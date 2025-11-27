@@ -115,8 +115,6 @@ sample_pairs <- function(pairs,
   if (n == 0L) return(pairs)
 
   if (!is.null(seed)) {
-    old_seed <- .Random.seed
-    on.exit({ .Random.seed <<- old_seed }, add = TRUE)
     set.seed(seed)
   }
 
@@ -187,8 +185,6 @@ sample_reverse_pairs <- function(pairs,
   if (n == 0L) return(pairs[0, , drop = FALSE])
 
   if (!is.null(seed)) {
-    old_seed <- .Random.seed
-    on.exit({ .Random.seed <<- old_seed }, add = TRUE)
     set.seed(seed)
   }
 
