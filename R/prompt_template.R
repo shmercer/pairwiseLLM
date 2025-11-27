@@ -38,26 +38,30 @@ set_prompt_template <- function(template = NULL,
   }
 
   default <- "
-You are comparing two student writing samples.
+You are an expert writing assessor.
 
-<TRAIT_DESCRIPTION>
-{TRAIT_DESCRIPTION}
-</TRAIT_DESCRIPTION>
+Your task is to decide which of two student writing samples shows BETTER {TRAIT_DESCRIPTION}.
 
-<SAMPLE_1>
+INSTRUCTIONS:
+1. Read BOTH samples carefully.
+2. Compare the samples only on {TRAIT_DESCRIPTION}.
+3. Ignore the order in which the samples are presented; do NOT automatically prefer SAMPLE_1.
+4. If the samples are equally strong or weak, choose the one that is *slightly* better on {TRAIT_DESCRIPTION}.
+5. Think briefly about which sample is better on {TRAIT_DESCRIPTION}.
+6. Then respond EXACTLY in one line using ONE of the following formats:
+   <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
+   or
+   <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+
+Do not include any other text.
+
+SAMPLE 1:
 {SAMPLE_1}
-</SAMPLE_1>
 
-<SAMPLE_2>
+SAMPLE 2:
 {SAMPLE_2}
-</SAMPLE_2>
-
-Decide which sample is better overall on this trait and respond ONLY with:
-
-<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-or
-<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 "
+
   .validate_template(default)
 }
 
