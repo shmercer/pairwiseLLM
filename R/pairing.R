@@ -22,6 +22,11 @@
 #' pairs_all <- make_pairs(samples)
 #' pairs_all
 #'
+#' # Using the built-in example data (10 writing samples)
+#' data("example_writing_samples")
+#' pairs_example <- make_pairs(example_writing_samples)
+#' nrow(pairs_example)  # should be choose(10, 2) = 45
+#'
 #' @export
 make_pairs <- function(samples) {
   samples <- tibble::as_tibble(samples)
@@ -94,6 +99,12 @@ make_pairs <- function(samples) {
 #' # Sample exactly 3 pairs
 #' sample_pairs(pairs_all, n_pairs = 3, seed = 123)
 #'
+#' # Using example_writing_samples: sample 10% of all pairs
+#' data("example_writing_samples")
+#' pairs_ex <- make_pairs(example_writing_samples)
+#' pairs_ex_sample <- sample_pairs(pairs_ex, pair_pct = 0.10, seed = 1)
+#' nrow(pairs_ex_sample)
+#'
 #' @export
 sample_pairs <- function(pairs,
                          pair_pct = 1,
@@ -159,6 +170,12 @@ sample_pairs <- function(pairs,
 #' # Reverse 50% of the pairs
 #' rev_pairs <- sample_reverse_pairs(pairs_all, reverse_pct = 0.5, seed = 123)
 #' rev_pairs
+#'
+#' # Using example_writing_samples: generate some reversed pairs
+#' data("example_writing_samples")
+#' pairs_ex <- make_pairs(example_writing_samples)
+#' rev_ex   <- sample_reverse_pairs(pairs_ex, reverse_pct = 0.2, seed = 1)
+#' nrow(rev_ex)
 #'
 #' @export
 sample_reverse_pairs <- function(pairs,

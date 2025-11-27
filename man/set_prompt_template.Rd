@@ -27,4 +27,12 @@ and \code{{SAMPLE_2}} must be present in any custom template.
 tmpl <- set_prompt_template()
 cat(substr(tmpl, 1, 200), "...\n")
 
+# Using the template with example writing samples
+data("example_writing_samples")
+trait <- trait_description("overall_quality")
+text1 <- example_writing_samples$text[1]
+text2 <- example_writing_samples$text[2]
+prompt <- build_prompt(tmpl, trait_desc = trait, text1 = text1, text2 = text2)
+cat(substr(prompt, 1, 200), "...\n")
+
 }

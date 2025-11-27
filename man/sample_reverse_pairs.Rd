@@ -43,4 +43,10 @@ pairs_all <- make_pairs(samples)
 rev_pairs <- sample_reverse_pairs(pairs_all, reverse_pct = 0.5, seed = 123)
 rev_pairs
 
+# Using example_writing_samples: generate some reversed pairs
+data("example_writing_samples")
+pairs_ex <- make_pairs(example_writing_samples)
+rev_ex   <- sample_reverse_pairs(pairs_ex, reverse_pct = 0.2, seed = 1)
+nrow(rev_ex)
+
 }

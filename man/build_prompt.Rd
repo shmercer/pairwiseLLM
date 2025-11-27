@@ -40,4 +40,14 @@ text2 <- "This is the second example writing sample."
 prompt <- build_prompt(tmpl, trait_desc = trait, text1 = text1, text2 = text2)
 cat(substr(prompt, 1, 200), "...\n")
 
+# Use the built-in example writing samples
+data("example_writing_samples")
+prompt2 <- build_prompt(
+  tmpl,
+  trait_desc = trait,
+  text1      = example_writing_samples$text[1],
+  text2      = example_writing_samples$text[2]
+)
+cat(substr(prompt2, 1, 200), "...\n")
+
 }

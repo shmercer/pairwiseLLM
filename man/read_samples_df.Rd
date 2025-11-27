@@ -39,4 +39,13 @@ df <- data.frame(
 samples <- read_samples_df(df, id_col = "StudentID", text_col = "Response")
 samples
 
+# Using the built-in example dataset (keep only ID and text)
+data("example_writing_samples")
+samples2 <- read_samples_df(
+  example_writing_samples[, c("ID", "text")],
+  id_col   = "ID",
+  text_col = "text"
+)
+head(samples2)
+
 }

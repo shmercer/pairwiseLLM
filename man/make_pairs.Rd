@@ -31,4 +31,9 @@ samples <- tibble::tibble(
 pairs_all <- make_pairs(samples)
 pairs_all
 
+# Using the built-in example data (10 writing samples)
+data("example_writing_samples")
+pairs_example <- make_pairs(example_writing_samples)
+nrow(pairs_example)  # should be choose(10, 2) = 45
+
 }
