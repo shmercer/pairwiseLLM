@@ -10,9 +10,11 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
+    purrr,
     tibble,
     tidyselect,
-    tools
+    tools,
+    utils
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
