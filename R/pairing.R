@@ -29,22 +29,25 @@ make_pairs <- function(samples) {
     stop("`samples` must have columns 'ID' and 'text'.", call. = FALSE)
   }
 
-  ids <- samples$ID
+  ids <- as.character(samples$ID)
   n   <- length(ids)
 
   if (n < 2) {
     stop("At least two samples are required to create pairs.", call. = FALSE)
   }
 
+  # All unordered combinations of IDs
   comb <- utils::combn(ids, 2, simplify = FALSE)
 
-  out <- purrr::map_dfr(
+  rows <- lapply(
     comb,
     function(pair_ids) {
       id1 <- pair_ids[[1]]
       id2 <- pair_ids[[2]]
+
       text1 <- samples$text[samples$ID == id1][1]
       text2 <- samples$text[samples$ID == id2][1]
+
       tibble::tibble(
         ID1   = id1,
         text1 = text1,
@@ -53,6 +56,9 @@ make_pairs <- function(samples) {
       )
     }
   )
+
+  # Use dplyr so the Imports entry is “real”
+  out <- dplyr::bind_rows(rows)
 
   out
 }
