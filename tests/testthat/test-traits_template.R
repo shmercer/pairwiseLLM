@@ -117,3 +117,23 @@ test_that("build_prompt works with default template and built-in trait", {
   expect_true(grepl("Sample 2 text.", prompt, fixed = TRUE))
   expect_true(grepl("BETTER_SAMPLE",  prompt, fixed = TRUE))
 })
+
+test_that("build_prompt works end-to-end with example_writing_samples", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  tmpl  <- set_prompt_template()
+  trait <- trait_description("overall_quality")
+  text1 <- example_writing_samples$text[1]
+  text2 <- example_writing_samples$text[2]
+
+  prompt <- build_prompt(
+    template   = tmpl,
+    trait_desc = trait,
+    text1      = text1,
+    text2      = text2
+  )
+
+  expect_true(grepl(text1, prompt, fixed = TRUE))
+  expect_true(grepl(text2, prompt, fixed = TRUE))
+  expect_true(grepl("BETTER_SAMPLE", prompt, fixed = TRUE))
+})
