@@ -42,9 +42,9 @@ if (requireNamespace("testthat", quietly = TRUE)) {
 
   testthat::with_mocked_bindings(
     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-    httr2::req_body_json  = function(req, body) req,
-    httr2::req_perform    = function(req) list(),
-    httr2::resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
+    req_body_json  = function(req, body) req,
+    req_perform    = function(req) list(),
+    resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
     {
       res <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
       res$status  # "queued"

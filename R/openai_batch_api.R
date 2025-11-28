@@ -1,5 +1,11 @@
+#' @importFrom httr2 request req_auth_bearer_token req_body_multipart
+#' @importFrom httr2 req_body_json req_perform resp_body_json resp_body_raw
+#' @importFrom curl form_file
+NULL
+
 #' Internal: Null-coalescing helper
 #' @keywords internal
+#' @noRd
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 #' Internal: Get OpenAI API key
@@ -29,8 +35,8 @@
 .openai_request <- function(path, api_key = Sys.getenv("OPENAI_API_KEY")) {
   api_key <- .openai_api_key(api_key)
 
-  httr2::request(paste0(.openai_base_url(), path)) |>
-    httr2::req_auth_bearer_token(api_key)
+  request(paste0(.openai_base_url(), path)) |>
+    req_auth_bearer_token(api_key)
 }
 
 #' Upload a JSONL batch file to OpenAI
@@ -59,9 +65,9 @@
 #'
 #'   testthat::with_mocked_bindings(
 #'     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-#'     httr2::req_body_multipart = function(req, ...) req,
-#'     httr2::req_perform    = function(req) list(),
-#'     httr2::resp_body_json = function(resp, simplifyVector = TRUE) fake_file,
+#'     req_body_multipart = function(req, ...) req,
+#'     req_perform    = function(req) list(),
+#'     resp_body_json = function(resp, simplifyVector = TRUE) fake_file,
 #'     {
 #'       res <- openai_upload_batch_file(tf)
 #'       res$id  # "file_123"
@@ -86,13 +92,13 @@ openai_upload_batch_file <- function(
   }
 
   req <- .openai_request("/files", api_key) |>
-    httr2::req_body_multipart(
-      file    = httr2::req_file(path),
+    req_body_multipart(
+      file    = form_file(path),
       purpose = purpose
     )
 
-  resp <- httr2::req_perform(req)
-  httr2::resp_body_json(resp, simplifyVector = TRUE)
+  resp <- req_perform(req)
+  resp_body_json(resp, simplifyVector = TRUE)
 }
 
 #' Create an OpenAI batch from an uploaded file
@@ -120,9 +126,9 @@ openai_upload_batch_file <- function(
 #'
 #'   testthat::with_mocked_bindings(
 #'     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-#'     httr2::req_body_json  = function(req, body) req,
-#'     httr2::req_perform    = function(req) list(),
-#'     httr2::resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
+#'     req_body_json  = function(req, body) req,
+#'     req_perform    = function(req) list(),
+#'     resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
 #'     {
 #'       res <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
 #'       res$status  # "queued"
@@ -158,10 +164,10 @@ openai_create_batch <- function(
   }
 
   req <- .openai_request("/batches", api_key) |>
-    httr2::req_body_json(body)
+    req_body_json(body)
 
-  resp <- httr2::req_perform(req)
-  httr2::resp_body_json(resp, simplifyVector = TRUE)
+  resp <- req_perform(req)
+  resp_body_json(resp, simplifyVector = TRUE)
 }
 
 #' Retrieve an OpenAI batch
@@ -178,8 +184,8 @@ openai_create_batch <- function(
 #'
 #'   testthat::with_mocked_bindings(
 #'     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-#'     httr2::req_perform    = function(req) list(),
-#'     httr2::resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
+#'     req_perform    = function(req) list(),
+#'     resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
 #'     {
 #'       res <- openai_get_batch("batch_123")
 #'       res$status  # "completed"
@@ -200,9 +206,9 @@ openai_get_batch <- function(
   path <- paste0("/batches/", batch_id)
 
   req  <- .openai_request(path, api_key)
-  resp <- httr2::req_perform(req)
+  resp <- req_perform(req)
 
-  httr2::resp_body_json(resp, simplifyVector = TRUE)
+  resp_body_json(resp, simplifyVector = TRUE)
 }
 
 #' Download the output file for a completed batch
@@ -228,8 +234,8 @@ openai_get_batch <- function(
 #'   testthat::with_mocked_bindings(
 #'     openai_get_batch  = function(batch_id, api_key) fake_batch,
 #'     .openai_request   = function(path, api_key) structure(list(), class = "fake_req"),
-#'     httr2::req_perform = function(req) list(),
-#'     httr2::resp_body_raw = function(resp) charToRaw('{"dummy": true}\n'),
+#'     req_perform = function(req) list(),
+#'     resp_body_raw = function(resp) charToRaw('{"dummy": true}\n'),
 #'     {
 #'       tf <- tempfile(fileext = ".jsonl")
 #'       openai_download_batch_output("batch_123", tf)
@@ -263,9 +269,9 @@ openai_download_batch_output <- function(
   file_path <- paste0("/files/", output_file_id, "/content")
 
   req  <- .openai_request(file_path, api_key)
-  resp <- httr2::req_perform(req)
+  resp <- req_perform(req)
 
-  raw <- httr2::resp_body_raw(resp)
+  raw <- resp_body_raw(resp)
   writeBin(raw, path)
 
   invisible(path)
@@ -376,4 +382,228 @@ openai_poll_batch_until_complete <- function(
 
     Sys.sleep(interval_seconds)
   }
+}
+
+#' Run a full OpenAI batch pipeline for pairwise comparisons
+#'
+#' This helper wires together the existing pieces:
+#' - [build_openai_batch_requests()]
+#' - [write_openai_batch_file()]
+#' - [openai_upload_batch_file()]
+#' - [openai_create_batch()]
+#' - optionally [openai_poll_batch_until_complete()]
+#' - optionally [openai_download_batch_output()]
+#' - optionally [parse_openai_batch_output()]
+#'
+#' It is a convenience wrapper around these smaller functions and is intended
+#' for end-to-end batch runs on a set of pairwise comparisons. For more control
+#' (or testing), you can call the components directly.
+#'
+#' @param pairs Tibble of pairs with at least `ID1`, `text1`, `ID2`, `text2`.
+#'   Typically produced by [make_pairs()], [sample_pairs()], and
+#'   [randomize_pair_order()].
+#' @param model OpenAI model name (e.g. `"gpt-4.1"`, `"gpt-5.1"`).
+#' @param trait_name Trait name to pass to [build_openai_batch_requests()].
+#' @param trait_description Trait description to pass to
+#'   [build_openai_batch_requests()].
+#' @param prompt_template Prompt template string, typically from
+#'   [set_prompt_template()].
+#' @param endpoint One of `"chat.completions"` or `"responses"`. This is passed
+#'   to [build_openai_batch_requests()]. The underlying Batch API endpoint is
+#'   derived automatically.
+#' @param batch_input_path Path to write the batch input `.jsonl` file. Defaults
+#'   to a temporary file.
+#' @param batch_output_path Path to write the batch output `.jsonl` file if
+#'   `poll = TRUE`. Defaults to a temporary file.
+#' @param poll Logical; if `TRUE`, the function will poll the batch until it
+#'   reaches a terminal status using [openai_poll_batch_until_complete()] and
+#'   then download and parse the output. If `FALSE`, it stops after creating
+#'   the batch and returns without polling or parsing.
+#' @param interval_seconds Polling interval in seconds (used when `poll = TRUE`).
+#' @param timeout_seconds Maximum total time in seconds for polling before
+#'   giving up (used when `poll = TRUE`).
+#' @param max_attempts Maximum number of polling attempts (primarily useful for
+#'   testing).
+#' @param metadata Optional named list of metadata key–value pairs to pass to
+#'   [openai_create_batch()].
+#' @param api_key Optional OpenAI API key. Defaults to
+#'   `Sys.getenv("OPENAI_API_KEY")`.
+#' @param ... Additional arguments passed through to
+#'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
+#'   `reasoning` etc.
+#'
+#' @return A list with elements:
+#' * `batch_input_path`  – path to the input `.jsonl` file.
+#' * `batch_output_path` – path to the output `.jsonl` file (or `NULL` if
+#'   `poll = FALSE`).
+#' * `file`              – File object returned by [openai_upload_batch_file()].
+#' * `batch`             – Batch object; if `poll = TRUE`, this is the final
+#'   batch after polling, otherwise the initial batch returned by
+#'   [openai_create_batch()].
+#' * `results`           – Parsed tibble from [parse_openai_batch_output()] if
+#'   `poll = TRUE`, otherwise `NULL`.
+#'
+#' @examples
+#' # Mocked example: verify the control flow without real HTTP calls
+#' if (requireNamespace("testthat", quietly = TRUE)) {
+#'   pairs <- tibble::tibble(
+#'     ID1   = "S01",
+#'     text1 = "Text 1",
+#'     ID2   = "S02",
+#'     text2 = "Text 2"
+#'   )
+#'
+#'   fake_results <- tibble::tibble(
+#'     ID1      = "S01",
+#'     ID2      = "S02",
+#'     better_id = "S01"
+#'   )
+#'
+#'   # In this small example we only mock the high-level helpers from
+#'   # pairwiseLLM itself. This avoids any real HTTP calls.
+#'   testthat::with_mocked_bindings(
+#'     run_openai_batch_pipeline = function(...) {
+#'       list(
+#'         batch_input_path  = tempfile(fileext = ".jsonl"),
+#'         batch_output_path = tempfile(fileext = ".jsonl"),
+#'         file              = list(id = "file_123"),
+#'         batch             = list(id = "batch_123", status = "completed"),
+#'         results           = fake_results
+#'       )
+#'     },
+#'     {
+#'       td   <- list(name = "Overall quality", description = "Quality.")
+#'       tmpl <- set_prompt_template()
+#'
+#'       res <- run_openai_batch_pipeline(
+#'         pairs             = pairs,
+#'         model             = "gpt-4.1",
+#'         trait_name        = td$name,
+#'         trait_description = td$description,
+#'         prompt_template   = tmpl,
+#'         endpoint          = "chat.completions"
+#'       )
+#'
+#'       res$results$better_id  # "S01"
+#'     }
+#'   )
+#' }
+#'
+#' \dontrun{
+#' # Real usage (requires OPENAI_API_KEY and will incur API cost):
+#' library(pairwiseLLM)
+#' library(dplyr)
+#'
+#' data("example_writing_samples")
+#'
+#' pairs <- example_writing_samples |>
+#'   make_pairs() |>
+#'   sample_pairs(n_pairs = 5, seed = 123) |>
+#'   randomize_pair_order(seed = 456)
+#'
+#' td   <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' pipeline <- run_openai_batch_pipeline(
+#'   pairs             = pairs,
+#'   model             = "gpt-4.1",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   endpoint          = "chat.completions",
+#'   interval_seconds  = 10,
+#'   timeout_seconds   = 3600
+#' )
+#'
+#' pipeline$results
+#' }
+#'
+#' @export
+run_openai_batch_pipeline <- function(
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    endpoint = c("chat.completions", "responses"),
+    batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
+    batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+    poll = TRUE,
+    interval_seconds = 5,
+    timeout_seconds = 600,
+    max_attempts = Inf,
+    metadata = NULL,
+    api_key = Sys.getenv("OPENAI_API_KEY"),
+    ...
+) {
+  endpoint <- match.arg(endpoint)
+
+  # Endpoint for the Batch API expects the full path
+  batch_api_endpoint <- switch(
+    endpoint,
+    "chat.completions" = "/v1/chat/completions",
+    "responses"        = "/v1/responses"
+  )
+
+  # 1) Build batch requests tibble
+  batch_tbl <- build_openai_batch_requests(
+    pairs             = pairs,
+    model             = model,
+    trait_name        = trait_name,
+    trait_description = trait_description,
+    prompt_template   = prompt_template,
+    endpoint          = endpoint,
+    ...
+  )
+
+  # 2) Write JSONL input file
+  write_openai_batch_file(batch_tbl, batch_input_path)
+
+  # 3) Upload file
+  file_obj <- openai_upload_batch_file(
+    path    = batch_input_path,
+    api_key = api_key
+  )
+
+  # 4) Create batch
+  batch_obj <- openai_create_batch(
+    input_file_id     = file_obj$id,
+    endpoint          = batch_api_endpoint,
+    completion_window = "24h",
+    metadata          = metadata,
+    api_key           = api_key
+  )
+
+  final_batch <- batch_obj
+  results     <- NULL
+  out_path    <- NULL
+
+  # 5) Optional polling + download + parse
+  if (isTRUE(poll)) {
+    final_batch <- openai_poll_batch_until_complete(
+      batch_id         = batch_obj$id,
+      interval_seconds = interval_seconds,
+      timeout_seconds  = timeout_seconds,
+      max_attempts     = max_attempts,
+      api_key          = api_key,
+      verbose          = TRUE
+    )
+
+    openai_download_batch_output(
+      batch_id = final_batch$id,
+      path     = batch_output_path,
+      api_key  = api_key
+    )
+
+    out_path <- batch_output_path
+    results  <- parse_openai_batch_output(batch_output_path)
+  }
+
+  list(
+    batch_input_path  = batch_input_path,
+    batch_output_path = out_path,
+    file              = file_obj,
+    batch             = final_batch,
+    results           = results
+  )
 }

@@ -39,9 +39,9 @@ if (requireNamespace("testthat", quietly = TRUE)) {
 
   testthat::with_mocked_bindings(
     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-    httr2::req_body_multipart = function(req, ...) req,
-    httr2::req_perform    = function(req) list(),
-    httr2::resp_body_json = function(resp, simplifyVector = TRUE) fake_file,
+    req_body_multipart = function(req, ...) req,
+    req_perform    = function(req) list(),
+    resp_body_json = function(resp, simplifyVector = TRUE) fake_file,
     {
       res <- openai_upload_batch_file(tf)
       res$id  # "file_123"

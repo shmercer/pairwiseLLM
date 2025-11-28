@@ -24,8 +24,8 @@ if (requireNamespace("testthat", quietly = TRUE)) {
 
   testthat::with_mocked_bindings(
     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-    httr2::req_perform    = function(req) list(),
-    httr2::resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
+    req_perform    = function(req) list(),
+    resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
     {
       res <- openai_get_batch("batch_123")
       res$status  # "completed"

@@ -36,8 +36,8 @@ if (requireNamespace("testthat", quietly = TRUE)) {
   testthat::with_mocked_bindings(
     openai_get_batch  = function(batch_id, api_key) fake_batch,
     .openai_request   = function(path, api_key) structure(list(), class = "fake_req"),
-    httr2::req_perform = function(req) list(),
-    httr2::resp_body_raw = function(resp) charToRaw('{"dummy": true}\n'),
+    req_perform = function(req) list(),
+    resp_body_raw = function(resp) charToRaw('{"dummy": true}\n'),
     {
       tf <- tempfile(fileext = ".jsonl")
       openai_download_batch_output("batch_123", tf)
