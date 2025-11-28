@@ -39,8 +39,7 @@ A list with two elements:
 \item \code{n_pairs}: number of unordered pairs
 \item \code{prop_consistent}: observed proportion of consistent pairs
 \item \code{boot_mean}: mean of bootstrap consistency proportions
-\item \code{boot_lwr}, \code{boot_upr}: lower/upper bounds of the
-bootstrap confidence interval
+\item \code{boot_lwr}, \code{boot_upr}: bootstrap confidence interval
 \item \code{p_sample1_main}: p-value from a binomial test for the
 null hypothesis that SAMPLE_1 wins 50\\% of the time in the
 main (forward) comparisons
@@ -77,7 +76,6 @@ that looks like its \code{$details} component.
 }
 \examples{
 \dontrun{
-# Suppose you have forward and reverse OpenAI batch outputs:
 res_main <- parse_openai_batch_output("batch_forward_output.jsonl")
 res_rev  <- parse_openai_batch_output("batch_reverse_output.jsonl")
 

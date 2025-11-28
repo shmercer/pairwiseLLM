@@ -171,13 +171,19 @@ compute_reverse_consistency <- function(main_results,
 #'         \item \code{n_pairs}: number of unordered pairs
 #'         \item \code{prop_consistent}: observed proportion of consistent pairs
 #'         \item \code{boot_mean}: mean of bootstrap consistency proportions
-#'         \item \code{boot_lwr}, \code{boot_upr}: lower/upper bounds of the
-#'               bootstrap confidence interval
+#'         \item \code{boot_lwr}, \code{boot_upr}: bootstrap confidence interval
 #'         \item \code{p_sample1_main}: p-value from a binomial test for the
 #'               null hypothesis that SAMPLE_1 wins 50\% of the time in the
 #'               main (forward) comparisons
 #'         \item \code{p_sample1_rev}: analogous p-value for the reverse
 #'               comparisons
+#'         \item \code{p_sample1_overall}: p-value from a binomial test for
+#'               the null that position 1 wins 50\% of the time across
+#'               \emph{all} (forward + reverse) comparisons
+#'         \item \code{total_pos1_wins}: total number of wins by position 1
+#'               across forward + reverse comparisons
+#'         \item \code{total_comparisons}: total number of valid forward +
+#'               reverse comparisons included in the overall test
 #'         \item \code{n_inconsistent}: number of pairs with inconsistent
 #'               forward vs. reverse outcomes
 #'         \item \code{n_inconsistent_pos1_bias}: among inconsistent pairs, how
@@ -197,29 +203,17 @@ compute_reverse_consistency <- function(main_results,
 #'     }
 #'   }
 #'
-#' @examples
-#' \dontrun{
-#' # Suppose you have forward and reverse OpenAI batch outputs:
-#' res_main <- parse_openai_batch_output("batch_forward_output.jsonl")
-#' res_rev  <- parse_openai_batch_output("batch_reverse_output.jsonl")
-#'
-#' cons <- compute_reverse_consistency(res_main, res_rev)
-#'
-#' diag <- check_positional_bias(cons, n_boot = 1000, seed = 123)
-#'
-#' diag$summary
-#' diag$details %>% dplyr::filter(!is_consistent)
-#' }
-#'
 #' @export
 check_positional_bias <- function(consistency,
                                   n_boot     = 1000,
                                   conf_level = 0.95,
                                   seed       = NULL) {
 
-  # Extract the details tibble
-  if (is.list(consistency) && !is.null(consistency$details)) {
-    details <- consistency$details
+  # ---- Extract the details tibble safely ----
+  if (!inherits(consistency, "data.frame") &&
+      is.list(consistency) &&
+      "details" %in% names(consistency)) {
+    details <- consistency[["details"]]
   } else {
     details <- consistency
   }
@@ -246,7 +240,7 @@ check_positional_bias <- function(consistency,
     stop("`details` has zero rows; nothing to diagnose.", call. = FALSE)
   }
 
-  # Position of winner in main and reverse directions
+  # Winner positions
   details <- details %>%
     dplyr::mutate(
       winner_pos_main = dplyr::case_when(
@@ -264,7 +258,7 @@ check_positional_bias <- function(consistency,
   # Overall consistency
   prop_consistent <- mean(details$is_consistent)
 
-  # Bootstrap CI for consistency proportion
+  # Bootstrap CI
   if (!is.null(seed)) {
     set.seed(seed)
   }
@@ -275,17 +269,19 @@ check_positional_bias <- function(consistency,
     boot_props[b] <- mean(details$is_consistent[idx])
   }
 
-  alpha    <- 1 - conf_level
-  boot_lwr <- stats::quantile(boot_props, probs = alpha / 2)
-  boot_upr <- stats::quantile(boot_props, probs = 1 - alpha / 2)
+  alpha     <- 1 - conf_level
+  boot_lwr  <- stats::quantile(boot_props, probs = alpha / 2)
+  boot_upr  <- stats::quantile(boot_props, probs = 1 - alpha / 2)
   boot_mean <- mean(boot_props)
 
-  # Positional bias: how often does SAMPLE_1 win?
-  # (In main and reverse directions)
+  # Positional bias: how often does SAMPLE_1 (position 1) win?
+  # -- forward (main) direction --
   wins_sample1_main <- sum(details$better_id_main == details$ID1_main, na.rm = TRUE)
-  n_valid_main      <- sum(!is.na(details$better_id_main) &
-                             (details$better_id_main == details$ID1_main |
-                                details$better_id_main == details$ID2_main))
+  n_valid_main      <- sum(
+    !is.na(details$better_id_main) &
+      (details$better_id_main == details$ID1_main |
+         details$better_id_main == details$ID2_main)
+  )
 
   p_sample1_main <- if (n_valid_main > 0L) {
     stats::binom.test(wins_sample1_main, n_valid_main, p = 0.5)$p.value
@@ -293,10 +289,13 @@ check_positional_bias <- function(consistency,
     NA_real_
   }
 
+  # -- reverse direction --
   wins_sample1_rev <- sum(details$better_id_rev == details$ID1_rev, na.rm = TRUE)
-  n_valid_rev      <- sum(!is.na(details$better_id_rev) &
-                            (details$better_id_rev == details$ID1_rev |
-                               details$better_id_rev == details$ID2_rev))
+  n_valid_rev      <- sum(
+    !is.na(details$better_id_rev) &
+      (details$better_id_rev == details$ID1_rev |
+         details$better_id_rev == details$ID2_rev)
+  )
 
   p_sample1_rev <- if (n_valid_rev > 0L) {
     stats::binom.test(wins_sample1_rev, n_valid_rev, p = 0.5)$p.value
@@ -304,7 +303,17 @@ check_positional_bias <- function(consistency,
     NA_real_
   }
 
-  # Among inconsistent pairs, how often does position 1 win in both directions?
+  # ---- NEW: overall position-1 bias test (forward + reverse combined) ----
+  total_pos1_wins   <- wins_sample1_main + wins_sample1_rev
+  total_comparisons <- n_valid_main + n_valid_rev
+
+  p_sample1_overall <- if (total_comparisons > 0L) {
+    stats::binom.test(total_pos1_wins, total_comparisons, p = 0.5)$p.value
+  } else {
+    NA_real_
+  }
+
+  # Inconsistent pairs & positional bias counts
   inconsistent <- details %>%
     dplyr::filter(!is_consistent)
 
@@ -335,14 +344,17 @@ check_positional_bias <- function(consistency,
   }
 
   summary <- tibble::tibble(
-    n_pairs                 = n_pairs,
-    prop_consistent         = prop_consistent,
-    boot_mean               = boot_mean,
-    boot_lwr                = as.numeric(boot_lwr),
-    boot_upr                = as.numeric(boot_upr),
-    p_sample1_main          = p_sample1_main,
-    p_sample1_rev           = p_sample1_rev,
-    n_inconsistent          = n_inconsistent,
+    n_pairs                  = n_pairs,
+    prop_consistent          = prop_consistent,
+    boot_mean                = boot_mean,
+    boot_lwr                 = as.numeric(boot_lwr),
+    boot_upr                 = as.numeric(boot_upr),
+    p_sample1_main           = p_sample1_main,
+    p_sample1_rev            = p_sample1_rev,
+    p_sample1_overall        = p_sample1_overall,
+    total_pos1_wins          = total_pos1_wins,
+    total_comparisons        = total_comparisons,
+    n_inconsistent           = n_inconsistent,
     n_inconsistent_pos1_bias = n_pos1_bias,
     n_inconsistent_pos2_bias = n_pos2_bias
   )
@@ -352,4 +364,3 @@ check_positional_bias <- function(consistency,
     details = details
   )
 }
-

@@ -2,5 +2,10 @@ utils::globalVariables(c(
   "key",
   "ID1",
   "ID2",
-  "better_id"
+  "better_id",
+  "is_consistent",
+  "is_pos1_bias",
+  "is_pos2_bias",
+  "winner_pos_main",
+  "winner_pos_rev"
 ))
