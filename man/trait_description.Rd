@@ -2,36 +2,52 @@
 % Please edit documentation in R/traits.R
 \name{trait_description}
 \alias{trait_description}
-\title{Get a trait description string}
+\title{Get a trait name and description for prompts}
 \usage{
-trait_description(name = c("overall_quality", "organization"), custom = NULL)
+trait_description(
+  name = c("overall_quality", "organization"),
+  custom_name = NULL,
+  custom_description = NULL
+)
 }
 \arguments{
-\item{name}{A character string identifying a built-in trait
-description. Current options include:
-\itemize{
-\item \code{"overall_quality"}: a simple, generic definition of overall quality.
-\item \code{"organization"}: a simple, generic definition of organization.
-}
-This argument is ignored if \code{custom} is not \code{NULL}.}
+\item{name}{Character identifier for a built-in trait. One of
+\code{"overall_quality"} or \code{"organization"}.
+Ignored if \code{custom_description} is supplied.}
 
-\item{custom}{An optional character string containing a fully
-specified trait description. If provided, this string is returned
-as-is.}
+\item{custom_name}{Optional short label to use when supplying a
+\code{custom_description}. Defaults to "Custom trait" if
+\code{custom_description} is provided but \code{custom_name}
+is \code{NULL}.}
+
+\item{custom_description}{Optional full-text definition of a
+custom trait. When supplied, built-in \code{name} values are
+ignored and this text is returned instead.}
 }
 \value{
-A character string with the trait description.
+A list with two elements:
+\describe{
+\item{name}{Short display label for the trait (e.g., "Overall Quality").}
+\item{description}{Full-text definition of the trait, suitable for
+inclusion in the prompt.}
+}
 }
 \description{
-This function returns a trait description string that can be inserted
-into LLM prompts. It provides a small set of built-in examples and
-can also return custom user-specified descriptions directly.
+This helper returns both a short display name and a longer
+description for a scoring trait. These can be inserted into
+the prompt template via the \code{{TRAIT_NAME}} and
+\code{{TRAIT_DESCRIPTION}} placeholders.
 }
 \examples{
-# Use a built-in description
-trait_description("overall_quality")
+td <- trait_description("overall_quality")
+td$name
+td$description
 
-# Provide your own description
-trait_description(custom = "Clarity of ideas and argumentation.")
+custom_td <- trait_description(
+  custom_name = "Ideas",
+  custom_description = "Quality and development of ideas in the writing."
+)
+custom_td$name
+custom_td$description
 
 }

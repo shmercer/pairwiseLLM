@@ -1,9 +1,10 @@
 #' Get or set a prompt template for pairwise comparisons
 #'
 #' This function returns a default prompt template that includes
-#' placeholders for the trait description and two writing samples.
-#' The placeholders \code{{TRAIT_DESCRIPTION}}, \code{{SAMPLE_1}},
-#' and \code{{SAMPLE_2}} must be present in any custom template.
+#' placeholders for the trait name, trait description, and two
+#' writing samples. Any custom template must contain the
+#' placeholders \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
+#' \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
 #'
 #' @param template Optional character string containing a custom template.
 #'   If \code{NULL}, a default template is returned.
@@ -19,10 +20,18 @@
 #'
 #' # Using the template with example writing samples
 #' data("example_writing_samples")
-#' trait <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
+#'
 #' text1 <- example_writing_samples$text[1]
 #' text2 <- example_writing_samples$text[2]
-#' prompt <- build_prompt(tmpl, trait_desc = trait, text1 = text1, text2 = text2)
+#'
+#' prompt <- build_prompt(
+#'   template   = tmpl,
+#'   trait_name = td$name,
+#'   trait_desc = td$description,
+#'   text1      = text1,
+#'   text2      = text2
+#' )
 #' cat(substr(prompt, 1, 200), "...\n")
 #'
 #' @export
@@ -40,20 +49,49 @@ set_prompt_template <- function(template = NULL,
   default <- "
 You are an expert writing assessor.
 
-Your task is to decide which of two student writing samples shows BETTER {TRAIT_DESCRIPTION}.
+Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.
+
+Definition of {TRAIT_NAME}:
+{TRAIT_DESCRIPTION}
 
 INSTRUCTIONS:
 1. Read BOTH samples carefully.
-2. Compare the samples only on {TRAIT_DESCRIPTION}.
-3. Ignore the order in which the samples are presented; do NOT automatically prefer SAMPLE_1.
-4. If the samples are equally strong or weak, choose the one that is *slightly* better on {TRAIT_DESCRIPTION}.
-5. Think briefly about which sample is better on {TRAIT_DESCRIPTION}.
-6. Then respond EXACTLY in one line using ONE of the following formats:
+
+2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.
+   Do NOT consider length, formatting, grammar, topic relevance, or any other
+   aspect unless it directly affects {TRAIT_NAME}.
+
+3. The labels SAMPLE_1 and SAMPLE_2 are arbitrary. They do NOT indicate quality.
+   SAMPLE_1 could have been SAMPLE_2 and vice versa.
+
+3a. Before deciding, remind yourself explicitly that SAMPLE_1 and SAMPLE_2 might
+    have been presented in the opposite order. Your decision MUST NOT depend on
+    their position.
+
+3b. After reading both samples, PAUSE and reconsider which sample is truly better
+    on {TRAIT_NAME}, independent of position.
+
+4. You MUST choose exactly one sample. If the samples seem equal, choose the one
+   that is even slightly better on {TRAIT_NAME}. Do NOT output ties.
+
+5. Decide which sample has BETTER QUALITY on {TRAIT_NAME}.
+   Think silently. Do NOT reveal your reasoning.
+
+6. After making your judgment, respond EXACTLY with ONE of the following lines:
+
    <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-   or
+
+   OR
+
    <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 
-Do not include any other text.
+6a. Before responding, VERIFY that the tag you are about to output matches
+    your internal decision about which sample is better.
+
+IMPORTANT:
+- Output EXACTLY one of the two lines above.
+- Do NOT add explanations, reasoning, punctuation, or extra text.
+- Do NOT include chain-of-thought or justification.
 
 SAMPLE 1:
 {SAMPLE_1}
@@ -81,54 +119,64 @@ SAMPLE 2:
   template
 }
 
-#' Build a prompt for a pair of samples
+#' Build a concrete LLM prompt from a template
 #'
-#' This function substitutes a trait description and two writing samples
-#' into a prompt template created by \code{\link{set_prompt_template}}.
-#' The template must contain the placeholders
-#' \code{{TRAIT_DESCRIPTION}}, \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
+#' This function takes a prompt template (typically from
+#' \code{\link{set_prompt_template}}), a trait name and description,
+#' and two writing samples, and fills in the required placeholders.
 #'
-#' @param template A character string containing a prompt template.
-#'   Typically this is the result of \code{\link{set_prompt_template}()}.
-#' @param trait_desc A character string with the trait description to
-#'   insert in place of \code{{TRAIT_DESCRIPTION}}.
-#' @param text1 A character string containing the first writing sample.
-#'   This is substituted for \code{{SAMPLE_1}}.
-#' @param text2 A character string containing the second writing sample.
-#'   This is substituted for \code{{SAMPLE_2}}.
+#' The template must contain the placeholders:
+#' \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
+#' \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
 #'
-#' @return A single character string containing the completed prompt,
-#'   ready to be sent to an LLM.
+#' @param template Character string containing the prompt template.
+#' @param trait_name Character scalar giving a short label for the trait
+#'   (e.g., "Overall Quality").
+#' @param trait_desc Character scalar giving the full definition of the trait.
+#' @param text1 Character scalar containing the text for SAMPLE_1.
+#' @param text2 Character scalar containing the text for SAMPLE_2.
+#'
+#' @return A single character string containing the completed prompt.
 #'
 #' @examples
-#' # Get a default template and a built-in trait description
-#' tmpl  <- set_prompt_template()
-#' trait <- trait_description("overall_quality")
-#'
-#' text1 <- "This is the first example writing sample."
-#' text2 <- "This is the second example writing sample."
-#'
-#' prompt <- build_prompt(tmpl, trait_desc = trait, text1 = text1, text2 = text2)
-#' cat(substr(prompt, 1, 200), "...\n")
-#'
-#' # Use the built-in example writing samples
-#' data("example_writing_samples")
-#' prompt2 <- build_prompt(
-#'   tmpl,
-#'   trait_desc = trait,
-#'   text1      = example_writing_samples$text[1],
-#'   text2      = example_writing_samples$text[2]
+#' tmpl <- set_prompt_template()
+#' td   <- trait_description("overall_quality")
+#' prompt <- build_prompt(
+#'   template   = tmpl,
+#'   trait_name = td$name,
+#'   trait_desc = td$description,
+#'   text1      = "This is sample 1.",
+#'   text2      = "This is sample 2."
 #' )
-#' cat(substr(prompt2, 1, 200), "...\n")
+#' cat(substr(prompt, 1, 200), "...\n")
 #'
 #' @export
 build_prompt <- function(template,
+                         trait_name,
                          trait_desc,
                          text1,
                          text2) {
+  if (!is.character(template) || length(template) != 1L) {
+    stop("`template` must be a single character string.", call. = FALSE)
+  }
+  if (!is.character(trait_name) || length(trait_name) != 1L) {
+    stop("`trait_name` must be a single character string.", call. = FALSE)
+  }
+  if (!is.character(trait_desc) || length(trait_desc) != 1L) {
+    stop("`trait_desc` must be a single character string.", call. = FALSE)
+  }
+  if (!is.character(text1) || length(text1) != 1L) {
+    stop("`text1` must be a single character string.", call. = FALSE)
+  }
+  if (!is.character(text2) || length(text2) != 1L) {
+    stop("`text2` must be a single character string.", call. = FALSE)
+  }
+
   out <- template
-  out <- gsub("{TRAIT_DESCRIPTION}", trait_desc, out, fixed = TRUE)
-  out <- gsub("{SAMPLE_1}",        text1,      out, fixed = TRUE)
-  out <- gsub("{SAMPLE_2}",        text2,      out, fixed = TRUE)
+  out <- gsub("{TRAIT_NAME}",        trait_name, out, fixed = TRUE)
+  out <- gsub("{TRAIT_DESCRIPTION}", trait_desc, out,   fixed = TRUE)
+  out <- gsub("{SAMPLE_1}",          text1,      out,   fixed = TRUE)
+  out <- gsub("{SAMPLE_2}",          text2,      out,   fixed = TRUE)
+
   out
 }

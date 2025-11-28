@@ -2,52 +2,45 @@
 % Please edit documentation in R/prompt_template.R
 \name{build_prompt}
 \alias{build_prompt}
-\title{Build a prompt for a pair of samples}
+\title{Build a concrete LLM prompt from a template}
 \usage{
-build_prompt(template, trait_desc, text1, text2)
+build_prompt(template, trait_name, trait_desc, text1, text2)
 }
 \arguments{
-\item{template}{A character string containing a prompt template.
-Typically this is the result of \code{\link{set_prompt_template}()}.}
+\item{template}{Character string containing the prompt template.}
 
-\item{trait_desc}{A character string with the trait description to
-insert in place of \code{{TRAIT_DESCRIPTION}}.}
+\item{trait_name}{Character scalar giving a short label for the trait
+(e.g., "Overall Quality").}
 
-\item{text1}{A character string containing the first writing sample.
-This is substituted for \code{{SAMPLE_1}}.}
+\item{trait_desc}{Character scalar giving the full definition of the trait.}
 
-\item{text2}{A character string containing the second writing sample.
-This is substituted for \code{{SAMPLE_2}}.}
+\item{text1}{Character scalar containing the text for SAMPLE_1.}
+
+\item{text2}{Character scalar containing the text for SAMPLE_2.}
 }
 \value{
-A single character string containing the completed prompt,
-ready to be sent to an LLM.
+A single character string containing the completed prompt.
 }
 \description{
-This function substitutes a trait description and two writing samples
-into a prompt template created by \code{\link{set_prompt_template}}.
-The template must contain the placeholders
-\code{{TRAIT_DESCRIPTION}}, \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
+This function takes a prompt template (typically from
+\code{\link{set_prompt_template}}), a trait name and description,
+and two writing samples, and fills in the required placeholders.
+}
+\details{
+The template must contain the placeholders:
+\code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
+\code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
 }
 \examples{
-# Get a default template and a built-in trait description
-tmpl  <- set_prompt_template()
-trait <- trait_description("overall_quality")
-
-text1 <- "This is the first example writing sample."
-text2 <- "This is the second example writing sample."
-
-prompt <- build_prompt(tmpl, trait_desc = trait, text1 = text1, text2 = text2)
-cat(substr(prompt, 1, 200), "...\n")
-
-# Use the built-in example writing samples
-data("example_writing_samples")
-prompt2 <- build_prompt(
-  tmpl,
-  trait_desc = trait,
-  text1      = example_writing_samples$text[1],
-  text2      = example_writing_samples$text[2]
+tmpl <- set_prompt_template()
+td   <- trait_description("overall_quality")
+prompt <- build_prompt(
+  template   = tmpl,
+  trait_name = td$name,
+  trait_desc = td$description,
+  text1      = "This is sample 1.",
+  text2      = "This is sample 2."
 )
-cat(substr(prompt2, 1, 200), "...\n")
+cat(substr(prompt, 1, 200), "...\n")
 
 }

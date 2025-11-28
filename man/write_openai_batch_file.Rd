@@ -2,43 +2,52 @@
 % Please edit documentation in R/batch_openai.R
 \name{write_openai_batch_file}
 \alias{write_openai_batch_file}
-\title{Write OpenAI batch JSONL lines to a file}
+\title{Write an OpenAI batch table to a JSONL file}
 \usage{
 write_openai_batch_file(batch_tbl, path)
 }
 \arguments{
-\item{batch_tbl}{A data frame or tibble produced by
-\code{\link{build_openai_batch_requests}} with a \code{jsonl} column
-containing one JSON object (as a character string) per row.}
+\item{batch_tbl}{A data frame or tibble, typically the result of
+\code{\link{build_openai_batch_requests}}.}
 
-\item{path}{File path to write to (e.g., \code{"openai_batch.jsonl"}).}
+\item{path}{File path where the JSONL file should be written.}
 }
 \value{
-Invisibly returns the input \code{batch_tbl}.
+Invisibly returns \code{path}.
 }
 \description{
-This is a small convenience wrapper around the output of
-\code{\link{build_openai_batch_requests}}. It takes a tibble with a
-\code{jsonl} column (one JSON object per row) and writes those lines
-to a file suitable for uploading to the OpenAI Batch API.
+This helper takes the output of \code{\link{build_openai_batch_requests}}
+(or a compatible table) and writes one JSON object per line, in the
+format expected by the OpenAI batch API.
+}
+\details{
+The input can either:
+\itemize{
+\item Already contain a character column \code{jsonl} (one JSON string
+per row), in which case that column is used directly, or
+\item Contain the columns \code{custom_id}, \code{method},
+\code{url}, and \code{body}, in which case the JSON strings are
+constructed automatically.
+}
 }
 \examples{
 \dontrun{
 data("example_writing_samples")
-pairs <- make_pairs(example_writing_samples)
+pairs_all   <- make_pairs(example_writing_samples)
+pairs_small <- sample_pairs(pairs_all, n_pairs = 5, seed = 1)
 
-tmpl  <- "Evaluate {TRAIT_DESCRIPTION}.\n\nSample 1:\n{SAMPLE_1}\n\nSample 2:\n{SAMPLE_2}"
-trait <- "overall writing quality"
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
 
 batch_tbl <- build_openai_batch_requests(
-  pairs             = pairs[1:2, ],
+  pairs             = pairs_small,
   model             = "gpt-4.1",
-  trait_description = trait,
-  prompt_template   = tmpl,
-  endpoint          = "chat.completions"
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl
 )
 
-write_openai_batch_file(batch_tbl, "openai_batch_gpt4.1.jsonl")
+write_openai_batch_file(batch_tbl, "batch_forward.jsonl")
 }
 
 }

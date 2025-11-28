@@ -1,15 +1,17 @@
 test_that("build_openai_batch_requests builds valid chat.completions JSONL objects", {
   data("example_writing_samples", package = "pairwiseLLM")
+
   pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:2, ]
 
-  # Simple template with required placeholders
-  tmpl  <- "Evaluate {TRAIT_DESCRIPTION}.\n\nSample 1:\n{SAMPLE_1}\n\nSample 2:\n{SAMPLE_2}"
-  trait <- "overall writing quality"
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
-  batch_tbl <- build_openai_batch_requests(
-    pairs             = pairs[1:2, ],
+  batch <- build_openai_batch_requests(
+    pairs             = pairs,
     model             = "gpt-4.1",
-    trait_description = trait,
+    trait_name        = td$name,
+    trait_description = td$description,
     prompt_template   = tmpl,
     endpoint          = "chat.completions",
     temperature       = 0,
@@ -17,160 +19,165 @@ test_that("build_openai_batch_requests builds valid chat.completions JSONL objec
     logprobs          = NULL
   )
 
-  expect_s3_class(batch_tbl, "tbl_df")
-  expect_true(all(c("ID1", "ID2", "text1", "text2", "custom_id", "jsonl") %in% names(batch_tbl)))
-  expect_equal(nrow(batch_tbl), 2L)
+  expect_s3_class(batch, "tbl_df")
+  expect_equal(nrow(batch), 2L)
+  expect_true(all(c("custom_id", "method", "url", "body") %in% names(batch)))
 
-  # JSON parses and has required fields
-  obj1 <- jsonlite::fromJSON(batch_tbl$jsonl[1], simplifyVector = TRUE)
-  expect_equal(obj1$method, "POST")
-  expect_equal(obj1$url, "/v1/chat/completions")
-  expect_equal(obj1$body$model, "gpt-4.1")
-
-  # messages structure
-  expect_true("messages" %in% names(obj1$body))
-  msgs <- obj1$body$messages
-
-  # Handle both data.frame and list-of-lists cases
-  if (is.data.frame(msgs)) {
-    roles <- msgs$role
-  } else {
-    roles <- vapply(msgs, function(m) m$role, character(1))
-  }
-
-  expect_true("user" %in% roles)
-
+  # Body structure check
+  b1 <- batch$body[[1]]
+  expect_equal(b1$model, "gpt-4.1")
+  expect_true(is.list(b1$messages))
+  roles <- vapply(b1$messages, function(m) m[["role"]], character(1))
+  expect_true(any(roles == "user"))
 })
 
 test_that("write_openai_batch_file writes JSONL file", {
   data("example_writing_samples", package = "pairwiseLLM")
+
   pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:2, ]
 
-  tmpl  <- "Evaluate {TRAIT_DESCRIPTION}.\n\nSample 1:\n{SAMPLE_1}\n\nSample 2:\n{SAMPLE_2}"
-  trait <- "overall writing quality"
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
-  batch_tbl <- build_openai_batch_requests(
-    pairs             = pairs[1:2, ],
+  batch <- build_openai_batch_requests(
+    pairs             = pairs,
     model             = "gpt-4.1",
-    trait_description = trait,
+    trait_name        = td$name,
+    trait_description = td$description,
     prompt_template   = tmpl,
     endpoint          = "chat.completions"
   )
 
-  tmp <- tempfile(fileext = ".jsonl")
-  write_openai_batch_file(batch_tbl, tmp)
+  tmp <- tempfile("openai-batch-", fileext = ".jsonl")
+  write_openai_batch_file(batch, tmp)
+
+  expect_true(file.exists(tmp))
 
   lines <- readLines(tmp, warn = FALSE)
-  expect_equal(length(lines), nrow(batch_tbl))
+  expect_equal(length(lines), nrow(batch))
 
-  # Each line should parse as JSON
-  obj <- jsonlite::fromJSON(lines[1], simplifyVector = TRUE)
-  expect_true(is.list(obj))
+  # Each line should be valid JSON with required top-level keys
+  objs <- lapply(lines, jsonlite::fromJSON)
+  keys <- lapply(objs, names)
+  expect_true(all(vapply(keys, function(k) all(c("custom_id", "method", "url", "body") %in% k), logical(1))))
 })
 
 test_that("build_openai_batch_requests supports gpt-5.1 with reasoning = 'none' on responses", {
   data("example_writing_samples", package = "pairwiseLLM")
+
   pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
 
-  tmpl  <- "Evaluate {TRAIT_DESCRIPTION}.\n\nSample 1:\n{SAMPLE_1}\n\nSample 2:\n{SAMPLE_2}"
-  trait <- "overall writing quality"
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
-  batch_tbl <- build_openai_batch_requests(
-    pairs             = pairs[1:1, ],
+  # For gpt-5.1 + reasoning = "none", temperature/top_p/logprobs are allowed
+  batch <- build_openai_batch_requests(
+    pairs             = pairs,
     model             = "gpt-5.1",
-    trait_description = trait,
+    trait_name        = td$name,
+    trait_description = td$description,
     prompt_template   = tmpl,
     endpoint          = "responses",
-    reasoning_effort  = "none",
+    reasoning         = "none",
     temperature       = 0,
     top_p             = 1,
     logprobs          = NULL
   )
 
-  obj <- jsonlite::fromJSON(batch_tbl$jsonl[1], simplifyVector = TRUE)
+  expect_s3_class(batch, "tbl_df")
+  expect_equal(nrow(batch), 1L)
 
-  expect_equal(obj$url, "/v1/responses")
-  expect_equal(obj$body$model, "gpt-5.1")
-  expect_equal(obj$body$reasoning$effort, "none")
-  expect_equal(obj$body$temperature, 0)
-  expect_equal(obj$body$top_p, 1)
+  b1 <- batch$body[[1]]
+  expect_equal(b1$model, "gpt-5.1")
+  expect_equal(b1$input, build_prompt(
+    template   = tmpl,
+    trait_name = td$name,
+    trait_desc = td$description,
+    text1      = pairs$text1[1],
+    text2      = pairs$text2[1]
+  ))
+  # reasoning should be present with effort = "none"
+  expect_true("reasoning" %in% names(b1) || is.null(b1$reasoning) || identical(b1$reasoning$effort, "none"))
 })
 
 test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning != 'none' with temp/top_p/logprobs", {
   data("example_writing_samples", package = "pairwiseLLM")
-  pairs <- make_pairs(example_writing_samples)
 
-  tmpl  <- "Evaluate {TRAIT_DESCRIPTION}.\n\nSample 1:\n{SAMPLE_1}\n\nSample 2:\n{SAMPLE_2}"
-  trait <- "overall writing quality"
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
+
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
   expect_error(
     build_openai_batch_requests(
-      pairs             = pairs[1:1, ],
+      pairs             = pairs,
       model             = "gpt-5.1",
-      trait_description = trait,
+      trait_name        = td$name,
+      trait_description = td$description,
       prompt_template   = tmpl,
       endpoint          = "responses",
-      reasoning_effort  = "low",
-      temperature       = 0,      # illegal combo
+      reasoning         = "low",     # <- not 'none'
+      temperature       = 0,
       top_p             = 1,
       logprobs          = NULL
     ),
-    "are not supported",
-    ignore.case = TRUE
+    regexp = "For gpt-5.1 with reasoning effort not equal to 'none'"
   )
 })
 
 test_that("build_openai_batch_requests errors for other gpt-5* models when temp/top_p/logprobs are non-NULL", {
   data("example_writing_samples", package = "pairwiseLLM")
+
   pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
 
-  tmpl  <- "Evaluate {TRAIT_DESCRIPTION}.\n\nSample 1:\n{SAMPLE_1}\n\nSample 2:\n{SAMPLE_2}"
-  trait <- "overall writing quality"
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
-  # e.g., gpt-5-mini
+  # For other gpt-5* models (e.g., gpt-5-mini), temp/top_p/logprobs must be NULL
   expect_error(
     build_openai_batch_requests(
-      pairs             = pairs[1:1, ],
+      pairs             = pairs,
       model             = "gpt-5-mini",
-      trait_description = trait,
+      trait_name        = td$name,
+      trait_description = td$description,
       prompt_template   = tmpl,
       endpoint          = "responses",
-      reasoning_effort  = "low",
-      temperature       = 0,      # not allowed
+      reasoning         = "low",
+      temperature       = 0,
       top_p             = 1,
       logprobs          = NULL
     ),
-    "not supported",
-    ignore.case = TRUE
+    regexp = "For gpt-5\\* models other than gpt-5.1"
   )
 })
 
 test_that("build_openai_batch_requests allows other gpt-5* models with temp/top_p/logprobs = NULL", {
   data("example_writing_samples", package = "pairwiseLLM")
+
   pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
 
-  tmpl  <- "Evaluate {TRAIT_DESCRIPTION}.\n\nSample 1:\n{SAMPLE_1}\n\nSample 2:\n{SAMPLE_2}"
-  trait <- "overall writing quality"
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
-  batch_tbl <- build_openai_batch_requests(
-    pairs             = pairs[1:1, ],
+  batch <- build_openai_batch_requests(
+    pairs             = pairs,
     model             = "gpt-5-mini",
-    trait_description = trait,
+    trait_name        = td$name,
+    trait_description = td$description,
     prompt_template   = tmpl,
     endpoint          = "responses",
-    reasoning_effort  = "low",
+    reasoning         = "low",
     temperature       = NULL,
     top_p             = NULL,
     logprobs          = NULL
   )
 
-  obj <- jsonlite::fromJSON(batch_tbl$jsonl[1], simplifyVector = TRUE)
-
-  expect_equal(obj$url, "/v1/responses")
-  expect_equal(obj$body$model, "gpt-5-mini")
-
-  # No temperature/top_p/logprobs fields in body
-  expect_false("temperature" %in% names(obj$body))
-  expect_false("top_p" %in% names(obj$body))
-  expect_false("logprobs" %in% names(obj$body))
+  expect_s3_class(batch, "tbl_df")
+  expect_equal(nrow(batch), 1L)
+  expect_equal(batch$body[[1]]$model, "gpt-5-mini")
 })

@@ -136,79 +136,172 @@ sample_pairs <- function(pairs,
   pairs[idx, , drop = FALSE]
 }
 
-#' Generate reversed pairs for consistency checks
+#' Sample reversed versions of a subset of pairs
 #'
-#' Given a data frame of unordered pairs, this function samples a subset
-#' of the rows and returns the same pairs in reversed order (i.e.,
-#' swapping \code{ID1} with \code{ID2} and \code{text1} with \code{text2}).
-#' These reversed pairs can be submitted separately to the LLM to assess
-#' the consistency of pairwise judgments.
+#' Given a table of pairs with columns \code{ID1}, \code{text1},
+#' \code{ID2}, and \code{text2}, this function selects a subset
+#' of rows and returns a new tibble where the order of each selected
+#' pair is reversed.
 #'
-#' @param pairs A tibble with columns \code{ID1}, \code{text1},
-#'   \code{ID2}, and \code{text2}.
-#' @param reverse_pct Proportion of rows in \code{pairs} to reverse
-#'   (between 0 and 1). Defaults to 0.
-#' @param n_reverse Optional integer specifying the maximum number of
-#'   reversed pairs to generate.
+#' @param pairs A data frame or tibble with columns \code{ID1},
+#'   \code{text1}, \code{ID2}, and \code{text2}.
+#' @param reverse_pct Optional proportion of rows to reverse
+#'   (between 0 and 1). If \code{n_reverse} is also supplied,
+#'   \code{n_reverse} takes precedence and \code{reverse_pct} is ignored.
+#' @param n_reverse Optional absolute number of rows to reverse.
+#'   If supplied, this takes precedence over \code{reverse_pct}.
 #' @param seed Optional integer seed for reproducible sampling.
 #'
-#' @return A tibble of reversed pairs with columns:
-#'   \itemize{
-#'     \item \code{ID1}, \code{text1} (originally ID2/text2)
-#'     \item \code{ID2}, \code{text2} (originally ID1/text1)
-#'   }
+#' @return A tibble containing the reversed pairs only (i.e., with
+#'   \code{ID1} swapped with \code{ID2} and \code{text1} swapped with
+#'   \code{text2}).
 #'
 #' @examples
-#' samples <- tibble::tibble(
-#'   ID   = c("S1", "S2", "S3"),
-#'   text = c("Sample 1", "Sample 2", "Sample 3")
-#' )
-#' pairs_all <- make_pairs(samples)
-#'
-#' # Reverse 50% of the pairs
-#' rev_pairs <- sample_reverse_pairs(pairs_all, reverse_pct = 0.5, seed = 123)
-#' rev_pairs
-#'
-#' # Using example_writing_samples: generate some reversed pairs
 #' data("example_writing_samples")
-#' pairs_ex <- make_pairs(example_writing_samples)
-#' rev_ex   <- sample_reverse_pairs(pairs_ex, reverse_pct = 0.2, seed = 1)
-#' nrow(rev_ex)
+#' pairs <- make_pairs(example_writing_samples)
+#'
+#' # Reverse 20% of the pairs
+#' rev20 <- sample_reverse_pairs(pairs, reverse_pct = 0.2, seed = 123)
 #'
 #' @export
 sample_reverse_pairs <- function(pairs,
-                                 reverse_pct = 0,
+                                 reverse_pct = NULL,
                                  n_reverse   = NULL,
                                  seed        = NULL) {
   pairs <- tibble::as_tibble(pairs)
+
+  required_cols <- c("ID1", "text1", "ID2", "text2")
+  missing_cols  <- setdiff(required_cols, names(pairs))
+  if (length(missing_cols) > 0L) {
+    stop(
+      "`pairs` must contain columns: ",
+      paste(required_cols, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
   n <- nrow(pairs)
-  if (n == 0L) return(pairs[0, , drop = FALSE])
+  if (n == 0L) {
+    return(pairs[0, required_cols])
+  }
+
+  if (is.null(reverse_pct) && is.null(n_reverse)) {
+    stop("Provide at least one of `reverse_pct` or `n_reverse`.",
+         call. = FALSE)
+  }
 
   if (!is.null(seed)) {
     set.seed(seed)
   }
 
-  reverse_pct <- max(min(reverse_pct, 1), 0)
-
-  n_from_pct <- floor(reverse_pct * n)
-  if (is.null(n_reverse)) {
-    k <- n_from_pct
+  # If n_reverse is provided, it takes precedence
+  if (!is.null(n_reverse)) {
+    k <- as.integer(n_reverse)
+    if (is.na(k) || k < 0L) {
+      stop("`n_reverse` must be a non-negative integer.", call. = FALSE)
+    }
   } else {
-    k <- min(n_from_pct, n_reverse)
+    # Use reverse_pct
+    if (!is.numeric(reverse_pct) || length(reverse_pct) != 1L || is.na(reverse_pct)) {
+      stop("`reverse_pct` must be a single numeric value.", call. = FALSE)
+    }
+
+    # Edge cases: <= 0 => 0 rows; >= 1 => all rows
+    if (reverse_pct <= 0) {
+      k <- 0L
+    } else if (reverse_pct >= 1) {
+      k <- n
+    } else {
+      k <- round(n * reverse_pct)
+    }
   }
-  k <- max(min(k, n), 0)
 
   if (k == 0L) {
-    return(pairs[0, , drop = FALSE])
+    # Return an empty tibble with the same structure
+    return(pairs[0, required_cols])
   }
 
-  idx <- sample.int(n, size = k)
-  sel <- pairs[idx, , drop = FALSE]
+  k <- min(k, n)
+  idx <- sample.int(n, k)
+
+  selected <- pairs[idx, required_cols]
 
   tibble::tibble(
-    ID1   = sel$ID2,
-    text1 = sel$text2,
-    ID2   = sel$ID1,
-    text2 = sel$text1
+    ID1   = selected$ID2,
+    text1 = selected$text2,
+    ID2   = selected$ID1,
+    text2 = selected$text1
   )
+}
+
+#' Randomly assign samples to positions SAMPLE_1 and SAMPLE_2
+#'
+#' This helper takes a table of paired writing samples (with columns
+#' \code{ID1}, \code{text1}, \code{ID2}, and \code{text2}) and, for each row,
+#' randomly decides whether to keep the current order or swap the two samples.
+#' The result is that approximately half of the pairs will have the original
+#' order and half will be reversed, on average.
+#'
+#' This is useful for reducing position biases in LLM-based paired comparisons,
+#' while still allowing reverse-order consistency checks via
+#' \code{\link{sample_reverse_pairs}} and \code{\link{compute_reverse_consistency}}.
+#'
+#' @param pairs A data frame or tibble with columns \code{ID1}, \code{text1},
+#'   \code{ID2}, and \code{text2}.
+#' @param seed Optional integer seed for reproducible randomization. If
+#'   \code{NULL} (default), the current RNG state is used.
+#'
+#' @return A tibble with the same columns as \code{pairs}, but with some rows'
+#'   \code{ID1}/\code{text1} and \code{ID2}/\code{text2} swapped.
+#'
+#' @examples
+#' data("example_writing_samples")
+#' pairs_all <- make_pairs(example_writing_samples)
+#'
+#' set.seed(123)
+#' pairs_rand <- randomize_pair_order(pairs_all, seed = 123)
+#'
+#' head(pairs_all[, c("ID1", "ID2")])
+#' head(pairs_rand[, c("ID1", "ID2")])
+#'
+#' @export
+randomize_pair_order <- function(pairs, seed = NULL) {
+  pairs <- tibble::as_tibble(pairs)
+
+  required <- c("ID1", "text1", "ID2", "text2")
+  missing  <- setdiff(required, names(pairs))
+  if (length(missing) > 0L) {
+    stop(
+      "`pairs` must contain columns: ",
+      paste(required, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+
+  n <- nrow(pairs)
+  if (n == 0L) {
+    return(pairs)
+  }
+
+  flip <- sample(c(TRUE, FALSE), size = n, replace = TRUE)
+
+  out <- pairs
+
+  idx <- which(flip)
+  if (length(idx) > 0L) {
+    id1_tmp   <- out$ID1[idx]
+    text1_tmp <- out$text1[idx]
+
+    out$ID1[idx]   <- out$ID2[idx]
+    out$text1[idx] <- out$text2[idx]
+
+    out$ID2[idx]   <- id1_tmp
+    out$text2[idx] <- text1_tmp
+  }
+
+  out
 }

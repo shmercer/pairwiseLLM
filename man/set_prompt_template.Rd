@@ -18,9 +18,10 @@ A character string containing the prompt template.
 }
 \description{
 This function returns a default prompt template that includes
-placeholders for the trait description and two writing samples.
-The placeholders \code{{TRAIT_DESCRIPTION}}, \code{{SAMPLE_1}},
-and \code{{SAMPLE_2}} must be present in any custom template.
+placeholders for the trait name, trait description, and two
+writing samples. Any custom template must contain the
+placeholders \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
+\code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
 }
 \examples{
 # Get the default template
@@ -29,10 +30,18 @@ cat(substr(tmpl, 1, 200), "...\n")
 
 # Using the template with example writing samples
 data("example_writing_samples")
-trait <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
+
 text1 <- example_writing_samples$text[1]
 text2 <- example_writing_samples$text[2]
-prompt <- build_prompt(tmpl, trait_desc = trait, text1 = text1, text2 = text2)
+
+prompt <- build_prompt(
+  template   = tmpl,
+  trait_name = td$name,
+  trait_desc = td$description,
+  text1      = text1,
+  text2      = text2
+)
 cat(substr(prompt, 1, 200), "...\n")
 
 }

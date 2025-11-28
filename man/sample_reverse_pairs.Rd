@@ -2,51 +2,39 @@
 % Please edit documentation in R/pairing.R
 \name{sample_reverse_pairs}
 \alias{sample_reverse_pairs}
-\title{Generate reversed pairs for consistency checks}
+\title{Sample reversed versions of a subset of pairs}
 \usage{
-sample_reverse_pairs(pairs, reverse_pct = 0, n_reverse = NULL, seed = NULL)
+sample_reverse_pairs(pairs, reverse_pct = NULL, n_reverse = NULL, seed = NULL)
 }
 \arguments{
-\item{pairs}{A tibble with columns \code{ID1}, \code{text1},
-\code{ID2}, and \code{text2}.}
+\item{pairs}{A data frame or tibble with columns \code{ID1},
+\code{text1}, \code{ID2}, and \code{text2}.}
 
-\item{reverse_pct}{Proportion of rows in \code{pairs} to reverse
-(between 0 and 1). Defaults to 0.}
+\item{reverse_pct}{Optional proportion of rows to reverse
+(between 0 and 1). If \code{n_reverse} is also supplied,
+\code{n_reverse} takes precedence and \code{reverse_pct} is ignored.}
 
-\item{n_reverse}{Optional integer specifying the maximum number of
-reversed pairs to generate.}
+\item{n_reverse}{Optional absolute number of rows to reverse.
+If supplied, this takes precedence over \code{reverse_pct}.}
 
 \item{seed}{Optional integer seed for reproducible sampling.}
 }
 \value{
-A tibble of reversed pairs with columns:
-\itemize{
-\item \code{ID1}, \code{text1} (originally ID2/text2)
-\item \code{ID2}, \code{text2} (originally ID1/text1)
-}
+A tibble containing the reversed pairs only (i.e., with
+\code{ID1} swapped with \code{ID2} and \code{text1} swapped with
+\code{text2}).
 }
 \description{
-Given a data frame of unordered pairs, this function samples a subset
-of the rows and returns the same pairs in reversed order (i.e.,
-swapping \code{ID1} with \code{ID2} and \code{text1} with \code{text2}).
-These reversed pairs can be submitted separately to the LLM to assess
-the consistency of pairwise judgments.
+Given a table of pairs with columns \code{ID1}, \code{text1},
+\code{ID2}, and \code{text2}, this function selects a subset
+of rows and returns a new tibble where the order of each selected
+pair is reversed.
 }
 \examples{
-samples <- tibble::tibble(
-  ID   = c("S1", "S2", "S3"),
-  text = c("Sample 1", "Sample 2", "Sample 3")
-)
-pairs_all <- make_pairs(samples)
-
-# Reverse 50\% of the pairs
-rev_pairs <- sample_reverse_pairs(pairs_all, reverse_pct = 0.5, seed = 123)
-rev_pairs
-
-# Using example_writing_samples: generate some reversed pairs
 data("example_writing_samples")
-pairs_ex <- make_pairs(example_writing_samples)
-rev_ex   <- sample_reverse_pairs(pairs_ex, reverse_pct = 0.2, seed = 1)
-nrow(rev_ex)
+pairs <- make_pairs(example_writing_samples)
+
+# Reverse 20\% of the pairs
+rev20 <- sample_reverse_pairs(pairs, reverse_pct = 0.2, seed = 123)
 
 }

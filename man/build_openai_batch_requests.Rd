@@ -7,123 +7,88 @@
 build_openai_batch_requests(
   pairs,
   model,
+  trait_name,
   trait_description,
-  prompt_template,
-  system_prompt = NULL,
-  temperature = 0,
-  top_p = 1,
-  logprobs = NULL,
+  prompt_template = set_prompt_template(),
   endpoint = c("chat.completions", "responses"),
-  reasoning_effort = NULL,
-  custom_id_prefix = "EXP_"
+  temperature = NULL,
+  top_p = NULL,
+  logprobs = NULL,
+  reasoning = NULL,
+  request_id_prefix = "EXP"
 )
 }
 \arguments{
-\item{pairs}{A data frame or tibble with at least the columns
-\code{ID1}, \code{ID2}, \code{text1}, and \code{text2}.}
+\item{pairs}{A data frame or tibble with columns \code{ID1}, \code{text1},
+\code{ID2}, and \code{text2}.}
 
-\item{model}{Character string with the OpenAI model name
+\item{model}{Character scalar giving the OpenAI model name
 (e.g., \code{"gpt-4.1"}, \code{"gpt-5.1"}).}
 
-\item{trait_description}{Character string with the description of the
-trait being evaluated (e.g., "overall writing quality").}
+\item{trait_name}{Short label for the trait (e.g., "Overall Quality").}
 
-\item{prompt_template}{Character string template containing placeholders
-for \code{\\{TRAIT_DESCRIPTION\\}}, \code{\\{SAMPLE_1\\}},
-and \code{\\{SAMPLE_2\\}}. The function performs straightforward
-string substitution on these markers.}
+\item{trait_description}{Full-text definition of the trait.}
 
-\item{system_prompt}{Optional system prompt string. If \code{NULL}
-(default), no system message is included (chat endpoint only).}
+\item{prompt_template}{Character template containing the placeholders
+\code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}}, \code{{SAMPLE_1}},
+and \code{{SAMPLE_2}}. Defaults to \code{set_prompt_template()}.}
 
-\item{temperature}{Numeric temperature to include in the request body.
-Defaults to \code{0}, which is usually preferred for scoring and
-comparison tasks. For GPT-5.x on the Responses endpoint, see the
-constraints above.}
+\item{endpoint}{Which OpenAI endpoint to target. One of
+\code{"chat.completions"} (default) or \code{"responses"}.}
 
-\item{top_p}{Optional numeric \eqn{(0,1]} controlling nucleus sampling.
-Defaults to \code{1}. Only included in the request body if not \code{NULL}.
-For GPT-5.x on the Responses endpoint, see the constraints above.}
+\item{temperature}{Optional temperature parameter (see OpenAI docs).}
 
-\item{logprobs}{Optional control for log-probabilities. The value is passed
-through without validation and omitted if \code{NULL}, but GPT-5.x models
-on the Responses endpoint impose additional restrictions (see details).}
+\item{top_p}{Optional top_p parameter.}
 
-\item{endpoint}{Character string specifying which OpenAI endpoint to
-target. One of \code{"chat.completions"} (default) or
-\code{"responses"}. This controls the \code{url} field and the shape
-of the \code{body}.}
+\item{logprobs}{Optional logprobs parameter.}
 
-\item{reasoning_effort}{Optional character string for the Responses
-endpoint, specifying the reasoning effort. Typical values include
-\code{"none"}, \code{"low"}, \code{"medium"}, or \code{"high"}.
-If \code{NULL} (default), no \code{reasoning} field is included.}
+\item{reasoning}{Optional reasoning effort for \code{gpt-5.1} when using
+the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
+\code{"medium"}, or \code{"high"}.}
 
-\item{custom_id_prefix}{Character string used as a prefix for the
-\code{custom_id} field. The suffix is constructed as
-\code{"ID1_vs_ID2"}.}
+\item{request_id_prefix}{String prefix for \code{custom_id}; the full
+ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.}
 }
 \value{
 A tibble with one row per pair and columns:
 \itemize{
-\item \code{ID1}, \code{ID2}, \code{text1}, \code{text2}
-\item \code{custom_id}: the string used for the batch request
-\item \code{jsonl}: the JSON object as a single-character string
+\item \code{custom_id}: ID string used by the batch API.
+\item \code{method}: HTTP method (\code{"POST"}).
+\item \code{url}: Endpoint path (\code{"/v1/chat/completions"} or
+\code{"/v1/responses"}).
+\item \code{body}: List column containing the request body.
 }
 }
 \description{
-This function takes a data frame of paired writing samples and produces
-one JSON object (as a character string) per row, suitable for use with
-the OpenAI Batch API.
+This helper constructs one JSON object per pair of writing samples,
+suitable for use with the OpenAI batch API. It supports both
+\code{/v1/chat/completions} and \code{/v1/responses} endpoints.
 }
 \details{
-By default it targets the Chat Completions endpoint
-(\code{/v1/chat/completions}), which is appropriate for models such as
-\code{"gpt-4.1"} and \code{"gpt-4.1-mini"}. It can also target the
-Responses endpoint (\code{/v1/responses}) for models such as
-\code{"gpt-5.1"}, including an optional \code{reasoning} configuration.
-
-⚠️ GPT-5.x constraints (Responses endpoint):
-\itemize{
-\item For \code{model = "gpt-5.1"}, the fields \code{temperature},
-\code{top_p}, and \code{logprobs} are only allowed when
-\code{reasoning_effort = "none"}.
-\item For other GPT-5 family models (e.g., \code{"gpt-5"},
-\code{"gpt-5-mini"}, \code{"gpt-5-nano"}) on the Responses
-endpoint, \code{temperature}, \code{top_p}, and \code{logprobs}
-must be omitted entirely. If any of these arguments are non-NULL,
-this function will error with an explanatory message.
-}
+Each row in \code{pairs} must contain columns \code{ID1}, \code{text1},
+\code{ID2}, and \code{text2}. For each pair, a prompt is generated by
+filling a template (see \code{\link{set_prompt_template}} and
+\code{\link{build_prompt}}) and then wrapped in the appropriate request
+body structure.
 }
 \examples{
+\dontrun{
 data("example_writing_samples")
-pairs <- make_pairs(example_writing_samples)
+pairs_all   <- make_pairs(example_writing_samples)
+pairs_small <- sample_pairs(pairs_all, n_pairs = 10, seed = 1)
 
-tmpl <- paste(
-  "You are comparing two student writing samples.",
-  "Decide which sample shows better {TRAIT_DESCRIPTION}.",
-  "",
-  "SAMPLE 1:",
-  "{SAMPLE_1}",
-  "",
-  "SAMPLE 2:",
-  "{SAMPLE_2}",
-  "",
-  "Respond ONLY with:",
-  "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>  or",
-  "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>",
-  sep = "\n"
-)
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
 
-trait <- "overall writing quality"
-
-# Chat Completions endpoint (e.g., gpt-4.1)
-batch_chat <- build_openai_batch_requests(
-  pairs             = pairs[1:2, ],
+batch_tbl <- build_openai_batch_requests(
+  pairs             = pairs_small,
   model             = "gpt-4.1",
-  trait_description = trait,
+  trait_name        = td$name,
+  trait_description = td$description,
   prompt_template   = tmpl,
-  endpoint          = "chat.completions"
+  endpoint          = "chat.completions",
+  temperature       = 0
 )
+}
 
 }
