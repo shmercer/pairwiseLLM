@@ -34,6 +34,24 @@ NULL
     )
 }
 
+# Internal wrappers around httr2 so tests can mock them easily ---------
+
+.anthropic_req_body_json <- function(req, body) {
+  httr2::req_body_json(req, body)
+}
+
+.anthropic_req_perform <- function(req) {
+  httr2::req_perform(req)
+}
+
+.anthropic_resp_body_json <- function(resp, ...) {
+  httr2::resp_body_json(resp, ...)
+}
+
+.anthropic_resp_status <- function(resp) {
+  httr2::resp_status(resp)
+}
+
 # -------------------------------------------------------------------------
 # Public functions
 # -------------------------------------------------------------------------
@@ -79,24 +97,23 @@ NULL
 #'   \code{Sys.getenv("ANTHROPIC_API_KEY")}.
 #' @param anthropic_version Anthropic API version string passed as the
 #'   \code{anthropic-version} HTTP header. Defaults to \code{"2023-06-01"}.
-#' @param reasoning Character scalar indicating whether to use additional
-#'   "reasoning-style" chain-of-thought in the model prompt. Currently two
-#'   values are recognised:
+#' @param reasoning Character scalar indicating whether to allow more extensive
+#'   internal "thinking" before the visible answer. Two values are recognised:
 #'   \itemize{
 #'     \item \code{"none"} – standard prompting (recommended default).
-#'     \item \code{"enabled"} – reserved for future use; you can use this to
-#'       drive different temperature / max token settings or prompt templates
-#'       when experimenting with longer reasoning traces.
+#'     \item \code{"enabled"} – sends a \code{thinking} block to the Anthropic
+#'       API (with a token budget) and increases the default \code{max_tokens}
+#'       used for the visible answer.
 #'   }
-#'   This argument is provided to mirror OpenAI's \code{reasoning} concept but
-#'   is not directly sent as a separate parameter to the Anthropic API.
 #' @param include_raw Logical; if \code{TRUE}, adds a list-column
 #'   \code{raw_response} containing the parsed JSON body returned by Anthropic
 #'   (or \code{NULL} on parse failure). This is useful for debugging parsing
 #'   problems.
 #' @param ... Additional Anthropic parameters such as \code{max_tokens},
-#'   \code{temperature}, or \code{top_p}, which will be passed through to the
-#'   Messages API.
+#'   \code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
+#'   which will be passed through to the Messages API. If you supply
+#'   \code{thinking_budget_tokens} it will override the default thinking budget
+#'   used when \code{reasoning = "enabled"}.
 #'
 #' @return A tibble with one row and columns:
 #' \describe{
@@ -112,7 +129,8 @@ NULL
 #'     otherwise NA.}
 #'   \item{prompt_tokens}{Prompt / input token count (if reported).}
 #'   \item{completion_tokens}{Completion / output token count (if reported).}
-#'   \item{total_tokens}{Total token count (if reported).}
+#'   \item{total_tokens}{Total token count (reported by the API or computed as
+#'     input + output tokens when not provided).}
 #'   \item{raw_response}{(Optional) list-column containing the parsed JSON body.}
 #' }
 #'
@@ -122,12 +140,22 @@ NULL
 #' For stable, reproducible comparisons we recommend:
 #' \itemize{
 #'   \item \code{temperature = 0} (deterministic comparisons).
-#'   \item \code{max_tokens = 768} (enough room for explanation and the
-#'     `<BETTER_SAMPLE>` tag).
+#'   \item \code{max_tokens = 768} when \code{reasoning = "none"}.
+#'   \item \code{max_tokens = 1536} when \code{reasoning = "enabled"}.
 #' }
 #'
-#' If you do not supply \code{temperature} or \code{max_tokens} explicitly,
-#' this function will use these values by default for pairwise tasks.
+#' When \code{reasoning = "enabled"}, this function also sends a
+#' \code{thinking} block to the Anthropic API:
+#'
+#' \preformatted{
+#' "thinking": {
+#'   "type": "enabled",
+#'   "budget_tokens": <thinking_budget_tokens>
+#' }
+#' }
+#'
+#' where \code{thinking_budget_tokens} defaults to 2000, but can be overridden
+#' via \code{...}.
 #'
 #' @examples
 #' \dontrun{
@@ -140,6 +168,7 @@ NULL
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
+#' # Short, deterministic comparison (no explicit thinking block)
 #' res_claude <- anthropic_compare_pair_live(
 #'   ID1               = samples$ID[1],
 #'   text1             = samples$text[1],
@@ -149,13 +178,28 @@ NULL
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   temperature       = 0,
-#'   max_tokens        = 768,
 #'   reasoning         = "none",
 #'   include_raw       = FALSE
 #' )
 #'
 #' res_claude$better_id
+#'
+#' # Allow more internal thinking and a longer explanation
+#' res_claude_reason <- anthropic_compare_pair_live(
+#'   ID1               = samples$ID[1],
+#'   text1             = samples$text[1],
+#'   ID2               = samples$ID[2],
+#'   text2             = samples$text[2],
+#'   model             = "claude-sonnet-4-5",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   reasoning         = "enabled",
+#'   include_raw       = TRUE
+#' )
+#'
+#' res_claude_reason$total_tokens
+#' substr(res_claude_reason$content, 1, 200)
 #' }
 #'
 #' @export
@@ -184,11 +228,43 @@ anthropic_compare_pair_live <- function(
   if (!is.character(text2) || length(text2) != 1L) stop("`text2` must be a single character.", call. = FALSE)
   if (!is.character(model) || length(model) != 1L) stop("`model` must be a single character.", call. = FALSE)
 
-  dots        <- list(...)
-  # Recommended defaults for pairwise scoring:
+  dots <- list(...)
+
+  reasoning <- match.arg(reasoning)
+
+  # temperature: still deterministic unless user overrides
   temperature <- dots$temperature %||% 0
-  top_p       <- dots$top_p       %||% NULL
-  max_tokens  <- dots$max_tokens  %||% 768L
+
+  if (is.null(dots$max_tokens)) {
+    max_tokens <- if (reasoning == "none") 768L else 2048L
+  } else {
+    max_tokens <- dots$max_tokens
+  }
+
+  top_p <- dots$top_p %||% NULL
+
+  thinking_budget <- NULL
+  if (reasoning == "enabled") {
+    # default thinking budget: at least 1024, at most max_tokens - 256
+    default_budget <- 1024L
+
+    thinking_budget <- dots$thinking_budget_tokens %||% default_budget
+
+    # Enforce documented constraints gracefully
+    if (thinking_budget < 1024L) {
+      thinking_budget <- 1024L
+    }
+    if (thinking_budget >= max_tokens) {
+      # Keep a 25% margin for visible output
+      thinking_budget <- as.integer(floor(max_tokens * 0.5))
+      if (thinking_budget < 1024L) {
+        stop("`max_tokens` too small to support extended thinking: ",
+             "it must be large enough that thinking_budget_tokens >= 1024 ",
+             "and thinking_budget_tokens < max_tokens.",
+             call. = FALSE)
+      }
+    }
+  }
 
   prompt <- build_prompt(
     template   = prompt_template,
@@ -217,24 +293,30 @@ anthropic_compare_pair_live <- function(
   if (!is.null(temperature)) body$temperature <- temperature
   if (!is.null(top_p))       body$top_p       <- top_p
 
-  # At present we don't send `reasoning` as a separate parameter; users can
-  # encode reasoning-related instructions in the prompt template and/or adjust
-  # temperature / max_tokens via `...`.
+  if (reasoning == "enabled" && !is.null(thinking_budget)) {
+    body$thinking <- list(
+      type          = "enabled",
+      budget_tokens = thinking_budget
+    )
+  }
+
+  if (!is.null(temperature)) body$temperature <- temperature
+  if (!is.null(top_p))       body$top_p       <- top_p
 
   req <- .anthropic_request(
     path              = "/v1/messages",
     api_key           = api_key,
     anthropic_version = anthropic_version
   ) |>
-    req_body_json(body)
+    .anthropic_req_body_json(body)
 
-  resp <- req_perform(req)
+  resp <- .anthropic_req_perform(req)
 
-  status_code   <- resp_status(resp)
+  status_code   <- .anthropic_resp_status(resp)
   error_message <- NA_character_
 
   body_parsed <- tryCatch(
-    resp_body_json(resp, simplifyVector = FALSE),
+    .anthropic_resp_body_json(resp, simplifyVector = FALSE),
     error = function(e) NULL
   )
 
@@ -302,9 +384,17 @@ anthropic_compare_pair_live <- function(
   }
 
   usage <- body$usage %||% list()
+
   prompt_tokens     <- usage$input_tokens  %||% NA_real_
   completion_tokens <- usage$output_tokens %||% NA_real_
-  total_tokens      <- usage$total_tokens  %||% NA_real_
+
+  if (!is.null(usage$total_tokens)) {
+    total_tokens <- usage$total_tokens
+  } else if (!is.null(prompt_tokens) && !is.null(completion_tokens)) {
+    total_tokens <- as.numeric(prompt_tokens) + as.numeric(completion_tokens)
+  } else {
+    total_tokens <- NA_real_
+  }
 
   res <- tibble::tibble(
     custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),

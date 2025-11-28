@@ -55,17 +55,14 @@ instructions, rubric text, and \verb{<BETTER_SAMPLE>} tagging convention.}
 \item{anthropic_version}{Anthropic API version string passed as the
 \code{anthropic-version} HTTP header. Defaults to \code{"2023-06-01"}.}
 
-\item{reasoning}{Character scalar indicating whether to use additional
-"reasoning-style" chain-of-thought in the model prompt. Currently two
-values are recognised:
+\item{reasoning}{Character scalar indicating whether to allow more extensive
+internal "thinking" before the visible answer. Two values are recognised:
 \itemize{
 \item \code{"none"} – standard prompting (recommended default).
-\item \code{"enabled"} – reserved for future use; you can use this to
-drive different temperature / max token settings or prompt templates
-when experimenting with longer reasoning traces.
-}
-This argument is provided to mirror OpenAI's \code{reasoning} concept but
-is not directly sent as a separate parameter to the Anthropic API.}
+\item \code{"enabled"} – sends a \code{thinking} block to the Anthropic
+API (with a token budget) and increases the default \code{max_tokens}
+used for the visible answer.
+}}
 
 \item{include_raw}{Logical; if \code{TRUE}, adds a list-column
 \code{raw_response} containing the parsed JSON body returned by Anthropic
@@ -73,8 +70,10 @@ is not directly sent as a separate parameter to the Anthropic API.}
 problems.}
 
 \item{...}{Additional Anthropic parameters such as \code{max_tokens},
-\code{temperature}, or \code{top_p}, which will be passed through to the
-Messages API.}
+\code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
+which will be passed through to the Messages API. If you supply
+\code{thinking_budget_tokens} it will override the default thinking budget
+used when \code{reasoning = "enabled"}.}
 }
 \value{
 A tibble with one row and columns:
@@ -91,7 +90,8 @@ A tibble with one row and columns:
 otherwise NA.}
 \item{prompt_tokens}{Prompt / input token count (if reported).}
 \item{completion_tokens}{Completion / output token count (if reported).}
-\item{total_tokens}{Total token count (if reported).}
+\item{total_tokens}{Total token count (reported by the API or computed as
+input + output tokens when not provided).}
 \item{raw_response}{(Optional) list-column containing the parsed JSON body.}
 }
 }
@@ -121,12 +121,22 @@ The API typically responds with a dated model string such as
 For stable, reproducible comparisons we recommend:
 \itemize{
 \item \code{temperature = 0} (deterministic comparisons).
-\item \code{max_tokens = 768} (enough room for explanation and the
-\verb{<BETTER_SAMPLE>} tag).
+\item \code{max_tokens = 768} when \code{reasoning = "none"}.
+\item \code{max_tokens = 1536} when \code{reasoning = "enabled"}.
 }
 
-If you do not supply \code{temperature} or \code{max_tokens} explicitly,
-this function will use these values by default for pairwise tasks.
+When \code{reasoning = "enabled"}, this function also sends a
+\code{thinking} block to the Anthropic API:
+
+\preformatted{
+"thinking": {
+  "type": "enabled",
+  "budget_tokens": <thinking_budget_tokens>
+}
+}
+
+where \code{thinking_budget_tokens} defaults to 2000, but can be overridden
+via \code{...}.
 }
 \examples{
 \dontrun{
@@ -139,6 +149,7 @@ samples <- example_writing_samples[1:2, ]
 td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
+# Short, deterministic comparison (no explicit thinking block)
 res_claude <- anthropic_compare_pair_live(
   ID1               = samples$ID[1],
   text1             = samples$text[1],
@@ -148,13 +159,28 @@ res_claude <- anthropic_compare_pair_live(
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  temperature       = 0,
-  max_tokens        = 768,
   reasoning         = "none",
   include_raw       = FALSE
 )
 
 res_claude$better_id
+
+# Allow more internal thinking and a longer explanation
+res_claude_reason <- anthropic_compare_pair_live(
+  ID1               = samples$ID[1],
+  text1             = samples$text[1],
+  ID2               = samples$ID[2],
+  text2             = samples$text[2],
+  model             = "claude-sonnet-4-5",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  reasoning         = "enabled",
+  include_raw       = TRUE
+)
+
+res_claude_reason$total_tokens
+substr(res_claude_reason$content, 1, 200)
 }
 
 }

@@ -28,11 +28,11 @@ testthat::test_that("anthropic_compare_pair_live parses /v1/messages correctly",
   )
 
   testthat::with_mocked_bindings(
-    .anthropic_api_key = function(...) "FAKEKEY",
-    req_body_json      = function(req, body) req,
-    req_perform        = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json     = function(...) fake_body,
-    resp_status        = function(...) 200L,
+    .anthropic_api_key       = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) req,
+    .anthropic_req_perform   = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) fake_body,
+    .anthropic_resp_status    = function(...) 200L,
     {
       res <- anthropic_compare_pair_live(
         ID1               = ID1,
@@ -89,11 +89,11 @@ testthat::test_that("anthropic_compare_pair_live returns error row on JSON parse
   ID1 <- "S01"; ID2 <- "S02"
 
   testthat::with_mocked_bindings(
-    .anthropic_api_key = function(...) "FAKEKEY",
-    req_body_json      = function(req, body) req,
-    req_perform        = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json     = function(...) stop("boom"),
-    resp_status        = function(...) 500L,
+    .anthropic_api_key       = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) req,
+    .anthropic_req_perform   = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) stop("boom"),
+    .anthropic_resp_status    = function(...) 500L,
     {
       res <- anthropic_compare_pair_live(
         ID1               = ID1,
@@ -141,14 +141,11 @@ testthat::test_that("anthropic_compare_pair_live applies recommended defaults", 
   )
 
   testthat::with_mocked_bindings(
-    .anthropic_api_key = function(...) "FAKEKEY",
-    req_body_json      = function(req, body) {
-      bodies <<- append(bodies, list(body))
-      req
-    },
-    req_perform        = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json     = function(...) fake_body,
-    resp_status        = function(...) 200L,
+    .anthropic_api_key       = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) { bodies <<- append(bodies, list(body)); req },
+    .anthropic_req_perform   = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) fake_body,
+    .anthropic_resp_status    = function(...) 200L,
     {
       res <- anthropic_compare_pair_live(
         ID1               = ID1,
@@ -273,3 +270,171 @@ testthat::test_that("submit_anthropic_pairs_live calls anthropic_compare_pair_li
     }
   )
 })
+
+# ---------------------------------------------------------------------
+
+testthat::test_that("anthropic_compare_pair_live defaults and thinking depend on reasoning", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  bodies <- list()
+
+  fake_body <- list(
+    model  = "claude-sonnet-4-5-20250929",
+    id     = "msg_01XYZ",
+    type   = "message",
+    role   = "assistant",
+    content = list(
+      list(type = "text", text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")
+    ),
+    usage = list(
+      input_tokens  = 10L,
+      output_tokens = 4L
+      # total_tokens omitted on purpose so we test computed total
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key       = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) {
+      bodies <<- append(bodies, list(body))
+      req
+    },
+    .anthropic_req_perform   = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) fake_body,
+    .anthropic_resp_status    = function(...) 200L,
+    {
+      # Call once with reasoning = "none"
+      res_none <- anthropic_compare_pair_live(
+        ID1               = "S1",
+        text1             = "A",
+        ID2               = "S2",
+        text2             = "B",
+        model             = "claude-sonnet-4-5",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        reasoning         = "none"
+      )
+
+      # Call again with reasoning = "enabled"
+      res_reason <- anthropic_compare_pair_live(
+        ID1               = "S1",
+        text1             = "A",
+        ID2               = "S2",
+        text2             = "B",
+        model             = "claude-sonnet-4-5",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        reasoning         = "enabled"
+      )
+
+      # Parsed output correctness (same fake response in both cases)
+      testthat::expect_equal(res_none$better_id,   "S1")
+      testthat::expect_equal(res_reason$better_id, "S1")
+
+      # total_tokens should be computed as input + output (10 + 4)
+      testthat::expect_equal(res_none$total_tokens,   14)
+      testthat::expect_equal(res_reason$total_tokens, 14)
+
+      # We should have captured two bodies with different defaults
+      testthat::expect_equal(length(bodies), 2L)
+      b_none   <- bodies[[1]]
+      b_reason <- bodies[[2]]
+
+      # Both deterministic
+      testthat::expect_equal(b_none$temperature,   0)
+      testthat::expect_equal(b_reason$temperature, 0)
+
+      # Different max_tokens by reasoning mode
+      testthat::expect_equal(b_none$max_tokens,   768)
+      testthat::expect_equal(b_reason$max_tokens, 2048)
+
+      # No thinking block when reasoning = "none"
+      testthat::expect_false("thinking" %in% names(b_none))
+
+      # Thinking block present and well-formed when reasoning = "enabled"
+      testthat::expect_true("thinking" %in% names(b_reason))
+      testthat::expect_equal(b_reason$thinking$type, "enabled")
+      # Default matches your function's default; adjust here if you changed it
+      testthat::expect_equal(b_reason$thinking$budget_tokens, 1024)
+    }
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled output correctly", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  ID1   <- "S01"
+  ID2   <- "S02"
+
+  fake_body <- list(
+    model  = "claude-sonnet-4-5-20250929",
+    id     = "msg_01XYZ",
+    type   = "message",
+    role   = "assistant",
+    content = list(
+      # Simulate a more verbose answer you'd get with extended thinking:
+      list(type = "text", text = "Some hidden reasoning and explanation. "),
+      list(type = "text", text = "Final choice: <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>.")
+    ),
+    usage = list(
+      input_tokens  = 20L,
+      output_tokens = 30L,
+      total_tokens  = 50L
+    )
+  )
+
+  bodies <- list()
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key       = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) {
+      bodies <<- append(bodies, list(body))
+      req
+    },
+    .anthropic_req_perform   = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) fake_body,
+    .anthropic_resp_status    = function(...) 200L,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1               = ID1,
+        text1             = "Text 1",
+        ID2               = ID2,
+        text2             = "Text 2",
+        model             = "claude-sonnet-4-5",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        reasoning         = "enabled",
+        include_raw       = TRUE
+      )
+
+      # Still a single-row tibble
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(nrow(res), 1L)
+
+      # We concatenated both blocks correctly
+      testthat::expect_true(grepl("Some hidden reasoning and explanation\\.", res$content))
+      testthat::expect_true(grepl("<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>", res$content, fixed = TRUE))
+
+      # Tag parsing works even with extra explanation
+      testthat::expect_equal(res$better_sample, "SAMPLE_2")
+      testthat::expect_equal(res$better_id,     ID2)
+
+      # Tokens passed through correctly
+      testthat::expect_equal(res$prompt_tokens,     20)
+      testthat::expect_equal(res$completion_tokens, 30)
+      testthat::expect_equal(res$total_tokens,      50)
+
+      # We did send a thinking block in the request
+      testthat::expect_equal(length(bodies), 1L)
+      b <- bodies[[1]]
+      testthat::expect_true("thinking" %in% names(b))
+      testthat::expect_equal(b$thinking$type, "enabled")
+    }
+  )
+})
+
