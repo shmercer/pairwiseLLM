@@ -12,6 +12,7 @@ RoxygenNote: 7.3.3
 Imports:
     BradleyTerry2,
     dplyr,
+    httr2,
     jsonlite,
     sirt,
     stats,

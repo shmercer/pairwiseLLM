@@ -45,6 +45,13 @@ null hypothesis that SAMPLE_1 wins 50\\% of the time in the
 main (forward) comparisons
 \item \code{p_sample1_rev}: analogous p-value for the reverse
 comparisons
+\item \code{p_sample1_overall}: p-value from a binomial test for
+the null that position 1 wins 50\\% of the time across
+\emph{all} (forward + reverse) comparisons
+\item \code{total_pos1_wins}: total number of wins by position 1
+across forward + reverse comparisons
+\item \code{total_comparisons}: total number of valid forward +
+reverse comparisons included in the overall test
 \item \code{n_inconsistent}: number of pairs with inconsistent
 forward vs. reverse outcomes
 \item \code{n_inconsistent_pos1_bias}: among inconsistent pairs, how
@@ -73,18 +80,4 @@ of forward vs. reverse comparisons.
 It is designed to work with the output of
 \code{\link{compute_reverse_consistency}}, but will also accept a tibble
 that looks like its \code{$details} component.
-}
-\examples{
-\dontrun{
-res_main <- parse_openai_batch_output("batch_forward_output.jsonl")
-res_rev  <- parse_openai_batch_output("batch_reverse_output.jsonl")
-
-cons <- compute_reverse_consistency(res_main, res_rev)
-
-diag <- check_positional_bias(cons, n_boot = 1000, seed = 123)
-
-diag$summary
-diag$details \%>\% dplyr::filter(!is_consistent)
-}
-
 }
