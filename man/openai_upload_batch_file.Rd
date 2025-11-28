@@ -26,31 +26,10 @@ Uploads a \code{.jsonl} file to the OpenAI Files API with purpose \code{"batch"}
 which can then be used to create a Batch job.
 }
 \examples{
-# Example without real API calls, using a mock request/response:
-if (requireNamespace("testthat", quietly = TRUE)) {
-  tf <- tempfile(fileext = ".jsonl")
-  writeLines("{}", tf)
-
-  fake_file <- list(
-    id       = "file_123",
-    filename = basename(tf),
-    purpose  = "batch"
-  )
-
-  testthat::with_mocked_bindings(
-    .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-    req_body_multipart = function(req, ...) req,
-    req_perform    = function(req) list(),
-    resp_body_json = function(resp, simplifyVector = TRUE) fake_file,
-    {
-      res <- openai_upload_batch_file(tf)
-      res$id  # "file_123"
-    }
-  )
-}
-
 \dontrun{
-# Real usage (requires OPENAI_API_KEY in your env):
+# Requires OPENAI_API_KEY set in your environment.
+# Upload a JSONL file prepared with write_openai_batch_file():
+
 file_obj <- openai_upload_batch_file("batch_input.jsonl")
 file_obj$id
 }

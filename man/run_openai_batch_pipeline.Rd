@@ -102,58 +102,15 @@ for end-to-end batch runs on a set of pairwise comparisons. For more control
 (or testing), you can call the components directly.
 }
 \examples{
-# Mocked example: verify the control flow without real HTTP calls
-if (requireNamespace("testthat", quietly = TRUE)) {
-  pairs <- tibble::tibble(
-    ID1   = "S01",
-    text1 = "Text 1",
-    ID2   = "S02",
-    text2 = "Text 2"
-  )
-
-  fake_results <- tibble::tibble(
-    ID1      = "S01",
-    ID2      = "S02",
-    better_id = "S01"
-  )
-
-  # In this small example we only mock the high-level helpers from
-  # pairwiseLLM itself. This avoids any real HTTP calls.
-  testthat::with_mocked_bindings(
-    run_openai_batch_pipeline = function(...) {
-      list(
-        batch_input_path  = tempfile(fileext = ".jsonl"),
-        batch_output_path = tempfile(fileext = ".jsonl"),
-        file              = list(id = "file_123"),
-        batch             = list(id = "batch_123", status = "completed"),
-        results           = fake_results
-      )
-    },
-    {
-      td   <- list(name = "Overall quality", description = "Quality.")
-      tmpl <- set_prompt_template()
-
-      res <- run_openai_batch_pipeline(
-        pairs             = pairs,
-        model             = "gpt-4.1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        endpoint          = "chat.completions"
-      )
-
-      res$results$better_id  # "S01"
-    }
-  )
-}
-
 \dontrun{
-# Real usage (requires OPENAI_API_KEY and will incur API cost):
+# Requires OPENAI_API_KEY and will incur API cost.
+
 library(pairwiseLLM)
 library(dplyr)
 
 data("example_writing_samples")
 
+# Use a small subset of pairs for testing
 pairs <- example_writing_samples |>
   make_pairs() |>
   sample_pairs(n_pairs = 5, seed = 123) |>
@@ -173,6 +130,7 @@ pipeline <- run_openai_batch_pipeline(
   timeout_seconds   = 3600
 )
 
+pipeline$batch$status
 pipeline$results
 }
 

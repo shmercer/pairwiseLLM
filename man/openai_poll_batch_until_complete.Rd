@@ -40,40 +40,17 @@ This is a synchronous helper – it will block until one of the conditions
 above is met.
 }
 \examples{
-# Mocked example: simulate a batch going from "in_progress" to "completed"
-if (requireNamespace("testthat", quietly = TRUE)) {
-  fake_batches <- list(
-    list(id = "batch_123", status = "in_progress"),
-    list(id = "batch_123", status = "completed", output_file_id = "file_out_123")
-  )
-  i <- 0L
-
-  testthat::with_mocked_bindings(
-    openai_get_batch = function(batch_id, api_key) {
-      i <<- i + 1L
-      fake_batches[[i]]
-    },
-    {
-      res <- openai_poll_batch_until_complete(
-        batch_id         = "batch_123",
-        interval_seconds = 0,
-        timeout_seconds  = 10,
-        max_attempts     = 5,
-        verbose          = FALSE
-      )
-      res$status  # "completed"
-    }
-  )
-}
-
 \dontrun{
-# Real usage:
+# Requires OPENAI_API_KEY and a batch that has been created but may still be running.
+
 batch <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
+
 final <- openai_poll_batch_until_complete(
   batch_id         = batch$id,
   interval_seconds = 10,
   timeout_seconds  = 3600
 )
+
 final$status
 }
 

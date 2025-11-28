@@ -18,22 +18,9 @@ A list representing the Batch object.
 Retrieve an OpenAI batch
 }
 \examples{
-# Mocked example:
-if (requireNamespace("testthat", quietly = TRUE)) {
-  fake_batch <- list(id = "batch_123", status = "completed")
-
-  testthat::with_mocked_bindings(
-    .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-    req_perform    = function(req) list(),
-    resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
-    {
-      res <- openai_get_batch("batch_123")
-      res$status  # "completed"
-    }
-  )
-}
-
 \dontrun{
+# Requires OPENAI_API_KEY and an existing batch ID.
+
 batch <- openai_get_batch("batch_abc123")
 batch$status
 }

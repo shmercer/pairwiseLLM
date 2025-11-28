@@ -32,33 +32,18 @@ A list representing the Batch object.
 Creates and executes a batch based on a previously uploaded input file.
 }
 \examples{
-# Mocked example – no real HTTP calls:
-if (requireNamespace("testthat", quietly = TRUE)) {
-  fake_batch <- list(
-    id            = "batch_123",
-    input_file_id = "file_123",
-    status        = "queued"
-  )
-
-  testthat::with_mocked_bindings(
-    .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-    req_body_json  = function(req, body) req,
-    req_perform    = function(req) list(),
-    resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
-    {
-      res <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
-      res$status  # "queued"
-    }
-  )
-}
-
 \dontrun{
-file_obj  <- openai_upload_batch_file("batch_input.jsonl")
+# Requires OPENAI_API_KEY set in your environment and network access.
+# Example: create a batch for a previously uploaded file.
+
+file_obj <- openai_upload_batch_file("batch_input.jsonl")
+
 batch_obj <- openai_create_batch(
   input_file_id = file_obj$id,
   endpoint      = "/v1/chat/completions"
 )
-batch_obj$id
+
+batch_obj$status
 }
 
 }

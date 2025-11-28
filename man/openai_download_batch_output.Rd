@@ -25,30 +25,14 @@ Given a batch ID, retrieves the batch metadata, extracts the \code{output_file_i
 and downloads the corresponding file content to \code{path}.
 }
 \examples{
-# Mocked example:
-if (requireNamespace("testthat", quietly = TRUE)) {
-  fake_batch <- list(
-    id             = "batch_123",
-    status         = "completed",
-    output_file_id = "file_out_123"
-  )
-
-  testthat::with_mocked_bindings(
-    openai_get_batch  = function(batch_id, api_key) fake_batch,
-    .openai_request   = function(path, api_key) structure(list(), class = "fake_req"),
-    req_perform = function(req) list(),
-    resp_body_raw = function(resp) charToRaw('{"dummy": true}\n'),
-    {
-      tf <- tempfile(fileext = ".jsonl")
-      openai_download_batch_output("batch_123", tf)
-      readLines(tf)
-    }
-  )
-}
-
 \dontrun{
+# Requires OPENAI_API_KEY and a completed batch with an output_file_id.
+
 openai_download_batch_output("batch_abc123", "batch_output.jsonl")
+
+# You can then parse the file with pairwiseLLM's parser:
 res <- parse_openai_batch_output("batch_output.jsonl")
+head(res)
 }
 
 }

@@ -52,31 +52,10 @@ NULL
 #'   `id`, `filename`, `bytes`, `purpose`, etc.
 #'
 #' @examples
-#' # Example without real API calls, using a mock request/response:
-#' if (requireNamespace("testthat", quietly = TRUE)) {
-#'   tf <- tempfile(fileext = ".jsonl")
-#'   writeLines("{}", tf)
-#'
-#'   fake_file <- list(
-#'     id       = "file_123",
-#'     filename = basename(tf),
-#'     purpose  = "batch"
-#'   )
-#'
-#'   testthat::with_mocked_bindings(
-#'     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-#'     req_body_multipart = function(req, ...) req,
-#'     req_perform    = function(req) list(),
-#'     resp_body_json = function(resp, simplifyVector = TRUE) fake_file,
-#'     {
-#'       res <- openai_upload_batch_file(tf)
-#'       res$id  # "file_123"
-#'     }
-#'   )
-#' }
-#'
 #' \dontrun{
-#' # Real usage (requires OPENAI_API_KEY in your env):
+#' # Requires OPENAI_API_KEY set in your environment.
+#' # Upload a JSONL file prepared with write_openai_batch_file():
+#'
 #' file_obj <- openai_upload_batch_file("batch_input.jsonl")
 #' file_obj$id
 #' }
@@ -116,33 +95,18 @@ openai_upload_batch_file <- function(
 #' @return A list representing the Batch object.
 #'
 #' @examples
-#' # Mocked example – no real HTTP calls:
-#' if (requireNamespace("testthat", quietly = TRUE)) {
-#'   fake_batch <- list(
-#'     id            = "batch_123",
-#'     input_file_id = "file_123",
-#'     status        = "queued"
-#'   )
-#'
-#'   testthat::with_mocked_bindings(
-#'     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-#'     req_body_json  = function(req, body) req,
-#'     req_perform    = function(req) list(),
-#'     resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
-#'     {
-#'       res <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
-#'       res$status  # "queued"
-#'     }
-#'   )
-#' }
-#'
 #' \dontrun{
-#' file_obj  <- openai_upload_batch_file("batch_input.jsonl")
+#' # Requires OPENAI_API_KEY set in your environment and network access.
+#' # Example: create a batch for a previously uploaded file.
+#'
+#' file_obj <- openai_upload_batch_file("batch_input.jsonl")
+#'
 #' batch_obj <- openai_create_batch(
 #'   input_file_id = file_obj$id,
 #'   endpoint      = "/v1/chat/completions"
 #' )
-#' batch_obj$id
+#'
+#' batch_obj$status
 #' }
 #'
 #' @export
@@ -178,22 +142,9 @@ openai_create_batch <- function(
 #' @return A list representing the Batch object.
 #'
 #' @examples
-#' # Mocked example:
-#' if (requireNamespace("testthat", quietly = TRUE)) {
-#'   fake_batch <- list(id = "batch_123", status = "completed")
-#'
-#'   testthat::with_mocked_bindings(
-#'     .openai_request       = function(path, api_key) structure(list(), class = "fake_req"),
-#'     req_perform    = function(req) list(),
-#'     resp_body_json = function(resp, simplifyVector = TRUE) fake_batch,
-#'     {
-#'       res <- openai_get_batch("batch_123")
-#'       res$status  # "completed"
-#'     }
-#'   )
-#' }
-#'
 #' \dontrun{
+#' # Requires OPENAI_API_KEY and an existing batch ID.
+#'
 #' batch <- openai_get_batch("batch_abc123")
 #' batch$status
 #' }
@@ -223,30 +174,14 @@ openai_get_batch <- function(
 #' @return Invisibly, the path to the downloaded file.
 #'
 #' @examples
-#' # Mocked example:
-#' if (requireNamespace("testthat", quietly = TRUE)) {
-#'   fake_batch <- list(
-#'     id             = "batch_123",
-#'     status         = "completed",
-#'     output_file_id = "file_out_123"
-#'   )
-#'
-#'   testthat::with_mocked_bindings(
-#'     openai_get_batch  = function(batch_id, api_key) fake_batch,
-#'     .openai_request   = function(path, api_key) structure(list(), class = "fake_req"),
-#'     req_perform = function(req) list(),
-#'     resp_body_raw = function(resp) charToRaw('{"dummy": true}\n'),
-#'     {
-#'       tf <- tempfile(fileext = ".jsonl")
-#'       openai_download_batch_output("batch_123", tf)
-#'       readLines(tf)
-#'     }
-#'   )
-#' }
-#'
 #' \dontrun{
+#' # Requires OPENAI_API_KEY and a completed batch with an output_file_id.
+#'
 #' openai_download_batch_output("batch_abc123", "batch_output.jsonl")
+#'
+#' # You can then parse the file with pairwiseLLM's parser:
 #' res <- parse_openai_batch_output("batch_output.jsonl")
+#' head(res)
 #' }
 #'
 #' @export
@@ -297,40 +232,17 @@ openai_download_batch_output <- function(
 #' @return The final Batch object (a list) as returned by [openai_get_batch()].
 #'
 #' @examples
-#' # Mocked example: simulate a batch going from "in_progress" to "completed"
-#' if (requireNamespace("testthat", quietly = TRUE)) {
-#'   fake_batches <- list(
-#'     list(id = "batch_123", status = "in_progress"),
-#'     list(id = "batch_123", status = "completed", output_file_id = "file_out_123")
-#'   )
-#'   i <- 0L
-#'
-#'   testthat::with_mocked_bindings(
-#'     openai_get_batch = function(batch_id, api_key) {
-#'       i <<- i + 1L
-#'       fake_batches[[i]]
-#'     },
-#'     {
-#'       res <- openai_poll_batch_until_complete(
-#'         batch_id         = "batch_123",
-#'         interval_seconds = 0,
-#'         timeout_seconds  = 10,
-#'         max_attempts     = 5,
-#'         verbose          = FALSE
-#'       )
-#'       res$status  # "completed"
-#'     }
-#'   )
-#' }
-#'
 #' \dontrun{
-#' # Real usage:
+#' # Requires OPENAI_API_KEY and a batch that has been created but may still be running.
+#'
 #' batch <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
+#'
 #' final <- openai_poll_batch_until_complete(
 #'   batch_id         = batch$id,
 #'   interval_seconds = 10,
 #'   timeout_seconds  = 3600
 #' )
+#'
 #' final$status
 #' }
 #'
@@ -444,58 +356,15 @@ openai_poll_batch_until_complete <- function(
 #'   `poll = TRUE`, otherwise `NULL`.
 #'
 #' @examples
-#' # Mocked example: verify the control flow without real HTTP calls
-#' if (requireNamespace("testthat", quietly = TRUE)) {
-#'   pairs <- tibble::tibble(
-#'     ID1   = "S01",
-#'     text1 = "Text 1",
-#'     ID2   = "S02",
-#'     text2 = "Text 2"
-#'   )
-#'
-#'   fake_results <- tibble::tibble(
-#'     ID1      = "S01",
-#'     ID2      = "S02",
-#'     better_id = "S01"
-#'   )
-#'
-#'   # In this small example we only mock the high-level helpers from
-#'   # pairwiseLLM itself. This avoids any real HTTP calls.
-#'   testthat::with_mocked_bindings(
-#'     run_openai_batch_pipeline = function(...) {
-#'       list(
-#'         batch_input_path  = tempfile(fileext = ".jsonl"),
-#'         batch_output_path = tempfile(fileext = ".jsonl"),
-#'         file              = list(id = "file_123"),
-#'         batch             = list(id = "batch_123", status = "completed"),
-#'         results           = fake_results
-#'       )
-#'     },
-#'     {
-#'       td   <- list(name = "Overall quality", description = "Quality.")
-#'       tmpl <- set_prompt_template()
-#'
-#'       res <- run_openai_batch_pipeline(
-#'         pairs             = pairs,
-#'         model             = "gpt-4.1",
-#'         trait_name        = td$name,
-#'         trait_description = td$description,
-#'         prompt_template   = tmpl,
-#'         endpoint          = "chat.completions"
-#'       )
-#'
-#'       res$results$better_id  # "S01"
-#'     }
-#'   )
-#' }
-#'
 #' \dontrun{
-#' # Real usage (requires OPENAI_API_KEY and will incur API cost):
+#' # Requires OPENAI_API_KEY and will incur API cost.
+#'
 #' library(pairwiseLLM)
 #' library(dplyr)
 #'
 #' data("example_writing_samples")
 #'
+#' # Use a small subset of pairs for testing
 #' pairs <- example_writing_samples |>
 #'   make_pairs() |>
 #'   sample_pairs(n_pairs = 5, seed = 123) |>
@@ -515,6 +384,7 @@ openai_poll_batch_until_complete <- function(
 #'   timeout_seconds   = 3600
 #' )
 #'
+#' pipeline$batch$status
 #' pipeline$results
 #' }
 #'
