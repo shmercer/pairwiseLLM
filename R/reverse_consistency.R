@@ -137,3 +137,219 @@ compute_reverse_consistency <- function(main_results,
     details = joined
   )
 }
+
+#' Check positional bias and bootstrap consistency reliability
+#'
+#' This function diagnoses positional bias in LLM-based paired comparison data
+#' and provides a bootstrapped confidence interval for the overall consistency
+#' of forward vs. reverse comparisons.
+#'
+#' It is designed to work with the output of
+#' \code{\link{compute_reverse_consistency}}, but will also accept a tibble
+#' that looks like its \code{$details} component.
+#'
+#' @param consistency Either:
+#'   \itemize{
+#'     \item A list returned by \code{compute_reverse_consistency()} that
+#'           contains a \code{$details} tibble; or
+#'     \item A tibble/data frame with columns
+#'           \code{key}, \code{ID1_main}, \code{ID2_main},
+#'           \code{better_id_main}, \code{ID1_rev}, \code{ID2_rev},
+#'           \code{better_id_rev}, and \code{is_consistent}.
+#'   }
+#' @param n_boot Integer, number of bootstrap resamples for estimating the
+#'   distribution of the overall consistency proportion. Default is 1000.
+#' @param conf_level Confidence level for the bootstrap interval. Default is
+#'   0.95.
+#' @param seed Optional integer seed for reproducible bootstrapping. If
+#'   \code{NULL} (default), the current RNG state is used.
+#'
+#' @return A list with two elements:
+#'   \describe{
+#'     \item{summary}{A tibble with:
+#'       \itemize{
+#'         \item \code{n_pairs}: number of unordered pairs
+#'         \item \code{prop_consistent}: observed proportion of consistent pairs
+#'         \item \code{boot_mean}: mean of bootstrap consistency proportions
+#'         \item \code{boot_lwr}, \code{boot_upr}: lower/upper bounds of the
+#'               bootstrap confidence interval
+#'         \item \code{p_sample1_main}: p-value from a binomial test for the
+#'               null hypothesis that SAMPLE_1 wins 50\% of the time in the
+#'               main (forward) comparisons
+#'         \item \code{p_sample1_rev}: analogous p-value for the reverse
+#'               comparisons
+#'         \item \code{n_inconsistent}: number of pairs with inconsistent
+#'               forward vs. reverse outcomes
+#'         \item \code{n_inconsistent_pos1_bias}: among inconsistent pairs, how
+#'               many times the winner is in position 1 in both directions
+#'         \item \code{n_inconsistent_pos2_bias}: analogous for position 2
+#'       }
+#'     }
+#'     \item{details}{The input \code{details} tibble augmented with:
+#'       \itemize{
+#'         \item \code{winner_pos_main}: \code{"pos1"} or \code{"pos2"} (or
+#'               \code{NA}) indicating which position won in the main direction
+#'         \item \code{winner_pos_rev}: analogous for the reversed direction
+#'         \item \code{is_pos1_bias}: logical; \code{TRUE} if the pair is
+#'               inconsistent and position 1 wins in both directions
+#'         \item \code{is_pos2_bias}: analogous for position 2
+#'       }
+#'     }
+#'   }
+#'
+#' @examples
+#' \dontrun{
+#' # Suppose you have forward and reverse OpenAI batch outputs:
+#' res_main <- parse_openai_batch_output("batch_forward_output.jsonl")
+#' res_rev  <- parse_openai_batch_output("batch_reverse_output.jsonl")
+#'
+#' cons <- compute_reverse_consistency(res_main, res_rev)
+#'
+#' diag <- check_positional_bias(cons, n_boot = 1000, seed = 123)
+#'
+#' diag$summary
+#' diag$details %>% dplyr::filter(!is_consistent)
+#' }
+#'
+#' @export
+check_positional_bias <- function(consistency,
+                                  n_boot     = 1000,
+                                  conf_level = 0.95,
+                                  seed       = NULL) {
+
+  # Extract the details tibble
+  if (is.list(consistency) && !is.null(consistency$details)) {
+    details <- consistency$details
+  } else {
+    details <- consistency
+  }
+
+  details <- tibble::as_tibble(details)
+
+  required <- c(
+    "key",
+    "ID1_main", "ID2_main", "better_id_main",
+    "ID1_rev",  "ID2_rev",  "better_id_rev",
+    "is_consistent"
+  )
+  missing <- setdiff(required, names(details))
+  if (length(missing) > 0L) {
+    stop(
+      "`details` must contain columns: ",
+      paste(required, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  n_pairs <- nrow(details)
+  if (n_pairs == 0L) {
+    stop("`details` has zero rows; nothing to diagnose.", call. = FALSE)
+  }
+
+  # Position of winner in main and reverse directions
+  details <- details %>%
+    dplyr::mutate(
+      winner_pos_main = dplyr::case_when(
+        better_id_main == ID1_main ~ "pos1",
+        better_id_main == ID2_main ~ "pos2",
+        TRUE                       ~ NA_character_
+      ),
+      winner_pos_rev = dplyr::case_when(
+        better_id_rev == ID1_rev ~ "pos1",
+        better_id_rev == ID2_rev ~ "pos2",
+        TRUE                     ~ NA_character_
+      )
+    )
+
+  # Overall consistency
+  prop_consistent <- mean(details$is_consistent)
+
+  # Bootstrap CI for consistency proportion
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+
+  boot_props <- numeric(n_boot)
+  for (b in seq_len(n_boot)) {
+    idx <- sample.int(n_pairs, size = n_pairs, replace = TRUE)
+    boot_props[b] <- mean(details$is_consistent[idx])
+  }
+
+  alpha    <- 1 - conf_level
+  boot_lwr <- stats::quantile(boot_props, probs = alpha / 2)
+  boot_upr <- stats::quantile(boot_props, probs = 1 - alpha / 2)
+  boot_mean <- mean(boot_props)
+
+  # Positional bias: how often does SAMPLE_1 win?
+  # (In main and reverse directions)
+  wins_sample1_main <- sum(details$better_id_main == details$ID1_main, na.rm = TRUE)
+  n_valid_main      <- sum(!is.na(details$better_id_main) &
+                             (details$better_id_main == details$ID1_main |
+                                details$better_id_main == details$ID2_main))
+
+  p_sample1_main <- if (n_valid_main > 0L) {
+    stats::binom.test(wins_sample1_main, n_valid_main, p = 0.5)$p.value
+  } else {
+    NA_real_
+  }
+
+  wins_sample1_rev <- sum(details$better_id_rev == details$ID1_rev, na.rm = TRUE)
+  n_valid_rev      <- sum(!is.na(details$better_id_rev) &
+                            (details$better_id_rev == details$ID1_rev |
+                               details$better_id_rev == details$ID2_rev))
+
+  p_sample1_rev <- if (n_valid_rev > 0L) {
+    stats::binom.test(wins_sample1_rev, n_valid_rev, p = 0.5)$p.value
+  } else {
+    NA_real_
+  }
+
+  # Among inconsistent pairs, how often does position 1 win in both directions?
+  inconsistent <- details %>%
+    dplyr::filter(!is_consistent)
+
+  n_inconsistent <- nrow(inconsistent)
+
+  if (n_inconsistent > 0L) {
+    inconsistent <- inconsistent %>%
+      dplyr::mutate(
+        is_pos1_bias = winner_pos_main == "pos1" & winner_pos_rev == "pos1",
+        is_pos2_bias = winner_pos_main == "pos2" & winner_pos_rev == "pos2"
+      )
+
+    n_pos1_bias <- sum(inconsistent$is_pos1_bias, na.rm = TRUE)
+    n_pos2_bias <- sum(inconsistent$is_pos2_bias, na.rm = TRUE)
+
+    # Merge flags back into main details tibble
+    details <- details %>%
+      dplyr::left_join(
+        inconsistent %>%
+          dplyr::select(key, is_pos1_bias, is_pos2_bias),
+        by = "key"
+      )
+  } else {
+    details$is_pos1_bias <- FALSE
+    details$is_pos2_bias <- FALSE
+    n_pos1_bias <- 0L
+    n_pos2_bias <- 0L
+  }
+
+  summary <- tibble::tibble(
+    n_pairs                 = n_pairs,
+    prop_consistent         = prop_consistent,
+    boot_mean               = boot_mean,
+    boot_lwr                = as.numeric(boot_lwr),
+    boot_upr                = as.numeric(boot_upr),
+    p_sample1_main          = p_sample1_main,
+    p_sample1_rev           = p_sample1_rev,
+    n_inconsistent          = n_inconsistent,
+    n_inconsistent_pos1_bias = n_pos1_bias,
+    n_inconsistent_pos2_bias = n_pos2_bias
+  )
+
+  list(
+    summary = summary,
+    details = details
+  )
+}
+

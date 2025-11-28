@@ -3,6 +3,7 @@
 export(build_bt_data)
 export(build_openai_batch_requests)
 export(build_prompt)
+export(check_positional_bias)
 export(compute_reverse_consistency)
 export(fit_bt_model)
 export(make_pairs)
