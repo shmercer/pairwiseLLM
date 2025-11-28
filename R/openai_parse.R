@@ -136,19 +136,19 @@ parse_openai_batch_output <- function(path,
     body <- response$body
     if (is.null(body)) {
       out[[i]] <- tibble::tibble(
-        custom_id        = custom_id,
-        ID1              = NA_character_,
-        ID2              = NA_character_,
-        model            = NA_character_,
-        object_type      = NA_character_,
-        status_code      = status_code,
-        error_message    = error_message,
-        content          = NA_character_,
-        better_sample    = NA_character_,
-        better_id        = NA_character_,
-        prompt_tokens    = NA_real_,
+        custom_id         = custom_id,
+        ID1               = NA_character_,
+        ID2               = NA_character_,
+        model             = NA_character_,
+        object_type       = NA_character_,
+        status_code       = status_code,
+        error_message     = error_message,
+        content           = NA_character_,
+        better_sample     = NA_character_,
+        better_id         = NA_character_,
+        prompt_tokens     = NA_real_,
         completion_tokens = NA_real_,
-        total_tokens     = NA_real_
+        total_tokens      = NA_real_
       )
       next
     }
@@ -163,28 +163,42 @@ parse_openai_batch_output <- function(path,
       # Chat Completions: choices[[1]]$message$content
       choices <- body$choices %||% list()
       if (length(choices) >= 1L) {
-        message <- choices[[1]]$message
-        if (!is.null(message) && !is.null(message$content)) {
-          content <- as.character(message$content)
+        message_obj <- choices[[1]]$message
+        if (!is.null(message_obj) && !is.null(message_obj$content)) {
+          content <- as.character(message_obj$content)
         }
       }
     } else if (identical(object_type, "response")) {
-      # Responses endpoint: output[[1]]$content is a list of blocks
+      # Responses endpoint: collect text from reasoning summary (if any) and
+      # from each output element's content blocks that have a $text field.
+      collected <- character(0)
+
+      # Possible reasoning summary text at top level
+      if (!is.null(body$reasoning) && !is.null(body$reasoning$summary)) {
+        rs <- body$reasoning$summary
+        if (!is.null(rs$text)) {
+          collected <- c(collected, as.character(rs$text %||% ""))
+        }
+      }
+
       output <- body$output %||% list()
-      if (length(output) >= 1L) {
-        blocks <- output[[1]]$content %||% list()
-        texts <- vapply(
-          blocks,
-          function(b) {
-            if (!is.null(b$type) && identical(b$type, "output_text")) {
-              as.character(b$text %||% "")
-            } else {
-              ""
+      if (length(output) > 0L) {
+        for (out_el in output) {
+          blocks <- out_el$content %||% list()
+          if (length(blocks) > 0L) {
+            for (b in blocks) {
+              if (!is.null(b$text)) {
+                collected <- c(collected, as.character(b$text %||% ""))
+              }
             }
-          },
-          character(1)
-        )
-        content <- paste(texts, collapse = "")
+          }
+        }
+      }
+
+      if (length(collected) > 0L) {
+        content <- paste(collected, collapse = "")
+      } else {
+        content <- NA_character_
       }
     }
 
@@ -213,24 +227,24 @@ parse_openai_batch_output <- function(path,
 
     # Chat completions: prompt_tokens, completion_tokens, total_tokens
     # Responses (gpt-5.x): input_tokens, output_tokens, total_tokens
-    prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
+    prompt_tokens     <- usage$prompt_tokens     %||% usage$input_tokens  %||% NA_real_
     completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
-    total_tokens <- usage$total_tokens %||% NA_real_
+    total_tokens      <- usage$total_tokens      %||% NA_real_
 
     out[[i]] <- tibble::tibble(
-      custom_id        = custom_id,
-      ID1              = ids$ID1,
-      ID2              = ids$ID2,
-      model            = model,
-      object_type      = object_type,
-      status_code      = status_code,
-      error_message    = error_message,
-      content          = content,
-      better_sample    = better_sample,
-      better_id        = better_id,
-      prompt_tokens    = as.numeric(prompt_tokens),
+      custom_id         = custom_id,
+      ID1               = ids$ID1,
+      ID2               = ids$ID2,
+      model             = model,
+      object_type       = object_type,
+      status_code       = status_code,
+      error_message     = error_message,
+      content           = content,
+      better_sample     = better_sample,
+      better_id         = better_id,
+      prompt_tokens     = as.numeric(prompt_tokens),
       completion_tokens = as.numeric(completion_tokens),
-      total_tokens     = as.numeric(total_tokens)
+      total_tokens      = as.numeric(total_tokens)
     )
   }
 

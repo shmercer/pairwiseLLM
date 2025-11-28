@@ -181,3 +181,83 @@ test_that("build_openai_batch_requests allows other gpt-5* models with temp/top_
   expect_equal(nrow(batch), 1L)
   expect_equal(batch$body[[1]]$model, "gpt-5-mini")
 })
+
+testthat::test_that("parse_openai_batch_output collects reasoning and message text for responses", {
+  tmp <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tmp), add = TRUE)
+
+  # Construct a fake batch output line similar to gpt-5.1 responses
+  line_obj <- list(
+    custom_id = "LIVE_S01_vs_S02",
+    response  = list(
+      status_code = 200L,
+      body = list(
+        object   = "response",
+        model    = "gpt-5.1",
+        reasoning = list(
+          effort  = "low",
+          summary = list(text = "Reasoning summary. ")
+        ),
+        output = list(
+          list(
+            id     = "rs_x",
+            type   = "reasoning",
+            summary = list()
+          ),
+          list(
+            id      = "msg_x",
+            type    = "message",
+            status  = "completed",
+            content = list(
+              list(
+                type = "output_text",
+                text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+              )
+            ),
+            role    = "assistant"
+          )
+        ),
+        usage = list(
+          input_tokens  = 10L,
+          output_tokens = 5L,
+          total_tokens  = 15L
+        )
+      )
+    ),
+    error = NULL
+  )
+
+  json_line <- jsonlite::toJSON(line_obj, auto_unbox = TRUE)
+  writeLines(json_line, con = tmp, useBytes = TRUE)
+
+  res <- parse_openai_batch_output(tmp)
+
+  testthat::expect_s3_class(res, "tbl_df")
+  testthat::expect_equal(nrow(res), 1L)
+
+  # IDs from custom_id
+  testthat::expect_equal(res$custom_id, "LIVE_S01_vs_S02")
+  testthat::expect_equal(res$ID1, "S01")
+  testthat::expect_equal(res$ID2, "S02")
+
+  # Basic metadata
+  testthat::expect_equal(res$model, "gpt-5.1")
+  testthat::expect_equal(res$object_type, "response")
+  testthat::expect_equal(res$status_code, 200L)
+  testthat::expect_true(is.na(res$error_message))
+
+  # Content should include both reasoning summary and message text
+  testthat::expect_equal(
+    res$content,
+    "Reasoning summary. <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+  )
+
+  # Tag parsing and better_id mapping
+  testthat::expect_equal(res$better_sample, "SAMPLE_2")
+  testthat::expect_equal(res$better_id, "S02")
+
+  # Token usage
+  testthat::expect_equal(res$prompt_tokens,     10)
+  testthat::expect_equal(res$completion_tokens, 5)
+  testthat::expect_equal(res$total_tokens,      15)
+})
