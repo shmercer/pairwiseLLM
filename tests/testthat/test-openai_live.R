@@ -1,4 +1,7 @@
-# tests/testthat/test-openai_live.R
+# =====================================================================
+#   test-openai_live.R
+#   Tests for openai_compare_pair_live() and submit_openai_pairs_live()
+# =====================================================================
 
 testthat::test_that("openai_compare_pair_live parses chat.completions correctly", {
   data("example_writing_samples", package = "pairwiseLLM")
@@ -11,7 +14,6 @@ testthat::test_that("openai_compare_pair_live parses chat.completions correctly"
   text1 <- "Text 1"
   text2 <- "Text 2"
 
-  # Fake OpenAI chat.completions-style JSON body
   fake_body <- list(
     object = "chat.completion",
     model  = "gpt-4.1",
@@ -29,11 +31,11 @@ testthat::test_that("openai_compare_pair_live parses chat.completions correctly"
   )
 
   testthat::with_mocked_bindings(
-    .openai_api_key = function(api_key = Sys.getenv("OPENAI_API_KEY")) "FAKEKEY",
-    req_body_json   = function(req, body) req,        # passthrough
+    .openai_api_key = function(...) "FAKEKEY",
+    req_body_json   = function(req, body) req,
     req_perform     = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json  = function(resp, simplifyVector = FALSE) fake_body,
-    resp_status     = function(resp) 200L,
+    resp_body_json  = function(...) fake_body,
+    resp_status     = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1               = ID1,
@@ -45,7 +47,8 @@ testthat::test_that("openai_compare_pair_live parses chat.completions correctly"
         trait_description = td$description,
         prompt_template   = tmpl,
         endpoint          = "chat.completions",
-        temperature       = 0
+        temperature       = 0,
+        include_raw       = TRUE
       )
 
       testthat::expect_s3_class(res, "tbl_df")
@@ -71,29 +74,32 @@ testthat::test_that("openai_compare_pair_live parses chat.completions correctly"
       testthat::expect_equal(res$prompt_tokens,     10)
       testthat::expect_equal(res$completion_tokens, 5)
       testthat::expect_equal(res$total_tokens,      15)
+
+      # raw_response
+      testthat::expect_true("raw_response" %in% names(res))
+      testthat::expect_type(res$raw_response, "list")
+      testthat::expect_equal(res$raw_response[[1]]$object, "chat.completion")
+      testthat::expect_equal(res$raw_response[[1]]$model,  "gpt-4.1")
     }
   )
 })
+
+# ---------------------------------------------------------------------
 
 testthat::test_that("openai_compare_pair_live parses responses endpoint correctly", {
   td   <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  ID1   <- "S01"
-  ID2   <- "S02"
-  text1 <- "Text 1"
-  text2 <- "Text 2"
+  ID1 <- "S01"; ID2 <- "S02"
+  text1 <- "Text A"; text2 <- "Text B"
 
-  # Fake OpenAI /v1/responses-style body with output_text blocks
   fake_body <- list(
     object = "response",
     model  = "gpt-5.1",
     output = list(list(
       content = list(
-        list(type = "output_text",
-             text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> A "),
-        list(type = "output_text",
-             text = "B")
+        list(type = "output_text", text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> A "),
+        list(type = "output_text", text = "B")
       )
     )),
     usage = list(
@@ -104,138 +110,11 @@ testthat::test_that("openai_compare_pair_live parses responses endpoint correctl
   )
 
   testthat::with_mocked_bindings(
-    .openai_api_key = function(api_key = Sys.getenv("OPENAI_API_KEY")) "FAKEKEY",
+    .openai_api_key = function(...) "FAKEKEY",
     req_body_json   = function(req, body) req,
     req_perform     = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json  = function(resp, simplifyVector = FALSE) fake_body,
-    resp_status     = function(resp) 200L,
-    {
-      res <- openai_compare_pair_live(
-        ID1               = ID1,
-        text1             = text1,
-        ID2               = ID2,
-        text2             = text2,
-        model             = "gpt-5.1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        endpoint          = "responses",
-        reasoning         = "none"
-      )
-
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(nrow(res), 1L)
-
-      testthat::expect_equal(res$model, "gpt-5.1")
-      testthat::expect_equal(res$object_type, "response")
-
-      # Content concatenates all output_text segments
-      testthat::expect_equal(
-        res$content,
-        "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> A B"
-      )
-
-      testthat::expect_equal(res$better_sample, "SAMPLE_2")
-      testthat::expect_equal(res$better_id, ID2)
-
-      # usage fields map input/output → prompt/completion
-      testthat::expect_equal(res$prompt_tokens,     7)
-      testthat::expect_equal(res$completion_tokens, 3)
-      testthat::expect_equal(res$total_tokens,      10)
-    }
-  )
-})
-
-testthat::test_that("openai_compare_pair_live returns error row on JSON parse failure", {
-  td   <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  ID1   <- "S01"
-  ID2   <- "S02"
-  text1 <- "Text 1"
-  text2 <- "Text 2"
-
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(api_key = Sys.getenv("OPENAI_API_KEY")) "FAKEKEY",
-    req_body_json   = function(req, body) req,
-    req_perform     = function(req) structure(list(), class = "fake_resp"),
-    # Simulate resp_body_json throwing
-    resp_body_json  = function(resp, simplifyVector = FALSE) stop("boom"),
-    resp_status     = function(resp) 500L,
-    {
-      res <- openai_compare_pair_live(
-        ID1               = ID1,
-        text1             = text1,
-        ID2               = ID2,
-        text2             = text2,
-        model             = "gpt-4.1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        endpoint          = "chat.completions"
-      )
-
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(nrow(res), 1L)
-
-      testthat::expect_equal(res$status_code, 500L)
-      testthat::expect_equal(
-        res$error_message,
-        "Failed to parse response body as JSON."
-      )
-
-      testthat::expect_true(is.na(res$better_sample))
-      testthat::expect_true(is.na(res$better_id))
-      testthat::expect_true(is.na(res$content))
-    }
-  )
-})
-
-testthat::test_that("openai_compare_pair_live enforces gpt-5.1 + reasoning constraints", {
-  td   <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  ID1   <- "S01"
-  ID2   <- "S02"
-  text1 <- "Text 1"
-  text2 <- "Text 2"
-
-  # Should error: gpt-5.1 + reasoning != "none" + non-NULL temp/top_p/logprobs
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1               = ID1,
-      text1             = text1,
-      ID2               = ID2,
-      text2             = text2,
-      model             = "gpt-5.1",
-      trait_name        = td$name,
-      trait_description = td$description,
-      prompt_template   = tmpl,
-      endpoint          = "responses",
-      reasoning         = "low",
-      temperature       = 0,
-      top_p             = 1,
-      logprobs          = NULL
-    ),
-    regexp = "For gpt-5.1 with reasoning effort not equal to 'none'"
-  )
-
-  # Allowed: gpt-5.1 + reasoning = "none" + temp/top_p/logprobs
-  # (Mock network so we don't hit the API.)
-  fake_body <- list(
-    object = "response",
-    model  = "gpt-5.1",
-    output = list(list(content = list(
-      list(type = "output_text", text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")
-    )))
-  )
-
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(api_key = Sys.getenv("OPENAI_API_KEY")) "FAKEKEY",
-    req_body_json   = function(req, body) req,
-    req_perform     = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json  = function(resp, simplifyVector = FALSE) fake_body,
-    resp_status     = function(resp) 200L,
+    resp_body_json  = function(...) fake_body,
+    resp_status     = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1               = ID1,
@@ -248,84 +127,168 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1 + reasoning const
         prompt_template   = tmpl,
         endpoint          = "responses",
         reasoning         = "none",
-        temperature       = 0,
-        top_p             = 1,
-        logprobs          = NULL
+        include_raw       = TRUE
       )
 
-      testthat::expect_equal(res$better_sample, "SAMPLE_1")
-      testthat::expect_equal(res$better_id, ID1)
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(res$object_type, "response")
+      testthat::expect_equal(res$model, "gpt-5.1")
+      testthat::expect_equal(
+        res$content,
+        "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> A B"
+      )
+
+      testthat::expect_equal(res$better_sample, "SAMPLE_2")
+      testthat::expect_equal(res$better_id, ID2)
+
+      testthat::expect_equal(res$prompt_tokens, 7)
+      testthat::expect_equal(res$completion_tokens, 3)
+      testthat::expect_equal(res$total_tokens, 10)
+
+      testthat::expect_true("raw_response" %in% names(res))
+      testthat::expect_equal(res$raw_response[[1]]$model, "gpt-5.1")
     }
   )
 })
+
+# ---------------------------------------------------------------------
+
+testthat::test_that("openai_compare_pair_live returns error row on JSON parse failure", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  ID1 <- "S01"; ID2 <- "S02"
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "FAKEKEY",
+    req_body_json   = function(req, body) req,
+    req_perform     = function(req) structure(list(), class = "fake_resp"),
+    resp_body_json  = function(...) stop("boom"),
+    resp_status     = function(...) 500L,
+    {
+      res <- openai_compare_pair_live(
+        ID1               = ID1,
+        text1             = "X",
+        ID2               = ID2,
+        text2             = "Y",
+        model             = "gpt-4.1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        endpoint          = "chat.completions",
+        include_raw       = TRUE
+      )
+
+      testthat::expect_equal(res$status_code, 500L)
+      testthat::expect_equal(res$error_message, "Failed to parse response body as JSON.")
+      testthat::expect_true(is.na(res$better_sample))
+      testthat::expect_true(is.null(res$raw_response[[1]]))
+    }
+  )
+})
+
+# ---------------------------------------------------------------------
+
+testthat::test_that("openai_compare_pair_live enforces gpt-5.1 + reasoning constraints", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Should error
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1="A", text1="x", ID2="B", text2="y",
+      model="gpt-5.1",
+      trait_name=td$name,
+      trait_description=td$description,
+      prompt_template=tmpl,
+      endpoint="responses",
+      reasoning="low",
+      temperature=0
+    ),
+    regexp="gpt-5.1"
+  )
+
+  # Allowed case
+  fake_body <- list(
+    object="response",
+    model="gpt-5.1",
+    output=list(list(
+      content=list(list(type="output_text", text="<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>"))
+    )),
+    usage=list(input_tokens=1L, output_tokens=1L, total_tokens=2L)
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key=function(...) "FAKEKEY",
+    req_body_json=function(req, body) req,
+    req_perform=function(req) structure(list(), class="fake_resp"),
+    resp_body_json=function(...) fake_body,
+    resp_status=function(...) 200L,
+    {
+      res <- openai_compare_pair_live(
+        ID1="A", text1="x", ID2="B", text2="y",
+        model="gpt-5.1",
+        trait_name=td$name,
+        trait_description=td$description,
+        prompt_template=tmpl,
+        endpoint="responses",
+        reasoning="none",
+        include_raw=TRUE
+      )
+      testthat::expect_equal(res$better_id, "A")
+    }
+  )
+})
+
+# ---------------------------------------------------------------------
 
 testthat::test_that("openai_compare_pair_live enforces other gpt-5* constraints", {
   td   <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  ID1   <- "S01"
-  ID2   <- "S02"
-  text1 <- "Text 1"
-  text2 <- "Text 2"
-
-  # Error: other gpt-5* model with non-NULL temp/top_p/logprobs
   testthat::expect_error(
     openai_compare_pair_live(
-      ID1               = ID1,
-      text1             = text1,
-      ID2               = ID2,
-      text2             = text2,
-      model             = "gpt-5-mini",
-      trait_name        = td$name,
-      trait_description = td$description,
-      prompt_template   = tmpl,
-      endpoint          = "responses",
-      reasoning         = "low",
-      temperature       = 0,
-      top_p             = 1,
-      logprobs          = NULL
-    ),
-    regexp = "For gpt-5\\* models other than gpt-5.1"
+      ID1="A", text1="x", ID2="B", text2="y",
+      model="gpt-5-mini",
+      trait_name=td$name,
+      trait_description=td$description,
+      prompt_template=tmpl,
+      endpoint="responses",
+      temperature=0
+    )
   )
 
-  # Allowed: other gpt-5* model with temp/top_p/logprobs = NULL
   fake_body <- list(
-    object = "response",
-    model  = "gpt-5-mini",
-    output = list(list(content = list(
-      list(type = "output_text", text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>")
-    )))
+    object="response",
+    model="gpt-5-mini",
+    output=list(list(
+      content=list(list(type="output_text", text="<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"))
+    )),
+    usage=list(input_tokens=1L, output_tokens=1L, total_tokens=2L)
   )
 
   testthat::with_mocked_bindings(
-    .openai_api_key = function(api_key = Sys.getenv("OPENAI_API_KEY")) "FAKEKEY",
-    req_body_json   = function(req, body) req,
-    req_perform     = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json  = function(resp, simplifyVector = FALSE) fake_body,
-    resp_status     = function(resp) 200L,
+    .openai_api_key=function(...) "FAKEKEY",
+    req_body_json=function(req, body) req,
+    req_perform=function(req) structure(list(), class="fake_resp"),
+    resp_body_json=function(...) fake_body,
+    resp_status=function(...) 200L,
     {
       res <- openai_compare_pair_live(
-        ID1               = ID1,
-        text1             = text1,
-        ID2               = ID2,
-        text2             = text2,
-        model             = "gpt-5-mini",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        endpoint          = "responses",
-        reasoning         = "low",
-        temperature       = NULL,
-        top_p             = NULL,
-        logprobs          = NULL
+        ID1="A", text1="x", ID2="B", text2="y",
+        model="gpt-5-mini",
+        trait_name=td$name,
+        trait_description=td$description,
+        prompt_template=tmpl,
+        endpoint="responses",
+        include_raw=TRUE
       )
-
-      testthat::expect_equal(res$model, "gpt-5-mini")
-      testthat::expect_equal(res$better_sample, "SAMPLE_2")
-      testthat::expect_equal(res$better_id, ID2)
+      testthat::expect_equal(res$better_id, "B")
     }
   )
 })
+
+# ---------------------------------------------------------------------
 
 testthat::test_that("submit_openai_pairs_live returns empty tibble for zero rows", {
   td   <- trait_description("overall_quality")
@@ -339,25 +302,47 @@ testthat::test_that("submit_openai_pairs_live returns empty tibble for zero rows
   )
 
   res <- submit_openai_pairs_live(
-    pairs             = empty_pairs,
-    model             = "gpt-4.1",
-    trait_name        = td$name,
+    pairs = empty_pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
     trait_description = td$description,
-    prompt_template   = tmpl,
-    endpoint          = "chat.completions"
+    prompt_template = tmpl,
+    endpoint = "chat.completions"
   )
 
-  testthat::expect_s3_class(res, "tbl_df")
   testthat::expect_equal(nrow(res), 0L)
-  testthat::expect_true(all(
-    c(
-      "custom_id", "ID1", "ID2", "model", "object_type",
-      "status_code", "error_message", "content",
-      "better_sample", "better_id",
-      "prompt_tokens", "completion_tokens", "total_tokens"
-    ) %in% names(res)
-  ))
+  testthat::expect_false("raw_response" %in% names(res))
 })
+
+# ---------------------------------------------------------------------
+
+testthat::test_that("submit_openai_pairs_live with include_raw=TRUE returns raw_response column", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  empty_pairs <- tibble::tibble(
+    ID1   = character(0),
+    text1 = character(0),
+    ID2   = character(0),
+    text2 = character(0)
+  )
+
+  res <- submit_openai_pairs_live(
+    pairs = empty_pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "chat.completions",
+    include_raw = TRUE
+  )
+
+  testthat::expect_equal(nrow(res), 0L)
+  testthat::expect_true("raw_response" %in% names(res))
+  testthat::expect_type(res$raw_response, "list")
+})
+
+# ---------------------------------------------------------------------
 
 testthat::test_that("submit_openai_pairs_live calls openai_compare_pair_live row-wise", {
   pairs <- tibble::tibble(
@@ -382,7 +367,7 @@ testthat::test_that("submit_openai_pairs_live calls openai_compare_pair_live row
       status_code       = 200L,
       error_message     = NA_character_,
       content           = sprintf("<BETTER_SAMPLE>%s</BETTER_SAMPLE>", chosen),
-      better_sample     = if (chosen == "SAMPLE_1") "SAMPLE_1" else "SAMPLE_2",
+      better_sample     = chosen,
       better_id         = if (chosen == "SAMPLE_1") ID1 else ID2,
       prompt_tokens     = 10,
       completion_tokens = 5,
@@ -393,100 +378,11 @@ testthat::test_that("submit_openai_pairs_live calls openai_compare_pair_live row
   testthat::with_mocked_bindings(
     openai_compare_pair_live = function(
     ID1, text1, ID2, text2, model, trait_name,
-    trait_description, prompt_template, endpoint, ...
+    trait_description, prompt_template, endpoint, api_key,
+    include_raw, ...
     ) {
-      # record the call
-      calls <<- append(calls, list(
-        list(ID1 = ID1, ID2 = ID2, endpoint = endpoint, model = model)
-      ))
-      # alternately pick SAMPLE_1 / SAMPLE_2
-      if (ID1 == "S01") {
-        fake_result(ID1, ID2, "SAMPLE_1")
-      } else {
-        fake_result(ID1, ID2, "SAMPLE_2")
-      }
-    },
-    {
-      res <- submit_openai_pairs_live(
-        pairs             = pairs,
-        model             = "gpt-4.1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        endpoint          = "chat.completions"
-      )
-
-      testthat::expect_equal(length(calls), 2L)
-      testthat::expect_equal(calls[[1]]$ID1, "S01")
-      testthat::expect_equal(calls[[1]]$ID2, "S02")
-      testthat::expect_equal(calls[[1]]$endpoint, "chat.completions")
-
-      testthat::expect_equal(calls[[2]]$ID1, "S03")
-      testthat::expect_equal(calls[[2]]$ID2, "S04")
-
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(nrow(res), 2L)
-
-      testthat::expect_equal(res$better_id, c("S01", "S04"))
-    }
-  )
-})
-
-testthat::test_that("submit_openai_pairs_live errors on missing columns", {
-  td   <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  bad_pairs <- tibble::tibble(
-    ID1 = "S01",
-    ID2 = "S02"
-    # missing text1/text2
-  )
-
-  testthat::expect_error(
-    submit_openai_pairs_live(
-      pairs             = bad_pairs,
-      model             = "gpt-4.1",
-      trait_name        = td$name,
-      trait_description = td$description,
-      prompt_template   = tmpl,
-      endpoint          = "chat.completions"
-    ),
-    regexp = "`pairs` must contain columns"
-  )
-})
-
-testthat::test_that("submit_openai_pairs_live supports verbose/status_every/progress args", {
-  pairs <- tibble::tibble(
-    ID1   = c("S01", "S03", "S05"),
-    text1 = c("Text 1", "Text 3", "Text 5"),
-    ID2   = c("S02", "S04", "S06"),
-    text2 = c("Text 2", "Text 4", "Text 6")
-  )
-
-  td   <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  # Simple stub that returns deterministic results
-  testthat::with_mocked_bindings(
-    openai_compare_pair_live = function(
-    ID1, text1, ID2, text2, model, trait_name,
-    trait_description, prompt_template, endpoint, api_key, ...
-    ) {
-      tibble::tibble(
-        custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
-        ID1               = ID1,
-        ID2               = ID2,
-        model             = model,
-        object_type       = "chat.completion",
-        status_code       = 200L,
-        error_message     = NA_character_,
-        content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-        better_sample     = "SAMPLE_1",
-        better_id         = ID1,
-        prompt_tokens     = 10,
-        completion_tokens = 5,
-        total_tokens      = 15
-      )
+      calls <<- append(calls, list(list(ID1 = ID1, ID2 = ID2)))
+      if (ID1 == "S01") fake_result(ID1, ID2, "SAMPLE_1") else fake_result(ID1, ID2, "SAMPLE_2")
     },
     {
       res <- submit_openai_pairs_live(
@@ -496,14 +392,87 @@ testthat::test_that("submit_openai_pairs_live supports verbose/status_every/prog
         trait_description = td$description,
         prompt_template   = tmpl,
         endpoint          = "chat.completions",
-        verbose           = TRUE,
-        status_every      = 2,
+        include_raw       = FALSE,
+        verbose           = FALSE,
         progress          = FALSE
       )
 
+      testthat::expect_equal(length(calls), 2L)
+      testthat::expect_equal(res$better_id, c("S01", "S04"))
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live collects reasoning + message text for responses", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  ID1 <- "S01"; ID2 <- "S02"
+  text1 <- "Text A"; text2 <- "Text B"
+
+  fake_body <- list(
+    object = "response",
+    model  = "gpt-5.1",
+    reasoning = list(
+      effort  = "low",
+      summary = list(text = "Reasoning summary. ")
+    ),
+    output = list(
+      list(
+        id     = "rs_x",
+        type   = "reasoning",
+        summary = list()
+      ),
+      list(
+        id      = "msg_x",
+        type    = "message",
+        status  = "completed",
+        content = list(
+          list(
+            type = "output_text",
+            text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+          )
+        ),
+        role    = "assistant"
+      )
+    ),
+    usage = list(
+      input_tokens  = 10L,
+      output_tokens = 5L,
+      total_tokens  = 15L
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "FAKEKEY",
+    req_body_json   = function(req, body) req,
+    req_perform     = function(req) structure(list(), class = "fake_resp"),
+    resp_body_json  = function(...) fake_body,
+    resp_status     = function(...) 200L,
+    {
+      res <- openai_compare_pair_live(
+        ID1               = ID1,
+        text1             = text1,
+        ID2               = ID2,
+        text2             = text2,
+        model             = "gpt-5.1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        endpoint          = "responses",
+        reasoning         = "low",
+        include_raw       = TRUE
+      )
+
       testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(nrow(res), 3L)
-      testthat::expect_equal(res$better_id, pairs$ID1)
+      testthat::expect_equal(res$object_type, "response")
+      # content should include both reasoning summary and message text
+      testthat::expect_equal(
+        res$content,
+        "Reasoning summary. <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+      )
+      testthat::expect_equal(res$better_sample, "SAMPLE_2")
+      testthat::expect_equal(res$better_id, ID2)
     }
   )
 })

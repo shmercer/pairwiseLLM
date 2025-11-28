@@ -17,6 +17,7 @@ openai_compare_pair_live(
   tag_prefix = "<BETTER_SAMPLE>",
   tag_suffix = "</BETTER_SAMPLE>",
   api_key = Sys.getenv("OPENAI_API_KEY"),
+  include_raw = FALSE,
   ...
 )
 }
@@ -29,9 +30,9 @@ openai_compare_pair_live(
 
 \item{text2}{Character string containing the second sample's text.}
 
-\item{model}{OpenAI model name (e.g. "gpt-4.1", "gpt-5.1").}
+\item{model}{OpenAI model name (for example "gpt-4.1", "gpt-5.1").}
 
-\item{trait_name}{Short label for the trait (e.g., "Overall Quality").}
+\item{trait_name}{Short label for the trait (for example "Overall Quality").}
 
 \item{trait_description}{Full-text definition of the trait.}
 
@@ -50,9 +51,14 @@ openai_compare_pair_live(
 \item{api_key}{Optional OpenAI API key. Defaults to
 \code{Sys.getenv("OPENAI_API_KEY")}.}
 
-\item{...}{Additional OpenAI parameters, e.g. \code{temperature}, \code{top_p},
-\code{logprobs}, \code{reasoning}. The same validation rules for gpt-5.x
-models are applied as in \code{\link{build_openai_batch_requests}}.}
+\item{include_raw}{Logical; if TRUE, adds a list-column \code{raw_response}
+containing the parsed JSON body returned by OpenAI (or NULL on parse
+failure). This is useful for debugging parsing problems.}
+
+\item{...}{Additional OpenAI parameters, for example
+\code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}.
+The same validation rules for gpt-5 models are applied as in
+\code{\link{build_openai_batch_requests}}.}
 }
 \value{
 A tibble with one row and columns:
@@ -60,49 +66,87 @@ A tibble with one row and columns:
 \item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
 \item{ID1, ID2}{The sample IDs you supplied.}
 \item{model}{Model name reported by the API.}
-\item{object_type}{OpenAI object type (e.g. "chat.completion" or "response").}
+\item{object_type}{OpenAI object type (for example "chat.completion" or "response").}
 \item{status_code}{HTTP-style status code (200 if successful).}
 \item{error_message}{Error message if something goes wrong; otherwise NA.}
-\item{content}{Raw assistant content string (the LLM output).}
-\item{better_sample}{Either "SAMPLE_1", "SAMPLE_2", or NA.}
-\item{better_id}{ID1 if SAMPLE_1 chosen, ID2 if SAMPLE_2 chosen, otherwise NA.}
-\item{prompt_tokens}{Prompt/input token count (if reported).}
-\item{completion_tokens}{Completion/output token count (if reported).}
+\item{content}{Concatenated text from the assistant output. For the
+Responses endpoint this may include both reasoning and message text.}
+\item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
+\item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
+otherwise NA.}
+\item{prompt_tokens}{Prompt / input token count (if reported).}
+\item{completion_tokens}{Completion / output token count (if reported).}
 \item{total_tokens}{Total token count (if reported).}
+\item{raw_response}{(Optional) list-column containing the parsed JSON body.}
 }
 }
 \description{
 This function sends a single pairwise comparison prompt to the OpenAI API
-and parses the result into a small tibble. It is the live/on-demand analogue
-of \code{\link{build_openai_batch_requests}} + \code{\link{parse_openai_batch_output}}.
+and parses the result into a small tibble. It is the live / on-demand
+analogue of \code{\link{build_openai_batch_requests}} plus
+\code{\link{parse_openai_batch_output}}.
 }
 \details{
 It supports both the Chat Completions endpoint ("/v1/chat/completions") and
-the Responses endpoint ("/v1/responses", e.g., for gpt-5.1 with reasoning),
-using the same prompt template and model/parameter rules as the batch pipeline.
+the Responses endpoint ("/v1/responses", for example gpt-5.1 with reasoning),
+using the same prompt template and model / parameter rules as the batch
+pipeline.
+
+For the Responses endpoint, the function collects text from both reasoning
+and message outputs when available. In practice this means:
+\itemize{
+\item If the API returns a reasoning summary with text (for example in
+\code{body$reasoning$summary$text}), that is included.
+\item For each element of \code{body$output}, any nested element with a
+\code{text} field is appended.
+}
 }
 \examples{
 \dontrun{
-data("example_writing_samples")
+# Single live comparison using the chat.completions endpoint
+library(pairwiseLLM)
+
+data("example_writing_samples", package = "pairwiseLLM")
+samples <- example_writing_samples[1:2, ]
+
 td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-pair <- example_writing_samples[1:2, ]
-
-res <- openai_compare_pair_live(
-  ID1               = pair$ID[1],
-  text1             = pair$text[1],
-  ID2               = pair$ID[2],
-  text2             = pair$text[2],
+res_live <- openai_compare_pair_live(
+  ID1               = samples$ID[1],
+  text1             = samples$text[1],
+  ID2               = samples$ID[2],
+  text2             = samples$text[2],
   model             = "gpt-4.1",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   endpoint          = "chat.completions",
-  temperature       = 0
+  temperature       = 0,
+  include_raw       = FALSE
 )
 
-res$better_id
+res_live$better_id
+
+# Using the responses endpoint with gpt-5.1 and reasoning = "low"
+res_live_gpt5 <- openai_compare_pair_live(
+  ID1               = samples$ID[1],
+  text1             = samples$text[1],
+  ID2               = samples$ID[2],
+  text2             = samples$text[2],
+  model             = "gpt-5.1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  endpoint          = "responses",
+  reasoning         = "low",
+  temperature       = NULL,
+  top_p             = NULL,
+  logprobs          = NULL,
+  include_raw       = TRUE
+)
+
+str(res_live_gpt5$raw_response[[1]], max.level = 2)
 }
 
 }

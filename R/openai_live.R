@@ -4,19 +4,30 @@ NULL
 #' Live OpenAI comparison for a single pair of samples
 #'
 #' This function sends a single pairwise comparison prompt to the OpenAI API
-#' and parses the result into a small tibble. It is the live/on-demand analogue
-#' of \code{\link{build_openai_batch_requests}} + \code{\link{parse_openai_batch_output}}.
+#' and parses the result into a small tibble. It is the live / on-demand
+#' analogue of \code{\link{build_openai_batch_requests}} plus
+#' \code{\link{parse_openai_batch_output}}.
 #'
 #' It supports both the Chat Completions endpoint ("/v1/chat/completions") and
-#' the Responses endpoint ("/v1/responses", e.g., for gpt-5.1 with reasoning),
-#' using the same prompt template and model/parameter rules as the batch pipeline.
+#' the Responses endpoint ("/v1/responses", for example gpt-5.1 with reasoning),
+#' using the same prompt template and model / parameter rules as the batch
+#' pipeline.
+#'
+#' For the Responses endpoint, the function collects text from both reasoning
+#' and message outputs when available. In practice this means:
+#' \itemize{
+#'   \item If the API returns a reasoning summary with text (for example in
+#'     \code{body$reasoning$summary$text}), that is included.
+#'   \item For each element of \code{body$output}, any nested element with a
+#'     \code{text} field is appended.
+#' }
 #'
 #' @param ID1 Character ID for the first sample.
 #' @param text1 Character string containing the first sample's text.
 #' @param ID2 Character ID for the second sample.
 #' @param text2 Character string containing the second sample's text.
-#' @param model OpenAI model name (e.g. "gpt-4.1", "gpt-5.1").
-#' @param trait_name Short label for the trait (e.g., "Overall Quality").
+#' @param model OpenAI model name (for example "gpt-4.1", "gpt-5.1").
+#' @param trait_name Short label for the trait (for example "Overall Quality").
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}.
@@ -28,48 +39,79 @@ NULL
 #'   \code{"</BETTER_SAMPLE>"}.
 #' @param api_key Optional OpenAI API key. Defaults to
 #'   \code{Sys.getenv("OPENAI_API_KEY")}.
-#' @param ... Additional OpenAI parameters, e.g. \code{temperature}, \code{top_p},
-#'   \code{logprobs}, \code{reasoning}. The same validation rules for gpt-5.x
-#'   models are applied as in \code{\link{build_openai_batch_requests}}.
+#' @param include_raw Logical; if TRUE, adds a list-column \code{raw_response}
+#'   containing the parsed JSON body returned by OpenAI (or NULL on parse
+#'   failure). This is useful for debugging parsing problems.
+#' @param ... Additional OpenAI parameters, for example
+#'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}.
+#'   The same validation rules for gpt-5 models are applied as in
+#'   \code{\link{build_openai_batch_requests}}.
 #'
 #' @return A tibble with one row and columns:
 #' \describe{
 #'   \item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
 #'   \item{ID1, ID2}{The sample IDs you supplied.}
 #'   \item{model}{Model name reported by the API.}
-#'   \item{object_type}{OpenAI object type (e.g. "chat.completion" or "response").}
+#'   \item{object_type}{OpenAI object type (for example "chat.completion" or "response").}
 #'   \item{status_code}{HTTP-style status code (200 if successful).}
 #'   \item{error_message}{Error message if something goes wrong; otherwise NA.}
-#'   \item{content}{Raw assistant content string (the LLM output).}
-#'   \item{better_sample}{Either "SAMPLE_1", "SAMPLE_2", or NA.}
-#'   \item{better_id}{ID1 if SAMPLE_1 chosen, ID2 if SAMPLE_2 chosen, otherwise NA.}
-#'   \item{prompt_tokens}{Prompt/input token count (if reported).}
-#'   \item{completion_tokens}{Completion/output token count (if reported).}
+#'   \item{content}{Concatenated text from the assistant output. For the
+#'     Responses endpoint this may include both reasoning and message text.}
+#'   \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
+#'   \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
+#'     otherwise NA.}
+#'   \item{prompt_tokens}{Prompt / input token count (if reported).}
+#'   \item{completion_tokens}{Completion / output token count (if reported).}
 #'   \item{total_tokens}{Total token count (if reported).}
+#'   \item{raw_response}{(Optional) list-column containing the parsed JSON body.}
 #' }
 #'
 #' @examples
 #' \dontrun{
-#' data("example_writing_samples")
+#' # Single live comparison using the chat.completions endpoint
+#' library(pairwiseLLM)
+#'
+#' data("example_writing_samples", package = "pairwiseLLM")
+#' samples <- example_writing_samples[1:2, ]
+#'
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' pair <- example_writing_samples[1:2, ]
-#'
-#' res <- openai_compare_pair_live(
-#'   ID1               = pair$ID[1],
-#'   text1             = pair$text[1],
-#'   ID2               = pair$ID[2],
-#'   text2             = pair$text[2],
+#' res_live <- openai_compare_pair_live(
+#'   ID1               = samples$ID[1],
+#'   text1             = samples$text[1],
+#'   ID2               = samples$ID[2],
+#'   text2             = samples$text[2],
 #'   model             = "gpt-4.1",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   endpoint          = "chat.completions",
-#'   temperature       = 0
+#'   temperature       = 0,
+#'   include_raw       = FALSE
 #' )
 #'
-#' res$better_id
+#' res_live$better_id
+#'
+#' # Using the responses endpoint with gpt-5.1 and reasoning = "low"
+#' res_live_gpt5 <- openai_compare_pair_live(
+#'   ID1               = samples$ID[1],
+#'   text1             = samples$text[1],
+#'   ID2               = samples$ID[2],
+#'   text2             = samples$text[2],
+#'   model             = "gpt-5.1",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   endpoint          = "responses",
+#'   reasoning         = "low",
+#'   temperature       = NULL,
+#'   top_p             = NULL,
+#'   logprobs          = NULL,
+#'   include_raw       = TRUE
+#' )
+#'
+#' str(res_live_gpt5$raw_response[[1]], max.level = 2)
 #' }
 #'
 #' @export
@@ -86,21 +128,17 @@ openai_compare_pair_live <- function(
     tag_prefix      = "<BETTER_SAMPLE>",
     tag_suffix      = "</BETTER_SAMPLE>",
     api_key         = Sys.getenv("OPENAI_API_KEY"),
+    include_raw     = FALSE,
     ...
 ) {
   endpoint <- match.arg(endpoint)
 
-  # Basic input checks
   if (!is.character(ID1)  || length(ID1)  != 1L) stop("`ID1` must be a single character.",  call. = FALSE)
   if (!is.character(ID2)  || length(ID2)  != 1L) stop("`ID2` must be a single character.",  call. = FALSE)
   if (!is.character(text1) || length(text1) != 1L) stop("`text1` must be a single character.", call. = FALSE)
   if (!is.character(text2) || length(text2) != 1L) stop("`text2` must be a single character.", call. = FALSE)
   if (!is.character(model) || length(model) != 1L) stop("`model` must be a single character.", call. = FALSE)
 
-  # ------------------------------------------------------------------------
-  # Validate model vs temperature / top_p / logprobs / reasoning
-  # (mirrors build_openai_batch_requests) :contentReference[oaicite:6]{index=6}
-  # ------------------------------------------------------------------------
   dots        <- list(...)
   temperature <- dots$temperature %||% NULL
   top_p       <- dots$top_p       %||% NULL
@@ -130,9 +168,6 @@ openai_compare_pair_live <- function(
     }
   }
 
-  # ------------------------------------------------------------------------
-  # Build the prompt (same as in batch_openai) :contentReference[oaicite:7]{index=7}
-  # ------------------------------------------------------------------------
   prompt <- build_prompt(
     template   = prompt_template,
     trait_name = trait_name,
@@ -141,9 +176,6 @@ openai_compare_pair_live <- function(
     text2      = text2
   )
 
-  # ------------------------------------------------------------------------
-  # Construct request body + endpoint path
-  # ------------------------------------------------------------------------
   if (endpoint == "chat.completions") {
     body <- list(
       model    = model,
@@ -160,7 +192,6 @@ openai_compare_pair_live <- function(
 
     path <- "/chat/completions"
   } else {
-    # endpoint == "responses"
     body <- list(
       model = model,
       input = prompt
@@ -175,49 +206,45 @@ openai_compare_pair_live <- function(
     path <- "/responses"
   }
 
-  # ------------------------------------------------------------------------
-  # Perform request via shared helper (.openai_request) :contentReference[oaicite:8]{index=8}
-  # ------------------------------------------------------------------------
   req <- .openai_request(path, api_key) |>
     req_body_json(body)
 
   resp <- req_perform(req)
 
-  status_code <- resp_status(resp)
+  status_code   <- resp_status(resp)
   error_message <- NA_character_
 
-  # Try to parse body; if it fails, return an error row
   body_parsed <- tryCatch(
     resp_body_json(resp, simplifyVector = FALSE),
     error = function(e) NULL
   )
 
   if (is.null(body_parsed)) {
-    error_message <- "Failed to parse response body as JSON."
-
-    return(tibble::tibble(
+    res <- tibble::tibble(
       custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
       ID1               = ID1,
       ID2               = ID2,
       model             = NA_character_,
       object_type       = NA_character_,
       status_code       = status_code,
-      error_message     = error_message,
+      error_message     = "Failed to parse response body as JSON.",
       content           = NA_character_,
       better_sample     = NA_character_,
       better_id         = NA_character_,
       prompt_tokens     = NA_real_,
       completion_tokens = NA_real_,
       total_tokens      = NA_real_
-    ))
+    )
+
+    if (include_raw) {
+      res$raw_response <- list(NULL)
+    }
+
+    return(res)
   }
 
   body <- body_parsed
 
-  # ------------------------------------------------------------------------
-  # Extract object_type, model, content, usage
-  #   (mirrors parse_openai_batch_output) :contentReference[oaicite:9]{index=9} :contentReference[oaicite:10]{index=10}
-  # ------------------------------------------------------------------------
   object_type <- body$object %||% NA_character_
   model_name  <- body$model  %||% NA_character_
 
@@ -226,31 +253,45 @@ openai_compare_pair_live <- function(
   if (identical(object_type, "chat.completion")) {
     choices <- body$choices %||% list()
     if (length(choices) >= 1L) {
-      message <- choices[[1]]$message
-      if (!is.null(message) && !is.null(message$content)) {
-        content <- as.character(message$content)
+      message_obj <- choices[[1]]$message
+      if (!is.null(message_obj) && !is.null(message_obj$content)) {
+        content <- as.character(message_obj$content)
       }
     }
   } else if (identical(object_type, "response")) {
+    # /v1/responses: collect text from reasoning summary (if any) and
+    # from each output element's content blocks that have a $text field.
+    collected <- character(0)
+
+    # Possible reasoning summary text at top level
+    if (!is.null(body$reasoning) && !is.null(body$reasoning$summary)) {
+      rs <- body$reasoning$summary
+      if (!is.null(rs$text)) {
+        collected <- c(collected, as.character(rs$text %||% ""))
+      }
+    }
+
     output <- body$output %||% list()
-    if (length(output) >= 1L) {
-      blocks <- output[[1]]$content %||% list()
-      texts <- vapply(
-        blocks,
-        function(b) {
-          if (!is.null(b$type) && identical(b$type, "output_text")) {
-            as.character(b$text %||% "")
-          } else {
-            ""
+    if (length(output) > 0L) {
+      for (out in output) {
+        blocks <- out$content %||% list()
+        if (length(blocks) > 0L) {
+          for (b in blocks) {
+            if (!is.null(b$text)) {
+              collected <- c(collected, as.character(b$text %||% ""))
+            }
           }
-        },
-        character(1)
-      )
-      content <- paste(texts, collapse = "")
+        }
+      }
+    }
+
+    if (length(collected) > 0L) {
+      content <- paste(collected, collapse = "")
+    } else {
+      content <- NA_character_
     }
   }
 
-  # Better-sample tag detection
   better_sample <- NA_character_
   if (!is.na(content)) {
     if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
@@ -262,19 +303,15 @@ openai_compare_pair_live <- function(
 
   better_id <- NA_character_
   if (!is.na(better_sample)) {
-    if (better_sample == "SAMPLE_1") {
-      better_id <- ID1
-    } else if (better_sample == "SAMPLE_2") {
-      better_id <- ID2
-    }
+    better_id <- if (better_sample == "SAMPLE_1") ID1 else ID2
   }
 
   usage <- body$usage %||% list()
-  prompt_tokens     <- usage$prompt_tokens   %||% usage$input_tokens   %||% NA_real_
-  completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
-  total_tokens      <- usage$total_tokens    %||% NA_real_
+  prompt_tokens     <- usage$prompt_tokens     %||% usage$input_tokens   %||% NA_real_
+  completion_tokens <- usage$completion_tokens %||% usage$output_tokens  %||% NA_real_
+  total_tokens      <- usage$total_tokens      %||% NA_real_
 
-  tibble::tibble(
+  res <- tibble::tibble(
     custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
     ID1               = ID1,
     ID2               = ID2,
@@ -289,22 +326,29 @@ openai_compare_pair_live <- function(
     completion_tokens = as.numeric(completion_tokens),
     total_tokens      = as.numeric(total_tokens)
   )
+
+  if (include_raw) {
+    res$raw_response <- list(body)
+  }
+
+  res
 }
 
 #' Live OpenAI comparisons for a tibble of pairs
 #'
 #' This is a thin row-wise wrapper around \code{\link{openai_compare_pair_live}}.
-#' It takes a tibble of pairs (ID1/text1/ID2/text2), submits each pair to the
-#' OpenAI API, and binds the results into a single tibble.
+#' It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each pair to
+#' the OpenAI API, and binds the results into a single tibble.
 #'
 #' The output has the same columns as \code{\link{openai_compare_pair_live}},
 #' with one row per pair, making it easy to pass into
 #' \code{\link{build_bt_data}} and \code{\link{fit_bt_model}}.
 #'
-#' @param pairs Tibble/data frame with at least columns \code{ID1}, \code{text1},
-#'   \code{ID2}, \code{text2}. Typically created by \code{\link{make_pairs}},
-#'   \code{\link{sample_pairs}}, and \code{\link{randomize_pair_order}}.
-#' @param model OpenAI model name (e.g. "gpt-4.1", "gpt-5.1").
+#' @param pairs Tibble or data frame with at least columns \code{ID1},
+#'   \code{text1}, \code{ID2}, \code{text2}. Typically created by
+#'   \code{\link{make_pairs}}, \code{\link{sample_pairs}}, and
+#'   \code{\link{randomize_pair_order}}.
+#' @param model OpenAI model name (for example "gpt-4.1", "gpt-5.1").
 #' @param trait_name Trait name to pass to \code{openai_compare_pair_live}.
 #' @param trait_description Trait description to pass to
 #'   \code{openai_compare_pair_live}.
@@ -313,28 +357,35 @@ openai_compare_pair_live <- function(
 #' @param endpoint Which OpenAI endpoint to target. One of
 #'   \code{"chat.completions"} or \code{"responses"}.
 #' @param api_key Optional OpenAI API key.
-#' @param verbose Logical; if `TRUE`, prints status, timing, and result summaries.
-#' @param status_every Integer; print status/timing for every `status_every`-th pair.
-#'   Defaults to 1 (every pair). Errors are always printed.
-#' @param progress Logical; if `TRUE`, shows a textual progress bar.
+#' @param verbose Logical; if TRUE, prints status, timing, and result summaries.
+#' @param status_every Integer; print status / timing for every
+#'   \code{status_every}-th pair. Defaults to 1 (every pair). Errors are always
+#'   printed.
+#' @param progress Logical; if TRUE, shows a textual progress bar.
+#' @param include_raw Logical; if TRUE, each row of the returned tibble will
+#'   include a \code{raw_response} list-column with the parsed JSON body from
+#'   OpenAI.
 #' @param ... Additional OpenAI parameters (temperature, top_p, logprobs,
-#'   reasoning, etc.) passed on to \code{openai_compare_pair_live}.
+#'   reasoning, and so on) passed on to \code{openai_compare_pair_live}.
 #'
 #' @return A tibble with one row per pair and the same columns as
 #'   \code{\link{openai_compare_pair_live}}.
 #'
 #' @examples
 #' \dontrun{
-#' data("example_writing_samples")
+#' library(pairwiseLLM)
+#'
+#' data("example_writing_samples", package = "pairwiseLLM")
 #'
 #' pairs <- example_writing_samples |>
 #'   make_pairs() |>
-#'   sample_pairs(n_pairs = 3, seed = 123) |>
+#'   sample_pairs(n_pairs = 5, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
+#' # Live comparisons for multiple pairs
 #' res_live <- submit_openai_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "gpt-4.1",
@@ -342,10 +393,34 @@ openai_compare_pair_live <- function(
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   endpoint          = "chat.completions",
-#'   temperature       = 0
+#'   temperature       = 0,
+#'   verbose           = TRUE,
+#'   status_every      = 2,
+#'   progress          = TRUE,
+#'   include_raw       = FALSE
 #' )
 #'
 #' res_live$better_id
+#'
+#' # Using gpt-5.1 with reasoning = "low" on the responses endpoint
+#' res_live_gpt5 <- submit_openai_pairs_live(
+#'   pairs             = pairs,
+#'   model             = "gpt-5.1",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   endpoint          = "responses",
+#'   reasoning         = "low",
+#'   temperature       = NULL,
+#'   top_p             = NULL,
+#'   logprobs          = NULL,
+#'   verbose           = TRUE,
+#'   status_every      = 3,
+#'   progress          = TRUE,
+#'   include_raw       = TRUE
+#' )
+#'
+#' str(res_live_gpt5$raw_response[[1]], max.level = 2)
 #' }
 #'
 #' @export
@@ -360,6 +435,7 @@ submit_openai_pairs_live <- function(
     verbose         = TRUE,
     status_every    = 1,
     progress        = TRUE,
+    include_raw     = FALSE,
     ...
 ) {
   endpoint <- match.arg(endpoint)
@@ -378,7 +454,7 @@ submit_openai_pairs_live <- function(
 
   n <- nrow(pairs)
   if (n == 0L) {
-    return(tibble::tibble(
+    res <- tibble::tibble(
       custom_id         = character(0),
       ID1               = character(0),
       ID2               = character(0),
@@ -392,7 +468,11 @@ submit_openai_pairs_live <- function(
       prompt_tokens     = numeric(0),
       completion_tokens = numeric(0),
       total_tokens      = numeric(0)
-    ))
+    )
+    if (include_raw) {
+      res$raw_response <- list()
+    }
+    return(res)
   }
 
   if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
@@ -400,12 +480,11 @@ submit_openai_pairs_live <- function(
   }
   status_every <- as.integer(status_every)
 
-  # Helper for human-readable seconds
   fmt_secs <- function(x) sprintf("%.1fs", x)
 
   if (verbose) {
     message(sprintf(
-      "Submitting %d live pair(s) for comparison (model=%s, endpoint=%s)…",
+      "Submitting %d live pair(s) for comparison (model=%s, endpoint=%s)...",
       n, model, endpoint
     ))
   }
@@ -423,7 +502,7 @@ submit_openai_pairs_live <- function(
 
     if (show_status) {
       message(sprintf(
-        "[Live pair %d of %d] Comparing %s vs %s …",
+        "[Live pair %d of %d] Comparing %s vs %s ...",
         i, n, pairs$ID1[i], pairs$ID2[i]
       ))
     }
@@ -439,30 +518,28 @@ submit_openai_pairs_live <- function(
       prompt_template   = prompt_template,
       endpoint          = endpoint,
       api_key           = api_key,
+      include_raw       = include_raw,
       ...
     )
 
-    # Update progress bar
     if (!is.null(pb)) {
       utils::setTxtProgressBar(pb, i)
     }
 
-    # Always print errors
     if (!is.na(res$error_message)) {
       message(sprintf(
-        "    ⚠️ API Error (status %s): %s",
+        "    WARNING: API Error (status %s): %s",
         res$status_code, res$error_message
       ))
 
     } else if (show_status) {
-      # Per-pair result + timing
       elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
       avg     <- elapsed / i
       remain  <- n - i
       est_rem <- avg * remain
 
       message(sprintf(
-        "    → Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
+        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
         res$better_id,
         res$better_sample,
         res$prompt_tokens,
@@ -470,7 +547,7 @@ submit_openai_pairs_live <- function(
         res$total_tokens
       ))
       message(sprintf(
-        "    ⏱ elapsed=%s | avg/pair=%s | est remaining=%s",
+        "    Timing: elapsed=%s | avg/pair=%s | est remaining=%s",
         fmt_secs(elapsed),
         fmt_secs(avg),
         fmt_secs(est_rem)
@@ -495,3 +572,4 @@ submit_openai_pairs_live <- function(
 
   dplyr::bind_rows(out)
 }
+

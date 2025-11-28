@@ -15,15 +15,17 @@ submit_openai_pairs_live(
   verbose = TRUE,
   status_every = 1,
   progress = TRUE,
+  include_raw = FALSE,
   ...
 )
 }
 \arguments{
-\item{pairs}{Tibble/data frame with at least columns \code{ID1}, \code{text1},
-\code{ID2}, \code{text2}. Typically created by \code{\link{make_pairs}},
-\code{\link{sample_pairs}}, and \code{\link{randomize_pair_order}}.}
+\item{pairs}{Tibble or data frame with at least columns \code{ID1},
+\code{text1}, \code{ID2}, \code{text2}. Typically created by
+\code{\link{make_pairs}}, \code{\link{sample_pairs}}, and
+\code{\link{randomize_pair_order}}.}
 
-\item{model}{OpenAI model name (e.g. "gpt-4.1", "gpt-5.1").}
+\item{model}{OpenAI model name (for example "gpt-4.1", "gpt-5.1").}
 
 \item{trait_name}{Trait name to pass to \code{openai_compare_pair_live}.}
 
@@ -38,15 +40,20 @@ submit_openai_pairs_live(
 
 \item{api_key}{Optional OpenAI API key.}
 
-\item{verbose}{Logical; if \code{TRUE}, prints status, timing, and result summaries.}
+\item{verbose}{Logical; if TRUE, prints status, timing, and result summaries.}
 
-\item{status_every}{Integer; print status/timing for every \code{status_every}-th pair.
-Defaults to 1 (every pair). Errors are always printed.}
+\item{status_every}{Integer; print status / timing for every
+\code{status_every}-th pair. Defaults to 1 (every pair). Errors are always
+printed.}
 
-\item{progress}{Logical; if \code{TRUE}, shows a textual progress bar.}
+\item{progress}{Logical; if TRUE, shows a textual progress bar.}
+
+\item{include_raw}{Logical; if TRUE, each row of the returned tibble will
+include a \code{raw_response} list-column with the parsed JSON body from
+OpenAI.}
 
 \item{...}{Additional OpenAI parameters (temperature, top_p, logprobs,
-reasoning, etc.) passed on to \code{openai_compare_pair_live}.}
+reasoning, and so on) passed on to \code{openai_compare_pair_live}.}
 }
 \value{
 A tibble with one row per pair and the same columns as
@@ -54,8 +61,8 @@ A tibble with one row per pair and the same columns as
 }
 \description{
 This is a thin row-wise wrapper around \code{\link{openai_compare_pair_live}}.
-It takes a tibble of pairs (ID1/text1/ID2/text2), submits each pair to the
-OpenAI API, and binds the results into a single tibble.
+It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each pair to
+the OpenAI API, and binds the results into a single tibble.
 }
 \details{
 The output has the same columns as \code{\link{openai_compare_pair_live}},
@@ -64,16 +71,19 @@ with one row per pair, making it easy to pass into
 }
 \examples{
 \dontrun{
-data("example_writing_samples")
+library(pairwiseLLM)
+
+data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
   make_pairs() |>
-  sample_pairs(n_pairs = 3, seed = 123) |>
+  sample_pairs(n_pairs = 5, seed = 123) |>
   randomize_pair_order(seed = 456)
 
 td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
+# Live comparisons for multiple pairs
 res_live <- submit_openai_pairs_live(
   pairs             = pairs,
   model             = "gpt-4.1",
@@ -81,10 +91,34 @@ res_live <- submit_openai_pairs_live(
   trait_description = td$description,
   prompt_template   = tmpl,
   endpoint          = "chat.completions",
-  temperature       = 0
+  temperature       = 0,
+  verbose           = TRUE,
+  status_every      = 2,
+  progress          = TRUE,
+  include_raw       = FALSE
 )
 
 res_live$better_id
+
+# Using gpt-5.1 with reasoning = "low" on the responses endpoint
+res_live_gpt5 <- submit_openai_pairs_live(
+  pairs             = pairs,
+  model             = "gpt-5.1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  endpoint          = "responses",
+  reasoning         = "low",
+  temperature       = NULL,
+  top_p             = NULL,
+  logprobs          = NULL,
+  verbose           = TRUE,
+  status_every      = 3,
+  progress          = TRUE,
+  include_raw       = TRUE
+)
+
+str(res_live_gpt5$raw_response[[1]], max.level = 2)
 }
 
 }
