@@ -12,6 +12,9 @@ submit_openai_pairs_live(
   prompt_template = set_prompt_template(),
   endpoint = c("chat.completions", "responses"),
   api_key = Sys.getenv("OPENAI_API_KEY"),
+  verbose = TRUE,
+  status_every = 1,
+  progress = TRUE,
   ...
 )
 }
@@ -34,6 +37,13 @@ submit_openai_pairs_live(
 \code{"chat.completions"} or \code{"responses"}.}
 
 \item{api_key}{Optional OpenAI API key.}
+
+\item{verbose}{Logical; if \code{TRUE}, prints status, timing, and result summaries.}
+
+\item{status_every}{Integer; print status/timing for every \code{status_every}-th pair.
+Defaults to 1 (every pair). Errors are always printed.}
+
+\item{progress}{Logical; if \code{TRUE}, shows a textual progress bar.}
 
 \item{...}{Additional OpenAI parameters (temperature, top_p, logprobs,
 reasoning, etc.) passed on to \code{openai_compare_pair_live}.}

@@ -454,3 +454,57 @@ testthat::test_that("submit_openai_pairs_live errors on missing columns", {
     regexp = "`pairs` must contain columns"
   )
 })
+
+testthat::test_that("submit_openai_pairs_live supports verbose/status_every/progress args", {
+  pairs <- tibble::tibble(
+    ID1   = c("S01", "S03", "S05"),
+    text1 = c("Text 1", "Text 3", "Text 5"),
+    ID2   = c("S02", "S04", "S06"),
+    text2 = c("Text 2", "Text 4", "Text 6")
+  )
+
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Simple stub that returns deterministic results
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(
+    ID1, text1, ID2, text2, model, trait_name,
+    trait_description, prompt_template, endpoint, api_key, ...
+    ) {
+      tibble::tibble(
+        custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+        ID1               = ID1,
+        ID2               = ID2,
+        model             = model,
+        object_type       = "chat.completion",
+        status_code       = 200L,
+        error_message     = NA_character_,
+        content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+        better_sample     = "SAMPLE_1",
+        better_id         = ID1,
+        prompt_tokens     = 10,
+        completion_tokens = 5,
+        total_tokens      = 15
+      )
+    },
+    {
+      res <- submit_openai_pairs_live(
+        pairs             = pairs,
+        model             = "gpt-4.1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        endpoint          = "chat.completions",
+        verbose           = TRUE,
+        status_every      = 2,
+        progress          = FALSE
+      )
+
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(nrow(res), 3L)
+      testthat::expect_equal(res$better_id, pairs$ID1)
+    }
+  )
+})
+

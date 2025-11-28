@@ -313,6 +313,10 @@ openai_compare_pair_live <- function(
 #' @param endpoint Which OpenAI endpoint to target. One of
 #'   \code{"chat.completions"} or \code{"responses"}.
 #' @param api_key Optional OpenAI API key.
+#' @param verbose Logical; if `TRUE`, prints status, timing, and result summaries.
+#' @param status_every Integer; print status/timing for every `status_every`-th pair.
+#'   Defaults to 1 (every pair). Errors are always printed.
+#' @param progress Logical; if `TRUE`, shows a textual progress bar.
 #' @param ... Additional OpenAI parameters (temperature, top_p, logprobs,
 #'   reasoning, etc.) passed on to \code{openai_compare_pair_live}.
 #'
@@ -353,6 +357,9 @@ submit_openai_pairs_live <- function(
     prompt_template = set_prompt_template(),
     endpoint        = c("chat.completions", "responses"),
     api_key         = Sys.getenv("OPENAI_API_KEY"),
+    verbose         = TRUE,
+    status_every    = 1,
+    progress        = TRUE,
     ...
 ) {
   endpoint <- match.arg(endpoint)
@@ -388,10 +395,40 @@ submit_openai_pairs_live <- function(
     ))
   }
 
+  if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
+    stop("`status_every` must be a single positive integer.", call. = FALSE)
+  }
+  status_every <- as.integer(status_every)
+
+  # Helper for human-readable seconds
+  fmt_secs <- function(x) sprintf("%.1fs", x)
+
+  if (verbose) {
+    message(sprintf(
+      "Submitting %d live pair(s) for comparison (model=%s, endpoint=%s)…",
+      n, model, endpoint
+    ))
+  }
+
+  pb <- NULL
+  if (progress && n > 0L) {
+    pb <- utils::txtProgressBar(min = 0, max = n, style = 3)
+  }
+
+  start_time <- Sys.time()
   out <- vector("list", n)
 
   for (i in seq_len(n)) {
-    out[[i]] <- openai_compare_pair_live(
+    show_status <- verbose && (i %% status_every == 1L)
+
+    if (show_status) {
+      message(sprintf(
+        "[Live pair %d of %d] Comparing %s vs %s …",
+        i, n, pairs$ID1[i], pairs$ID2[i]
+      ))
+    }
+
+    res <- openai_compare_pair_live(
       ID1               = as.character(pairs$ID1[i]),
       text1             = as.character(pairs$text1[i]),
       ID2               = as.character(pairs$ID2[i]),
@@ -404,6 +441,56 @@ submit_openai_pairs_live <- function(
       api_key           = api_key,
       ...
     )
+
+    # Update progress bar
+    if (!is.null(pb)) {
+      utils::setTxtProgressBar(pb, i)
+    }
+
+    # Always print errors
+    if (!is.na(res$error_message)) {
+      message(sprintf(
+        "    ⚠️ API Error (status %s): %s",
+        res$status_code, res$error_message
+      ))
+
+    } else if (show_status) {
+      # Per-pair result + timing
+      elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+      avg     <- elapsed / i
+      remain  <- n - i
+      est_rem <- avg * remain
+
+      message(sprintf(
+        "    → Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
+        res$better_id,
+        res$better_sample,
+        res$prompt_tokens,
+        res$completion_tokens,
+        res$total_tokens
+      ))
+      message(sprintf(
+        "    ⏱ elapsed=%s | avg/pair=%s | est remaining=%s",
+        fmt_secs(elapsed),
+        fmt_secs(avg),
+        fmt_secs(est_rem)
+      ))
+    }
+
+    out[[i]] <- res
+  }
+
+  if (!is.null(pb)) {
+    close(pb)
+  }
+
+  if (verbose) {
+    total_elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    avg <- total_elapsed / n
+    message(sprintf(
+      "Completed %d live pair(s) in %s (avg %.2fs per pair).",
+      n, fmt_secs(total_elapsed), avg
+    ))
   }
 
   dplyr::bind_rows(out)
