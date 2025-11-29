@@ -1,0 +1,381 @@
+testthat::test_that("build_anthropic_batch_requests builds valid requests", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:2, ]
+
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  batch <- build_anthropic_batch_requests(
+    pairs             = pairs,
+    model             = "claude-sonnet-4-5",
+    trait_name        = td$name,
+    trait_description = td$description,
+    prompt_template   = tmpl,
+    reasoning         = "none"
+  )
+
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 2L)
+  testthat::expect_true(all(c("custom_id", "params") %in% names(batch)))
+
+  # Basic structure checks on first params
+  p1 <- batch$params[[1]]
+  testthat::expect_equal(p1$model, "claude-sonnet-4-5")
+  testthat::expect_true(is.list(p1$messages))
+  testthat::expect_true(is.list(p1$system))
+
+  # User message should contain SAMPLE_1/SAMPLE_2 tags in text
+  msg1 <- p1$messages[[1]]
+  testthat::expect_equal(msg1$role, "user")
+  testthat::expect_true(is.list(msg1$content))
+  text_block <- msg1$content[[1]]$text
+  testthat::expect_true(grepl("<SAMPLE_1>", text_block, fixed = TRUE))
+  testthat::expect_true(grepl("<SAMPLE_2>", text_block, fixed = TRUE))
+})
+
+testthat::test_that("build_anthropic_batch_requests enforces reasoning constraints", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
+
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # reasoning = "enabled" with default temperature and budgets should work
+  batch <- build_anthropic_batch_requests(
+    pairs             = pairs,
+    model             = "claude-sonnet-4-5",
+    trait_name        = td$name,
+    trait_description = td$description,
+    prompt_template   = tmpl,
+    reasoning         = "enabled"
+  )
+
+  p1 <- batch$params[[1]]
+  testthat::expect_equal(p1$temperature, 1)
+  testthat::expect_true("thinking" %in% names(p1))
+  testthat::expect_gte(p1$thinking$budget_tokens, 1024)
+  testthat::expect_gt(p1$max_tokens, p1$thinking$budget_tokens)
+
+  # temperature != 1 with reasoning = "enabled" should error
+  testthat::expect_error(
+    build_anthropic_batch_requests(
+      pairs             = pairs,
+      model             = "claude-sonnet-4-5",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl,
+      reasoning         = "enabled",
+      temperature       = 0
+    ),
+    regexp = "temperature"
+  )
+
+  # thinking_budget_tokens < 1024 should error
+  testthat::expect_error(
+    build_anthropic_batch_requests(
+      pairs             = pairs,
+      model             = "claude-sonnet-4-5",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl,
+      reasoning         = "enabled",
+      thinking_budget_tokens = 512
+    ),
+    regexp = "thinking_budget_tokens"
+  )
+})
+
+testthat::test_that("parse_anthropic_batch_output handles succeeded and errored results", {
+  tmp <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tmp), add = TRUE)
+
+  # Succeeded result line, similar to docs
+  line_ok <- list(
+    custom_id = "ANTH_S01_vs_S02",
+    result = list(
+      type    = "succeeded",
+      message = list(
+        id     = "msg_014VwiXbi91y3JMjcpyGBHX5",
+        type   = "message",
+        role   = "assistant",
+        model  = "claude-sonnet-4-5-20250929",
+        content = list(
+          list(
+            type = "text",
+            text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Hello!"
+          )
+        ),
+        stop_reason   = "end_turn",
+        stop_sequence = NULL,
+        usage = list(
+          input_tokens  = 10L,
+          output_tokens = 5L,
+          total_tokens  = 15L
+        )
+      )
+    )
+  )
+
+  # Errored result line
+  line_err <- list(
+    custom_id = "ANTH_S03_vs_S04",
+    result = list(
+      type  = "errored",
+      error = list(
+        type    = "invalid_request",
+        message = "Validation error"
+      )
+    )
+  )
+
+  json_lines <- c(
+    jsonlite::toJSON(line_ok,  auto_unbox = TRUE),
+    jsonlite::toJSON(line_err, auto_unbox = TRUE)
+  )
+  writeLines(json_lines, con = tmp, useBytes = TRUE)
+
+  res <- parse_anthropic_batch_output(tmp)
+
+  testthat::expect_s3_class(res, "tbl_df")
+  testthat::expect_equal(nrow(res), 2L)
+
+  # First row: succeeded
+  r1 <- res[1, ]
+  testthat::expect_equal(r1$custom_id, "ANTH_S01_vs_S02")
+  testthat::expect_equal(r1$ID1, "S01")
+  testthat::expect_equal(r1$ID2, "S02")
+  testthat::expect_equal(r1$result_type, "succeeded")
+  testthat::expect_equal(r1$status_code, 200L)
+  testthat::expect_true(is.na(r1$error_message))
+  testthat::expect_equal(r1$model, "claude-sonnet-4-5-20250929")
+  testthat::expect_equal(r1$better_sample, "SAMPLE_2")
+  testthat::expect_equal(r1$better_id, "S02")
+  testthat::expect_equal(r1$prompt_tokens,     10)
+  testthat::expect_equal(r1$completion_tokens, 5)
+  testthat::expect_equal(r1$total_tokens,      15)
+
+  # Second row: errored
+  r2 <- res[2, ]
+  testthat::expect_equal(r2$custom_id, "ANTH_S03_vs_S04")
+  testthat::expect_equal(r2$ID1, "S03")
+  testthat::expect_equal(r2$ID2, "S04")
+  testthat::expect_equal(r2$result_type, "errored")
+  testthat::expect_true(is.na(r2$status_code))
+  testthat::expect_match(r2$error_message, "Validation error")
+  testthat::expect_true(is.na(r2$content))
+  testthat::expect_true(is.na(r2$better_sample))
+  testthat::expect_true(is.na(r2$better_id))
+})
+
+testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing", {
+  pairs <- tibble::tibble(
+    ID1   = "S01",
+    text1 = "Text 1",
+    ID2   = "S02",
+    text2 = "Text 2"
+  )
+
+  fake_req_tbl <- tibble::tibble(
+    custom_id = "ANTH_S01_vs_S02",
+    params    = list(list(dummy = TRUE))
+  )
+
+  fake_batch_initial <- list(
+    id                = "msgbatch_123",
+    type              = "message_batch",
+    processing_status = "in_progress",
+    request_counts    = list(
+      processing = 1L,
+      succeeded  = 0L,
+      errored    = 0L,
+      canceled   = 0L,
+      expired    = 0L
+    ),
+    results_url = NULL
+  )
+
+  fake_batch_final <- list(
+    id                = "msgbatch_123",
+    type              = "message_batch",
+    processing_status = "ended",
+    request_counts    = list(
+      processing = 0L,
+      succeeded  = 1L,
+      errored    = 0L,
+      canceled   = 0L,
+      expired    = 0L
+    ),
+    results_url = "https://example.com/results.jsonl"
+  )
+
+  fake_results <- tibble::tibble(
+    custom_id     = "ANTH_S01_vs_S02",
+    ID1           = "S01",
+    ID2           = "S02",
+    better_id     = "S01",
+    result_type   = "succeeded",
+    status_code   = 200L,
+    content       = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+    prompt_tokens = 10,
+    completion_tokens = 5,
+    total_tokens  = 15
+  )
+
+  # Flags to ensure each helper is called
+  created_batch_id  <- NULL
+  polled_batch_id   <- NULL
+  downloaded_batch  <- NULL
+  parsed_path       <- NULL
+
+  testthat::with_mocked_bindings(
+    build_anthropic_batch_requests = function(pairs, model, trait_name,
+                                              trait_description,
+                                              prompt_template, reasoning, ...) {
+      fake_req_tbl
+    },
+    anthropic_create_batch = function(requests, api_key, anthropic_version) {
+      created_batch_id <<- "msgbatch_123"
+      fake_batch_initial
+    },
+    anthropic_poll_batch_until_complete = function(batch_id, interval_seconds,
+                                                   timeout_seconds, api_key,
+                                                   anthropic_version, verbose) {
+      polled_batch_id <<- batch_id
+      fake_batch_final
+    },
+    anthropic_download_batch_results = function(batch_id, output_path, api_key,
+                                                anthropic_version) {
+      downloaded_batch <<- batch_id
+      # Write a dummy .jsonl file so that parse_* can read it
+      writeLines('{"dummy": true}', con = output_path)
+      invisible(output_path)
+    },
+    parse_anthropic_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+      parsed_path <<- jsonl_path
+      fake_results
+    },
+    {
+      td   <- list(name = "Overall quality", description = "Quality")
+      tmpl <- set_prompt_template()
+
+      res <- run_anthropic_batch_pipeline(
+        pairs             = pairs,
+        model             = "claude-sonnet-4-5",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        reasoning         = "none",
+        interval_seconds  = 0,
+        timeout_seconds   = 10,
+        verbose           = FALSE
+      )
+
+      testthat::expect_equal(created_batch_id,  "msgbatch_123")
+      testthat::expect_equal(polled_batch_id,   "msgbatch_123")
+      testthat::expect_equal(downloaded_batch,  "msgbatch_123")
+      testthat::expect_true(file.exists(res$batch_input_path))
+      testthat::expect_true(file.exists(res$batch_output_path))
+      testthat::expect_true(file.exists(parsed_path))
+
+      # Return structure should mirror run_openai_batch_pipeline()
+      testthat::expect_true(all(c(
+        "batch_input_path", "batch_output_path", "file", "batch", "results"
+      ) %in% names(res)))
+
+      testthat::expect_null(res$file)
+      testthat::expect_equal(res$batch$processing_status, "ended")
+      testthat::expect_equal(res$results$better_id, "S01")
+    }
+  )
+})
+
+testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when poll = FALSE", {
+  pairs <- tibble::tibble(
+    ID1   = "S01",
+    text1 = "Text 1",
+    ID2   = "S02",
+    text2 = "Text 2"
+  )
+
+  fake_req_tbl <- tibble::tibble(
+    custom_id = "ANTH_S01_vs_S02",
+    params    = list(list(dummy = TRUE))
+  )
+
+  fake_batch_initial <- list(
+    id                = "msgbatch_123",
+    type              = "message_batch",
+    processing_status = "in_progress",
+    request_counts    = list(
+      processing = 1L,
+      succeeded  = 0L,
+      errored    = 0L,
+      canceled   = 0L,
+      expired    = 0L
+    ),
+    results_url = NULL
+  )
+
+  poll_called      <- FALSE
+  download_called  <- FALSE
+  parse_called     <- FALSE
+
+  testthat::with_mocked_bindings(
+    build_anthropic_batch_requests = function(pairs, model, trait_name,
+                                              trait_description,
+                                              prompt_template, reasoning, ...) {
+      fake_req_tbl
+    },
+    anthropic_create_batch = function(requests, api_key, anthropic_version) {
+      fake_batch_initial
+    },
+    anthropic_poll_batch_until_complete = function(batch_id, interval_seconds,
+                                                   timeout_seconds, api_key,
+                                                   anthropic_version, verbose) {
+      poll_called <<- TRUE
+      stop("Polling should not be called when poll = FALSE")
+    },
+    anthropic_download_batch_results = function(batch_id, output_path, api_key,
+                                                anthropic_version) {
+      download_called <<- TRUE
+      stop("Download should not be called when poll = FALSE")
+    },
+    parse_anthropic_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+      parse_called <<- TRUE
+      stop("Parse should not be called when poll = FALSE")
+    },
+    {
+      td   <- list(name = "Overall quality", description = "Quality")
+      tmpl <- set_prompt_template()
+
+      res <- run_anthropic_batch_pipeline(
+        pairs             = pairs,
+        model             = "claude-sonnet-4-5",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        reasoning         = "none",
+        poll              = FALSE
+      )
+
+      testthat::expect_false(poll_called)
+      testthat::expect_false(download_called)
+      testthat::expect_false(parse_called)
+
+      testthat::expect_true(file.exists(res$batch_input_path))
+      testthat::expect_null(res$batch_output_path)
+      testthat::expect_null(res$results)
+
+      # Return structure still standardized
+      testthat::expect_true(all(c(
+        "batch_input_path", "batch_output_path", "file", "batch", "results"
+      ) %in% names(res)))
+      testthat::expect_null(res$file)
+      testthat::expect_equal(res$batch$processing_status, "in_progress")
+    }
+  )
+})
