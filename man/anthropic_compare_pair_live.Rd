@@ -59,9 +59,9 @@ instructions, rubric text, and \verb{<BETTER_SAMPLE>} tagging convention.}
 internal "thinking" before the visible answer. Two values are recognised:
 \itemize{
 \item \code{"none"} – standard prompting (recommended default).
-\item \code{"enabled"} – sends a \code{thinking} block to the Anthropic
-API (with a token budget) and increases the default \code{max_tokens}
-used for the visible answer.
+\item \code{"enabled"} – uses Anthropic's extended thinking mode by
+sending a \code{thinking} block with a token budget; this also changes
+the default \code{max_tokens} and constrains \code{temperature}.
 }}
 
 \item{include_raw}{Logical; if \code{TRUE}, adds a list-column
@@ -71,9 +71,27 @@ problems.}
 
 \item{...}{Additional Anthropic parameters such as \code{max_tokens},
 \code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
-which will be passed through to the Messages API. If you supply
-\code{thinking_budget_tokens} it will override the default thinking budget
-used when \code{reasoning = "enabled"}.}
+which will be passed through to the Messages API.
+
+When \code{reasoning = "none"} the defaults are:
+\itemize{
+\item \code{temperature = 0} (deterministic behaviour) unless you
+supply \code{temperature} explicitly.
+\item \code{max_tokens = 768} unless you supply \code{max_tokens}.
+}
+
+When \code{reasoning = "enabled"} (extended thinking), the Anthropic API
+imposes additional constraints:
+\itemize{
+\item \code{temperature} \strong{must} be 1. If you supply a different
+value, this function will throw an error.
+\item \code{thinking_budget_tokens} must satisfy
+\code{thinking_budget_tokens >= 1024} and
+\code{thinking_budget_tokens < max_tokens}. If you supply a value that
+violates these constraints, this function will throw an error.
+\item By default, \code{max_tokens = 2048} and
+\code{thinking_budget_tokens = 1024}.
+}}
 }
 \value{
 A tibble with one row and columns:
@@ -120,9 +138,14 @@ The API typically responds with a dated model string such as
 
 For stable, reproducible comparisons we recommend:
 \itemize{
-\item \code{temperature = 0} (deterministic comparisons).
-\item \code{max_tokens = 768} when \code{reasoning = "none"}.
-\item \code{max_tokens = 1536} when \code{reasoning = "enabled"}.
+\item \code{reasoning = "none"} with \code{temperature = 0} and
+\code{max_tokens = 768} for standard pairwise scoring.
+\item \code{reasoning = "enabled"} when you explicitly want extended
+thinking; in this mode Anthropic requires \code{temperature = 1}.
+The default in this function is \code{max_tokens = 2048} and
+\code{thinking_budget_tokens = 1024}, which satisfies the documented
+constraints \code{thinking_budget_tokens >= 1024} and
+\code{thinking_budget_tokens < max_tokens}.
 }
 
 When \code{reasoning = "enabled"}, this function also sends a
@@ -134,9 +157,6 @@ When \code{reasoning = "enabled"}, this function also sends a
   "budget_tokens": <thinking_budget_tokens>
 }
 }
-
-where \code{thinking_budget_tokens} defaults to 2000, but can be overridden
-via \code{...}.
 }
 \examples{
 \dontrun{

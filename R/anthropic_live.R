@@ -101,9 +101,9 @@ NULL
 #'   internal "thinking" before the visible answer. Two values are recognised:
 #'   \itemize{
 #'     \item \code{"none"} – standard prompting (recommended default).
-#'     \item \code{"enabled"} – sends a \code{thinking} block to the Anthropic
-#'       API (with a token budget) and increases the default \code{max_tokens}
-#'       used for the visible answer.
+#'     \item \code{"enabled"} – uses Anthropic's extended thinking mode by
+#'       sending a \code{thinking} block with a token budget; this also changes
+#'       the default \code{max_tokens} and constrains \code{temperature}.
 #'   }
 #' @param include_raw Logical; if \code{TRUE}, adds a list-column
 #'   \code{raw_response} containing the parsed JSON body returned by Anthropic
@@ -111,9 +111,27 @@ NULL
 #'   problems.
 #' @param ... Additional Anthropic parameters such as \code{max_tokens},
 #'   \code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
-#'   which will be passed through to the Messages API. If you supply
-#'   \code{thinking_budget_tokens} it will override the default thinking budget
-#'   used when \code{reasoning = "enabled"}.
+#'   which will be passed through to the Messages API.
+#'
+#'   When \code{reasoning = "none"} the defaults are:
+#'   \itemize{
+#'     \item \code{temperature = 0} (deterministic behaviour) unless you
+#'       supply \code{temperature} explicitly.
+#'     \item \code{max_tokens = 768} unless you supply \code{max_tokens}.
+#'   }
+#'
+#'   When \code{reasoning = "enabled"} (extended thinking), the Anthropic API
+#'   imposes additional constraints:
+#'   \itemize{
+#'     \item \code{temperature} \strong{must} be 1. If you supply a different
+#'       value, this function will throw an error.
+#'     \item \code{thinking_budget_tokens} must satisfy
+#'       \code{thinking_budget_tokens >= 1024} and
+#'       \code{thinking_budget_tokens < max_tokens}. If you supply a value that
+#'       violates these constraints, this function will throw an error.
+#'     \item By default, \code{max_tokens = 2048} and
+#'       \code{thinking_budget_tokens = 1024}.
+#'   }
 #'
 #' @return A tibble with one row and columns:
 #' \describe{
@@ -139,9 +157,14 @@ NULL
 #'
 #' For stable, reproducible comparisons we recommend:
 #' \itemize{
-#'   \item \code{temperature = 0} (deterministic comparisons).
-#'   \item \code{max_tokens = 768} when \code{reasoning = "none"}.
-#'   \item \code{max_tokens = 1536} when \code{reasoning = "enabled"}.
+#'   \item \code{reasoning = "none"} with \code{temperature = 0} and
+#'     \code{max_tokens = 768} for standard pairwise scoring.
+#'   \item \code{reasoning = "enabled"} when you explicitly want extended
+#'     thinking; in this mode Anthropic requires \code{temperature = 1}.
+#'     The default in this function is \code{max_tokens = 2048} and
+#'     \code{thinking_budget_tokens = 1024}, which satisfies the documented
+#'     constraints \code{thinking_budget_tokens >= 1024} and
+#'     \code{thinking_budget_tokens < max_tokens}.
 #' }
 #'
 #' When \code{reasoning = "enabled"}, this function also sends a
@@ -153,9 +176,6 @@ NULL
 #'   "budget_tokens": <thinking_budget_tokens>
 #' }
 #' }
-#'
-#' where \code{thinking_budget_tokens} defaults to 2000, but can be overridden
-#' via \code{...}.
 #'
 #' @examples
 #' \dontrun{
@@ -230,42 +250,70 @@ anthropic_compare_pair_live <- function(
 
   dots <- list(...)
 
-  reasoning <- match.arg(reasoning)
+  # ------------------------------------------------------------------
+  # Temperature defaults & validation
+  # ------------------------------------------------------------------
+  if (reasoning == "none") {
+    # Deterministic by default; user can override if they really want to.
+    temperature <- dots$temperature %||% 0
+  } else {
+    # reasoning == "enabled" -> Anthropic requires temperature == 1
+    if (is.null(dots$temperature)) {
+      temperature <- 1
+    } else if (!identical(dots$temperature, 1)) {
+      stop(
+        "For Anthropic extended thinking (reasoning = 'enabled'), ",
+        "`temperature` must be 1 according to the Anthropic API.\n",
+        "Either omit `temperature` or set `temperature = 1`.",
+        call. = FALSE
+      )
+    }
+  }
 
-  # temperature: still deterministic unless user overrides
-  temperature <- dots$temperature %||% 0
-
+  # ------------------------------------------------------------------
+  # max_tokens & thinking budget
+  # ------------------------------------------------------------------
   if (is.null(dots$max_tokens)) {
     max_tokens <- if (reasoning == "none") 768L else 2048L
   } else {
-    max_tokens <- dots$max_tokens
+    max_tokens <- as.integer(dots$max_tokens)
   }
 
   top_p <- dots$top_p %||% NULL
 
   thinking_budget <- NULL
   if (reasoning == "enabled") {
-    # default thinking budget: at least 1024, at most max_tokens - 256
+    # User can optionally pass thinking_budget_tokens
+    tb_user <- dots$thinking_budget_tokens
+
     default_budget <- 1024L
+    if (is.null(tb_user)) {
+      thinking_budget <- default_budget
+    } else {
+      thinking_budget <- as.integer(tb_user)
+    }
 
-    thinking_budget <- dots$thinking_budget_tokens %||% default_budget
-
-    # Enforce documented constraints gracefully
+    # Enforce Anthropic constraints explicitly
     if (thinking_budget < 1024L) {
-      thinking_budget <- 1024L
+      stop(
+        "`thinking_budget_tokens` must be at least 1024 when reasoning = 'enabled'. ",
+        "Got: ", thinking_budget,
+        call. = FALSE
+      )
     }
     if (thinking_budget >= max_tokens) {
-      # Keep a 25% margin for visible output
-      thinking_budget <- as.integer(floor(max_tokens * 0.5))
-      if (thinking_budget < 1024L) {
-        stop("`max_tokens` too small to support extended thinking: ",
-             "it must be large enough that thinking_budget_tokens >= 1024 ",
-             "and thinking_budget_tokens < max_tokens.",
-             call. = FALSE)
-      }
+      stop(
+        "`thinking_budget_tokens` (", thinking_budget, ") must be smaller than `max_tokens` (",
+        max_tokens, ") for Anthropic extended thinking.\n",
+        "Try something like: max_tokens = 2048, thinking_budget_tokens = 1024.",
+        call. = FALSE
+      )
     }
   }
 
+  # ------------------------------------------------------------------
+  # Build prompt and request body
+  # ------------------------------------------------------------------
   prompt <- build_prompt(
     template   = prompt_template,
     trait_name = trait_name,
@@ -300,9 +348,9 @@ anthropic_compare_pair_live <- function(
     )
   }
 
-  if (!is.null(temperature)) body$temperature <- temperature
-  if (!is.null(top_p))       body$top_p       <- top_p
-
+  # ------------------------------------------------------------------
+  # Perform request and parse response
+  # ------------------------------------------------------------------
   req <- .anthropic_request(
     path              = "/v1/messages",
     api_key           = api_key,

@@ -343,9 +343,9 @@ testthat::test_that("anthropic_compare_pair_live defaults and thinking depend on
       b_none   <- bodies[[1]]
       b_reason <- bodies[[2]]
 
-      # Both deterministic
+      # Temperatures differ by reasoning mode
       testthat::expect_equal(b_none$temperature,   0)
-      testthat::expect_equal(b_reason$temperature, 0)
+      testthat::expect_equal(b_reason$temperature, 1)
 
       # Different max_tokens by reasoning mode
       testthat::expect_equal(b_none$max_tokens,   768)
@@ -435,6 +435,71 @@ testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled output
       testthat::expect_true("thinking" %in% names(b))
       testthat::expect_equal(b$thinking$type, "enabled")
     }
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live errors if temperature != 1 with reasoning = 'enabled'", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # temperature = 0 should be rejected when reasoning = "enabled"
+  testthat::expect_error(
+    anthropic_compare_pair_live(
+      ID1               = "S1",
+      text1             = "A",
+      ID2               = "S2",
+      text2             = "B",
+      model             = "claude-sonnet-4-5",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl,
+      reasoning         = "enabled",
+      temperature       = 0
+    ),
+    "temperature` must be 1",
+    fixed = FALSE
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live enforces thinking_budget_tokens constraints", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # budget too small
+  testthat::expect_error(
+    anthropic_compare_pair_live(
+      ID1                     = "S1",
+      text1                   = "A",
+      ID2                     = "S2",
+      text2                   = "B",
+      model                   = "claude-sonnet-4-5",
+      trait_name              = td$name,
+      trait_description       = td$description,
+      prompt_template         = tmpl,
+      reasoning               = "enabled",
+      thinking_budget_tokens  = 512
+    ),
+    "thinking_budget_tokens` must be at least 1024",
+    fixed = FALSE
+  )
+
+  # budget >= max_tokens should also error
+  testthat::expect_error(
+    anthropic_compare_pair_live(
+      ID1                     = "S1",
+      text1                   = "A",
+      ID2                     = "S2",
+      text2                   = "B",
+      model                   = "claude-sonnet-4-5",
+      trait_name              = td$name,
+      trait_description       = td$description,
+      prompt_template         = tmpl,
+      reasoning               = "enabled",
+      max_tokens              = 1500,
+      thinking_budget_tokens  = 1500
+    ),
+    "must be smaller than `max_tokens`",
+    fixed = FALSE
   )
 })
 
