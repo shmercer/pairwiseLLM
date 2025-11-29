@@ -37,13 +37,97 @@
     "  • Supply `api_key` explicitly to the function you are calling.\n\n",
     "Common ways to set a key in R:\n",
     "  - For the current session only:\n",
-    "      Sys.setenv(", env_var, ' = "YOUR_KEY_HERE")\n',
+    "      Sys.setenv(", env_var, ' = \"YOUR_KEY_HERE\")\n',
     "  - Persistently (recommended):\n",
     "      usethis::edit_r_environ()\n",
     "    and add a line such as:\n",
-    "      ", env_var, ' = "YOUR_KEY_HERE"\n\n',
+    "      ", env_var, ' = \"YOUR_KEY_HERE\"\n\n',
     "After editing .Renviron, restart R (Session → Restart R in RStudio) ",
     "so the change takes effect.",
     call. = FALSE
   )
+}
+
+#' Check configured API keys for LLM backends
+#'
+#' This function inspects the current R session for configured API keys
+#' used by pairwiseLLM. It checks for known environment variables such as
+#' `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` and returns a small tibble
+#' summarising which keys are available.
+#'
+#' It does **not** print or return the key values themselves – only whether
+#' each key is present. This makes it safe to run in logs, scripts, and
+#' shared environments.
+#'
+#' @param verbose Logical; if `TRUE` (default), prints a human-readable
+#'   summary to the console describing which keys are set and how to
+#'   configure missing ones.
+#'
+#' @return A tibble (or data frame) with one row per backend and columns:
+#' \describe{
+#'   \item{backend}{Short backend identifier, e.g. `"openai"`, `"anthropic"`.}
+#'   \item{service}{Human-readable service name, e.g. `"OpenAI"`.}
+#'   \item{env_var}{Name of the environment variable that is checked.}
+#'   \item{has_key}{Logical flag indicating whether the key is set and non-empty.}
+#' }
+#'
+#' @examples
+#' # In an interactive session, you can quickly check which keys are configured:
+#' \dontrun{
+#'   check_llm_api_keys()
+#' }
+#'
+#' # In non-interactive scripts, you can disable messages and just use the result:
+#' \dontrun{
+#'   status <- check_llm_api_keys(verbose = FALSE)
+#'   status
+#' }
+#'
+#' @export
+check_llm_api_keys <- function(verbose = TRUE) {
+  backends <- c("openai", "anthropic")
+  services <- c("OpenAI", "Anthropic")
+  env_vars <- c("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
+
+  values <- vapply(
+    env_vars,
+    function(v) Sys.getenv(v, unset = ""),
+    FUN.VALUE = character(1L)
+  )
+  has_key <- nzchar(values)
+
+  res <- tibble::tibble(
+    backend = backends,
+    service = services,
+    env_var = env_vars,
+    has_key = has_key
+  )
+
+  if (isTRUE(verbose)) {
+    if (all(has_key)) {
+      message(
+        "All known LLM API keys are set: ",
+        paste(env_vars, collapse = ", "),
+        "."
+      )
+    } else {
+      message("Some LLM API keys are not set:")
+      for (i in seq_along(env_vars)) {
+        if (!has_key[i]) {
+          msg <- paste0(
+            "- ", services[i], " (", backends[i], "): ", env_vars[i], " is not set.\n",
+            "  Set it for this session with:\n",
+            "    Sys.setenv(", env_vars[i], ' = "YOUR_KEY_HERE")\n',
+            "  Or persistently via:\n",
+            "    usethis::edit_r_environ()\n",
+            "  and add a line like:\n",
+            "    ", env_vars[i], ' = "YOUR_KEY_HERE"'
+          )
+          message(msg)
+        }
+      }
+    }
+  }
+
+  res
 }
