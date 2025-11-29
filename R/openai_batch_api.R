@@ -11,15 +11,13 @@ NULL
 #' Internal: Get OpenAI API key
 #'
 #' @keywords internal
-.openai_api_key <- function(api_key = Sys.getenv("OPENAI_API_KEY")) {
-  if (is.null(api_key) || !nzchar(api_key)) {
-    stop(
-      "No OpenAI API key found. Please set OPENAI_API_KEY in your environment ",
-      "or pass api_key explicitly.",
-      call. = FALSE
-    )
-  }
-  api_key
+#' @noRd
+.openai_api_key <- function(api_key = NULL) {
+  .get_api_key(
+    api_key = api_key,
+    env_var = "OPENAI_API_KEY",
+    service = "OpenAI"
+  )
 }
 
 #' Internal: Base URL for OpenAI API

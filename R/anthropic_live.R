@@ -5,18 +5,18 @@ NULL
 # Internal helpers for Anthropic
 # -------------------------------------------------------------------------
 
-# Resolve Anthropic API key -----------------------------------------------
+#' Internal: Get Anthropic API key
+#'
+#' @keywords internal
+#' @noRd
 .anthropic_api_key <- function(api_key = NULL) {
-  key <- api_key %||% Sys.getenv("ANTHROPIC_API_KEY")
-  if (!nzchar(key)) {
-    stop(
-      "No Anthropic API key found. Please set the ANTHROPIC_API_KEY ",
-      "environment variable or supply `api_key` explicitly.",
-      call. = FALSE
-    )
-  }
-  key
+  .get_api_key(
+    api_key = api_key,
+    env_var = "ANTHROPIC_API_KEY",
+    service = "Anthropic"
+  )
 }
+
 
 # Base Anthropic request builder ------------------------------------------
 .anthropic_request <- function(
