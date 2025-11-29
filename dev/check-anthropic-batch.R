@@ -319,6 +319,8 @@ check_anthropic_batch_models <- function(
       }
 
       results[[i]] <- tibble::tibble(
+        backend            = "anthropic",
+        interface          = "batch",
         model              = model,
         reasoning          = mode,
         processing_status  = status,
