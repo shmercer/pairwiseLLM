@@ -27,7 +27,7 @@ used by pairwiseLLM. It checks for known environment variables such as
 a small tibble summarising which keys are available.
 }
 \details{
-It does \strong{not} print or return the key values themselves – only whether
+It does \strong{not} print or return the key values themselves - only whether
 each key is present. This makes it safe to run in logs, scripts, and
 shared environments.
 }
