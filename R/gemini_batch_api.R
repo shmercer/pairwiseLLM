@@ -606,37 +606,42 @@ gemini_poll_batch_until_complete <- function(
 #' Download Gemini Batch results to a JSONL file
 #'
 #' For inline batch requests, Gemini returns results under
-#' response$inlinedResponses$inlinedResponses. In the v1beta REST API this
-#' often comes back as a data frame with one row per request and a "response"
-#' column, where each "response" is itself a data frame of
-#' GenerateContentResponse objects.
+#' \code{response$inlinedResponses$inlinedResponses}. In the v1beta REST API this
+#' often comes back as a data frame with one row per request and a \code{"response"}
+#' column, where each \code{"response"} is itself a data frame of
+#' \code{GenerateContentResponse} objects.
 #'
-#' This helper writes those results to a local .jsonl file where each line is a
-#' JSON object of the form:
+#' This helper writes those results to a local \code{.jsonl} file where each line
+#' is a JSON object of the form:
 #'
-#'   {"custom_id": "<GEM_ID1_vs_ID2>",
-#'    "result": {
-#'      "type": "succeeded",
-#'      "response": { ... GenerateContentResponse ... }
-#'    }}
+#' \preformatted{
+#' {"custom_id": "<GEM_ID1_vs_ID2>",
+#'  "result": {
+#'    "type": "succeeded",
+#'    "response": { ... GenerateContentResponse ... }
+#'  }}
+#' }
 #'
 #' or, when an error occurred:
 #'
-#'   {"custom_id": "<GEM_ID1_vs_ID2>",
-#'    "result": {
-#'      "type": "errored",
-#'      "error": { ... }
-#'    }}
+#' \preformatted{
+#' {"custom_id": "<GEM_ID1_vs_ID2>",
+#'  "result": {
+#'    "type": "errored",
+#'    "error": { ... }
+#'  }}
+#' }
 #'
-#' @param batch Either a parsed batch object (as returned by gemini_get_batch())
-#'   or a character batch name such as "batches/123...".
-#' @param requests_tbl Tibble/data frame with a `custom_id` column in the same
-#'   order as the submitted requests.
+#' @param batch Either a parsed batch object (as returned by
+#'   \code{gemini_get_batch()}) or a character batch name such as
+#'   \code{"batches/123..."}.
+#' @param requests_tbl Tibble/data frame with a \code{custom_id} column in the
+#'   same order as the submitted requests.
 #' @param output_path Path to the JSONL file to create.
-#' @param api_key Optional Gemini API key (used only when `batch` is a name).
-#' @param api_version API version (default "v1beta").
+#' @param api_key Optional Gemini API key (used only when \code{batch} is a name).
+#' @param api_version API version (default \code{"v1beta"}).
 #'
-#' @return Invisibly returns `output_path`.
+#' @return Invisibly returns \code{output_path}.
 #' @export
 gemini_download_batch_results <- function(
     batch,
