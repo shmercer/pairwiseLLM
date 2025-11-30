@@ -1,47 +1,70 @@
 #' Backend-agnostic live comparison for a single pair of samples
 #'
 #' `llm_compare_pair()` is a thin wrapper around backend-specific comparison
-#' functions. At present it supports the `"openai"` backend and forwards the
-#' call to [openai_compare_pair_live()]. Future backends (for example Anthropic
-#' or Gemini) will be added behind the same interface.
+#' functions. It currently supports the `"openai"`, `"anthropic"`, and
+#' `"gemini"` backends and forwards the call to the appropriate live
+#' comparison helper:
+#' \itemize{
+#'   \item `"openai"`   → [openai_compare_pair_live()]
+#'   \item `"anthropic"` → [anthropic_compare_pair_live()]
+#'   \item `"gemini"`   → [gemini_compare_pair_live()]
+#' }
 #'
-#' The return value has the same structure as [openai_compare_pair_live()],
-#' making it easy to plug into downstream helpers such as [build_bt_data()] and
-#' [fit_bt_model()].
+#' All backends are expected to return a tibble with a compatible structure,
+#' including:
+#' \itemize{
+#'   \item \code{custom_id}, \code{ID1}, \code{ID2}
+#'   \item \code{model}, \code{object_type}, \code{status_code},
+#'         \code{error_message}
+#'   \item \code{thoughts} (reasoning / thinking text when available)
+#'   \item \code{content} (visible assistant output)
+#'   \item \code{better_sample}, \code{better_id}
+#'   \item \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens}
+#' }
+#'
+#' For the `"openai"` backend, the \code{endpoint} argument controls whether
+#' the Chat Completions API (\code{"chat.completions"}) or the Responses API
+#' (\code{"responses"}) is used. For the `"anthropic"` and `"gemini"`
+#' backends, \code{endpoint} is currently ignored and the default live API
+#' for that provider is used.
 #'
 #' @param ID1 Character ID for the first sample.
 #' @param text1 Character string containing the first sample's text.
 #' @param ID2 Character ID for the second sample.
 #' @param text2 Character string containing the second sample's text.
-#' @param model Model identifier for the chosen backend. For the `"openai"`
-#'   backend this should be an OpenAI model name (for example `"gpt-4.1"`,
-#'   `"gpt-5.1"`).
+#' @param model Model identifier for the chosen backend. For `"openai"` this
+#'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
+#'   For `"anthropic"` and `"gemini"`, use the corresponding provider model
+#'   names (for example `"claude-3-5-sonnet-latest"` or
+#'   `"gemini-2.0-pro-exp"`).
 #' @param trait_name Short label for the trait (for example `"Overall Quality"`).
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param backend Character scalar indicating which LLM provider to use.
-#'   Currently only `"openai"` is implemented. Additional backends will be
-#'   added in future versions.
-#' @param endpoint Character scalar specifying which endpoint family to use for
-#'   backends that support multiple live APIs. For the `"openai"` backend this
-#'   must be one of `"chat.completions"` or `"responses"`, matching
-#'   [openai_compare_pair_live()].
-#' @param api_key Optional API key for the selected backend. For the `"openai"`
-#'   backend this defaults to `Sys.getenv("OPENAI_API_KEY")`. If `NULL` or an
-#'   empty string is supplied for the OpenAI backend, an error is raised.
+#'   One of `"openai"`, `"anthropic"`, or `"gemini"`.
+#' @param endpoint Character scalar specifying which endpoint family to use
+#'   for backends that support multiple live APIs. For the `"openai"` backend
+#'   this must be one of `"chat.completions"` or `"responses"`, matching
+#'   [openai_compare_pair_live()]. For `"anthropic"` and `"gemini"`, this
+#'   argument is currently ignored.
+#' @param api_key Optional API key for the selected backend. If `NULL`, the
+#'   backend-specific helper will use its own default environment variable
+#'   (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`).
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
 #'   `raw_response` list-column with the parsed JSON body (or `NULL` on parse
 #'   failure). Support for this may vary across backends.
-#' @param ... Additional backend-specific parameters. For the `"openai"`
-#'   backend these are passed on to [openai_compare_pair_live()] and typically
-#'   include arguments such as `temperature`, `top_p`, `logprobs`, and
-#'   `reasoning`. The same validation rules for gpt-5 models apply as in the
-#'   OpenAI helpers.
+#' @param ... Additional backend-specific parameters. For `"openai"` these
+#'   are passed on to [openai_compare_pair_live()] and typically include
+#'   arguments such as `temperature`, `top_p`, `logprobs`, `reasoning`, and
+#'   `include_thoughts`. For `"anthropic"` and `"gemini"` they are forwarded to
+#'   the corresponding live helper and may include parameters such as
+#'   `max_output_tokens`, `include_thoughts`, or provider-specific options.
 #'
-#' @return A tibble with one row and the same columns as
-#'   [openai_compare_pair_live()] for the `"openai"` backend. Future backends
-#'   will return tibbles with a compatible structure.
+#' @return A tibble with one row and the same columns as the underlying
+#'   backend-specific live helper (for example [openai_compare_pair_live()]
+#'   for `"openai"`). All backends are intended to return a compatible
+#'   structure including `thoughts`, `content`, and token counts.
 #'
 #' @examples
 #' \dontrun{
@@ -87,6 +110,7 @@
 #'   backend           = "openai",
 #'   endpoint          = "responses",
 #'   reasoning         = "low",
+#'   include_thoughts  = TRUE,
 #'   temperature       = NULL,
 #'   top_p             = NULL,
 #'   logprobs          = NULL,
@@ -97,7 +121,8 @@
 #' }
 #'
 #' @seealso
-#' * [openai_compare_pair_live()] for the underlying OpenAI implementation.
+#' * [openai_compare_pair_live()], [anthropic_compare_pair_live()],
+#'   and [gemini_compare_pair_live()] for backend-specific implementations.
 #' * [submit_llm_pairs()] for row-wise comparisons over a tibble of pairs.
 #' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
 #'   comparison results.
@@ -112,9 +137,9 @@ llm_compare_pair <- function(
     trait_name,
     trait_description,
     prompt_template = set_prompt_template(),
-    backend         = c("openai"),
+    backend         = c("openai", "anthropic", "gemini"),
     endpoint        = c("chat.completions", "responses"),
-    api_key         = Sys.getenv("OPENAI_API_KEY"),
+    api_key         = NULL,
     include_raw     = FALSE,
     ...
 ) {
@@ -133,7 +158,43 @@ llm_compare_pair <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
-        api_key           = api_key,
+        api_key           = api_key %||% Sys.getenv("OPENAI_API_KEY"),
+        include_raw       = include_raw,
+        ...
+      )
+    )
+  }
+
+  if (backend == "anthropic") {
+    return(
+      anthropic_compare_pair_live(
+        ID1               = ID1,
+        text1             = text1,
+        ID2               = ID2,
+        text2             = text2,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,      # backend handles default env var
+        include_raw       = include_raw,
+        ...
+      )
+    )
+  }
+
+  if (backend == "gemini") {
+    return(
+      gemini_compare_pair_live(
+        ID1               = ID1,
+        text1             = text1,
+        ID2               = ID2,
+        text2             = text2,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,      # backend handles default env var
         include_raw       = include_raw,
         ...
       )
@@ -142,11 +203,10 @@ llm_compare_pair <- function(
 
   stop(
     "Backend '", backend, "' is not implemented yet. ",
-    "Currently only backend = \"openai\" is supported.",
+    "Currently supported backends are: \"openai\", \"anthropic\", and \"gemini\".",
     call. = FALSE
   )
 }
-
 
 #' Backend-agnostic live comparisons for a tibble of pairs
 #'
@@ -155,35 +215,41 @@ llm_compare_pair <- function(
 #' `text2`), submits each pair to the selected backend, and binds the results
 #' into a single tibble.
 #'
-#' At present, only the `"openai"` backend is implemented and the function is a
-#' thin wrapper around [submit_openai_pairs_live()], which itself calls
-#' [openai_compare_pair_live()] row-wise.
+#' At present, the following backends are implemented:
+#' \itemize{
+#'   \item `"openai"`   → [submit_openai_pairs_live()]
+#'   \item `"anthropic"` → [submit_anthropic_pairs_live()]
+#'   \item `"gemini"`   → [submit_gemini_pairs_live()]
+#' }
 #'
-#' The output has the same columns as [openai_compare_pair_live()], with one row
-#' per pair, making it easy to pass into [build_bt_data()] and [fit_bt_model()].
+#' Each backend-specific helper returns a tibble with one row per pair and a
+#' compatible set of columns, including a `thoughts` column (reasoning /
+#' thinking text when available), `content` (visible assistant output),
+#' `better_sample`, `better_id`, and token usage fields.
 #'
 #' @param pairs Tibble or data frame with at least columns `ID1`, `text1`,
 #'   `ID2`, `text2`. Typically created by [make_pairs()], [sample_pairs()], and
 #'   [randomize_pair_order()].
-#' @param model Model identifier for the chosen backend. For the `"openai"`
-#'   backend this should be an OpenAI model name (for example `"gpt-4.1"`,
-#'   `"gpt-5.1"`).
+#' @param model Model identifier for the chosen backend. For `"openai"` this
+#'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
+#'   For `"anthropic"` and `"gemini"`, use the corresponding provider model
+#'   names.
 #' @param trait_name Trait name to pass through to the backend-specific
 #'   comparison function (for example `"Overall Quality"`).
 #' @param trait_description Full-text trait description passed to the backend.
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param backend Character scalar indicating which LLM provider to use.
-#'   Currently only `"openai"` is implemented. Additional backends will be
-#'   added in future versions.
+#'   One of `"openai"`, `"anthropic"`, or `"gemini"`.
 #' @param endpoint Character scalar specifying which endpoint family to use for
 #'   backends that support multiple live APIs. For the `"openai"` backend this
 #'   must be one of `"chat.completions"` or `"responses"`, matching
-#'   [submit_openai_pairs_live()].
-#' @param api_key Optional API key for the selected backend. For the `"openai"`
-#'   backend this defaults to `Sys.getenv("OPENAI_API_KEY")`.
+#'   [submit_openai_pairs_live()]. For `"anthropic"` and `"gemini"`, this is
+#'   currently ignored.
+#' @param api_key Optional API key for the selected backend. If `NULL`, the
+#'   backend-specific helper will use its own default environment variable.
 #' @param verbose Logical; if `TRUE`, prints status, timing, and result
-#'   summaries. Support for this may vary across backends.
+#'   summaries (for backends that support it).
 #' @param status_every Integer; print status and timing for every
 #'   `status_every`-th pair. Defaults to 1 (every pair). Errors are always
 #'   printed.
@@ -192,14 +258,19 @@ llm_compare_pair <- function(
 #' @param include_raw Logical; if `TRUE`, each row of the returned tibble will
 #'   include a `raw_response` list-column with the parsed JSON body from the
 #'   backend (for backends that support this).
-#' @param ... Additional backend-specific parameters. For the `"openai"`
-#'   backend these are forwarded to [openai_compare_pair_live()] and typically
-#'   include arguments such as `temperature`, `top_p`, `logprobs`, and
-#'   `reasoning`.
+#' @param ... Additional backend-specific parameters. For `"openai"` these
+#'   are forwarded to [submit_openai_pairs_live()] (and ultimately
+#'   [openai_compare_pair_live()]) and typically include `temperature`,
+#'   `top_p`, `logprobs`, `reasoning`, and `include_thoughts`. For
+#'   `"anthropic"` and `"gemini"`, they are forwarded to
+#'   [submit_anthropic_pairs_live()] or [submit_gemini_pairs_live()] and
+#'   may include options such as `max_output_tokens`, `include_thoughts`, and
+#'   provider-specific controls.
 #'
-#' @return A tibble with one row per pair and the same columns as
-#'   [openai_compare_pair_live()] for the `"openai"` backend. Future backends
-#'   will return tibbles with a compatible structure.
+#' @return A tibble with one row per pair and the same columns as the
+#'   underlying backend-specific helper for the selected backend. All
+#'   backends are intended to return a compatible structure suitable for
+#'   [build_bt_data()] and [fit_bt_model()].
 #'
 #' @examples
 #' \dontrun{
@@ -236,31 +307,11 @@ llm_compare_pair <- function(
 #' )
 #'
 #' res_live$better_id
-#'
-#' # Using gpt-5.1 with reasoning = "low" on the responses endpoint
-#' res_live_gpt5 <- submit_llm_pairs(
-#'   pairs             = pairs,
-#'   model             = "gpt-5.1",
-#'   trait_name        = td$name,
-#'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   backend           = "openai",
-#'   endpoint          = "responses",
-#'   reasoning         = "low",
-#'   temperature       = NULL,
-#'   top_p             = NULL,
-#'   logprobs          = NULL,
-#'   verbose           = TRUE,
-#'   status_every      = 3,
-#'   progress          = TRUE,
-#'   include_raw       = TRUE
-#' )
-#'
-#' str(res_live_gpt5$raw_response[[1]], max.level = 2)
 #' }
 #'
 #' @seealso
-#' * [submit_openai_pairs_live()] for the underlying OpenAI implementation.
+#' * [submit_openai_pairs_live()], [submit_anthropic_pairs_live()],
+#'   and [submit_gemini_pairs_live()] for backend-specific implementations.
 #' * [llm_compare_pair()] for single-pair comparisons.
 #' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
 #'   comparison results.
@@ -272,9 +323,9 @@ submit_llm_pairs <- function(
     trait_name,
     trait_description,
     prompt_template = set_prompt_template(),
-    backend         = c("openai"),
+    backend         = c("openai", "anthropic", "gemini"),
     endpoint        = c("chat.completions", "responses"),
-    api_key         = Sys.getenv("OPENAI_API_KEY"),
+    api_key         = NULL,
     verbose         = TRUE,
     status_every    = 1,
     progress        = TRUE,
@@ -293,6 +344,42 @@ submit_llm_pairs <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
+        api_key           = api_key %||% Sys.getenv("OPENAI_API_KEY"),
+        verbose           = verbose,
+        status_every      = status_every,
+        progress          = progress,
+        include_raw       = include_raw,
+        ...
+      )
+    )
+  }
+
+  if (backend == "anthropic") {
+    return(
+      submit_anthropic_pairs_live(
+        pairs             = pairs,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        verbose           = verbose,
+        status_every      = status_every,
+        progress          = progress,
+        include_raw       = include_raw,
+        ...
+      )
+    )
+  }
+
+  if (backend == "gemini") {
+    return(
+      submit_gemini_pairs_live(
+        pairs             = pairs,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
         api_key           = api_key,
         verbose           = verbose,
         status_every      = status_every,
@@ -305,7 +392,7 @@ submit_llm_pairs <- function(
 
   stop(
     "Backend '", backend, "' is not implemented yet. ",
-    "Currently only backend = \"openai\" is supported.",
+    "Currently supported backends are: \"openai\", \"anthropic\", and \"gemini\".",
     call. = FALSE
   )
 }

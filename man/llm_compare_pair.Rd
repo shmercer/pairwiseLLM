@@ -13,9 +13,9 @@ llm_compare_pair(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai"),
+  backend = c("openai", "anthropic", "gemini"),
   endpoint = c("chat.completions", "responses"),
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   include_raw = FALSE,
   ...
 )
@@ -29,9 +29,11 @@ llm_compare_pair(
 
 \item{text2}{Character string containing the second sample's text.}
 
-\item{model}{Model identifier for the chosen backend. For the \code{"openai"}
-backend this should be an OpenAI model name (for example \code{"gpt-4.1"},
-\code{"gpt-5.1"}).}
+\item{model}{Model identifier for the chosen backend. For \code{"openai"} this
+should be an OpenAI model name (for example \code{"gpt-4.1"}, \code{"gpt-5.1"}).
+For \code{"anthropic"} and \code{"gemini"}, use the corresponding provider model
+names (for example \code{"claude-3-5-sonnet-latest"} or
+\code{"gemini-2.0-pro-exp"}).}
 
 \item{trait_name}{Short label for the trait (for example \code{"Overall Quality"}).}
 
@@ -41,43 +43,64 @@ backend this should be an OpenAI model name (for example \code{"gpt-4.1"},
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{backend}{Character scalar indicating which LLM provider to use.
-Currently only \code{"openai"} is implemented. Additional backends will be
-added in future versions.}
+One of \code{"openai"}, \code{"anthropic"}, or \code{"gemini"}.}
 
-\item{endpoint}{Character scalar specifying which endpoint family to use for
-backends that support multiple live APIs. For the \code{"openai"} backend this
-must be one of \code{"chat.completions"} or \code{"responses"}, matching
-\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}.}
+\item{endpoint}{Character scalar specifying which endpoint family to use
+for backends that support multiple live APIs. For the \code{"openai"} backend
+this must be one of \code{"chat.completions"} or \code{"responses"}, matching
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}. For \code{"anthropic"} and \code{"gemini"}, this
+argument is currently ignored.}
 
-\item{api_key}{Optional API key for the selected backend. For the \code{"openai"}
-backend this defaults to \code{Sys.getenv("OPENAI_API_KEY")}. If \code{NULL} or an
-empty string is supplied for the OpenAI backend, an error is raised.}
+\item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
+backend-specific helper will use its own default environment variable
+(for example \code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, \code{GEMINI_API_KEY}).}
 
 \item{include_raw}{Logical; if \code{TRUE}, the returned tibble includes a
 \code{raw_response} list-column with the parsed JSON body (or \code{NULL} on parse
 failure). Support for this may vary across backends.}
 
-\item{...}{Additional backend-specific parameters. For the \code{"openai"}
-backend these are passed on to \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}} and typically
-include arguments such as \code{temperature}, \code{top_p}, \code{logprobs}, and
-\code{reasoning}. The same validation rules for gpt-5 models apply as in the
-OpenAI helpers.}
+\item{...}{Additional backend-specific parameters. For \code{"openai"} these
+are passed on to \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}} and typically include
+arguments such as \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, and
+\code{include_thoughts}. For \code{"anthropic"} and \code{"gemini"} they are forwarded to
+the corresponding live helper and may include parameters such as
+\code{max_output_tokens}, \code{include_thoughts}, or provider-specific options.}
 }
 \value{
-A tibble with one row and the same columns as
-\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}} for the \code{"openai"} backend. Future backends
-will return tibbles with a compatible structure.
+A tibble with one row and the same columns as the underlying
+backend-specific live helper (for example \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
+for \code{"openai"}). All backends are intended to return a compatible
+structure including \code{thoughts}, \code{content}, and token counts.
 }
 \description{
 \code{llm_compare_pair()} is a thin wrapper around backend-specific comparison
-functions. At present it supports the \code{"openai"} backend and forwards the
-call to \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}. Future backends (for example Anthropic
-or Gemini) will be added behind the same interface.
+functions. It currently supports the \code{"openai"}, \code{"anthropic"}, and
+\code{"gemini"} backends and forwards the call to the appropriate live
+comparison helper:
+\itemize{
+\item \code{"openai"}   → \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
+\item \code{"anthropic"} → \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}}
+\item \code{"gemini"}   → \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}
+}
 }
 \details{
-The return value has the same structure as \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
-making it easy to plug into downstream helpers such as \code{\link[=build_bt_data]{build_bt_data()}} and
-\code{\link[=fit_bt_model]{fit_bt_model()}}.
+All backends are expected to return a tibble with a compatible structure,
+including:
+\itemize{
+\item \code{custom_id}, \code{ID1}, \code{ID2}
+\item \code{model}, \code{object_type}, \code{status_code},
+\code{error_message}
+\item \code{thoughts} (reasoning / thinking text when available)
+\item \code{content} (visible assistant output)
+\item \code{better_sample}, \code{better_id}
+\item \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens}
+}
+
+For the \code{"openai"} backend, the \code{endpoint} argument controls whether
+the Chat Completions API (\code{"chat.completions"}) or the Responses API
+(\code{"responses"}) is used. For the \code{"anthropic"} and \code{"gemini"}
+backends, \code{endpoint} is currently ignored and the default live API
+for that provider is used.
 }
 \examples{
 \dontrun{
@@ -123,6 +146,7 @@ res_live_gpt5 <- llm_compare_pair(
   backend           = "openai",
   endpoint          = "responses",
   reasoning         = "low",
+  include_thoughts  = TRUE,
   temperature       = NULL,
   top_p             = NULL,
   logprobs          = NULL,
@@ -135,7 +159,8 @@ str(res_live_gpt5$raw_response[[1]], max.level = 2)
 }
 \seealso{
 \itemize{
-\item \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}} for the underlying OpenAI implementation.
+\item \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}, \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+and \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}} for backend-specific implementations.
 \item \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} for row-wise comparisons over a tibble of pairs.
 \item \code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}} for Bradley–Terry modelling of
 comparison results.
