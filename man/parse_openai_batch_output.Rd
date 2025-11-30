@@ -56,7 +56,7 @@ For each line, the function:
 \itemize{
 \item extracts \code{custom_id} and parses \code{ID1} and \code{ID2}
 from the pattern \code{"<prefix>ID1_vs_ID2"},
-\item pulls the raw LLM content containing the
+\item pulls the assistant message content containing the
 \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag into \code{content},
 \item for Responses objects with reasoning summaries, collects the
 reasoning summary text into a separate \code{thoughts} column,
@@ -67,18 +67,4 @@ selected and maps that to \code{better_id},
 
 The returned data frame is suitable as input for
 \code{\link{build_bt_data}}.
-}
-\examples{
-\dontrun{
-# Suppose 'openai_batch_gpt4.1_output.jsonl' is an output file you
-# downloaded from the OpenAI Batch UI after running a gpt-4.1 batch.
-results <- parse_openai_batch_output("openai_batch_gpt4.1_output.jsonl")
-
-# Convert to BT data and fit a model
-bt_data <- build_bt_data(results)
-fit     <- fit_bt_model(bt_data, engine = "auto")
-summary <- summarize_bt_fit(fit)
-summary
-}
-
 }

@@ -182,7 +182,7 @@ test_that("build_openai_batch_requests allows other gpt-5* models with temp/top_
   expect_equal(batch$body[[1]]$model, "gpt-5-mini")
 })
 
-testthat::test_that("parse_openai_batch_output collects reasoning and message text for responses", {
+testthat::test_that("parse_openai_batch_output collects thoughts and message text separately for responses", {
   tmp <- tempfile(fileext = ".jsonl")
   on.exit(unlink(tmp), add = TRUE)
 
@@ -246,10 +246,13 @@ testthat::test_that("parse_openai_batch_output collects reasoning and message te
   testthat::expect_equal(res$status_code, 200L)
   testthat::expect_true(is.na(res$error_message))
 
-  # Content should include both reasoning summary and message text
+  # Reasoning summary should go to thoughts
+  testthat::expect_equal(res$thoughts, "Reasoning summary. ")
+
+  # Content should be assistant message only
   testthat::expect_equal(
     res$content,
-    "Reasoning summary. <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+    "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
   )
 
   # Tag parsing and better_id mapping
@@ -261,3 +264,52 @@ testthat::test_that("parse_openai_batch_output collects reasoning and message te
   testthat::expect_equal(res$completion_tokens, 5)
   testthat::expect_equal(res$total_tokens,      15)
 })
+
+test_that("build_openai_batch_requests adds reasoning summary when include_thoughts = TRUE", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
+
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # include_thoughts = TRUE, reasoning != "none" -> summary = "auto"
+  batch <- build_openai_batch_requests(
+    pairs             = pairs,
+    model             = "gpt-5.1",
+    trait_name        = td$name,
+    trait_description = td$description,
+    prompt_template   = tmpl,
+    endpoint          = "responses",
+    reasoning         = "low",
+    include_thoughts  = TRUE
+  )
+
+  expect_s3_class(batch, "tbl_df")
+  expect_equal(nrow(batch), 1L)
+
+  b1 <- batch$body[[1]]
+  expect_equal(b1$model, "gpt-5.1")
+  expect_true("reasoning" %in% names(b1))
+  expect_equal(b1$reasoning$effort, "low")
+  expect_equal(b1$reasoning$summary, "auto")
+
+  # include_thoughts = TRUE but reasoning = "none" -> no summary field
+  batch_none <- build_openai_batch_requests(
+    pairs             = pairs,
+    model             = "gpt-5.1",
+    trait_name        = td$name,
+    trait_description = td$description,
+    prompt_template   = tmpl,
+    endpoint          = "responses",
+    reasoning         = "none",
+    include_thoughts  = TRUE
+  )
+
+  b2 <- batch_none$body[[1]]
+  expect_true("reasoning" %in% names(b2))
+  expect_equal(b2$reasoning$effort, "none")
+  expect_false("summary" %in% names(b2$reasoning))
+})
+

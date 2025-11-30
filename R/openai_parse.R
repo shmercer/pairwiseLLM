@@ -1,4 +1,4 @@
-##' Parse an OpenAI Batch output JSONL file
+#' Parse an OpenAI Batch output JSONL file
 #'
 #' This function reads an OpenAI Batch API output file (JSONL) and extracts
 #' pairwise comparison results for use with Bradley–Terry models. It supports
@@ -10,7 +10,7 @@
 #' \itemize{
 #'   \item extracts \code{custom_id} and parses \code{ID1} and \code{ID2}
 #'         from the pattern \code{"<prefix>ID1_vs_ID2"},
-#'   \item pulls the raw LLM content containing the
+#'   \item pulls the assistant message content containing the
 #'         \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag into \code{content},
 #'   \item for Responses objects with reasoning summaries, collects the
 #'         reasoning summary text into a separate \code{thoughts} column,
@@ -51,19 +51,6 @@
 #'     \item{completion_tokens}{Completion/output token count (if reported).}
 #'     \item{total_tokens}{Total tokens (if reported).}
 #'   }
-#'
-#' @examples
-#' \dontrun{
-#' # Suppose 'openai_batch_gpt4.1_output.jsonl' is an output file you
-#' # downloaded from the OpenAI Batch UI after running a gpt-4.1 batch.
-#' results <- parse_openai_batch_output("openai_batch_gpt4.1_output.jsonl")
-#'
-#' # Convert to BT data and fit a model
-#' bt_data <- build_bt_data(results)
-#' fit     <- fit_bt_model(bt_data, engine = "auto")
-#' summary <- summarize_bt_fit(fit)
-#' summary
-#' }
 #'
 #' @import tibble
 #' @importFrom jsonlite fromJSON
@@ -202,7 +189,7 @@ parse_openai_batch_output <- function(path,
         output_items <- body$output %||% list()
         if (length(output_items) > 0L) {
           for (out_el in output_items) {
-            if (!identical(out_el$type, "reasoning")) next
+            if (!is.null(out_el$type) && !identical(out_el$type, "reasoning")) next
             rs <- out_el$summary
             if (is.null(rs)) next
 
@@ -231,7 +218,8 @@ parse_openai_batch_output <- function(path,
 
       if (length(output_items) > 0L) {
         for (out_el in output_items) {
-          if (!identical(out_el$type, "message")) next
+          # Treat missing type as "message" for backward compatibility
+          if (!is.null(out_el$type) && !identical(out_el$type, "message")) next
           blocks <- out_el$content %||% list()
           if (length(blocks) > 0L) {
             for (b in blocks) {

@@ -77,58 +77,6 @@ NULL
 #'   \item{raw_response}{(Optional) list-column containing the parsed JSON body.}
 #' }
 #'
-#' @examples
-#' \dontrun{
-#' # Single live comparison using the chat.completions endpoint
-#' library(pairwiseLLM)
-#'
-#' data("example_writing_samples", package = "pairwiseLLM")
-#' samples <- example_writing_samples[1:2, ]
-#'
-#' td   <- trait_description("overall_quality")
-#' tmpl <- set_prompt_template()
-#'
-#' res_live <- openai_compare_pair_live(
-#'   ID1               = samples$ID[1],
-#'   text1             = samples$text[1],
-#'   ID2               = samples$ID[2],
-#'   text2             = samples$text[2],
-#'   model             = "gpt-4.1",
-#'   trait_name        = td$name,
-#'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   endpoint          = "chat.completions",
-#'   temperature       = 0,
-#'   include_raw       = FALSE
-#' )
-#'
-#' res_live$better_id
-#'
-#' # Using the responses endpoint with gpt-5.1 and reasoning = "low",
-#' # requesting a reasoning summary as `thoughts`
-#' res_live_gpt5 <- openai_compare_pair_live(
-#'   ID1               = samples$ID[1],
-#'   text1             = samples$text[1],
-#'   ID2               = samples$ID[2],
-#'   text2             = samples$text[2],
-#'   model             = "gpt-5.1",
-#'   trait_name        = td$name,
-#'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   endpoint          = "responses",
-#'   reasoning         = "low",
-#'   include_thoughts  = TRUE,
-#'   temperature       = NULL,
-#'   top_p             = NULL,
-#'   logprobs          = NULL,
-#'   include_raw       = TRUE
-#' )
-#'
-#' str(res_live_gpt5$raw_response[[1]], max.level = 2)
-#' res_live_gpt5$thoughts
-#' res_live_gpt5$content
-#' }
-#'
 #' @export
 openai_compare_pair_live <- function(
     ID1,
@@ -306,7 +254,7 @@ openai_compare_pair_live <- function(
     if (is.na(thoughts) || !nzchar(thoughts)) {
       output_items <- body$output %||% list()
       for (out in output_items) {
-        if (!identical(out$type, "reasoning")) next
+        if (!is.null(out$type) && !identical(out$type, "reasoning")) next
         rs <- out$summary
         if (is.null(rs)) next
 
@@ -335,7 +283,8 @@ openai_compare_pair_live <- function(
     collected <- character(0)
 
     for (out in output_items) {
-      if (!identical(out$type, "message")) next
+      # Treat missing type as "message" for backward compatibility
+      if (!is.null(out$type) && !identical(out$type, "message")) next
       blocks <- out$content %||% list()
       for (b in blocks) {
         if (!is.null(b$text)) {

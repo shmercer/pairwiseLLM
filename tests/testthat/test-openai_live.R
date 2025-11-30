@@ -311,6 +311,7 @@ testthat::test_that("submit_openai_pairs_live returns empty tibble for zero rows
   )
 
   testthat::expect_equal(nrow(res), 0L)
+  testthat::expect_true("thoughts" %in% names(res))
   testthat::expect_false("raw_response" %in% names(res))
 })
 
@@ -338,9 +339,11 @@ testthat::test_that("submit_openai_pairs_live with include_raw=TRUE returns raw_
   )
 
   testthat::expect_equal(nrow(res), 0L)
+  testthat::expect_true("thoughts" %in% names(res))
   testthat::expect_true("raw_response" %in% names(res))
   testthat::expect_type(res$raw_response, "list")
 })
+
 
 # ---------------------------------------------------------------------
 
@@ -403,7 +406,7 @@ testthat::test_that("submit_openai_pairs_live calls openai_compare_pair_live row
   )
 })
 
-testthat::test_that("openai_compare_pair_live collects reasoning + message text for responses", {
+testthat::test_that("openai_compare_pair_live collects thoughts and message text separately for responses", {
   td   <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -461,19 +464,109 @@ testthat::test_that("openai_compare_pair_live collects reasoning + message text 
         prompt_template   = tmpl,
         endpoint          = "responses",
         reasoning         = "low",
+        include_thoughts  = TRUE,
         include_raw       = TRUE
       )
 
       testthat::expect_s3_class(res, "tbl_df")
       testthat::expect_equal(res$object_type, "response")
-      # content should include both reasoning summary and message text
+
+      # Reasoning summary should go to thoughts
+      testthat::expect_equal(res$thoughts, "Reasoning summary. ")
+
+      # Content should be assistant message only
       testthat::expect_equal(
         res$content,
-        "Reasoning summary. <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+        "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+      )
+
+      testthat::expect_equal(res$better_sample, "SAMPLE_2")
+      testthat::expect_equal(res$better_id, ID2)
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live picks up reasoning summary from output items", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  ID1 <- "S01"; ID2 <- "S02"
+  text1 <- "Text A"; text2 <- "Text B"
+
+  fake_body <- list(
+    object = "response",
+    model  = "gpt-5.1",
+    # No top-level reasoning$summary here
+    reasoning = list(
+      effort = "low"
+    ),
+    output = list(
+      list(
+        id     = "rs_x",
+        type   = "reasoning",
+        summary = list(
+          list(type = "summary_text", text = "Reasoning sentence 1."),
+          list(type = "summary_text", text = "Reasoning sentence 2.")
+        )
+      ),
+      list(
+        id      = "msg_x",
+        type    = "message",
+        status  = "completed",
+        content = list(
+          list(
+            type = "output_text",
+            text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+          )
+        ),
+        role    = "assistant"
+      )
+    ),
+    usage = list(
+      input_tokens  = 5L,
+      output_tokens = 5L,
+      total_tokens  = 10L
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "FAKEKEY",
+    req_body_json   = function(req, body) req,
+    req_perform     = function(req) structure(list(), class = "fake_resp"),
+    resp_body_json  = function(...) fake_body,
+    resp_status     = function(...) 200L,
+    {
+      res <- openai_compare_pair_live(
+        ID1               = ID1,
+        text1             = text1,
+        ID2               = ID2,
+        text2             = text2,
+        model             = "gpt-5.1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        endpoint          = "responses",
+        reasoning         = "low",
+        include_thoughts  = TRUE,
+        include_raw       = TRUE
+      )
+
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(res$object_type, "response")
+
+      # Thoughts should be both summary_text entries joined with \n\n
+      testthat::expect_match(res$thoughts, "Reasoning sentence 1.", fixed = TRUE)
+      testthat::expect_match(res$thoughts, "Reasoning sentence 2.", fixed = TRUE)
+
+      # Content should be assistant message only
+      testthat::expect_equal(
+        res$content,
+        "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
       )
       testthat::expect_equal(res$better_sample, "SAMPLE_2")
       testthat::expect_equal(res$better_id, ID2)
     }
   )
 })
+
 
