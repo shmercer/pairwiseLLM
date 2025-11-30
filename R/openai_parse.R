@@ -1,4 +1,4 @@
-#' Parse an OpenAI Batch output JSONL file
+##' Parse an OpenAI Batch output JSONL file
 #'
 #' This function reads an OpenAI Batch API output file (JSONL) and extracts
 #' pairwise comparison results for use with Bradley–Terry models. It supports
@@ -11,7 +11,9 @@
 #'   \item extracts \code{custom_id} and parses \code{ID1} and \code{ID2}
 #'         from the pattern \code{"<prefix>ID1_vs_ID2"},
 #'   \item pulls the raw LLM content containing the
-#'         \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag,
+#'         \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag into \code{content},
+#'   \item for Responses objects with reasoning summaries, collects the
+#'         reasoning summary text into a separate \code{thoughts} column,
 #'   \item determines whether \code{SAMPLE_1} or \code{SAMPLE_2} was
 #'         selected and maps that to \code{better_id},
 #'   \item collects model name and basic token usage statistics.
@@ -37,7 +39,10 @@
 #'           (e.g., \code{"chat.completion"} or \code{"response"}).}
 #'     \item{status_code}{HTTP-style status code from the batch output.}
 #'     \item{error_message}{Error message, if present; otherwise \code{NA}.}
-#'     \item{content}{The raw assistant content string (the LLM's output).}
+#'     \item{thoughts}{Reasoning summary text for reasoning-enabled responses
+#'           when present in the batch output; otherwise \code{NA}.}
+#'     \item{content}{The assistant message content string (the LLM's final
+#'           answer), used to locate the \code{<BETTER_SAMPLE>} tag.}
 #'     \item{better_sample}{Either \code{"SAMPLE_1"}, \code{"SAMPLE_2"},
 #'           or \code{NA} if the tag was not found.}
 #'     \item{better_id}{\code{ID1} if \code{SAMPLE_1} was chosen, \code{ID2}
@@ -143,6 +148,7 @@ parse_openai_batch_output <- function(path,
         object_type       = NA_character_,
         status_code       = status_code,
         error_message     = error_message,
+        thoughts          = NA_character_,
         content           = NA_character_,
         better_sample     = NA_character_,
         better_id         = NA_character_,
@@ -156,8 +162,8 @@ parse_openai_batch_output <- function(path,
     object_type <- body$object %||% NA_character_
     model       <- body$model %||% NA_character_
 
-    # Extract raw content depending on object type
-    content <- NA_character_
+    thoughts <- NA_character_
+    content  <- NA_character_
 
     if (identical(object_type, "chat.completion")) {
       # Chat Completions: choices[[1]]$message$content
@@ -168,27 +174,69 @@ parse_openai_batch_output <- function(path,
           content <- as.character(message_obj$content)
         }
       }
-    } else if (identical(object_type, "response")) {
-      # Responses endpoint: collect text from reasoning summary (if any) and
-      # from each output element's content blocks that have a $text field.
-      collected <- character(0)
 
-      # Possible reasoning summary text at top level
+    } else if (identical(object_type, "response")) {
+      # Responses endpoint: separate reasoning summary ("thoughts") from
+      # assistant message content ("content").
+
+      # 1) Top-level reasoning summary
       if (!is.null(body$reasoning) && !is.null(body$reasoning$summary)) {
         rs <- body$reasoning$summary
         if (!is.null(rs$text)) {
-          collected <- c(collected, as.character(rs$text %||% ""))
+          thoughts <- as.character(rs$text)
+        } else if (is.list(rs)) {
+          txts <- vapply(
+            rs,
+            function(s) if (!is.null(s$text)) as.character(s$text) else "",
+            FUN.VALUE = character(1L)
+          )
+          txts <- txts[nzchar(txts)]
+          if (length(txts) > 0L) {
+            thoughts <- paste(txts, collapse = "\n\n")
+          }
         }
       }
 
-      output <- body$output %||% list()
-      if (length(output) > 0L) {
-        for (out_el in output) {
+      # 2) Reasoning summary from output items of type "reasoning"
+      if (is.na(thoughts) || !nzchar(thoughts)) {
+        output_items <- body$output %||% list()
+        if (length(output_items) > 0L) {
+          for (out_el in output_items) {
+            if (!identical(out_el$type, "reasoning")) next
+            rs <- out_el$summary
+            if (is.null(rs)) next
+
+            if (!is.null(rs$text)) {
+              thoughts <- as.character(rs$text)
+              break
+            } else if (is.list(rs)) {
+              txts <- vapply(
+                rs,
+                function(s) if (!is.null(s$text)) as.character(s$text) else "",
+                FUN.VALUE = character(1L)
+              )
+              txts <- txts[nzchar(txts)]
+              if (length(txts) > 0L) {
+                thoughts <- paste(txts, collapse = "\n\n")
+                break
+              }
+            }
+          }
+        }
+      }
+
+      # Assistant message content: output items of type "message"
+      output_items <- body$output %||% list()
+      collected <- character(0)
+
+      if (length(output_items) > 0L) {
+        for (out_el in output_items) {
+          if (!identical(out_el$type, "message")) next
           blocks <- out_el$content %||% list()
           if (length(blocks) > 0L) {
             for (b in blocks) {
               if (!is.null(b$text)) {
-                collected <- c(collected, as.character(b$text %||% ""))
+                collected <- c(collected, as.character(b$text))
               }
             }
           }
@@ -239,6 +287,7 @@ parse_openai_batch_output <- function(path,
       object_type       = object_type,
       status_code       = status_code,
       error_message     = error_message,
+      thoughts          = thoughts,
       content           = content,
       better_sample     = better_sample,
       better_id         = better_id,

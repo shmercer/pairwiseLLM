@@ -13,13 +13,15 @@ NULL
 #' using the same prompt template and model / parameter rules as the batch
 #' pipeline.
 #'
-#' For the Responses endpoint, the function collects text from both reasoning
-#' and message outputs when available. In practice this means:
+#' For the Responses endpoint, the function can optionally request and store a
+#' reasoning summary separately from the assistant's final answer:
 #' \itemize{
-#'   \item If the API returns a reasoning summary with text (for example in
-#'     \code{body$reasoning$summary$text}), that is included.
-#'   \item For each element of \code{body$output}, any nested element with a
-#'     \code{text} field is appended.
+#'   \item If the API returns a reasoning summary (for example in
+#'     \code{body$reasoning$summary} or in an \code{output} item of type
+#'     \code{"reasoning"}), that text is stored in a \code{thoughts} column.
+#'   \item Assistant message text (the part containing the
+#'     \code{<BETTER_SAMPLE>} tag) is stored in \code{content} and used to
+#'     determine the preferred sample.
 #' }
 #'
 #' @param ID1 Character ID for the first sample.
@@ -42,6 +44,11 @@ NULL
 #' @param include_raw Logical; if TRUE, adds a list-column \code{raw_response}
 #'   containing the parsed JSON body returned by OpenAI (or NULL on parse
 #'   failure). This is useful for debugging parsing problems.
+#' @param include_thoughts Logical; if TRUE and \code{endpoint = "responses"},
+#'   requests a reasoning summary from supported reasoning models by setting
+#'   \code{reasoning = list(effort = reasoning, summary = "auto")} and stores
+#'   the summary text in a \code{thoughts} column. Defaults to FALSE. For the
+#'   Chat Completions endpoint this argument has no effect.
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}.
 #'   The same validation rules for gpt-5 models are applied as in
@@ -55,8 +62,12 @@ NULL
 #'   \item{object_type}{OpenAI object type (for example "chat.completion" or "response").}
 #'   \item{status_code}{HTTP-style status code (200 if successful).}
 #'   \item{error_message}{Error message if something goes wrong; otherwise NA.}
-#'   \item{content}{Concatenated text from the assistant output. For the
-#'     Responses endpoint this may include both reasoning and message text.}
+#'   \item{thoughts}{Reasoning summary text for reasoning-enabled responses
+#'     when \code{include_thoughts = TRUE} and the model returns a summary;
+#'     otherwise \code{NA}.}
+#'   \item{content}{Concatenated text from the assistant message output (the
+#'     LLM's final answer). This is used to locate the \code{<BETTER_SAMPLE>}
+#'     tag.}
 #'   \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 #'   \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
 #'     otherwise NA.}
@@ -93,7 +104,8 @@ NULL
 #'
 #' res_live$better_id
 #'
-#' # Using the responses endpoint with gpt-5.1 and reasoning = "low"
+#' # Using the responses endpoint with gpt-5.1 and reasoning = "low",
+#' # requesting a reasoning summary as `thoughts`
 #' res_live_gpt5 <- openai_compare_pair_live(
 #'   ID1               = samples$ID[1],
 #'   text1             = samples$text[1],
@@ -105,6 +117,7 @@ NULL
 #'   prompt_template   = tmpl,
 #'   endpoint          = "responses",
 #'   reasoning         = "low",
+#'   include_thoughts  = TRUE,
 #'   temperature       = NULL,
 #'   top_p             = NULL,
 #'   logprobs          = NULL,
@@ -112,6 +125,8 @@ NULL
 #' )
 #'
 #' str(res_live_gpt5$raw_response[[1]], max.level = 2)
+#' res_live_gpt5$thoughts
+#' res_live_gpt5$content
 #' }
 #'
 #' @export
@@ -129,10 +144,12 @@ openai_compare_pair_live <- function(
     tag_suffix      = "</BETTER_SAMPLE>",
     api_key         = Sys.getenv("OPENAI_API_KEY"),
     include_raw     = FALSE,
+    include_thoughts = FALSE,
     ...
 ) {
   endpoint <- match.arg(endpoint)
 
+  # Validate inputs -----------------------------------------------------------
   if (!is.character(ID1)  || length(ID1)  != 1L) stop("`ID1` must be a single character.",  call. = FALSE)
   if (!is.character(ID2)  || length(ID2)  != 1L) stop("`ID2` must be a single character.",  call. = FALSE)
   if (!is.character(text1) || length(text1) != 1L) stop("`text1` must be a single character.", call. = FALSE)
@@ -148,6 +165,7 @@ openai_compare_pair_live <- function(
   is_gpt5  <- grepl("^gpt-5", model)
   is_gpt51 <- grepl("^gpt-5\\.1", model)
 
+  # Validate temperature / top_p / logprobs for GPT-5.x -----------------------
   if (is_gpt51) {
     if (!is.null(reasoning) && reasoning != "none") {
       if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
@@ -168,6 +186,7 @@ openai_compare_pair_live <- function(
     }
   }
 
+  # Build prompt --------------------------------------------------------------
   prompt <- build_prompt(
     template   = prompt_template,
     trait_name = trait_name,
@@ -176,14 +195,12 @@ openai_compare_pair_live <- function(
     text2      = text2
   )
 
+  # Build request body --------------------------------------------------------
   if (endpoint == "chat.completions") {
     body <- list(
       model    = model,
       messages = list(
-        list(
-          role    = "user",
-          content = prompt
-        )
+        list(role = "user", content = prompt)
       )
     )
     if (!is.null(temperature)) body$temperature <- temperature
@@ -191,14 +208,21 @@ openai_compare_pair_live <- function(
     if (!is.null(logprobs))    body$logprobs    <- logprobs
 
     path <- "/chat/completions"
+
   } else {
     body <- list(
       model = model,
       input = prompt
     )
+
     if (!is.null(reasoning)) {
-      body$reasoning <- list(effort = reasoning)
+      reasoning_block <- list(effort = reasoning)
+      if (!identical(reasoning, "none") && isTRUE(include_thoughts)) {
+        reasoning_block$summary <- "auto"   # Request reasoning summary
+      }
+      body$reasoning <- reasoning_block
     }
+
     if (!is.null(temperature)) body$temperature <- temperature
     if (!is.null(top_p))       body$top_p       <- top_p
     if (!is.null(logprobs))    body$logprobs    <- logprobs
@@ -206,9 +230,8 @@ openai_compare_pair_live <- function(
     path <- "/responses"
   }
 
-  req <- .openai_request(path, api_key) |>
-    req_body_json(body)
-
+  # Perform request -----------------------------------------------------------
+  req  <- .openai_request(path, api_key) |> req_body_json(body)
   resp <- req_perform(req)
 
   status_code   <- resp_status(resp)
@@ -219,6 +242,7 @@ openai_compare_pair_live <- function(
     error = function(e) NULL
   )
 
+  # JSON parse failure --------------------------------------------------------
   if (is.null(body_parsed)) {
     res <- tibble::tibble(
       custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
@@ -228,6 +252,7 @@ openai_compare_pair_live <- function(
       object_type       = NA_character_,
       status_code       = status_code,
       error_message     = "Failed to parse response body as JSON.",
+      thoughts          = NA_character_,
       content           = NA_character_,
       better_sample     = NA_character_,
       better_id         = NA_character_,
@@ -235,63 +260,98 @@ openai_compare_pair_live <- function(
       completion_tokens = NA_real_,
       total_tokens      = NA_real_
     )
-
-    if (include_raw) {
-      res$raw_response <- list(NULL)
-    }
-
+    if (include_raw) res$raw_response <- list(NULL)
     return(res)
   }
 
   body <- body_parsed
-
   object_type <- body$object %||% NA_character_
   model_name  <- body$model  %||% NA_character_
 
-  content <- NA_character_
+  thoughts <- NA_character_
+  content  <- NA_character_
 
+  # Parse ---------------------------------------------------------------------
   if (identical(object_type, "chat.completion")) {
+
+    # Chat completions: no thoughts
     choices <- body$choices %||% list()
     if (length(choices) >= 1L) {
-      message_obj <- choices[[1]]$message
-      if (!is.null(message_obj) && !is.null(message_obj$content)) {
-        content <- as.character(message_obj$content)
+      msg <- choices[[1]]$message
+      if (!is.null(msg$content)) {
+        content <- as.character(msg$content)
       }
     }
-  } else if (identical(object_type, "response")) {
-    # /v1/responses: collect text from reasoning summary (if any) and
-    # from each output element's content blocks that have a $text field.
-    collected <- character(0)
 
-    # Possible reasoning summary text at top level
+  } else if (identical(object_type, "response")) {
+
+    # Extract reasoning summary (thoughts) -----------------------------------
+    # 1) Top-level: body$reasoning$summary
     if (!is.null(body$reasoning) && !is.null(body$reasoning$summary)) {
       rs <- body$reasoning$summary
       if (!is.null(rs$text)) {
-        collected <- c(collected, as.character(rs$text %||% ""))
+        thoughts <- as.character(rs$text)
+      } else if (is.list(rs)) {
+        txts <- vapply(
+          rs,
+          function(s) if (!is.null(s$text)) as.character(s$text) else "",
+          FUN.VALUE = character(1L)
+        )
+        txts <- txts[nzchar(txts)]
+        if (length(txts) > 0) thoughts <- paste(txts, collapse = "\n\n")
       }
     }
 
-    output <- body$output %||% list()
-    if (length(output) > 0L) {
-      for (out in output) {
-        blocks <- out$content %||% list()
-        if (length(blocks) > 0L) {
-          for (b in blocks) {
-            if (!is.null(b$text)) {
-              collected <- c(collected, as.character(b$text %||% ""))
-            }
+    # 2) In output items: type == "reasoning"
+    if (is.na(thoughts) || !nzchar(thoughts)) {
+      output_items <- body$output %||% list()
+      for (out in output_items) {
+        if (!identical(out$type, "reasoning")) next
+        rs <- out$summary
+        if (is.null(rs)) next
+
+        if (!is.null(rs$text)) {
+          thoughts <- as.character(rs$text)
+          break
+        }
+
+        if (is.list(rs)) {
+          txts <- vapply(
+            rs,
+            function(s) if (!is.null(s$text)) as.character(s$text) else "",
+            FUN.VALUE = character(1L)
+          )
+          txts <- txts[nzchar(txts)]
+          if (length(txts) > 0) {
+            thoughts <- paste(txts, collapse = "\n\n")
+            break
           }
         }
       }
     }
 
-    if (length(collected) > 0L) {
+    # Extract assistant message text (content) --------------------------------
+    output_items <- body$output %||% list()
+    collected <- character(0)
+
+    for (out in output_items) {
+      if (!identical(out$type, "message")) next
+      blocks <- out$content %||% list()
+      for (b in blocks) {
+        if (!is.null(b$text)) {
+          collected <- c(collected, as.character(b$text))
+        }
+      }
+    }
+
+    if (length(collected) > 0) {
       content <- paste(collected, collapse = "")
     } else {
       content <- NA_character_
     }
   }
 
+  # Determine preferred sample ------------------------------------------------
   better_sample <- NA_character_
   if (!is.na(content)) {
     if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
@@ -301,16 +361,17 @@ openai_compare_pair_live <- function(
     }
   }
 
-  better_id <- NA_character_
-  if (!is.na(better_sample)) {
-    better_id <- if (better_sample == "SAMPLE_1") ID1 else ID2
-  }
+  better_id <- if (!is.na(better_sample)) {
+    if (better_sample == "SAMPLE_1") ID1 else ID2
+  } else NA_character_
 
+  # Token usage ---------------------------------------------------------------
   usage <- body$usage %||% list()
   prompt_tokens     <- usage$prompt_tokens     %||% usage$input_tokens   %||% NA_real_
   completion_tokens <- usage$completion_tokens %||% usage$output_tokens  %||% NA_real_
   total_tokens      <- usage$total_tokens      %||% NA_real_
 
+  # Build result tibble -------------------------------------------------------
   res <- tibble::tibble(
     custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
     ID1               = ID1,
@@ -319,6 +380,7 @@ openai_compare_pair_live <- function(
     object_type       = object_type,
     status_code       = status_code,
     error_message     = error_message,
+    thoughts          = thoughts,
     content           = content,
     better_sample     = better_sample,
     better_id         = better_id,
@@ -327,9 +389,7 @@ openai_compare_pair_live <- function(
     total_tokens      = as.numeric(total_tokens)
   )
 
-  if (include_raw) {
-    res$raw_response <- list(body)
-  }
+  if (include_raw) res$raw_response <- list(body)
 
   res
 }
@@ -369,7 +429,8 @@ openai_compare_pair_live <- function(
 #'   reasoning, and so on) passed on to \code{openai_compare_pair_live}.
 #'
 #' @return A tibble with one row per pair and the same columns as
-#'   \code{\link{openai_compare_pair_live}}.
+#'   \code{\link{openai_compare_pair_live}}, including a \code{thoughts}
+#'   column for reasoning summaries (when available).
 #'
 #' @examples
 #' \dontrun{
@@ -462,6 +523,7 @@ submit_openai_pairs_live <- function(
       object_type       = character(0),
       status_code       = integer(0),
       error_message     = character(0),
+      thoughts          = character(0),
       content           = character(0),
       better_sample     = character(0),
       better_id         = character(0),

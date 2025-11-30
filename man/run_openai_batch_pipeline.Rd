@@ -68,7 +68,7 @@ testing).}
 
 \item{...}{Additional arguments passed through to
 \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}, e.g. \code{temperature}, \code{top_p}, \code{logprobs},
-\code{reasoning} etc.}
+\code{reasoning}, and optionally \code{include_thoughts = TRUE} for \code{endpoint = "responses"} to request reasoning summaries in batch jobs.}
 }
 \value{
 A list with elements:

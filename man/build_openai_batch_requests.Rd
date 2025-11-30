@@ -15,6 +15,7 @@ build_openai_batch_requests(
   top_p = NULL,
   logprobs = NULL,
   reasoning = NULL,
+  include_thoughts = FALSE,
   request_id_prefix = "EXP"
 )
 }
@@ -45,6 +46,13 @@ and \code{{SAMPLE_2}}. Defaults to \code{set_prompt_template()}.}
 \item{reasoning}{Optional reasoning effort for \code{gpt-5.1} when using
 the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
 \code{"medium"}, or \code{"high"}.}
+
+\item{include_thoughts}{Logical; if TRUE and \code{endpoint = "responses"},
+and \code{reasoning} is not \code{"none"}, adds \code{summary = "auto"}
+to the \code{reasoning} block so that reasoning summaries (thoughts)
+are returned and can be parsed into a \code{thoughts} column by
+\code{\link{parse_openai_batch_output}}. Has no effect for
+\code{"chat.completions"}.}
 
 \item{request_id_prefix}{String prefix for \code{custom_id}; the full
 ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.}

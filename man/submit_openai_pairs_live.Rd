@@ -57,7 +57,8 @@ reasoning, and so on) passed on to \code{openai_compare_pair_live}.}
 }
 \value{
 A tibble with one row per pair and the same columns as
-\code{\link{openai_compare_pair_live}}.
+\code{\link{openai_compare_pair_live}}, including a \code{thoughts}
+column for reasoning summaries (when available).
 }
 \description{
 This is a thin row-wise wrapper around \code{\link{openai_compare_pair_live}}.

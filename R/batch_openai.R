@@ -27,6 +27,12 @@
 #' @param reasoning Optional reasoning effort for \code{gpt-5.1} when using
 #'   the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
 #'   \code{"medium"}, or \code{"high"}.
+#' @param include_thoughts Logical; if TRUE and \code{endpoint = "responses"},
+#'   and \code{reasoning} is not \code{"none"}, adds \code{summary = "auto"}
+#'   to the \code{reasoning} block so that reasoning summaries (thoughts)
+#'   are returned and can be parsed into a \code{thoughts} column by
+#'   \code{\link{parse_openai_batch_output}}. Has no effect for
+#'   \code{"chat.completions"}.
 #' @param request_id_prefix String prefix for \code{custom_id}; the full
 #'   ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.
 #'
@@ -72,6 +78,7 @@ build_openai_batch_requests <- function(pairs,
                                         top_p           = NULL,
                                         logprobs        = NULL,
                                         reasoning       = NULL,
+                                        include_thoughts = FALSE,
                                         request_id_prefix = "EXP") {
   endpoint <- match.arg(endpoint)
 
@@ -175,8 +182,17 @@ build_openai_batch_requests <- function(pairs,
       )
 
       if (!is.null(reasoning)) {
-        body$reasoning <- list(effort = reasoning)
+        reasoning_block <- list(effort = reasoning)
+
+        # When reasoning is used and include_thoughts = TRUE,
+        # ask OpenAI to include a reasoning summary.
+        if (!identical(reasoning, "none") && isTRUE(include_thoughts)) {
+          reasoning_block$summary <- "auto"
+        }
+
+        body$reasoning <- reasoning_block
       }
+
       if (!is.null(temperature)) body$temperature <- temperature
       if (!is.null(top_p))       body$top_p       <- top_p
       if (!is.null(logprobs))    body$logprobs    <- logprobs

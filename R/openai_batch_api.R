@@ -340,7 +340,8 @@ openai_poll_batch_until_complete <- function(
 #'   `Sys.getenv("OPENAI_API_KEY")`.
 #' @param ... Additional arguments passed through to
 #'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
-#'   `reasoning` etc.
+#'   `reasoning`, and optionally `include_thoughts = TRUE` for `endpoint =
+#'   "responses"` to request reasoning summaries in batch jobs.
 #'
 #' @return A list with elements:
 #' * `batch_input_path`  – path to the input `.jsonl` file.
