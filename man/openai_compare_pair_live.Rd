@@ -18,7 +18,6 @@ openai_compare_pair_live(
   tag_suffix = "</BETTER_SAMPLE>",
   api_key = Sys.getenv("OPENAI_API_KEY"),
   include_raw = FALSE,
-  include_thoughts = FALSE,
   ...
 )
 }
@@ -56,16 +55,14 @@ openai_compare_pair_live(
 containing the parsed JSON body returned by OpenAI (or NULL on parse
 failure). This is useful for debugging parsing problems.}
 
-\item{include_thoughts}{Logical; if TRUE and \code{endpoint = "responses"},
-requests a reasoning summary from supported reasoning models by setting
-\code{reasoning = list(effort = reasoning, summary = "auto")} and stores
-the summary text in a \code{thoughts} column. Defaults to FALSE. For the
-Chat Completions endpoint this argument has no effect.}
-
 \item{...}{Additional OpenAI parameters, for example
-\code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}.
-The same validation rules for gpt-5 models are applied as in
-\code{\link{build_openai_batch_requests}}.}
+\code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
+and (optionally) \code{include_thoughts}. The same validation rules for
+gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
+When using the Responses endpoint with reasoning models, you can request
+reasoning summaries in the \code{thoughts} column by setting
+\code{endpoint = "responses"}, a non-"none" reasoning effort, and
+\code{include_thoughts = TRUE}.}
 }
 \value{
 A tibble with one row and columns:
@@ -76,12 +73,10 @@ A tibble with one row and columns:
 \item{object_type}{OpenAI object type (for example "chat.completion" or "response").}
 \item{status_code}{HTTP-style status code (200 if successful).}
 \item{error_message}{Error message if something goes wrong; otherwise NA.}
-\item{thoughts}{Reasoning summary text for reasoning-enabled responses
-when \code{include_thoughts = TRUE} and the model returns a summary;
-otherwise \code{NA}.}
-\item{content}{Concatenated text from the assistant message output (the
-LLM's final answer). This is used to locate the \code{<BETTER_SAMPLE>}
-tag.}
+\item{thoughts}{Reasoning / thinking summary text when available, otherwise NA.}
+\item{content}{Concatenated text from the assistant's visible output. For the
+Responses endpoint this is taken from the \code{type = "message"} output
+items and does not include reasoning summaries.}
 \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
 otherwise NA.}
@@ -103,14 +98,14 @@ the Responses endpoint ("/v1/responses", for example gpt-5.1 with reasoning),
 using the same prompt template and model / parameter rules as the batch
 pipeline.
 
-For the Responses endpoint, the function can optionally request and store a
-reasoning summary separately from the assistant's final answer:
+For the Responses endpoint, the function collects:
 \itemize{
-\item If the API returns a reasoning summary (for example in
-\code{body$reasoning$summary} or in an \code{output} item of type
-\code{"reasoning"}), that text is stored in a \code{thoughts} column.
-\item Assistant message text (the part containing the
-\code{<BETTER_SAMPLE>} tag) is stored in \code{content} and used to
-determine the preferred sample.
+\item Reasoning / "thoughts" text (if available) into the \code{thoughts}
+column. Reasoning summaries are typically provided on the
+\code{type = "reasoning"} output item under \code{summary}.
+\item Visible assistant output into the \code{content} column, taken from
+the \code{type = "message"} output item's \code{content[[*]]$text}.
 }
+Reasoning text is not prefixed into \code{content}; instead it is kept
+separate in \code{thoughts} for consistency with Anthropic and Gemini.
 }

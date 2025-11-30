@@ -31,10 +31,12 @@ columns:
 (e.g., \code{"chat.completion"} or \code{"response"}).}
 \item{status_code}{HTTP-style status code from the batch output.}
 \item{error_message}{Error message, if present; otherwise \code{NA}.}
-\item{thoughts}{Reasoning summary text for reasoning-enabled responses
-when present in the batch output; otherwise \code{NA}.}
-\item{content}{The assistant message content string (the LLM's final
-answer), used to locate the \code{<BETTER_SAMPLE>} tag.}
+\item{thoughts}{Reasoning / thinking summary text when available
+(for Responses with reasoning); otherwise \code{NA}.}
+\item{content}{The raw assistant visible content string (the LLM's
+output), used to locate the \code{<BETTER_SAMPLE>} tag. For
+Responses with reasoning this does not include reasoning
+summaries, which are kept in \code{thoughts}.}
 \item{better_sample}{Either \code{"SAMPLE_1"}, \code{"SAMPLE_2"},
 or \code{NA} if the tag was not found.}
 \item{better_id}{\code{ID1} if \code{SAMPLE_1} was chosen, \code{ID2}
@@ -56,13 +58,14 @@ For each line, the function:
 \itemize{
 \item extracts \code{custom_id} and parses \code{ID1} and \code{ID2}
 from the pattern \code{"<prefix>ID1_vs_ID2"},
-\item pulls the assistant message content containing the
-\code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag into \code{content},
-\item for Responses objects with reasoning summaries, collects the
-reasoning summary text into a separate \code{thoughts} column,
+\item pulls the raw LLM content containing the
+\code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag,
 \item determines whether \code{SAMPLE_1} or \code{SAMPLE_2} was
 selected and maps that to \code{better_id},
-\item collects model name and basic token usage statistics.
+\item collects model name and basic token usage statistics,
+\item when using the Responses endpoint with reasoning, separates
+reasoning summaries into the \code{thoughts} column and visible
+assistant output into \code{content}.
 }
 
 The returned data frame is suitable as input for

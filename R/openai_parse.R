@@ -10,13 +10,14 @@
 #' \itemize{
 #'   \item extracts \code{custom_id} and parses \code{ID1} and \code{ID2}
 #'         from the pattern \code{"<prefix>ID1_vs_ID2"},
-#'   \item pulls the assistant message content containing the
-#'         \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag into \code{content},
-#'   \item for Responses objects with reasoning summaries, collects the
-#'         reasoning summary text into a separate \code{thoughts} column,
+#'   \item pulls the raw LLM content containing the
+#'         \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag,
 #'   \item determines whether \code{SAMPLE_1} or \code{SAMPLE_2} was
 #'         selected and maps that to \code{better_id},
-#'   \item collects model name and basic token usage statistics.
+#'   \item collects model name and basic token usage statistics,
+#'   \item when using the Responses endpoint with reasoning, separates
+#'         reasoning summaries into the \code{thoughts} column and visible
+#'         assistant output into \code{content}.
 #' }
 #'
 #' The returned data frame is suitable as input for
@@ -39,10 +40,12 @@
 #'           (e.g., \code{"chat.completion"} or \code{"response"}).}
 #'     \item{status_code}{HTTP-style status code from the batch output.}
 #'     \item{error_message}{Error message, if present; otherwise \code{NA}.}
-#'     \item{thoughts}{Reasoning summary text for reasoning-enabled responses
-#'           when present in the batch output; otherwise \code{NA}.}
-#'     \item{content}{The assistant message content string (the LLM's final
-#'           answer), used to locate the \code{<BETTER_SAMPLE>} tag.}
+#'     \item{thoughts}{Reasoning / thinking summary text when available
+#'           (for Responses with reasoning); otherwise \code{NA}.}
+#'     \item{content}{The raw assistant visible content string (the LLM's
+#'           output), used to locate the \code{<BETTER_SAMPLE>} tag. For
+#'           Responses with reasoning this does not include reasoning
+#'           summaries, which are kept in \code{thoughts}.}
 #'     \item{better_sample}{Either \code{"SAMPLE_1"}, \code{"SAMPLE_2"},
 #'           or \code{NA} if the tag was not found.}
 #'     \item{better_id}{\code{ID1} if \code{SAMPLE_1} was chosen, \code{ID2}
@@ -161,78 +164,77 @@ parse_openai_batch_output <- function(path,
           content <- as.character(message_obj$content)
         }
       }
-
     } else if (identical(object_type, "response")) {
-      # Responses endpoint: separate reasoning summary ("thoughts") from
-      # assistant message content ("content").
+      # Responses endpoint: collect reasoning summaries into `thoughts` and
+      # message text into `content`.
+      reasoning_chunks <- character(0)
+      message_chunks   <- character(0)
 
-      # 1) Top-level reasoning summary
-      if (!is.null(body$reasoning) && !is.null(body$reasoning$summary)) {
-        rs <- body$reasoning$summary
-        if (!is.null(rs$text)) {
-          thoughts <- as.character(rs$text)
-        } else if (is.list(rs)) {
-          txts <- vapply(
-            rs,
-            function(s) if (!is.null(s$text)) as.character(s$text) else "",
-            FUN.VALUE = character(1L)
-          )
-          txts <- txts[nzchar(txts)]
-          if (length(txts) > 0L) {
-            thoughts <- paste(txts, collapse = "\n\n")
-          }
-        }
-      }
-
-      # 2) Reasoning summary from output items of type "reasoning"
-      if (is.na(thoughts) || !nzchar(thoughts)) {
-        output_items <- body$output %||% list()
-        if (length(output_items) > 0L) {
-          for (out_el in output_items) {
-            if (!is.null(out_el$type) && !identical(out_el$type, "reasoning")) next
+      output <- body$output %||% list()
+      if (length(output) > 0L) {
+        for (out_el in output) {
+          # Reasoning summaries: output item with type = "reasoning"
+          if (!is.null(out_el$type) && identical(out_el$type, "reasoning")) {
             rs <- out_el$summary
-            if (is.null(rs)) next
-
-            if (!is.null(rs$text)) {
-              thoughts <- as.character(rs$text)
-              break
-            } else if (is.list(rs)) {
-              txts <- vapply(
-                rs,
-                function(s) if (!is.null(s$text)) as.character(s$text) else "",
-                FUN.VALUE = character(1L)
-              )
-              txts <- txts[nzchar(txts)]
-              if (length(txts) > 0L) {
-                thoughts <- paste(txts, collapse = "\n\n")
-                break
+            if (!is.null(rs) && length(rs) > 0L) {
+              if (is.list(rs) && !is.data.frame(rs)) {
+                for (s in rs) {
+                  if (!is.null(s$text)) {
+                    reasoning_chunks <- c(
+                      reasoning_chunks,
+                      as.character(s$text %||% "")
+                    )
+                  }
+                }
+              } else if (is.data.frame(rs) && "text" %in% names(rs)) {
+                reasoning_chunks <- c(
+                  reasoning_chunks,
+                  as.character(rs$text)
+                )
               }
             }
           }
-        }
-      }
 
-      # Assistant message content: output items of type "message"
-      output_items <- body$output %||% list()
-      collected <- character(0)
-
-      if (length(output_items) > 0L) {
-        for (out_el in output_items) {
-          # Treat missing type as "message" for backward compatibility
-          if (!is.null(out_el$type) && !identical(out_el$type, "message")) next
+          # Visible output text (assistant message, etc.)
           blocks <- out_el$content %||% list()
           if (length(blocks) > 0L) {
             for (b in blocks) {
               if (!is.null(b$text)) {
-                collected <- c(collected, as.character(b$text))
+                message_chunks <- c(
+                  message_chunks,
+                  as.character(b$text %||% "")
+                )
               }
             }
           }
         }
       }
 
-      if (length(collected) > 0L) {
-        content <- paste(collected, collapse = "")
+      # Backwards compatibility: some fixtures store reasoning summary at
+      # body$reasoning$summary$text. If we have no reasoning_chunks yet, try
+      # that shape. If summary is a character scalar (e.g. "auto"/"detailed"),
+      # treat it as configuration and ignore it for thoughts.
+      if (!length(reasoning_chunks) &&
+          !is.null(body$reasoning) &&
+          !is.null(body$reasoning$summary)) {
+
+        rs <- body$reasoning$summary
+
+        if (is.list(rs) && !is.null(rs$text)) {
+          reasoning_chunks <- c(
+            reasoning_chunks,
+            as.character(rs$text %||% "")
+          )
+        }
+        # Character summaries are ignored.
+      }
+
+      if (length(reasoning_chunks)) {
+        thoughts <- paste(reasoning_chunks, collapse = " ")
+      }
+
+      if (length(message_chunks)) {
+        content <- paste(message_chunks, collapse = "")
       } else {
         content <- NA_character_
       }
