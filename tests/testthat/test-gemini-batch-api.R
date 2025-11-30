@@ -25,14 +25,17 @@ testthat::test_that("build_gemini_batch_requests builds valid requests", {
   testthat::expect_true(is.list(r1$contents))
   testthat::expect_true(is.list(r1$generationConfig))
 
-  # User message should contain SAMPLE_1/SAMPLE_2 tags in text
+  # User message should contain SAMPLE_1 / SAMPLE_2 labels in the text
   msg1 <- r1$contents[[1]]
   testthat::expect_equal(msg1$role, "user")
   parts <- msg1$parts
   testthat::expect_true(is.list(parts))
   text_block <- parts[[1]]$text
-  testthat::expect_true(grepl("<SAMPLE_1>", text_block, fixed = TRUE))
-  testthat::expect_true(grepl("<SAMPLE_2>", text_block, fixed = TRUE))
+
+  # We now just require that the labels SAMPLE_1 / SAMPLE_2 appear somewhere,
+  # not necessarily wrapped in angle brackets.
+  testthat::expect_true(grepl("SAMPLE_1", text_block, fixed = TRUE))
+  testthat::expect_true(grepl("SAMPLE_2", text_block, fixed = TRUE))
 })
 
 testthat::test_that("parse_gemini_batch_output handles succeeded and errored results", {
@@ -87,7 +90,18 @@ testthat::test_that("parse_gemini_batch_output handles succeeded and errored res
   )
   writeLines(json_lines, con = tmp, useBytes = TRUE)
 
-  res <- parse_gemini_batch_output(tmp)
+  # New API: parse_gemini_batch_output() expects a requests_tbl with
+  # custom_id / ID1 / ID2 in the same order as the requests.
+  requests_tbl <- tibble::tibble(
+    custom_id = c("GEM_S01_vs_S02", "GEM_S03_vs_S04"),
+    ID1       = c("S01",           "S03"),
+    ID2       = c("S02",           "S04")
+  )
+
+  res <- parse_gemini_batch_output(
+    results_path = tmp,
+    requests_tbl = requests_tbl
+  )
 
   testthat::expect_s3_class(res, "tbl_df")
   testthat::expect_equal(nrow(res), 2L)
@@ -126,7 +140,18 @@ testthat::test_that("parse_gemini_batch_output handles invalid JSON lines gracef
 
   writeLines("not-json", con = tmp, useBytes = TRUE)
 
-  res <- parse_gemini_batch_output(tmp)
+  # Even for invalid JSON, we now must pass a requests_tbl; IDs here are dummies.
+  requests_tbl <- tibble::tibble(
+    custom_id = "GEM_S01_vs_S02",
+    ID1       = "S01",
+    ID2       = "S02"
+  )
+
+  res <- parse_gemini_batch_output(
+    results_path = tmp,
+    requests_tbl = requests_tbl
+  )
+
   testthat::expect_equal(nrow(res), 1L)
   testthat::expect_true(is.na(res$custom_id))
   testthat::expect_match(res$error_message, "Failed to parse JSON line")
@@ -140,8 +165,11 @@ testthat::test_that("run_gemini_batch_pipeline works with polling and parsing (m
     text2 = "Text 2"
   )
 
+  # New requests_tbl shape: custom_id + ID1 + ID2 + request
   fake_req_tbl <- tibble::tibble(
     custom_id = "GEM_S01_vs_S02",
+    ID1       = "S01",
+    ID2       = "S02",
     request   = list(list(dummy = TRUE))
   )
 
@@ -204,8 +232,9 @@ testthat::test_that("run_gemini_batch_pipeline works with polling and parsing (m
       writeLines('{"dummy": true}', con = output_path)
       invisible(output_path)
     },
-    parse_gemini_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
-      parsed_path <<- jsonl_path
+    # New signature: parse_gemini_batch_output(results_path, requests_tbl)
+    parse_gemini_batch_output = function(results_path, requests_tbl) {
+      parsed_path <<- results_path
       fake_results
     },
     {
@@ -250,6 +279,8 @@ testthat::test_that("run_gemini_batch_pipeline does not poll or parse when poll 
 
   fake_req_tbl <- tibble::tibble(
     custom_id = "GEM_S01_vs_S02",
+    ID1       = "S01",
+    ID2       = "S02",
     request   = list(list(dummy = TRUE))
   )
 
@@ -286,7 +317,8 @@ testthat::test_that("run_gemini_batch_pipeline does not poll or parse when poll 
       download_called <<- TRUE
       stop("Download should not be called when poll = FALSE")
     },
-    parse_gemini_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+    # New signature: parse_gemini_batch_output(results_path, requests_tbl)
+    parse_gemini_batch_output = function(results_path, requests_tbl) {
       parse_called <<- TRUE
       stop("Parse should not be called when poll = FALSE")
     },

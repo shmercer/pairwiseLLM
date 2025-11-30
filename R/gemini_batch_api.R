@@ -225,8 +225,12 @@
   total_tokens         <- as_num_scalar(total_tokens_raw)
   thoughts_token_count <- as_num_scalar(thoughts_token_count_raw)
 
+  # Prefer modelVersion if present; fall back to model
   model_raw <- find_named(resp, "modelVersion")
-  model     <- as_chr_scalar(model_raw)
+  if (is.null(model_raw)) {
+    model_raw <- find_named(resp, "model")
+  }
+  model <- as_chr_scalar(model_raw)
 
   tibble::tibble(
     custom_id            = custom_id,
@@ -809,16 +813,33 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     )
   }
 
-  objs <- lapply(
-    lines,
-    function(z) jsonlite::fromJSON(z, simplifyVector = FALSE)
-  )
-
   `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
   if (is.null(`%||%`)) {
     `%||%` <- function(x, y) if (!is.null(x)) x else y
   }
 
+  # Parse each line individually; if JSON parse fails, create an "errored" stub
+  objs <- lapply(
+    lines,
+    function(z) {
+      tryCatch(
+        jsonlite::fromJSON(z, simplifyVector = FALSE),
+        error = function(e) {
+          list(
+            custom_id = NULL,
+            result = list(
+              type  = "errored",
+              error = list(
+                message = paste("Failed to parse JSON line:", conditionMessage(e))
+              )
+            )
+          )
+        }
+      )
+    }
+  )
+
+  # Build lookup from custom_id -> row index in requests_tbl
   req_ids  <- as.character(requests_tbl$custom_id)
   line_ids <- vapply(
     objs,
