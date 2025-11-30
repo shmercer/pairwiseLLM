@@ -1,96 +1,174 @@
 #!/usr/bin/env Rscript
 
 # dev/check-gemini-positional-bias.R
-# Full Gemini batch run on example_writing_samples + positional bias check
+# Gemini positional bias check using the package pairing + consistency helpers:
+#   - make_pairs()
+#   - randomize_pair_order()
+#   - sample_reverse_pairs()
+#   - compute_reverse_consistency()
+#   - check_positional_bias()
 
 if (!requireNamespace("pairwiseLLM", quietly = TRUE)) {
   stop("Please install/load pairwiseLLM first.")
 }
 
 library(pairwiseLLM)
+library(dplyr)
 
-# Use your usual dev workflow: run this from RStudio after devtools::load_all()
-message("=== Gemini positional bias check (batch) ===")
+message("=== Gemini positional bias check (batch: forward + reverse) ===")
 
 # -------------------------------------------------------------------
-# 1. Load example data and build randomized pairs
+# 1. Load example data and build forward + reverse pairs
 # -------------------------------------------------------------------
 
 data("example_writing_samples", package = "pairwiseLLM")
 
 set.seed(20251130)  # for reproducibility
 
-pairs <- make_pairs(example_writing_samples)
-pairs <- randomize_pair_order(pairs)
+# All unordered pairs from the example samples
+pairs_all <- make_pairs(example_writing_samples)
 
-message(sprintf("Built %d pairs from %d samples.",
-                nrow(pairs), nrow(example_writing_samples)))
+# Randomize SAMPLE_1 / SAMPLE_2 position once
+pairs_forward <- randomize_pair_order(pairs_all, seed = 20251130)
 
-# Trait / prompt template (same pattern used for other backends)
+# Build a full set of reversed pairs using the helper:
+# reverse_pct = 1 => reverse all rows (one reversed copy per pair)
+# Note: order of rows in the reversed tibble may differ, but
+# compute_reverse_consistency() is order-invariant (it uses unordered keys).
+pairs_reverse <- sample_reverse_pairs(
+  pairs        = pairs_forward,
+  reverse_pct  = 1,
+  seed         = 20251130
+)
+
+n_forward <- nrow(pairs_forward)
+n_reverse <- nrow(pairs_reverse)
+
+message(sprintf(
+  "Built %d forward pairs and %d reverse pairs from %d samples.",
+  n_forward, n_reverse, nrow(example_writing_samples)
+))
+
+# -------------------------------------------------------------------
+# 2. Set up trait / prompt / model
+# -------------------------------------------------------------------
+
 td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
-
-# -------------------------------------------------------------------
-# 2. Run full Gemini batch pipeline
-# -------------------------------------------------------------------
-
 model <- "gemini-3-pro-preview"
 
-message("Running Gemini batch pipeline...")
-message(sprintf("  model           = %s", model))
-message(sprintf("  trait_name      = %s", td$name))
-message(sprintf("  thinking_level  = %s", "low"))
+message("Using settings:")
+message(sprintf("  model            = %s", model))
+message(sprintf("  trait_name       = %s", td$name))
+message(sprintf("  thinking_level   = %s", "low"))
 message(sprintf("  include_thoughts = %s", TRUE))
 
-batch_result <- run_gemini_batch_pipeline(
-  pairs             = pairs,
+# -------------------------------------------------------------------
+# 3. Run Gemini batch pipeline: FORWARD pairs
+# -------------------------------------------------------------------
+
+message("Running Gemini batch pipeline for FORWARD pairs...")
+
+batch_forward <- run_gemini_batch_pipeline(
+  pairs             = pairs_forward,
   model             = model,
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   thinking_level    = "low",
-  # Let Gemini return thought metadata + signatures; visible thoughts may or
-  # may not be present, but the batch parser handles both cases.
   include_thoughts  = TRUE,
-  # For a full example file this might take a bit; tune as needed
   interval_seconds  = 30,
   timeout_seconds   = 60 * 60,   # 1 hour
   verbose           = TRUE
 )
 
-gemini_results <- batch_result$results
+results_forward <- batch_forward$results
 
-message("Gemini batch completed.")
-message(sprintf("  Results rows: %d", nrow(gemini_results)))
+message("Forward batch completed.")
+message(sprintf("  Forward results rows: %d", nrow(results_forward)))
 
-# Save a copy for later inspection / reproducibility
+# -------------------------------------------------------------------
+# 4. Run Gemini batch pipeline: REVERSE pairs
+# -------------------------------------------------------------------
+
+message("Running Gemini batch pipeline for REVERSE pairs...")
+
+batch_reverse <- run_gemini_batch_pipeline(
+  pairs             = pairs_reverse,
+  model             = model,
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "low",
+  include_thoughts  = TRUE,
+  interval_seconds  = 30,
+  timeout_seconds   = 60 * 60,   # 1 hour
+  verbose           = TRUE
+)
+
+results_reverse <- batch_reverse$results
+
+message("Reverse batch completed.")
+message(sprintf("  Reverse results rows: %d", nrow(results_reverse)))
+
+# -------------------------------------------------------------------
+# 5. Save raw results for reproducibility
+# -------------------------------------------------------------------
+
 if (!dir.exists("dev")) dir.create("dev", showWarnings = FALSE)
 
-results_rds  <- file.path("dev", "gemini_positional_bias_results.rds")
-results_csv  <- file.path("dev", "gemini_positional_bias_results.csv")
+forward_rds <- file.path("dev", "gemini_positional_bias_forward_results.rds")
+forward_csv <- file.path("dev", "gemini_positional_bias_forward_results.csv")
+reverse_rds <- file.path("dev", "gemini_positional_bias_reverse_results.rds")
+reverse_csv <- file.path("dev", "gemini_positional_bias_reverse_results.csv")
 
-saveRDS(gemini_results, results_rds)
-utils::write.csv(gemini_results, results_csv, row.names = FALSE)
+saveRDS(results_forward, forward_rds)
+utils::write.csv(results_forward, forward_csv, row.names = FALSE)
 
-message("Saved Gemini batch results to:")
-message(sprintf("  RDS : %s", results_rds))
-message(sprintf("  CSV : %s", results_csv))
+saveRDS(results_reverse, reverse_rds)
+utils::write.csv(results_reverse, reverse_csv, row.names = FALSE)
+
+message("Saved Gemini FORWARD results to:")
+message(sprintf("  RDS : %s", forward_rds))
+message(sprintf("  CSV : %s", forward_csv))
+
+message("Saved Gemini REVERSE results to:")
+message(sprintf("  RDS : %s", reverse_rds))
+message(sprintf("  CSV : %s", reverse_csv))
 
 # -------------------------------------------------------------------
-# 3. Check positional bias using the package helper
+# 6. Compute reverse consistency (forward vs reverse)
 # -------------------------------------------------------------------
 
-message("Computing positional bias metrics from Gemini results...")
+message("Computing reverse consistency (forward vs reverse)...")
 
-# Assumes check_positional_bias() uses the standard columns (ID1, ID2, better_id)
-# as produced by the batch/live pipelines.
-pos_bias <- check_positional_bias(gemini_results)
+# compute_reverse_consistency() expects ID1, ID2, better_id in each tibble.
+rc <- compute_reverse_consistency(
+  main_results    = results_forward,
+  reverse_results = results_reverse
+)
 
-print(pos_bias)
+message("Reverse consistency summary:")
+print(rc$summary)
 
-# Optionally save the summary too
-summary_rds <- file.path("dev", "gemini_positional_bias_summary.rds")
-saveRDS(pos_bias, summary_rds)
-message(sprintf("Saved positional bias summary to: %s", summary_rds))
+# -------------------------------------------------------------------
+# 7. Check positional bias using the consistency object
+# -------------------------------------------------------------------
+
+message("Checking positional bias with bootstrap CI...")
+
+pos_bias <- check_positional_bias(
+  consistency = rc,
+  n_boot      = 1000,
+  conf_level  = 0.95,
+  seed        = 20251130
+)
+
+message("Positional bias summary:")
+print(pos_bias$summary)
+
+pos_bias_rds <- file.path("dev", "gemini_positional_bias_summary.rds")
+saveRDS(pos_bias, pos_bias_rds)
+message(sprintf("Saved positional bias object to: %s", pos_bias_rds))
 
 message("=== Gemini positional bias check complete ===")
