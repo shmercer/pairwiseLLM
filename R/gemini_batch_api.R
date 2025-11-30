@@ -1,14 +1,36 @@
 #' Internal: parse a Gemini GenerateContentResponse into the standard tibble row
 #'
+#' This version supports an `include_thoughts` flag so that, when Gemini was
+#' called with `thinkingConfig.includeThoughts = TRUE`, the first text part is
+#' treated as `thoughts` and remaining parts are concatenated into `content`,
+#' mirroring gemini_compare_pair_live().
+#'
 #' @keywords internal
 .parse_gemini_pair_response <- function(
     custom_id,
     ID1,
     ID2,
-    response
+    response,
+    include_thoughts = FALSE
 ) {
+  # Safe %||% (use package helper if present, otherwise local fallback)
+  `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
+  if (is.null(`%||%`)) {
+    `%||%` <- function(x, y) if (!is.null(x)) x else y
+  }
+
+  # -------------------------------------------------------------------
+  # Normalise the response object a bit
+  # -------------------------------------------------------------------
+  resp <- response
+
+  # Sometimes we might get an extra nesting: list(response = <actual>)
+  if (!is.null(resp$response) && is.null(resp$candidates) && is.list(resp$response)) {
+    resp <- resp$response
+  }
+
   # If we received an error-shaped object
-  if (is.null(response$candidates)) {
+  if (!is.null(resp$error) && is.null(resp$candidates)) {
     return(tibble::tibble(
       custom_id         = custom_id,
       ID1               = ID1,
@@ -17,7 +39,8 @@
       object_type       = "generateContent",
       status_code       = 200L,
       result_type       = "errored",
-      error_message     = response$error$message %||% NA_character_,
+      error_message     = resp$error$message %||% NA_character_,
+      thoughts          = NA_character_,
       content           = NA_character_,
       better_sample     = NA_character_,
       better_id         = NA_character_,
@@ -27,25 +50,137 @@
     ))
   }
 
-  # -----------------------------------------------------------------------
-  # Extract content text
-  # -----------------------------------------------------------------------
-  content <- NA_character_
-  cand    <- response$candidates[[1]]
-  parts   <- cand$content$parts %||% list()
+  # -------------------------------------------------------------------
+  # Helpers
+  # -------------------------------------------------------------------
+  # Get first candidate, robust to list/data.frame shapes
+  get_first_candidate <- function(x) {
+    cands <- x$candidates
+    if (is.null(cands)) return(NULL)
 
-  texts <- vapply(
-    parts,
-    function(p) p$text %||% "",
-    FUN.VALUE = character(1L)
-  )
-  if (length(texts) > 0 && any(nzchar(texts))) {
-    content <- paste(texts, collapse = "")
+    if (is.data.frame(cands)) {
+      if (nrow(cands) == 0L) return(NULL)
+      cand <- lapply(cands[1, , drop = FALSE], function(v) {
+        if (is.list(v) && length(v) == 1L) v[[1]] else v
+      })
+      return(cand)
+    }
+
+    if (is.list(cands) && length(cands) > 0L) {
+      return(cands[[1]])
+    }
+
+    NULL
   }
 
-  # -----------------------------------------------------------------------
-  # Extract <BETTER_SAMPLE>
-  # -----------------------------------------------------------------------
+  # Normalise content$parts into a list of "part" objects
+  get_parts_list <- function(content_obj) {
+    if (is.null(content_obj)) return(list())
+
+    # content may be a data.frame with a "parts" column
+    if (is.data.frame(content_obj)) {
+      if ("parts" %in% names(content_obj)) {
+        parts_obj <- content_obj$parts[[1]]
+      } else {
+        parts_obj <- content_obj
+      }
+    } else if (is.list(content_obj) && !is.null(content_obj$parts)) {
+      parts_obj <- content_obj$parts
+    } else {
+      parts_obj <- content_obj
+    }
+
+    if (is.null(parts_obj)) {
+      list()
+    } else if (is.data.frame(parts_obj)) {
+      lapply(seq_len(nrow(parts_obj)), function(i) {
+        as.list(parts_obj[i, , drop = FALSE])
+      })
+    } else if (is.list(parts_obj)) {
+      parts_obj
+    } else {
+      list(parts_obj)
+    }
+  }
+
+  # Extract the text field from a "part"
+  get_part_text <- function(p) {
+    if (is.null(p)) return("")
+    # list-style part with $text
+    if (is.list(p) && !is.data.frame(p) && !is.null(p$text)) {
+      return(as.character(p$text %||% ""))
+    }
+    # data.frame-style part with "text" column
+    if (is.data.frame(p) && "text" %in% names(p)) {
+      return(as.character(p$text[[1]] %||% ""))
+    }
+    # bare character vector
+    if (is.character(p)) {
+      return(paste(p, collapse = ""))
+    }
+    ""
+  }
+
+  # Generic recursive lookup for usage/model fields
+  find_named <- function(x, name) {
+    if (!is.list(x)) return(NULL)
+    if (!is.null(x[[name]])) return(x[[name]])
+    for (el in x) {
+      if (is.list(el)) {
+        found <- find_named(el, name)
+        if (!is.null(found)) return(found)
+      }
+    }
+    NULL
+  }
+
+  as_num_scalar <- function(x) {
+    if (is.null(x)) return(NA_real_)
+    v <- suppressWarnings(as.numeric(unlist(x, recursive = TRUE, use.names = FALSE)))
+    if (!length(v)) return(NA_real_)
+    v[1]
+  }
+
+  as_chr_scalar <- function(x) {
+    if (is.null(x)) return(NA_character_)
+    v <- as.character(unlist(x, recursive = TRUE, use.names = FALSE))
+    if (!length(v)) return(NA_character_)
+    v[1]
+  }
+
+  # -------------------------------------------------------------------
+  # Extract thoughts + content from first candidate, like gemini_live.R
+  # -------------------------------------------------------------------
+  cand  <- get_first_candidate(resp)
+  parts <- list()
+
+  if (!is.null(cand) && !is.null(cand$content)) {
+    parts <- get_parts_list(cand$content)
+  }
+
+  thoughts <- NA_character_
+  content  <- NA_character_
+
+  if (length(parts) > 0L) {
+    if (isTRUE(include_thoughts) && length(parts) >= 2L) {
+      # First part = thoughts, remaining parts = final content
+      t_text <- get_part_text(parts[[1]])
+      c_texts <- vapply(parts[-1], get_part_text, FUN.VALUE = character(1L))
+      c_texts <- c_texts[nzchar(c_texts)]
+
+      thoughts <- if (nzchar(t_text)) t_text else NA_character_
+      content  <- if (length(c_texts)) paste(c_texts, collapse = "") else NA_character_
+    } else {
+      # No visible thoughts: collapse all parts into content
+      c_texts <- vapply(parts, get_part_text, FUN.VALUE = character(1L))
+      c_texts <- c_texts[nzchar(c_texts)]
+      content <- if (length(c_texts)) paste(c_texts, collapse = "") else NA_character_
+    }
+  }
+
+  # -------------------------------------------------------------------
+  # Parse <BETTER_SAMPLE> tag from content
+  # -------------------------------------------------------------------
   better_sample <- NA_character_
   if (!is.na(content)) {
     if (grepl("<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>", content, fixed = TRUE)) {
@@ -57,21 +192,24 @@
 
   better_id <- NA_character_
   if (!is.na(better_sample)) {
-    better_id <- if (better_sample == "SAMPLE_1") ID1 else ID2
+    better_id <- if (identical(better_sample, "SAMPLE_1")) ID1 else ID2
   }
 
-  # -----------------------------------------------------------------------
-  # Token usage
-  # -----------------------------------------------------------------------
-  usage <- response$usageMetadata %||% list()
-  prompt_tokens     <- usage$promptTokenCount     %||% NA_real_
-  completion_tokens <- usage$candidatesTokenCount %||% NA_real_
-  total_tokens      <- usage$totalTokenCount      %||% NA_real_
+  # -------------------------------------------------------------------
+  # Token usage & model (recursive lookup)
+  # -------------------------------------------------------------------
+  usage_obj <- find_named(resp, "usageMetadata")
 
-  # -----------------------------------------------------------------------
-  # Model version
-  # -----------------------------------------------------------------------
-  model <- response$modelVersion %||% NA_character_
+  prompt_tokens_raw     <- if (!is.null(usage_obj)) find_named(usage_obj, "promptTokenCount")     else NULL
+  completion_tokens_raw <- if (!is.null(usage_obj)) find_named(usage_obj, "candidatesTokenCount") else NULL
+  total_tokens_raw      <- if (!is.null(usage_obj)) find_named(usage_obj, "totalTokenCount")      else NULL
+
+  prompt_tokens     <- as_num_scalar(prompt_tokens_raw)
+  completion_tokens <- as_num_scalar(completion_tokens_raw)
+  total_tokens      <- as_num_scalar(total_tokens_raw)
+
+  model_raw <- find_named(resp, "modelVersion")
+  model     <- as_chr_scalar(model_raw)
 
   tibble::tibble(
     custom_id         = custom_id,
@@ -82,12 +220,13 @@
     status_code       = 200L,
     result_type       = "succeeded",
     error_message     = NA_character_,
+    thoughts          = thoughts,
     content           = content,
     better_sample     = better_sample,
     better_id         = better_id,
-    prompt_tokens     = as.numeric(prompt_tokens),
-    completion_tokens = as.numeric(completion_tokens),
-    total_tokens      = as.numeric(total_tokens)
+    prompt_tokens     = prompt_tokens,
+    completion_tokens = completion_tokens,
+    total_tokens      = total_tokens
   )
 }
 
@@ -251,6 +390,8 @@ build_gemini_batch_requests <- function(
 
   tibble::tibble(
     custom_id = custom_ids,
+    ID1       = pairs$ID1,
+    ID2       = pairs$ID2,
     request   = out
   )
 }
@@ -588,30 +729,17 @@ gemini_download_batch_results <- function(
 
 #' Parse Gemini batch JSONL output into a tibble of pairwise results
 #'
-#' This function reads a JSONL file created by [gemini_download_batch_results()]
-#' and converts each line into a row that mirrors the structure used for live
-#' pairwise calls.
-#'
-#' Each line is expected to be a JSON object of the form:
-#'
-#'   {"custom_id": "<GEM_ID1_vs_ID2>",
-#'    "result": {
-#'      "type": "succeeded",
-#'      "response": { ... GenerateContentResponse ... }
-#'    }}
-#'
-#' or:
-#'
-#'   {"custom_id": "<GEM_ID1_vs_ID2>",
-#'    "result": {
-#'      "type": "errored",
-#'      "error": { ... }
-#'    }}
+#' This reads a JSONL file created by [gemini_download_batch_results()] and
+#' converts each line into a row that mirrors the structure used for live
+#' Gemini calls, including a `thoughts` column when the batch was run with
+#' `include_thoughts = TRUE`.
 #'
 #' @param results_path Path to the JSONL file produced by
 #'   [gemini_download_batch_results()].
 #' @param requests_tbl Tibble/data frame with at least columns `custom_id`,
-#'   `ID1`, and `ID2`, in the same order as the original requests.
+#'   `ID1`, `ID2`, and (optionally) `request`. If a `request` list-column is
+#'   present, it is used to detect whether `thinkingConfig.includeThoughts`
+#'   was enabled for that pair.
 #'
 #' @return A tibble with one row per request and columns:
 #'   * `custom_id`
@@ -621,6 +749,7 @@ gemini_download_batch_results <- function(
 #'   * `status_code`
 #'   * `result_type`
 #'   * `error_message`
+#'   * `thoughts`
 #'   * `content`
 #'   * `better_sample`
 #'   * `better_id`
@@ -657,6 +786,7 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
         status_code        = integer(0),
         result_type        = character(0),
         error_message      = character(0),
+        thoughts           = character(0),
         content            = character(0),
         better_sample      = character(0),
         better_id          = character(0),
@@ -672,112 +802,103 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     function(z) jsonlite::fromJSON(z, simplifyVector = FALSE)
   )
 
-  # Quick helper if %||% exists; otherwise define local
-  `%||%` <- get("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
+  # Safe %||% helper
+  `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
+  if (is.null(`%||%`)) {
+    `%||%` <- function(x, y) if (!is.null(x)) x else y
+  }
 
   # Build lookup from custom_id -> row index in requests_tbl
-  req_ids   <- as.character(requests_tbl$custom_id)
-  line_ids  <- vapply(objs, function(o) as.character(o$custom_id %||% NA_character_), character(1L))
-  matches   <- match(line_ids, req_ids)
+  req_ids  <- as.character(requests_tbl$custom_id)
+  line_ids <- vapply(
+    objs,
+    function(o) as.character(o$custom_id %||% NA_character_),
+    FUN.VALUE = character(1L)
+  )
+  matches <- match(line_ids, req_ids)
+
+  has_request_col <- "request" %in% names(requests_tbl)
 
   rows <- vector("list", length(objs))
 
   for (i in seq_along(objs)) {
-    obj      <- objs[[i]]
+    obj       <- objs[[i]]
     custom_id <- obj$custom_id %||% NA_character_
     result    <- obj$result %||% list()
-    result_ty <- result$type   %||% NA_character_
-    error_msg <- NA_character_
+    result_ty <- result$type %||% NA_character_
 
     idx <- matches[i]
     ID1 <- if (!is.na(idx)) as.character(requests_tbl$ID1[idx]) else NA_character_
     ID2 <- if (!is.na(idx)) as.character(requests_tbl$ID2[idx]) else NA_character_
 
-    # Defaults
-    model_name        <- NA_character_
-    object_type       <- NA_character_
-    status_code       <- NA_integer_
-    content           <- NA_character_
-    better_sample     <- NA_character_
-    better_id         <- NA_character_
-    prompt_tokens     <- NA_real_
-    completion_tokens <- NA_real_
-    total_tokens      <- NA_real_
+    # Default: assume thoughts not requested
+    include_thoughts <- FALSE
+    if (!is.na(idx) && has_request_col) {
+      req_obj <- requests_tbl$request[[idx]]
+      # generationConfig$thinkingConfig$includeThoughts
+      if (!is.null(req_obj$generationConfig) &&
+          !is.null(req_obj$generationConfig$thinkingConfig) &&
+          !is.null(req_obj$generationConfig$thinkingConfig$includeThoughts)) {
+        include_thoughts <- isTRUE(req_obj$generationConfig$thinkingConfig$includeThoughts)
+      }
+    }
 
     if (identical(result_ty, "succeeded")) {
       body <- result$response %||% list()
 
-      object_type <- "generateContent"
-      # Gemini returns modelVersion instead of model
-      model_name  <- body$modelVersion %||% NA_character_
-      status_code <- 200L
+      # Delegate all Gemini-specific parsing to the helper
+      row <- .parse_gemini_pair_response(
+        custom_id       = custom_id,
+        ID1             = ID1,
+        ID2             = ID2,
+        response        = body,
+        include_thoughts = include_thoughts
+      )
+      row$result_type <- result_ty
+      rows[[i]] <- row
 
-      # Extract content text from candidates[[1]]$content$parts[[*]]$text
-      candidates <- body$candidates %||% list()
-      if (length(candidates) > 0L) {
-        first   <- candidates[[1]]
-        content_list <- first$content %||% list()
-        if (!is.null(content_list$parts)) {
-          parts <- content_list$parts
-        } else {
-          parts <- content_list
-        }
-        collected <- character()
-        if (is.list(parts) && length(parts) > 0L) {
-          for (p in parts) {
-            if (!is.null(p$text)) {
-              collected <- c(collected, as.character(p$text %||% ""))
-            }
-          }
-        }
-        if (length(collected) > 0L) {
-          content <- paste(collected, collapse = "")
-        }
-      }
-
-      # Parse <BETTER_SAMPLE> tag
-      if (!is.na(content)) {
-        tag_prefix <- "<BETTER_SAMPLE>"
-        tag_suffix <- "</BETTER_SAMPLE>"
-        if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
-          better_sample <- "SAMPLE_1"
-        } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content, fixed = TRUE)) {
-          better_sample <- "SAMPLE_2"
-        }
-      }
-
-      if (!is.na(better_sample)) {
-        better_id <- if (better_sample == "SAMPLE_1") ID1 else ID2
-      }
-
-      # Usage metadata
-      usage <- body$usageMetadata %||% list()
-      prompt_tokens     <- usage$promptTokenCount     %||% NA_real_
-      completion_tokens <- usage$candidatesTokenCount %||% NA_real_
-      total_tokens      <- usage$totalTokenCount      %||% NA_real_
     } else if (identical(result_ty, "errored")) {
       err <- result$error %||% list()
-      # Try to build a reasonable message
-      msg_core <- err$message %||% NA_character_
-      error_msg <- msg_core
-    }
+      error_msg <- err$message %||% NA_character_
 
-    rows[[i]] <- tibble::tibble(
-      custom_id          = custom_id,
-      ID1                = ID1,
-      ID2                = ID2,
-      model              = model_name,
-      object_type        = object_type,
-      status_code        = status_code,
-      result_type        = result_ty,
-      error_message      = error_msg,
-      content            = content,
-      better_sample      = better_sample,
-      better_id          = better_id,
-      prompt_tokens      = as.numeric(prompt_tokens),
-      completion_tokens  = as.numeric(completion_tokens),
-      total_tokens       = as.numeric(total_tokens)
-    )
+      rows[[i]] <- tibble::tibble(
+        custom_id          = custom_id,
+        ID1                = ID1,
+        ID2                = ID2,
+        model              = NA_character_,
+        object_type        = "generateContent",
+        status_code        = NA_integer_,
+        result_type        = result_ty,
+        error_message      = error_msg,
+        thoughts           = NA_character_,
+        content            = NA_character_,
+        better_sample      = NA_character_,
+        better_id          = NA_character_,
+        prompt_tokens      = NA_real_,
+        completion_tokens  = NA_real_,
+        total_tokens       = NA_real_
+      )
+
+    } else {
+      # Unknown result type; still emit something so caller can inspect
+      rows[[i]] <- tibble::tibble(
+        custom_id          = custom_id,
+        ID1                = ID1,
+        ID2                = ID2,
+        model              = NA_character_,
+        object_type        = "generateContent",
+        status_code        = NA_integer_,
+        result_type        = result_ty,
+        error_message      = NA_character_,
+        thoughts           = NA_character_,
+        content            = NA_character_,
+        better_sample      = NA_character_,
+        better_id          = NA_character_,
+        prompt_tokens      = NA_real_,
+        completion_tokens  = NA_real_,
+        total_tokens       = NA_real_
+      )
+    }
   }
 
   dplyr::bind_rows(rows)
@@ -867,6 +988,8 @@ run_gemini_batch_pipeline <- function(
     requests = lapply(seq_len(nrow(req_tbl)), function(i) {
       list(
         custom_id = req_tbl$custom_id[i],
+        ID1       = req_tbl$ID1[i],    # <-- ADD THIS
+        ID2       = req_tbl$ID2[i],    # <-- ADD THIS
         request   = req_tbl$request[[i]]
       )
     })
