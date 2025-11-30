@@ -33,16 +33,16 @@
   stop(
     "No API key found for ", service, ".\n",
     "Please either:\n",
-    "  • Set the ", env_var, " environment variable, or\n",
-    "  • Supply `api_key` explicitly to the function you are calling.\n\n",
+    "  - Set the ", env_var, " environment variable, or\n",
+    "  - Supply `api_key` explicitly to the function you are calling.\n\n",
     "Common ways to set a key in R:\n",
     "  - For the current session only:\n",
-    "      Sys.setenv(", env_var, ' = \"YOUR_KEY_HERE\")\n',
+    "      Sys.setenv(", env_var, ' = "YOUR_KEY_HERE")\n',
     "  - Persistently (recommended):\n",
     "      usethis::edit_r_environ()\n",
     "    and add a line such as:\n",
-    "      ", env_var, ' = \"YOUR_KEY_HERE\"\n\n',
-    "After editing .Renviron, restart R (Session → Restart R in RStudio) ",
+    "      ", env_var, ' = "YOUR_KEY_HERE"\n\n',
+    "After editing .Renviron, restart R (Session -> Restart R in RStudio) ",
     "so the change takes effect.",
     call. = FALSE
   )
@@ -55,7 +55,7 @@
 #' `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`, and returns
 #' a small tibble summarising which keys are available.
 #'
-#' It does **not** print or return the key values themselves – only whether
+#' It does **not** print or return the key values themselves - only whether
 #' each key is present. This makes it safe to run in logs, scripts, and
 #' shared environments.
 #'
