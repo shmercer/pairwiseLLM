@@ -141,7 +141,11 @@ NULL
 #'   \item{object_type}{Anthropic object type (for example \code{"message"}).}
 #'   \item{status_code}{HTTP-style status code (200 if successful).}
 #'   \item{error_message}{Error message if something goes wrong; otherwise NA.}
-#'   \item{content}{Concatenated text from the assistant output.}
+#'   \item{thoughts}{Summarised thinking / reasoning text when
+#'     \code{reasoning = "enabled"} and the API returns thinking blocks;
+#'     otherwise \code{NA}.}
+#'   \item{content}{Concatenated text from the assistant output (excluding
+#'     thinking blocks).}
 #'   \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 #'   \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
 #'     otherwise NA.}
@@ -254,10 +258,8 @@ anthropic_compare_pair_live <- function(
   # Temperature defaults & validation
   # ------------------------------------------------------------------
   if (reasoning == "none") {
-    # Deterministic by default; user can override if they really want to.
     temperature <- dots$temperature %||% 0
   } else {
-    # reasoning == "enabled" -> Anthropic requires temperature == 1
     if (is.null(dots$temperature)) {
       temperature <- 1
     } else if (!identical(dots$temperature, 1)) {
@@ -283,17 +285,15 @@ anthropic_compare_pair_live <- function(
 
   thinking_budget <- NULL
   if (reasoning == "enabled") {
-    # User can optionally pass thinking_budget_tokens
     tb_user <- dots$thinking_budget_tokens
-
     default_budget <- 1024L
+
     if (is.null(tb_user)) {
       thinking_budget <- default_budget
     } else {
       thinking_budget <- as.integer(tb_user)
     }
 
-    # Enforce Anthropic constraints explicitly
     if (thinking_budget < 1024L) {
       stop(
         "`thinking_budget_tokens` must be at least 1024 when reasoning = 'enabled'. ",
@@ -378,6 +378,7 @@ anthropic_compare_pair_live <- function(
       object_type       = NA_character_,
       status_code       = status_code,
       error_message     = "Failed to parse response body as JSON.",
+      thoughts          = NA_character_,
       content           = NA_character_,
       better_sample     = NA_character_,
       better_id         = NA_character_,
@@ -403,20 +404,47 @@ anthropic_compare_pair_live <- function(
   object_type <- body$type  %||% NA_character_
   model_name  <- body$model %||% NA_character_
 
-  # Collect text content from assistant message blocks
-  content <- NA_character_
+  # ------------------------------------------------------------------
+  # Collect thinking + text content from assistant content blocks
+  # ------------------------------------------------------------------
+  thoughts <- NA_character_
+  content  <- NA_character_
+
   if (!is.null(body$content) && length(body$content) > 0L) {
-    collected <- character(0)
+    thought_chunks <- character(0)
+    text_chunks    <- character(0)
+
     for (blk in body$content) {
-      if (!is.null(blk$text)) {
-        collected <- c(collected, as.character(blk$text %||% ""))
+      blk_type <- blk$type %||% NULL
+
+      if (identical(blk_type, "thinking") && !is.null(blk$thinking)) {
+        # Summarized thinking text
+        thought_chunks <- c(thought_chunks, as.character(blk$thinking %||% ""))
+      } else if (identical(blk_type, "redacted_thinking") && !is.null(blk$data)) {
+        # Encrypted/redacted thinking; keep as-is but label so it's obvious
+        redacted_txt <- as.character(blk$data %||% "")
+        if (nzchar(redacted_txt)) {
+          thought_chunks <- c(
+            thought_chunks,
+            paste0("[REDACTED_THINKING]", redacted_txt)
+          )
+        }
+      } else if (identical(blk_type, "text") && !is.null(blk$text)) {
+        text_chunks <- c(text_chunks, as.character(blk$text %||% ""))
       }
     }
-    if (length(collected) > 0L) {
-      content <- paste(collected, collapse = "")
+
+    if (length(thought_chunks) > 0L) {
+      thoughts <- paste(thought_chunks, collapse = "")
+    }
+    if (length(text_chunks) > 0L) {
+      content <- paste(text_chunks, collapse = "")
     }
   }
 
+  # ------------------------------------------------------------------
+  # Better-sample extraction
+  # ------------------------------------------------------------------
   better_sample <- NA_character_
   if (!is.na(content)) {
     if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
@@ -452,6 +480,7 @@ anthropic_compare_pair_live <- function(
     object_type       = object_type,
     status_code       = status_code,
     error_message     = error_message,
+    thoughts          = thoughts,
     content           = content,
     better_sample     = better_sample,
     better_id         = better_id,
@@ -584,6 +613,7 @@ submit_anthropic_pairs_live <- function(
       object_type       = character(0),
       status_code       = integer(0),
       error_message     = character(0),
+      thoughts          = character(0),
       content           = character(0),
       better_sample     = character(0),
       better_id         = character(0),

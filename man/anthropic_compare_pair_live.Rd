@@ -102,7 +102,11 @@ A tibble with one row and columns:
 \item{object_type}{Anthropic object type (for example \code{"message"}).}
 \item{status_code}{HTTP-style status code (200 if successful).}
 \item{error_message}{Error message if something goes wrong; otherwise NA.}
-\item{content}{Concatenated text from the assistant output.}
+\item{thoughts}{Summarised thinking / reasoning text when
+\code{reasoning = "enabled"} and the API returns thinking blocks;
+otherwise \code{NA}.}
+\item{content}{Concatenated text from the assistant output (excluding
+thinking blocks).}
 \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
 otherwise NA.}
