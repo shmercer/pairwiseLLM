@@ -12,10 +12,10 @@ summary to the console describing which keys are set and how to
 configure missing ones.}
 }
 \value{
-A tibble (or data frame) with one row per backend and columns:
+A tibble (data frame) with one row per backend and columns:
 \describe{
-\item{backend}{Short backend identifier, e.g. \code{"openai"}, \code{"anthropic"}.}
-\item{service}{Human-readable service name, e.g. \code{"OpenAI"}.}
+\item{backend}{Short backend identifier, e.g. \code{"openai"}, \code{"anthropic"}, \code{"gemini"}.}
+\item{service}{Human-readable service name, e.g. \code{"OpenAI"}, \code{"Anthropic"}, \code{"Google Gemini"}.}
 \item{env_var}{Name of the environment variable that is checked.}
 \item{has_key}{Logical flag indicating whether the key is set and non-empty.}
 }
@@ -23,8 +23,8 @@ A tibble (or data frame) with one row per backend and columns:
 \description{
 This function inspects the current R session for configured API keys
 used by pairwiseLLM. It checks for known environment variables such as
-\code{OPENAI_API_KEY} and \code{ANTHROPIC_API_KEY} and returns a small tibble
-summarising which keys are available.
+\code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, and \code{GEMINI_API_KEY}, and returns
+a small tibble summarising which keys are available.
 }
 \details{
 It does \strong{not} print or return the key values themselves – only whether
@@ -32,13 +32,11 @@ each key is present. This makes it safe to run in logs, scripts, and
 shared environments.
 }
 \examples{
-# In an interactive session, you can quickly check which keys are configured:
 \dontrun{
+  # In an interactive session, quickly check which keys are configured:
   check_llm_api_keys()
-}
 
-# In non-interactive scripts, you can disable messages and just use the result:
-\dontrun{
+  # In non-interactive scripts, you can disable messages and just use the result:
   status <- check_llm_api_keys(verbose = FALSE)
   status
 }
