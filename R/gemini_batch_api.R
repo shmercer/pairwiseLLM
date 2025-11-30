@@ -1,9 +1,14 @@
 #' Internal: parse a Gemini GenerateContentResponse into the standard tibble row
 #'
-#' This version supports an `include_thoughts` flag so that, when Gemini was
-#' called with `thinkingConfig.includeThoughts = TRUE`, the first text part is
-#' treated as `thoughts` and remaining parts are concatenated into `content`,
-#' mirroring gemini_compare_pair_live().
+#' For batch responses, Gemini 3 Pro currently typically returns:
+#'   * `candidates[[1]]$content$parts[[1]]$text`             = final answer
+#'   * `candidates[[1]]$content$parts[[1]]$thoughtSignature` = opaque signature
+#'   * `usageMetadata$thoughtsTokenCount`                    = hidden reasoning tokens
+#'
+#' When `include_thoughts = TRUE` and >= 2 parts are present, we mirror the live
+#' behavior: first part = `thoughts`, remaining parts = `content`.
+#' When only one part is present, we treat it as `content` and leave `thoughts`
+#' as NA (batch isn't returning visible thoughts text).
 #'
 #' @keywords internal
 .parse_gemini_pair_response <- function(
@@ -13,47 +18,50 @@
     response,
     include_thoughts = FALSE
 ) {
-  # Safe %||% (use package helper if present, otherwise local fallback)
+  # Safe %||%
   `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
   if (is.null(`%||%`)) {
     `%||%` <- function(x, y) if (!is.null(x)) x else y
   }
 
-  # -------------------------------------------------------------------
-  # Normalise the response object a bit
-  # -------------------------------------------------------------------
   resp <- response
 
-  # Sometimes we might get an extra nesting: list(response = <actual>)
+  # Sometimes we see list(response = [ {candidates=...} ])
   if (!is.null(resp$response) && is.null(resp$candidates) && is.list(resp$response)) {
     resp <- resp$response
   }
+  # And that response can be a length-1 array
+  if (is.list(resp) && is.null(resp$candidates) && length(resp) == 1L &&
+      is.list(resp[[1]]) && !is.null(resp[[1]]$candidates)) {
+    resp <- resp[[1]]
+  }
 
-  # If we received an error-shaped object
+  # Error-shaped response
   if (!is.null(resp$error) && is.null(resp$candidates)) {
     return(tibble::tibble(
-      custom_id         = custom_id,
-      ID1               = ID1,
-      ID2               = ID2,
-      model             = NA_character_,
-      object_type       = "generateContent",
-      status_code       = 200L,
-      result_type       = "errored",
-      error_message     = resp$error$message %||% NA_character_,
-      thoughts          = NA_character_,
-      content           = NA_character_,
-      better_sample     = NA_character_,
-      better_id         = NA_character_,
-      prompt_tokens     = NA_real_,
-      completion_tokens = NA_real_,
-      total_tokens      = NA_real_
+      custom_id            = custom_id,
+      ID1                  = ID1,
+      ID2                  = ID2,
+      model                = NA_character_,
+      object_type          = "generateContent",
+      status_code          = 200L,
+      result_type          = "errored",
+      error_message        = resp$error$message %||% NA_character_,
+      thoughts             = NA_character_,
+      thought_signature    = NA_character_,
+      thoughts_token_count = NA_real_,
+      content              = NA_character_,
+      better_sample        = NA_character_,
+      better_id            = NA_character_,
+      prompt_tokens        = NA_real_,
+      completion_tokens    = NA_real_,
+      total_tokens         = NA_real_
     ))
   }
 
   # -------------------------------------------------------------------
   # Helpers
   # -------------------------------------------------------------------
-  # Get first candidate, robust to list/data.frame shapes
   get_first_candidate <- function(x) {
     cands <- x$candidates
     if (is.null(cands)) return(NULL)
@@ -73,11 +81,9 @@
     NULL
   }
 
-  # Normalise content$parts into a list of "part" objects
   get_parts_list <- function(content_obj) {
     if (is.null(content_obj)) return(list())
 
-    # content may be a data.frame with a "parts" column
     if (is.data.frame(content_obj)) {
       if ("parts" %in% names(content_obj)) {
         parts_obj <- content_obj$parts[[1]]
@@ -103,25 +109,31 @@
     }
   }
 
-  # Extract the text field from a "part"
   get_part_text <- function(p) {
     if (is.null(p)) return("")
-    # list-style part with $text
     if (is.list(p) && !is.data.frame(p) && !is.null(p$text)) {
       return(as.character(p$text %||% ""))
     }
-    # data.frame-style part with "text" column
     if (is.data.frame(p) && "text" %in% names(p)) {
       return(as.character(p$text[[1]] %||% ""))
     }
-    # bare character vector
     if (is.character(p)) {
       return(paste(p, collapse = ""))
     }
     ""
   }
 
-  # Generic recursive lookup for usage/model fields
+  get_part_thought_signature <- function(p) {
+    if (is.null(p)) return(NA_character_)
+    if (is.list(p) && !is.data.frame(p) && !is.null(p$thoughtSignature)) {
+      return(as.character(p$thoughtSignature %||% NA_character_))
+    }
+    if (is.data.frame(p) && "thoughtSignature" %in% names(p)) {
+      return(as.character(p$thoughtSignature[[1]] %||% NA_character_))
+    }
+    NA_character_
+  }
+
   find_named <- function(x, name) {
     if (!is.list(x)) return(NULL)
     if (!is.null(x[[name]])) return(x[[name]])
@@ -149,29 +161,32 @@
   }
 
   # -------------------------------------------------------------------
-  # Extract thoughts + content from first candidate, like gemini_live.R
+  # Extract thoughts + content
   # -------------------------------------------------------------------
   cand  <- get_first_candidate(resp)
   parts <- list()
-
   if (!is.null(cand) && !is.null(cand$content)) {
     parts <- get_parts_list(cand$content)
   }
 
-  thoughts <- NA_character_
-  content  <- NA_character_
+  thoughts          <- NA_character_
+  thought_signature <- NA_character_
+  content           <- NA_character_
 
   if (length(parts) > 0L) {
+    # First part may carry a thoughtSignature in batch mode
+    thought_signature <- get_part_thought_signature(parts[[1]])
+
     if (isTRUE(include_thoughts) && length(parts) >= 2L) {
-      # First part = thoughts, remaining parts = final content
-      t_text <- get_part_text(parts[[1]])
+      # Live-style: first part = thoughts, rest = content
+      t_text  <- get_part_text(parts[[1]])
       c_texts <- vapply(parts[-1], get_part_text, FUN.VALUE = character(1L))
       c_texts <- c_texts[nzchar(c_texts)]
 
       thoughts <- if (nzchar(t_text)) t_text else NA_character_
       content  <- if (length(c_texts)) paste(c_texts, collapse = "") else NA_character_
     } else {
-      # No visible thoughts: collapse all parts into content
+      # Default / batch-style: collapse everything into content
       c_texts <- vapply(parts, get_part_text, FUN.VALUE = character(1L))
       c_texts <- c_texts[nzchar(c_texts)]
       content <- if (length(c_texts)) paste(c_texts, collapse = "") else NA_character_
@@ -179,7 +194,7 @@
   }
 
   # -------------------------------------------------------------------
-  # Parse <BETTER_SAMPLE> tag from content
+  # Parse <BETTER_SAMPLE>
   # -------------------------------------------------------------------
   better_sample <- NA_character_
   if (!is.na(content)) {
@@ -196,37 +211,41 @@
   }
 
   # -------------------------------------------------------------------
-  # Token usage & model (recursive lookup)
+  # Usage + model
   # -------------------------------------------------------------------
   usage_obj <- find_named(resp, "usageMetadata")
 
-  prompt_tokens_raw     <- if (!is.null(usage_obj)) find_named(usage_obj, "promptTokenCount")     else NULL
-  completion_tokens_raw <- if (!is.null(usage_obj)) find_named(usage_obj, "candidatesTokenCount") else NULL
-  total_tokens_raw      <- if (!is.null(usage_obj)) find_named(usage_obj, "totalTokenCount")      else NULL
+  prompt_tokens_raw         <- if (!is.null(usage_obj)) find_named(usage_obj, "promptTokenCount")       else NULL
+  completion_tokens_raw     <- if (!is.null(usage_obj)) find_named(usage_obj, "candidatesTokenCount")   else NULL
+  total_tokens_raw          <- if (!is.null(usage_obj)) find_named(usage_obj, "totalTokenCount")        else NULL
+  thoughts_token_count_raw  <- if (!is.null(usage_obj)) find_named(usage_obj, "thoughtsTokenCount")     else NULL
 
-  prompt_tokens     <- as_num_scalar(prompt_tokens_raw)
-  completion_tokens <- as_num_scalar(completion_tokens_raw)
-  total_tokens      <- as_num_scalar(total_tokens_raw)
+  prompt_tokens        <- as_num_scalar(prompt_tokens_raw)
+  completion_tokens    <- as_num_scalar(completion_tokens_raw)
+  total_tokens         <- as_num_scalar(total_tokens_raw)
+  thoughts_token_count <- as_num_scalar(thoughts_token_count_raw)
 
   model_raw <- find_named(resp, "modelVersion")
   model     <- as_chr_scalar(model_raw)
 
   tibble::tibble(
-    custom_id         = custom_id,
-    ID1               = ID1,
-    ID2               = ID2,
-    model             = model,
-    object_type       = "generateContent",
-    status_code       = 200L,
-    result_type       = "succeeded",
-    error_message     = NA_character_,
-    thoughts          = thoughts,
-    content           = content,
-    better_sample     = better_sample,
-    better_id         = better_id,
-    prompt_tokens     = prompt_tokens,
-    completion_tokens = completion_tokens,
-    total_tokens      = total_tokens
+    custom_id            = custom_id,
+    ID1                  = ID1,
+    ID2                  = ID2,
+    model                = model,
+    object_type          = "generateContent",
+    status_code          = 200L,
+    result_type          = "succeeded",
+    error_message        = NA_character_,
+    thoughts             = thoughts,
+    thought_signature    = thought_signature,
+    thoughts_token_count = thoughts_token_count,
+    content              = content,
+    better_sample        = better_sample,
+    better_id            = better_id,
+    prompt_tokens        = prompt_tokens,
+    completion_tokens    = completion_tokens,
+    total_tokens         = total_tokens
   )
 }
 
@@ -742,20 +761,11 @@ gemini_download_batch_results <- function(
 #'   was enabled for that pair.
 #'
 #' @return A tibble with one row per request and columns:
-#'   * `custom_id`
-#'   * `ID1`, `ID2`
-#'   * `model`
-#'   * `object_type`
-#'   * `status_code`
-#'   * `result_type`
-#'   * `error_message`
-#'   * `thoughts`
-#'   * `content`
-#'   * `better_sample`
-#'   * `better_id`
-#'   * `prompt_tokens`
-#'   * `completion_tokens`
-#'   * `total_tokens`
+#'   * `custom_id`, `ID1`, `ID2`
+#'   * `model`, `object_type`, `status_code`, `result_type`, `error_message`
+#'   * `thoughts`, `thought_signature`, `thoughts_token_count`
+#'   * `content`, `better_sample`, `better_id`
+#'   * `prompt_tokens`, `completion_tokens`, `total_tokens`
 #' @export
 parse_gemini_batch_output <- function(results_path, requests_tbl) {
   if (!file.exists(results_path)) {
@@ -778,21 +788,23 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
   if (length(lines) == 0L) {
     return(
       tibble::tibble(
-        custom_id          = character(0),
-        ID1                = character(0),
-        ID2                = character(0),
-        model              = character(0),
-        object_type        = character(0),
-        status_code        = integer(0),
-        result_type        = character(0),
-        error_message      = character(0),
-        thoughts           = character(0),
-        content            = character(0),
-        better_sample      = character(0),
-        better_id          = character(0),
-        prompt_tokens      = numeric(0),
-        completion_tokens  = numeric(0),
-        total_tokens       = numeric(0)
+        custom_id            = character(0),
+        ID1                  = character(0),
+        ID2                  = character(0),
+        model                = character(0),
+        object_type          = character(0),
+        status_code          = integer(0),
+        result_type          = character(0),
+        error_message        = character(0),
+        thoughts             = character(0),
+        thought_signature    = character(0),
+        thoughts_token_count = numeric(0),
+        content              = character(0),
+        better_sample        = character(0),
+        better_id            = character(0),
+        prompt_tokens        = numeric(0),
+        completion_tokens    = numeric(0),
+        total_tokens         = numeric(0)
       )
     )
   }
@@ -802,13 +814,11 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     function(z) jsonlite::fromJSON(z, simplifyVector = FALSE)
   )
 
-  # Safe %||% helper
   `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
   if (is.null(`%||%`)) {
     `%||%` <- function(x, y) if (!is.null(x)) x else y
   }
 
-  # Build lookup from custom_id -> row index in requests_tbl
   req_ids  <- as.character(requests_tbl$custom_id)
   line_ids <- vapply(
     objs,
@@ -831,11 +841,10 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     ID1 <- if (!is.na(idx)) as.character(requests_tbl$ID1[idx]) else NA_character_
     ID2 <- if (!is.na(idx)) as.character(requests_tbl$ID2[idx]) else NA_character_
 
-    # Default: assume thoughts not requested
+    # Detect include_thoughts from original request, if available
     include_thoughts <- FALSE
     if (!is.na(idx) && has_request_col) {
       req_obj <- requests_tbl$request[[idx]]
-      # generationConfig$thinkingConfig$includeThoughts
       if (!is.null(req_obj$generationConfig) &&
           !is.null(req_obj$generationConfig$thinkingConfig) &&
           !is.null(req_obj$generationConfig$thinkingConfig$includeThoughts)) {
@@ -846,12 +855,11 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     if (identical(result_ty, "succeeded")) {
       body <- result$response %||% list()
 
-      # Delegate all Gemini-specific parsing to the helper
       row <- .parse_gemini_pair_response(
-        custom_id       = custom_id,
-        ID1             = ID1,
-        ID2             = ID2,
-        response        = body,
+        custom_id        = custom_id,
+        ID1              = ID1,
+        ID2              = ID2,
+        response         = body,
         include_thoughts = include_thoughts
       )
       row$result_type <- result_ty
@@ -862,41 +870,44 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
       error_msg <- err$message %||% NA_character_
 
       rows[[i]] <- tibble::tibble(
-        custom_id          = custom_id,
-        ID1                = ID1,
-        ID2                = ID2,
-        model              = NA_character_,
-        object_type        = "generateContent",
-        status_code        = NA_integer_,
-        result_type        = result_ty,
-        error_message      = error_msg,
-        thoughts           = NA_character_,
-        content            = NA_character_,
-        better_sample      = NA_character_,
-        better_id          = NA_character_,
-        prompt_tokens      = NA_real_,
-        completion_tokens  = NA_real_,
-        total_tokens       = NA_real_
+        custom_id            = custom_id,
+        ID1                  = ID1,
+        ID2                  = ID2,
+        model                = NA_character_,
+        object_type          = "generateContent",
+        status_code          = NA_integer_,
+        result_type          = result_ty,
+        error_message        = error_msg,
+        thoughts             = NA_character_,
+        thought_signature    = NA_character_,
+        thoughts_token_count = NA_real_,
+        content              = NA_character_,
+        better_sample        = NA_character_,
+        better_id            = NA_character_,
+        prompt_tokens        = NA_real_,
+        completion_tokens    = NA_real_,
+        total_tokens         = NA_real_
       )
 
     } else {
-      # Unknown result type; still emit something so caller can inspect
       rows[[i]] <- tibble::tibble(
-        custom_id          = custom_id,
-        ID1                = ID1,
-        ID2                = ID2,
-        model              = NA_character_,
-        object_type        = "generateContent",
-        status_code        = NA_integer_,
-        result_type        = result_ty,
-        error_message      = NA_character_,
-        thoughts           = NA_character_,
-        content            = NA_character_,
-        better_sample      = NA_character_,
-        better_id          = NA_character_,
-        prompt_tokens      = NA_real_,
-        completion_tokens  = NA_real_,
-        total_tokens       = NA_real_
+        custom_id            = custom_id,
+        ID1                  = ID1,
+        ID2                  = ID2,
+        model                = NA_character_,
+        object_type          = "generateContent",
+        status_code          = NA_integer_,
+        result_type          = result_ty,
+        error_message        = NA_character_,
+        thoughts             = NA_character_,
+        thought_signature    = NA_character_,
+        thoughts_token_count = NA_real_,
+        content              = NA_character_,
+        better_sample        = NA_character_,
+        better_id            = NA_character_,
+        prompt_tokens        = NA_real_,
+        completion_tokens    = NA_real_,
+        total_tokens         = NA_real_
       )
     }
   }
@@ -936,10 +947,15 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' @param api_key Optional Gemini API key.
 #' @param api_version API version string.
 #' @param verbose Logical; if \code{TRUE}, prints progress messages.
+#' @param include_thoughts Logical; if `TRUE`, sets
+#'   `thinkingConfig.includeThoughts = TRUE` in each request, mirroring
+#'   [gemini_compare_pair_live()]. Parsed results will include a `thoughts`
+#'   column when visible thoughts are returned by the API (currently batch
+#'   typically only exposes `thoughtSignature` + `thoughtsTokenCount`).
 #' @param ... Additional arguments forwarded to
 #'   \code{\link{build_gemini_batch_requests}} (for example
 #'   \code{temperature}, \code{top_p}, \code{top_k},
-#'   \code{max_output_tokens}, \code{include_thoughts}).
+#'   \code{max_output_tokens}).
 #'
 #' @return A list with elements:
 #' \describe{
@@ -969,6 +985,7 @@ run_gemini_batch_pipeline <- function(
     api_key           = Sys.getenv("GEMINI_API_KEY"),
     api_version       = "v1beta",
     verbose           = TRUE,
+    include_thoughts  = FALSE,
     ...
 ) {
   thinking_level <- match.arg(thinking_level)
@@ -980,6 +997,7 @@ run_gemini_batch_pipeline <- function(
     trait_description = trait_description,
     prompt_template   = prompt_template,
     thinking_level    = thinking_level,
+    include_thoughts  = include_thoughts,
     ...
   )
 

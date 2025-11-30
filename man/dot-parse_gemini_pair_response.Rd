@@ -4,9 +4,26 @@
 \alias{.parse_gemini_pair_response}
 \title{Internal: parse a Gemini GenerateContentResponse into the standard tibble row}
 \usage{
-.parse_gemini_pair_response(custom_id, ID1, ID2, response)
+.parse_gemini_pair_response(
+  custom_id,
+  ID1,
+  ID2,
+  response,
+  include_thoughts = FALSE
+)
 }
 \description{
-Internal: parse a Gemini GenerateContentResponse into the standard tibble row
+For batch responses, Gemini 3 Pro currently typically returns:
+\itemize{
+\item \code{candidates[[1]]$content$parts[[1]]$text}             = final answer
+\item \code{candidates[[1]]$content$parts[[1]]$thoughtSignature} = opaque signature
+\item \code{usageMetadata$thoughtsTokenCount}                    = hidden reasoning tokens
+}
+}
+\details{
+When \code{include_thoughts = TRUE} and >= 2 parts are present, we mirror the live
+behavior: first part = \code{thoughts}, remaining parts = \code{content}.
+When only one part is present, we treat it as \code{content} and leave \code{thoughts}
+as NA (batch isn't returning visible thoughts text).
 }
 \keyword{internal}

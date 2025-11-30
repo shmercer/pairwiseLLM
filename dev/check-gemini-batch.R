@@ -49,7 +49,8 @@ pipeline <- run_gemini_batch_pipeline(
   timeout_seconds   = 600,
   api_key           = key,
   api_version       = "v1beta",
-  verbose           = TRUE
+  verbose           = TRUE,
+  include_thoughts = TRUE
 )
 
 str(pipeline$batch)

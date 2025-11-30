@@ -19,6 +19,7 @@ run_gemini_batch_pipeline(
   api_key = Sys.getenv("GEMINI_API_KEY"),
   api_version = "v1beta",
   verbose = TRUE,
+  include_thoughts = FALSE,
   ...
 )
 }
@@ -54,10 +55,16 @@ file.}
 
 \item{verbose}{Logical; if \code{TRUE}, prints progress messages.}
 
+\item{include_thoughts}{Logical; if \code{TRUE}, sets
+\code{thinkingConfig.includeThoughts = TRUE} in each request, mirroring
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. Parsed results will include a \code{thoughts}
+column when visible thoughts are returned by the API (currently batch
+typically only exposes \code{thoughtSignature} + \code{thoughtsTokenCount}).}
+
 \item{...}{Additional arguments forwarded to
 \code{\link{build_gemini_batch_requests}} (for example
 \code{temperature}, \code{top_p}, \code{top_k},
-\code{max_output_tokens}, \code{include_thoughts}).}
+\code{max_output_tokens}).}
 }
 \value{
 A list with elements:

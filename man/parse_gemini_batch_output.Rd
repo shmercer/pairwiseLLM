@@ -11,45 +11,23 @@ parse_gemini_batch_output(results_path, requests_tbl)
 \code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}}.}
 
 \item{requests_tbl}{Tibble/data frame with at least columns \code{custom_id},
-\code{ID1}, and \code{ID2}, in the same order as the original requests.}
+\code{ID1}, \code{ID2}, and (optionally) \code{request}. If a \code{request} list-column is
+present, it is used to detect whether \code{thinkingConfig.includeThoughts}
+was enabled for that pair.}
 }
 \value{
 A tibble with one row per request and columns:
 \itemize{
-\item \code{custom_id}
-\item \code{ID1}, \code{ID2}
-\item \code{model}
-\item \code{object_type}
-\item \code{status_code}
-\item \code{result_type}
-\item \code{error_message}
-\item \code{content}
-\item \code{better_sample}
-\item \code{better_id}
-\item \code{prompt_tokens}
-\item \code{completion_tokens}
-\item \code{total_tokens}
+\item \code{custom_id}, \code{ID1}, \code{ID2}
+\item \code{model}, \code{object_type}, \code{status_code}, \code{result_type}, \code{error_message}
+\item \code{thoughts}, \code{thought_signature}, \code{thoughts_token_count}
+\item \code{content}, \code{better_sample}, \code{better_id}
+\item \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens}
 }
 }
 \description{
-This function reads a JSONL file created by \code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}}
-and converts each line into a row that mirrors the structure used for live
-pairwise calls.
-}
-\details{
-Each line is expected to be a JSON object of the form:
-
-{"custom_id": "<GEM_ID1_vs_ID2>",
-"result": {
-"type": "succeeded",
-"response": { ... GenerateContentResponse ... }
-}}
-
-or:
-
-{"custom_id": "<GEM_ID1_vs_ID2>",
-"result": {
-"type": "errored",
-"error": { ... }
-}}
+This reads a JSONL file created by \code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}} and
+converts each line into a row that mirrors the structure used for live
+Gemini calls, including a \code{thoughts} column when the batch was run with
+\code{include_thoughts = TRUE}.
 }
