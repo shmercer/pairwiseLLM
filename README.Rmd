@@ -349,4 +349,4 @@ A formal `CITATION` file will be added prior to the first CRAN release.
 
 In the meantime, if you use `pairwiseLLM` in published work, you can cite it as:
 
-> Mercer, S. (2025). *pairwiseLLM: Pairwise comparisons of writing quality with LLMs* (R package). GitHub: <https://github.com/shmercer/pairwiseLLM>
+> Mercer, S. H. (2025). *pairwiseLLM: Pairwise comparisons of writing quality with LLMs* (R package). GitHub: <https://github.com/shmercer/pairwiseLLM>
