@@ -10,8 +10,6 @@ coverage](https://codecov.io/gh/shmercer/pairwiseLLM/branch/main/graph/badge.svg
 status](https://www.r-pkg.org/badges/version/pairwiseLLM)](https://CRAN.R-project.org/package=pairwiseLLM)
 <!-- badges: end -->
 
-# pairwiseLLM: Pairwise comparisons of writing quality with LLMs
-
 `pairwiseLLM` is an R package for performing **pairwise comparisons of
 writing quality** using large language models (LLMs).
 

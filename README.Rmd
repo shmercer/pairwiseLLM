@@ -20,8 +20,6 @@ knitr::opts_chunk$set(
 )
 ```
 
-# pairwiseLLM: Pairwise comparisons of writing quality with LLMs
-
 `pairwiseLLM` is an R package for performing **pairwise comparisons of writing quality** using large language models (LLMs).
 
 It provides a unified interface for comparing writing samples across OpenAI, Anthropic, Gemini, and (planned) local models via **Ollama**, with support for both **live** and **batch** pipelines.
