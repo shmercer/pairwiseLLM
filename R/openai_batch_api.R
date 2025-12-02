@@ -296,33 +296,37 @@ openai_poll_batch_until_complete <- function(
 
 #' Run a full OpenAI batch pipeline for pairwise comparisons
 #'
-#' This helper wires together the existing pieces:
-#' - [build_openai_batch_requests()]
-#' - [write_openai_batch_file()]
-#' - [openai_upload_batch_file()]
-#' - [openai_create_batch()]
-#' - optionally [openai_poll_batch_until_complete()]
-#' - optionally [openai_download_batch_output()]
-#' - optionally [parse_openai_batch_output()]
+#' This function orchestrates a complete OpenAI Batch API workflow for
+#' pairwise LLM comparisons, wrapping:
 #'
-#' It is a convenience wrapper around these smaller functions and is intended
-#' for end-to-end batch runs on a set of pairwise comparisons. For more control
-#' (or testing), you can call the components directly.
+#' \itemize{
+#'   \item \code{\link{build_openai_batch_requests}}
+#'   \item \code{\link{write_openai_batch_file}}
+#'   \item \code{\link{openai_upload_batch_file}}
+#'   \item \code{\link{openai_create_batch}}
+#'   \item optionally \code{\link{openai_poll_batch_until_complete}}
+#'   \item optionally \code{\link{openai_download_batch_output}}
+#'   \item optionally \code{\link{parse_openai_batch_output}}
+#' }
 #'
-#' @param pairs Tibble of pairs with at least `ID1`, `text1`, `ID2`, `text2`.
-#'   Typically produced by [make_pairs()], [sample_pairs()], and
-#'   [randomize_pair_order()].
-#' @param model OpenAI model name (e.g. `"gpt-4.1"`, `"gpt-5.1"`).
-#' @param trait_name Trait name to pass to [build_openai_batch_requests()].
-#' @param trait_description Trait description to pass to
-#'   [build_openai_batch_requests()].
+#' The function provides an end-to-end interface for preparing template-based
+#' prompts, constructing JSONL batch requests, submitting them to OpenAI,
+#' optionally polling for completion, and parsing the results into a normalized
+#' tibble.
+#'
+#' If \code{include_thoughts = TRUE} and \code{endpoint = "responses"}, the
+#' batch requests automatically enable OpenAI reasoning summaries (when
+#' supported by the model). These are parsed into a \code{thoughts} column by
+#' \code{\link{parse_openai_batch_output}}. This is typically used with
+#' GPT-5.1 models where reasoning is enabled.
+#'
+#' @param pairs Tibble of pairwise comparisons containing columns
+#'   \code{ID1}, \code{text1}, \code{ID2}, and \code{text2}.
+#' @param model OpenAI model name (e.g. \code{"gpt-4.1"}, \code{"gpt-5.1"}).
+#' @param trait_name Trait name to interpolate into the prompt template.
+#' @param trait_description Full rubric text for the trait.
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
-#' @param include_thoughts Logical; if `TRUE` and using `endpoint = "responses"`,
-#'   requests reasoning-style summaries to populate the `thoughts` column in the
-#'   parsed output.
-#' @param include_raw Logical; if `TRUE`, attaches the raw model response as a
-#'   list-column `raw_response` in the parsed results.
 #' @param endpoint One of `"chat.completions"` or `"responses"`. This is passed
 #'   to [build_openai_batch_requests()]. The underlying Batch API endpoint is
 #'   derived automatically.
@@ -331,65 +335,32 @@ openai_poll_batch_until_complete <- function(
 #' @param batch_output_path Path to write the batch output `.jsonl` file if
 #'   `poll = TRUE`. Defaults to a temporary file.
 #' @param poll Logical; if `TRUE`, the function will poll the batch until it
-#'   reaches a terminal status using [openai_poll_batch_until_complete()] and
-#'   then download and parse the output. If `FALSE`, it stops after creating
-#'   the batch and returns without polling or parsing.
-#' @param interval_seconds Polling interval in seconds (used when `poll = TRUE`).
-#' @param timeout_seconds Maximum total time in seconds for polling before
-#'   giving up (used when `poll = TRUE`).
-#' @param max_attempts Maximum number of polling attempts (primarily useful for
-#'   testing).
+#'   reaches a terminal status and then download and parse the output. If
+#'   `FALSE`, it stops after creating the batch and returns without polling or
+#'   parsing.
+#' @param interval_seconds Polling interval in seconds.
+#' @param timeout_seconds Maximum total polling time in seconds.
+#' @param max_attempts Maximum number of polling attempts.
 #' @param metadata Optional named list of metadata key–value pairs to pass to
 #'   [openai_create_batch()].
-#' @param api_key Optional OpenAI API key. Defaults to
-#'   `Sys.getenv("OPENAI_API_KEY")`.
+#' @param api_key Optional OpenAI API key.
+#' @param include_thoughts Logical; if `TRUE` and using `endpoint = "responses"`,
+#'   requests reasoning-style summaries so that a `thoughts` column can be
+#'   populated by [parse_openai_batch_output()].
+#' @param include_raw Logical; if `TRUE`, attaches the raw model response as a
+#'   list-column `raw_response` in the parsed results (when supported).
 #' @param ... Additional arguments passed through to
 #'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
 #'   `reasoning`.
 #'
-#' @return A list with elements:
-#' * `batch_input_path`  – path to the input `.jsonl` file.
-#' * `batch_output_path` – path to the output `.jsonl` file (or `NULL` if
-#'   `poll = FALSE`).
-#' * `file`              – File object returned by [openai_upload_batch_file()].
-#' * `batch`             – Batch object; if `poll = TRUE`, this is the final
-#'   batch after polling, otherwise the initial batch returned by
-#'   [openai_create_batch()].
-#' * `results`           – Parsed tibble from [parse_openai_batch_output()] if
-#'   `poll = TRUE`, otherwise `NULL`.
-#'
-#' @examples
-#' \dontrun{
-#' # Requires OPENAI_API_KEY and will incur API cost.
-#'
-#' library(pairwiseLLM)
-#' library(dplyr)
-#'
-#' data("example_writing_samples")
-#'
-#' # Use a small subset of pairs for testing
-#' pairs <- example_writing_samples |>
-#'   make_pairs() |>
-#'   sample_pairs(n_pairs = 5, seed = 123) |>
-#'   randomize_pair_order(seed = 456)
-#'
-#' td   <- trait_description("overall_quality")
-#' tmpl <- set_prompt_template()
-#'
-#' pipeline <- run_openai_batch_pipeline(
-#'   pairs             = pairs,
-#'   model             = "gpt-4.1",
-#'   trait_name        = td$name,
-#'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   endpoint          = "chat.completions",
-#'   interval_seconds  = 10,
-#'   timeout_seconds   = 3600
-#' )
-#'
-#' pipeline$batch$status
-#' pipeline$results
-#' }
+#' @return A list with components:
+#'   \describe{
+#'     \item{\code{batch_input_path}}{Path to the JSONL input file.}
+#'     \item{\code{batch_output_path}}{Output file path, or \code{NULL}.}
+#'     \item{\code{file}}{OpenAI file object returned by the upload step.}
+#'     \item{\code{batch}}{Batch object (initial or final, depending on \code{poll}).}
+#'     \item{\code{results}}{Parsed results tibble, or \code{NULL}.}
+#'   }
 #'
 #' @export
 run_openai_batch_pipeline <- function(
@@ -397,23 +368,22 @@ run_openai_batch_pipeline <- function(
     model,
     trait_name,
     trait_description,
-    prompt_template = set_prompt_template(),
-    include_thoughts = FALSE,
-    include_raw      = FALSE,
-    endpoint = c("chat.completions", "responses"),
-    batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
+    prompt_template   = set_prompt_template(),
+    endpoint          = c("chat.completions", "responses"),
+    batch_input_path  = tempfile("openai_batch_input_",  fileext = ".jsonl"),
     batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
-    poll = TRUE,
-    interval_seconds = 5,
-    timeout_seconds = 600,
-    max_attempts = Inf,
-    metadata = NULL,
-    api_key = Sys.getenv("OPENAI_API_KEY"),
+    poll              = TRUE,
+    interval_seconds  = 5,
+    timeout_seconds   = 600,
+    max_attempts      = Inf,
+    metadata          = NULL,
+    api_key           = Sys.getenv("OPENAI_API_KEY"),
+    include_thoughts  = FALSE,
+    include_raw       = FALSE,
     ...
 ) {
   endpoint <- match.arg(endpoint)
 
-  # Endpoint for the Batch API expects the full path
   batch_api_endpoint <- switch(
     endpoint,
     "chat.completions" = "/v1/chat/completions",

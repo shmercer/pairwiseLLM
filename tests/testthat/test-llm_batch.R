@@ -45,8 +45,6 @@ test_that("llm_submit_pairs_batch validates pairs and model", {
 })
 
 test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", {
-  ns <- asNamespace("pairwiseLLM")
-
   pairs <- tibble::tibble(
     ID1   = c("S01", "S02"),
     text1 = c("Text 1a", "Text 2a"),
@@ -62,10 +60,17 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
   gemini_calls    <- list()
 
   fake_batch_return <- function(backend_name) {
+    input_path  <- tempfile(pattern = paste0("input_", backend_name, "_"),  fileext = ".jsonl")
+    output_path <- tempfile(pattern = paste0("output_", backend_name, "_"), fileext = ".jsonl")
+
+    # Create the files so file.exists() expectations pass
+    file.create(input_path)
+    file.create(output_path)
+
     list(
       backend           = backend_name,
-      batch_input_path  = tempfile(pattern = paste0("input_", backend_name, "_"), fileext = ".jsonl"),
-      batch_output_path = tempfile(pattern = paste0("output_", backend_name, "_"), fileext = ".jsonl"),
+      batch_input_path  = input_path,
+      batch_output_path = output_path,
       batch             = list(id = paste0("batch_", backend_name)),
       results           = tibble::tibble(
         custom_id         = "BATCH_S01_vs_S02",
@@ -86,10 +91,25 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
     )
   }
 
-  testthat::local_mocked_bindings(
+  testthat::with_mocked_bindings(
     run_openai_batch_pipeline = function(
-    pairs, model, trait_name, trait_description, prompt_template,
-    include_thoughts, include_raw, ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template,
+    endpoint          = c("chat.completions", "responses"),
+    batch_input_path  = tempfile("openai_batch_input_",  fileext = ".jsonl"),
+    batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+    poll              = TRUE,
+    interval_seconds  = 5,
+    timeout_seconds   = 600,
+    max_attempts      = Inf,
+    metadata          = NULL,
+    api_key           = Sys.getenv("OPENAI_API_KEY"),
+    include_thoughts  = FALSE,
+    include_raw       = FALSE,
+    ...
     ) {
       openai_calls <<- append(openai_calls, list(
         list(
@@ -103,8 +123,14 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
       fake_batch_return("openai")
     },
     run_anthropic_batch_pipeline = function(
-    pairs, model, trait_name, trait_description, prompt_template,
-    include_thoughts, include_raw, ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template,
+    include_thoughts  = FALSE,
+    include_raw       = FALSE,
+    ...
     ) {
       anthropic_calls <<- append(anthropic_calls, list(
         list(
@@ -118,8 +144,14 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
       fake_batch_return("anthropic")
     },
     run_gemini_batch_pipeline = function(
-    pairs, model, trait_name, trait_description, prompt_template,
-    include_thoughts, include_raw, ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template,
+    include_thoughts  = FALSE,
+    include_raw       = FALSE,
+    ...
     ) {
       gemini_calls <<- append(gemini_calls, list(
         list(
@@ -132,58 +164,58 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
       ))
       fake_batch_return("gemini")
     },
-    .env = ns
+    {
+      # OpenAI
+      batch_openai <- llm_submit_pairs_batch(
+        pairs             = pairs,
+        backend           = "openai",
+        model             = "gpt-4o-mini",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        include_thoughts  = FALSE,
+        include_raw       = TRUE
+      )
+
+      expect_s3_class(batch_openai, "pairwiseLLM_batch")
+      expect_equal(batch_openai$backend, "openai")
+      expect_equal(length(openai_calls), 1L)
+      expect_true(file.exists(batch_openai$batch_input_path))
+      expect_true(file.exists(batch_openai$batch_output_path))
+
+      # Anthropic
+      batch_anthropic <- llm_submit_pairs_batch(
+        pairs             = pairs,
+        backend           = "anthropic",
+        model             = "claude-3-5-sonnet-latest",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        include_thoughts  = TRUE,
+        include_raw       = FALSE
+      )
+
+      expect_s3_class(batch_anthropic, "pairwiseLLM_batch")
+      expect_equal(batch_anthropic$backend, "anthropic")
+      expect_equal(length(anthropic_calls), 1L)
+
+      # Gemini
+      batch_gemini <- llm_submit_pairs_batch(
+        pairs             = pairs,
+        backend           = "gemini",
+        model             = "gemini-3-pro-preview",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        include_thoughts  = TRUE,
+        include_raw       = FALSE
+      )
+
+      expect_s3_class(batch_gemini, "pairwiseLLM_batch")
+      expect_equal(batch_gemini$backend, "gemini")
+      expect_equal(length(gemini_calls), 1L)
+    }
   )
-
-  # OpenAI
-  batch_openai <- llm_submit_pairs_batch(
-    pairs             = pairs,
-    backend           = "openai",
-    model             = "gpt-4o-mini",
-    trait_name        = td$name,
-    trait_description = td$description,
-    prompt_template   = tmpl,
-    include_thoughts  = FALSE,
-    include_raw       = TRUE
-  )
-
-  expect_s3_class(batch_openai, "pairwiseLLM_batch")
-  expect_equal(batch_openai$backend, "openai")
-  expect_equal(length(openai_calls), 1L)
-  expect_true(file.exists(batch_openai$batch_input_path))
-  expect_true(file.exists(batch_openai$batch_output_path))
-
-  # Anthropic
-  batch_anthropic <- llm_submit_pairs_batch(
-    pairs             = pairs,
-    backend           = "anthropic",
-    model             = "claude-3-5-sonnet-latest",
-    trait_name        = td$name,
-    trait_description = td$description,
-    prompt_template   = tmpl,
-    include_thoughts  = TRUE,
-    include_raw       = FALSE
-  )
-
-  expect_s3_class(batch_anthropic, "pairwiseLLM_batch")
-  expect_equal(batch_anthropic$backend, "anthropic")
-  expect_equal(length(anthropic_calls), 1L)
-
-  # Gemini
-  batch_gemini <- llm_submit_pairs_batch(
-    pairs             = pairs,
-    backend           = "gemini",
-    model             = "gemini-3-pro-preview",
-    trait_name        = td$name,
-    trait_description = td$description,
-    prompt_template   = tmpl,
-    include_thoughts  = TRUE,
-    include_raw       = FALSE
-  )
-
-  expect_s3_class(batch_gemini, "pairwiseLLM_batch")
-  expect_equal(batch_gemini$backend, "gemini")
-  expect_equal(length(gemini_calls), 1L)
 })
 
 test_that("llm_download_batch_results extracts results tibble", {
