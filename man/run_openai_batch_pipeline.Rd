@@ -10,7 +10,9 @@ run_openai_batch_pipeline(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  endpoint = c("chat.completions", "responses"),
+  include_thoughts = FALSE,
+  include_raw = FALSE,
+  endpoint = NULL,
   batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
   batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
   poll = TRUE,
@@ -19,27 +21,34 @@ run_openai_batch_pipeline(
   max_attempts = Inf,
   metadata = NULL,
   api_key = Sys.getenv("OPENAI_API_KEY"),
-  include_thoughts = FALSE,
-  include_raw = FALSE,
   ...
 )
 }
 \arguments{
-\item{pairs}{Tibble of pairwise comparisons containing columns
-\code{ID1}, \code{text1}, \code{ID2}, and \code{text2}.}
+\item{pairs}{Tibble of pairs with at least \code{ID1}, \code{text1}, \code{ID2}, \code{text2}.
+Typically produced by \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=sample_pairs]{sample_pairs()}}, and
+\code{\link[=randomize_pair_order]{randomize_pair_order()}}.}
 
 \item{model}{OpenAI model name (e.g. \code{"gpt-4.1"}, \code{"gpt-5.1"}).}
 
-\item{trait_name}{Trait name to interpolate into the prompt template.}
+\item{trait_name}{Trait name to pass to \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}.}
 
-\item{trait_description}{Full rubric text for the trait.}
+\item{trait_description}{Trait description to pass to
+\code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}.}
 
 \item{prompt_template}{Prompt template string, typically from
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
-\item{endpoint}{One of \code{"chat.completions"} or \code{"responses"}. This is passed
-to \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}. The underlying Batch API endpoint is
-derived automatically.}
+\item{include_thoughts}{Logical; if \code{TRUE} and using \code{endpoint = "responses"},
+requests reasoning-style summaries to populate the \code{thoughts} column in the
+parsed output. When \code{endpoint} is not supplied, \code{include_thoughts = TRUE}
+causes the \code{responses} endpoint to be selected automatically.}
+
+\item{include_raw}{Logical; if \code{TRUE}, attaches the raw model response as a
+list-column \code{raw_response} in the parsed results.}
+
+\item{endpoint}{One of \code{"chat.completions"} or \code{"responses"}. If \code{NULL} (or
+omitted), it is chosen automatically as described above.}
 
 \item{batch_input_path}{Path to write the batch input \code{.jsonl} file. Defaults
 to a temporary file.}
@@ -48,65 +57,111 @@ to a temporary file.}
 \code{poll = TRUE}. Defaults to a temporary file.}
 
 \item{poll}{Logical; if \code{TRUE}, the function will poll the batch until it
-reaches a terminal status and then download and parse the output. If
-\code{FALSE}, it stops after creating the batch and returns without polling or
-parsing.}
+reaches a terminal status using \code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}} and
+then download and parse the output. If \code{FALSE}, it stops after creating
+the batch and returns without polling or parsing.}
 
-\item{interval_seconds}{Polling interval in seconds.}
+\item{interval_seconds}{Polling interval in seconds (used when \code{poll = TRUE}).}
 
-\item{timeout_seconds}{Maximum total polling time in seconds.}
+\item{timeout_seconds}{Maximum total time in seconds for polling before
+giving up (used when \code{poll = TRUE}).}
 
-\item{max_attempts}{Maximum number of polling attempts.}
+\item{max_attempts}{Maximum number of polling attempts (primarily useful for
+testing).}
 
 \item{metadata}{Optional named list of metadata key–value pairs to pass to
 \code{\link[=openai_create_batch]{openai_create_batch()}}.}
 
-\item{api_key}{Optional OpenAI API key.}
-
-\item{include_thoughts}{Logical; if \code{TRUE} and using \code{endpoint = "responses"},
-requests reasoning-style summaries so that a \code{thoughts} column can be
-populated by \code{\link[=parse_openai_batch_output]{parse_openai_batch_output()}}.}
-
-\item{include_raw}{Logical; if \code{TRUE}, attaches the raw model response as a
-list-column \code{raw_response} in the parsed results (when supported).}
+\item{api_key}{Optional OpenAI API key. Defaults to
+\code{Sys.getenv("OPENAI_API_KEY")}.}
 
 \item{...}{Additional arguments passed through to
 \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}, e.g. \code{temperature}, \code{top_p}, \code{logprobs},
 \code{reasoning}.}
 }
 \value{
-A list with components:
-\describe{
-\item{\code{batch_input_path}}{Path to the JSONL input file.}
-\item{\code{batch_output_path}}{Output file path, or \code{NULL}.}
-\item{\code{file}}{OpenAI file object returned by the upload step.}
-\item{\code{batch}}{Batch object (initial or final, depending on \code{poll}).}
-\item{\code{results}}{Parsed results tibble, or \code{NULL}.}
+A list with elements:
+\itemize{
+\item \code{batch_input_path}  – path to the input \code{.jsonl} file.
+\item \code{batch_output_path} – path to the output \code{.jsonl} file (or \code{NULL} if
+\code{poll = FALSE}).
+\item \code{file}              – File object returned by \code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}}.
+\item \code{batch}             – Batch object; if \code{poll = TRUE}, this is the final
+batch after polling, otherwise the initial batch returned by
+\code{\link[=openai_create_batch]{openai_create_batch()}}.
+\item \code{results}           – Parsed tibble from \code{\link[=parse_openai_batch_output]{parse_openai_batch_output()}} if
+\code{poll = TRUE}, otherwise \code{NULL}.
 }
 }
 \description{
-This function orchestrates a complete OpenAI Batch API workflow for
-pairwise LLM comparisons, wrapping:
+This helper wires together the existing pieces:
+\itemize{
+\item \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}
+\item \code{\link[=write_openai_batch_file]{write_openai_batch_file()}}
+\item \code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}}
+\item \code{\link[=openai_create_batch]{openai_create_batch()}}
+\item optionally \code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}}
+\item optionally \code{\link[=openai_download_batch_output]{openai_download_batch_output()}}
+\item optionally \code{\link[=parse_openai_batch_output]{parse_openai_batch_output()}}
+}
 }
 \details{
+It is a convenience wrapper around these smaller functions and is intended
+for end-to-end batch runs on a set of pairwise comparisons. For more control
+(or testing), you can call the components directly.
+
+When \code{endpoint} is not specified, it is chosen automatically:
 \itemize{
-\item \code{\link{build_openai_batch_requests}}
-\item \code{\link{write_openai_batch_file}}
-\item \code{\link{openai_upload_batch_file}}
-\item \code{\link{openai_create_batch}}
-\item optionally \code{\link{openai_poll_batch_until_complete}}
-\item optionally \code{\link{openai_download_batch_output}}
-\item optionally \code{\link{parse_openai_batch_output}}
+\item if \code{include_thoughts = TRUE}, the \code{"responses"} endpoint
+is used and, for \code{"gpt-5.1"}, a default reasoning effort of
+\code{"low"} is applied (unless overridden via \code{reasoning}).
+\item otherwise, \code{"chat.completions"} is used.
+}
+}
+\examples{
+\dontrun{
+# Requires OPENAI_API_KEY and network access.
+library(pairwiseLLM)
+
+data("example_writing_samples", package = "pairwiseLLM")
+
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 5, seed = 123) |>
+  randomize_pair_order(seed = 456)
+
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# 1) Standard chat.completions batch (no thoughts)
+pipeline_chat <- run_openai_batch_pipeline(
+  pairs             = pairs,
+  model             = "gpt-4.1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  endpoint          = "chat.completions",
+  interval_seconds  = 10,
+  timeout_seconds   = 600
+)
+
+pipeline_chat$batch$status
+head(pipeline_chat$results)
+
+# 2) Responses endpoint with reasoning summaries (thoughts) for gpt-5.1
+pipeline_resp <- run_openai_batch_pipeline(
+  pairs             = pairs,
+  model             = "gpt-5.1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  include_thoughts  = TRUE,   # automatically picks "responses" + reasoning
+  interval_seconds  = 10,
+  timeout_seconds   = 600
+)
+
+pipeline_resp$batch$status
+head(pipeline_resp$results)
 }
 
-The function provides an end-to-end interface for preparing template-based
-prompts, constructing JSONL batch requests, submitting them to OpenAI,
-optionally polling for completion, and parsing the results into a normalized
-tibble.
-
-If \code{include_thoughts = TRUE} and \code{endpoint = "responses"}, the
-batch requests automatically enable OpenAI reasoning summaries (when
-supported by the model). These are parsed into a \code{thoughts} column by
-\code{\link{parse_openai_batch_output}}. This is typically used with
-GPT-5.1 models where reasoning is enabled.
 }

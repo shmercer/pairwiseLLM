@@ -22,8 +22,7 @@ parse_anthropic_batch_output(
 }
 \value{
 A tibble with one row per result. The columns mirror
-\code{\link{anthropic_compare_pair_live}} with two additions
-specific to batch processing:
+\code{\link{anthropic_compare_pair_live}} with batch-specific additions:
 
 \describe{
 \item{custom_id}{Batch custom ID (for example \code{"ANTH_S01_vs_S02"}).}
@@ -35,6 +34,8 @@ specific to batch processing:
 \item{result_type}{One of \code{"succeeded"}, \code{"errored"},
 \code{"canceled"}, \code{"expired"}.}
 \item{error_message}{Error message for non-succeeded results, otherwise NA.}
+\item{thoughts}{Extended thinking text returned by Claude when reasoning
+is enabled (for example when \code{reasoning = "enabled"}), otherwise NA.}
 \item{content}{Concatenated assistant text for succeeded results.}
 \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
@@ -63,13 +64,25 @@ is a JSON object with at least:
 
 Results may be returned in any order. This function uses the
 \code{custom_id} field to recover \code{ID1} and \code{ID2} and then
-applies the same parsing logic as \code{\link{anthropic_compare_pair_live}}.
+applies the same parsing logic as \code{\link{anthropic_compare_pair_live}},
+including extraction of extended thinking blocks (when enabled) into
+a separate \code{thoughts} column.
 }
 \examples{
 \dontrun{
-# After downloading a batch results .jsonl file:
-tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
-dplyr::count(tbl, result_type)
+# Requires ANTHROPIC_API_KEY and a completed batch.
+library(pairwiseLLM)
+
+# Suppose you have already run run_anthropic_batch_pipeline() with poll = TRUE:
+# pipeline <- run_anthropic_batch_pipeline(...)
+# jsonl_path <- pipeline$batch_output_path
+
+# You can parse the results .jsonl file directly:
+# tbl <- parse_anthropic_batch_output(jsonl_path)
+# dplyr::count(tbl, result_type)
+
+# For illustration only (do not run without a real path):
+# tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
 }
 
 }

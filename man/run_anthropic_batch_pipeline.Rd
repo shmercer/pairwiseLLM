@@ -11,6 +11,7 @@ run_anthropic_batch_pipeline(
   trait_description,
   prompt_template = set_prompt_template(),
   reasoning = c("none", "enabled"),
+  include_thoughts = FALSE,
   batch_input_path = NULL,
   batch_output_path = NULL,
   poll = TRUE,
@@ -37,7 +38,13 @@ run_anthropic_batch_pipeline(
 \item{prompt_template}{Prompt template string, typically from
 \code{\link{set_prompt_template}}.}
 
-\item{reasoning}{Character scalar; one of \code{"none"} or \code{"enabled"}.}
+\item{reasoning}{Character scalar; one of \code{"none"} or \code{"enabled"}.
+See details above for how \code{include_thoughts} influences this value.}
+
+\item{include_thoughts}{Logical; if \code{TRUE}, requests extended thinking
+from Claude (by setting \code{reasoning = "enabled"} when necessary) and
+parses any thinking blocks into a \code{thoughts} column in the batch
+results.}
 
 \item{batch_input_path}{Path to write the JSON file containing the
 \code{requests} object. Defaults to a temporary file with suffix
@@ -110,6 +117,12 @@ using \code{\link{anthropic_poll_batch_until_complete}}.
 It is the Anthropic analogue of \code{\link{run_openai_batch_pipeline}} and
 returns a list with the same overall structure so that downstream code can
 treat the two backends uniformly.
+
+When \code{include_thoughts = TRUE} and \code{reasoning} is left at its
+default of \code{"none"}, this function automatically upgrades
+\code{reasoning} to \code{"enabled"} so that Claude's extended thinking
+blocks are returned and parsed into the \code{thoughts} column by
+\code{\link{parse_anthropic_batch_output}}.
 }
 \examples{
 \dontrun{
@@ -126,20 +139,38 @@ pairs <- example_writing_samples |>
 td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-pipeline <- run_anthropic_batch_pipeline(
+# 1) Standard batch without extended thinking
+pipeline_none <- run_anthropic_batch_pipeline(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   reasoning         = "none",
+  include_thoughts  = FALSE,
   interval_seconds  = 60,
   timeout_seconds   = 3600,
   verbose           = TRUE
 )
 
-pipeline$batch$processing_status
-pipeline$results
+pipeline_none$batch$processing_status
+head(pipeline_none$results)
+
+# 2) Batch with extended thinking and thoughts column
+pipeline_thoughts <- run_anthropic_batch_pipeline(
+  pairs             = pairs,
+  model             = "claude-sonnet-4-5",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  include_thoughts  = TRUE,   # will upgrade reasoning to "enabled" if needed
+  interval_seconds  = 60,
+  timeout_seconds   = 3600,
+  verbose           = TRUE
+)
+
+pipeline_thoughts$batch$processing_status
+head(pipeline_thoughts$results)
 }
 
 }
