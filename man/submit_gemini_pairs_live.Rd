@@ -81,5 +81,5 @@ Gemini 3 Pro, and binds the results into a single tibble.
 \details{
 The output has one row per pair and the same columns as
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}, making it easy to pass into downstream
-Bradley–Terry / BTM pipelines.
+Bradley-Terry / BTM pipelines.
 }

@@ -83,19 +83,19 @@ first text part as \code{thoughts}, with subsequent parts collapsed into
 \value{
 A tibble with one row and columns:
 \itemize{
-\item \code{custom_id} – \code{"LIVE_<ID1>_vs_<ID2>"}.
-\item \code{ID1}, \code{ID2} – provided sample IDs.
-\item \code{model} – model name returned by the API (or the requested model).
-\item \code{object_type} – \code{"generateContent"} on success, otherwise \code{NA}.
-\item \code{status_code} – HTTP status code (200 on success).
-\item \code{error_message} – error message for failures, otherwise \code{NA}.
-\item \code{thoughts} – explicit chain-of-thought style reasoning text if
+\item \code{custom_id} - \code{"LIVE_<ID1>_vs_<ID2>"}.
+\item \code{ID1}, \code{ID2} - provided sample IDs.
+\item \code{model} - model name returned by the API (or the requested model).
+\item \code{object_type} - \code{"generateContent"} on success, otherwise \code{NA}.
+\item \code{status_code} - HTTP status code (200 on success).
+\item \code{error_message} - error message for failures, otherwise \code{NA}.
+\item \code{thoughts} - explicit chain-of-thought style reasoning text if
 \code{include_thoughts = TRUE} and the model returns it; otherwise \code{NA}.
-\item \code{content} – concatenated text of the assistant's final answer (used to
+\item \code{content} - concatenated text of the assistant's final answer (used to
 locate the \verb{<BETTER_SAMPLE>} tag).
-\item \code{better_sample} – \code{"SAMPLE_1"}, \code{"SAMPLE_2"}, or \code{NA}.
-\item \code{better_id} – \code{ID1} if SAMPLE_1 is chosen, \code{ID2} if SAMPLE_2, or \code{NA}.
-\item \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens} – usage counts if
+\item \code{better_sample} - \code{"SAMPLE_1"}, \code{"SAMPLE_2"}, or \code{NA}.
+\item \code{better_id} - \code{ID1} if \code{SAMPLE_1} is chosen, \code{ID2} if \code{SAMPLE_2}, or \code{NA}.
+\item \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens} - usage counts if
 reported by the API, otherwise \code{NA_real_}.
 }
 }

@@ -102,19 +102,19 @@
 #'   `thinking_budget` and `thinking_level` to be used together.
 #'
 #' @return A tibble with one row and columns:
-#'   * `custom_id` – `"LIVE_<ID1>_vs_<ID2>"`.
-#'   * `ID1`, `ID2` – provided sample IDs.
-#'   * `model` – model name returned by the API (or the requested model).
-#'   * `object_type` – `"generateContent"` on success, otherwise `NA`.
-#'   * `status_code` – HTTP status code (200 on success).
-#'   * `error_message` – error message for failures, otherwise `NA`.
-#'   * `thoughts` – explicit chain-of-thought style reasoning text if
+#'   * `custom_id` - `"LIVE_<ID1>_vs_<ID2>"`.
+#'   * `ID1`, `ID2` - provided sample IDs.
+#'   * `model` - model name returned by the API (or the requested model).
+#'   * `object_type` - `"generateContent"` on success, otherwise `NA`.
+#'   * `status_code` - HTTP status code (200 on success).
+#'   * `error_message` - error message for failures, otherwise `NA`.
+#'   * `thoughts` - explicit chain-of-thought style reasoning text if
 #'     `include_thoughts = TRUE` and the model returns it; otherwise `NA`.
-#'   * `content` – concatenated text of the assistant's final answer (used to
+#'   * `content` - concatenated text of the assistant's final answer (used to
 #'     locate the `<BETTER_SAMPLE>` tag).
-#'   * `better_sample` – `"SAMPLE_1"`, `"SAMPLE_2"`, or `NA`.
-#'   * `better_id` – `ID1` if SAMPLE_1 is chosen, `ID2` if SAMPLE_2, or `NA`.
-#'   * `prompt_tokens`, `completion_tokens`, `total_tokens` – usage counts if
+#'   * `better_sample` - `"SAMPLE_1"`, `"SAMPLE_2"`, or `NA`.
+#'   * `better_id` - `ID1` if `SAMPLE_1` is chosen, `ID2` if `SAMPLE_2`, or `NA`.
+#'   * `prompt_tokens`, `completion_tokens`, `total_tokens` - usage counts if
 #'     reported by the API, otherwise `NA_real_`.
 #'
 #' @export
@@ -252,7 +252,7 @@ gemini_compare_pair_live <- function(
         # Status code from the error's response
         status_code <<- httr2::resp_status(err$resp)
 
-        # Try to pull the raw body text – often contains a JSON error
+        # Try to pull the raw body text - often contains a JSON error
         body_raw <- tryCatch(
           httr2::resp_body_string(err$resp),
           error = function(e) NA_character_
@@ -395,7 +395,7 @@ gemini_compare_pair_live <- function(
 #'
 #' The output has one row per pair and the same columns as
 #' [gemini_compare_pair_live()], making it easy to pass into downstream
-#' Bradley–Terry / BTM pipelines.
+#' Bradley-Terry / BTM pipelines.
 #'
 #' @param pairs Tibble/data frame with columns `ID1`, `text1`, `ID2`, `text2`.
 #' @param model Gemini model name (e.g. `"gemini-3-pro-preview"`).
