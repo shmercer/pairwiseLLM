@@ -15,6 +15,7 @@ Imports:
     dplyr,
     httr2,
     jsonlite,
+    rlang,
     sirt,
     stats,
     tibble,
