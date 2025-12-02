@@ -14,7 +14,8 @@
 #'         \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag,
 #'   \item determines whether \code{SAMPLE_1} or \code{SAMPLE_2} was
 #'         selected and maps that to \code{better_id},
-#'   \item collects model name and basic token usage statistics,
+#'   \item collects model name and token usage statistics (including
+#'         reasoning tokens for GPT-5.1 Responses),
 #'   \item when using the Responses endpoint with reasoning, separates
 #'         reasoning summaries into the \code{thoughts} column and visible
 #'         assistant output into \code{content}.
@@ -53,6 +54,11 @@
 #'     \item{prompt_tokens}{Prompt/input token count (if reported).}
 #'     \item{completion_tokens}{Completion/output token count (if reported).}
 #'     \item{total_tokens}{Total tokens (if reported).}
+#'     \item{prompt_cached_tokens}{Cached prompt tokens (if reported via
+#'           \code{input_tokens_details$cached_tokens}); otherwise \code{NA}.}
+#'     \item{reasoning_tokens}{Reasoning tokens (if reported via
+#'           \code{output_tokens_details$reasoning_tokens}); otherwise
+#'           \code{NA}.}
 #'   }
 #'
 #' @import tibble
@@ -131,20 +137,22 @@ parse_openai_batch_output <- function(path,
     body <- response$body
     if (is.null(body)) {
       out[[i]] <- tibble::tibble(
-        custom_id         = custom_id,
-        ID1               = NA_character_,
-        ID2               = NA_character_,
-        model             = NA_character_,
-        object_type       = NA_character_,
-        status_code       = status_code,
-        error_message     = error_message,
-        thoughts          = NA_character_,
-        content           = NA_character_,
-        better_sample     = NA_character_,
-        better_id         = NA_character_,
-        prompt_tokens     = NA_real_,
-        completion_tokens = NA_real_,
-        total_tokens      = NA_real_
+        custom_id           = custom_id,
+        ID1                 = NA_character_,
+        ID2                 = NA_character_,
+        model               = NA_character_,
+        object_type         = NA_character_,
+        status_code         = status_code,
+        error_message       = error_message,
+        thoughts            = NA_character_,
+        content             = NA_character_,
+        better_sample       = NA_character_,
+        better_id           = NA_character_,
+        prompt_tokens       = NA_real_,
+        completion_tokens   = NA_real_,
+        total_tokens        = NA_real_,
+        prompt_cached_tokens = NA_real_,
+        reasoning_tokens    = NA_real_
       )
       next
     }
@@ -199,10 +207,12 @@ parse_openai_batch_output <- function(path,
           blocks <- out_el$content %||% list()
           if (length(blocks) > 0L) {
             for (b in blocks) {
-              if (!is.null(b$text)) {
+              # For Responses, content blocks often use "text" or "output_text"
+              txt <- b$text %||% b$output_text %||% NULL
+              if (!is.null(txt)) {
                 message_chunks <- c(
                   message_chunks,
-                  as.character(b$text %||% "")
+                  as.character(txt %||% "")
                 )
               }
             }
@@ -226,7 +236,7 @@ parse_openai_batch_output <- function(path,
             as.character(rs$text %||% "")
           )
         }
-        # Character summaries are ignored.
+        # Character summaries (e.g. "auto", "detailed") are ignored.
       }
 
       if (length(reasoning_chunks)) {
@@ -269,21 +279,30 @@ parse_openai_batch_output <- function(path,
     completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
     total_tokens      <- usage$total_tokens      %||% NA_real_
 
+    # Detailed token info when available
+    input_details  <- usage$input_tokens_details  %||% list()
+    output_details <- usage$output_tokens_details %||% list()
+
+    prompt_cached_tokens <- input_details$cached_tokens        %||% NA_real_
+    reasoning_tokens     <- output_details$reasoning_tokens    %||% NA_real_
+
     out[[i]] <- tibble::tibble(
-      custom_id         = custom_id,
-      ID1               = ids$ID1,
-      ID2               = ids$ID2,
-      model             = model,
-      object_type       = object_type,
-      status_code       = status_code,
-      error_message     = error_message,
-      thoughts          = thoughts,
-      content           = content,
-      better_sample     = better_sample,
-      better_id         = better_id,
-      prompt_tokens     = as.numeric(prompt_tokens),
-      completion_tokens = as.numeric(completion_tokens),
-      total_tokens      = as.numeric(total_tokens)
+      custom_id            = custom_id,
+      ID1                  = ids$ID1,
+      ID2                  = ids$ID2,
+      model                = model,
+      object_type          = object_type,
+      status_code          = status_code,
+      error_message        = error_message,
+      thoughts             = thoughts,
+      content              = content,
+      better_sample        = better_sample,
+      better_id            = better_id,
+      prompt_tokens        = as.numeric(prompt_tokens),
+      completion_tokens    = as.numeric(completion_tokens),
+      total_tokens         = as.numeric(total_tokens),
+      prompt_cached_tokens = as.numeric(prompt_cached_tokens),
+      reasoning_tokens     = as.numeric(reasoning_tokens)
     )
   }
 

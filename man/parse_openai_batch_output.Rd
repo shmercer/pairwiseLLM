@@ -44,6 +44,11 @@ if \code{SAMPLE_2} was chosen, or \code{NA}.}
 \item{prompt_tokens}{Prompt/input token count (if reported).}
 \item{completion_tokens}{Completion/output token count (if reported).}
 \item{total_tokens}{Total tokens (if reported).}
+\item{prompt_cached_tokens}{Cached prompt tokens (if reported via
+\code{input_tokens_details$cached_tokens}); otherwise \code{NA}.}
+\item{reasoning_tokens}{Reasoning tokens (if reported via
+\code{output_tokens_details$reasoning_tokens}); otherwise
+\code{NA}.}
 }
 }
 \description{
@@ -62,7 +67,8 @@ from the pattern \code{"<prefix>ID1_vs_ID2"},
 \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag,
 \item determines whether \code{SAMPLE_1} or \code{SAMPLE_2} was
 selected and maps that to \code{better_id},
-\item collects model name and basic token usage statistics,
+\item collects model name and token usage statistics (including
+reasoning tokens for GPT-5.1 Responses),
 \item when using the Responses endpoint with reasoning, separates
 reasoning summaries into the \code{thoughts} column and visible
 assistant output into \code{content}.
