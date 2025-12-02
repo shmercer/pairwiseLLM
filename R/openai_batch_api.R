@@ -318,6 +318,11 @@ openai_poll_batch_until_complete <- function(
 #'   [build_openai_batch_requests()].
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
+#' @param include_thoughts Logical; if `TRUE` and using `endpoint = "responses"`,
+#'   requests reasoning-style summaries to populate the `thoughts` column in the
+#'   parsed output.
+#' @param include_raw Logical; if `TRUE`, attaches the raw model response as a
+#'   list-column `raw_response` in the parsed results.
 #' @param endpoint One of `"chat.completions"` or `"responses"`. This is passed
 #'   to [build_openai_batch_requests()]. The underlying Batch API endpoint is
 #'   derived automatically.
@@ -340,8 +345,7 @@ openai_poll_batch_until_complete <- function(
 #'   `Sys.getenv("OPENAI_API_KEY")`.
 #' @param ... Additional arguments passed through to
 #'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`, and optionally `include_thoughts = TRUE` for `endpoint =
-#'   "responses"` to request reasoning summaries in batch jobs.
+#'   `reasoning`.
 #'
 #' @return A list with elements:
 #' * `batch_input_path`  – path to the input `.jsonl` file.
@@ -394,6 +398,8 @@ run_openai_batch_pipeline <- function(
     trait_name,
     trait_description,
     prompt_template = set_prompt_template(),
+    include_thoughts = FALSE,
+    include_raw      = FALSE,
     endpoint = c("chat.completions", "responses"),
     batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
     batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
@@ -421,6 +427,7 @@ run_openai_batch_pipeline <- function(
     trait_name        = trait_name,
     trait_description = trait_description,
     prompt_template   = prompt_template,
+    include_thoughts  = include_thoughts,
     endpoint          = endpoint,
     ...
   )
