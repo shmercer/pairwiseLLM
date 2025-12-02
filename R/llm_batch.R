@@ -8,6 +8,16 @@
 #' hood via `run_openai_batch_pipeline()`, `run_anthropic_batch_pipeline()`,
 #' and `run_gemini_batch_pipeline()`.
 #'
+#' For OpenAI, this helper will by default:
+#' * Use the `chat.completions` batch style for most models, and
+#' * Automatically switch to the `responses` style endpoint when:
+#'   - `model` starts with `"gpt-5.1"` and
+#'   - either `include_thoughts = TRUE` **or** a non-`"none"` `reasoning`
+#'     effort is supplied in `...`.
+#'
+#' You can override this by explicitly passing `endpoint = "chat.completions"`
+#' or `endpoint = "responses"` in `...`.
+#'
 #' Currently, this function *synchronously* runs the full batch pipeline for
 #' each backend (build requests, create batch, poll until complete, download
 #' results, parse). The returned object contains both metadata and a normalized
@@ -25,12 +35,16 @@
 #' @param prompt_template A prompt template created by [set_prompt_template()]
 #'   or a compatible character scalar.
 #' @param include_thoughts Logical; whether to request and parse model
-#'   "thoughts" (where supported).
+#'   "thoughts" (where supported). For OpenAI GPT-5.1, setting this to `TRUE`
+#'   will by default cause the batch to use the `responses` endpoint (unless
+#'   you explicitly pass an `endpoint` in `...`).
 #' @param include_raw Logical; whether to include raw provider responses in the
 #'   result (where supported by backends).
 #' @param ... Additional arguments passed through to the backend-specific
 #'   `run_*_batch_pipeline()` functions. This can include provider-specific
-#'   options such as temperature or batch configuration fields.
+#'   options such as temperature or batch configuration fields. For OpenAI,
+#'   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
+#'   `reasoning`, etc.
 #'
 #' @return
 #' A list of class `"pairwiseLLM_batch"` containing at least:
@@ -92,30 +106,50 @@ llm_submit_pairs_batch <- function(
     ))
   }
 
-  # Dispatch to backend-specific batch pipeline
-  out <- switch(
-    backend,
-    openai = run_openai_batch_pipeline(
-      pairs             = pairs,
-      model             = model,
-      trait_name        = trait_name,
-      trait_description = trait_description,
-      prompt_template   = prompt_template,
-      include_thoughts  = include_thoughts,
-      include_raw       = include_raw,
-      ...
-    ),
-    anthropic = run_anthropic_batch_pipeline(
-      pairs             = pairs,
-      model             = model,
-      trait_name        = trait_name,
-      trait_description = trait_description,
-      prompt_template   = prompt_template,
-      include_thoughts  = include_thoughts,
-      include_raw       = include_raw,
-      ...
-    ),
-    gemini = run_gemini_batch_pipeline(
+  # Capture dots so we can inspect/modify for OpenAI
+  dot_list <- list(...)
+
+  if (backend == "openai") {
+    # Detect GPT-5.1 and requested reasoning
+    is_gpt51  <- grepl("^gpt-5\\.1", model)
+    reasoning <- if ("reasoning" %in% names(dot_list)) dot_list$reasoning else NULL
+
+    # If caller explicitly supplied an endpoint in ..., respect it.
+    # Otherwise, choose based on model + reasoning / thoughts.
+    endpoint <- if ("endpoint" %in% names(dot_list)) {
+      dot_list$endpoint
+    } else {
+      if (is_gpt51 && (isTRUE(include_thoughts) ||
+                       (!is.null(reasoning) && !identical(reasoning, "none")))) {
+        "responses"
+      } else {
+        "chat.completions"
+      }
+    }
+
+    # Remove endpoint from dot_list so we don't pass it twice
+    dot_list$endpoint <- NULL
+
+    out <- do.call(
+      run_openai_batch_pipeline,
+      c(
+        list(
+          pairs             = pairs,
+          model             = model,
+          trait_name        = trait_name,
+          trait_description = trait_description,
+          prompt_template   = prompt_template,
+          include_thoughts  = include_thoughts,
+          include_raw       = include_raw,
+          endpoint          = endpoint
+        ),
+        dot_list
+      )
+    )
+
+  } else if (backend == "anthropic") {
+
+    out <- run_anthropic_batch_pipeline(
       pairs             = pairs,
       model             = model,
       trait_name        = trait_name,
@@ -125,7 +159,20 @@ llm_submit_pairs_batch <- function(
       include_raw       = include_raw,
       ...
     )
-  )
+
+  } else if (backend == "gemini") {
+
+    out <- run_gemini_batch_pipeline(
+      pairs             = pairs,
+      model             = model,
+      trait_name        = trait_name,
+      trait_description = trait_description,
+      prompt_template   = prompt_template,
+      include_thoughts  = include_thoughts,
+      include_raw       = include_raw,
+      ...
+    )
+  }
 
   # Normalize and tag result
   if (!is.list(out)) {

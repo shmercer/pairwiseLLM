@@ -35,14 +35,18 @@ through where supported.}
 or a compatible character scalar.}
 
 \item{include_thoughts}{Logical; whether to request and parse model
-"thoughts" (where supported).}
+"thoughts" (where supported). For OpenAI GPT-5.1, setting this to \code{TRUE}
+will by default cause the batch to use the \code{responses} endpoint (unless
+you explicitly pass an \code{endpoint} in \code{...}).}
 
 \item{include_raw}{Logical; whether to include raw provider responses in the
 result (where supported by backends).}
 
 \item{...}{Additional arguments passed through to the backend-specific
 \verb{run_*_batch_pipeline()} functions. This can include provider-specific
-options such as temperature or batch configuration fields.}
+options such as temperature or batch configuration fields. For OpenAI,
+this may include \code{endpoint}, \code{temperature}, \code{top_p}, \code{logprobs},
+\code{reasoning}, etc.}
 }
 \value{
 A list of class \code{"pairwiseLLM_batch"} containing at least:
@@ -65,6 +69,20 @@ provider batch pipelines (OpenAI, Anthropic, Gemini).
 It mirrors \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} but uses the provider batch APIs under the
 hood via \code{run_openai_batch_pipeline()}, \code{run_anthropic_batch_pipeline()},
 and \code{run_gemini_batch_pipeline()}.
+
+For OpenAI, this helper will by default:
+\itemize{
+\item Use the \code{chat.completions} batch style for most models, and
+\item Automatically switch to the \code{responses} style endpoint when:
+\itemize{
+\item \code{model} starts with \code{"gpt-5.1"} and
+\item either \code{include_thoughts = TRUE} \strong{or} a non-\code{"none"} \code{reasoning}
+effort is supplied in \code{...}.
+}
+}
+
+You can override this by explicitly passing \code{endpoint = "chat.completions"}
+or \code{endpoint = "responses"} in \code{...}.
 
 Currently, this function \emph{synchronously} runs the full batch pipeline for
 each backend (build requests, create batch, poll until complete, download
