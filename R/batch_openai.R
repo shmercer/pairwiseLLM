@@ -31,8 +31,10 @@
 #'   and \code{reasoning} is not \code{"none"}, adds \code{summary = "auto"}
 #'   to the \code{reasoning} block so that reasoning summaries (thoughts)
 #'   are returned and can be parsed into a \code{thoughts} column by
-#'   \code{\link{parse_openai_batch_output}}. Has no effect for
-#'   \code{"chat.completions"}.
+#'   \code{\link{parse_openai_batch_output}}. When \code{endpoint = "responses"},
+#'   \code{include_thoughts = TRUE}, and the model is \code{"gpt-5.1"} with
+#'   no explicit \code{reasoning}, the function defaults \code{reasoning} to
+#'   \code{"low"}. Has no effect for \code{"chat.completions"}.
 #' @param request_id_prefix String prefix for \code{custom_id}; the full
 #'   ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.
 #'
@@ -47,15 +49,22 @@
 #'
 #' @examples
 #' \dontrun{
-#' data("example_writing_samples")
-#' pairs_all   <- make_pairs(example_writing_samples)
-#' pairs_small <- sample_pairs(pairs_all, n_pairs = 10, seed = 1)
+#' # Requires OPENAI_API_KEY and network access.
+#' library(pairwiseLLM)
+#'
+#' data("example_writing_samples", package = "pairwiseLLM")
+#'
+#' pairs <- example_writing_samples |>
+#'   make_pairs() |>
+#'   sample_pairs(n_pairs = 3, seed = 123) |>
+#'   randomize_pair_order(seed = 456)
 #'
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' batch_tbl <- build_openai_batch_requests(
-#'   pairs             = pairs_small,
+#' # Basic chat.completions batch (no thoughts)
+#' batch_tbl_chat <- build_openai_batch_requests(
+#'   pairs             = pairs,
 #'   model             = "gpt-4.1",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
@@ -63,6 +72,20 @@
 #'   endpoint          = "chat.completions",
 #'   temperature       = 0
 #' )
+#'
+#' # Responses endpoint with reasoning summaries (thoughts) for gpt-5.1
+#' batch_tbl_resp <- build_openai_batch_requests(
+#'   pairs             = pairs,
+#'   model             = "gpt-5.1",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   endpoint          = "responses",
+#'   include_thoughts  = TRUE    # will set reasoning = "low" by default
+#' )
+#'
+#' batch_tbl_chat
+#' batch_tbl_resp
 #' }
 #'
 #' @import tibble
@@ -108,6 +131,21 @@ build_openai_batch_requests <- function(pairs,
   # ------------------------------------------------------------------
   is_gpt5  <- grepl("^gpt-5", model)
   is_gpt51 <- grepl("^gpt-5\\.1", model)
+
+  # If user asked for thoughts on responses endpoint but didn't set reasoning,
+  # provide a sensible default for gpt-5.1.
+  if (endpoint == "responses" && isTRUE(include_thoughts) && is.null(reasoning)) {
+    if (is_gpt51) {
+      reasoning <- "low"
+    } else {
+      warning(
+        "`include_thoughts = TRUE` requested for OpenAI responses endpoint, ",
+        "but no `reasoning` was provided and model is not gpt-5.1. ",
+        "Thoughts will only be returned if `reasoning` is non-\"none\".",
+        call. = FALSE
+      )
+    }
+  }
 
   if (is_gpt51) {
     # GPT-5.1 has special rules:

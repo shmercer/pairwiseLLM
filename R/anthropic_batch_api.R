@@ -54,17 +54,37 @@ NULL
   object_type <- body$type  %||% NA_character_
   model_name  <- body$model %||% NA_character_
 
-  # Collect text content from assistant message blocks
-  content <- NA_character_
+  # Collect thinking + text content from assistant message blocks
+  thoughts <- NA_character_
+  content  <- NA_character_
+
   if (!is.null(body$content) && length(body$content) > 0L) {
-    collected <- character(0)
+    thought_pieces <- character(0)
+    content_pieces <- character(0)
+
     for (blk in body$content) {
-      if (!is.null(blk$text)) {
-        collected <- c(collected, as.character(blk$text %||% ""))
+      blk_type <- blk$type %||% NULL
+
+      if (!is.null(blk_type) && identical(blk_type, "thinking")) {
+        # Extended-thinking block (Claude 4.x/4.5)
+        txt <- blk$thinking %||% blk$text %||% ""
+        if (!is.null(txt)) {
+          thought_pieces <- c(thought_pieces, as.character(txt))
+        }
+      } else {
+        # Default text block
+        txt <- blk$text %||% ""
+        if (!is.null(txt)) {
+          content_pieces <- c(content_pieces, as.character(txt))
+        }
       }
     }
-    if (length(collected) > 0L) {
-      content <- paste(collected, collapse = "")
+
+    if (length(thought_pieces) > 0L) {
+      thoughts <- paste(thought_pieces, collapse = "\n\n")
+    }
+    if (length(content_pieces) > 0L) {
+      content <- paste(content_pieces, collapse = "")
     }
   }
 
@@ -92,6 +112,7 @@ NULL
     ID2               = ID2,
     model             = model_name,
     object_type       = object_type,
+    thoughts          = thoughts,
     content           = content,
     better_sample     = better_sample,
     better_id         = better_id,
@@ -616,7 +637,9 @@ anthropic_download_batch_results <- function(
 #'
 #' Results may be returned in any order. This function uses the
 #' \code{custom_id} field to recover \code{ID1} and \code{ID2} and then
-#' applies the same parsing logic as \code{\link{anthropic_compare_pair_live}}.
+#' applies the same parsing logic as \code{\link{anthropic_compare_pair_live}},
+#' including extraction of extended thinking blocks (when enabled) into
+#' a separate \code{thoughts} column.
 #'
 #' @param jsonl_path Path to a \code{.jsonl} file produced by
 #'   \code{\link{anthropic_download_batch_results}}.
@@ -626,8 +649,7 @@ anthropic_download_batch_results <- function(
 #'   \code{"</BETTER_SAMPLE>"}.
 #'
 #' @return A tibble with one row per result. The columns mirror
-#'   \code{\link{anthropic_compare_pair_live}} with two additions
-#'   specific to batch processing:
+#'   \code{\link{anthropic_compare_pair_live}} with batch-specific additions:
 #'
 #' \describe{
 #'   \item{custom_id}{Batch custom ID (for example \code{"ANTH_S01_vs_S02"}).}
@@ -639,6 +661,8 @@ anthropic_download_batch_results <- function(
 #'   \item{result_type}{One of \code{"succeeded"}, \code{"errored"},
 #'         \code{"canceled"}, \code{"expired"}.}
 #'   \item{error_message}{Error message for non-succeeded results, otherwise NA.}
+#'   \item{thoughts}{Extended thinking text returned by Claude when reasoning
+#'         is enabled (for example when \code{reasoning = "enabled"}), otherwise NA.}
 #'   \item{content}{Concatenated assistant text for succeeded results.}
 #'   \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 #'   \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
@@ -650,9 +674,19 @@ anthropic_download_batch_results <- function(
 #'
 #' @examples
 #' \dontrun{
-#' # After downloading a batch results .jsonl file:
-#' tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
-#' dplyr::count(tbl, result_type)
+#' # Requires ANTHROPIC_API_KEY and a completed batch.
+#' library(pairwiseLLM)
+#'
+#' # Suppose you have already run run_anthropic_batch_pipeline() with poll = TRUE:
+#' # pipeline <- run_anthropic_batch_pipeline(...)
+#' # jsonl_path <- pipeline$batch_output_path
+#'
+#' # You can parse the results .jsonl file directly:
+#' # tbl <- parse_anthropic_batch_output(jsonl_path)
+#' # dplyr::count(tbl, result_type)
+#'
+#' # For illustration only (do not run without a real path):
+#' # tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
 #' }
 #'
 #' @export
@@ -677,6 +711,7 @@ parse_anthropic_batch_output <- function(
         status_code       = integer(0),
         result_type       = character(0),
         error_message     = character(0),
+        thoughts          = character(0),
         content           = character(0),
         better_sample     = character(0),
         better_id         = character(0),
@@ -716,6 +751,7 @@ parse_anthropic_batch_output <- function(
         status_code       = NA_integer_,
         result_type       = NA_character_,
         error_message     = "Failed to parse JSON line.",
+        thoughts          = NA_character_,
         content           = NA_character_,
         better_sample     = NA_character_,
         better_id         = NA_character_,
@@ -749,6 +785,7 @@ parse_anthropic_batch_output <- function(
         status_code       = NA_integer_,
         result_type       = as.character(r_type),
         error_message     = err_msg,
+        thoughts          = NA_character_,
         content           = NA_character_,
         better_sample     = NA_character_,
         better_id         = NA_character_,
@@ -777,6 +814,7 @@ parse_anthropic_batch_output <- function(
       status_code       = 200L,
       result_type       = as.character(r_type),
       error_message     = NA_character_,
+      thoughts          = parsed$thoughts,
       content           = parsed$content,
       better_sample     = parsed$better_sample,
       better_id         = parsed$better_id,
@@ -811,6 +849,12 @@ parse_anthropic_batch_output <- function(
 #' returns a list with the same overall structure so that downstream code can
 #' treat the two backends uniformly.
 #'
+#' When \code{include_thoughts = TRUE} and \code{reasoning} is left at its
+#' default of \code{"none"}, this function automatically upgrades
+#' \code{reasoning} to \code{"enabled"} so that Claude's extended thinking
+#' blocks are returned and parsed into the \code{thoughts} column by
+#' \code{\link{parse_anthropic_batch_output}}.
+#'
 #' @param pairs Tibble or data frame with at least columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2}.
 #' @param model Anthropic model name (for example \code{"claude-sonnet-4-5"}).
@@ -821,6 +865,11 @@ parse_anthropic_batch_output <- function(
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}.
 #' @param reasoning Character scalar; one of \code{"none"} or \code{"enabled"}.
+#'   See details above for how \code{include_thoughts} influences this value.
+#' @param include_thoughts Logical; if \code{TRUE}, requests extended thinking
+#'   from Claude (by setting \code{reasoning = "enabled"} when necessary) and
+#'   parses any thinking blocks into a \code{thoughts} column in the batch
+#'   results.
 #' @param batch_input_path Path to write the JSON file containing the
 #'   \code{requests} object. Defaults to a temporary file with suffix
 #'   \code{".json"}.
@@ -877,20 +926,38 @@ parse_anthropic_batch_output <- function(
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' pipeline <- run_anthropic_batch_pipeline(
+#' # 1) Standard batch without extended thinking
+#' pipeline_none <- run_anthropic_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   reasoning         = "none",
+#'   include_thoughts  = FALSE,
 #'   interval_seconds  = 60,
 #'   timeout_seconds   = 3600,
 #'   verbose           = TRUE
 #' )
 #'
-#' pipeline$batch$processing_status
-#' pipeline$results
+#' pipeline_none$batch$processing_status
+#' head(pipeline_none$results)
+#'
+#' # 2) Batch with extended thinking and thoughts column
+#' pipeline_thoughts <- run_anthropic_batch_pipeline(
+#'   pairs             = pairs,
+#'   model             = "claude-sonnet-4-5",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   include_thoughts  = TRUE,   # will upgrade reasoning to "enabled" if needed
+#'   interval_seconds  = 60,
+#'   timeout_seconds   = 3600,
+#'   verbose           = TRUE
+#' )
+#'
+#' pipeline_thoughts$batch$processing_status
+#' head(pipeline_thoughts$results)
 #' }
 #'
 #' @export
@@ -901,6 +968,7 @@ run_anthropic_batch_pipeline <- function(
     trait_description,
     prompt_template   = set_prompt_template(),
     reasoning         = c("none", "enabled"),
+    include_thoughts  = FALSE,
     batch_input_path  = NULL,
     batch_output_path = NULL,
     poll              = TRUE,
@@ -912,6 +980,12 @@ run_anthropic_batch_pipeline <- function(
     ...
 ) {
   reasoning <- match.arg(reasoning)
+
+  # If caller requested thoughts but reasoning was left as "none",
+  # upgrade to "enabled" so the thinking block is actually used.
+  if (isTRUE(include_thoughts) && identical(reasoning, "none")) {
+    reasoning <- "enabled"
+  }
 
   # 1) Build batch requests tibble
   req_tbl <- build_anthropic_batch_requests(
@@ -981,9 +1055,6 @@ run_anthropic_batch_pipeline <- function(
     results  <- parse_anthropic_batch_output(batch_output_path)
   }
 
-  # NOTE: `file` is always NULL for Anthropic (no uploaded input file),
-  # but we keep the field for structural compatibility with
-  # run_openai_batch_pipeline().
   list(
     batch_input_path  = batch_input_path,
     batch_output_path = out_path,

@@ -165,12 +165,12 @@ run_backend_batch <- function(
 
 if (has_key("OPENAI_API_KEY")) {
   # 1) Standard batch: no thoughts, default endpoint for OpenAI backend
-  openai_batch <- run_backend_batch(
-    backend          = "openai",
-    model            = "gpt-5.1",
-    include_thoughts = FALSE,
-    include_raw      = FALSE
-  )
+#  openai_batch <- run_backend_batch(
+#    backend          = "openai",
+#    model            = "gpt-5.1",
+#    include_thoughts = FALSE,
+#    include_raw      = FALSE
+#  )
 
   # 2) Optional: reasoning / thoughts via responses endpoint
   #    Adjust model/args if you want to exercise GPT-5.1 + reasoning.
@@ -206,15 +206,15 @@ if (has_key("ANTHROPIC_API_KEY")) {
 ## Gemini batch tests
 ## ----------------------------------------------------------------------
 
-if (has_key("GEMINI_API_KEY")) {
-  gemini_batch <- run_backend_batch(
-    backend          = "gemini",
-    model            = "gemini-3-pro-preview",
-    include_thoughts = TRUE,
-    include_raw      = FALSE
-  )
-} else {
-  message("\n[SKIP] Gemini batch tests: GEMINI_API_KEY not set.")
-}
+#if (has_key("GEMINI_API_KEY")) {
+#  gemini_batch <- run_backend_batch(
+#    backend          = "gemini",
+#    model            = "gemini-3-pro-preview",
+#    include_thoughts = TRUE,
+#    include_raw      = FALSE
+#  )
+#} else {
+#  message("\n[SKIP] Gemini batch tests: GEMINI_API_KEY not set.")
+#}
 
 message("\nDone. Inspect console output above for JSONL previews and parsed results.")
