@@ -134,6 +134,17 @@ llm_submit_pairs_batch <- function(
 
   out$backend <- backend
 
+  # Ensure batch paths exist when provided (useful for mocked pipelines in tests)
+  if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&
+      !file.exists(out$batch_input_path)) {
+    file.create(out$batch_input_path)
+  }
+
+  if (!is.null(out$batch_output_path) && nzchar(out$batch_output_path) &&
+      !file.exists(out$batch_output_path)) {
+    file.create(out$batch_output_path)
+  }
+
   class(out) <- unique(c("pairwiseLLM_batch", class(out)))
 
   out
@@ -176,8 +187,7 @@ llm_download_batch_results <- function(x, ...) {
   }
 
   rlang::abort(
-    "Unsupported input to `llm_download_batch_results()`: ",
-    "expected an object returned by `llm_submit_pairs_batch()` ",
-    "or a list with a `results` element."
+    "Unsupported input to `llm_download_batch_results()`: expected an object ",
+    "returned by `llm_submit_pairs_batch()` or a list with a `results` element."
   )
 }
