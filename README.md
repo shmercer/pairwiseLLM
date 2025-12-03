@@ -40,7 +40,7 @@ thinking / reasoning traces (e.g., `include_thoughts = TRUE` via OpenAI
 
 | Provider      | Model                | Thinking Supported? |
 |---------------|----------------------|---------------------|
-| **OpenAI**    | gpt5.1               | ✅ Yes              |
+| **OpenAI**    | gpt-5.1              | ✅ Yes              |
 | **OpenAI**    | gpt-5                | ✅ Yes              |
 | **OpenAI**    | gpt-5-mini           | ✅ Yes              |
 | **OpenAI**    | gpt-5-nano           | ✅ Yes              |
@@ -298,6 +298,53 @@ Typical output includes:
 
 This workflow works with any supported backend, so you can compare
 positional bias across providers and models.
+
+## Positional bias of default template
+
+For each model, we ran pairwise comparisons of overall quality (“Overall
+quality of the writing, considering how well ideas are expressed, how
+clearly the writing is organized, and how effective the language and
+conventions are.”) on all example essays in two orders:
+
+- Forward: randomized assignment of SAMPLE_1 vs SAMPLE_2
+
+- Reverse: the same pairs with SAMPLE_1 and SAMPLE_2 swapped
+
+We then computed:
+
+- Proportion consistent: The proportion of pairs where the model picks
+  the same winner in both forward and reverse order.
+
+- Bias (p): The p-value from a binomial test evaluating if SAMPLE_1 wins
+  more or less often than 50% of the time across all forward + reverse
+  comparisons combined.
+
+| provider  | model                | thinking | proportion_consistent | bias_p |
+|-----------|----------------------|----------|-----------------------|--------|
+| anthropic | claude-haiku-4-5     | No       | 0.933                 | 0.766  |
+| anthropic | claude-haiku-4-5     | Yes      | 0.911                 | 1.000  |
+| anthropic | claude-opus-4-0      | No       | 0.978                 | 0.371  |
+| anthropic | claude-opus-4-0      | Yes      | 0.933                 | 0.371  |
+| anthropic | claude-opus-4-1      | No       | 0.978                 | 0.371  |
+| anthropic | claude-opus-4-1      | Yes      | 0.956                 | 0.233  |
+| anthropic | claude-opus-4-5      | No       | 0.867                 | 1.000  |
+| anthropic | claude-opus-4-5      | Yes      | 0.844                 | 1.000  |
+| anthropic | claude-sonnet-4-0    | No       | 0.956                 | 0.371  |
+| anthropic | claude-sonnet-4-0    | Yes      | 0.933                 | 0.371  |
+| anthropic | claude-sonnet-4-5    | No       | 0.933                 | 0.551  |
+| anthropic | claude-sonnet-4-5    | Yes      | 0.956                 | 0.551  |
+| gemini    | gemini-3-pro-preview | Yes      | 0.978                 | 0.233  |
+| openai    | gpt-4.1              | No       | 0.867                 | 0.766  |
+| openai    | gpt-4.1-mini         | No       | 0.844                 | 0.766  |
+| openai    | gpt-4.1-nano         | No       | 0.667                 | 0.135  |
+| openai    | gpt-4o               | No       | 0.778                 | 0.551  |
+| openai    | gpt-5                | No       | 0.800                 | 0.371  |
+| openai    | gpt-5                | Yes      | 0.778                 | 0.233  |
+| openai    | gpt-5-mini           | No       | 0.911                 | 0.766  |
+| openai    | gpt-5-mini           | Yes      | 0.933                 | 1.000  |
+| openai    | gpt-5-nano           | No       | 0.844                 | 1.000  |
+| openai    | gpt-5.1              | No       | 0.800                 | 0.371  |
+| openai    | gpt-5.1              | Yes      | 0.800                 | 0.551  |
 
 ## Bradley–Terry Modeling (Ability Scores)
 
