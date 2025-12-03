@@ -8,6 +8,8 @@ pairwiseLLM: Pairwise comparisons of writing quality with LLMs
 coverage](https://codecov.io/gh/shmercer/pairwiseLLM/graph/badge.svg)](https://app.codecov.io/gh/shmercer/pairwiseLLM)
 [![CRAN
 status](https://www.r-pkg.org/badges/version/pairwiseLLM)](https://CRAN.R-project.org/package=pairwiseLLM)
+[![License:
+MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/shmercer/pairwiseLLM/blob/master/LICENSE.md)
 <!-- badges: end -->
 
 `pairwiseLLM` is an R package that provides a unified framework for
@@ -465,6 +467,14 @@ modeling method, please include:
 
 `pairwiseLLM` is released under the MIT License. See the `LICENSE` file
 for details.
+
+## Package Author and Maintainer
+
+- **Sterett H. Mercer** - *University of British Columbia*  
+  UBC Faculty Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/>  
+  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer>  
+  Google Scholar:
+  <https://scholar.google.ca/citations?user=YJg4svsAAAAJ&hl=en>
 
 ## Citation
 

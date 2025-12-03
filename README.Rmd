@@ -9,6 +9,7 @@ editor_options:
 [![R-CMD-check](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml)
 [![Codecov test coverage](https://codecov.io/gh/shmercer/pairwiseLLM/graph/badge.svg)](https://app.codecov.io/gh/shmercer/pairwiseLLM)
 [![CRAN status](https://www.r-pkg.org/badges/version/pairwiseLLM)](https://CRAN.R-project.org/package=pairwiseLLM)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/shmercer/pairwiseLLM/blob/master/LICENSE.md)
 <!-- badges: end -->
 
 ```{r, include = FALSE}
@@ -446,6 +447,13 @@ Issues and pull requests are welcome. If you’re adding a new backend or modeli
 ## License
 
 `pairwiseLLM` is released under the MIT License. See the `LICENSE` file for details.
+
+## Package Author and Maintainer
+
+* **Sterett H. Mercer** - *University of British Columbia*  
+UBC Faculty Profile: https://ecps.educ.ubc.ca/sterett-h-mercer/  
+ResearchGate: https://www.researchgate.net/profile/Sterett_Mercer  
+Google Scholar: https://scholar.google.ca/citations?user=YJg4svsAAAAJ&hl=en
 
 ## Citation
 
