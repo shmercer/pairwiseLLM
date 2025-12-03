@@ -77,10 +77,15 @@ Batch APIs (for larger jobs and offline processing) are implemented for:
 
 - Google Gemini
 
-Each provider has its own `build_*_batch_requests()`,
-`run_*_batch_pipeline()`, and `parse_*_batch_output()` functions. A
-unified batch front-end (e.g., `llm_submit_pairs_batch()`) is planned to
-mirror `submit_llm_pairs()`.
+All live backends are accessed through a single, unified API:
+
+- `llm_submit_pairs_batch()` — submit batch requests
+
+- `llm_download_batch_results()` — download & parse the completed
+  results
+
+Each provider also has its own `build_*_batch_requests()`,
+`run_*_batch_pipeline()`, and `parse_*_batch_output()` functions.
 
 ## API Keys
 
@@ -239,7 +244,7 @@ pairs <- make_pairs(items)
 2.  Create reversed pairs
 
 ``` r
-rev_pairs <- reverse_pairs(pairs)
+rev_pairs <- sample_reverse_pairs(pairs)
 ```
 
 3.  Submit both sets to a backend
@@ -339,7 +344,7 @@ pairs <- make_pairs(items)
 res_live <- submit_llm_pairs(
   pairs,
   backend = "anthropic",
-  model = "claude-3-5-sonnet-latest"
+  model = "claude-sonnet-4-5"
 )
 ```
 
@@ -359,16 +364,24 @@ batch <- run_openai_batch_pipeline(
 res_batch <- parse_openai_batch_output(batch$batch_output_path)
 ```
 
-A unified batch front-end is planned (e.g., `llm_submit_pairs_batch()`
-and `llm_download_batch_results()`) to mirror the live unified API.
+A unified batch front-end can also be used.
+
+``` r
+
+batch <- llm_submit_pairs_batch(
+  provider = "openai",        # "openai", "anthropic", or "gemini"
+  model = "gpt-4o-mini",      # or any supported model
+  pairs = pairs,              # tibble of pairwise comparisons
+  trait_name = "overall_quality",
+  trait_description = "Overall writing quality."
+)
+
+results <- llm_download_batch_results(batch)
+```
 
 ## Roadmap (High Level)
 
 Planned / in-progress features include:
-
-- A unified batch API mirroring submit_llm_pairs()
-
-- Additional diagnostics for reliability and agreement
 
 - Local backends (e.g., Ollama) for offline testing
 
