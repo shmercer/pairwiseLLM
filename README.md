@@ -43,9 +43,6 @@ thinking / reasoning traces (e.g., `include_thoughts = TRUE` via OpenAI
 | Provider      | Model                | Thinking Supported? |
 |---------------|----------------------|---------------------|
 | **OpenAI**    | gpt-5.1              | ✅ Yes              |
-| **OpenAI**    | gpt-5                | ✅ Yes              |
-| **OpenAI**    | gpt-5-mini           | ✅ Yes              |
-| **OpenAI**    | gpt-5-nano           | ✅ Yes              |
 | **OpenAI**    | gpt-4.1              | ❌ No               |
 | **OpenAI**    | gpt-4.1-mini         | ❌ No               |
 | **OpenAI**    | gpt-4.1-nano         | ❌ No               |
@@ -340,11 +337,6 @@ We then computed:
 | openai    | gpt-4.1-mini         | No       | 0.844                 | 0.766  |
 | openai    | gpt-4.1-nano         | No       | 0.667                 | 0.135  |
 | openai    | gpt-4o               | No       | 0.778                 | 0.551  |
-| openai    | gpt-5                | No       | 0.800                 | 0.371  |
-| openai    | gpt-5                | Yes      | 0.778                 | 0.233  |
-| openai    | gpt-5-mini           | No       | 0.911                 | 0.766  |
-| openai    | gpt-5-mini           | Yes      | 0.933                 | 1.000  |
-| openai    | gpt-5-nano           | No       | 0.844                 | 1.000  |
 | openai    | gpt-5.1              | No       | 0.800                 | 0.371  |
 | openai    | gpt-5.1              | Yes      | 0.800                 | 0.551  |
 
