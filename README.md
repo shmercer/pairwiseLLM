@@ -31,6 +31,31 @@ It supports:
 
 - Consistent output tibbles across all backends.
 
+## Supported Models
+
+The following models are confirmed to work with pairwiseLLM for live and
+batch pairwise comparisons. The table notes whether each model supports
+thinking / reasoning traces (e.g., `include_thoughts = TRUE` via OpenAI
+`reasoning`, Anthropic `thinking`, Gemini `thinkingConfig`).
+
+| Provider      | Model                | Thinking Supported? |
+|---------------|----------------------|---------------------|
+| **OpenAI**    | gpt5.1               | ✅ Yes              |
+| **OpenAI**    | gpt-5                | ✅ Yes              |
+| **OpenAI**    | gpt-5-mini           | ✅ Yes              |
+| **OpenAI**    | gpt-5-nano           | ✅ Yes              |
+| **OpenAI**    | gpt-4.1              | ❌ No               |
+| **OpenAI**    | gpt-4.1-mini         | ❌ No               |
+| **OpenAI**    | gpt-4.1-nano         | ❌ No               |
+| **OpenAI**    | gpt-4o               | ❌ No               |
+| **Anthropic** | claude-sonnet-4-5    | ✅ Yes              |
+| **Anthropic** | claude-haiku-4-5     | ✅ Yes              |
+| **Anthropic** | claude-opus-4-5      | ✅ Yes              |
+| **Anthropic** | claude-opus-4-1      | ✅ Yes              |
+| **Anthropic** | claude-sonnet-4-0    | ✅ Yes              |
+| **Anthropic** | claude-opus-4-0      | ✅ Yes              |
+| **Gemini**    | gemini-3-pro-preview | ✅ Yes              |
+
 ## Installation
 
 From GitHub (development version):
@@ -46,19 +71,10 @@ You can then load the package in the usual way:
 library(pairwiseLLM)
 ```
 
-\##Supported Backends
+## Live comparisons
 
-### Live comparisons
-
-Live pairwise comparisons (one-off or small batches) are available for:
-
-- OpenAI: GPT-4o, GPT-4.1, GPT-5, GPT-5.1 (and similar models)
-
-- Anthropic: Claude / 4 family (Haiku, Sonnet, Opus)
-
-- Google: Gemini 3 Pro (and compatible models)
-
-All live backends are accessed through a single, unified API:
+Live pairwise comparisons (one-off or small batches) are available
+through a single, unified API:
 
 - `llm_compare_pair()` – compare a single pair
 
@@ -67,17 +83,10 @@ All live backends are accessed through a single, unified API:
 Backend-specific helpers (e.g., `submit_openai_pairs_live()`) are
 available but most users will only need the unified functions.
 
-### Batch comparisons
+## Batch comparisons
 
-Batch APIs (for larger jobs and offline processing) are implemented for:
-
-- OpenAI
-
-- Anthropic
-
-- Google Gemini
-
-All live backends are accessed through a single, unified API:
+Batch APIs (for larger jobs and offline processing) are implemented
+through a single, unified API:
 
 - `llm_submit_pairs_batch()` — submit batch requests
 
