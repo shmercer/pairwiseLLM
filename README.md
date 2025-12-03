@@ -123,23 +123,30 @@ Here is a minimal, end-to-end example using OpenAI via the unified API:
 ``` r
 library(pairwiseLLM)
 
-items <- c(
-  "This is the first sample.",
-  "Here is a second sample.",
-  "Another response to compare."
-)
+# 1. Load included writing sample data
+data("example_writing_samples", package = "pairwiseLLM")
 
-# 1. Create pairs
-pairs <- make_pairs(items)
+# 2. Create a small set of pairs
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 5, seed = 321) |>
+  randomize_pair_order(seed = 654)
 
-# 2. Submit to a backend (e.g., OpenAI)
+# 3. Specify the trait and prompt template
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# 4. Submit to a backend (e.g., OpenAI)
 res <- submit_llm_pairs(
-  pairs,
-  backend = "openai",
-  model = "gpt-4o"
+  pairs             = pairs,
+  model             = "gpt-4o",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  backend           = "openai"
 )
 
-# 3. Fit a Bradley–Terry model
+# 5. Fit a Bradley–Terry model
 bt_data <- build_bt_data(res)
 bt_fit  <- fit_bt_model(bt_data)
 
