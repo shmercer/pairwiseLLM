@@ -23,25 +23,36 @@ writing samples. Any custom template must contain the
 placeholders \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
 \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
 }
+\details{
+The default template is stored as a plain-text file in
+\code{inst/templates/default.txt} and loaded at run time. This
+makes it easy to inspect and modify the prompt text without
+changing the R code.
+}
 \examples{
-# Get the default template
+# Get the default template shipped with the package
 tmpl <- set_prompt_template()
 cat(substr(tmpl, 1, 200), "...\n")
 
-# Using the template with example writing samples
-data("example_writing_samples")
-td <- trait_description("overall_quality")
+# Use a custom template defined in-line
+custom <- "
+You are an expert writing assessor for {TRAIT_NAME}.
 
-text1 <- example_writing_samples$text[1]
-text2 <- example_writing_samples$text[2]
+{TRAIT_NAME} is defined as {TRAIT_DESCRIPTION}.
 
-prompt <- build_prompt(
-  template   = tmpl,
-  trait_name = td$name,
-  trait_desc = td$description,
-  text1      = text1,
-  text2      = text2
-)
-cat(substr(prompt, 1, 200), "...\n")
+Which of the samples below is better on {TRAIT_NAME}?
+
+SAMPLE 1:
+{SAMPLE_1}
+
+SAMPLE 2:
+{SAMPLE_2}
+
+<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> or
+<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+"
+
+tmpl2 <- set_prompt_template(template = custom)
+cat(substr(tmpl2, 1, 120), "...\n")
 
 }

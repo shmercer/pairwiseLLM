@@ -1,3 +1,38 @@
+# Internal environment for user-registered templates (session-local)
+.pwllm_prompt_templates <- new.env(parent = emptyenv())
+
+# Internal helper: read a built-in template from inst/templates
+.pwllm_read_builtin_template <- function(name) {
+  stopifnot(is.character(name), length(name) == 1L, nzchar(name))
+
+  path <- system.file(
+    "templates",
+    paste0(name, ".txt"),
+    package = "pairwiseLLM"
+  )
+
+  if (identical(path, "") || !file.exists(path)) {
+    return(NULL)
+  }
+
+  text <- paste(
+    readLines(path, warn = FALSE, encoding = "UTF-8"),
+    collapse = "\n"
+  )
+
+  text
+}
+
+# Internal helper: get and validate a built-in template by name
+.pwllm_get_builtin_template <- function(name) {
+  tmpl <- .pwllm_read_builtin_template(name)
+  if (is.null(tmpl)) {
+    return(NULL)
+  }
+  .validate_template(tmpl)
+}
+
+
 #' Get or set a prompt template for pairwise comparisons
 #'
 #' This function returns a default prompt template that includes
@@ -5,6 +40,11 @@
 #' writing samples. Any custom template must contain the
 #' placeholders \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
 #' \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
+#'
+#' The default template is stored as a plain-text file in
+#' \code{inst/templates/default.txt} and loaded at run time. This
+#' makes it easy to inspect and modify the prompt text without
+#' changing the R code.
 #'
 #' @param template Optional character string containing a custom template.
 #'   If \code{NULL}, a default template is returned.
@@ -14,25 +54,30 @@
 #' @return A character string containing the prompt template.
 #'
 #' @examples
-#' # Get the default template
+#' # Get the default template shipped with the package
 #' tmpl <- set_prompt_template()
 #' cat(substr(tmpl, 1, 200), "...\n")
 #'
-#' # Using the template with example writing samples
-#' data("example_writing_samples")
-#' td <- trait_description("overall_quality")
+#' # Use a custom template defined in-line
+#' custom <- "
+#' You are an expert writing assessor for {TRAIT_NAME}.
 #'
-#' text1 <- example_writing_samples$text[1]
-#' text2 <- example_writing_samples$text[2]
+#' {TRAIT_NAME} is defined as {TRAIT_DESCRIPTION}.
 #'
-#' prompt <- build_prompt(
-#'   template   = tmpl,
-#'   trait_name = td$name,
-#'   trait_desc = td$description,
-#'   text1      = text1,
-#'   text2      = text2
-#' )
-#' cat(substr(prompt, 1, 200), "...\n")
+#' Which of the samples below is better on {TRAIT_NAME}?
+#'
+#' SAMPLE 1:
+#' {SAMPLE_1}
+#'
+#' SAMPLE 2:
+#' {SAMPLE_2}
+#'
+#' <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> or
+#' <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+#' "
+#'
+#' tmpl2 <- set_prompt_template(template = custom)
+#' cat(substr(tmpl2, 1, 120), "...\n")
 #'
 #' @export
 set_prompt_template <- function(template = NULL,
@@ -46,69 +91,26 @@ set_prompt_template <- function(template = NULL,
     return(.validate_template(template_text))
   }
 
-  default <- "
-You are an expert writing assessor.
+  # Default: use the built-in template from inst/templates/default.txt
+  default <- .pwllm_get_builtin_template("default")
 
-Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.
+  if (is.null(default)) {
+    stop(
+      "Built-in default template not found. ",
+      "Expected a file 'inst/templates/default.txt' in the package.",
+      call. = FALSE
+    )
+  }
 
-Definition of {TRAIT_NAME}:
-{TRAIT_DESCRIPTION}
-
-INSTRUCTIONS:
-1. Read BOTH samples carefully.
-
-2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.
-   Do NOT consider length, formatting, grammar, topic relevance, or any other
-   aspect unless it directly affects {TRAIT_NAME}.
-
-3. The labels SAMPLE_1 and SAMPLE_2 are arbitrary. They do NOT indicate quality.
-   SAMPLE_1 could have been SAMPLE_2 and vice versa.
-
-3a. Before deciding, remind yourself explicitly that SAMPLE_1 and SAMPLE_2 might
-    have been presented in the opposite order. Your decision MUST NOT depend on
-    their position.
-
-3b. After reading both samples, PAUSE and reconsider which sample is truly better
-    on {TRAIT_NAME}, independent of position.
-
-4. You MUST choose exactly one sample. If the samples seem equal, choose the one
-   that is even slightly better on {TRAIT_NAME}. Do NOT output ties.
-
-5. Decide which sample has BETTER QUALITY on {TRAIT_NAME}.
-   Think silently. Do NOT reveal your reasoning.
-
-6. After making your judgment, respond EXACTLY with ONE of the following lines:
-
-   <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-   OR
-
-   <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-
-6a. Before responding, VERIFY that the tag you are about to output matches
-    your internal decision about which sample is better.
-
-IMPORTANT:
-- Output EXACTLY one of the two lines above.
-- Do NOT add explanations, reasoning, punctuation, or extra text.
-- Do NOT include chain-of-thought or justification.
-
-SAMPLE 1:
-{SAMPLE_1}
-
-SAMPLE 2:
-{SAMPLE_2}
-"
-
-  .validate_template(default)
+  default
 }
 
 # Internal helper: check that required placeholders are present
 .validate_template <- function(template) {
-  required <- c("{TRAIT_DESCRIPTION}", "{SAMPLE_1}", "{SAMPLE_2}")
+  required <- c("{TRAIT_NAME}", "{TRAIT_DESCRIPTION}", "{SAMPLE_1}", "{SAMPLE_2}")
   missing <- required[!vapply(required, grepl, logical(1), x = template, fixed = TRUE)]
 
-  if (length(missing) > 0) {
+  if (length(missing) > 0L) {
     stop(
       "Template is missing required placeholder(s): ",
       paste(missing, collapse = ", "),
@@ -180,3 +182,225 @@ build_prompt <- function(template,
 
   out
 }
+
+#' Register a named prompt template
+#'
+#' This function validates a template (or reads it from a file) and
+#' stores it under a user-provided name for reuse in the current R
+#' session. Registered templates live in a package-internal registry.
+#'
+#' To make templates persistent across sessions, call this function
+#' in your \code{.Rprofile} or in a project startup script.
+#'
+#' Any template must contain the placeholders
+#' \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
+#' \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
+#'
+#' @param name Character scalar; name under which to store the template.
+#' @param template Optional character string containing a custom template.
+#'   If \code{NULL}, the template is read from \code{file}, or the
+#'   package default is used when both \code{template} and \code{file}
+#'   are \code{NULL}.
+#' @param file Optional path to a text file containing a template.
+#'   Ignored if \code{template} is not \code{NULL}.
+#' @param overwrite Logical; if \code{FALSE} (default), an error is
+#'   thrown when \code{name} already exists in the registry.
+#'
+#' @return Invisibly, the validated template string.
+#'
+#' @examples
+#' # Register a custom template for this session
+#' custom <- "
+#' You are an expert writing assessor for {TRAIT_NAME}.
+#'
+#' {TRAIT_NAME} is defined as {TRAIT_DESCRIPTION}.
+#'
+#' Which of the samples below is better on {TRAIT_NAME}?
+#'
+#' SAMPLE 1:
+#' {SAMPLE_1}
+#'
+#' SAMPLE 2:
+#' {SAMPLE_2}
+#'
+#' <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> or
+#' <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+#' "
+#'
+#' register_prompt_template("my_custom", template = custom)
+#'
+#' # Retrieve and inspect it
+#' tmpl <- get_prompt_template("my_custom")
+#' cat(substr(tmpl, 1, 160), "...\n")
+#'
+#' @export
+register_prompt_template <- function(name,
+                                     template  = NULL,
+                                     file      = NULL,
+                                     overwrite = FALSE) {
+  if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
+    stop("`name` must be a non-empty character scalar.", call. = FALSE)
+  }
+
+  # Use the existing helper to build/validate the template
+  tmpl <- set_prompt_template(template = template, file = file)
+
+  if (!overwrite &&
+      exists(name, envir = .pwllm_prompt_templates, inherits = FALSE)) {
+    stop(
+      "A prompt template named '", name, "' is already registered. ",
+      "Use `overwrite = TRUE` to replace it.",
+      call. = FALSE
+    )
+  }
+
+  assign(name, tmpl, envir = .pwllm_prompt_templates)
+  invisible(tmpl)
+}
+
+#' Retrieve a named prompt template
+#'
+#' This function retrieves a prompt template from either:
+#' \itemize{
+#'   \item the user registry (see \code{\link{register_prompt_template}}), or
+#'   \item a built-in template stored under \code{inst/templates}.
+#' }
+#'
+#' The function first checks user-registered templates, then looks for
+#' a built-in text file \code{inst/templates/<name>.txt}. The special
+#' name \code{"default"} falls back to \code{\link{set_prompt_template}()}
+#' when no user-registered or built-in template is found.
+#'
+#' @param name Character scalar giving the template name.
+#'
+#' @return A single character string containing the prompt template.
+#'
+#' @examples
+#' # Get the built-in default template
+#' tmpl_default <- get_prompt_template("default")
+#'
+#' # List available template names (built-in + registered)
+#' list_prompt_templates()
+#'
+#' @seealso \code{\link{register_prompt_template}},
+#'   \code{\link{list_prompt_templates}},
+#'   \code{\link{remove_prompt_template}}
+#'
+#' @export
+get_prompt_template <- function(name = "default") {
+  if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
+    stop("`name` must be a non-empty character scalar.", call. = FALSE)
+  }
+
+  # 1) User-registered template wins
+  if (exists(name, envir = .pwllm_prompt_templates, inherits = FALSE)) {
+    return(get(name, envir = .pwllm_prompt_templates, inherits = FALSE))
+  }
+
+  # 2) Built-in template from inst/templates
+  builtin <- .pwllm_get_builtin_template(name)
+  if (!is.null(builtin)) {
+    return(builtin)
+  }
+
+  # 3) Special case: "default" falls back to set_prompt_template()
+  if (identical(name, "default")) {
+    return(set_prompt_template())
+  }
+
+  stop(
+    "No prompt template found with name '", name, "'. ",
+    "Use `list_prompt_templates()` to see available names.",
+    call. = FALSE
+  )
+}
+
+#' List available prompt templates
+#'
+#' This function lists template names that are available either as
+#' built-in text files under \code{inst/templates} or as
+#' user-registered templates in the current R session.
+#'
+#' Built-in templates are identified by files named
+#' \code{<name>.txt} within \code{inst/templates}. For example, a
+#' file \code{inst/templates/minimal.txt} will be listed as
+#' \code{"minimal"}.
+#'
+#' @param include_builtin Logical; include built-in template names
+#'   (the default is \code{TRUE}).
+#' @param include_registered Logical; include user-registered names
+#'   (the default is \code{TRUE}).
+#'
+#' @return A sorted character vector of unique template names.
+#'
+#' @examples
+#' list_prompt_templates()
+#'
+#' @export
+list_prompt_templates <- function(include_builtin    = TRUE,
+                                  include_registered = TRUE) {
+  out <- character()
+
+  if (isTRUE(include_builtin)) {
+    # List files under inst/templates at run time
+    dir_path <- system.file("templates", package = "pairwiseLLM")
+    if (!identical(dir_path, "") && dir.exists(dir_path)) {
+      files <- list.files(dir_path, pattern = "\\.txt$", full.names = FALSE)
+      builtin_names <- sub("\\.txt$", "", files)
+      out <- c(out, builtin_names)
+    }
+  }
+
+  if (isTRUE(include_registered)) {
+    reg <- ls(envir = .pwllm_prompt_templates, all.names = FALSE)
+    out <- c(out, reg)
+  }
+
+  sort(unique(out))
+}
+
+#' Remove a registered prompt template
+#'
+#' This function removes a template from the user registry created by
+#' \code{\link{register_prompt_template}}. It does not affect built-in
+#' templates stored under \code{inst/templates}.
+#'
+#' @param name Character scalar; name of the template to remove.
+#' @param quiet Logical; if \code{FALSE} (default), an error is thrown
+#'   when \code{name} is not found in the user registry. When
+#'   \code{TRUE}, the function simply returns \code{FALSE} in that
+#'   case.
+#'
+#' @return Invisibly, \code{TRUE} if a template was removed,
+#'   \code{FALSE} otherwise.
+#'
+#' @examples
+#' # Register and then remove a template
+#' register_prompt_template("to_delete", template = set_prompt_template())
+#' remove_prompt_template("to_delete")
+#'
+#' @seealso \code{\link{register_prompt_template}},
+#'   \code{\link{get_prompt_template}},
+#'   \code{\link{list_prompt_templates}}
+#'
+#' @export
+remove_prompt_template <- function(name, quiet = FALSE) {
+  if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
+    stop("`name` must be a non-empty character scalar.", call. = FALSE)
+  }
+
+  if (!exists(name, envir = .pwllm_prompt_templates, inherits = FALSE)) {
+    if (!quiet) {
+      stop(
+        "No registered prompt template named '", name, "'. ",
+        "Built-in templates stored under inst/templates cannot be removed.",
+        call. = FALSE
+      )
+    }
+    return(invisible(FALSE))
+  }
+
+  rm(list = name, envir = .pwllm_prompt_templates)
+  invisible(TRUE)
+}
+

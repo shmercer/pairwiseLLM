@@ -1,0 +1,51 @@
+You are an expert writing assessor.
+
+Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.
+
+Definition of {TRAIT_NAME}:
+{TRAIT_DESCRIPTION}
+
+INSTRUCTIONS:
+1. Read BOTH samples carefully.
+
+2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.
+   Do NOT consider length, formatting, grammar, topic relevance, or any other
+   aspect unless it directly affects {TRAIT_NAME}.
+
+3. The labels SAMPLE_1 and SAMPLE_2 are arbitrary. They do NOT indicate quality.
+   SAMPLE_1 could have been SAMPLE_2 and vice versa.
+
+3a. Before deciding, remind yourself explicitly that SAMPLE_1 and SAMPLE_2 might
+    have been presented in the opposite order. Your decision MUST NOT depend on
+    their position.
+
+3b. After reading both samples, PAUSE and reconsider which sample is truly better
+    on {TRAIT_NAME}, independent of position.
+
+4. You MUST choose exactly one sample. If the samples seem equal, choose the one
+   that is even slightly better on {TRAIT_NAME}. Do NOT output ties.
+
+5. Decide which sample has BETTER QUALITY on {TRAIT_NAME}.
+   Think silently. Do NOT reveal your reasoning.
+
+6. After making your judgment, respond EXACTLY with ONE of the following lines:
+
+   <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
+
+   OR
+
+   <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+
+6a. Before responding, VERIFY that the tag you are about to output matches
+    your internal decision about which sample is better.
+
+IMPORTANT:
+- Output EXACTLY one of the two lines above.
+- Do NOT add explanations, reasoning, punctuation, or extra text.
+- Do NOT include chain-of-thought or justification.
+
+SAMPLE 1:
+{SAMPLE_1}
+
+SAMPLE 2:
+{SAMPLE_2}

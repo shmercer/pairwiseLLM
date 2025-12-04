@@ -175,3 +175,223 @@ test_that("build_prompt works end-to-end with example_writing_samples", {
   expect_true(grepl(td$name,      prompt, fixed = TRUE))
   expect_true(grepl("BETTER_SAMPLE", prompt, fixed = TRUE))
 })
+
+# -------------------------------------------------------------------------
+# New tests for txt-based built-in templates + registry API
+# -------------------------------------------------------------------------
+
+test_that("default template is loaded from inst/templates via get_prompt_template", {
+  tmpl1 <- set_prompt_template()
+  tmpl2 <- get_prompt_template("default")
+
+  expect_type(tmpl2, "character")
+  expect_identical(tmpl1, tmpl2)
+
+  # Still has required placeholders
+  expect_true(grepl("{TRAIT_NAME}",        tmpl2, fixed = TRUE))
+  expect_true(grepl("{TRAIT_DESCRIPTION}", tmpl2, fixed = TRUE))
+  expect_true(grepl("{SAMPLE_1}",          tmpl2, fixed = TRUE))
+  expect_true(grepl("{SAMPLE_2}",          tmpl2, fixed = TRUE))
+})
+
+test_that("list_prompt_templates includes built-in default from inst/templates", {
+  all_names <- list_prompt_templates(
+    include_builtin    = TRUE,
+    include_registered = FALSE
+  )
+
+  expect_true("default" %in% all_names)
+})
+
+test_that("list_prompt_templates respects include_builtin and include_registered flags", {
+  # Clear registry to avoid interference from other tests
+  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+     envir = .pwllm_prompt_templates)
+
+  # Register one custom template
+  custom_tmpl <- "
+Trait: {TRAIT_NAME}
+Definition: {TRAIT_DESCRIPTION}
+A: {SAMPLE_1}
+B: {SAMPLE_2}
+"
+  register_prompt_template("my_custom", template = custom_tmpl)
+
+  builtin_only <- list_prompt_templates(
+    include_builtin    = TRUE,
+    include_registered = FALSE
+  )
+  registered_only <- list_prompt_templates(
+    include_builtin    = FALSE,
+    include_registered = TRUE
+  )
+  both <- list_prompt_templates(
+    include_builtin    = TRUE,
+    include_registered = TRUE
+  )
+
+  expect_true("default" %in% builtin_only)
+  expect_false("my_custom" %in% builtin_only)
+
+  expect_false("default" %in% registered_only)
+  expect_true("my_custom" %in% registered_only)
+
+  expect_true(all(c("default", "my_custom") %in% both))
+})
+
+test_that("register_prompt_template stores and retrieves a template by name", {
+  # Clear registry
+  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+     envir = .pwllm_prompt_templates)
+
+  custom_tmpl <- "
+You are assessing {TRAIT_NAME}.
+S1: {SAMPLE_1}
+S2: {SAMPLE_2}
+Definition: {TRAIT_DESCRIPTION}
+"
+
+  invisible(register_prompt_template("short", template = custom_tmpl))
+
+  # Should be listed as registered
+  regs <- list_prompt_templates(
+    include_builtin    = FALSE,
+    include_registered = TRUE
+  )
+  expect_true("short" %in% regs)
+
+  # And retrievable via get_prompt_template()
+  tmpl <- get_prompt_template("short")
+  expect_identical(tmpl, custom_tmpl)
+})
+
+test_that("register_prompt_template can read from file and validates placeholders", {
+  # Clear registry
+  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+     envir = .pwllm_prompt_templates)
+
+  good_tmpl <- "
+Compare {SAMPLE_1} vs {SAMPLE_2} on {TRAIT_NAME}.
+Definition: {TRAIT_DESCRIPTION}
+"
+
+  tmp <- tempfile("pairwiseLLM-reg-template-", fileext = ".txt")
+  writeLines(good_tmpl, con = tmp)
+
+  invisible(register_prompt_template("from_file", file = tmp))
+
+  tmpl <- get_prompt_template("from_file")
+  expect_identical(tmpl, good_tmpl)
+
+  bad_tmpl <- "
+Missing placeholders except {SAMPLE_1}.
+"
+  tmp_bad <- tempfile("pairwiseLLM-reg-template-bad-", fileext = ".txt")
+  writeLines(bad_tmpl, con = tmp_bad)
+
+  expect_error(
+    register_prompt_template("bad_from_file", file = tmp_bad),
+    "missing required placeholder"
+  )
+})
+
+test_that("register_prompt_template enforces overwrite = FALSE by default", {
+  # Clear registry
+  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+     envir = .pwllm_prompt_templates)
+
+  tmpl1 <- "
+Template one with {TRAIT_NAME}, {TRAIT_DESCRIPTION}, {SAMPLE_1}, {SAMPLE_2}.
+"
+  tmpl2 <- "
+Template two with {TRAIT_NAME}, {TRAIT_DESCRIPTION}, {SAMPLE_1}, {SAMPLE_2}.
+"
+
+  register_prompt_template("dup_name", template = tmpl1)
+
+  expect_error(
+    register_prompt_template("dup_name", template = tmpl2),
+    "already registered"
+  )
+
+  # Overwrite should succeed
+  register_prompt_template("dup_name", template = tmpl2, overwrite = TRUE)
+  retrieved <- get_prompt_template("dup_name")
+  expect_identical(retrieved, tmpl2)
+})
+
+test_that("get_prompt_template prefers registered templates over built-ins", {
+  # Clear registry
+  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+     envir = .pwllm_prompt_templates)
+
+  builtin_default <- get_prompt_template("default")
+
+  # Register a custom template under the same name
+  custom_default <- "
+Custom default for {TRAIT_NAME} with {SAMPLE_1} and {SAMPLE_2}.
+Definition: {TRAIT_DESCRIPTION}
+"
+  register_prompt_template("default", template = custom_default)
+
+  # get_prompt_template() should now return the registered version
+  tmpl <- get_prompt_template("default")
+  expect_identical(tmpl, custom_default)
+
+  # set_prompt_template() still uses the built-in default from inst/templates
+  tmpl_set <- set_prompt_template()
+  expect_identical(builtin_default, tmpl_set)
+})
+
+test_that("get_prompt_template errors on unknown name", {
+  # Clear registry (but keep built-ins unaffected)
+  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+     envir = .pwllm_prompt_templates)
+
+  expect_error(
+    get_prompt_template("definitely_not_a_template_name"),
+    "No prompt template found"
+  )
+})
+
+test_that("remove_prompt_template removes only registered templates, not built-ins", {
+  # Clear registry
+  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+     envir = .pwllm_prompt_templates)
+
+  custom_tmpl <- "
+Registered for removal {TRAIT_NAME}, {TRAIT_DESCRIPTION}, {SAMPLE_1}, {SAMPLE_2}.
+"
+  register_prompt_template("to_remove", template = custom_tmpl)
+
+  # Ensure it exists
+  expect_true("to_remove" %in% list_prompt_templates(
+    include_builtin    = FALSE,
+    include_registered = TRUE
+  ))
+
+  # Remove it
+  res <- remove_prompt_template("to_remove")
+  expect_true(res)
+
+  expect_false("to_remove" %in% list_prompt_templates(
+    include_builtin    = FALSE,
+    include_registered = TRUE
+  ))
+
+  # Attempting to remove a non-registered name should error by default
+  expect_error(
+    remove_prompt_template("does_not_exist"),
+    "No registered prompt template"
+  )
+
+  # But can be silenced with quiet = TRUE
+  res2 <- remove_prompt_template("does_not_exist", quiet = TRUE)
+  expect_false(res2)
+
+  # Built-in templates such as "default" are not removable:
+  expect_error(
+    remove_prompt_template("default"),
+    "No registered prompt template"
+  )
+})
