@@ -133,8 +133,6 @@ build_bt_data <- function(results) {
 #' fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
 #' }
 #'
-#' @import sirt
-#' @import BradleyTerry2
 #' @import tibble
 #' @import dplyr
 #' @importFrom stats aggregate
@@ -154,6 +152,14 @@ fit_bt_model <- function(bt_data,
   # sirt::btm helper
   # --------------------------
   fit_sirt <- function(dat, ...) {
+    if (!requireNamespace("sirt", quietly = TRUE)) {
+      stop(
+        "Package 'sirt' must be installed to use engine = \"sirt\".\n",
+        "Install it with: install.packages(\"sirt\")",
+        call. = FALSE
+      )
+    }
+
     # Suppress the benign "NAs introduced by coercion" warning
     fit <- suppressWarnings(sirt::btm(dat, ...))
 
@@ -163,8 +169,11 @@ fit_bt_model <- function(bt_data,
     }
 
     if (!all(c("individual", "theta", "se.theta") %in% names(effects))) {
-      stop("sirt::btm$effects does not contain expected columns ",
-           "`individual`, `theta`, `se.theta`.", call. = FALSE)
+      stop(
+        "sirt::btm$effects does not contain expected columns ",
+        "`individual`, `theta`, `se.theta`.",
+        call. = FALSE
+      )
     }
 
     theta <- tibble::tibble(
@@ -185,6 +194,14 @@ fit_bt_model <- function(bt_data,
   # BradleyTerry2 helper
   # --------------------------
   fit_bt2 <- function(dat, ...) {
+    if (!requireNamespace("BradleyTerry2", quietly = TRUE)) {
+      stop(
+        "Package 'BradleyTerry2' must be installed to use engine = \"BradleyTerry2\".\n",
+        "Install it with: install.packages(\"BradleyTerry2\")",
+        call. = FALSE
+      )
+    }
+
     dat <- as.data.frame(dat)
     names(dat)[1:3] <- c("object1", "object2", "result")
 
@@ -196,7 +213,7 @@ fit_bt_model <- function(bt_data,
     agg[is.na(agg)] <- 0
     names(agg)[3:4] <- c("win1", "win2")
 
-    # --- KEY FIX: force both player factors to share identical levels ---
+    # Force both player factors to share identical levels
     players <- sort(unique(c(agg$object1, agg$object2)))
     agg$object1 <- factor(agg$object1, levels = players)
     agg$object2 <- factor(agg$object2, levels = players)
@@ -228,6 +245,8 @@ fit_bt_model <- function(bt_data,
   # --------------------------
   # Dispatch
   # --------------------------
+
+  # Explicit engines first
   if (engine == "sirt") {
     return(fit_sirt(bt_data, ...))
   }
@@ -236,18 +255,30 @@ fit_bt_model <- function(bt_data,
     return(fit_bt2(bt_data, ...))
   }
 
-  # engine = "auto":
-  res <- tryCatch(fit_sirt(bt_data, ...), error = function(e) e)
-  if (inherits(res, "error")) {
-    res2 <- tryCatch(fit_bt2(bt_data, ...), error = function(e) e)
-    if (inherits(res2, "error")) {
-      stop("Both sirt and BradleyTerry2 failed:\n",
-           "sirt error: ", conditionMessage(res), "\n",
-           "BT2 error: ", conditionMessage(res2),
-           call. = FALSE)
-    }
-    return(res2)
+  # engine == "auto": try sirt, then fallback to BradleyTerry2
+  res_sirt <- tryCatch(
+    fit_sirt(bt_data, ...),
+    error = function(e) e
+  )
+
+  if (!inherits(res_sirt, "error")) {
+    return(res_sirt)
   }
 
-  res
+  res_bt2 <- tryCatch(
+    fit_bt2(bt_data, ...),
+    error = function(e) e
+  )
+
+  if (!inherits(res_bt2, "error")) {
+    return(res_bt2)
+  }
+
+  # If we get here, both engines failed
+  stop(
+    "Both sirt and BradleyTerry2 failed:\n",
+    "sirt error: ", conditionMessage(res_sirt), "\n",
+    "BradleyTerry2 error: ", conditionMessage(res_bt2),
+    call. = FALSE
+  )
 }
