@@ -568,7 +568,15 @@ summarize_model_thinking <- function(provider, model, thinking) {
     NULL
   }
 
-  p_sample1_overall <- extract_numeric_metric(bias, "p_sample1)overall")
+  # Correct extraction of p_sample1_overall from check_positional_bias()
+  p_sample1_overall <- NA_real_
+  if (!is.null(bias)) {
+    if (is.data.frame(bias) && "p_sample1_overall" %in% names(bias)) {
+      p_sample1_overall <- bias$p_sample1_overall[1]
+    } else {
+      p_sample1_overall <- extract_numeric_metric(bias, "p_sample1_overall")
+    }
+  }
 
   tibble::tibble(
     prop_consistent   = prop_consistent,

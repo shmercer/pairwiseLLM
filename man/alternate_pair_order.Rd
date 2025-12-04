@@ -12,7 +12,7 @@ alternate_pair_order(pairs)
 }
 \value{
 A tibble identical to \code{pairs} except that rows 2, 4, 6, ...
-have been reversed.
+have \code{ID1}/\code{text1} and \code{ID2}/\code{text2} swapped.
 }
 \description{
 This helper takes a table of paired writing samples (with columns
@@ -20,9 +20,16 @@ This helper takes a table of paired writing samples (with columns
 every second row (rows 2, 4, 6, ...). This provides a perfectly balanced
 reversal pattern without the randomness of \code{randomize_pair_order()}.
 }
+\details{
+This is useful when you want a fixed 50/50 mix of original and reversed
+pairs for bias control, benchmarking, or debugging, without relying on
+the random number generator or seeds.
+}
 \examples{
 data("example_writing_samples")
 pairs <- make_pairs(example_writing_samples)
+
+# Deterministic alternation (no randomness)
 pairs_alt <- alternate_pair_order(pairs)
 
 head(pairs[, c("ID1", "ID2")])

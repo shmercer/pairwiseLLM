@@ -7,52 +7,53 @@
 randomize_pair_order(pairs, seed = NULL)
 }
 \arguments{
-\item{pairs}{A data frame or tibble with columns \code{ID1}, \code{text1}, \code{ID2},
-and \code{text2}.}
+\item{pairs}{A data frame or tibble with columns \code{ID1}, \code{text1},
+\code{ID2}, and \code{text2}. Typically created by \code{\link{make_pairs}}
+(optionally followed by \code{\link{sample_pairs}}).}
 
 \item{seed}{Optional integer seed for reproducible randomization. If
-\code{NULL} (default), the current RNG state is used.}
+\code{NULL} (default), the current RNG state is used and not modified.}
 }
 \value{
 A tibble with the same columns as \code{pairs}, but with some rows'
-\code{ID1}/\code{text1} and \code{ID2}/\code{text2} swapped.
+\code{ID1}/\code{text1} and \code{ID2}/\code{text2} swapped at random.
 }
 \description{
 This helper takes a table of paired writing samples (with columns
-\code{ID1}, \code{text1}, \code{ID2}, and \code{text2}) and, for each row, randomly decides
-whether to keep the current order or swap the two samples.
-Approximately half of the pairs will be reversed on average.
+\code{ID1}, \code{text1}, \code{ID2}, and \code{text2}) and, for each row,
+randomly decides whether to keep the current order or swap the two samples.
+The result is that approximately half of the pairs will have the original
+order and half will be reversed, on average.
 }
 \details{
-This randomness helps reduce position-bias in LLM-based comparisons,
-and the resulting mixtures of forward and reversed pairs can be used
-to evaluate reverse-order consistency (see \code{sample_reverse_pairs()} and
-\code{compute_reverse_consistency()}).
-\subsection{Deterministic alternative}{
+This is useful for reducing position biases in LLM-based paired comparisons,
+while still allowing reverse-order consistency checks via
+\code{\link{sample_reverse_pairs}} and
+\code{\link{compute_reverse_consistency}}.
 
-If you prefer a fully reproducible \emph{non-random} ordering that always
-flips every second pair, use \code{alternate_pair_order()}. That function
-produces a perfectly balanced 50/50 split between original and reversed
-pairs without using the RNG, which can be desirable for reproducibility,
-debugging, formal evaluations, or fixed benchmark workflows.
-}
-
-\subsection{Parameters}{
-}
+If you want a \emph{deterministic} alternation of positions (for example,
+first pair as-is, second pair swapped, third pair as-is, and so on), use
+\code{\link{alternate_pair_order}} instead of this function.
 }
 \examples{
-data("example_writing_samples")
+data("example_writing_samples", package = "pairwiseLLM")
+
+# Build all pairs
 pairs_all <- make_pairs(example_writing_samples)
 
-# Randomized ordering
+# Randomly flip the order within pairs
 set.seed(123)
 pairs_rand <- randomize_pair_order(pairs_all, seed = 123)
 
-# Deterministic alternation (no randomness)
-pairs_alt <- alternate_pair_order(pairs_all)
-
 head(pairs_all[, c("ID1", "ID2")])
 head(pairs_rand[, c("ID1", "ID2")])
-head(pairs_alt[,  c("ID1", "ID2")])
 
+# For deterministic alternation instead of randomness, see:
+# alt_pairs <- alternate_pair_order(pairs_all)
+
+}
+\seealso{
+\code{\link{alternate_pair_order}} for deterministic alternating order,
+\code{\link{sample_reverse_pairs}} and
+\code{\link{compute_reverse_consistency}} for reverse-order checks.
 }
