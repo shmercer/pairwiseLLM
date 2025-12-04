@@ -10,7 +10,7 @@ test_that("example_writing_pairs has expected structure", {
   data("example_writing_pairs", package = "pairwiseLLM")
 
   expect_s3_class(example_writing_pairs, "tbl_df")
-  expect_equal(nrow(example_writing_pairs), choose(30, 2))
+  expect_equal(nrow(example_writing_pairs), choose(20, 2))
   expect_true(all(c("ID1", "ID2", "better_id") %in% names(example_writing_pairs)))
 })
 
