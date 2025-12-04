@@ -37,7 +37,9 @@ or a compatible character scalar.}
 \item{include_thoughts}{Logical; whether to request and parse model
 "thoughts" (where supported). For OpenAI GPT-5.1, setting this to \code{TRUE}
 will by default cause the batch to use the \code{responses} endpoint (unless
-you explicitly pass an \code{endpoint} in \code{...}).}
+you explicitly pass an \code{endpoint} in \code{...}). For Anthropic, setting this
+to \code{TRUE} while \code{reasoning = "none"} (in \code{...}) upgrades to
+\code{reasoning = "enabled"}, which implies \code{temperature = 1} for the batch.}
 
 \item{include_raw}{Logical; whether to include raw provider responses in the
 result (where supported by backends).}
@@ -46,7 +48,8 @@ result (where supported by backends).}
 \verb{run_*_batch_pipeline()} functions. This can include provider-specific
 options such as temperature or batch configuration fields. For OpenAI,
 this may include \code{endpoint}, \code{temperature}, \code{top_p}, \code{logprobs},
-\code{reasoning}, etc.}
+\code{reasoning}, etc. For Anthropic, this may include \code{reasoning},
+\code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}.}
 }
 \value{
 A list of class \code{"pairwiseLLM_batch"} containing at least:
@@ -83,6 +86,27 @@ effort is supplied in \code{...}.
 
 You can override this by explicitly passing \code{endpoint = "chat.completions"}
 or \code{endpoint = "responses"} in \code{...}.
+
+For Anthropic, this helper delegates temperature and extended-thinking
+behaviour to \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}} and
+\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}}, which apply the following rules:
+\itemize{
+\item When \code{reasoning = "none"} (no extended thinking), the default
+temperature is \code{0} (deterministic) unless you explicitly supply a
+different \code{temperature} in \code{...}.
+\item When \code{reasoning = "enabled"} (extended thinking), Anthropic requires
+\code{temperature = 1}. If you supply a different value in \code{...}, an error
+is raised. Default values in this mode are \code{max_tokens = 2048} and
+\code{thinking_budget_tokens = 1024}, subject to
+\verb{1024 <= thinking_budget_tokens < max_tokens}.
+\item Setting \code{include_thoughts = TRUE} while leaving \code{reasoning = "none"}
+causes \code{run_anthropic_batch_pipeline()} to upgrade to
+\code{reasoning = "enabled"}, which implies \code{temperature = 1} for the batch.
+}
+
+For Gemini, this helper simply forwards \code{include_thoughts} and other
+arguments to \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}, which is responsible for
+interpreting any thinking-related options.
 
 Currently, this function \emph{synchronously} runs the full batch pipeline for
 each backend (build requests, create batch, poll until complete, download

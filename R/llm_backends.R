@@ -59,7 +59,8 @@
 #'   arguments such as `temperature`, `top_p`, `logprobs`, `reasoning`, and
 #'   `include_thoughts`. For `"anthropic"` and `"gemini"` they are forwarded to
 #'   the corresponding live helper and may include parameters such as
-#'   `max_output_tokens`, `include_thoughts`, or provider-specific options.
+#'   `reasoning`, `include_thoughts`, `max_output_tokens`, or
+#'   provider-specific options.
 #'
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper (for example [openai_compare_pair_live()]
@@ -176,7 +177,7 @@ llm_compare_pair <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,      # backend handles default env var
+        api_key           = api_key %||% Sys.getenv("ANTHROPIC_API_KEY"),
         include_raw       = include_raw,
         ...
       )

@@ -135,13 +135,29 @@ NULL
 #' \code{\link{anthropic_compare_pair_live}}:
 #'
 #' \itemize{
-#'   \item \code{reasoning = "none"}: default \code{temperature = 0},
-#'         \code{max_tokens = 768}.
-#'   \item \code{reasoning = "enabled"}: extended thinking, requires
-#'         \code{temperature = 1}. Defaults to \code{max_tokens = 2048},
+#'   \item \code{reasoning = "none"}:
+#'     \itemize{
+#'       \item Default \code{temperature = 0} (deterministic behaviour),
+#'         unless you explicitly supply a different \code{temperature} via
+#'         \code{...}.
+#'       \item Default \code{max_tokens = 768}, unless overridden via
+#'         \code{max_tokens} in \code{...}.
+#'     }
+#'   \item \code{reasoning = "enabled"} (extended thinking):
+#'     \itemize{
+#'       \item \code{temperature} \strong{must} be 1. If you supply a different
+#'         value in \code{...}, this function throws an error.
+#'       \item Defaults to \code{max_tokens = 2048} and
 #'         \code{thinking_budget_tokens = 1024}, with the constraint
-#'         \code{1024 <= thinking_budget_tokens < max_tokens}.
+#'         \code{1024 <= thinking_budget_tokens < max_tokens}. Violations of
+#'         this constraint produce an error.
+#'     }
 #' }
+#'
+#' As a result, when you build batches without extended thinking
+#' (\code{reasoning = "none"}), the effective default temperature is 0. When
+#' you opt into extended thinking (\code{reasoning = "enabled"}), Anthropic's
+#' requirement of \code{temperature = 1} is enforced for all batch requests.
 #'
 #' @param pairs Tibble or data frame with at least columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2}. Typically created by
@@ -165,7 +181,8 @@ NULL
 #'
 #' @return A tibble with one row per pair and two main columns:
 #' \describe{
-#'   \item{custom_id}{Character ID of the form \code{"<PREFIX>_<ID1>_vs_<ID2>"}.}
+#'   \item{custom_id}{Character ID of the form
+#'     \code{"<PREFIX>_<ID1>_vs_<ID2>"}.}
 #'   \item{params}{List-column containing the Anthropic Messages API
 #'     \code{params} object for each request, ready to be used in the
 #'     \code{requests} array of \code{/v1/messages/batches}.}
@@ -186,7 +203,8 @@ NULL
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' reqs <- build_anthropic_batch_requests(
+#' # Standard batch requests without extended thinking
+#' reqs_none <- build_anthropic_batch_requests(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
 #'   trait_name        = td$name,
@@ -195,7 +213,19 @@ NULL
 #'   reasoning         = "none"
 #' )
 #'
-#' reqs
+#' reqs_none
+#'
+#' # Batch requests with extended thinking (temperature forced to 1)
+#' reqs_reason <- build_anthropic_batch_requests(
+#'   pairs             = pairs,
+#'   model             = "claude-sonnet-4-5",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   reasoning         = "enabled"
+#' )
+#'
+#' reqs_reason
 #' }
 #'
 #' @export
@@ -204,8 +234,8 @@ build_anthropic_batch_requests <- function(
     model,
     trait_name,
     trait_description,
-    prompt_template = set_prompt_template(),
-    reasoning       = c("none", "enabled"),
+    prompt_template  = set_prompt_template(),
+    reasoning        = c("none", "enabled"),
     custom_id_prefix = "ANTH",
     ...
 ) {
@@ -229,13 +259,16 @@ build_anthropic_batch_requests <- function(
 
   dots <- list(...)
 
-  # Determine effective temperature / thinking defaults once, per reasoning mode.
   get_body_for_pair <- function(ID1, text1, ID2, text2) {
-    # Temperature defaults and validation
+    # --------------------------------------------------------------------
+    # Temperature, max_tokens, and thinking budget (per reasoning mode)
+    # --------------------------------------------------------------------
     if (reasoning == "none") {
       temperature <- dots$temperature %||% 0
-      max_tokens  <- dots$max_tokens  %||% 768
-      thinking    <- NULL
+      max_tokens  <- dots$max_tokens  %||% 768L
+      max_tokens  <- as.integer(max_tokens)
+
+      thinking               <- NULL
       thinking_budget_tokens <- NULL
     } else {
       # reasoning == "enabled"
@@ -251,10 +284,13 @@ build_anthropic_batch_requests <- function(
         temperature <- dots$temperature
       }
 
-      max_tokens <- dots$max_tokens %||% 2048
-      thinking_budget_tokens <- dots$thinking_budget_tokens %||% 1024
+      max_tokens <- dots$max_tokens %||% 2048L
+      max_tokens <- as.integer(max_tokens)
 
-      if (thinking_budget_tokens < 1024) {
+      thinking_budget_tokens <- dots$thinking_budget_tokens %||% 1024L
+      thinking_budget_tokens <- as.integer(thinking_budget_tokens)
+
+      if (thinking_budget_tokens < 1024L) {
         stop(
           "`thinking_budget_tokens` must be at least 1024 when ",
           "`reasoning = \"enabled\"`.",
@@ -286,15 +322,20 @@ build_anthropic_batch_requests <- function(
     )
 
     user_msg <- list(
-      list(type = "text", text = paste0("<SAMPLE_1>\n", text1, "\n</SAMPLE_1>\n\n",
-                                        "<SAMPLE_2>\n", text2, "\n</SAMPLE_2>"))
+      list(
+        type = "text",
+        text = paste0(
+          "<SAMPLE_1>\n", text1, "\n</SAMPLE_1>\n\n",
+          "<SAMPLE_2>\n", text2, "\n</SAMPLE_2>"
+        )
+      )
     )
 
     params <- list(
-      model      = model,
-      max_tokens = max_tokens,
+      model       = model,
+      max_tokens  = max_tokens,
       temperature = temperature,
-      system = list(
+      system      = list(
         list(type = "text", text = system_msg)
       ),
       messages = list(
@@ -855,6 +896,38 @@ parse_anthropic_batch_output <- function(
 #' blocks are returned and parsed into the \code{thoughts} column by
 #' \code{\link{parse_anthropic_batch_output}}.
 #'
+#' @details
+#' **Temperature and reasoning defaults**
+#'
+#' Temperature and thinking-mode behaviour are controlled by
+#' \code{\link{build_anthropic_batch_requests}}:
+#' \itemize{
+#'   \item When \code{reasoning = "none"} (no extended thinking):
+#'     \itemize{
+#'       \item The default \code{temperature} is \code{0} (deterministic),
+#'         unless you explicitly supply a \code{temperature} argument via
+#'         \code{...}.
+#'       \item The default \code{max_tokens} is \code{768}, unless you
+#'         override it via \code{max_tokens} in \code{...}.
+#'     }
+#'   \item When \code{reasoning = "enabled"} (extended thinking enabled):
+#'     \itemize{
+#'       \item \code{temperature} \strong{must} be \code{1}. If you supply a
+#'         different value in \code{...}, \code{build_anthropic_batch_requests()}
+#'         will throw an error.
+#'       \item By default, \code{max_tokens = 2048} and
+#'         \code{thinking_budget_tokens = 1024}, subject to the constraint
+#'         \code{1024 <= thinking_budget_tokens < max_tokens}. Violations of
+#'         this constraint also produce an error.
+#'     }
+#' }
+#'
+#' Therefore, when you run batches without extended thinking (the usual case),
+#' the effective default is a temperature of \code{0}. When you explicitly use
+#' extended thinking (either by setting \code{reasoning = "enabled"} or by
+#' using \code{include_thoughts = TRUE}), Anthropic's requirement of
+#' \code{temperature = 1} is enforced.
+#'
 #' @param pairs Tibble or data frame with at least columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2}.
 #' @param model Anthropic model name (for example \code{"claude-sonnet-4-5"}).
@@ -865,7 +938,8 @@ parse_anthropic_batch_output <- function(
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}.
 #' @param reasoning Character scalar; one of \code{"none"} or \code{"enabled"}.
-#'   See details above for how \code{include_thoughts} influences this value.
+#'   See details above for how \code{include_thoughts} influences this value and
+#'   how temperature defaults are derived.
 #' @param include_thoughts Logical; if \code{TRUE}, requests extended thinking
 #'   from Claude (by setting \code{reasoning = "enabled"} when necessary) and
 #'   parses any thinking blocks into a \code{thoughts} column in the batch
@@ -926,7 +1000,7 @@ parse_anthropic_batch_output <- function(
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # 1) Standard batch without extended thinking
+#' # 1) Standard batch without extended thinking (temperature defaults to 0)
 #' pipeline_none <- run_anthropic_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
@@ -944,6 +1018,7 @@ parse_anthropic_batch_output <- function(
 #' head(pipeline_none$results)
 #'
 #' # 2) Batch with extended thinking and thoughts column
+#' #    (temperature is forced to 1 inside build_anthropic_batch_requests())
 #' pipeline_thoughts <- run_anthropic_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",

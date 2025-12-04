@@ -287,6 +287,88 @@ testthat::test_that("llm_compare_pair routes to anthropic backend", {
   )
 })
 
+testthat::test_that("llm_compare_pair uses Anthropic env var when api_key is NULL", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  ID1   <- "S01"
+  ID2   <- "S02"
+  text1 <- "Text 1"
+  text2 <- "Text 2"
+
+  fake_res <- tibble::tibble(
+    custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+    ID1               = ID1,
+    ID2               = ID2,
+    model             = "claude-3-5-sonnet-latest",
+    object_type       = "message",
+    status_code       = 200L,
+    error_message     = NA_character_,
+    thoughts          = NA_character_,
+    content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+    better_sample     = "SAMPLE_1",
+    better_id         = ID1,
+    prompt_tokens     = 10,
+    completion_tokens = 5,
+    total_tokens      = 15
+  )
+
+  calls <- list()
+  old_env <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
+  on.exit(Sys.setenv(ANTHROPIC_API_KEY = old_env), add = TRUE)
+  Sys.setenv(ANTHROPIC_API_KEY = "ENV_ANTH_KEY")
+
+  testthat::with_mocked_bindings(
+    anthropic_compare_pair_live = function(
+    ID1,
+    text1,
+    ID2,
+    text2,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template,
+    api_key,
+    include_raw,
+    ...
+    ) {
+      calls <<- append(calls, list(list(
+        ID1               = ID1,
+        ID2               = ID2,
+        model             = model,
+        api_key           = api_key,
+        include_raw       = include_raw,
+        dots              = list(...)
+      )))
+      fake_res
+    },
+    {
+      res <- llm_compare_pair(
+        ID1               = ID1,
+        text1             = text1,
+        ID2               = ID2,
+        text2             = text2,
+        model             = "claude-3-5-sonnet-latest",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "anthropic",
+        api_key           = NULL,
+        include_raw       = FALSE
+      )
+
+      testthat::expect_equal(length(calls), 1L)
+      call <- calls[[1]]
+
+      # When api_key is NULL, llm_compare_pair should fall back to the env var
+      testthat::expect_equal(call$api_key, "ENV_ANTH_KEY")
+
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(res, fake_res)
+    }
+  )
+})
+
 testthat::test_that("submit_llm_pairs routes to anthropic backend", {
   pairs <- tibble::tibble(
     ID1   = c("S01", "S03"),

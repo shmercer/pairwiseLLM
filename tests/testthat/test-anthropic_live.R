@@ -248,7 +248,7 @@ testthat::test_that("submit_anthropic_pairs_live calls anthropic_compare_pair_li
     anthropic_compare_pair_live = function(
     ID1, text1, ID2, text2, model, trait_name,
     trait_description, prompt_template, api_key,
-    anthropic_version, reasoning, include_raw, ...
+    anthropic_version, reasoning, include_raw, include_thoughts, ...
     ) {
       calls <<- append(calls, list(list(ID1 = ID1, ID2 = ID2)))
       if (ID1 == "S01") fake_result(ID1, ID2, "SAMPLE_1") else fake_result(ID1, ID2, "SAMPLE_2")
@@ -359,6 +359,65 @@ testthat::test_that("anthropic_compare_pair_live defaults and thinking depend on
       testthat::expect_equal(b_reason$thinking$type, "enabled")
       # Default matches your function's default; adjust here if you changed it
       testthat::expect_equal(b_reason$thinking$budget_tokens, 1024)
+    }
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live upgrades reasoning when include_thoughts = TRUE", {
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  bodies <- list()
+
+  fake_body <- list(
+    model  = "claude-sonnet-4-5-20250929",
+    id     = "msg_01XYZ",
+    type   = "message",
+    role   = "assistant",
+    content = list(
+      list(type = "text", text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")
+    ),
+    usage = list(
+      input_tokens  = 10L,
+      output_tokens = 4L
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key       = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) {
+      bodies <<- append(bodies, list(body))
+      req
+    },
+    .anthropic_req_perform   = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) fake_body,
+    .anthropic_resp_status    = function(...) 200L,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1               = "S1",
+        text1             = "A",
+        ID2               = "S2",
+        text2             = "B",
+        model             = "claude-sonnet-4-5",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        reasoning         = "none",
+        include_thoughts  = TRUE
+      )
+
+      testthat::expect_equal(res$better_id, "S1")
+
+      testthat::expect_equal(length(bodies), 1L)
+      b <- bodies[[1]]
+
+      # When include_thoughts = TRUE and reasoning = "none", we upgrade to
+      # extended thinking mode, which implies temperature = 1 and a thinking block
+      testthat::expect_equal(b$temperature, 1)
+      testthat::expect_equal(b$max_tokens, 2048)
+      testthat::expect_true("thinking" %in% names(b))
+      testthat::expect_equal(b$thinking$type, "enabled")
+      testthat::expect_equal(b$thinking$budget_tokens, 1024)
     }
   )
 })
@@ -502,4 +561,3 @@ testthat::test_that("anthropic_compare_pair_live enforces thinking_budget_tokens
     fixed = FALSE
   )
 })
-

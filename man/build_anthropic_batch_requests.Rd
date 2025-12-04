@@ -46,7 +46,8 @@ which will be passed through to the Messages API.}
 \value{
 A tibble with one row per pair and two main columns:
 \describe{
-\item{custom_id}{Character ID of the form \code{"<PREFIX>_<ID1>_vs_<ID2>"}.}
+\item{custom_id}{Character ID of the form
+\code{"<PREFIX>_<ID1>_vs_<ID2>"}.}
 \item{params}{List-column containing the Anthropic Messages API
 \code{params} object for each request, ready to be used in the
 \code{requests} array of \code{/v1/messages/batches}.}
@@ -65,13 +66,29 @@ same recommended defaults and reasoning constraints as
 \code{\link{anthropic_compare_pair_live}}:
 
 \itemize{
-\item \code{reasoning = "none"}: default \code{temperature = 0},
-\code{max_tokens = 768}.
-\item \code{reasoning = "enabled"}: extended thinking, requires
-\code{temperature = 1}. Defaults to \code{max_tokens = 2048},
-\code{thinking_budget_tokens = 1024}, with the constraint
-\code{1024 <= thinking_budget_tokens < max_tokens}.
+\item \code{reasoning = "none"}:
+\itemize{
+\item Default \code{temperature = 0} (deterministic behaviour),
+unless you explicitly supply a different \code{temperature} via
+\code{...}.
+\item Default \code{max_tokens = 768}, unless overridden via
+\code{max_tokens} in \code{...}.
 }
+\item \code{reasoning = "enabled"} (extended thinking):
+\itemize{
+\item \code{temperature} \strong{must} be 1. If you supply a different
+value in \code{...}, this function throws an error.
+\item Defaults to \code{max_tokens = 2048} and
+\code{thinking_budget_tokens = 1024}, with the constraint
+\code{1024 <= thinking_budget_tokens < max_tokens}. Violations of
+this constraint produce an error.
+}
+}
+
+As a result, when you build batches without extended thinking
+(\code{reasoning = "none"}), the effective default temperature is 0. When
+you opt into extended thinking (\code{reasoning = "enabled"}), Anthropic's
+requirement of \code{temperature = 1} is enforced for all batch requests.
 }
 \examples{
 \dontrun{
@@ -88,7 +105,8 @@ pairs <- example_writing_samples |>
 td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-reqs <- build_anthropic_batch_requests(
+# Standard batch requests without extended thinking
+reqs_none <- build_anthropic_batch_requests(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
   trait_name        = td$name,
@@ -97,7 +115,19 @@ reqs <- build_anthropic_batch_requests(
   reasoning         = "none"
 )
 
-reqs
+reqs_none
+
+# Batch requests with extended thinking (temperature forced to 1)
+reqs_reason <- build_anthropic_batch_requests(
+  pairs             = pairs,
+  model             = "claude-sonnet-4-5",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  reasoning         = "enabled"
+)
+
+reqs_reason
 }
 
 }

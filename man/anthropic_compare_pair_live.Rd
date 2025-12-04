@@ -19,6 +19,7 @@ anthropic_compare_pair_live(
   anthropic_version = "2023-06-01",
   reasoning = c("none", "enabled"),
   include_raw = FALSE,
+  include_thoughts = NULL,
   ...
 )
 }
@@ -68,6 +69,14 @@ the default \code{max_tokens} and constrains \code{temperature}.
 \code{raw_response} containing the parsed JSON body returned by Anthropic
 (or \code{NULL} on parse failure). This is useful for debugging parsing
 problems.}
+
+\item{include_thoughts}{Logical or \code{NULL}. When \code{TRUE} and
+\code{reasoning = "none"}, this function upgrades to extended thinking
+mode by setting \code{reasoning = "enabled"} before constructing the
+request, which in turn implies \code{temperature = 1} and adds a
+\code{thinking} block. When \code{FALSE} and \code{reasoning = "enabled"},
+a warning is issued but extended thinking is still used. When
+\code{NULL} (the default), \code{reasoning} is used as-is.}
 
 \item{...}{Additional Anthropic parameters such as \code{max_tokens},
 \code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
@@ -161,6 +170,15 @@ When \code{reasoning = "enabled"}, this function also sends a
   "budget_tokens": <thinking_budget_tokens>
 }
 }
+
+Setting \code{include_thoughts = TRUE} when \code{reasoning = "none"}
+is a convenient way to opt into Anthropic's extended thinking mode without
+changing the \code{reasoning} argument explicitly. In that case,
+\code{reasoning} is upgraded to \code{"enabled"}, the default
+\code{temperature} becomes 1, and a \code{thinking} block is included in the
+request. When \code{reasoning = "none"} and \code{include_thoughts} is
+\code{FALSE} or \code{NULL}, the default temperature remains 0 unless
+you explicitly override it.
 }
 \examples{
 \dontrun{
@@ -200,7 +218,8 @@ res_claude_reason <- anthropic_compare_pair_live(
   trait_description = td$description,
   prompt_template   = tmpl,
   reasoning         = "enabled",
-  include_raw       = TRUE
+  include_raw       = TRUE,
+  include_thoughts  = TRUE
 )
 
 res_claude_reason$total_tokens

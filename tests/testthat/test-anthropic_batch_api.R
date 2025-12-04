@@ -26,6 +26,12 @@ testthat::test_that("build_anthropic_batch_requests builds valid requests", {
   testthat::expect_true(is.list(p1$messages))
   testthat::expect_true(is.list(p1$system))
 
+  # With reasoning = "none", temperature should default to 0 and there
+  # should be no thinking block; max_tokens should default to 768.
+  testthat::expect_equal(p1$temperature, 0)
+  testthat::expect_equal(p1$max_tokens, 768)
+  testthat::expect_false("thinking" %in% names(p1))
+
   # User message should contain SAMPLE_1/SAMPLE_2 tags in text
   msg1 <- p1$messages[[1]]
   testthat::expect_equal(msg1$role, "user")
@@ -86,6 +92,81 @@ testthat::test_that("build_anthropic_batch_requests enforces reasoning constrain
       thinking_budget_tokens = 512
     ),
     regexp = "thinking_budget_tokens"
+  )
+})
+
+testthat::test_that("run_anthropic_batch_pipeline upgrades reasoning for include_thoughts = TRUE", {
+  pairs <- tibble::tibble(
+    ID1   = "S01",
+    text1 = "Text 1",
+    ID2   = "S02",
+    text2 = "Text 2"
+  )
+
+  fake_req_tbl <- tibble::tibble(
+    custom_id = "ANTH_S01_vs_S02",
+    params    = list(list(dummy = TRUE))
+  )
+
+  captured_reasoning <- NULL
+
+  fake_batch_initial <- list(
+    id                = "msgbatch_123",
+    type              = "message_batch",
+    processing_status = "in_progress",
+    request_counts    = list(
+      processing = 1L,
+      succeeded  = 0L,
+      errored    = 0L,
+      canceled   = 0L,
+      expired    = 0L
+    ),
+    results_url = NULL
+  )
+
+  testthat::with_mocked_bindings(
+    build_anthropic_batch_requests = function(pairs, model, trait_name,
+                                              trait_description,
+                                              prompt_template, reasoning, ...) {
+      captured_reasoning <<- reasoning
+      fake_req_tbl
+    },
+    anthropic_create_batch = function(requests, api_key, anthropic_version) {
+      fake_batch_initial
+    },
+    anthropic_poll_batch_until_complete = function(batch_id, interval_seconds,
+                                                   timeout_seconds, api_key,
+                                                   anthropic_version, verbose) {
+      stop("Polling should not be called in this test")
+    },
+    anthropic_download_batch_results = function(batch_id, output_path, api_key,
+                                                anthropic_version) {
+      stop("Download should not be called in this test")
+    },
+    parse_anthropic_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+      stop("Parse should not be called in this test")
+    },
+    {
+      td   <- list(name = "Overall quality", description = "Quality")
+      tmpl <- set_prompt_template()
+
+      # Start with reasoning = "none" but include_thoughts = TRUE; this should
+      # cause run_anthropic_batch_pipeline() to upgrade reasoning to "enabled".
+      res <- run_anthropic_batch_pipeline(
+        pairs             = pairs,
+        model             = "claude-sonnet-4-5",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        reasoning         = "none",
+        include_thoughts  = TRUE,
+        poll              = FALSE,
+        verbose           = FALSE
+      )
+
+      testthat::expect_type(res, "list")
+      testthat::expect_equal(captured_reasoning, "enabled")
+    }
   )
 })
 

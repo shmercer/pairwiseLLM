@@ -64,7 +64,8 @@ are passed on to \code{\link[=openai_compare_pair_live]{openai_compare_pair_live
 arguments such as \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, and
 \code{include_thoughts}. For \code{"anthropic"} and \code{"gemini"} they are forwarded to
 the corresponding live helper and may include parameters such as
-\code{max_output_tokens}, \code{include_thoughts}, or provider-specific options.}
+\code{reasoning}, \code{include_thoughts}, \code{max_output_tokens}, or
+provider-specific options.}
 }
 \value{
 A tibble with one row and the same columns as the underlying

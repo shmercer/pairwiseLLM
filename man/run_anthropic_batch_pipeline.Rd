@@ -39,7 +39,8 @@ run_anthropic_batch_pipeline(
 \code{\link{set_prompt_template}}.}
 
 \item{reasoning}{Character scalar; one of \code{"none"} or \code{"enabled"}.
-See details above for how \code{include_thoughts} influences this value.}
+See details above for how \code{include_thoughts} influences this value and
+how temperature defaults are derived.}
 
 \item{include_thoughts}{Logical; if \code{TRUE}, requests extended thinking
 from Claude (by setting \code{reasoning = "enabled"} when necessary) and
@@ -123,6 +124,37 @@ default of \code{"none"}, this function automatically upgrades
 \code{reasoning} to \code{"enabled"} so that Claude's extended thinking
 blocks are returned and parsed into the \code{thoughts} column by
 \code{\link{parse_anthropic_batch_output}}.
+
+\strong{Temperature and reasoning defaults}
+
+Temperature and thinking-mode behaviour are controlled by
+\code{\link{build_anthropic_batch_requests}}:
+\itemize{
+\item When \code{reasoning = "none"} (no extended thinking):
+\itemize{
+\item The default \code{temperature} is \code{0} (deterministic),
+unless you explicitly supply a \code{temperature} argument via
+\code{...}.
+\item The default \code{max_tokens} is \code{768}, unless you
+override it via \code{max_tokens} in \code{...}.
+}
+\item When \code{reasoning = "enabled"} (extended thinking enabled):
+\itemize{
+\item \code{temperature} \strong{must} be \code{1}. If you supply a
+different value in \code{...}, \code{build_anthropic_batch_requests()}
+will throw an error.
+\item By default, \code{max_tokens = 2048} and
+\code{thinking_budget_tokens = 1024}, subject to the constraint
+\code{1024 <= thinking_budget_tokens < max_tokens}. Violations of
+this constraint also produce an error.
+}
+}
+
+Therefore, when you run batches without extended thinking (the usual case),
+the effective default is a temperature of \code{0}. When you explicitly use
+extended thinking (either by setting \code{reasoning = "enabled"} or by
+using \code{include_thoughts = TRUE}), Anthropic's requirement of
+\code{temperature = 1} is enforced.
 }
 \examples{
 \dontrun{
@@ -139,7 +171,7 @@ pairs <- example_writing_samples |>
 td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# 1) Standard batch without extended thinking
+# 1) Standard batch without extended thinking (temperature defaults to 0)
 pipeline_none <- run_anthropic_batch_pipeline(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
@@ -157,6 +189,7 @@ pipeline_none$batch$processing_status
 head(pipeline_none$results)
 
 # 2) Batch with extended thinking and thoughts column
+#    (temperature is forced to 1 inside build_anthropic_batch_requests())
 pipeline_thoughts <- run_anthropic_batch_pipeline(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",

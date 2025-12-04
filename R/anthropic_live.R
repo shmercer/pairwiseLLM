@@ -109,6 +109,13 @@ NULL
 #'   \code{raw_response} containing the parsed JSON body returned by Anthropic
 #'   (or \code{NULL} on parse failure). This is useful for debugging parsing
 #'   problems.
+#' @param include_thoughts Logical or \code{NULL}. When \code{TRUE} and
+#'   \code{reasoning = "none"}, this function upgrades to extended thinking
+#'   mode by setting \code{reasoning = "enabled"} before constructing the
+#'   request, which in turn implies \code{temperature = 1} and adds a
+#'   \code{thinking} block. When \code{FALSE} and \code{reasoning = "enabled"},
+#'   a warning is issued but extended thinking is still used. When
+#'   \code{NULL} (the default), \code{reasoning} is used as-is.
 #' @param ... Additional Anthropic parameters such as \code{max_tokens},
 #'   \code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
 #'   which will be passed through to the Messages API.
@@ -181,6 +188,15 @@ NULL
 #' }
 #' }
 #'
+#' Setting \code{include_thoughts = TRUE} when \code{reasoning = "none"}
+#' is a convenient way to opt into Anthropic's extended thinking mode without
+#' changing the \code{reasoning} argument explicitly. In that case,
+#' \code{reasoning} is upgraded to \code{"enabled"}, the default
+#' \code{temperature} becomes 1, and a \code{thinking} block is included in the
+#' request. When \code{reasoning = "none"} and \code{include_thoughts} is
+#' \code{FALSE} or \code{NULL}, the default temperature remains 0 unless
+#' you explicitly override it.
+#'
 #' @examples
 #' \dontrun{
 #' # Requires ANTHROPIC_API_KEY and network access.
@@ -219,7 +235,8 @@ NULL
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   reasoning         = "enabled",
-#'   include_raw       = TRUE
+#'   include_raw       = TRUE,
+#'   include_thoughts  = TRUE
 #' )
 #'
 #' res_claude_reason$total_tokens
@@ -242,6 +259,7 @@ anthropic_compare_pair_live <- function(
     anthropic_version = "2023-06-01",
     reasoning         = c("none", "enabled"),
     include_raw       = FALSE,
+    include_thoughts  = NULL,
     ...
 ) {
   reasoning <- match.arg(reasoning)
@@ -252,12 +270,28 @@ anthropic_compare_pair_live <- function(
   if (!is.character(text2) || length(text2) != 1L) stop("`text2` must be a single character.", call. = FALSE)
   if (!is.character(model) || length(model) != 1L) stop("`model` must be a single character.", call. = FALSE)
 
+  # ------------------------------------------------------------------
+  # include_thoughts -> reasoning mapping
+  # ------------------------------------------------------------------
+  if (!is.null(include_thoughts)) {
+    if (isTRUE(include_thoughts) && identical(reasoning, "none")) {
+      reasoning <- "enabled"
+    } else if (!isTRUE(include_thoughts) && identical(reasoning, "enabled")) {
+      warning(
+        "include_thoughts = FALSE but reasoning = 'enabled'; ",
+        "keeping reasoning = 'enabled'.",
+        call. = FALSE
+      )
+    }
+  }
+
   dots <- list(...)
 
   # ------------------------------------------------------------------
   # Temperature defaults & validation
   # ------------------------------------------------------------------
   if (reasoning == "none") {
+    # Default to deterministic behaviour when not using extended thinking
     temperature <- dots$temperature %||% 0
   } else {
     if (is.null(dots$temperature)) {
@@ -506,6 +540,26 @@ anthropic_compare_pair_live <- function(
 #' with one row per pair, making it easy to pass into \code{\link{build_bt_data}}
 #' and \code{\link{fit_bt_model}}.
 #'
+#' @details
+#' **Temperature and reasoning behaviour**
+#'
+#' Temperature and extended-thinking behaviour are controlled by
+#' \code{\link{anthropic_compare_pair_live}}:
+#' \itemize{
+#'   \item When \code{reasoning = "none"} (no extended thinking), the default
+#'     \code{temperature} is \code{0} (deterministic) unless you explicitly
+#'     supply a different \code{temperature} via \code{...}.
+#'   \item When \code{reasoning = "enabled"} (extended thinking), Anthropic
+#'     requires \code{temperature = 1}. If you supply a different value, an
+#'     error is raised by \code{\link{anthropic_compare_pair_live}}.
+#' }
+#'
+#' If you set \code{include_thoughts = TRUE} while \code{reasoning = "none"},
+#' the underlying calls upgrade to \code{reasoning = "enabled"}, which in turn
+#' implies \code{temperature = 1} and adds a \code{thinking} block to the API
+#' request. When \code{include_thoughts = FALSE} (the default), and you leave
+#' \code{reasoning = "none"}, the effective default temperature is \code{0}.
+#'
 #' @param pairs Tibble or data frame with at least columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2}. Typically created by
 #'   \code{\link{make_pairs}}, \code{\link{sample_pairs}}, and
@@ -522,7 +576,7 @@ anthropic_compare_pair_live <- function(
 #' @param anthropic_version Anthropic API version string passed as the
 #'   \code{anthropic-version} HTTP header. Defaults to \code{"2023-06-01"}.
 #' @param reasoning Character scalar passed to
-#'   \code{anthropic_compare_pair_live} (one of \code{"none"} or
+#'   \code{\link{anthropic_compare_pair_live}} (one of \code{"none"} or
 #'   \code{"enabled"}).
 #' @param verbose Logical; if \code{TRUE}, prints status, timing, and result
 #'   summaries.
@@ -533,9 +587,15 @@ anthropic_compare_pair_live <- function(
 #' @param include_raw Logical; if \code{TRUE}, each row of the returned tibble
 #'   will include a \code{raw_response} list-column with the parsed JSON body
 #'   from Anthropic.
+#' @param include_thoughts Logical or \code{NULL}; forwarded to
+#'   \code{\link{anthropic_compare_pair_live}}. When \code{TRUE} and
+#'   \code{reasoning = "none"}, the underlying calls upgrade to extended
+#'   thinking mode (\code{reasoning = "enabled"}), which implies
+#'   \code{temperature = 1} and adds a \code{thinking} block. When
+#'   \code{FALSE} or \code{NULL}, \code{reasoning} is used as-is.
 #' @param ... Additional Anthropic parameters (for example \code{temperature},
 #'   \code{top_p}, \code{max_tokens}) passed on to
-#'   \code{anthropic_compare_pair_live}.
+#'   \code{\link{anthropic_compare_pair_live}}.
 #'
 #' @return A tibble with one row per pair and the same columns as
 #'   \code{\link{anthropic_compare_pair_live}}.
@@ -555,14 +615,13 @@ anthropic_compare_pair_live <- function(
 #' td   <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
+#' # Deterministic comparisons (no extended thinking, temperature defaults to 0)
 #' res_claude <- submit_anthropic_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   temperature       = 0,
-#'   max_tokens        = 768,
 #'   reasoning         = "none",
 #'   verbose           = TRUE,
 #'   status_every      = 2,
@@ -571,6 +630,23 @@ anthropic_compare_pair_live <- function(
 #' )
 #'
 #' res_claude$better_id
+#'
+#' # Comparisons with extended thinking (temperature fixed at 1)
+#' res_claude_reason <- submit_anthropic_pairs_live(
+#'   pairs             = pairs,
+#'   model             = "claude-sonnet-4-5",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   reasoning         = "enabled",
+#'   include_thoughts  = TRUE,
+#'   verbose           = TRUE,
+#'   status_every      = 2,
+#'   progress          = TRUE,
+#'   include_raw       = TRUE
+#' )
+#'
+#' res_claude_reason$better_id
 #' }
 #'
 #' @export
@@ -587,6 +663,7 @@ submit_anthropic_pairs_live <- function(
     status_every      = 1,
     progress          = TRUE,
     include_raw       = FALSE,
+    include_thoughts  = NULL,
     ...
 ) {
   reasoning <- match.arg(reasoning)
@@ -672,6 +749,7 @@ submit_anthropic_pairs_live <- function(
       anthropic_version = anthropic_version,
       reasoning         = reasoning,
       include_raw       = include_raw,
+      include_thoughts  = include_thoughts,
       ...
     )
 

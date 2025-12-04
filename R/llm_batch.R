@@ -18,6 +18,27 @@
 #' You can override this by explicitly passing `endpoint = "chat.completions"`
 #' or `endpoint = "responses"` in `...`.
 #'
+#' For Anthropic, this helper delegates temperature and extended-thinking
+#' behaviour to [run_anthropic_batch_pipeline()] and
+#' [build_anthropic_batch_requests()], which apply the following rules:
+#' \itemize{
+#'   \item When `reasoning = "none"` (no extended thinking), the default
+#'     temperature is `0` (deterministic) unless you explicitly supply a
+#'     different `temperature` in `...`.
+#'   \item When `reasoning = "enabled"` (extended thinking), Anthropic requires
+#'     `temperature = 1`. If you supply a different value in `...`, an error
+#'     is raised. Default values in this mode are `max_tokens = 2048` and
+#'     `thinking_budget_tokens = 1024`, subject to
+#'     `1024 <= thinking_budget_tokens < max_tokens`.
+#'   \item Setting `include_thoughts = TRUE` while leaving `reasoning = "none"`
+#'     causes `run_anthropic_batch_pipeline()` to upgrade to
+#'     `reasoning = "enabled"`, which implies `temperature = 1` for the batch.
+#' }
+#'
+#' For Gemini, this helper simply forwards `include_thoughts` and other
+#' arguments to [run_gemini_batch_pipeline()], which is responsible for
+#' interpreting any thinking-related options.
+#'
 #' Currently, this function *synchronously* runs the full batch pipeline for
 #' each backend (build requests, create batch, poll until complete, download
 #' results, parse). The returned object contains both metadata and a normalized
@@ -37,14 +58,17 @@
 #' @param include_thoughts Logical; whether to request and parse model
 #'   "thoughts" (where supported). For OpenAI GPT-5.1, setting this to `TRUE`
 #'   will by default cause the batch to use the `responses` endpoint (unless
-#'   you explicitly pass an `endpoint` in `...`).
+#'   you explicitly pass an `endpoint` in `...`). For Anthropic, setting this
+#'   to `TRUE` while `reasoning = "none"` (in `...`) upgrades to
+#'   `reasoning = "enabled"`, which implies `temperature = 1` for the batch.
 #' @param include_raw Logical; whether to include raw provider responses in the
 #'   result (where supported by backends).
 #' @param ... Additional arguments passed through to the backend-specific
 #'   `run_*_batch_pipeline()` functions. This can include provider-specific
 #'   options such as temperature or batch configuration fields. For OpenAI,
 #'   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`, etc.
+#'   `reasoning`, etc. For Anthropic, this may include `reasoning`,
+#'   `max_tokens`, `temperature`, or `thinking_budget_tokens`.
 #'
 #' @return
 #' A list of class `"pairwiseLLM_batch"` containing at least:

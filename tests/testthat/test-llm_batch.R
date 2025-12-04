@@ -218,6 +218,107 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
   )
 })
 
+test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for gpt-5.1 with thoughts or reasoning", {
+  pairs <- tibble::tibble(
+    ID1   = "S01",
+    text1 = "Text 1a",
+    ID2   = "S02",
+    text2 = "Text 1b"
+  )
+
+  td   <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  endpoints <- list()
+
+  fake_batch_return <- function(endpoint_value) {
+    input_path  <- tempfile(pattern = paste0("input_", endpoint_value, "_"),  fileext = ".jsonl")
+    output_path <- tempfile(pattern = paste0("output_", endpoint_value, "_"), fileext = ".jsonl")
+    file.create(input_path)
+    file.create(output_path)
+    list(
+      batch_input_path  = input_path,
+      batch_output_path = output_path,
+      batch             = list(id = paste0("batch_", endpoint_value)),
+      results           = tibble::tibble(
+        custom_id         = "BATCH_S01_vs_S02",
+        ID1               = "S01",
+        ID2               = "S02",
+        model             = "gpt-5.1-mini",
+        object_type       = "batch",
+        status_code       = 200L,
+        error_message     = NA_character_,
+        thoughts          = NA_character_,
+        content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+        better_sample     = "SAMPLE_1",
+        better_id         = "S01",
+        prompt_tokens     = 10L,
+        completion_tokens = 2L,
+        total_tokens      = 12L
+      )
+    )
+  }
+
+  testthat::with_mocked_bindings(
+    run_openai_batch_pipeline = function(
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template,
+    endpoint          = c("chat.completions", "responses"),
+    batch_input_path  = tempfile("openai_batch_input_",  fileext = ".jsonl"),
+    batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+    poll              = TRUE,
+    interval_seconds  = 5,
+    timeout_seconds   = 600,
+    max_attempts      = Inf,
+    metadata          = NULL,
+    api_key           = Sys.getenv("OPENAI_API_KEY"),
+    include_thoughts  = FALSE,
+    include_raw       = FALSE,
+    ...
+    ) {
+      endpoints <<- append(endpoints, list(endpoint))
+      fake_batch_return(endpoint)
+    },
+    {
+      # 1) gpt-5.1 with include_thoughts = TRUE -> responses endpoint
+      batch_resp <- llm_submit_pairs_batch(
+        pairs             = pairs,
+        backend           = "openai",
+        model             = "gpt-5.1-mini",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        include_thoughts  = TRUE
+      )
+
+      expect_s3_class(batch_resp, "pairwiseLLM_batch")
+
+      # 2) gpt-5.1 with include_thoughts = FALSE and reasoning = "none" -> chat.completions
+      batch_chat <- llm_submit_pairs_batch(
+        pairs             = pairs,
+        backend           = "openai",
+        model             = "gpt-5.1-mini",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        include_thoughts  = FALSE,
+        reasoning         = "none"
+      )
+
+      expect_s3_class(batch_chat, "pairwiseLLM_batch")
+
+      expect_equal(length(endpoints), 2L)
+      # First call (with thoughts) should use responses
+      expect_equal(endpoints[[1]], "responses")
+      # Second call (no thoughts, reasoning = "none") should use chat.completions
+      expect_equal(endpoints[[2]], "chat.completions")
+    }
+  )
+})
+
 test_that("llm_download_batch_results extracts results tibble", {
   fake_batch <- list(
     backend           = "openai",
