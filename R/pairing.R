@@ -237,32 +237,47 @@ sample_reverse_pairs <- function(pairs,
 #' Randomly assign samples to positions SAMPLE_1 and SAMPLE_2
 #'
 #' This helper takes a table of paired writing samples (with columns
-#' \code{ID1}, \code{text1}, \code{ID2}, and \code{text2}) and, for each row,
-#' randomly decides whether to keep the current order or swap the two samples.
-#' The result is that approximately half of the pairs will have the original
-#' order and half will be reversed, on average.
+#' `ID1`, `text1`, `ID2`, and `text2`) and, for each row, randomly decides
+#' whether to keep the current order or swap the two samples.
+#' Approximately half of the pairs will be reversed on average.
 #'
-#' This is useful for reducing position biases in LLM-based paired comparisons,
-#' while still allowing reverse-order consistency checks via
-#' \code{\link{sample_reverse_pairs}} and \code{\link{compute_reverse_consistency}}.
+#' This randomness helps reduce position-bias in LLM-based comparisons,
+#' and the resulting mixtures of forward and reversed pairs can be used
+#' to evaluate reverse-order consistency (see `sample_reverse_pairs()` and
+#' `compute_reverse_consistency()`).
 #'
-#' @param pairs A data frame or tibble with columns \code{ID1}, \code{text1},
-#'   \code{ID2}, and \code{text2}.
+#' ## Deterministic alternative
+#'
+#' If you prefer a fully reproducible *non-random* ordering that always
+#' flips every second pair, use `alternate_pair_order()`. That function
+#' produces a perfectly balanced 50/50 split between original and reversed
+#' pairs without using the RNG, which can be desirable for reproducibility,
+#' debugging, formal evaluations, or fixed benchmark workflows.
+#'
+#' ## Parameters
+#'
+#' @param pairs A data frame or tibble with columns `ID1`, `text1`, `ID2`,
+#'   and `text2`.
 #' @param seed Optional integer seed for reproducible randomization. If
-#'   \code{NULL} (default), the current RNG state is used.
+#'   `NULL` (default), the current RNG state is used.
 #'
-#' @return A tibble with the same columns as \code{pairs}, but with some rows'
-#'   \code{ID1}/\code{text1} and \code{ID2}/\code{text2} swapped.
+#' @return A tibble with the same columns as `pairs`, but with some rows'
+#'   `ID1`/`text1` and `ID2`/`text2` swapped.
 #'
 #' @examples
 #' data("example_writing_samples")
 #' pairs_all <- make_pairs(example_writing_samples)
 #'
+#' # Randomized ordering
 #' set.seed(123)
 #' pairs_rand <- randomize_pair_order(pairs_all, seed = 123)
 #'
+#' # Deterministic alternation (no randomness)
+#' pairs_alt <- alternate_pair_order(pairs_all)
+#'
 #' head(pairs_all[, c("ID1", "ID2")])
 #' head(pairs_rand[, c("ID1", "ID2")])
+#' head(pairs_alt[,  c("ID1", "ID2")])
 #'
 #' @export
 randomize_pair_order <- function(pairs, seed = NULL) {
@@ -292,6 +307,73 @@ randomize_pair_order <- function(pairs, seed = NULL) {
   out <- pairs
 
   idx <- which(flip)
+  if (length(idx) > 0L) {
+    id1_tmp   <- out$ID1[idx]
+    text1_tmp <- out$text1[idx]
+
+    out$ID1[idx]   <- out$ID2[idx]
+    out$text1[idx] <- out$text2[idx]
+
+    out$ID2[idx]   <- id1_tmp
+    out$text2[idx] <- text1_tmp
+  }
+
+  out
+}
+
+#' Deterministically alternate sample order in pairs
+#'
+#' This helper takes a table of paired writing samples (with columns
+#' `ID1`, `text1`, `ID2`, and `text2`) and reverses the sample order for
+#' every second row (rows 2, 4, 6, ...). This provides a perfectly balanced
+#' reversal pattern without the randomness of `randomize_pair_order()`.
+#'
+#' This is useful when you want a fixed 50/50 mix of original and reversed
+#' pairs for bias control, benchmarking, or debugging, without relying on
+#' the random number generator or seeds.
+#'
+#' @param pairs A tibble or data frame with columns `ID1`, `text1`,
+#'   `ID2`, and `text2`.
+#'
+#' @return A tibble identical to `pairs` except that rows 2, 4, 6, ...
+#'   have `ID1`/`text1` and `ID2`/`text2` swapped.
+#'
+#' @examples
+#' data("example_writing_samples")
+#' pairs <- make_pairs(example_writing_samples)
+#'
+#' # Deterministic alternation (no randomness)
+#' pairs_alt <- alternate_pair_order(pairs)
+#'
+#' head(pairs[, c("ID1", "ID2")])
+#' head(pairs_alt[, c("ID1", "ID2")])
+#'
+#' @export
+alternate_pair_order <- function(pairs) {
+  pairs <- tibble::as_tibble(pairs)
+
+  required <- c("ID1", "text1", "ID2", "text2")
+  missing  <- setdiff(required, names(pairs))
+  if (length(missing) > 0L) {
+    stop(
+      "`pairs` must contain columns: ",
+      paste(required, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  n <- nrow(pairs)
+
+  # Nothing to do for 0 or 1 row
+  if (n < 2L) {
+    return(pairs)
+  }
+
+  out <- pairs
+
+  # Reverse rows 2, 4, 6, ...
+  idx <- seq.int(from = 2L, to = n, by = 2L)
+
   if (length(idx) > 0L) {
     id1_tmp   <- out$ID1[idx]
     text1_tmp <- out$text1[idx]

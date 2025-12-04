@@ -3,9 +3,9 @@
 # Run positional-bias experiments across multiple providers/models using
 # pairwiseLLM, with:
 # - all pairs from example_writing_samples
-# - forward (randomized) + reverse sequences
+# - forward (deterministic alternating) + reverse sequences
 # - batch APIs for OpenAI, Anthropic, Gemini
-# - temperature = 0 for all non-thinking runs
+# - temperature = 0 for all non-thinking runs (where supported)
 #
 # Outputs:
 # - Per-run CSVs: dev-output/positional-bias-all-models/<provider>_<model>_<thinking>_<direction>.csv
@@ -40,9 +40,9 @@ tmpl <- set_prompt_template()
 pairs_all <- example_writing_samples |>
   make_pairs()
 
-# Forward (randomized SAMPLE_1 vs SAMPLE_2 order)
+# Forward: deterministic alternating SAMPLE_1 vs SAMPLE_2 order
 pairs_forward <- pairs_all |>
-  randomize_pair_order(seed = 1001)
+  alternate_pair_order()
 
 # Reverse sequence: flip SAMPLE_1 / SAMPLE_2 for all pairs
 pairs_reverse <- sample_reverse_pairs(
@@ -55,24 +55,24 @@ pairs_reverse <- sample_reverse_pairs(
 # 2. Model grid
 # ------------------------------------------------------------------------------
 
-openai_models <- c(
+# OpenAI:
+# - gpt-4.x family: no thinking / reasoning supported -> only "no_thinking"
+# - gpt-5.1: test both no_thinking and with_thinking
+openai_no_thinking_models <- c(
   "gpt-4.1",
   "gpt-4.1-mini",
   "gpt-4.1-nano",
-  "gpt-4o",
-  "gpt-5",
-  "gpt-5-mini",
-  "gpt-5-nano",
+  "gpt-4o"
+)
+
+openai_thinking_models <- c(
   "gpt-5.1"
 )
 
 anthropic_models <- c(
   "claude-sonnet-4-5",
   "claude-haiku-4-5",
-  "claude-opus-4-5",
-  "claude-opus-4-1",
-  "claude-sonnet-4-0",
-  "claude-opus-4-0"
+  "claude-opus-4-5"
 )
 
 gemini_models <- c(
@@ -82,26 +82,40 @@ gemini_models <- c(
 thinking_levels <- c("no_thinking", "with_thinking")
 directions      <- c("forward", "reverse")
 
-model_matrix <- bind_rows(
+openai_grid <- bind_rows(
   tidyr::expand_grid(
-    provider = "openai",
-    model    = openai_models,
-    thinking = thinking_levels,
+    provider  = "openai",
+    model     = openai_no_thinking_models,
+    thinking  = "no_thinking",
     direction = directions
   ),
   tidyr::expand_grid(
-    provider = "anthropic",
-    model    = anthropic_models,
-    thinking = thinking_levels,
-    direction = directions
-  ),
-  # Gemini: only WITH thinking
-  tidyr::expand_grid(
-    provider = "gemini",
-    model    = gemini_models,
-    thinking = "with_thinking",
+    provider  = "openai",
+    model     = openai_thinking_models,
+    thinking  = thinking_levels,
     direction = directions
   )
+)
+
+anthropic_grid <- tidyr::expand_grid(
+  provider  = "anthropic",
+  model     = anthropic_models,
+  thinking  = thinking_levels,
+  direction = directions
+)
+
+# Gemini: only WITH thinking
+gemini_grid <- tidyr::expand_grid(
+  provider  = "gemini",
+  model     = gemini_models,
+  thinking  = "with_thinking",
+  direction = directions
+)
+
+model_matrix <- bind_rows(
+  openai_grid,
+  anthropic_grid,
+  gemini_grid
 )
 
 # ------------------------------------------------------------------------------
@@ -148,7 +162,7 @@ for (i in seq_len(nrow(model_matrix))) {
   is_thinking <- identical(thinking, "with_thinking")
 
   # For non-thinking runs, we want temperature = 0 where supported.
-  # - OpenAI: temperature = 0 is supported for gpt-4.x and gpt-5.x with reasoning = none
+  # - OpenAI: temperature = 0 is supported for gpt-4.x and gpt-5.1 with reasoning = none
   # - Anthropic: reasoning = "none" uses temp=0 by default; we pass temp=0 explicitly here.
   # - Gemini: only runs with thinking; we never set temp=0 for Gemini here.
   temperature_arg <- if (!is_thinking) 0 else NULL
@@ -182,7 +196,7 @@ for (i in seq_len(nrow(model_matrix))) {
         trait_name        = td$name,
         trait_description = td$description,
         prompt_template   = tmpl,
-        include_thoughts  = TRUE,   # picks responses endpoint + reasoning
+        include_thoughts  = TRUE,   # picks responses endpoint + reasoning for gpt-5.1
         batch_input_path  = batch_input_path,
         batch_output_path = batch_output_path,
         poll              = FALSE
@@ -190,18 +204,18 @@ for (i in seq_len(nrow(model_matrix))) {
     }
 
     jobs[[length(jobs) + 1L]] <- list(
-      provider         = provider,
-      model            = model,
-      thinking         = thinking,
-      direction        = direction,
-      prefix           = prefix,
-      batch_type       = "openai",
-      batch_id         = pipeline$batch$id,
-      batch_input_path = pipeline$batch_input_path,
+      provider          = provider,
+      model             = model,
+      thinking          = thinking,
+      direction         = direction,
+      prefix            = prefix,
+      batch_type        = "openai",
+      batch_id          = pipeline$batch$id,
+      batch_input_path  = pipeline$batch_input_path,
       batch_output_path = batch_output_path,
-      csv_path         = csv_path,
-      done             = FALSE,
-      results          = NULL
+      csv_path          = csv_path,
+      done              = FALSE,
+      results           = NULL
     )
 
   } else if (identical(provider, "anthropic")) {
@@ -241,18 +255,18 @@ for (i in seq_len(nrow(model_matrix))) {
     }
 
     jobs[[length(jobs) + 1L]] <- list(
-      provider         = provider,
-      model            = model,
-      thinking         = thinking,
-      direction        = direction,
-      prefix           = prefix,
-      batch_type       = "anthropic",
-      batch_id         = pipeline$batch$id,
-      batch_input_path = pipeline$batch_input_path,
+      provider          = provider,
+      model             = model,
+      thinking          = thinking,
+      direction         = direction,
+      prefix            = prefix,
+      batch_type        = "anthropic",
+      batch_id          = pipeline$batch$id,
+      batch_input_path  = pipeline$batch_input_path,
       batch_output_path = batch_output_path,
-      csv_path         = csv_path,
-      done             = FALSE,
-      results          = NULL
+      csv_path          = csv_path,
+      done              = FALSE,
+      results           = NULL
     )
 
   } else if (identical(provider, "gemini")) {
@@ -306,7 +320,7 @@ for (i in seq_len(nrow(model_matrix))) {
 
 # Convert jobs list to a tibble for easier handling
 jobs_tbl <- tibble::tibble(
-  idx = seq_along(jobs),
+  idx       = seq_along(jobs),
   provider  = vapply(jobs, `[[`, character(1), "provider"),
   model     = vapply(jobs, `[[`, character(1), "model"),
   thinking  = vapply(jobs, `[[`, character(1), "thinking"),
@@ -349,7 +363,7 @@ while (length(unfinished) > 0L) {
     if (job$done) next
 
     if (identical(job$batch_type, "openai")) {
-      batch <- openai_get_batch(job$batch_id)
+      batch  <- openai_get_batch(job$batch_id)
       status <- batch$status %||% "unknown"
 
       message("  [OpenAI] ", job$prefix, " status: ", status)
@@ -369,7 +383,7 @@ while (length(unfinished) > 0L) {
       }
 
     } else if (identical(job$batch_type, "anthropic")) {
-      batch <- anthropic_get_batch(job$batch_id)
+      batch  <- anthropic_get_batch(job$batch_id)
       status <- batch$processing_status %||% "unknown"
 
       message("  [Anthropic] ", job$prefix, " status: ", status)
@@ -435,7 +449,7 @@ extract_numeric_metric <- function(obj, name_pattern = NULL) {
 
   if (is.data.frame(obj)) {
     if (!is.null(name_pattern)) {
-      num_cols <- vapply(obj, is.numeric, logical(1))
+      num_cols   <- vapply(obj, is.numeric, logical(1))
       candidates <- names(obj)[num_cols & grepl(name_pattern, names(obj))]
       if (length(candidates) > 0L) {
         return(obj[[candidates[1]]][1])
@@ -554,7 +568,7 @@ summarize_model_thinking <- function(provider, model, thinking) {
     NULL
   }
 
-  p_sample1_overall <- extract_numeric_metric(bias, "p_sample1")
+  p_sample1_overall <- extract_numeric_metric(bias, "p_sample1)overall")
 
   tibble::tibble(
     prop_consistent   = prop_consistent,
