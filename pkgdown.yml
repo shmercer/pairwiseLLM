@@ -3,7 +3,7 @@ pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
   prompt-template-positional-bias: prompt-template-positional-bias.html
-last_built: 2025-12-05T20:43Z
+last_built: 2025-12-05T20:45Z
 urls:
   reference: https://shmercer.github.io/pairwiseLLM/reference
   article: https://shmercer.github.io/pairwiseLLM/articles

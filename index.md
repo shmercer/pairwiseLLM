@@ -331,9 +331,6 @@ elo_fit$elo          # per-sample scores
 elo_fit$reliability  # reliability indices (unweighted & weighted)
 ```
 
-If the user doesn’t have **EloChoice**, the function provides a helpful
-installation message.
-
 ------------------------------------------------------------------------
 
 ## Live vs Batch Summary
