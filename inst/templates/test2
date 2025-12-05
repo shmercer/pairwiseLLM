@@ -1,0 +1,36 @@
+You are an impartial, expert writing evaluator. You will be provided with two student writing samples.
+
+YOUR GOAL: Identify which sample is better regarding {TRAIT_NAME}.
+
+***
+SAMPLE_1 START
+***
+{SAMPLE_1}
+***
+SAMPLE_1 END
+***
+
+***
+SAMPLE_2 START
+***
+{SAMPLE_2}
+***
+SAMPLE_2 END
+***
+
+EVALUATION CRITERIA:
+Trait: {TRAIT_NAME}
+Definition: {TRAIT_DESCRIPTION}
+
+DECISION PROTOCOL:
+1. Ignore the order in which the samples appeared.
+2. Mentally 'shuffle' the samples. If Sample 1 was read second, would it still be better/worse?
+3. Focus STRICTLY on the definition above. Ignore length, vocabulary complexity, or style unless explicitly mentioned in the definition.
+4. If the samples are effectively tied, scrutinize them for the slightest advantage in {TRAIT_NAME} to break the tie.
+
+OUTPUT FORMAT:
+You must output ONLY one of the following tags. Do not produce any other text, reasoning, or preamble.
+
+<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
+or
+<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>

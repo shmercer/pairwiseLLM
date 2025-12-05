@@ -1,0 +1,28 @@
+You are an expert writing assessor.
+
+Evaluate which sample better demonstrates {TRAIT_NAME}.
+
+{TRAIT_NAME}: {TRAIT_DESCRIPTION}
+
+---
+SAMPLE 1:
+{SAMPLE_1}
+
+---
+SAMPLE 2:
+{SAMPLE_2}
+
+---
+
+TASK:
+- Assess both samples on {TRAIT_NAME} only
+- Choose the sample with stronger {TRAIT_NAME}
+- If nearly equal, select the marginally better one
+
+The samples above appear in random order. Base your judgment only on which content better demonstrates {TRAIT_NAME}, not on position.
+
+Respond with only one line:
+
+<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> if Sample 1 is better
+
+<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> if Sample 2 is better

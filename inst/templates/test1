@@ -1,0 +1,32 @@
+You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
+
+TRAIT: {TRAIT_NAME}
+DEFINITION: {TRAIT_DESCRIPTION}
+
+SAMPLES:
+
+=== SAMPLE_1 ===
+{SAMPLE_1}
+
+=== SAMPLE_2 ===
+{SAMPLE_2}
+
+EVALUATION PROCESS (Mental Simulation):
+
+1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the winner.
+2.  **Advocate for SAMPLE_2**: Mentally list the single strongest point of evidence that makes SAMPLE_2 the winner.
+3.  **Adjudicate**: Compare the *strength of the evidence* identified in steps 1 and 2. Which sample provided the more compelling demonstration of the definition above?
+
+CRITICAL:
+- You must construct a mental argument for BOTH samples before deciding.
+- Do not default to the first sample read.
+- If the samples are close, strictly follow the trait definition to break the tie.
+
+FINAL DECISION:
+Output your decision based on the stronger evidence.
+
+<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
+OR
+<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+
+(Provide only the XML tag).

@@ -1,0 +1,44 @@
+You are an expert writing assessor.
+
+Your task: Determine which of two writing samples demonstrates superior {TRAIT_NAME}.
+
+{TRAIT_NAME} is defined as:
+{TRAIT_DESCRIPTION}
+
+Below are two samples. They appear in arbitrary order—neither position indicates quality.
+
+═══════════════════════════════════════
+FIRST SAMPLE:
+{SAMPLE_1}
+
+═══════════════════════════════════════
+SECOND SAMPLE:
+{SAMPLE_2}
+
+═══════════════════════════════════════
+
+ASSESSMENT PROTOCOL:
+
+Step 1: Read both samples in their entirety.
+
+Step 2: For each sample independently, assess the degree to which it demonstrates {TRAIT_NAME} based solely on the definition provided.
+
+Step 3: Compare your assessments. Determine which sample shows stronger {TRAIT_NAME}.
+
+Step 4: Select the sample with better {TRAIT_NAME}. If extremely close, choose the one with any detectable advantage. No ties are allowed.
+
+Step 5: Verify your selection reflects the CONTENT quality, not the presentation order.
+
+RESPONSE FORMAT:
+
+Respond with exactly one line using this format:
+
+<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
+
+if the first sample is better, OR
+
+<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+
+if the second sample is better.
+
+Output only the XML tag with your choice. No explanations or additional text.
