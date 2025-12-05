@@ -37,6 +37,12 @@ It includes:
 * Bradley–Terry (BT) and Elo modeling  
 * Consistent data structures for all providers
 
+Basic usage is covered in a vignette:
+
+```r
+vignette("getting-started")
+```
+
 ---
 
 ## Supported Models
@@ -139,6 +145,10 @@ batch <- llm_submit_pairs_batch(
 results <- llm_download_batch_results(batch)
 ```
 
+More advanced usage of batch functions is covered in a vignette:
+```r
+vignette("advanced-batch-workflows")
+```
 ---
 
 ## API Keys
@@ -294,7 +304,7 @@ bias$summary
 
 ### Positional-bias tested templates
 
-Five included templates have been tested across different backend providers. Complete details are presented in a vignette: https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html
+Five included templates have been tested across different backend providers. Complete details are presented in a vignette: 
 
 ```r
 vignette("prompt-template-positional-bias", package = "pairwiseLLM")
