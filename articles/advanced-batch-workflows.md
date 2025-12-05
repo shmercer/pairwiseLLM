@@ -650,9 +650,6 @@ thinking × direction), you can:
 
 ## 9. Citation
 
-If you use these batch workflows or related diagnostics in published
-work, please cite:
-
-> Mercer, S. H. (2025). *pairwiseLLM: Pairwise comparisons of writing
-> quality with LLMs* (R package). GitHub:
-> <https://github.com/shmercer/pairwiseLLM>
+> Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality
+> comparisons with large language models (Version 1.0.0) \[R package;
+> Computer software\]. <https://github.com/shmercer/pairwiseLLM>
