@@ -1,0 +1,11 @@
+utils::citHeader("To cite pairwiseLLM, use:")
+
+utils::bibentry(
+  bibtype      = "Manual",
+  title        = "pairwiseLLM: Pairwise writing quality comparisons with large language models",
+  author       = utils::person(given = c("Sterett", "H."), family = "Mercer"),
+  year         = "2025",
+  note         = "R package version 1.0.0",
+  url          = "https://github.com/shmercer/pairwiseLLM",
+  textVersion  = "Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons with large language models (Version 1.0.0) [R package; Computer software]. https://github.com/shmercer/pairwiseLLM"
+)
