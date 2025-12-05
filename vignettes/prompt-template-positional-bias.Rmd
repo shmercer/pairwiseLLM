@@ -40,6 +40,14 @@ The vignette also shows how to:
 - Inspect their full text  
 - Access summary statistics from the experiments
 
+For basic function usage, see:
+
+* [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+
+For advanced batch processing workflows, see:
+
+* [`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
+
 ---
 
 # 2. Testing Process Summary

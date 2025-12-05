@@ -31,6 +31,13 @@ The examples are based on the A/B template testing dev scripts for:
 
 > Note: All heavy API calls in this vignette are set to `eval = FALSE` so that the vignette remains CRAN-safe. You can enable them in your own project.
 
+For basic function usage, see the companion vignette:
+
+* [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+
+For prompt evaluation and positional-bias diagnostics, see the companion vignette:
+
+* [`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
 
 # 2. Setup and API Keys
 
@@ -571,12 +578,6 @@ Once you have per-job results CSVs (e.g., one per template × model × thinking 
 - Aggregate results by provider/model/template using standard `dplyr` pipelines
 - Fit **Bradley–Terry** models with `build_bt_data()` + `fit_bt_model()`
 - Fit **Elo** models with `fit_elo_model()` (when `EloChoice` is installed)
-
-For a full worked example of prompt-template testing and positional-bias analysis, see:
-
-```r
-vignette("prompt-template-positional-bias")
-```
 
 
 # 9. Citation

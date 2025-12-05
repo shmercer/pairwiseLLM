@@ -27,9 +27,13 @@ A typical workflow:
 4. Parse model outputs  
 5. Fit Bradley–Terry or Elo models to obtain latent writing-quality scores  
 
-For prompt evaluation and positional-bias diagnostics, see the companion vignette:
+For prompt evaluation and positional-bias diagnostics, see:
 
-👉 `vignette("prompt-template-positional-bias")`
+* [`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
+
+For advanced batch processing workflows, see:
+
+* [`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
 
 ---
 
