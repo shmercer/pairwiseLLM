@@ -23,6 +23,8 @@ Imports:
 Suggests:
     BradleyTerry2,
     EloChoice,
+    knitr,
+    rmarkdown,
     sirt,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
@@ -31,3 +33,4 @@ BugReports: https://github.com/shmercer/pairwiseLLM/issues
 Depends: 
     R (>= 4.1)
 LazyData: true
+VignetteBuilder: knitr

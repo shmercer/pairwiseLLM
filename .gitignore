@@ -6,3 +6,5 @@
 .quarto
 dev-output/
 docs
+/doc/
+/Meta/
