@@ -33,7 +33,9 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/prompt-template-positional-bias.html">Prompt Template Positional Bias Testing</a></li>
+<li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
+    <li><a class="dropdown-item" href="../articles/prompt-template-positional-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul>
 </li>
       </ul>
@@ -353,7 +355,7 @@ you would use your own writing samples.</p>
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Inspect the structure</span></span>
-<span><span class="fu">glimpse</span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://pillar.r-lib.org/reference/glimpse.html" class="external-link">glimpse</a></span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Rows: 20</span></span>
 <span><span class="co">#&gt; Columns: 3</span></span>
 <span><span class="co">#&gt; $ ID            <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> "S01"<span style="color: #949494;">, </span>"S02"<span style="color: #949494;">, </span>"S03"<span style="color: #949494;">, </span>"S04"<span style="color: #949494;">, </span>"S05"<span style="color: #949494;">, </span>"S06"<span style="color: #949494;">, </span>"S07"<span style="color: #949494;">, </span>"S08"<span style="color: #949494;">, </span>…</span></span>
@@ -831,8 +833,8 @@ lightly clean that file here.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">summary_tbl</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">summary_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
-<span>    provider <span class="op">=</span> <span class="fu">if_else</span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">""</span> <span class="op">|</span> <span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">provider</span><span class="op">)</span>, <span class="st">"openai"</span>, <span class="va">provider</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
+<span>    provider <span class="op">=</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/if_else.html" class="external-link">if_else</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">""</span> <span class="op">|</span> <span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">provider</span><span class="op">)</span>, <span class="st">"openai"</span>, <span class="va">provider</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">summary_tbl</span><span class="op">)</span></span>
@@ -1037,14 +1039,14 @@ the experiments.</p>
 </h4>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test1"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test1"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
@@ -1214,14 +1216,14 @@ the experiments.</p>
 </h4>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test2"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test2"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
@@ -1399,14 +1401,14 @@ the experiments.</p>
 </h4>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
@@ -1568,14 +1570,14 @@ the experiments.</p>
 </h4>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test4"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test4"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
@@ -1738,14 +1740,14 @@ the experiments.</p>
 </h4>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test5"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test5"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
@@ -1899,14 +1901,14 @@ used in testing.</p>
 </h3>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"anthropic"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"anthropic"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Template <span class="op">=</span> <span class="va">template_id</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
@@ -2186,14 +2188,14 @@ thinking configuration.</caption>
 </h3>
 <div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"gemini"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"gemini"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Template <span class="op">=</span> <span class="va">template_id</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
@@ -2273,14 +2275,14 @@ thinking configuration.</caption>
 </h3>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"openai"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">arrange</span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">mutate</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"openai"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">select</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Template <span class="op">=</span> <span class="va">template_id</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
