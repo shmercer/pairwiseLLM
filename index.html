@@ -56,25 +56,29 @@
 </h1></div>
 <!-- badges: start -->
 
-<p><code>pairwiseLLM</code> is an R package that provides a unified framework for generating, submitting, and modeling <strong>pairwise comparisons of writing quality</strong> from large language models (LLMs).</p>
-<p>It supports:</p>
+<p><code>pairwiseLLM</code> provides a unified, extensible framework for generating, submitting, and modeling <strong>pairwise comparisons of writing quality</strong> using large language models (LLMs).</p>
+<p>It includes:</p>
 <ul>
-<li><p>Multiple providers: OpenAI, Anthropic, Google Gemini, and (planned) local models via <code>Ollama</code></p></li>
-<li><p>Live and batch processing pipelines for all supported cloud providers.</p></li>
-<li><p>A default prompt template, designed (and tested) to reduce positional bias.</p></li>
-<li><p>Built-in tools for positional-bias diagnostics</p></li>
-<li><p>Bradley-Terry (BT) modeling to convert pairwise comparison results into latent ability scores</p></li>
-<li><p>Consistent output tibbles across all backends.</p></li>
+<li>Unified <strong>live</strong> and <strong>batch</strong> APIs across OpenAI, Anthropic, and Gemini<br>
+</li>
+<li>A prompt template registry with a <strong>tested default template</strong> designed to reduce positional bias<br>
+</li>
+<li>Positional-bias diagnostics (forward vs reverse design)<br>
+</li>
+<li>Bradley–Terry (BT) and Elo modeling<br>
+</li>
+<li>Consistent data structures for all providers</li>
 </ul>
+<hr>
 <div class="section level2">
 <h2 id="supported-models">Supported Models<a class="anchor" aria-label="anchor" href="#supported-models"></a>
 </h2>
-<p>The following models are confirmed to work with pairwiseLLM for live and batch pairwise comparisons. The table notes whether each model supports thinking / reasoning traces (e.g., <code>include_thoughts = TRUE</code> via OpenAI <code>reasoning</code>, Anthropic <code>thinking</code>, Gemini <code>thinkingConfig</code>).</p>
+<p>The following models are confirmed to work for live and batch pairwise comparisons:</p>
 <table class="table">
 <thead><tr class="header">
 <th>Provider</th>
 <th>Model</th>
-<th>Thinking Supported?</th>
+<th>Reasoning Mode?</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
@@ -84,22 +88,12 @@
 </tr>
 <tr class="even">
 <td><strong>OpenAI</strong></td>
-<td>gpt-4.1</td>
-<td>❌ No</td>
-</tr>
-<tr class="odd">
-<td><strong>OpenAI</strong></td>
-<td>gpt-4.1-mini</td>
-<td>❌ No</td>
-</tr>
-<tr class="even">
-<td><strong>OpenAI</strong></td>
-<td>gpt-4.1-nano</td>
-<td>❌ No</td>
-</tr>
-<tr class="odd">
-<td><strong>OpenAI</strong></td>
 <td>gpt-4o</td>
+<td>❌ No</td>
+</tr>
+<tr class="odd">
+<td><strong>OpenAI</strong></td>
+<td>gpt-4.1</td>
 <td>❌ No</td>
 </tr>
 <tr class="even">
@@ -118,525 +112,401 @@
 <td>✅ Yes</td>
 </tr>
 <tr class="odd">
-<td><strong>Anthropic</strong></td>
-<td>claude-opus-4-1</td>
-<td>✅ Yes</td>
-</tr>
-<tr class="even">
-<td><strong>Anthropic</strong></td>
-<td>claude-sonnet-4-0</td>
-<td>✅ Yes</td>
-</tr>
-<tr class="odd">
-<td><strong>Anthropic</strong></td>
-<td>claude-opus-4-0</td>
-<td>✅ Yes</td>
-</tr>
-<tr class="even">
 <td><strong>Gemini</strong></td>
 <td>gemini-3-pro-preview</td>
 <td>✅ Yes</td>
 </tr>
 </tbody>
 </table>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>From GitHub (development version):</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"shmercer/pairwiseLLM"</span><span class="op">)</span></span></code></pre></div>
-<p>You can then load the package in the usual way:</p>
+<p>Load the package:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span></code></pre></div>
+<hr>
 </div>
 <div class="section level2">
-<h2 id="live-comparisons">Live comparisons<a class="anchor" aria-label="anchor" href="#live-comparisons"></a>
+<h2 id="core-concepts">Core Concepts<a class="anchor" aria-label="anchor" href="#core-concepts"></a>
 </h2>
-<p>Live pairwise comparisons (one-off or small batches) are available through a single, unified API:</p>
-<ul>
-<li><p><code><a href="reference/llm_compare_pair.html">llm_compare_pair()</a></code> – compare a single pair</p></li>
-<li><p><code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> – submit many pairs in one call</p></li>
-</ul>
-<p>Backend-specific helpers (e.g., <code><a href="reference/submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>) are available but most users will only need the unified functions.</p>
+<p>At a high level, <code>pairwiseLLM</code> workflows follow this structure:</p>
+<ol style="list-style-type: decimal">
+<li>
+<strong>Writing samples</strong> – e.g., essays, constructed responses, short answers.<br>
+</li>
+<li>
+<strong>Trait</strong> – a rating dimension such as “overall quality” or “organization”.<br>
+</li>
+<li>
+<strong>Pairs</strong> – pairs of samples to be compared for that trait.<br>
+</li>
+<li>
+<strong>Prompt template</strong> – instructions + placeholders for <code>{TRAIT_NAME}</code>, <code>{TRAIT_DESCRIPTION}</code>, <code>{SAMPLE_1}</code>, <code>{SAMPLE_2}</code>.<br>
+</li>
+<li>
+<strong>Backend</strong> – which provider/model to use (OpenAI, Anthropic, Gemini).<br>
+</li>
+<li>
+<strong>Modeling</strong> – convert pairwise results to latent scores via BT or Elo.</li>
+</ol>
+<p>The package provides helpers for each step.</p>
+<hr>
 </div>
 <div class="section level2">
-<h2 id="batch-comparisons">Batch comparisons<a class="anchor" aria-label="anchor" href="#batch-comparisons"></a>
+<h2 id="live-comparisons">Live Comparisons<a class="anchor" aria-label="anchor" href="#live-comparisons"></a>
 </h2>
-<p>Batch APIs (for larger jobs and offline processing) are implemented through a single, unified API:</p>
+<p>Use the unified API:</p>
 <ul>
-<li><p><code><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code> — submit batch requests</p></li>
-<li><p><code><a href="reference/llm_download_batch_results.html">llm_download_batch_results()</a></code> — download &amp; parse the completed results</p></li>
+<li>
+<code><a href="reference/llm_compare_pair.html">llm_compare_pair()</a></code> — compare one pair<br>
+</li>
+<li>
+<code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> — compare many pairs at once</li>
 </ul>
-<p>Each provider also has its own <code>build_*_batch_requests()</code>, <code>run_*_batch_pipeline()</code>, and <code>parse_*_batch_output()</code> functions.</p>
+<p>Example:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span><span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
+<span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span>
+<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>,</span>
+<span>  model             <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
+<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="batch-comparisons">Batch Comparisons<a class="anchor" aria-label="anchor" href="#batch-comparisons"></a>
+</h2>
+<p>Large-scale runs use:</p>
+<ul>
+<li>
+<code><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code><br>
+</li>
+<li><code><a href="reference/llm_download_batch_results.html">llm_download_batch_results()</a></code></li>
+</ul>
+<p>Example:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
+<span>  provider          <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
+<span>  model             <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
+<span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span>
+<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span></code></pre></div>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="api-keys">API Keys<a class="anchor" aria-label="anchor" href="#api-keys"></a>
 </h2>
-<p><code>pairwiseLLM</code> uses a CRAN-safe API key layer:</p>
-<ul>
-<li><p>Keys are read only from environment variables (e.g., <code>Sys.getenv("OPENAI_API_KEY")</code>).</p></li>
-<li><p>Keys are never printed or stored in package data.</p></li>
-<li><p>A single helper, <code>.get_api_key()</code>, is used internally by all backends.</p></li>
-</ul>
-<p>You can quickly verify what keys are visible to R using:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p>This returns a tibble with one row per provider and a column indicating whether a key is set.</p>
-</div>
-<div class="section level2">
-<h2 id="quick-start-example">Quick Start Example<a class="anchor" aria-label="anchor" href="#quick-start-example"></a>
-</h2>
-<p>Here is a minimal, end-to-end example using OpenAI via the unified API:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 1. Load included writing sample data</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 2. Create a small set of pairs</span></span>
-<span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span>n_pairs <span class="op">=</span> <span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">321</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span>seed <span class="op">=</span> <span class="fl">654</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 3. Specify the trait and prompt template</span></span>
-<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
-<span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 4. Submit to a backend (e.g., OpenAI)</span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
-<span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span>
-<span>  model             <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
-<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
-<span>  backend           <span class="op">=</span> <span class="st">"openai"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 5. Fit a Bradley–Terry model</span></span>
-<span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
-<span><span class="va">bt_fit</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="default-prompt-template-positional-bias-tested">Default Prompt Template (Positional-Bias Tested)<a class="anchor" aria-label="anchor" href="#default-prompt-template-positional-bias-tested"></a>
-</h2>
-<p><code>pairwiseLLM</code> ships with a default XML-style prompt template that has been tested across:</p>
-<ul>
-<li><p>multiple OpenAI GPT models,</p></li>
-<li><p>Anthropic Claude models, and</p></li>
-<li><p>Google Gemini models.</p></li>
-</ul>
-<p>The default template is designed to:</p>
-<ul>
-<li><p>clearly separate instructions and samples</p></li>
-<li><p>use explicit <code>&lt;SAMPLE_1&gt;</code>, <code>&lt;SAMPLE_2&gt;</code>, and <code>&lt;BETTER_SAMPLE&gt;</code> tags</p></li>
-<li><p>minimize positional and formatting bias</p></li>
-<li><p>avoid returning chain-of-thought unless explicitly requested</p></li>
-</ul>
-<p>You can retrieve or inspect the default template from R:</p>
+<p><code>pairwiseLLM</code> reads keys <strong>only from environment variables</strong>.<br>
+Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <strong>never written</strong> to disk.</p>
+<p>You can verify which providers are available using:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">default_template</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">default_template</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>You are an expert writing assessor.</span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.</span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a></span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>Definition of {TRAIT_NAME}<span class="sc">:</span></span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>{TRAIT_DESCRIPTION}</span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a></span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>INSTRUCTIONS<span class="sc">:</span></span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="fl">1.</span> Read BOTH samples carefully.</span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="fl">2.</span> Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.</span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>   Do NOT consider length, formatting, grammar, topic relevance, or any other</span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>   aspect unless it directly affects {TRAIT_NAME}.</span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a></span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="fl">3.</span> The labels SAMPLE_1 and SAMPLE_2 are arbitrary. They do NOT indicate quality.</span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a>   SAMPLE_1 could have been SAMPLE_2 and vice versa.</span>
-<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a></span>
-<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="dv">3</span>a. Before deciding, remind yourself explicitly that SAMPLE_1 and SAMPLE_2 might</span>
-<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a>    have been presented <span class="cf">in</span> the opposite order. Your decision MUST NOT depend on</span>
-<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a>    their position.</span>
-<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a></span>
-<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="dv">3</span>b. After reading both samples, PAUSE and reconsider which sample is truly better</span>
-<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a>    on {TRAIT_NAME}, independent of position.</span>
-<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a></span>
-<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a><span class="fl">4.</span> You MUST choose exactly one sample. If the samples seem equal, choose the one</span>
-<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a>   that is even slightly better on {TRAIT_NAME}. Do NOT output ties.</span>
-<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a></span>
-<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a><span class="fl">5.</span> Decide which sample has BETTER QUALITY on {TRAIT_NAME}.</span>
-<span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a>   Think silently. Do NOT reveal your reasoning.</span>
-<span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a></span>
-<span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a><span class="fl">6.</span> After making your judgment, respond EXACTLY with ONE of the following lines<span class="sc">:</span></span>
-<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a></span>
-<span id="cb6-33"><a href="#cb6-33" tabindex="-1"></a>   <span class="er">&lt;</span>BETTER_SAMPLE<span class="sc">&gt;</span>SAMPLE_1<span class="sc">&lt;</span><span class="er">/</span>BETTER_SAMPLE<span class="sc">&gt;</span></span>
-<span id="cb6-34"><a href="#cb6-34" tabindex="-1"></a></span>
-<span id="cb6-35"><a href="#cb6-35" tabindex="-1"></a>   OR</span>
-<span id="cb6-36"><a href="#cb6-36" tabindex="-1"></a></span>
-<span id="cb6-37"><a href="#cb6-37" tabindex="-1"></a>   <span class="sc">&lt;</span>BETTER_SAMPLE<span class="sc">&gt;</span>SAMPLE_2<span class="sc">&lt;</span><span class="er">/</span>BETTER_SAMPLE<span class="sc">&gt;</span></span>
-<span id="cb6-38"><a href="#cb6-38" tabindex="-1"></a></span>
-<span id="cb6-39"><a href="#cb6-39" tabindex="-1"></a><span class="dv">6</span>a. Before responding, VERIFY that the tag you are about to output matches</span>
-<span id="cb6-40"><a href="#cb6-40" tabindex="-1"></a>    your internal decision about which sample is better.</span>
-<span id="cb6-41"><a href="#cb6-41" tabindex="-1"></a></span>
-<span id="cb6-42"><a href="#cb6-42" tabindex="-1"></a>IMPORTANT<span class="sc">:</span></span>
-<span id="cb6-43"><a href="#cb6-43" tabindex="-1"></a><span class="sc">-</span> Output EXACTLY one of the two lines above.</span>
-<span id="cb6-44"><a href="#cb6-44" tabindex="-1"></a><span class="sc">-</span> Do NOT add explanations, reasoning, punctuation, or extra text.</span>
-<span id="cb6-45"><a href="#cb6-45" tabindex="-1"></a><span class="sc">-</span> Do NOT include chain<span class="sc">-</span>of<span class="sc">-</span>thought or justification.</span>
-<span id="cb6-46"><a href="#cb6-46" tabindex="-1"></a></span>
-<span id="cb6-47"><a href="#cb6-47" tabindex="-1"></a>SAMPLE <span class="dv">1</span><span class="sc">:</span></span>
-<span id="cb6-48"><a href="#cb6-48" tabindex="-1"></a>{SAMPLE_1}</span>
-<span id="cb6-49"><a href="#cb6-49" tabindex="-1"></a></span>
-<span id="cb6-50"><a href="#cb6-50" tabindex="-1"></a>SAMPLE <span class="dv">2</span><span class="sc">:</span></span>
-<span id="cb6-51"><a href="#cb6-51" tabindex="-1"></a>{SAMPLE_2}</span></code></pre></div>
-<p>You can supply your own template globally:</p>
+<code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>This returns a tibble showing whether R can see the required keys for:</p>
+<ul>
+<li>OpenAI<br>
+</li>
+<li>Anthropic<br>
+</li>
+<li>Google Gemini</li>
+</ul>
+<div class="section level3">
+<h3 id="setting-api-keys">Setting API Keys<a class="anchor" aria-label="anchor" href="#setting-api-keys"></a>
+</h3>
+<p>You may set keys <strong>temporarily</strong> for the current R session:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ANTHROPIC_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>GEMINI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span></code></pre></div>
+<p>…but for normal use and for reproducible analyses, it is <strong>strongly recommended</strong><br>
+to store them in your <code>~/.Renviron</code> file.</p>
+</div>
+<div class="section level3">
+<h3 id="recommended-method-adding-keys-to-renviron">Recommended method: Adding keys to <code>~/.Renviron</code>
+<a class="anchor" aria-label="anchor" href="#recommended-method-adding-keys-to-renviron"></a>
+</h3>
+<p>Open your <code>.Renviron</code> file:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="va">my_custom_template</span><span class="op">)</span></span></code></pre></div>
-<p>or switch templates within a session as needed.</p>
+<code class="sourceCode R"><span><span class="fu">usethis</span><span class="fu">::</span><span class="fu">edit_r_environ</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>Add the following lines:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>OPENAI_API_KEY<span class="ot">=</span><span class="st">"your-openai-key"</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>ANTHROPIC_API_KEY<span class="ot">=</span><span class="st">"your-anthropic-key"</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>GEMINI_API_KEY<span class="ot">=</span><span class="st">"your-gemini-key"</span></span></code></pre></div>
+<p>Save the file, then restart R.</p>
+<p>You can confirm that R now sees the keys:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="prompt-templates--registry">Prompt Templates &amp; Registry<a class="anchor" aria-label="anchor" href="#prompt-templates--registry"></a>
+</h2>
+<p><code>pairwiseLLM</code> includes:</p>
+<ul>
+<li>A <strong>default template</strong> tested for positional bias<br>
+</li>
+<li>Support for <strong>multiple templates stored by name</strong><br>
+</li>
+<li>User-defined templates via <code><a href="reference/register_prompt_template.html">register_prompt_template()</a></code>
+</li>
+</ul>
+<div class="section level3">
+<h3 id="view-available-templates">View available templates<a class="anchor" aria-label="anchor" href="#view-available-templates"></a>
+</h3>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/list_prompt_templates.html">list_prompt_templates</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "default" "test1"   "test2"   "test3"   "test4"   "test5"</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="show-the-default-template-truncated">Show the default template (truncated)<a class="anchor" aria-label="anchor" href="#show-the-default-template-truncated"></a>
+</h3>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"...\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; You are an expert writing assessor.</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Definition of {TRAIT_NAME}:</span></span>
+<span><span class="co">#&gt; {TRAIT_DESCRIPTION}</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; INSTRUCTIONS:</span></span>
+<span><span class="co">#&gt; 1. Read BOTH samples carefully.</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; 2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.</span></span>
+<span><span class="co">#&gt;    Do NOT consider length, formatting, grammar, topic relevance, or any other</span></span>
+<span><span class="co">#&gt;    aspect unless it  ...</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="register-your-own-template">Register your own template<a class="anchor" aria-label="anchor" href="#register-your-own-template"></a>
+</h3>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/register_prompt_template.html">register_prompt_template</a></span><span class="op">(</span><span class="st">"my_template"</span>, <span class="st">"</span></span>
+<span><span class="st">Compare two essays for {TRAIT_NAME}…</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">{TRAIT_NAME} is defined as {TRAIT_DESCRIPTION}.</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">SAMPLE 1:</span></span>
+<span><span class="st">{SAMPLE_1}</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">SAMPLE 2:</span></span>
+<span><span class="st">{SAMPLE_2}</span></span>
+<span><span class="st"></span></span>
+<span><span class="st">&lt;BETTER_SAMPLE&gt;SAMPLE_1&lt;/BETTER_SAMPLE&gt; or</span></span>
+<span><span class="st">&lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt;</span></span>
+<span><span class="st">"</span><span class="op">)</span></span></code></pre></div>
+<p>Use it in a submission:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"my_template"</span><span class="op">)</span></span></code></pre></div>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="trait-descriptions">Trait Descriptions<a class="anchor" aria-label="anchor" href="#trait-descriptions"></a>
+</h2>
+<p>Traits define what “quality” means.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; $name</span></span>
+<span><span class="co">#&gt; [1] "Overall Quality"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $description</span></span>
+<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."</span></span></code></pre></div>
+<p>You can also provide custom traits:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span></span>
+<span>  custom_name        <span class="op">=</span> <span class="st">"Clarity"</span>,</span>
+<span>  custom_description <span class="op">=</span> <span class="st">"How understandable, coherent, and well structured the ideas are."</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="positional-bias-testing">Positional Bias Testing<a class="anchor" aria-label="anchor" href="#positional-bias-testing"></a>
 </h2>
-<p>LLMs often show a preference for the first or second position when making pairwise judgments. <code>pairwiseLLM</code> includes built-in tools to quantify and diagnose positional bias.</p>
-<div class="section level3">
-<h3 id="workflow">Workflow<a class="anchor" aria-label="anchor" href="#workflow"></a>
-</h3>
-<ol style="list-style-type: decimal">
-<li>Create base pairs</li>
-</ol>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="va">items</span><span class="op">)</span></span></code></pre></div>
-<ol start="2" style="list-style-type: decimal">
-<li>Create reversed pairs</li>
-</ol>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">rev_pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sample_reverse_pairs.html">sample_reverse_pairs</a></span><span class="op">(</span><span class="va">pairs</span><span class="op">)</span></span></code></pre></div>
-<ol start="3" style="list-style-type: decimal">
-<li>Submit both sets to a backend</li>
-</ol>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_forward</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
-<span>  <span class="va">pairs</span>,</span>
-<span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
-<span>  model <span class="op">=</span> <span class="st">"gpt-4o"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">res_reversed</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
-<span>  <span class="va">rev_pairs</span>,</span>
-<span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
-<span>  model <span class="op">=</span> <span class="st">"gpt-4o"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<ol start="4" style="list-style-type: decimal">
-<li>Run the positional bias diagnostic</li>
-</ol>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bias</span> <span class="op">&lt;-</span> <span class="fu">test_positional_bias</span><span class="op">(</span><span class="va">res_forward</span>, <span class="va">res_reversed</span><span class="op">)</span></span>
-<span><span class="va">bias</span></span></code></pre></div>
-<p>Typical output includes:</p>
-<ul>
-<li><p>the proportion of consistent decisions between forward and reversed pairs</p></li>
-<li><p>an estimate of positional bias (e.g., preference for “first” vs “second” position)</p></li>
-<li><p>simple significance/comparison summaries</p></li>
-</ul>
-<p>This workflow works with any supported backend, so you can compare positional bias across providers and models.</p>
-</div>
-</div>
-<div class="section level2">
-<h2 id="positional-bias-of-default-template">Positional bias of default template<a class="anchor" aria-label="anchor" href="#positional-bias-of-default-template"></a>
-</h2>
-<p>For each model, we ran pairwise comparisons of overall quality (“Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are.”) on all example essays in two orders:</p>
-<ul>
-<li><p>Forward: randomized assignment of SAMPLE_1 vs SAMPLE_2</p></li>
-<li><p>Reverse: the same pairs with SAMPLE_1 and SAMPLE_2 swapped</p></li>
-</ul>
-<p>We then computed:</p>
-<ul>
-<li><p>Proportion consistent: The proportion of pairs where the model picks the same winner in both forward and reverse order.</p></li>
-<li><p>Bias (p): The p-value from a binomial test evaluating if SAMPLE_1 wins more or less often than 50% of the time across all forward + reverse comparisons combined.</p></li>
-</ul>
-<table class="table">
-<colgroup>
-<col width="14%">
-<col width="29%">
-<col width="13%">
-<col width="31%">
-<col width="10%">
-</colgroup>
-<thead><tr class="header">
-<th>provider</th>
-<th>model</th>
-<th>thinking</th>
-<th>proportion_consistent</th>
-<th>bias_p</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td>anthropic</td>
-<td>claude-haiku-4-5</td>
-<td>No</td>
-<td>0.933</td>
-<td>0.766</td>
-</tr>
-<tr class="even">
-<td>anthropic</td>
-<td>claude-haiku-4-5</td>
-<td>Yes</td>
-<td>0.911</td>
-<td>1.000</td>
-</tr>
-<tr class="odd">
-<td>anthropic</td>
-<td>claude-opus-4-0</td>
-<td>No</td>
-<td>0.978</td>
-<td>0.371</td>
-</tr>
-<tr class="even">
-<td>anthropic</td>
-<td>claude-opus-4-0</td>
-<td>Yes</td>
-<td>0.933</td>
-<td>0.371</td>
-</tr>
-<tr class="odd">
-<td>anthropic</td>
-<td>claude-opus-4-1</td>
-<td>No</td>
-<td>0.978</td>
-<td>0.371</td>
-</tr>
-<tr class="even">
-<td>anthropic</td>
-<td>claude-opus-4-1</td>
-<td>Yes</td>
-<td>0.956</td>
-<td>0.233</td>
-</tr>
-<tr class="odd">
-<td>anthropic</td>
-<td>claude-opus-4-5</td>
-<td>No</td>
-<td>0.867</td>
-<td>1.000</td>
-</tr>
-<tr class="even">
-<td>anthropic</td>
-<td>claude-opus-4-5</td>
-<td>Yes</td>
-<td>0.844</td>
-<td>1.000</td>
-</tr>
-<tr class="odd">
-<td>anthropic</td>
-<td>claude-sonnet-4-0</td>
-<td>No</td>
-<td>0.956</td>
-<td>0.371</td>
-</tr>
-<tr class="even">
-<td>anthropic</td>
-<td>claude-sonnet-4-0</td>
-<td>Yes</td>
-<td>0.933</td>
-<td>0.371</td>
-</tr>
-<tr class="odd">
-<td>anthropic</td>
-<td>claude-sonnet-4-5</td>
-<td>No</td>
-<td>0.933</td>
-<td>0.551</td>
-</tr>
-<tr class="even">
-<td>anthropic</td>
-<td>claude-sonnet-4-5</td>
-<td>Yes</td>
-<td>0.956</td>
-<td>0.551</td>
-</tr>
-<tr class="odd">
-<td>gemini</td>
-<td>gemini-3-pro-preview</td>
-<td>Yes</td>
-<td>0.978</td>
-<td>0.233</td>
-</tr>
-<tr class="even">
-<td>openai</td>
-<td>gpt-4.1</td>
-<td>No</td>
-<td>0.867</td>
-<td>0.766</td>
-</tr>
-<tr class="odd">
-<td>openai</td>
-<td>gpt-4.1-mini</td>
-<td>No</td>
-<td>0.844</td>
-<td>0.766</td>
-</tr>
-<tr class="even">
-<td>openai</td>
-<td>gpt-4.1-nano</td>
-<td>No</td>
-<td>0.667</td>
-<td>0.135</td>
-</tr>
-<tr class="odd">
-<td>openai</td>
-<td>gpt-4o</td>
-<td>No</td>
-<td>0.778</td>
-<td>0.551</td>
-</tr>
-<tr class="even">
-<td>openai</td>
-<td>gpt-5.1</td>
-<td>No</td>
-<td>0.800</td>
-<td>0.371</td>
-</tr>
-<tr class="odd">
-<td>openai</td>
-<td>gpt-5.1</td>
-<td>Yes</td>
-<td>0.800</td>
-<td>0.551</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="section level2">
-<h2 id="bradleyterry-modeling-ability-scores">Bradley–Terry Modeling (Ability Scores)<a class="anchor" aria-label="anchor" href="#bradleyterry-modeling-ability-scores"></a>
-</h2>
-<p><code>pairwiseLLM</code> provides a modeling layer to convert LLM pairwise comparison results into latent ability scores using Bradley–Terry models.</p>
+<p>LLMs often show a first-position or second-position bias.<br><code>pairwiseLLM</code> includes explicit tools for testing this.</p>
 <div class="section level3">
 <h3 id="typical-workflow">Typical workflow<a class="anchor" aria-label="anchor" href="#typical-workflow"></a>
 </h3>
-<ol style="list-style-type: decimal">
-<li>Collect pairwise results</li>
-</ol>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
-<span>  <span class="va">pairs</span>,</span>
-<span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
-<span>  model <span class="op">=</span> <span class="st">"gpt-4o"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<ol start="2" style="list-style-type: decimal">
-<li>Build BT data</li>
-</ol>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span></code></pre></div>
-<ol start="3" style="list-style-type: decimal">
-<li>Fit the model</li>
-</ol>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span></code></pre></div>
-<ol start="4" style="list-style-type: decimal">
-<li>Summarize results</li>
-</ol>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span>
-<span><span class="va">summary_tbl</span></span></code></pre></div>
-<p>Depending on configuration, the modeling layer supports:</p>
-<ul>
-<li><p>different engines (e.g., <code>sirt</code>, <code>BradleyTerry2</code>)</p></li>
-<li><p>ability estimates with standard errors</p></li>
-<li><p>ranking and comparison of items</p></li>
-</ul>
-<p>These functions turn raw pairwise outputs into interpretable rankings suitable for evaluation studies, benchmark construction, and research projects.</p>
-</div>
-</div>
-<div class="section level2">
-<h2 id="live-vs-batch-workflows">Live vs Batch Workflows<a class="anchor" aria-label="anchor" href="#live-vs-batch-workflows"></a>
-</h2>
-<div class="section level3">
-<h3 id="live-interactive-usage">Live (interactive) usage<a class="anchor" aria-label="anchor" href="#live-interactive-usage"></a>
-</h3>
-<p>Best for smaller numbers of pairs or exploratory work:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="va">items</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">pairs_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">)</span></span>
+<span><span class="va">pairs_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sample_reverse_pairs.html">sample_reverse_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, reverse_pct <span class="op">=</span> <span class="fl">1.0</span><span class="op">)</span></span></code></pre></div>
+<p>Submit:</p>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">res_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, model<span class="op">=</span><span class="st">"gpt-4o"</span>, backend<span class="op">=</span><span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="va">res_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_rev</span>, model<span class="op">=</span><span class="st">"gpt-4o"</span>, backend<span class="op">=</span><span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+<p>Compute bias:</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cons</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compute_reverse_consistency.html">compute_reverse_consistency</a></span><span class="op">(</span><span class="va">res_fwd</span>, <span class="va">res_rev</span><span class="op">)</span></span>
+<span><span class="va">bias</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/check_positional_bias.html">check_positional_bias</a></span><span class="op">(</span><span class="va">cons</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">res_live</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
-<span>  <span class="va">pairs</span>,</span>
-<span>  backend <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
-<span>  model <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">cons</span><span class="op">$</span><span class="va">summary</span></span>
+<span><span class="va">bias</span><span class="op">$</span><span class="va">summary</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="batch-usage-large-jobs">Batch usage (large jobs)<a class="anchor" aria-label="anchor" href="#batch-usage-large-jobs"></a>
+<h3 id="positional-bias-tested-templates">Positional-bias tested templates<a class="anchor" aria-label="anchor" href="#positional-bias-tested-templates"></a>
 </h3>
-<p>Best for large-scale runs via provider batch APIs:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Example flow – function names will depend on backend</span></span>
-<span><span class="va">reqs</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_openai_batch_requests.html">build_openai_batch_requests</a></span><span class="op">(</span><span class="va">pairs</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/run_openai_batch_pipeline.html">run_openai_batch_pipeline</a></span><span class="op">(</span></span>
-<span>  requests <span class="op">=</span> <span class="va">reqs</span>,</span>
-<span>  model    <span class="op">=</span> <span class="st">"gpt-4o-mini"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">res_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/parse_openai_batch_output.html">parse_openai_batch_output</a></span><span class="op">(</span><span class="va">batch</span><span class="op">$</span><span class="va">batch_output_path</span><span class="op">)</span></span></code></pre></div>
-<p>A unified batch front-end can also be used.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span></span>
-<span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
-<span>  provider <span class="op">=</span> <span class="st">"openai"</span>,        <span class="co"># "openai", "anthropic", or "gemini"</span></span>
-<span>  model <span class="op">=</span> <span class="st">"gpt-4o-mini"</span>,      <span class="co"># or any supported model</span></span>
-<span>  pairs <span class="op">=</span> <span class="va">pairs</span>,              <span class="co"># tibble of pairwise comparisons</span></span>
-<span>  trait_name <span class="op">=</span> <span class="st">"overall_quality"</span>,</span>
-<span>  trait_description <span class="op">=</span> <span class="st">"Overall writing quality."</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span></code></pre></div>
+<p>Five included templates have been tested across different backend providers. Complete details are presented in a vignette: <a href="https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html" class="uri">https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html</a></p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/vignette.html" class="external-link">vignette</a></span><span class="op">(</span><span class="st">"prompt-template-positional-bias"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span></code></pre></div>
+<hr>
 </div>
 </div>
 <div class="section level2">
-<h2 id="roadmap-high-level">Roadmap (High Level)<a class="anchor" aria-label="anchor" href="#roadmap-high-level"></a>
+<h2 id="bradleyterry--elo-modeling">Bradley–Terry &amp; Elo Modeling<a class="anchor" aria-label="anchor" href="#bradleyterry--elo-modeling"></a>
 </h2>
-<p>Planned / in-progress features include:</p>
+<div class="section level3">
+<h3 id="bradleyterry-bt">Bradley–Terry (BT)<a class="anchor" aria-label="anchor" href="#bradleyterry-bt"></a>
+</h3>
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
+<span><span class="va">bt_fit</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="elo-modeling">Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
+</h3>
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span>          <span class="co"># per-sample scores</span></span>
+<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability</span>  <span class="co"># reliability indices (unweighted &amp; weighted)</span></span></code></pre></div>
+<p>If the user doesn’t have <strong>EloChoice</strong>, the function provides a helpful installation message.</p>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="live-vs-batch-summary">Live vs Batch Summary<a class="anchor" aria-label="anchor" href="#live-vs-batch-summary"></a>
+</h2>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>Workflow</th>
+<th>Use Case</th>
+<th>Functions</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><strong>Live</strong></td>
+<td>small or interactive runs</td>
+<td>
+<code>submit_llm_pairs</code>, <code>llm_compare_pair</code>
+</td>
+</tr>
+<tr class="even">
+<td><strong>Batch</strong></td>
+<td>large jobs, cost control</td>
+<td>
+<code>llm_submit_pairs_batch</code>, <code>llm_download_batch_results</code>
+</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="roadmap">Roadmap<a class="anchor" aria-label="anchor" href="#roadmap"></a>
+</h2>
+<p>Planned features include:</p>
 <ul>
-<li><p>Local backends (e.g., Ollama) for offline testing</p></li>
-<li><p>Expanded documentation: vignettes, pkgdown site, and worked examples</p></li>
+<li>Local / offline inference (Ollama)<br>
+</li>
+<li>Documentation and vignette additions</li>
+<li>CRAN submission</li>
 </ul>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="contributing">Contributing<a class="anchor" aria-label="anchor" href="#contributing"></a>
 </h2>
-<p>Issues and pull requests are welcome. If you’re adding a new backend or modeling method, please include:</p>
+<p>Contributions to <strong>pairwiseLLM</strong> are very welcome!</p>
 <ul>
-<li><p>unit tests</p></li>
-<li><p>example usage</p></li>
-<li><p>documentation updates (including README / vignettes)</p></li>
+<li>Bug reports (with reproducible examples when possible)</li>
+<li>Feature requests, ideas, and discussion</li>
+<li>Pull requests improving:
+<ul>
+<li>functionality</li>
+<li>documentation</li>
+<li>examples / vignettes</li>
+<li>test coverage</li>
 </ul>
+</li>
+<li>Backend integrations (e.g., additional LLM providers or local inference engines)</li>
+<li>Modeling extensions</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="id_-reporting-issues">📝 Reporting issues<a class="anchor" aria-label="anchor" href="#id_-reporting-issues"></a>
+</h2>
+<p>If you encounter a problem:</p>
+<ol style="list-style-type: decimal">
+<li>
+<p>Run:</p>
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">session_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+</li>
+<li>
+<p>Include:</p>
+<ul>
+<li>reproducible code</li>
+<li>the error message</li>
+<li>the model/backend involved</li>
+<li>your operating system</li>
+</ul>
+</li>
+<li><p>Open an issue at:<br><a href="https://github.com/shmercer/pairwiseLLM/issues" class="external-link uri">https://github.com/shmercer/pairwiseLLM/issues</a></p></li>
+</ol>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>
 </h2>
-<p><code>pairwiseLLM</code> is released under the MIT License. See the <code>LICENSE</code> file for details.</p>
+<p>MIT License. See <code>LICENSE</code>.</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="package-author-and-maintainer">Package Author and Maintainer<a class="anchor" aria-label="anchor" href="#package-author-and-maintainer"></a>
 </h2>
 <ul>
 <li>
-<strong>Sterett H. Mercer</strong> - <em>University of British Columbia</em><br>
+<strong>Sterett H. Mercer</strong> – <em>University of British Columbia</em><br>
 UBC Faculty Profile: <a href="https://ecps.educ.ubc.ca/sterett-h-mercer/" class="external-link uri">https://ecps.educ.ubc.ca/sterett-h-mercer/</a><br>
 ResearchGate: <a href="https://www.researchgate.net/profile/Sterett_Mercer" class="external-link uri">https://www.researchgate.net/profile/Sterett_Mercer</a><br>
 Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&amp;hl=en" class="external-link uri">https://scholar.google.ca/citations?user=YJg4svsAAAAJ&amp;hl=en</a>
 </li>
 </ul>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
-<p>A formal <code>CITATION</code> file will be added prior to the first CRAN release.</p>
-<p>In the meantime, if you use <code>pairwiseLLM</code> in published work, you can cite it as:</p>
 <blockquote>
-<p>Mercer, S. H. (2025). <em>pairwiseLLM: Pairwise comparisons of writing quality with LLMs</em> (R package). GitHub: <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
+<p>Mercer, S. H. (2025). <em>pairwiseLLM: Pairwise comparisons of writing quality with LLMs</em> (R package).<br>
+GitHub: <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
 </div>

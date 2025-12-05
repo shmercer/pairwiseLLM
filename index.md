@@ -1,472 +1,415 @@
 # pairwiseLLM: Pairwise comparisons of writing quality with LLMs
 
-`pairwiseLLM` is an R package that provides a unified framework for
-generating, submitting, and modeling **pairwise comparisons of writing
-quality** from large language models (LLMs).
+`pairwiseLLM` provides a unified, extensible framework for generating,
+submitting, and modeling **pairwise comparisons of writing quality**
+using large language models (LLMs).
 
-It supports:
+It includes:
 
-- Multiple providers: OpenAI, Anthropic, Google Gemini, and (planned)
-  local models via `Ollama`
+- Unified **live** and **batch** APIs across OpenAI, Anthropic, and
+  Gemini  
+- A prompt template registry with a **tested default template** designed
+  to reduce positional bias  
+- Positional-bias diagnostics (forward vs reverse design)  
+- Bradley–Terry (BT) and Elo modeling  
+- Consistent data structures for all providers
 
-- Live and batch processing pipelines for all supported cloud providers.
-
-- A default prompt template, designed (and tested) to reduce positional
-  bias.
-
-- Built-in tools for positional-bias diagnostics
-
-- Bradley-Terry (BT) modeling to convert pairwise comparison results
-  into latent ability scores
-
-- Consistent output tibbles across all backends.
+------------------------------------------------------------------------
 
 ## Supported Models
 
-The following models are confirmed to work with pairwiseLLM for live and
-batch pairwise comparisons. The table notes whether each model supports
-thinking / reasoning traces (e.g., `include_thoughts = TRUE` via OpenAI
-`reasoning`, Anthropic `thinking`, Gemini `thinkingConfig`).
+The following models are confirmed to work for live and batch pairwise
+comparisons:
 
-| Provider      | Model                | Thinking Supported? |
-|---------------|----------------------|---------------------|
-| **OpenAI**    | gpt-5.1              | ✅ Yes              |
-| **OpenAI**    | gpt-4.1              | ❌ No               |
-| **OpenAI**    | gpt-4.1-mini         | ❌ No               |
-| **OpenAI**    | gpt-4.1-nano         | ❌ No               |
-| **OpenAI**    | gpt-4o               | ❌ No               |
-| **Anthropic** | claude-sonnet-4-5    | ✅ Yes              |
-| **Anthropic** | claude-haiku-4-5     | ✅ Yes              |
-| **Anthropic** | claude-opus-4-5      | ✅ Yes              |
-| **Anthropic** | claude-opus-4-1      | ✅ Yes              |
-| **Anthropic** | claude-sonnet-4-0    | ✅ Yes              |
-| **Anthropic** | claude-opus-4-0      | ✅ Yes              |
-| **Gemini**    | gemini-3-pro-preview | ✅ Yes              |
+| Provider      | Model                | Reasoning Mode? |
+|---------------|----------------------|-----------------|
+| **OpenAI**    | gpt-5.1              | ✅ Yes          |
+| **OpenAI**    | gpt-4o               | ❌ No           |
+| **OpenAI**    | gpt-4.1              | ❌ No           |
+| **Anthropic** | claude-sonnet-4-5    | ✅ Yes          |
+| **Anthropic** | claude-haiku-4-5     | ✅ Yes          |
+| **Anthropic** | claude-opus-4-5      | ✅ Yes          |
+| **Gemini**    | gemini-3-pro-preview | ✅ Yes          |
+
+------------------------------------------------------------------------
 
 ## Installation
-
-From GitHub (development version):
 
 ``` r
 # install.packages("pak")
 pak::pak("shmercer/pairwiseLLM")
 ```
 
-You can then load the package in the usual way:
+Load the package:
 
 ``` r
 library(pairwiseLLM)
 ```
 
-## Live comparisons
+------------------------------------------------------------------------
 
-Live pairwise comparisons (one-off or small batches) are available
-through a single, unified API:
+## Core Concepts
+
+At a high level, `pairwiseLLM` workflows follow this structure:
+
+1.  **Writing samples** – e.g., essays, constructed responses, short
+    answers.  
+2.  **Trait** – a rating dimension such as “overall quality” or
+    “organization”.  
+3.  **Pairs** – pairs of samples to be compared for that trait.  
+4.  **Prompt template** – instructions + placeholders for
+    `{TRAIT_NAME}`, `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, `{SAMPLE_2}`.  
+5.  **Backend** – which provider/model to use (OpenAI, Anthropic,
+    Gemini).  
+6.  **Modeling** – convert pairwise results to latent scores via BT or
+    Elo.
+
+The package provides helpers for each step.
+
+------------------------------------------------------------------------
+
+## Live Comparisons
+
+Use the unified API:
 
 - [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
-  – compare a single pair
-
+  — compare one pair  
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
-  – submit many pairs in one call
+  — compare many pairs at once
 
-Backend-specific helpers (e.g.,
-[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md))
-are available but most users will only need the unified functions.
+Example:
 
-## Batch comparisons
+``` r
+data("example_writing_samples")
 
-Batch APIs (for larger jobs and offline processing) are implemented
-through a single, unified API:
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(5, seed = 123) |>
+  randomize_pair_order()
 
-- [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
-  — submit batch requests
+td   <- trait_description("overall_quality")
+tmpl <- get_prompt_template("default")
 
+res <- submit_llm_pairs(
+  pairs             = pairs,
+  backend           = "openai",
+  model             = "gpt-4o",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl
+)
+```
+
+------------------------------------------------------------------------
+
+## Batch Comparisons
+
+Large-scale runs use:
+
+- [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)  
 - [`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md)
-  — download & parse the completed results
 
-Each provider also has its own `build_*_batch_requests()`,
-`run_*_batch_pipeline()`, and `parse_*_batch_output()` functions.
+Example:
+
+``` r
+batch <- llm_submit_pairs_batch(
+  provider          = "anthropic",
+  model             = "claude-sonnet-4-5",
+  pairs             = pairs,
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl
+)
+
+results <- llm_download_batch_results(batch)
+```
+
+------------------------------------------------------------------------
 
 ## API Keys
 
-`pairwiseLLM` uses a CRAN-safe API key layer:
+`pairwiseLLM` reads keys **only from environment variables**.  
+Keys are **never printed**, **never stored**, and **never written** to
+disk.
 
-- Keys are read only from environment variables (e.g.,
-  `Sys.getenv("OPENAI_API_KEY")`).
-
-- Keys are never printed or stored in package data.
-
-- A single helper, `.get_api_key()`, is used internally by all backends.
-
-You can quickly verify what keys are visible to R using:
+You can verify which providers are available using:
 
 ``` r
 check_llm_api_keys()
 ```
 
-This returns a tibble with one row per provider and a column indicating
-whether a key is set.
+This returns a tibble showing whether R can see the required keys for:
 
-## Quick Start Example
+- OpenAI  
+- Anthropic  
+- Google Gemini
 
-Here is a minimal, end-to-end example using OpenAI via the unified API:
+### Setting API Keys
+
+You may set keys **temporarily** for the current R session:
 
 ``` r
-library(pairwiseLLM)
-
-# 1. Load included writing sample data
-data("example_writing_samples", package = "pairwiseLLM")
-
-# 2. Create a small set of pairs
-pairs <- example_writing_samples |>
-  make_pairs() |>
-  sample_pairs(n_pairs = 5, seed = 321) |>
-  randomize_pair_order(seed = 654)
-
-# 3. Specify the trait and prompt template
-td   <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-# 4. Submit to a backend (e.g., OpenAI)
-res <- submit_llm_pairs(
-  pairs             = pairs,
-  model             = "gpt-4o",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  backend           = "openai"
-)
-
-# 5. Fit a Bradley–Terry model
-bt_data <- build_bt_data(res)
-bt_fit  <- fit_bt_model(bt_data)
-
-summarize_bt_fit(bt_fit)
+Sys.setenv(OPENAI_API_KEY = "your-key-here")
+Sys.setenv(ANTHROPIC_API_KEY = "your-key-here")
+Sys.setenv(GEMINI_API_KEY = "your-key-here")
 ```
 
-## Default Prompt Template (Positional-Bias Tested)
+…but for normal use and for reproducible analyses, it is **strongly
+recommended**  
+to store them in your `~/.Renviron` file.
 
-`pairwiseLLM` ships with a default XML-style prompt template that has
-been tested across:
+### Recommended method: Adding keys to `~/.Renviron`
 
-- multiple OpenAI GPT models,
-
-- Anthropic Claude models, and
-
-- Google Gemini models.
-
-The default template is designed to:
-
-- clearly separate instructions and samples
-
-- use explicit `<SAMPLE_1>`, `<SAMPLE_2>`, and `<BETTER_SAMPLE>` tags
-
-- minimize positional and formatting bias
-
-- avoid returning chain-of-thought unless explicitly requested
-
-You can retrieve or inspect the default template from R:
+Open your `.Renviron` file:
 
 ``` r
-default_template <- set_prompt_template()
-cat(default_template)
+usethis::edit_r_environ()
 ```
 
+Add the following lines:
+
+``` R
+OPENAI_API_KEY="your-openai-key"
+ANTHROPIC_API_KEY="your-anthropic-key"
+GEMINI_API_KEY="your-gemini-key"
+```
+
+Save the file, then restart R.
+
+You can confirm that R now sees the keys:
+
 ``` r
-You are an expert writing assessor.
+check_llm_api_keys()
+```
 
-Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.
+------------------------------------------------------------------------
 
-Definition of {TRAIT_NAME}:
-{TRAIT_DESCRIPTION}
+## Prompt Templates & Registry
 
-INSTRUCTIONS:
-1. Read BOTH samples carefully.
+`pairwiseLLM` includes:
 
-2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.
-   Do NOT consider length, formatting, grammar, topic relevance, or any other
-   aspect unless it directly affects {TRAIT_NAME}.
+- A **default template** tested for positional bias  
+- Support for **multiple templates stored by name**  
+- User-defined templates via
+  [`register_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/register_prompt_template.md)
 
-3. The labels SAMPLE_1 and SAMPLE_2 are arbitrary. They do NOT indicate quality.
-   SAMPLE_1 could have been SAMPLE_2 and vice versa.
+### View available templates
 
-3a. Before deciding, remind yourself explicitly that SAMPLE_1 and SAMPLE_2 might
-    have been presented in the opposite order. Your decision MUST NOT depend on
-    their position.
+``` r
+list_prompt_templates()
+#> [1] "default" "test1"   "test2"   "test3"   "test4"   "test5"
+```
 
-3b. After reading both samples, PAUSE and reconsider which sample is truly better
-    on {TRAIT_NAME}, independent of position.
+### Show the default template (truncated)
 
-4. You MUST choose exactly one sample. If the samples seem equal, choose the one
-   that is even slightly better on {TRAIT_NAME}. Do NOT output ties.
+``` r
+tmpl <- get_prompt_template("default")
+cat(substr(tmpl, 1, 400), "...\n")
+#> You are an expert writing assessor.
+#> 
+#> Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.
+#> 
+#> Definition of {TRAIT_NAME}:
+#> {TRAIT_DESCRIPTION}
+#> 
+#> INSTRUCTIONS:
+#> 1. Read BOTH samples carefully.
+#> 
+#> 2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.
+#>    Do NOT consider length, formatting, grammar, topic relevance, or any other
+#>    aspect unless it  ...
+```
 
-5. Decide which sample has BETTER QUALITY on {TRAIT_NAME}.
-   Think silently. Do NOT reveal your reasoning.
+### Register your own template
 
-6. After making your judgment, respond EXACTLY with ONE of the following lines:
+``` r
+register_prompt_template("my_template", "
+Compare two essays for {TRAIT_NAME}…
 
-   <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-   OR
-
-   <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-
-6a. Before responding, VERIFY that the tag you are about to output matches
-    your internal decision about which sample is better.
-
-IMPORTANT:
-- Output EXACTLY one of the two lines above.
-- Do NOT add explanations, reasoning, punctuation, or extra text.
-- Do NOT include chain-of-thought or justification.
+{TRAIT_NAME} is defined as {TRAIT_DESCRIPTION}.
 
 SAMPLE 1:
 {SAMPLE_1}
 
 SAMPLE 2:
 {SAMPLE_2}
+
+<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> or
+<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+")
 ```
 
-You can supply your own template globally:
+Use it in a submission:
 
 ``` r
-set_prompt_template(my_custom_template)
+tmpl <- get_prompt_template("my_template")
 ```
 
-or switch templates within a session as needed.
+------------------------------------------------------------------------
+
+## Trait Descriptions
+
+Traits define what “quality” means.
+
+``` r
+trait_description("overall_quality")
+#> $name
+#> [1] "Overall Quality"
+#> 
+#> $description
+#> [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."
+```
+
+You can also provide custom traits:
+
+``` r
+trait_description(
+  custom_name        = "Clarity",
+  custom_description = "How understandable, coherent, and well structured the ideas are."
+)
+```
+
+------------------------------------------------------------------------
 
 ## Positional Bias Testing
 
-LLMs often show a preference for the first or second position when
-making pairwise judgments. `pairwiseLLM` includes built-in tools to
-quantify and diagnose positional bias.
-
-### Workflow
-
-1.  Create base pairs
-
-``` r
-pairs <- make_pairs(items)
-```
-
-2.  Create reversed pairs
-
-``` r
-rev_pairs <- sample_reverse_pairs(pairs)
-```
-
-3.  Submit both sets to a backend
-
-``` r
-res_forward <- submit_llm_pairs(
-  pairs,
-  backend = "openai",
-  model = "gpt-4o"
-)
-
-res_reversed <- submit_llm_pairs(
-  rev_pairs,
-  backend = "openai",
-  model = "gpt-4o"
-)
-```
-
-4.  Run the positional bias diagnostic
-
-``` r
-bias <- test_positional_bias(res_forward, res_reversed)
-bias
-```
-
-Typical output includes:
-
-- the proportion of consistent decisions between forward and reversed
-  pairs
-
-- an estimate of positional bias (e.g., preference for “first” vs
-  “second” position)
-
-- simple significance/comparison summaries
-
-This workflow works with any supported backend, so you can compare
-positional bias across providers and models.
-
-## Positional bias of default template
-
-For each model, we ran pairwise comparisons of overall quality (“Overall
-quality of the writing, considering how well ideas are expressed, how
-clearly the writing is organized, and how effective the language and
-conventions are.”) on all example essays in two orders:
-
-- Forward: randomized assignment of SAMPLE_1 vs SAMPLE_2
-
-- Reverse: the same pairs with SAMPLE_1 and SAMPLE_2 swapped
-
-We then computed:
-
-- Proportion consistent: The proportion of pairs where the model picks
-  the same winner in both forward and reverse order.
-
-- Bias (p): The p-value from a binomial test evaluating if SAMPLE_1 wins
-  more or less often than 50% of the time across all forward + reverse
-  comparisons combined.
-
-| provider  | model                | thinking | proportion_consistent | bias_p |
-|-----------|----------------------|----------|-----------------------|--------|
-| anthropic | claude-haiku-4-5     | No       | 0.933                 | 0.766  |
-| anthropic | claude-haiku-4-5     | Yes      | 0.911                 | 1.000  |
-| anthropic | claude-opus-4-0      | No       | 0.978                 | 0.371  |
-| anthropic | claude-opus-4-0      | Yes      | 0.933                 | 0.371  |
-| anthropic | claude-opus-4-1      | No       | 0.978                 | 0.371  |
-| anthropic | claude-opus-4-1      | Yes      | 0.956                 | 0.233  |
-| anthropic | claude-opus-4-5      | No       | 0.867                 | 1.000  |
-| anthropic | claude-opus-4-5      | Yes      | 0.844                 | 1.000  |
-| anthropic | claude-sonnet-4-0    | No       | 0.956                 | 0.371  |
-| anthropic | claude-sonnet-4-0    | Yes      | 0.933                 | 0.371  |
-| anthropic | claude-sonnet-4-5    | No       | 0.933                 | 0.551  |
-| anthropic | claude-sonnet-4-5    | Yes      | 0.956                 | 0.551  |
-| gemini    | gemini-3-pro-preview | Yes      | 0.978                 | 0.233  |
-| openai    | gpt-4.1              | No       | 0.867                 | 0.766  |
-| openai    | gpt-4.1-mini         | No       | 0.844                 | 0.766  |
-| openai    | gpt-4.1-nano         | No       | 0.667                 | 0.135  |
-| openai    | gpt-4o               | No       | 0.778                 | 0.551  |
-| openai    | gpt-5.1              | No       | 0.800                 | 0.371  |
-| openai    | gpt-5.1              | Yes      | 0.800                 | 0.551  |
-
-## Bradley–Terry Modeling (Ability Scores)
-
-`pairwiseLLM` provides a modeling layer to convert LLM pairwise
-comparison results into latent ability scores using Bradley–Terry
-models.
+LLMs often show a first-position or second-position bias.  
+`pairwiseLLM` includes explicit tools for testing this.
 
 ### Typical workflow
 
-1.  Collect pairwise results
-
 ``` r
-res <- submit_llm_pairs(
-  pairs,
-  backend = "openai",
-  model = "gpt-4o"
-)
+pairs_fwd <- make_pairs(example_writing_samples)
+pairs_rev <- sample_reverse_pairs(pairs_fwd, reverse_pct = 1.0)
 ```
 
-2.  Build BT data
+Submit:
+
+``` r
+res_fwd <- submit_llm_pairs(pairs_fwd, model="gpt-4o", backend="openai", ...)
+res_rev <- submit_llm_pairs(pairs_rev, model="gpt-4o", backend="openai", ...)
+```
+
+Compute bias:
+
+``` r
+cons <- compute_reverse_consistency(res_fwd, res_rev)
+bias <- check_positional_bias(cons)
+
+cons$summary
+bias$summary
+```
+
+### Positional-bias tested templates
+
+Five included templates have been tested across different backend
+providers. Complete details are presented in a vignette:
+<https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html>
+
+``` r
+vignette("prompt-template-positional-bias", package = "pairwiseLLM")
+```
+
+------------------------------------------------------------------------
+
+## Bradley–Terry & Elo Modeling
+
+### Bradley–Terry (BT)
 
 ``` r
 bt_data <- build_bt_data(res)
+bt_fit  <- fit_bt_model(bt_data)
+summarize_bt_fit(bt_fit)
 ```
 
-3.  Fit the model
+### Elo Modeling
 
 ``` r
-bt_fit <- fit_bt_model(bt_data)
+elo_fit <- fit_elo_model(elo_data, runs = 5)
+
+elo_fit$elo          # per-sample scores
+elo_fit$reliability  # reliability indices (unweighted & weighted)
 ```
 
-4.  Summarize results
+If the user doesn’t have **EloChoice**, the function provides a helpful
+installation message.
 
-``` r
-summary_tbl <- summarize_bt_fit(bt_fit)
-summary_tbl
-```
+------------------------------------------------------------------------
 
-Depending on configuration, the modeling layer supports:
+## Live vs Batch Summary
 
-- different engines (e.g., `sirt`, `BradleyTerry2`)
+| Workflow  | Use Case                  | Functions                                              |
+|-----------|---------------------------|--------------------------------------------------------|
+| **Live**  | small or interactive runs | `submit_llm_pairs`, `llm_compare_pair`                 |
+| **Batch** | large jobs, cost control  | `llm_submit_pairs_batch`, `llm_download_batch_results` |
 
-- ability estimates with standard errors
+------------------------------------------------------------------------
 
-- ranking and comparison of items
+## Roadmap
 
-These functions turn raw pairwise outputs into interpretable rankings
-suitable for evaluation studies, benchmark construction, and research
-projects.
+Planned features include:
 
-## Live vs Batch Workflows
+- Local / offline inference (Ollama)  
+- Documentation and vignette additions
+- CRAN submission
 
-### Live (interactive) usage
-
-Best for smaller numbers of pairs or exploratory work:
-
-``` r
-pairs <- make_pairs(items)
-
-res_live <- submit_llm_pairs(
-  pairs,
-  backend = "anthropic",
-  model = "claude-sonnet-4-5"
-)
-```
-
-### Batch usage (large jobs)
-
-Best for large-scale runs via provider batch APIs:
-
-``` r
-# Example flow – function names will depend on backend
-reqs <- build_openai_batch_requests(pairs)
-
-batch <- run_openai_batch_pipeline(
-  requests = reqs,
-  model    = "gpt-4o-mini"
-)
-
-res_batch <- parse_openai_batch_output(batch$batch_output_path)
-```
-
-A unified batch front-end can also be used.
-
-``` r
-
-batch <- llm_submit_pairs_batch(
-  provider = "openai",        # "openai", "anthropic", or "gemini"
-  model = "gpt-4o-mini",      # or any supported model
-  pairs = pairs,              # tibble of pairwise comparisons
-  trait_name = "overall_quality",
-  trait_description = "Overall writing quality."
-)
-
-results <- llm_download_batch_results(batch)
-```
-
-## Roadmap (High Level)
-
-Planned / in-progress features include:
-
-- Local backends (e.g., Ollama) for offline testing
-
-- Expanded documentation: vignettes, pkgdown site, and worked examples
+------------------------------------------------------------------------
 
 ## Contributing
 
-Issues and pull requests are welcome. If you’re adding a new backend or
-modeling method, please include:
+Contributions to **pairwiseLLM** are very welcome!
 
-- unit tests
+- Bug reports (with reproducible examples when possible)
+- Feature requests, ideas, and discussion
+- Pull requests improving:
+  - functionality
+  - documentation
+  - examples / vignettes
+  - test coverage
+- Backend integrations (e.g., additional LLM providers or local
+  inference engines)
+- Modeling extensions
 
-- example usage
+## 📝 Reporting issues
 
-- documentation updates (including README / vignettes)
+If you encounter a problem:
+
+1.  Run:
+
+    ``` r
+    devtools::session_info()
+    ```
+
+2.  Include:
+
+    - reproducible code
+    - the error message
+    - the model/backend involved
+    - your operating system
+
+3.  Open an issue at:  
+    <https://github.com/shmercer/pairwiseLLM/issues>
+
+------------------------------------------------------------------------
 
 ## License
 
-`pairwiseLLM` is released under the MIT License. See the `LICENSE` file
-for details.
+MIT License. See `LICENSE`.
+
+------------------------------------------------------------------------
 
 ## Package Author and Maintainer
 
-- **Sterett H. Mercer** - *University of British Columbia*  
+- **Sterett H. Mercer** – *University of British Columbia*  
   UBC Faculty Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/>  
   ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer>  
   Google Scholar:
   <https://scholar.google.ca/citations?user=YJg4svsAAAAJ&hl=en>
 
+------------------------------------------------------------------------
+
 ## Citation
 
-A formal `CITATION` file will be added prior to the first CRAN release.
-
-In the meantime, if you use `pairwiseLLM` in published work, you can
-cite it as:
-
 > Mercer, S. H. (2025). *pairwiseLLM: Pairwise comparisons of writing
-> quality with LLMs* (R package). GitHub:
-> <https://github.com/shmercer/pairwiseLLM>
+> quality with LLMs* (R package).  
+> GitHub: <https://github.com/shmercer/pairwiseLLM>
