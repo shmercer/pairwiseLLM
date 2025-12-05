@@ -8,18 +8,30 @@ It includes:
 
 - Unified **live** and **batch** APIs across OpenAI, Anthropic, and
   Gemini  
-- A prompt template registry with a **tested default template** designed
-  to reduce positional bias  
+- A prompt template registry with **tested templates** designed to
+  reduce positional bias  
 - Positional-bias diagnostics (forward vs reverse design)  
 - Bradley–Terry (BT) and Elo modeling  
 - Consistent data structures for all providers
 
-Basic usage is covered in a vignette:
-<https://shmercer.github.io/pairwiseLLM/articles/getting-started.html>
+------------------------------------------------------------------------
 
-``` r
-vignette("getting-started")
-```
+## Vignettes
+
+Several vignettes are available to demonstrate functionality.
+
+For basic function usage, see:
+
+- [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+
+For advanced batch processing workflows, see:
+
+- [`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
+
+For information on prompt evaluation and positional-bias diagnostics,
+see:
+
+- [`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
 
 ------------------------------------------------------------------------
 
@@ -129,13 +141,6 @@ batch <- llm_submit_pairs_batch(
 )
 
 results <- llm_download_batch_results(batch)
-```
-
-More advanced usage of batch functions is covered in a vignette:
-<https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html>
-
-``` r
-vignette("advanced-batch-workflows")
 ```
 
 ------------------------------------------------------------------------
@@ -318,11 +323,7 @@ bias$summary
 
 Five included templates have been tested across different backend
 providers. Complete details are presented in a vignette:
-<https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html>
-
-``` r
-vignette("prompt-template-positional-bias", package = "pairwiseLLM")
-```
+[`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
 
 ------------------------------------------------------------------------
 
@@ -381,7 +382,7 @@ Contributions to **pairwiseLLM** are very welcome!
   inference engines)
 - Modeling extensions
 
-## 📝 Reporting issues
+## Reporting issues
 
 If you encounter a problem:
 

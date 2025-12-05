@@ -29,6 +29,15 @@ The examples are based on the A/B template testing dev scripts for:
 > so that the vignette remains CRAN-safe. You can enable them in your
 > own project.
 
+For basic function usage, see the companion vignette:
+
+- [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+
+For prompt evaluation and positional-bias diagnostics, see the companion
+vignette:
+
+- [`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
+
 ## 2. Setup and API Keys
 
 ``` r
@@ -638,13 +647,6 @@ thinking × direction), you can:
 - Fit **Elo** models with
   [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md)
   (when `EloChoice` is installed)
-
-For a full worked example of prompt-template testing and positional-bias
-analysis, see:
-
-``` r
-vignette("prompt-template-positional-bias")
-```
 
 ## 9. Citation
 
