@@ -24,9 +24,12 @@ Suggests:
     BradleyTerry2,
     EloChoice,
     knitr,
+    readr,
     rmarkdown,
     sirt,
-    testthat (>= 3.0.0)
+    stringr,
+    testthat (>= 3.0.0),
+    tidyr
 Config/testthat/edition: 3
 URL: https://github.com/shmercer/pairwiseLLM, https://shmercer.github.io/pairwiseLLM/
 BugReports: https://github.com/shmercer/pairwiseLLM/issues
