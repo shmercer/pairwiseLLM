@@ -14,6 +14,13 @@ It includes:
 - Bradley–Terry (BT) and Elo modeling  
 - Consistent data structures for all providers
 
+Basic usage is covered in a vignette:
+<https://shmercer.github.io/pairwiseLLM/articles/getting-started.html>
+
+``` r
+vignette("getting-started")
+```
+
 ------------------------------------------------------------------------
 
 ## Supported Models
@@ -122,6 +129,13 @@ batch <- llm_submit_pairs_batch(
 )
 
 results <- llm_download_batch_results(batch)
+```
+
+More advanced usage of batch functions is covered in a vignette:
+<https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html>
+
+``` r
+vignette("advanced-batch-workflows")
 ```
 
 ------------------------------------------------------------------------
