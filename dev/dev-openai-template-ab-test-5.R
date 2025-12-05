@@ -1,9 +1,11 @@
-# dev/dev-openai-template-ab-test.R
+# dev/dev-openai-template-ab-test-5.R
 #
 # A/B test two alternative prompt templates on OpenAI models via batch API.
 #
 # - OpenAI models:
 #     * gpt-4.1
+#     * gpt-4.1-mini
+#     * gpt-4.1-nano
 #     * gpt-4o
 #     * gpt-5.1
 # - Thinking:
@@ -19,9 +21,9 @@
 #
 # Outputs:
 # - Per-run CSVs:
-#     dev-output/openai-template-ab-test/openai_ab_<TID>_<model>_<thinking>_<direction>.csv
+#     dev-output/openai-template-ab-test-3/openai_ab_<TID>_<model>_<thinking>_<direction>.csv
 # - Summary CSV:
-#     dev-output/openai-template-ab-test/openai_template_ab_summary.csv
+#     dev-output/openai-template-ab-test-3/openai_template_ab_summary.csv
 
 library(pairwiseLLM)
 library(dplyr)
@@ -34,7 +36,7 @@ library(stringr)
 # 0. Setup
 # ---------------------------------------------------------------------
 
-out_dir <- "dev-output/openai-template-ab-test"
+out_dir <- "dev-output/openai-template-ab-test-5"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 set.seed(123)
@@ -48,99 +50,72 @@ td <- trait_description("overall_quality")
 # ---------------------------------------------------------------------
 
 template_T1 <- "
-You are an expert writing assessor.
+You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
 
-Your task: Determine which of two writing samples demonstrates superior {TRAIT_NAME}.
+TRAIT: {TRAIT_NAME}
+DEFINITION: {TRAIT_DESCRIPTION}
 
-{TRAIT_NAME} is defined as:
-{TRAIT_DESCRIPTION}
+SAMPLES:
 
-Below are two samples. They appear in arbitrary order—neither position indicates quality.
-
-═══════════════════════════════════════
-FIRST SAMPLE:
+=== SAMPLE_1 ===
 {SAMPLE_1}
 
-═══════════════════════════════════════
-SECOND SAMPLE:
+=== SAMPLE_2 ===
 {SAMPLE_2}
 
-═══════════════════════════════════════
+EVALUATION PROCESS (Mental Simulation):
 
-ASSESSMENT PROTOCOL:
+1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the winner.
+2.  **Advocate for SAMPLE_2**: Mentally list the single strongest point of evidence that makes SAMPLE_2 the winner.
+3.  **Adjudicate**: Compare the *strength of the evidence* identified in steps 1 and 2. Which sample provided the more compelling demonstration of the definition above?
 
-Step 1: Read both samples in their entirety.
+CRITICAL:
+- You must construct a mental argument for BOTH samples before deciding.
+- Do not default to the first sample read.
+- If the samples are close, strictly follow the trait definition to break the tie.
 
-Step 2: For each sample independently, assess the degree to which it demonstrates {TRAIT_NAME} based solely on the definition provided.
-
-Step 3: Compare your assessments. Determine which sample shows stronger {TRAIT_NAME}.
-
-Step 4: Select the sample with better {TRAIT_NAME}. If extremely close, choose the one with any detectable advantage. No ties are allowed.
-
-Step 5: Verify your selection reflects the CONTENT quality, not the presentation order.
-
-RESPONSE FORMAT:
-
-Respond with exactly one line using this format:
+FINAL DECISION:
+Output your decision based on the stronger evidence.
 
 <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-if the first sample is better, OR
-
+OR
 <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 
-if the second sample is better.
-
-Output only the XML tag with your choice. No explanations or additional text.
+(Provide only the XML tag).
 "
 
 template_T2 <- "
-You are an expert writing assessor evaluating student work on a specific trait.
+Read the following two anonymous writing samples carefully. Do not assess them yet. Simply ingest the content.
 
-TRAIT TO EVALUATE: {TRAIT_NAME}
-
-DEFINITION:
-{TRAIT_DESCRIPTION}
-
-TWO SAMPLES TO COMPARE:
-
-SAMPLE A:
+###################
+TEXT BLOCK [ONE]
+###################
 {SAMPLE_1}
 
-SAMPLE B:
+###################
+TEXT BLOCK [TWO]
+###################
 {SAMPLE_2}
 
-EVALUATION INSTRUCTIONS:
+###################
 
-1. Read both samples completely before making any judgments.
+NOW, APPLY THE EVALUATION CRITERIA:
 
-2. Evaluate ONLY on {TRAIT_NAME} as defined above. Ignore other factors (length, grammar, formatting, topic) unless they directly impact {TRAIT_NAME}.
+You must choose which of the two text blocks above better demonstrates: {TRAIT_NAME}.
 
-3. CRITICAL: The labels \"SAMPLE A\" and \"SAMPLE B\" are random assignments with no meaning. Do not let their alphabetical order or position influence your judgment.
+**Definition of {TRAIT_NAME}:**
+{TRAIT_DESCRIPTION}
 
-4. Use this mental process:
-   - Identify specific evidence of {TRAIT_NAME} in SAMPLE A
-   - Identify specific evidence of {TRAIT_NAME} in SAMPLE B
-   - Compare the QUALITY and STRENGTH of {TRAIT_NAME} in each
-   - Determine which sample demonstrates BETTER {TRAIT_NAME}
+**Scoring Rules:**
+1.  Positional Check: You have just read Text Block [TWO] last. Do not let its recency bias you. Conversely, do not let the primacy of Text Block [ONE] bias you.
+2.  Content Focus: Evaluate which text *actually* fulfills the definition of {TRAIT_NAME} more effectively.
+3.  Tie-Breaking: If they seem equal, look for negative constraints. Which sample has *fewer* flaws regarding {TRAIT_NAME}?
 
-5. If samples appear nearly equal, identify which shows even marginally better {TRAIT_NAME}. You must select one—ties are not permitted.
+**Output Formatting:**
+- If Text Block [ONE] is better, output: <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
+- If Text Block [TWO] is better, output: <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 
-6. Before finalizing your decision, perform this check:
-   \"If these samples were labeled in reverse order, would I still choose the same content as better?\"
-   If your answer depends on the labels rather than the content quality, reconsider.
-
-7. Output your decision using EXACTLY one of these two formats (nothing else):
-
-<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-if SAMPLE A is better, OR
-
-<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-
-if SAMPLE B is better.
-
-Do not include explanations, reasoning, or any other text in your response.
+Respond with the XML tag only.
 "
 
 templates_tbl <- tibble::tibble(
@@ -149,7 +124,7 @@ templates_tbl <- tibble::tibble(
 )
 
 # ---------------------------------------------------------------------
-# 2. Build forward + reverse pairs (subset for cost)
+# 2. Build forward + reverse pairs (all pairs)
 # ---------------------------------------------------------------------
 
 pairs_all <- example_writing_samples |>

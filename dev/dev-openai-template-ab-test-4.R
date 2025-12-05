@@ -1,9 +1,11 @@
-# dev/dev-openai-template-ab-test.R
+# dev/dev-openai-template-ab-test-4.R
 #
 # A/B test two alternative prompt templates on OpenAI models via batch API.
 #
 # - OpenAI models:
 #     * gpt-4.1
+#     * gpt-4.1-mini
+#     * gpt-4.1-nano
 #     * gpt-4o
 #     * gpt-5.1
 # - Thinking:
@@ -19,9 +21,9 @@
 #
 # Outputs:
 # - Per-run CSVs:
-#     dev-output/openai-template-ab-test/openai_ab_<TID>_<model>_<thinking>_<direction>.csv
+#     dev-output/openai-template-ab-test-3/openai_ab_<TID>_<model>_<thinking>_<direction>.csv
 # - Summary CSV:
-#     dev-output/openai-template-ab-test/openai_template_ab_summary.csv
+#     dev-output/openai-template-ab-test-3/openai_template_ab_summary.csv
 
 library(pairwiseLLM)
 library(dplyr)
@@ -34,7 +36,7 @@ library(stringr)
 # 0. Setup
 # ---------------------------------------------------------------------
 
-out_dir <- "dev-output/openai-template-ab-test"
+out_dir <- "dev-output/openai-template-ab-test-4"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 set.seed(123)
@@ -48,99 +50,74 @@ td <- trait_description("overall_quality")
 # ---------------------------------------------------------------------
 
 template_T1 <- "
-You are an expert writing assessor.
+You are a precise writing evaluation engine. Your goal is to assign a quality score to two writing samples and select the one with the higher score.
 
-Your task: Determine which of two writing samples demonstrates superior {TRAIT_NAME}.
+TRAIT: {TRAIT_NAME}
+DEFINITION: {TRAIT_DESCRIPTION}
 
-{TRAIT_NAME} is defined as:
-{TRAIT_DESCRIPTION}
+INSTRUCTIONS:
+1. Read the two samples below (labeled SAMPLE_1 and SAMPLE_2).
+2. Mentally assign a score from 0 to 100 to SAMPLE_1 based *strictly* on the definition above.
+3. Mentally assign a score from 0 to 100 to SAMPLE_2 based *strictly* on the definition above.
+4. Compare the two scores.
+5. Ties are not allowed. If the scores are equal, re-evaluate the specific evidence in both text to find the differentiator.
 
-Below are two samples. They appear in arbitrary order—neither position indicates quality.
-
-═══════════════════════════════════════
-FIRST SAMPLE:
+***
+SAMPLE_1
+***
 {SAMPLE_1}
 
-═══════════════════════════════════════
-SECOND SAMPLE:
+***
+SAMPLE_2
+***
 {SAMPLE_2}
 
-═══════════════════════════════════════
+***
 
-ASSESSMENT PROTOCOL:
+DECISION PHASE:
+- Which sample received the higher mental score?
+- Verify: Did the order of presentation influence the score? (If yes, swap the order mentally and re-score).
 
-Step 1: Read both samples in their entirety.
-
-Step 2: For each sample independently, assess the degree to which it demonstrates {TRAIT_NAME} based solely on the definition provided.
-
-Step 3: Compare your assessments. Determine which sample shows stronger {TRAIT_NAME}.
-
-Step 4: Select the sample with better {TRAIT_NAME}. If extremely close, choose the one with any detectable advantage. No ties are allowed.
-
-Step 5: Verify your selection reflects the CONTENT quality, not the presentation order.
-
-RESPONSE FORMAT:
-
-Respond with exactly one line using this format:
+REQUIRED OUTPUT:
+Output only the XML tag corresponding to the higher-scoring sample.
 
 <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-if the first sample is better, OR
-
+OR
 <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-
-if the second sample is better.
-
-Output only the XML tag with your choice. No explanations or additional text.
 "
 
 template_T2 <- "
-You are an expert writing assessor evaluating student work on a specific trait.
+Task: Pairwise Comparison of Writing Samples
+Trait: {TRAIT_NAME}
 
-TRAIT TO EVALUATE: {TRAIT_NAME}
-
-DEFINITION:
+Definition of {TRAIT_NAME}:
 {TRAIT_DESCRIPTION}
 
-TWO SAMPLES TO COMPARE:
+System Directive: You must ignore the order of the inputs. The labels 'Passage A' and 'Passage B' are arbitrary containers. Focus only on the internal quality of the text.
 
-SAMPLE A:
+-------------------------------------------------
+PASSAGE A (maps to output: SAMPLE_1)
+-------------------------------------------------
 {SAMPLE_1}
 
-SAMPLE B:
+-------------------------------------------------
+PASSAGE B (maps to output: SAMPLE_2)
+-------------------------------------------------
 {SAMPLE_2}
 
-EVALUATION INSTRUCTIONS:
+-------------------------------------------------
 
-1. Read both samples completely before making any judgments.
+EVALUATION CHECKLIST:
+1. Review the definition of {TRAIT_NAME} provided at the top.
+2. Identify the strongest evidence for this trait in Passage A.
+3. Identify the strongest evidence for this trait in Passage B.
+4. Determine which passage provides stronger evidence.
 
-2. Evaluate ONLY on {TRAIT_NAME} as defined above. Ignore other factors (length, grammar, formatting, topic) unless they directly impact {TRAIT_NAME}.
+OUTPUT MAPPING:
+- If Passage A is better, output: <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
+- If Passage B is better, output: <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 
-3. CRITICAL: The labels \"SAMPLE A\" and \"SAMPLE B\" are random assignments with no meaning. Do not let their alphabetical order or position influence your judgment.
-
-4. Use this mental process:
-   - Identify specific evidence of {TRAIT_NAME} in SAMPLE A
-   - Identify specific evidence of {TRAIT_NAME} in SAMPLE B
-   - Compare the QUALITY and STRENGTH of {TRAIT_NAME} in each
-   - Determine which sample demonstrates BETTER {TRAIT_NAME}
-
-5. If samples appear nearly equal, identify which shows even marginally better {TRAIT_NAME}. You must select one—ties are not permitted.
-
-6. Before finalizing your decision, perform this check:
-   \"If these samples were labeled in reverse order, would I still choose the same content as better?\"
-   If your answer depends on the labels rather than the content quality, reconsider.
-
-7. Output your decision using EXACTLY one of these two formats (nothing else):
-
-<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-if SAMPLE A is better, OR
-
-<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-
-if SAMPLE B is better.
-
-Do not include explanations, reasoning, or any other text in your response.
+Constraint: Output ONLY the XML tag. Do not include the score, reasoning, or the text of the sample.
 "
 
 templates_tbl <- tibble::tibble(
@@ -149,7 +126,7 @@ templates_tbl <- tibble::tibble(
 )
 
 # ---------------------------------------------------------------------
-# 2. Build forward + reverse pairs (subset for cost)
+# 2. Build forward + reverse pairs (all pairs)
 # ---------------------------------------------------------------------
 
 pairs_all <- example_writing_samples |>

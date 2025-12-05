@@ -24,7 +24,7 @@ library(stringr)
 library(purrr)
 
 # Adjust this if you used a different dir
-out_dir <- "dev-output/openai-template-ab-test-2"
+out_dir <- "dev-output/openai-template-ab-test-6"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # ------------------------------------------------------------------------------

@@ -1,9 +1,11 @@
-# dev/dev-openai-template-ab-test.R
+# dev/dev-openai-template-ab-test-6.R
 #
 # A/B test two alternative prompt templates on OpenAI models via batch API.
 #
 # - OpenAI models:
 #     * gpt-4.1
+#     * gpt-4.1-mini
+#     * gpt-4.1-nano
 #     * gpt-4o
 #     * gpt-5.1
 # - Thinking:
@@ -19,9 +21,9 @@
 #
 # Outputs:
 # - Per-run CSVs:
-#     dev-output/openai-template-ab-test/openai_ab_<TID>_<model>_<thinking>_<direction>.csv
+#     dev-output/openai-template-ab-test-3/openai_ab_<TID>_<model>_<thinking>_<direction>.csv
 # - Summary CSV:
-#     dev-output/openai-template-ab-test/openai_template_ab_summary.csv
+#     dev-output/openai-template-ab-test-3/openai_template_ab_summary.csv
 
 library(pairwiseLLM)
 library(dplyr)
@@ -34,7 +36,7 @@ library(stringr)
 # 0. Setup
 # ---------------------------------------------------------------------
 
-out_dir <- "dev-output/openai-template-ab-test"
+out_dir <- "dev-output/openai-template-ab-test-6"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 set.seed(123)
@@ -48,99 +50,66 @@ td <- trait_description("overall_quality")
 # ---------------------------------------------------------------------
 
 template_T1 <- "
-You are an expert writing assessor.
+You are a granular text analysis engine. Your task is to perform a component-level comparison of two writing samples.
 
-Your task: Determine which of two writing samples demonstrates superior {TRAIT_NAME}.
+TRAIT: {TRAIT_NAME}
+DEFINITION: {TRAIT_DESCRIPTION}
 
-{TRAIT_NAME} is defined as:
-{TRAIT_DESCRIPTION}
+INPUTS:
 
-Below are two samples. They appear in arbitrary order—neither position indicates quality.
-
-═══════════════════════════════════════
-FIRST SAMPLE:
+[SAMPLE_1]
 {SAMPLE_1}
 
-═══════════════════════════════════════
-SECOND SAMPLE:
+[SAMPLE_2]
 {SAMPLE_2}
 
-═══════════════════════════════════════
+ANALYSIS PROTOCOL (Perform Mentally):
+1. Deconstruct the Definition: Identify 2-3 distinct key components or keywords in the definition of {TRAIT_NAME} above (e.g., 'clarity', 'depth', 'structure').
+2. Component Comparison:
+   - Component A: Does Sample 1 or Sample 2 perform better?
+   - Component B: Does Sample 1 or Sample 2 perform better?
+   - Component C: Does Sample 1 or Sample 2 perform better?
+3. Synthesis: Based *only* on the components where one sample clearly outperforms the other, determine the overall winner.
+4. Bias Check: If the samples seem equal, choose the one that executes the *most difficult* aspect of the definition more successfully.
 
-ASSESSMENT PROTOCOL:
-
-Step 1: Read both samples in their entirety.
-
-Step 2: For each sample independently, assess the degree to which it demonstrates {TRAIT_NAME} based solely on the definition provided.
-
-Step 3: Compare your assessments. Determine which sample shows stronger {TRAIT_NAME}.
-
-Step 4: Select the sample with better {TRAIT_NAME}. If extremely close, choose the one with any detectable advantage. No ties are allowed.
-
-Step 5: Verify your selection reflects the CONTENT quality, not the presentation order.
-
-RESPONSE FORMAT:
-
-Respond with exactly one line using this format:
+OUTPUT:
+Respond with exactly one of the following tags. No other text.
 
 <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-if the first sample is better, OR
-
+or
 <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-
-if the second sample is better.
-
-Output only the XML tag with your choice. No explanations or additional text.
 "
 
 template_T2 <- "
-You are an expert writing assessor evaluating student work on a specific trait.
+You are a critique-focused evaluator. Instead of looking for general quality, you will look for deviations from the ideal.
 
-TRAIT TO EVALUATE: {TRAIT_NAME}
+Target Trait: {TRAIT_NAME}
+Ideal Standard: {TRAIT_DESCRIPTION}
 
-DEFINITION:
-{TRAIT_DESCRIPTION}
+SAMPLES:
 
-TWO SAMPLES TO COMPARE:
-
-SAMPLE A:
+>>> TEXT_BLOCK_1 (Refers to SAMPLE_1)
 {SAMPLE_1}
 
-SAMPLE B:
+>>> TEXT_BLOCK_2 (Refers to SAMPLE_2)
 {SAMPLE_2}
 
-EVALUATION INSTRUCTIONS:
+EVALUATION METHOD (Gap Analysis):
 
-1. Read both samples completely before making any judgments.
+1. Scrutinize TEXT_BLOCK_1. Where does it fail, hesitate, or deviate from the Ideal Standard?
+2. Scrutinize TEXT_BLOCK_2. Where does it fail, hesitate, or deviate from the Ideal Standard?
+3. Compare the 'Distance from Ideal'. Which sample is closer to the definition provided?
+4. Select the sample with the FEWEST or LEAST SEVERE deficits regarding {TRAIT_NAME}.
 
-2. Evaluate ONLY on {TRAIT_NAME} as defined above. Ignore other factors (length, grammar, formatting, topic) unless they directly impact {TRAIT_NAME}.
+IMPORTANT:
+- Ignore the order of presentation.
+- Focus purely on which text adheres more tightly to the definition.
+- If both are excellent, select the one with the higher 'ceiling' (stronger peak performance).
 
-3. CRITICAL: The labels \"SAMPLE A\" and \"SAMPLE B\" are random assignments with no meaning. Do not let their alphabetical order or position influence your judgment.
-
-4. Use this mental process:
-   - Identify specific evidence of {TRAIT_NAME} in SAMPLE A
-   - Identify specific evidence of {TRAIT_NAME} in SAMPLE B
-   - Compare the QUALITY and STRENGTH of {TRAIT_NAME} in each
-   - Determine which sample demonstrates BETTER {TRAIT_NAME}
-
-5. If samples appear nearly equal, identify which shows even marginally better {TRAIT_NAME}. You must select one—ties are not permitted.
-
-6. Before finalizing your decision, perform this check:
-   \"If these samples were labeled in reverse order, would I still choose the same content as better?\"
-   If your answer depends on the labels rather than the content quality, reconsider.
-
-7. Output your decision using EXACTLY one of these two formats (nothing else):
-
+FINAL SELECTION:
 <BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>
-
-if SAMPLE A is better, OR
-
+or
 <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-
-if SAMPLE B is better.
-
-Do not include explanations, reasoning, or any other text in your response.
 "
 
 templates_tbl <- tibble::tibble(
@@ -149,7 +118,7 @@ templates_tbl <- tibble::tibble(
 )
 
 # ---------------------------------------------------------------------
-# 2. Build forward + reverse pairs (subset for cost)
+# 2. Build forward + reverse pairs (all pairs)
 # ---------------------------------------------------------------------
 
 pairs_all <- example_writing_samples |>
