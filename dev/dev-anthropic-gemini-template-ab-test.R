@@ -29,13 +29,8 @@
 #     dev-output/anthropic-gemini-template-ab-test/<provider>_<template>_<model>_<thinking>_<direction>.csv
 # - Summary CSV:
 #     dev-output/anthropic-gemini-template-ab-test/anthropic_gemini_template_ab_summary.csv
-#
-# Summary columns (per template_id / provider / model / thinking):
-#   - prop_consistent
-#   - prop_pos1
-#   - p_sample1_overall
-#   - thinking_config
-#   - temperature
+# - Jobs metadata:
+#     dev-output/anthropic-gemini-template-ab-test/anthropic_gemini_batches.csv
 
 library(pairwiseLLM)
 library(dplyr)
@@ -171,14 +166,14 @@ for (t_row in seq_len(nrow(templates_tbl))) {
     batch_output_path <- file.path(out_dir, paste0(prefix, "_output.jsonl"))
     csv_path          <- file.path(out_dir, paste0(prefix, ".csv"))
 
-    is_thinking <- identical(thinking, "with_thinking")
-    temperature_arg <- if (!is_thinking) 0 else NULL
+    is_thinking     <- identical(thinking, "with_thinking")
+    temperature_arg <- if (!is_thinking && identical(provider, "anthropic")) 0 else NULL
 
     if (identical(provider, "anthropic")) {
 
       # Anthropic:
       # - reasoning = "none" for non-thinking (temp=0)
-      # - reasoning = "enabled" for thinking (temp default, include_thoughts=TRUE)
+      # - reasoning = "enabled" for thinking (temp=1, include_thoughts=TRUE)
       reasoning <- if (is_thinking) "enabled" else "none"
 
       if (!is_thinking) {
@@ -221,9 +216,11 @@ for (t_row in seq_len(nrow(templates_tbl))) {
         prefix            = prefix,
         batch_type        = "anthropic",
         batch_id          = pipeline$batch$id,
+        batch_name        = NA_character_,
         batch_input_path  = pipeline$batch_input_path,
         batch_output_path = batch_output_path,
         csv_path          = csv_path,
+        requests_tbl      = NULL,
         done              = FALSE,
         results           = NULL
       )
@@ -264,11 +261,12 @@ for (t_row in seq_len(nrow(templates_tbl))) {
         direction         = direction,
         prefix            = prefix,
         batch_type        = "gemini",
-        batch_name        = batch_name,
-        requests_tbl      = req_tbl,
-        batch_input_path  = NA_character_,  # not used for Gemini
+        batch_id          = batch_name,      # use batch_id as generic field
+        batch_name        = batch_name,      # keep explicit name for debugging
+        batch_input_path  = NA_character_,   # not used for Gemini
         batch_output_path = batch_output_path,
         csv_path          = csv_path,
+        requests_tbl      = req_tbl,
         done              = FALSE,
         results           = NULL
       )
@@ -279,31 +277,55 @@ for (t_row in seq_len(nrow(templates_tbl))) {
   }
 }
 
+# Build + persist a jobs metadata table so batch IDs / names aren’t lost
 jobs_tbl <- tibble::tibble(
-  idx         = seq_along(jobs),
-  template_id = vapply(jobs, `[[`, character(1), "template_id"),
-  provider    = vapply(jobs, `[[`, character(1), "provider"),
-  model       = vapply(jobs, `[[`, character(1), "model"),
-  thinking    = vapply(jobs, `[[`, character(1), "thinking"),
-  direction   = vapply(jobs, `[[`, character(1), "direction"),
-  prefix      = vapply(jobs, `[[`, character(1), "prefix")
+  idx               = seq_along(jobs),
+  template_id       = vapply(jobs, `[[`, character(1), "template_id"),
+  provider          = vapply(jobs, `[[`, character(1), "provider"),
+  model             = vapply(jobs, `[[`, character(1), "model"),
+  thinking          = vapply(jobs, `[[`, character(1), "thinking"),
+  direction         = vapply(jobs, `[[`, character(1), "direction"),
+  prefix            = vapply(jobs, `[[`, character(1), "prefix"),
+  batch_type        = vapply(jobs, `[[`, character(1), "batch_type"),
+  batch_id          = vapply(jobs, function(x) {
+    val <- x$batch_id
+    if (is.null(val)) NA_character_ else as.character(val)
+  }, FUN.VALUE = character(1)),
+  batch_name        = vapply(jobs, function(x) {
+    val <- x$batch_name
+    if (is.null(val)) NA_character_ else as.character(val)
+  }, FUN.VALUE = character(1)),
+  batch_input_path  = vapply(jobs, `[[`, character(1), "batch_input_path"),
+  batch_output_path = vapply(jobs, `[[`, character(1), "batch_output_path"),
+  csv_path          = vapply(jobs, `[[`, character(1), "csv_path")
 )
 
 print(jobs_tbl)
+
+jobs_meta_path <- file.path(out_dir, "anthropic_gemini_batches.csv")
+readr::write_csv(jobs_tbl, jobs_meta_path)
+message("Jobs metadata written to: ", jobs_meta_path)
 
 # ------------------------------------------------------------------------------
 # 5. Phase 2: Poll all batches periodically, download + parse
 # ------------------------------------------------------------------------------
 
-interval_seconds   <- 90      # time between full polling rounds
-per_request_delay  <- 1    # short delay between individual requests (sec)
+interval_seconds  <- 90  # time between full polling rounds
+per_request_delay <- 1   # short delay between individual requests (sec)
 
+# Anthropic: use processing_status; terminal when == "ended"
 is_terminal_anthropic <- function(status) {
-  status %in% c("processed", "cancelled", "expired", "failed")
+  status %in% c("ended")
 }
 
+# Gemini: states are of the form "BATCH_STATE_*"
 is_terminal_gemini <- function(state) {
-  state %in% c("SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED")
+  state %in% c(
+    "BATCH_STATE_SUCCEEDED",
+    "BATCH_STATE_FAILED",
+    "BATCH_STATE_CANCELLED",
+    "BATCH_STATE_EXPIRED"
+  )
 }
 
 unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
@@ -320,16 +342,17 @@ while (length(unfinished) > 0L) {
     }
 
     if (identical(job$batch_type, "anthropic")) {
+
       batch  <- anthropic_get_batch(job$batch_id)
-      status <- batch$status %||% "unknown"
+      status <- batch$processing_status %||% "unknown"
 
       message("  [Anthropic] ", job$prefix, " status: ", status)
 
       if (is_terminal_anthropic(status)) {
-        if (identical(status, "processed")) {
+        if (identical(status, "ended")) {
           anthropic_download_batch_results(
-            batch_id = job$batch_id,
-            path     = job$batch_output_path
+            batch_id     = job$batch_id,
+            output_path  = job$batch_output_path
           )
 
           res <- parse_anthropic_batch_output(job$batch_output_path)
@@ -342,16 +365,25 @@ while (length(unfinished) > 0L) {
       }
 
     } else if (identical(job$batch_type, "gemini")) {
-      batch  <- gemini_get_batch(job$batch_name)
-      state  <- batch$state %||% "STATE_UNSPECIFIED"
+
+      batch <- gemini_get_batch(
+        batch_name = job$batch_id,
+        api_key    = Sys.getenv("GEMINI_API_KEY"),
+        api_version = "v1beta"
+      )
+
+      state <- if (!is.null(batch$metadata$state)) batch$metadata$state else "STATE_UNSPECIFIED"
 
       message("  [Gemini] ", job$prefix, " state: ", state)
 
       if (is_terminal_gemini(state)) {
-        if (identical(state, "SUCCEEDED")) {
+        if (identical(state, "BATCH_STATE_SUCCEEDED")) {
           gemini_download_batch_results(
-            name = job$batch_name,
-            path = job$batch_output_path
+            batch        = batch,
+            requests_tbl = job$requests_tbl,
+            output_path  = job$batch_output_path,
+            api_key      = Sys.getenv("GEMINI_API_KEY"),
+            api_version  = "v1beta"
           )
 
           res <- parse_gemini_batch_output(
@@ -409,9 +441,9 @@ summarize_template_model <- function(template_id, provider, model, thinking) {
   if (!key_forward %in% names(results_by_key) ||
       !key_reverse %in% names(results_by_key)) {
     return(tibble::tibble(
-      prop_consistent   = NA_real_,
-      prop_sample1_overall = NA_real_, # placeholder, we'll rename below
-      prop_pos1         = NA_real_
+      prop_consistent      = NA_real_,
+      prop_pos1            = NA_real_,
+      p_sample1_overall    = NA_real_
     ))
   }
 
@@ -422,8 +454,8 @@ summarize_template_model <- function(template_id, provider, model, thinking) {
       !nrow(res_forward) || !nrow(res_reverse)) {
     return(tibble::tibble(
       prop_consistent      = NA_real_,
-      prop_sample1_overall = NA_real_,
-      prop_pos1            = NA_real_
+      prop_pos1            = NA_real_,
+      p_sample1_overall    = NA_real_
     ))
   }
 
@@ -454,7 +486,7 @@ summarize_template_model <- function(template_id, provider, model, thinking) {
       }
     }
 
-    # Positional bias on the consistency object (as in OpenAI template AB rebuild)
+    # Positional bias on the consistency object
     bias <- tryCatch(
       check_positional_bias(cons),
       error = function(e) {
@@ -471,11 +503,6 @@ summarize_template_model <- function(template_id, provider, model, thinking) {
     if (!is.null(bias) && is.list(bias) && "summary" %in% names(bias)) {
       bs <- bias$summary
       if (is.data.frame(bs)) {
-        # p_sample1_overall
-        if ("p_sample1_overall" %in% names(bs)) {
-          p_sample1_overall <- bs$p_sample1_overall[1]
-        }
-
         # prop_pos1: use directly if present, otherwise compute from totals
         if ("prop_pos1" %in% names(bs)) {
           prop_pos1 <- bs$prop_pos1[1]
@@ -487,6 +514,11 @@ summarize_template_model <- function(template_id, provider, model, thinking) {
               total_comparisons > 0) {
             prop_pos1 <- total_pos1_wins / total_comparisons
           }
+        }
+
+        # p_sample1_overall
+        if ("p_sample1_overall" %in% names(bs)) {
+          p_sample1_overall <- bs$p_sample1_overall[1]
         }
       }
     }
