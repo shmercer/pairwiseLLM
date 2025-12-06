@@ -36,6 +36,6 @@ schema.
 ``` r
 if (FALSE) { # \dontrun{
 batch <- llm_submit_pairs_batch(...)
-res   <- llm_download_batch_results(batch)
+res <- llm_download_batch_results(batch)
 } # }
 ```

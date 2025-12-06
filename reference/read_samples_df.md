@@ -41,8 +41,8 @@ Any remaining columns in `df` are retained unchanged.
 ``` r
 df <- data.frame(
   StudentID = c("S1", "S2"),
-  Response  = c("This is sample 1.", "This is sample 2."),
-  Grade     = c(8, 9),
+  Response = c("This is sample 1.", "This is sample 2."),
+  Grade = c(8, 9),
   stringsAsFactors = FALSE
 )
 

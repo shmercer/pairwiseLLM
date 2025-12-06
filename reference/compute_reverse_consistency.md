@@ -72,7 +72,7 @@ rc$summary
 # Using the example writing pairs: reverse the first 10 pairs
 data("example_writing_pairs")
 main2 <- example_writing_pairs[1:10, ]
-rev2  <- main2
+rev2 <- main2
 rev2$ID1 <- main2$ID2
 rev2$ID2 <- main2$ID1
 rc2 <- compute_reverse_consistency(main2, rev2)

@@ -176,7 +176,7 @@ openai_models <- c(
 )
 
 thinking_levels <- c("no_thinking", "with_thinking")
-directions      <- c("forward", "reverse")
+directions <- c("forward", "reverse")
 
 anthropic_grid <- tidyr::expand_grid(
   provider  = "anthropic",
@@ -274,9 +274,9 @@ for (t_row in seq_len(nrow(templates_tbl))) {
   for (i in seq_len(nrow(batch_grid))) {
     row <- batch_grid[i, ]
 
-    provider  <- row$provider
-    model     <- row$model
-    thinking  <- row$thinking
+    provider <- row$provider
+    model <- row$model
+    thinking <- row$thinking
     direction <- row$direction
 
     message(
@@ -291,9 +291,9 @@ for (t_row in seq_len(nrow(templates_tbl))) {
     prefix <- paste(provider, template_id, model, thinking, direction, sep = "_")
     prefix <- gsub("[^A-Za-z0-9_.-]", "-", prefix)
 
-    batch_input_path  <- file.path(out_dir, paste0(prefix, "_input.jsonl"))
+    batch_input_path <- file.path(out_dir, paste0(prefix, "_input.jsonl"))
     batch_output_path <- file.path(out_dir, paste0(prefix, "_output.jsonl"))
-    csv_path          <- file.path(out_dir, paste0(prefix, ".csv"))
+    csv_path <- file.path(out_dir, paste0(prefix, ".csv"))
 
     if (identical(provider, "openai")) {
       # OpenAI: use the helpers from the dev scripts
@@ -327,7 +327,6 @@ for (t_row in seq_len(nrow(templates_tbl))) {
         done              = FALSE,
         results           = NULL
       )
-
     } else if (identical(provider, "anthropic")) {
       # Anthropic: use run_anthropic_batch_pipeline()
       reasoning <- if (is_thinking) "enabled" else "none"
@@ -363,7 +362,6 @@ for (t_row in seq_len(nrow(templates_tbl))) {
         done              = FALSE,
         results           = NULL
       )
-
     } else if (identical(provider, "gemini")) {
       # Gemini: typically use low-level helpers, as in the dev scripts
       req_tbl <- build_gemini_batch_requests(
@@ -372,7 +370,7 @@ for (t_row in seq_len(nrow(templates_tbl))) {
         trait_name        = td$name,
         trait_description = td$description,
         prompt_template   = tmpl_string,
-        thinking_level    = "low",   # example
+        thinking_level    = "low", # example
         include_thoughts  = TRUE
       )
 
@@ -415,18 +413,18 @@ all jobs to disk:
 
 ``` r
 jobs_tbl <- tibble::tibble(
-  idx         = seq_along(jobs),
+  idx = seq_along(jobs),
   template_id = vapply(jobs, `[[`, character(1), "template_id"),
-  provider    = vapply(jobs, `[[`, character(1), "provider"),
-  model       = vapply(jobs, `[[`, character(1), "model"),
-  thinking    = vapply(jobs, `[[`, character(1), "thinking"),
-  direction   = vapply(jobs, `[[`, character(1), "direction"),
-  prefix      = vapply(jobs, `[[`, character(1), "prefix"),
-  batch_type  = vapply(jobs, `[[`, character(1), "batch_type"),
-  batch_id    = vapply(jobs, `[[`, character(1), "batch_id"),
-  batch_input_path  = vapply(jobs, `[[`, character(1), "batch_input_path"),
+  provider = vapply(jobs, `[[`, character(1), "provider"),
+  model = vapply(jobs, `[[`, character(1), "model"),
+  thinking = vapply(jobs, `[[`, character(1), "thinking"),
+  direction = vapply(jobs, `[[`, character(1), "direction"),
+  prefix = vapply(jobs, `[[`, character(1), "prefix"),
+  batch_type = vapply(jobs, `[[`, character(1), "batch_type"),
+  batch_id = vapply(jobs, `[[`, character(1), "batch_id"),
+  batch_input_path = vapply(jobs, `[[`, character(1), "batch_input_path"),
   batch_output_path = vapply(jobs, `[[`, character(1), "batch_output_path"),
-  csv_path          = vapply(jobs, `[[`, character(1), "csv_path")
+  csv_path = vapply(jobs, `[[`, character(1), "csv_path")
 )
 
 jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
@@ -469,7 +467,7 @@ Now the polling loop, with a small delay between jobs to reduce 429
 
 ``` r
 interval_seconds <- 60
-per_job_delay    <- 2   # seconds between polling calls
+per_job_delay <- 2 # seconds between polling calls
 
 # Reload batch index
 jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
@@ -511,7 +509,7 @@ while (length(unfinished) > 0L) {
     batch_type <- job$batch_type
 
     if (identical(batch_type, "openai")) {
-      batch  <- openai_get_batch(job$batch_id)
+      batch <- openai_get_batch(job$batch_id)
       status <- batch$status %||% "unknown"
       message("  [OpenAI] ", job$prefix, " status: ", status)
 
@@ -529,9 +527,8 @@ while (length(unfinished) > 0L) {
         }
         jobs[[j]]$done <- TRUE
       }
-
     } else if (identical(batch_type, "anthropic")) {
-      batch  <- anthropic_get_batch(job$batch_id)
+      batch <- anthropic_get_batch(job$batch_id)
       status <- batch$processing_status %||% "unknown"
       message("  [Anthropic] ", job$prefix, " status: ", status)
 
@@ -554,7 +551,6 @@ while (length(unfinished) > 0L) {
         }
         jobs[[j]]$done <- TRUE
       }
-
     } else if (identical(batch_type, "gemini")) {
       batch <- gemini_get_batch(job$batch_id)
       state <- batch$state %||% "STATE_UNSPECIFIED"

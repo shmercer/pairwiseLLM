@@ -218,7 +218,7 @@ is used and, for <code>"gpt-5.1"</code>, a default reasoning effort of
 <span class="r-in"><span>  <span class="fu"><a href="sample_pairs.html">sample_pairs</a></span><span class="op">(</span>n_pairs <span class="op">=</span> <span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span></span>
 <span class="r-in"><span>  <span class="fu"><a href="randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span>seed <span class="op">=</span> <span class="fl">456</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># 1) Standard chat.completions batch (no thoughts)</span></span></span>
@@ -243,7 +243,7 @@ is used and, for <code>"gpt-5.1"</code>, a default reasoning effort of
 <span class="r-in"><span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span></span>
 <span class="r-in"><span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span></span>
 <span class="r-in"><span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span></span>
-<span class="r-in"><span>  include_thoughts  <span class="op">=</span> <span class="cn">TRUE</span>,   <span class="co"># automatically picks "responses" + reasoning</span></span></span>
+<span class="r-in"><span>  include_thoughts  <span class="op">=</span> <span class="cn">TRUE</span>, <span class="co"># automatically picks "responses" + reasoning</span></span></span>
 <span class="r-in"><span>  interval_seconds  <span class="op">=</span> <span class="fl">10</span>,</span></span>
 <span class="r-in"><span>  timeout_seconds   <span class="op">=</span> <span class="fl">600</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>

@@ -191,7 +191,7 @@ The unified wrapper works for **OpenAI, Anthropic, and Gemini**.
 ``` r
 res_live <- submit_llm_pairs(
   pairs             = pairs_small,
-  backend           = "openai",   # also "anthropic" or "gemini"
+  backend           = "openai", # also "anthropic" or "gemini"
   model             = "gpt-4o",
   trait_name        = td$name,
   trait_description = td$description,

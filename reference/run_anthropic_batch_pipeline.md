@@ -220,7 +220,7 @@ pairs <- example_writing_samples |>
   sample_pairs(n_pairs = 5, seed = 123) |>
   randomize_pair_order(seed = 456)
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 # 1) Standard batch without extended thinking (temperature defaults to 0)
@@ -248,7 +248,7 @@ pipeline_thoughts <- run_anthropic_batch_pipeline(
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  include_thoughts  = TRUE,   # will upgrade reasoning to "enabled" if needed
+  include_thoughts  = TRUE, # will upgrade reasoning to "enabled" if needed
   interval_seconds  = 60,
   timeout_seconds   = 3600,
   verbose           = TRUE

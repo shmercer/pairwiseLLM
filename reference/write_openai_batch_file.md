@@ -41,10 +41,10 @@ The input can either:
 ``` r
 if (FALSE) { # \dontrun{
 data("example_writing_samples")
-pairs_all   <- make_pairs(example_writing_samples)
+pairs_all <- make_pairs(example_writing_samples)
 pairs_small <- sample_pairs(pairs_all, n_pairs = 5, seed = 1)
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 batch_tbl <- build_openai_batch_requests(

@@ -47,7 +47,7 @@ The template must contain the placeholders: `{TRAIT_NAME}`,
 
 ``` r
 tmpl <- set_prompt_template()
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 prompt <- build_prompt(
   template   = tmpl,
   trait_name = td$name,

@@ -123,7 +123,7 @@ pairs <- example_writing_samples |>
   sample_pairs(n_pairs = 3, seed = 123) |>
   randomize_pair_order(seed = 456)
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 # Basic chat.completions batch (no thoughts)
@@ -145,7 +145,7 @@ batch_tbl_resp <- build_openai_batch_requests(
   trait_description = td$description,
   prompt_template   = tmpl,
   endpoint          = "responses",
-  include_thoughts  = TRUE    # will set reasoning = "low" by default
+  include_thoughts  = TRUE # will set reasoning = "low" by default
 )
 
 batch_tbl_chat
