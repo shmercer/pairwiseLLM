@@ -51,7 +51,7 @@ pairs <- example_writing_samples |>
   sample_pairs(n_pairs = 2, seed = 123) |>
   randomize_pair_order(seed = 456)
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 req_tbl <- build_anthropic_batch_requests(

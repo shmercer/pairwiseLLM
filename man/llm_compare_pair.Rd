@@ -114,7 +114,7 @@ library(pairwiseLLM)
 data("example_writing_samples", package = "pairwiseLLM")
 samples <- example_writing_samples[1:2, ]
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 # Single live comparison using the OpenAI backend and chat.completions

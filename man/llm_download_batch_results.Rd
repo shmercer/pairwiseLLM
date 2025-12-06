@@ -26,7 +26,7 @@ forward-compatible with future, more asynchronous batch workflows.
 \examples{
 \dontrun{
 batch <- llm_submit_pairs_batch(...)
-res   <- llm_download_batch_results(batch)
+res <- llm_download_batch_results(batch)
 }
 
 }

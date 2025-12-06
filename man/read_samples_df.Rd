@@ -31,8 +31,8 @@ column is the ID and the second column is the text.
 \examples{
 df <- data.frame(
   StudentID = c("S1", "S2"),
-  Response  = c("This is sample 1.", "This is sample 2."),
-  Grade     = c(8, 9),
+  Response = c("This is sample 1.", "This is sample 2."),
+  Grade = c(8, 9),
   stringsAsFactors = FALSE
 )
 
