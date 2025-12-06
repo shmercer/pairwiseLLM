@@ -161,6 +161,9 @@ for (t_row in seq_len(nrow(templates_tbl))) {
       "\n===================================================="
     )
 
+    # Before running this model, try to ensure only this model is loaded
+    ensure_only_ollama_model_loaded(model)
+
     # Run forward and reverse once each
     res_dir <- list()
 
