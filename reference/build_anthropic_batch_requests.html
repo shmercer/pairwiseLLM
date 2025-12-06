@@ -128,8 +128,9 @@ which will be passed through to the Messages API.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>The function mirrors the behaviour of <code><a href="build_openai_batch_requests.html">build_openai_batch_requests</a></code>
-but targets Anthropic's <code>/v1/messages/batches</code> endpoint. It applies the
+    <p>The function mirrors the behaviour of
+<code><a href="build_openai_batch_requests.html">build_openai_batch_requests</a></code> but targets Anthropic's
+<code>/v1/messages/batches</code> endpoint. It applies the
 same recommended defaults and reasoning constraints as
 <code><a href="anthropic_compare_pair_live.html">anthropic_compare_pair_live</a></code>:</p>
 <ul><li><p><code>reasoning = "none"</code>:</p><ul><li><p>Default <code>temperature = 0</code> (deterministic behaviour),

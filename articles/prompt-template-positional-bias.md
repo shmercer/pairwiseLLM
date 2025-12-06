@@ -138,7 +138,7 @@ td
 #> [1] "Overall Quality"
 #> 
 #> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
 ```
 
 In *pairwiseLLM*, every pairwise comparison evaluates writing samples on

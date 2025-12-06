@@ -123,10 +123,11 @@ the <code>/v1/responses</code> endpoint. Typically <code>"none"</code>, <code>"l
 and <code>reasoning</code> is not <code>"none"</code>, adds <code>summary = "auto"</code>
 to the <code>reasoning</code> block so that reasoning summaries (thoughts)
 are returned and can be parsed into a <code>thoughts</code> column by
-<code><a href="parse_openai_batch_output.html">parse_openai_batch_output</a></code>. When <code>endpoint = "responses"</code>,
-<code>include_thoughts = TRUE</code>, and the model is <code>"gpt-5.1"</code> with
-no explicit <code>reasoning</code>, the function defaults <code>reasoning</code> to
-<code>"low"</code>. Has no effect for <code>"chat.completions"</code>.</p></dd>
+<code><a href="parse_openai_batch_output.html">parse_openai_batch_output</a></code>. When
+<code>endpoint = "responses"</code>, <code>include_thoughts = TRUE</code>, and the
+model is <code>"gpt-5.1"</code> with no explicit <code>reasoning</code>, the function
+defaults <code>reasoning</code> to <code>"low"</code>. Has no effect for
+<code>"chat.completions"</code>.</p></dd>
 
 
 <dt id="arg-request-id-prefix">request_id_prefix<a class="anchor" aria-label="anchor" href="#arg-request-id-prefix"></a></dt>

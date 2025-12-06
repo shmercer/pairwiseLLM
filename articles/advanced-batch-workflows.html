@@ -170,7 +170,7 @@ companion vignette:</p>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $description</span></span>
-<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre></div>
 <p>Default prompt template:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -268,7 +268,7 @@ companion vignette:</p>
 <span>  model     <span class="op">=</span> <span class="va">openai_models</span>,</span>
 <span>  thinking  <span class="op">=</span> <span class="va">thinking_levels</span>,</span>
 <span>  direction <span class="op">=</span> <span class="va">directions</span></span>
-<span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="co"># For example, only allow "with_thinking" for gpt-5.1</span></span>
 <span>  <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">model</span> <span class="op">==</span> <span class="st">"gpt-5.1"</span> <span class="op">|</span> <span class="va">thinking</span> <span class="op">==</span> <span class="st">"no_thinking"</span><span class="op">)</span></span>
 <span></span>
@@ -354,7 +354,8 @@ combinations.</li>
 <span>    <span class="va">pairs_use</span> <span class="op">&lt;-</span> <span class="fu">get_pairs_for_direction</span><span class="op">(</span><span class="va">direction</span><span class="op">)</span></span>
 <span>    <span class="va">is_thinking</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">thinking</span>, <span class="st">"with_thinking"</span><span class="op">)</span></span>
 <span></span>
-<span>    <span class="va">prefix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>, sep <span class="op">=</span> <span class="st">"_"</span><span class="op">)</span></span>
+<span>    <span class="va">prefix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>, </span>
+<span>                    sep <span class="op">=</span> <span class="st">"_"</span><span class="op">)</span></span>
 <span>    <span class="va">prefix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">gsub</a></span><span class="op">(</span><span class="st">"[^A-Za-z0-9_.-]"</span>, <span class="st">"-"</span>, <span class="va">prefix</span><span class="op">)</span></span>
 <span></span>
 <span>    <span class="va">batch_input_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">prefix</span>, <span class="st">"_input.jsonl"</span><span class="op">)</span><span class="op">)</span></span>

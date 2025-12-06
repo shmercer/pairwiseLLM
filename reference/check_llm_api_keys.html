@@ -70,16 +70,19 @@ configure missing ones.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A tibble (data frame) with one row per backend and columns:</p><dl><dt>backend</dt>
-<dd><p>Short backend identifier, e.g. <code>"openai"</code>, <code>"anthropic"</code>, <code>"gemini"</code>.</p></dd>
+<dd><p>Short backend identifier, e.g. <code>"openai"</code>, <code>"anthropic"</code>,
+<code>"gemini"</code>.</p></dd>
 
 <dt>service</dt>
-<dd><p>Human-readable service name, e.g. <code>"OpenAI"</code>, <code>"Anthropic"</code>, <code>"Google Gemini"</code>.</p></dd>
+<dd><p>Human-readable service name, e.g. <code>"OpenAI"</code>,
+<code>"Anthropic"</code>, <code>"Google Gemini"</code>.</p></dd>
 
 <dt>env_var</dt>
 <dd><p>Name of the environment variable that is checked.</p></dd>
 
 <dt>has_key</dt>
-<dd><p>Logical flag indicating whether the key is set and non-empty.</p></dd>
+<dd><p>Logical flag indicating whether the key is set and
+non-empty.</p></dd>
 
 
 </dl></div>
@@ -96,7 +99,8 @@ shared environments.</p>
 <span class="r-in"><span><span class="co"># In an interactive session, quickly check which keys are configured:</span></span></span>
 <span class="r-in"><span><span class="fu">check_llm_api_keys</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># In non-interactive scripts, you can disable messages and just use the result:</span></span></span>
+<span class="r-in"><span><span class="co"># In non-interactive scripts, you can disable messages and just use the</span></span></span>
+<span class="r-in"><span><span class="co"># result:</span></span></span>
 <span class="r-in"><span><span class="va">status</span> <span class="op">&lt;-</span> <span class="fu">check_llm_api_keys</span><span class="op">(</span>verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">status</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>

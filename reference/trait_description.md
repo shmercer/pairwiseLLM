@@ -52,7 +52,7 @@ td <- trait_description("overall_quality")
 td$name
 #> [1] "Overall Quality"
 td$description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
 
 custom_td <- trait_description(
   custom_name = "Ideas",

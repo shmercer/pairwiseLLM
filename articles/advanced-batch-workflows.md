@@ -92,7 +92,7 @@ td
 #> [1] "Overall Quality"
 #> 
 #> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
 ```
 
 Default prompt template:
@@ -197,7 +197,7 @@ openai_grid <- tidyr::expand_grid(
   model     = openai_models,
   thinking  = thinking_levels,
   direction = directions
-) %>%
+) |>
   # For example, only allow "with_thinking" for gpt-5.1
   dplyr::filter(model == "gpt-5.1" | thinking == "no_thinking")
 
@@ -288,7 +288,8 @@ for (t_row in seq_len(nrow(templates_tbl))) {
     pairs_use <- get_pairs_for_direction(direction)
     is_thinking <- identical(thinking, "with_thinking")
 
-    prefix <- paste(provider, template_id, model, thinking, direction, sep = "_")
+    prefix <- paste(provider, template_id, model, thinking, direction, 
+                    sep = "_")
     prefix <- gsub("[^A-Za-z0-9_.-]", "-", prefix)
 
     batch_input_path <- file.path(out_dir, paste0(prefix, "_input.jsonl"))

@@ -117,7 +117,8 @@ if (FALSE) { # \dontrun{
 # Requires ANTHROPIC_API_KEY and a completed batch.
 library(pairwiseLLM)
 
-# Suppose you have already run run_anthropic_batch_pipeline() with poll = TRUE:
+# Suppose you have already run run_anthropic_batch_pipeline() with poll =
+# TRUE:
 # pipeline <- run_anthropic_batch_pipeline(...)
 # jsonl_path <- pipeline$batch_output_path
 

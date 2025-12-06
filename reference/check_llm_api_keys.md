@@ -53,7 +53,8 @@ if (FALSE) { # \dontrun{
 # In an interactive session, quickly check which keys are configured:
 check_llm_api_keys()
 
-# In non-interactive scripts, you can disable messages and just use the result:
+# In non-interactive scripts, you can disable messages and just use the
+# result:
 status <- check_llm_api_keys(verbose = FALSE)
 status
 } # }

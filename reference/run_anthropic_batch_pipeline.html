@@ -122,15 +122,16 @@ if <code>poll = TRUE</code>. Defaults to a temporary file with suffix
 
 
 <dt id="arg-poll">poll<a class="anchor" aria-label="anchor" href="#arg-poll"></a></dt>
-<dd><p>Logical; if <code>TRUE</code>, the function will poll the batch until it
-reaches <code>processing_status = "ended"</code> using
+<dd><p>Logical; if <code>TRUE</code>, the function will poll the batch until
+it reaches <code>processing_status = "ended"</code> using
 <code><a href="anthropic_poll_batch_until_complete.html">anthropic_poll_batch_until_complete</a></code> and then download and
 parse the output. If <code>FALSE</code>, it stops after creating the batch and
 returns without polling or parsing.</p></dd>
 
 
 <dt id="arg-interval-seconds">interval_seconds<a class="anchor" aria-label="anchor" href="#arg-interval-seconds"></a></dt>
-<dd><p>Polling interval in seconds (used when <code>poll = TRUE</code>).</p></dd>
+<dd><p>Polling interval in seconds (used when
+<code>poll = TRUE</code>).</p></dd>
 
 
 <dt id="arg-timeout-seconds">timeout_seconds<a class="anchor" aria-label="anchor" href="#arg-timeout-seconds"></a></dt>
@@ -162,7 +163,8 @@ polling.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A list with elements (aligned with <code><a href="run_openai_batch_pipeline.html">run_openai_batch_pipeline</a></code>):</p><dl><dt>batch_input_path</dt>
+    <p>A list with elements (aligned with
+<code><a href="run_openai_batch_pipeline.html">run_openai_batch_pipeline</a></code>):</p><dl><dt>batch_input_path</dt>
 <dd><p>Path to the JSON file containing the batch
 <code>requests</code> object.</p></dd>
 
@@ -194,8 +196,8 @@ otherwise <code>NULL</code>.</p></dd>
 <li><p>Writes a JSON file containing the <code>requests</code> object for
 reproducibility.</p></li>
 <li><p>Creates a Message Batch via <code><a href="anthropic_create_batch.html">anthropic_create_batch</a></code>.</p></li>
-<li><p>Optionally polls until the batch reaches <code>processing_status = "ended"</code>
-using <code><a href="anthropic_poll_batch_until_complete.html">anthropic_poll_batch_until_complete</a></code>.</p></li>
+<li><p>Optionally polls until the batch reaches <code>processing_status =
+    "ended"</code> using <code><a href="anthropic_poll_batch_until_complete.html">anthropic_poll_batch_until_complete</a></code>.</p></li>
 <li><p>If polling is enabled, downloads the <code>.jsonl</code> result file with
 <code><a href="anthropic_download_batch_results.html">anthropic_download_batch_results</a></code> and parses it via
 <code><a href="parse_anthropic_batch_output.html">parse_anthropic_batch_output</a></code>.</p></li>
@@ -216,8 +218,8 @@ unless you explicitly supply a <code>temperature</code> argument via
 override it via <code>max_tokens</code> in <code>...</code>.</p></li>
 </ul></li>
 <li><p>When <code>reasoning = "enabled"</code> (extended thinking enabled):</p><ul><li><p><code>temperature</code> <strong>must</strong> be <code>1</code>. If you supply a
-different value in <code>...</code>, <code><a href="build_anthropic_batch_requests.html">build_anthropic_batch_requests()</a></code>
-will throw an error.</p></li>
+different value in <code>...</code>,
+<code><a href="build_anthropic_batch_requests.html">build_anthropic_batch_requests()</a></code> will throw an error.</p></li>
 <li><p>By default, <code>max_tokens = 2048</code> and
 <code>thinking_budget_tokens = 1024</code>, subject to the constraint
 <code>1024 &lt;= thinking_budget_tokens &lt; max_tokens</code>. Violations of

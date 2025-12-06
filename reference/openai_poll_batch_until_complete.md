@@ -60,7 +60,7 @@ above is met.
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires OPENAI_API_KEY and a batch that has been created but may still be running.
+# Requires OPENAI_API_KEY and a created batch that may still be running.
 
 batch <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
 
