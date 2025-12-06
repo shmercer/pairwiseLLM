@@ -4,7 +4,7 @@ testthat::test_that("build_anthropic_batch_requests builds valid requests", {
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:2, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   batch <- build_anthropic_batch_requests(
@@ -47,7 +47,7 @@ testthat::test_that("build_anthropic_batch_requests enforces reasoning constrain
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   # reasoning = "enabled" with default temperature and budgets should work
@@ -83,12 +83,12 @@ testthat::test_that("build_anthropic_batch_requests enforces reasoning constrain
   # thinking_budget_tokens < 1024 should error
   testthat::expect_error(
     build_anthropic_batch_requests(
-      pairs             = pairs,
-      model             = "claude-sonnet-4-5",
-      trait_name        = td$name,
+      pairs = pairs,
+      model = "claude-sonnet-4-5",
+      trait_name = td$name,
       trait_description = td$description,
-      prompt_template   = tmpl,
-      reasoning         = "enabled",
+      prompt_template = tmpl,
+      reasoning = "enabled",
       thinking_budget_tokens = 512
     ),
     regexp = "thinking_budget_tokens"
@@ -111,10 +111,10 @@ testthat::test_that("run_anthropic_batch_pipeline upgrades reasoning for include
   captured_reasoning <- NULL
 
   fake_batch_initial <- list(
-    id                = "msgbatch_123",
-    type              = "message_batch",
+    id = "msgbatch_123",
+    type = "message_batch",
     processing_status = "in_progress",
-    request_counts    = list(
+    request_counts = list(
       processing = 1L,
       succeeded  = 0L,
       errored    = 0L,
@@ -147,7 +147,7 @@ testthat::test_that("run_anthropic_batch_pipeline upgrades reasoning for include
       stop("Parse should not be called in this test")
     },
     {
-      td   <- list(name = "Overall quality", description = "Quality")
+      td <- list(name = "Overall quality", description = "Quality")
       tmpl <- set_prompt_template()
 
       # Start with reasoning = "none" but include_thoughts = TRUE; this should
@@ -178,19 +178,19 @@ testthat::test_that("parse_anthropic_batch_output handles succeeded and errored 
   line_ok <- list(
     custom_id = "ANTH_S01_vs_S02",
     result = list(
-      type    = "succeeded",
+      type = "succeeded",
       message = list(
-        id     = "msg_014VwiXbi91y3JMjcpyGBHX5",
-        type   = "message",
-        role   = "assistant",
-        model  = "claude-sonnet-4-5-20250929",
+        id = "msg_014VwiXbi91y3JMjcpyGBHX5",
+        type = "message",
+        role = "assistant",
+        model = "claude-sonnet-4-5-20250929",
         content = list(
           list(
             type = "text",
             text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Hello!"
           )
         ),
-        stop_reason   = "end_turn",
+        stop_reason = "end_turn",
         stop_sequence = NULL,
         usage = list(
           input_tokens  = 10L,
@@ -205,7 +205,7 @@ testthat::test_that("parse_anthropic_batch_output handles succeeded and errored 
   line_err <- list(
     custom_id = "ANTH_S03_vs_S04",
     result = list(
-      type  = "errored",
+      type = "errored",
       error = list(
         type    = "invalid_request",
         message = "Validation error"
@@ -214,7 +214,7 @@ testthat::test_that("parse_anthropic_batch_output handles succeeded and errored 
   )
 
   json_lines <- c(
-    jsonlite::toJSON(line_ok,  auto_unbox = TRUE),
+    jsonlite::toJSON(line_ok, auto_unbox = TRUE),
     jsonlite::toJSON(line_err, auto_unbox = TRUE)
   )
   writeLines(json_lines, con = tmp, useBytes = TRUE)
@@ -235,9 +235,9 @@ testthat::test_that("parse_anthropic_batch_output handles succeeded and errored 
   testthat::expect_equal(r1$model, "claude-sonnet-4-5-20250929")
   testthat::expect_equal(r1$better_sample, "SAMPLE_2")
   testthat::expect_equal(r1$better_id, "S02")
-  testthat::expect_equal(r1$prompt_tokens,     10)
+  testthat::expect_equal(r1$prompt_tokens, 10)
   testthat::expect_equal(r1$completion_tokens, 5)
-  testthat::expect_equal(r1$total_tokens,      15)
+  testthat::expect_equal(r1$total_tokens, 15)
 
   # Second row: errored
   r2 <- res[2, ]
@@ -266,10 +266,10 @@ testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing
   )
 
   fake_batch_initial <- list(
-    id                = "msgbatch_123",
-    type              = "message_batch",
+    id = "msgbatch_123",
+    type = "message_batch",
     processing_status = "in_progress",
-    request_counts    = list(
+    request_counts = list(
       processing = 1L,
       succeeded  = 0L,
       errored    = 0L,
@@ -280,10 +280,10 @@ testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing
   )
 
   fake_batch_final <- list(
-    id                = "msgbatch_123",
-    type              = "message_batch",
+    id = "msgbatch_123",
+    type = "message_batch",
     processing_status = "ended",
-    request_counts    = list(
+    request_counts = list(
       processing = 0L,
       succeeded  = 1L,
       errored    = 0L,
@@ -294,23 +294,23 @@ testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing
   )
 
   fake_results <- tibble::tibble(
-    custom_id     = "ANTH_S01_vs_S02",
-    ID1           = "S01",
-    ID2           = "S02",
-    better_id     = "S01",
-    result_type   = "succeeded",
-    status_code   = 200L,
-    content       = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+    custom_id = "ANTH_S01_vs_S02",
+    ID1 = "S01",
+    ID2 = "S02",
+    better_id = "S01",
+    result_type = "succeeded",
+    status_code = 200L,
+    content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
     prompt_tokens = 10,
     completion_tokens = 5,
-    total_tokens  = 15
+    total_tokens = 15
   )
 
   # Flags to ensure each helper is called
-  created_batch_id  <- NULL
-  polled_batch_id   <- NULL
-  downloaded_batch  <- NULL
-  parsed_path       <- NULL
+  created_batch_id <- NULL
+  polled_batch_id <- NULL
+  downloaded_batch <- NULL
+  parsed_path <- NULL
 
   testthat::with_mocked_bindings(
     build_anthropic_batch_requests = function(pairs, model, trait_name,
@@ -340,7 +340,7 @@ testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing
       fake_results
     },
     {
-      td   <- list(name = "Overall quality", description = "Quality")
+      td <- list(name = "Overall quality", description = "Quality")
       tmpl <- set_prompt_template()
 
       res <- run_anthropic_batch_pipeline(
@@ -355,9 +355,9 @@ testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing
         verbose           = FALSE
       )
 
-      testthat::expect_equal(created_batch_id,  "msgbatch_123")
-      testthat::expect_equal(polled_batch_id,   "msgbatch_123")
-      testthat::expect_equal(downloaded_batch,  "msgbatch_123")
+      testthat::expect_equal(created_batch_id, "msgbatch_123")
+      testthat::expect_equal(polled_batch_id, "msgbatch_123")
+      testthat::expect_equal(downloaded_batch, "msgbatch_123")
       testthat::expect_true(file.exists(res$batch_input_path))
       testthat::expect_true(file.exists(res$batch_output_path))
       testthat::expect_true(file.exists(parsed_path))
@@ -388,10 +388,10 @@ testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when po
   )
 
   fake_batch_initial <- list(
-    id                = "msgbatch_123",
-    type              = "message_batch",
+    id = "msgbatch_123",
+    type = "message_batch",
     processing_status = "in_progress",
-    request_counts    = list(
+    request_counts = list(
       processing = 1L,
       succeeded  = 0L,
       errored    = 0L,
@@ -401,9 +401,9 @@ testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when po
     results_url = NULL
   )
 
-  poll_called      <- FALSE
-  download_called  <- FALSE
-  parse_called     <- FALSE
+  poll_called <- FALSE
+  download_called <- FALSE
+  parse_called <- FALSE
 
   testthat::with_mocked_bindings(
     build_anthropic_batch_requests = function(pairs, model, trait_name,
@@ -430,7 +430,7 @@ testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when po
       stop("Parse should not be called when poll = FALSE")
     },
     {
-      td   <- list(name = "Overall quality", description = "Quality")
+      td <- list(name = "Overall quality", description = "Quality")
       tmpl <- set_prompt_template()
 
       res <- run_anthropic_batch_pipeline(

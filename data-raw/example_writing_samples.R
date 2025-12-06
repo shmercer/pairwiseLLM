@@ -90,5 +90,5 @@ example_openai_batch_output <- c(
 
 # Save datasets into the package
 usethis::use_data(example_writing_samples, overwrite = TRUE)
-usethis::use_data(example_writing_pairs,   overwrite = TRUE)
+usethis::use_data(example_writing_pairs, overwrite = TRUE)
 usethis::use_data(example_openai_batch_output, overwrite = TRUE)

@@ -20,9 +20,9 @@ NULL
 
 # Base Anthropic request builder ------------------------------------------
 .anthropic_request <- function(
-    path,
-    api_key = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01"
+  path,
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01"
 ) {
   api_key <- .anthropic_api_key(api_key)
 
@@ -205,7 +205,7 @@ NULL
 #' data("example_writing_samples", package = "pairwiseLLM")
 #' samples <- example_writing_samples[1:2, ]
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # Short, deterministic comparison (no explicit thinking block)
@@ -245,27 +245,27 @@ NULL
 #'
 #' @export
 anthropic_compare_pair_live <- function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template   = set_prompt_template(),
-    tag_prefix        = "<BETTER_SAMPLE>",
-    tag_suffix        = "</BETTER_SAMPLE>",
-    api_key           = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01",
-    reasoning         = c("none", "enabled"),
-    include_raw       = FALSE,
-    include_thoughts  = NULL,
-    ...
+  ID1,
+  text1,
+  ID2,
+  text2,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  tag_prefix = "<BETTER_SAMPLE>",
+  tag_suffix = "</BETTER_SAMPLE>",
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01",
+  reasoning = c("none", "enabled"),
+  include_raw = FALSE,
+  include_thoughts = NULL,
+  ...
 ) {
   reasoning <- match.arg(reasoning)
 
-  if (!is.character(ID1)  || length(ID1)  != 1L) stop("`ID1` must be a single character.",  call. = FALSE)
-  if (!is.character(ID2)  || length(ID2)  != 1L) stop("`ID2` must be a single character.",  call. = FALSE)
+  if (!is.character(ID1) || length(ID1) != 1L) stop("`ID1` must be a single character.", call. = FALSE)
+  if (!is.character(ID2) || length(ID2) != 1L) stop("`ID2` must be a single character.", call. = FALSE)
   if (!is.character(text1) || length(text1) != 1L) stop("`text1` must be a single character.", call. = FALSE)
   if (!is.character(text2) || length(text2) != 1L) stop("`text2` must be a single character.", call. = FALSE)
   if (!is.character(model) || length(model) != 1L) stop("`model` must be a single character.", call. = FALSE)
@@ -357,11 +357,11 @@ anthropic_compare_pair_live <- function(
   )
 
   body <- list(
-    model      = model,
+    model = model,
     max_tokens = max_tokens,
-    messages   = list(
+    messages = list(
       list(
-        role    = "user",
+        role = "user",
         content = list(
           list(
             type = "text",
@@ -373,7 +373,7 @@ anthropic_compare_pair_live <- function(
   )
 
   if (!is.null(temperature)) body$temperature <- temperature
-  if (!is.null(top_p))       body$top_p       <- top_p
+  if (!is.null(top_p)) body$top_p <- top_p
 
   if (reasoning == "enabled" && !is.null(thinking_budget)) {
     body$thinking <- list(
@@ -394,7 +394,7 @@ anthropic_compare_pair_live <- function(
 
   resp <- .anthropic_req_perform(req)
 
-  status_code   <- .anthropic_resp_status(resp)
+  status_code <- .anthropic_resp_status(resp)
   error_message <- NA_character_
 
   body_parsed <- tryCatch(
@@ -435,18 +435,18 @@ anthropic_compare_pair_live <- function(
     error_message <- body$error$message %||% sprintf("HTTP error %s from Anthropic.", status_code)
   }
 
-  object_type <- body$type  %||% NA_character_
-  model_name  <- body$model %||% NA_character_
+  object_type <- body$type %||% NA_character_
+  model_name <- body$model %||% NA_character_
 
   # ------------------------------------------------------------------
   # Collect thinking + text content from assistant content blocks
   # ------------------------------------------------------------------
   thoughts <- NA_character_
-  content  <- NA_character_
+  content <- NA_character_
 
   if (!is.null(body$content) && length(body$content) > 0L) {
     thought_chunks <- character(0)
-    text_chunks    <- character(0)
+    text_chunks <- character(0)
 
     for (blk in body$content) {
       blk_type <- blk$type %||% NULL
@@ -495,7 +495,7 @@ anthropic_compare_pair_live <- function(
 
   usage <- body$usage %||% list()
 
-  prompt_tokens     <- usage$input_tokens  %||% NA_real_
+  prompt_tokens <- usage$input_tokens %||% NA_real_
   completion_tokens <- usage$output_tokens %||% NA_real_
 
   if (!is.null(usage$total_tokens)) {
@@ -612,7 +612,7 @@ anthropic_compare_pair_live <- function(
 #'   sample_pairs(n_pairs = 5, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # Deterministic comparisons (no extended thinking, temperature defaults to 0)
@@ -651,26 +651,26 @@ anthropic_compare_pair_live <- function(
 #'
 #' @export
 submit_anthropic_pairs_live <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template   = set_prompt_template(),
-    api_key           = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01",
-    reasoning         = c("none", "enabled"),
-    verbose           = TRUE,
-    status_every      = 1,
-    progress          = TRUE,
-    include_raw       = FALSE,
-    include_thoughts  = NULL,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01",
+  reasoning = c("none", "enabled"),
+  verbose = TRUE,
+  status_every = 1,
+  progress = TRUE,
+  include_raw = FALSE,
+  include_thoughts = NULL,
+  ...
 ) {
   reasoning <- match.arg(reasoning)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols  <- setdiff(required_cols, names(pairs))
+  missing_cols <- setdiff(required_cols, names(pairs))
 
   if (length(missing_cols) > 0L) {
     stop(
@@ -764,8 +764,8 @@ submit_anthropic_pairs_live <- function(
       ))
     } else if (show_status) {
       elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-      avg     <- elapsed / i
-      remain  <- n - i
+      avg <- elapsed / i
+      remain <- n - i
       est_rem <- avg * remain
 
       message(sprintf(

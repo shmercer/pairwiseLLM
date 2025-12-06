@@ -17,9 +17,9 @@
 .get_api_key <- function(api_key = NULL, env_var, service = env_var) {
   # 1) Use explicit api_key if supplied and non-empty
   if (!is.null(api_key) &&
-      is.character(api_key) &&
-      length(api_key) == 1L &&
-      nzchar(api_key)) {
+    is.character(api_key) &&
+    length(api_key) == 1L &&
+    nzchar(api_key)) {
     return(api_key)
   }
 
@@ -73,12 +73,12 @@
 #'
 #' @examples
 #' \dontrun{
-#'   # In an interactive session, quickly check which keys are configured:
-#'   check_llm_api_keys()
+#' # In an interactive session, quickly check which keys are configured:
+#' check_llm_api_keys()
 #'
-#'   # In non-interactive scripts, you can disable messages and just use the result:
-#'   status <- check_llm_api_keys(verbose = FALSE)
-#'   status
+#' # In non-interactive scripts, you can disable messages and just use the result:
+#' status <- check_llm_api_keys(verbose = FALSE)
+#' status
 #' }
 #'
 #' @export
@@ -103,8 +103,8 @@ check_llm_api_keys <- function(verbose = TRUE) {
   )
 
   if (isTRUE(verbose)) {
-    any_set  <- any(has_key)
-    all_set  <- all(has_key)
+    any_set <- any(has_key)
+    all_set <- all(has_key)
     none_set <- !any_set
 
     if (all_set) {

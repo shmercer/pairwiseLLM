@@ -1,13 +1,13 @@
 test_that("trait_description returns built-in name and description", {
   overall <- trait_description("overall_quality")
-  org     <- trait_description("organization")
+  org <- trait_description("organization")
 
   # Now returns a list with name + description
   expect_type(overall, "list")
   expect_type(org, "list")
 
   expect_named(overall, c("name", "description"))
-  expect_named(org,     c("name", "description"))
+  expect_named(org, c("name", "description"))
 
   expect_true(is.character(overall$name))
   expect_true(is.character(overall$description))
@@ -19,8 +19,8 @@ test_that("trait_description returns built-in name and description", {
   expect_true(grepl("quality", overall$name, ignore.case = TRUE))
   expect_true(grepl("overall", overall$description, ignore.case = TRUE))
 
-  expect_true(grepl("organ", org$name, ignore.case = TRUE))         # organization / organized
-  expect_true(grepl("organ", org$description, ignore.case = TRUE))  # organization of writing, etc.
+  expect_true(grepl("organ", org$name, ignore.case = TRUE)) # organization / organized
+  expect_true(grepl("organ", org$description, ignore.case = TRUE)) # organization of writing, etc.
 })
 
 test_that("trait_description returns custom name and description when provided", {
@@ -49,10 +49,10 @@ test_that("set_prompt_template returns a default template with required placehol
   expect_type(tmpl, "character")
 
   # Template must contain all required placeholders
-  expect_true(grepl("{TRAIT_NAME}",        tmpl, fixed = TRUE))
+  expect_true(grepl("{TRAIT_NAME}", tmpl, fixed = TRUE))
   expect_true(grepl("{TRAIT_DESCRIPTION}", tmpl, fixed = TRUE))
-  expect_true(grepl("{SAMPLE_1}",          tmpl, fixed = TRUE))
-  expect_true(grepl("{SAMPLE_2}",          tmpl, fixed = TRUE))
+  expect_true(grepl("{SAMPLE_1}", tmpl, fixed = TRUE))
+  expect_true(grepl("{SAMPLE_2}", tmpl, fixed = TRUE))
 })
 
 test_that("set_prompt_template accepts a custom template string", {
@@ -123,19 +123,19 @@ B: {SAMPLE_2}
   # Substitutions present
   expect_true(grepl(trait_name, prompt, fixed = TRUE))
   expect_true(grepl(trait_desc, prompt, fixed = TRUE))
-  expect_true(grepl(text1,      prompt, fixed = TRUE))
-  expect_true(grepl(text2,      prompt, fixed = TRUE))
+  expect_true(grepl(text1, prompt, fixed = TRUE))
+  expect_true(grepl(text2, prompt, fixed = TRUE))
 
   # No unsubstituted placeholders should remain
-  expect_false(grepl("{TRAIT_NAME}",        prompt, fixed = TRUE))
+  expect_false(grepl("{TRAIT_NAME}", prompt, fixed = TRUE))
   expect_false(grepl("{TRAIT_DESCRIPTION}", prompt, fixed = TRUE))
-  expect_false(grepl("{SAMPLE_1}",          prompt, fixed = TRUE))
-  expect_false(grepl("{SAMPLE_2}",          prompt, fixed = TRUE))
+  expect_false(grepl("{SAMPLE_1}", prompt, fixed = TRUE))
+  expect_false(grepl("{SAMPLE_2}", prompt, fixed = TRUE))
 })
 
 test_that("build_prompt works with default template and built-in trait", {
-  tmpl  <- set_prompt_template()
-  td    <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  td <- trait_description("overall_quality")
 
   text1 <- "Sample 1 text."
   text2 <- "Sample 2 text."
@@ -150,15 +150,15 @@ test_that("build_prompt works with default template and built-in trait", {
 
   expect_true(grepl("Sample 1 text.", prompt, fixed = TRUE))
   expect_true(grepl("Sample 2 text.", prompt, fixed = TRUE))
-  expect_true(grepl(td$name,          prompt, fixed = TRUE))
-  expect_true(grepl("BETTER_SAMPLE",  prompt, fixed = TRUE))
+  expect_true(grepl(td$name, prompt, fixed = TRUE))
+  expect_true(grepl("BETTER_SAMPLE", prompt, fixed = TRUE))
 })
 
 test_that("build_prompt works end-to-end with example_writing_samples", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   tmpl <- set_prompt_template()
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   text1 <- example_writing_samples$text[1]
   text2 <- example_writing_samples$text[2]
 
@@ -170,9 +170,9 @@ test_that("build_prompt works end-to-end with example_writing_samples", {
     text2      = text2
   )
 
-  expect_true(grepl(text1,        prompt, fixed = TRUE))
-  expect_true(grepl(text2,        prompt, fixed = TRUE))
-  expect_true(grepl(td$name,      prompt, fixed = TRUE))
+  expect_true(grepl(text1, prompt, fixed = TRUE))
+  expect_true(grepl(text2, prompt, fixed = TRUE))
+  expect_true(grepl(td$name, prompt, fixed = TRUE))
   expect_true(grepl("BETTER_SAMPLE", prompt, fixed = TRUE))
 })
 
@@ -188,10 +188,10 @@ test_that("default template is loaded from inst/templates via get_prompt_templat
   expect_identical(tmpl1, tmpl2)
 
   # Still has required placeholders
-  expect_true(grepl("{TRAIT_NAME}",        tmpl2, fixed = TRUE))
+  expect_true(grepl("{TRAIT_NAME}", tmpl2, fixed = TRUE))
   expect_true(grepl("{TRAIT_DESCRIPTION}", tmpl2, fixed = TRUE))
-  expect_true(grepl("{SAMPLE_1}",          tmpl2, fixed = TRUE))
-  expect_true(grepl("{SAMPLE_2}",          tmpl2, fixed = TRUE))
+  expect_true(grepl("{SAMPLE_1}", tmpl2, fixed = TRUE))
+  expect_true(grepl("{SAMPLE_2}", tmpl2, fixed = TRUE))
 })
 
 test_that("list_prompt_templates includes built-in default from inst/templates", {
@@ -205,8 +205,10 @@ test_that("list_prompt_templates includes built-in default from inst/templates",
 
 test_that("list_prompt_templates respects include_builtin and include_registered flags", {
   # Clear registry to avoid interference from other tests
-  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
-     envir = .pwllm_prompt_templates)
+  rm(
+    list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+    envir = .pwllm_prompt_templates
+  )
 
   # Register one custom template
   custom_tmpl <- "
@@ -241,8 +243,10 @@ B: {SAMPLE_2}
 
 test_that("register_prompt_template stores and retrieves a template by name", {
   # Clear registry
-  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
-     envir = .pwllm_prompt_templates)
+  rm(
+    list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+    envir = .pwllm_prompt_templates
+  )
 
   custom_tmpl <- "
 You are assessing {TRAIT_NAME}.
@@ -267,8 +271,10 @@ Definition: {TRAIT_DESCRIPTION}
 
 test_that("register_prompt_template can read from file and validates placeholders", {
   # Clear registry
-  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
-     envir = .pwllm_prompt_templates)
+  rm(
+    list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+    envir = .pwllm_prompt_templates
+  )
 
   good_tmpl <- "
 Compare {SAMPLE_1} vs {SAMPLE_2} on {TRAIT_NAME}.
@@ -297,8 +303,10 @@ Missing placeholders except {SAMPLE_1}.
 
 test_that("register_prompt_template enforces overwrite = FALSE by default", {
   # Clear registry
-  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
-     envir = .pwllm_prompt_templates)
+  rm(
+    list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+    envir = .pwllm_prompt_templates
+  )
 
   tmpl1 <- "
 Template one with {TRAIT_NAME}, {TRAIT_DESCRIPTION}, {SAMPLE_1}, {SAMPLE_2}.
@@ -322,8 +330,10 @@ Template two with {TRAIT_NAME}, {TRAIT_DESCRIPTION}, {SAMPLE_1}, {SAMPLE_2}.
 
 test_that("get_prompt_template prefers registered templates over built-ins", {
   # Clear registry
-  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
-     envir = .pwllm_prompt_templates)
+  rm(
+    list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+    envir = .pwllm_prompt_templates
+  )
 
   builtin_default <- get_prompt_template("default")
 
@@ -345,8 +355,10 @@ Definition: {TRAIT_DESCRIPTION}
 
 test_that("get_prompt_template errors on unknown name", {
   # Clear registry (but keep built-ins unaffected)
-  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
-     envir = .pwllm_prompt_templates)
+  rm(
+    list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+    envir = .pwllm_prompt_templates
+  )
 
   expect_error(
     get_prompt_template("definitely_not_a_template_name"),
@@ -356,8 +368,10 @@ test_that("get_prompt_template errors on unknown name", {
 
 test_that("remove_prompt_template removes only registered templates, not built-ins", {
   # Clear registry
-  rm(list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
-     envir = .pwllm_prompt_templates)
+  rm(
+    list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
+    envir = .pwllm_prompt_templates
+  )
 
   custom_tmpl <- "
 Registered for removal {TRAIT_NAME}, {TRAIT_DESCRIPTION}, {SAMPLE_1}, {SAMPLE_2}.

@@ -84,7 +84,7 @@ parse_openai_batch_output <- function(path,
     if (length(parts) != 2L) {
       return(list(ID1 = NA_character_, ID2 = NA_character_))
     }
-    left  <- parts[1]
+    left <- parts[1]
     right <- parts[2]
 
     # ID2 is everything after "_vs_"
@@ -122,8 +122,8 @@ parse_openai_batch_output <- function(path,
       next
     }
 
-    custom_id   <- obj$custom_id %||% NA_character_
-    response    <- obj$response
+    custom_id <- obj$custom_id %||% NA_character_
+    response <- obj$response
     status_code <- response$status_code %||% NA_integer_
 
     # Error message (if any)
@@ -137,31 +137,31 @@ parse_openai_batch_output <- function(path,
     body <- response$body
     if (is.null(body)) {
       out[[i]] <- tibble::tibble(
-        custom_id           = custom_id,
-        ID1                 = NA_character_,
-        ID2                 = NA_character_,
-        model               = NA_character_,
-        object_type         = NA_character_,
-        status_code         = status_code,
-        error_message       = error_message,
-        thoughts            = NA_character_,
-        content             = NA_character_,
-        better_sample       = NA_character_,
-        better_id           = NA_character_,
-        prompt_tokens       = NA_real_,
-        completion_tokens   = NA_real_,
-        total_tokens        = NA_real_,
+        custom_id = custom_id,
+        ID1 = NA_character_,
+        ID2 = NA_character_,
+        model = NA_character_,
+        object_type = NA_character_,
+        status_code = status_code,
+        error_message = error_message,
+        thoughts = NA_character_,
+        content = NA_character_,
+        better_sample = NA_character_,
+        better_id = NA_character_,
+        prompt_tokens = NA_real_,
+        completion_tokens = NA_real_,
+        total_tokens = NA_real_,
         prompt_cached_tokens = NA_real_,
-        reasoning_tokens    = NA_real_
+        reasoning_tokens = NA_real_
       )
       next
     }
 
     object_type <- body$object %||% NA_character_
-    model       <- body$model %||% NA_character_
+    model <- body$model %||% NA_character_
 
     thoughts <- NA_character_
-    content  <- NA_character_
+    content <- NA_character_
 
     if (identical(object_type, "chat.completion")) {
       # Chat Completions: choices[[1]]$message$content
@@ -176,7 +176,7 @@ parse_openai_batch_output <- function(path,
       # Responses endpoint: collect reasoning summaries into `thoughts` and
       # message text into `content`.
       reasoning_chunks <- character(0)
-      message_chunks   <- character(0)
+      message_chunks <- character(0)
 
       output <- body$output %||% list()
       if (length(output) > 0L) {
@@ -225,9 +225,8 @@ parse_openai_batch_output <- function(path,
       # that shape. If summary is a character scalar (e.g. "auto"/"detailed"),
       # treat it as configuration and ignore it for thoughts.
       if (!length(reasoning_chunks) &&
-          !is.null(body$reasoning) &&
-          !is.null(body$reasoning$summary)) {
-
+        !is.null(body$reasoning) &&
+        !is.null(body$reasoning$summary)) {
         rs <- body$reasoning$summary
 
         if (is.list(rs) && !is.null(rs$text)) {
@@ -275,16 +274,16 @@ parse_openai_batch_output <- function(path,
 
     # Chat completions: prompt_tokens, completion_tokens, total_tokens
     # Responses (gpt-5.x): input_tokens, output_tokens, total_tokens
-    prompt_tokens     <- usage$prompt_tokens     %||% usage$input_tokens  %||% NA_real_
+    prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
     completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
-    total_tokens      <- usage$total_tokens      %||% NA_real_
+    total_tokens <- usage$total_tokens %||% NA_real_
 
     # Detailed token info when available
-    input_details  <- usage$input_tokens_details  %||% list()
+    input_details <- usage$input_tokens_details %||% list()
     output_details <- usage$output_tokens_details %||% list()
 
-    prompt_cached_tokens <- input_details$cached_tokens        %||% NA_real_
-    reasoning_tokens     <- output_details$reasoning_tokens    %||% NA_real_
+    prompt_cached_tokens <- input_details$cached_tokens %||% NA_real_
+    reasoning_tokens <- output_details$reasoning_tokens %||% NA_real_
 
     out[[i]] <- tibble::tibble(
       custom_id            = custom_id,

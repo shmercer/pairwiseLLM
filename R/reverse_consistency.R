@@ -51,7 +51,7 @@
 #' # Using the example writing pairs: reverse the first 10 pairs
 #' data("example_writing_pairs")
 #' main2 <- example_writing_pairs[1:10, ]
-#' rev2  <- main2
+#' rev2 <- main2
 #' rev2$ID1 <- main2$ID2
 #' rev2$ID2 <- main2$ID1
 #' rc2 <- compute_reverse_consistency(main2, rev2)
@@ -60,7 +60,7 @@
 #' @export
 compute_reverse_consistency <- function(main_results,
                                         reverse_results) {
-  main_results    <- tibble::as_tibble(main_results)
+  main_results <- tibble::as_tibble(main_results)
   reverse_results <- tibble::as_tibble(reverse_results)
 
   required_cols <- c("ID1", "ID2", "better_id")
@@ -122,7 +122,7 @@ compute_reverse_consistency <- function(main_results,
     joined$is_consistent <- logical(0)
   }
 
-  n_pairs      <- nrow(joined)
+  n_pairs <- nrow(joined)
   n_consistent <- if (n_pairs > 0L) sum(joined$is_consistent) else 0L
   prop_consistent <- if (n_pairs > 0L) n_consistent / n_pairs else NA_real_
 
@@ -205,14 +205,13 @@ compute_reverse_consistency <- function(main_results,
 #'
 #' @export
 check_positional_bias <- function(consistency,
-                                  n_boot     = 1000,
+                                  n_boot = 1000,
                                   conf_level = 0.95,
-                                  seed       = NULL) {
-
+                                  seed = NULL) {
   # ---- Extract the details tibble safely ----
   if (!inherits(consistency, "data.frame") &&
-      is.list(consistency) &&
-      "details" %in% names(consistency)) {
+    is.list(consistency) &&
+    "details" %in% names(consistency)) {
     details <- consistency[["details"]]
   } else {
     details <- consistency
@@ -246,12 +245,12 @@ check_positional_bias <- function(consistency,
       winner_pos_main = dplyr::case_when(
         better_id_main == ID1_main ~ "pos1",
         better_id_main == ID2_main ~ "pos2",
-        TRUE                       ~ NA_character_
+        TRUE ~ NA_character_
       ),
       winner_pos_rev = dplyr::case_when(
         better_id_rev == ID1_rev ~ "pos1",
         better_id_rev == ID2_rev ~ "pos2",
-        TRUE                     ~ NA_character_
+        TRUE ~ NA_character_
       )
     )
 
@@ -269,18 +268,18 @@ check_positional_bias <- function(consistency,
     boot_props[b] <- mean(details$is_consistent[idx])
   }
 
-  alpha     <- 1 - conf_level
-  boot_lwr  <- stats::quantile(boot_props, probs = alpha / 2)
-  boot_upr  <- stats::quantile(boot_props, probs = 1 - alpha / 2)
+  alpha <- 1 - conf_level
+  boot_lwr <- stats::quantile(boot_props, probs = alpha / 2)
+  boot_upr <- stats::quantile(boot_props, probs = 1 - alpha / 2)
   boot_mean <- mean(boot_props)
 
   # Positional bias: how often does SAMPLE_1 (position 1) win?
   # -- forward (main) direction --
   wins_sample1_main <- sum(details$better_id_main == details$ID1_main, na.rm = TRUE)
-  n_valid_main      <- sum(
+  n_valid_main <- sum(
     !is.na(details$better_id_main) &
       (details$better_id_main == details$ID1_main |
-         details$better_id_main == details$ID2_main)
+        details$better_id_main == details$ID2_main)
   )
 
   p_sample1_main <- if (n_valid_main > 0L) {
@@ -291,10 +290,10 @@ check_positional_bias <- function(consistency,
 
   # -- reverse direction --
   wins_sample1_rev <- sum(details$better_id_rev == details$ID1_rev, na.rm = TRUE)
-  n_valid_rev      <- sum(
+  n_valid_rev <- sum(
     !is.na(details$better_id_rev) &
       (details$better_id_rev == details$ID1_rev |
-         details$better_id_rev == details$ID2_rev)
+        details$better_id_rev == details$ID2_rev)
   )
 
   p_sample1_rev <- if (n_valid_rev > 0L) {
@@ -304,7 +303,7 @@ check_positional_bias <- function(consistency,
   }
 
   # ---- NEW: overall position-1 bias test (forward + reverse combined) ----
-  total_pos1_wins   <- wins_sample1_main + wins_sample1_rev
+  total_pos1_wins <- wins_sample1_main + wins_sample1_rev
   total_comparisons <- n_valid_main + n_valid_rev
 
   p_sample1_overall <- if (total_comparisons > 0L) {

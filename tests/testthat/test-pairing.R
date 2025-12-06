@@ -7,7 +7,7 @@ test_that("make_pairs creates all unordered pairs", {
   pairs <- make_pairs(samples)
 
   expect_s3_class(pairs, "tbl_df")
-  expect_equal(nrow(pairs), 3)  # 3C2 = 3 pairs
+  expect_equal(nrow(pairs), 3) # 3C2 = 3 pairs
 
   # Check that all combinations are present (order-insensitive)
   pair_labels <- apply(pairs[, c("ID1", "ID2")], 1, function(x) paste(sort(x), collapse = "-"))
@@ -57,7 +57,7 @@ test_that("sample_pairs respects pair_pct and n_pairs, and is reproducible", {
   pairs_half_1 <- sample_pairs(pairs, pair_pct = 0.5, seed = 123)
   pairs_half_2 <- sample_pairs(pairs, pair_pct = 0.5, seed = 123)
   expect_equal(pairs_half_1, pairs_half_2)
-  expect_true(nrow(pairs_half_1) >= floor(0.5 * n_all))  # due to floor()
+  expect_true(nrow(pairs_half_1) >= floor(0.5 * n_all)) # due to floor()
 
   # Fixed n_pairs
   pairs_fixed <- sample_pairs(pairs, n_pairs = 4, seed = 42)
@@ -96,8 +96,8 @@ test_that("sample_reverse_pairs reverses sampled subset correctly", {
       r <- rev_pairs[i, ]
 
       match_idx <- which(
-        pairs$ID1   == r$ID2 &
-          pairs$ID2   == r$ID1 &
+        pairs$ID1 == r$ID2 &
+          pairs$ID2 == r$ID1 &
           pairs$text1 == r$text2 &
           pairs$text2 == r$text1
       )
@@ -134,7 +134,7 @@ test_that("sample_reverse_pairs handles edge cases for reverse_pct and n_reverse
 
 test_that("make_pairs on example_writing_samples matches example_writing_pairs", {
   data("example_writing_samples", package = "pairwiseLLM")
-  data("example_writing_pairs",  package = "pairwiseLLM")
+  data("example_writing_pairs", package = "pairwiseLLM")
 
   pairs_gen <- make_pairs(example_writing_samples)
 
@@ -148,7 +148,7 @@ test_that("make_pairs on example_writing_samples matches example_writing_pairs",
 
 test_that("sample_pairs returns a subset of example_writing_pairs", {
   data("example_writing_samples", package = "pairwiseLLM")
-  data("example_writing_pairs",  package = "pairwiseLLM")
+  data("example_writing_pairs", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)
 
@@ -157,7 +157,7 @@ test_that("sample_pairs returns a subset of example_writing_pairs", {
 
   # Every sampled pair should correspond to some pair in example_writing_pairs
   sampled_labels <- apply(sampled[, c("ID1", "ID2")], 1, function(x) paste(sort(x), collapse = "-"))
-  ref_labels     <- apply(example_writing_pairs[, c("ID1", "ID2")], 1, function(x) paste(sort(x), collapse = "-"))
+  ref_labels <- apply(example_writing_pairs[, c("ID1", "ID2")], 1, function(x) paste(sort(x), collapse = "-"))
 
   expect_true(all(sampled_labels %in% ref_labels))
 })
@@ -174,8 +174,8 @@ test_that("sample_reverse_pairs produces valid reversed pairs on example data", 
     for (i in seq_len(nrow(rev_pairs))) {
       r <- rev_pairs[i, ]
       match_idx <- which(
-        pairs$ID1   == r$ID2 &
-          pairs$ID2   == r$ID1 &
+        pairs$ID1 == r$ID2 &
+          pairs$ID2 == r$ID1 &
           pairs$text1 == r$text2 &
           pairs$text2 == r$text1
       )

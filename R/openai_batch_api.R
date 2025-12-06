@@ -60,9 +60,9 @@ NULL
 #'
 #' @export
 openai_upload_batch_file <- function(
-    path,
-    purpose = "batch",
-    api_key = Sys.getenv("OPENAI_API_KEY")
+  path,
+  purpose = "batch",
+  api_key = Sys.getenv("OPENAI_API_KEY")
 ) {
   if (!file.exists(path)) {
     stop("File does not exist: ", path, call. = FALSE)
@@ -109,11 +109,11 @@ openai_upload_batch_file <- function(
 #'
 #' @export
 openai_create_batch <- function(
-    input_file_id,
-    endpoint,
-    completion_window = "24h",
-    metadata = NULL,
-    api_key = Sys.getenv("OPENAI_API_KEY")
+  input_file_id,
+  endpoint,
+  completion_window = "24h",
+  metadata = NULL,
+  api_key = Sys.getenv("OPENAI_API_KEY")
 ) {
   body <- list(
     input_file_id     = input_file_id,
@@ -149,12 +149,12 @@ openai_create_batch <- function(
 #'
 #' @export
 openai_get_batch <- function(
-    batch_id,
-    api_key = Sys.getenv("OPENAI_API_KEY")
+  batch_id,
+  api_key = Sys.getenv("OPENAI_API_KEY")
 ) {
   path <- paste0("/batches/", batch_id)
 
-  req  <- .openai_request(path, api_key)
+  req <- .openai_request(path, api_key)
   resp <- req_perform(req)
 
   resp_body_json(resp, simplifyVector = TRUE)
@@ -184,9 +184,9 @@ openai_get_batch <- function(
 #'
 #' @export
 openai_download_batch_output <- function(
-    batch_id,
-    path,
-    api_key = Sys.getenv("OPENAI_API_KEY")
+  batch_id,
+  path,
+  api_key = Sys.getenv("OPENAI_API_KEY")
 ) {
   batch <- openai_get_batch(batch_id, api_key = api_key)
 
@@ -201,7 +201,7 @@ openai_download_batch_output <- function(
 
   file_path <- paste0("/files/", output_file_id, "/content")
 
-  req  <- .openai_request(file_path, api_key)
+  req <- .openai_request(file_path, api_key)
   resp <- req_perform(req)
 
   raw <- resp_body_raw(resp)
@@ -246,25 +246,27 @@ openai_download_batch_output <- function(
 #'
 #' @export
 openai_poll_batch_until_complete <- function(
-    batch_id,
-    interval_seconds = 5,
-    timeout_seconds = 600,
-    max_attempts = Inf,
-    api_key = Sys.getenv("OPENAI_API_KEY"),
-    verbose = TRUE
+  batch_id,
+  interval_seconds = 5,
+  timeout_seconds = 600,
+  max_attempts = Inf,
+  api_key = Sys.getenv("OPENAI_API_KEY"),
+  verbose = TRUE
 ) {
   start_time <- Sys.time()
-  attempts   <- 0L
+  attempts <- 0L
 
   repeat {
     attempts <- attempts + 1L
 
-    batch  <- openai_get_batch(batch_id, api_key = api_key)
+    batch <- openai_get_batch(batch_id, api_key = api_key)
     status <- batch$status %||% "unknown"
 
     if (verbose) {
-      message("Batch ", batch_id, " status: ", status,
-              " (attempt ", attempts, ")")
+      message(
+        "Batch ", batch_id, " status: ", status,
+        " (attempt ", attempts, ")"
+      )
     }
 
     if (status %in% c("completed", "failed", "cancelled", "expired")) {
@@ -378,7 +380,7 @@ openai_poll_batch_until_complete <- function(
 #'   sample_pairs(n_pairs = 5, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # 1) Standard chat.completions batch (no thoughts)
@@ -403,7 +405,7 @@ openai_poll_batch_until_complete <- function(
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   include_thoughts  = TRUE,   # automatically picks "responses" + reasoning
+#'   include_thoughts  = TRUE, # automatically picks "responses" + reasoning
 #'   interval_seconds  = 10,
 #'   timeout_seconds   = 600
 #' )
@@ -414,23 +416,23 @@ openai_poll_batch_until_complete <- function(
 #'
 #' @export
 run_openai_batch_pipeline <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    include_thoughts = FALSE,
-    include_raw      = FALSE,
-    endpoint = NULL,
-    batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
-    batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
-    poll = TRUE,
-    interval_seconds = 5,
-    timeout_seconds = 600,
-    max_attempts = Inf,
-    metadata = NULL,
-    api_key = Sys.getenv("OPENAI_API_KEY"),
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  include_thoughts = FALSE,
+  include_raw = FALSE,
+  endpoint = NULL,
+  batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
+  batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+  poll = TRUE,
+  interval_seconds = 5,
+  timeout_seconds = 600,
+  max_attempts = Inf,
+  metadata = NULL,
+  api_key = Sys.getenv("OPENAI_API_KEY"),
+  ...
 ) {
   # If endpoint not supplied, choose automatically based on include_thoughts
   if (is.null(endpoint)) {
@@ -439,8 +441,7 @@ run_openai_batch_pipeline <- function(
   endpoint <- match.arg(endpoint, c("chat.completions", "responses"))
 
   # Endpoint for the Batch API expects the full path
-  batch_api_endpoint <- switch(
-    endpoint,
+  batch_api_endpoint <- switch(endpoint,
     "chat.completions" = "/v1/chat/completions",
     "responses"        = "/v1/responses"
   )
@@ -476,8 +477,8 @@ run_openai_batch_pipeline <- function(
   )
 
   final_batch <- batch_obj
-  results     <- NULL
-  out_path    <- NULL
+  results <- NULL
+  out_path <- NULL
 
   # 5) Optional polling + download + parse
   if (isTRUE(poll)) {
@@ -497,7 +498,7 @@ run_openai_batch_pipeline <- function(
     )
 
     out_path <- batch_output_path
-    results  <- parse_openai_batch_output(batch_output_path)
+    results <- parse_openai_batch_output(batch_output_path)
   }
 
   list(
@@ -508,4 +509,3 @@ run_openai_batch_pipeline <- function(
     results           = results
   )
 }
-

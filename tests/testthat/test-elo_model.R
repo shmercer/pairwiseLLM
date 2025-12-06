@@ -17,7 +17,7 @@ test_that("build_elo_data converts better_id into winner/loser", {
   # For each row, winner should be better_id;
   # loser should be the other ID in the pair.
   expect_equal(elo$winner, c("S1", "S3", "S2", "S4"))
-  expect_equal(elo$loser,  c("S2", "S1", "S3", "S3"))
+  expect_equal(elo$loser, c("S2", "S1", "S3", "S3"))
 })
 
 test_that("build_elo_data drops rows with invalid or missing better_id", {
@@ -32,7 +32,7 @@ test_that("build_elo_data drops rows with invalid or missing better_id", {
   # Only rows 1 and 4 are valid
   expect_equal(nrow(elo), 2)
   expect_equal(elo$winner, c("S1", "S1"))
-  expect_equal(elo$loser,  c("S2", "S4"))
+  expect_equal(elo$loser, c("S2", "S4"))
 })
 
 test_that("build_elo_data errors when required columns are missing", {
@@ -62,7 +62,7 @@ test_that("build_elo_data works on example_writing_pairs", {
   # Winner/loser should always be one of the IDs in the original pair
   all_ids <- unique(c(example_writing_pairs$ID1, example_writing_pairs$ID2))
   expect_true(all(elo$winner %in% all_ids))
-  expect_true(all(elo$loser  %in% all_ids))
+  expect_true(all(elo$loser %in% all_ids))
 })
 
 # -------------------------------------------------------------------------

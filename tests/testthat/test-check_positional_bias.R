@@ -3,13 +3,13 @@ test_that("check_positional_bias works with a consistency list", {
   # Pair A||B: position-1 bias type inconsistency
   details <- tibble::tibble(
     key            = c("A||B", "A||C", "B||C"),
-    ID1_main       = c("A",   "A",    "B"),
-    ID2_main       = c("B",   "C",    "C"),
-    better_id_main = c("A",   "C",    "B"),
-    ID1_rev        = c("B",   "C",    "C"),
-    ID2_rev        = c("A",   "A",    "B"),
-    better_id_rev  = c("B",   "C",    "B"),
-    is_consistent  = c(FALSE, TRUE,   TRUE)
+    ID1_main       = c("A", "A", "B"),
+    ID2_main       = c("B", "C", "C"),
+    better_id_main = c("A", "C", "B"),
+    ID1_rev        = c("B", "C", "C"),
+    ID2_rev        = c("A", "A", "B"),
+    better_id_rev  = c("B", "C", "B"),
+    is_consistent  = c(FALSE, TRUE, TRUE)
   )
 
   consistency <- list(
@@ -19,7 +19,7 @@ test_that("check_positional_bias works with a consistency list", {
 
   diag <- check_positional_bias(
     consistency,
-    n_boot = 200,   # keep small for tests
+    n_boot = 200, # keep small for tests
     seed   = 123
   )
 
@@ -58,13 +58,13 @@ test_that("check_positional_bias works with a consistency list", {
 test_that("check_positional_bias accepts a raw details tibble", {
   details <- tibble::tibble(
     key            = c("X||Y", "X||Z"),
-    ID1_main       = c("X",   "X"),
-    ID2_main       = c("Y",   "Z"),
-    better_id_main = c("X",   "Z"),
-    ID1_rev        = c("Y",   "Z"),
-    ID2_rev        = c("X",   "X"),
-    better_id_rev  = c("X",   "Z"),
-    is_consistent  = c(TRUE,  TRUE)
+    ID1_main       = c("X", "X"),
+    ID2_main       = c("Y", "Z"),
+    better_id_main = c("X", "Z"),
+    ID1_rev        = c("Y", "Z"),
+    ID2_rev        = c("X", "X"),
+    better_id_rev  = c("X", "Z"),
+    is_consistent  = c(TRUE, TRUE)
   )
 
   diag <- check_positional_bias(
@@ -83,14 +83,16 @@ test_that("check_positional_bias accepts a raw details tibble", {
 
   # New overall fields exist and are numeric
   expect_true("p_sample1_overall" %in% names(s))
-  expect_true("total_pos1_wins"   %in% names(s))
+  expect_true("total_pos1_wins" %in% names(s))
   expect_true("total_comparisons" %in% names(s))
   expect_true(is.numeric(s$p_sample1_overall))
 
   # details tibble should have added columns
   d <- diag$details
-  expect_true(all(c("winner_pos_main", "winner_pos_rev",
-                    "is_pos1_bias", "is_pos2_bias") %in% names(d)))
+  expect_true(all(c(
+    "winner_pos_main", "winner_pos_rev",
+    "is_pos1_bias", "is_pos2_bias"
+  ) %in% names(d)))
 })
 
 test_that("check_positional_bias errors cleanly on missing columns", {

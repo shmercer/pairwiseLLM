@@ -28,14 +28,14 @@ test_that("gemini_compare_pair_live parses a successful response without thought
 
   testthat::local_mocked_bindings(
     # ✅ Avoid hitting .get_api_key() / env
-    .gemini_api_key       = function(api_key = NULL) "TEST_GEMINI_KEY",
-    .gemini_req_perform   = function(req) fake_resp,
-    .gemini_resp_status   = function(resp) 200L,
+    .gemini_api_key = function(api_key = NULL) "TEST_GEMINI_KEY",
+    .gemini_req_perform = function(req) fake_resp,
+    .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
     .env = ns
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   res <- gemini_compare_pair_live(
@@ -70,9 +70,9 @@ test_that("gemini_compare_pair_live parses a successful response without thought
   expect_equal(res$better_sample, "SAMPLE_1")
   expect_equal(res$better_id, "S01")
 
-  expect_equal(res$prompt_tokens,     42)
+  expect_equal(res$prompt_tokens, 42)
   expect_equal(res$completion_tokens, 7)
-  expect_equal(res$total_tokens,      49)
+  expect_equal(res$total_tokens, 49)
 
   expect_true("raw_response" %in% names(res))
   expect_type(res$raw_response, "list")
@@ -102,14 +102,14 @@ test_that("gemini_compare_pair_live parses thoughts and content when include_tho
   )
 
   testthat::local_mocked_bindings(
-    .gemini_api_key       = function(api_key = NULL) "TEST_GEMINI_KEY",
-    .gemini_req_perform   = function(req) fake_resp,
-    .gemini_resp_status   = function(resp) 200L,
+    .gemini_api_key = function(api_key = NULL) "TEST_GEMINI_KEY",
+    .gemini_req_perform = function(req) fake_resp,
+    .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
     .env = ns
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   res <- gemini_compare_pair_live(
@@ -163,14 +163,14 @@ test_that("gemini_compare_pair_live handles responses without <BETTER_SAMPLE> ta
   )
 
   testthat::local_mocked_bindings(
-    .gemini_api_key       = function(api_key = NULL) "TEST_GEMINI_KEY",
-    .gemini_req_perform   = function(req) fake_resp,
-    .gemini_resp_status   = function(resp) 200L,
+    .gemini_api_key = function(api_key = NULL) "TEST_GEMINI_KEY",
+    .gemini_req_perform = function(req) fake_resp,
+    .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
     .env = ns
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   res <- gemini_compare_pair_live(
@@ -197,14 +197,14 @@ test_that("gemini_compare_pair_live returns an error row when request fails", {
 
   # Simulate a generic error thrown by .gemini_req_perform
   testthat::local_mocked_bindings(
-    .gemini_api_key       = function(api_key = NULL) "TEST_GEMINI_KEY",
-    .gemini_req_perform   = function(req) stop("HTTP 500 Internal Server Error"),
-    .gemini_resp_status   = function(resp) 500L,
+    .gemini_api_key = function(api_key = NULL) "TEST_GEMINI_KEY",
+    .gemini_req_perform = function(req) stop("HTTP 500 Internal Server Error"),
+    .gemini_resp_status = function(resp) 500L,
     .gemini_resp_body_json = function(resp, ...) NULL,
     .env = ns
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   res <- gemini_compare_pair_live(
@@ -252,14 +252,14 @@ test_that("gemini_compare_pair_live validates model and maps thinking_level medi
   )
 
   testthat::local_mocked_bindings(
-    .gemini_api_key       = function(api_key = NULL) "TEST_GEMINI_KEY",
-    .gemini_req_perform   = function(req) fake_resp,
-    .gemini_resp_status   = function(resp) 200L,
+    .gemini_api_key = function(api_key = NULL) "TEST_GEMINI_KEY",
+    .gemini_req_perform = function(req) fake_resp,
+    .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
     .env = ns
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   # Invalid model
@@ -310,7 +310,7 @@ test_that("gemini_compare_pair_live validates model and maps thinking_level medi
         trait_description = td$description,
         prompt_template   = tmpl,
         thinking_level    = "low",
-        thinking_budget   = 2048  # should be ignored
+        thinking_budget   = 2048 # should be ignored
       )
       expect_equal(res$better_sample, "SAMPLE_2")
     },
@@ -320,7 +320,7 @@ test_that("gemini_compare_pair_live validates model and maps thinking_level medi
 })
 
 test_that("submit_gemini_pairs_live validates inputs and handles zero-row pairs", {
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   # Missing columns
@@ -381,7 +381,7 @@ test_that("submit_gemini_pairs_live calls gemini_compare_pair_live for each row 
     text2 = c("Text 1b", "Text 2b")
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   calls <- list()
@@ -390,8 +390,8 @@ test_that("submit_gemini_pairs_live calls gemini_compare_pair_live for each row 
     ID1, text1, ID2, text2, model, trait_name, trait_description,
     prompt_template, api_key, thinking_level, temperature,
     top_p, top_k, max_output_tokens, api_version,
-    include_raw, include_thoughts, ...) {
-
+    include_raw, include_thoughts, ...
+  ) {
     calls <<- append(calls, list(
       list(
         ID1              = ID1,

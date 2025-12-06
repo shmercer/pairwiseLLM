@@ -78,7 +78,7 @@
 #' data("example_writing_samples", package = "pairwiseLLM")
 #' samples <- example_writing_samples[1:2, ]
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # Single live comparison using the OpenAI backend and chat.completions
@@ -130,21 +130,21 @@
 #'
 #' @export
 llm_compare_pair <- function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    backend         = c("openai", "anthropic", "gemini"),
-    endpoint        = c("chat.completions", "responses"),
-    api_key         = NULL,
-    include_raw     = FALSE,
-    ...
+  ID1,
+  text1,
+  ID2,
+  text2,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  backend = c("openai", "anthropic", "gemini"),
+  endpoint = c("chat.completions", "responses"),
+  api_key = NULL,
+  include_raw = FALSE,
+  ...
 ) {
-  backend  <- match.arg(backend)
+  backend <- match.arg(backend)
   endpoint <- match.arg(endpoint)
 
   if (backend == "openai") {
@@ -195,7 +195,7 @@ llm_compare_pair <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,      # backend handles default env var
+        api_key           = api_key, # backend handles default env var
         include_raw       = include_raw,
         ...
       )
@@ -288,7 +288,7 @@ llm_compare_pair <- function(
 #'   sample_pairs(n_pairs = 5, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # Live comparisons for multiple pairs using the OpenAI backend
@@ -319,21 +319,21 @@ llm_compare_pair <- function(
 #'
 #' @export
 submit_llm_pairs <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    backend         = c("openai", "anthropic", "gemini"),
-    endpoint        = c("chat.completions", "responses"),
-    api_key         = NULL,
-    verbose         = TRUE,
-    status_every    = 1,
-    progress        = TRUE,
-    include_raw     = FALSE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  backend = c("openai", "anthropic", "gemini"),
+  endpoint = c("chat.completions", "responses"),
+  api_key = NULL,
+  verbose = TRUE,
+  status_every = 1,
+  progress = TRUE,
+  include_raw = FALSE,
+  ...
 ) {
-  backend  <- match.arg(backend)
+  backend <- match.arg(backend)
   endpoint <- match.arg(endpoint)
 
   if (backend == "openai") {

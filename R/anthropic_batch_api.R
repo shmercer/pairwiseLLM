@@ -45,18 +45,18 @@ NULL
 # Internal: parse a single Anthropic "message" object (from Messages API)
 # into the standard pairwiseLLM schema (without custom_id / status_code).
 .parse_anthropic_pair_message <- function(
-    body,
-    ID1,
-    ID2,
-    tag_prefix = "<BETTER_SAMPLE>",
-    tag_suffix = "</BETTER_SAMPLE>"
+  body,
+  ID1,
+  ID2,
+  tag_prefix = "<BETTER_SAMPLE>",
+  tag_suffix = "</BETTER_SAMPLE>"
 ) {
-  object_type <- body$type  %||% NA_character_
-  model_name  <- body$model %||% NA_character_
+  object_type <- body$type %||% NA_character_
+  model_name <- body$model %||% NA_character_
 
   # Collect thinking + text content from assistant message blocks
   thoughts <- NA_character_
-  content  <- NA_character_
+  content <- NA_character_
 
   if (!is.null(body$content) && length(body$content) > 0L) {
     thought_pieces <- character(0)
@@ -103,9 +103,9 @@ NULL
   }
 
   usage <- body$usage %||% list()
-  prompt_tokens     <- usage$input_tokens  %||% NA_real_
+  prompt_tokens <- usage$input_tokens %||% NA_real_
   completion_tokens <- usage$output_tokens %||% NA_real_
-  total_tokens      <- usage$total_tokens  %||% NA_real_
+  total_tokens <- usage$total_tokens %||% NA_real_
 
   tibble::tibble(
     ID1               = ID1,
@@ -200,7 +200,7 @@ NULL
 #'   sample_pairs(n_pairs = 3, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # Standard batch requests without extended thinking
@@ -230,20 +230,20 @@ NULL
 #'
 #' @export
 build_anthropic_batch_requests <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template  = set_prompt_template(),
-    reasoning        = c("none", "enabled"),
-    custom_id_prefix = "ANTH",
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  reasoning = c("none", "enabled"),
+  custom_id_prefix = "ANTH",
+  ...
 ) {
   reasoning <- match.arg(reasoning)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols  <- setdiff(required_cols, names(pairs))
+  missing_cols <- setdiff(required_cols, names(pairs))
 
   if (length(missing_cols) > 0L) {
     stop(
@@ -265,10 +265,10 @@ build_anthropic_batch_requests <- function(
     # --------------------------------------------------------------------
     if (reasoning == "none") {
       temperature <- dots$temperature %||% 0
-      max_tokens  <- dots$max_tokens  %||% 768L
-      max_tokens  <- as.integer(max_tokens)
+      max_tokens <- dots$max_tokens %||% 768L
+      max_tokens <- as.integer(max_tokens)
 
-      thinking               <- NULL
+      thinking <- NULL
       thinking_budget_tokens <- NULL
     } else {
       # reasoning == "enabled"
@@ -332,10 +332,10 @@ build_anthropic_batch_requests <- function(
     )
 
     params <- list(
-      model       = model,
-      max_tokens  = max_tokens,
+      model = model,
+      max_tokens = max_tokens,
       temperature = temperature,
-      system      = list(
+      system = list(
         list(type = "text", text = system_msg)
       ),
       messages = list(
@@ -358,13 +358,13 @@ build_anthropic_batch_requests <- function(
 
   out <- vector("list", nrow(pairs))
   for (i in seq_len(nrow(pairs))) {
-    ID1   <- as.character(pairs$ID1[i])
-    ID2   <- as.character(pairs$ID2[i])
+    ID1 <- as.character(pairs$ID1[i])
+    ID2 <- as.character(pairs$ID2[i])
     text1 <- as.character(pairs$text1[i])
     text2 <- as.character(pairs$text2[i])
 
     custom_id <- sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
-    params    <- get_body_for_pair(ID1, text1, ID2, text2)
+    params <- get_body_for_pair(ID1, text1, ID2, text2)
 
     out[[i]] <- list(custom_id = custom_id, params = params)
   }
@@ -412,7 +412,7 @@ build_anthropic_batch_requests <- function(
 #'   sample_pairs(n_pairs = 2, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' req_tbl <- build_anthropic_batch_requests(
@@ -437,9 +437,9 @@ build_anthropic_batch_requests <- function(
 #'
 #' @export
 anthropic_create_batch <- function(
-    requests,
-    api_key           = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01"
+  requests,
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01"
 ) {
   if (!is.list(requests) || length(requests) == 0L) {
     stop("`requests` must be a non-empty list of request objects.", call. = FALSE)
@@ -486,9 +486,9 @@ anthropic_create_batch <- function(
 #'
 #' @export
 anthropic_get_batch <- function(
-    batch_id,
-    api_key           = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01"
+  batch_id,
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01"
 ) {
   if (!is.character(batch_id) || length(batch_id) != 1L || !nzchar(batch_id)) {
     stop("`batch_id` must be a non-empty character scalar.", call. = FALSE)
@@ -537,12 +537,12 @@ anthropic_get_batch <- function(
 #'
 #' @export
 anthropic_poll_batch_until_complete <- function(
-    batch_id,
-    interval_seconds  = 60,
-    timeout_seconds   = 86400,
-    api_key           = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01",
-    verbose           = TRUE
+  batch_id,
+  interval_seconds = 60,
+  timeout_seconds = 86400,
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01",
+  verbose = TRUE
 ) {
   start_time <- Sys.time()
   last_batch <- NULL
@@ -563,10 +563,10 @@ anthropic_poll_batch_until_complete <- function(
         batch$id %||% "<unknown>",
         status,
         batch$request_counts$processing %||% NA_integer_,
-        batch$request_counts$succeeded  %||% NA_integer_,
-        batch$request_counts$errored    %||% NA_integer_,
-        batch$request_counts$canceled   %||% NA_integer_,
-        batch$request_counts$expired    %||% NA_integer_
+        batch$request_counts$succeeded %||% NA_integer_,
+        batch$request_counts$errored %||% NA_integer_,
+        batch$request_counts$canceled %||% NA_integer_,
+        batch$request_counts$expired %||% NA_integer_
       )
       message(msg)
     }
@@ -620,10 +620,10 @@ anthropic_poll_batch_until_complete <- function(
 #'
 #' @export
 anthropic_download_batch_results <- function(
-    batch_id,
-    output_path,
-    api_key           = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01"
+  batch_id,
+  output_path,
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01"
 ) {
   batch <- anthropic_get_batch(
     batch_id          = batch_id,
@@ -649,7 +649,7 @@ anthropic_download_batch_results <- function(
   )
 
   resp <- .anthropic_req_perform(req)
-  txt  <- httr2::resp_body_string(resp)
+  txt <- httr2::resp_body_string(resp)
 
   # The results are already JSONL; write as-is.
   con <- file(output_path, open = "wb")
@@ -732,9 +732,9 @@ anthropic_download_batch_results <- function(
 #'
 #' @export
 parse_anthropic_batch_output <- function(
-    jsonl_path,
-    tag_prefix = "<BETTER_SAMPLE>",
-    tag_suffix = "</BETTER_SAMPLE>"
+  jsonl_path,
+  tag_prefix = "<BETTER_SAMPLE>",
+  tag_suffix = "</BETTER_SAMPLE>"
 ) {
   if (!file.exists(jsonl_path)) {
     stop("`jsonl_path` does not exist: ", jsonl_path, call. = FALSE)
@@ -997,7 +997,7 @@ parse_anthropic_batch_output <- function(
 #'   sample_pairs(n_pairs = 5, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # 1) Standard batch without extended thinking (temperature defaults to 0)
@@ -1025,7 +1025,7 @@ parse_anthropic_batch_output <- function(
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   include_thoughts  = TRUE,   # will upgrade reasoning to "enabled" if needed
+#'   include_thoughts  = TRUE, # will upgrade reasoning to "enabled" if needed
 #'   interval_seconds  = 60,
 #'   timeout_seconds   = 3600,
 #'   verbose           = TRUE
@@ -1037,22 +1037,22 @@ parse_anthropic_batch_output <- function(
 #'
 #' @export
 run_anthropic_batch_pipeline <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template   = set_prompt_template(),
-    reasoning         = c("none", "enabled"),
-    include_thoughts  = FALSE,
-    batch_input_path  = NULL,
-    batch_output_path = NULL,
-    poll              = TRUE,
-    interval_seconds  = 60,
-    timeout_seconds   = 86400,
-    api_key           = Sys.getenv("ANTHROPIC_API_KEY"),
-    anthropic_version = "2023-06-01",
-    verbose           = TRUE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  reasoning = c("none", "enabled"),
+  include_thoughts = FALSE,
+  batch_input_path = NULL,
+  batch_output_path = NULL,
+  poll = TRUE,
+  interval_seconds = 60,
+  timeout_seconds = 86400,
+  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  anthropic_version = "2023-06-01",
+  verbose = TRUE,
+  ...
 ) {
   reasoning <- match.arg(reasoning)
 
@@ -1087,7 +1087,7 @@ run_anthropic_batch_pipeline <- function(
   }
 
   input_obj <- list(requests = requests)
-  json_txt  <- jsonlite::toJSON(input_obj, auto_unbox = TRUE, pretty = TRUE)
+  json_txt <- jsonlite::toJSON(input_obj, auto_unbox = TRUE, pretty = TRUE)
   writeLines(json_txt, batch_input_path, useBytes = TRUE)
 
   # 3) Create batch
@@ -1098,8 +1098,8 @@ run_anthropic_batch_pipeline <- function(
   )
 
   final_batch <- batch_obj
-  results     <- NULL
-  out_path    <- NULL
+  results <- NULL
+  out_path <- NULL
 
   # 4) Optional polling + download + parse
   if (isTRUE(poll)) {
@@ -1127,7 +1127,7 @@ run_anthropic_batch_pipeline <- function(
     )
 
     out_path <- batch_output_path
-    results  <- parse_anthropic_batch_output(batch_output_path)
+    results <- parse_anthropic_batch_output(batch_output_path)
   }
 
   list(

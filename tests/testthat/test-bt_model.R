@@ -25,7 +25,7 @@ test_that("build_bt_data drops rows with invalid or missing better_id", {
   expect_equal(nrow(bt), 2)
   expect_equal(bt$object1, c("S1", "S4"))
   expect_equal(bt$object2, c("S2", "S1"))
-  expect_equal(bt$result,  c(1,   0))
+  expect_equal(bt$result, c(1, 0))
 })
 
 test_that("build_bt_data errors when required columns are missing", {
@@ -151,4 +151,3 @@ test_that("fit_bt_model errors when bt_data does not have exactly three columns"
     "exactly three columns"
   )
 })
-

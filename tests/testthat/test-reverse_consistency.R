@@ -30,7 +30,7 @@ test_that("compute_reverse_consistency detects inconsistencies and ignores NAs",
   rev <- tibble::tibble(
     ID1       = c("S2", "S3", "S3", "S4"),
     ID2       = c("S1", "S1", "S2", "S3"),
-    better_id = c("S1", "S1", NA,   "S3")  # one inconsistent, one NA
+    better_id = c("S1", "S1", NA, "S3") # one inconsistent, one NA
   )
 
   rc <- compute_reverse_consistency(main, rev)
@@ -68,7 +68,7 @@ test_that("compute_reverse_consistency works on example_writing_pairs", {
   data("example_writing_pairs", package = "pairwiseLLM")
 
   main <- example_writing_pairs[1:10, ]
-  rev  <- main
+  rev <- main
   rev$ID1 <- main$ID2
   rev$ID2 <- main$ID1
 

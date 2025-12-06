@@ -216,7 +216,7 @@ fit_elo_model <- function(elo_data, runs = 5, ...) {
   rel <- EloChoice::reliability(fit)
 
   reliability_unweighted <- NA_real_
-  reliability_weighted   <- NA_real_
+  reliability_weighted <- NA_real_
 
   if (is.data.frame(rel) && nrow(rel) > 0L) {
     # Per docs: first column = unweighted, second = weighted

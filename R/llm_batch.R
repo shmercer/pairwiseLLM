@@ -102,15 +102,15 @@
 #'
 #' @export
 llm_submit_pairs_batch <- function(
-    pairs,
-    backend           = c("openai", "anthropic", "gemini"),
-    model,
-    trait_name,
-    trait_description,
-    prompt_template   = set_prompt_template(),
-    include_thoughts  = FALSE,
-    include_raw       = FALSE,
-    ...
+  pairs,
+  backend = c("openai", "anthropic", "gemini"),
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  include_thoughts = FALSE,
+  include_raw = FALSE,
+  ...
 ) {
   backend <- match.arg(tolower(backend), c("openai", "anthropic", "gemini"))
 
@@ -135,7 +135,7 @@ llm_submit_pairs_batch <- function(
 
   if (backend == "openai") {
     # Detect GPT-5.1 and requested reasoning
-    is_gpt51  <- grepl("^gpt-5\\.1", model)
+    is_gpt51 <- grepl("^gpt-5\\.1", model)
     reasoning <- if ("reasoning" %in% names(dot_list)) dot_list$reasoning else NULL
 
     # If caller explicitly supplied an endpoint in ..., respect it.
@@ -144,7 +144,7 @@ llm_submit_pairs_batch <- function(
       dot_list$endpoint
     } else {
       if (is_gpt51 && (isTRUE(include_thoughts) ||
-                       (!is.null(reasoning) && !identical(reasoning, "none")))) {
+        (!is.null(reasoning) && !identical(reasoning, "none")))) {
         "responses"
       } else {
         "chat.completions"
@@ -170,9 +170,7 @@ llm_submit_pairs_batch <- function(
         dot_list
       )
     )
-
   } else if (backend == "anthropic") {
-
     out <- run_anthropic_batch_pipeline(
       pairs             = pairs,
       model             = model,
@@ -183,9 +181,7 @@ llm_submit_pairs_batch <- function(
       include_raw       = include_raw,
       ...
     )
-
   } else if (backend == "gemini") {
-
     out <- run_gemini_batch_pipeline(
       pairs             = pairs,
       model             = model,
@@ -207,12 +203,12 @@ llm_submit_pairs_batch <- function(
 
   # Ensure batch paths exist when provided (useful for mocked pipelines in tests)
   if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&
-      !file.exists(out$batch_input_path)) {
+    !file.exists(out$batch_input_path)) {
     file.create(out$batch_input_path)
   }
 
   if (!is.null(out$batch_output_path) && nzchar(out$batch_output_path) &&
-      !file.exists(out$batch_output_path)) {
+    !file.exists(out$batch_output_path)) {
     file.create(out$batch_output_path)
   }
 
@@ -240,7 +236,7 @@ llm_submit_pairs_batch <- function(
 #' @examples
 #' \dontrun{
 #' batch <- llm_submit_pairs_batch(...)
-#' res   <- llm_download_batch_results(batch)
+#' res <- llm_download_batch_results(batch)
 #' }
 #'
 #' @export

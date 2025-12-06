@@ -4,7 +4,7 @@ testthat::test_that("build_gemini_batch_requests builds valid requests", {
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:2, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   batch <- build_gemini_batch_requests(
@@ -75,7 +75,7 @@ testthat::test_that("parse_gemini_batch_output handles succeeded and errored res
   line_err <- list(
     custom_id = "GEM_S03_vs_S04",
     result = list(
-      type  = "errored",
+      type = "errored",
       error = list(
         code    = 400L,
         message = "Validation error",
@@ -85,7 +85,7 @@ testthat::test_that("parse_gemini_batch_output handles succeeded and errored res
   )
 
   json_lines <- c(
-    jsonlite::toJSON(line_ok,  auto_unbox = TRUE),
+    jsonlite::toJSON(line_ok, auto_unbox = TRUE),
     jsonlite::toJSON(line_err, auto_unbox = TRUE)
   )
   writeLines(json_lines, con = tmp, useBytes = TRUE)
@@ -94,8 +94,8 @@ testthat::test_that("parse_gemini_batch_output handles succeeded and errored res
   # custom_id / ID1 / ID2 in the same order as the requests.
   requests_tbl <- tibble::tibble(
     custom_id = c("GEM_S01_vs_S02", "GEM_S03_vs_S04"),
-    ID1       = c("S01",           "S03"),
-    ID2       = c("S02",           "S04")
+    ID1       = c("S01", "S03"),
+    ID2       = c("S02", "S04")
   )
 
   res <- parse_gemini_batch_output(
@@ -117,9 +117,9 @@ testthat::test_that("parse_gemini_batch_output handles succeeded and errored res
   testthat::expect_equal(r1$model, "gemini-3-pro-preview")
   testthat::expect_equal(r1$better_sample, "SAMPLE_2")
   testthat::expect_equal(r1$better_id, "S02")
-  testthat::expect_equal(r1$prompt_tokens,     10)
+  testthat::expect_equal(r1$prompt_tokens, 10)
   testthat::expect_equal(r1$completion_tokens, 5)
-  testthat::expect_equal(r1$total_tokens,      15)
+  testthat::expect_equal(r1$total_tokens, 15)
 
   # Second row: errored
   r2 <- res[2, ]
@@ -201,11 +201,11 @@ testthat::test_that("run_gemini_batch_pipeline works with polling and parsing (m
   )
 
   created_batch_name <- NULL
-  polled_batch_name  <- NULL
+  polled_batch_name <- NULL
   download_batch_obj <- NULL
-  parsed_path        <- NULL
+  parsed_path <- NULL
 
-  td   <- list(name = "Overall quality", description = "Quality")
+  td <- list(name = "Overall quality", description = "Quality")
   tmpl <- set_prompt_template()
 
   testthat::with_mocked_bindings(
@@ -251,7 +251,7 @@ testthat::test_that("run_gemini_batch_pipeline works with polling and parsing (m
       )
 
       testthat::expect_equal(created_batch_name, "batches/123")
-      testthat::expect_equal(polled_batch_name,  "batches/123")
+      testthat::expect_equal(polled_batch_name, "batches/123")
       testthat::expect_identical(download_batch_obj, fake_batch_final)
       testthat::expect_true(file.exists(res$batch_input_path))
       testthat::expect_true(file.exists(res$batch_output_path))
@@ -289,11 +289,11 @@ testthat::test_that("run_gemini_batch_pipeline does not poll or parse when poll 
     metadata = list(state = "JOB_STATE_RUNNING")
   )
 
-  poll_called     <- FALSE
+  poll_called <- FALSE
   download_called <- FALSE
-  parse_called    <- FALSE
+  parse_called <- FALSE
 
-  td   <- list(name = "Overall quality", description = "Quality")
+  td <- list(name = "Overall quality", description = "Quality")
   tmpl <- set_prompt_template()
 
   testthat::with_mocked_bindings(

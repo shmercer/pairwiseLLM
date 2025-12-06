@@ -142,7 +142,7 @@ set_prompt_template <- function(template = NULL,
 #'
 #' @examples
 #' tmpl <- set_prompt_template()
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' prompt <- build_prompt(
 #'   template   = tmpl,
 #'   trait_name = td$name,
@@ -175,10 +175,10 @@ build_prompt <- function(template,
   }
 
   out <- template
-  out <- gsub("{TRAIT_NAME}",        trait_name, out, fixed = TRUE)
-  out <- gsub("{TRAIT_DESCRIPTION}", trait_desc, out,   fixed = TRUE)
-  out <- gsub("{SAMPLE_1}",          text1,      out,   fixed = TRUE)
-  out <- gsub("{SAMPLE_2}",          text2,      out,   fixed = TRUE)
+  out <- gsub("{TRAIT_NAME}", trait_name, out, fixed = TRUE)
+  out <- gsub("{TRAIT_DESCRIPTION}", trait_desc, out, fixed = TRUE)
+  out <- gsub("{SAMPLE_1}", text1, out, fixed = TRUE)
+  out <- gsub("{SAMPLE_2}", text2, out, fixed = TRUE)
 
   out
 }
@@ -235,8 +235,8 @@ build_prompt <- function(template,
 #'
 #' @export
 register_prompt_template <- function(name,
-                                     template  = NULL,
-                                     file      = NULL,
+                                     template = NULL,
+                                     file = NULL,
                                      overwrite = FALSE) {
   if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
     stop("`name` must be a non-empty character scalar.", call. = FALSE)
@@ -246,7 +246,7 @@ register_prompt_template <- function(name,
   tmpl <- set_prompt_template(template = template, file = file)
 
   if (!overwrite &&
-      exists(name, envir = .pwllm_prompt_templates, inherits = FALSE)) {
+    exists(name, envir = .pwllm_prompt_templates, inherits = FALSE)) {
     stop(
       "A prompt template named '", name, "' is already registered. ",
       "Use `overwrite = TRUE` to replace it.",
@@ -337,7 +337,7 @@ get_prompt_template <- function(name = "default") {
 #' list_prompt_templates()
 #'
 #' @export
-list_prompt_templates <- function(include_builtin    = TRUE,
+list_prompt_templates <- function(include_builtin = TRUE,
                                   include_registered = TRUE) {
   out <- character()
 
@@ -403,4 +403,3 @@ remove_prompt_template <- function(name, quiet = FALSE) {
   rm(list = name, envir = .pwllm_prompt_templates)
   invisible(TRUE)
 }
-

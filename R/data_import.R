@@ -20,8 +20,8 @@
 #' @examples
 #' df <- data.frame(
 #'   StudentID = c("S1", "S2"),
-#'   Response  = c("This is sample 1.", "This is sample 2."),
-#'   Grade     = c(8, 9),
+#'   Response = c("This is sample 1.", "This is sample 2."),
+#'   Grade = c(8, 9),
 #'   stringsAsFactors = FALSE
 #' )
 #'
@@ -39,15 +39,15 @@
 #'
 #' @export
 read_samples_df <- function(df,
-                            id_col   = 1,
+                            id_col = 1,
                             text_col = 2) {
   df <- tibble::as_tibble(df)
 
-  id_col   <- tidyselect::vars_pull(names(df), {{ id_col }})
+  id_col <- tidyselect::vars_pull(names(df), {{ id_col }})
   text_col <- tidyselect::vars_pull(names(df), {{ text_col }})
 
   out <- df
-  out$ID   <- as.character(df[[id_col]])
+  out$ID <- as.character(df[[id_col]])
   out$text <- as.character(df[[text_col]])
 
   # Reorder columns: ID, text, then everything else except original ID/text columns

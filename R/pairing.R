@@ -25,7 +25,7 @@
 #' # Using the built-in example data (10 writing samples)
 #' data("example_writing_samples")
 #' pairs_example <- make_pairs(example_writing_samples)
-#' nrow(pairs_example)  # should be choose(10, 2) = 45
+#' nrow(pairs_example) # should be choose(10, 2) = 45
 #'
 #' @export
 make_pairs <- function(samples) {
@@ -35,7 +35,7 @@ make_pairs <- function(samples) {
   }
 
   ids <- as.character(samples$ID)
-  n   <- length(ids)
+  n <- length(ids)
 
   if (n < 2) {
     stop("At least two samples are required to create pairs.", call. = FALSE)
@@ -108,17 +108,19 @@ make_pairs <- function(samples) {
 #' @export
 sample_pairs <- function(pairs,
                          pair_pct = 1,
-                         n_pairs  = NULL,
-                         seed     = NULL) {
+                         n_pairs = NULL,
+                         seed = NULL) {
   pairs <- tibble::as_tibble(pairs)
   n <- nrow(pairs)
-  if (n == 0L) return(pairs)
+  if (n == 0L) {
+    return(pairs)
+  }
 
   if (!is.null(seed)) {
     set.seed(seed)
   }
 
-  pair_pct <- max(min(pair_pct, 1), 0)  # clamp
+  pair_pct <- max(min(pair_pct, 1), 0) # clamp
 
   n_from_pct <- floor(pair_pct * n)
   if (is.null(n_pairs)) {
@@ -166,12 +168,12 @@ sample_pairs <- function(pairs,
 #' @export
 sample_reverse_pairs <- function(pairs,
                                  reverse_pct = NULL,
-                                 n_reverse   = NULL,
-                                 seed        = NULL) {
+                                 n_reverse = NULL,
+                                 seed = NULL) {
   pairs <- tibble::as_tibble(pairs)
 
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols  <- setdiff(required_cols, names(pairs))
+  missing_cols <- setdiff(required_cols, names(pairs))
   if (length(missing_cols) > 0L) {
     stop(
       "`pairs` must contain columns: ",
@@ -187,7 +189,8 @@ sample_reverse_pairs <- function(pairs,
 
   if (is.null(reverse_pct) && is.null(n_reverse)) {
     stop("Provide at least one of `reverse_pct` or `n_reverse`.",
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 
   if (!is.null(seed)) {
@@ -286,7 +289,7 @@ randomize_pair_order <- function(pairs, seed = NULL) {
   pairs <- tibble::as_tibble(pairs)
 
   required <- c("ID1", "text1", "ID2", "text2")
-  missing  <- setdiff(required, names(pairs))
+  missing <- setdiff(required, names(pairs))
   if (length(missing) > 0L) {
     stop(
       "`pairs` must contain columns: ",
@@ -297,12 +300,15 @@ randomize_pair_order <- function(pairs, seed = NULL) {
 
   if (!is.null(seed)) {
     old_seed <- .Random.seed
-    on.exit({
-      # Restore previous RNG state to avoid surprising callers
-      if (exists("old_seed", inherits = FALSE)) {
-        .Random.seed <<- old_seed
-      }
-    }, add = TRUE)
+    on.exit(
+      {
+        # Restore previous RNG state to avoid surprising callers
+        if (exists("old_seed", inherits = FALSE)) {
+          .Random.seed <<- old_seed
+        }
+      },
+      add = TRUE
+    )
 
     set.seed(seed)
   }
@@ -318,13 +324,13 @@ randomize_pair_order <- function(pairs, seed = NULL) {
 
   idx <- which(flip)
   if (length(idx) > 0L) {
-    id1_tmp   <- out$ID1[idx]
+    id1_tmp <- out$ID1[idx]
     text1_tmp <- out$text1[idx]
 
-    out$ID1[idx]   <- out$ID2[idx]
+    out$ID1[idx] <- out$ID2[idx]
     out$text1[idx] <- out$text2[idx]
 
-    out$ID2[idx]   <- id1_tmp
+    out$ID2[idx] <- id1_tmp
     out$text2[idx] <- text1_tmp
   }
 
@@ -363,7 +369,7 @@ alternate_pair_order <- function(pairs) {
   pairs <- tibble::as_tibble(pairs)
 
   required <- c("ID1", "text1", "ID2", "text2")
-  missing  <- setdiff(required, names(pairs))
+  missing <- setdiff(required, names(pairs))
   if (length(missing) > 0L) {
     stop(
       "`pairs` must contain columns: ",
@@ -385,13 +391,13 @@ alternate_pair_order <- function(pairs) {
   idx <- seq.int(from = 2L, to = n, by = 2L)
 
   if (length(idx) > 0L) {
-    id1_tmp   <- out$ID1[idx]
+    id1_tmp <- out$ID1[idx]
     text1_tmp <- out$text1[idx]
 
-    out$ID1[idx]   <- out$ID2[idx]
+    out$ID1[idx] <- out$ID2[idx]
     out$text1[idx] <- out$text2[idx]
 
-    out$ID2[idx]   <- id1_tmp
+    out$ID2[idx] <- id1_tmp
     out$text2[idx] <- text1_tmp
   }
 

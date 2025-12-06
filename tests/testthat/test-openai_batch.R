@@ -4,7 +4,7 @@ test_that("build_openai_batch_requests builds valid chat.completions JSONL objec
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:2, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   batch <- build_openai_batch_requests(
@@ -37,7 +37,7 @@ test_that("write_openai_batch_file writes JSONL file", {
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:2, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   batch <- build_openai_batch_requests(
@@ -69,7 +69,7 @@ test_that("build_openai_batch_requests supports gpt-5.1 with reasoning = 'none' 
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   # For gpt-5.1 + reasoning = "none", temperature/top_p/logprobs are allowed
@@ -108,7 +108,7 @@ test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning != 'none' 
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   expect_error(
@@ -119,7 +119,7 @@ test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning != 'none' 
       trait_description = td$description,
       prompt_template   = tmpl,
       endpoint          = "responses",
-      reasoning         = "low",     # <- not 'none'
+      reasoning         = "low", # <- not 'none'
       temperature       = 0,
       top_p             = 1,
       logprobs          = NULL
@@ -134,7 +134,7 @@ test_that("build_openai_batch_requests errors for other gpt-5* models when temp/
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   # For other gpt-5* models (e.g., gpt-5-mini), temp/top_p/logprobs must be NULL
@@ -161,7 +161,7 @@ test_that("build_openai_batch_requests allows other gpt-5* models with temp/top_
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   batch <- build_openai_batch_requests(
@@ -189,32 +189,32 @@ testthat::test_that("parse_openai_batch_output collects thoughts and message tex
   # Construct a fake batch output line similar to gpt-5.1 responses
   line_obj <- list(
     custom_id = "LIVE_S01_vs_S02",
-    response  = list(
+    response = list(
       status_code = 200L,
       body = list(
-        object   = "response",
-        model    = "gpt-5.1",
+        object = "response",
+        model = "gpt-5.1",
         reasoning = list(
           effort  = "low",
           summary = list(text = "Reasoning summary. ")
         ),
         output = list(
           list(
-            id     = "rs_x",
-            type   = "reasoning",
+            id = "rs_x",
+            type = "reasoning",
             summary = list()
           ),
           list(
-            id      = "msg_x",
-            type    = "message",
-            status  = "completed",
+            id = "msg_x",
+            type = "message",
+            status = "completed",
             content = list(
               list(
                 type = "output_text",
                 text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
               )
             ),
-            role    = "assistant"
+            role = "assistant"
           )
         ),
         usage = list(
@@ -260,9 +260,9 @@ testthat::test_that("parse_openai_batch_output collects thoughts and message tex
   testthat::expect_equal(res$better_id, "S02")
 
   # Token usage
-  testthat::expect_equal(res$prompt_tokens,     10)
+  testthat::expect_equal(res$prompt_tokens, 10)
   testthat::expect_equal(res$completion_tokens, 5)
-  testthat::expect_equal(res$total_tokens,      15)
+  testthat::expect_equal(res$total_tokens, 15)
 })
 
 test_that("build_openai_batch_requests adds reasoning summary when include_thoughts = TRUE", {
@@ -271,7 +271,7 @@ test_that("build_openai_batch_requests adds reasoning summary when include_thoug
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   # include_thoughts = TRUE, reasoning != "none" -> summary = "auto"
@@ -312,4 +312,3 @@ test_that("build_openai_batch_requests adds reasoning summary when include_thoug
   expect_equal(b2$reasoning$effort, "none")
   expect_false("summary" %in% names(b2$reasoning))
 })
-

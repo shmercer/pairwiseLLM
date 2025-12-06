@@ -59,7 +59,7 @@
 #'   sample_pairs(n_pairs = 3, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # Basic chat.completions batch (no thoughts)
@@ -81,7 +81,7 @@
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   endpoint          = "responses",
-#'   include_thoughts  = TRUE    # will set reasoning = "low" by default
+#'   include_thoughts  = TRUE # will set reasoning = "low" by default
 #' )
 #'
 #' batch_tbl_chat
@@ -95,19 +95,21 @@ build_openai_batch_requests <- function(pairs,
                                         trait_name,
                                         trait_description,
                                         prompt_template = set_prompt_template(),
-                                        endpoint        = c("chat.completions",
-                                                            "responses"),
-                                        temperature     = NULL,
-                                        top_p           = NULL,
-                                        logprobs        = NULL,
-                                        reasoning       = NULL,
+                                        endpoint = c(
+                                          "chat.completions",
+                                          "responses"
+                                        ),
+                                        temperature = NULL,
+                                        top_p = NULL,
+                                        logprobs = NULL,
+                                        reasoning = NULL,
                                         include_thoughts = FALSE,
                                         request_id_prefix = "EXP") {
   endpoint <- match.arg(endpoint)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols  <- setdiff(required_cols, names(pairs))
+  missing_cols <- setdiff(required_cols, names(pairs))
   if (length(missing_cols) > 0L) {
     stop(
       "`pairs` must contain columns: ",
@@ -129,7 +131,7 @@ build_openai_batch_requests <- function(pairs,
   # ------------------------------------------------------------------
   # Validate model vs temperature / top_p / logprobs / reasoning
   # ------------------------------------------------------------------
-  is_gpt5  <- grepl("^gpt-5", model)
+  is_gpt5 <- grepl("^gpt-5", model)
   is_gpt51 <- grepl("^gpt-5\\.1", model)
 
   # If user asked for thoughts on responses endpoint but didn't set reasoning,
@@ -176,8 +178,8 @@ build_openai_batch_requests <- function(pairs,
   out_list <- vector("list", n)
 
   for (i in seq_len(n)) {
-    id1  <- as.character(pairs$ID1[i])
-    id2  <- as.character(pairs$ID2[i])
+    id1 <- as.character(pairs$ID1[i])
+    id2 <- as.character(pairs$ID2[i])
     txt1 <- as.character(pairs$text1[i])
     txt2 <- as.character(pairs$text2[i])
 
@@ -193,7 +195,7 @@ build_openai_batch_requests <- function(pairs,
 
     if (endpoint == "chat.completions") {
       body <- list(
-        model    = model,
+        model = model,
         messages = list(
           list(
             role    = "user",
@@ -203,8 +205,8 @@ build_openai_batch_requests <- function(pairs,
       )
 
       if (!is.null(temperature)) body$temperature <- temperature
-      if (!is.null(top_p))       body$top_p       <- top_p
-      if (!is.null(logprobs))    body$logprobs    <- logprobs
+      if (!is.null(top_p)) body$top_p <- top_p
+      if (!is.null(logprobs)) body$logprobs <- logprobs
 
       obj <- list(
         custom_id = custom_id,
@@ -232,8 +234,8 @@ build_openai_batch_requests <- function(pairs,
       }
 
       if (!is.null(temperature)) body$temperature <- temperature
-      if (!is.null(top_p))       body$top_p       <- top_p
-      if (!is.null(logprobs))    body$logprobs    <- logprobs
+      if (!is.null(top_p)) body$top_p <- top_p
+      if (!is.null(logprobs)) body$logprobs <- logprobs
 
       obj <- list(
         custom_id = custom_id,
@@ -278,10 +280,10 @@ build_openai_batch_requests <- function(pairs,
 #' @examples
 #' \dontrun{
 #' data("example_writing_samples")
-#' pairs_all   <- make_pairs(example_writing_samples)
+#' pairs_all <- make_pairs(example_writing_samples)
 #' pairs_small <- sample_pairs(pairs_all, n_pairs = 5, seed = 1)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' batch_tbl <- build_openai_batch_requests(
@@ -309,7 +311,7 @@ write_openai_batch_file <- function(batch_tbl, path) {
   } else {
     # Otherwise, construct JSONL from custom_id / method / url / body
     required_cols <- c("custom_id", "method", "url", "body")
-    missing_cols  <- setdiff(required_cols, names(batch_tbl))
+    missing_cols <- setdiff(required_cols, names(batch_tbl))
     if (length(missing_cols) > 0L) {
       stop(
         "`batch_tbl` must have either a `jsonl` column or columns: ",

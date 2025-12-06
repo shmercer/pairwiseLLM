@@ -43,7 +43,7 @@ testthat::test_that("openai_poll_batch_until_complete succeeds after several pol
     {
       res <- openai_poll_batch_until_complete(
         batch_id         = "batch_123",
-        interval_seconds = 0,   # no sleep in tests
+        interval_seconds = 0, # no sleep in tests
         timeout_seconds  = 60,
         max_attempts     = 5,
         verbose          = FALSE
@@ -67,7 +67,7 @@ testthat::test_that("openai_poll_batch_until_complete stops at max_attempts", {
       testthat::expect_error(
         openai_poll_batch_until_complete(
           batch_id         = "batch_123",
-          interval_seconds = 0,   # avoid sleeping in tests
+          interval_seconds = 0, # avoid sleeping in tests
           timeout_seconds  = 60,
           max_attempts     = 3,
           verbose          = FALSE

@@ -7,13 +7,13 @@ testthat::test_that("run_openai_batch_pipeline works with polling and parsing", 
   )
 
   fake_batch_tbl <- tibble::tibble(jsonl = '{"dummy": true}')
-  fake_file      <- list(id = "file_123")
-  fake_batch     <- list(
+  fake_file <- list(id = "file_123")
+  fake_batch <- list(
     id             = "batch_123",
     status         = "completed",
     output_file_id = "file_out_123"
   )
-  fake_results   <- tibble::tibble(ID1 = "S01", ID2 = "S02", better_id = "S01")
+  fake_results <- tibble::tibble(ID1 = "S01", ID2 = "S02", better_id = "S01")
 
   # capture the endpoint used for openai_create_batch
   used_endpoint <- NULL
@@ -53,7 +53,7 @@ testthat::test_that("run_openai_batch_pipeline works with polling and parsing", 
       fake_results
     },
     {
-      td   <- list(name = "Overall quality", description = "Quality")
+      td <- list(name = "Overall quality", description = "Quality")
       tmpl <- set_prompt_template()
 
       res <- run_openai_batch_pipeline(
@@ -86,12 +86,12 @@ testthat::test_that("run_openai_batch_pipeline does not poll or parse when poll 
   )
 
   fake_batch_tbl <- tibble::tibble(jsonl = '{"dummy": true}')
-  fake_file      <- list(id = "file_123")
-  fake_batch     <- list(id = "batch_123", status = "queued")
+  fake_file <- list(id = "file_123")
+  fake_batch <- list(id = "batch_123", status = "queued")
 
-  poll_called    <- FALSE
+  poll_called <- FALSE
   download_called <- FALSE
-  parse_called    <- FALSE
+  parse_called <- FALSE
 
   testthat::with_mocked_bindings(
     build_openai_batch_requests = function(pairs, model, trait_name,
@@ -105,7 +105,9 @@ testthat::test_that("run_openai_batch_pipeline does not poll or parse when poll 
     },
     openai_upload_batch_file = function(path, api_key) fake_file,
     openai_create_batch = function(input_file_id, endpoint, completion_window,
-                                   metadata, api_key) fake_batch,
+                                   metadata, api_key) {
+      fake_batch
+    },
     openai_poll_batch_until_complete = function(batch_id, interval_seconds,
                                                 timeout_seconds, max_attempts,
                                                 api_key, verbose) {
@@ -121,7 +123,7 @@ testthat::test_that("run_openai_batch_pipeline does not poll or parse when poll 
       stop("parse should not be called when poll = FALSE")
     },
     {
-      td   <- list(name = "Overall quality", description = "Quality")
+      td <- list(name = "Overall quality", description = "Quality")
       tmpl <- set_prompt_template()
 
       res <- run_openai_batch_pipeline(

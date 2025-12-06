@@ -51,14 +51,12 @@ trait_description <- function(name = c("overall_quality", "organization"),
   # Built-in traits
   name <- match.arg(name)
 
-  trait_name <- switch(
-    name,
+  trait_name <- switch(name,
     overall_quality = "Overall Quality",
     organization    = "Organization"
   )
 
-  trait_desc <- switch(
-    name,
+  trait_desc <- switch(name,
     overall_quality =
       "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are.",
     organization =

@@ -76,37 +76,37 @@ NULL
 #'
 #' @export
 openai_compare_pair_live <- function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    endpoint        = c("chat.completions", "responses"),
-    tag_prefix      = "<BETTER_SAMPLE>",
-    tag_suffix      = "</BETTER_SAMPLE>",
-    api_key         = Sys.getenv("OPENAI_API_KEY"),
-    include_raw     = FALSE,
-    ...
+  ID1,
+  text1,
+  ID2,
+  text2,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  endpoint = c("chat.completions", "responses"),
+  tag_prefix = "<BETTER_SAMPLE>",
+  tag_suffix = "</BETTER_SAMPLE>",
+  api_key = Sys.getenv("OPENAI_API_KEY"),
+  include_raw = FALSE,
+  ...
 ) {
   endpoint <- match.arg(endpoint)
 
-  if (!is.character(ID1)  || length(ID1)  != 1L) stop("`ID1` must be a single character.",  call. = FALSE)
-  if (!is.character(ID2)  || length(ID2)  != 1L) stop("`ID2` must be a single character.",  call. = FALSE)
+  if (!is.character(ID1) || length(ID1) != 1L) stop("`ID1` must be a single character.", call. = FALSE)
+  if (!is.character(ID2) || length(ID2) != 1L) stop("`ID2` must be a single character.", call. = FALSE)
   if (!is.character(text1) || length(text1) != 1L) stop("`text1` must be a single character.", call. = FALSE)
   if (!is.character(text2) || length(text2) != 1L) stop("`text2` must be a single character.", call. = FALSE)
   if (!is.character(model) || length(model) != 1L) stop("`model` must be a single character.", call. = FALSE)
 
-  dots             <- list(...)
-  temperature      <- dots$temperature      %||% NULL
-  top_p            <- dots$top_p            %||% NULL
-  logprobs         <- dots$logprobs         %||% NULL
-  reasoning_effort <- dots$reasoning        %||% NULL
+  dots <- list(...)
+  temperature <- dots$temperature %||% NULL
+  top_p <- dots$top_p %||% NULL
+  logprobs <- dots$logprobs %||% NULL
+  reasoning_effort <- dots$reasoning %||% NULL
   include_thoughts <- dots$include_thoughts %||% FALSE
 
-  is_gpt5  <- grepl("^gpt-5", model)
+  is_gpt5 <- grepl("^gpt-5", model)
   is_gpt51 <- grepl("^gpt-5\\.1", model)
 
   if (is_gpt51) {
@@ -139,7 +139,7 @@ openai_compare_pair_live <- function(
 
   if (endpoint == "chat.completions") {
     body <- list(
-      model    = model,
+      model = model,
       messages = list(
         list(
           role    = "user",
@@ -148,8 +148,8 @@ openai_compare_pair_live <- function(
       )
     )
     if (!is.null(temperature)) body$temperature <- temperature
-    if (!is.null(top_p))       body$top_p       <- top_p
-    if (!is.null(logprobs))    body$logprobs    <- logprobs
+    if (!is.null(top_p)) body$top_p <- top_p
+    if (!is.null(logprobs)) body$logprobs <- logprobs
 
     path <- "/chat/completions"
   } else {
@@ -169,8 +169,8 @@ openai_compare_pair_live <- function(
     }
 
     if (!is.null(temperature)) body$temperature <- temperature
-    if (!is.null(top_p))       body$top_p       <- top_p
-    if (!is.null(logprobs))    body$logprobs    <- logprobs
+    if (!is.null(top_p)) body$top_p <- top_p
+    if (!is.null(logprobs)) body$logprobs <- logprobs
 
     path <- "/responses"
   }
@@ -180,7 +180,7 @@ openai_compare_pair_live <- function(
 
   resp <- req_perform(req)
 
-  status_code   <- resp_status(resp)
+  status_code <- resp_status(resp)
   error_message <- NA_character_
 
   body_parsed <- tryCatch(
@@ -214,12 +214,12 @@ openai_compare_pair_live <- function(
     return(res)
   }
 
-  body        <- body_parsed
+  body <- body_parsed
   object_type <- body$object %||% NA_character_
-  model_name  <- body$model  %||% NA_character_
+  model_name <- body$model %||% NA_character_
 
   thoughts <- NA_character_
-  content  <- NA_character_
+  content <- NA_character_
 
   if (identical(object_type, "chat.completion")) {
     choices <- body$choices %||% list()
@@ -233,7 +233,7 @@ openai_compare_pair_live <- function(
     # /v1/responses: collect reasoning summaries (if any) into `thoughts`
     # and visible assistant text into `content`.
     reasoning_chunks <- character(0)
-    message_chunks   <- character(0)
+    message_chunks <- character(0)
 
     output <- body$output %||% list()
     if (length(output) > 0L) {
@@ -280,9 +280,8 @@ openai_compare_pair_live <- function(
     # that shape. If summary is a character scalar (e.g. "auto"/"detailed"),
     # treat it as configuration and ignore it for thoughts.
     if (!length(reasoning_chunks) &&
-        !is.null(body$reasoning) &&
-        !is.null(body$reasoning$summary)) {
-
+      !is.null(body$reasoning) &&
+      !is.null(body$reasoning$summary)) {
       rs <- body$reasoning$summary
 
       if (is.list(rs) && !is.null(rs$text)) {
@@ -320,9 +319,9 @@ openai_compare_pair_live <- function(
   }
 
   usage <- body$usage %||% list()
-  prompt_tokens     <- usage$prompt_tokens     %||% usage$input_tokens   %||% NA_real_
-  completion_tokens <- usage$completion_tokens %||% usage$output_tokens  %||% NA_real_
-  total_tokens      <- usage$total_tokens      %||% NA_real_
+  prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
+  completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
+  total_tokens <- usage$total_tokens %||% NA_real_
 
   res <- tibble::tibble(
     custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
@@ -397,7 +396,7 @@ openai_compare_pair_live <- function(
 #'   sample_pairs(n_pairs = 5, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
-#' td   <- trait_description("overall_quality")
+#' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
 #' # Live comparisons for multiple pairs
@@ -440,24 +439,24 @@ openai_compare_pair_live <- function(
 #'
 #' @export
 submit_openai_pairs_live <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    endpoint        = c("chat.completions", "responses"),
-    api_key         = Sys.getenv("OPENAI_API_KEY"),
-    verbose         = TRUE,
-    status_every    = 1,
-    progress        = TRUE,
-    include_raw     = FALSE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  endpoint = c("chat.completions", "responses"),
+  api_key = Sys.getenv("OPENAI_API_KEY"),
+  verbose = TRUE,
+  status_every = 1,
+  progress = TRUE,
+  include_raw = FALSE,
+  ...
 ) {
   endpoint <- match.arg(endpoint)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols  <- setdiff(required_cols, names(pairs))
+  missing_cols <- setdiff(required_cols, names(pairs))
 
   if (length(missing_cols) > 0L) {
     stop(
@@ -547,11 +546,10 @@ submit_openai_pairs_live <- function(
         "    WARNING: API Error (status %s): %s",
         res$status_code, res$error_message
       ))
-
     } else if (show_status) {
       elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-      avg     <- elapsed / i
-      remain  <- n - i
+      avg <- elapsed / i
+      remain <- n - i
       est_rem <- avg * remain
 
       message(sprintf(
@@ -588,4 +586,3 @@ submit_openai_pairs_live <- function(
 
   dplyr::bind_rows(out)
 }
-

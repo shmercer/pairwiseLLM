@@ -8,11 +8,11 @@
 # ---------------------------------------------------------------------
 
 testthat::test_that("llm_compare_pair uses default backend and endpoint", {
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  ID1   <- "S01"
-  ID2   <- "S02"
+  ID1 <- "S01"
+  ID2 <- "S02"
   text1 <- "Text 1"
   text2 <- "Text 2"
 
@@ -37,18 +37,18 @@ testthat::test_that("llm_compare_pair uses default backend and endpoint", {
 
   testthat::with_mocked_bindings(
     openai_compare_pair_live = function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    endpoint,
-    api_key,
-    include_raw,
-    ...
+      ID1,
+      text1,
+      ID2,
+      text2,
+      model,
+      trait_name,
+      trait_description,
+      prompt_template,
+      endpoint,
+      api_key,
+      include_raw,
+      ...
     ) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
@@ -105,45 +105,45 @@ testthat::test_that("submit_llm_pairs uses default backend and endpoint", {
     text2 = c("Text 2", "Text 4")
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   fake_res <- tibble::tibble(
-    custom_id         = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
-    ID1               = pairs$ID1,
-    ID2               = pairs$ID2,
-    model             = "gpt-4.1",
-    object_type       = "chat.completion",
-    status_code       = c(200L, 200L),
-    error_message     = c(NA_character_, NA_character_),
-    thoughts          = c(NA_character_, NA_character_),
-    content           = c(
+    custom_id = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
+    ID1 = pairs$ID1,
+    ID2 = pairs$ID2,
+    model = "gpt-4.1",
+    object_type = "chat.completion",
+    status_code = c(200L, 200L),
+    error_message = c(NA_character_, NA_character_),
+    thoughts = c(NA_character_, NA_character_),
+    content = c(
       "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
       "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
     ),
-    better_sample     = c("SAMPLE_1", "SAMPLE_2"),
-    better_id         = c("S01", "S04"),
-    prompt_tokens     = c(10, 11),
+    better_sample = c("SAMPLE_1", "SAMPLE_2"),
+    better_id = c("S01", "S04"),
+    prompt_tokens = c(10, 11),
     completion_tokens = c(5, 6),
-    total_tokens      = c(15, 17)
+    total_tokens = c(15, 17)
   )
 
   calls <- list()
 
   testthat::with_mocked_bindings(
     submit_openai_pairs_live = function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    endpoint,
-    api_key,
-    verbose,
-    status_every,
-    progress,
-    include_raw,
-    ...
+      pairs,
+      model,
+      trait_name,
+      trait_description,
+      prompt_template,
+      endpoint,
+      api_key,
+      verbose,
+      status_every,
+      progress,
+      include_raw,
+      ...
     ) {
       calls <<- append(calls, list(list(
         pairs             = pairs,
@@ -195,11 +195,11 @@ testthat::test_that("submit_llm_pairs uses default backend and endpoint", {
 # ---------------------------------------------------------------------
 
 testthat::test_that("llm_compare_pair routes to anthropic backend", {
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  ID1   <- "S01"
-  ID2   <- "S02"
+  ID1 <- "S01"
+  ID2 <- "S02"
   text1 <- "Text 1"
   text2 <- "Text 2"
 
@@ -224,17 +224,17 @@ testthat::test_that("llm_compare_pair routes to anthropic backend", {
 
   testthat::with_mocked_bindings(
     anthropic_compare_pair_live = function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    api_key,
-    include_raw,
-    ...
+      ID1,
+      text1,
+      ID2,
+      text2,
+      model,
+      trait_name,
+      trait_description,
+      prompt_template,
+      api_key,
+      include_raw,
+      ...
     ) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
@@ -288,11 +288,11 @@ testthat::test_that("llm_compare_pair routes to anthropic backend", {
 })
 
 testthat::test_that("llm_compare_pair uses Anthropic env var when api_key is NULL", {
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  ID1   <- "S01"
-  ID2   <- "S02"
+  ID1 <- "S01"
+  ID2 <- "S02"
   text1 <- "Text 1"
   text2 <- "Text 2"
 
@@ -320,17 +320,17 @@ testthat::test_that("llm_compare_pair uses Anthropic env var when api_key is NUL
 
   testthat::with_mocked_bindings(
     anthropic_compare_pair_live = function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    api_key,
-    include_raw,
-    ...
+      ID1,
+      text1,
+      ID2,
+      text2,
+      model,
+      trait_name,
+      trait_description,
+      prompt_template,
+      api_key,
+      include_raw,
+      ...
     ) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
@@ -377,44 +377,44 @@ testthat::test_that("submit_llm_pairs routes to anthropic backend", {
     text2 = c("Text 2", "Text 4")
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   fake_res <- tibble::tibble(
-    custom_id         = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
-    ID1               = pairs$ID1,
-    ID2               = pairs$ID2,
-    model             = "claude-3-5-sonnet-latest",
-    object_type       = "message",
-    status_code       = c(200L, 200L),
-    error_message     = c(NA_character_, NA_character_),
-    thoughts          = c("Thoughts 1", "Thoughts 2"),
-    content           = c(
+    custom_id = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
+    ID1 = pairs$ID1,
+    ID2 = pairs$ID2,
+    model = "claude-3-5-sonnet-latest",
+    object_type = "message",
+    status_code = c(200L, 200L),
+    error_message = c(NA_character_, NA_character_),
+    thoughts = c("Thoughts 1", "Thoughts 2"),
+    content = c(
       "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
       "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
     ),
-    better_sample     = c("SAMPLE_1", "SAMPLE_2"),
-    better_id         = c("S01", "S04"),
-    prompt_tokens     = c(20, 22),
+    better_sample = c("SAMPLE_1", "SAMPLE_2"),
+    better_id = c("S01", "S04"),
+    prompt_tokens = c(20, 22),
     completion_tokens = c(10, 12),
-    total_tokens      = c(30, 34)
+    total_tokens = c(30, 34)
   )
 
   calls <- list()
 
   testthat::with_mocked_bindings(
     submit_anthropic_pairs_live = function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    api_key,
-    verbose,
-    status_every,
-    progress,
-    include_raw,
-    ...
+      pairs,
+      model,
+      trait_name,
+      trait_description,
+      prompt_template,
+      api_key,
+      verbose,
+      status_every,
+      progress,
+      include_raw,
+      ...
     ) {
       calls <<- append(calls, list(list(
         pairs             = pairs,
@@ -468,11 +468,11 @@ testthat::test_that("submit_llm_pairs routes to anthropic backend", {
 # ---------------------------------------------------------------------
 
 testthat::test_that("llm_compare_pair routes to gemini backend", {
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  ID1   <- "S01"
-  ID2   <- "S02"
+  ID1 <- "S01"
+  ID2 <- "S02"
   text1 <- "Text 1"
   text2 <- "Text 2"
 
@@ -497,17 +497,17 @@ testthat::test_that("llm_compare_pair routes to gemini backend", {
 
   testthat::with_mocked_bindings(
     gemini_compare_pair_live = function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    api_key,
-    include_raw,
-    ...
+      ID1,
+      text1,
+      ID2,
+      text2,
+      model,
+      trait_name,
+      trait_description,
+      prompt_template,
+      api_key,
+      include_raw,
+      ...
     ) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
@@ -567,44 +567,44 @@ testthat::test_that("submit_llm_pairs routes to gemini backend", {
     text2 = c("Text 2", "Text 4")
   )
 
-  td   <- trait_description("overall_quality")
+  td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   fake_res <- tibble::tibble(
-    custom_id         = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
-    ID1               = pairs$ID1,
-    ID2               = pairs$ID2,
-    model             = "gemini-2.0-pro-exp",
-    object_type       = "generateContent",
-    status_code       = c(200L, 200L),
-    error_message     = c(NA_character_, NA_character_),
-    thoughts          = c("Gemini thoughts 1", "Gemini thoughts 2"),
-    content           = c(
+    custom_id = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
+    ID1 = pairs$ID1,
+    ID2 = pairs$ID2,
+    model = "gemini-2.0-pro-exp",
+    object_type = "generateContent",
+    status_code = c(200L, 200L),
+    error_message = c(NA_character_, NA_character_),
+    thoughts = c("Gemini thoughts 1", "Gemini thoughts 2"),
+    content = c(
       "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
       "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
     ),
-    better_sample     = c("SAMPLE_1", "SAMPLE_2"),
-    better_id         = c("S01", "S04"),
-    prompt_tokens     = c(30, 32),
+    better_sample = c("SAMPLE_1", "SAMPLE_2"),
+    better_id = c("S01", "S04"),
+    prompt_tokens = c(30, 32),
     completion_tokens = c(15, 17),
-    total_tokens      = c(45, 49)
+    total_tokens = c(45, 49)
   )
 
   calls <- list()
 
   testthat::with_mocked_bindings(
     submit_gemini_pairs_live = function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    api_key,
-    verbose,
-    status_every,
-    progress,
-    include_raw,
-    ...
+      pairs,
+      model,
+      trait_name,
+      trait_description,
+      prompt_template,
+      api_key,
+      verbose,
+      status_every,
+      progress,
+      include_raw,
+      ...
     ) {
       calls <<- append(calls, list(list(
         pairs             = pairs,

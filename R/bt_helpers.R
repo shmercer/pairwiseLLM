@@ -64,8 +64,8 @@ summarize_bt_fit <- function(fit, decreasing = TRUE) {
   reliability <- if (!is.null(fit$reliability)) fit$reliability else NA_real_
 
   # Modify the existing tibble rather than calling tibble()
-  theta$rank        <- rank_vec
-  theta$engine      <- engine
+  theta$rank <- rank_vec
+  theta$engine <- engine
   theta$reliability <- reliability
 
   theta

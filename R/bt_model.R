@@ -140,7 +140,6 @@ build_bt_data <- function(results) {
 fit_bt_model <- function(bt_data,
                          engine = c("auto", "sirt", "BradleyTerry2"),
                          ...) {
-
   bt_data <- as.data.frame(bt_data)
   if (ncol(bt_data) != 3L) {
     stop("`bt_data` must have exactly three columns.", call. = FALSE)
@@ -238,7 +237,7 @@ fit_bt_model <- function(bt_data,
       engine      = "BradleyTerry2",
       fit         = fit,
       theta       = theta,
-      reliability = NA_real_   # BTm does not report this
+      reliability = NA_real_ # BTm does not report this
     )
   }
 

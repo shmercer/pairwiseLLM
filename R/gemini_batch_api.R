@@ -12,11 +12,11 @@
 #'
 #' @keywords internal
 .parse_gemini_pair_response <- function(
-    custom_id,
-    ID1,
-    ID2,
-    response,
-    include_thoughts = FALSE
+  custom_id,
+  ID1,
+  ID2,
+  response,
+  include_thoughts = FALSE
 ) {
   # Safe %||%
   `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
@@ -32,7 +32,7 @@
   }
   # And that response can be a length-1 array
   if (is.list(resp) && is.null(resp$candidates) && length(resp) == 1L &&
-      is.list(resp[[1]]) && !is.null(resp[[1]]$candidates)) {
+    is.list(resp[[1]]) && !is.null(resp[[1]]$candidates)) {
     resp <- resp[[1]]
   }
 
@@ -64,10 +64,14 @@
   # -------------------------------------------------------------------
   get_first_candidate <- function(x) {
     cands <- x$candidates
-    if (is.null(cands)) return(NULL)
+    if (is.null(cands)) {
+      return(NULL)
+    }
 
     if (is.data.frame(cands)) {
-      if (nrow(cands) == 0L) return(NULL)
+      if (nrow(cands) == 0L) {
+        return(NULL)
+      }
       cand <- lapply(cands[1, , drop = FALSE], function(v) {
         if (is.list(v) && length(v) == 1L) v[[1]] else v
       })
@@ -82,7 +86,9 @@
   }
 
   get_parts_list <- function(content_obj) {
-    if (is.null(content_obj)) return(list())
+    if (is.null(content_obj)) {
+      return(list())
+    }
 
     if (is.data.frame(content_obj)) {
       if ("parts" %in% names(content_obj)) {
@@ -110,7 +116,9 @@
   }
 
   get_part_text <- function(p) {
-    if (is.null(p)) return("")
+    if (is.null(p)) {
+      return("")
+    }
     if (is.list(p) && !is.data.frame(p) && !is.null(p$text)) {
       return(as.character(p$text %||% ""))
     }
@@ -124,7 +132,9 @@
   }
 
   get_part_thought_signature <- function(p) {
-    if (is.null(p)) return(NA_character_)
+    if (is.null(p)) {
+      return(NA_character_)
+    }
     if (is.list(p) && !is.data.frame(p) && !is.null(p$thoughtSignature)) {
       return(as.character(p$thoughtSignature %||% NA_character_))
     }
@@ -135,43 +145,57 @@
   }
 
   find_named <- function(x, name) {
-    if (!is.list(x)) return(NULL)
-    if (!is.null(x[[name]])) return(x[[name]])
+    if (!is.list(x)) {
+      return(NULL)
+    }
+    if (!is.null(x[[name]])) {
+      return(x[[name]])
+    }
     for (el in x) {
       if (is.list(el)) {
         found <- find_named(el, name)
-        if (!is.null(found)) return(found)
+        if (!is.null(found)) {
+          return(found)
+        }
       }
     }
     NULL
   }
 
   as_num_scalar <- function(x) {
-    if (is.null(x)) return(NA_real_)
+    if (is.null(x)) {
+      return(NA_real_)
+    }
     v <- suppressWarnings(as.numeric(unlist(x, recursive = TRUE, use.names = FALSE)))
-    if (!length(v)) return(NA_real_)
+    if (!length(v)) {
+      return(NA_real_)
+    }
     v[1]
   }
 
   as_chr_scalar <- function(x) {
-    if (is.null(x)) return(NA_character_)
+    if (is.null(x)) {
+      return(NA_character_)
+    }
     v <- as.character(unlist(x, recursive = TRUE, use.names = FALSE))
-    if (!length(v)) return(NA_character_)
+    if (!length(v)) {
+      return(NA_character_)
+    }
     v[1]
   }
 
   # -------------------------------------------------------------------
   # Extract thoughts + content
   # -------------------------------------------------------------------
-  cand  <- get_first_candidate(resp)
+  cand <- get_first_candidate(resp)
   parts <- list()
   if (!is.null(cand) && !is.null(cand$content)) {
     parts <- get_parts_list(cand$content)
   }
 
-  thoughts          <- NA_character_
+  thoughts <- NA_character_
   thought_signature <- NA_character_
-  content           <- NA_character_
+  content <- NA_character_
 
   if (length(parts) > 0L) {
     # First part may carry a thoughtSignature in batch mode
@@ -179,12 +203,12 @@
 
     if (isTRUE(include_thoughts) && length(parts) >= 2L) {
       # Live-style: first part = thoughts, rest = content
-      t_text  <- get_part_text(parts[[1]])
+      t_text <- get_part_text(parts[[1]])
       c_texts <- vapply(parts[-1], get_part_text, FUN.VALUE = character(1L))
       c_texts <- c_texts[nzchar(c_texts)]
 
       thoughts <- if (nzchar(t_text)) t_text else NA_character_
-      content  <- if (length(c_texts)) paste(c_texts, collapse = "") else NA_character_
+      content <- if (length(c_texts)) paste(c_texts, collapse = "") else NA_character_
     } else {
       # Default / batch-style: collapse everything into content
       c_texts <- vapply(parts, get_part_text, FUN.VALUE = character(1L))
@@ -215,14 +239,14 @@
   # -------------------------------------------------------------------
   usage_obj <- find_named(resp, "usageMetadata")
 
-  prompt_tokens_raw         <- if (!is.null(usage_obj)) find_named(usage_obj, "promptTokenCount")       else NULL
-  completion_tokens_raw     <- if (!is.null(usage_obj)) find_named(usage_obj, "candidatesTokenCount")   else NULL
-  total_tokens_raw          <- if (!is.null(usage_obj)) find_named(usage_obj, "totalTokenCount")        else NULL
-  thoughts_token_count_raw  <- if (!is.null(usage_obj)) find_named(usage_obj, "thoughtsTokenCount")     else NULL
+  prompt_tokens_raw <- if (!is.null(usage_obj)) find_named(usage_obj, "promptTokenCount") else NULL
+  completion_tokens_raw <- if (!is.null(usage_obj)) find_named(usage_obj, "candidatesTokenCount") else NULL
+  total_tokens_raw <- if (!is.null(usage_obj)) find_named(usage_obj, "totalTokenCount") else NULL
+  thoughts_token_count_raw <- if (!is.null(usage_obj)) find_named(usage_obj, "thoughtsTokenCount") else NULL
 
-  prompt_tokens        <- as_num_scalar(prompt_tokens_raw)
-  completion_tokens    <- as_num_scalar(completion_tokens_raw)
-  total_tokens         <- as_num_scalar(total_tokens_raw)
+  prompt_tokens <- as_num_scalar(prompt_tokens_raw)
+  completion_tokens <- as_num_scalar(completion_tokens_raw)
+  total_tokens <- as_num_scalar(total_tokens_raw)
   thoughts_token_count <- as_num_scalar(thoughts_token_count_raw)
 
   # Prefer modelVersion if present; fall back to model
@@ -303,25 +327,25 @@
 #'
 #' @export
 build_gemini_batch_requests <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    thinking_level  = c("low", "medium", "high"),
-    custom_id_prefix = "GEM",
-    temperature       = NULL,
-    top_p             = NULL,
-    top_k             = NULL,
-    max_output_tokens = NULL,
-    include_thoughts  = FALSE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  thinking_level = c("low", "medium", "high"),
+  custom_id_prefix = "GEM",
+  temperature = NULL,
+  top_p = NULL,
+  top_k = NULL,
+  max_output_tokens = NULL,
+  include_thoughts = FALSE,
+  ...
 ) {
   thinking_level <- match.arg(thinking_level)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols  <- setdiff(required_cols, names(pairs))
+  missing_cols <- setdiff(required_cols, names(pairs))
 
   if (length(missing_cols) > 0L) {
     stop(
@@ -388,7 +412,7 @@ build_gemini_batch_requests <- function(
     list(
       contents = list(
         list(
-          role  = "user",
+          role = "user",
           parts = list(
             list(text = prompt)
           )
@@ -402,13 +426,13 @@ build_gemini_batch_requests <- function(
   custom_ids <- character(nrow(pairs))
 
   for (i in seq_len(nrow(pairs))) {
-    ID1   <- as.character(pairs$ID1[i])
+    ID1 <- as.character(pairs$ID1[i])
     text1 <- as.character(pairs$text1[i])
-    ID2   <- as.character(pairs$ID2[i])
+    ID2 <- as.character(pairs$ID2[i])
     text2 <- as.character(pairs$text2[i])
 
     custom_ids[i] <- sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
-    out[[i]]      <- get_request_for_pair(ID1, text1, ID2, text2)
+    out[[i]] <- get_request_for_pair(ID1, text1, ID2, text2)
   }
 
   tibble::tibble(
@@ -445,11 +469,11 @@ build_gemini_batch_requests <- function(
 #'
 #' @export
 gemini_create_batch <- function(
-    requests,
-    model,
-    api_key     = Sys.getenv("GEMINI_API_KEY"),
-    api_version = "v1beta",
-    display_name = NULL
+  requests,
+  model,
+  api_key = Sys.getenv("GEMINI_API_KEY"),
+  api_version = "v1beta",
+  display_name = NULL
 ) {
   if (!is.list(requests) || length(requests) == 0L) {
     stop("`requests` must be a non-empty list of request objects.", call. = FALSE)
@@ -507,9 +531,9 @@ gemini_create_batch <- function(
 #'
 #' @export
 gemini_get_batch <- function(
-    batch_name,
-    api_key     = Sys.getenv("GEMINI_API_KEY"),
-    api_version = "v1beta"
+  batch_name,
+  api_key = Sys.getenv("GEMINI_API_KEY"),
+  api_version = "v1beta"
 ) {
   if (!is.character(batch_name) || length(batch_name) != 1L || !nzchar(batch_name)) {
     stop("`batch_name` must be a non-empty character scalar.", call. = FALSE)
@@ -517,7 +541,7 @@ gemini_get_batch <- function(
 
   path <- sprintf("/%s/%s", api_version, batch_name)
 
-  req  <- .gemini_request(path = path, api_key = api_key)
+  req <- .gemini_request(path = path, api_key = api_key)
   resp <- .gemini_req_perform(req)
 
   .gemini_resp_body_json(resp, simplifyVector = TRUE)
@@ -543,12 +567,12 @@ gemini_get_batch <- function(
 #'
 #' @export
 gemini_poll_batch_until_complete <- function(
-    batch_name,
-    interval_seconds = 60,
-    timeout_seconds  = 86400,
-    api_key          = Sys.getenv("GEMINI_API_KEY"),
-    api_version      = "v1beta",
-    verbose          = TRUE
+  batch_name,
+  interval_seconds = 60,
+  timeout_seconds = 86400,
+  api_key = Sys.getenv("GEMINI_API_KEY"),
+  api_version = "v1beta",
+  verbose = TRUE
 ) {
   if (!is.character(batch_name) || length(batch_name) != 1L || !nzchar(batch_name)) {
     stop("`batch_name` must be a non-empty character scalar.", call. = FALSE)
@@ -567,7 +591,7 @@ gemini_poll_batch_until_complete <- function(
   repeat {
     batch <- gemini_get_batch(
       batch_name = batch_name,
-      api_key    = api_key,
+      api_key = api_key,
       api_version = api_version
     )
     last_batch <- batch
@@ -644,25 +668,26 @@ gemini_poll_batch_until_complete <- function(
 #' @return Invisibly returns \code{output_path}.
 #' @export
 gemini_download_batch_results <- function(
-    batch,
-    requests_tbl,
-    output_path,
-    api_key     = Sys.getenv("GEMINI_API_KEY"),
-    api_version = "v1beta"
+  batch,
+  requests_tbl,
+  output_path,
+  api_key = Sys.getenv("GEMINI_API_KEY"),
+  api_version = "v1beta"
 ) {
   # Allow passing either the batch object or its name
   if (is.character(batch) && length(batch) == 1L) {
     batch <- gemini_get_batch(
       batch_name = batch,
-      api_key    = api_key,
+      api_key = api_key,
       api_version = api_version
     )
   }
 
   if (!inherits(requests_tbl, "data.frame") ||
-      !"custom_id" %in% names(requests_tbl)) {
+    !"custom_id" %in% names(requests_tbl)) {
     stop("`requests_tbl` must be a tibble/data frame with a `custom_id` column.",
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 
   # ---------------------------------------------------------------------------
@@ -714,7 +739,7 @@ gemini_download_batch_results <- function(
 
   n_res <- nrow(resp_df)
   n_req <- nrow(requests_tbl)
-  n     <- min(n_req, n_res)
+  n <- min(n_req, n_res)
 
   if (n_req != n_res) {
     warning(
@@ -782,9 +807,9 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
   }
 
   if (!inherits(requests_tbl, "data.frame") ||
-      !"custom_id" %in% names(requests_tbl) ||
-      !"ID1" %in% names(requests_tbl) ||
-      !"ID2" %in% names(requests_tbl)) {
+    !"custom_id" %in% names(requests_tbl) ||
+    !"ID1" %in% names(requests_tbl) ||
+    !"ID2" %in% names(requests_tbl)) {
     stop(
       "`requests_tbl` must be a data frame with columns `custom_id`, `ID1`, and `ID2`.",
       call. = FALSE
@@ -833,7 +858,7 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
           list(
             custom_id = NULL,
             result = list(
-              type  = "errored",
+              type = "errored",
               error = list(
                 message = paste("Failed to parse JSON line:", conditionMessage(e))
               )
@@ -845,7 +870,7 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
   )
 
   # Build lookup from custom_id -> row index in requests_tbl
-  req_ids  <- as.character(requests_tbl$custom_id)
+  req_ids <- as.character(requests_tbl$custom_id)
   line_ids <- vapply(
     objs,
     function(o) as.character(o$custom_id %||% NA_character_),
@@ -858,9 +883,9 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
   rows <- vector("list", length(objs))
 
   for (i in seq_along(objs)) {
-    obj       <- objs[[i]]
+    obj <- objs[[i]]
     custom_id <- obj$custom_id %||% NA_character_
-    result    <- obj$result %||% list()
+    result <- obj$result %||% list()
     result_ty <- result$type %||% NA_character_
 
     idx <- matches[i]
@@ -872,8 +897,8 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     if (!is.na(idx) && has_request_col) {
       req_obj <- requests_tbl$request[[idx]]
       if (!is.null(req_obj$generationConfig) &&
-          !is.null(req_obj$generationConfig$thinkingConfig) &&
-          !is.null(req_obj$generationConfig$thinkingConfig$includeThoughts)) {
+        !is.null(req_obj$generationConfig$thinkingConfig) &&
+        !is.null(req_obj$generationConfig$thinkingConfig$includeThoughts)) {
         include_thoughts <- isTRUE(req_obj$generationConfig$thinkingConfig$includeThoughts)
       }
     }
@@ -890,7 +915,6 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
       )
       row$result_type <- result_ty
       rows[[i]] <- row
-
     } else if (identical(result_ty, "errored")) {
       err <- result$error %||% list()
       error_msg <- err$message %||% NA_character_
@@ -914,7 +938,6 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
         completion_tokens    = NA_real_,
         total_tokens         = NA_real_
       )
-
     } else {
       rows[[i]] <- tibble::tibble(
         custom_id            = custom_id,
@@ -997,22 +1020,22 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #'
 #' @export
 run_gemini_batch_pipeline <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template  = set_prompt_template(),
-    thinking_level   = c("low", "medium", "high"),
-    batch_input_path  = tempfile(pattern = "gemini-batch-input-",  fileext = ".json"),
-    batch_output_path = tempfile(pattern = "gemini-batch-output-", fileext = ".jsonl"),
-    poll              = TRUE,
-    interval_seconds  = 60,
-    timeout_seconds   = 86400,
-    api_key           = Sys.getenv("GEMINI_API_KEY"),
-    api_version       = "v1beta",
-    verbose           = TRUE,
-    include_thoughts  = FALSE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  thinking_level = c("low", "medium", "high"),
+  batch_input_path = tempfile(pattern = "gemini-batch-input-", fileext = ".json"),
+  batch_output_path = tempfile(pattern = "gemini-batch-output-", fileext = ".jsonl"),
+  poll = TRUE,
+  interval_seconds = 60,
+  timeout_seconds = 86400,
+  api_key = Sys.getenv("GEMINI_API_KEY"),
+  api_version = "v1beta",
+  verbose = TRUE,
+  include_thoughts = FALSE,
+  ...
 ) {
   thinking_level <- match.arg(thinking_level)
 
@@ -1032,8 +1055,8 @@ run_gemini_batch_pipeline <- function(
     requests = lapply(seq_len(nrow(req_tbl)), function(i) {
       list(
         custom_id = req_tbl$custom_id[i],
-        ID1       = req_tbl$ID1[i],    # <-- ADD THIS
-        ID2       = req_tbl$ID2[i],    # <-- ADD THIS
+        ID1       = req_tbl$ID1[i], # <-- ADD THIS
+        ID2       = req_tbl$ID2[i], # <-- ADD THIS
         request   = req_tbl$request[[i]]
       )
     })
@@ -1075,18 +1098,22 @@ run_gemini_batch_pipeline <- function(
     message("Polling Gemini batch until completion...")
   }
 
-  batch_name <- if (!is.null(batch$name)) batch$name else stop(
-    "Gemini batch response did not contain a `name` field.",
-    call. = FALSE
-  )
+  batch_name <- if (!is.null(batch$name)) {
+    batch$name
+  } else {
+    stop(
+      "Gemini batch response did not contain a `name` field.",
+      call. = FALSE
+    )
+  }
 
   final_batch <- gemini_poll_batch_until_complete(
-    batch_name      = batch_name,
+    batch_name = batch_name,
     interval_seconds = interval_seconds,
-    timeout_seconds  = timeout_seconds,
-    api_key          = api_key,
-    api_version      = api_version,
-    verbose          = verbose
+    timeout_seconds = timeout_seconds,
+    api_key = api_key,
+    api_version = api_version,
+    verbose = verbose
   )
 
   gemini_download_batch_results(

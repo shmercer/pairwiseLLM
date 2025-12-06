@@ -56,7 +56,7 @@ test_that("summarize_bt_fit works with BradleyTerry2 engine as well", {
 })
 
 test_that("summarize_bt_fit errors cleanly on malformed input", {
-  bad_fit1 <- list()  # no theta
+  bad_fit1 <- list() # no theta
   expect_error(
     summarize_bt_fit(bad_fit1)
   )

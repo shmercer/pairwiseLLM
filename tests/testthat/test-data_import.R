@@ -1,15 +1,15 @@
 test_that("read_samples_df extracts ID and text correctly with column names", {
   df <- data.frame(
     StudentID = c("S1", "S2"),
-    Response  = c("Text 1", "Text 2"),
-    Grade     = c(8, 9),
+    Response = c("Text 1", "Text 2"),
+    Grade = c(8, 9),
     stringsAsFactors = FALSE
   )
 
   samples <- read_samples_df(df, id_col = "StudentID", text_col = "Response")
 
   expect_s3_class(samples, "tbl_df")
-  expect_equal(samples$ID,   c("S1", "S2"))
+  expect_equal(samples$ID, c("S1", "S2"))
   expect_equal(samples$text, c("Text 1", "Text 2"))
   expect_true("Grade" %in% names(samples))
   expect_equal(samples$Grade, c(8, 9))
@@ -18,34 +18,34 @@ test_that("read_samples_df extracts ID and text correctly with column names", {
 
 test_that("read_samples_df works with numeric column indices", {
   df <- data.frame(
-    ID_col   = c("A", "B"),
+    ID_col = c("A", "B"),
     Text_col = c("Sample A", "Sample B"),
     stringsAsFactors = FALSE
   )
 
   samples <- read_samples_df(df, id_col = 1, text_col = 2)
 
-  expect_equal(samples$ID,   c("A", "B"))
+  expect_equal(samples$ID, c("A", "B"))
   expect_equal(samples$text, c("Sample A", "Sample B"))
 })
 
 test_that("read_samples_df coerces IDs and text to character", {
   df <- data.frame(
-    ID_num   = c(101, 102),
+    ID_num = c(101, 102),
     Text_fac = factor(c("Fac 1", "Fac 2")),
     stringsAsFactors = FALSE
   )
 
   samples <- read_samples_df(df, id_col = "ID_num", text_col = "Text_fac")
 
-  expect_type(samples$ID,   "character")
+  expect_type(samples$ID, "character")
   expect_type(samples$text, "character")
 })
 
 test_that("read_samples_df enforces unique IDs", {
   df_dup <- data.frame(
     StudentID = c("S1", "S1"),
-    Response  = c("Text 1", "Text 2"),
+    Response = c("Text 1", "Text 2"),
     stringsAsFactors = FALSE
   )
 
@@ -58,7 +58,7 @@ test_that("read_samples_df enforces unique IDs", {
 test_that("read_samples_df errors when id_col or text_col is invalid", {
   df <- data.frame(
     StudentID = c("S1", "S2"),
-    Response  = c("Text 1", "Text 2"),
+    Response = c("Text 1", "Text 2"),
     stringsAsFactors = FALSE
   )
 

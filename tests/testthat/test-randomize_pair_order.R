@@ -14,7 +14,7 @@ test_that("randomize_pair_order errors if required columns are missing", {
 test_that("randomize_pair_order preserves unordered ID pairs", {
   data("example_writing_samples", package = "pairwiseLLM")
 
-  pairs_all   <- make_pairs(example_writing_samples)
+  pairs_all <- make_pairs(example_writing_samples)
   pairs_small <- pairs_all[1:10, ]
 
   set.seed(123)
@@ -26,7 +26,7 @@ test_that("randomize_pair_order preserves unordered ID pairs", {
   # For each row, the *set* of IDs is unchanged (only order may differ)
   for (i in seq_len(nrow(pairs_small))) {
     orig_ids <- sort(c(pairs_small$ID1[i], pairs_small$ID2[i]))
-    rand_ids <- sort(c(pairs_rand$ID1[i],  pairs_rand$ID2[i]))
+    rand_ids <- sort(c(pairs_rand$ID1[i], pairs_rand$ID2[i]))
     expect_equal(orig_ids, rand_ids)
   }
 })
@@ -34,7 +34,7 @@ test_that("randomize_pair_order preserves unordered ID pairs", {
 test_that("randomize_pair_order uses seed for reproducibility", {
   data("example_writing_samples", package = "pairwiseLLM")
 
-  pairs_all   <- make_pairs(example_writing_samples)
+  pairs_all <- make_pairs(example_writing_samples)
   pairs_small <- pairs_all[1:20, ]
 
   out1 <- randomize_pair_order(pairs_small, seed = 999)
@@ -46,7 +46,7 @@ test_that("randomize_pair_order uses seed for reproducibility", {
 test_that("randomize_pair_order flips at least one pair when n > 1", {
   data("example_writing_samples", package = "pairwiseLLM")
 
-  pairs_all   <- make_pairs(example_writing_samples)
+  pairs_all <- make_pairs(example_writing_samples)
   pairs_small <- pairs_all[1:20, ]
 
   set.seed(42)
@@ -63,7 +63,7 @@ test_that("randomize_pair_order flips at least one pair when n > 1", {
 test_that("randomize_pair_order keeps text consistent with IDs", {
   data("example_writing_samples", package = "pairwiseLLM")
 
-  pairs_all   <- make_pairs(example_writing_samples)
+  pairs_all <- make_pairs(example_writing_samples)
   pairs_small <- pairs_all[1:15, ]
 
   # Map from ID -> text to verify alignment

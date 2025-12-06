@@ -119,24 +119,24 @@
 #'
 #' @export
 gemini_compare_pair_live <- function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template   = set_prompt_template(),
-    api_key           = Sys.getenv("GEMINI_API_KEY"),
-    thinking_level    = c("low", "medium", "high"),
-    temperature       = NULL,
-    top_p             = NULL,
-    top_k             = NULL,
-    max_output_tokens = NULL,
-    api_version       = "v1beta",
-    include_raw       = FALSE,
-    include_thoughts  = FALSE,
-    ...
+  ID1,
+  text1,
+  ID2,
+  text2,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  api_key = Sys.getenv("GEMINI_API_KEY"),
+  thinking_level = c("low", "medium", "high"),
+  temperature = NULL,
+  top_p = NULL,
+  top_k = NULL,
+  max_output_tokens = NULL,
+  api_version = "v1beta",
+  include_raw = FALSE,
+  include_thoughts = FALSE,
+  ...
 ) {
   # Basic validation / normalisation
   if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
@@ -154,8 +154,8 @@ gemini_compare_pair_live <- function(
     )
   }
 
-  ID1   <- as.character(ID1)
-  ID2   <- as.character(ID2)
+  ID1 <- as.character(ID1)
+  ID2 <- as.character(ID2)
   text1 <- as.character(text1)
   text2 <- as.character(text2)
 
@@ -213,7 +213,7 @@ gemini_compare_pair_live <- function(
   body <- list(
     contents = list(
       list(
-        role  = "user",
+        role = "user",
         parts = list(
           list(text = prompt)
         )
@@ -231,15 +231,15 @@ gemini_compare_pair_live <- function(
   req <- .gemini_request(path = path, api_key = api_key)
   req <- .gemini_req_body_json(req, body = body)
 
-  resp          <- NULL
-  body_parsed   <- NULL
-  status_code   <- NA_integer_
+  resp <- NULL
+  body_parsed <- NULL
+  status_code <- NA_integer_
   error_message <- NA_character_
 
   # Perform request; capture any HTTP/httr2 error so we can return a row
   tryCatch(
     {
-      resp        <- .gemini_req_perform(req)
+      resp <- .gemini_req_perform(req)
       status_code <- .gemini_resp_status(resp)
       body_parsed <- .gemini_resp_body_json(resp, simplifyVector = FALSE)
     },
@@ -297,15 +297,15 @@ gemini_compare_pair_live <- function(
   # ---------------------------------------------------------------------------
 
   object_type <- "generateContent"
-  model_name  <- body_parsed$model %||% model
+  model_name <- body_parsed$model %||% model
 
   thoughts <- NA_character_
-  content  <- NA_character_
+  content <- NA_character_
 
   candidates <- body_parsed$candidates %||% list()
   if (length(candidates) > 0L) {
-    first   <- candidates[[1]]
-    cont    <- first$content %||% list()
+    first <- candidates[[1]]
+    cont <- first$content %||% list()
     if (length(cont) > 0L) {
       parts <- cont$parts %||% cont
       if (is.list(parts) && length(parts) > 0L) {
@@ -359,9 +359,9 @@ gemini_compare_pair_live <- function(
   }
 
   usage <- body_parsed$usageMetadata %||% list()
-  prompt_tokens     <- usage$promptTokenCount     %||% NA_real_
+  prompt_tokens <- usage$promptTokenCount %||% NA_real_
   completion_tokens <- usage$candidatesTokenCount %||% NA_real_
-  total_tokens      <- usage$totalTokenCount      %||% NA_real_
+  total_tokens <- usage$totalTokenCount %||% NA_real_
 
   res <- tibble::tibble(
     custom_id         = custom_id,
@@ -427,28 +427,28 @@ gemini_compare_pair_live <- function(
 #' @return A tibble of results (one row per pair).
 #' @export
 submit_gemini_pairs_live <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template   = set_prompt_template(),
-    api_key           = Sys.getenv("GEMINI_API_KEY"),
-    thinking_level    = c("low", "medium", "high"),
-    temperature       = NULL,
-    top_p             = NULL,
-    top_k             = NULL,
-    max_output_tokens = NULL,
-    api_version       = "v1beta",
-    verbose           = TRUE,
-    status_every      = 1L,
-    progress          = TRUE,
-    include_raw       = FALSE,
-    include_thoughts  = FALSE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  api_key = Sys.getenv("GEMINI_API_KEY"),
+  thinking_level = c("low", "medium", "high"),
+  temperature = NULL,
+  top_p = NULL,
+  top_k = NULL,
+  max_output_tokens = NULL,
+  api_version = "v1beta",
+  verbose = TRUE,
+  status_every = 1L,
+  progress = TRUE,
+  include_raw = FALSE,
+  include_thoughts = FALSE,
+  ...
 ) {
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols  <- setdiff(required_cols, names(pairs))
+  missing_cols <- setdiff(required_cols, names(pairs))
 
   if (length(missing_cols) > 0L) {
     stop(
@@ -544,8 +544,8 @@ submit_gemini_pairs_live <- function(
     }
 
     if (show_status) {
-      elapsed   <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-      avg       <- elapsed / i
+      elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+      avg <- elapsed / i
       remaining <- avg * (n - i)
       message(sprintf(
         "  Elapsed: %s | Avg per pair: %s | Est. remaining: %s",
@@ -560,4 +560,3 @@ submit_gemini_pairs_live <- function(
 
   dplyr::bind_rows(out)
 }
-
