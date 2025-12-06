@@ -205,19 +205,19 @@ ollama_compare_pair_live <- function(
   )
 
   # Base request helper
-  req <- httr2::request(host) |>
+  req <- request(host) |>
     httr2::req_url_path_append("api", "generate") |>
-    httr2::req_body_json(body) |>
+    req_body_json(body) |>
     # Don't throw on non-200; we want to inspect the body
     httr2::req_error(is_error = function(resp) FALSE)
 
-  resp <- httr2::req_perform(req)
+  resp <- req_perform(req)
 
-  status_code <- httr2::resp_status(resp)
+  status_code <- resp_status(resp)
   error_message <- NA_character_
 
   body_parsed <- tryCatch(
-    httr2::resp_body_json(resp, simplifyVector = FALSE),
+    resp_body_json(resp, simplifyVector = FALSE),
     error = function(e) NULL
   )
 
@@ -258,12 +258,14 @@ ollama_compare_pair_live <- function(
   # Extract better_sample and better_id from tag in content
   better_sample <- NA_character_
   if (!is.na(content)) {
-    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix),
+    if (grepl(
+      paste0(tag_prefix, "SAMPLE_1", tag_suffix),
       content,
       fixed = TRUE
     )) {
       better_sample <- "SAMPLE_1"
-    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix),
+    } else if (grepl(
+      paste0(tag_prefix, "SAMPLE_2", tag_suffix),
       content,
       fixed = TRUE
     )) {
@@ -562,14 +564,15 @@ submit_ollama_pairs_live <- function(
         res$status_code, res$error_message
       ))
     } else if (show_status) {
-      elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+      elapsed <- as.numeric(difftime(Sys.time(), start_time,
+        units = "secs"
+      ))
       avg <- elapsed / i
       remain <- n - i
       est_rem <- avg * remain
 
       message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s,
-        total=%s",
+        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
         res$better_id,
         res$better_sample,
         res$prompt_tokens,
