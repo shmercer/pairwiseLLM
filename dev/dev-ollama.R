@@ -29,7 +29,7 @@ pairs <- example_writing_samples |>
 
 print(pairs)
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 # Helper to print a compact summary of results
@@ -57,7 +57,7 @@ res_mistral <- submit_llm_pairs(
   status_every      = 1,
   progress          = TRUE,
   include_raw       = FALSE,
-  think             = FALSE,        # not used by mistral
+  think             = FALSE, # not used by mistral
   num_ctx           = 8192
 )
 
@@ -82,7 +82,7 @@ res_qwen_det <- submit_llm_pairs(
   status_every      = 1,
   progress          = TRUE,
   include_raw       = FALSE,
-  think             = FALSE,        # temperature = 0
+  think             = FALSE, # temperature = 0
   num_ctx           = 8192
 )
 
@@ -107,7 +107,7 @@ res_qwen_think <- submit_llm_pairs(
   status_every      = 1,
   progress          = TRUE,
   include_raw       = FALSE,
-  think             = TRUE,         # triggers temperature = 0.6
+  think             = TRUE, # triggers temperature = 0.6
   num_ctx           = 8192
 )
 
@@ -132,7 +132,7 @@ res_gemma <- submit_llm_pairs(
   status_every      = 1,
   progress          = TRUE,
   include_raw       = FALSE,
-  think             = FALSE,        # not used by gemma
+  think             = FALSE, # not used by gemma
   num_ctx           = 8192
 )
 
