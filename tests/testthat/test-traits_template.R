@@ -19,11 +19,12 @@ test_that("trait_description returns built-in name and description", {
   expect_true(grepl("quality", overall$name, ignore.case = TRUE))
   expect_true(grepl("overall", overall$description, ignore.case = TRUE))
 
-  expect_true(grepl("organ", org$name, ignore.case = TRUE)) # organization / organized
-  expect_true(grepl("organ", org$description, ignore.case = TRUE)) # organization of writing, etc.
+  expect_true(grepl("organ", org$name, ignore.case = TRUE))
+  expect_true(grepl("organ", org$description, ignore.case = TRUE))
 })
 
-test_that("trait_description returns custom name and description when provided", {
+test_that("trait_description returns custom name and description
+          when provided", {
   custom_text <- "Clarity of argument and ideas."
   out <- trait_description(
     custom_name        = "Clarity",
@@ -43,7 +44,8 @@ test_that("trait_description errors on invalid name when no custom text", {
   )
 })
 
-test_that("set_prompt_template returns a default template with required placeholders", {
+test_that("set_prompt_template returns a default template with required
+          placeholders", {
   tmpl <- set_prompt_template()
 
   expect_type(tmpl, "character")
@@ -180,7 +182,8 @@ test_that("build_prompt works end-to-end with example_writing_samples", {
 # New tests for txt-based built-in templates + registry API
 # -------------------------------------------------------------------------
 
-test_that("default template is loaded from inst/templates via get_prompt_template", {
+test_that("default template is loaded from inst/templates via
+          get_prompt_template", {
   tmpl1 <- set_prompt_template()
   tmpl2 <- get_prompt_template("default")
 
@@ -194,7 +197,8 @@ test_that("default template is loaded from inst/templates via get_prompt_templat
   expect_true(grepl("{SAMPLE_2}", tmpl2, fixed = TRUE))
 })
 
-test_that("list_prompt_templates includes built-in default from inst/templates", {
+test_that("list_prompt_templates includes built-in default from
+          inst/templates", {
   all_names <- list_prompt_templates(
     include_builtin    = TRUE,
     include_registered = FALSE
@@ -203,7 +207,8 @@ test_that("list_prompt_templates includes built-in default from inst/templates",
   expect_true("default" %in% all_names)
 })
 
-test_that("list_prompt_templates respects include_builtin and include_registered flags", {
+test_that("list_prompt_templates respects include_builtin and
+          include_registered flags", {
   # Clear registry to avoid interference from other tests
   rm(
     list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
@@ -269,7 +274,8 @@ Definition: {TRAIT_DESCRIPTION}
   expect_identical(tmpl, custom_tmpl)
 })
 
-test_that("register_prompt_template can read from file and validates placeholders", {
+test_that("register_prompt_template can read from file and validates
+          placeholders", {
   # Clear registry
   rm(
     list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
@@ -366,7 +372,8 @@ test_that("get_prompt_template errors on unknown name", {
   )
 })
 
-test_that("remove_prompt_template removes only registered templates, not built-ins", {
+test_that("remove_prompt_template removes only registered templates,
+          not built-ins", {
   # Clear registry
   rm(
     list = ls(envir = .pwllm_prompt_templates, all.names = TRUE),
@@ -374,7 +381,8 @@ test_that("remove_prompt_template removes only registered templates, not built-i
   )
 
   custom_tmpl <- "
-Registered for removal {TRAIT_NAME}, {TRAIT_DESCRIPTION}, {SAMPLE_1}, {SAMPLE_2}.
+Registered for removal {TRAIT_NAME}, {TRAIT_DESCRIPTION},
+{SAMPLE_1}, {SAMPLE_2}.
 "
   register_prompt_template("to_remove", template = custom_tmpl)
 

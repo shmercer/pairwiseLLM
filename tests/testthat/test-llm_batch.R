@@ -44,7 +44,8 @@ test_that("llm_submit_pairs_batch validates pairs and model", {
   )
 })
 
-test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", {
+test_that("llm_submit_pairs_batch dispatches to the correct backend
+          pipelines", {
   pairs <- tibble::tibble(
     ID1   = c("S01", "S02"),
     text1 = c("Text 1a", "Text 2a"),
@@ -60,8 +61,14 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
   gemini_calls <- list()
 
   fake_batch_return <- function(backend_name) {
-    input_path <- tempfile(pattern = paste0("input_", backend_name, "_"), fileext = ".jsonl")
-    output_path <- tempfile(pattern = paste0("output_", backend_name, "_"), fileext = ".jsonl")
+    input_path <- tempfile(
+      pattern = paste0("input_", backend_name, "_"),
+      fileext = ".jsonl"
+    )
+    output_path <- tempfile(
+      pattern = paste0("output_", backend_name, "_"),
+      fileext = ".jsonl"
+    )
 
     # Create the files so file.exists() expectations pass
     file.create(input_path)
@@ -92,25 +99,23 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
   }
 
   testthat::with_mocked_bindings(
-    run_openai_batch_pipeline = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      endpoint = c("chat.completions", "responses"),
-      batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
-      batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
-      poll = TRUE,
-      interval_seconds = 5,
-      timeout_seconds = 600,
-      max_attempts = Inf,
-      metadata = NULL,
-      api_key = Sys.getenv("OPENAI_API_KEY"),
-      include_thoughts = FALSE,
-      include_raw = FALSE,
-      ...
-    ) {
+    run_openai_batch_pipeline = function(pairs,
+                                         model,
+                                         trait_name,
+                                         trait_description,
+                                         prompt_template,
+                                         endpoint = c("chat.completions", "responses"),
+                                         batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
+                                         batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+                                         poll = TRUE,
+                                         interval_seconds = 5,
+                                         timeout_seconds = 600,
+                                         max_attempts = Inf,
+                                         metadata = NULL,
+                                         api_key = Sys.getenv("OPENAI_API_KEY"),
+                                         include_thoughts = FALSE,
+                                         include_raw = FALSE,
+                                         ...) {
       openai_calls <<- append(openai_calls, list(
         list(
           model             = model,
@@ -122,16 +127,14 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
       ))
       fake_batch_return("openai")
     },
-    run_anthropic_batch_pipeline = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      include_thoughts = FALSE,
-      include_raw = FALSE,
-      ...
-    ) {
+    run_anthropic_batch_pipeline = function(pairs,
+                                            model,
+                                            trait_name,
+                                            trait_description,
+                                            prompt_template,
+                                            include_thoughts = FALSE,
+                                            include_raw = FALSE,
+                                            ...) {
       anthropic_calls <<- append(anthropic_calls, list(
         list(
           model             = model,
@@ -143,16 +146,14 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
       ))
       fake_batch_return("anthropic")
     },
-    run_gemini_batch_pipeline = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      include_thoughts = FALSE,
-      include_raw = FALSE,
-      ...
-    ) {
+    run_gemini_batch_pipeline = function(pairs,
+                                         model,
+                                         trait_name,
+                                         trait_description,
+                                         prompt_template,
+                                         include_thoughts = FALSE,
+                                         include_raw = FALSE,
+                                         ...) {
       gemini_calls <<- append(gemini_calls, list(
         list(
           model             = model,
@@ -218,7 +219,8 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
   )
 })
 
-test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for gpt-5.1 with thoughts or reasoning", {
+test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for
+          gpt-5.1 with thoughts or reasoning", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1a",
@@ -232,8 +234,14 @@ test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for gpt-5.1 
   endpoints <- list()
 
   fake_batch_return <- function(endpoint_value) {
-    input_path <- tempfile(pattern = paste0("input_", endpoint_value, "_"), fileext = ".jsonl")
-    output_path <- tempfile(pattern = paste0("output_", endpoint_value, "_"), fileext = ".jsonl")
+    input_path <- tempfile(
+      pattern = paste0("input_", endpoint_value, "_"),
+      fileext = ".jsonl"
+    )
+    output_path <- tempfile(
+      pattern = paste0("output_", endpoint_value, "_"),
+      fileext = ".jsonl"
+    )
     file.create(input_path)
     file.create(output_path)
     list(
@@ -260,25 +268,23 @@ test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for gpt-5.1 
   }
 
   testthat::with_mocked_bindings(
-    run_openai_batch_pipeline = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      endpoint = c("chat.completions", "responses"),
-      batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
-      batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
-      poll = TRUE,
-      interval_seconds = 5,
-      timeout_seconds = 600,
-      max_attempts = Inf,
-      metadata = NULL,
-      api_key = Sys.getenv("OPENAI_API_KEY"),
-      include_thoughts = FALSE,
-      include_raw = FALSE,
-      ...
-    ) {
+    run_openai_batch_pipeline = function(pairs,
+                                         model,
+                                         trait_name,
+                                         trait_description,
+                                         prompt_template,
+                                         endpoint = c("chat.completions", "responses"),
+                                         batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
+                                         batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+                                         poll = TRUE,
+                                         interval_seconds = 5,
+                                         timeout_seconds = 600,
+                                         max_attempts = Inf,
+                                         metadata = NULL,
+                                         api_key = Sys.getenv("OPENAI_API_KEY"),
+                                         include_thoughts = FALSE,
+                                         include_raw = FALSE,
+                                         ...) {
       endpoints <<- append(endpoints, list(endpoint))
       fake_batch_return(endpoint)
     },
@@ -296,7 +302,8 @@ test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for gpt-5.1 
 
       expect_s3_class(batch_resp, "pairwiseLLM_batch")
 
-      # 2) gpt-5.1 with include_thoughts = FALSE and reasoning = "none" -> chat.completions
+      # 2) gpt-5.1 with include_thoughts = FALSE and reasoning = "none" ->
+      # chat.completions
       batch_chat <- llm_submit_pairs_batch(
         pairs             = pairs,
         backend           = "openai",
@@ -313,7 +320,8 @@ test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for gpt-5.1 
       expect_equal(length(endpoints), 2L)
       # First call (with thoughts) should use responses
       expect_equal(endpoints[[1]], "responses")
-      # Second call (no thoughts, reasoning = "none") should use chat.completions
+      # Second call (no thoughts, reasoning = "none") should use
+      # chat.completions
       expect_equal(endpoints[[2]], "chat.completions")
     }
   )

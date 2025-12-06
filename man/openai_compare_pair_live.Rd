@@ -70,20 +70,23 @@ A tibble with one row and columns:
 \item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
 \item{ID1, ID2}{The sample IDs you supplied.}
 \item{model}{Model name reported by the API.}
-\item{object_type}{OpenAI object type (for example "chat.completion" or "response").}
+\item{object_type}{OpenAI object type (for example "chat.completion" or
+"response").}
 \item{status_code}{HTTP-style status code (200 if successful).}
 \item{error_message}{Error message if something goes wrong; otherwise NA.}
-\item{thoughts}{Reasoning / thinking summary text when available, otherwise NA.}
-\item{content}{Concatenated text from the assistant's visible output. For the
-Responses endpoint this is taken from the \code{type = "message"} output
-items and does not include reasoning summaries.}
+\item{thoughts}{Reasoning / thinking summary text when available,
+otherwise NA.}
+\item{content}{Concatenated text from the assistant's visible output. For
+the Responses endpoint this is taken from the \code{type = "message"}
+output items and does not include reasoning summaries.}
 \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
 otherwise NA.}
 \item{prompt_tokens}{Prompt / input token count (if reported).}
 \item{completion_tokens}{Completion / output token count (if reported).}
 \item{total_tokens}{Total token count (if reported).}
-\item{raw_response}{(Optional) list-column containing the parsed JSON body.}
+\item{raw_response}{(Optional) list-column containing the parsed JSON
+body.}
 }
 }
 \description{

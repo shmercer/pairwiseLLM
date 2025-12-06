@@ -1,6 +1,7 @@
 # tests/testthat/test-gemini_live.R
 
-test_that("gemini_compare_pair_live parses a successful response without thoughts", {
+test_that("gemini_compare_pair_live parses a successful response without
+          thoughts", {
   skip_if_not_installed("httr2")
 
   ns <- asNamespace("pairwiseLLM")
@@ -65,7 +66,9 @@ test_that("gemini_compare_pair_live parses a successful response without thought
   # Without include_thoughts, everything is collapsed into content
   expect_true(is.na(res$thoughts))
   expect_true(grepl("Some internal text", res$content, fixed = TRUE))
-  expect_true(grepl("<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>", res$content, fixed = TRUE))
+  expect_true(grepl("<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>", res$content,
+    fixed = TRUE
+  ))
 
   expect_equal(res$better_sample, "SAMPLE_1")
   expect_equal(res$better_id, "S01")
@@ -79,7 +82,8 @@ test_that("gemini_compare_pair_live parses a successful response without thought
   expect_identical(res$raw_response[[1]], fake_body)
 })
 
-test_that("gemini_compare_pair_live parses thoughts and content when include_thoughts = TRUE", {
+test_that("gemini_compare_pair_live parses thoughts and content when
+          include_thoughts = TRUE", {
   skip_if_not_installed("httr2")
 
   ns <- asNamespace("pairwiseLLM")
@@ -142,7 +146,8 @@ test_that("gemini_compare_pair_live parses thoughts and content when include_tho
   expect_true(is.na(res$total_tokens))
 })
 
-test_that("gemini_compare_pair_live handles responses without <BETTER_SAMPLE> tag", {
+test_that("gemini_compare_pair_live handles responses without
+          <BETTER_SAMPLE> tag", {
   skip_if_not_installed("httr2")
 
   ns <- asNamespace("pairwiseLLM")
@@ -190,7 +195,8 @@ test_that("gemini_compare_pair_live handles responses without <BETTER_SAMPLE> ta
   expect_true(is.na(res$better_id))
 })
 
-test_that("gemini_compare_pair_live returns an error row when request fails", {
+test_that("gemini_compare_pair_live returns an error row when
+          request fails", {
   skip_if_not_installed("httr2")
 
   ns <- asNamespace("pairwiseLLM")
@@ -231,7 +237,8 @@ test_that("gemini_compare_pair_live returns an error row when request fails", {
   expect_match(res$error_message, "HTTP 500", fixed = FALSE)
 })
 
-test_that("gemini_compare_pair_live validates model and maps thinking_level medium to High", {
+test_that("gemini_compare_pair_live validates model and maps thinking_level
+          medium to High", {
   skip_if_not_installed("httr2")
 
   ns <- asNamespace("pairwiseLLM")
@@ -319,7 +326,8 @@ test_that("gemini_compare_pair_live validates model and maps thinking_level medi
   )
 })
 
-test_that("submit_gemini_pairs_live validates inputs and handles zero-row pairs", {
+test_that("submit_gemini_pairs_live validates inputs and handles
+          zero-row pairs", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -371,7 +379,8 @@ test_that("submit_gemini_pairs_live validates inputs and handles zero-row pairs"
   )
 })
 
-test_that("submit_gemini_pairs_live calls gemini_compare_pair_live for each row and passes include_thoughts", {
+test_that("submit_gemini_pairs_live calls gemini_compare_pair_live for
+          each row and passes include_thoughts", {
   ns <- asNamespace("pairwiseLLM")
 
   pairs <- tibble::tibble(
@@ -403,20 +412,24 @@ test_that("submit_gemini_pairs_live calls gemini_compare_pair_live for each row 
     ))
 
     tibble::tibble(
-      custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
-      ID1               = ID1,
-      ID2               = ID2,
-      model             = model,
-      object_type       = "generateContent",
-      status_code       = 200L,
-      error_message     = NA_character_,
-      thoughts          = if (isTRUE(include_thoughts)) "fake thoughts" else NA_character_,
-      content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-      better_sample     = "SAMPLE_1",
-      better_id         = ID1,
-      prompt_tokens     = 10,
+      custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+      ID1 = ID1,
+      ID2 = ID2,
+      model = model,
+      object_type = "generateContent",
+      status_code = 200L,
+      error_message = NA_character_,
+      thoughts = if (isTRUE(include_thoughts)) {
+        "fake thoughts"
+      } else {
+        NA_character_
+      },
+      content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+      better_sample = "SAMPLE_1",
+      better_id = ID1,
+      prompt_tokens = 10,
       completion_tokens = 2,
-      total_tokens      = 12
+      total_tokens = 12
     )
   }
 

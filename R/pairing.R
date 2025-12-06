@@ -205,7 +205,8 @@ sample_reverse_pairs <- function(pairs,
     }
   } else {
     # Use reverse_pct
-    if (!is.numeric(reverse_pct) || length(reverse_pct) != 1L || is.na(reverse_pct)) {
+    if (!is.numeric(reverse_pct) || length(reverse_pct) != 1L ||
+      is.na(reverse_pct)) {
       stop("`reverse_pct` must be a single numeric value.", call. = FALSE)
     }
 

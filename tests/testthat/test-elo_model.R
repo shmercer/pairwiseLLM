@@ -111,7 +111,8 @@ test_that("fit_elo_model fits an Elo model when EloChoice is available", {
   expect_type(fit$elo$ID, "character")
   expect_type(fit$elo$elo, "double")
 
-  # Reliability indices: numeric scalars (may be NA if EloChoice returns no data)
+  # Reliability indices: numeric scalars (may be NA if EloChoice
+  # returns no data)
   expect_true(is.numeric(fit$reliability))
   expect_equal(length(fit$reliability), 1L)
 

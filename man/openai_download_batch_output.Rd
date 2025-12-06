@@ -21,8 +21,8 @@ openai_download_batch_output(
 Invisibly, the path to the downloaded file.
 }
 \description{
-Given a batch ID, retrieves the batch metadata, extracts the \code{output_file_id},
-and downloads the corresponding file content to \code{path}.
+Given a batch ID, retrieves the batch metadata, extracts the
+\code{output_file_id}, and downloads the corresponding file content to \code{path}.
 }
 \examples{
 \dontrun{

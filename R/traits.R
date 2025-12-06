@@ -58,9 +58,12 @@ trait_description <- function(name = c("overall_quality", "organization"),
 
   trait_desc <- switch(name,
     overall_quality =
-      "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are.",
+      "Overall quality of the writing, considering how well ideas are expressed,
+      how clearly the writing is organized, and how effective the language and
+      conventions are.",
     organization =
-      "How clearly the writing is organized, including logical sequencing of ideas and effective use of transitions."
+      "How clearly the writing is organized, including logical sequencing of
+      ideas and effective use of transitions."
   )
 
   list(

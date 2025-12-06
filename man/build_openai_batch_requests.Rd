@@ -51,10 +51,11 @@ the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
 and \code{reasoning} is not \code{"none"}, adds \code{summary = "auto"}
 to the \code{reasoning} block so that reasoning summaries (thoughts)
 are returned and can be parsed into a \code{thoughts} column by
-\code{\link{parse_openai_batch_output}}. When \code{endpoint = "responses"},
-\code{include_thoughts = TRUE}, and the model is \code{"gpt-5.1"} with
-no explicit \code{reasoning}, the function defaults \code{reasoning} to
-\code{"low"}. Has no effect for \code{"chat.completions"}.}
+\code{\link{parse_openai_batch_output}}. When
+\code{endpoint = "responses"}, \code{include_thoughts = TRUE}, and the
+model is \code{"gpt-5.1"} with no explicit \code{reasoning}, the function
+defaults \code{reasoning} to \code{"low"}. Has no effect for
+\code{"chat.completions"}.}
 
 \item{request_id_prefix}{String prefix for \code{custom_id}; the full
 ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.}

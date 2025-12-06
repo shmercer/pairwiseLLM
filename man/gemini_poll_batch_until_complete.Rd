@@ -24,7 +24,8 @@ gemini_poll_batch_until_complete(
 \item{api_key}{Optional Gemini API key. Defaults to
 \code{Sys.getenv("GEMINI_API_KEY")}.}
 
-\item{api_version}{API version string for the path; defaults to \code{"v1beta"}.}
+\item{api_version}{API version string for the path; defaults to
+\code{"v1beta"}.}
 
 \item{verbose}{Logical; if \code{TRUE}, prints progress messages.}
 }

@@ -16,7 +16,8 @@ gemini_get_batch(
 \item{api_key}{Optional Gemini API key. Defaults to
 \code{Sys.getenv("GEMINI_API_KEY")}.}
 
-\item{api_version}{API version string for the path; defaults to \code{"v1beta"}.}
+\item{api_version}{API version string for the path; defaults to
+\code{"v1beta"}.}
 }
 \value{
 A list representing the Batch job object.

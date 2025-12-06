@@ -20,7 +20,8 @@ test_that("compute_reverse_consistency works for fully consistent pairs", {
   expect_true(all(rc$details$is_consistent))
 })
 
-test_that("compute_reverse_consistency detects inconsistencies and ignores NAs", {
+test_that("compute_reverse_consistency detects inconsistencies and
+          ignores NAs", {
   main <- tibble::tibble(
     ID1       = c("S1", "S1", "S2", "S3"),
     ID2       = c("S2", "S3", "S3", "S4"),
@@ -79,7 +80,8 @@ test_that("compute_reverse_consistency works on example_writing_pairs", {
   expect_equal(rc$summary$prop_consistent, 1)
 })
 
-test_that("compute_reverse_consistency errors when required columns are missing", {
+test_that("compute_reverse_consistency errors when required columns are
+          missing", {
   main <- tibble::tibble(
     ID1       = c("S1", "S2"),
     ID2       = c("S3", "S4"),

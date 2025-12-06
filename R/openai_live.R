@@ -58,20 +58,23 @@ NULL
 #'   \item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
 #'   \item{ID1, ID2}{The sample IDs you supplied.}
 #'   \item{model}{Model name reported by the API.}
-#'   \item{object_type}{OpenAI object type (for example "chat.completion" or "response").}
+#'   \item{object_type}{OpenAI object type (for example "chat.completion" or
+#'     "response").}
 #'   \item{status_code}{HTTP-style status code (200 if successful).}
 #'   \item{error_message}{Error message if something goes wrong; otherwise NA.}
-#'   \item{thoughts}{Reasoning / thinking summary text when available, otherwise NA.}
-#'   \item{content}{Concatenated text from the assistant's visible output. For the
-#'     Responses endpoint this is taken from the \code{type = "message"} output
-#'     items and does not include reasoning summaries.}
+#'   \item{thoughts}{Reasoning / thinking summary text when available,
+#'     otherwise NA.}
+#'   \item{content}{Concatenated text from the assistant's visible output. For
+#'     the Responses endpoint this is taken from the \code{type = "message"}
+#'     output items and does not include reasoning summaries.}
 #'   \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 #'   \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
 #'     otherwise NA.}
 #'   \item{prompt_tokens}{Prompt / input token count (if reported).}
 #'   \item{completion_tokens}{Completion / output token count (if reported).}
 #'   \item{total_tokens}{Total token count (if reported).}
-#'   \item{raw_response}{(Optional) list-column containing the parsed JSON body.}
+#'   \item{raw_response}{(Optional) list-column containing the parsed JSON
+#'     body.}
 #' }
 #'
 #' @export
@@ -93,11 +96,21 @@ openai_compare_pair_live <- function(
 ) {
   endpoint <- match.arg(endpoint)
 
-  if (!is.character(ID1) || length(ID1) != 1L) stop("`ID1` must be a single character.", call. = FALSE)
-  if (!is.character(ID2) || length(ID2) != 1L) stop("`ID2` must be a single character.", call. = FALSE)
-  if (!is.character(text1) || length(text1) != 1L) stop("`text1` must be a single character.", call. = FALSE)
-  if (!is.character(text2) || length(text2) != 1L) stop("`text2` must be a single character.", call. = FALSE)
-  if (!is.character(model) || length(model) != 1L) stop("`model` must be a single character.", call. = FALSE)
+  if (!is.character(ID1) || length(ID1) != 1L) {
+    stop("`ID1` must be a single character.", call. = FALSE)
+  }
+  if (!is.character(ID2) || length(ID2) != 1L) {
+    stop("`ID2` must be a single character.", call. = FALSE)
+  }
+  if (!is.character(text1) || length(text1) != 1L) {
+    stop("`text1` must be a single character.", call. = FALSE)
+  }
+  if (!is.character(text2) || length(text2) != 1L) {
+    stop("`text2` must be a single character.", call. = FALSE)
+  }
+  if (!is.character(model) || length(model) != 1L) {
+    stop("`model` must be a single character.", call. = FALSE)
+  }
 
   dots <- list(...)
   temperature <- dots$temperature %||% NULL
@@ -306,9 +319,15 @@ openai_compare_pair_live <- function(
 
   better_sample <- NA_character_
   if (!is.na(content)) {
-    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
+    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix),
+      content,
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_1"
-    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content, fixed = TRUE)) {
+    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix),
+      content,
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_2"
     }
   }
@@ -320,7 +339,8 @@ openai_compare_pair_live <- function(
 
   usage <- body$usage %||% list()
   prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
-  completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
+  completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||%
+    NA_real_
   total_tokens <- usage$total_tokens %||% NA_real_
 
   res <- tibble::tibble(
@@ -349,8 +369,9 @@ openai_compare_pair_live <- function(
 
 #' Live OpenAI comparisons for a tibble of pairs
 #'
-#' This is a thin row-wise wrapper around \code{\link{openai_compare_pair_live}}.
-#' It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each pair to
+#' This is a thin row-wise wrapper around
+#' \code{\link{openai_compare_pair_live}}. It takes a tibble of pairs
+#'  (ID1 / text1 / ID2 / text2), submits each pair to
 #' the OpenAI API, and binds the results into a single tibble.
 #'
 #' The output has the same columns as \code{\link{openai_compare_pair_live}},
@@ -490,7 +511,8 @@ submit_openai_pairs_live <- function(
     return(res)
   }
 
-  if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
+  if (!is.numeric(status_every) || length(status_every) != 1L ||
+    status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
   status_every <- as.integer(status_every)
@@ -553,7 +575,8 @@ submit_openai_pairs_live <- function(
       est_rem <- avg * remain
 
       message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
+        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s,
+        total=%s",
         res$better_id,
         res$better_sample,
         res$prompt_tokens,
@@ -576,7 +599,9 @@ submit_openai_pairs_live <- function(
   }
 
   if (verbose) {
-    total_elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    total_elapsed <- as.numeric(difftime(Sys.time(), start_time,
+      units = "secs"
+    ))
     avg <- total_elapsed / n
     message(sprintf(
       "Completed %d live pair(s) in %s (avg %.2fs per pair).",

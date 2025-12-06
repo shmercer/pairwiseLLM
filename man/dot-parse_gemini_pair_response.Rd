@@ -17,7 +17,8 @@ For batch responses, Gemini 3 Pro currently typically returns:
 \itemize{
 \item \code{candidates[[1]]$content$parts[[1]]$text}             = final answer
 \item \code{candidates[[1]]$content$parts[[1]]$thoughtSignature} = opaque signature
-\item \code{usageMetadata$thoughtsTokenCount}                    = hidden reasoning tokens
+\item \code{usageMetadata$thoughtsTokenCount}                    =
+hidden reasoning tokens
 }
 }
 \details{

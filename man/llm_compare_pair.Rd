@@ -35,7 +35,8 @@ For \code{"anthropic"} and \code{"gemini"}, use the corresponding provider model
 names (for example \code{"claude-3-5-sonnet-latest"} or
 \code{"gemini-2.0-pro-exp"}).}
 
-\item{trait_name}{Short label for the trait (for example \code{"Overall Quality"}).}
+\item{trait_name}{Short label for the trait (for example
+\code{"Overall Quality"}).}
 
 \item{trait_description}{Full-text definition of the trait.}
 

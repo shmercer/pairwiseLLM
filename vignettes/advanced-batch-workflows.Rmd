@@ -163,7 +163,7 @@ openai_grid <- tidyr::expand_grid(
   model     = openai_models,
   thinking  = thinking_levels,
   direction = directions
-) %>%
+) |>
   # For example, only allow "with_thinking" for gpt-5.1
   dplyr::filter(model == "gpt-5.1" | thinking == "no_thinking")
 
@@ -176,7 +176,9 @@ batch_grid <- dplyr::bind_rows(
 batch_grid
 ```
 
-We will also imagine multiple prompt templates have been registered. For simplicity, we use the same `tmpl` string, but in practice you would substitute different text:
+We will also imagine multiple prompt templates have been registered. For 
+simplicity, we use the same `tmpl` string, but in practice you would substitute 
+different text:
 
 ```{r}
 templates_tbl <- tibble::tibble(
@@ -230,7 +232,8 @@ for (t_row in seq_len(nrow(templates_tbl))) {
     pairs_use <- get_pairs_for_direction(direction)
     is_thinking <- identical(thinking, "with_thinking")
 
-    prefix <- paste(provider, template_id, model, thinking, direction, sep = "_")
+    prefix <- paste(provider, template_id, model, thinking, direction, 
+                    sep = "_")
     prefix <- gsub("[^A-Za-z0-9_.-]", "-", prefix)
 
     batch_input_path <- file.path(out_dir, paste0(prefix, "_input.jsonl"))

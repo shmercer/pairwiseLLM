@@ -18,7 +18,10 @@ testthat::test_that("anthropic_compare_pair_live parses /v1/messages correctly",
     type = "message",
     role = "assistant",
     content = list(
-      list(type = "text", text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> Explanation.")
+      list(
+        type = "text", text =
+          "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> Explanation."
+      )
     ),
     usage = list(
       input_tokens  = 14L,
@@ -30,7 +33,12 @@ testthat::test_that("anthropic_compare_pair_live parses /v1/messages correctly",
   testthat::with_mocked_bindings(
     .anthropic_api_key = function(...) "FAKEKEY",
     .anthropic_req_body_json = function(req, body) req,
-    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_req_perform = function(req) {
+      structure(list(),
+        class =
+          "fake_resp"
+      )
+    },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
     {
@@ -75,14 +83,18 @@ testthat::test_that("anthropic_compare_pair_live parses /v1/messages correctly",
 
       testthat::expect_true("raw_response" %in% names(res))
       testthat::expect_type(res$raw_response, "list")
-      testthat::expect_equal(res$raw_response[[1]]$model, "claude-sonnet-4-5-20250929")
+      testthat::expect_equal(
+        res$raw_response[[1]]$model,
+        "claude-sonnet-4-5-20250929"
+      )
     }
   )
 })
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("anthropic_compare_pair_live returns error row on JSON parse failure", {
+testthat::test_that("anthropic_compare_pair_live returns error row on
+                    JSON parse failure", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -92,7 +104,12 @@ testthat::test_that("anthropic_compare_pair_live returns error row on JSON parse
   testthat::with_mocked_bindings(
     .anthropic_api_key = function(...) "FAKEKEY",
     .anthropic_req_body_json = function(req, body) req,
-    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_req_perform = function(req) {
+      structure(list(),
+        class =
+          "fake_resp"
+      )
+    },
     .anthropic_resp_body_json = function(...) stop("boom"),
     .anthropic_resp_status = function(...) 500L,
     {
@@ -109,7 +126,10 @@ testthat::test_that("anthropic_compare_pair_live returns error row on JSON parse
       )
 
       testthat::expect_equal(res$status_code, 500L)
-      testthat::expect_equal(res$error_message, "Failed to parse response body as JSON.")
+      testthat::expect_equal(
+        res$error_message,
+        "Failed to parse response body as JSON."
+      )
       testthat::expect_true(is.na(res$better_sample))
       testthat::expect_true(is.null(res$raw_response[[1]]))
     }
@@ -118,7 +138,8 @@ testthat::test_that("anthropic_compare_pair_live returns error row on JSON parse
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("anthropic_compare_pair_live applies recommended defaults", {
+testthat::test_that("anthropic_compare_pair_live applies recommended
+                    defaults", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -148,7 +169,12 @@ testthat::test_that("anthropic_compare_pair_live applies recommended defaults", 
       bodies <<- append(bodies, list(body))
       req
     },
-    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_req_perform = function(req) {
+      structure(list(),
+        class =
+          "fake_resp"
+      )
+    },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
     {
@@ -180,7 +206,8 @@ testthat::test_that("anthropic_compare_pair_live applies recommended defaults", 
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("submit_anthropic_pairs_live returns empty tibble for zero rows", {
+testthat::test_that("submit_anthropic_pairs_live returns empty tibble
+                    for zero rows", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -218,7 +245,8 @@ testthat::test_that("submit_anthropic_pairs_live returns empty tibble for zero r
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("submit_anthropic_pairs_live calls anthropic_compare_pair_live row-wise", {
+testthat::test_that("submit_anthropic_pairs_live calls
+                    anthropic_compare_pair_live row-wise", {
   pairs <- tibble::tibble(
     ID1   = c("S01", "S03"),
     text1 = c("Text 1", "Text 3"),
@@ -250,13 +278,15 @@ testthat::test_that("submit_anthropic_pairs_live calls anthropic_compare_pair_li
   }
 
   testthat::with_mocked_bindings(
-    anthropic_compare_pair_live = function(
-      ID1, text1, ID2, text2, model, trait_name,
-      trait_description, prompt_template, api_key,
-      anthropic_version, reasoning, include_raw, include_thoughts, ...
-    ) {
+    anthropic_compare_pair_live = function(ID1, text1, ID2, text2, model, trait_name,
+                                           trait_description, prompt_template, api_key,
+                                           anthropic_version, reasoning, include_raw, include_thoughts, ...) {
       calls <<- append(calls, list(list(ID1 = ID1, ID2 = ID2)))
-      if (ID1 == "S01") fake_result(ID1, ID2, "SAMPLE_1") else fake_result(ID1, ID2, "SAMPLE_2")
+      if (ID1 == "S01") {
+        fake_result(ID1, ID2, "SAMPLE_1")
+      } else {
+        fake_result(ID1, ID2, "SAMPLE_2")
+      }
     },
     {
       res <- submit_anthropic_pairs_live(
@@ -278,7 +308,8 @@ testthat::test_that("submit_anthropic_pairs_live calls anthropic_compare_pair_li
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("anthropic_compare_pair_live defaults and thinking depend on reasoning", {
+testthat::test_that("anthropic_compare_pair_live defaults and thinking
+                    depend on reasoning", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -305,7 +336,12 @@ testthat::test_that("anthropic_compare_pair_live defaults and thinking depend on
       bodies <<- append(bodies, list(body))
       req
     },
-    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_req_perform = function(req) {
+      structure(list(),
+        class =
+          "fake_resp"
+      )
+    },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
     {
@@ -368,7 +404,8 @@ testthat::test_that("anthropic_compare_pair_live defaults and thinking depend on
   )
 })
 
-testthat::test_that("anthropic_compare_pair_live upgrades reasoning when include_thoughts = TRUE", {
+testthat::test_that("anthropic_compare_pair_live upgrades reasoning when
+                    include_thoughts = TRUE", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -394,7 +431,12 @@ testthat::test_that("anthropic_compare_pair_live upgrades reasoning when include
       bodies <<- append(bodies, list(body))
       req
     },
-    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_req_perform = function(req) {
+      structure(list(),
+        class =
+          "fake_resp"
+      )
+    },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
     {
@@ -417,7 +459,8 @@ testthat::test_that("anthropic_compare_pair_live upgrades reasoning when include
       b <- bodies[[1]]
 
       # When include_thoughts = TRUE and reasoning = "none", we upgrade to
-      # extended thinking mode, which implies temperature = 1 and a thinking block
+      # extended thinking mode, which implies temperature = 1 and
+      # a thinking block
       testthat::expect_equal(b$temperature, 1)
       testthat::expect_equal(b$max_tokens, 2048)
       testthat::expect_true("thinking" %in% names(b))
@@ -427,7 +470,8 @@ testthat::test_that("anthropic_compare_pair_live upgrades reasoning when include
   )
 })
 
-testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled output correctly", {
+testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled
+                    output correctly", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -442,7 +486,10 @@ testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled output
     content = list(
       # Simulate a more verbose answer you'd get with extended thinking:
       list(type = "text", text = "Some hidden reasoning and explanation. "),
-      list(type = "text", text = "Final choice: <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>.")
+      list(
+        type = "text", text =
+          "Final choice: <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>."
+      )
     ),
     usage = list(
       input_tokens  = 20L,
@@ -459,7 +506,12 @@ testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled output
       bodies <<- append(bodies, list(body))
       req
     },
-    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_req_perform = function(req) {
+      structure(list(),
+        class =
+          "fake_resp"
+      )
+    },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
     {
@@ -481,8 +533,14 @@ testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled output
       testthat::expect_equal(nrow(res), 1L)
 
       # We concatenated both blocks correctly
-      testthat::expect_true(grepl("Some hidden reasoning and explanation\\.", res$content))
-      testthat::expect_true(grepl("<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>", res$content, fixed = TRUE))
+      testthat::expect_true(grepl(
+        "Some hidden reasoning and explanation\\.",
+        res$content
+      ))
+      testthat::expect_true(grepl("<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>",
+        res$content,
+        fixed = TRUE
+      ))
 
       # Tag parsing works even with extra explanation
       testthat::expect_equal(res$better_sample, "SAMPLE_2")
@@ -502,7 +560,8 @@ testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled output
   )
 })
 
-testthat::test_that("anthropic_compare_pair_live errors if temperature != 1 with reasoning = 'enabled'", {
+testthat::test_that("anthropic_compare_pair_live errors if temperature != 1
+                    with reasoning = 'enabled'", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -525,7 +584,8 @@ testthat::test_that("anthropic_compare_pair_live errors if temperature != 1 with
   )
 })
 
-testthat::test_that("anthropic_compare_pair_live enforces thinking_budget_tokens constraints", {
+testthat::test_that("anthropic_compare_pair_live enforces
+                    thinking_budget_tokens constraints", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -543,8 +603,8 @@ testthat::test_that("anthropic_compare_pair_live enforces thinking_budget_tokens
       reasoning               = "enabled",
       thinking_budget_tokens  = 512
     ),
-    "thinking_budget_tokens` must be at least 1024",
-    fixed = FALSE
+    "at least 1024",
+    fixed = TRUE
   )
 
   # budget >= max_tokens should also error
@@ -562,7 +622,7 @@ testthat::test_that("anthropic_compare_pair_live enforces thinking_budget_tokens
       max_tokens              = 1500,
       thinking_budget_tokens  = 1500
     ),
-    "must be smaller than `max_tokens`",
+    "thinking_budget_tokens.*must be smaller than.*max_tokens",
     fixed = FALSE
   )
 })

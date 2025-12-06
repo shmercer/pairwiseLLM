@@ -136,7 +136,11 @@ llm_submit_pairs_batch <- function(
   if (backend == "openai") {
     # Detect GPT-5.1 and requested reasoning
     is_gpt51 <- grepl("^gpt-5\\.1", model)
-    reasoning <- if ("reasoning" %in% names(dot_list)) dot_list$reasoning else NULL
+    reasoning <- if ("reasoning" %in% names(dot_list)) {
+      dot_list$reasoning
+    } else {
+      NULL
+    }
 
     # If caller explicitly supplied an endpoint in ..., respect it.
     # Otherwise, choose based on model + reasoning / thoughts.
@@ -201,7 +205,7 @@ llm_submit_pairs_batch <- function(
 
   out$backend <- backend
 
-  # Ensure batch paths exist when provided (useful for mocked pipelines in tests)
+  # Ensure batch paths exist when provided (useful for mocked pipelines)
   if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&
     !file.exists(out$batch_input_path)) {
     file.create(out$batch_input_path)

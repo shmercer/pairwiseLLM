@@ -240,7 +240,7 @@ check_positional_bias <- function(consistency,
   }
 
   # Winner positions
-  details <- details %>%
+  details <- details |>
     dplyr::mutate(
       winner_pos_main = dplyr::case_when(
         better_id_main == ID1_main ~ "pos1",
@@ -275,7 +275,9 @@ check_positional_bias <- function(consistency,
 
   # Positional bias: how often does SAMPLE_1 (position 1) win?
   # -- forward (main) direction --
-  wins_sample1_main <- sum(details$better_id_main == details$ID1_main, na.rm = TRUE)
+  wins_sample1_main <- sum(details$better_id_main == details$ID1_main,
+    na.rm = TRUE
+  )
   n_valid_main <- sum(
     !is.na(details$better_id_main) &
       (details$better_id_main == details$ID1_main |
@@ -289,7 +291,9 @@ check_positional_bias <- function(consistency,
   }
 
   # -- reverse direction --
-  wins_sample1_rev <- sum(details$better_id_rev == details$ID1_rev, na.rm = TRUE)
+  wins_sample1_rev <- sum(details$better_id_rev == details$ID1_rev,
+    na.rm = TRUE
+  )
   n_valid_rev <- sum(
     !is.na(details$better_id_rev) &
       (details$better_id_rev == details$ID1_rev |
@@ -313,13 +317,13 @@ check_positional_bias <- function(consistency,
   }
 
   # Inconsistent pairs & positional bias counts
-  inconsistent <- details %>%
+  inconsistent <- details |>
     dplyr::filter(!is_consistent)
 
   n_inconsistent <- nrow(inconsistent)
 
   if (n_inconsistent > 0L) {
-    inconsistent <- inconsistent %>%
+    inconsistent <- inconsistent |>
       dplyr::mutate(
         is_pos1_bias = winner_pos_main == "pos1" & winner_pos_rev == "pos1",
         is_pos2_bias = winner_pos_main == "pos2" & winner_pos_rev == "pos2"
@@ -329,9 +333,9 @@ check_positional_bias <- function(consistency,
     n_pos2_bias <- sum(inconsistent$is_pos2_bias, na.rm = TRUE)
 
     # Merge flags back into main details tibble
-    details <- details %>%
+    details <- details |>
       dplyr::left_join(
-        inconsistent %>%
+        inconsistent |>
           dplyr::select(key, is_pos1_bias, is_pos2_bias),
         by = "key"
       )

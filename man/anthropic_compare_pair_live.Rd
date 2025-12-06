@@ -123,7 +123,8 @@ otherwise NA.}
 \item{completion_tokens}{Completion / output token count (if reported).}
 \item{total_tokens}{Total token count (reported by the API or computed as
 input + output tokens when not provided).}
-\item{raw_response}{(Optional) list-column containing the parsed JSON body.}
+\item{raw_response}{(Optional) list-column containing the parsed JSON
+body.}
 }
 }
 \description{

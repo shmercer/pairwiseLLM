@@ -113,7 +113,8 @@
 #'   * `content` - concatenated text of the assistant's final answer (used to
 #'     locate the `<BETTER_SAMPLE>` tag).
 #'   * `better_sample` - `"SAMPLE_1"`, `"SAMPLE_2"`, or `NA`.
-#'   * `better_id` - `ID1` if `SAMPLE_1` is chosen, `ID2` if `SAMPLE_2`, or `NA`.
+#'   * `better_id` - `ID1` if `SAMPLE_1` is chosen,
+#'     `ID2` if `SAMPLE_2`, or `NA`.
 #'   * `prompt_tokens`, `completion_tokens`, `total_tokens` - usage counts if
 #'     reported by the API, otherwise `NA_real_`.
 #'
@@ -195,7 +196,8 @@ gemini_compare_pair_live <- function(
 
     if (identical(thinking_level, "medium")) {
       warning(
-        "`thinking_level = \"medium\"` is not yet supported by the Gemini REST API; ",
+        "`thinking_level = \"medium\"` is not yet supported by the Gemini
+        REST API; ",
         "mapping to \"High\" internally.",
         call. = FALSE
       )
@@ -259,7 +261,7 @@ gemini_compare_pair_live <- function(
         )
 
         if (!is.na(body_raw) && nzchar(body_raw)) {
-          # Append the raw body to the error_message so it shows up in the tibble
+          # Append the raw body to the error_message so it is in the tibble
           error_message <<- paste0(error_message, " | body: ", body_raw)
         }
       }
@@ -346,9 +348,13 @@ gemini_compare_pair_live <- function(
   tag_suffix <- "</BETTER_SAMPLE>"
 
   if (!is.na(content)) {
-    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
+    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content,
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_1"
-    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content, fixed = TRUE)) {
+    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content,
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_2"
     }
   }
@@ -482,7 +488,8 @@ submit_gemini_pairs_live <- function(
     return(res)
   }
 
-  if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
+  if (!is.numeric(status_every) || length(status_every) != 1L ||
+    status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
   status_every <- as.integer(status_every)
@@ -493,7 +500,8 @@ submit_gemini_pairs_live <- function(
 
   if (verbose) {
     message(sprintf(
-      "Submitting %d live pair(s) for comparison (model=%s, backend=gemini, thinking_level=%s, include_thoughts=%s)...",
+      "Submitting %d live pair(s) for comparison (model=%s, backend=gemini,
+      thinking_level=%s, include_thoughts=%s)...",
       n, model, thinking_level, include_thoughts
     ))
   }

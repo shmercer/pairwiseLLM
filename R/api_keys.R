@@ -65,10 +65,13 @@
 #'
 #' @return A tibble (data frame) with one row per backend and columns:
 #' \describe{
-#'   \item{backend}{Short backend identifier, e.g. `"openai"`, `"anthropic"`, `"gemini"`.}
-#'   \item{service}{Human-readable service name, e.g. `"OpenAI"`, `"Anthropic"`, `"Google Gemini"`.}
+#'   \item{backend}{Short backend identifier, e.g. `"openai"`, `"anthropic"`,
+#'   `"gemini"`.}
+#'   \item{service}{Human-readable service name, e.g. `"OpenAI"`,
+#'   `"Anthropic"`, `"Google Gemini"`.}
 #'   \item{env_var}{Name of the environment variable that is checked.}
-#'   \item{has_key}{Logical flag indicating whether the key is set and non-empty.}
+#'   \item{has_key}{Logical flag indicating whether the key is set and
+#'   non-empty.}
 #' }
 #'
 #' @examples
@@ -76,7 +79,8 @@
 #' # In an interactive session, quickly check which keys are configured:
 #' check_llm_api_keys()
 #'
-#' # In non-interactive scripts, you can disable messages and just use the result:
+#' # In non-interactive scripts, you can disable messages and just use the
+#' # result:
 #' status <- check_llm_api_keys(verbose = FALSE)
 #' status
 #' }
@@ -135,7 +139,8 @@ check_llm_api_keys <- function(verbose = TRUE) {
           )
         } else {
           msg <- paste0(
-            "- ", services[i], " (", backends[i], "): ", env_vars[i], " is not set.\n",
+            "- ", services[i], " (", backends[i], "): ", env_vars[i],
+            " is not set.\n",
             "  Set it for this session with:\n",
             "    Sys.setenv(", env_vars[i], ' = "YOUR_KEY_HERE")\n',
             "  Or persistently via:\n",

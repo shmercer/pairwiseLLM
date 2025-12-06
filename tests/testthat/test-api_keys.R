@@ -33,7 +33,8 @@ testthat::test_that(".get_api_key falls back to env var when api_key is NULL", {
   testthat::expect_equal(res, "FROM_ENV")
 })
 
-testthat::test_that(".get_api_key errors with informative message when nothing is set", {
+testthat::test_that(".get_api_key errors with informative message when nothing
+                    is set", {
   old <- Sys.getenv("SOME_FAKE_KEY", unset = "")
   on.exit(Sys.setenv(SOME_FAKE_KEY = old), add = TRUE)
 
@@ -49,7 +50,8 @@ testthat::test_that(".get_api_key errors with informative message when nothing i
   )
 })
 
-testthat::test_that("check_llm_api_keys returns expected structure when keys are missing", {
+testthat::test_that("check_llm_api_keys returns expected structure when keys
+                    are missing", {
   old_openai <- Sys.getenv("OPENAI_API_KEY", unset = "")
   old_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
   on.exit(
@@ -66,7 +68,8 @@ testthat::test_that("check_llm_api_keys returns expected structure when keys are
   status <- check_llm_api_keys(verbose = FALSE)
 
   testthat::expect_s3_class(status, "tbl_df")
-  testthat::expect_true(all(c("backend", "service", "env_var", "has_key") %in% names(status)))
+  testthat::expect_true(all(c("backend", "service", "env_var", "has_key")
+  %in% names(status)))
 
   # Ensure we have at least the expected backends
   testthat::expect_true(all(c("openai", "anthropic") %in% status$backend))
@@ -81,7 +84,8 @@ testthat::test_that("check_llm_api_keys returns expected structure when keys are
   testthat::expect_false(anth_row$has_key)
 })
 
-testthat::test_that("check_llm_api_keys reports keys as present when env vars are set", {
+testthat::test_that("check_llm_api_keys reports keys as present when env
+                    vars are set", {
   old_openai <- Sys.getenv("OPENAI_API_KEY", unset = "")
   old_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
   on.exit(

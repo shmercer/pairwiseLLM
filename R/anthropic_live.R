@@ -160,7 +160,8 @@ NULL
 #'   \item{completion_tokens}{Completion / output token count (if reported).}
 #'   \item{total_tokens}{Total token count (reported by the API or computed as
 #'     input + output tokens when not provided).}
-#'   \item{raw_response}{(Optional) list-column containing the parsed JSON body.}
+#'   \item{raw_response}{(Optional) list-column containing the parsed JSON
+#'     body.}
 #' }
 #'
 #' @details
@@ -264,11 +265,36 @@ anthropic_compare_pair_live <- function(
 ) {
   reasoning <- match.arg(reasoning)
 
-  if (!is.character(ID1) || length(ID1) != 1L) stop("`ID1` must be a single character.", call. = FALSE)
-  if (!is.character(ID2) || length(ID2) != 1L) stop("`ID2` must be a single character.", call. = FALSE)
-  if (!is.character(text1) || length(text1) != 1L) stop("`text1` must be a single character.", call. = FALSE)
-  if (!is.character(text2) || length(text2) != 1L) stop("`text2` must be a single character.", call. = FALSE)
-  if (!is.character(model) || length(model) != 1L) stop("`model` must be a single character.", call. = FALSE)
+  if (!is.character(ID1) || length(ID1) != 1L) {
+    stop(
+      "`ID1` must be a single character.",
+      call. = FALSE
+    )
+  }
+  if (!is.character(ID2) || length(ID2) != 1L) {
+    stop(
+      "`ID2` must be a single character.",
+      call. = FALSE
+    )
+  }
+  if (!is.character(text1) || length(text1) != 1L) {
+    stop(
+      "`text1` must be a single character.",
+      call. = FALSE
+    )
+  }
+  if (!is.character(text2) || length(text2) != 1L) {
+    stop(
+      "`text2` must be a single character.",
+      call. = FALSE
+    )
+  }
+  if (!is.character(model) || length(model) != 1L) {
+    stop(
+      "`model` must be a single character.",
+      call. = FALSE
+    )
+  }
 
   # ------------------------------------------------------------------
   # include_thoughts -> reasoning mapping
@@ -330,14 +356,16 @@ anthropic_compare_pair_live <- function(
 
     if (thinking_budget < 1024L) {
       stop(
-        "`thinking_budget_tokens` must be at least 1024 when reasoning = 'enabled'. ",
+        "`thinking_budget_tokens` must be at least 1024 when reasoning =
+        'enabled'. ",
         "Got: ", thinking_budget,
         call. = FALSE
       )
     }
     if (thinking_budget >= max_tokens) {
       stop(
-        "`thinking_budget_tokens` (", thinking_budget, ") must be smaller than `max_tokens` (",
+        "`thinking_budget_tokens` (", thinking_budget, ") must be smaller than
+        `max_tokens` (",
         max_tokens, ") for Anthropic extended thinking.\n",
         "Try something like: max_tokens = 2048, thinking_budget_tokens = 1024.",
         call. = FALSE
@@ -432,7 +460,9 @@ anthropic_compare_pair_live <- function(
 
   # If HTTP status is non-success, try to extract an error message
   if (status_code >= 300L) {
-    error_message <- body$error$message %||% sprintf("HTTP error %s from Anthropic.", status_code)
+    error_message <- body$error$message %||% sprintf(
+      "HTTP error %s from Anthropic.", status_code
+    )
   }
 
   object_type <- body$type %||% NA_character_
@@ -454,7 +484,8 @@ anthropic_compare_pair_live <- function(
       if (identical(blk_type, "thinking") && !is.null(blk$thinking)) {
         # Summarized thinking text
         thought_chunks <- c(thought_chunks, as.character(blk$thinking %||% ""))
-      } else if (identical(blk_type, "redacted_thinking") && !is.null(blk$data)) {
+      } else if (identical(blk_type, "redacted_thinking") &&
+        !is.null(blk$data)) {
         # Encrypted/redacted thinking; keep as-is but label so it's obvious
         redacted_txt <- as.character(blk$data %||% "")
         if (nzchar(redacted_txt)) {
@@ -481,9 +512,13 @@ anthropic_compare_pair_live <- function(
   # ------------------------------------------------------------------
   better_sample <- NA_character_
   if (!is.na(content)) {
-    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
+    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content,
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_1"
-    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content, fixed = TRUE)) {
+    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content,
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_2"
     }
   }
@@ -532,13 +567,14 @@ anthropic_compare_pair_live <- function(
 
 #' Live Anthropic (Claude) comparisons for a tibble of pairs
 #'
-#' This is a thin row-wise wrapper around \code{\link{anthropic_compare_pair_live}}.
-#' It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each pair to
-#' the Anthropic Messages API, and binds the results into a single tibble.
+#' This is a thin row-wise wrapper around
+#' \code{\link{anthropic_compare_pair_live}}. It takes a tibble of pairs
+#' (ID1 / text1 / ID2 / text2), submits each pair to the Anthropic
+#' Messages API, and binds the results into a single tibble.
 #'
 #' The output has the same columns as \code{\link{anthropic_compare_pair_live}},
-#' with one row per pair, making it easy to pass into \code{\link{build_bt_data}}
-#' and \code{\link{fit_bt_model}}.
+#' with one row per pair, making it easy to pass into
+#' \code{\link{build_bt_data}} and \code{\link{fit_bt_model}}.
 #'
 #' @details
 #' **Temperature and reasoning behaviour**
@@ -704,7 +740,8 @@ submit_anthropic_pairs_live <- function(
     return(res)
   }
 
-  if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
+  if (!is.numeric(status_every) || length(status_every) != 1L ||
+    status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
   status_every <- as.integer(status_every)
@@ -769,7 +806,8 @@ submit_anthropic_pairs_live <- function(
       est_rem <- avg * remain
 
       message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
+        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s,
+        total=%s",
         res$better_id,
         res$better_sample,
         res$prompt_tokens,
@@ -792,7 +830,9 @@ submit_anthropic_pairs_live <- function(
   }
 
   if (verbose) {
-    total_elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    total_elapsed <- as.numeric(difftime(Sys.time(), start_time,
+      units = "secs"
+    ))
     avg <- total_elapsed / n
     message(sprintf(
       "Completed %d Anthropic live pair(s) in %s (avg %.2fs per pair).",

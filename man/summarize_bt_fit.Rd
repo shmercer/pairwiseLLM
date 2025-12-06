@@ -19,7 +19,8 @@ A tibble with columns:
 \item{ID}{Object identifier.}
 \item{theta}{Estimated ability parameter.}
 \item{se}{Standard error of \code{theta}.}
-\item{rank}{Rank of \code{theta}; 1 = highest (if \code{decreasing = TRUE}).}
+\item{rank}{Rank of \code{theta}; 1 = highest
+(if \code{decreasing = TRUE}).}
 \item{engine}{Modeling engine used ("sirt" or "BradleyTerry2").}
 \item{reliability}{MLE reliability (numeric scalar) repeated on each row.}
 }

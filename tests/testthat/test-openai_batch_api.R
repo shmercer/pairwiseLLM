@@ -8,7 +8,8 @@ testthat::test_that("openai_upload_batch_file errors on missing file", {
   )
 })
 
-testthat::test_that("openai_download_batch_output errors if no output_file_id", {
+testthat::test_that("openai_download_batch_output errors if no
+                    output_file_id", {
   fake_batch <- list(
     id             = "batch_123",
     status         = "completed",
@@ -27,11 +28,15 @@ testthat::test_that("openai_download_batch_output errors if no output_file_id", 
   )
 })
 
-testthat::test_that("openai_poll_batch_until_complete succeeds after several polls", {
+testthat::test_that("openai_poll_batch_until_complete succeeds after
+                    several polls", {
   fake_batches <- list(
     list(id = "batch_123", status = "in_progress"),
     list(id = "batch_123", status = "in_progress"),
-    list(id = "batch_123", status = "completed", output_file_id = "file_out_123")
+    list(
+      id = "batch_123", status = "completed", output_file_id =
+        "file_out_123"
+    )
   )
   i <- 0L
 

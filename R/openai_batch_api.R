@@ -44,7 +44,8 @@ NULL
 #'
 #' @param path Path to the local `.jsonl` file to upload.
 #' @param purpose File purpose. For the Batch API this should be `"batch"`.
-#' @param api_key Optional OpenAI API key. Defaults to `Sys.getenv("OPENAI_API_KEY")`.
+#' @param api_key Optional OpenAI API key. Defaults to
+#'   `Sys.getenv("OPENAI_API_KEY")`.
 #'
 #' @return A list representing the File object returned by the API, including
 #'   `id`, `filename`, `bytes`, `purpose`, etc.
@@ -162,8 +163,8 @@ openai_get_batch <- function(
 
 #' Download the output file for a completed batch
 #'
-#' Given a batch ID, retrieves the batch metadata, extracts the `output_file_id`,
-#' and downloads the corresponding file content to `path`.
+#' Given a batch ID, retrieves the batch metadata, extracts the
+#' `output_file_id`, and downloads the corresponding file content to `path`.
 #'
 #' @param batch_id The batch ID (e.g. `"batch_abc123"`).
 #' @param path Local file path to write the downloaded `.jsonl` output.
@@ -221,7 +222,8 @@ openai_download_batch_output <- function(
 #'
 #' @param batch_id The batch ID.
 #' @param interval_seconds Number of seconds to wait between polling attempts.
-#' @param timeout_seconds Maximum total time to wait in seconds before giving up.
+#' @param timeout_seconds Maximum total time to wait in seconds before
+#'   giving up.
 #' @param max_attempts Maximum number of polling attempts. This is mainly useful
 #'   for testing; default is `Inf`.
 #' @param api_key Optional OpenAI API key.
@@ -231,7 +233,7 @@ openai_download_batch_output <- function(
 #'
 #' @examples
 #' \dontrun{
-#' # Requires OPENAI_API_KEY and a batch that has been created but may still be running.
+#' # Requires OPENAI_API_KEY and a created batch that may still be running.
 #'
 #' batch <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
 #'
@@ -328,10 +330,11 @@ openai_poll_batch_until_complete <- function(
 #'   [build_openai_batch_requests()].
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
-#' @param include_thoughts Logical; if `TRUE` and using `endpoint = "responses"`,
-#'   requests reasoning-style summaries to populate the `thoughts` column in the
-#'   parsed output. When `endpoint` is not supplied, `include_thoughts = TRUE`
-#'   causes the `responses` endpoint to be selected automatically.
+#' @param include_thoughts Logical; if `TRUE` and using
+#'   `endpoint = "responses"`, requests reasoning-style summaries to populate
+#'   the `thoughts` column in the parsed output. When `endpoint` is not
+#'   supplied, `include_thoughts = TRUE` causes the `responses` endpoint to
+#'   be selected automatically.
 #' @param include_raw Logical; if `TRUE`, attaches the raw model response as a
 #'   list-column `raw_response` in the parsed results.
 #' @param endpoint One of `"chat.completions"` or `"responses"`. If `NULL` (or
@@ -344,7 +347,8 @@ openai_poll_batch_until_complete <- function(
 #'   reaches a terminal status using [openai_poll_batch_until_complete()] and
 #'   then download and parse the output. If `FALSE`, it stops after creating
 #'   the batch and returns without polling or parsing.
-#' @param interval_seconds Polling interval in seconds (used when `poll = TRUE`).
+#' @param interval_seconds Polling interval in seconds
+#'   (used when `poll = TRUE`).
 #' @param timeout_seconds Maximum total time in seconds for polling before
 #'   giving up (used when `poll = TRUE`).
 #' @param max_attempts Maximum number of polling attempts (primarily useful for
@@ -436,7 +440,11 @@ run_openai_batch_pipeline <- function(
 ) {
   # If endpoint not supplied, choose automatically based on include_thoughts
   if (is.null(endpoint)) {
-    endpoint <- if (isTRUE(include_thoughts)) "responses" else "chat.completions"
+    endpoint <- if (isTRUE(include_thoughts)) {
+      "responses"
+    } else {
+      "chat.completions"
+    }
   }
   endpoint <- match.arg(endpoint, c("chat.completions", "responses"))
 

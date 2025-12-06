@@ -22,7 +22,8 @@ same order as the submitted requests.}
 
 \item{output_path}{Path to the JSONL file to create.}
 
-\item{api_key}{Optional Gemini API key (used only when \code{batch} is a name).}
+\item{api_key}{Optional Gemini API key (used only when
+\code{batch} is a name).}
 
 \item{api_version}{API version (default \code{"v1beta"}).}
 }
@@ -31,14 +32,14 @@ Invisibly returns \code{output_path}.
 }
 \description{
 For inline batch requests, Gemini returns results under
-\code{response$inlinedResponses$inlinedResponses}. In the v1beta REST API this
-often comes back as a data frame with one row per request and a \code{"response"}
-column, where each \code{"response"} is itself a data frame of
-\code{GenerateContentResponse} objects.
+\code{response$inlinedResponses$inlinedResponses}. In the v1beta REST API
+this often comes back as a data frame with one row per request and a
+\code{"response"} column, where each \code{"response"} is itself a data frame
+of \code{GenerateContentResponse} objects.
 }
 \details{
-This helper writes those results to a local \code{.jsonl} file where each line
-is a JSON object of the form:
+This helper writes those results to a local \code{.jsonl} file where each
+line is a JSON object of the form:
 
 \preformatted{
 {"custom_id": "<GEM_ID1_vs_ID2>",

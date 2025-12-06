@@ -41,7 +41,8 @@ testthat::test_that("build_anthropic_batch_requests builds valid requests", {
   testthat::expect_true(grepl("<SAMPLE_2>", text_block, fixed = TRUE))
 })
 
-testthat::test_that("build_anthropic_batch_requests enforces reasoning constraints", {
+testthat::test_that("build_anthropic_batch_requests enforces reasoning
+                    constraints", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)
@@ -95,7 +96,8 @@ testthat::test_that("build_anthropic_batch_requests enforces reasoning constrain
   )
 })
 
-testthat::test_that("run_anthropic_batch_pipeline upgrades reasoning for include_thoughts = TRUE", {
+testthat::test_that("run_anthropic_batch_pipeline upgrades reasoning for
+                    include_thoughts = TRUE", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",
@@ -143,7 +145,8 @@ testthat::test_that("run_anthropic_batch_pipeline upgrades reasoning for include
                                                 anthropic_version) {
       stop("Download should not be called in this test")
     },
-    parse_anthropic_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+    parse_anthropic_batch_output = function(jsonl_path, tag_prefix,
+                                            tag_suffix) {
       stop("Parse should not be called in this test")
     },
     {
@@ -170,7 +173,8 @@ testthat::test_that("run_anthropic_batch_pipeline upgrades reasoning for include
   )
 })
 
-testthat::test_that("parse_anthropic_batch_output handles succeeded and errored results", {
+testthat::test_that("parse_anthropic_batch_output handles succeeded and
+                    errored results", {
   tmp <- tempfile(fileext = ".jsonl")
   on.exit(unlink(tmp), add = TRUE)
 
@@ -252,7 +256,8 @@ testthat::test_that("parse_anthropic_batch_output handles succeeded and errored 
   testthat::expect_true(is.na(r2$better_id))
 })
 
-testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing", {
+testthat::test_that("run_anthropic_batch_pipeline works with polling
+                    and parsing", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",
@@ -335,7 +340,8 @@ testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing
       writeLines('{"dummy": true}', con = output_path)
       invisible(output_path)
     },
-    parse_anthropic_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+    parse_anthropic_batch_output = function(jsonl_path, tag_prefix,
+                                            tag_suffix) {
       parsed_path <<- jsonl_path
       fake_results
     },
@@ -374,7 +380,8 @@ testthat::test_that("run_anthropic_batch_pipeline works with polling and parsing
   )
 })
 
-testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when poll = FALSE", {
+testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when
+                    poll = FALSE", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",
@@ -425,7 +432,8 @@ testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when po
       download_called <<- TRUE
       stop("Download should not be called when poll = FALSE")
     },
-    parse_anthropic_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+    parse_anthropic_batch_output = function(jsonl_path, tag_prefix,
+                                            tag_suffix) {
       parse_called <<- TRUE
       stop("Parse should not be called when poll = FALSE")
     },

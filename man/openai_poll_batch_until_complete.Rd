@@ -18,7 +18,8 @@ openai_poll_batch_until_complete(
 
 \item{interval_seconds}{Number of seconds to wait between polling attempts.}
 
-\item{timeout_seconds}{Maximum total time to wait in seconds before giving up.}
+\item{timeout_seconds}{Maximum total time to wait in seconds before
+giving up.}
 
 \item{max_attempts}{Maximum number of polling attempts. This is mainly useful
 for testing; default is \code{Inf}.}
@@ -41,7 +42,7 @@ above is met.
 }
 \examples{
 \dontrun{
-# Requires OPENAI_API_KEY and a batch that has been created but may still be running.
+# Requires OPENAI_API_KEY and a created batch that may still be running.
 
 batch <- openai_create_batch("file_123", endpoint = "/v1/chat/completions")
 

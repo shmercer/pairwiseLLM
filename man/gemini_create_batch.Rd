@@ -23,14 +23,16 @@ list from the output of \code{\link{build_gemini_batch_requests}} via
 \item{api_key}{Optional Gemini API key. Defaults to
 \code{Sys.getenv("GEMINI_API_KEY")}.}
 
-\item{api_version}{API version string for the path; defaults to \code{"v1beta"}.}
+\item{api_version}{API version string for the path; defaults to
+\code{"v1beta"}.}
 
 \item{display_name}{Optional display name for the batch.}
 }
 \value{
-A list representing the Batch job object returned by Gemini. Important
-fields include \code{name}, \code{metadata$state}, and (after completion)
-\code{response$inlinedResponses} or \code{response$responsesFile}.
+A list representing the Batch job object returned by Gemini.
+Important fields include \code{name}, \code{metadata$state},
+and (after completion) \code{response$inlinedResponses} or
+\code{response$responsesFile}.
 }
 \description{
 This is a thin wrapper around the REST endpoint

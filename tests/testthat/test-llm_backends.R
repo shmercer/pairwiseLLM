@@ -36,20 +36,18 @@ testthat::test_that("llm_compare_pair uses default backend and endpoint", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    openai_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      endpoint,
-      api_key,
-      include_raw,
-      ...
-    ) {
+    openai_compare_pair_live = function(ID1,
+                                        text1,
+                                        ID2,
+                                        text2,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template,
+                                        endpoint,
+                                        api_key,
+                                        include_raw,
+                                        ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         text1             = text1,
@@ -82,7 +80,8 @@ testthat::test_that("llm_compare_pair uses default backend and endpoint", {
       testthat::expect_equal(length(calls), 1L)
       call <- calls[[1]]
 
-      # Defaults should resolve to backend = "openai", endpoint = "chat.completions"
+      # Defaults should resolve to backend = "openai", endpoint =
+      # "chat.completions"
       testthat::expect_equal(call$endpoint, "chat.completions")
       # api_key default is from Sys.getenv("OPENAI_API_KEY"); we only check that
       # an argument was passed through (value may vary by environment).
@@ -131,20 +130,18 @@ testthat::test_that("submit_llm_pairs uses default backend and endpoint", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    submit_openai_pairs_live = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      endpoint,
-      api_key,
-      verbose,
-      status_every,
-      progress,
-      include_raw,
-      ...
-    ) {
+    submit_openai_pairs_live = function(pairs,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template,
+                                        endpoint,
+                                        api_key,
+                                        verbose,
+                                        status_every,
+                                        progress,
+                                        include_raw,
+                                        ...) {
       calls <<- append(calls, list(list(
         pairs             = pairs,
         model             = model,
@@ -174,7 +171,8 @@ testthat::test_that("submit_llm_pairs uses default backend and endpoint", {
       testthat::expect_equal(length(calls), 1L)
       call <- calls[[1]]
 
-      # Defaults should resolve to backend = "openai", endpoint = "chat.completions"
+      # Defaults should resolve to backend = "openai", endpoint =
+      # "chat.completions"
       testthat::expect_equal(call$endpoint, "chat.completions")
       testthat::expect_true("api_key" %in% names(call))
       # Defaults for verbose / status_every / progress / include_raw
@@ -287,7 +285,8 @@ testthat::test_that("llm_compare_pair routes to anthropic backend", {
   )
 })
 
-testthat::test_that("llm_compare_pair uses Anthropic env var when api_key is NULL", {
+testthat::test_that("llm_compare_pair uses Anthropic env var when
+                    api_key is NULL", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -319,19 +318,17 @@ testthat::test_that("llm_compare_pair uses Anthropic env var when api_key is NUL
   Sys.setenv(ANTHROPIC_API_KEY = "ENV_ANTH_KEY")
 
   testthat::with_mocked_bindings(
-    anthropic_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      api_key,
-      include_raw,
-      ...
-    ) {
+    anthropic_compare_pair_live = function(ID1,
+                                           text1,
+                                           ID2,
+                                           text2,
+                                           model,
+                                           trait_name,
+                                           trait_description,
+                                           prompt_template,
+                                           api_key,
+                                           include_raw,
+                                           ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         ID2               = ID2,

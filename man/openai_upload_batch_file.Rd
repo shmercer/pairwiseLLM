@@ -15,7 +15,8 @@ openai_upload_batch_file(
 
 \item{purpose}{File purpose. For the Batch API this should be \code{"batch"}.}
 
-\item{api_key}{Optional OpenAI API key. Defaults to \code{Sys.getenv("OPENAI_API_KEY")}.}
+\item{api_key}{Optional OpenAI API key. Defaults to
+\code{Sys.getenv("OPENAI_API_KEY")}.}
 }
 \value{
 A list representing the File object returned by the API, including

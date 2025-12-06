@@ -60,8 +60,9 @@ of the form \code{"ANTH_<ID1>_vs_<ID2>"} and a \code{params} object
 compatible with the \code{/v1/messages} API.
 }
 \details{
-The function mirrors the behaviour of \code{\link{build_openai_batch_requests}}
-but targets Anthropic's \code{/v1/messages/batches} endpoint. It applies the
+The function mirrors the behaviour of
+\code{\link{build_openai_batch_requests}} but targets Anthropic's
+\code{/v1/messages/batches} endpoint. It applies the
 same recommended defaults and reasoning constraints as
 \code{\link{anthropic_compare_pair_live}}:
 

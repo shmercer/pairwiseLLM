@@ -122,7 +122,8 @@ build_elo_data <- function(results) {
 #'   \item{fit}{The \code{"elochoice"} model object.}
 #'   \item{elo}{A tibble with columns \code{ID} and \code{elo}.}
 #'   \item{reliability}{Numeric scalar: mean unweighted reliability index.}
-#'   \item{reliability_weighted}{Numeric scalar: mean weighted reliability index.}
+#'   \item{reliability_weighted}{Numeric scalar: mean weighted
+#'   reliability index.}
 #' }
 #'
 #' @references

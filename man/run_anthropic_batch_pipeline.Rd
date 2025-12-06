@@ -55,13 +55,14 @@ results.}
 if \code{poll = TRUE}. Defaults to a temporary file with suffix
 \code{".jsonl"}.}
 
-\item{poll}{Logical; if \code{TRUE}, the function will poll the batch until it
-reaches \code{processing_status = "ended"} using
+\item{poll}{Logical; if \code{TRUE}, the function will poll the batch until
+it reaches \code{processing_status = "ended"} using
 \code{\link{anthropic_poll_batch_until_complete}} and then download and
 parse the output. If \code{FALSE}, it stops after creating the batch and
 returns without polling or parsing.}
 
-\item{interval_seconds}{Polling interval in seconds (used when \code{poll = TRUE}).}
+\item{interval_seconds}{Polling interval in seconds (used when
+\code{poll = TRUE}).}
 
 \item{timeout_seconds}{Maximum total time in seconds for polling before
 giving up (used when \code{poll = TRUE}).}
@@ -81,7 +82,8 @@ polling.}
 \code{thinking_budget_tokens}).}
 }
 \value{
-A list with elements (aligned with \code{\link{run_openai_batch_pipeline}}):
+A list with elements (aligned with
+\code{\link{run_openai_batch_pipeline}}):
 \describe{
 \item{batch_input_path}{Path to the JSON file containing the batch
 \code{requests} object.}
@@ -108,8 +110,8 @@ targets Anthropic's \emph{Message Batches API}. It:
 \item Writes a JSON file containing the \code{requests} object for
 reproducibility.
 \item Creates a Message Batch via \code{\link{anthropic_create_batch}}.
-\item Optionally polls until the batch reaches \code{processing_status = "ended"}
-using \code{\link{anthropic_poll_batch_until_complete}}.
+\item Optionally polls until the batch reaches \code{processing_status =
+    "ended"} using \code{\link{anthropic_poll_batch_until_complete}}.
 \item If polling is enabled, downloads the \code{.jsonl} result file with
 \code{\link{anthropic_download_batch_results}} and parses it via
 \code{\link{parse_anthropic_batch_output}}.
@@ -141,8 +143,8 @@ override it via \code{max_tokens} in \code{...}.
 \item When \code{reasoning = "enabled"} (extended thinking enabled):
 \itemize{
 \item \code{temperature} \strong{must} be \code{1}. If you supply a
-different value in \code{...}, \code{build_anthropic_batch_requests()}
-will throw an error.
+different value in \code{...},
+\code{build_anthropic_batch_requests()} will throw an error.
 \item By default, \code{max_tokens = 2048} and
 \code{thinking_budget_tokens = 1024}, subject to the constraint
 \code{1024 <= thinking_budget_tokens < max_tokens}. Violations of

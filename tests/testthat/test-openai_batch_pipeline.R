@@ -1,4 +1,5 @@
-testthat::test_that("run_openai_batch_pipeline works with polling and parsing", {
+testthat::test_that("run_openai_batch_pipeline works with polling and
+                    parsing", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",
@@ -77,7 +78,8 @@ testthat::test_that("run_openai_batch_pipeline works with polling and parsing", 
   )
 })
 
-testthat::test_that("run_openai_batch_pipeline does not poll or parse when poll = FALSE", {
+testthat::test_that("run_openai_batch_pipeline does not poll or parse when
+                    poll = FALSE", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",

@@ -38,7 +38,8 @@ testthat::test_that("build_gemini_batch_requests builds valid requests", {
   testthat::expect_true(grepl("SAMPLE_2", text_block, fixed = TRUE))
 })
 
-testthat::test_that("parse_gemini_batch_output handles succeeded and errored results", {
+testthat::test_that("parse_gemini_batch_output handles succeeded and errored
+                    results", {
   tmp <- tempfile(fileext = ".jsonl")
   on.exit(unlink(tmp), add = TRUE)
 
@@ -134,7 +135,8 @@ testthat::test_that("parse_gemini_batch_output handles succeeded and errored res
   testthat::expect_true(is.na(r2$better_id))
 })
 
-testthat::test_that("parse_gemini_batch_output handles invalid JSON lines gracefully", {
+testthat::test_that("parse_gemini_batch_output handles invalid JSON lines
+                    gracefully", {
   tmp <- tempfile(fileext = ".jsonl")
   on.exit(unlink(tmp), add = TRUE)
 
@@ -157,7 +159,8 @@ testthat::test_that("parse_gemini_batch_output handles invalid JSON lines gracef
   testthat::expect_match(res$error_message, "Failed to parse JSON line")
 })
 
-testthat::test_that("run_gemini_batch_pipeline works with polling and parsing (mocked)", {
+testthat::test_that("run_gemini_batch_pipeline works with polling and parsing
+                    (mocked)", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",
@@ -211,7 +214,8 @@ testthat::test_that("run_gemini_batch_pipeline works with polling and parsing (m
   testthat::with_mocked_bindings(
     build_gemini_batch_requests = function(pairs, model, trait_name,
                                            trait_description,
-                                           prompt_template, thinking_level, ...) {
+                                           prompt_template, thinking_level,
+                                           ...) {
       fake_req_tbl
     },
     gemini_create_batch = function(requests, model, api_key, api_version,
@@ -269,7 +273,8 @@ testthat::test_that("run_gemini_batch_pipeline works with polling and parsing (m
   )
 })
 
-testthat::test_that("run_gemini_batch_pipeline does not poll or parse when poll = FALSE", {
+testthat::test_that("run_gemini_batch_pipeline does not poll or parse when
+                    poll = FALSE", {
   pairs <- tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",
@@ -299,7 +304,8 @@ testthat::test_that("run_gemini_batch_pipeline does not poll or parse when poll 
   testthat::with_mocked_bindings(
     build_gemini_batch_requests = function(pairs, model, trait_name,
                                            trait_description,
-                                           prompt_template, thinking_level, ...) {
+                                           prompt_template, thinking_level,
+                                           ...) {
       fake_req_tbl
     },
     gemini_create_batch = function(requests, model, api_key, api_version,

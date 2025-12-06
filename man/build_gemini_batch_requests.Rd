@@ -67,7 +67,8 @@ entries are ignored (Gemini 3 Pro does not support thinking budgets).}
 \value{
 A tibble with one row per pair and two main columns:
 \describe{
-\item{custom_id}{Character ID of the form \code{"<PREFIX>_<ID1>_vs_<ID2>"}.}
+\item{custom_id}{Character ID of the form
+\code{"<PREFIX>_<ID1>_vs_<ID2>"}.}
 \item{request}{List-column containing the Gemini GenerateContent request
 object for each pair.}
 }

@@ -195,7 +195,8 @@ fit_bt_model <- function(bt_data,
   fit_bt2 <- function(dat, ...) {
     if (!requireNamespace("BradleyTerry2", quietly = TRUE)) {
       stop(
-        "Package 'BradleyTerry2' must be installed to use engine = \"BradleyTerry2\".\n",
+        "Package 'BradleyTerry2' must be installed to use engine =
+        \"BradleyTerry2\".\n",
         "Install it with: install.packages(\"BradleyTerry2\")",
         call. = FALSE
       )
@@ -205,8 +206,14 @@ fit_bt_model <- function(bt_data,
     names(dat)[1:3] <- c("object1", "object2", "result")
 
     # Aggregate wins for object1 vs object2
-    wins1 <- stats::aggregate(I(result == 1) ~ object1 + object2, data = dat, sum)
-    wins0 <- stats::aggregate(I(result == 0) ~ object1 + object2, data = dat, sum)
+    wins1 <- stats::aggregate(I(result == 1) ~ object1 + object2,
+      data =
+        dat, sum
+    )
+    wins0 <- stats::aggregate(I(result == 0) ~ object1 + object2,
+      data =
+        dat, sum
+    )
 
     agg <- merge(wins1, wins0, by = c("object1", "object2"), all = TRUE)
     agg[is.na(agg)] <- 0

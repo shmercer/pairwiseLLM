@@ -61,8 +61,9 @@ A tibble with one row per pair and the same columns as
 column for reasoning summaries (when available).
 }
 \description{
-This is a thin row-wise wrapper around \code{\link{openai_compare_pair_live}}.
-It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each pair to
+This is a thin row-wise wrapper around
+\code{\link{openai_compare_pair_live}}. It takes a tibble of pairs
+(ID1 / text1 / ID2 / text2), submits each pair to
 the OpenAI API, and binds the results into a single tibble.
 }
 \details{

@@ -21,7 +21,8 @@
 #'   \item{ID}{Object identifier.}
 #'   \item{theta}{Estimated ability parameter.}
 #'   \item{se}{Standard error of \code{theta}.}
-#'   \item{rank}{Rank of \code{theta}; 1 = highest (if \code{decreasing = TRUE}).}
+#'   \item{rank}{Rank of \code{theta}; 1 = highest
+#'   (if \code{decreasing = TRUE}).}
 #'   \item{engine}{Modeling engine used ("sirt" or "BradleyTerry2").}
 #'   \item{reliability}{MLE reliability (numeric scalar) repeated on each row.}
 #' }
@@ -32,7 +33,8 @@ summarize_bt_fit <- function(fit, decreasing = TRUE) {
   # Basic sanity checks
   if (!is.list(fit) || is.null(fit$theta)) {
     stop(
-      "`fit` must be a list returned by `fit_bt_model()` and contain a `$theta` tibble.",
+      "`fit` must be a list returned by `fit_bt_model()` and contain a
+      `$theta` tibble.",
       call. = FALSE
     )
   }
@@ -57,7 +59,7 @@ summarize_bt_fit <- function(fit, decreasing = TRUE) {
   finite_idx <- which(is.finite(theta$theta))
   if (length(finite_idx) > 0L) {
     ord_finite <- ord[ord %in% finite_idx]
-    rank_vec[ord_finite] <- seq_len(length(ord_finite))
+    rank_vec[ord_finite] <- seq_along(ord_finite)
   }
 
   engine <- if (!is.null(fit$engine)) fit$engine else NA_character_

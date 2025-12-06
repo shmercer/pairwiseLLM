@@ -37,7 +37,8 @@
 #'   For `"anthropic"` and `"gemini"`, use the corresponding provider model
 #'   names (for example `"claude-3-5-sonnet-latest"` or
 #'   `"gemini-2.0-pro-exp"`).
-#' @param trait_name Short label for the trait (for example `"Overall Quality"`).
+#' @param trait_name Short label for the trait (for example
+#'   `"Overall Quality"`).
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
@@ -204,7 +205,8 @@ llm_compare_pair <- function(
 
   stop(
     "Backend '", backend, "' is not implemented yet. ",
-    "Currently supported backends are: \"openai\", \"anthropic\", and \"gemini\".",
+    "Currently supported backends are: \"openai\", \"anthropic\",
+    and \"gemini\".",
     call. = FALSE
   )
 }
@@ -393,7 +395,8 @@ submit_llm_pairs <- function(
 
   stop(
     "Backend '", backend, "' is not implemented yet. ",
-    "Currently supported backends are: \"openai\", \"anthropic\", and \"gemini\".",
+    "Currently supported backends are: \"openai\", \"anthropic\", and
+    \"gemini\".",
     call. = FALSE
   )
 }

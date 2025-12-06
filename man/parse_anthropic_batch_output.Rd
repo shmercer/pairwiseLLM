@@ -33,9 +33,11 @@ A tibble with one row per result. The columns mirror
 \code{NA} otherwise).}
 \item{result_type}{One of \code{"succeeded"}, \code{"errored"},
 \code{"canceled"}, \code{"expired"}.}
-\item{error_message}{Error message for non-succeeded results, otherwise NA.}
+\item{error_message}{Error message for non-succeeded results,
+otherwise NA.}
 \item{thoughts}{Extended thinking text returned by Claude when reasoning
-is enabled (for example when \code{reasoning = "enabled"}), otherwise NA.}
+is enabled (for example when \code{reasoning = "enabled"}),
+otherwise NA.}
 \item{content}{Concatenated assistant text for succeeded results.}
 \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
@@ -73,7 +75,8 @@ a separate \code{thoughts} column.
 # Requires ANTHROPIC_API_KEY and a completed batch.
 library(pairwiseLLM)
 
-# Suppose you have already run run_anthropic_batch_pipeline() with poll = TRUE:
+# Suppose you have already run run_anthropic_batch_pipeline() with poll =
+# TRUE:
 # pipeline <- run_anthropic_batch_pipeline(...)
 # jsonl_path <- pipeline$batch_output_path
 

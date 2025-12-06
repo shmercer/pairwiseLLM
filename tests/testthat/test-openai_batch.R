@@ -1,4 +1,5 @@
-test_that("build_openai_batch_requests builds valid chat.completions JSONL objects", {
+test_that("build_openai_batch_requests builds valid chat.completions JSONL
+          objects", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)
@@ -60,10 +61,16 @@ test_that("write_openai_batch_file writes JSONL file", {
   # Each line should be valid JSON with required top-level keys
   objs <- lapply(lines, jsonlite::fromJSON)
   keys <- lapply(objs, names)
-  expect_true(all(vapply(keys, function(k) all(c("custom_id", "method", "url", "body") %in% k), logical(1))))
+  expect_true(all(vapply(keys, function(k) {
+    all(c(
+      "custom_id", "method",
+      "url", "body"
+    ) %in% k)
+  }, logical(1))))
 })
 
-test_that("build_openai_batch_requests supports gpt-5.1 with reasoning = 'none' on responses", {
+test_that("build_openai_batch_requests supports gpt-5.1 with reasoning =
+          'none' on responses", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)
@@ -99,10 +106,12 @@ test_that("build_openai_batch_requests supports gpt-5.1 with reasoning = 'none' 
     text2      = pairs$text2[1]
   ))
   # reasoning should be present with effort = "none"
-  expect_true("reasoning" %in% names(b1) || is.null(b1$reasoning) || identical(b1$reasoning$effort, "none"))
+  expect_true("reasoning" %in% names(b1) || is.null(b1$reasoning) ||
+    identical(b1$reasoning$effort, "none"))
 })
 
-test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning != 'none' with temp/top_p/logprobs", {
+test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning !=
+          'none' with temp/top_p/logprobs", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)
@@ -128,7 +137,8 @@ test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning != 'none' 
   )
 })
 
-test_that("build_openai_batch_requests errors for other gpt-5* models when temp/top_p/logprobs are non-NULL", {
+test_that("build_openai_batch_requests errors for other gpt-5* models when
+          temp/top_p/logprobs are non-NULL", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)
@@ -155,7 +165,8 @@ test_that("build_openai_batch_requests errors for other gpt-5* models when temp/
   )
 })
 
-test_that("build_openai_batch_requests allows other gpt-5* models with temp/top_p/logprobs = NULL", {
+test_that("build_openai_batch_requests allows other gpt-5* models with
+          temp/top_p/logprobs = NULL", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)
@@ -182,7 +193,8 @@ test_that("build_openai_batch_requests allows other gpt-5* models with temp/top_
   expect_equal(batch$body[[1]]$model, "gpt-5-mini")
 })
 
-testthat::test_that("parse_openai_batch_output collects thoughts and message text separately for responses", {
+testthat::test_that("parse_openai_batch_output collects thoughts and message
+                    text separately for responses", {
   tmp <- tempfile(fileext = ".jsonl")
   on.exit(unlink(tmp), add = TRUE)
 
@@ -265,7 +277,8 @@ testthat::test_that("parse_openai_batch_output collects thoughts and message tex
   testthat::expect_equal(res$total_tokens, 15)
 })
 
-test_that("build_openai_batch_requests adds reasoning summary when include_thoughts = TRUE", {
+test_that("build_openai_batch_requests adds reasoning summary when
+          include_thoughts = TRUE", {
   data("example_writing_samples", package = "pairwiseLLM")
 
   pairs <- make_pairs(example_writing_samples)

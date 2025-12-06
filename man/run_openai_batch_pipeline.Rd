@@ -39,10 +39,11 @@ Typically produced by \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=samp
 \item{prompt_template}{Prompt template string, typically from
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
-\item{include_thoughts}{Logical; if \code{TRUE} and using \code{endpoint = "responses"},
-requests reasoning-style summaries to populate the \code{thoughts} column in the
-parsed output. When \code{endpoint} is not supplied, \code{include_thoughts = TRUE}
-causes the \code{responses} endpoint to be selected automatically.}
+\item{include_thoughts}{Logical; if \code{TRUE} and using
+\code{endpoint = "responses"}, requests reasoning-style summaries to populate
+the \code{thoughts} column in the parsed output. When \code{endpoint} is not
+supplied, \code{include_thoughts = TRUE} causes the \code{responses} endpoint to
+be selected automatically.}
 
 \item{include_raw}{Logical; if \code{TRUE}, attaches the raw model response as a
 list-column \code{raw_response} in the parsed results.}
@@ -61,7 +62,8 @@ reaches a terminal status using \code{\link[=openai_poll_batch_until_complete]{o
 then download and parse the output. If \code{FALSE}, it stops after creating
 the batch and returns without polling or parsing.}
 
-\item{interval_seconds}{Polling interval in seconds (used when \code{poll = TRUE}).}
+\item{interval_seconds}{Polling interval in seconds
+(used when \code{poll = TRUE}).}
 
 \item{timeout_seconds}{Maximum total time in seconds for polling before
 giving up (used when \code{poll = TRUE}).}

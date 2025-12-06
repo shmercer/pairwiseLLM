@@ -252,9 +252,13 @@ parse_openai_batch_output <- function(path,
     # Extract better_sample via simple tag search
     better_sample <- NA_character_
     if (!is.na(content)) {
-      if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
+      if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content,
+        fixed = TRUE
+      )) {
         better_sample <- "SAMPLE_1"
-      } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content, fixed = TRUE)) {
+      } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content,
+        fixed = TRUE
+      )) {
         better_sample <- "SAMPLE_2"
       }
     }
@@ -275,7 +279,8 @@ parse_openai_batch_output <- function(path,
     # Chat completions: prompt_tokens, completion_tokens, total_tokens
     # Responses (gpt-5.x): input_tokens, output_tokens, total_tokens
     prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
-    completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
+    completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||%
+      NA_real_
     total_tokens <- usage$total_tokens %||% NA_real_
 
     # Detailed token info when available

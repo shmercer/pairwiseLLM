@@ -126,7 +126,8 @@ test_that("fit_bt_model with engine = 'auto' uses sirt when available", {
   expect_true(all(c("ID", "theta", "se") %in% names(fit$theta)))
 })
 
-test_that("fit_bt_model errors when bt_data does not have exactly three columns", {
+test_that("fit_bt_model errors when bt_data does not have exactly three
+          columns", {
   # Too many columns
   bad <- tibble::tibble(
     object1 = c("S1", "S2"),

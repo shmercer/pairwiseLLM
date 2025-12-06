@@ -90,9 +90,14 @@ NULL
 
   better_sample <- NA_character_
   if (!is.na(content)) {
-    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
+    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content,
+      fixed =
+        TRUE
+    )) {
       better_sample <- "SAMPLE_1"
-    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content, fixed = TRUE)) {
+    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content,
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_2"
     }
   }
@@ -129,8 +134,9 @@ NULL
 #' of the form \code{"ANTH_<ID1>_vs_<ID2>"} and a \code{params} object
 #' compatible with the \code{/v1/messages} API.
 #'
-#' The function mirrors the behaviour of \code{\link{build_openai_batch_requests}}
-#' but targets Anthropic's \code{/v1/messages/batches} endpoint. It applies the
+#' The function mirrors the behaviour of
+#' \code{\link{build_openai_batch_requests}} but targets Anthropic's
+#' \code{/v1/messages/batches} endpoint. It applies the
 #' same recommended defaults and reasoning constraints as
 #' \code{\link{anthropic_compare_pair_live}}:
 #'
@@ -442,7 +448,9 @@ anthropic_create_batch <- function(
   anthropic_version = "2023-06-01"
 ) {
   if (!is.list(requests) || length(requests) == 0L) {
-    stop("`requests` must be a non-empty list of request objects.", call. = FALSE)
+    stop("`requests` must be a non-empty list of request objects.",
+      call. = FALSE
+    )
   }
 
   req <- .anthropic_request(
@@ -559,7 +567,8 @@ anthropic_poll_batch_until_complete <- function(
 
     if (verbose) {
       msg <- sprintf(
-        "Batch %s status: %s | processing=%s, succeeded=%s, errored=%s, canceled=%s, expired=%s",
+        "Batch %s status: %s | processing=%s, succeeded=%s, errored=%s,
+        canceled=%s, expired=%s",
         batch$id %||% "<unknown>",
         status,
         batch$request_counts$processing %||% NA_integer_,
@@ -701,9 +710,11 @@ anthropic_download_batch_results <- function(
 #'         \code{NA} otherwise).}
 #'   \item{result_type}{One of \code{"succeeded"}, \code{"errored"},
 #'         \code{"canceled"}, \code{"expired"}.}
-#'   \item{error_message}{Error message for non-succeeded results, otherwise NA.}
+#'   \item{error_message}{Error message for non-succeeded results,
+#'         otherwise NA.}
 #'   \item{thoughts}{Extended thinking text returned by Claude when reasoning
-#'         is enabled (for example when \code{reasoning = "enabled"}), otherwise NA.}
+#'         is enabled (for example when \code{reasoning = "enabled"}),
+#'         otherwise NA.}
 #'   \item{content}{Concatenated assistant text for succeeded results.}
 #'   \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or NA.}
 #'   \item{better_id}{ID1 if SAMPLE_1 is chosen, ID2 if SAMPLE_2 is chosen,
@@ -718,7 +729,8 @@ anthropic_download_batch_results <- function(
 #' # Requires ANTHROPIC_API_KEY and a completed batch.
 #' library(pairwiseLLM)
 #'
-#' # Suppose you have already run run_anthropic_batch_pipeline() with poll = TRUE:
+#' # Suppose you have already run run_anthropic_batch_pipeline() with poll =
+#' # TRUE:
 #' # pipeline <- run_anthropic_batch_pipeline(...)
 #' # jsonl_path <- pipeline$batch_output_path
 #'
@@ -879,8 +891,8 @@ parse_anthropic_batch_output <- function(
 #'   \item Writes a JSON file containing the \code{requests} object for
 #'     reproducibility.
 #'   \item Creates a Message Batch via \code{\link{anthropic_create_batch}}.
-#'   \item Optionally polls until the batch reaches \code{processing_status = "ended"}
-#'     using \code{\link{anthropic_poll_batch_until_complete}}.
+#'   \item Optionally polls until the batch reaches \code{processing_status =
+#'     "ended"} using \code{\link{anthropic_poll_batch_until_complete}}.
 #'   \item If polling is enabled, downloads the \code{.jsonl} result file with
 #'     \code{\link{anthropic_download_batch_results}} and parses it via
 #'     \code{\link{parse_anthropic_batch_output}}.
@@ -913,8 +925,8 @@ parse_anthropic_batch_output <- function(
 #'   \item When \code{reasoning = "enabled"} (extended thinking enabled):
 #'     \itemize{
 #'       \item \code{temperature} \strong{must} be \code{1}. If you supply a
-#'         different value in \code{...}, \code{build_anthropic_batch_requests()}
-#'         will throw an error.
+#'         different value in \code{...},
+#'         \code{build_anthropic_batch_requests()} will throw an error.
 #'       \item By default, \code{max_tokens = 2048} and
 #'         \code{thinking_budget_tokens = 1024}, subject to the constraint
 #'         \code{1024 <= thinking_budget_tokens < max_tokens}. Violations of
@@ -950,12 +962,13 @@ parse_anthropic_batch_output <- function(
 #' @param batch_output_path Path to write the downloaded \code{.jsonl} results
 #'   if \code{poll = TRUE}. Defaults to a temporary file with suffix
 #'   \code{".jsonl"}.
-#' @param poll Logical; if \code{TRUE}, the function will poll the batch until it
-#'   reaches \code{processing_status = "ended"} using
+#' @param poll Logical; if \code{TRUE}, the function will poll the batch until
+#'   it reaches \code{processing_status = "ended"} using
 #'   \code{\link{anthropic_poll_batch_until_complete}} and then download and
 #'   parse the output. If \code{FALSE}, it stops after creating the batch and
 #'   returns without polling or parsing.
-#' @param interval_seconds Polling interval in seconds (used when \code{poll = TRUE}).
+#' @param interval_seconds Polling interval in seconds (used when
+#'   \code{poll = TRUE}).
 #' @param timeout_seconds Maximum total time in seconds for polling before
 #'   giving up (used when \code{poll = TRUE}).
 #' @param api_key Optional Anthropic API key. Defaults to
@@ -969,7 +982,8 @@ parse_anthropic_batch_output <- function(
 #'   \code{max_tokens}, \code{temperature}, \code{top_p},
 #'   \code{thinking_budget_tokens}).
 #'
-#' @return A list with elements (aligned with \code{\link{run_openai_batch_pipeline}}):
+#' @return A list with elements (aligned with
+#'   \code{\link{run_openai_batch_pipeline}}):
 #' \describe{
 #'   \item{batch_input_path}{Path to the JSON file containing the batch
 #'     \code{requests} object.}
@@ -1073,7 +1087,8 @@ run_anthropic_batch_pipeline <- function(
     ...
   )
 
-  # Convert tibble to list-of-requests structure expected by /v1/messages/batches
+  # Convert tibble to list-of-requests structure expected by
+  # /v1/messages/batches
   requests <- lapply(seq_len(nrow(req_tbl)), function(i) {
     list(
       custom_id = req_tbl$custom_id[i],
@@ -1083,7 +1098,10 @@ run_anthropic_batch_pipeline <- function(
 
   # 2) Write JSON input (for reproducibility only)
   if (is.null(batch_input_path)) {
-    batch_input_path <- tempfile(pattern = "anthropic-batch-input-", fileext = ".json")
+    batch_input_path <- tempfile(
+      pattern = "anthropic-batch-input-",
+      fileext = ".json"
+    )
   }
 
   input_obj <- list(requests = requests)

@@ -94,7 +94,8 @@ A tibble with one row and columns:
 \item \code{content} - concatenated text of the assistant's final answer (used to
 locate the \verb{<BETTER_SAMPLE>} tag).
 \item \code{better_sample} - \code{"SAMPLE_1"}, \code{"SAMPLE_2"}, or \code{NA}.
-\item \code{better_id} - \code{ID1} if \code{SAMPLE_1} is chosen, \code{ID2} if \code{SAMPLE_2}, or \code{NA}.
+\item \code{better_id} - \code{ID1} if \code{SAMPLE_1} is chosen,
+\code{ID2} if \code{SAMPLE_2}, or \code{NA}.
 \item \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens} - usage counts if
 reported by the API, otherwise \code{NA_real_}.
 }

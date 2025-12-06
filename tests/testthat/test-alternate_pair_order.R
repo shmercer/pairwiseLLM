@@ -44,7 +44,8 @@ testthat::test_that("alternate_pair_order returns tibble and handles 0/1 rows", 
   testthat::expect_equal(res_one$ID2, one_pair$ID2)
 })
 
-testthat::test_that("alternate_pair_order flips every second row (2, 4, 6, ...)", {
+testthat::test_that("alternate_pair_order flips every second row
+                    (2, 4, 6, ...)", {
   pairs <- tibble::tibble(
     ID1   = paste0("S", 1:6),
     text1 = paste("Text", 1:6, "A"),
@@ -82,7 +83,8 @@ testthat::test_that("alternate_pair_order flips every second row (2, 4, 6, ...)"
   testthat::expect_equal(res$ID2[6], pairs$ID1[6])
 })
 
-testthat::test_that("alternate_pair_order does not modify the input object", {
+testthat::test_that("alternate_pair_order does not
+                    modify the input object", {
   pairs <- tibble::tibble(
     ID1   = paste0("S", 1:4),
     text1 = paste("Text", 1:4, "A"),

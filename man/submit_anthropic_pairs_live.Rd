@@ -77,14 +77,15 @@ A tibble with one row per pair and the same columns as
 \code{\link{anthropic_compare_pair_live}}.
 }
 \description{
-This is a thin row-wise wrapper around \code{\link{anthropic_compare_pair_live}}.
-It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each pair to
-the Anthropic Messages API, and binds the results into a single tibble.
+This is a thin row-wise wrapper around
+\code{\link{anthropic_compare_pair_live}}. It takes a tibble of pairs
+(ID1 / text1 / ID2 / text2), submits each pair to the Anthropic
+Messages API, and binds the results into a single tibble.
 }
 \details{
 The output has the same columns as \code{\link{anthropic_compare_pair_live}},
-with one row per pair, making it easy to pass into \code{\link{build_bt_data}}
-and \code{\link{fit_bt_model}}.
+with one row per pair, making it easy to pass into
+\code{\link{build_bt_data}} and \code{\link{fit_bt_model}}.
 
 \strong{Temperature and reasoning behaviour}
 

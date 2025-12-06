@@ -14,10 +14,13 @@ configure missing ones.}
 \value{
 A tibble (data frame) with one row per backend and columns:
 \describe{
-\item{backend}{Short backend identifier, e.g. \code{"openai"}, \code{"anthropic"}, \code{"gemini"}.}
-\item{service}{Human-readable service name, e.g. \code{"OpenAI"}, \code{"Anthropic"}, \code{"Google Gemini"}.}
+\item{backend}{Short backend identifier, e.g. \code{"openai"}, \code{"anthropic"},
+\code{"gemini"}.}
+\item{service}{Human-readable service name, e.g. \code{"OpenAI"},
+\code{"Anthropic"}, \code{"Google Gemini"}.}
 \item{env_var}{Name of the environment variable that is checked.}
-\item{has_key}{Logical flag indicating whether the key is set and non-empty.}
+\item{has_key}{Logical flag indicating whether the key is set and
+non-empty.}
 }
 }
 \description{
@@ -36,7 +39,8 @@ shared environments.
 # In an interactive session, quickly check which keys are configured:
 check_llm_api_keys()
 
-# In non-interactive scripts, you can disable messages and just use the result:
+# In non-interactive scripts, you can disable messages and just use the
+# result:
 status <- check_llm_api_keys(verbose = FALSE)
 status
 }

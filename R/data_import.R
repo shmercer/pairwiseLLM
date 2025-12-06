@@ -50,7 +50,8 @@ read_samples_df <- function(df,
   out$ID <- as.character(df[[id_col]])
   out$text <- as.character(df[[text_col]])
 
-  # Reorder columns: ID, text, then everything else except original ID/text columns
+  # Reorder columns: ID, text, then everything else except original
+  # ID/text columns
   keep_cols <- c("ID", "text")
   other_cols <- setdiff(names(out), c(keep_cols, id_col, text_col))
   out <- out[, c(keep_cols, other_cols), drop = FALSE]
