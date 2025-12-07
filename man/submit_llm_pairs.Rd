@@ -10,7 +10,7 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini"),
+  backend = c("openai", "anthropic", "gemini", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   verbose = TRUE,
@@ -28,7 +28,8 @@ submit_llm_pairs(
 \item{model}{Model identifier for the chosen backend. For \code{"openai"} this
 should be an OpenAI model name (for example \code{"gpt-4.1"}, \code{"gpt-5.1"}).
 For \code{"anthropic"} and \code{"gemini"}, use the corresponding provider model
-names.}
+names. For \code{"ollama"}, use a local model name known to the Ollama server
+(for example \code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).}
 
 \item{trait_name}{Trait name to pass through to the backend-specific
 comparison function (for example \code{"Overall Quality"}).}
@@ -39,16 +40,18 @@ comparison function (for example \code{"Overall Quality"}).}
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{backend}{Character scalar indicating which LLM provider to use.
-One of \code{"openai"}, \code{"anthropic"}, or \code{"gemini"}.}
+One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, or \code{"ollama"}.}
 
 \item{endpoint}{Character scalar specifying which endpoint family to use for
 backends that support multiple live APIs. For the \code{"openai"} backend this
 must be one of \code{"chat.completions"} or \code{"responses"}, matching
-\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"} and \code{"gemini"}, this is
-currently ignored.}
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"}, \code{"gemini"}, and
+\code{"ollama"}, this is currently ignored.}
 
 \item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
-backend-specific helper will use its own default environment variable.}
+backend-specific helper will use its own default environment variable.
+For \code{"ollama"}, this argument is ignored (no API key is required for
+local inference).}
 
 \item{verbose}{Logical; if \code{TRUE}, prints status, timing, and result
 summaries (for backends that support it).}
@@ -71,7 +74,9 @@ are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live
 \code{"anthropic"} and \code{"gemini"}, they are forwarded to
 \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}} or \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} and
 may include options such as \code{max_output_tokens}, \code{include_thoughts}, and
-provider-specific controls.}
+provider-specific controls. For \code{"ollama"}, arguments are forwarded to
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} and may include \code{host}, \code{think},
+\code{num_ctx}, and other Ollama-specific options.}
 }
 \value{
 A tibble with one row per pair and the same columns as the
@@ -91,6 +96,7 @@ At present, the following backends are implemented:
 \item \code{"openai"}   → \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}
 \item \code{"anthropic"} → \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}
 \item \code{"gemini"}   → \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}
+\item \code{"ollama"}   → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
 }
 
 Each backend-specific helper returns a tibble with one row per pair and a
@@ -100,9 +106,13 @@ thinking text when available), \code{content} (visible assistant output),
 }
 \examples{
 \dontrun{
-# Requires an API key for the chosen backend. For OpenAI, set
-# OPENAI_API_KEY in your environment. Running this example will incur
+# Requires an API key for the chosen cloud backend. For OpenAI, set
+# OPENAI_API_KEY in your environment. Running these examples will incur
 # API usage costs.
+#
+# For local Ollama use, an Ollama server must be running and the models
+# must be pulled in advance. No API key is required for the `"ollama"`
+# backend.
 
 library(pairwiseLLM)
 
@@ -133,13 +143,35 @@ res_live <- submit_llm_pairs(
 )
 
 res_live$better_id
+
+# Live comparisons using a local Ollama backend (no API key required)
+# Make sure an Ollama server is running and the model is available, e.g.:
+#   ollama pull mistral-small3.2:24b
+#
+# res_ollama <- submit_llm_pairs(
+#   pairs             = pairs,
+#   model             = "mistral-small3.2:24b",
+#   trait_name        = td$name,
+#   trait_description = td$description,
+#   prompt_template   = tmpl,
+#   backend           = "ollama",
+#   verbose           = TRUE,
+#   status_every      = 2,
+#   progress          = TRUE,
+#   include_raw       = FALSE,
+#   think             = FALSE,
+#   num_ctx           = 8192
+# )
+#
+# res_ollama$better_id
 }
 
 }
 \seealso{
 \itemize{
 \item \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
-and \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} for backend-specific implementations.
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, and \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for
+backend-specific implementations.
 \item \code{\link[=llm_compare_pair]{llm_compare_pair()}} for single-pair comparisons.
 \item \code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}} for Bradley–Terry modelling of
 comparison results.
