@@ -14,7 +14,7 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini"),
+  backend = c("openai", "anthropic", "gemini", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   verbose = TRUE,
@@ -41,7 +41,9 @@ submit_llm_pairs(
   Model identifier for the chosen backend. For `"openai"` this should be
   an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`). For
   `"anthropic"` and `"gemini"`, use the corresponding provider model
-  names.
+  names. For `"ollama"`, use a local model name known to the Ollama
+  server (for example `"mistral-small3.2:24b"`, `"qwen3:32b"`,
+  `"gemma3:27b"`).
 
 - trait_name:
 
@@ -60,7 +62,7 @@ submit_llm_pairs(
 - backend:
 
   Character scalar indicating which LLM provider to use. One of
-  `"openai"`, `"anthropic"`, or `"gemini"`.
+  `"openai"`, `"anthropic"`, `"gemini"`, or `"ollama"`.
 
 - endpoint:
 
@@ -68,12 +70,15 @@ submit_llm_pairs(
   that support multiple live APIs. For the `"openai"` backend this must
   be one of `"chat.completions"` or `"responses"`, matching
   [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md).
-  For `"anthropic"` and `"gemini"`, this is currently ignored.
+  For `"anthropic"`, `"gemini"`, and `"ollama"`, this is currently
+  ignored.
 
 - api_key:
 
   Optional API key for the selected backend. If `NULL`, the
   backend-specific helper will use its own default environment variable.
+  For `"ollama"`, this argument is ignored (no API key is required for
+  local inference).
 
 - verbose:
 
@@ -110,7 +115,11 @@ submit_llm_pairs(
   or
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
   and may include options such as `max_output_tokens`,
-  `include_thoughts`, and provider-specific controls.
+  `include_thoughts`, and provider-specific controls. For `"ollama"`,
+  arguments are forwarded to
+  [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
+  and may include `host`, `think`, `num_ctx`, and other Ollama-specific
+  options.
 
 ## Value
 
@@ -134,6 +143,9 @@ At present, the following backends are implemented:
 - `"gemini"` →
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
 
+- `"ollama"` →
+  [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
+
 Each backend-specific helper returns a tibble with one row per pair and
 a compatible set of columns, including a `thoughts` column (reasoning /
 thinking text when available), `content` (visible assistant output),
@@ -143,8 +155,9 @@ thinking text when available), `content` (visible assistant output),
 
 - [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
   [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+  [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
   and
-  [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
+  [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
   for backend-specific implementations.
 
 - [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
@@ -159,9 +172,13 @@ thinking text when available), `content` (visible assistant output),
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires an API key for the chosen backend. For OpenAI, set
-# OPENAI_API_KEY in your environment. Running this example will incur
+# Requires an API key for the chosen cloud backend. For OpenAI, set
+# OPENAI_API_KEY in your environment. Running these examples will incur
 # API usage costs.
+#
+# For local Ollama use, an Ollama server must be running and the models
+# must be pulled in advance. No API key is required for the `"ollama"`
+# backend.
 
 library(pairwiseLLM)
 
@@ -192,5 +209,26 @@ res_live <- submit_llm_pairs(
 )
 
 res_live$better_id
+
+# Live comparisons using a local Ollama backend (no API key required)
+# Make sure an Ollama server is running and the model is available, e.g.:
+#   ollama pull mistral-small3.2:24b
+#
+# res_ollama <- submit_llm_pairs(
+#   pairs             = pairs,
+#   model             = "mistral-small3.2:24b",
+#   trait_name        = td$name,
+#   trait_description = td$description,
+#   prompt_template   = tmpl,
+#   backend           = "ollama",
+#   verbose           = TRUE,
+#   status_every      = 2,
+#   progress          = TRUE,
+#   include_raw       = FALSE,
+#   think             = FALSE,
+#   num_ctx           = 8192
+# )
+#
+# res_ollama$better_id
 } # }
 ```

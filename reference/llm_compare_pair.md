@@ -2,8 +2,8 @@
 
 `llm_compare_pair()` is a thin wrapper around backend-specific
 comparison functions. It currently supports the `"openai"`,
-`"anthropic"`, and `"gemini"` backends and forwards the call to the
-appropriate live comparison helper:
+`"anthropic"`, `"gemini"`, and `"ollama"` backends and forwards the call
+to the appropriate live comparison helper:
 
 - `"openai"` →
   [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md)
@@ -13,6 +13,9 @@ appropriate live comparison helper:
 
 - `"gemini"` →
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md)
+
+- `"ollama"` →
+  [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
 
 ## Usage
 
@@ -26,7 +29,7 @@ llm_compare_pair(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini"),
+  backend = c("openai", "anthropic", "gemini", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   include_raw = FALSE,
@@ -58,7 +61,9 @@ llm_compare_pair(
   an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`). For
   `"anthropic"` and `"gemini"`, use the corresponding provider model
   names (for example `"claude-3-5-sonnet-latest"` or
-  `"gemini-2.0-pro-exp"`).
+  `"gemini-2.0-pro-exp"`). For `"ollama"`, use a local model name known
+  to the Ollama server (for example `"mistral-small3.2:24b"`,
+  `"qwen3:32b"`, `"gemma3:27b"`).
 
 - trait_name:
 
@@ -76,7 +81,7 @@ llm_compare_pair(
 - backend:
 
   Character scalar indicating which LLM provider to use. One of
-  `"openai"`, `"anthropic"`, or `"gemini"`.
+  `"openai"`, `"anthropic"`, `"gemini"`, or `"ollama"`.
 
 - endpoint:
 
@@ -84,13 +89,16 @@ llm_compare_pair(
   that support multiple live APIs. For the `"openai"` backend this must
   be one of `"chat.completions"` or `"responses"`, matching
   [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md).
-  For `"anthropic"` and `"gemini"`, this argument is currently ignored.
+  For `"anthropic"`, `"gemini"`, and `"ollama"`, this argument is
+  currently ignored.
 
 - api_key:
 
   Optional API key for the selected backend. If `NULL`, the
   backend-specific helper will use its own default environment variable
   (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`).
+  For `"ollama"`, this argument is ignored (no API key is required for
+  local inference).
 
 - include_raw:
 
@@ -107,7 +115,11 @@ llm_compare_pair(
   `logprobs`, `reasoning`, and `include_thoughts`. For `"anthropic"` and
   `"gemini"` they are forwarded to the corresponding live helper and may
   include parameters such as `reasoning`, `include_thoughts`,
-  `max_output_tokens`, or provider-specific options.
+  `max_output_tokens`, or provider-specific options. For `"ollama"`,
+  arguments are forwarded to
+  [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
+  and may include `host`, `think`, `num_ctx`, and other Ollama-specific
+  controls.
 
 ## Value
 
@@ -136,16 +148,17 @@ structure, including:
 
 For the `"openai"` backend, the `endpoint` argument controls whether the
 Chat Completions API (`"chat.completions"`) or the Responses API
-(`"responses"`) is used. For the `"anthropic"` and `"gemini"` backends,
-`endpoint` is currently ignored and the default live API for that
-provider is used.
+(`"responses"`) is used. For the `"anthropic"`, `"gemini"`, and
+`"ollama"` backends, `endpoint` is currently ignored and the default
+live API for that provider is used.
 
 ## See also
 
 - [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
   [`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+  [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
   and
-  [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md)
+  [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
   for backend-specific implementations.
 
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
@@ -160,9 +173,13 @@ provider is used.
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires an API key for the chosen backend. For OpenAI, set
-# OPENAI_API_KEY in your environment. Running this example will incur
+# Requires an API key for the chosen cloud backend. For OpenAI, set
+# OPENAI_API_KEY in your environment. Running these examples will incur
 # API usage costs.
+#
+# For local Ollama use, an Ollama server must be running and the models
+# must be pulled in advance. No API key is required for the `"ollama"`
+# backend.
 
 library(pairwiseLLM)
 
@@ -210,5 +227,28 @@ res_live_gpt5 <- llm_compare_pair(
 )
 
 str(res_live_gpt5$raw_response[[1]], max.level = 2)
+
+# Example: single live comparison using a local Ollama backend
+# (requires a running Ollama server and pulled model, e.g.
+#   `ollama pull mistral-small3.2:24b`)
+#
+# res_ollama <- llm_compare_pair(
+#   ID1               = samples$ID[1],
+#   text1             = samples$text[1],
+#   ID2               = samples$ID[2],
+#   text2             = samples$text[2],
+#   model             = "mistral-small3.2:24b",
+#   trait_name        = td$name,
+#   trait_description = td$description,
+#   prompt_template   = tmpl,
+#   backend           = "ollama",
+#   host              = getOption(
+#     "pairwiseLLM.ollama_host",
+#     "http://127.0.0.1:11434"
+#   ),
+#   think             = FALSE
+# )
+#
+# res_ollama$better_id
 } # }
 ```

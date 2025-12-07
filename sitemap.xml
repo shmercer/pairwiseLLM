@@ -28,6 +28,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-openai_base_url.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-openai_request.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-parse_gemini_pair_response.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_openai_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_pairs.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples.html</loc></url>
@@ -45,6 +46,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/make_pairs.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.html</loc></url>
@@ -68,6 +70,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/trait_description.html</loc></url>

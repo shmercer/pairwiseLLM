@@ -460,6 +460,8 @@ MIT License. See `LICENSE`.
   : Check positional bias and bootstrap consistency reliability
 - [`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md)
   : Compute consistency between forward and reverse pair comparisons
+- [`ensure_only_ollama_model_loaded()`](https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.md)
+  : Ensure only one Ollama model is loaded in memory
 - [`example_openai_batch_output`](https://shmercer.github.io/pairwiseLLM/reference/example_openai_batch_output.md)
   : Example OpenAI Batch output (JSONL lines)
 - [`example_writing_pairs`](https://shmercer.github.io/pairwiseLLM/reference/example_writing_pairs.md)
@@ -492,6 +494,8 @@ MIT License. See `LICENSE`.
   : Submit pairs to an LLM backend via batch API
 - [`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md)
   : Create all unordered pairs of writing samples
+- [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
+  : Live Ollama comparison for a single pair of samples
 - [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md)
   : Live OpenAI comparison for a single pair of samples
 - [`openai_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.md)
@@ -538,6 +542,8 @@ MIT License. See `LICENSE`.
   : Live Google Gemini comparisons for a tibble of pairs
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
   : Backend-agnostic live comparisons for a tibble of pairs
+- [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
+  : Live Ollama comparisons for a tibble of pairs
 - [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
   : Live OpenAI comparisons for a tibble of pairs
 - [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
