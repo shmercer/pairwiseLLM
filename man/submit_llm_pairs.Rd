@@ -10,7 +10,7 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   verbose = TRUE,
@@ -40,13 +40,13 @@ comparison function (for example \code{"Overall Quality"}).}
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{backend}{Character scalar indicating which LLM provider to use.
-One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, or \code{"ollama"}.}
+One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, or \code{"ollama"}.}
 
 \item{endpoint}{Character scalar specifying which endpoint family to use for
 backends that support multiple live APIs. For the \code{"openai"} backend this
 must be one of \code{"chat.completions"} or \code{"responses"}, matching
-\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"}, \code{"gemini"}, and
-\code{"ollama"}, this is currently ignored.}
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"}, \code{"gemini"}, \code{"together"},
+and \code{"ollama"}, this is currently ignored.}
 
 \item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
 backend-specific helper will use its own default environment variable.
@@ -96,6 +96,7 @@ At present, the following backends are implemented:
 \item \code{"openai"}   → \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}
 \item \code{"anthropic"} → \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}
 \item \code{"gemini"}   → \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}
+\item \code{"together"}  → \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}
 \item \code{"ollama"}   → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
 }
 
@@ -170,8 +171,8 @@ res_live$better_id
 \seealso{
 \itemize{
 \item \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
-\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, and \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for
-backend-specific implementations.
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, and
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for backend-specific implementations.
 \item \code{\link[=llm_compare_pair]{llm_compare_pair()}} for single-pair comparisons.
 \item \code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}} for Bradley–Terry modelling of
 comparison results.

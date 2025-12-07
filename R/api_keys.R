@@ -66,9 +66,9 @@
 #' @return A tibble (data frame) with one row per backend and columns:
 #' \describe{
 #'   \item{backend}{Short backend identifier, e.g. `"openai"`, `"anthropic"`,
-#'   `"gemini"`.}
+#'   `"gemini"`, `"together"`.}
 #'   \item{service}{Human-readable service name, e.g. `"OpenAI"`,
-#'   `"Anthropic"`, `"Google Gemini"`.}
+#'   `"Anthropic"`, `"Google Gemini"`, `"Together.ai"`.}
 #'   \item{env_var}{Name of the environment variable that is checked.}
 #'   \item{has_key}{Logical flag indicating whether the key is set and
 #'   non-empty.}
@@ -88,9 +88,15 @@
 #' @export
 check_llm_api_keys <- function(verbose = TRUE) {
   # Known backends and their primary env vars
-  backends <- c("openai", "anthropic", "gemini")
-  services <- c("OpenAI", "Anthropic", "Google Gemini")
-  env_vars <- c("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY")
+  backends <- c("openai", "anthropic", "gemini", "together")
+  services <- c("OpenAI", "Anthropic", "Google Gemini", "Together.ai")
+  env_vars <- c(
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+    "TOGETHER_API_KEY"
+  )
+
 
   values <- vapply(
     env_vars,
@@ -123,11 +129,13 @@ check_llm_api_keys <- function(verbose = TRUE) {
         "  - OpenAI:         OPENAI_API_KEY\n",
         "  - Anthropic:      ANTHROPIC_API_KEY\n",
         "  - Google Gemini:  GEMINI_API_KEY\n",
+        "  - Together.ai:    TOGETHER_API_KEY\n",
         "\n",
         "Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:\n",
-        '  OPENAI_API_KEY   = "YOUR_OPENAI_KEY_HERE"\n',
+        '  OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"\n',
         '  ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"\n',
-        '  GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"'
+        '  GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"\n',
+        '  TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"'
       )
     } else {
       message("Some LLM API keys are not set:")
@@ -172,5 +180,23 @@ check_llm_api_keys <- function(verbose = TRUE) {
     api_key = api_key,
     env_var = "GEMINI_API_KEY",
     service = "Google Gemini"
+  )
+}
+
+#' Internal: Together.ai API key helper
+#'
+#' This is a thin wrapper around `.get_api_key()` for the Together.ai backend.
+#' It looks for a `TOGETHER_API_KEY` environment variable by default and can be
+#' overridden explicitly via the `api_key` argument.
+#'
+#' @param api_key Optional character scalar. If `NULL` or an empty string, the
+#'   helper falls back to `Sys.getenv("TOGETHER_API_KEY")`.
+#'
+#' @keywords internal
+.together_api_key <- function(api_key = NULL) {
+  .get_api_key(
+    api_key = api_key,
+    env_var = "TOGETHER_API_KEY",
+    service = "Together.ai"
   )
 }

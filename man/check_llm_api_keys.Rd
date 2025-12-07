@@ -15,9 +15,9 @@ configure missing ones.}
 A tibble (data frame) with one row per backend and columns:
 \describe{
 \item{backend}{Short backend identifier, e.g. \code{"openai"}, \code{"anthropic"},
-\code{"gemini"}.}
+\code{"gemini"}, \code{"together"}.}
 \item{service}{Human-readable service name, e.g. \code{"OpenAI"},
-\code{"Anthropic"}, \code{"Google Gemini"}.}
+\code{"Anthropic"}, \code{"Google Gemini"}, \code{"Together.ai"}.}
 \item{env_var}{Name of the environment variable that is checked.}
 \item{has_key}{Logical flag indicating whether the key is set and
 non-empty.}
