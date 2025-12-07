@@ -500,8 +500,10 @@ submit_gemini_pairs_live <- function(
 
   if (verbose) {
     message(sprintf(
-      "Submitting %d live pair(s) for comparison (model=%s, backend=gemini,
-      thinking_level=%s, include_thoughts=%s)...",
+      paste(
+        "Submitting %d live pair(s) for comparison",
+        "(model=%s, backend=gemini, thinking_level=%s, include_thoughts=%s)..."
+      ),
       n, model, thinking_level, include_thoughts
     ))
   }
@@ -517,32 +519,73 @@ submit_gemini_pairs_live <- function(
   for (i in seq_len(n)) {
     show_status <- verbose && (i %% status_every == 1L)
 
+    id1_i <- as.character(pairs$ID1[i])
+    id2_i <- as.character(pairs$ID2[i])
+
     if (show_status) {
       message(sprintf(
         "[Gemini live pair %d of %d] Comparing %s vs %s ...",
-        i, n, pairs$ID1[i], pairs$ID2[i]
+        i, n, id1_i, id2_i
       ))
     }
 
-    res_i <- gemini_compare_pair_live(
-      ID1               = as.character(pairs$ID1[i]),
-      text1             = as.character(pairs$text1[i]),
-      ID2               = as.character(pairs$ID2[i]),
-      text2             = as.character(pairs$text2[i]),
-      model             = model,
-      trait_name        = trait_name,
-      trait_description = trait_description,
-      prompt_template   = prompt_template,
-      api_key           = api_key,
-      thinking_level    = thinking_level,
-      temperature       = temperature,
-      top_p             = top_p,
-      top_k             = top_k,
-      max_output_tokens = max_output_tokens,
-      api_version       = api_version,
-      include_raw       = include_raw,
-      include_thoughts  = include_thoughts,
-      ...
+    res_i <- tryCatch(
+      gemini_compare_pair_live(
+        ID1               = id1_i,
+        text1             = as.character(pairs$text1[i]),
+        ID2               = id2_i,
+        text2             = as.character(pairs$text2[i]),
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        thinking_level    = thinking_level,
+        temperature       = temperature,
+        top_p             = top_p,
+        top_k             = top_k,
+        max_output_tokens = max_output_tokens,
+        api_version       = api_version,
+        include_raw       = include_raw,
+        include_thoughts  = include_thoughts,
+        ...
+      ),
+      error = function(e) {
+        if (verbose) {
+          message(sprintf(
+            "    ERROR: Gemini comparison failed for pair %s vs %s: %s",
+            id1_i,
+            id2_i,
+            conditionMessage(e)
+          ))
+        }
+
+        out_row <- tibble::tibble(
+          custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+          ID1 = id1_i,
+          ID2 = id2_i,
+          model = model,
+          object_type = NA_character_,
+          status_code = NA_integer_,
+          error_message = paste0(
+            "Error during Gemini comparison: ",
+            conditionMessage(e)
+          ),
+          thoughts = NA_character_,
+          content = NA_character_,
+          better_sample = NA_character_,
+          better_id = NA_character_,
+          prompt_tokens = NA_real_,
+          completion_tokens = NA_real_,
+          total_tokens = NA_real_
+        )
+
+        if (include_raw) {
+          out_row$raw_response <- list(NULL)
+        }
+
+        out_row
+      }
     )
 
     out[[i]] <- res_i

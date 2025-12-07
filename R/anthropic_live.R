@@ -773,21 +773,63 @@ submit_anthropic_pairs_live <- function(
       ))
     }
 
-    res <- anthropic_compare_pair_live(
-      ID1               = as.character(pairs$ID1[i]),
-      text1             = as.character(pairs$text1[i]),
-      ID2               = as.character(pairs$ID2[i]),
-      text2             = as.character(pairs$text2[i]),
-      model             = model,
-      trait_name        = trait_name,
-      trait_description = trait_description,
-      prompt_template   = prompt_template,
-      api_key           = api_key,
-      anthropic_version = anthropic_version,
-      reasoning         = reasoning,
-      include_raw       = include_raw,
-      include_thoughts  = include_thoughts,
-      ...
+    res <- tryCatch(
+      anthropic_compare_pair_live(
+        ID1               = as.character(pairs$ID1[i]),
+        text1             = as.character(pairs$text1[i]),
+        ID2               = as.character(pairs$ID2[i]),
+        text2             = as.character(pairs$text2[i]),
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        anthropic_version = anthropic_version,
+        reasoning         = reasoning,
+        include_raw       = include_raw,
+        include_thoughts  = include_thoughts,
+        ...
+      ),
+      error = function(e) {
+        if (verbose) {
+          message(sprintf(
+            "    ERROR: Anthropic comparison failed for pair %s vs %s: %s",
+            as.character(pairs$ID1[i]),
+            as.character(pairs$ID2[i]),
+            conditionMessage(e)
+          ))
+        }
+
+        out_row <- tibble::tibble(
+          custom_id = sprintf(
+            "LIVE_%s_vs_%s",
+            as.character(pairs$ID1[i]),
+            as.character(pairs$ID2[i])
+          ),
+          ID1 = as.character(pairs$ID1[i]),
+          ID2 = as.character(pairs$ID2[i]),
+          model = model,
+          object_type = NA_character_,
+          status_code = NA_integer_,
+          error_message = paste0(
+            "Error during Anthropic comparison: ",
+            conditionMessage(e)
+          ),
+          thoughts = NA_character_,
+          content = NA_character_,
+          better_sample = NA_character_,
+          better_id = NA_character_,
+          prompt_tokens = NA_real_,
+          completion_tokens = NA_real_,
+          total_tokens = NA_real_
+        )
+
+        if (include_raw) {
+          out_row$raw_response <- list(NULL)
+        }
+
+        out_row
+      }
     )
 
     if (!is.null(pb)) {

@@ -572,27 +572,68 @@ submit_ollama_pairs_live <- function(
   for (i in seq_len(n)) {
     show_status <- verbose && (i %% status_every == 1L)
 
+    id1_i <- as.character(pairs$ID1[i])
+    id2_i <- as.character(pairs$ID2[i])
+
     if (show_status) {
       message(sprintf(
         "[Live pair %d of %d] Comparing %s vs %s ...",
-        i, n, pairs$ID1[i], pairs$ID2[i]
+        i, n, id1_i, id2_i
       ))
     }
 
-    res <- ollama_compare_pair_live(
-      ID1               = as.character(pairs$ID1[i]),
-      text1             = as.character(pairs$text1[i]),
-      ID2               = as.character(pairs$ID2[i]),
-      text2             = as.character(pairs$text2[i]),
-      model             = model,
-      trait_name        = trait_name,
-      trait_description = trait_description,
-      prompt_template   = prompt_template,
-      host              = host,
-      think             = think,
-      num_ctx           = num_ctx,
-      include_raw       = include_raw,
-      ...
+    res <- tryCatch(
+      ollama_compare_pair_live(
+        ID1               = id1_i,
+        text1             = as.character(pairs$text1[i]),
+        ID2               = id2_i,
+        text2             = as.character(pairs$text2[i]),
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        host              = host,
+        think             = think,
+        num_ctx           = num_ctx,
+        include_raw       = include_raw,
+        ...
+      ),
+      error = function(e) {
+        if (verbose) {
+          message(sprintf(
+            "    ERROR: Ollama comparison failed for pair %s vs %s: %s",
+            id1_i,
+            id2_i,
+            conditionMessage(e)
+          ))
+        }
+
+        out_row <- tibble::tibble(
+          custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+          ID1 = id1_i,
+          ID2 = id2_i,
+          model = model,
+          object_type = NA_character_,
+          status_code = NA_integer_,
+          error_message = paste0(
+            "Error during Ollama comparison: ",
+            conditionMessage(e)
+          ),
+          thoughts = NA_character_,
+          content = NA_character_,
+          better_sample = NA_character_,
+          better_id = NA_character_,
+          prompt_tokens = NA_real_,
+          completion_tokens = NA_real_,
+          total_tokens = NA_real_
+        )
+
+        if (include_raw) {
+          out_row$raw_response <- list(NULL)
+        }
+
+        out_row
+      }
     )
 
     if (!is.null(pb)) {
@@ -613,8 +654,7 @@ submit_ollama_pairs_live <- function(
       est_rem <- avg * remain
 
       message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s,
-        total=%s",
+        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
         res$better_id,
         res$better_sample,
         res$prompt_tokens,

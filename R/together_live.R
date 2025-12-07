@@ -193,7 +193,53 @@ together_compare_pair_live <- function(
   req <- .together_request("/v1/chat/completions", key)
   req <- .together_req_body_json(req, body = body)
 
-  resp <- .together_req_perform(req)
+  # Perform request, but catch HTTP / network errors and return an
+  # error-row tibble instead of throwing.
+  resp <- tryCatch(
+    .together_req_perform(req),
+    error = function(e) {
+      status_local <- NA_integer_
+
+      # If this is an httr2 HTTP error (e.g., HTTP 503), try to
+      # extract the status code from the underlying response.
+      if (inherits(e, "httr2_http")) {
+        resp_err <- e$response
+        if (!is.null(resp_err)) {
+          status_local <- httr2::resp_status(resp_err)
+        }
+      }
+
+      msg <- conditionMessage(e)
+
+      res <- tibble::tibble(
+        custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+        ID1               = ID1,
+        ID2               = ID2,
+        model             = model,
+        object_type       = NA_character_,
+        status_code       = status_local,
+        error_message     = paste0("Together.ai request error: ", msg),
+        thoughts          = NA_character_,
+        content           = NA_character_,
+        better_sample     = NA_character_,
+        better_id         = NA_character_,
+        prompt_tokens     = NA_real_,
+        completion_tokens = NA_real_,
+        total_tokens      = NA_real_
+      )
+
+      if (include_raw) {
+        res$raw_response <- list(NULL)
+      }
+
+      res
+    }
+  )
+
+  # If the error handler above returned a tibble, we’re done.
+  if (inherits(resp, "tbl_df")) {
+    return(resp)
+  }
 
   status_code <- .together_resp_status(resp)
   error_message <- NA_character_
@@ -498,18 +544,61 @@ submit_together_pairs_live <- function(
       ))
     }
 
-    res <- together_compare_pair_live(
-      ID1               = as.character(pairs$ID1[i]),
-      text1             = as.character(pairs$text1[i]),
-      ID2               = as.character(pairs$ID2[i]),
-      text2             = as.character(pairs$text2[i]),
-      model             = model,
-      trait_name        = trait_name,
-      trait_description = trait_description,
-      prompt_template   = prompt_template,
-      api_key           = api_key,
-      include_raw       = include_raw,
-      ...
+    res <- tryCatch(
+      together_compare_pair_live(
+        ID1               = as.character(pairs$ID1[i]),
+        text1             = as.character(pairs$text1[i]),
+        ID2               = as.character(pairs$ID2[i]),
+        text2             = as.character(pairs$text2[i]),
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        include_raw       = include_raw,
+        ...
+      ),
+      error = function(e) {
+        if (verbose) {
+          message(sprintf(
+            "    ERROR: %s comparison failed for pair %s vs %s: %s",
+            "Together.ai",
+            as.character(pairs$ID1[i]),
+            as.character(pairs$ID2[i]),
+            conditionMessage(e)
+          ))
+        }
+
+        out_row <- tibble::tibble(
+          custom_id = sprintf(
+            "LIVE_%s_vs_%s",
+            as.character(pairs$ID1[i]),
+            as.character(pairs$ID2[i])
+          ),
+          ID1 = as.character(pairs$ID1[i]),
+          ID2 = as.character(pairs$ID2[i]),
+          model = model,
+          object_type = NA_character_,
+          status_code = NA_integer_,
+          error_message = paste0(
+            "Error during Together.ai comparison: ",
+            conditionMessage(e)
+          ),
+          thoughts = NA_character_,
+          content = NA_character_,
+          better_sample = NA_character_,
+          better_id = NA_character_,
+          prompt_tokens = NA_real_,
+          completion_tokens = NA_real_,
+          total_tokens = NA_real_
+        )
+
+        if (include_raw) {
+          out_row$raw_response <- list(NULL)
+        }
+
+        out_row
+      }
     )
 
     if (!is.null(pb)) {
