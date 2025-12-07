@@ -54,16 +54,19 @@ testthat::test_that("check_llm_api_keys returns expected structure when keys
                     are missing", {
   old_openai <- Sys.getenv("OPENAI_API_KEY", unset = "")
   old_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
+  old_together <- Sys.getenv("TOGETHER_API_KEY", unset = "")
   on.exit(
     {
       Sys.setenv(OPENAI_API_KEY = old_openai)
       Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
+      Sys.setenv(TOGETHER_API_KEY = old_together)
     },
     add = TRUE
   )
 
   Sys.setenv(OPENAI_API_KEY = "")
   Sys.setenv(ANTHROPIC_API_KEY = "")
+  Sys.setenv(TOGETHER_API_KEY = "")
 
   status <- check_llm_api_keys(verbose = FALSE)
 
@@ -72,38 +75,47 @@ testthat::test_that("check_llm_api_keys returns expected structure when keys
   %in% names(status)))
 
   # Ensure we have at least the expected backends
-  testthat::expect_true(all(c("openai", "anthropic") %in% status$backend))
+  testthat::expect_true(all(c("openai", "anthropic", "together") %in%
+    status$backend))
 
   openai_row <- status[status$backend == "openai", , drop = FALSE]
   anth_row <- status[status$backend == "anthropic", , drop = FALSE]
+  together_row <- status[status$backend == "together", , drop = FALSE]
 
   testthat::expect_equal(openai_row$env_var, "OPENAI_API_KEY")
   testthat::expect_equal(anth_row$env_var, "ANTHROPIC_API_KEY")
+  testthat::expect_equal(together_row$env_var, "TOGETHER_API_KEY")
 
   testthat::expect_false(openai_row$has_key)
   testthat::expect_false(anth_row$has_key)
+  testthat::expect_false(together_row$has_key)
 })
 
 testthat::test_that("check_llm_api_keys reports keys as present when env
                     vars are set", {
   old_openai <- Sys.getenv("OPENAI_API_KEY", unset = "")
   old_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
+  old_together <- Sys.getenv("TOGETHER_API_KEY", unset = "")
   on.exit(
     {
       Sys.setenv(OPENAI_API_KEY = old_openai)
       Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
+      Sys.setenv(TOGETHER_API_KEY = old_together)
     },
     add = TRUE
   )
 
   Sys.setenv(OPENAI_API_KEY = "OPENAI_KEY_FOR_TEST")
   Sys.setenv(ANTHROPIC_API_KEY = "ANTHROPIC_KEY_FOR_TEST")
+  Sys.setenv(TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST")
 
   status <- check_llm_api_keys(verbose = FALSE)
 
   openai_row <- status[status$backend == "openai", , drop = FALSE]
   anth_row <- status[status$backend == "anthropic", , drop = FALSE]
+  together_row <- status[status$backend == "together", , drop = FALSE]
 
   testthat::expect_true(openai_row$has_key)
   testthat::expect_true(anth_row$has_key)
+  testthat::expect_true(together_row$has_key)
 })

@@ -2,12 +2,13 @@
 #'
 #' `llm_compare_pair()` is a thin wrapper around backend-specific comparison
 #' functions. It currently supports the `"openai"`, `"anthropic"`, `"gemini"`,
-#' and `"ollama"` backends and forwards the call to the appropriate live
-#' comparison helper:
+#' `"together"`, and `"ollama"` backends and forwards the call to the
+#' appropriate live comparison helper:
 #' \itemize{
 #'   \item `"openai"`   → [openai_compare_pair_live()]
 #'   \item `"anthropic"` → [anthropic_compare_pair_live()]
 #'   \item `"gemini"`   → [gemini_compare_pair_live()]
+#'   \item `"together"`  → [together_compare_pair_live()]
 #'   \item `"ollama"`   → [ollama_compare_pair_live()]
 #' }
 #'
@@ -46,7 +47,7 @@
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param backend Character scalar indicating which LLM provider to use.
-#'   One of `"openai"`, `"anthropic"`, `"gemini"`, or `"ollama"`.
+#'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, or `"ollama"`.
 #' @param endpoint Character scalar specifying which endpoint family to use
 #'   for backends that support multiple live APIs. For the `"openai"` backend
 #'   this must be one of `"chat.completions"` or `"responses"`, matching
@@ -54,9 +55,9 @@
 #'   `"ollama"`, this argument is currently ignored.
 #' @param api_key Optional API key for the selected backend. If `NULL`, the
 #'   backend-specific helper will use its own default environment variable
-#'   (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`).
-#'   For `"ollama"`, this argument is ignored (no API key is required for
-#'   local inference).
+#'   (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+#'   `TOGETHER_API_KEY`). For `"ollama"`, this argument is ignored (no API key
+#'   is required for local inference).
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
 #'   `raw_response` list-column with the parsed JSON body (or `NULL` on parse
 #'   failure). Support for this may vary across backends.
@@ -158,8 +159,8 @@
 #'
 #' @seealso
 #' * [openai_compare_pair_live()], [anthropic_compare_pair_live()],
-#'   [gemini_compare_pair_live()], and [ollama_compare_pair_live()] for
-#'   backend-specific implementations.
+#'   [gemini_compare_pair_live()], [together_compare_pair_live()], and
+#'   [ollama_compare_pair_live()] for backend-specific implementations.
 #' * [submit_llm_pairs()] for row-wise comparisons over a tibble of pairs.
 #' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
 #'   comparison results.
@@ -174,7 +175,7 @@ llm_compare_pair <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   include_raw = FALSE,
@@ -238,6 +239,24 @@ llm_compare_pair <- function(
     )
   }
 
+  if (backend == "together") {
+    return(
+      together_compare_pair_live(
+        ID1               = ID1,
+        text1             = text1,
+        ID2               = ID2,
+        text2             = text2,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        include_raw       = include_raw,
+        ...
+      )
+    )
+  }
+
   if (backend == "ollama") {
     return(
       ollama_compare_pair_live(
@@ -258,7 +277,7 @@ llm_compare_pair <- function(
   stop(
     "Backend '", backend, "' is not implemented yet. ",
     "Currently supported backends are: ",
-    "\"openai\", \"anthropic\", \"gemini\", and \"ollama\".",
+    "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
     call. = FALSE
   )
 }
@@ -275,6 +294,7 @@ llm_compare_pair <- function(
 #'   \item `"openai"`   → [submit_openai_pairs_live()]
 #'   \item `"anthropic"` → [submit_anthropic_pairs_live()]
 #'   \item `"gemini"`   → [submit_gemini_pairs_live()]
+#'   \item `"together"`  → [together_compare_pair_live()]
 #'   \item `"ollama"`   → [submit_ollama_pairs_live()]
 #' }
 #'
@@ -297,12 +317,12 @@ llm_compare_pair <- function(
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param backend Character scalar indicating which LLM provider to use.
-#'   One of `"openai"`, `"anthropic"`, `"gemini"`, or `"ollama"`.
+#'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, or `"ollama"`.
 #' @param endpoint Character scalar specifying which endpoint family to use for
 #'   backends that support multiple live APIs. For the `"openai"` backend this
 #'   must be one of `"chat.completions"` or `"responses"`, matching
-#'   [submit_openai_pairs_live()]. For `"anthropic"`, `"gemini"`, and
-#'   `"ollama"`, this is currently ignored.
+#'   [submit_openai_pairs_live()]. For `"anthropic"`, `"gemini"`, `"together"`,
+#'   and `"ollama"`, this is currently ignored.
 #' @param api_key Optional API key for the selected backend. If `NULL`, the
 #'   backend-specific helper will use its own default environment variable.
 #'   For `"ollama"`, this argument is ignored (no API key is required for
@@ -397,8 +417,8 @@ llm_compare_pair <- function(
 #'
 #' @seealso
 #' * [submit_openai_pairs_live()], [submit_anthropic_pairs_live()],
-#'   [submit_gemini_pairs_live()], and [submit_ollama_pairs_live()] for
-#'   backend-specific implementations.
+#'   [submit_gemini_pairs_live()], [submit_together_pairs_live()], and
+#'   [submit_ollama_pairs_live()] for backend-specific implementations.
 #' * [llm_compare_pair()] for single-pair comparisons.
 #' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
 #'   comparison results.
@@ -410,7 +430,7 @@ submit_llm_pairs <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   verbose = TRUE,
@@ -477,6 +497,24 @@ submit_llm_pairs <- function(
     )
   }
 
+  if (backend == "together") {
+    return(
+      submit_together_pairs_live(
+        pairs             = pairs,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        verbose           = verbose,
+        status_every      = status_every,
+        progress          = progress,
+        include_raw       = include_raw,
+        ...
+      )
+    )
+  }
+
   if (backend == "ollama") {
     return(
       submit_ollama_pairs_live(
@@ -497,7 +535,7 @@ submit_llm_pairs <- function(
   stop(
     "Backend '", backend, "' is not implemented yet. ",
     "Currently supported backends are: ",
-    "\"openai\", \"anthropic\", \"gemini\", and \"ollama\".",
+    "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
     call. = FALSE
   )
 }
