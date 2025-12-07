@@ -60,7 +60,7 @@ into a single tibble.</p>
 <span>  <span class="va">trait_name</span>,</span>
 <span>  <span class="va">trait_description</span>,</span>
 <span>  prompt_template <span class="op">=</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  backend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"openai"</span>, <span class="st">"anthropic"</span>, <span class="st">"gemini"</span>, <span class="st">"ollama"</span><span class="op">)</span>,</span>
+<span>  backend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"openai"</span>, <span class="st">"anthropic"</span>, <span class="st">"gemini"</span>, <span class="st">"together"</span>, <span class="st">"ollama"</span><span class="op">)</span>,</span>
 <span>  endpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"chat.completions"</span>, <span class="st">"responses"</span><span class="op">)</span>,</span>
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
@@ -105,15 +105,15 @@ comparison function (for example <code>"Overall Quality"</code>).</p></dd>
 
 <dt id="arg-backend">backend<a class="anchor" aria-label="anchor" href="#arg-backend"></a></dt>
 <dd><p>Character scalar indicating which LLM provider to use.
-One of <code>"openai"</code>, <code>"anthropic"</code>, <code>"gemini"</code>, or <code>"ollama"</code>.</p></dd>
+One of <code>"openai"</code>, <code>"anthropic"</code>, <code>"gemini"</code>, <code>"together"</code>, or <code>"ollama"</code>.</p></dd>
 
 
 <dt id="arg-endpoint">endpoint<a class="anchor" aria-label="anchor" href="#arg-endpoint"></a></dt>
 <dd><p>Character scalar specifying which endpoint family to use for
 backends that support multiple live APIs. For the <code>"openai"</code> backend this
 must be one of <code>"chat.completions"</code> or <code>"responses"</code>, matching
-<code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>. For <code>"anthropic"</code>, <code>"gemini"</code>, and
-<code>"ollama"</code>, this is currently ignored.</p></dd>
+<code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>. For <code>"anthropic"</code>, <code>"gemini"</code>, <code>"together"</code>,
+and <code>"ollama"</code>, this is currently ignored.</p></dd>
 
 
 <dt id="arg-api-key">api_key<a class="anchor" aria-label="anchor" href="#arg-api-key"></a></dt>
@@ -170,6 +170,7 @@ backends are intended to return a compatible structure suitable for
     <p>At present, the following backends are implemented:</p><ul><li><p><code>"openai"</code>   → <code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code></p></li>
 <li><p><code>"anthropic"</code> → <code><a href="submit_anthropic_pairs_live.html">submit_anthropic_pairs_live()</a></code></p></li>
 <li><p><code>"gemini"</code>   → <code><a href="submit_gemini_pairs_live.html">submit_gemini_pairs_live()</a></code></p></li>
+<li><p><code>"together"</code>  → <code><a href="together_compare_pair_live.html">together_compare_pair_live()</a></code></p></li>
 <li><p><code>"ollama"</code>   → <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code></p></li>
 </ul><p>Each backend-specific helper returns a tibble with one row per pair and a
 compatible set of columns, including a <code>thoughts</code> column (reasoning /
@@ -180,8 +181,8 @@ thinking text when available), <code>content</code> (visible assistant output),
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index">
 <ul><li><p><code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>, <code><a href="submit_anthropic_pairs_live.html">submit_anthropic_pairs_live()</a></code>,
-<code><a href="submit_gemini_pairs_live.html">submit_gemini_pairs_live()</a></code>, and <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code> for
-backend-specific implementations.</p></li>
+<code><a href="submit_gemini_pairs_live.html">submit_gemini_pairs_live()</a></code>, <code><a href="submit_together_pairs_live.html">submit_together_pairs_live()</a></code>, and
+<code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code> for backend-specific implementations.</p></li>
 <li><p><code><a href="llm_compare_pair.html">llm_compare_pair()</a></code> for single-pair comparisons.</p></li>
 <li><p><code><a href="build_bt_data.html">build_bt_data()</a></code> and <code><a href="fit_bt_model.html">fit_bt_model()</a></code> for Bradley–Terry modelling of
 comparison results.</p></li>

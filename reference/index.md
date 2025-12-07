@@ -118,8 +118,12 @@
   : Live Ollama comparisons for a tibble of pairs
 - [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
   : Live OpenAI comparisons for a tibble of pairs
+- [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
+  : Live Together.ai comparisons for a tibble of pairs
 - [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
   : Summarize a Bradley–Terry model fit
+- [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
+  : Live Together.ai comparison for a single pair of samples
 - [`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md)
   : Get a trait name and description for prompts
 - [`write_openai_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/write_openai_batch_file.md)

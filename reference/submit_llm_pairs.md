@@ -14,7 +14,7 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   verbose = TRUE,
@@ -62,7 +62,7 @@ submit_llm_pairs(
 - backend:
 
   Character scalar indicating which LLM provider to use. One of
-  `"openai"`, `"anthropic"`, `"gemini"`, or `"ollama"`.
+  `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, or `"ollama"`.
 
 - endpoint:
 
@@ -70,8 +70,8 @@ submit_llm_pairs(
   that support multiple live APIs. For the `"openai"` backend this must
   be one of `"chat.completions"` or `"responses"`, matching
   [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md).
-  For `"anthropic"`, `"gemini"`, and `"ollama"`, this is currently
-  ignored.
+  For `"anthropic"`, `"gemini"`, `"together"`, and `"ollama"`, this is
+  currently ignored.
 
 - api_key:
 
@@ -143,6 +143,9 @@ At present, the following backends are implemented:
 - `"gemini"` →
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
 
+- `"together"` →
+  [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
+
 - `"ollama"` →
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
 
@@ -156,6 +159,7 @@ thinking text when available), `content` (visible assistant output),
 - [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
   [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+  [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
   and
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
   for backend-specific implementations.

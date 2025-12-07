@@ -2,8 +2,8 @@
 
 `llm_compare_pair()` is a thin wrapper around backend-specific
 comparison functions. It currently supports the `"openai"`,
-`"anthropic"`, `"gemini"`, and `"ollama"` backends and forwards the call
-to the appropriate live comparison helper:
+`"anthropic"`, `"gemini"`, `"together"`, and `"ollama"` backends and
+forwards the call to the appropriate live comparison helper:
 
 - `"openai"` →
   [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md)
@@ -13,6 +13,9 @@ to the appropriate live comparison helper:
 
 - `"gemini"` →
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md)
+
+- `"together"` →
+  [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
 
 - `"ollama"` →
   [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
@@ -29,7 +32,7 @@ llm_compare_pair(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   include_raw = FALSE,
@@ -81,7 +84,7 @@ llm_compare_pair(
 - backend:
 
   Character scalar indicating which LLM provider to use. One of
-  `"openai"`, `"anthropic"`, `"gemini"`, or `"ollama"`.
+  `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, or `"ollama"`.
 
 - endpoint:
 
@@ -96,9 +99,9 @@ llm_compare_pair(
 
   Optional API key for the selected backend. If `NULL`, the
   backend-specific helper will use its own default environment variable
-  (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`).
-  For `"ollama"`, this argument is ignored (no API key is required for
-  local inference).
+  (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+  `TOGETHER_API_KEY`). For `"ollama"`, this argument is ignored (no API
+  key is required for local inference).
 
 - include_raw:
 
@@ -157,6 +160,7 @@ live API for that provider is used.
 - [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
   [`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+  [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
   and
   [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
   for backend-specific implementations.

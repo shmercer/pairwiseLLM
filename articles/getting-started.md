@@ -51,17 +51,20 @@ check_llm_api_keys()
 #>   - OpenAI:         OPENAI_API_KEY
 #>   - Anthropic:      ANTHROPIC_API_KEY
 #>   - Google Gemini:  GEMINI_API_KEY
+#>   - Together.ai:    TOGETHER_API_KEY
 #> 
 #> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
-#>   OPENAI_API_KEY   = "YOUR_OPENAI_KEY_HERE"
+#>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
 #>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
 #>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
-#> # A tibble: 3 × 4
+#>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
+#> # A tibble: 4 × 4
 #>   backend   service       env_var           has_key
 #>   <chr>     <chr>         <chr>             <lgl>  
 #> 1 openai    OpenAI        OPENAI_API_KEY    FALSE  
 #> 2 anthropic Anthropic     ANTHROPIC_API_KEY FALSE  
-#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE
+#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE  
+#> 4 together  Together.ai   TOGETHER_API_KEY  FALSE
 ```
 
 ------------------------------------------------------------------------
@@ -325,17 +328,20 @@ check_llm_api_keys()
 #>   - OpenAI:         OPENAI_API_KEY
 #>   - Anthropic:      ANTHROPIC_API_KEY
 #>   - Google Gemini:  GEMINI_API_KEY
+#>   - Together.ai:    TOGETHER_API_KEY
 #> 
 #> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
-#>   OPENAI_API_KEY   = "YOUR_OPENAI_KEY_HERE"
+#>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
 #>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
 #>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
-#> # A tibble: 3 × 4
+#>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
+#> # A tibble: 4 × 4
 #>   backend   service       env_var           has_key
 #>   <chr>     <chr>         <chr>             <lgl>  
 #> 1 openai    OpenAI        OPENAI_API_KEY    FALSE  
 #> 2 anthropic Anthropic     ANTHROPIC_API_KEY FALSE  
-#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE
+#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE  
+#> 4 together  Together.ai   TOGETHER_API_KEY  FALSE
 ```
 
 #### Getting chain-of-thought leakage

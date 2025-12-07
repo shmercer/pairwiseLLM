@@ -25,12 +25,13 @@ A tibble (data frame) with one row per backend and columns:
 
 - backend:
 
-  Short backend identifier, e.g. `"openai"`, `"anthropic"`, `"gemini"`.
+  Short backend identifier, e.g. `"openai"`, `"anthropic"`, `"gemini"`,
+  `"together"`.
 
 - service:
 
   Human-readable service name, e.g. `"OpenAI"`, `"Anthropic"`,
-  `"Google Gemini"`.
+  `"Google Gemini"`, `"Together.ai"`.
 
 - env_var:
 
