@@ -684,7 +684,7 @@ submit_together_pairs_live <- function(
 #' @keywords internal
 #' @noRd
 .together_req_perform <- function(req) {
-  httr2::req_perform(req)
+  .retry_httr2_request(req)
 }
 
 #' @keywords internal

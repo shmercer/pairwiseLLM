@@ -40,8 +40,10 @@ NULL
   httr2::req_body_json(req, body)
 }
 
+#' @keywords internal
+#' @noRd
 .anthropic_req_perform <- function(req) {
-  httr2::req_perform(req)
+  .retry_httr2_request(req)
 }
 
 .anthropic_resp_body_json <- function(resp, ...) {

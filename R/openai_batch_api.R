@@ -8,6 +8,10 @@ NULL
 #' @noRd
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+# -------------------------------------------------------------------------
+# Internal OpenAI helpers
+# -------------------------------------------------------------------------
+
 #' Internal: Get OpenAI API key
 #'
 #' @keywords internal
@@ -20,22 +24,56 @@ NULL
   )
 }
 
-#' Internal: Base URL for OpenAI API
-#'
 #' @keywords internal
+#' @noRd
 .openai_base_url <- function() {
+  # Adjust if you support Azure or other endpoints elsewhere
   "https://api.openai.com/v1"
 }
 
 #' Internal: Create a httr2 request with auth
 #'
 #' @keywords internal
+#' @noRd
 .openai_request <- function(path, api_key = Sys.getenv("OPENAI_API_KEY")) {
   api_key <- .openai_api_key(api_key)
 
-  request(paste0(.openai_base_url(), path)) |>
-    req_auth_bearer_token(api_key)
+  httr2::request(paste0(.openai_base_url(), path)) |>
+    httr2::req_auth_bearer_token(api_key)
 }
+
+#' Internal: Attach JSON body to an OpenAI request
+#'
+#' @keywords internal
+#' @noRd
+.openai_req_body_json <- function(req, body, ...) {
+  httr2::req_body_json(req, body)
+}
+
+#' Internal: Perform an OpenAI request with retry on transient errors
+#'
+#' @keywords internal
+#' @noRd
+.openai_req_perform <- function(req) {
+  .retry_httr2_request(req)
+}
+
+#' Internal: Parse JSON body from an OpenAI response
+#'
+#' @keywords internal
+#' @noRd
+.openai_resp_body_json <- function(resp, ...) {
+  httr2::resp_body_json(resp, ...)
+}
+
+#' Internal: Extract HTTP status from an OpenAI response
+#'
+#' @keywords internal
+#' @noRd
+.openai_resp_status <- function(resp) {
+  httr2::resp_status(resp)
+}
+
 
 #' Upload a JSONL batch file to OpenAI
 #'
