@@ -25,8 +25,6 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-gemini_api_key.html</loc></url>
-<url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-openai_base_url.html</loc></url>
-<url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-openai_request.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-parse_gemini_pair_response.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-together_api_key.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.html</loc></url>
