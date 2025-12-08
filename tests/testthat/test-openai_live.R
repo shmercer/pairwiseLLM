@@ -33,10 +33,10 @@ testthat::test_that("openai_compare_pair_live parses chat.completions
 
   testthat::with_mocked_bindings(
     .openai_api_key = function(...) "FAKEKEY",
-    req_body_json = function(req, body) req,
-    req_perform = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json = function(...) fake_body,
-    resp_status = function(...) 200L,
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1               = ID1,
@@ -118,10 +118,10 @@ testthat::test_that("openai_compare_pair_live parses responses endpoint
 
   testthat::with_mocked_bindings(
     .openai_api_key = function(...) "FAKEKEY",
-    req_body_json = function(req, body) req,
-    req_perform = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json = function(...) fake_body,
-    resp_status = function(...) 200L,
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1               = ID1,
@@ -170,10 +170,10 @@ testthat::test_that("openai_compare_pair_live returns error row
 
   testthat::with_mocked_bindings(
     .openai_api_key = function(...) "FAKEKEY",
-    req_body_json = function(req, body) req,
-    req_perform = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json = function(...) stop("boom"),
-    resp_status = function(...) 500L,
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) stop("boom"),
+    .openai_resp_status = function(...) 500L,
     {
       res <- openai_compare_pair_live(
         ID1               = ID1,
@@ -236,10 +236,10 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1 + reasoning
 
   testthat::with_mocked_bindings(
     .openai_api_key = function(...) "FAKEKEY",
-    req_body_json = function(req, body) req,
-    req_perform = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json = function(...) fake_body,
-    resp_status = function(...) 200L,
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1 = "A", text1 = "x", ID2 = "B", text2 = "y",
@@ -289,10 +289,10 @@ testthat::test_that("openai_compare_pair_live enforces other gpt-5*
 
   testthat::with_mocked_bindings(
     .openai_api_key = function(...) "FAKEKEY",
-    req_body_json = function(req, body) req,
-    req_perform = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json = function(...) fake_body,
-    resp_status = function(...) 200L,
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1 = "A", text1 = "x", ID2 = "B", text2 = "y",
@@ -431,6 +431,8 @@ testthat::test_that("submit_openai_pairs_live calls
   )
 })
 
+# ---------------------------------------------------------------------
+
 testthat::test_that("openai_compare_pair_live collects thoughts and
                     message text separately for responses", {
   td <- trait_description("overall_quality")
@@ -476,10 +478,10 @@ testthat::test_that("openai_compare_pair_live collects thoughts and
 
   testthat::with_mocked_bindings(
     .openai_api_key = function(...) "FAKEKEY",
-    req_body_json = function(req, body) req,
-    req_perform = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json = function(...) fake_body,
-    resp_status = function(...) 200L,
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1               = ID1,
@@ -513,6 +515,8 @@ testthat::test_that("openai_compare_pair_live collects thoughts and
     }
   )
 })
+
+# ---------------------------------------------------------------------
 
 testthat::test_that("openai_compare_pair_live picks up reasoning summary
                     from output items", {
@@ -562,10 +566,10 @@ testthat::test_that("openai_compare_pair_live picks up reasoning summary
 
   testthat::with_mocked_bindings(
     .openai_api_key = function(...) "FAKEKEY",
-    req_body_json = function(req, body) req,
-    req_perform = function(req) structure(list(), class = "fake_resp"),
-    resp_body_json = function(...) fake_body,
-    resp_status = function(...) 200L,
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
     {
       res <- openai_compare_pair_live(
         ID1               = ID1,
@@ -585,7 +589,7 @@ testthat::test_that("openai_compare_pair_live picks up reasoning summary
       testthat::expect_s3_class(res, "tbl_df")
       testthat::expect_equal(res$object_type, "response")
 
-      # Thoughts should be both summary_text entries joined with \n\n
+      # Thoughts should be both summary_text entries present
       testthat::expect_match(res$thoughts, "Reasoning sentence 1.",
         fixed = TRUE
       )

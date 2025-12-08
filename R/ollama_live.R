@@ -247,7 +247,7 @@ ollama_compare_pair_live <- function(
     req_body_json(body) |>
     httr2::req_error(is_error = function(resp) FALSE)
 
-  resp <- req_perform(req)
+  resp <- .retry_httr2_request(req)
 
   status_code <- resp_status(resp)
   error_message <- NA_character_

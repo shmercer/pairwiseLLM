@@ -188,16 +188,17 @@ openai_compare_pair_live <- function(
     path <- "/responses"
   }
 
-  req <- .openai_request(path, api_key) |>
-    req_body_json(body)
+  # Build request, add JSON body, and perform with retry-aware helper
+  req <- .openai_request(path, api_key)
+  req <- .openai_req_body_json(req, body = body)
 
-  resp <- req_perform(req)
+  resp <- .openai_req_perform(req)
 
-  status_code <- resp_status(resp)
+  status_code <- .openai_resp_status(resp)
   error_message <- NA_character_
 
   body_parsed <- tryCatch(
-    resp_body_json(resp, simplifyVector = FALSE),
+    .openai_resp_body_json(resp, simplifyVector = FALSE),
     error = function(e) NULL
   )
 
@@ -230,6 +231,14 @@ openai_compare_pair_live <- function(
   body <- body_parsed
   object_type <- body$object %||% NA_character_
   model_name <- body$model %||% NA_character_
+
+  # Error handling: OpenAI uses an "error" object for API errors
+  if (!is.null(body$error)) {
+    msg <- body$error$message %||% "Unknown error from OpenAI."
+    error_message <- as.character(msg)
+  } else if (status_code >= 400L) {
+    error_message <- paste0("HTTP ", status_code, " from OpenAI.")
+  }
 
   thoughts <- NA_character_
   content <- NA_character_

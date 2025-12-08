@@ -29,8 +29,9 @@
 }
 
 #' @keywords internal
+#' @noRd
 .gemini_req_perform <- function(req) {
-  httr2::req_perform(req)
+  .retry_httr2_request(req)
 }
 
 #' @keywords internal
