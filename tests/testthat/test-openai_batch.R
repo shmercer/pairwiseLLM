@@ -325,3 +325,474 @@ test_that("build_openai_batch_requests adds reasoning summary when
   expect_equal(b2$reasoning$effort, "none")
   expect_false("summary" %in% names(b2$reasoning))
 })
+
+testthat::test_that("run_openai_batch_pipeline works with polling and
+                    parsing", {
+  pairs <- tibble::tibble(
+    ID1   = "S01",
+    text1 = "Text 1",
+    ID2   = "S02",
+    text2 = "Text 2"
+  )
+
+  fake_batch_tbl <- tibble::tibble(jsonl = '{"dummy": true}')
+  fake_file <- list(id = "file_123")
+  fake_batch <- list(
+    id             = "batch_123",
+    status         = "completed",
+    output_file_id = "file_out_123"
+  )
+  fake_results <- tibble::tibble(ID1 = "S01", ID2 = "S02", better_id = "S01")
+
+  # capture the endpoint used for openai_create_batch
+  used_endpoint <- NULL
+
+  testthat::with_mocked_bindings(
+    build_openai_batch_requests = function(pairs, model, trait_name,
+                                           trait_description, prompt_template,
+                                           endpoint, ...) {
+      testthat::expect_equal(endpoint, "chat.completions")
+      fake_batch_tbl
+    },
+    write_openai_batch_file = function(batch_tbl, path) {
+      writeLines(batch_tbl$jsonl, path)
+      invisible(path)
+    },
+    openai_upload_batch_file = function(path, api_key) {
+      testthat::expect_true(file.exists(path))
+      fake_file
+    },
+    openai_create_batch = function(input_file_id, endpoint, completion_window,
+                                   metadata, api_key) {
+      used_endpoint <<- endpoint
+      list(id = "batch_123", status = "in_progress")
+    },
+    openai_poll_batch_until_complete = function(batch_id, interval_seconds,
+                                                timeout_seconds, max_attempts,
+                                                api_key, verbose) {
+      testthat::expect_equal(batch_id, "batch_123")
+      fake_batch
+    },
+    openai_download_batch_output = function(batch_id, path, api_key) {
+      writeLines('{"dummy": true}', path)
+      invisible(path)
+    },
+    parse_openai_batch_output = function(path) {
+      testthat::expect_true(file.exists(path))
+      fake_results
+    },
+    {
+      td <- list(name = "Overall quality", description = "Quality")
+      tmpl <- set_prompt_template()
+
+      res <- run_openai_batch_pipeline(
+        pairs             = pairs,
+        model             = "gpt-4.1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        endpoint          = "chat.completions",
+        interval_seconds  = 0,
+        timeout_seconds   = 10,
+        max_attempts      = 5
+      )
+
+      testthat::expect_equal(used_endpoint, "/v1/chat/completions")
+      testthat::expect_true(file.exists(res$batch_input_path))
+      testthat::expect_true(file.exists(res$batch_output_path))
+      testthat::expect_equal(res$results$better_id, "S01")
+      testthat::expect_equal(res$batch$status, "completed")
+    }
+  )
+})
+
+testthat::test_that("run_openai_batch_pipeline does not poll or parse when
+                    poll = FALSE", {
+  pairs <- tibble::tibble(
+    ID1   = "S01",
+    text1 = "Text 1",
+    ID2   = "S02",
+    text2 = "Text 2"
+  )
+
+  fake_batch_tbl <- tibble::tibble(jsonl = '{"dummy": true}')
+  fake_file <- list(id = "file_123")
+  fake_batch <- list(id = "batch_123", status = "queued")
+
+  poll_called <- FALSE
+  download_called <- FALSE
+  parse_called <- FALSE
+
+  testthat::with_mocked_bindings(
+    build_openai_batch_requests = function(pairs, model, trait_name,
+                                           trait_description, prompt_template,
+                                           endpoint, ...) {
+      fake_batch_tbl
+    },
+    write_openai_batch_file = function(batch_tbl, path) {
+      writeLines(batch_tbl$jsonl, path)
+      invisible(path)
+    },
+    openai_upload_batch_file = function(path, api_key) fake_file,
+    openai_create_batch = function(input_file_id, endpoint, completion_window,
+                                   metadata, api_key) {
+      fake_batch
+    },
+    openai_poll_batch_until_complete = function(batch_id, interval_seconds,
+                                                timeout_seconds, max_attempts,
+                                                api_key, verbose) {
+      poll_called <<- TRUE
+      stop("polling should not be called when poll = FALSE")
+    },
+    openai_download_batch_output = function(batch_id, path, api_key) {
+      download_called <<- TRUE
+      stop("download should not be called when poll = FALSE")
+    },
+    parse_openai_batch_output = function(path) {
+      parse_called <<- TRUE
+      stop("parse should not be called when poll = FALSE")
+    },
+    {
+      td <- list(name = "Overall quality", description = "Quality")
+      tmpl <- set_prompt_template()
+
+      res <- run_openai_batch_pipeline(
+        pairs             = pairs,
+        model             = "gpt-4.1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        endpoint          = "responses",
+        poll              = FALSE
+      )
+
+      testthat::expect_false(poll_called)
+      testthat::expect_false(download_called)
+      testthat::expect_false(parse_called)
+
+      testthat::expect_true(file.exists(res$batch_input_path))
+      testthat::expect_null(res$batch_output_path)
+      testthat::expect_null(res$results)
+      testthat::expect_equal(res$batch$status, "queued")
+    }
+  )
+})
+
+testthat::test_that("openai_upload_batch_file errors on missing file", {
+  nonexistent <- tempfile(fileext = ".jsonl")
+  testthat::expect_false(file.exists(nonexistent))
+
+  testthat::expect_error(
+    openai_upload_batch_file(nonexistent),
+    "File does not exist"
+  )
+})
+
+testthat::test_that("openai_download_batch_output errors if no
+                    output_file_id", {
+  fake_batch <- list(
+    id             = "batch_123",
+    status         = "completed",
+    output_file_id = NULL
+  )
+
+  testthat::with_mocked_bindings(
+    openai_get_batch = function(batch_id, api_key) fake_batch,
+    {
+      tf <- tempfile(fileext = ".jsonl")
+      testthat::expect_error(
+        openai_download_batch_output("batch_123", tf),
+        "has no output_file_id"
+      )
+    }
+  )
+})
+
+testthat::test_that("openai_poll_batch_until_complete succeeds after
+                    several polls", {
+  fake_batches <- list(
+    list(id = "batch_123", status = "in_progress"),
+    list(id = "batch_123", status = "in_progress"),
+    list(
+      id = "batch_123", status = "completed", output_file_id =
+        "file_out_123"
+    )
+  )
+  i <- 0L
+
+  testthat::with_mocked_bindings(
+    openai_get_batch = function(batch_id, api_key) {
+      i <<- i + 1L
+      fake_batches[[i]]
+    },
+    {
+      res <- openai_poll_batch_until_complete(
+        batch_id         = "batch_123",
+        interval_seconds = 0, # no sleep in tests
+        timeout_seconds  = 60,
+        max_attempts     = 5,
+        verbose          = FALSE
+      )
+      testthat::expect_equal(res$status, "completed")
+      testthat::expect_equal(i, 3L)
+    }
+  )
+})
+
+testthat::test_that("openai_poll_batch_until_complete stops at max_attempts", {
+  fake_batch <- list(id = "batch_123", status = "in_progress")
+  i <- 0L
+
+  testthat::with_mocked_bindings(
+    openai_get_batch = function(batch_id, api_key) {
+      i <<- i + 1L
+      fake_batch
+    },
+    {
+      testthat::expect_error(
+        openai_poll_batch_until_complete(
+          batch_id         = "batch_123",
+          interval_seconds = 0, # avoid sleeping in tests
+          timeout_seconds  = 60,
+          max_attempts     = 3,
+          verbose          = FALSE
+        ),
+        "Reached max_attempts"
+      )
+      testthat::expect_equal(i, 3L)
+    }
+  )
+})
+
+# -------------------------------------------------------------------
+# Internal helper: .openai_api_key
+# -------------------------------------------------------------------
+
+testthat::test_that(".openai_api_key prefers explicit api_key over env", {
+  old <- Sys.getenv("OPENAI_API_KEY", unset = "")
+  on.exit(Sys.setenv(OPENAI_API_KEY = old), add = TRUE)
+
+  Sys.setenv(OPENAI_API_KEY = "FROM_ENV")
+
+  # Explicit argument should win
+  res <- .openai_api_key("EXPLICIT_KEY")
+  testthat::expect_equal(res, "EXPLICIT_KEY")
+})
+
+testthat::test_that(".openai_api_key falls back to OPENAI_API_KEY env var", {
+  old <- Sys.getenv("OPENAI_API_KEY", unset = "")
+  on.exit(Sys.setenv(OPENAI_API_KEY = old), add = TRUE)
+
+  Sys.setenv(OPENAI_API_KEY = "FROM_ENV")
+
+  res <- .openai_api_key(NULL)
+  testthat::expect_equal(res, "FROM_ENV")
+
+  # Empty string should also trigger env fallback (via .get_api_key)
+  res2 <- .openai_api_key("")
+  testthat::expect_equal(res2, "FROM_ENV")
+})
+
+# -------------------------------------------------------------------
+# openai_upload_batch_file: happy path
+# -------------------------------------------------------------------
+
+testthat::test_that("openai_upload_batch_file uploads file and returns id", {
+  tf <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tf), add = TRUE)
+  writeLines(c('{"a":1}', '{"b":2}'), tf)
+
+  captured <- list()
+
+  testthat::with_mocked_bindings(
+    .openai_request = function(path, api_key) {
+      captured$path <<- path
+      captured$api_key <<- api_key
+      "REQ"
+    },
+    req_body_multipart = function(req, file, purpose) {
+      captured$multipart_req <<- req
+      captured$file <<- file # this is a form_file object
+      captured$purpose <<- purpose
+      list(req = req, file = file, purpose = purpose)
+    },
+    req_perform = function(req) {
+      captured$performed <<- TRUE
+      "RESP"
+    },
+    resp_body_json = function(resp, simplifyVector = TRUE) {
+      captured$resp <<- resp
+      list(id = "file_123")
+    },
+    {
+      out <- openai_upload_batch_file(tf, purpose = "batch")
+
+      testthat::expect_equal(out$id, "file_123")
+      testthat::expect_equal(captured$path, "/files")
+      testthat::expect_true(captured$performed)
+
+      # file is an httr2::form_file object; check its fields instead of
+      # raw equality with the path string.
+      testthat::expect_s3_class(captured$file, "form_file")
+
+      # Normalize paths to avoid Windows forward/backslash differences
+      norm_captured <- normalizePath(captured$file$path, winslash = "/", mustWork = FALSE)
+      norm_tf       <- normalizePath(tf,                  winslash = "/", mustWork = FALSE)
+      testthat::expect_equal(norm_captured, norm_tf)
+
+      testthat::expect_equal(captured$purpose, "batch")
+    }
+  )
+})
+
+# -------------------------------------------------------------------
+# openai_create_batch / openai_get_batch
+# -------------------------------------------------------------------
+
+testthat::test_that("openai_create_batch sends correct body and returns batch", {
+  captured <- list()
+
+  testthat::with_mocked_bindings(
+    .openai_request = function(path, api_key) {
+      captured$path <<- path
+      captured$api_key <<- api_key
+      "REQ"
+    },
+    req_body_json = function(req, body) {
+      captured$body <<- body
+      "REQ_WITH_BODY"
+    },
+    req_perform = function(req) {
+      captured$performed <<- TRUE
+      "RESP"
+    },
+    resp_body_json = function(resp, simplifyVector = TRUE) {
+      captured$resp <<- resp
+      list(id = "batch_123", status = "queued")
+    },
+    {
+      batch <- openai_create_batch(
+        input_file_id     = "file_123",
+        endpoint          = "responses",
+        completion_window = "24h",
+        metadata          = list(foo = "bar"),
+        api_key           = "TEST_KEY"
+      )
+
+      testthat::expect_equal(batch$id, "batch_123")
+      testthat::expect_equal(batch$status, "queued")
+
+      # Focus on body correctness and the fact we performed the request.
+      testthat::expect_equal(captured$body$input_file_id, "file_123")
+      testthat::expect_equal(captured$body$endpoint, "responses")
+      testthat::expect_equal(captured$body$completion_window, "24h")
+      testthat::expect_equal(captured$body$metadata$foo, "bar")
+      testthat::expect_true(captured$performed)
+    }
+  )
+})
+
+testthat::test_that("openai_get_batch calls batches endpoint and returns response", {
+  captured <- list()
+
+  testthat::with_mocked_bindings(
+    .openai_request = function(path, api_key) {
+      captured$path <<- path
+      captured$api_key <<- api_key
+      "REQ"
+    },
+    req_perform = function(req) {
+      captured$performed <<- TRUE
+      "RESP"
+    },
+    resp_body_json = function(resp, simplifyVector = TRUE) {
+      captured$resp <<- resp
+      list(id = "batch_123", status = "completed")
+    },
+    {
+      batch <- openai_get_batch("batch_123", api_key = "TEST_KEY")
+
+      testthat::expect_equal(batch$id, "batch_123")
+      testthat::expect_equal(batch$status, "completed")
+      testthat::expect_equal(captured$path, "/batches/batch_123")
+      testthat::expect_true(captured$performed)
+    }
+  )
+})
+
+# -------------------------------------------------------------------
+# openai_download_batch_output: happy path
+# -------------------------------------------------------------------
+
+testthat::test_that("openai_download_batch_output downloads to path when output_file_id present", {
+  fake_batch <- list(
+    id             = "batch_123",
+    status         = "completed",
+    output_file_id = "file_out_123"
+  )
+
+  captured <- list()
+  tf <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tf), add = TRUE)
+
+  testthat::with_mocked_bindings(
+    openai_get_batch = function(batch_id, api_key) fake_batch,
+    .openai_request = function(path, api_key) {
+      captured$path <<- path
+      captured$api_key <<- api_key
+      "REQ"
+    },
+    req_perform = function(req) {
+      captured$performed <<- TRUE
+      "RESP"
+    },
+    resp_body_raw = function(resp) {
+      captured$resp <<- resp
+      charToRaw('{"ok":true}\n')
+    },
+    {
+      out_path <- openai_download_batch_output("batch_123", tf, api_key = "TEST_KEY")
+
+      testthat::expect_equal(out_path, tf)
+      testthat::expect_true(file.exists(tf))
+      testthat::expect_equal(captured$path, "/files/file_out_123/content")
+      testthat::expect_true(captured$performed)
+
+      # File should contain exactly the raw we wrote
+      txt <- readLines(tf, warn = FALSE)
+      testthat::expect_equal(txt, '{"ok":true}')
+    }
+  )
+})
+
+# -------------------------------------------------------------------
+# openai_poll_batch_until_complete: timeout_seconds branch
+# -------------------------------------------------------------------
+
+testthat::test_that("openai_poll_batch_until_complete errors on timeout_seconds", {
+  fake_batch <- list(id = "batch_123", status = "in_progress")
+  calls <- 0L
+
+  testthat::with_mocked_bindings(
+    openai_get_batch = function(batch_id, api_key) {
+      calls <<- calls + 1L
+      fake_batch
+    },
+    {
+      testthat::expect_error(
+        openai_poll_batch_until_complete(
+          batch_id         = "batch_123",
+          interval_seconds = 0, # no sleep for tests
+          timeout_seconds  = 0, # immediately exceed timeout
+          max_attempts     = 100,
+          verbose          = FALSE
+        ),
+        "Timeout \\(0 seconds\\) waiting for batch",
+        fixed = FALSE
+      )
+
+      # Should have polled at least once
+      testthat::expect_gte(calls, 1L)
+    }
+  )
+})
