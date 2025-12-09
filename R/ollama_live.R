@@ -790,7 +790,7 @@ ensure_only_ollama_model_loaded <- function(model, verbose = TRUE) {
   }
 
   ps <- tryCatch(
-    system2("ollama", args = "ps", stdout = TRUE, stderr = TRUE),
+    .ollama_system2("ollama", args = "ps", stdout = TRUE, stderr = TRUE),
     error = function(e) {
       if (verbose) {
         message("Unable to run `ollama ps`: ", conditionMessage(e))
@@ -869,12 +869,16 @@ ensure_only_ollama_model_loaded <- function(model, verbose = TRUE) {
     if (verbose) {
       message("Unloading Ollama model: ", m)
     }
-    # Best-effort attempt; ignore any errors from `ollama stop`
     try(
-      system2("ollama", args = c("stop", m), stdout = FALSE, stderr = FALSE),
+      .ollama_system2("ollama", args = c("stop", m), stdout = FALSE, stderr = FALSE),
       silent = TRUE
     )
   }
 
   invisible(to_unload)
+}
+
+# Internal helper so tests can mock system calls without touching base::system2
+.ollama_system2 <- function(command, args, stdout = TRUE, stderr = TRUE, ...) {
+  system2(command, args = args, stdout = stdout, stderr = stderr, ...)
 }
