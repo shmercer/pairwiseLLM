@@ -634,7 +634,12 @@ testthat::test_that("openai_upload_batch_file uploads file and returns id", {
       # file is an httr2::form_file object; check its fields instead of
       # raw equality with the path string.
       testthat::expect_s3_class(captured$file, "form_file")
-      testthat::expect_equal(captured$file$path, tf)
+
+      # Normalize paths to avoid Windows forward/backslash differences
+      norm_captured <- normalizePath(captured$file$path, winslash = "/", mustWork = FALSE)
+      norm_tf       <- normalizePath(tf,                  winslash = "/", mustWork = FALSE)
+      testthat::expect_equal(norm_captured, norm_tf)
+
       testthat::expect_equal(captured$purpose, "batch")
     }
   )
