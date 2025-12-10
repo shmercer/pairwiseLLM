@@ -96,6 +96,11 @@
 </h2>
 <p>The following models are confirmed to work for live and batch pairwise comparisons:</p>
 <table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
 <thead><tr class="header">
 <th>Provider</th>
 <th>Model</th>
@@ -103,42 +108,79 @@
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><strong>OpenAI</strong></td>
+<td><strong><a href="https://openai.com/api/" class="external-link">OpenAI</a></strong></td>
 <td>gpt-5.1</td>
 <td>✅ Yes</td>
 </tr>
 <tr class="even">
-<td><strong>OpenAI</strong></td>
+<td><strong><a href="https://openai.com/api/" class="external-link">OpenAI</a></strong></td>
 <td>gpt-4o</td>
 <td>❌ No</td>
 </tr>
 <tr class="odd">
-<td><strong>OpenAI</strong></td>
+<td><strong><a href="https://openai.com/api/" class="external-link">OpenAI</a></strong></td>
 <td>gpt-4.1</td>
 <td>❌ No</td>
 </tr>
 <tr class="even">
-<td><strong>Anthropic</strong></td>
+<td><strong><a href="https://console.anthropic.com/" class="external-link">Anthropic</a></strong></td>
 <td>claude-sonnet-4-5</td>
 <td>✅ Yes</td>
 </tr>
 <tr class="odd">
-<td><strong>Anthropic</strong></td>
+<td><strong><a href="https://console.anthropic.com/" class="external-link">Anthropic</a></strong></td>
 <td>claude-haiku-4-5</td>
 <td>✅ Yes</td>
 </tr>
 <tr class="even">
-<td><strong>Anthropic</strong></td>
+<td><strong><a href="https://console.anthropic.com/" class="external-link">Anthropic</a></strong></td>
 <td>claude-opus-4-5</td>
 <td>✅ Yes</td>
 </tr>
 <tr class="odd">
-<td><strong>Gemini</strong></td>
+<td><strong><a href="https://aistudio.google.com/" class="external-link">Google/Gemini</a></strong></td>
 <td>gemini-3-pro-preview</td>
 <td>✅ Yes</td>
 </tr>
+<tr class="even">
+<td><strong><a href="https://www.deepseek.com/en" class="external-link">DeepSeek-AI</a><sub>1</sub></strong></td>
+<td>DeepSeek-R1</td>
+<td>✅ Yes</td>
+</tr>
+<tr class="odd">
+<td><strong><a href="https://www.deepseek.com/en" class="external-link">DeepSeek-AI</a><sub>1</sub></strong></td>
+<td>DeepSeek-V3</td>
+<td>❌ No</td>
+</tr>
+<tr class="even">
+<td><strong><a href="https://www.moonshot.ai/" class="external-link">Moonshot-AI</a><sub>1</sub></strong></td>
+<td>Kimi-K2-Instruct-0905</td>
+<td>❌ No</td>
+</tr>
+<tr class="odd">
+<td><strong><a href="https://chat.qwen.ai/" class="external-link">Qwen</a><sub>1</sub></strong></td>
+<td>Qwen3-235B-A22B-Instruct-2507</td>
+<td>❌ No</td>
+</tr>
+<tr class="even">
+<td><strong><a href="https://chat.qwen.ai/" class="external-link">Qwen</a><sub>2</sub></strong></td>
+<td>qwen3:32b</td>
+<td>✅ Yes</td>
+</tr>
+<tr class="odd">
+<td><strong>Google<sub>2</sub></strong></td>
+<td>gemma3:27b</td>
+<td>❌ No</td>
+</tr>
+<tr class="even">
+<td><strong><a href="https://mistral.ai/" class="external-link">Mistral</a><sub>2</sub></strong></td>
+<td>mistral-small3.2:24b</td>
+<td>❌ No</td>
+</tr>
 </tbody>
 </table>
+<p><sub>1</sub> via the <a href="https://www.together.ai/" class="external-link">together.ai</a> API</p>
+<p><sub>2</sub> via <a href="https://ollama.com/" class="external-link">Ollama</a> on a local machine</p>
 <hr>
 </div>
 <div class="section level2">
@@ -170,7 +212,7 @@
 <strong>Prompt template</strong> – instructions + placeholders for <code>{TRAIT_NAME}</code>, <code>{TRAIT_DESCRIPTION}</code>, <code>{SAMPLE_1}</code>, <code>{SAMPLE_2}</code>.<br>
 </li>
 <li>
-<strong>Backend</strong> – which provider/model to use (OpenAI, Anthropic, Gemini).<br>
+<strong>Backend</strong> – which provider/model to use (OpenAI, Anthropic, Gemini, Together, Ollama).<br>
 </li>
 <li>
 <strong>Modeling</strong> – convert pairwise results to latent scores via BT or Elo.</li>
@@ -198,7 +240,7 @@
 <span>  <span class="fu"><a href="reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span><span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
@@ -250,6 +292,7 @@ Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <str
 <li>Anthropic<br>
 </li>
 <li>Google Gemini</li>
+<li>Together.ai</li>
 </ul>
 <div class="section level3">
 <h3 id="setting-api-keys">Setting API Keys<a class="anchor" aria-label="anchor" href="#setting-api-keys"></a>
@@ -258,7 +301,8 @@ Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <str
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ANTHROPIC_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>GEMINI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>GEMINI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>TOGETHER_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span></code></pre></div>
 <p>…but for normal use and for reproducible analyses, it is <strong>strongly recommended</strong><br>
 to store them in your <code>~/.Renviron</code> file.</p>
 </div>
@@ -272,7 +316,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <p>Add the following lines:</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>OPENAI_API_KEY<span class="ot">=</span><span class="st">"your-openai-key"</span></span>
 <span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>ANTHROPIC_API_KEY<span class="ot">=</span><span class="st">"your-anthropic-key"</span></span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>GEMINI_API_KEY<span class="ot">=</span><span class="st">"your-gemini-key"</span></span></code></pre></div>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>GEMINI_API_KEY<span class="ot">=</span><span class="st">"your-gemini-key"</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>TOGETHER_API_KEY<span class="ot">=</span><span class="st">"your-together-key"</span></span></code></pre></div>
 <p>Save the file, then restart R.</p>
 <p>You can confirm that R now sees the keys:</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
@@ -374,8 +419,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="va">pairs_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sample_reverse_pairs.html">sample_reverse_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, reverse_pct <span class="op">=</span> <span class="fl">1.0</span><span class="op">)</span></span></code></pre></div>
 <p>Submit:</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, model<span class="op">=</span><span class="st">"gpt-4o"</span>, backend<span class="op">=</span><span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span>
-<span><span class="va">res_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_rev</span>, model<span class="op">=</span><span class="st">"gpt-4o"</span>, backend<span class="op">=</span><span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">res_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="va">res_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_rev</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
 <p>Compute bias:</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cons</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compute_reverse_consistency.html">compute_reverse_consistency</a></span><span class="op">(</span><span class="va">res_fwd</span>, <span class="va">res_rev</span><span class="op">)</span></span>
@@ -399,7 +444,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </h3>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
-<span><span class="va">bt_fit</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
+<span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
@@ -408,8 +453,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span>          <span class="co"># per-sample scores</span></span>
-<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability</span>  <span class="co"># reliability indices (unweighted &amp; weighted)</span></span></code></pre></div>
+<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span> <span class="co"># per-sample scores</span></span>
+<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability</span> <span class="co"># reliability indices (unweighted &amp; weighted)</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -451,8 +496,6 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </h2>
 <p>Planned features include:</p>
 <ul>
-<li>Local / offline inference (Ollama)<br>
-</li>
 <li>Documentation and vignette additions</li>
 <li>CRAN submission</li>
 </ul>
