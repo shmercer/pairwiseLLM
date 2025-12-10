@@ -64,9 +64,9 @@ comparisons:
 | **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-R1 | ✅ Yes |
 | **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-V3 | ❌ No |
 | **[Moonshot-AI](https://www.moonshot.ai/)<sub>1</sub>** | Kimi-K2-Instruct-0905 | ❌ No |
-| **[Qwen](https://chat.qwen.ai/)<sub>1</sub>** | Qwen3-235B-A22B-Instruct-2507 | ❌ No |
-| **[Qwen](https://chat.qwen.ai/)<sub>2</sub>** | qwen3:32b | ✅ Yes |
-| **Google<sub>2</sub>** | gemma3:27b | ❌ No |
+| **[Qwen](https://qwen.ai/home)<sub>1</sub>** | Qwen3-235B-A22B-Instruct-2507 | ❌ No |
+| **[Qwen](https://qwen.ai/home)<sub>2</sub>** | qwen3:32b | ✅ Yes |
+| **[Google](https://deepmind.google/models/gemma/)<sub>2</sub>** | gemma3:27b | ❌ No |
 | **[Mistral](https://mistral.ai/)<sub>2</sub>** | mistral-small3.2:24b | ❌ No |
 
 <sub>1</sub> via the [together.ai](https://www.together.ai/) API
