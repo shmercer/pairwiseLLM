@@ -571,7 +571,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Backend = backend,
@@ -581,7 +581,9 @@ summary_tbl |>
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
 ---
@@ -603,7 +605,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Backend = backend,
@@ -613,7 +615,9 @@ summary_tbl |>
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
 ---
@@ -635,7 +639,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Backend = backend,
@@ -645,7 +649,9 @@ summary_tbl |>
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
 ---
@@ -667,7 +673,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Backend = backend,
@@ -677,7 +683,9 @@ summary_tbl |>
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
 ---
@@ -699,7 +707,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Backend = backend,
@@ -709,7 +717,9 @@ summary_tbl |>
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
 ---
@@ -742,7 +752,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Template = template_id,
@@ -753,7 +763,8 @@ summary_tbl |>
     Binomial_Test_p
   ) |>
   kable(
-    caption = "Anthropic: Positional-bias summary by template, model, and thinking configuration."
+    caption = "Anthropic: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
   )
 ```
 
@@ -768,7 +779,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Template = template_id,
@@ -779,7 +790,8 @@ summary_tbl |>
     Binomial_Test_p
   ) |>
   kable(
-    caption = "Gemini: Positional-bias summary by template, model, and thinking configuration."
+    caption = "Gemini: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
   )
 ```
 
@@ -794,7 +806,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Template = template_id,
@@ -805,7 +817,8 @@ summary_tbl |>
     Binomial_Test_p
   ) |>
   kable(
-    caption = "OpenAI: Positional-bias summary by template, model, and thinking configuration."
+    caption = "OpenAI: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
   )
 ```
 
@@ -820,7 +833,7 @@ summary_tbl |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Template = template_id,
@@ -831,7 +844,8 @@ summary_tbl |>
     Binomial_Test_p
   ) |>
   kable(
-    caption = "TogetherAI: Positional-bias summary by template, model, and thinking configuration."
+    caption = "TogetherAI: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
   )
 ```
 
