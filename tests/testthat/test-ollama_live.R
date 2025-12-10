@@ -853,3 +853,32 @@ testthat::test_that(
     )
   }
 )
+
+testthat::test_that("ensure_only_ollama_model_loaded handles empty or weird CLI output", {
+  # Scenario 1: ollama ps returns only header
+  testthat::with_mocked_bindings(
+    .ollama_system2 = function(...) {
+      structure("NAME       ID       SIZE   PROCESSOR  UNTIL", status = 0L)
+    },
+    {
+      # Should return empty character invisibly (no models found to unload)
+      res <- ensure_only_ollama_model_loaded("mistral", verbose = FALSE)
+      testthat::expect_length(res, 0L)
+    }
+  )
+
+  # Scenario 2: ollama ps returns header and the target model only
+  testthat::with_mocked_bindings(
+    .ollama_system2 = function(...) {
+      structure(c(
+        "NAME       ID       SIZE   PROCESSOR  UNTIL",
+        "mistral    abc      4GB    gpu        4m"
+      ), status = 0L)
+    },
+    {
+      # Should return empty character (target matches, nothing to unload)
+      res <- ensure_only_ollama_model_loaded("mistral", verbose = FALSE)
+      testthat::expect_length(res, 0L)
+    }
+  )
+})

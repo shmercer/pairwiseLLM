@@ -63,13 +63,24 @@ The following models are confirmed to work for live and batch pairwise compariso
 
 | Provider   | Model                     | Reasoning Mode? |
 |------------|----------------------------|------------------|
-| **OpenAI** | gpt-5.1                    | ✅ Yes |
-| **OpenAI** | gpt-4o                     | ❌ No |
-| **OpenAI** | gpt-4.1                    | ❌ No |
-| **Anthropic** | claude-sonnet-4-5       | ✅ Yes |
-| **Anthropic** | claude-haiku-4-5        | ✅ Yes |
-| **Anthropic** | claude-opus-4-5         | ✅ Yes |
-| **Gemini** | gemini-3-pro-preview       | ✅ Yes |
+| **[OpenAI](https://openai.com/api/)** | gpt-5.1                    | ✅ Yes |
+| **[OpenAI](https://openai.com/api/)** | gpt-4o                     | ❌ No |
+| **[OpenAI](https://openai.com/api/)** | gpt-4.1                    | ❌ No |
+| **[Anthropic](https://console.anthropic.com/)** | claude-sonnet-4-5       | ✅ Yes |
+| **[Anthropic](https://console.anthropic.com/)** | claude-haiku-4-5        | ✅ Yes |
+| **[Anthropic](https://console.anthropic.com/)** | claude-opus-4-5         | ✅ Yes |
+| **[Google/Gemini](https://aistudio.google.com/)** | gemini-3-pro-preview       | ✅ Yes |
+| **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-R1           | ✅ Yes |
+| **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-V3           | ❌ No |
+| **[Moonshot-AI](https://www.moonshot.ai/)<sub>1</sub>** | Kimi-K2-Instruct-0905 | ❌ No |
+| **[Qwen](https://chat.qwen.ai/)<sub>1</sub>** | Qwen3-235B-A22B-Instruct-2507 | ❌ No |
+| **[Qwen](https://chat.qwen.ai/)<sub>2</sub>** | qwen3:32b         | ✅ Yes |
+| **Google<sub>2</sub>** | gemma3:27b      | ❌ No |
+| **[Mistral](https://mistral.ai/)<sub>2</sub>** | mistral-small3.2:24b | ❌ No |
+
+<sub>1</sub> via the [together.ai](https://www.together.ai/) API
+
+<sub>2</sub> via [Ollama](https://ollama.com/) on a local machine
 
 ---
 
@@ -96,7 +107,7 @@ At a high level, `pairwiseLLM` workflows follow this structure:
 2. **Trait** – a rating dimension such as “overall quality” or “organization”.  
 3. **Pairs** – pairs of samples to be compared for that trait.  
 4. **Prompt template** – instructions + placeholders for `{TRAIT_NAME}`, `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, `{SAMPLE_2}`.  
-5. **Backend** – which provider/model to use (OpenAI, Anthropic, Gemini).  
+5. **Backend** – which provider/model to use (OpenAI, Anthropic, Gemini, Together, Ollama).  
 6. **Modeling** – convert pairwise results to latent scores via BT or Elo.
 
 The package provides helpers for each step.
@@ -174,7 +185,8 @@ This returns a tibble showing whether R can see the required keys for:
 
 - OpenAI  
 - Anthropic  
-- Google Gemini  
+- Google Gemini
+- Together.ai
 
 ### Setting API Keys
 
@@ -184,6 +196,7 @@ You may set keys **temporarily** for the current R session:
 Sys.setenv(OPENAI_API_KEY = "your-key-here")
 Sys.setenv(ANTHROPIC_API_KEY = "your-key-here")
 Sys.setenv(GEMINI_API_KEY = "your-key-here")
+Sys.setenv(TOGETHER_API_KEY = "your-key-here")
 ```
 
 …but for normal use and for reproducible analyses, it is **strongly recommended**  
@@ -203,6 +216,7 @@ Add the following lines:
 OPENAI_API_KEY="your-openai-key"
 ANTHROPIC_API_KEY="your-anthropic-key"
 GEMINI_API_KEY="your-gemini-key"
+TOGETHER_API_KEY="your-together-key"
 ```
 
 Save the file, then restart R.
@@ -350,7 +364,6 @@ elo_fit$reliability # reliability indices (unweighted & weighted)
 
 Planned features include:
 
-* Local / offline inference (Ollama)  
 * Documentation and vignette additions
 * CRAN submission
 

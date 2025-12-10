@@ -202,3 +202,60 @@ test_that("sample_reverse_pairs produces valid reversed pairs on
     }
   }
 })
+
+testthat::test_that("compute_reverse_consistency matches pairs order-invariantly", {
+  # Main: A vs B -> A wins
+  main <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+
+  # Reverse: B vs A -> A wins (Consistent)
+  # Note order of IDs in columns is swapped relative to main
+  rev <- tibble::tibble(ID1 = "B", ID2 = "A", better_id = "A")
+
+  res <- compute_reverse_consistency(main, rev)
+
+  # Should find 1 overlapping pair
+  testthat::expect_equal(res$summary$n_pairs, 1)
+  testthat::expect_equal(res$summary$n_consistent, 1)
+  testthat::expect_equal(res$summary$prop_consistent, 1.0)
+})
+
+testthat::test_that("check_positional_bias handles zero inconsistencies gracefully", {
+  # Create a details object with 100% consistency
+  details <- tibble::tibble(
+    key = c("A||B", "C||D"),
+    ID1_main = c("A", "C"), ID2_main = c("B", "D"), better_id_main = c("A", "C"),
+    ID1_rev = c("B", "D"), ID2_rev = c("A", "C"), better_id_rev = c("A", "C"),
+    is_consistent = c(TRUE, TRUE)
+  )
+
+  consistency_obj <- list(details = details)
+
+  res <- check_positional_bias(consistency_obj, n_boot = 10)
+
+  # Bias counts should be zero, not NA or error
+  testthat::expect_equal(res$summary$n_inconsistent, 0)
+  testthat::expect_equal(res$summary$n_inconsistent_pos1_bias, 0)
+  testthat::expect_equal(res$summary$n_inconsistent_pos2_bias, 0)
+
+  # Check flags in details
+  testthat::expect_false(any(res$details$is_pos1_bias))
+})
+
+testthat::test_that("check_positional_bias identifies positional bias correctly", {
+  # Scenario: Position 1 always wins, causing inconsistency
+  # Main: A vs B (A is pos1) -> A wins
+  # Rev:  B vs A (B is pos1) -> B wins
+  details <- tibble::tibble(
+    key = "A||B",
+    ID1_main = "A", ID2_main = "B", better_id_main = "A", # Pos 1 wins
+    ID1_rev = "B", ID2_rev = "A", better_id_rev = "B", # Pos 1 wins
+    is_consistent = FALSE
+  )
+
+  res <- check_positional_bias(details, n_boot = 10)
+
+  testthat::expect_equal(res$summary$n_inconsistent, 1)
+  testthat::expect_equal(res$summary$n_inconsistent_pos1_bias, 1)
+  testthat::expect_equal(res$summary$n_inconsistent_pos2_bias, 0)
+  testthat::expect_true(res$details$is_pos1_bias[1])
+})

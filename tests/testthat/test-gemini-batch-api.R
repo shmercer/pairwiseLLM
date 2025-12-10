@@ -979,12 +979,11 @@ testthat::test_that("gemini_download_batch_results handles batch name string and
 })
 
 testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correctly", {
-  # Access internal function
-  parse_resp <- pairwiseLLM:::.parse_gemini_pair_response
+  # Internal function is available directly
 
   # 1. Error response handling
   err_resp <- list(error = list(message = "Blocked"))
-  res_err <- parse_resp("id", "A", "B", err_resp)
+  res_err <- .parse_gemini_pair_response("id", "A", "B", err_resp)
   testthat::expect_equal(res_err$result_type, "errored")
   testthat::expect_equal(res_err$error_message, "Blocked")
 
@@ -1003,7 +1002,7 @@ testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correct
     )
   )
 
-  res_t <- parse_resp("id", "A", "B", resp_thoughts, include_thoughts = TRUE)
+  res_t <- .parse_gemini_pair_response("id", "A", "B", resp_thoughts, include_thoughts = TRUE)
   testthat::expect_equal(res_t$thoughts, "Thinking...")
   testthat::expect_equal(res_t$content, "Answer")
 
@@ -1020,7 +1019,7 @@ testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correct
       )
     )
   )
-  res_s <- parse_resp("id", "A", "B", resp_single, include_thoughts = TRUE)
+  res_s <- .parse_gemini_pair_response("id", "A", "B", resp_single, include_thoughts = TRUE)
   testthat::expect_true(is.na(res_s$thoughts))
   testthat::expect_equal(res_s$content, "Just answer")
 })
@@ -1073,4 +1072,64 @@ testthat::test_that("parse_gemini_batch_output detects include_thoughts from req
   # When include_thoughts is false, everything is concatenated into content
   testthat::expect_true(is.na(res_false$thoughts))
   testthat::expect_equal(res_false$content, "My thought processFinal Answer")
+})
+
+testthat::test_that("build_gemini_batch_requests validates inputs and warns on medium thinking", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+
+  # Error on missing columns
+  bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
+  testthat::expect_error(
+    build_gemini_batch_requests(bad_pairs, "gemini-1.5-pro", td$name, td$description),
+    "must contain columns"
+  )
+
+  # Warning on thinking_level = "medium"
+  testthat::expect_warning(
+    req <- build_gemini_batch_requests(
+      pairs, "gemini-1.5-pro", td$name, td$description,
+      thinking_level = "medium"
+    ),
+    "mapping to \"High\" internally"
+  )
+
+  # Verify the mapping occurred in the request body
+  config <- req$request[[1]]$generationConfig
+  testthat::expect_equal(config$thinkingConfig$thinkingLevel, "High")
+})
+
+testthat::test_that("gemini_download_batch_results warns if response count mismatches request count", {
+  # Mock a batch object with 2 responses.
+  # We construct a data frame where the 'response' column is a nested data frame.
+  # This ensures inlined$response satisfies is.data.frame().
+  resp_df <- data.frame(
+    candidates = I(list(list(content=list(parts=list(list(text="A")))),
+                        list(content=list(parts=list(list(text="B"))))))
+  )
+
+  inlined <- data.frame(row_id = 1:2)
+  inlined$response <- resp_df
+
+  mock_batch <- list(
+    response = list(
+      inlinedResponses = inlined
+    )
+  )
+
+  # Provide 3 requests (mismatch with 2 responses)
+  req_tbl <- tibble::tibble(custom_id = c("1", "2", "3"))
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
+
+  testthat::with_mocked_bindings(
+    gemini_get_batch = function(...) mock_batch,
+    {
+      testthat::expect_warning(
+        gemini_download_batch_results("batch_123", req_tbl, tmp),
+        "does not match number of requests"
+      )
+    }
+  )
 })

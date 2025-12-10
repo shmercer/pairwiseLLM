@@ -1144,3 +1144,58 @@ testthat::test_that("submit_llm_pairs routes to together backend", {
     }
   )
 })
+
+testthat::test_that("llm_compare_pair prioritizes explicit api_key over environment", {
+  # We mock the specific backend function (e.g. openai) to capture arguments
+  captured_args <- NULL
+
+  mock_openai <- function(...) {
+    captured_args <<- list(...)
+    tibble::tibble(custom_id = "id", status_code = 200) # minimal return
+  }
+
+  # Set a dummy env var
+  withr::with_envvar(c("OPENAI_API_KEY" = "ENV_KEY"), {
+    testthat::with_mocked_bindings(
+      openai_compare_pair_live = mock_openai,
+      {
+        # Call generic wrapper with explicit key
+        llm_compare_pair(
+          "A", "txt", "B", "txt", "gpt-4", "trait", "desc",
+          backend = "openai",
+          api_key = "EXPLICIT_KEY"
+        )
+      }
+    )
+  })
+
+  testthat::expect_equal(captured_args$api_key, "EXPLICIT_KEY")
+})
+
+testthat::test_that("llm_compare_pair forwards '...' arguments correctly", {
+  captured_args <- NULL
+
+  mock_anthropic <- function(...) {
+    captured_args <<- list(...)
+    tibble::tibble(custom_id = "id", status_code = 200)
+  }
+
+  testthat::with_mocked_bindings(
+    anthropic_compare_pair_live = mock_anthropic,
+    {
+      llm_compare_pair(
+        "A", "txt", "B", "txt", "claude", "trait", "desc",
+        backend = "anthropic",
+        # Extra args passed via ...
+        temperature = 0.7,
+        top_p = 0.9,
+        max_tokens = 100
+      )
+    }
+  )
+
+  # Check that dots were forwarded
+  testthat::expect_equal(captured_args$temperature, 0.7)
+  testthat::expect_equal(captured_args$top_p, 0.9)
+  testthat::expect_equal(captured_args$max_tokens, 100)
+})
