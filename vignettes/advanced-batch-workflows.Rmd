@@ -29,6 +29,8 @@ The examples are based on the A/B template testing dev scripts for:
 - Anthropic (via `run_anthropic_batch_pipeline()` + `anthropic_get_batch()`)
 - Gemini (via low-level helpers such as `build_gemini_batch_requests()` and `gemini_create_batch()`)
 
+At present, batch helpers are implemented for OpenAI, Anthropic, and Gemini. Together.ai and Ollama are supported only via the live APIs (`submit_llm_pairs()` / `llm_compare_pair()`).
+
 > Note: All heavy API calls in this vignette are set to `eval = FALSE` so that the vignette remains CRAN-safe. You can enable them in your own project.
 
 For basic function usage, see the companion vignette:
