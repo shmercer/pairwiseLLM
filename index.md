@@ -40,22 +40,22 @@ see:
 The following models are confirmed to work for live and batch pairwise
 comparisons:
 
-| Provider                                          | Model                         | Reasoning Mode? |
-|---------------------------------------------------|-------------------------------|-----------------|
-| **[OpenAI](https://openai.com/api/)**             | gpt-5.1                       | ✅ Yes          |
-| **[OpenAI](https://openai.com/api/)**             | gpt-4o                        | ❌ No           |
-| **[OpenAI](https://openai.com/api/)**             | gpt-4.1                       | ❌ No           |
-| **[Anthropic](https://console.anthropic.com/)**   | claude-sonnet-4-5             | ✅ Yes          |
-| **[Anthropic](https://console.anthropic.com/)**   | claude-haiku-4-5              | ✅ Yes          |
-| **[Anthropic](https://console.anthropic.com/)**   | claude-opus-4-5               | ✅ Yes          |
-| **[Google/Gemini](https://aistudio.google.com/)** | gemini-3-pro-preview          | ✅ Yes          |
-| **[DeepSeek-AI](https://www.deepseek.com/en)₁**   | DeepSeek-R1                   | ✅ Yes          |
-| **[DeepSeek-AI](https://www.deepseek.com/en)₁**   | DeepSeek-V3                   | ❌ No           |
-| **[Moonshot-AI](https://www.moonshot.ai/)₁**      | Kimi-K2-Instruct-0905         | ❌ No           |
-| **[Qwen](https://chat.qwen.ai/)₁**                | Qwen3-235B-A22B-Instruct-2507 | ❌ No           |
-| **[Qwen](https://chat.qwen.ai/)₂**                | qwen3:32b                     | ✅ Yes          |
-| **Google₂**                                       | gemma3:27b                    | ❌ No           |
-| **[Mistral](https://mistral.ai/)₂**               | mistral-small3.2:24b          | ❌ No           |
+| Provider                                             | Model                         | Reasoning Mode? |
+|------------------------------------------------------|-------------------------------|-----------------|
+| **[OpenAI](https://openai.com/api/)**                | gpt-5.1                       | ✅ Yes          |
+| **[OpenAI](https://openai.com/api/)**                | gpt-4o                        | ❌ No           |
+| **[OpenAI](https://openai.com/api/)**                | gpt-4.1                       | ❌ No           |
+| **[Anthropic](https://console.anthropic.com/)**      | claude-sonnet-4-5             | ✅ Yes          |
+| **[Anthropic](https://console.anthropic.com/)**      | claude-haiku-4-5              | ✅ Yes          |
+| **[Anthropic](https://console.anthropic.com/)**      | claude-opus-4-5               | ✅ Yes          |
+| **[Google/Gemini](https://aistudio.google.com/)**    | gemini-3-pro-preview          | ✅ Yes          |
+| **[DeepSeek-AI](https://www.deepseek.com/en)₁**      | DeepSeek-R1                   | ✅ Yes          |
+| **[DeepSeek-AI](https://www.deepseek.com/en)₁**      | DeepSeek-V3                   | ❌ No           |
+| **[Moonshot-AI](https://www.moonshot.ai/)₁**         | Kimi-K2-Instruct-0905         | ❌ No           |
+| **[Qwen](https://qwen.ai/home)₁**                    | Qwen3-235B-A22B-Instruct-2507 | ❌ No           |
+| **[Qwen](https://qwen.ai/home)₂**                    | qwen3:32b                     | ✅ Yes          |
+| **[Google](https://deepmind.google/models/gemma/)₂** | gemma3:27b                    | ❌ No           |
+| **[Mistral](https://mistral.ai/)₂**                  | mistral-small3.2:24b          | ❌ No           |
 
 ₁ via the [together.ai](https://www.together.ai/) API
 
