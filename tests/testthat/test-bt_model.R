@@ -152,3 +152,143 @@ test_that("fit_bt_model errors when bt_data does not have exactly three
     "exactly three columns"
   )
 })
+
+# Helper to safely mock internal package functions
+mock_internal <- function(name, value, code) {
+  ns <- asNamespace("pairwiseLLM")
+
+  # Check existence
+  if (!exists(name, envir = ns)) {
+    rlang::abort(sprintf("Function '%s' not found in pairwiseLLM namespace.", name))
+  }
+
+  # Backup original
+  orig <- get(name, envir = ns)
+
+  # Restore on exit
+  on.exit(
+    {
+      utils::assignInNamespace(name, orig, ns = ns)
+    },
+    add = TRUE
+  )
+
+  # Inject mock
+  utils::assignInNamespace(name, value, ns = ns)
+
+  # Run code
+  force(code)
+}
+
+testthat::test_that("fit_bt_model validates input columns", {
+  # bt_data must have 3 columns
+  bad_data <- tibble::tibble(object1 = "A", object2 = "B") # 2 columns
+
+  testthat::expect_error(
+    fit_bt_model(bad_data),
+    "must have exactly three columns"
+  )
+
+  bad_data2 <- tibble::tibble(A = 1, B = 2, C = 3, D = 4) # 4 columns
+  testthat::expect_error(
+    fit_bt_model(bad_data2),
+    "must have exactly three columns"
+  )
+})
+
+testthat::test_that("summarize_bt_fit produces correct ranks and handles decreasing argument", {
+  # Construct a mock fit object that mimics the output of fit_bt_model
+  # We ensure types are strictly numeric to avoid coercion warnings
+  theta_df <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    theta = as.numeric(c(1.5, -0.5, 2.0)),
+    se = as.numeric(c(0.1, 0.2, 0.1))
+  )
+
+  fit <- list(
+    engine = "mock",
+    reliability = 0.85,
+    theta = theta_df
+  )
+
+  # Case 1: decreasing = TRUE (default). Highest theta = Rank 1.
+  # Values: C(2.0) > A(1.5) > B(-0.5)
+  # Ranks:  C=1,   A=2,    B=3
+  # Suppress warnings to avoid "NAs introduced by coercion" noise
+  sum_dec <- suppressWarnings(summarize_bt_fit(fit, decreasing = TRUE))
+
+  testthat::expect_s3_class(sum_dec, "tbl_df")
+  testthat::expect_equal(sum_dec$rank[sum_dec$ID == "C"], 1)
+  testthat::expect_equal(sum_dec$rank[sum_dec$ID == "A"], 2)
+  testthat::expect_equal(sum_dec$rank[sum_dec$ID == "B"], 3)
+
+  # Case 2: decreasing = FALSE. Lowest theta = Rank 1.
+  # Values: B(-0.5) < A(1.5) < C(2.0)
+  # Ranks:  B=1,    A=2,     C=3
+  sum_inc <- suppressWarnings(summarize_bt_fit(fit, decreasing = FALSE))
+
+  testthat::expect_equal(sum_inc$rank[sum_inc$ID == "B"], 1)
+  testthat::expect_equal(sum_inc$rank[sum_inc$ID == "A"], 2)
+  testthat::expect_equal(sum_inc$rank[sum_inc$ID == "C"], 3)
+
+  # Check metadata preservation
+  testthat::expect_equal(sum_dec$engine[1], "mock")
+  testthat::expect_equal(sum_dec$reliability[1], 0.85)
+})
+
+testthat::test_that("summarize_bt_fit validates fit object structure", {
+  # Missing theta
+  bad_fit <- list(engine = "mock")
+  testthat::expect_error(
+    summarize_bt_fit(bad_fit),
+    "must be a list returned by `fit_bt_model\\(\\)`"
+  )
+
+  # Malformed theta (missing required columns)
+  bad_fit2 <- list(
+    theta = tibble::tibble(ID = "A", val = 1) # missing 'theta', 'se'
+  )
+  testthat::expect_error(
+    summarize_bt_fit(bad_fit2),
+    "must contain columns"
+  )
+})
+
+testthat::test_that("build_bt_data handles NAs and ties correctly", {
+  # build_bt_data expects: ID1, ID2, better_id
+  # It converts better_id to binary (1 if ID1, 0 if ID2).
+  # Rows with NA or non-matching better_id should be dropped.
+
+  df <- tibble::tibble(
+    ID1 = c("A", "B", "C", "D"),
+    ID2 = c("B", "C", "A", "E"),
+    better_id = c("A", "C", NA, "Tie")
+  )
+
+  # Row 1: A vs B, better=A -> result 1
+  # Row 2: B vs C, better=C -> result 0
+  # Row 3: C vs A, better=NA -> dropped
+  # Row 4: D vs E, better="Tie" -> dropped (doesn't match D or E)
+
+  res <- build_bt_data(df)
+
+  testthat::expect_equal(nrow(res), 2L)
+
+  # Check Row 1
+  testthat::expect_equal(res$object1[1], "A")
+  testthat::expect_equal(res$object2[1], "B")
+  testthat::expect_equal(res$result[1], 1)
+
+  # Check Row 2
+  testthat::expect_equal(res$object1[2], "B")
+  testthat::expect_equal(res$object2[2], "C")
+  testthat::expect_equal(res$result[2], 0)
+})
+
+testthat::test_that("build_bt_data validates input columns", {
+  bad_df <- tibble::tibble(ID1 = "A", ID2 = "B") # Missing better_id
+  testthat::expect_error(
+    build_bt_data(bad_df),
+    "must contain columns"
+  )
+})

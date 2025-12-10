@@ -690,3 +690,46 @@ testthat::test_that("parse_anthropic_batch_output handles empty files and bad JS
   testthat::expect_equal(r2$error_message, "Failed to parse JSON line.")
   testthat::expect_true(is.na(r2$custom_id))
 })
+
+testthat::test_that("internal helper .parse_ids_from_custom_id handles edge cases", {
+  # Access internal function using :::
+  parse_ids <- pairwiseLLM:::.parse_ids_from_custom_id
+
+  # Happy path
+  res <- parse_ids("ANTH_S01_vs_S02")
+  testthat::expect_equal(res$ID1, "S01")
+  testthat::expect_equal(res$ID2, "S02")
+
+  # Different prefix
+  res <- parse_ids("CUSTOM_123_vs_456")
+  testthat::expect_equal(res$ID1, "123")
+  testthat::expect_equal(res$ID2, "456")
+
+  # Malformed: No underscores
+  res <- parse_ids("ANTHS01vsS02")
+  testthat::expect_true(is.na(res$ID1))
+  testthat::expect_true(is.na(res$ID2))
+
+  # Malformed: Missing IDs parts
+  res <- parse_ids("ANTH_vs_")
+  testthat::expect_true(is.na(res$ID1))
+  testthat::expect_true(is.na(res$ID2))
+
+  # Input validation
+  res <- parse_ids(NULL)
+  testthat::expect_true(is.na(res$ID1))
+  res <- parse_ids("")
+  testthat::expect_true(is.na(res$ID1))
+})
+
+testthat::test_that("internal helper .parse_anthropic_pair_message handles missing content", {
+  parse_msg <- pairwiseLLM:::.parse_anthropic_pair_message
+
+  # Case: Empty content list (e.g. pre-fill response or error upstream)
+  body_empty <- list(type = "message", model = "claude-test", content = list())
+  res <- parse_msg(body_empty, "A", "B")
+
+  testthat::expect_true(is.na(res$content))
+  testthat::expect_true(is.na(res$thoughts))
+  testthat::expect_true(is.na(res$better_sample))
+})

@@ -125,17 +125,20 @@ testthat::test_that("check_llm_api_keys reports keys as present when env
 # ---------------------------------------------------------------------
 
 testthat::test_that("check_llm_api_keys(verbose = TRUE) prints all-set message", {
-  old_openai    <- Sys.getenv("OPENAI_API_KEY",    unset = "")
+  old_openai <- Sys.getenv("OPENAI_API_KEY", unset = "")
   old_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
-  old_gemini    <- Sys.getenv("GEMINI_API_KEY",    unset = "")
-  old_together  <- Sys.getenv("TOGETHER_API_KEY",  unset = "")
+  old_gemini <- Sys.getenv("GEMINI_API_KEY", unset = "")
+  old_together <- Sys.getenv("TOGETHER_API_KEY", unset = "")
 
-  on.exit({
-    Sys.setenv(OPENAI_API_KEY    = old_openai)
-    Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
-    Sys.setenv(GEMINI_API_KEY    = old_gemini)
-    Sys.setenv(TOGETHER_API_KEY  = old_together)
-  }, add = TRUE)
+  on.exit(
+    {
+      Sys.setenv(OPENAI_API_KEY = old_openai)
+      Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
+      Sys.setenv(GEMINI_API_KEY = old_gemini)
+      Sys.setenv(TOGETHER_API_KEY = old_together)
+    },
+    add = TRUE
+  )
 
   Sys.setenv(
     OPENAI_API_KEY    = "OPENAI_KEY_FOR_TEST",
@@ -153,17 +156,20 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints all-set message",
 })
 
 testthat::test_that("check_llm_api_keys(verbose = TRUE) prints none-set guidance", {
-  old_openai    <- Sys.getenv("OPENAI_API_KEY",    unset = "")
+  old_openai <- Sys.getenv("OPENAI_API_KEY", unset = "")
   old_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
-  old_gemini    <- Sys.getenv("GEMINI_API_KEY",    unset = "")
-  old_together  <- Sys.getenv("TOGETHER_API_KEY",  unset = "")
+  old_gemini <- Sys.getenv("GEMINI_API_KEY", unset = "")
+  old_together <- Sys.getenv("TOGETHER_API_KEY", unset = "")
 
-  on.exit({
-    Sys.setenv(OPENAI_API_KEY    = old_openai)
-    Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
-    Sys.setenv(GEMINI_API_KEY    = old_gemini)
-    Sys.setenv(TOGETHER_API_KEY  = old_together)
-  }, add = TRUE)
+  on.exit(
+    {
+      Sys.setenv(OPENAI_API_KEY = old_openai)
+      Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
+      Sys.setenv(GEMINI_API_KEY = old_gemini)
+      Sys.setenv(TOGETHER_API_KEY = old_together)
+    },
+    add = TRUE
+  )
 
   Sys.setenv(
     OPENAI_API_KEY    = "",
@@ -178,24 +184,27 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints none-set guidance
 
   testthat::expect_s3_class(status, "tbl_df")
   testthat::expect_true(any(grepl("No LLM API keys are currently set for known backends", msgs)))
-  testthat::expect_true(any(grepl("OPENAI_API_KEY",    msgs)))
+  testthat::expect_true(any(grepl("OPENAI_API_KEY", msgs)))
   testthat::expect_true(any(grepl("ANTHROPIC_API_KEY", msgs)))
-  testthat::expect_true(any(grepl("GEMINI_API_KEY",    msgs)))
-  testthat::expect_true(any(grepl("TOGETHER_API_KEY",  msgs)))
+  testthat::expect_true(any(grepl("GEMINI_API_KEY", msgs)))
+  testthat::expect_true(any(grepl("TOGETHER_API_KEY", msgs)))
 })
 
 testthat::test_that("check_llm_api_keys(verbose = TRUE) prints mixed status per backend", {
-  old_openai    <- Sys.getenv("OPENAI_API_KEY",    unset = "")
+  old_openai <- Sys.getenv("OPENAI_API_KEY", unset = "")
   old_anthropic <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
-  old_gemini    <- Sys.getenv("GEMINI_API_KEY",    unset = "")
-  old_together  <- Sys.getenv("TOGETHER_API_KEY",  unset = "")
+  old_gemini <- Sys.getenv("GEMINI_API_KEY", unset = "")
+  old_together <- Sys.getenv("TOGETHER_API_KEY", unset = "")
 
-  on.exit({
-    Sys.setenv(OPENAI_API_KEY    = old_openai)
-    Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
-    Sys.setenv(GEMINI_API_KEY    = old_gemini)
-    Sys.setenv(TOGETHER_API_KEY  = old_together)
-  }, add = TRUE)
+  on.exit(
+    {
+      Sys.setenv(OPENAI_API_KEY = old_openai)
+      Sys.setenv(ANTHROPIC_API_KEY = old_anthropic)
+      Sys.setenv(GEMINI_API_KEY = old_gemini)
+      Sys.setenv(TOGETHER_API_KEY = old_together)
+    },
+    add = TRUE
+  )
 
   # Only OpenAI and Together set
   Sys.setenv(
@@ -225,18 +234,21 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints mixed status per 
 
 testthat::test_that(".gemini_api_key and .together_api_key prefer explicit api_key", {
   # Even if env vars are set, explicit argument wins
-  old_gemini   <- Sys.getenv("GEMINI_API_KEY",   unset = "")
+  old_gemini <- Sys.getenv("GEMINI_API_KEY", unset = "")
   old_together <- Sys.getenv("TOGETHER_API_KEY", unset = "")
 
-  on.exit({
-    Sys.setenv(GEMINI_API_KEY   = old_gemini)
-    Sys.setenv(TOGETHER_API_KEY = old_together)
-  }, add = TRUE)
+  on.exit(
+    {
+      Sys.setenv(GEMINI_API_KEY = old_gemini)
+      Sys.setenv(TOGETHER_API_KEY = old_together)
+    },
+    add = TRUE
+  )
 
-  Sys.setenv(GEMINI_API_KEY   = "GEMINI_FROM_ENV")
+  Sys.setenv(GEMINI_API_KEY = "GEMINI_FROM_ENV")
   Sys.setenv(TOGETHER_API_KEY = "TOGETHER_FROM_ENV")
 
-  testthat::expect_equal(.gemini_api_key("GEMINI_EXPLICIT"),   "GEMINI_EXPLICIT")
+  testthat::expect_equal(.gemini_api_key("GEMINI_EXPLICIT"), "GEMINI_EXPLICIT")
   testthat::expect_equal(.together_api_key("TOGETHER_EXPLICIT"), "TOGETHER_EXPLICIT")
 })
 
@@ -278,3 +290,26 @@ testthat::test_that(".get_api_key treats empty string api_key like missing and u
   testthat::expect_equal(res, "FROM_ENV")
 })
 
+testthat::test_that("check_llm_api_keys provides verbose guidance when keys missing", {
+  # Unset all keys
+  withr::with_envvar(
+    c("OPENAI_API_KEY" = "", "ANTHROPIC_API_KEY" = "", "GEMINI_API_KEY" = "", "TOGETHER_API_KEY" = ""),
+    {
+      testthat::expect_message(
+        check_llm_api_keys(verbose = TRUE),
+        "No LLM API keys are currently set"
+      )
+    }
+  )
+
+  # Set one key
+  withr::with_envvar(
+    c("OPENAI_API_KEY" = "TEST", "ANTHROPIC_API_KEY" = ""),
+    {
+      testthat::expect_message(
+        check_llm_api_keys(verbose = TRUE),
+        "Some LLM API keys are not set"
+      )
+    }
+  )
+})

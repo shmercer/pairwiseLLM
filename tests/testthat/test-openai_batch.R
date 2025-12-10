@@ -944,3 +944,30 @@ testthat::test_that("parse_openai_batch_output extracts better_id correctly from
   testthat::expect_equal(res$ID2, "B_2")
   testthat::expect_equal(res$better_id, "1")
 })
+
+testthat::test_that("parse_openai_batch_output handles empty files and malformed JSON", {
+  # Case 1: Empty file
+  empty_file <- tempfile()
+  file.create(empty_file)
+  on.exit(unlink(empty_file), add = TRUE)
+
+  testthat::expect_error(
+    parse_openai_batch_output(empty_file),
+    "File contains no lines"
+  )
+
+  # Case 2: File with valid JSON and garbage lines
+  mixed_file <- tempfile()
+  lines <- c(
+    jsonlite::toJSON(list(custom_id = "LIVE_A_vs_B", response = list(body = list(model = "gpt-4"))), auto_unbox = TRUE),
+    "THIS IS NOT JSON",
+    jsonlite::toJSON(list(custom_id = "LIVE_C_vs_D", response = list(body = list(model = "gpt-4"))), auto_unbox = TRUE)
+  )
+  writeLines(lines, mixed_file)
+  on.exit(unlink(mixed_file), add = TRUE)
+
+  # The function should skip the malformed line and return 2 rows
+  res <- parse_openai_batch_output(mixed_file)
+  testthat::expect_equal(nrow(res), 2L)
+  testthat::expect_equal(res$ID1, c("A", "C"))
+})
