@@ -883,3 +883,194 @@ testthat::test_that(
     )
   }
 )
+
+testthat::test_that("build_gemini_batch_requests validates inputs and handles parameters", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # 1. Missing columns
+  bad_pairs <- tibble::tibble(ID1 = "A", text1 = "txt")
+  testthat::expect_error(
+    build_gemini_batch_requests(bad_pairs, "gemini-model", td$name, td$description),
+    "must contain columns"
+  )
+
+  # 2. Invalid model
+  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+  testthat::expect_error(
+    build_gemini_batch_requests(pairs, "", td$name, td$description),
+    "model.*must be a non-empty character"
+  )
+
+  # 3. Warnings for thinking_budget and medium level
+  testthat::expect_warning(
+    build_gemini_batch_requests(
+      pairs, "gemini-model", td$name, td$description,
+      thinking_budget = 1000 # Should trigger warning
+    ),
+    "thinking_budget.*is ignored"
+  )
+
+  testthat::expect_warning(
+    build_gemini_batch_requests(
+      pairs, "gemini-model", td$name, td$description,
+      thinking_level = "medium" # Should trigger warning
+    ),
+    "thinking_level = \"medium\".*mapping to \"High\""
+  )
+
+  # 4. Check parameter passthrough (temperature, top_p, etc.)
+  batch <- build_gemini_batch_requests(
+    pairs, "gemini-model", td$name, td$description,
+    temperature = 0.7,
+    top_p = 0.9,
+    include_thoughts = TRUE
+  )
+
+  config <- batch$request[[1]]$generationConfig
+  testthat::expect_equal(config$temperature, 0.7)
+  testthat::expect_equal(config$topP, 0.9)
+  testthat::expect_true(config$thinkingConfig$includeThoughts)
+})
+
+testthat::test_that("gemini_create_batch validates inputs", {
+  testthat::expect_error(
+    gemini_create_batch(list(), "model"),
+    "must be a non-empty list"
+  )
+  testthat::expect_error(
+    gemini_create_batch(list(a = 1), ""),
+    "model.*must be a non-empty character"
+  )
+})
+
+testthat::test_that("gemini_download_batch_results handles batch name string and count mismatch", {
+  # Mock get_batch to return a fake batch object from a string name
+  # We construct a data frame where the 'response' column is a nested data frame,
+  # satisfying is.data.frame() checks in the function.
+  resp_col <- data.frame(a = 1:2)
+  inlined <- data.frame(row_id = 1:2)
+  inlined$response <- resp_col
+
+  mock_batch <- list(
+    response = list(
+      inlinedResponses = inlined
+    )
+  )
+
+  # Mismatch: 3 requests, but only 2 responses in mock_batch
+  req_tbl <- tibble::tibble(custom_id = c("1", "2", "3"))
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
+
+  testthat::with_mocked_bindings(
+    gemini_get_batch = function(...) mock_batch,
+    {
+      # Should warn about mismatch
+      testthat::expect_warning(
+        gemini_download_batch_results("batches/123", req_tbl, tmp),
+        "Number of inlined responses.*does not match"
+      )
+
+      # Should resolve string "batches/123" to mock_batch via get_batch
+      testthat::expect_true(file.exists(tmp))
+    }
+  )
+})
+
+testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correctly", {
+  # Access internal function
+  parse_resp <- pairwiseLLM:::.parse_gemini_pair_response
+
+  # 1. Error response handling
+  err_resp <- list(error = list(message = "Blocked"))
+  res_err <- parse_resp("id", "A", "B", err_resp)
+  testthat::expect_equal(res_err$result_type, "errored")
+  testthat::expect_equal(res_err$error_message, "Blocked")
+
+  # 2. Thoughts extraction: include_thoughts=TRUE, 2 parts
+  # Part 1: Thought, Part 2: Answer
+  resp_thoughts <- list(
+    candidates = list(
+      list(
+        content = list(
+          parts = list(
+            list(text = "Thinking..."),
+            list(text = "Answer")
+          )
+        )
+      )
+    )
+  )
+
+  res_t <- parse_resp("id", "A", "B", resp_thoughts, include_thoughts = TRUE)
+  testthat::expect_equal(res_t$thoughts, "Thinking...")
+  testthat::expect_equal(res_t$content, "Answer")
+
+  # 3. Thoughts extraction: include_thoughts=TRUE, but only 1 part
+  # Should fallback to treating it as content, thoughts = NA
+  resp_single <- list(
+    candidates = list(
+      list(
+        content = list(
+          parts = list(
+            list(text = "Just answer")
+          )
+        )
+      )
+    )
+  )
+  res_s <- parse_resp("id", "A", "B", resp_single, include_thoughts = TRUE)
+  testthat::expect_true(is.na(res_s$thoughts))
+  testthat::expect_equal(res_s$content, "Just answer")
+})
+
+testthat::test_that("parse_gemini_batch_output detects include_thoughts from request column", {
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
+
+  # Create a result file with 2 parts (thought + content)
+  resp_data <- list(
+    candidates = list(
+      list(
+        content = list(
+          parts = list(
+            list(text = "My thought process"),
+            list(text = "Final Answer")
+          )
+        )
+      )
+    )
+  )
+
+  line <- list(
+    custom_id = "CID",
+    result = list(type = "succeeded", response = resp_data)
+  )
+  writeLines(jsonlite::toJSON(line, auto_unbox = TRUE), tmp)
+
+  # Case A: Request column exists and has includeThoughts = TRUE
+  req_tbl_true <- tibble::tibble(
+    custom_id = "CID", ID1 = "A", ID2 = "B",
+    request = list(
+      list(generationConfig = list(thinkingConfig = list(includeThoughts = TRUE)))
+    )
+  )
+
+  res_true <- parse_gemini_batch_output(tmp, req_tbl_true)
+  testthat::expect_equal(res_true$thoughts, "My thought process")
+  testthat::expect_equal(res_true$content, "Final Answer")
+
+  # Case B: Request column exists but includeThoughts = FALSE (or missing)
+  req_tbl_false <- tibble::tibble(
+    custom_id = "CID", ID1 = "A", ID2 = "B",
+    request = list(
+      list(generationConfig = list(thinkingConfig = list(includeThoughts = FALSE)))
+    )
+  )
+
+  res_false <- parse_gemini_batch_output(tmp, req_tbl_false)
+  # When include_thoughts is false, everything is concatenated into content
+  testthat::expect_true(is.na(res_false$thoughts))
+  testthat::expect_equal(res_false$content, "My thought processFinal Answer")
+})

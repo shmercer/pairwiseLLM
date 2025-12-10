@@ -61,12 +61,43 @@
 #'           \code{NA}.}
 #'   }
 #'
+#' @examples
+#' # Create a temporary JSONL file containing a simulated OpenAI batch result
+#' tf <- tempfile(fileext = ".jsonl")
+#'
+#' # A single line of JSON representing a successful Chat Completion
+#' # custom_id implies "LIVE_" prefix, ID1="A", ID2="B"
+#' json_line <- paste0(
+#'   '{"custom_id": "LIVE_A_vs_B", ',
+#'   '"response": {"status_code": 200, "body": {',
+#'   '"object": "chat.completion", ',
+#'   '"model": "gpt-4", ',
+#'   '"choices": [{"message": {"content": "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>"}}], ',
+#'   '"usage": {"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60}}}}'
+#' )
+#'
+#' writeLines(json_line, tf)
+#'
+#' # Parse the output
+#' res <- parse_openai_batch_output(tf)
+#'
+#' # Inspect the result
+#' print(res$better_id)
+#' print(res$prompt_tokens)
+#'
+#' # Clean up
+#' unlink(tf)
+#'
 #' @import tibble
 #' @importFrom jsonlite fromJSON
 #' @export
 parse_openai_batch_output <- function(path,
                                       tag_prefix = "<BETTER_SAMPLE>",
                                       tag_suffix = "</BETTER_SAMPLE>") {
+  if (!file.exists(path)) {
+    stop("File does not exist: ", path, call. = FALSE)
+  }
+
   lines <- readLines(path, warn = FALSE)
   if (length(lines) == 0L) {
     stop("File contains no lines: ", path, call. = FALSE)
@@ -123,6 +154,12 @@ parse_openai_batch_output <- function(path,
     }
 
     custom_id <- obj$custom_id %||% NA_character_
+
+    # Parse IDs immediately so they are available even if body is missing
+    ids <- parse_ids(custom_id)
+    ID1 <- ids$ID1
+    ID2 <- ids$ID2
+
     response <- obj$response
     status_code <- response$status_code %||% NA_integer_
 
@@ -138,8 +175,8 @@ parse_openai_batch_output <- function(path,
     if (is.null(body)) {
       out[[i]] <- tibble::tibble(
         custom_id = custom_id,
-        ID1 = NA_character_,
-        ID2 = NA_character_,
+        ID1 = ID1,
+        ID2 = ID2,
         model = NA_character_,
         object_type = NA_character_,
         status_code = status_code,
@@ -263,13 +300,12 @@ parse_openai_batch_output <- function(path,
       }
     }
 
-    ids <- parse_ids(custom_id)
     better_id <- NA_character_
     if (!is.na(better_sample)) {
       if (better_sample == "SAMPLE_1") {
-        better_id <- ids$ID1
+        better_id <- ID1
       } else if (better_sample == "SAMPLE_2") {
-        better_id <- ids$ID2
+        better_id <- ID2
       }
     }
 
@@ -292,8 +328,8 @@ parse_openai_batch_output <- function(path,
 
     out[[i]] <- tibble::tibble(
       custom_id            = custom_id,
-      ID1                  = ids$ID1,
-      ID2                  = ids$ID2,
+      ID1                  = ID1,
+      ID2                  = ID2,
       model                = model,
       object_type          = object_type,
       status_code          = status_code,

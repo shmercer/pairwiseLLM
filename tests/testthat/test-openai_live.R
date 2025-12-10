@@ -607,3 +607,109 @@ testthat::test_that("openai_compare_pair_live picks up reasoning summary
     }
   )
 })
+
+testthat::test_that("openai_compare_pair_live validates input types", {
+  td <- trait_description("overall_quality")
+
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = 123, text1 = "t", ID2 = "B", text2 = "t",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description
+    ),
+    "`ID1` must be a single character"
+  )
+
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "t", ID2 = "B", text2 = list(),
+      model = "gpt-4", trait_name = td$name, trait_description = td$description
+    ),
+    "`text2` must be a single character"
+  )
+})
+
+testthat::test_that("openai_compare_pair_live handles HTTP errors gracefully", {
+  td <- trait_description("overall_quality")
+
+  # Simulate 400 Bad Request
+  fake_error_body <- list(
+    error = list(message = "Invalid parameter")
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, ...) req,
+    .openai_req_perform = function(...) "RESP",
+    .openai_resp_status = function(...) 400L,
+    .openai_resp_body_json = function(...) fake_error_body,
+    {
+      res <- openai_compare_pair_live(
+        ID1 = "A", text1 = "t", ID2 = "B", text2 = "t",
+        model = "gpt-4", trait_name = td$name, trait_description = td$description
+      )
+
+      testthat::expect_equal(res$status_code, 400L)
+      testthat::expect_equal(res$error_message, "Invalid parameter")
+      testthat::expect_true(is.na(res$content))
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live parses legacy reasoning summary location", {
+  td <- trait_description("overall_quality")
+
+  # Old structure where summary was at body$reasoning$summary$text
+  fake_body <- list(
+    object = "response",
+    model = "gpt-5.1",
+    reasoning = list(
+      effort = "low",
+      summary = list(text = "Legacy summary.")
+    ),
+    output = list(
+      list(
+        type = "message",
+        content = list(list(type = "output_text", text = "Content"))
+      )
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, ...) req,
+    .openai_req_perform = function(...) "RESP",
+    .openai_resp_status = function(...) 200L,
+    .openai_resp_body_json = function(...) fake_body,
+    {
+      res <- openai_compare_pair_live(
+        ID1 = "A", text1 = "t", ID2 = "B", text2 = "t",
+        model = "gpt-5.1", trait_name = td$name, trait_description = td$description,
+        endpoint = "responses"
+      )
+
+      testthat::expect_equal(res$thoughts, "Legacy summary.")
+      testthat::expect_equal(res$content, "Content")
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live validates inputs", {
+  td <- trait_description("overall_quality")
+
+  # Missing columns
+  bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
+  testthat::expect_error(
+    submit_openai_pairs_live(bad_pairs, "gpt-4", td$name, td$description),
+    "must contain columns"
+  )
+
+  # Invalid status_every
+  good_pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+  testthat::expect_error(
+    submit_openai_pairs_live(
+      good_pairs, "gpt-4", td$name, td$description,
+      status_every = 0
+    ),
+    "status_every` must be a single positive integer"
+  )
+})

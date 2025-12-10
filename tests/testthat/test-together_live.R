@@ -32,18 +32,18 @@ testthat::test_that(
     captured_bodies <- list()
 
     testthat::local_mocked_bindings(
-      .together_api_key        = function(api_key = NULL) "TEST_TOGETHER_KEY",
-      .together_req_body_json  = function(req, body) {
+      .together_api_key = function(api_key = NULL) "TEST_TOGETHER_KEY",
+      .together_req_body_json = function(req, body) {
         captured_bodies <<- append(captured_bodies, list(body))
         req
       },
-      .together_req_perform    = function(req) "FAKE_RESP",
-      .together_resp_status    = function(resp) 200L,
+      .together_req_perform = function(req) "FAKE_RESP",
+      .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
       .env = pll_ns
     )
 
-    td   <- trait_description("overall_quality")
+    td <- trait_description("overall_quality")
     tmpl <- set_prompt_template()
 
     res <- together_compare_pair_live(
@@ -126,18 +126,18 @@ testthat::test_that(
     captured_bodies <- list()
 
     testthat::local_mocked_bindings(
-      .together_api_key        = function(api_key = NULL) "TEST_TOGETHER_KEY",
-      .together_req_body_json  = function(req, body) {
+      .together_api_key = function(api_key = NULL) "TEST_TOGETHER_KEY",
+      .together_req_body_json = function(req, body) {
         captured_bodies <<- append(captured_bodies, list(body))
         req
       },
-      .together_req_perform    = function(req) "FAKE_RESP",
-      .together_resp_status    = function(resp) 200L,
+      .together_req_perform = function(req) "FAKE_RESP",
+      .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
       .env = pll_ns
     )
 
-    td   <- trait_description("overall_quality")
+    td <- trait_description("overall_quality")
     tmpl <- set_prompt_template()
 
     # 1) Non-thinking model (Kimi) with no temperature -> default 0
@@ -211,15 +211,15 @@ testthat::test_that(
     )
 
     testthat::local_mocked_bindings(
-      .together_api_key        = function(api_key = NULL) "TEST_TOGETHER_KEY",
-      .together_req_body_json  = function(req, body) req,
-      .together_req_perform    = function(req) "FAKE_RESP",
-      .together_resp_status    = function(resp) 200L,
+      .together_api_key = function(api_key = NULL) "TEST_TOGETHER_KEY",
+      .together_req_body_json = function(req, body) req,
+      .together_req_perform = function(req) "FAKE_RESP",
+      .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
       .env = pll_ns
     )
 
-    td   <- trait_description("overall_quality")
+    td <- trait_description("overall_quality")
     tmpl <- set_prompt_template()
 
     res <- together_compare_pair_live(
@@ -286,15 +286,15 @@ testthat::test_that(
     )
 
     testthat::local_mocked_bindings(
-      .together_api_key        = function(api_key = NULL) "TEST_TOGETHER_KEY",
-      .together_req_body_json  = function(req, body) req,
-      .together_req_perform    = function(req) "FAKE_RESP",
-      .together_resp_status    = function(resp) 200L,
+      .together_api_key = function(api_key = NULL) "TEST_TOGETHER_KEY",
+      .together_req_body_json = function(req, body) req,
+      .together_req_perform = function(req) "FAKE_RESP",
+      .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
       .env = pll_ns
     )
 
-    td   <- trait_description("overall_quality")
+    td <- trait_description("overall_quality")
     tmpl <- set_prompt_template()
 
     res <- together_compare_pair_live(
@@ -321,17 +321,17 @@ testthat::test_that(
     pll_ns <- asNamespace("pairwiseLLM")
 
     testthat::local_mocked_bindings(
-      .together_api_key        = function(api_key = NULL) "TEST_TOGETHER_KEY",
-      .together_req_body_json  = function(req, body) req,
-      .together_req_perform    = function(req) "FAKE_RESP",
-      .together_resp_status    = function(resp) 500L,
+      .together_api_key = function(api_key = NULL) "TEST_TOGETHER_KEY",
+      .together_req_body_json = function(req, body) req,
+      .together_req_perform = function(req) "FAKE_RESP",
+      .together_resp_status = function(resp) 500L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) {
         stop("boom")
       },
       .env = pll_ns
     )
 
-    td   <- trait_description("overall_quality")
+    td <- trait_description("overall_quality")
     tmpl <- set_prompt_template()
 
     res <- together_compare_pair_live(
@@ -376,7 +376,7 @@ testthat::test_that(
 testthat::test_that(
   "submit_together_pairs_live validates inputs and handles zero-row pairs",
   {
-    td   <- trait_description("overall_quality")
+    td <- trait_description("overall_quality")
     tmpl <- set_prompt_template()
 
     # Missing columns
@@ -443,94 +443,267 @@ testthat::test_that(
 
 # ---------------------------------------------------------------------
 
-testthat::test_that(
-  "submit_together_pairs_live calls together_compare_pair_live for each row",
-  {
-    pll_ns <- asNamespace("pairwiseLLM")
+testthat::test_that("submit_together_pairs_live runs correctly (mocking internals)", {
+  pll_ns <- asNamespace("pairwiseLLM")
 
-    pairs <- tibble::tibble(
-      ID1   = c("S01", "S02"),
-      text1 = c("Text 1a", "Text 2a"),
-      ID2   = c("S03", "S04"),
-      text2 = c("Text 1b", "Text 2b")
-    )
+  pairs <- tibble::tibble(
+    ID1   = c("S01", "S02"),
+    text1 = c("Text 1a", "Text 2a"),
+    ID2   = c("S03", "S04"),
+    text2 = c("Text 1b", "Text 2b")
+  )
 
-    td   <- trait_description("overall_quality")
-    tmpl <- set_prompt_template()
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
-    calls <- list()
+  # We capture the bodies sent to the API to verify arguments were passed down
+  captured_bodies <- list()
 
-    fake_together_compare <- function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template,
-    tag_prefix,
-    tag_suffix,
-    api_key,
-    include_raw,
-    ...
-    ) {
-      calls <<- append(calls, list(
-        list(
-          ID1         = ID1,
-          ID2         = ID2,
-          model       = model,
-          include_raw = include_raw,
-          dots        = list(...)
-        )
-      ))
-
-      tibble::tibble(
-        custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
-        ID1               = ID1,
-        ID2               = ID2,
-        model             = model,
-        object_type       = "chat.completion",
-        status_code       = 200L,
-        error_message     = NA_character_,
-        thoughts          = "fake thoughts",
-        content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-        better_sample     = "SAMPLE_1",
-        better_id         = ID1,
-        prompt_tokens     = 10,
-        completion_tokens = 2,
-        total_tokens      = 12
+  fake_body_resp <- list(
+    id = "chatcmpl-test",
+    object = "chat.completion",
+    choices = list(
+      list(
+        message = list(content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")
       )
+    ),
+    usage = list(total_tokens = 10)
+  )
+
+  testthat::with_mocked_bindings(
+    .together_api_key = function(...) "TEST_KEY",
+    .together_req_body_json = function(req, body) {
+      captured_bodies <<- append(captured_bodies, list(body))
+      req
+    },
+    .together_req_perform = function(req) "FAKE_RESP",
+    .together_resp_status = function(resp) 200L,
+    .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body_resp,
+    .env = pll_ns,
+    {
+      res <- submit_together_pairs_live(
+        pairs             = pairs,
+        model             = "deepseek-ai/DeepSeek-R1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        include_raw       = FALSE,
+        verbose           = FALSE,
+        progress          = FALSE,
+        temperature       = 0.7 # Custom arg to verify passthrough
+      )
+
+      # Verify structure
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(nrow(res), 2L)
+      testthat::expect_equal(res$ID1, c("S01", "S02"))
+
+      # Verify results parsed from the fake body
+      testthat::expect_true(all(res$better_sample == "SAMPLE_1"))
+
+      # Verify arguments were passed down to internals correctly
+      testthat::expect_equal(length(captured_bodies), 2L)
+      # Check passthrough of 'temperature' and 'model'
+      testthat::expect_equal(captured_bodies[[1]]$model, "deepseek-ai/DeepSeek-R1")
+      testthat::expect_equal(captured_bodies[[1]]$temperature, 0.7)
     }
+  )
+})
 
-    testthat::local_mocked_bindings(
-      together_compare_pair_live = fake_together_compare,
-      .env = pll_ns
+testthat::test_that("together_compare_pair_live validates input types", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # ID1 must be character
+  testthat::expect_error(
+    together_compare_pair_live(
+      ID1 = 123, text1 = "t", ID2 = "B", text2 = "t",
+      model = "model", trait_name = td$name, trait_description = td$description
+    ),
+    "`ID1` must be a single character"
+  )
+
+  # text1 must be character
+  testthat::expect_error(
+    together_compare_pair_live(
+      ID1 = "A", text1 = list(), ID2 = "B", text2 = "t",
+      model = "model", trait_name = td$name, trait_description = td$description
+    ),
+    "`text1` must be a single character"
+  )
+
+  # model must be character
+  testthat::expect_error(
+    together_compare_pair_live(
+      ID1 = "A", text1 = "t", ID2 = "B", text2 = "t",
+      model = 1, trait_name = td$name, trait_description = td$description
+    ),
+    "`model` must be a single character"
+  )
+})
+
+testthat::test_that("together_compare_pair_live handles network/HTTP errors gracefully", {
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+
+  # Mock internals to simulate a connection error
+  testthat::with_mocked_bindings(
+    .together_api_key = function(...) "KEY",
+    .together_req_body_json = function(req, ...) req,
+    .together_req_perform = function(...) {
+      stop("Simulated connection timeout")
+    },
+    .env = pll_ns,
+    {
+      res <- together_compare_pair_live(
+        ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
+        model = "model", trait_name = td$name, trait_description = td$description,
+        include_raw = TRUE
+      )
+
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(res$ID1, "S1")
+
+      # The catch-all error handler sets status_code to NA
+      testthat::expect_true(is.na(res$status_code))
+
+      # Check error message is captured
+      testthat::expect_match(res$error_message, "Together.ai request error: Simulated connection timeout")
+
+      # Check include_raw behavior on error (should be NULL)
+      testthat::expect_true("raw_response" %in% names(res))
+      testthat::expect_true(is.null(res$raw_response[[1]]))
+    }
+  )
+})
+
+testthat::test_that("together_compare_pair_live handles API-level errors (valid JSON, bad status)", {
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+
+  fake_error_body <- list(
+    error = list(
+      message = "Rate limit exceeded",
+      type = "rate_limit_error"
     )
+  )
 
-    res <- submit_together_pairs_live(
-      pairs             = pairs,
-      model             = "deepseek-ai/DeepSeek-R1",
-      trait_name        = td$name,
-      trait_description = td$description,
-      prompt_template   = tmpl,
-      include_raw       = FALSE,
-      verbose           = FALSE,
-      progress          = FALSE
-    )
+  testthat::with_mocked_bindings(
+    .together_api_key = function(...) "KEY",
+    .together_req_body_json = function(req, ...) req,
+    .together_req_perform = function(...) "RESP",
+    .together_resp_status = function(...) 429L,
+    .together_resp_body_json = function(...) fake_error_body,
+    .env = pll_ns,
+    {
+      res <- together_compare_pair_live(
+        ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
+        model = "model", trait_name = td$name, trait_description = td$description
+      )
 
-    testthat::expect_equal(nrow(res), 2L)
-    testthat::expect_equal(length(calls), 2L)
+      testthat::expect_equal(res$status_code, 429L)
+      testthat::expect_match(res$error_message, "Rate limit exceeded")
+      testthat::expect_true(is.na(res$content))
+    }
+  )
+})
 
-    testthat::expect_equal(calls[[1]]$ID1, "S01")
-    testthat::expect_equal(calls[[1]]$ID2, "S03")
-    testthat::expect_equal(calls[[1]]$model, "deepseek-ai/DeepSeek-R1")
-    testthat::expect_false(calls[[1]]$include_raw)
+testthat::test_that("together_compare_pair_live handles incomplete <think> tags", {
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
 
-    testthat::expect_equal(calls[[2]]$ID1, "S02")
-    testthat::expect_equal(calls[[2]]$ID2, "S04")
+  # Case: <think> is started but never closed (e.g. max tokens reached)
+  raw_text <- "<think> I am thinking... [cut off]"
 
-    testthat::expect_true(all(res$better_sample == "SAMPLE_1"))
-    testthat::expect_true(all(res$thoughts == "fake thoughts"))
-  }
-)
+  fake_body <- list(
+    choices = list(list(message = list(content = raw_text)))
+  )
+
+  testthat::with_mocked_bindings(
+    .together_api_key = function(...) "KEY",
+    .together_req_body_json = function(req, ...) req,
+    .together_req_perform = function(...) "RESP",
+    .together_resp_status = function(...) 200L,
+    .together_resp_body_json = function(...) fake_body,
+    .env = pll_ns,
+    {
+      res <- together_compare_pair_live(
+        ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
+        model = "deepseek-ai/DeepSeek-R1", trait_name = td$name, trait_description = td$description
+      )
+
+      # If regex tags aren't both present, it treats the whole thing as visible content
+      testthat::expect_true(is.na(res$thoughts))
+      testthat::expect_equal(res$content, raw_text)
+    }
+  )
+})
+
+testthat::test_that("submit_together_pairs_live validates status_every", {
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+
+  testthat::expect_error(
+    submit_together_pairs_live(pairs, "model", td$name, td$description, status_every = 0),
+    "status_every` must be a single positive integer"
+  )
+  testthat::expect_error(
+    submit_together_pairs_live(pairs, "model", td$name, td$description, status_every = "1"),
+    "status_every` must be a single positive integer"
+  )
+})
+
+testthat::test_that("submit_together_pairs_live handles internal R errors in loop", {
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+
+  pairs <- tibble::tibble(
+    ID1 = c("S1", "S2"),
+    text1 = "A", ID2 = "B", text2 = "C"
+  )
+
+  # Here we mock 'together_compare_pair_live' SAFELY because we use with_mocked_bindings
+  # and this test is isolated at the end. However, to be ultra-safe and consistent with
+  # the strategy, we can simulate the error by mocking the internals to crash for specific ID.
+
+  testthat::with_mocked_bindings(
+    .together_api_key = function(...) "KEY",
+    .together_req_perform = function(...) "RESP",
+    .together_resp_status = function(...) 200L,
+    .together_resp_body_json = function(...) list(choices = list(list(message = list(content = "OK")))),
+    # We mock the high-level function only for this specific aggregation test
+    # to guarantee we trigger the catch block inside the loop without relying on network stack details.
+    together_compare_pair_live = function(ID1, ...) {
+      if (ID1 == "S1") stop("Unexpected internal crash")
+      tibble::tibble(
+        custom_id = "LIVE_S2_vs_B", ID1 = "S2", ID2 = "B",
+        model = "mod", object_type = "chat", status_code = 200L,
+        error_message = NA_character_, thoughts = NA_character_,
+        content = "Res", better_sample = "SAMPLE_1", better_id = "S2",
+        prompt_tokens = 1, completion_tokens = 1, total_tokens = 2
+      )
+    },
+    .env = pll_ns,
+    {
+      res <- suppressMessages(
+        submit_together_pairs_live(
+          pairs, "model", td$name, td$description,
+          verbose = FALSE, progress = FALSE, include_raw = TRUE
+        )
+      )
+
+      testthat::expect_equal(nrow(res), 2L)
+
+      # First row: Error caught by loop tryCatch
+      r1 <- res[1, ]
+      testthat::expect_equal(r1$ID1, "S1")
+      testthat::expect_match(r1$error_message, "Error during Together.ai comparison: Unexpected internal crash")
+      testthat::expect_true(is.null(r1$raw_response[[1]]))
+
+      # Second row: Success
+      r2 <- res[2, ]
+      testthat::expect_equal(r2$ID1, "S2")
+      testthat::expect_true(is.na(r2$error_message))
+    }
+  )
+})
