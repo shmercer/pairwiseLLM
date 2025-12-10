@@ -52,15 +52,26 @@ see:
 The following models are confirmed to work for live and batch pairwise
 comparisons:
 
-| Provider      | Model                | Reasoning Mode? |
-|---------------|----------------------|-----------------|
-| **OpenAI**    | gpt-5.1              | ✅ Yes          |
-| **OpenAI**    | gpt-4o               | ❌ No           |
-| **OpenAI**    | gpt-4.1              | ❌ No           |
-| **Anthropic** | claude-sonnet-4-5    | ✅ Yes          |
-| **Anthropic** | claude-haiku-4-5     | ✅ Yes          |
-| **Anthropic** | claude-opus-4-5      | ✅ Yes          |
-| **Gemini**    | gemini-3-pro-preview | ✅ Yes          |
+| Provider                    | Model                         | Reasoning Mode? |
+|-----------------------------|-------------------------------|-----------------|
+| **OpenAI**                  | gpt-5.1                       | ✅ Yes          |
+| **OpenAI**                  | gpt-4o                        | ❌ No           |
+| **OpenAI**                  | gpt-4.1                       | ❌ No           |
+| **Anthropic**               | claude-sonnet-4-5             | ✅ Yes          |
+| **Anthropic**               | claude-haiku-4-5              | ✅ Yes          |
+| **Anthropic**               | claude-opus-4-5               | ✅ Yes          |
+| **Google/Gemini**           | gemini-3-pro-preview          | ✅ Yes          |
+| **DeepSeek-AI<sub>1</sub>** | DeepSeek-R1                   | ✅ Yes          |
+| **DeepSeek-AI<sub>1</sub>** | DeepSeek-V3                   | ❌ No           |
+| **Moonshot-AI<sub>1</sub>** | Kimi-K2-Instruct-0905         | ❌ No           |
+| **Qwen<sub>1</sub>**        | Qwen3-235B-A22B-Instruct-2507 | ❌ No           |
+| **Qwen<sub>2</sub>**        | qwen3:32b                     | ✅ Yes          |
+| **Google<sub>2</sub>**      | gemma3:27b                    | ❌ No           |
+| **Mistral<sub>2</sub>**     | mistral-small3.2:24b          | ❌ No           |
+
+<sub>1</sub> via the together.ai API
+
+<sub>2</sub> via Ollama on a local machine
 
 ------------------------------------------------------------------------
 
@@ -91,7 +102,7 @@ At a high level, `pairwiseLLM` workflows follow this structure:
 4.  **Prompt template** – instructions + placeholders for
     `{TRAIT_NAME}`, `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, `{SAMPLE_2}`.  
 5.  **Backend** – which provider/model to use (OpenAI, Anthropic,
-    Gemini).  
+    Gemini, Together, Ollama).  
 6.  **Modeling** – convert pairwise results to latent scores via BT or
     Elo.
 
@@ -116,7 +127,7 @@ pairs <- example_writing_samples |>
   sample_pairs(5, seed = 123) |>
   randomize_pair_order()
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- get_prompt_template("default")
 
 res <- submit_llm_pairs(
@@ -172,6 +183,7 @@ This returns a tibble showing whether R can see the required keys for:
 - OpenAI  
 - Anthropic  
 - Google Gemini
+- Together.ai
 
 ### Setting API Keys
 
@@ -181,6 +193,7 @@ You may set keys **temporarily** for the current R session:
 Sys.setenv(OPENAI_API_KEY = "your-key-here")
 Sys.setenv(ANTHROPIC_API_KEY = "your-key-here")
 Sys.setenv(GEMINI_API_KEY = "your-key-here")
+Sys.setenv(TOGETHER_API_KEY = "your-key-here")
 ```
 
 …but for normal use and for reproducible analyses, it is **strongly
@@ -200,6 +213,7 @@ Add the following lines:
     OPENAI_API_KEY="your-openai-key"
     ANTHROPIC_API_KEY="your-anthropic-key"
     GEMINI_API_KEY="your-gemini-key"
+    TOGETHER_API_KEY="your-together-key"
 
 Save the file, then restart R.
 
@@ -312,8 +326,8 @@ pairs_rev <- sample_reverse_pairs(pairs_fwd, reverse_pct = 1.0)
 Submit:
 
 ``` r
-res_fwd <- submit_llm_pairs(pairs_fwd, model="gpt-4o", backend="openai", ...)
-res_rev <- submit_llm_pairs(pairs_rev, model="gpt-4o", backend="openai", ...)
+res_fwd <- submit_llm_pairs(pairs_fwd, model = "gpt-4o", backend = "openai", ...)
+res_rev <- submit_llm_pairs(pairs_rev, model = "gpt-4o", backend = "openai", ...)
 ```
 
 Compute bias:
@@ -340,7 +354,7 @@ providers. Complete details are presented in a vignette:
 
 ``` r
 bt_data <- build_bt_data(res)
-bt_fit  <- fit_bt_model(bt_data)
+bt_fit <- fit_bt_model(bt_data)
 summarize_bt_fit(bt_fit)
 ```
 
@@ -349,8 +363,8 @@ summarize_bt_fit(bt_fit)
 ``` r
 elo_fit <- fit_elo_model(elo_data, runs = 5)
 
-elo_fit$elo          # per-sample scores
-elo_fit$reliability  # reliability indices (unweighted & weighted)
+elo_fit$elo # per-sample scores
+elo_fit$reliability # reliability indices (unweighted & weighted)
 ```
 
 ------------------------------------------------------------------------
@@ -368,7 +382,6 @@ elo_fit$reliability  # reliability indices (unweighted & weighted)
 
 Planned features include:
 
-- Local / offline inference (Ollama)  
 - Documentation and vignette additions
 - CRAN submission
 
