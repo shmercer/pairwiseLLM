@@ -470,43 +470,36 @@ testthat::test_that("run_anthropic_batch_pipeline does not poll or parse when
 })
 
 testthat::test_that("internal helper .parse_ids_from_custom_id handles edge cases", {
-  # Access internal function using :::
-  parse_ids <- pairwiseLLM:::.parse_ids_from_custom_id
-
-  # Happy path
-  res <- parse_ids("ANTH_S01_vs_S02")
+  # Internal function is available directly in the test environment
+  res <- .parse_ids_from_custom_id("ANTH_S01_vs_S02")
   testthat::expect_equal(res$ID1, "S01")
   testthat::expect_equal(res$ID2, "S02")
 
   # Different prefix
-  res <- parse_ids("CUSTOM_123_vs_456")
+  res <- .parse_ids_from_custom_id("CUSTOM_123_vs_456")
   testthat::expect_equal(res$ID1, "123")
   testthat::expect_equal(res$ID2, "456")
 
   # Malformed: No underscores
-  res <- parse_ids("ANTHS01vsS02")
+  res <- .parse_ids_from_custom_id("ANTHS01vsS02")
   testthat::expect_true(is.na(res$ID1))
   testthat::expect_true(is.na(res$ID2))
 
   # Malformed: Missing IDs parts
-  res <- parse_ids("ANTH_vs_")
-  testthat::expect_true(is.na(res$ID1))
-  testthat::expect_true(is.na(res$ID2))
-
-  # Malformed: Missing 'vs' keyword mechanism
-  res <- parse_ids("ANTH_S01_and_S02")
+  res <- .parse_ids_from_custom_id("ANTH_vs_")
   testthat::expect_true(is.na(res$ID1))
   testthat::expect_true(is.na(res$ID2))
 
   # Input validation
-  res <- parse_ids(NULL)
+  res <- .parse_ids_from_custom_id(NULL)
   testthat::expect_true(is.na(res$ID1))
-  res <- parse_ids("")
+  res <- .parse_ids_from_custom_id("")
   testthat::expect_true(is.na(res$ID1))
 })
 
 testthat::test_that("internal helper .parse_anthropic_pair_message extracts thoughts and handles no-choice", {
-  parse_msg <- pairwiseLLM:::.parse_anthropic_pair_message
+  # Internal function is available directly in the test environment
+  parse_msg <- .parse_anthropic_pair_message
 
   # Case 1: Complex content with extended thinking block and text
   body_thinking <- list(
@@ -692,8 +685,8 @@ testthat::test_that("parse_anthropic_batch_output handles empty files and bad JS
 })
 
 testthat::test_that("internal helper .parse_ids_from_custom_id handles edge cases", {
-  # Access internal function using :::
-  parse_ids <- pairwiseLLM:::.parse_ids_from_custom_id
+  # Internal function is available directly in the test environment
+  parse_ids <- .parse_ids_from_custom_id
 
   # Happy path
   res <- parse_ids("ANTH_S01_vs_S02")
@@ -723,11 +716,10 @@ testthat::test_that("internal helper .parse_ids_from_custom_id handles edge case
 })
 
 testthat::test_that("internal helper .parse_anthropic_pair_message handles missing content", {
-  parse_msg <- pairwiseLLM:::.parse_anthropic_pair_message
-
+  # Internal function is available directly
   # Case: Empty content list (e.g. pre-fill response or error upstream)
   body_empty <- list(type = "message", model = "claude-test", content = list())
-  res <- parse_msg(body_empty, "A", "B")
+  res <- .parse_anthropic_pair_message(body_empty, "A", "B")
 
   testthat::expect_true(is.na(res$content))
   testthat::expect_true(is.na(res$thoughts))

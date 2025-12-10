@@ -979,12 +979,11 @@ testthat::test_that("gemini_download_batch_results handles batch name string and
 })
 
 testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correctly", {
-  # Access internal function
-  parse_resp <- pairwiseLLM:::.parse_gemini_pair_response
+  # Internal function is available directly
 
   # 1. Error response handling
   err_resp <- list(error = list(message = "Blocked"))
-  res_err <- parse_resp("id", "A", "B", err_resp)
+  res_err <- .parse_gemini_pair_response("id", "A", "B", err_resp)
   testthat::expect_equal(res_err$result_type, "errored")
   testthat::expect_equal(res_err$error_message, "Blocked")
 
@@ -1003,7 +1002,7 @@ testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correct
     )
   )
 
-  res_t <- parse_resp("id", "A", "B", resp_thoughts, include_thoughts = TRUE)
+  res_t <- .parse_gemini_pair_response("id", "A", "B", resp_thoughts, include_thoughts = TRUE)
   testthat::expect_equal(res_t$thoughts, "Thinking...")
   testthat::expect_equal(res_t$content, "Answer")
 
@@ -1020,7 +1019,7 @@ testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correct
       )
     )
   )
-  res_s <- parse_resp("id", "A", "B", resp_single, include_thoughts = TRUE)
+  res_s <- .parse_gemini_pair_response("id", "A", "B", resp_single, include_thoughts = TRUE)
   testthat::expect_true(is.na(res_s$thoughts))
   testthat::expect_equal(res_s$content, "Just answer")
 })
