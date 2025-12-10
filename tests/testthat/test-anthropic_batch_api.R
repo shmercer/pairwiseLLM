@@ -628,7 +628,7 @@ testthat::test_that("anthropic_poll_batch_until_complete handles timeout", {
       testthat::expect_equal(res$processing_status, "in_progress")
 
       # It should have taken at least 0.5 seconds
-      testthat::expect_gte(as.numeric(difftime(end_t, start_t, units="secs")), 0.4)
+      testthat::expect_gte(as.numeric(difftime(end_t, start_t, units = "secs")), 0.4)
     }
   )
 })
@@ -666,7 +666,7 @@ testthat::test_that("parse_anthropic_batch_output handles empty files and bad JS
   # Case 2: File with one valid line and one garbage line
   bad_json_file <- tempfile()
   lines <- c(
-    jsonlite::toJSON(list(custom_id="ID_A_vs_B", result=list(type="canceled")), auto_unbox=TRUE),
+    jsonlite::toJSON(list(custom_id = "ID_A_vs_B", result = list(type = "canceled")), auto_unbox = TRUE),
     "{ broken_json: true " # Malformed
   )
   writeLines(lines, bad_json_file)
