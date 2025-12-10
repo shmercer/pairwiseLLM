@@ -125,3 +125,35 @@ For each line, the function:
 
 The returned data frame is suitable as input for
 [`build_bt_data`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md).
+
+## Examples
+
+``` r
+# Create a temporary JSONL file containing a simulated OpenAI batch result
+tf <- tempfile(fileext = ".jsonl")
+
+# A single line of JSON representing a successful Chat Completion
+# custom_id implies "LIVE_" prefix, ID1="A", ID2="B"
+json_line <- paste0(
+  '{"custom_id": "LIVE_A_vs_B", ',
+  '"response": {"status_code": 200, "body": {',
+  '"object": "chat.completion", ',
+  '"model": "gpt-4", ',
+  '"choices": [{"message": {"content": "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>"}}], ',
+  '"usage": {"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60}}}}'
+)
+
+writeLines(json_line, tf)
+
+# Parse the output
+res <- parse_openai_batch_output(tf)
+
+# Inspect the result
+print(res$better_id)
+#> [1] "A"
+print(res$prompt_tokens)
+#> [1] 50
+
+# Clean up
+unlink(tf)
+```
