@@ -626,3 +626,199 @@ testthat::test_that("anthropic_compare_pair_live enforces
     fixed = FALSE
   )
 })
+
+testthat::test_that("anthropic_compare_pair_live validates input types", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Test non-character inputs
+  testthat::expect_error(
+    anthropic_compare_pair_live(
+      ID1 = 123, text1 = "t", ID2 = "B", text2 = "t",
+      model = "claude", trait_name = td$name, trait_description = td$description
+    ),
+    "`ID1` must be a single character"
+  )
+
+  testthat::expect_error(
+    anthropic_compare_pair_live(
+      ID1 = "A", text1 = "t", ID2 = "B", text2 = "t",
+      model = 123, trait_name = td$name, trait_description = td$description
+    ),
+    "`model` must be a single character"
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live warns on conflicting thoughts settings", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # If user says reasoning="enabled" but include_thoughts=FALSE, it should warn
+  # but keep reasoning="enabled"
+  testthat::with_mocked_bindings(
+    # Mock internals to avoid actual API call failure
+    .anthropic_api_key = function(...) "FAKE",
+    .anthropic_request = function(...) list(),
+    .anthropic_req_body_json = function(req, ...) req,
+    .anthropic_req_perform = function(...) structure(list(), class = "fake"),
+    .anthropic_resp_status = function(...) 200L,
+    .anthropic_resp_body_json = function(...) list(type = "message"),
+    {
+      testthat::expect_warning(
+        anthropic_compare_pair_live(
+          ID1 = "A", text1 = "t", ID2 = "B", text2 = "t",
+          model = "claude", trait_name = td$name, trait_description = td$description,
+          reasoning = "enabled",
+          include_thoughts = FALSE
+        ),
+        "include_thoughts = FALSE but reasoning = 'enabled'"
+      )
+    }
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live handles complex blocks (redacted thinking, multi-text)", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Complex body: Thinking + Redacted Thinking + Split Text
+  complex_body <- list(
+    id = "msg_complex",
+    type = "message",
+    model = "claude-test",
+    role = "assistant",
+    content = list(
+      list(type = "thinking", thinking = "I am thinking... "),
+      list(type = "redacted_thinking", data = "HIDDEN"),
+      list(type = "text", text = "Here is part 1. "),
+      list(type = "text", text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")
+    ),
+    usage = list(input_tokens = 10, output_tokens = 10, total_tokens = 20)
+  )
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key = function(...) "FAKE",
+    .anthropic_req_body_json = function(req, ...) req,
+    .anthropic_req_perform = function(...) structure(list(), class = "fake"),
+    .anthropic_resp_status = function(...) 200L,
+    .anthropic_resp_body_json = function(...) complex_body,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
+        model = "claude", trait_name = td$name, trait_description = td$description
+      )
+
+      # Check thoughts concatenation including redaction tag
+      testthat::expect_match(res$thoughts, "I am thinking... ", fixed = TRUE)
+      testthat::expect_match(res$thoughts, "[REDACTED_THINKING]HIDDEN", fixed = TRUE)
+
+      # Check content concatenation
+      testthat::expect_match(res$content, "Here is part 1. <BETTER_SAMPLE>", fixed = TRUE)
+      testthat::expect_equal(res$better_sample, "SAMPLE_1")
+    }
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live calculates total_tokens fallback", {
+  td <- trait_description("overall_quality")
+
+  # Usage body missing total_tokens
+  body_no_total <- list(
+    type = "message",
+    content = list(list(type = "text", text = "HI")),
+    usage = list(input_tokens = 50, output_tokens = 50) # Sum = 100
+  )
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key = function(...) "FAKE",
+    .anthropic_req_body_json = function(req, ...) req,
+    .anthropic_req_perform = function(...) structure(list(), class = "fake"),
+    .anthropic_resp_status = function(...) 200L,
+    .anthropic_resp_body_json = function(...) body_no_total,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1 = "A", text1 = "t", ID2 = "B", text2 = "t",
+        model = "claude", trait_name = td$name, trait_description = td$description
+      )
+      testthat::expect_equal(res$total_tokens, 100)
+    }
+  )
+})
+
+testthat::test_that("submit_anthropic_pairs_live validates input columns and status_every", {
+  td <- trait_description("overall_quality")
+
+  # Missing text1 column
+  bad_pairs <- tibble::tibble(ID1 = "A", ID2 = "B", text2 = "t")
+  testthat::expect_error(
+    submit_anthropic_pairs_live(bad_pairs, "claude", td$name, td$description),
+    "must contain columns"
+  )
+
+  # Invalid status_every
+  good_pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+  testthat::expect_error(
+    submit_anthropic_pairs_live(
+      good_pairs, "claude", td$name, td$description,
+      status_every = 0
+    ),
+    "status_every` must be a single positive integer"
+  )
+})
+
+testthat::test_that("submit_anthropic_pairs_live is resilient to individual pair failures", {
+  td <- trait_description("overall_quality")
+
+  pairs <- tibble::tibble(
+    ID1 = c("S1", "S2"),
+    text1 = c("A", "C"),
+    ID2 = c("S2", "S3"),
+    text2 = c("B", "D")
+  )
+
+  # Mock the single comparison function directly.
+  # Pair 1 throws error, Pair 2 succeeds.
+  testthat::with_mocked_bindings(
+    anthropic_compare_pair_live = function(ID1, ...) {
+      if (ID1 == "S1") {
+        stop("Simulated Network Error")
+      } else {
+        # Return a valid 1-row tibble for success
+        tibble::tibble(
+          custom_id = "LIVE_S2_vs_S3",
+          ID1 = "S2", ID2 = "S3",
+          model = "claude",
+          object_type = "message",
+          status_code = 200L,
+          error_message = NA_character_,
+          thoughts = NA_character_,
+          content = "Result",
+          better_sample = "SAMPLE_1",
+          better_id = "S2",
+          prompt_tokens = 10, completion_tokens = 10, total_tokens = 20
+        )
+      }
+    },
+    {
+      # Capture output, suppress verbose messages for clean test logs
+      res <- suppressMessages(
+        submit_anthropic_pairs_live(
+          pairs, "claude", td$name, td$description,
+          verbose = FALSE, progress = FALSE
+        )
+      )
+
+      testthat::expect_equal(nrow(res), 2L)
+
+      # Row 1: Failed
+      testthat::expect_equal(res$ID1[1], "S1")
+      testthat::expect_match(res$error_message[1], "Simulated Network Error")
+      testthat::expect_true(is.na(res$status_code[1]))
+
+      # Row 2: Succeeded
+      testthat::expect_equal(res$ID1[2], "S2")
+      testthat::expect_true(is.na(res$error_message[2]))
+      testthat::expect_equal(res$better_id[2], "S2")
+    }
+  )
+})
