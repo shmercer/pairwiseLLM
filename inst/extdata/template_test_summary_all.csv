@@ -1,4 +1,4 @@
-template_id,provider,model,thinking,prop_consistent,prop_pos1,p_sample1_overall
+template_id,backend,model,thinking,prop_consistent,prop_pos1,p_sample1_overall
 test1,anthropic,claude-sonnet-4-5,no_thinking,0.894736842,0.505263158,0.877717225
 test1,anthropic,claude-sonnet-4-5,with_thinking,0.931578947,0.497368421,0.959096305
 test1,anthropic,claude-haiku-4-5,no_thinking,0.884210526,0.515789474,0.5726158
@@ -10,6 +10,10 @@ test1,openai,gpt-4.1,no_thinking,0.936842105,0.478947368,0.441647405
 test1,openai,gpt-4o,no_thinking,0.836842105,0.418421053,0.001716647
 test1,openai,gpt-5.1,no_thinking,0.926315789,0.473684211,0.32972497
 test1,openai,gpt-5.1,with_thinking,0.857894737,0.428947368,0.006475477
+test1,together,DeepSeek-R1,with_thinking,0.836842105,0.576315789,0.003401436
+test1,together,DeepSeek-V3,no_thinking,0.921052632,0.486842105,0.644360876
+test1,together,Kimi-K2-Instruct-0905,no_thinking,0.889473684,0.455263158,0.090349349
+test1,together,Qwen3-235B-A22B-Instruct-2507,no_thinking,0.821052632,0.415789474,0.001201212
 test2,anthropic,claude-sonnet-4-5,no_thinking,0.926315789,0.468421053,0.238009824
 test2,anthropic,claude-sonnet-4-5,with_thinking,0.915789474,0.484210526,0.5726158
 test2,anthropic,claude-haiku-4-5,no_thinking,0.863157895,0.442105263,0.027263025
@@ -21,6 +25,10 @@ test2,openai,gpt-4.1,no_thinking,0.931578947,0.465789474,0.199613447
 test2,openai,gpt-4o,no_thinking,0.884210526,0.442105263,0.027263025
 test2,openai,gpt-5.1,no_thinking,0.852631579,0.426315789,0.004716577
 test2,openai,gpt-5.1,with_thinking,0.852631579,0.426315789,0.004716577
+test2,together,DeepSeek-R1,with_thinking,0.915789474,0.510526316,0.719577487
+test2,together,DeepSeek-V3,no_thinking,0.873684211,0.563157895,0.015795485
+test2,together,Kimi-K2-Instruct-0905,no_thinking,0.905263158,0.457894737,0.111654614
+test2,together,Qwen3-235B-A22B-Instruct-2507,no_thinking,0.857894737,0.434210526,0.011849483
 test3,anthropic,claude-sonnet-4-5,no_thinking,0.884210526,0.452631579,0.072440575
 test3,anthropic,claude-sonnet-4-5,with_thinking,0.936842105,0.489473684,0.719577487
 test3,anthropic,claude-haiku-4-5,no_thinking,0.921052632,0.460526316,0.136733955
@@ -32,6 +40,10 @@ test3,openai,gpt-4.1,no_thinking,0.915789474,0.457894737,0.111654614
 test3,openai,gpt-4o,no_thinking,0.831578947,0.415789474,0.001201212
 test3,openai,gpt-5.1,no_thinking,0.878947368,0.444736842,0.035305211
 test3,openai,gpt-5.1,with_thinking,0.863157895,0.431578947,0.008802803
+test3,together,DeepSeek-R1,with_thinking,0.952631579,0.486842105,0.644360876
+test3,together,DeepSeek-V3,no_thinking,0.884210526,0.452631579,0.072440575
+test3,together,Kimi-K2-Instruct-0905,no_thinking,0.878947368,0.455263158,0.090349349
+test3,together,Qwen3-235B-A22B-Instruct-2507,no_thinking,0.805263158,0.407894737,3.87E-04
 test4,anthropic,claude-sonnet-4-5,no_thinking,0.910526316,0.460526316,0.136733955
 test4,anthropic,claude-sonnet-4-5,with_thinking,0.9,0.481578947,0.504897234
 test4,anthropic,claude-haiku-4-5,no_thinking,0.936842105,0.468421053,0.238009824
@@ -43,6 +55,10 @@ test4,openai,gpt-4.1,no_thinking,0.884210526,0.442105263,0.027263025
 test4,openai,gpt-4o,no_thinking,0.884210526,0.442105263,0.027263025
 test4,openai,gpt-5.1,no_thinking,0.857894737,0.428947368,0.006475477
 test4,openai,gpt-5.1,with_thinking,0.831578947,0.415789474,0.001201212
+test4,together,DeepSeek-R1,with_thinking,0.905263158,0.473684211,0.32972497
+test4,together,DeepSeek-V3,no_thinking,0.931578947,0.502631579,0.959096305
+test4,together,Kimi-K2-Instruct-0905,no_thinking,0.942105263,0.502631579,0.959096305
+test4,together,Qwen3-235B-A22B-Instruct-2507,no_thinking,0.768421053,0.384210526,7.40E-06
 test5,anthropic,claude-sonnet-4-5,no_thinking,0.9,0.481578947,0.504897234
 test5,anthropic,claude-sonnet-4-5,with_thinking,0.9,0.476315789,0.383189231
 test5,anthropic,claude-haiku-4-5,no_thinking,0.905263158,0.463157895,0.165945688
@@ -54,3 +70,7 @@ test5,openai,gpt-4.1,no_thinking,0.910526316,0.476315789,0.383189231
 test5,openai,gpt-4o,no_thinking,0.863157895,0.463157895,0.165945688
 test5,openai,gpt-5.1,no_thinking,0.877300613,0.450920245,0.085835393
 test5,openai,gpt-5.1,with_thinking,0.789473684,0.4,1.14E-04
+test5,together,DeepSeek-R1,with_thinking,0.847368421,0.497368421,0.959096305
+test5,together,DeepSeek-V3,no_thinking,0.810526316,0.484210526,0.5726158
+test5,together,Kimi-K2-Instruct-0905,no_thinking,0.794736842,0.481578947,0.504897234
+test5,together,Qwen3-235B-A22B-Instruct-2507,no_thinking,0.8,0.4,1.14E-04

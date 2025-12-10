@@ -323,4 +323,6 @@ Use `compute_reverse_consistency()` + `check_positional_bias()` (see [vignette("
 
 # 13. Citation
 
-> Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons with large language models (Version 1.0.0) [R package; Computer software]. https://github.com/shmercer/pairwiseLLM
+> Mercer, S. (2025). *Getting started with pairwiseLLM* (Version 1.0.0) [R package vignette]. 
+In *pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation*. 
+https://shmercer.github.io/pairwiseLLM/

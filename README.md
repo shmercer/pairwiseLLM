@@ -1,4 +1,5 @@
-pairwiseLLM: Pairwise comparisons of writing quality with LLMs
+pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
+Writing Evaluation
 ================
 
 <!-- badges: start -->

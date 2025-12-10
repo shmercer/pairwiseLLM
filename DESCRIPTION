@@ -1,16 +1,17 @@
 Package: pairwiseLLM
-Title: Pairwise Writing Quality Comparisons with Large Language Models
+Title: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 Version: 1.0.0
 Authors@R: 
     person("Sterett H.", "Mercer", , "sterett.mercer@ubc.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7940-4221"))
 Description: provides a unified framework for generating, submitting, and 
     analyzing pairwise comparisons of writing quality using large language 
-    models (LLMs). The package supports live and batch evaluation workflows 
-    across multiple providers (`OpenAI`, `Anthropic`, and `Google Gemini`), 
-    includes bias-tested prompt templates and a flexible template registry, and 
-    offers tools for constructing forward and reversed comparison sets to 
-    analyze consistency and positional bias. Results can be modeled using 
+    models (LLMs). The package supports live and/or batch evaluation workflows 
+    across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, 
+    `Together AI`, and locally-hosted `Ollama` models), includes bias-tested 
+    prompt templates and a flexible template registry, and offers tools
+    for constructing forward and reversed comparison sets to analyze
+    consistency and positional bias. Results can be modeled using 
     Bradley–Terry or Elo rating methods to derive writing quality scores.
 License: MIT + file LICENSE
 Encoding: UTF-8

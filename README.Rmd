@@ -1,5 +1,5 @@
 ---
-title: "pairwiseLLM: Pairwise comparisons of writing quality with LLMs"
+title: "pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation"
 output: github_document
 editor_options:
   chunk_output_type: console
