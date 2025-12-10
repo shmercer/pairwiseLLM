@@ -213,8 +213,8 @@ tmpl <- set_prompt_template()
 
 ID1 <- example_writing_samples$ID[1]
 ID2 <- example_writing_samples$ID[2]
-text1 <- example_writing_samples$Response[1]
-text2 <- example_writing_samples$Response[2]
+text1 <- example_writing_samples$text[1]
+text2 <- example_writing_samples$text[2]
 
 # Make sure an Ollama server is running and the model is pulled:
 #   ollama pull mistral-small3.2:24b

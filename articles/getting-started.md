@@ -3,8 +3,8 @@
 ## 1. Introduction
 
 `pairwiseLLM` provides a unified workflow for generating and analyzing
-**pairwise comparisons of writing quality** using modern LLM APIs
-(OpenAI, Anthropic, Gemini, and soon local models).
+**pairwise comparisons of writing quality** using LLM APIs (OpenAI,
+Anthropic, Gemini, Together), and local models via Ollama..
 
 A typical workflow:
 
@@ -30,42 +30,35 @@ For advanced batch processing workflows, see:
 `pairwiseLLM` reads provider keys **only from environment variables**,
 never from R options or global variables.
 
-| Provider  | Environment Variable |
-|-----------|----------------------|
-| OpenAI    | `OPENAI_API_KEY`     |
-| Anthropic | `ANTHROPIC_API_KEY`  |
-| Gemini    | `GEMINI_API_KEY`     |
+| Provider                                    | Environment Variable |
+|---------------------------------------------|----------------------|
+| [OpenAI](https://openai.com/api/)           | OPENAI_API_KEY       |
+| [Anthropic](https://console.anthropic.com/) | ANTHROPIC_API_KEY    |
+| [Gemini](https://aistudio.google.com/)      | GEMINI_API_KEY       |
+| [Together](https://www.together.ai/)        | TOGETHER_API_KEY     |
 
 You should put these in your `~/.Renviron`:
 
-    OPENAI_API_KEY=sk-...
-    ANTHROPIC_API_KEY=...
-    GEMINI_API_KEY=...
+    OPENAI_API_KEY="sk-..."
+    ANTHROPIC_API_KEY="..."
+    GEMINI_API_KEY="..."
+    TOGETHER_API_KEY="..."
 
 Check which keys are available:
 
-``` r
-library(pairwiseLLM)
-check_llm_api_keys()
-#> No LLM API keys are currently set for known backends:
-#>   - OpenAI:         OPENAI_API_KEY
-#>   - Anthropic:      ANTHROPIC_API_KEY
-#>   - Google Gemini:  GEMINI_API_KEY
-#>   - Together.ai:    TOGETHER_API_KEY
-#> 
-#> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
-#>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
-#>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
-#>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
-#>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
-#> # A tibble: 4 × 4
-#>   backend   service       env_var           has_key
-#>   <chr>     <chr>         <chr>             <lgl>  
-#> 1 openai    OpenAI        OPENAI_API_KEY    FALSE  
-#> 2 anthropic Anthropic     ANTHROPIC_API_KEY FALSE  
-#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE  
-#> 4 together  Together.ai   TOGETHER_API_KEY  FALSE
-```
+    library(pairwiseLLM)
+
+    check_llm_api_keys()
+    #> All known LLM API keys are set: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, TOGETHER_API_KEY.
+    #> # A tibble: 4 × 4
+    #>   backend   service        env_var           has_key
+    #> 1 openai    OpenAI         OPENAI_API_KEY    TRUE
+    #> 2 anthropic Anthropic      ANTHROPIC_API_KEY TRUE
+    #> 3 gemini    Google Gemini  GEMINI_API_KEY    TRUE
+    #> 4 together  Together.ai    TOGETHER_API_KEY  TRUE
+
+[Ollama](https://ollama.com/) runs locally and does not require an API
+key, just that the Ollama server is running.
 
 ------------------------------------------------------------------------
 
@@ -86,7 +79,7 @@ dplyr::slice_head(example_writing_samples, n = 3)
 
 Each sample has:
 
-- `id`  
+- `ID`  
 - `text`
 
 ------------------------------------------------------------------------
@@ -189,7 +182,8 @@ set_prompt_template(file = "my_template.txt")
 
 ## 6. Live Pairwise Comparisons
 
-The unified wrapper works for **OpenAI, Anthropic, and Gemini**.
+The unified wrapper works for **OpenAI, Anthropic, Gemini, Together, and
+Ollama.**
 
 ``` r
 res_live <- submit_llm_pairs(
@@ -222,8 +216,16 @@ Each row includes:
 Convert LLM output to a 3-column BT dataset:
 
 ``` r
+# res_live: output from submit_llm_pairs()
 bt_data <- build_bt_data(res_live)
 dplyr::slice_head(bt_data, 5)
+```
+
+and/or a dataset for Elo modeling:
+
+``` r
+# res_live: output from submit_llm_pairs()
+elo_data <- build_elo_data(res_live)
 ```
 
 ------------------------------------------------------------------------
@@ -250,12 +252,10 @@ The output includes:
 
 ------------------------------------------------------------------------
 
-## 9. Elo Modeling (Optional)
-
-Requires **EloChoice** (in Suggests):
+## 9. Elo Modeling
 
 ``` r
-elo_fit <- fit_elo_model(bt_data, runs = 5)
+elo_fit <- fit_elo_model(elo_data, runs = 5)
 elo_fit
 ```
 
@@ -316,6 +316,16 @@ Most users use the unified interface, but backend helpers are available.
 - [`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md)
 - [`parse_gemini_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.md)
 
+#### 11.4 Together.ai (live only)
+
+- [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
+- [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
+
+#### 11.5 Ollama (local, live only)
+
+- [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
+- [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
+
 ------------------------------------------------------------------------
 
 ## 12. Troubleshooting
@@ -354,29 +364,18 @@ Use batch APIs for \>40 pairs.
 
 #### Positional bias
 
-Use `test_positional_bias()` or see the bias-testing vignette.
+Use
+[`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md) +
+[`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md)
+(see
+[vignette(“prompt-template-positional-bias”)](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
+for a full example).
 
 ------------------------------------------------------------------------
 
-## 13. Further Reading
+## 13. Citation
 
-To evaluate positional bias across models and templates:
-
-``` r
-vignette("prompt-template-positional-bias")
-```
-
-To explore modeling:
-
-``` r
-?fit_bt_model
-?fit_elo_model
-```
-
-------------------------------------------------------------------------
-
-## 14. Citation
-
-> Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality
-> comparisons with large language models (Version 1.0.0) \[R package;
-> Computer software\]. <https://github.com/shmercer/pairwiseLLM>
+> Mercer, S. (2025). *Getting started with pairwiseLLM* (Version 1.0.0)
+> \[R package vignette\]. In *pairwiseLLM: Pairwise Comparison Tools for
+> Large Language Model-Based Writing Evaluation*.
+> <https://shmercer.github.io/pairwiseLLM/>

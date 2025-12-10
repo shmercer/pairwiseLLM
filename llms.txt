@@ -1,4 +1,5 @@
-# pairwiseLLM: Pairwise comparisons of writing quality with LLMs
+pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
+Writing Evaluation ================
 
 `pairwiseLLM` provides a unified, extensible framework for generating,
 submitting, and modeling **pairwise comparisons of writing quality**
@@ -37,8 +38,7 @@ see:
 
 ## Supported Models
 
-The following models are confirmed to work for live and batch pairwise
-comparisons:
+The following models are confirmed to work for pairwise comparisons:
 
 | Provider                                             | Model                         | Reasoning Mode? |
 |------------------------------------------------------|-------------------------------|-----------------|
@@ -60,6 +60,21 @@ comparisons:
 ₁ via the [together.ai](https://www.together.ai/) API
 
 ₂ via [Ollama](https://ollama.com/) on a local machine
+
+Batch APIs are currently available for OpenAI, Anthropic, and Gemini
+only. Models accessed via Together.ai and Ollama are supported for live
+comparisons via
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+/
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md).
+
+| Backend   | Live | Batch |
+|-----------|------|-------|
+| openai    | ✅   | ✅    |
+| anthropic | ✅   | ✅    |
+| gemini    | ✅   | ✅    |
+| together  | ✅   | ❌    |
+| ollama    | ✅   | ❌    |
 
 ------------------------------------------------------------------------
 
@@ -143,7 +158,7 @@ Example:
 
 ``` r
 batch <- llm_submit_pairs_batch(
-  provider          = "anthropic",
+  backend           = "anthropic",
   model             = "claude-sonnet-4-5",
   pairs             = pairs,
   trait_name        = td$name,
@@ -354,10 +369,13 @@ summarize_bt_fit(bt_fit)
 ### Elo Modeling
 
 ``` r
-elo_fit <- fit_elo_model(elo_data, runs = 5)
+# res: output from submit_llm_pairs() / llm_submit_pairs_batch()
+elo_data <- build_elo_data(res)
+elo_fit  <- fit_elo_model(elo_data, runs = 5)
 
-elo_fit$elo # per-sample scores
-elo_fit$reliability # reliability indices (unweighted & weighted)
+elo_fit$elo
+elo_fit$reliability
+elo_fit$reliability_weighted
 ```
 
 ------------------------------------------------------------------------

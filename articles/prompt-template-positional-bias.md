@@ -69,7 +69,7 @@ At a high level, the testing pipeline works as follows:
     - For each combination of:
 
       - Template (`test1`–`test5`)
-      - Provider (Anthropic, Gemini, OpenAI)
+      - Backend (Anthropic, Gemini, OpenAI, TogetherAI)
       - Model (e.g., `claude-sonnet-4-5`, `gpt-4o`,
         `gemini-3-pro-preview`)
       - Thinking configuration (`"no_thinking"` vs `"with_thinking"`,
@@ -79,8 +79,9 @@ At a high level, the testing pipeline works as follows:
     - Submit the forward and reverse pairs to the provider’s batch API
       using dev scripts such as:
 
-      - `dev/dev-anthropic-gemini-template-ab-test.R`
-      - `dev/dev-openai-template-ab-test.R`
+      - `dev/dev-positional-bias-all-models.R`
+      - `dev/dev-positional-bias-all-models-rebuild.R`
+      - `dev/dev-together-template-positional-bias.R`
 
     - Store responses as CSVs, including the model’s `<BETTER_SAMPLE>`
       decision and derived `better_id`.
@@ -431,9 +432,9 @@ In `pairwiseLLM`, these modes are exposed through a simple parameter:
     thinking = "no_thinking"   # standard inference mode  
     thinking = "with_thinking" # activates provider's reasoning system
 
-However, the *actual meaning* of these settings is
-**provider-specific**. Below we describe the exact configurations used
-in our positional-bias tests.
+However, the *actual meaning* of these settings is **backend-specific**.
+Below we describe the exact configurations used in our positional-bias
+tests.
 
 ------------------------------------------------------------------------
 
@@ -506,49 +507,65 @@ Used for **all models**, including gpt-5.1:
 
 This mode returns reasoning metadata that is stripped prior to analysis.
 
+### 7.4 TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)
+
+For Together.ai we ran positional-bias experiments using the Chat
+Completions API (/v1/chat/completions) for the following models:
+
+- “deepseek-ai/DeepSeek-R1”
+- “deepseek-ai/DeepSeek-V3”
+- “moonshotai/Kimi-K2-Instruct-0905”
+- “Qwen/Qwen3-235B-A22B-Instruct-2507-tput”
+
+DeepSeek-R1 emits internal reasoning wrapped in … tags. DeepSeek-V3,
+Kimi-K2, and Qwen3 do not have a separate reasoning switch; any
+“thinking” they do is part of their standard text output.
+
+Temperature settings used in testing: - “deepseek-ai/DeepSeek-R1”:
+`temperature = 0.6` - DeepSeek-V3, Kimi-K2, Qwen3: `temperature = 0.0`
+
 ------------------------------------------------------------------------
 
-### 7.4 Summary Table of Provider-Specific Behavior
+### 7.5 Summary Table of Backend-Specific Behavior
 
-| Provider  | Thinking Mode       | What It Controls                                  | Temperature Used | Notes                                            |
-|-----------|---------------------|---------------------------------------------------|------------------|--------------------------------------------------|
-| Anthropic | no_thinking         | reasoning=none, no thoughts                       | **0**            | deterministic                                    |
-| Anthropic | with_thinking       | reasoning enabled, thoughts included, budget=1024 | **1**            | rich internal reasoning                          |
-| Gemini    | with_thinking only  | thinkingLevel=“low”, includeThoughts              | provider default | batch API does not support pure no-thinking mode |
-| OpenAI    | no_thinking         | chat.completions, no reasoning                    | **0**            | deterministic                                    |
-| OpenAI    | with_thinking (5.1) | responses API with reasoning=low                  | ignored / N/A    | only applied to gpt-5.1                          |
+| Backend   | Thinking Mode       | What It Controls                                                 | Temperature Used  | Notes                                                     |
+|-----------|---------------------|------------------------------------------------------------------|-------------------|-----------------------------------------------------------|
+| Anthropic | no_thinking         | reasoning=none, no thoughts                                      | **0**             | deterministic                                             |
+| Anthropic | with_thinking       | reasoning enabled, thoughts included, budget=1024                | **1**             | rich internal reasoning                                   |
+| Gemini    | with_thinking only  | thinkingLevel=“low”, includeThoughts                             | provider default  | batch API does not support pure no-thinking mode          |
+| OpenAI    | no_thinking         | chat.completions, no reasoning                                   | **0**             | deterministic                                             |
+| OpenAI    | with_thinking (5.1) | responses API with reasoning=low                                 | ignored / N/A     | only applied to gpt-5.1                                   |
+| Together  | with_thinking       | Chat Completions with `<think>…</think>` extracted to `thoughts` | **0.6** (default) | internal reasoning always on; visible answer in `content` |
+| Together  | no_thinking         | Chat Completions, no explicit reasoning toggle                   | **0**             | reasoning not supported in these specific models          |
 
 ------------------------------------------------------------------------
 
 ## 8. Loading summary results
 
 The results from the experiments are stored in a CSV included in the
-package (for example, under `inst/extdata/template_test_summary.csv`).
-We load and lightly clean that file here.
+package (for example, under
+`inst/extdata/template_test_summary_all.csv`). We load and lightly clean
+that file here.
 
 ``` r
 summary_path <- system.file(
   "extdata",
-  "template_test_summary.csv",
+  "template_test_summary_all.csv",
   package = "pairwiseLLM"
 )
 
-summary_tbl <- readr::read_csv(summary_path, show_col_types = FALSE) |>
-  mutate(
-    provider = if_else(provider == "" | is.na(provider), "openai", provider)
-  )
+summary_tbl <- readr::read_csv(summary_path, show_col_types = FALSE)
 
 head(summary_tbl)
 #> # A tibble: 6 × 7
-#>   template_id provider  model             thinking     prop_consistent prop_pos1
-#>   <chr>       <chr>     <chr>             <chr>                  <dbl>     <dbl>
-#> 1 test1       anthropic claude-sonnet-4-5 no_thinking            0.895     0.505
-#> 2 test1       anthropic claude-sonnet-4-5 with_thinki…           0.932     0.497
-#> 3 test1       anthropic claude-haiku-4-5  no_thinking            0.884     0.516
-#> 4 test1       anthropic claude-haiku-4-5  with_thinki…           0.905     0.484
-#> 5 test1       anthropic claude-opus-4-5   no_thinking            0.884     0.442
-#> 6 test1       anthropic claude-opus-4-5   with_thinki…           0.884     0.447
-#> # ℹ 1 more variable: p_sample1_overall <dbl>
+#>   template_id backend model thinking prop_consistent prop_pos1 p_sample1_overall
+#>   <chr>       <chr>   <chr> <chr>              <dbl>     <dbl>             <dbl>
+#> 1 test1       anthro… clau… no_thin…           0.895     0.505            0.878 
+#> 2 test1       anthro… clau… with_th…           0.932     0.497            0.959 
+#> 3 test1       anthro… clau… no_thin…           0.884     0.516            0.573 
+#> 4 test1       anthro… clau… with_th…           0.905     0.484            0.573 
+#> 5 test1       anthro… clau… no_thin…           0.884     0.442            0.0273
+#> 6 test1       anthro… clau… with_th…           0.884     0.447            0.0453
 ```
 
 ------------------------------------------------------------------------
@@ -560,8 +577,8 @@ The columns in `summary_tbl` are:
 - **`template_id`**  
   ID of the prompt template (e.g., `"test1"`).
 
-- **`provider`**  
-  LLM provider (`"anthropic"`, `"gemini"`, `"openai"`).
+- **`backend`**  
+  LLM backend (`"anthropic"`, `"gemini"`, `"openai"`, `"together"`).
 
 - **`model`**  
   Specific model (e.g., `"claude-sonnet-4-5"`, `"gpt-4o"`,
@@ -651,18 +668,15 @@ In this section we present, for each template:
 
 1.  The full template text (as used in the experiments).  
 
-2.  A simple summary table with one row per (provider, model, thinking)
+2.  A simple summary table with one row per (backend, model, thinking)
     configuration and columns:
 
-    - `Provider`  
+    - `Backend`  
     - `Model`  
     - `Thinking`  
     - `Prop_Consistent`  
     - `Prop_SAMPLE_1`  
     - `Binomial_Test_p`
-
-You can regenerate these tables programmatically whenever you rerun the
-experiments.
 
 ------------------------------------------------------------------------
 
@@ -711,36 +725,42 @@ cat(get_prompt_template("test1"))
 ``` r
 summary_tbl |>
   filter(template_id == "test1") |>
-  arrange(provider, model, thinking) |>
+  arrange(backend, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
-    Provider = provider,
+    Backend = backend,
     Model    = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
-| Provider  | Model                | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:---------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5     | no_thinking   |           0.884 |         0.516 |         0.57300 |
-| anthropic | claude-haiku-4-5     | with_thinking |           0.905 |         0.484 |         0.57300 |
-| anthropic | claude-opus-4-5      | no_thinking   |           0.884 |         0.442 |         0.02730 |
-| anthropic | claude-opus-4-5      | with_thinking |           0.884 |         0.447 |         0.04530 |
-| anthropic | claude-sonnet-4-5    | no_thinking   |           0.895 |         0.505 |         0.87800 |
-| anthropic | claude-sonnet-4-5    | with_thinking |           0.932 |         0.497 |         0.95900 |
-| gemini    | gemini-3-pro-preview | with_thinking |           0.926 |         0.521 |         0.44200 |
-| openai    | gpt-4.1              | no_thinking   |           0.937 |         0.479 |         0.44200 |
-| openai    | gpt-4o               | no_thinking   |           0.837 |         0.418 |         0.00172 |
-| openai    | gpt-5.1              | no_thinking   |           0.926 |         0.474 |         0.33000 |
-| openai    | gpt-5.1              | with_thinking |           0.858 |         0.429 |         0.00648 |
+| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
+| anthropic | claude-haiku-4-5              | no_thinking   |           0.884 |         0.516 |           0.573 |
+| anthropic | claude-haiku-4-5              | with_thinking |           0.905 |         0.484 |           0.573 |
+| anthropic | claude-opus-4-5               | no_thinking   |           0.884 |         0.442 |           0.027 |
+| anthropic | claude-opus-4-5               | with_thinking |           0.884 |         0.447 |           0.045 |
+| anthropic | claude-sonnet-4-5             | no_thinking   |           0.895 |         0.505 |           0.878 |
+| anthropic | claude-sonnet-4-5             | with_thinking |           0.932 |         0.497 |           0.959 |
+| gemini    | gemini-3-pro-preview          | with_thinking |           0.926 |         0.521 |           0.442 |
+| openai    | gpt-4.1                       | no_thinking   |           0.937 |         0.479 |           0.442 |
+| openai    | gpt-4o                        | no_thinking   |           0.837 |         0.418 |           0.002 |
+| openai    | gpt-5.1                       | no_thinking   |           0.926 |         0.474 |           0.330 |
+| openai    | gpt-5.1                       | with_thinking |           0.858 |         0.429 |           0.006 |
+| together  | DeepSeek-R1                   | with_thinking |           0.837 |         0.576 |           0.003 |
+| together  | DeepSeek-V3                   | no_thinking   |           0.921 |         0.487 |           0.644 |
+| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.889 |         0.455 |           0.090 |
+| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.821 |         0.416 |           0.001 |
 
 ------------------------------------------------------------------------
 
@@ -793,36 +813,42 @@ cat(get_prompt_template("test2"))
 ``` r
 summary_tbl |>
   filter(template_id == "test2") |>
-  arrange(provider, model, thinking) |>
+  arrange(backend, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
-    Provider = provider,
+    Backend = backend,
     Model    = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
-| Provider  | Model                | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:---------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5     | no_thinking   |           0.863 |         0.442 |         0.02730 |
-| anthropic | claude-haiku-4-5     | with_thinking |           0.932 |         0.487 |         0.64400 |
-| anthropic | claude-opus-4-5      | no_thinking   |           0.895 |         0.458 |         0.11200 |
-| anthropic | claude-opus-4-5      | with_thinking |           0.926 |         0.474 |         0.33000 |
-| anthropic | claude-sonnet-4-5    | no_thinking   |           0.926 |         0.468 |         0.23800 |
-| anthropic | claude-sonnet-4-5    | with_thinking |           0.916 |         0.484 |         0.57300 |
-| gemini    | gemini-3-pro-preview | with_thinking |           0.879 |         0.561 |         0.02090 |
-| openai    | gpt-4.1              | no_thinking   |           0.932 |         0.466 |         0.20000 |
-| openai    | gpt-4o               | no_thinking   |           0.884 |         0.442 |         0.02730 |
-| openai    | gpt-5.1              | no_thinking   |           0.853 |         0.426 |         0.00472 |
-| openai    | gpt-5.1              | with_thinking |           0.853 |         0.426 |         0.00472 |
+| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
+| anthropic | claude-haiku-4-5              | no_thinking   |           0.863 |         0.442 |           0.027 |
+| anthropic | claude-haiku-4-5              | with_thinking |           0.932 |         0.487 |           0.644 |
+| anthropic | claude-opus-4-5               | no_thinking   |           0.895 |         0.458 |           0.112 |
+| anthropic | claude-opus-4-5               | with_thinking |           0.926 |         0.474 |           0.330 |
+| anthropic | claude-sonnet-4-5             | no_thinking   |           0.926 |         0.468 |           0.238 |
+| anthropic | claude-sonnet-4-5             | with_thinking |           0.916 |         0.484 |           0.573 |
+| gemini    | gemini-3-pro-preview          | with_thinking |           0.879 |         0.561 |           0.021 |
+| openai    | gpt-4.1                       | no_thinking   |           0.932 |         0.466 |           0.200 |
+| openai    | gpt-4o                        | no_thinking   |           0.884 |         0.442 |           0.027 |
+| openai    | gpt-5.1                       | no_thinking   |           0.853 |         0.426 |           0.005 |
+| openai    | gpt-5.1                       | with_thinking |           0.853 |         0.426 |           0.005 |
+| together  | DeepSeek-R1                   | with_thinking |           0.916 |         0.511 |           0.720 |
+| together  | DeepSeek-V3                   | no_thinking   |           0.874 |         0.563 |           0.016 |
+| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.905 |         0.458 |           0.112 |
+| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.858 |         0.434 |           0.012 |
 
 ------------------------------------------------------------------------
 
@@ -883,36 +909,42 @@ cat(get_prompt_template("test3"))
 ``` r
 summary_tbl |>
   filter(template_id == "test3") |>
-  arrange(provider, model, thinking) |>
+  arrange(backend, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
-    Provider = provider,
+    Backend = backend,
     Model    = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
-| Provider  | Model                | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:---------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5     | no_thinking   |           0.921 |         0.461 |          0.1370 |
-| anthropic | claude-haiku-4-5     | with_thinking |           0.916 |         0.463 |          0.1660 |
-| anthropic | claude-opus-4-5      | no_thinking   |           0.905 |         0.463 |          0.1660 |
-| anthropic | claude-opus-4-5      | with_thinking |           0.916 |         0.463 |          0.1660 |
-| anthropic | claude-sonnet-4-5    | no_thinking   |           0.884 |         0.453 |          0.0724 |
-| anthropic | claude-sonnet-4-5    | with_thinking |           0.937 |         0.489 |          0.7200 |
-| gemini    | gemini-3-pro-preview | with_thinking |           0.911 |         0.545 |          0.0903 |
-| openai    | gpt-4.1              | no_thinking   |           0.916 |         0.458 |          0.1120 |
-| openai    | gpt-4o               | no_thinking   |           0.832 |         0.416 |          0.0012 |
-| openai    | gpt-5.1              | no_thinking   |           0.879 |         0.445 |          0.0353 |
-| openai    | gpt-5.1              | with_thinking |           0.863 |         0.432 |          0.0088 |
+| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
+| anthropic | claude-haiku-4-5              | no_thinking   |           0.921 |         0.461 |           0.137 |
+| anthropic | claude-haiku-4-5              | with_thinking |           0.916 |         0.463 |           0.166 |
+| anthropic | claude-opus-4-5               | no_thinking   |           0.905 |         0.463 |           0.166 |
+| anthropic | claude-opus-4-5               | with_thinking |           0.916 |         0.463 |           0.166 |
+| anthropic | claude-sonnet-4-5             | no_thinking   |           0.884 |         0.453 |           0.072 |
+| anthropic | claude-sonnet-4-5             | with_thinking |           0.937 |         0.489 |           0.720 |
+| gemini    | gemini-3-pro-preview          | with_thinking |           0.911 |         0.545 |           0.090 |
+| openai    | gpt-4.1                       | no_thinking   |           0.916 |         0.458 |           0.112 |
+| openai    | gpt-4o                        | no_thinking   |           0.832 |         0.416 |           0.001 |
+| openai    | gpt-5.1                       | no_thinking   |           0.879 |         0.445 |           0.035 |
+| openai    | gpt-5.1                       | with_thinking |           0.863 |         0.432 |           0.009 |
+| together  | DeepSeek-R1                   | with_thinking |           0.953 |         0.487 |           0.644 |
+| together  | DeepSeek-V3                   | no_thinking   |           0.884 |         0.453 |           0.072 |
+| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.879 |         0.455 |           0.090 |
+| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.805 |         0.408 |           0.000 |
 
 ------------------------------------------------------------------------
 
@@ -957,36 +989,42 @@ cat(get_prompt_template("test4"))
 ``` r
 summary_tbl |>
   filter(template_id == "test4") |>
-  arrange(provider, model, thinking) |>
+  arrange(backend, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
-    Provider = provider,
+    Backend = backend,
     Model    = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
-| Provider  | Model                | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:---------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5     | no_thinking   |           0.937 |         0.468 |         0.23800 |
-| anthropic | claude-haiku-4-5     | with_thinking |           0.937 |         0.474 |         0.32800 |
-| anthropic | claude-opus-4-5      | no_thinking   |           0.900 |         0.461 |         0.13700 |
-| anthropic | claude-opus-4-5      | with_thinking |           0.895 |         0.458 |         0.11200 |
-| anthropic | claude-sonnet-4-5    | no_thinking   |           0.911 |         0.461 |         0.13700 |
-| anthropic | claude-sonnet-4-5    | with_thinking |           0.900 |         0.482 |         0.50500 |
-| gemini    | gemini-3-pro-preview | with_thinking |           0.916 |         0.542 |         0.11200 |
-| openai    | gpt-4.1              | no_thinking   |           0.884 |         0.442 |         0.02730 |
-| openai    | gpt-4o               | no_thinking   |           0.884 |         0.442 |         0.02730 |
-| openai    | gpt-5.1              | no_thinking   |           0.858 |         0.429 |         0.00648 |
-| openai    | gpt-5.1              | with_thinking |           0.832 |         0.416 |         0.00120 |
+| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
+| anthropic | claude-haiku-4-5              | no_thinking   |           0.937 |         0.468 |           0.238 |
+| anthropic | claude-haiku-4-5              | with_thinking |           0.937 |         0.474 |           0.328 |
+| anthropic | claude-opus-4-5               | no_thinking   |           0.900 |         0.461 |           0.137 |
+| anthropic | claude-opus-4-5               | with_thinking |           0.895 |         0.458 |           0.112 |
+| anthropic | claude-sonnet-4-5             | no_thinking   |           0.911 |         0.461 |           0.137 |
+| anthropic | claude-sonnet-4-5             | with_thinking |           0.900 |         0.482 |           0.505 |
+| gemini    | gemini-3-pro-preview          | with_thinking |           0.916 |         0.542 |           0.112 |
+| openai    | gpt-4.1                       | no_thinking   |           0.884 |         0.442 |           0.027 |
+| openai    | gpt-4o                        | no_thinking   |           0.884 |         0.442 |           0.027 |
+| openai    | gpt-5.1                       | no_thinking   |           0.858 |         0.429 |           0.006 |
+| openai    | gpt-5.1                       | with_thinking |           0.832 |         0.416 |           0.001 |
+| together  | DeepSeek-R1                   | with_thinking |           0.905 |         0.474 |           0.330 |
+| together  | DeepSeek-V3                   | no_thinking   |           0.932 |         0.503 |           0.959 |
+| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.942 |         0.503 |           0.959 |
+| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.768 |         0.384 |           0.000 |
 
 ------------------------------------------------------------------------
 
@@ -1032,47 +1070,53 @@ cat(get_prompt_template("test5"))
 ``` r
 summary_tbl |>
   filter(template_id == "test5") |>
-  arrange(provider, model, thinking) |>
+  arrange(backend, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
-    Provider = provider,
+    Backend = backend,
     Model    = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
     Binomial_Test_p
   ) |>
-  kable()
+  kable(
+    align = c("l", "l", "l", "r", "r", "r")
+  )
 ```
 
-| Provider  | Model                | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:---------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5     | no_thinking   |           0.905 |         0.463 |        0.166000 |
-| anthropic | claude-haiku-4-5     | with_thinking |           0.926 |         0.489 |        0.719000 |
-| anthropic | claude-opus-4-5      | no_thinking   |           0.874 |         0.447 |        0.045300 |
-| anthropic | claude-opus-4-5      | with_thinking |           0.926 |         0.489 |        0.720000 |
-| anthropic | claude-sonnet-4-5    | no_thinking   |           0.900 |         0.482 |        0.505000 |
-| anthropic | claude-sonnet-4-5    | with_thinking |           0.900 |         0.476 |        0.383000 |
-| gemini    | gemini-3-pro-preview | with_thinking |           0.932 |         0.508 |        0.798000 |
-| openai    | gpt-4.1              | no_thinking   |           0.911 |         0.476 |        0.383000 |
-| openai    | gpt-4o               | no_thinking   |           0.863 |         0.463 |        0.166000 |
-| openai    | gpt-5.1              | no_thinking   |           0.877 |         0.451 |        0.085800 |
-| openai    | gpt-5.1              | with_thinking |           0.789 |         0.400 |        0.000114 |
+| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
+| anthropic | claude-haiku-4-5              | no_thinking   |           0.905 |         0.463 |           0.166 |
+| anthropic | claude-haiku-4-5              | with_thinking |           0.926 |         0.489 |           0.719 |
+| anthropic | claude-opus-4-5               | no_thinking   |           0.874 |         0.447 |           0.045 |
+| anthropic | claude-opus-4-5               | with_thinking |           0.926 |         0.489 |           0.720 |
+| anthropic | claude-sonnet-4-5             | no_thinking   |           0.900 |         0.482 |           0.505 |
+| anthropic | claude-sonnet-4-5             | with_thinking |           0.900 |         0.476 |           0.383 |
+| gemini    | gemini-3-pro-preview          | with_thinking |           0.932 |         0.508 |           0.798 |
+| openai    | gpt-4.1                       | no_thinking   |           0.911 |         0.476 |           0.383 |
+| openai    | gpt-4o                        | no_thinking   |           0.863 |         0.463 |           0.166 |
+| openai    | gpt-5.1                       | no_thinking   |           0.877 |         0.451 |           0.086 |
+| openai    | gpt-5.1                       | with_thinking |           0.789 |         0.400 |           0.000 |
+| together  | DeepSeek-R1                   | with_thinking |           0.847 |         0.497 |           0.959 |
+| together  | DeepSeek-V3                   | no_thinking   |           0.811 |         0.484 |           0.573 |
+| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.795 |         0.482 |           0.505 |
+| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.800 |         0.400 |           0.000 |
 
 ------------------------------------------------------------------------
 
-## 10. Per-provider summary
+## 10. Per-backend summary
 
 It is often useful to examine positional-bias metrics **within each
-provider** to see whether:
+backend** to see whether:
 
 - certain models exhibit more positional bias than others,
 - reasoning mode makes a difference,
-- a provider shows overall higher or lower reverse-order consistency.
+- a backend shows overall higher or lower reverse-order consistency.
 
 The tables below show, for each provider, the key statistics:
 
@@ -1090,12 +1134,12 @@ in testing.
 
 ``` r
 summary_tbl |>
-  filter(provider == "anthropic") |>
+  filter(backend == "anthropic") |>
   arrange(template_id, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Template = template_id,
@@ -1106,42 +1150,43 @@ summary_tbl |>
     Binomial_Test_p
   ) |>
   kable(
-    caption = "Anthropic: Positional-bias summary by template, model, and thinking configuration."
+    caption = "Anthropic: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
   )
 ```
 
 | Template | Model             | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
 |:---------|:------------------|:--------------|----------------:|--------------:|----------------:|
-| test1    | claude-haiku-4-5  | no_thinking   |           0.884 |         0.516 |          0.5730 |
-| test1    | claude-haiku-4-5  | with_thinking |           0.905 |         0.484 |          0.5730 |
-| test1    | claude-opus-4-5   | no_thinking   |           0.884 |         0.442 |          0.0273 |
-| test1    | claude-opus-4-5   | with_thinking |           0.884 |         0.447 |          0.0453 |
-| test1    | claude-sonnet-4-5 | no_thinking   |           0.895 |         0.505 |          0.8780 |
-| test1    | claude-sonnet-4-5 | with_thinking |           0.932 |         0.497 |          0.9590 |
-| test2    | claude-haiku-4-5  | no_thinking   |           0.863 |         0.442 |          0.0273 |
-| test2    | claude-haiku-4-5  | with_thinking |           0.932 |         0.487 |          0.6440 |
-| test2    | claude-opus-4-5   | no_thinking   |           0.895 |         0.458 |          0.1120 |
-| test2    | claude-opus-4-5   | with_thinking |           0.926 |         0.474 |          0.3300 |
-| test2    | claude-sonnet-4-5 | no_thinking   |           0.926 |         0.468 |          0.2380 |
-| test2    | claude-sonnet-4-5 | with_thinking |           0.916 |         0.484 |          0.5730 |
-| test3    | claude-haiku-4-5  | no_thinking   |           0.921 |         0.461 |          0.1370 |
-| test3    | claude-haiku-4-5  | with_thinking |           0.916 |         0.463 |          0.1660 |
-| test3    | claude-opus-4-5   | no_thinking   |           0.905 |         0.463 |          0.1660 |
-| test3    | claude-opus-4-5   | with_thinking |           0.916 |         0.463 |          0.1660 |
-| test3    | claude-sonnet-4-5 | no_thinking   |           0.884 |         0.453 |          0.0724 |
-| test3    | claude-sonnet-4-5 | with_thinking |           0.937 |         0.489 |          0.7200 |
-| test4    | claude-haiku-4-5  | no_thinking   |           0.937 |         0.468 |          0.2380 |
-| test4    | claude-haiku-4-5  | with_thinking |           0.937 |         0.474 |          0.3280 |
-| test4    | claude-opus-4-5   | no_thinking   |           0.900 |         0.461 |          0.1370 |
-| test4    | claude-opus-4-5   | with_thinking |           0.895 |         0.458 |          0.1120 |
-| test4    | claude-sonnet-4-5 | no_thinking   |           0.911 |         0.461 |          0.1370 |
-| test4    | claude-sonnet-4-5 | with_thinking |           0.900 |         0.482 |          0.5050 |
-| test5    | claude-haiku-4-5  | no_thinking   |           0.905 |         0.463 |          0.1660 |
-| test5    | claude-haiku-4-5  | with_thinking |           0.926 |         0.489 |          0.7190 |
-| test5    | claude-opus-4-5   | no_thinking   |           0.874 |         0.447 |          0.0453 |
-| test5    | claude-opus-4-5   | with_thinking |           0.926 |         0.489 |          0.7200 |
-| test5    | claude-sonnet-4-5 | no_thinking   |           0.900 |         0.482 |          0.5050 |
-| test5    | claude-sonnet-4-5 | with_thinking |           0.900 |         0.476 |          0.3830 |
+| test1    | claude-haiku-4-5  | no_thinking   |           0.884 |         0.516 |           0.573 |
+| test1    | claude-haiku-4-5  | with_thinking |           0.905 |         0.484 |           0.573 |
+| test1    | claude-opus-4-5   | no_thinking   |           0.884 |         0.442 |           0.027 |
+| test1    | claude-opus-4-5   | with_thinking |           0.884 |         0.447 |           0.045 |
+| test1    | claude-sonnet-4-5 | no_thinking   |           0.895 |         0.505 |           0.878 |
+| test1    | claude-sonnet-4-5 | with_thinking |           0.932 |         0.497 |           0.959 |
+| test2    | claude-haiku-4-5  | no_thinking   |           0.863 |         0.442 |           0.027 |
+| test2    | claude-haiku-4-5  | with_thinking |           0.932 |         0.487 |           0.644 |
+| test2    | claude-opus-4-5   | no_thinking   |           0.895 |         0.458 |           0.112 |
+| test2    | claude-opus-4-5   | with_thinking |           0.926 |         0.474 |           0.330 |
+| test2    | claude-sonnet-4-5 | no_thinking   |           0.926 |         0.468 |           0.238 |
+| test2    | claude-sonnet-4-5 | with_thinking |           0.916 |         0.484 |           0.573 |
+| test3    | claude-haiku-4-5  | no_thinking   |           0.921 |         0.461 |           0.137 |
+| test3    | claude-haiku-4-5  | with_thinking |           0.916 |         0.463 |           0.166 |
+| test3    | claude-opus-4-5   | no_thinking   |           0.905 |         0.463 |           0.166 |
+| test3    | claude-opus-4-5   | with_thinking |           0.916 |         0.463 |           0.166 |
+| test3    | claude-sonnet-4-5 | no_thinking   |           0.884 |         0.453 |           0.072 |
+| test3    | claude-sonnet-4-5 | with_thinking |           0.937 |         0.489 |           0.720 |
+| test4    | claude-haiku-4-5  | no_thinking   |           0.937 |         0.468 |           0.238 |
+| test4    | claude-haiku-4-5  | with_thinking |           0.937 |         0.474 |           0.328 |
+| test4    | claude-opus-4-5   | no_thinking   |           0.900 |         0.461 |           0.137 |
+| test4    | claude-opus-4-5   | with_thinking |           0.895 |         0.458 |           0.112 |
+| test4    | claude-sonnet-4-5 | no_thinking   |           0.911 |         0.461 |           0.137 |
+| test4    | claude-sonnet-4-5 | with_thinking |           0.900 |         0.482 |           0.505 |
+| test5    | claude-haiku-4-5  | no_thinking   |           0.905 |         0.463 |           0.166 |
+| test5    | claude-haiku-4-5  | with_thinking |           0.926 |         0.489 |           0.719 |
+| test5    | claude-opus-4-5   | no_thinking   |           0.874 |         0.447 |           0.045 |
+| test5    | claude-opus-4-5   | with_thinking |           0.926 |         0.489 |           0.720 |
+| test5    | claude-sonnet-4-5 | no_thinking   |           0.900 |         0.482 |           0.505 |
+| test5    | claude-sonnet-4-5 | with_thinking |           0.900 |         0.476 |           0.383 |
 
 Anthropic: Positional-bias summary by template, model, and thinking
 configuration.
@@ -1152,12 +1197,12 @@ configuration.
 
 ``` r
 summary_tbl |>
-  filter(provider == "gemini") |>
+  filter(backend == "gemini") |>
   arrange(template_id, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Template = template_id,
@@ -1168,17 +1213,18 @@ summary_tbl |>
     Binomial_Test_p
   ) |>
   kable(
-    caption = "Gemini: Positional-bias summary by template, model, and thinking configuration."
+    caption = "Gemini: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
   )
 ```
 
 | Template | Model                | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
 |:---------|:---------------------|:--------------|----------------:|--------------:|----------------:|
-| test1    | gemini-3-pro-preview | with_thinking |           0.926 |         0.521 |          0.4420 |
-| test2    | gemini-3-pro-preview | with_thinking |           0.879 |         0.561 |          0.0209 |
-| test3    | gemini-3-pro-preview | with_thinking |           0.911 |         0.545 |          0.0903 |
-| test4    | gemini-3-pro-preview | with_thinking |           0.916 |         0.542 |          0.1120 |
-| test5    | gemini-3-pro-preview | with_thinking |           0.932 |         0.508 |          0.7980 |
+| test1    | gemini-3-pro-preview | with_thinking |           0.926 |         0.521 |           0.442 |
+| test2    | gemini-3-pro-preview | with_thinking |           0.879 |         0.561 |           0.021 |
+| test3    | gemini-3-pro-preview | with_thinking |           0.911 |         0.545 |           0.090 |
+| test4    | gemini-3-pro-preview | with_thinking |           0.916 |         0.542 |           0.112 |
+| test5    | gemini-3-pro-preview | with_thinking |           0.932 |         0.508 |           0.798 |
 
 Gemini: Positional-bias summary by template, model, and thinking
 configuration.
@@ -1189,12 +1235,12 @@ configuration.
 
 ``` r
 summary_tbl |>
-  filter(provider == "openai") |>
+  filter(backend == "openai") |>
   arrange(template_id, model, thinking) |>
   mutate(
     Prop_Consistent = round(prop_consistent, 3),
     Prop_SAMPLE_1   = round(prop_pos1, 3),
-    Binomial_Test_p = signif(p_sample1_overall, 3)
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
   ) |>
   select(
     Template = template_id,
@@ -1205,34 +1251,88 @@ summary_tbl |>
     Binomial_Test_p
   ) |>
   kable(
-    caption = "OpenAI: Positional-bias summary by template, model, and thinking configuration."
+    caption = "OpenAI: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
   )
 ```
 
 | Template | Model   | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
 |:---------|:--------|:--------------|----------------:|--------------:|----------------:|
-| test1    | gpt-4.1 | no_thinking   |           0.937 |         0.479 |        0.442000 |
-| test1    | gpt-4o  | no_thinking   |           0.837 |         0.418 |        0.001720 |
-| test1    | gpt-5.1 | no_thinking   |           0.926 |         0.474 |        0.330000 |
-| test1    | gpt-5.1 | with_thinking |           0.858 |         0.429 |        0.006480 |
-| test2    | gpt-4.1 | no_thinking   |           0.932 |         0.466 |        0.200000 |
-| test2    | gpt-4o  | no_thinking   |           0.884 |         0.442 |        0.027300 |
-| test2    | gpt-5.1 | no_thinking   |           0.853 |         0.426 |        0.004720 |
-| test2    | gpt-5.1 | with_thinking |           0.853 |         0.426 |        0.004720 |
-| test3    | gpt-4.1 | no_thinking   |           0.916 |         0.458 |        0.112000 |
-| test3    | gpt-4o  | no_thinking   |           0.832 |         0.416 |        0.001200 |
-| test3    | gpt-5.1 | no_thinking   |           0.879 |         0.445 |        0.035300 |
-| test3    | gpt-5.1 | with_thinking |           0.863 |         0.432 |        0.008800 |
-| test4    | gpt-4.1 | no_thinking   |           0.884 |         0.442 |        0.027300 |
-| test4    | gpt-4o  | no_thinking   |           0.884 |         0.442 |        0.027300 |
-| test4    | gpt-5.1 | no_thinking   |           0.858 |         0.429 |        0.006480 |
-| test4    | gpt-5.1 | with_thinking |           0.832 |         0.416 |        0.001200 |
-| test5    | gpt-4.1 | no_thinking   |           0.911 |         0.476 |        0.383000 |
-| test5    | gpt-4o  | no_thinking   |           0.863 |         0.463 |        0.166000 |
-| test5    | gpt-5.1 | no_thinking   |           0.877 |         0.451 |        0.085800 |
-| test5    | gpt-5.1 | with_thinking |           0.789 |         0.400 |        0.000114 |
+| test1    | gpt-4.1 | no_thinking   |           0.937 |         0.479 |           0.442 |
+| test1    | gpt-4o  | no_thinking   |           0.837 |         0.418 |           0.002 |
+| test1    | gpt-5.1 | no_thinking   |           0.926 |         0.474 |           0.330 |
+| test1    | gpt-5.1 | with_thinking |           0.858 |         0.429 |           0.006 |
+| test2    | gpt-4.1 | no_thinking   |           0.932 |         0.466 |           0.200 |
+| test2    | gpt-4o  | no_thinking   |           0.884 |         0.442 |           0.027 |
+| test2    | gpt-5.1 | no_thinking   |           0.853 |         0.426 |           0.005 |
+| test2    | gpt-5.1 | with_thinking |           0.853 |         0.426 |           0.005 |
+| test3    | gpt-4.1 | no_thinking   |           0.916 |         0.458 |           0.112 |
+| test3    | gpt-4o  | no_thinking   |           0.832 |         0.416 |           0.001 |
+| test3    | gpt-5.1 | no_thinking   |           0.879 |         0.445 |           0.035 |
+| test3    | gpt-5.1 | with_thinking |           0.863 |         0.432 |           0.009 |
+| test4    | gpt-4.1 | no_thinking   |           0.884 |         0.442 |           0.027 |
+| test4    | gpt-4o  | no_thinking   |           0.884 |         0.442 |           0.027 |
+| test4    | gpt-5.1 | no_thinking   |           0.858 |         0.429 |           0.006 |
+| test4    | gpt-5.1 | with_thinking |           0.832 |         0.416 |           0.001 |
+| test5    | gpt-4.1 | no_thinking   |           0.911 |         0.476 |           0.383 |
+| test5    | gpt-4o  | no_thinking   |           0.863 |         0.463 |           0.166 |
+| test5    | gpt-5.1 | no_thinking   |           0.877 |         0.451 |           0.086 |
+| test5    | gpt-5.1 | with_thinking |           0.789 |         0.400 |           0.000 |
 
 OpenAI: Positional-bias summary by template, model, and thinking
+configuration.
+
+------------------------------------------------------------------------
+
+### 10.4 TogetherAI-hosted models
+
+``` r
+summary_tbl |>
+  filter(backend == "together") |>
+  arrange(template_id, model, thinking) |>
+  mutate(
+    Prop_Consistent = round(prop_consistent, 3),
+    Prop_SAMPLE_1   = round(prop_pos1, 3),
+    Binomial_Test_p = formatC(p_sample1_overall, format = "f", digits = 3)
+  ) |>
+  select(
+    Template = template_id,
+    Model    = model,
+    Thinking = thinking,
+    Prop_Consistent,
+    Prop_SAMPLE_1,
+    Binomial_Test_p
+  ) |>
+  kable(
+    caption = "TogetherAI: Positional-bias summary by template, model, and thinking configuration.",
+    align = c("l", "l", "l", "r", "r", "r")
+  )
+```
+
+| Template | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
+| test1    | DeepSeek-R1                   | with_thinking |           0.837 |         0.576 |           0.003 |
+| test1    | DeepSeek-V3                   | no_thinking   |           0.921 |         0.487 |           0.644 |
+| test1    | Kimi-K2-Instruct-0905         | no_thinking   |           0.889 |         0.455 |           0.090 |
+| test1    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.821 |         0.416 |           0.001 |
+| test2    | DeepSeek-R1                   | with_thinking |           0.916 |         0.511 |           0.720 |
+| test2    | DeepSeek-V3                   | no_thinking   |           0.874 |         0.563 |           0.016 |
+| test2    | Kimi-K2-Instruct-0905         | no_thinking   |           0.905 |         0.458 |           0.112 |
+| test2    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.858 |         0.434 |           0.012 |
+| test3    | DeepSeek-R1                   | with_thinking |           0.953 |         0.487 |           0.644 |
+| test3    | DeepSeek-V3                   | no_thinking   |           0.884 |         0.453 |           0.072 |
+| test3    | Kimi-K2-Instruct-0905         | no_thinking   |           0.879 |         0.455 |           0.090 |
+| test3    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.805 |         0.408 |           0.000 |
+| test4    | DeepSeek-R1                   | with_thinking |           0.905 |         0.474 |           0.330 |
+| test4    | DeepSeek-V3                   | no_thinking   |           0.932 |         0.503 |           0.959 |
+| test4    | Kimi-K2-Instruct-0905         | no_thinking   |           0.942 |         0.503 |           0.959 |
+| test4    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.768 |         0.384 |           0.000 |
+| test5    | DeepSeek-R1                   | with_thinking |           0.847 |         0.497 |           0.959 |
+| test5    | DeepSeek-V3                   | no_thinking   |           0.811 |         0.484 |           0.573 |
+| test5    | Kimi-K2-Instruct-0905         | no_thinking   |           0.795 |         0.482 |           0.505 |
+| test5    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.800 |         0.400 |           0.000 |
+
+TogetherAI: Positional-bias summary by template, model, and thinking
 configuration.
 
 ------------------------------------------------------------------------
@@ -1269,3 +1369,10 @@ rapid inspection and informed template selection. Templates that show:
 - `Prop_SAMPLE_1` close to 0.5 with non-significant `Binomial_Test_p`
 
 are strong candidates for production scoring pipelines in `pairwiseLLM`.
+
+## 13. Citation
+
+> Mercer, S. (2025). *Prompt Template Positional Bias Testing* (Version
+> 1.0.0) \[R package vignette\]. In *pairwiseLLM: Pairwise Comparison
+> Tools for Large Language Model-Based Writing Evaluation*.
+> <https://shmercer.github.io/pairwiseLLM/>

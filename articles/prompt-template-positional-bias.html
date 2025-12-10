@@ -146,7 +146,7 @@ via <code>get_prompt_template("testX")</code>.</li>
 <p>For each combination of:</p>
 <ul>
 <li>Template (<code>test1</code>–<code>test5</code>)</li>
-<li>Provider (Anthropic, Gemini, OpenAI)</li>
+<li>Backend (Anthropic, Gemini, OpenAI, TogetherAI)</li>
 <li>Model (e.g., <code>claude-sonnet-4-5</code>, <code>gpt-4o</code>,
 <code>gemini-3-pro-preview</code>)</li>
 <li>Thinking configuration (<code>"no_thinking"</code> vs
@@ -158,8 +158,9 @@ via <code>get_prompt_template("testX")</code>.</li>
 <p>Submit the forward and reverse pairs to the provider’s batch API
 using dev scripts such as:</p>
 <ul>
-<li><code>dev/dev-anthropic-gemini-template-ab-test.R</code></li>
-<li><code>dev/dev-openai-template-ab-test.R</code></li>
+<li><code>dev/dev-positional-bias-all-models.R</code></li>
+<li><code>dev/dev-positional-bias-all-models-rebuild.R</code></li>
+<li><code>dev/dev-together-template-positional-bias.R</code></li>
 </ul>
 </li>
 <li><p>Store responses as CSVs, including the model’s
@@ -650,7 +651,7 @@ parameter:</p>
 <pre><code><span><span class="va">thinking</span> <span class="op">=</span> <span class="st">"no_thinking"</span>   <span class="co"># standard inference mode  </span></span>
 <span><span class="va">thinking</span> <span class="op">=</span> <span class="st">"with_thinking"</span> <span class="co"># activates provider's reasoning system</span></span></code></pre>
 <p>However, the <em>actual meaning</em> of these settings is
-<strong>provider-specific</strong>. Below we describe the exact
+<strong>backend-specific</strong>. Below we describe the exact
 configurations used in our positional-bias tests.</p>
 <hr>
 <div class="section level3">
@@ -765,11 +766,30 @@ for this endpoint)</li>
 </ul>
 <p>This mode returns reasoning metadata that is stripped prior to
 analysis.</p>
-<hr>
 </div>
 </div>
 <div class="section level3">
-<h3 id="summary-table-of-provider-specific-behavior">7.4 Summary Table of Provider-Specific Behavior<a class="anchor" aria-label="anchor" href="#summary-table-of-provider-specific-behavior"></a>
+<h3 id="togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3">7.4 TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)<a class="anchor" aria-label="anchor" href="#togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3"></a>
+</h3>
+<p>For Together.ai we ran positional-bias experiments using the Chat
+Completions API (/v1/chat/completions) for the following models:</p>
+<ul>
+<li>“deepseek-ai/DeepSeek-R1”</li>
+<li>“deepseek-ai/DeepSeek-V3”</li>
+<li>“moonshotai/Kimi-K2-Instruct-0905”</li>
+<li>“Qwen/Qwen3-235B-A22B-Instruct-2507-tput”</li>
+</ul>
+<p>DeepSeek-R1 emits internal reasoning wrapped in <think>…</think>
+tags. DeepSeek-V3, Kimi-K2, and Qwen3 do not have a separate reasoning
+switch; any “thinking” they do is part of their standard text
+output.</p>
+<p>Temperature settings used in testing: - “deepseek-ai/DeepSeek-R1”:
+<code>temperature = 0.6</code> - DeepSeek-V3, Kimi-K2, Qwen3:
+<code>temperature = 0.0</code></p>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="summary-table-of-backend-specific-behavior">7.5 Summary Table of Backend-Specific Behavior<a class="anchor" aria-label="anchor" href="#summary-table-of-backend-specific-behavior"></a>
 </h3>
 <table style="width:100%;" class="table">
 <colgroup>
@@ -780,7 +800,7 @@ analysis.</p>
 <col width="9%">
 </colgroup>
 <thead><tr class="header">
-<th>Provider</th>
+<th>Backend</th>
 <th>Thinking Mode</th>
 <th>What It Controls</th>
 <th>Temperature Used</th>
@@ -822,6 +842,25 @@ analysis.</p>
 <td>ignored / N/A</td>
 <td>only applied to gpt-5.1</td>
 </tr>
+<tr class="even">
+<td>Together</td>
+<td>with_thinking</td>
+<td>Chat Completions with <code>&lt;think&gt;…&lt;/think&gt;</code>
+extracted to <code>thoughts</code>
+</td>
+<td>
+<strong>0.6</strong> (default)</td>
+<td>internal reasoning always on; visible answer in
+<code>content</code>
+</td>
+</tr>
+<tr class="odd">
+<td>Together</td>
+<td>no_thinking</td>
+<td>Chat Completions, no explicit reasoning toggle</td>
+<td><strong>0</strong></td>
+<td>reasoning not supported in these specific models</td>
+</tr>
 </tbody>
 </table>
 <hr>
@@ -832,31 +871,27 @@ analysis.</p>
 </h2>
 <p>The results from the experiments are stored in a CSV included in the
 package (for example, under
-<code>inst/extdata/template_test_summary.csv</code>). We load and
+<code>inst/extdata/template_test_summary_all.csv</code>). We load and
 lightly clean that file here.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span></span>
 <span>  <span class="st">"extdata"</span>,</span>
-<span>  <span class="st">"template_test_summary.csv"</span>,</span>
+<span>  <span class="st">"template_test_summary_all.csv"</span>,</span>
 <span>  package <span class="op">=</span> <span class="st">"pairwiseLLM"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">summary_tbl</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">summary_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
-<span>    provider <span class="op">=</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/if_else.html" class="external-link">if_else</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">""</span> <span class="op">|</span> <span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">provider</span><span class="op">)</span>, <span class="st">"openai"</span>, <span class="va">provider</span><span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
+<span><span class="va">summary_tbl</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">summary_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">summary_tbl</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 6 × 7</span></span></span>
-<span><span class="co">#&gt;   template_id provider  model             thinking     prop_consistent prop_pos1</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>       <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> test1       anthropic claude-sonnet-4-5 no_thinking            0.895     0.505</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> test1       anthropic claude-sonnet-4-5 with_thinki…           0.932     0.497</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> test1       anthropic claude-haiku-4-5  no_thinking            0.884     0.516</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> test1       anthropic claude-haiku-4-5  with_thinki…           0.905     0.484</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> test1       anthropic claude-opus-4-5   no_thinking            0.884     0.442</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> test1       anthropic claude-opus-4-5   with_thinki…           0.884     0.447</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: p_sample1_overall &lt;dbl&gt;</span></span></span></code></pre></div>
+<span><span class="co">#&gt;   template_id backend model thinking prop_consistent prop_pos1 p_sample1_overall</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>       <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> test1       anthro… clau… no_thin…           0.895     0.505            0.878 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> test1       anthro… clau… with_th…           0.932     0.497            0.959 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> test1       anthro… clau… no_thin…           0.884     0.516            0.573 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> test1       anthro… clau… with_th…           0.905     0.484            0.573 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> test1       anthro… clau… no_thin…           0.884     0.442            0.027<span style="text-decoration: underline;">3</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> test1       anthro… clau… with_th…           0.884     0.447            0.045<span style="text-decoration: underline;">3</span></span></span></code></pre></div>
 <hr>
 <div class="section level3">
 <h3 id="column-definitions">8.1 Column definitions<a class="anchor" aria-label="anchor" href="#column-definitions"></a>
@@ -865,9 +900,9 @@ lightly clean that file here.</p>
 <ul>
 <li><p><strong><code>template_id</code></strong><br>
 ID of the prompt template (e.g., <code>"test1"</code>).</p></li>
-<li><p><strong><code>provider</code></strong><br>
-LLM provider (<code>"anthropic"</code>, <code>"gemini"</code>,
-<code>"openai"</code>).</p></li>
+<li><p><strong><code>backend</code></strong><br>
+LLM backend (<code>"anthropic"</code>, <code>"gemini"</code>,
+<code>"openai"</code>, <code>"together"</code>).</p></li>
 <li><p><strong><code>model</code></strong><br>
 Specific model (e.g., <code>"claude-sonnet-4-5"</code>,
 <code>"gpt-4o"</code>, <code>"gemini-3-pro-preview"</code>).</p></li>
@@ -977,11 +1012,11 @@ model prefers SAMPLE_2).</li>
 <ol style="list-style-type: decimal">
 <li><p>The full template text (as used in the experiments).<br></p></li>
 <li>
-<p>A simple summary table with one row per (provider, model,
+<p>A simple summary table with one row per (backend, model,
 thinking) configuration and columns:</p>
 <ul>
 <li>
-<code>Provider</code><br>
+<code>Backend</code><br>
 </li>
 <li>
 <code>Model</code><br>
@@ -999,8 +1034,6 @@ thinking) configuration and columns:</p>
 </ul>
 </li>
 </ol>
-<p>You can regenerate these tables programmatically whenever you rerun
-the experiments.</p>
 <hr>
 <div class="section level3">
 <h3 id="template-test1">9.1 Template <code>test1</code><a class="anchor" aria-label="anchor" href="#template-test1"></a>
@@ -1049,32 +1082,34 @@ the experiments.</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test1"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
-<span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
+<span>    Backend <span class="op">=</span> <span class="va">backend</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
 <span>    <span class="va">Prop_Consistent</span>,</span>
 <span>    <span class="va">Prop_SAMPLE_1</span>,</span>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">kable</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu">kable</span><span class="op">(</span></span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
 <col width="10%">
-<col width="23%">
-<col width="15%">
-<col width="17%">
-<col width="15%">
-<col width="17%">
+<col width="30%">
+<col width="14%">
+<col width="16%">
+<col width="14%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
-<th align="left">Provider</th>
+<th align="left">Backend</th>
 <th align="left">Model</th>
 <th align="left">Thinking</th>
 <th align="right">Prop_Consistent</th>
@@ -1088,7 +1123,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.516</td>
-<td align="right">0.57300</td>
+<td align="right">0.573</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1096,7 +1131,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.905</td>
 <td align="right">0.484</td>
-<td align="right">0.57300</td>
+<td align="right">0.573</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1104,7 +1139,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.02730</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1112,7 +1147,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.447</td>
-<td align="right">0.04530</td>
+<td align="right">0.045</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1120,7 +1155,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.895</td>
 <td align="right">0.505</td>
-<td align="right">0.87800</td>
+<td align="right">0.878</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1128,7 +1163,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.497</td>
-<td align="right">0.95900</td>
+<td align="right">0.959</td>
 </tr>
 <tr class="odd">
 <td align="left">gemini</td>
@@ -1136,7 +1171,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.521</td>
-<td align="right">0.44200</td>
+<td align="right">0.442</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1144,7 +1179,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.479</td>
-<td align="right">0.44200</td>
+<td align="right">0.442</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1152,7 +1187,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.837</td>
 <td align="right">0.418</td>
-<td align="right">0.00172</td>
+<td align="right">0.002</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1160,7 +1195,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.474</td>
-<td align="right">0.33000</td>
+<td align="right">0.330</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1168,7 +1203,39 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.858</td>
 <td align="right">0.429</td>
-<td align="right">0.00648</td>
+<td align="right">0.006</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.837</td>
+<td align="right">0.576</td>
+<td align="right">0.003</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.921</td>
+<td align="right">0.487</td>
+<td align="right">0.644</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.889</td>
+<td align="right">0.455</td>
+<td align="right">0.090</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.821</td>
+<td align="right">0.416</td>
+<td align="right">0.001</td>
 </tr>
 </tbody>
 </table>
@@ -1226,32 +1293,34 @@ the experiments.</p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test2"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
-<span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
+<span>    Backend <span class="op">=</span> <span class="va">backend</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
 <span>    <span class="va">Prop_Consistent</span>,</span>
 <span>    <span class="va">Prop_SAMPLE_1</span>,</span>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">kable</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu">kable</span><span class="op">(</span></span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
 <col width="10%">
-<col width="23%">
-<col width="15%">
-<col width="17%">
-<col width="15%">
-<col width="17%">
+<col width="30%">
+<col width="14%">
+<col width="16%">
+<col width="14%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
-<th align="left">Provider</th>
+<th align="left">Backend</th>
 <th align="left">Model</th>
 <th align="left">Thinking</th>
 <th align="right">Prop_Consistent</th>
@@ -1265,7 +1334,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.863</td>
 <td align="right">0.442</td>
-<td align="right">0.02730</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1273,7 +1342,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.487</td>
-<td align="right">0.64400</td>
+<td align="right">0.644</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1281,7 +1350,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.895</td>
 <td align="right">0.458</td>
-<td align="right">0.11200</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1289,7 +1358,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.474</td>
-<td align="right">0.33000</td>
+<td align="right">0.330</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1297,7 +1366,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.468</td>
-<td align="right">0.23800</td>
+<td align="right">0.238</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1305,7 +1374,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.484</td>
-<td align="right">0.57300</td>
+<td align="right">0.573</td>
 </tr>
 <tr class="odd">
 <td align="left">gemini</td>
@@ -1313,7 +1382,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.879</td>
 <td align="right">0.561</td>
-<td align="right">0.02090</td>
+<td align="right">0.021</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1321,7 +1390,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.466</td>
-<td align="right">0.20000</td>
+<td align="right">0.200</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1329,7 +1398,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.02730</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1337,7 +1406,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.853</td>
 <td align="right">0.426</td>
-<td align="right">0.00472</td>
+<td align="right">0.005</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1345,7 +1414,39 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.853</td>
 <td align="right">0.426</td>
-<td align="right">0.00472</td>
+<td align="right">0.005</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.916</td>
+<td align="right">0.511</td>
+<td align="right">0.720</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.874</td>
+<td align="right">0.563</td>
+<td align="right">0.016</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.905</td>
+<td align="right">0.458</td>
+<td align="right">0.112</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.858</td>
+<td align="right">0.434</td>
+<td align="right">0.012</td>
 </tr>
 </tbody>
 </table>
@@ -1411,32 +1512,34 @@ the experiments.</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
-<span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
+<span>    Backend <span class="op">=</span> <span class="va">backend</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
 <span>    <span class="va">Prop_Consistent</span>,</span>
 <span>    <span class="va">Prop_SAMPLE_1</span>,</span>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">kable</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu">kable</span><span class="op">(</span></span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
 <col width="10%">
-<col width="23%">
-<col width="15%">
-<col width="17%">
-<col width="15%">
-<col width="17%">
+<col width="30%">
+<col width="14%">
+<col width="16%">
+<col width="14%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
-<th align="left">Provider</th>
+<th align="left">Backend</th>
 <th align="left">Model</th>
 <th align="left">Thinking</th>
 <th align="right">Prop_Consistent</th>
@@ -1450,7 +1553,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.921</td>
 <td align="right">0.461</td>
-<td align="right">0.1370</td>
+<td align="right">0.137</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1458,7 +1561,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.463</td>
-<td align="right">0.1660</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1466,7 +1569,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.905</td>
 <td align="right">0.463</td>
-<td align="right">0.1660</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1474,7 +1577,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.463</td>
-<td align="right">0.1660</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1482,7 +1585,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.453</td>
-<td align="right">0.0724</td>
+<td align="right">0.072</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1490,7 +1593,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.489</td>
-<td align="right">0.7200</td>
+<td align="right">0.720</td>
 </tr>
 <tr class="odd">
 <td align="left">gemini</td>
@@ -1498,7 +1601,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.911</td>
 <td align="right">0.545</td>
-<td align="right">0.0903</td>
+<td align="right">0.090</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1506,7 +1609,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.458</td>
-<td align="right">0.1120</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1514,7 +1617,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.832</td>
 <td align="right">0.416</td>
-<td align="right">0.0012</td>
+<td align="right">0.001</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1522,7 +1625,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.879</td>
 <td align="right">0.445</td>
-<td align="right">0.0353</td>
+<td align="right">0.035</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1530,7 +1633,39 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.863</td>
 <td align="right">0.432</td>
-<td align="right">0.0088</td>
+<td align="right">0.009</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.953</td>
+<td align="right">0.487</td>
+<td align="right">0.644</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.884</td>
+<td align="right">0.453</td>
+<td align="right">0.072</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.879</td>
+<td align="right">0.455</td>
+<td align="right">0.090</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.805</td>
+<td align="right">0.408</td>
+<td align="right">0.000</td>
 </tr>
 </tbody>
 </table>
@@ -1580,32 +1715,34 @@ the experiments.</p>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test4"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
-<span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
+<span>    Backend <span class="op">=</span> <span class="va">backend</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
 <span>    <span class="va">Prop_Consistent</span>,</span>
 <span>    <span class="va">Prop_SAMPLE_1</span>,</span>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">kable</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu">kable</span><span class="op">(</span></span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
 <col width="10%">
-<col width="23%">
-<col width="15%">
-<col width="17%">
-<col width="15%">
-<col width="17%">
+<col width="30%">
+<col width="14%">
+<col width="16%">
+<col width="14%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
-<th align="left">Provider</th>
+<th align="left">Backend</th>
 <th align="left">Model</th>
 <th align="left">Thinking</th>
 <th align="right">Prop_Consistent</th>
@@ -1619,7 +1756,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.468</td>
-<td align="right">0.23800</td>
+<td align="right">0.238</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1627,7 +1764,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.474</td>
-<td align="right">0.32800</td>
+<td align="right">0.328</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1635,7 +1772,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.461</td>
-<td align="right">0.13700</td>
+<td align="right">0.137</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1643,7 +1780,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.895</td>
 <td align="right">0.458</td>
-<td align="right">0.11200</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1651,7 +1788,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.911</td>
 <td align="right">0.461</td>
-<td align="right">0.13700</td>
+<td align="right">0.137</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1659,7 +1796,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.482</td>
-<td align="right">0.50500</td>
+<td align="right">0.505</td>
 </tr>
 <tr class="odd">
 <td align="left">gemini</td>
@@ -1667,7 +1804,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.542</td>
-<td align="right">0.11200</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1675,7 +1812,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.02730</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1683,7 +1820,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.02730</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1691,7 +1828,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.858</td>
 <td align="right">0.429</td>
-<td align="right">0.00648</td>
+<td align="right">0.006</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1699,7 +1836,39 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.832</td>
 <td align="right">0.416</td>
-<td align="right">0.00120</td>
+<td align="right">0.001</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.905</td>
+<td align="right">0.474</td>
+<td align="right">0.330</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.932</td>
+<td align="right">0.503</td>
+<td align="right">0.959</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.942</td>
+<td align="right">0.503</td>
+<td align="right">0.959</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.768</td>
+<td align="right">0.384</td>
+<td align="right">0.000</td>
 </tr>
 </tbody>
 </table>
@@ -1750,32 +1919,34 @@ the experiments.</p>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test5"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
-<span>    Provider <span class="op">=</span> <span class="va">provider</span>,</span>
+<span>    Backend <span class="op">=</span> <span class="va">backend</span>,</span>
 <span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
 <span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
 <span>    <span class="va">Prop_Consistent</span>,</span>
 <span>    <span class="va">Prop_SAMPLE_1</span>,</span>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">kable</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu">kable</span><span class="op">(</span></span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
 <col width="10%">
-<col width="23%">
-<col width="15%">
-<col width="17%">
-<col width="15%">
-<col width="17%">
+<col width="30%">
+<col width="14%">
+<col width="16%">
+<col width="14%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
-<th align="left">Provider</th>
+<th align="left">Backend</th>
 <th align="left">Model</th>
 <th align="left">Thinking</th>
 <th align="right">Prop_Consistent</th>
@@ -1789,7 +1960,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.905</td>
 <td align="right">0.463</td>
-<td align="right">0.166000</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1797,7 +1968,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.489</td>
-<td align="right">0.719000</td>
+<td align="right">0.719</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1805,7 +1976,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.874</td>
 <td align="right">0.447</td>
-<td align="right">0.045300</td>
+<td align="right">0.045</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1813,7 +1984,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.489</td>
-<td align="right">0.720000</td>
+<td align="right">0.720</td>
 </tr>
 <tr class="odd">
 <td align="left">anthropic</td>
@@ -1821,7 +1992,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.482</td>
-<td align="right">0.505000</td>
+<td align="right">0.505</td>
 </tr>
 <tr class="even">
 <td align="left">anthropic</td>
@@ -1829,7 +2000,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.476</td>
-<td align="right">0.383000</td>
+<td align="right">0.383</td>
 </tr>
 <tr class="odd">
 <td align="left">gemini</td>
@@ -1837,7 +2008,7 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.508</td>
-<td align="right">0.798000</td>
+<td align="right">0.798</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1845,7 +2016,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.911</td>
 <td align="right">0.476</td>
-<td align="right">0.383000</td>
+<td align="right">0.383</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1853,7 +2024,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.863</td>
 <td align="right">0.463</td>
-<td align="right">0.166000</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="even">
 <td align="left">openai</td>
@@ -1861,7 +2032,7 @@ the experiments.</p>
 <td align="left">no_thinking</td>
 <td align="right">0.877</td>
 <td align="right">0.451</td>
-<td align="right">0.085800</td>
+<td align="right">0.086</td>
 </tr>
 <tr class="odd">
 <td align="left">openai</td>
@@ -1869,7 +2040,39 @@ the experiments.</p>
 <td align="left">with_thinking</td>
 <td align="right">0.789</td>
 <td align="right">0.400</td>
-<td align="right">0.000114</td>
+<td align="right">0.000</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.847</td>
+<td align="right">0.497</td>
+<td align="right">0.959</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.811</td>
+<td align="right">0.484</td>
+<td align="right">0.573</td>
+</tr>
+<tr class="even">
+<td align="left">together</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.795</td>
+<td align="right">0.482</td>
+<td align="right">0.505</td>
+</tr>
+<tr class="odd">
+<td align="left">together</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.800</td>
+<td align="right">0.400</td>
+<td align="right">0.000</td>
 </tr>
 </tbody>
 </table>
@@ -1878,14 +2081,14 @@ the experiments.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="per-provider-summary">10. Per-provider summary<a class="anchor" aria-label="anchor" href="#per-provider-summary"></a>
+<h2 id="per-backend-summary">10. Per-backend summary<a class="anchor" aria-label="anchor" href="#per-backend-summary"></a>
 </h2>
 <p>It is often useful to examine positional-bias metrics <strong>within
-each provider</strong> to see whether:</p>
+each backend</strong> to see whether:</p>
 <ul>
 <li>certain models exhibit more positional bias than others,</li>
 <li>reasoning mode makes a difference,</li>
-<li>a provider shows overall higher or lower reverse-order
+<li>a backend shows overall higher or lower reverse-order
 consistency.</li>
 </ul>
 <p>The tables below show, for each provider, the key statistics:</p>
@@ -1910,12 +2113,12 @@ used in testing.</p>
 </h3>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"anthropic"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"anthropic"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Template <span class="op">=</span> <span class="va">template_id</span>,</span>
@@ -1926,7 +2129,8 @@ used in testing.</p>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu">kable</span><span class="op">(</span></span>
-<span>    caption <span class="op">=</span> <span class="st">"Anthropic: Positional-bias summary by template, model, and thinking configuration."</span></span>
+<span>    caption <span class="op">=</span> <span class="st">"Anthropic: Positional-bias summary by template, model, and thinking configuration."</span>,</span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span></code></pre></div>
 <table class="table">
 <caption>Anthropic: Positional-bias summary by template, model, and
@@ -1954,7 +2158,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.516</td>
-<td align="right">0.5730</td>
+<td align="right">0.573</td>
 </tr>
 <tr class="even">
 <td align="left">test1</td>
@@ -1962,7 +2166,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.905</td>
 <td align="right">0.484</td>
-<td align="right">0.5730</td>
+<td align="right">0.573</td>
 </tr>
 <tr class="odd">
 <td align="left">test1</td>
@@ -1970,7 +2174,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.0273</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="even">
 <td align="left">test1</td>
@@ -1978,7 +2182,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.447</td>
-<td align="right">0.0453</td>
+<td align="right">0.045</td>
 </tr>
 <tr class="odd">
 <td align="left">test1</td>
@@ -1986,7 +2190,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.895</td>
 <td align="right">0.505</td>
-<td align="right">0.8780</td>
+<td align="right">0.878</td>
 </tr>
 <tr class="even">
 <td align="left">test1</td>
@@ -1994,7 +2198,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.497</td>
-<td align="right">0.9590</td>
+<td align="right">0.959</td>
 </tr>
 <tr class="odd">
 <td align="left">test2</td>
@@ -2002,7 +2206,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.863</td>
 <td align="right">0.442</td>
-<td align="right">0.0273</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="even">
 <td align="left">test2</td>
@@ -2010,7 +2214,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.487</td>
-<td align="right">0.6440</td>
+<td align="right">0.644</td>
 </tr>
 <tr class="odd">
 <td align="left">test2</td>
@@ -2018,7 +2222,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.895</td>
 <td align="right">0.458</td>
-<td align="right">0.1120</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="even">
 <td align="left">test2</td>
@@ -2026,7 +2230,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.474</td>
-<td align="right">0.3300</td>
+<td align="right">0.330</td>
 </tr>
 <tr class="odd">
 <td align="left">test2</td>
@@ -2034,7 +2238,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.468</td>
-<td align="right">0.2380</td>
+<td align="right">0.238</td>
 </tr>
 <tr class="even">
 <td align="left">test2</td>
@@ -2042,7 +2246,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.484</td>
-<td align="right">0.5730</td>
+<td align="right">0.573</td>
 </tr>
 <tr class="odd">
 <td align="left">test3</td>
@@ -2050,7 +2254,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.921</td>
 <td align="right">0.461</td>
-<td align="right">0.1370</td>
+<td align="right">0.137</td>
 </tr>
 <tr class="even">
 <td align="left">test3</td>
@@ -2058,7 +2262,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.463</td>
-<td align="right">0.1660</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="odd">
 <td align="left">test3</td>
@@ -2066,7 +2270,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.905</td>
 <td align="right">0.463</td>
-<td align="right">0.1660</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="even">
 <td align="left">test3</td>
@@ -2074,7 +2278,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.463</td>
-<td align="right">0.1660</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="odd">
 <td align="left">test3</td>
@@ -2082,7 +2286,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.453</td>
-<td align="right">0.0724</td>
+<td align="right">0.072</td>
 </tr>
 <tr class="even">
 <td align="left">test3</td>
@@ -2090,7 +2294,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.489</td>
-<td align="right">0.7200</td>
+<td align="right">0.720</td>
 </tr>
 <tr class="odd">
 <td align="left">test4</td>
@@ -2098,7 +2302,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.468</td>
-<td align="right">0.2380</td>
+<td align="right">0.238</td>
 </tr>
 <tr class="even">
 <td align="left">test4</td>
@@ -2106,7 +2310,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.474</td>
-<td align="right">0.3280</td>
+<td align="right">0.328</td>
 </tr>
 <tr class="odd">
 <td align="left">test4</td>
@@ -2114,7 +2318,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.461</td>
-<td align="right">0.1370</td>
+<td align="right">0.137</td>
 </tr>
 <tr class="even">
 <td align="left">test4</td>
@@ -2122,7 +2326,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.895</td>
 <td align="right">0.458</td>
-<td align="right">0.1120</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="odd">
 <td align="left">test4</td>
@@ -2130,7 +2334,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.911</td>
 <td align="right">0.461</td>
-<td align="right">0.1370</td>
+<td align="right">0.137</td>
 </tr>
 <tr class="even">
 <td align="left">test4</td>
@@ -2138,7 +2342,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.482</td>
-<td align="right">0.5050</td>
+<td align="right">0.505</td>
 </tr>
 <tr class="odd">
 <td align="left">test5</td>
@@ -2146,7 +2350,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.905</td>
 <td align="right">0.463</td>
-<td align="right">0.1660</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="even">
 <td align="left">test5</td>
@@ -2154,7 +2358,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.489</td>
-<td align="right">0.7190</td>
+<td align="right">0.719</td>
 </tr>
 <tr class="odd">
 <td align="left">test5</td>
@@ -2162,7 +2366,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.874</td>
 <td align="right">0.447</td>
-<td align="right">0.0453</td>
+<td align="right">0.045</td>
 </tr>
 <tr class="even">
 <td align="left">test5</td>
@@ -2170,7 +2374,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.489</td>
-<td align="right">0.7200</td>
+<td align="right">0.720</td>
 </tr>
 <tr class="odd">
 <td align="left">test5</td>
@@ -2178,7 +2382,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.482</td>
-<td align="right">0.5050</td>
+<td align="right">0.505</td>
 </tr>
 <tr class="even">
 <td align="left">test5</td>
@@ -2186,7 +2390,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.900</td>
 <td align="right">0.476</td>
-<td align="right">0.3830</td>
+<td align="right">0.383</td>
 </tr>
 </tbody>
 </table>
@@ -2197,12 +2401,12 @@ thinking configuration.</caption>
 </h3>
 <div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"gemini"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"gemini"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Template <span class="op">=</span> <span class="va">template_id</span>,</span>
@@ -2213,7 +2417,8 @@ thinking configuration.</caption>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu">kable</span><span class="op">(</span></span>
-<span>    caption <span class="op">=</span> <span class="st">"Gemini: Positional-bias summary by template, model, and thinking configuration."</span></span>
+<span>    caption <span class="op">=</span> <span class="st">"Gemini: Positional-bias summary by template, model, and thinking configuration."</span>,</span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span></code></pre></div>
 <table class="table">
 <caption>Gemini: Positional-bias summary by template, model, and
@@ -2241,7 +2446,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.521</td>
-<td align="right">0.4420</td>
+<td align="right">0.442</td>
 </tr>
 <tr class="even">
 <td align="left">test2</td>
@@ -2249,7 +2454,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.879</td>
 <td align="right">0.561</td>
-<td align="right">0.0209</td>
+<td align="right">0.021</td>
 </tr>
 <tr class="odd">
 <td align="left">test3</td>
@@ -2257,7 +2462,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.911</td>
 <td align="right">0.545</td>
-<td align="right">0.0903</td>
+<td align="right">0.090</td>
 </tr>
 <tr class="even">
 <td align="left">test4</td>
@@ -2265,7 +2470,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.542</td>
-<td align="right">0.1120</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="odd">
 <td align="left">test5</td>
@@ -2273,7 +2478,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.508</td>
-<td align="right">0.7980</td>
+<td align="right">0.798</td>
 </tr>
 </tbody>
 </table>
@@ -2284,12 +2489,12 @@ thinking configuration.</caption>
 </h3>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">provider</span> <span class="op">==</span> <span class="st">"openai"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"openai"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
 <span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
 <span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
 <span>    Template <span class="op">=</span> <span class="va">template_id</span>,</span>
@@ -2300,7 +2505,8 @@ thinking configuration.</caption>
 <span>    <span class="va">Binomial_Test_p</span></span>
 <span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu">kable</span><span class="op">(</span></span>
-<span>    caption <span class="op">=</span> <span class="st">"OpenAI: Positional-bias summary by template, model, and thinking configuration."</span></span>
+<span>    caption <span class="op">=</span> <span class="st">"OpenAI: Positional-bias summary by template, model, and thinking configuration."</span>,</span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span></code></pre></div>
 <table style="width:100%;" class="table">
 <caption>OpenAI: Positional-bias summary by template, model, and
@@ -2328,7 +2534,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.937</td>
 <td align="right">0.479</td>
-<td align="right">0.442000</td>
+<td align="right">0.442</td>
 </tr>
 <tr class="even">
 <td align="left">test1</td>
@@ -2336,7 +2542,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.837</td>
 <td align="right">0.418</td>
-<td align="right">0.001720</td>
+<td align="right">0.002</td>
 </tr>
 <tr class="odd">
 <td align="left">test1</td>
@@ -2344,7 +2550,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.926</td>
 <td align="right">0.474</td>
-<td align="right">0.330000</td>
+<td align="right">0.330</td>
 </tr>
 <tr class="even">
 <td align="left">test1</td>
@@ -2352,7 +2558,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.858</td>
 <td align="right">0.429</td>
-<td align="right">0.006480</td>
+<td align="right">0.006</td>
 </tr>
 <tr class="odd">
 <td align="left">test2</td>
@@ -2360,7 +2566,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.932</td>
 <td align="right">0.466</td>
-<td align="right">0.200000</td>
+<td align="right">0.200</td>
 </tr>
 <tr class="even">
 <td align="left">test2</td>
@@ -2368,7 +2574,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.027300</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="odd">
 <td align="left">test2</td>
@@ -2376,7 +2582,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.853</td>
 <td align="right">0.426</td>
-<td align="right">0.004720</td>
+<td align="right">0.005</td>
 </tr>
 <tr class="even">
 <td align="left">test2</td>
@@ -2384,7 +2590,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.853</td>
 <td align="right">0.426</td>
-<td align="right">0.004720</td>
+<td align="right">0.005</td>
 </tr>
 <tr class="odd">
 <td align="left">test3</td>
@@ -2392,7 +2598,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.916</td>
 <td align="right">0.458</td>
-<td align="right">0.112000</td>
+<td align="right">0.112</td>
 </tr>
 <tr class="even">
 <td align="left">test3</td>
@@ -2400,7 +2606,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.832</td>
 <td align="right">0.416</td>
-<td align="right">0.001200</td>
+<td align="right">0.001</td>
 </tr>
 <tr class="odd">
 <td align="left">test3</td>
@@ -2408,7 +2614,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.879</td>
 <td align="right">0.445</td>
-<td align="right">0.035300</td>
+<td align="right">0.035</td>
 </tr>
 <tr class="even">
 <td align="left">test3</td>
@@ -2416,7 +2622,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.863</td>
 <td align="right">0.432</td>
-<td align="right">0.008800</td>
+<td align="right">0.009</td>
 </tr>
 <tr class="odd">
 <td align="left">test4</td>
@@ -2424,7 +2630,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.027300</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="even">
 <td align="left">test4</td>
@@ -2432,7 +2638,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.884</td>
 <td align="right">0.442</td>
-<td align="right">0.027300</td>
+<td align="right">0.027</td>
 </tr>
 <tr class="odd">
 <td align="left">test4</td>
@@ -2440,7 +2646,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.858</td>
 <td align="right">0.429</td>
-<td align="right">0.006480</td>
+<td align="right">0.006</td>
 </tr>
 <tr class="even">
 <td align="left">test4</td>
@@ -2448,7 +2654,7 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.832</td>
 <td align="right">0.416</td>
-<td align="right">0.001200</td>
+<td align="right">0.001</td>
 </tr>
 <tr class="odd">
 <td align="left">test5</td>
@@ -2456,7 +2662,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.911</td>
 <td align="right">0.476</td>
-<td align="right">0.383000</td>
+<td align="right">0.383</td>
 </tr>
 <tr class="even">
 <td align="left">test5</td>
@@ -2464,7 +2670,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.863</td>
 <td align="right">0.463</td>
-<td align="right">0.166000</td>
+<td align="right">0.166</td>
 </tr>
 <tr class="odd">
 <td align="left">test5</td>
@@ -2472,7 +2678,7 @@ thinking configuration.</caption>
 <td align="left">no_thinking</td>
 <td align="right">0.877</td>
 <td align="right">0.451</td>
-<td align="right">0.085800</td>
+<td align="right">0.086</td>
 </tr>
 <tr class="even">
 <td align="left">test5</td>
@@ -2480,7 +2686,215 @@ thinking configuration.</caption>
 <td align="left">with_thinking</td>
 <td align="right">0.789</td>
 <td align="right">0.400</td>
-<td align="right">0.000114</td>
+<td align="right">0.000</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="togetherai-hosted-models">10.4 TogetherAI-hosted models<a class="anchor" aria-label="anchor" href="#togetherai-hosted-models"></a>
+</h3>
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"together"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
+<span>    Prop_Consistent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_consistent</span>, <span class="fl">3</span><span class="op">)</span>,</span>
+<span>    Prop_SAMPLE_1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">prop_pos1</span>, <span class="fl">3</span><span class="op">)</span>,</span>
+<span>    Binomial_Test_p <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/formatc.html" class="external-link">formatC</a></span><span class="op">(</span><span class="va">p_sample1_overall</span>, format <span class="op">=</span> <span class="st">"f"</span>, digits <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
+<span>    Template <span class="op">=</span> <span class="va">template_id</span>,</span>
+<span>    Model    <span class="op">=</span> <span class="va">model</span>,</span>
+<span>    Thinking <span class="op">=</span> <span class="va">thinking</span>,</span>
+<span>    <span class="va">Prop_Consistent</span>,</span>
+<span>    <span class="va">Prop_SAMPLE_1</span>,</span>
+<span>    <span class="va">Binomial_Test_p</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">kable</span><span class="op">(</span></span>
+<span>    caption <span class="op">=</span> <span class="st">"TogetherAI: Positional-bias summary by template, model, and thinking configuration."</span>,</span>
+<span>    align <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"l"</span>, <span class="st">"r"</span>, <span class="st">"r"</span>, <span class="st">"r"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span></code></pre></div>
+<table class="table">
+<caption>TogetherAI: Positional-bias summary by template, model, and
+thinking configuration.</caption>
+<colgroup>
+<col width="9%">
+<col width="30%">
+<col width="14%">
+<col width="16%">
+<col width="14%">
+<col width="16%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Template</th>
+<th align="left">Model</th>
+<th align="left">Thinking</th>
+<th align="right">Prop_Consistent</th>
+<th align="right">Prop_SAMPLE_1</th>
+<th align="right">Binomial_Test_p</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">test1</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.837</td>
+<td align="right">0.576</td>
+<td align="right">0.003</td>
+</tr>
+<tr class="even">
+<td align="left">test1</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.921</td>
+<td align="right">0.487</td>
+<td align="right">0.644</td>
+</tr>
+<tr class="odd">
+<td align="left">test1</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.889</td>
+<td align="right">0.455</td>
+<td align="right">0.090</td>
+</tr>
+<tr class="even">
+<td align="left">test1</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.821</td>
+<td align="right">0.416</td>
+<td align="right">0.001</td>
+</tr>
+<tr class="odd">
+<td align="left">test2</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.916</td>
+<td align="right">0.511</td>
+<td align="right">0.720</td>
+</tr>
+<tr class="even">
+<td align="left">test2</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.874</td>
+<td align="right">0.563</td>
+<td align="right">0.016</td>
+</tr>
+<tr class="odd">
+<td align="left">test2</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.905</td>
+<td align="right">0.458</td>
+<td align="right">0.112</td>
+</tr>
+<tr class="even">
+<td align="left">test2</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.858</td>
+<td align="right">0.434</td>
+<td align="right">0.012</td>
+</tr>
+<tr class="odd">
+<td align="left">test3</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.953</td>
+<td align="right">0.487</td>
+<td align="right">0.644</td>
+</tr>
+<tr class="even">
+<td align="left">test3</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.884</td>
+<td align="right">0.453</td>
+<td align="right">0.072</td>
+</tr>
+<tr class="odd">
+<td align="left">test3</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.879</td>
+<td align="right">0.455</td>
+<td align="right">0.090</td>
+</tr>
+<tr class="even">
+<td align="left">test3</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.805</td>
+<td align="right">0.408</td>
+<td align="right">0.000</td>
+</tr>
+<tr class="odd">
+<td align="left">test4</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.905</td>
+<td align="right">0.474</td>
+<td align="right">0.330</td>
+</tr>
+<tr class="even">
+<td align="left">test4</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.932</td>
+<td align="right">0.503</td>
+<td align="right">0.959</td>
+</tr>
+<tr class="odd">
+<td align="left">test4</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.942</td>
+<td align="right">0.503</td>
+<td align="right">0.959</td>
+</tr>
+<tr class="even">
+<td align="left">test4</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.768</td>
+<td align="right">0.384</td>
+<td align="right">0.000</td>
+</tr>
+<tr class="odd">
+<td align="left">test5</td>
+<td align="left">DeepSeek-R1</td>
+<td align="left">with_thinking</td>
+<td align="right">0.847</td>
+<td align="right">0.497</td>
+<td align="right">0.959</td>
+</tr>
+<tr class="even">
+<td align="left">test5</td>
+<td align="left">DeepSeek-V3</td>
+<td align="left">no_thinking</td>
+<td align="right">0.811</td>
+<td align="right">0.484</td>
+<td align="right">0.573</td>
+</tr>
+<tr class="odd">
+<td align="left">test5</td>
+<td align="left">Kimi-K2-Instruct-0905</td>
+<td align="left">no_thinking</td>
+<td align="right">0.795</td>
+<td align="right">0.482</td>
+<td align="right">0.505</td>
+</tr>
+<tr class="even">
+<td align="left">test5</td>
+<td align="left">Qwen3-235B-A22B-Instruct-2507</td>
+<td align="left">no_thinking</td>
+<td align="right">0.800</td>
+<td align="right">0.400</td>
+<td align="right">0.000</td>
 </tr>
 </tbody>
 </table>
@@ -2533,6 +2947,16 @@ providers and models, and<br>
 </ul>
 <p>are strong candidates for production scoring pipelines in
 <code>pairwiseLLM</code>.</p>
+</div>
+<div class="section level2">
+<h2 id="citation">13. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
+</h2>
+<blockquote>
+<p>Mercer, S. (2025). <em>Prompt Template Positional Bias Testing</em>
+(Version 1.0.0) [R package vignette]. In <em>pairwiseLLM: Pairwise
+Comparison Tools for Large Language Model-Based Writing Evaluation</em>.
+<a href="https://shmercer.github.io/pairwiseLLM/" class="uri">https://shmercer.github.io/pairwiseLLM/</a></p>
+</blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

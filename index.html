@@ -5,14 +5,14 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Pairwise Writing Quality Comparisons with Large Language Models • pairwiseLLM</title>
+<title>Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation • pairwiseLLM</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
 <script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Pairwise Writing Quality Comparisons with Large Language Models">
-<meta name="description" content="provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, and `Google Gemini`), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
-<meta property="og:description" content="provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, and `Google Gemini`), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
+<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation">
+<meta name="description" content="provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, `Together AI`, and locally-hosted `Ollama` models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
+<meta property="og:description" content="provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, `Together AI`, and locally-hosted `Ollama` models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -54,9 +54,7 @@
   </div>
 </nav><div class="container template-home">
 <div class="row">
-  <main id="main" class="col-md-9"><div class="section level1">
-<div class="page-header"><h1 id="pairwisellm-pairwise-comparisons-of-writing-quality-with-llms">pairwiseLLM: Pairwise comparisons of writing quality with LLMs<a class="anchor" aria-label="anchor" href="#pairwisellm-pairwise-comparisons-of-writing-quality-with-llms"></a>
-</h1></div>
+  <main id="main" class="col-md-9"><p>pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation ================</p>
 <!-- badges: start -->
 
 <p><code>pairwiseLLM</code> provides a unified, extensible framework for generating, submitting, and modeling <strong>pairwise comparisons of writing quality</strong> using large language models (LLMs).</p>
@@ -94,7 +92,7 @@
 <div class="section level2">
 <h2 id="supported-models">Supported Models<a class="anchor" aria-label="anchor" href="#supported-models"></a>
 </h2>
-<p>The following models are confirmed to work for live and batch pairwise comparisons:</p>
+<p>The following models are confirmed to work for pairwise comparisons:</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -181,6 +179,41 @@
 </table>
 <p><sub>1</sub> via the <a href="https://www.together.ai/" class="external-link">together.ai</a> API</p>
 <p><sub>2</sub> via <a href="https://ollama.com/" class="external-link">Ollama</a> on a local machine</p>
+<p>Batch APIs are currently available for OpenAI, Anthropic, and Gemini only. Models accessed via Together.ai and Ollama are supported for live comparisons via <code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> / <code><a href="reference/llm_compare_pair.html">llm_compare_pair()</a></code>.</p>
+<table class="table">
+<thead><tr class="header">
+<th>Backend</th>
+<th>Live</th>
+<th>Batch</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>openai</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>anthropic</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr class="odd">
+<td>gemini</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>together</td>
+<td>✅</td>
+<td>❌</td>
+</tr>
+<tr class="odd">
+<td>ollama</td>
+<td>✅</td>
+<td>❌</td>
+</tr>
+</tbody>
+</table>
 <hr>
 </div>
 <div class="section level2">
@@ -266,7 +299,7 @@
 <p>Example:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
-<span>  provider          <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
+<span>  backend           <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
 <span>  model             <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
 <span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span>
 <span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
@@ -451,10 +484,13 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <h3 id="elo-modeling">Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
 </h3>
 <div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># res: output from submit_llm_pairs() / llm_submit_pairs_batch()</span></span>
+<span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
+<span><span class="va">elo_fit</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span> <span class="co"># per-sample scores</span></span>
-<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability</span> <span class="co"># reliability indices (unweighted &amp; weighted)</span></span></code></pre></div>
+<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span></span>
+<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability</span></span>
+<span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability_weighted</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -569,7 +605,7 @@ Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&a
 <p>Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons with large language models (Version 1.0.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
-</div>
+
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">

@@ -10,14 +10,14 @@
 Source:
 [`inst/CITATION`](https://github.com/shmercer/pairwiseLLM/blob/master/inst/CITATION)
 
-Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons
-with large language models (Version 1.0.0) \[R package; Computer
-software\]. https://github.com/shmercer/pairwiseLLM
+Mercer, S. H. (2025). pairwiseLLM: Pairwise comparison tools for large
+language model-based writing evaluation (Version 1.0.0) \[R package;
+Computer software\]. https://shmercer.github.io/pairwiseLLM
 
     @Manual{,
-      title = {pairwiseLLM: Pairwise writing quality comparisons with large language models},
+      title = {pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation},
       author = {Sterett H. Mercer},
       year = {2025},
       note = {R package version 1.0.0},
-      url = {https://github.com/shmercer/pairwiseLLM},
+      url = {https://shmercer.github.io/pairwiseLLM},
     }

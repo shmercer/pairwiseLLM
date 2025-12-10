@@ -25,6 +25,12 @@ The examples are based on the A/B template testing dev scripts for:
   and
   [`gemini_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_create_batch.md))
 
+At present, batch helpers are implemented for OpenAI, Anthropic, and
+Gemini. Together.ai and Ollama are supported only via the live APIs
+([`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+/
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)).
+
 > Note: All heavy API calls in this vignette are set to `eval = FALSE`
 > so that the vignette remains CRAN-safe. You can enable them in your
 > own project.
@@ -650,6 +656,7 @@ thinking × direction), you can:
 
 ## 9. Citation
 
-> Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality
-> comparisons with large language models (Version 1.0.0) \[R package;
-> Computer software\]. <https://github.com/shmercer/pairwiseLLM>
+> Mercer, S. (2025). *Advanced: Submitting and Polling Multiple Batches*
+> (Version 1.0.0) \[R package vignette\]. In *pairwiseLLM: Pairwise
+> Comparison Tools for Large Language Model-Based Writing Evaluation*.
+> <https://shmercer.github.io/pairwiseLLM/>
