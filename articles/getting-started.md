@@ -188,7 +188,7 @@ Ollama.**
 ``` r
 res_live <- submit_llm_pairs(
   pairs             = pairs_small,
-  backend           = "openai", # also "anthropic" or "gemini"
+  backend           = "openai", # also "anthropic", "gemini", "together", "ollama"
   model             = "gpt-4o",
   trait_name        = td$name,
   trait_description = td$description,
@@ -273,7 +273,7 @@ Outputs:
 
 ``` r
 batch <- llm_submit_pairs_batch(
-  provider           = "openai",
+  backend            = "openai",
   model              = "gpt-4o",
   pairs              = pairs_small,
   trait_name         = td$name,

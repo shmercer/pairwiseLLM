@@ -11,8 +11,8 @@
 <script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation">
-<meta name="description" content="provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, `Together AI`, and locally-hosted `Ollama` models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
-<meta property="og:description" content="provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, `Together AI`, and locally-hosted `Ollama` models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
+<meta name="description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, `Together AI`, and locally-hosted `Ollama` models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
+<meta property="og:description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, `Together AI`, and locally-hosted `Ollama` models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry or Elo rating methods to derive writing quality scores.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -219,11 +219,15 @@
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
+<p>Once the package is available on CRAN, install with:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"pairwiseLLM"</span><span class="op">)</span></span></code></pre></div>
+<p>To install the development version from GitHub:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"shmercer/pairwiseLLM"</span><span class="op">)</span></span></code></pre></div>
 <p>Load the package:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -265,7 +269,7 @@
 <code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> — compare many pairs at once</li>
 </ul>
 <p>Example:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
@@ -297,7 +301,7 @@
 <li><code><a href="reference/llm_download_batch_results.html">llm_download_batch_results()</a></code></li>
 </ul>
 <p>Example:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
 <span>  backend           <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
 <span>  model             <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
@@ -316,7 +320,7 @@
 <p><code>pairwiseLLM</code> reads keys <strong>only from environment variables</strong>.<br>
 Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <strong>never written</strong> to disk.</p>
 <p>You can verify which providers are available using:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>This returns a tibble showing whether R can see the required keys for:</p>
 <ul>
@@ -331,7 +335,7 @@ Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <str
 <h3 id="setting-api-keys">Setting API Keys<a class="anchor" aria-label="anchor" href="#setting-api-keys"></a>
 </h3>
 <p>You may set keys <strong>temporarily</strong> for the current R session:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ANTHROPIC_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>GEMINI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
@@ -344,16 +348,16 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <a class="anchor" aria-label="anchor" href="#recommended-method-adding-keys-to-renviron"></a>
 </h3>
 <p>Open your <code>.Renviron</code> file:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">usethis</span><span class="fu">::</span><span class="fu">edit_r_environ</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Add the following lines:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>OPENAI_API_KEY<span class="ot">=</span><span class="st">"your-openai-key"</span></span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>ANTHROPIC_API_KEY<span class="ot">=</span><span class="st">"your-anthropic-key"</span></span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>GEMINI_API_KEY<span class="ot">=</span><span class="st">"your-gemini-key"</span></span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>TOGETHER_API_KEY<span class="ot">=</span><span class="st">"your-together-key"</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>OPENAI_API_KEY<span class="ot">=</span><span class="st">"your-openai-key"</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>ANTHROPIC_API_KEY<span class="ot">=</span><span class="st">"your-anthropic-key"</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>GEMINI_API_KEY<span class="ot">=</span><span class="st">"your-gemini-key"</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>TOGETHER_API_KEY<span class="ot">=</span><span class="st">"your-together-key"</span></span></code></pre></div>
 <p>Save the file, then restart R.</p>
 <p>You can confirm that R now sees the keys:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -373,34 +377,37 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="view-available-templates">View available templates<a class="anchor" aria-label="anchor" href="#view-available-templates"></a>
 </h3>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/list_prompt_templates.html">list_prompt_templates</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "default" "test1"   "test2"   "test3"   "test4"   "test5"</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="show-the-default-template-truncated">Show the default template (truncated)<a class="anchor" aria-label="anchor" href="#show-the-default-template-truncated"></a>
 </h3>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"...\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; You are an expert writing assessor.</span></span>
+<span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.</span></span>
+<span><span class="co">#&gt; TRAIT: {TRAIT_NAME}</span></span>
+<span><span class="co">#&gt; DEFINITION: {TRAIT_DESCRIPTION}</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Definition of {TRAIT_NAME}:</span></span>
-<span><span class="co">#&gt; {TRAIT_DESCRIPTION}</span></span>
+<span><span class="co">#&gt; SAMPLES:</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; INSTRUCTIONS:</span></span>
-<span><span class="co">#&gt; 1. Read BOTH samples carefully.</span></span>
+<span><span class="co">#&gt; === SAMPLE_1 ===</span></span>
+<span><span class="co">#&gt; {SAMPLE_1}</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; 2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.</span></span>
-<span><span class="co">#&gt;    Do NOT consider length, formatting, grammar, topic relevance, or any other</span></span>
-<span><span class="co">#&gt;    aspect unless it  ...</span></span></code></pre></div>
+<span><span class="co">#&gt; === SAMPLE_2 ===</span></span>
+<span><span class="co">#&gt; {SAMPLE_2}</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; EVALUATION PROCESS (Mental Simulation):</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the  ...</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="register-your-own-template">Register your own template<a class="anchor" aria-label="anchor" href="#register-your-own-template"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/register_prompt_template.html">register_prompt_template</a></span><span class="op">(</span><span class="st">"my_template"</span>, <span class="st">"</span></span>
 <span><span class="st">Compare two essays for {TRAIT_NAME}…</span></span>
 <span><span class="st"></span></span>
@@ -416,7 +423,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="st">&lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt;</span></span>
 <span><span class="st">"</span><span class="op">)</span></span></code></pre></div>
 <p>Use it in a submission:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"my_template"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -425,15 +432,15 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <h2 id="trait-descriptions">Trait Descriptions<a class="anchor" aria-label="anchor" href="#trait-descriptions"></a>
 </h2>
 <p>Traits define what “quality” means.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $name</span></span>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $description</span></span>
-<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre></div>
 <p>You can also provide custom traits:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span></span>
 <span>  custom_name        <span class="op">=</span> <span class="st">"Clarity"</span>,</span>
 <span>  custom_description <span class="op">=</span> <span class="st">"How understandable, coherent, and well structured the ideas are."</span></span>
@@ -447,15 +454,15 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="typical-workflow">Typical workflow<a class="anchor" aria-label="anchor" href="#typical-workflow"></a>
 </h3>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">)</span></span>
 <span><span class="va">pairs_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sample_reverse_pairs.html">sample_reverse_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, reverse_pct <span class="op">=</span> <span class="fl">1.0</span><span class="op">)</span></span></code></pre></div>
 <p>Submit:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span>
 <span><span class="va">res_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_rev</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
 <p>Compute bias:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cons</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compute_reverse_consistency.html">compute_reverse_consistency</a></span><span class="op">(</span><span class="va">res_fwd</span>, <span class="va">res_rev</span><span class="op">)</span></span>
 <span><span class="va">bias</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/check_positional_bias.html">check_positional_bias</a></span><span class="op">(</span><span class="va">cons</span><span class="op">)</span></span>
 <span></span>
@@ -475,7 +482,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="bradleyterry-bt">Bradley–Terry (BT)<a class="anchor" aria-label="anchor" href="#bradleyterry-bt"></a>
 </h3>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
 <span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
@@ -483,7 +490,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="elo-modeling">Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
 </h3>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res: output from submit_llm_pairs() / llm_submit_pairs_batch()</span></span>
 <span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
 <span><span class="va">elo_fit</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
@@ -528,16 +535,6 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <hr>
 </div>
 <div class="section level2">
-<h2 id="roadmap">Roadmap<a class="anchor" aria-label="anchor" href="#roadmap"></a>
-</h2>
-<p>Planned features include:</p>
-<ul>
-<li>Documentation and vignette additions</li>
-<li>CRAN submission</li>
-</ul>
-<hr>
-</div>
-<div class="section level2">
 <h2 id="contributing">Contributing<a class="anchor" aria-label="anchor" href="#contributing"></a>
 </h2>
 <p>Contributions to <strong>pairwiseLLM</strong> are very welcome!</p>
@@ -563,7 +560,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <ol style="list-style-type: decimal">
 <li>
 <p>Run:</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">session_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </li>
 <li>

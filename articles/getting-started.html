@@ -61,7 +61,7 @@
       <h1>Getting Started with pairwiseLLM</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/v1.0.0/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
       <div class="d-none name"><code>getting-started.Rmd</code></div>
     </div>
 
@@ -259,7 +259,7 @@ Together, and Ollama.</strong></p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_live</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
 <span>  pairs             <span class="op">=</span> <span class="va">pairs_small</span>,</span>
-<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>, <span class="co"># also "anthropic" or "gemini"</span></span>
+<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>, <span class="co"># also "anthropic", "gemini", "together", "ollama"</span></span>
 <span>  model             <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
 <span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
 <span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
@@ -338,7 +338,7 @@ Together, and Ollama.</strong></p>
 </h3>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
-<span>  provider           <span class="op">=</span> <span class="st">"openai"</span>,</span>
+<span>  backend            <span class="op">=</span> <span class="st">"openai"</span>,</span>
 <span>  model              <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
 <span>  pairs              <span class="op">=</span> <span class="va">pairs_small</span>,</span>
 <span>  trait_name         <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
