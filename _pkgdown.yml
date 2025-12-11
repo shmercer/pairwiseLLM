@@ -1,4 +1,43 @@
 url: https://shmercer.github.io/pairwiseLLM/
+
 template:
   bootstrap: 5
 
+navbar:
+  structure:
+    left: [home, reference, usage_guides, template_positional_bias, changelog]
+
+  components:
+    home:
+      text: Home
+      href: index.html
+
+    reference:
+      text: Reference
+      href: reference/index.html
+
+    usage_guides:
+      text: "Usage Guides"
+      menu:
+        - text: "Getting Started with pairwiseLLM"
+          href: articles/getting-started.html
+        - text: "Advanced: Submitting and Polling Multiple Batches"
+          href: articles/advanced-batch-workflows.html
+
+    template_positional_bias:
+      text: "Template Positional Bias"
+      href: articles/prompt-template-bias.html
+
+    changelog:
+      text: Changelog
+      href: news/index.html
+
+articles:
+  - title: "Usage Guides"
+    contents:
+      - getting-started
+      - advanced-batch-workflows
+
+  - title: "Template Positional Bias"
+    contents:
+      - prompt-template-bias

@@ -452,14 +452,10 @@ Temperature settings used in testing:
 The results from the experiments are stored in a CSV included in the package (for example, under `inst/extdata/template_test_summary_all.csv`). We load and lightly clean that file here.
 
 ```{r}
-summary_path <- system.file(
-  "extdata",
-  "template_test_summary_all.csv",
-  package = "pairwiseLLM"
-)
+summary_path <- system.file("extdata", "template_test_summary_all.csv", package = "pairwiseLLM")
+if (!nzchar(summary_path)) stop("Data file not found in installed package.")
 
 summary_tbl <- readr::read_csv(summary_path, show_col_types = FALSE)
-
 head(summary_tbl)
 ```
 
