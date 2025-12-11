@@ -32,7 +32,7 @@ For advanced batch processing workflows, see:
 For information on prompt evaluation and positional-bias diagnostics,
 see:
 
-- [`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
+- [`vignette("prompt-template-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 
 ------------------------------------------------------------------------
 
@@ -363,7 +363,7 @@ bias$summary
 
 Five included templates have been tested across different backend
 providers. Complete details are presented in a vignette:
-[`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
+[`vignette("prompt-template-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 
 ------------------------------------------------------------------------
 

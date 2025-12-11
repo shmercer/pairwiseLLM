@@ -17,7 +17,7 @@ A typical workflow:
 
 For prompt evaluation and positional-bias diagnostics, see:
 
-- [`vignette("prompt-template-positional-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
+- [`vignette("prompt-template-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 
 For advanced batch processing workflows, see:
 
@@ -368,7 +368,7 @@ Use
 [`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md) +
 [`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md)
 (see
-[vignette(“prompt-template-positional-bias”)](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-positional-bias.html)
+[vignette(“prompt-template-bias”)](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 for a full example).
 
 ------------------------------------------------------------------------
