@@ -96,6 +96,14 @@ Batch APIs are currently available for OpenAI, Anthropic, and Gemini only. Model
 
 ## Installation
 
+Once the package is available on CRAN, install with:
+
+```{r, eval = FALSE}
+install.packages("pairwiseLLM")
+```
+
+To install the development version from GitHub:
+
 ```{r, eval = FALSE}
 # install.packages("pak")
 pak::pak("shmercer/pairwiseLLM")
@@ -370,15 +378,6 @@ elo_fit$reliability_weighted
 |---------|----------|-----------|
 | **Live** | small or interactive runs | `submit_llm_pairs`, `llm_compare_pair` |
 | **Batch** | large jobs, cost control | `llm_submit_pairs_batch`, `llm_download_batch_results` |
-
----
-
-## Roadmap
-
-Planned features include:
-
-* Documentation and vignette additions
-* CRAN submission
 
 ---
 

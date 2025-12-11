@@ -2,7 +2,8 @@
 #'
 #' @description
 #' `llm_submit_pairs_batch()` is a backend-agnostic front-end for running
-#' provider batch pipelines (OpenAI, Anthropic, Gemini).
+#' provider batch pipelines (OpenAI, Anthropic, Gemini). Together.ai and Ollama
+#' are supported only for live comparisons.
 #'
 #' It mirrors [submit_llm_pairs()] but uses the provider batch APIs under the
 #' hood via `run_openai_batch_pipeline()`, `run_anthropic_batch_pipeline()`,
@@ -49,7 +50,11 @@
 #'   through where supported.
 #' @param backend Character scalar; one of `"openai"`, `"anthropic"`, or
 #'   `"gemini"`. Matching is case-insensitive.
-#' @param model Character scalar model name to use for the batch job.
+#' @param model Character scalar model name to use for the batch job. For
+#'   `"openai"` this should be an OpenAI model name (for example `"gpt-4.1"`,
+#'   `"gpt-5.1"`). For `"anthropic"` and `"gemini"`, use the corresponding
+#'   provider model names (for example `"claude-3-5-sonnet-latest"` or
+#'   `"gemini-2.0-pro-exp"`).
 #' @param trait_name A short name for the trait being evaluated (e.g.
 #'   `"overall_quality"`).
 #' @param trait_description A human-readable description of the trait.

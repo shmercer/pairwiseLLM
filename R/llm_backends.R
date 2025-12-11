@@ -38,9 +38,10 @@
 #'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
 #'   For `"anthropic"` and `"gemini"`, use the corresponding provider model
 #'   names (for example `"claude-3-5-sonnet-latest"` or
-#'   `"gemini-2.0-pro-exp"`). For `"ollama"`, use a local model name known
-#'   to the Ollama server (for example `"mistral-small3.2:24b"`,
-#'   `"qwen3:32b"`, `"gemma3:27b"`).
+#'   `"gemini-2.0-pro-exp"`). For "together", use Together.ai model identifiers
+#'   such as `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
+#'   `"ollama"`, use a local model name known to the Ollama server (for example
+#'    `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
 #' @param trait_name Short label for the trait (for example
 #'   `"Overall Quality"`).
 #' @param trait_description Full-text definition of the trait.
@@ -309,8 +310,11 @@ llm_compare_pair <- function(
 #' @param model Model identifier for the chosen backend. For `"openai"` this
 #'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
 #'   For `"anthropic"` and `"gemini"`, use the corresponding provider model
-#'   names. For `"ollama"`, use a local model name known to the Ollama server
-#'   (for example `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
+#'   names (for example `"claude-3-5-sonnet-latest"` or
+#'   `"gemini-2.0-pro-exp"`). For "together", use Together.ai model identifiers
+#'   such as `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
+#'   `"ollama"`, use a local model name known to the Ollama server (for example
+#'    `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
 #' @param trait_name Trait name to pass through to the backend-specific
 #'   comparison function (for example `"Overall Quality"`).
 #' @param trait_description Full-text trait description passed to the backend.

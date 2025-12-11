@@ -4,7 +4,7 @@ Version: 1.0.0
 Authors@R: 
     person("Sterett H.", "Mercer", , "sterett.mercer@ubc.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7940-4221"))
-Description: provides a unified framework for generating, submitting, and 
+Description: Provides a unified framework for generating, submitting, and 
     analyzing pairwise comparisons of writing quality using large language 
     models (LLMs). The package supports live and/or batch evaluation workflows 
     across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, 
@@ -45,5 +45,4 @@ URL: https://github.com/shmercer/pairwiseLLM, https://shmercer.github.io/pairwis
 BugReports: https://github.com/shmercer/pairwiseLLM/issues
 Depends: 
     R (>= 4.1)
-LazyData: true
 VignetteBuilder: knitr

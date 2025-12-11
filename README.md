@@ -89,6 +89,14 @@ comparisons via `submit_llm_pairs()` / `llm_compare_pair()`.
 
 ## Installation
 
+Once the package is available on CRAN, install with:
+
+``` r
+install.packages("pairwiseLLM")
+```
+
+To install the development version from GitHub:
+
 ``` r
 # install.packages("pak")
 pak::pak("shmercer/pairwiseLLM")
@@ -257,19 +265,22 @@ list_prompt_templates()
 ``` r
 tmpl <- get_prompt_template("default")
 cat(substr(tmpl, 1, 400), "...\n")
-#> You are an expert writing assessor.
+#> You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
 #> 
-#> Your task is to decide which of two student writing samples shows BETTER {TRAIT_NAME}.
+#> TRAIT: {TRAIT_NAME}
+#> DEFINITION: {TRAIT_DESCRIPTION}
 #> 
-#> Definition of {TRAIT_NAME}:
-#> {TRAIT_DESCRIPTION}
+#> SAMPLES:
 #> 
-#> INSTRUCTIONS:
-#> 1. Read BOTH samples carefully.
+#> === SAMPLE_1 ===
+#> {SAMPLE_1}
 #> 
-#> 2. Evaluate the samples ONLY on {TRAIT_NAME}, according to the definition above.
-#>    Do NOT consider length, formatting, grammar, topic relevance, or any other
-#>    aspect unless it  ...
+#> === SAMPLE_2 ===
+#> {SAMPLE_2}
+#> 
+#> EVALUATION PROCESS (Mental Simulation):
+#> 
+#> 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the  ...
 ```
 
 ### Register your own template
@@ -309,7 +320,7 @@ trait_description("overall_quality")
 #> [1] "Overall Quality"
 #> 
 #> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed, how clearly the writing is organized, and how effective the language and conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
 ```
 
 You can also provide custom traits:
@@ -390,15 +401,6 @@ elo_fit$reliability_weighted
 |----|----|----|
 | **Live** | small or interactive runs | `submit_llm_pairs`, `llm_compare_pair` |
 | **Batch** | large jobs, cost control | `llm_submit_pairs_batch`, `llm_download_batch_results` |
-
-------------------------------------------------------------------------
-
-## Roadmap
-
-Planned features include:
-
-- Documentation and vignette additions
-- CRAN submission
 
 ------------------------------------------------------------------------
 
