@@ -24,7 +24,14 @@ through where supported.}
 \item{backend}{Character scalar; one of \code{"openai"}, \code{"anthropic"}, or
 \code{"gemini"}. Matching is case-insensitive.}
 
-\item{model}{Character scalar model name to use for the batch job.}
+\item{model}{Character scalar model name to use for the batch job.
+\itemize{
+\item For \code{"openai"}, use models like \code{"gpt-4.1"}, \code{"gpt-5.1"}, or \code{"gpt-5.2"}
+(including date-stamped versions like \code{"gpt-5.2-2025-12-11"}).
+\item For \code{"anthropic"}, use provider names like \code{"claude-3-5-sonnet-latest"}
+or date-stamped versions like \code{"claude-sonnet-4-5-20250929"}.
+\item For \code{"gemini"}, use names like \code{"gemini-2.0-pro-exp"}.
+}}
 
 \item{trait_name}{A short name for the trait being evaluated (e.g.
 \code{"overall_quality"}).}
@@ -35,11 +42,13 @@ through where supported.}
 or a compatible character scalar.}
 
 \item{include_thoughts}{Logical; whether to request and parse model
-"thoughts" (where supported). For OpenAI GPT-5.1, setting this to \code{TRUE}
-will by default cause the batch to use the \code{responses} endpoint (unless
-you explicitly pass an \code{endpoint} in \code{...}). For Anthropic, setting this
-to \code{TRUE} while \code{reasoning = "none"} (in \code{...}) upgrades to
-\code{reasoning = "enabled"}, which implies \code{temperature = 1} for the batch.}
+"thoughts" (where supported).
+\itemize{
+\item For OpenAI GPT-5.1/5.2, setting this to \code{TRUE} defaults to the
+\code{responses} endpoint.
+\item For Anthropic, setting this to \code{TRUE} implies \code{reasoning = "enabled"}
+(unless overridden) and sets \code{temperature = 1}.
+}}
 
 \item{include_raw}{Logical; whether to include raw provider responses in the
 result (where supported by backends).}
@@ -67,7 +76,8 @@ preserved.
 }
 \description{
 \code{llm_submit_pairs_batch()} is a backend-agnostic front-end for running
-provider batch pipelines (OpenAI, Anthropic, Gemini).
+provider batch pipelines (OpenAI, Anthropic, Gemini). Together.ai and Ollama
+are supported only for live comparisons.
 
 It mirrors \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} but uses the provider batch APIs under the
 hood via \code{run_openai_batch_pipeline()}, \code{run_anthropic_batch_pipeline()},
@@ -78,18 +88,27 @@ For OpenAI, this helper will by default:
 \item Use the \code{chat.completions} batch style for most models, and
 \item Automatically switch to the \code{responses} style endpoint when:
 \itemize{
-\item \code{model} starts with \code{"gpt-5.1"} and
+\item \code{model} starts with \code{"gpt-5.1"} or \code{"gpt-5.2"} (including date-stamped
+versions like \code{"gpt-5.2-2025-12-11"}) and
 \item either \code{include_thoughts = TRUE} \strong{or} a non-\code{"none"} \code{reasoning}
 effort is supplied in \code{...}.
 }
 }
 
-You can override this by explicitly passing \code{endpoint = "chat.completions"}
-or \code{endpoint = "responses"} in \code{...}.
+\strong{Temperature Defaults:}
+For OpenAI, if \code{temperature} is not specified in \code{...}:
+\itemize{
+\item It defaults to \code{0} (deterministic) for standard models or when reasoning is
+disabled (\code{reasoning = "none"}).
+\item It remains \code{NULL} (API default) when reasoning is enabled, as the API
+does not support temperature with reasoning.
+}
 
-For Anthropic, this helper delegates temperature and extended-thinking
-behaviour to \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}} and
-\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}}, which apply the following rules:
+For Anthropic, standard and date-stamped model names
+(e.g. \code{"claude-sonnet-4-5-20250929"}) are supported. This helper delegates
+temperature and extended-thinking behaviour to
+\code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}} and \code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
+which apply the following rules:
 \itemize{
 \item When \code{reasoning = "none"} (no extended thinking), the default
 temperature is \code{0} (deterministic) unless you explicitly supply a
@@ -115,19 +134,28 @@ results, parse). The returned object contains both metadata and a normalized
 }
 \examples{
 \dontrun{
+# 1. OpenAI Batch (GPT-5.2 with thoughts)
 pairs <- make_pairs(c("A", "B", "C"))
-
-batch <- llm_submit_pairs_batch(
-  pairs             = pairs,
-  backend           = "openai",
-  model             = "gpt-4o-mini",
-  trait_name        = "overall_quality",
-  trait_description = "Overall quality of the response.",
-  prompt_template   = set_prompt_template(),
-  include_thoughts  = FALSE
+batch_openai <- llm_submit_pairs_batch(
+  pairs = pairs,
+  backend = "openai",
+  model = "gpt-5.2-2025-12-11",
+  trait_name = "overall_quality",
+  trait_description = "Quality of the response.",
+  include_thoughts = TRUE
 )
+res_openai <- llm_download_batch_results(batch_openai)
 
-res <- llm_download_batch_results(batch)
+# 2. Anthropic Batch (Claude Sonnet 4.5 date-stamped)
+batch_anthropic <- llm_submit_pairs_batch(
+  pairs = pairs,
+  backend = "anthropic",
+  model = "claude-sonnet-4-5-20250929",
+  trait_name = "coherence",
+  trait_description = "Logical flow of the text.",
+  include_thoughts = TRUE # triggers extended thinking
+)
+res_anthropic <- llm_download_batch_results(batch_anthropic)
 }
 
 }

@@ -54,6 +54,7 @@ The following models are confirmed to work for pairwise comparisons:
 
 | Provider | Model | Reasoning Mode? |
 |----|----|----|
+| **[OpenAI](https://openai.com/api/)** | gpt-5.2 | ✅ Yes |
 | **[OpenAI](https://openai.com/api/)** | gpt-5.1 | ✅ Yes |
 | **[OpenAI](https://openai.com/api/)** | gpt-4o | ❌ No |
 | **[OpenAI](https://openai.com/api/)** | gpt-4.1 | ❌ No |

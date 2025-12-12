@@ -33,9 +33,10 @@ llm_compare_pair(
 should be an OpenAI model name (for example \code{"gpt-4.1"}, \code{"gpt-5.1"}).
 For \code{"anthropic"} and \code{"gemini"}, use the corresponding provider model
 names (for example \code{"claude-3-5-sonnet-latest"} or
-\code{"gemini-2.0-pro-exp"}). For \code{"ollama"}, use a local model name known
-to the Ollama server (for example \code{"mistral-small3.2:24b"},
-\code{"qwen3:32b"}, \code{"gemma3:27b"}).}
+\code{"gemini-2.0-pro-exp"}). For "together", use Together.ai model identifiers
+such as \code{"deepseek-ai/DeepSeek-R1"} or \code{"deepseek-ai/DeepSeek-V3"}. For
+\code{"ollama"}, use a local model name known to the Ollama server (for example
+\code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).}
 
 \item{trait_name}{Short label for the trait (for example
 \code{"Overall Quality"}).}

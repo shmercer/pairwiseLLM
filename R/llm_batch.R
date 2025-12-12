@@ -12,16 +12,23 @@
 #' For OpenAI, this helper will by default:
 #' * Use the `chat.completions` batch style for most models, and
 #' * Automatically switch to the `responses` style endpoint when:
-#'   - `model` starts with `"gpt-5.1"` and
-#'   - either `include_thoughts = TRUE` **or** a non-`"none"` `reasoning`
-#'     effort is supplied in `...`.
+#'     - `model` starts with `"gpt-5.1"` or `"gpt-5.2"` (including date-stamped
+#'        versions like `"gpt-5.2-2025-12-11"`) and
+#'     - either `include_thoughts = TRUE` **or** a non-`"none"` `reasoning`
+#'       effort is supplied in `...`.
 #'
-#' You can override this by explicitly passing `endpoint = "chat.completions"`
-#' or `endpoint = "responses"` in `...`.
+#' **Temperature Defaults:**
+#' For OpenAI, if `temperature` is not specified in `...`:
+#' * It defaults to `0` (deterministic) for standard models or when reasoning is
+#'   disabled (`reasoning = "none"`).
+#' * It remains `NULL` (API default) when reasoning is enabled, as the API
+#'   does not support temperature with reasoning.
 #'
-#' For Anthropic, this helper delegates temperature and extended-thinking
-#' behaviour to [run_anthropic_batch_pipeline()] and
-#' [build_anthropic_batch_requests()], which apply the following rules:
+#' For Anthropic, standard and date-stamped model names
+#' (e.g. `"claude-sonnet-4-5-20250929"`) are supported. This helper delegates
+#' temperature and extended-thinking behaviour to
+#' [run_anthropic_batch_pipeline()] and [build_anthropic_batch_requests()],
+#' which apply the following rules:
 #' \itemize{
 #'   \item When `reasoning = "none"` (no extended thinking), the default
 #'     temperature is `0` (deterministic) unless you explicitly supply a
@@ -50,22 +57,23 @@
 #'   through where supported.
 #' @param backend Character scalar; one of `"openai"`, `"anthropic"`, or
 #'   `"gemini"`. Matching is case-insensitive.
-#' @param model Character scalar model name to use for the batch job. For
-#'   `"openai"` this should be an OpenAI model name (for example `"gpt-4.1"`,
-#'   `"gpt-5.1"`). For `"anthropic"` and `"gemini"`, use the corresponding
-#'   provider model names (for example `"claude-3-5-sonnet-latest"` or
-#'   `"gemini-2.0-pro-exp"`).
+#' @param model Character scalar model name to use for the batch job.
+#'   * For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5.1"`, or `"gpt-5.2"`
+#'     (including date-stamped versions like `"gpt-5.2-2025-12-11"`).
+#'   * For `"anthropic"`, use provider names like `"claude-3-5-sonnet-latest"`
+#'     or date-stamped versions like `"claude-sonnet-4-5-20250929"`.
+#'   * For `"gemini"`, use names like `"gemini-2.0-pro-exp"`.
 #' @param trait_name A short name for the trait being evaluated (e.g.
 #'   `"overall_quality"`).
 #' @param trait_description A human-readable description of the trait.
 #' @param prompt_template A prompt template created by [set_prompt_template()]
 #'   or a compatible character scalar.
 #' @param include_thoughts Logical; whether to request and parse model
-#'   "thoughts" (where supported). For OpenAI GPT-5.1, setting this to `TRUE`
-#'   will by default cause the batch to use the `responses` endpoint (unless
-#'   you explicitly pass an `endpoint` in `...`). For Anthropic, setting this
-#'   to `TRUE` while `reasoning = "none"` (in `...`) upgrades to
-#'   `reasoning = "enabled"`, which implies `temperature = 1` for the batch.
+#'   "thoughts" (where supported).
+#'   * For OpenAI GPT-5.1/5.2, setting this to `TRUE` defaults to the
+#'     `responses` endpoint.
+#'   * For Anthropic, setting this to `TRUE` implies `reasoning = "enabled"`
+#'     (unless overridden) and sets `temperature = 1`.
 #' @param include_raw Logical; whether to include raw provider responses in the
 #'   result (where supported by backends).
 #' @param ... Additional arguments passed through to the backend-specific
@@ -90,19 +98,28 @@
 #'
 #' @examples
 #' \dontrun{
+#' # 1. OpenAI Batch (GPT-5.2 with thoughts)
 #' pairs <- make_pairs(c("A", "B", "C"))
-#'
-#' batch <- llm_submit_pairs_batch(
-#'   pairs             = pairs,
-#'   backend           = "openai",
-#'   model             = "gpt-4o-mini",
-#'   trait_name        = "overall_quality",
-#'   trait_description = "Overall quality of the response.",
-#'   prompt_template   = set_prompt_template(),
-#'   include_thoughts  = FALSE
+#' batch_openai <- llm_submit_pairs_batch(
+#'   pairs = pairs,
+#'   backend = "openai",
+#'   model = "gpt-5.2-2025-12-11",
+#'   trait_name = "overall_quality",
+#'   trait_description = "Quality of the response.",
+#'   include_thoughts = TRUE
 #' )
+#' res_openai <- llm_download_batch_results(batch_openai)
 #'
-#' res <- llm_download_batch_results(batch)
+#' # 2. Anthropic Batch (Claude Sonnet 4.5 date-stamped)
+#' batch_anthropic <- llm_submit_pairs_batch(
+#'   pairs = pairs,
+#'   backend = "anthropic",
+#'   model = "claude-sonnet-4-5-20250929",
+#'   trait_name = "coherence",
+#'   trait_description = "Logical flow of the text.",
+#'   include_thoughts = TRUE # triggers extended thinking
+#' )
+#' res_anthropic <- llm_download_batch_results(batch_anthropic)
 #' }
 #'
 #' @export
@@ -119,7 +136,6 @@ llm_submit_pairs_batch <- function(
 ) {
   backend <- match.arg(tolower(backend), c("openai", "anthropic", "gemini"))
 
-  # Basic validation, mirroring submit_llm_pairs() style
   if (!rlang::is_scalar_character(model) || !nzchar(model)) {
     rlang::abort("`model` must be a non-empty character scalar.")
   }
@@ -135,24 +151,24 @@ llm_submit_pairs_batch <- function(
     ))
   }
 
-  # Capture dots so we can inspect/modify for OpenAI
   dot_list <- list(...)
 
   if (backend == "openai") {
-    # Detect GPT-5.1 and requested reasoning
-    is_gpt51 <- grepl("^gpt-5\\.1", model)
+    # Detect GPT-5.1/5.2 (and date variants)
+    is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
+
     reasoning <- if ("reasoning" %in% names(dot_list)) {
       dot_list$reasoning
     } else {
       NULL
     }
 
-    # If caller explicitly supplied an endpoint in ..., respect it.
-    # Otherwise, choose based on model + reasoning / thoughts.
+    # Determine endpoint automatically if not provided
     endpoint <- if ("endpoint" %in% names(dot_list)) {
       dot_list$endpoint
     } else {
-      if (is_gpt51 && (isTRUE(include_thoughts) ||
+      # Auto-select "responses" for reasoning models when thoughts are enabled
+      if (is_reasoning_model && (isTRUE(include_thoughts) ||
         (!is.null(reasoning) && !identical(reasoning, "none")))) {
         "responses"
       } else {
@@ -160,57 +176,66 @@ llm_submit_pairs_batch <- function(
       }
     }
 
-    # Remove endpoint from dot_list so we don't pass it twice
+    # Determine default temperature logic
+    # If reasoning is active, temperature MUST be NULL (handled by build_openai_batch_requests).
+    # If reasoning is NOT active (standard models OR gpt-5.1/5.2 with reasoning="none"),
+    # we default to 0 if user didn't supply it.
+    reasoning_active <- is_reasoning_model &&
+      (!is.null(reasoning) && reasoning != "none")
+
+    if (!"temperature" %in% names(dot_list) && !reasoning_active) {
+      dot_list$temperature <- 0
+    }
+
     dot_list$endpoint <- NULL
 
     out <- do.call(
       run_openai_batch_pipeline,
       c(
         list(
-          pairs             = pairs,
-          model             = model,
-          trait_name        = trait_name,
+          pairs = pairs,
+          model = model,
+          trait_name = trait_name,
           trait_description = trait_description,
-          prompt_template   = prompt_template,
-          include_thoughts  = include_thoughts,
-          include_raw       = include_raw,
-          endpoint          = endpoint
+          prompt_template = prompt_template,
+          include_thoughts = include_thoughts,
+          include_raw = include_raw,
+          endpoint = endpoint
         ),
         dot_list
       )
     )
   } else if (backend == "anthropic") {
     out <- run_anthropic_batch_pipeline(
-      pairs             = pairs,
-      model             = model,
-      trait_name        = trait_name,
+      pairs = pairs,
+      model = model,
+      trait_name = trait_name,
       trait_description = trait_description,
-      prompt_template   = prompt_template,
-      include_thoughts  = include_thoughts,
-      include_raw       = include_raw,
+      prompt_template = prompt_template,
+      include_thoughts = include_thoughts,
+      include_raw = include_raw,
       ...
     )
   } else if (backend == "gemini") {
     out <- run_gemini_batch_pipeline(
-      pairs             = pairs,
-      model             = model,
-      trait_name        = trait_name,
+      pairs = pairs,
+      model = model,
+      trait_name = trait_name,
       trait_description = trait_description,
-      prompt_template   = prompt_template,
-      include_thoughts  = include_thoughts,
-      include_raw       = include_raw,
+      prompt_template = prompt_template,
+      include_thoughts = include_thoughts,
+      include_raw = include_raw,
       ...
     )
   }
 
-  # Normalize and tag result
   if (!is.list(out)) {
     rlang::abort("Backend batch pipeline did not return a list.")
   }
 
   out$backend <- backend
 
-  # Ensure batch paths exist when provided (useful for mocked pipelines)
+  # Ensure batch paths exist when provided
   if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&
     !file.exists(out$batch_input_path)) {
     file.create(out$batch_input_path)
@@ -222,7 +247,6 @@ llm_submit_pairs_batch <- function(
   }
 
   class(out) <- unique(c("pairwiseLLM_batch", class(out)))
-
   out
 }
 
