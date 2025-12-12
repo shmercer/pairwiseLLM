@@ -255,3 +255,88 @@ testthat::test_that("build_openai_batch_requests adds reasoning summary when inc
   testthat::expect_equal(b2$reasoning$effort, "none")
   testthat::expect_false("summary" %in% names(b2$reasoning))
 })
+
+testthat::test_that("build_openai_batch_requests handles empty pairs tibble", {
+  # Covers the n == 0L check
+  empty_pairs <- tibble::tibble(
+    ID1 = character(), text1 = character(),
+    ID2 = character(), text2 = character()
+  )
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  batch <- build_openai_batch_requests(
+    pairs = empty_pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl
+  )
+
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 0L)
+  testthat::expect_named(batch, c("custom_id", "method", "url", "body"))
+})
+
+testthat::test_that("build_openai_batch_requests warns if include_thoughts=TRUE for non-reasoning model", {
+  # Covers the warning block when is_reasoning_model is FALSE but include_thoughts is TRUE
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  testthat::expect_warning(
+    build_openai_batch_requests(
+      pairs = pairs,
+      model = "gpt-4o", # Not a reasoning model
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl,
+      endpoint = "responses",
+      include_thoughts = TRUE
+    ),
+    "include_thoughts requested for non-reasoning model"
+  )
+})
+
+testthat::test_that("build_openai_batch_requests passes top_p and logprobs to body", {
+  # Covers the lines adding optional parameters to the body list for both endpoints
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # 1. Chat Completions
+  batch_chat <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "chat.completions",
+    temperature = 0.5,
+    top_p = 0.9,
+    logprobs = TRUE
+  )
+  body_chat <- batch_chat$body[[1]]
+  testthat::expect_equal(body_chat$temperature, 0.5)
+  testthat::expect_equal(body_chat$top_p, 0.9)
+  testthat::expect_equal(body_chat$logprobs, TRUE)
+
+  # 2. Responses
+  batch_resp <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    temperature = 0.7,
+    top_p = 0.8,
+    logprobs = FALSE
+  )
+  body_resp <- batch_resp$body[[1]]
+  testthat::expect_equal(body_resp$temperature, 0.7)
+  testthat::expect_equal(body_resp$top_p, 0.8)
+  testthat::expect_equal(body_resp$logprobs, FALSE)
+})
