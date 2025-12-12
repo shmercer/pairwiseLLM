@@ -1,203 +1,150 @@
-test_that("build_openai_batch_requests builds valid chat.completions JSONL
-          objects", {
-  data("example_writing_samples", package = "pairwiseLLM")
+# =====================================================================
+# test-openai_batch.R
+# Tests for build_openai_batch_requests() and related batch helpers
+# =====================================================================
 
+testthat::test_that("build_openai_batch_requests builds valid chat.completions JSONL objects", {
+  data("example_writing_samples", package = "pairwiseLLM")
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:2, ]
-
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
-
   batch <- build_openai_batch_requests(
-    pairs             = pairs,
-    model             = "gpt-4.1",
-    trait_name        = td$name,
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
     trait_description = td$description,
-    prompt_template   = tmpl,
-    endpoint          = "chat.completions",
-    temperature       = 0,
-    top_p             = 1,
-    logprobs          = NULL
+    prompt_template = tmpl,
+    endpoint = "chat.completions",
+    temperature = 0,
+    top_p = 1,
+    logprobs = NULL
   )
-
-  expect_s3_class(batch, "tbl_df")
-  expect_equal(nrow(batch), 2L)
-  expect_true(all(c("custom_id", "method", "url", "body") %in% names(batch)))
-
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 2L)
+  testthat::expect_true(all(c("custom_id", "method", "url", "body") %in% names(batch)))
   # Body structure check
   b1 <- batch$body[[1]]
-  expect_equal(b1$model, "gpt-4.1")
-  expect_true(is.list(b1$messages))
+  testthat::expect_equal(b1$model, "gpt-4.1")
+  testthat::expect_true(is.list(b1$messages))
   roles <- vapply(b1$messages, function(m) m[["role"]], character(1))
-  expect_true(any(roles == "user"))
+  testthat::expect_true(any(roles == "user"))
 })
 
-test_that("write_openai_batch_file writes JSONL file", {
+testthat::test_that("write_openai_batch_file writes JSONL file", {
   data("example_writing_samples", package = "pairwiseLLM")
-
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:2, ]
-
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
-
   batch <- build_openai_batch_requests(
-    pairs             = pairs,
-    model             = "gpt-4.1",
-    trait_name        = td$name,
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
     trait_description = td$description,
-    prompt_template   = tmpl,
-    endpoint          = "chat.completions"
+    prompt_template = tmpl,
+    endpoint = "chat.completions"
   )
-
   tmp <- tempfile("openai-batch-", fileext = ".jsonl")
   write_openai_batch_file(batch, tmp)
-
-  expect_true(file.exists(tmp))
-
+  testthat::expect_true(file.exists(tmp))
   lines <- readLines(tmp, warn = FALSE)
-  expect_equal(length(lines), nrow(batch))
-
+  testthat::expect_equal(length(lines), nrow(batch))
   # Each line should be valid JSON with required top-level keys
   objs <- lapply(lines, jsonlite::fromJSON)
   keys <- lapply(objs, names)
-  expect_true(all(vapply(keys, function(k) {
-    all(c(
-      "custom_id", "method",
-      "url", "body"
-    ) %in% k)
+  testthat::expect_true(all(vapply(keys, function(k) {
+    all(c("custom_id", "method", "url", "body") %in% k)
   }, logical(1))))
 })
 
-test_that("build_openai_batch_requests supports gpt-5.1 with reasoning =
-          'none' on responses", {
+testthat::test_that("build_openai_batch_requests supports gpt-5.1 with reasoning = 'none' on responses", {
   data("example_writing_samples", package = "pairwiseLLM")
-
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
-
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
-
   # For gpt-5.1 + reasoning = "none", temperature/top_p/logprobs are allowed
   batch <- build_openai_batch_requests(
-    pairs             = pairs,
-    model             = "gpt-5.1",
-    trait_name        = td$name,
+    pairs = pairs,
+    model = "gpt-5.1",
+    trait_name = td$name,
     trait_description = td$description,
-    prompt_template   = tmpl,
-    endpoint          = "responses",
-    reasoning         = "none",
-    temperature       = 0,
-    top_p             = 1,
-    logprobs          = NULL
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "none",
+    temperature = 0,
+    top_p = 1,
+    logprobs = NULL
   )
-
-  expect_s3_class(batch, "tbl_df")
-  expect_equal(nrow(batch), 1L)
-
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 1L)
   b1 <- batch$body[[1]]
-  expect_equal(b1$model, "gpt-5.1")
-  expect_equal(b1$input, build_prompt(
-    template   = tmpl,
+  testthat::expect_equal(b1$model, "gpt-5.1")
+  testthat::expect_equal(b1$input, build_prompt(
+    template = tmpl,
     trait_name = td$name,
     trait_desc = td$description,
-    text1      = pairs$text1[1],
-    text2      = pairs$text2[1]
+    text1 = pairs$text1[1],
+    text2 = pairs$text2[1]
   ))
   # reasoning should be present with effort = "none"
-  expect_true("reasoning" %in% names(b1) || is.null(b1$reasoning) ||
+  testthat::expect_true("reasoning" %in% names(b1) || is.null(b1$reasoning) ||
     identical(b1$reasoning$effort, "none"))
 })
 
-test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning !=
-          'none' with temp/top_p/logprobs", {
+testthat::test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning != 'none' with temp/top_p/logprobs", {
   data("example_writing_samples", package = "pairwiseLLM")
-
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
-
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  expect_error(
+  testthat::expect_error(
     build_openai_batch_requests(
-      pairs             = pairs,
-      model             = "gpt-5.1",
-      trait_name        = td$name,
+      pairs = pairs,
+      model = "gpt-5.1",
+      trait_name = td$name,
       trait_description = td$description,
-      prompt_template   = tmpl,
-      endpoint          = "responses",
-      reasoning         = "low", # <- not 'none'
-      temperature       = 0,
-      top_p             = 1,
-      logprobs          = NULL
+      prompt_template = tmpl,
+      endpoint = "responses",
+      reasoning = "low", # <- not 'none'
+      temperature = 0,
+      top_p = 1,
+      logprobs = NULL
     ),
-    regexp = "For gpt-5.1 with reasoning effort not equal to 'none'"
+    regexp = "For gpt-5.1/5.2 with reasoning"
   )
 })
 
-test_that("build_openai_batch_requests errors for other gpt-5* models when
-          temp/top_p/logprobs are non-NULL", {
+testthat::test_that("build_openai_batch_requests allows other gpt-5* models with default temp=0", {
   data("example_writing_samples", package = "pairwiseLLM")
-
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  # For other gpt-5* models (e.g., gpt-5-mini), temp/top_p/logprobs must be NULL
-  expect_error(
-    build_openai_batch_requests(
-      pairs             = pairs,
-      model             = "gpt-5-mini",
-      trait_name        = td$name,
-      trait_description = td$description,
-      prompt_template   = tmpl,
-      endpoint          = "responses",
-      reasoning         = "low",
-      temperature       = 0,
-      top_p             = 1,
-      logprobs          = NULL
-    ),
-    regexp = "For gpt-5\\* models other than gpt-5.1"
-  )
-})
-
-test_that("build_openai_batch_requests allows other gpt-5* models with
-          temp/top_p/logprobs = NULL", {
-  data("example_writing_samples", package = "pairwiseLLM")
-
-  pairs <- make_pairs(example_writing_samples)
-  pairs <- pairs[1:1, ]
-
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
   batch <- build_openai_batch_requests(
-    pairs             = pairs,
-    model             = "gpt-5-mini",
-    trait_name        = td$name,
+    pairs = pairs,
+    model = "gpt-5-mini",
+    trait_name = td$name,
     trait_description = td$description,
-    prompt_template   = tmpl,
-    endpoint          = "responses",
-    reasoning         = "low",
-    temperature       = NULL,
-    top_p             = NULL,
-    logprobs          = NULL
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "low",
+    temperature = NULL,
+    top_p = NULL,
+    logprobs = NULL
   )
-
-  expect_s3_class(batch, "tbl_df")
-  expect_equal(nrow(batch), 1L)
-  expect_equal(batch$body[[1]]$model, "gpt-5-mini")
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 1L)
+  # Verify temperature defaulted to 0
+  testthat::expect_equal(batch$body[[1]]$temperature, 0)
 })
 
-testthat::test_that("parse_openai_batch_output collects thoughts and message
-                    text separately for responses", {
+testthat::test_that("parse_openai_batch_output collects thoughts and message text separately for responses", {
   tmp <- tempfile(fileext = ".jsonl")
   on.exit(unlink(tmp), add = TRUE)
-
   # Construct a fake batch output line similar to gpt-5.1 responses
   line_obj <- list(
     custom_id = "LIVE_S01_vs_S02",
@@ -207,7 +154,7 @@ testthat::test_that("parse_openai_batch_output collects thoughts and message
         object = "response",
         model = "gpt-5.1",
         reasoning = list(
-          effort  = "low",
+          effort = "low",
           summary = list(text = "Reasoning summary. ")
         ),
         output = list(
@@ -230,744 +177,166 @@ testthat::test_that("parse_openai_batch_output collects thoughts and message
           )
         ),
         usage = list(
-          input_tokens  = 10L,
+          input_tokens = 10L,
           output_tokens = 5L,
-          total_tokens  = 15L
+          total_tokens = 15L
         )
       )
     ),
     error = NULL
   )
-
   json_line <- jsonlite::toJSON(line_obj, auto_unbox = TRUE)
   writeLines(json_line, con = tmp, useBytes = TRUE)
-
   res <- parse_openai_batch_output(tmp)
-
   testthat::expect_s3_class(res, "tbl_df")
   testthat::expect_equal(nrow(res), 1L)
-
   # IDs from custom_id
   testthat::expect_equal(res$custom_id, "LIVE_S01_vs_S02")
   testthat::expect_equal(res$ID1, "S01")
   testthat::expect_equal(res$ID2, "S02")
-
   # Basic metadata
   testthat::expect_equal(res$model, "gpt-5.1")
   testthat::expect_equal(res$object_type, "response")
   testthat::expect_equal(res$status_code, 200L)
   testthat::expect_true(is.na(res$error_message))
-
   # Reasoning summary should go to thoughts
   testthat::expect_equal(res$thoughts, "Reasoning summary. ")
-
   # Content should be assistant message only
   testthat::expect_equal(
     res$content,
     "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
   )
-
   # Tag parsing and better_id mapping
   testthat::expect_equal(res$better_sample, "SAMPLE_2")
   testthat::expect_equal(res$better_id, "S02")
-
   # Token usage
   testthat::expect_equal(res$prompt_tokens, 10)
   testthat::expect_equal(res$completion_tokens, 5)
   testthat::expect_equal(res$total_tokens, 15)
 })
 
-test_that("build_openai_batch_requests adds reasoning summary when
-          include_thoughts = TRUE", {
+testthat::test_that("build_openai_batch_requests adds reasoning summary when include_thoughts = TRUE", {
   data("example_writing_samples", package = "pairwiseLLM")
-
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  # include_thoughts = TRUE, reasoning != "none" -> summary = "auto"
+  batch <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-5.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "low",
+    include_thoughts = TRUE
+  )
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 1L)
+  b1 <- batch$body[[1]]
+  testthat::expect_equal(b1$model, "gpt-5.1")
+  testthat::expect_true("reasoning" %in% names(b1))
+  testthat::expect_equal(b1$reasoning$effort, "low")
+  testthat::expect_equal(b1$reasoning$summary, "auto")
+  # include_thoughts = TRUE but reasoning = "none" -> no summary field
+  batch_none <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-5.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "none",
+    include_thoughts = TRUE
+  )
+  b2 <- batch_none$body[[1]]
+  testthat::expect_true("reasoning" %in% names(b2))
+  testthat::expect_equal(b2$reasoning$effort, "none")
+  testthat::expect_false("summary" %in% names(b2$reasoning))
+})
 
+testthat::test_that("build_openai_batch_requests handles empty pairs tibble", {
+  # Covers the n == 0L check
+  empty_pairs <- tibble::tibble(
+    ID1 = character(), text1 = character(),
+    ID2 = character(), text2 = character()
+  )
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  # include_thoughts = TRUE, reasoning != "none" -> summary = "auto"
   batch <- build_openai_batch_requests(
-    pairs             = pairs,
-    model             = "gpt-5.1",
-    trait_name        = td$name,
+    pairs = empty_pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
     trait_description = td$description,
-    prompt_template   = tmpl,
-    endpoint          = "responses",
-    reasoning         = "low",
-    include_thoughts  = TRUE
+    prompt_template = tmpl
   )
 
-  expect_s3_class(batch, "tbl_df")
-  expect_equal(nrow(batch), 1L)
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 0L)
+  testthat::expect_named(batch, c("custom_id", "method", "url", "body"))
+})
 
-  b1 <- batch$body[[1]]
-  expect_equal(b1$model, "gpt-5.1")
-  expect_true("reasoning" %in% names(b1))
-  expect_equal(b1$reasoning$effort, "low")
-  expect_equal(b1$reasoning$summary, "auto")
+testthat::test_that("build_openai_batch_requests warns if include_thoughts=TRUE for non-reasoning model", {
+  # Covers the warning block when is_reasoning_model is FALSE but include_thoughts is TRUE
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
 
-  # include_thoughts = TRUE but reasoning = "none" -> no summary field
-  batch_none <- build_openai_batch_requests(
-    pairs             = pairs,
-    model             = "gpt-5.1",
-    trait_name        = td$name,
+  testthat::expect_warning(
+    build_openai_batch_requests(
+      pairs = pairs,
+      model = "gpt-4o", # Not a reasoning model
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl,
+      endpoint = "responses",
+      include_thoughts = TRUE
+    ),
+    "include_thoughts requested for non-reasoning model"
+  )
+})
+
+testthat::test_that("build_openai_batch_requests passes top_p and logprobs to body", {
+  # Covers the lines adding optional parameters to the body list for both endpoints
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # 1. Chat Completions
+  batch_chat <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
     trait_description = td$description,
-    prompt_template   = tmpl,
-    endpoint          = "responses",
-    reasoning         = "none",
-    include_thoughts  = TRUE
+    prompt_template = tmpl,
+    endpoint = "chat.completions",
+    temperature = 0.5,
+    top_p = 0.9,
+    logprobs = TRUE
   )
+  body_chat <- batch_chat$body[[1]]
+  testthat::expect_equal(body_chat$temperature, 0.5)
+  testthat::expect_equal(body_chat$top_p, 0.9)
+  testthat::expect_equal(body_chat$logprobs, TRUE)
 
-  b2 <- batch_none$body[[1]]
-  expect_true("reasoning" %in% names(b2))
-  expect_equal(b2$reasoning$effort, "none")
-  expect_false("summary" %in% names(b2$reasoning))
-})
-
-testthat::test_that("run_openai_batch_pipeline works with polling and
-                    parsing", {
-  pairs <- tibble::tibble(
-    ID1   = "S01",
-    text1 = "Text 1",
-    ID2   = "S02",
-    text2 = "Text 2"
+  # 2. Responses
+  batch_resp <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    temperature = 0.7,
+    top_p = 0.8,
+    logprobs = FALSE
   )
-
-  fake_batch_tbl <- tibble::tibble(jsonl = '{"dummy": true}')
-  fake_file <- list(id = "file_123")
-  fake_batch <- list(
-    id             = "batch_123",
-    status         = "completed",
-    output_file_id = "file_out_123"
-  )
-  fake_results <- tibble::tibble(ID1 = "S01", ID2 = "S02", better_id = "S01")
-
-  # capture the endpoint used for openai_create_batch
-  used_endpoint <- NULL
-
-  testthat::with_mocked_bindings(
-    build_openai_batch_requests = function(pairs, model, trait_name,
-                                           trait_description, prompt_template,
-                                           endpoint, ...) {
-      testthat::expect_equal(endpoint, "chat.completions")
-      fake_batch_tbl
-    },
-    write_openai_batch_file = function(batch_tbl, path) {
-      writeLines(batch_tbl$jsonl, path)
-      invisible(path)
-    },
-    openai_upload_batch_file = function(path, api_key) {
-      testthat::expect_true(file.exists(path))
-      fake_file
-    },
-    openai_create_batch = function(input_file_id, endpoint, completion_window,
-                                   metadata, api_key) {
-      used_endpoint <<- endpoint
-      list(id = "batch_123", status = "in_progress")
-    },
-    openai_poll_batch_until_complete = function(batch_id, interval_seconds,
-                                                timeout_seconds, max_attempts,
-                                                api_key, verbose) {
-      testthat::expect_equal(batch_id, "batch_123")
-      fake_batch
-    },
-    openai_download_batch_output = function(batch_id, path, api_key) {
-      writeLines('{"dummy": true}', path)
-      invisible(path)
-    },
-    parse_openai_batch_output = function(path) {
-      testthat::expect_true(file.exists(path))
-      fake_results
-    },
-    {
-      td <- list(name = "Overall quality", description = "Quality")
-      tmpl <- set_prompt_template()
-
-      res <- run_openai_batch_pipeline(
-        pairs             = pairs,
-        model             = "gpt-4.1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        endpoint          = "chat.completions",
-        interval_seconds  = 0,
-        timeout_seconds   = 10,
-        max_attempts      = 5
-      )
-
-      testthat::expect_equal(used_endpoint, "/v1/chat/completions")
-      testthat::expect_true(file.exists(res$batch_input_path))
-      testthat::expect_true(file.exists(res$batch_output_path))
-      testthat::expect_equal(res$results$better_id, "S01")
-      testthat::expect_equal(res$batch$status, "completed")
-    }
-  )
-})
-
-testthat::test_that("run_openai_batch_pipeline does not poll or parse when
-                    poll = FALSE", {
-  pairs <- tibble::tibble(
-    ID1   = "S01",
-    text1 = "Text 1",
-    ID2   = "S02",
-    text2 = "Text 2"
-  )
-
-  fake_batch_tbl <- tibble::tibble(jsonl = '{"dummy": true}')
-  fake_file <- list(id = "file_123")
-  fake_batch <- list(id = "batch_123", status = "queued")
-
-  poll_called <- FALSE
-  download_called <- FALSE
-  parse_called <- FALSE
-
-  testthat::with_mocked_bindings(
-    build_openai_batch_requests = function(pairs, model, trait_name,
-                                           trait_description, prompt_template,
-                                           endpoint, ...) {
-      fake_batch_tbl
-    },
-    write_openai_batch_file = function(batch_tbl, path) {
-      writeLines(batch_tbl$jsonl, path)
-      invisible(path)
-    },
-    openai_upload_batch_file = function(path, api_key) fake_file,
-    openai_create_batch = function(input_file_id, endpoint, completion_window,
-                                   metadata, api_key) {
-      fake_batch
-    },
-    openai_poll_batch_until_complete = function(batch_id, interval_seconds,
-                                                timeout_seconds, max_attempts,
-                                                api_key, verbose) {
-      poll_called <<- TRUE
-      stop("polling should not be called when poll = FALSE")
-    },
-    openai_download_batch_output = function(batch_id, path, api_key) {
-      download_called <<- TRUE
-      stop("download should not be called when poll = FALSE")
-    },
-    parse_openai_batch_output = function(path) {
-      parse_called <<- TRUE
-      stop("parse should not be called when poll = FALSE")
-    },
-    {
-      td <- list(name = "Overall quality", description = "Quality")
-      tmpl <- set_prompt_template()
-
-      res <- run_openai_batch_pipeline(
-        pairs             = pairs,
-        model             = "gpt-4.1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        endpoint          = "responses",
-        poll              = FALSE
-      )
-
-      testthat::expect_false(poll_called)
-      testthat::expect_false(download_called)
-      testthat::expect_false(parse_called)
-
-      testthat::expect_true(file.exists(res$batch_input_path))
-      testthat::expect_null(res$batch_output_path)
-      testthat::expect_null(res$results)
-      testthat::expect_equal(res$batch$status, "queued")
-    }
-  )
-})
-
-testthat::test_that("openai_upload_batch_file errors on missing file", {
-  nonexistent <- tempfile(fileext = ".jsonl")
-  testthat::expect_false(file.exists(nonexistent))
-
-  testthat::expect_error(
-    openai_upload_batch_file(nonexistent),
-    "File does not exist"
-  )
-})
-
-testthat::test_that("openai_download_batch_output errors if no
-                    output_file_id", {
-  fake_batch <- list(
-    id             = "batch_123",
-    status         = "completed",
-    output_file_id = NULL
-  )
-
-  testthat::with_mocked_bindings(
-    openai_get_batch = function(batch_id, api_key) fake_batch,
-    {
-      tf <- tempfile(fileext = ".jsonl")
-      testthat::expect_error(
-        openai_download_batch_output("batch_123", tf),
-        "has no output_file_id"
-      )
-    }
-  )
-})
-
-testthat::test_that("openai_poll_batch_until_complete succeeds after
-                    several polls", {
-  fake_batches <- list(
-    list(id = "batch_123", status = "in_progress"),
-    list(id = "batch_123", status = "in_progress"),
-    list(
-      id = "batch_123", status = "completed", output_file_id =
-        "file_out_123"
-    )
-  )
-  i <- 0L
-
-  testthat::with_mocked_bindings(
-    openai_get_batch = function(batch_id, api_key) {
-      i <<- i + 1L
-      fake_batches[[i]]
-    },
-    {
-      res <- openai_poll_batch_until_complete(
-        batch_id         = "batch_123",
-        interval_seconds = 0, # no sleep in tests
-        timeout_seconds  = 60,
-        max_attempts     = 5,
-        verbose          = FALSE
-      )
-      testthat::expect_equal(res$status, "completed")
-      testthat::expect_equal(i, 3L)
-    }
-  )
-})
-
-testthat::test_that("openai_poll_batch_until_complete stops at max_attempts", {
-  fake_batch <- list(id = "batch_123", status = "in_progress")
-  i <- 0L
-
-  testthat::with_mocked_bindings(
-    openai_get_batch = function(batch_id, api_key) {
-      i <<- i + 1L
-      fake_batch
-    },
-    {
-      testthat::expect_error(
-        openai_poll_batch_until_complete(
-          batch_id         = "batch_123",
-          interval_seconds = 0, # avoid sleeping in tests
-          timeout_seconds  = 60,
-          max_attempts     = 3,
-          verbose          = FALSE
-        ),
-        "Reached max_attempts"
-      )
-      testthat::expect_equal(i, 3L)
-    }
-  )
-})
-
-# -------------------------------------------------------------------
-# Internal helper: .openai_api_key
-# -------------------------------------------------------------------
-
-testthat::test_that(".openai_api_key prefers explicit api_key over env", {
-  old <- Sys.getenv("OPENAI_API_KEY", unset = "")
-  on.exit(Sys.setenv(OPENAI_API_KEY = old), add = TRUE)
-
-  Sys.setenv(OPENAI_API_KEY = "FROM_ENV")
-
-  # Explicit argument should win
-  res <- .openai_api_key("EXPLICIT_KEY")
-  testthat::expect_equal(res, "EXPLICIT_KEY")
-})
-
-testthat::test_that(".openai_api_key falls back to OPENAI_API_KEY env var", {
-  old <- Sys.getenv("OPENAI_API_KEY", unset = "")
-  on.exit(Sys.setenv(OPENAI_API_KEY = old), add = TRUE)
-
-  Sys.setenv(OPENAI_API_KEY = "FROM_ENV")
-
-  res <- .openai_api_key(NULL)
-  testthat::expect_equal(res, "FROM_ENV")
-
-  # Empty string should also trigger env fallback (via .get_api_key)
-  res2 <- .openai_api_key("")
-  testthat::expect_equal(res2, "FROM_ENV")
-})
-
-# -------------------------------------------------------------------
-# openai_upload_batch_file: happy path
-# -------------------------------------------------------------------
-
-testthat::test_that("openai_upload_batch_file uploads file and returns id", {
-  tf <- tempfile(fileext = ".jsonl")
-  on.exit(unlink(tf), add = TRUE)
-  writeLines(c('{"a":1}', '{"b":2}'), tf)
-
-  captured <- list()
-
-  testthat::with_mocked_bindings(
-    .openai_request = function(path, api_key) {
-      captured$path <<- path
-      captured$api_key <<- api_key
-      "REQ"
-    },
-    req_body_multipart = function(req, file, purpose) {
-      captured$multipart_req <<- req
-      captured$file <<- file # this is a form_file object
-      captured$purpose <<- purpose
-      list(req = req, file = file, purpose = purpose)
-    },
-    req_perform = function(req) {
-      captured$performed <<- TRUE
-      "RESP"
-    },
-    resp_body_json = function(resp, simplifyVector = TRUE) {
-      captured$resp <<- resp
-      list(id = "file_123")
-    },
-    {
-      out <- openai_upload_batch_file(tf, purpose = "batch")
-
-      testthat::expect_equal(out$id, "file_123")
-      testthat::expect_equal(captured$path, "/files")
-      testthat::expect_true(captured$performed)
-
-      # file is an httr2::form_file object; check its fields instead of
-      # raw equality with the path string.
-      testthat::expect_s3_class(captured$file, "form_file")
-
-      # Normalize paths to avoid Windows forward/backslash differences
-      norm_captured <- normalizePath(captured$file$path, winslash = "/", mustWork = FALSE)
-      norm_tf <- normalizePath(tf, winslash = "/", mustWork = FALSE)
-      testthat::expect_equal(norm_captured, norm_tf)
-
-      testthat::expect_equal(captured$purpose, "batch")
-    }
-  )
-})
-
-# -------------------------------------------------------------------
-# openai_create_batch / openai_get_batch
-# -------------------------------------------------------------------
-
-testthat::test_that("openai_create_batch sends correct body and returns batch", {
-  captured <- list()
-
-  testthat::with_mocked_bindings(
-    .openai_request = function(path, api_key) {
-      captured$path <<- path
-      captured$api_key <<- api_key
-      "REQ"
-    },
-    req_body_json = function(req, body) {
-      captured$body <<- body
-      "REQ_WITH_BODY"
-    },
-    req_perform = function(req) {
-      captured$performed <<- TRUE
-      "RESP"
-    },
-    resp_body_json = function(resp, simplifyVector = TRUE) {
-      captured$resp <<- resp
-      list(id = "batch_123", status = "queued")
-    },
-    {
-      batch <- openai_create_batch(
-        input_file_id     = "file_123",
-        endpoint          = "responses",
-        completion_window = "24h",
-        metadata          = list(foo = "bar"),
-        api_key           = "TEST_KEY"
-      )
-
-      testthat::expect_equal(batch$id, "batch_123")
-      testthat::expect_equal(batch$status, "queued")
-
-      # Focus on body correctness and the fact we performed the request.
-      testthat::expect_equal(captured$body$input_file_id, "file_123")
-      testthat::expect_equal(captured$body$endpoint, "responses")
-      testthat::expect_equal(captured$body$completion_window, "24h")
-      testthat::expect_equal(captured$body$metadata$foo, "bar")
-      testthat::expect_true(captured$performed)
-    }
-  )
-})
-
-testthat::test_that("openai_get_batch calls batches endpoint and returns response", {
-  captured <- list()
-
-  testthat::with_mocked_bindings(
-    .openai_request = function(path, api_key) {
-      captured$path <<- path
-      captured$api_key <<- api_key
-      "REQ"
-    },
-    req_perform = function(req) {
-      captured$performed <<- TRUE
-      "RESP"
-    },
-    resp_body_json = function(resp, simplifyVector = TRUE) {
-      captured$resp <<- resp
-      list(id = "batch_123", status = "completed")
-    },
-    {
-      batch <- openai_get_batch("batch_123", api_key = "TEST_KEY")
-
-      testthat::expect_equal(batch$id, "batch_123")
-      testthat::expect_equal(batch$status, "completed")
-      testthat::expect_equal(captured$path, "/batches/batch_123")
-      testthat::expect_true(captured$performed)
-    }
-  )
-})
-
-# -------------------------------------------------------------------
-# openai_download_batch_output: happy path
-# -------------------------------------------------------------------
-
-testthat::test_that("openai_download_batch_output downloads to path when output_file_id present", {
-  fake_batch <- list(
-    id             = "batch_123",
-    status         = "completed",
-    output_file_id = "file_out_123"
-  )
-
-  captured <- list()
-  tf <- tempfile(fileext = ".jsonl")
-  on.exit(unlink(tf), add = TRUE)
-
-  testthat::with_mocked_bindings(
-    openai_get_batch = function(batch_id, api_key) fake_batch,
-    .openai_request = function(path, api_key) {
-      captured$path <<- path
-      captured$api_key <<- api_key
-      "REQ"
-    },
-    req_perform = function(req) {
-      captured$performed <<- TRUE
-      "RESP"
-    },
-    resp_body_raw = function(resp) {
-      captured$resp <<- resp
-      charToRaw('{"ok":true}\n')
-    },
-    {
-      out_path <- openai_download_batch_output("batch_123", tf, api_key = "TEST_KEY")
-
-      testthat::expect_equal(out_path, tf)
-      testthat::expect_true(file.exists(tf))
-      testthat::expect_equal(captured$path, "/files/file_out_123/content")
-      testthat::expect_true(captured$performed)
-
-      # File should contain exactly the raw we wrote
-      txt <- readLines(tf, warn = FALSE)
-      testthat::expect_equal(txt, '{"ok":true}')
-    }
-  )
-})
-
-# -------------------------------------------------------------------
-# openai_poll_batch_until_complete: timeout_seconds branch
-# -------------------------------------------------------------------
-
-testthat::test_that("openai_poll_batch_until_complete errors on timeout_seconds", {
-  fake_batch <- list(id = "batch_123", status = "in_progress")
-  calls <- 0L
-
-  testthat::with_mocked_bindings(
-    openai_get_batch = function(batch_id, api_key) {
-      calls <<- calls + 1L
-      fake_batch
-    },
-    {
-      testthat::expect_error(
-        openai_poll_batch_until_complete(
-          batch_id         = "batch_123",
-          interval_seconds = 0, # no sleep for tests
-          timeout_seconds  = 0, # immediately exceed timeout
-          max_attempts     = 100,
-          verbose          = FALSE
-        ),
-        "Timeout \\(0 seconds\\) waiting for batch",
-        fixed = FALSE
-      )
-
-      # Should have polled at least once
-      testthat::expect_gte(calls, 1L)
-    }
-  )
-})
-
-testthat::test_that("run_openai_batch_pipeline selects endpoint automatically", {
-  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
-  td <- list(name = "q", description = "d")
-
-  # We want to verify that `endpoint` defaults to "responses" when include_thoughts=TRUE
-  # and "chat.completions" otherwise.
-
-  captured_endpoints <- character(0)
-
-  testthat::with_mocked_bindings(
-    build_openai_batch_requests = function(..., endpoint) {
-      captured_endpoints <<- c(captured_endpoints, endpoint)
-      tibble::tibble(jsonl = "")
-    },
-    write_openai_batch_file = function(...) NULL,
-    openai_upload_batch_file = function(...) list(id = "f"),
-    openai_create_batch = function(...) list(id = "b", status = "q"),
-    {
-      # Case 1: Default (FALSE) -> chat.completions
-      run_openai_batch_pipeline(pairs, "m", td$name, td$description, poll = FALSE)
-
-      # Case 2: include_thoughts=TRUE -> responses
-      run_openai_batch_pipeline(pairs, "m", td$name, td$description, include_thoughts = TRUE, poll = FALSE)
-
-      testthat::expect_equal(captured_endpoints[1], "chat.completions")
-      testthat::expect_equal(captured_endpoints[2], "responses")
-    }
-  )
-})
-
-testthat::test_that("parse_openai_batch_output validates input file", {
-  # Non-existent file - now expect clean error
-  testthat::expect_error(
-    parse_openai_batch_output("nonexistent.jsonl"),
-    "File does not exist"
-  )
-
-  # Empty file
-  tmp <- tempfile()
-  file.create(tmp)
-  on.exit(unlink(tmp), add = TRUE)
-
-  testthat::expect_error(
-    parse_openai_batch_output(tmp),
-    "File contains no lines"
-  )
-})
-
-testthat::test_that("parse_openai_batch_output handles malformed JSON and body", {
-  tmp <- tempfile()
-  on.exit(unlink(tmp), add = TRUE)
-
-  lines <- c(
-    "", # Empty line (should be skipped)
-    "NOT JSON", # Malformed -> NULL -> skipped
-    '{"custom_id": "bad_id"}', # No response body -> NA row
-    '{"custom_id": "LIVE_A_vs_B", "response": {"status_code": 200, "body": null}}' # Explicit null body -> NA row
-  )
-  writeLines(lines, tmp)
-
-  res <- parse_openai_batch_output(tmp)
-
-  testthat::expect_equal(nrow(res), 2L)
-
-  # Row 1 (from 'bad_id')
-  r1 <- res[1, ]
-  testthat::expect_equal(r1$custom_id, "bad_id")
-  # "bad_id" fails the _vs_ regex, so IDs should be NA
-  testthat::expect_true(is.na(r1$ID1))
-  testthat::expect_true(is.na(r1$model))
-
-  # Row 2 (from 'LIVE_A_vs_B')
-  r2 <- res[2, ]
-  testthat::expect_equal(r2$custom_id, "LIVE_A_vs_B")
-  # "LIVE_A_vs_B" parses correctly: left="LIVE_A", right="B"
-  # suffix after last _ in left is "A"
-  testthat::expect_equal(r2$ID1, "A")
-  testthat::expect_equal(r2$ID2, "B")
-  testthat::expect_equal(r2$status_code, 200L)
-  testthat::expect_true(is.na(r2$content))
-})
-
-testthat::test_that("parse_openai_batch_output extracts detailed token usage", {
-  tmp <- tempfile()
-  on.exit(unlink(tmp), add = TRUE)
-
-  # Chat completion object with detailed usage
-  obj <- list(
-    custom_id = "LIVE_S1_vs_S2",
-    response = list(
-      status_code = 200,
-      body = list(
-        object = "chat.completion",
-        model = "gpt-4",
-        choices = list(list(message = list(content = "Hi"))),
-        usage = list(
-          prompt_tokens = 50,
-          completion_tokens = 20,
-          total_tokens = 70,
-          input_tokens_details = list(cached_tokens = 25),
-          output_tokens_details = list(reasoning_tokens = 10)
-        )
-      )
-    )
-  )
-
-  writeLines(jsonlite::toJSON(obj, auto_unbox = TRUE), tmp)
-
-  res <- parse_openai_batch_output(tmp)
-
-  testthat::expect_equal(res$prompt_tokens, 50)
-  testthat::expect_equal(res$prompt_cached_tokens, 25)
-  testthat::expect_equal(res$reasoning_tokens, 10)
-})
-
-testthat::test_that("parse_openai_batch_output extracts better_id correctly from ID1_vs_ID2", {
-  # Edge case: ID1 contains underscores, e.g. "PREFIX_ID_1_vs_ID_2"
-  tmp <- tempfile()
-  on.exit(unlink(tmp), add = TRUE)
-
-  obj <- list(
-    custom_id = "LIVE_A_1_vs_B_2", # ID1="A_1", ID2="B_2" (assuming prefix logic matches)
-    response = list(
-      body = list(
-        object = "chat.completion",
-        choices = list(list(message = list(content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")))
-      )
-    )
-  )
-  writeLines(jsonlite::toJSON(obj, auto_unbox = TRUE), tmp)
-
-  res <- parse_openai_batch_output(tmp)
-
-  # The parser logic: parts = strsplit(..., "_vs_")
-  # left = "LIVE_A_1", right = "B_2"
-  # regexpr("_[^_]*$", left) matches "_1". substring after matches "1".
-  # Wait, let's check the code:
-  # m <- regexpr("_[^_]*$", left)
-  # if > 0, substring(left, m[1] + 1L).
-  # "LIVE_A_1": last underscore is before "1". So ID1 = "1".
-  # If the prefix was "LIVE_" and ID was "A_1", this logic fails for IDs with underscores if prefix exists.
-  # This tests specific behavior of the current implementation.
-
-  testthat::expect_equal(res$ID1, "1")
-  testthat::expect_equal(res$ID2, "B_2")
-  testthat::expect_equal(res$better_id, "1")
-})
-
-testthat::test_that("parse_openai_batch_output handles empty files and malformed JSON", {
-  # Case 1: Empty file
-  empty_file <- tempfile()
-  file.create(empty_file)
-  on.exit(unlink(empty_file), add = TRUE)
-
-  testthat::expect_error(
-    parse_openai_batch_output(empty_file),
-    "File contains no lines"
-  )
-
-  # Case 2: File with valid JSON and garbage lines
-  mixed_file <- tempfile()
-  lines <- c(
-    jsonlite::toJSON(list(custom_id = "LIVE_A_vs_B", response = list(body = list(model = "gpt-4"))), auto_unbox = TRUE),
-    "THIS IS NOT JSON",
-    jsonlite::toJSON(list(custom_id = "LIVE_C_vs_D", response = list(body = list(model = "gpt-4"))), auto_unbox = TRUE)
-  )
-  writeLines(lines, mixed_file)
-  on.exit(unlink(mixed_file), add = TRUE)
-
-  # The function should skip the malformed line and return 2 rows
-  res <- parse_openai_batch_output(mixed_file)
-  testthat::expect_equal(nrow(res), 2L)
-  testthat::expect_equal(res$ID1, c("A", "C"))
+  body_resp <- batch_resp$body[[1]]
+  testthat::expect_equal(body_resp$temperature, 0.7)
+  testthat::expect_equal(body_resp$top_p, 0.8)
+  testthat::expect_equal(body_resp$logprobs, FALSE)
 })

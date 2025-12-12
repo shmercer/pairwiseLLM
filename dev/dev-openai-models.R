@@ -3,7 +3,8 @@
 # Manual smoke tests for OpenAI live + batch comparison pipelines
 # - Uses a small number of pairs
 # - Exercises multiple chat models via chat.completions
-# - Exercises gpt-5.1 via responses + reasoning summaries (thoughts)
+# - Exercises gpt-5.1 and gpt-5.2 via responses (with and without thoughts)
+# - Tests long date-stamped model names
 #
 # Requires:
 #   - OPENAI_API_KEY set in your environment
@@ -71,35 +72,48 @@ message("====================================================")
 # Model grids
 # ---------------------------------------------------------------------
 
-# Chat-style models (chat.completions)
-openai_chat_models <- c(
-  "gpt-4o",
-  "gpt-4.1"
-)
-
-# Reasoning / responses model
-openai_reasoning_models <- c(
-  "gpt-5.1"
-)
-
 # LIVE grid:
-# - chat models via chat.completions, temperature = 0
-# - gpt-5.1 via responses + reasoning = "low" (no temperature)
+# - Standard chat models: use temp=0
+# - Reasoning models (enabled): MUST use temp=NA (NULL)
+# - Reasoning models (disabled): use temp=0 for consistency
 live_grid <- tibble::tribble(
-  ~model,   ~endpoint,           ~include_thoughts, ~reasoning,       ~temperature,
-  "gpt-4o", "chat.completions",  FALSE,             NA_character_,    0,
-  "gpt-4.1","chat.completions",  FALSE,             NA_character_,    0,
-  "gpt-5.1","responses",         TRUE,              "low",            NA_real_
+  ~model,               ~endpoint,           ~include_thoughts, ~reasoning,       ~temperature,
+  "gpt-4o",             "chat.completions",  FALSE,             NA_character_,    0,
+  "gpt-4o-2024-11-20",  "chat.completions",  FALSE,             NA_character_,    0,
+  "gpt-4.1",            "chat.completions",  FALSE,             NA_character_,    0,
+  "gpt-4.1-2025-04-14", "chat.completions",  FALSE,             NA_character_,    0,
+
+  # GPT-5.1
+  "gpt-5.1",            "responses",         TRUE,              "low",            NA_real_, # Reasoning enabled -> No temp
+  "gpt-5.1",            "responses",         FALSE,             "none",           0, # Reasoning disabled -> Temp 0
+  "gpt-5.1-2025-11-13", "responses",         TRUE,              "low",            NA_real_,
+
+  # GPT-5.2
+  "gpt-5.2",            "responses",         TRUE,              "low",            NA_real_,
+  "gpt-5.2",            "responses",         FALSE,             "none",           0,
+  "gpt-5.2-2025-12-11", "responses",         TRUE,              "low",            NA_real_
 )
 
 # BATCH grid:
-# - chat models via chat.completions, temperature = 0
-# - gpt-5.1 via responses + include_thoughts = TRUE (auto reasoning = "low")
+# - Standard chat models: temp=0
+# - Reasoning models (enabled): temp=NA
+# - Reasoning models (disabled): temp=0
 batch_grid <- tibble::tribble(
-  ~model,   ~include_thoughts, ~endpoint,          ~temperature,
-  "gpt-4o", FALSE,             "chat.completions", 0,
-  "gpt-4.1",FALSE,             "chat.completions", 0,
-  "gpt-5.1",TRUE,              NA_character_,      NA_real_
+  ~model,               ~include_thoughts, ~endpoint,          ~reasoning,       ~temperature,
+  "gpt-4o",             FALSE,             "chat.completions", NA_character_,    0,
+  "gpt-4o-2024-11-20",  FALSE,             "chat.completions", NA_character_,    0,
+  "gpt-4.1",            FALSE,             "chat.completions", NA_character_,    0,
+  "gpt-4.1-2025-04-14", FALSE,             "chat.completions", NA_character_,    0,
+
+  # GPT-5.1
+  "gpt-5.1",            TRUE,              NA_character_,      NA_character_,    NA_real_, # Auto-selects responses/low
+  "gpt-5.1",            FALSE,             "responses",        "none",           0,
+  "gpt-5.1-2025-11-13", TRUE,              NA_character_,      NA_character_,    NA_real_,
+
+  # GPT-5.2
+  "gpt-5.2",            TRUE,              NA_character_,      NA_character_,    NA_real_,
+  "gpt-5.2",            FALSE,             "responses",        "none",           0,
+  "gpt-5.2-2025-12-11", TRUE,              NA_character_,      NA_character_,    NA_real_
 )
 
 # ---------------------------------------------------------------------
@@ -122,8 +136,11 @@ for (i in seq_len(nrow(live_grid))) {
   reasoning <- row$reasoning
   temperature <- row$temperature
 
-  label <- paste0("live_", safe_name(model), "_", endpoint)
-  message("\n--- LIVE: ", model, " | endpoint=", endpoint, " ---")
+  # Unique label for filename
+  config_suffix <- if (include_thoughts) "thoughts" else "nothoughts"
+  label <- paste0("live_", safe_name(model), "_", config_suffix)
+
+  message("\n--- LIVE: ", model, " | endpoint=", endpoint, " | thoughts=", include_thoughts, " ---")
 
   args <- list(
     pairs             = pairs_small,
@@ -132,6 +149,7 @@ for (i in seq_len(nrow(live_grid))) {
     trait_description = td$description,
     prompt_template   = tmpl,
     endpoint          = endpoint,
+    include_thoughts  = include_thoughts,
     verbose           = TRUE,
     status_every      = 1,
     progress          = TRUE,
@@ -160,7 +178,7 @@ for (i in seq_len(nrow(live_grid))) {
     # Save a small CSV snapshot
     out_csv <- file.path(
       out_dir,
-      paste0("openai_live_", safe_name(model), "_", safe_name(endpoint), "_", timestamp, ".csv")
+      paste0(label, "_", timestamp, ".csv")
     )
     readr::write_csv(res, out_csv)
 
@@ -170,6 +188,7 @@ for (i in seq_len(nrow(live_grid))) {
     live_status[[label]] <- tibble::tibble(
       model    = model,
       endpoint = endpoint,
+      thoughts = include_thoughts,
       ok       = TRUE,
       n_pairs  = nrow(res),
       file     = out_csv
@@ -178,6 +197,7 @@ for (i in seq_len(nrow(live_grid))) {
     live_status[[label]] <- tibble::tibble(
       model    = model,
       endpoint = endpoint,
+      thoughts = include_thoughts,
       ok       = FALSE,
       n_pairs  = NA_integer_,
       file     = NA_character_
@@ -206,9 +226,12 @@ for (i in seq_len(nrow(batch_grid))) {
   model <- row$model
   include_thoughts <- isTRUE(row$include_thoughts)
   endpoint <- row$endpoint
+  reasoning <- row$reasoning
   temperature <- row$temperature
 
-  label <- paste0("batch_", safe_name(model))
+  config_suffix <- if (include_thoughts) "thoughts" else "nothoughts"
+  label <- paste0("batch_", safe_name(model), "_", config_suffix)
+
   message(
     "\n--- BATCH: ", model,
     " | include_thoughts=", include_thoughts,
@@ -230,20 +253,23 @@ for (i in seq_len(nrow(batch_grid))) {
     batch_input_path  = batch_input_path,
     batch_output_path = batch_output_path,
     poll              = TRUE,
-    interval_seconds  = 20,   # less frequent polling
-    timeout_seconds   = 36000  # 10 hour timeout to avoid premature failure
+    interval_seconds  = 20, # less frequent polling
+    timeout_seconds   = 36000 # 10 hour timeout
   )
 
-  # For chat models we explicitly set endpoint + temperature
+  # Optional arguments
   if (!is.na(endpoint)) {
     args$endpoint <- endpoint
   }
   if (!is.na(temperature)) {
     args$temperature <- temperature
   }
+  if (!is.na(reasoning)) {
+    args$reasoning <- reasoning
+  }
 
   pipeline <- tryCatch(
-    do.call(run_openai_batch_pipeline, args),
+    do.call(llm_submit_pairs_batch, c(args, list(backend = "openai"))),
     error = function(e) {
       message("[ERROR] BATCH ", model, ": ", conditionMessage(e))
       NULL
@@ -251,7 +277,7 @@ for (i in seq_len(nrow(batch_grid))) {
   )
 
   if (!is.null(pipeline)) {
-    res <- pipeline$results
+    res <- tryCatch(llm_download_batch_results(pipeline), error = function(e) NULL)
     status <- tryCatch(pipeline$batch$status, error = function(e) NA_character_)
 
     if (!is.null(res)) {
@@ -259,7 +285,7 @@ for (i in seq_len(nrow(batch_grid))) {
 
       out_csv <- file.path(
         out_dir,
-        paste0("openai_batch_", safe_name(model), "_", timestamp, ".csv")
+        paste0(label, "_", timestamp, ".csv")
       )
       readr::write_csv(res, out_csv)
 
@@ -268,41 +294,41 @@ for (i in seq_len(nrow(batch_grid))) {
       message("Saved results to: ", out_csv)
 
       batch_status[[label]] <- tibble::tibble(
-        model           = model,
+        model = model,
         include_thoughts = include_thoughts,
-        endpoint        = ifelse(is.null(args$endpoint), "<auto>", args$endpoint),
-        ok              = identical(status, "completed"),
-        n_pairs         = nrow(res),
-        batch_status    = status,
-        input_path      = pipeline$batch_input_path,
-        output_path     = pipeline$batch_output_path,
-        file            = out_csv
+        endpoint = ifelse(is.null(args$endpoint), "<auto>", args$endpoint),
+        ok = identical(status, "completed"),
+        n_pairs = nrow(res),
+        batch_status = status,
+        input_path = pipeline$batch_input_path,
+        output_path = pipeline$batch_output_path,
+        file = out_csv
       )
     } else {
       message("[WARN] BATCH ", model, ": pipeline completed but results is NULL (status=", status, ").")
       batch_status[[label]] <- tibble::tibble(
-        model           = model,
+        model = model,
         include_thoughts = include_thoughts,
-        endpoint        = ifelse(is.null(args$endpoint), "<auto>", args$endpoint),
-        ok              = FALSE,
-        n_pairs         = NA_integer_,
-        batch_status    = status,
-        input_path      = pipeline$batch_input_path,
-        output_path     = pipeline$batch_output_path,
-        file            = NA_character_
+        endpoint = ifelse(is.null(args$endpoint), "<auto>", args$endpoint),
+        ok = FALSE,
+        n_pairs = NA_integer_,
+        batch_status = status,
+        input_path = pipeline$batch_input_path,
+        output_path = pipeline$batch_output_path,
+        file = NA_character_
       )
     }
   } else {
     batch_status[[label]] <- tibble::tibble(
-      model           = model,
+      model = model,
       include_thoughts = include_thoughts,
-      endpoint        = ifelse(is.na(endpoint), "<auto>", endpoint),
-      ok              = FALSE,
-      n_pairs         = NA_integer_,
-      batch_status    = NA_character_,
-      input_path      = NA_character_,
-      output_path     = NA_character_,
-      file            = NA_character_
+      endpoint = ifelse(is.na(endpoint), "<auto>", endpoint),
+      ok = FALSE,
+      n_pairs = NA_integer_,
+      batch_status = NA_character_,
+      input_path = NA_character_,
+      output_path = NA_character_,
+      file = NA_character_
     )
   }
 }

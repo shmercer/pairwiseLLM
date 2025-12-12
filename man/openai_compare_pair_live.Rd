@@ -30,30 +30,24 @@ openai_compare_pair_live(
 
 \item{text2}{Character string containing the second sample's text.}
 
-\item{model}{OpenAI model name (for example "gpt-4.1", "gpt-5.1").}
+\item{model}{OpenAI model name (e.g. "gpt-4.1", "gpt-5.2-2025-12-11").}
 
-\item{trait_name}{Short label for the trait (for example "Overall Quality").}
+\item{trait_name}{Short label for the trait (e.g. "Overall Quality").}
 
 \item{trait_description}{Full-text definition of the trait.}
 
-\item{prompt_template}{Prompt template string, typically from
-\code{\link{set_prompt_template}}.}
+\item{prompt_template}{Prompt template string.}
 
-\item{endpoint}{Which OpenAI endpoint to use. One of
-\code{"chat.completions"} or \code{"responses"}.}
+\item{endpoint}{Which OpenAI endpoint to use: \code{"chat.completions"} or
+\code{"responses"}.}
 
-\item{tag_prefix}{Prefix for the better-sample tag. Defaults to
-\code{"<BETTER_SAMPLE>"}.}
+\item{tag_prefix}{Prefix for the better-sample tag.}
 
-\item{tag_suffix}{Suffix for the better-sample tag. Defaults to
-\code{"</BETTER_SAMPLE>"}.}
+\item{tag_suffix}{Suffix for the better-sample tag.}
 
-\item{api_key}{Optional OpenAI API key. Defaults to
-\code{Sys.getenv("OPENAI_API_KEY")}.}
+\item{api_key}{Optional OpenAI API key.}
 
-\item{include_raw}{Logical; if TRUE, adds a list-column \code{raw_response}
-containing the parsed JSON body returned by OpenAI (or NULL on parse
-failure). This is useful for debugging parsing problems.}
+\item{include_raw}{Logical; if TRUE, adds a \code{raw_response} column.}
 
 \item{...}{Additional OpenAI parameters, for example
 \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
@@ -104,11 +98,43 @@ pipeline.
 For the Responses endpoint, the function collects:
 \itemize{
 \item Reasoning / "thoughts" text (if available) into the \code{thoughts}
-column. Reasoning summaries are typically provided on the
-\code{type = "reasoning"} output item under \code{summary}.
-\item Visible assistant output into the \code{content} column, taken from
-the \code{type = "message"} output item's \code{content[[*]]$text}.
+column.
+\item Visible assistant output into the \code{content} column.
 }
-Reasoning text is not prefixed into \code{content}; instead it is kept
-separate in \code{thoughts} for consistency with Anthropic and Gemini.
+
+\strong{Temperature Defaults:}
+If \code{temperature} is not provided in \code{...}:
+\itemize{
+\item It defaults to \code{0} (deterministic) for standard models or when reasoning is
+disabled.
+\item It remains \code{NULL} when reasoning is enabled, as the API does not support
+temperature in that mode.
+}
+}
+\examples{
+\dontrun{
+# 1. Standard comparison using GPT-4.1
+res <- openai_compare_pair_live(
+  ID1 = "A", text1 = "Text A...",
+  ID2 = "B", text2 = "Text B...",
+  model = "gpt-4.1",
+  trait_name = "clarity",
+  trait_description = "Which text is clearer?",
+  temperature = 0
+)
+
+# 2. Reasoning comparison using GPT-5.2 (date-stamped)
+res_reasoning <- openai_compare_pair_live(
+  ID1 = "A", text1 = "Text A...",
+  ID2 = "B", text2 = "Text B...",
+  model = "gpt-5.2-2025-12-11",
+  trait_name = "clarity",
+  trait_description = "Which text is clearer?",
+  endpoint = "responses",
+  include_thoughts = TRUE,
+  reasoning = "high"
+)
+print(res_reasoning$thoughts)
+}
+
 }

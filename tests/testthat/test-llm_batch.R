@@ -3,59 +3,52 @@
 test_that("llm_submit_pairs_batch validates pairs and model", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
-
   bad_pairs <- tibble::tibble(
-    ID1   = "S01",
+    ID1 = "S01",
     text1 = "Sample 1"
     # missing ID2, text2
   )
-
   expect_error(
     llm_submit_pairs_batch(
-      pairs             = bad_pairs,
-      backend           = "openai",
-      model             = "gpt-4o-mini",
-      trait_name        = td$name,
+      pairs = bad_pairs,
+      backend = "openai",
+      model = "gpt-4o-mini",
+      trait_name = td$name,
       trait_description = td$description,
-      prompt_template   = tmpl
+      prompt_template = tmpl
     ),
     "`pairs` must contain columns",
     fixed = FALSE
   )
-
   good_pairs <- tibble::tibble(
-    ID1   = "S01",
+    ID1 = "S01",
     text1 = "Sample 1",
-    ID2   = "S02",
+    ID2 = "S02",
     text2 = "Sample 2"
   )
-
   expect_error(
     llm_submit_pairs_batch(
-      pairs             = good_pairs,
-      backend           = "openai",
-      model             = "",
-      trait_name        = td$name,
+      pairs = good_pairs,
+      backend = "openai",
+      model = "",
+      trait_name = td$name,
       trait_description = td$description,
-      prompt_template   = tmpl
+      prompt_template = tmpl
     ),
     "`model` must be a non-empty character scalar",
     fixed = TRUE
   )
 })
 
-test_that("llm_submit_pairs_batch dispatches to the correct backend
-          pipelines", {
+test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", {
   pairs <- tibble::tibble(
-    ID1   = c("S01", "S02"),
+    ID1 = c("S01", "S02"),
     text1 = c("Text 1a", "Text 2a"),
-    ID2   = c("S03", "S04"),
+    ID2 = c("S03", "S04"),
     text2 = c("Text 1b", "Text 2b")
   )
-
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
-
   openai_calls <- list()
   anthropic_calls <- list()
   gemini_calls <- list()
@@ -69,31 +62,29 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend
       pattern = paste0("output_", backend_name, "_"),
       fileext = ".jsonl"
     )
-
     # Create the files so file.exists() expectations pass
     file.create(input_path)
     file.create(output_path)
-
     list(
       backend = backend_name,
       batch_input_path = input_path,
       batch_output_path = output_path,
       batch = list(id = paste0("batch_", backend_name)),
       results = tibble::tibble(
-        custom_id         = "BATCH_S01_vs_S02",
-        ID1               = "S01",
-        ID2               = "S02",
-        model             = paste0("model_", backend_name),
-        object_type       = "batch",
-        status_code       = 200L,
-        error_message     = NA_character_,
-        thoughts          = NA_character_,
-        content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-        better_sample     = "SAMPLE_1",
-        better_id         = "S01",
-        prompt_tokens     = 10L,
+        custom_id = "BATCH_S01_vs_S02",
+        ID1 = "S01",
+        ID2 = "S02",
+        model = paste0("model_", backend_name),
+        object_type = "batch",
+        status_code = 200L,
+        error_message = NA_character_,
+        thoughts = NA_character_,
+        content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+        better_sample = "SAMPLE_1",
+        better_id = "S01",
+        prompt_tokens = 10L,
         completion_tokens = 2L,
-        total_tokens      = 12L
+        total_tokens = 12L
       )
     )
   }
@@ -118,11 +109,11 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend
                                          ...) {
       openai_calls <<- append(openai_calls, list(
         list(
-          model             = model,
-          trait_name        = trait_name,
+          model = model,
+          trait_name = trait_name,
           trait_description = trait_description,
-          include_thoughts  = include_thoughts,
-          include_raw       = include_raw
+          include_thoughts = include_thoughts,
+          include_raw = include_raw
         )
       ))
       fake_batch_return("openai")
@@ -137,11 +128,11 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend
                                             ...) {
       anthropic_calls <<- append(anthropic_calls, list(
         list(
-          model             = model,
-          trait_name        = trait_name,
+          model = model,
+          trait_name = trait_name,
           trait_description = trait_description,
-          include_thoughts  = include_thoughts,
-          include_raw       = include_raw
+          include_thoughts = include_thoughts,
+          include_raw = include_raw
         )
       ))
       fake_batch_return("anthropic")
@@ -156,11 +147,11 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend
                                          ...) {
       gemini_calls <<- append(gemini_calls, list(
         list(
-          model             = model,
-          trait_name        = trait_name,
+          model = model,
+          trait_name = trait_name,
           trait_description = trait_description,
-          include_thoughts  = include_thoughts,
-          include_raw       = include_raw
+          include_thoughts = include_thoughts,
+          include_raw = include_raw
         )
       ))
       fake_batch_return("gemini")
@@ -168,16 +159,15 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend
     {
       # OpenAI
       batch_openai <- llm_submit_pairs_batch(
-        pairs             = pairs,
-        backend           = "openai",
-        model             = "gpt-4o-mini",
-        trait_name        = td$name,
+        pairs = pairs,
+        backend = "openai",
+        model = "gpt-4o-mini",
+        trait_name = td$name,
         trait_description = td$description,
-        prompt_template   = tmpl,
-        include_thoughts  = FALSE,
-        include_raw       = TRUE
+        prompt_template = tmpl,
+        include_thoughts = FALSE,
+        include_raw = TRUE
       )
-
       expect_s3_class(batch_openai, "pairwiseLLM_batch")
       expect_equal(batch_openai$backend, "openai")
       expect_equal(length(openai_calls), 1L)
@@ -186,32 +176,30 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend
 
       # Anthropic
       batch_anthropic <- llm_submit_pairs_batch(
-        pairs             = pairs,
-        backend           = "anthropic",
-        model             = "claude-3-5-sonnet-latest",
-        trait_name        = td$name,
+        pairs = pairs,
+        backend = "anthropic",
+        model = "claude-3-5-sonnet-latest",
+        trait_name = td$name,
         trait_description = td$description,
-        prompt_template   = tmpl,
-        include_thoughts  = TRUE,
-        include_raw       = FALSE
+        prompt_template = tmpl,
+        include_thoughts = TRUE,
+        include_raw = FALSE
       )
-
       expect_s3_class(batch_anthropic, "pairwiseLLM_batch")
       expect_equal(batch_anthropic$backend, "anthropic")
       expect_equal(length(anthropic_calls), 1L)
 
       # Gemini
       batch_gemini <- llm_submit_pairs_batch(
-        pairs             = pairs,
-        backend           = "gemini",
-        model             = "gemini-3-pro-preview",
-        trait_name        = td$name,
+        pairs = pairs,
+        backend = "gemini",
+        model = "gemini-3-pro-preview",
+        trait_name = td$name,
         trait_description = td$description,
-        prompt_template   = tmpl,
-        include_thoughts  = TRUE,
-        include_raw       = FALSE
+        prompt_template = tmpl,
+        include_thoughts = TRUE,
+        include_raw = FALSE
       )
-
       expect_s3_class(batch_gemini, "pairwiseLLM_batch")
       expect_equal(batch_gemini$backend, "gemini")
       expect_equal(length(gemini_calls), 1L)
@@ -219,18 +207,15 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend
   )
 })
 
-test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for
-          gpt-5.1 with thoughts or reasoning", {
+test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for gpt-5.1/5.2 with thoughts or reasoning", {
   pairs <- tibble::tibble(
-    ID1   = "S01",
+    ID1 = "S01",
     text1 = "Text 1a",
-    ID2   = "S02",
+    ID2 = "S02",
     text2 = "Text 1b"
   )
-
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
-
   endpoints <- list()
 
   fake_batch_return <- function(endpoint_value) {
@@ -249,20 +234,20 @@ test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for
       batch_output_path = output_path,
       batch = list(id = paste0("batch_", endpoint_value)),
       results = tibble::tibble(
-        custom_id         = "BATCH_S01_vs_S02",
-        ID1               = "S01",
-        ID2               = "S02",
-        model             = "gpt-5.1-mini",
-        object_type       = "batch",
-        status_code       = 200L,
-        error_message     = NA_character_,
-        thoughts          = NA_character_,
-        content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-        better_sample     = "SAMPLE_1",
-        better_id         = "S01",
-        prompt_tokens     = 10L,
+        custom_id = "BATCH_S01_vs_S02",
+        ID1 = "S01",
+        ID2 = "S02",
+        model = "gpt-5.1-mini",
+        object_type = "batch",
+        status_code = 200L,
+        error_message = NA_character_,
+        thoughts = NA_character_,
+        content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+        better_sample = "SAMPLE_1",
+        better_id = "S01",
+        prompt_tokens = 10L,
         completion_tokens = 2L,
-        total_tokens      = 12L
+        total_tokens = 12L
       )
     )
   }
@@ -291,38 +276,49 @@ test_that("llm_submit_pairs_batch chooses OpenAI responses endpoint for
     {
       # 1) gpt-5.1 with include_thoughts = TRUE -> responses endpoint
       batch_resp <- llm_submit_pairs_batch(
-        pairs             = pairs,
-        backend           = "openai",
-        model             = "gpt-5.1-mini",
-        trait_name        = td$name,
+        pairs = pairs,
+        backend = "openai",
+        model = "gpt-5.1-mini",
+        trait_name = td$name,
         trait_description = td$description,
-        prompt_template   = tmpl,
-        include_thoughts  = TRUE
+        prompt_template = tmpl,
+        include_thoughts = TRUE
       )
-
       expect_s3_class(batch_resp, "pairwiseLLM_batch")
 
-      # 2) gpt-5.1 with include_thoughts = FALSE and reasoning = "none" ->
-      # chat.completions
+      # 2) gpt-5.1 with include_thoughts = FALSE and reasoning = "none" -> chat.completions
+      # Note: model name here is "gpt-5.1-mini" which triggers logic
       batch_chat <- llm_submit_pairs_batch(
-        pairs             = pairs,
-        backend           = "openai",
-        model             = "gpt-5.1-mini",
-        trait_name        = td$name,
+        pairs = pairs,
+        backend = "openai",
+        model = "gpt-5.1-mini",
+        trait_name = td$name,
         trait_description = td$description,
-        prompt_template   = tmpl,
-        include_thoughts  = FALSE,
-        reasoning         = "none"
+        prompt_template = tmpl,
+        include_thoughts = FALSE,
+        reasoning = "none"
       )
-
       expect_s3_class(batch_chat, "pairwiseLLM_batch")
 
-      expect_equal(length(endpoints), 2L)
+      # 3) gpt-5.2 date-stamped with thoughts -> responses endpoint
+      batch_resp_52 <- llm_submit_pairs_batch(
+        pairs = pairs,
+        backend = "openai",
+        model = "gpt-5.2-2025-12-11",
+        trait_name = td$name,
+        trait_description = td$description,
+        prompt_template = tmpl,
+        include_thoughts = TRUE
+      )
+      expect_s3_class(batch_resp_52, "pairwiseLLM_batch")
+
+      expect_equal(length(endpoints), 3L)
       # First call (with thoughts) should use responses
       expect_equal(endpoints[[1]], "responses")
-      # Second call (no thoughts, reasoning = "none") should use
-      # chat.completions
+      # Second call (no thoughts, reasoning = "none") should use chat.completions
       expect_equal(endpoints[[2]], "chat.completions")
+      # Third call (gpt-5.2 date stamped) should use responses
+      expect_equal(endpoints[[3]], "responses")
     }
   )
 })
@@ -333,31 +329,288 @@ test_that("llm_download_batch_results extracts results tibble", {
     batch_input_path = "input.jsonl",
     batch_output_path = "output.jsonl",
     results = tibble::tibble(
-      custom_id     = "BATCH_S01_vs_S02",
-      ID1           = "S01",
-      ID2           = "S02",
-      model         = "model_openai",
+      custom_id = "BATCH_S01_vs_S02",
+      ID1 = "S01",
+      ID2 = "S02",
+      model = "model_openai",
       better_sample = "SAMPLE_1",
-      better_id     = "S01"
+      better_id = "S01"
     )
   )
   class(fake_batch) <- c("pairwiseLLM_batch", class(fake_batch))
-
   res <- llm_download_batch_results(fake_batch)
-
   expect_s3_class(res, "tbl_df")
   expect_equal(nrow(res), 1L)
   expect_equal(res$ID1, "S01")
   expect_equal(res$better_sample, "SAMPLE_1")
-
   # Non classed, but list with results should still work
   res2 <- llm_download_batch_results(unclass(fake_batch))
   expect_equal(res2$ID2, "S02")
-
   # Invalid input
   expect_error(
     llm_download_batch_results(list(foo = "bar")),
     "Unsupported input to `llm_download_batch_results",
     fixed = FALSE
   )
+})
+
+test_that("build_openai_batch_requests builds valid chat.completions JSONL objects", {
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:2, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  batch <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "chat.completions",
+    temperature = 0,
+    top_p = 1,
+    logprobs = NULL
+  )
+  expect_s3_class(batch, "tbl_df")
+  expect_equal(nrow(batch), 2L)
+  expect_true(all(c("custom_id", "method", "url", "body") %in% names(batch)))
+  # Body structure check
+  b1 <- batch$body[[1]]
+  expect_equal(b1$model, "gpt-4.1")
+  expect_true(is.list(b1$messages))
+  roles <- vapply(b1$messages, function(m) m[["role"]], character(1))
+  expect_true(any(roles == "user"))
+})
+
+test_that("write_openai_batch_file writes JSONL file", {
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:2, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  batch <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "chat.completions"
+  )
+  tmp <- tempfile("openai-batch-", fileext = ".jsonl")
+  write_openai_batch_file(batch, tmp)
+  expect_true(file.exists(tmp))
+  lines <- readLines(tmp, warn = FALSE)
+  expect_equal(length(lines), nrow(batch))
+  # Each line should be valid JSON with required top-level keys
+  objs <- lapply(lines, jsonlite::fromJSON)
+  keys <- lapply(objs, names)
+  expect_true(all(vapply(keys, function(k) {
+    all(c(
+      "custom_id", "method",
+      "url", "body"
+    ) %in% k)
+  }, logical(1))))
+})
+
+test_that("build_openai_batch_requests supports gpt-5.1 with reasoning = 'none' on responses", {
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  # For gpt-5.1 + reasoning = "none", temperature/top_p/logprobs are allowed
+  batch <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-5.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "none",
+    temperature = 0,
+    top_p = 1,
+    logprobs = NULL
+  )
+  expect_s3_class(batch, "tbl_df")
+  expect_equal(nrow(batch), 1L)
+  b1 <- batch$body[[1]]
+  expect_equal(b1$model, "gpt-5.1")
+  expect_equal(b1$input, build_prompt(
+    template = tmpl,
+    trait_name = td$name,
+    trait_desc = td$description,
+    text1 = pairs$text1[1],
+    text2 = pairs$text2[1]
+  ))
+  # reasoning should be present with effort = "none"
+  expect_true("reasoning" %in% names(b1) || is.null(b1$reasoning) ||
+    identical(b1$reasoning$effort, "none"))
+})
+
+test_that("build_openai_batch_requests errors for gpt-5.1/5.2 + reasoning != 'none' with temp", {
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # GPT-5.1
+  expect_error(
+    build_openai_batch_requests(
+      pairs = pairs, model = "gpt-5.1", trait_name = td$name, trait_description = td$description,
+      endpoint = "responses", reasoning = "low", temperature = 0
+    ),
+    regexp = "For gpt-5.1/5.2 with reasoning, temperature/top_p/logprobs must be NULL."
+  )
+
+  # GPT-5.2
+  expect_error(
+    build_openai_batch_requests(
+      pairs = pairs, model = "gpt-5.2", trait_name = td$name, trait_description = td$description,
+      endpoint = "responses", reasoning = "high", top_p = 0.5
+    ),
+    regexp = "For gpt-5.1/5.2 with reasoning, temperature/top_p/logprobs must be NULL."
+  )
+})
+
+test_that("build_openai_batch_requests allows other gpt-5* models with default temp=0", {
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Pass NULL temp; since reasoning logic doesn't match 5.1/5.2 regex,
+  # it should default to 0 inside the function and succeed.
+  batch <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-5-mini",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "low",
+    temperature = NULL,
+    top_p = NULL,
+    logprobs = NULL
+  )
+  expect_s3_class(batch, "tbl_df")
+  expect_equal(nrow(batch), 1L)
+  b1 <- batch$body[[1]]
+  expect_equal(b1$model, "gpt-5-mini")
+  # Verify temperature defaulted to 0
+  expect_equal(b1$temperature, 0)
+})
+
+testthat::test_that("parse_openai_batch_output collects thoughts and message text separately for responses", {
+  tmp <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tmp), add = TRUE)
+  # Construct a fake batch output line similar to gpt-5.1 responses
+  line_obj <- list(
+    custom_id = "LIVE_S01_vs_S02",
+    response = list(
+      status_code = 200L,
+      body = list(
+        object = "response",
+        model = "gpt-5.1",
+        reasoning = list(
+          effort = "low",
+          summary = list(text = "Reasoning summary. ")
+        ),
+        output = list(
+          list(
+            id = "rs_x",
+            type = "reasoning",
+            summary = list()
+          ),
+          list(
+            id = "msg_x",
+            type = "message",
+            status = "completed",
+            content = list(
+              list(
+                type = "output_text",
+                text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+              )
+            ),
+            role = "assistant"
+          )
+        ),
+        usage = list(
+          input_tokens = 10L,
+          output_tokens = 5L,
+          total_tokens = 15L
+        )
+      )
+    ),
+    error = NULL
+  )
+  json_line <- jsonlite::toJSON(line_obj, auto_unbox = TRUE)
+  writeLines(json_line, con = tmp, useBytes = TRUE)
+  res <- parse_openai_batch_output(tmp)
+  testthat::expect_s3_class(res, "tbl_df")
+  testthat::expect_equal(nrow(res), 1L)
+  # IDs from custom_id
+  testthat::expect_equal(res$custom_id, "LIVE_S01_vs_S02")
+  testthat::expect_equal(res$ID1, "S01")
+  testthat::expect_equal(res$ID2, "S02")
+  # Basic metadata
+  testthat::expect_equal(res$model, "gpt-5.1")
+  testthat::expect_equal(res$object_type, "response")
+  testthat::expect_equal(res$status_code, 200L)
+  testthat::expect_true(is.na(res$error_message))
+  # Reasoning summary should go to thoughts
+  testthat::expect_equal(res$thoughts, "Reasoning summary. ")
+  # Content should be assistant message only
+  testthat::expect_equal(
+    res$content,
+    "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Final answer."
+  )
+  # Tag parsing and better_id mapping
+  testthat::expect_equal(res$better_sample, "SAMPLE_2")
+  testthat::expect_equal(res$better_id, "S02")
+  # Token usage
+  testthat::expect_equal(res$prompt_tokens, 10)
+  testthat::expect_equal(res$completion_tokens, 5)
+  testthat::expect_equal(res$total_tokens, 15)
+})
+
+test_that("build_openai_batch_requests adds reasoning summary when include_thoughts = TRUE", {
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)
+  pairs <- pairs[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  # include_thoughts = TRUE, reasoning != "none" -> summary = "auto"
+  batch <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-5.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "low",
+    include_thoughts = TRUE
+  )
+  testthat::expect_s3_class(batch, "tbl_df")
+  testthat::expect_equal(nrow(batch), 1L)
+  b1 <- batch$body[[1]]
+  testthat::expect_equal(b1$model, "gpt-5.1")
+  testthat::expect_true("reasoning" %in% names(b1))
+  testthat::expect_equal(b1$reasoning$effort, "low")
+  testthat::expect_equal(b1$reasoning$summary, "auto")
+  # include_thoughts = TRUE but reasoning = "none" -> no summary field
+  batch_none <- build_openai_batch_requests(
+    pairs = pairs,
+    model = "gpt-5.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "responses",
+    reasoning = "none",
+    include_thoughts = TRUE
+  )
+  b2 <- batch_none$body[[1]]
+  testthat::expect_true("reasoning" %in% names(b2))
+  testthat::expect_equal(b2$reasoning$effort, "none")
+  testthat::expect_false("summary" %in% names(b2$reasoning))
 })
