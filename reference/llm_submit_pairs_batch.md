@@ -1,7 +1,8 @@
 # Submit pairs to an LLM backend via batch API
 
 `llm_submit_pairs_batch()` is a backend-agnostic front-end for running
-provider batch pipelines (OpenAI, Anthropic, Gemini).
+provider batch pipelines (OpenAI, Anthropic, Gemini). Together.ai and
+Ollama are supported only for live comparisons.
 
 It mirrors
 [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
@@ -17,16 +18,25 @@ For OpenAI, this helper will by default:
 
 - Automatically switch to the `responses` style endpoint when:
 
-  - `model` starts with `"gpt-5.1"` and
+  - `model` starts with `"gpt-5.1"` or `"gpt-5.2"` (including
+    date-stamped versions like `"gpt-5.2-2025-12-11"`) and
 
   - either `include_thoughts = TRUE` **or** a non-`"none"` `reasoning`
     effort is supplied in `...`.
 
-You can override this by explicitly passing
-`endpoint = "chat.completions"` or `endpoint = "responses"` in `...`.
+**Temperature Defaults:** For OpenAI, if `temperature` is not specified
+in `...`:
 
-For Anthropic, this helper delegates temperature and extended-thinking
-behaviour to
+- It defaults to `0` (deterministic) for standard models or when
+  reasoning is disabled (`reasoning = "none"`) on supported models
+  (5.1/5.2).
+
+- It remains `NULL` (API default) when reasoning is enabled, as the API
+  does not support temperature with reasoning.
+
+For Anthropic, standard and date-stamped model names (e.g.
+`"claude-sonnet-4-5-20250929"`) are supported. This helper delegates
+temperature and extended-thinking behaviour to
 [`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md)
 and
 [`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md),
@@ -93,6 +103,16 @@ llm_submit_pairs_batch(
 
   Character scalar model name to use for the batch job.
 
+  - For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5.1"`, or
+    `"gpt-5.2"` (including date-stamped versions like
+    `"gpt-5.2-2025-12-11"`).
+
+  - For `"anthropic"`, use provider names like
+    `"claude-3-5-sonnet-latest"` or date-stamped versions like
+    `"claude-sonnet-4-5-20250929"`.
+
+  - For `"gemini"`, use names like `"gemini-2.0-pro-exp"`.
+
 - trait_name:
 
   A short name for the trait being evaluated (e.g. `"overall_quality"`).
@@ -110,12 +130,14 @@ llm_submit_pairs_batch(
 - include_thoughts:
 
   Logical; whether to request and parse model "thoughts" (where
-  supported). For OpenAI GPT-5.1, setting this to `TRUE` will by default
-  cause the batch to use the `responses` endpoint (unless you explicitly
-  pass an `endpoint` in `...`). For Anthropic, setting this to `TRUE`
-  while `reasoning = "none"` (in `...`) upgrades to
-  `reasoning = "enabled"`, which implies `temperature = 1` for the
-  batch.
+  supported).
+
+  - For OpenAI GPT-5.1/5.2, setting this to `TRUE` defaults to the
+    `responses` endpoint.
+
+  - For Anthropic, setting this to `TRUE` implies
+    `reasoning = "enabled"` (unless overridden) and sets
+    `temperature = 1`.
 
 - include_raw:
 
@@ -154,18 +176,27 @@ are preserved.
 
 ``` r
 if (FALSE) { # \dontrun{
+# 1. OpenAI Batch (GPT-5.2 with thoughts)
 pairs <- make_pairs(c("A", "B", "C"))
-
-batch <- llm_submit_pairs_batch(
-  pairs             = pairs,
-  backend           = "openai",
-  model             = "gpt-4o-mini",
-  trait_name        = "overall_quality",
-  trait_description = "Overall quality of the response.",
-  prompt_template   = set_prompt_template(),
-  include_thoughts  = FALSE
+batch_openai <- llm_submit_pairs_batch(
+  pairs = pairs,
+  backend = "openai",
+  model = "gpt-5.2-2025-12-11",
+  trait_name = "overall_quality",
+  trait_description = "Quality of the response.",
+  include_thoughts = TRUE
 )
+res_openai <- llm_download_batch_results(batch_openai)
 
-res <- llm_download_batch_results(batch)
+# 2. Anthropic Batch (Claude Sonnet 4.5 date-stamped)
+batch_anthropic <- llm_submit_pairs_batch(
+  pairs = pairs,
+  backend = "anthropic",
+  model = "claude-sonnet-4-5-20250929",
+  trait_name = "coherence",
+  trait_description = "Logical flow of the text.",
+  include_thoughts = TRUE # triggers extended thinking
+)
+res_anthropic <- llm_download_batch_results(batch_anthropic)
 } # }
 ```

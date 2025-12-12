@@ -94,11 +94,11 @@ analogue of <code><a href="build_openai_batch_requests.html">build_openai_batch_
 
 
 <dt id="arg-model">model<a class="anchor" aria-label="anchor" href="#arg-model"></a></dt>
-<dd><p>OpenAI model name (for example "gpt-4.1", "gpt-5.1").</p></dd>
+<dd><p>OpenAI model name (e.g. "gpt-4.1", "gpt-5.2-2025-12-11").</p></dd>
 
 
 <dt id="arg-trait-name">trait_name<a class="anchor" aria-label="anchor" href="#arg-trait-name"></a></dt>
-<dd><p>Short label for the trait (for example "Overall Quality").</p></dd>
+<dd><p>Short label for the trait (e.g. "Overall Quality").</p></dd>
 
 
 <dt id="arg-trait-description">trait_description<a class="anchor" aria-label="anchor" href="#arg-trait-description"></a></dt>
@@ -106,34 +106,28 @@ analogue of <code><a href="build_openai_batch_requests.html">build_openai_batch_
 
 
 <dt id="arg-prompt-template">prompt_template<a class="anchor" aria-label="anchor" href="#arg-prompt-template"></a></dt>
-<dd><p>Prompt template string, typically from
-<code><a href="set_prompt_template.html">set_prompt_template</a></code>.</p></dd>
+<dd><p>Prompt template string.</p></dd>
 
 
 <dt id="arg-endpoint">endpoint<a class="anchor" aria-label="anchor" href="#arg-endpoint"></a></dt>
-<dd><p>Which OpenAI endpoint to use. One of
-<code>"chat.completions"</code> or <code>"responses"</code>.</p></dd>
+<dd><p>Which OpenAI endpoint to use: <code>"chat.completions"</code> or
+<code>"responses"</code>.</p></dd>
 
 
 <dt id="arg-tag-prefix">tag_prefix<a class="anchor" aria-label="anchor" href="#arg-tag-prefix"></a></dt>
-<dd><p>Prefix for the better-sample tag. Defaults to
-<code>"&lt;BETTER_SAMPLE&gt;"</code>.</p></dd>
+<dd><p>Prefix for the better-sample tag.</p></dd>
 
 
 <dt id="arg-tag-suffix">tag_suffix<a class="anchor" aria-label="anchor" href="#arg-tag-suffix"></a></dt>
-<dd><p>Suffix for the better-sample tag. Defaults to
-<code>"&lt;/BETTER_SAMPLE&gt;"</code>.</p></dd>
+<dd><p>Suffix for the better-sample tag.</p></dd>
 
 
 <dt id="arg-api-key">api_key<a class="anchor" aria-label="anchor" href="#arg-api-key"></a></dt>
-<dd><p>Optional OpenAI API key. Defaults to
-<code>Sys.getenv("OPENAI_API_KEY")</code>.</p></dd>
+<dd><p>Optional OpenAI API key.</p></dd>
 
 
 <dt id="arg-include-raw">include_raw<a class="anchor" aria-label="anchor" href="#arg-include-raw"></a></dt>
-<dd><p>Logical; if TRUE, adds a list-column <code>raw_response</code>
-containing the parsed JSON body returned by OpenAI (or NULL on parse
-failure). This is useful for debugging parsing problems.</p></dd>
+<dd><p>Logical; if TRUE, adds a <code>raw_response</code> column.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -206,14 +200,44 @@ the Responses endpoint ("/v1/responses", for example gpt-5.1 with reasoning),
 using the same prompt template and model / parameter rules as the batch
 pipeline.</p>
 <p>For the Responses endpoint, the function collects:</p><ul><li><p>Reasoning / "thoughts" text (if available) into the <code>thoughts</code>
-column. Reasoning summaries are typically provided on the
-<code>type = "reasoning"</code> output item under <code>summary</code>.</p></li>
-<li><p>Visible assistant output into the <code>content</code> column, taken from
-the <code>type = "message"</code> output item's <code>content[[*]]$text</code>.</p></li>
-</ul><p>Reasoning text is not prefixed into <code>content</code>; instead it is kept
-separate in <code>thoughts</code> for consistency with Anthropic and Gemini.</p>
-    </div>
+column.</p></li>
+<li><p>Visible assistant output into the <code>content</code> column.</p></li>
+</ul><p><strong>Temperature Defaults:</strong>
+If <code>temperature</code> is not provided in <code>...</code>:</p><ul><li><p>It defaults to <code>0</code> (deterministic) for standard models or when reasoning is
+disabled.</p></li>
+<li><p>It remains <code>NULL</code> when reasoning is enabled, as the API does not support
+temperature in that mode.</p></li>
+</ul></div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+<span class="r-in"><span><span class="co"># 1. Standard comparison using GPT-4.1</span></span></span>
+<span class="r-in"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu">openai_compare_pair_live</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  ID1 <span class="op">=</span> <span class="st">"A"</span>, text1 <span class="op">=</span> <span class="st">"Text A..."</span>,</span></span>
+<span class="r-in"><span>  ID2 <span class="op">=</span> <span class="st">"B"</span>, text2 <span class="op">=</span> <span class="st">"Text B..."</span>,</span></span>
+<span class="r-in"><span>  model <span class="op">=</span> <span class="st">"gpt-4.1"</span>,</span></span>
+<span class="r-in"><span>  trait_name <span class="op">=</span> <span class="st">"clarity"</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="st">"Which text is clearer?"</span>,</span></span>
+<span class="r-in"><span>  temperature <span class="op">=</span> <span class="fl">0</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># 2. Reasoning comparison using GPT-5.2 (date-stamped)</span></span></span>
+<span class="r-in"><span><span class="va">res_reasoning</span> <span class="op">&lt;-</span> <span class="fu">openai_compare_pair_live</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  ID1 <span class="op">=</span> <span class="st">"A"</span>, text1 <span class="op">=</span> <span class="st">"Text A..."</span>,</span></span>
+<span class="r-in"><span>  ID2 <span class="op">=</span> <span class="st">"B"</span>, text2 <span class="op">=</span> <span class="st">"Text B..."</span>,</span></span>
+<span class="r-in"><span>  model <span class="op">=</span> <span class="st">"gpt-5.2-2025-12-11"</span>,</span></span>
+<span class="r-in"><span>  trait_name <span class="op">=</span> <span class="st">"clarity"</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="st">"Which text is clearer?"</span>,</span></span>
+<span class="r-in"><span>  endpoint <span class="op">=</span> <span class="st">"responses"</span>,</span></span>
+<span class="r-in"><span>  include_thoughts <span class="op">=</span> <span class="cn">TRUE</span>,</span></span>
+<span class="r-in"><span>  reasoning <span class="op">=</span> <span class="st">"high"</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">res_reasoning</span><span class="op">$</span><span class="va">thoughts</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

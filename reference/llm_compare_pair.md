@@ -64,8 +64,10 @@ llm_compare_pair(
   an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`). For
   `"anthropic"` and `"gemini"`, use the corresponding provider model
   names (for example `"claude-3-5-sonnet-latest"` or
-  `"gemini-2.0-pro-exp"`). For `"ollama"`, use a local model name known
-  to the Ollama server (for example `"mistral-small3.2:24b"`,
+  `"gemini-2.0-pro-exp"`). For "together", use Together.ai model
+  identifiers such as `"deepseek-ai/DeepSeek-R1"` or
+  `"deepseek-ai/DeepSeek-V3"`. For `"ollama"`, use a local model name
+  known to the Ollama server (for example `"mistral-small3.2:24b"`,
   `"qwen3:32b"`, `"gemma3:27b"`).
 
 - trait_name:

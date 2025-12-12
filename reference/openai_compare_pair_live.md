@@ -48,11 +48,11 @@ openai_compare_pair_live(
 
 - model:
 
-  OpenAI model name (for example "gpt-4.1", "gpt-5.1").
+  OpenAI model name (e.g. "gpt-4.1", "gpt-5.2-2025-12-11").
 
 - trait_name:
 
-  Short label for the trait (for example "Overall Quality").
+  Short label for the trait (e.g. "Overall Quality").
 
 - trait_description:
 
@@ -60,31 +60,27 @@ openai_compare_pair_live(
 
 - prompt_template:
 
-  Prompt template string, typically from
-  [`set_prompt_template`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md).
+  Prompt template string.
 
 - endpoint:
 
-  Which OpenAI endpoint to use. One of `"chat.completions"` or
-  `"responses"`.
+  Which OpenAI endpoint to use: `"chat.completions"` or `"responses"`.
 
 - tag_prefix:
 
-  Prefix for the better-sample tag. Defaults to `"<BETTER_SAMPLE>"`.
+  Prefix for the better-sample tag.
 
 - tag_suffix:
 
-  Suffix for the better-sample tag. Defaults to `"</BETTER_SAMPLE>"`.
+  Suffix for the better-sample tag.
 
 - api_key:
 
-  Optional OpenAI API key. Defaults to `Sys.getenv("OPENAI_API_KEY")`.
+  Optional OpenAI API key.
 
 - include_raw:
 
-  Logical; if TRUE, adds a list-column `raw_response` containing the
-  parsed JSON body returned by OpenAI (or NULL on parse failure). This
-  is useful for debugging parsing problems.
+  Logical; if TRUE, adds a `raw_response` column.
 
 - ...:
 
@@ -169,11 +165,42 @@ as the batch pipeline.
 For the Responses endpoint, the function collects:
 
 - Reasoning / "thoughts" text (if available) into the `thoughts` column.
-  Reasoning summaries are typically provided on the `type = "reasoning"`
-  output item under `summary`.
 
-- Visible assistant output into the `content` column, taken from the
-  `type = "message"` output item's `content[[*]]$text`.
+- Visible assistant output into the `content` column.
 
-Reasoning text is not prefixed into `content`; instead it is kept
-separate in `thoughts` for consistency with Anthropic and Gemini.
+**Temperature Defaults:** If `temperature` is not provided in `...`:
+
+- It defaults to `0` (deterministic) for standard models or when
+  reasoning is disabled.
+
+- It remains `NULL` when reasoning is enabled, as the API does not
+  support temperature in that mode.
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+# 1. Standard comparison using GPT-4.1
+res <- openai_compare_pair_live(
+  ID1 = "A", text1 = "Text A...",
+  ID2 = "B", text2 = "Text B...",
+  model = "gpt-4.1",
+  trait_name = "clarity",
+  trait_description = "Which text is clearer?",
+  temperature = 0
+)
+
+# 2. Reasoning comparison using GPT-5.2 (date-stamped)
+res_reasoning <- openai_compare_pair_live(
+  ID1 = "A", text1 = "Text A...",
+  ID2 = "B", text2 = "Text B...",
+  model = "gpt-5.2-2025-12-11",
+  trait_name = "clarity",
+  trait_description = "Which text is clearer?",
+  endpoint = "responses",
+  include_thoughts = TRUE,
+  reasoning = "high"
+)
+print(res_reasoning$thoughts)
+} # }
+```
