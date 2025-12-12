@@ -20,7 +20,7 @@
 #' **Temperature Defaults:**
 #' For OpenAI, if `temperature` is not specified in `...`:
 #' * It defaults to `0` (deterministic) for standard models or when reasoning is
-#'   disabled (`reasoning = "none"`).
+#'   disabled (`reasoning = "none"`) on supported models (5.1/5.2).
 #' * It remains `NULL` (API default) when reasoning is enabled, as the API
 #'   does not support temperature with reasoning.
 #'
@@ -154,7 +154,8 @@ llm_submit_pairs_batch <- function(
   dot_list <- list(...)
 
   if (backend == "openai") {
-    # Detect GPT-5.1/5.2 (and date variants)
+    # Detect models
+    is_gpt5 <- grepl("^gpt-5", model)
     is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
 
     reasoning <- if ("reasoning" %in% names(dot_list)) {
@@ -177,13 +178,20 @@ llm_submit_pairs_batch <- function(
     }
 
     # Determine default temperature logic
-    # If reasoning is active, temperature MUST be NULL (handled by build_openai_batch_requests).
-    # If reasoning is NOT active (standard models OR gpt-5.1/5.2 with reasoning="none"),
-    # we default to 0 if user didn't supply it.
-    reasoning_active <- is_reasoning_model &&
-      (!is.null(reasoning) && reasoning != "none")
+    # Reasoning is ACTIVE if:
+    # 1. Explicitly set to something other than NULL or "none"
+    # 2. OR if it is NULL, but include_thoughts=TRUE (which forces default 'low')
+    reasoning_active <- is_reasoning_model && (
+      (!is.null(reasoning) && reasoning != "none") ||
+        (is.null(reasoning) && isTRUE(include_thoughts))
+    )
 
-    if (!"temperature" %in% names(dot_list) && !reasoning_active) {
+    # Default to 0 ONLY if:
+    # 1. It is NOT a gpt-5 model (standard models)
+    # 2. OR it IS a gpt-5.1/5.2 model AND reasoning is inactive.
+    should_default_zero <- (!is_gpt5) || (is_reasoning_model && !reasoning_active)
+
+    if (!"temperature" %in% names(dot_list) && should_default_zero) {
       dot_list$temperature <- 0
     }
 

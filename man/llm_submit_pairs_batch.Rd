@@ -99,7 +99,7 @@ effort is supplied in \code{...}.
 For OpenAI, if \code{temperature} is not specified in \code{...}:
 \itemize{
 \item It defaults to \code{0} (deterministic) for standard models or when reasoning is
-disabled (\code{reasoning = "none"}).
+disabled (\code{reasoning = "none"}) on supported models (5.1/5.2).
 \item It remains \code{NULL} (API default) when reasoning is enabled, as the API
 does not support temperature with reasoning.
 }
