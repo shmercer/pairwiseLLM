@@ -124,15 +124,15 @@
 #'
 #' @export
 llm_submit_pairs_batch <- function(
-  pairs,
-  backend = c("openai", "anthropic", "gemini"),
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  include_thoughts = FALSE,
-  include_raw = FALSE,
-  ...
+    pairs,
+    backend = c("openai", "anthropic", "gemini"),
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    include_thoughts = FALSE,
+    include_raw = FALSE,
+    ...
 ) {
   backend <- match.arg(tolower(backend), c("openai", "anthropic", "gemini"))
 
@@ -154,8 +154,7 @@ llm_submit_pairs_batch <- function(
   dot_list <- list(...)
 
   if (backend == "openai") {
-    # Detect models
-    is_gpt5 <- grepl("^gpt-5", model)
+    # Detect GPT-5.1/5.2 (and date variants)
     is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
 
     reasoning <- if ("reasoning" %in% names(dot_list)) {
@@ -170,7 +169,7 @@ llm_submit_pairs_batch <- function(
     } else {
       # Auto-select "responses" for reasoning models when thoughts are enabled
       if (is_reasoning_model && (isTRUE(include_thoughts) ||
-        (!is.null(reasoning) && !identical(reasoning, "none")))) {
+                                 (!is.null(reasoning) && !identical(reasoning, "none")))) {
         "responses"
       } else {
         "chat.completions"
@@ -186,12 +185,9 @@ llm_submit_pairs_batch <- function(
         (is.null(reasoning) && isTRUE(include_thoughts))
     )
 
-    # Default to 0 ONLY if:
-    # 1. It is NOT a gpt-5 model (standard models)
-    # 2. OR it IS a gpt-5.1/5.2 model AND reasoning is inactive.
-    should_default_zero <- (!is_gpt5) || (is_reasoning_model && !reasoning_active)
-
-    if (!"temperature" %in% names(dot_list) && should_default_zero) {
+    # Default to 0 ONLY if reasoning is NOT active.
+    # This covers standard models AND gpt-5.1/5.2 with reasoning disabled.
+    if (!"temperature" %in% names(dot_list) && !reasoning_active) {
       dot_list$temperature <- 0
     }
 
@@ -245,12 +241,12 @@ llm_submit_pairs_batch <- function(
 
   # Ensure batch paths exist when provided
   if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&
-    !file.exists(out$batch_input_path)) {
+      !file.exists(out$batch_input_path)) {
     file.create(out$batch_input_path)
   }
 
   if (!is.null(out$batch_output_path) && nzchar(out$batch_output_path) &&
-    !file.exists(out$batch_output_path)) {
+      !file.exists(out$batch_output_path)) {
     file.create(out$batch_output_path)
   }
 

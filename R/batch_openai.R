@@ -107,7 +107,6 @@ build_openai_batch_requests <- function(pairs,
   }
 
   # Validate model vs temperature / top_p / logprobs / reasoning
-  is_gpt5 <- grepl("^gpt-5", model)
   is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
 
   # Default reasoning if thoughts requested on responses endpoint
@@ -126,6 +125,7 @@ build_openai_batch_requests <- function(pairs,
     temperature <- 0
   }
 
+  # Validation: only strict check for ACTIVE reasoning
   if (is_reasoning_model && reasoning_active) {
     if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
       stop("For gpt-5.1/5.2 with reasoning, temperature/top_p/logprobs must be NULL.", call. = FALSE)

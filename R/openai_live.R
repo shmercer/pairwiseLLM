@@ -131,7 +131,6 @@ openai_compare_pair_live <- function(
   include_thoughts <- dots$include_thoughts %||% FALSE
 
   # Determine temperature default
-  is_gpt5 <- grepl("^gpt-5", model)
   is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
   reasoning_active <- is_reasoning_model &&
     (!is.null(reasoning_effort) && reasoning_effort != "none")
@@ -144,7 +143,7 @@ openai_compare_pair_live <- function(
     0 # Default to 0 for everything else (standard or disabled reasoning)
   }
 
-  # Validation: Only block temp/top_p/logprobs if reasoning is ACTIVE.
+  # Validation: Only block temp/top_p/logprobs if reasoning is ACTIVE
   # We do NOT block generic gpt-5 models here, allowing temp=0.
   if (is_reasoning_model && reasoning_active) {
     if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
@@ -234,10 +233,14 @@ openai_compare_pair_live <- function(
       for (out_el in output) {
         if (identical(out_el$type, "reasoning")) {
           rs <- out_el$summary
-          if (is.list(rs)) {
-            for (s in rs) if (!is.null(s$text)) reasoning_chunks <- c(reasoning_chunks, s$text)
-          } else if (is.data.frame(rs) && "text" %in% names(rs)) {
+
+          # Priority 1: Data frame (check first because is.list(df) is TRUE)
+          if (is.data.frame(rs) && "text" %in% names(rs)) {
             reasoning_chunks <- c(reasoning_chunks, as.character(rs$text))
+          }
+          # Priority 2: Generic list
+          else if (is.list(rs)) {
+            for (s in rs) if (!is.null(s$text)) reasoning_chunks <- c(reasoning_chunks, s$text)
           }
         }
         if (length(out_el$content) > 0L) {
