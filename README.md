@@ -11,6 +11,9 @@ coverage](https://codecov.io/gh/shmercer/pairwiseLLM/graph/badge.svg)](https://a
 status](https://www.r-pkg.org/badges/version/pairwiseLLM)](https://CRAN.R-project.org/package=pairwiseLLM)
 [![License:
 MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/shmercer/pairwiseLLM/blob/master/LICENSE.md)
+[![Project Status: Active – The project has reached a stable, usable
+state and is being actively
+developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 <!-- badges: end -->
 
 `pairwiseLLM` provides a unified, extensible framework for generating,
