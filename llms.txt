@@ -1,8 +1,5 @@
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
-pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
-Writing Evaluation ================
-
 ![pairwiseLLM
 banner](https://www.dropbox.com/scl/fi/bsimk0eq27o7c8wh3r56i/pairwiseLLM_logo.jpeg?rlkey=ay5alvw19j5tmok2seh5086pp&st=l5pgk5n9&raw=1)
 
