@@ -1,13 +1,5 @@
 # Getting Started with pairwiseLLM
 
-![](../../../_temp/Library/pairwiseLLM/images/pairwiseLLM_logo.jpeg)
-
-  
-
-# Getting Started with pairwiseLLM
-
-  
-
 ## 1. Introduction
 
 `pairwiseLLM` provides a unified workflow for generating and analyzing
