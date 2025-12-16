@@ -1,7 +1,7 @@
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
 ![pairwiseLLM
-banner](https://www.dropbox.com/scl/fi/bsimk0eq27o7c8wh3r56i/pairwiseLLM_logo.jpeg?rlkey=ay5alvw19j5tmok2seh5086pp&st=l5pgk5n9&raw=1)
+banner](https://www.dropbox.com/scl/fi/dn51r1q7bkythiz5e6jdj/pairwiseLLM_logo.jpeg?rlkey=qlpe8xyda35wriryxqa87a1v8&st=tu8hmsp6&raw=1)
 
 pairwiseLLM banner
 
