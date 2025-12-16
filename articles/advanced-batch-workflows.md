@@ -1,5 +1,13 @@
 # Advanced: Submitting and Polling Multiple Batches
 
+![](../../../_temp/Library/pairwiseLLM/images/pairwiseLLM_logo.jpeg)
+
+  
+
+# Advanced: Submitting and Polling Multiple Batches
+
+  
+
 ## 1. Overview
 
 This vignette demonstrates how to use **pairwiseLLM** for more complex

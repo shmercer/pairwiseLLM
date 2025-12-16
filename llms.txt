@@ -1,6 +1,10 @@
 pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation ================
 
+![](inst/images/pairwiseLLM_logo.jpeg)
+
+  
+
 `pairwiseLLM` provides a unified, extensible framework for generating,
 submitting, and modeling **pairwise comparisons of writing quality**
 using large language models (LLMs).
