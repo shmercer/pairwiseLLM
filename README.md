@@ -2,12 +2,20 @@ pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation
 ================
 
+<style>
+h1.title {
+  display: none;
+}
+</style>
+
 <figure>
 <img
 src="https://www.dropbox.com/scl/fi/bsimk0eq27o7c8wh3r56i/pairwiseLLM_logo.jpeg?rlkey=ay5alvw19j5tmok2seh5086pp&amp;st=l5pgk5n9&amp;raw=1"
 alt="pairwiseLLM banner" />
 <figcaption aria-hidden="true">pairwiseLLM banner</figcaption>
 </figure>
+
+# pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
 <!-- badges: start -->
 
