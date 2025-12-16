@@ -5,6 +5,12 @@ editor_options:
   chunk_output_type: console
 ---
 
+```{r logo, echo = FALSE, out.width = "100%", fig.align = "center"}
+knitr::include_graphics("inst/images/pairwiseLLM_logo.jpeg")
+```
+
+<br>
+
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml)
 [![Codecov test coverage](https://codecov.io/gh/shmercer/pairwiseLLM/graph/badge.svg)](https://app.codecov.io/gh/shmercer/pairwiseLLM)

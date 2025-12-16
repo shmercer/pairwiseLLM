@@ -2,6 +2,10 @@ pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation
 ================
 
+<img src="inst/images/pairwiseLLM_logo.jpeg" width="100%" style="display: block; margin: auto;" />
+
+<br>
+
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml)
