@@ -5,9 +5,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r logo, echo = FALSE, out.width = "100%", fig.align = "center"}
-knitr::include_graphics("inst/images/pairwiseLLM_logo.jpeg")
-```
+![pairwiseLLM banner](https://www.dropbox.com/scl/fi/bsimk0eq27o7c8wh3r56i/pairwiseLLM_logo.jpeg?rlkey=ay5alvw19j5tmok2seh5086pp&st=l5pgk5n9&raw=1)
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml)

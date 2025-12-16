@@ -7,28 +7,12 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-<style>
-h1.title {
-  display: none;
-}
-</style>
-
 ```{r, include=FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment  = "#>"
 )
 ```
-
-```{r logo, echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center", out.width = "100%"}
-knitr::include_graphics(
-  system.file("images", "pairwiseLLM_logo.jpeg", package = "pairwiseLLM")
-)
-```
-
-<br>
-<h1 style="text-align: center;">Advanced: Submitting and Polling Multiple Batches</h1>
-<br>
 
 # 1. Overview
 
