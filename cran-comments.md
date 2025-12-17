@@ -1,3 +1,21 @@
+## Resubmission
+
+This is a resubmission. I have addressed all reviewer comments as follows:
+
+1. I now use only undirected quotation marks in the description text.
+2. I added references to the description field of DESCRIPTION
+3. Examples for unexported functions
+  - `together_compare_pair_live()` is now exported
+4. Commented out code lines in examples
+  - I reviewed all functions and removed any commented out code lines.
+5. `.GlobalEnv` CRAN policy
+  - The following variables are now defined only within functions: 
+    "key", "ID1", "ID2", "better_id", "is_consistent", "is_pos1_bias",
+    "is_pos2_bias", "winner_pos_main", "winner_pos_rev"
+6. I added `inst/WORDLIST` to remove notes about misspelled words.
+
+Thank you for your review!
+
 ## Test environments
 
 I tested the package on the following environments:
@@ -14,16 +32,17 @@ I tested the package on the following environments:
   - All CI jobs complete successfully with: 0 errors or warnings.
 
 - `devtools::check_win_devel()`
-  - O errors or warnings, 1 note for possibly misspelled words ("Anthropic", "Elo", "LLMs", "Ollama", and "OpenAI"), which are spelled correctly.
+  - No errors, warnings, or notes
 
 ## R CMD check results
 
-0 errors | 0 warnings | 1 note
+0 errors | 0 warnings | 0 notes
 
-No errors or warnings.  
-The single NOTE is expected and harmless.
+## Reverse dependencies
 
-## CRAN policy compliance
+There are no reverse dependencies.
+
+## Additional Notes
 
 ### Internet access
 
@@ -65,14 +84,4 @@ Tests run deterministically and without side effects:
 - No test performs file I/O outside temporary directories.
 
 This ensures fast, clean CRAN checks.
-
-### Reverse dependencies
-
-This is the first CRAN submission, so there are no reverse dependencies.
-
-## Additional notes
-
-- The package does not modify user files or global options.
-- All non-CRAN dependencies are placed in `Suggests` with proper conditional usage.
-- The package follows MIT licensing and includes the required `LICENSE` and `LICENSE.md` files.
 
