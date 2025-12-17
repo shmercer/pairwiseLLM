@@ -123,6 +123,8 @@
 #'
 #' res_kimi$better_id
 #' }
+#'
+#' @export
 together_compare_pair_live <- function(
   ID1,
   text1,
