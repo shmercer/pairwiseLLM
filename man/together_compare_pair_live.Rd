@@ -121,7 +121,6 @@ defaults are not applied.
 \examples{
 \dontrun{
 # Requires TOGETHER_API_KEY set in your environment and network access.
-library(pairwiseLLM)
 
 data("example_writing_samples", package = "pairwiseLLM")
 samples <- example_writing_samples[1:2, ]
