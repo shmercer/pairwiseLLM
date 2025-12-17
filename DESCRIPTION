@@ -7,12 +7,16 @@ Authors@R:
 Description: Provides a unified framework for generating, submitting, and 
     analyzing pairwise comparisons of writing quality using large language 
     models (LLMs). The package supports live and/or batch evaluation workflows 
-    across multiple providers (`OpenAI`, `Anthropic`, `Google Gemini`, 
-    `Together AI`, and locally-hosted `Ollama` models), includes bias-tested 
+    across multiple providers ('OpenAI', 'Anthropic', 'Google Gemini', 
+    'Together AI', and locally-hosted 'Ollama' models), includes bias-tested 
     prompt templates and a flexible template registry, and offers tools
     for constructing forward and reversed comparison sets to analyze
     consistency and positional bias. Results can be modeled using 
-    Bradley–Terry or Elo rating methods to derive writing quality scores.
+    Bradley–Terry (1952) <doi:10.2307/2334029> or Elo rating methods to derive 
+    writing quality scores. For information on the method of pairwise 
+    comparisons, see Thurstone (1927) <doi:10.1037/h0070288> and Heldsinger & 
+    Humphry (2010) <doi:10.1007/BF03216919>. For information on Elo ratings, see
+    Clark et al. (2018) <doi:10.1371/journal.pone.0190393>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
