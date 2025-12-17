@@ -160,3 +160,100 @@ test_that("fit_elo_model validates runs argument", {
     fixed = FALSE
   )
 })
+
+test_that("fit_elo_model supports verbose = FALSE (quiet mode)", {
+  skip_if_not_installed("EloChoice")
+
+  data("example_writing_pairs", package = "pairwiseLLM")
+  elo_data <- build_elo_data(example_writing_pairs)
+
+  # Should still fit and return expected structure
+  fit <- fit_elo_model(elo_data, runs = 3, verbose = FALSE)
+
+  expect_equal(fit$engine, "EloChoice")
+  expect_s3_class(fit$elo, "tbl_df")
+  expect_true(all(c("ID", "elo") %in% names(fit$elo)))
+})
+
+test_that("fit_elo_model rejects non-numeric or NA runs", {
+  skip_if_not_installed("EloChoice")
+
+  data("example_writing_pairs", package = "pairwiseLLM")
+  elo_data <- build_elo_data(example_writing_pairs)
+
+  expect_error(
+    fit_elo_model(elo_data, runs = NA),
+    "`runs` must be a single positive numeric value",
+    fixed = FALSE
+  )
+
+  expect_error(
+    fit_elo_model(elo_data, runs = "3"),
+    "`runs` must be a single positive numeric value",
+    fixed = FALSE
+  )
+})
+
+test_that("build_elo_data works when inputs are factors", {
+  results <- tibble::tibble(
+    ID1       = factor(c("S1", "S2")),
+    ID2       = factor(c("S2", "S3")),
+    better_id = factor(c("S1", "S3"))
+  )
+
+  elo <- build_elo_data(results)
+
+  expect_s3_class(elo, "tbl_df")
+  expect_identical(names(elo), c("winner", "loser"))
+  expect_equal(elo$winner, c("S1", "S3"))
+  expect_equal(elo$loser, c("S2", "S2"))
+})
+
+test_that("build_elo_data returns character winner/loser even if inputs are factors", {
+  results <- tibble::tibble(
+    ID1       = factor(c("S1")),
+    ID2       = factor(c("S2")),
+    better_id = factor(c("S2"))
+  )
+
+  elo <- build_elo_data(results)
+
+  expect_type(elo$winner, "character")
+  expect_type(elo$loser, "character")
+})
+
+test_that("fit_elo_model errors if EloChoice output lacks a valid ratmat matrix", {
+  skip_if_not_installed("EloChoice")
+  skip_if_not_installed("mockery")
+  skip_if_not_installed("withr")
+
+  data("example_writing_pairs", package = "pairwiseLLM")
+  elo_data <- build_elo_data(example_writing_pairs)
+
+  # Stub EloChoice::elochoice() to return an object with invalid ratmat
+  withr::local_package("pairwiseLLM")
+
+  mockery::stub(
+    where = fit_elo_model,
+    what  = "EloChoice::elochoice",
+    how   = list(ratmat = NULL) # invalid ratmat
+  )
+
+  expect_error(
+    fit_elo_model(elo_data, runs = 3),
+    "does not contain a valid `ratmat` matrix",
+    fixed = TRUE
+  )
+})
+
+test_that("build_elo_data returns character winner/loser", {
+  results <- tibble::tibble(
+    ID1       = factor(c("S1")),
+    ID2       = factor(c("S2")),
+    better_id = factor(c("S2"))
+  )
+
+  elo <- build_elo_data(results)
+  expect_type(elo$winner, "character")
+  expect_type(elo$loser, "character")
+})

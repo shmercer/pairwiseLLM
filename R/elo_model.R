@@ -42,15 +42,19 @@ build_elo_data <- function(results) {
     )
   }
 
-  # Winner = better_id, loser = the other ID (otherwise NA)
-  winner <- ifelse(
-    results$better_id == results$ID1, results$ID1,
-    ifelse(results$better_id == results$ID2, results$ID2, NA_character_)
+  # Coerce to character to avoid factor level-set comparison errors
+  ID1 <- as.character(results$ID1)
+  ID2 <- as.character(results$ID2)
+  better <- as.character(results$better_id)
+
+  winner <- dplyr::if_else(
+    better == ID1, ID1,
+    dplyr::if_else(better == ID2, ID2, NA_character_)
   )
 
-  loser <- ifelse(
-    results$better_id == results$ID1, results$ID2,
-    ifelse(results$better_id == results$ID2, results$ID1, NA_character_)
+  loser <- dplyr::if_else(
+    better == ID1, ID2,
+    dplyr::if_else(better == ID2, ID1, NA_character_)
   )
 
   keep <- !is.na(winner) & !is.na(loser)
@@ -112,6 +116,9 @@ build_elo_data <- function(results) {
 #'   \code{\link{build_elo_data}}.
 #' @param runs Integer number of randomizations to use in
 #'   \code{EloChoice::elochoice}. Default is 5.
+#' @param verbose Logical. If \code{TRUE} (default), show any messages/warnings
+#'   emitted by the underlying fitting functions. If \code{FALSE}, suppress
+#'   noisy output to keep examples and reports clean.
 #' @param ... Additional arguments passed to
 #'   \code{EloChoice::elochoice()}.
 #'
@@ -134,22 +141,17 @@ build_elo_data <- function(results) {
 #' \doi{10.1371/journal.pone.0190393}.
 #'
 #' @examples
-#' \dontrun{
-#' if (requireNamespace("EloChoice", quietly = TRUE)) {
-#'   data("example_writing_pairs", package = "pairwiseLLM")
+#' data("example_writing_pairs", package = "pairwiseLLM")
 #'
-#'   elo_data <- build_elo_data(example_writing_pairs)
+#' elo_data <- build_elo_data(example_writing_pairs)
 #'
-#'   fit <- fit_elo_model(elo_data, runs = 5)
-#'   fit$elo
-#'   fit$reliability
-#'   fit$reliability_weighted
-#' }
-#' }
+#' fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
+#' fit$elo
+#' fit$reliability
+#' fit$reliability_weighted
 #'
 #' @export
-fit_elo_model <- function(elo_data, runs = 5, ...) {
-  # Helpful message if EloChoice is not installed
+fit_elo_model <- function(elo_data, runs = 5, verbose = FALSE, ...) {
   if (!requireNamespace("EloChoice", quietly = TRUE)) {
     stop(
       "Package 'EloChoice' must be installed to use `fit_elo_model()`. ",
@@ -170,25 +172,42 @@ fit_elo_model <- function(elo_data, runs = 5, ...) {
     )
   }
 
-  # Validate runs: type and length before numeric comparison
+  # Validate runs
   if (!is.numeric(runs) || length(runs) != 1L || runs <= 0) {
     stop("`runs` must be a single positive numeric value.", call. = FALSE)
   }
   runs <- as.integer(runs)
 
   # -------------------------------------------------------------------
-  # Fit EloChoice model
+  # Fit EloChoice model (quiet mode suppresses warnings/messages/printing)
   # -------------------------------------------------------------------
-  fit <- EloChoice::elochoice(
-    winner = elo_data$winner,
-    loser  = elo_data$loser,
-    runs   = runs,
-    ...
-  )
+  fit <- if (isTRUE(verbose)) {
+    EloChoice::elochoice(
+      winner = elo_data$winner,
+      loser  = elo_data$loser,
+      runs   = runs,
+      ...
+    )
+  } else {
+    suppressWarnings(
+      suppressMessages({
+        tmp <- utils::capture.output(
+          fit0 <- EloChoice::elochoice(
+            winner = elo_data$winner,
+            loser  = elo_data$loser,
+            runs   = runs,
+            ...
+          ),
+          type = "output"
+        )
+        invisible(tmp)
+        fit0
+      })
+    )
+  }
 
   # -------------------------------------------------------------------
   # Extract Elo ratings from ratmat
-  # ratmat: rows = randomizations, cols = stimuli
   # -------------------------------------------------------------------
   ratings_mat <- fit$ratmat
   if (is.null(ratings_mat) || !is.matrix(ratings_mat)) {
@@ -200,7 +219,6 @@ fit_elo_model <- function(elo_data, runs = 5, ...) {
 
   ids <- colnames(ratings_mat)
   if (is.null(ids) || all(!nzchar(ids))) {
-    # This would be unusual; EloChoice normally sets colnames from stimulus IDs
     ids <- as.character(seq_len(ncol(ratings_mat)))
   }
 
@@ -214,18 +232,19 @@ fit_elo_model <- function(elo_data, runs = 5, ...) {
   # -------------------------------------------------------------------
   # Reliability: unweighted + weighted indices
   # -------------------------------------------------------------------
-  rel <- EloChoice::reliability(fit)
+  rel <- if (isTRUE(verbose)) {
+    EloChoice::reliability(fit)
+  } else {
+    suppressWarnings(suppressMessages(EloChoice::reliability(fit)))
+  }
 
   reliability_unweighted <- NA_real_
   reliability_weighted <- NA_real_
 
   if (is.data.frame(rel) && nrow(rel) > 0L) {
-    # Per docs: first column = unweighted, second = weighted
-    # typically named upset and upset.wgt
     if ("upset" %in% names(rel)) {
       reliability_unweighted <- mean(rel$upset, na.rm = TRUE)
     } else {
-      # fallback to first numeric column if names ever change
       num_cols <- vapply(rel, is.numeric, logical(1))
       if (any(num_cols)) {
         reliability_unweighted <- mean(rel[[which(num_cols)[1]]], na.rm = TRUE)

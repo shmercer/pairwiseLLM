@@ -5,7 +5,7 @@
 \alias{example_writing_samples}
 \title{Example dataset of writing samples}
 \format{
-A tibble with 10 rows and 3 variables:
+A tibble with 20 rows and 3 variables:
 \describe{
 \item{ID}{Character ID for each sample (e.g., \code{"S01"}).}
 \item{text}{Character string with the writing sample.}
@@ -17,7 +17,7 @@ intended relative quality of the sample (higher = better).}
 data("example_writing_samples")
 }
 \description{
-A small set of ten writing samples on the topic
+A small set of 20 writing samples on the topic
 "Why is writing assessment difficult?", intended for use in
 examples and tests involving pairing and LLM-based comparisons.
 The samples vary in quality, approximately from very weak to very

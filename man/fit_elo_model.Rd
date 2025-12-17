@@ -4,7 +4,7 @@
 \alias{fit_elo_model}
 \title{Fit an EloChoice model to pairwise comparison data}
 \usage{
-fit_elo_model(elo_data, runs = 5, ...)
+fit_elo_model(elo_data, runs = 5, verbose = FALSE, ...)
 }
 \arguments{
 \item{elo_data}{A data frame or tibble containing \code{winner} and
@@ -13,6 +13,10 @@ fit_elo_model(elo_data, runs = 5, ...)
 
 \item{runs}{Integer number of randomizations to use in
 \code{EloChoice::elochoice}. Default is 5.}
+
+\item{verbose}{Logical. If \code{TRUE} (default), show any messages/warnings
+emitted by the underlying fitting functions. If \code{FALSE}, suppress
+noisy output to keep examples and reports clean.}
 
 \item{...}{Additional arguments passed to
 \code{EloChoice::elochoice()}.}
@@ -75,18 +79,14 @@ standard errors for these ratings, so none are returned.)
 }
 }
 \examples{
-\dontrun{
-if (requireNamespace("EloChoice", quietly = TRUE)) {
-  data("example_writing_pairs", package = "pairwiseLLM")
+data("example_writing_pairs", package = "pairwiseLLM")
 
-  elo_data <- build_elo_data(example_writing_pairs)
+elo_data <- build_elo_data(example_writing_pairs)
 
-  fit <- fit_elo_model(elo_data, runs = 5)
-  fit$elo
-  fit$reliability
-  fit$reliability_weighted
-}
-}
+fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
+fit$elo
+fit$reliability
+fit$reliability_weighted
 
 }
 \references{

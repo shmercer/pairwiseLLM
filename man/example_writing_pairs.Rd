@@ -5,7 +5,7 @@
 \alias{example_writing_pairs}
 \title{Example dataset of paired comparisons for writing samples}
 \format{
-A tibble with 45 rows and 3 variables:
+A tibble with 190 rows and 3 variables:
 \describe{
 \item{ID1}{Character ID of the first sample in the pair.}
 \item{ID2}{Character ID of the second sample in the pair.}
@@ -18,7 +18,7 @@ data("example_writing_pairs")
 }
 \description{
 A complete set of unordered paired comparison outcomes for the
-ten samples in \code{\link{example_writing_samples}}. For each
+20 samples in \code{\link{example_writing_samples}}. For each
 pair of IDs, the \code{better_id} field indicates which sample
 is assumed to be better, based on the \code{quality_score} in
 \code{example_writing_samples}.
