@@ -48,9 +48,6 @@ pairs_rand <- randomize_pair_order(pairs_all, seed = 123)
 head(pairs_all[, c("ID1", "ID2")])
 head(pairs_rand[, c("ID1", "ID2")])
 
-# For deterministic alternation instead of randomness, see:
-# alt_pairs <- alternate_pair_order(pairs_all)
-
 }
 \seealso{
 \code{\link{alternate_pair_order}} for deterministic alternating order,

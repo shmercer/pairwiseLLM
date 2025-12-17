@@ -277,9 +277,6 @@ sample_reverse_pairs <- function(pairs,
 #' head(pairs_all[, c("ID1", "ID2")])
 #' head(pairs_rand[, c("ID1", "ID2")])
 #'
-#' # For deterministic alternation instead of randomness, see:
-#' # alt_pairs <- alternate_pair_order(pairs_all)
-#'
 #' @seealso
 #' \code{\link{alternate_pair_order}} for deterministic alternating order,
 #' \code{\link{sample_reverse_pairs}} and
@@ -359,7 +356,6 @@ randomize_pair_order <- function(pairs, seed = NULL) {
 #' data("example_writing_samples")
 #' pairs <- make_pairs(example_writing_samples)
 #'
-#' # Deterministic alternation (no randomness)
 #' pairs_alt <- alternate_pair_order(pairs)
 #'
 #' head(pairs[, c("ID1", "ID2")])
