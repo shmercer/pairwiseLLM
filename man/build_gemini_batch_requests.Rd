@@ -83,3 +83,27 @@ Each pair receives a unique \code{custom_id} of the form
 \code{"GEM_<ID1>_vs_<ID2>"} and a corresponding request object containing
 the prompt and generation configuration.
 }
+\examples{
+data("example_writing_samples", package = "pairwiseLLM")
+
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 3, seed = 123) |>
+  randomize_pair_order(seed = 456)
+
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+reqs <- build_gemini_batch_requests(
+  pairs             = pairs,
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "low",
+  include_thoughts  = TRUE
+)
+
+reqs
+
+}

@@ -38,3 +38,19 @@ This helper repeatedly calls \code{\link{gemini_get_batch}} until the
 batch's \code{metadata$state} enters a terminal state or a time limit is
 reached. For the REST API, states have the form "BATCH_STATE_*".
 }
+\examples{
+# Offline: polling parameters and batch name are plain R objects
+batch_name <- "batches/123456"
+
+# Online: poll until the batch reaches a terminal state (requires network)
+\dontrun{
+final_batch <- gemini_poll_batch_until_complete(
+  batch_name       = batch_name,
+  interval_seconds = 10,
+  timeout_seconds  = 600,
+  verbose          = TRUE
+)
+final_batch$metadata$state
+}
+
+}

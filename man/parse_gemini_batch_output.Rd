@@ -31,3 +31,26 @@ converts each line into a row that mirrors the structure used for live
 Gemini calls, including a \code{thoughts} column when the batch was run with
 \code{include_thoughts = TRUE}.
 }
+\examples{
+#' # This example assumes you have already:
+# 1. Built Gemini batch requests with `build_gemini_batch_requests()`
+# 2. Submitted and completed a batch job via the Gemini API
+# 3. Downloaded the results using `gemini_download_batch_results()`
+\dontrun{
+# Path to a JSONL file created by `gemini_download_batch_results()`
+results_path <- "gemini_batch_results.jsonl"
+
+# Requests table used to build the batch (must contain custom_id, ID1, ID2)
+# as returned by `build_gemini_batch_requests()`
+requests_tbl <- readRDS("gemini_batch_requests.rds")
+
+# Parse batch output into a tidy tibble of pairwise results
+results <- parse_gemini_batch_output(
+  results_path = results_path,
+  requests_tbl = requests_tbl
+)
+
+results
+}
+
+}

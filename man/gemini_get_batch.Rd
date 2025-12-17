@@ -30,3 +30,15 @@ returned by \code{\link{gemini_create_batch}}.
 It corresponds to a GET request on \code{/v1beta/<BATCH_NAME>}, where
 \code{BATCH_NAME} is a string such as \code{"batches/123456"}.
 }
+\examples{
+# Offline: basic batch name validation / object you would pass
+batch_name <- "batches/123456"
+
+# Online: retrieve the batch state from Gemini (requires API key + network)
+\dontrun{
+batch <- gemini_get_batch(batch_name = batch_name)
+batch$name
+batch$metadata$state
+}
+
+}

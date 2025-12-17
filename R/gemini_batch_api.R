@@ -352,6 +352,28 @@
 #'   \item{request}{List-column containing the Gemini GenerateContent request
 #'     object for each pair.}
 #' }
+#' @examples
+#' data("example_writing_samples", package = "pairwiseLLM")
+#'
+#' pairs <- example_writing_samples |>
+#'   make_pairs() |>
+#'   sample_pairs(n_pairs = 3, seed = 123) |>
+#'   randomize_pair_order(seed = 456)
+#'
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' reqs <- build_gemini_batch_requests(
+#'   pairs             = pairs,
+#'   model             = "gemini-3-pro-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "low",
+#'   include_thoughts  = TRUE
+#' )
+#'
+#' reqs
 #'
 #' @export
 build_gemini_batch_requests <- function(
@@ -498,6 +520,45 @@ build_gemini_batch_requests <- function(
 #'    and (after completion) \code{response$inlinedResponses} or
 #'   \code{response$responsesFile}.
 #'
+#' @examples
+#' # --- Offline preparation: build GenerateContent requests ---
+#'
+#' data("example_writing_samples", package = "pairwiseLLM")
+#'
+#' pairs <- example_writing_samples |>
+#'   make_pairs() |>
+#'   sample_pairs(n_pairs = 2, seed = 123)
+#'
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' batch_tbl <- build_gemini_batch_requests(
+#'   pairs             = pairs,
+#'   model             = "gemini-3-pro-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "low"
+#' )
+#'
+#' # Extract the list of request objects
+#' requests <- batch_tbl$request
+#'
+#' # Inspect a single GenerateContent request (purely local)
+#' requests[[1]]
+#'
+#' # --- Online step: create the Gemini Batch job ---
+#' # Requires network access and a valid Gemini API key.
+#' \dontrun{
+#' batch <- gemini_create_batch(
+#'   requests = requests,
+#'   model    = "gemini-3-pro-preview"
+#' )
+#'
+#' batch$name
+#' batch$metadata$state
+#' }
+#'
 #' @export
 gemini_create_batch <- function(
   requests,
@@ -563,6 +624,17 @@ gemini_create_batch <- function(
 #'
 #' @return A list representing the Batch job object.
 #'
+#' @examples
+#' # Offline: basic batch name validation / object you would pass
+#' batch_name <- "batches/123456"
+#'
+#' # Online: retrieve the batch state from Gemini (requires API key + network)
+#' \dontrun{
+#' batch <- gemini_get_batch(batch_name = batch_name)
+#' batch$name
+#' batch$metadata$state
+#' }
+#'
 #' @export
 gemini_get_batch <- function(
   batch_name,
@@ -600,6 +672,21 @@ gemini_get_batch <- function(
 #'
 #' @return The final Batch job object as returned by
 #'   \code{\link{gemini_get_batch}}.
+#'
+#' @examples
+#' # Offline: polling parameters and batch name are plain R objects
+#' batch_name <- "batches/123456"
+#'
+#' # Online: poll until the batch reaches a terminal state (requires network)
+#' \dontrun{
+#' final_batch <- gemini_poll_batch_until_complete(
+#'   batch_name       = batch_name,
+#'   interval_seconds = 10,
+#'   timeout_seconds  = 600,
+#'   verbose          = TRUE
+#' )
+#' final_batch$metadata$state
+#' }
 #'
 #' @export
 gemini_poll_batch_until_complete <- function(
@@ -708,6 +795,32 @@ gemini_poll_batch_until_complete <- function(
 #' @param api_version API version (default \code{"v1beta"}).
 #'
 #' @return Invisibly returns \code{output_path}.
+#'
+#' @examples
+#' # This example requires a Gemini API key and network access.
+#' # It assumes you have already created and run a Gemini batch job.
+#' \dontrun{
+#' # Name of an existing Gemini batch
+#' batch_name <- "batches/123456"
+#'
+#' # Requests table used to create the batch (must include custom_id)
+#' requests_tbl <- tibble::tibble(
+#'   custom_id = c("GEM_S01_vs_S02", "GEM_S03_vs_S04")
+#' )
+#'
+#' # Download inline batch results to a local JSONL file
+#' out_file <- tempfile(fileext = ".jsonl")
+#'
+#' gemini_download_batch_results(
+#'   batch        = batch_name,
+#'   requests_tbl = requests_tbl,
+#'   output_path  = out_file
+#' )
+#'
+#' # Inspect the downloaded JSONL
+#' readLines(out_file, warn = FALSE)
+#' }
+#'
 #' @export
 gemini_download_batch_results <- function(
   batch,
@@ -844,6 +957,29 @@ gemini_download_batch_results <- function(
 #'   * `thoughts`, `thought_signature`, `thoughts_token_count`
 #'   * `content`, `better_sample`, `better_id`
 #'   * `prompt_tokens`, `completion_tokens`, `total_tokens`
+#'
+#' @examples
+#' #' # This example assumes you have already:
+#' # 1. Built Gemini batch requests with `build_gemini_batch_requests()`
+#' # 2. Submitted and completed a batch job via the Gemini API
+#' # 3. Downloaded the results using `gemini_download_batch_results()`
+#' \dontrun{
+#' # Path to a JSONL file created by `gemini_download_batch_results()`
+#' results_path <- "gemini_batch_results.jsonl"
+#'
+#' # Requests table used to build the batch (must contain custom_id, ID1, ID2)
+#' # as returned by `build_gemini_batch_requests()`
+#' requests_tbl <- readRDS("gemini_batch_requests.rds")
+#'
+#' # Parse batch output into a tidy tibble of pairwise results
+#' results <- parse_gemini_batch_output(
+#'   results_path = results_path,
+#'   requests_tbl = requests_tbl
+#' )
+#'
+#' results
+#' }
+#'
 #' @export
 parse_gemini_batch_output <- function(results_path, requests_tbl) {
   if (!file.exists(results_path)) {
@@ -1068,6 +1204,45 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #'   \item{batch}{The created Batch job object.}
 #'   \item{results}{Parsed tibble of results (or \code{NULL} when
 #'         \code{poll = FALSE}).}
+#' }
+#'
+#' @examples
+#' # This example requires:
+#' # - A valid Gemini API key (set in GEMINI_API_KEY)
+#' # - Internet access
+#' # - Billable Gemini API usage
+#' \dontrun{
+#' # Example pairwise data
+#' data("example_writing_samples", package = "pairwiseLLM")
+#'
+#' pairs <- example_writing_samples |>
+#'   make_pairs() |>
+#'   sample_pairs(n_pairs = 5, seed = 123)
+#'
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' # Run the full Gemini batch pipeline
+#' res <- run_gemini_batch_pipeline(
+#'   pairs             = pairs,
+#'   model             = "gemini-3-pro-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "low",
+#'   poll              = TRUE,
+#'   include_thoughts  = FALSE
+#' )
+#'
+#' # Parsed pairwise comparison results
+#' res$results
+#'
+#' # Inspect batch metadata
+#' res$batch
+#'
+#' # Paths to saved input/output files
+#' res$batch_input_path
+#' res$batch_output_path
 #' }
 #'
 #' @export

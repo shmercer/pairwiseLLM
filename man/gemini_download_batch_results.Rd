@@ -59,3 +59,29 @@ or, when an error occurred:
  }}
 }
 }
+\examples{
+# This example requires a Gemini API key and network access.
+# It assumes you have already created and run a Gemini batch job.
+\dontrun{
+# Name of an existing Gemini batch
+batch_name <- "batches/123456"
+
+# Requests table used to create the batch (must include custom_id)
+requests_tbl <- tibble::tibble(
+  custom_id = c("GEM_S01_vs_S02", "GEM_S03_vs_S04")
+)
+
+# Download inline batch results to a local JSONL file
+out_file <- tempfile(fileext = ".jsonl")
+
+gemini_download_batch_results(
+  batch        = batch_name,
+  requests_tbl = requests_tbl,
+  output_path  = out_file
+)
+
+# Inspect the downloaded JSONL
+readLines(out_file, warn = FALSE)
+}
+
+}

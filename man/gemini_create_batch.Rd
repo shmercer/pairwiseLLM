@@ -44,3 +44,43 @@ Typically you will not call this directly; instead, use
 \code{\link{run_gemini_batch_pipeline}} which builds requests from a tibble
 of pairs, creates the batch, polls for completion, and parses the results.
 }
+\examples{
+# --- Offline preparation: build GenerateContent requests ---
+
+data("example_writing_samples", package = "pairwiseLLM")
+
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 2, seed = 123)
+
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+batch_tbl <- build_gemini_batch_requests(
+  pairs             = pairs,
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "low"
+)
+
+# Extract the list of request objects
+requests <- batch_tbl$request
+
+# Inspect a single GenerateContent request (purely local)
+requests[[1]]
+
+# --- Online step: create the Gemini Batch job ---
+# Requires network access and a valid Gemini API key.
+\dontrun{
+batch <- gemini_create_batch(
+  requests = requests,
+  model    = "gemini-3-pro-preview"
+)
+
+batch$name
+batch$metadata$state
+}
+
+}

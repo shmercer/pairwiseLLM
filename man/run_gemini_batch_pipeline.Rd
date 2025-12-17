@@ -94,3 +94,43 @@ The returned list mirrors the structure of
 \code{\link{run_openai_batch_pipeline}} and
 \code{\link{run_anthropic_batch_pipeline}}.
 }
+\examples{
+# This example requires:
+# - A valid Gemini API key (set in GEMINI_API_KEY)
+# - Internet access
+# - Billable Gemini API usage
+\dontrun{
+# Example pairwise data
+data("example_writing_samples", package = "pairwiseLLM")
+
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 5, seed = 123)
+
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# Run the full Gemini batch pipeline
+res <- run_gemini_batch_pipeline(
+  pairs             = pairs,
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "low",
+  poll              = TRUE,
+  include_thoughts  = FALSE
+)
+
+# Parsed pairwise comparison results
+res$results
+
+# Inspect batch metadata
+res$batch
+
+# Paths to saved input/output files
+res$batch_input_path
+res$batch_output_path
+}
+
+}
