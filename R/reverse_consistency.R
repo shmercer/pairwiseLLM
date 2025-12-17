@@ -60,6 +60,12 @@
 #' @export
 compute_reverse_consistency <- function(main_results,
                                         reverse_results) {
+  # Define variables
+  better_id <- NULL
+  key <- NULL
+  ID1 <- NULL
+  ID2 <- NULL
+
   main_results <- tibble::as_tibble(main_results)
   reverse_results <- tibble::as_tibble(reverse_results)
 
@@ -208,6 +214,14 @@ check_positional_bias <- function(consistency,
                                   n_boot = 1000,
                                   conf_level = 0.95,
                                   seed = NULL) {
+  # Define variables
+  is_consistent <- NULL
+  is_pos1_bias <- NULL
+  is_pos2_bias <- NULL
+  key <- NULL
+  winner_pos_main <- NULL
+  winner_pos_rev <- NULL
+
   # ---- Extract the details tibble safely ----
   if (!inherits(consistency, "data.frame") &&
     is.list(consistency) &&
@@ -306,7 +320,7 @@ check_positional_bias <- function(consistency,
     NA_real_
   }
 
-  # ---- NEW: overall position-1 bias test (forward + reverse combined) ----
+  # ---- overall position-1 bias test (forward + reverse combined) ----
   total_pos1_wins <- wins_sample1_main + wins_sample1_rev
   total_comparisons <- n_valid_main + n_valid_rev
 
