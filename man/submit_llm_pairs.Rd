@@ -118,8 +118,6 @@ thinking text when available), \code{content} (visible assistant output),
 # must be pulled in advance. No API key is required for the `"ollama"`
 # backend.
 
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>

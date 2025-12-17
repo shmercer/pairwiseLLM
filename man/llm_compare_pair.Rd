@@ -123,8 +123,6 @@ live API for that provider is used.
 # must be pulled in advance. No API key is required for the `"ollama"`
 # backend.
 
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 samples <- example_writing_samples[1:2, ]
 

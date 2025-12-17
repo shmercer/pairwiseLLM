@@ -87,8 +87,6 @@
 #' # must be pulled in advance. No API key is required for the `"ollama"`
 #' # backend.
 #'
-#' library(pairwiseLLM)
-#'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #' samples <- example_writing_samples[1:2, ]
 #'
@@ -364,8 +362,6 @@ llm_compare_pair <- function(
 #' # For local Ollama use, an Ollama server must be running and the models
 #' # must be pulled in advance. No API key is required for the `"ollama"`
 #' # backend.
-#'
-#' library(pairwiseLLM)
 #'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'
