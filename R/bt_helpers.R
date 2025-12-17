@@ -15,6 +15,8 @@
 #' @param decreasing Logical; should higher \code{theta} values receive
 #'   lower rank numbers? If \code{TRUE} (default), the highest \code{theta}
 #'   gets \code{rank = 1}.
+#' @param verbose Logical. If \code{TRUE} (default), emit warnings when coercing.
+#'   If \code{FALSE}, suppress coercion warnings during ranking.
 #'
 #' @return A tibble with columns:
 #' \describe{
@@ -27,19 +29,27 @@
 #'   \item{reliability}{MLE reliability (numeric scalar) repeated on each row.}
 #' }
 #'
+#' @examples
+#' # Example using built-in comparison data
+#' data("example_writing_pairs")
+#' bt <- build_bt_data(example_writing_pairs)
+#'
+#' fit1 <- fit_bt_model(bt, engine = "sirt")
+#' fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+#'
+#' summarize_bt_fit(fit1)
+#' summarize_bt_fit(fit2)
+#'
 #' @import tibble
 #' @export
-summarize_bt_fit <- function(fit, decreasing = TRUE) {
-  # Basic sanity checks
+summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
   if (!is.list(fit) || is.null(fit$theta)) {
     stop(
-      "`fit` must be a list returned by `fit_bt_model()` and contain a
-      `$theta` tibble.",
+      "`fit` must be a list returned by `fit_bt_model()` and contain a `$theta` tibble.",
       call. = FALSE
     )
   }
 
-  # Coerce theta to tibble to ensure data-frame semantics
   theta <- tibble::as_tibble(fit$theta)
 
   required_cols <- c("ID", "theta", "se")
@@ -52,11 +62,29 @@ summarize_bt_fit <- function(fit, decreasing = TRUE) {
     )
   }
 
-  # Order and rank by theta
-  ord <- order(theta$theta, decreasing = decreasing, na.last = "keep")
-  rank_vec <- rep(NA_integer_, nrow(theta))
+  # Make a *plain* numeric vector for ranking:
+  # - drop names/attributes
+  # - ensure atomic double
+  theta_num <- theta$theta
+  theta_num <- unname(theta_num)      # removes names attribute (important for fit2)
+  theta_num <- as.double(theta_num)   # ensures plain numeric
 
-  finite_idx <- which(is.finite(theta$theta))
+  # If something ever sneaks in as character, coerce (quietly if verbose=FALSE)
+  if (!is.numeric(theta_num)) {
+    theta_num <- if (isTRUE(verbose)) as.numeric(theta_num) else suppressWarnings(as.numeric(theta_num))
+    theta_num <- as.double(unname(theta_num))
+  }
+
+  # Order and rank (quietly if verbose = FALSE)
+  ord <- if (isTRUE(verbose)) {
+    order(theta_num, decreasing = decreasing, na.last = "keep")
+  } else {
+    suppressWarnings(order(theta_num, decreasing = decreasing, na.last = "keep"))
+  }
+
+  rank_vec <- rep(NA_integer_, length(theta_num))
+
+  finite_idx <- which(is.finite(theta_num))
   if (length(finite_idx) > 0L) {
     ord_finite <- ord[ord %in% finite_idx]
     rank_vec[ord_finite] <- seq_along(ord_finite)
@@ -65,10 +93,10 @@ summarize_bt_fit <- function(fit, decreasing = TRUE) {
   engine <- if (!is.null(fit$engine)) fit$engine else NA_character_
   reliability <- if (!is.null(fit$reliability)) fit$reliability else NA_real_
 
-  # Modify the existing tibble rather than calling tibble()
   theta$rank <- rank_vec
   theta$engine <- engine
   theta$reliability <- reliability
 
   theta
 }
+

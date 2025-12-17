@@ -52,17 +52,31 @@ build_bt_data <- function(results) {
     )
   }
 
-  # Compute result: 1 if better_id == ID1, 0 if better_id == ID2, else NA
-  results$result <- ifelse(
-    results$better_id == results$ID1, 1,
-    ifelse(results$better_id == results$ID2, 0, NA_real_)
+  # Ensure character IDs (avoid factors / labelled types)
+  results <- dplyr::mutate(
+    results,
+    ID1 = as.character(.data$ID1),
+    ID2 = as.character(.data$ID2),
+    better_id = as.character(.data$better_id)
   )
 
-  keep <- !is.na(results$result)
-  results <- results[keep, , drop = FALSE]
+  out <- dplyr::mutate(
+    results,
+    result = dplyr::case_when(
+      .data$better_id == .data$ID1 ~ 1L,
+      .data$better_id == .data$ID2 ~ 0L,
+      TRUE ~ NA_integer_
+    )
+  )
 
-  out <- results[, c("ID1", "ID2", "result"), drop = FALSE]
-  names(out) <- c("object1", "object2", "result")
+  out <- dplyr::filter(out, !is.na(.data$result))
+
+  out <- dplyr::transmute(
+    out,
+    object1 = .data$ID1,
+    object2 = .data$ID2,
+    result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
+  )
 
   tibble::as_tibble(out)
 }
@@ -102,6 +116,9 @@ build_bt_data <- function(results) {
 #'   equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.
 #' @param engine Character string specifying the modeling engine. One of:
 #'   \code{"auto"} (default), \code{"sirt"}, or \code{"BradleyTerry2"}.
+#' @param verbose Logical. If \code{TRUE} (default), show engine output (iterations,
+#'   warnings). If \code{FALSE}, suppress noisy output to keep
+#'   examples and reports clean.
 #' @param ... Additional arguments passed through to \code{sirt::btm()}
 #'   or \code{BradleyTerry2::BTm()}.
 #'
@@ -128,10 +145,8 @@ build_bt_data <- function(results) {
 #' data("example_writing_pairs")
 #' bt <- build_bt_data(example_writing_pairs)
 #'
-#' \dontrun{
 #' fit1 <- fit_bt_model(bt, engine = "sirt")
 #' fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
-#' }
 #'
 #' @import tibble
 #' @import dplyr
@@ -139,6 +154,7 @@ build_bt_data <- function(results) {
 #' @export
 fit_bt_model <- function(bt_data,
                          engine = c("auto", "sirt", "BradleyTerry2"),
+                         verbose = TRUE,
                          ...) {
   bt_data <- as.data.frame(bt_data)
   if (ncol(bt_data) != 3L) {
@@ -150,7 +166,7 @@ fit_bt_model <- function(bt_data,
   # --------------------------
   # sirt::btm helper
   # --------------------------
-  fit_sirt <- function(dat, ...) {
+  fit_sirt <- function(dat, verbose, ...) {
     if (!requireNamespace("sirt", quietly = TRUE)) {
       stop(
         "Package 'sirt' must be installed to use engine = \"sirt\".\n",
@@ -159,8 +175,21 @@ fit_bt_model <- function(bt_data,
       )
     }
 
-    # Suppress the benign "NAs introduced by coercion" warning
-    fit <- suppressWarnings(sirt::btm(dat, ...))
+    # sirt::btm often prints iteration progress. Capture when verbose = FALSE.
+    run_btm <- function() sirt::btm(dat, ...)
+
+    fit <- if (isTRUE(verbose)) {
+      run_btm()
+    } else {
+      suppressWarnings({
+        tmp <- utils::capture.output(
+          fit0 <- run_btm(),
+          type = "output"
+        )
+        invisible(tmp)
+        fit0
+      })
+    }
 
     effects <- fit$effects
     if (is.null(effects)) {
@@ -192,11 +221,10 @@ fit_bt_model <- function(bt_data,
   # --------------------------
   # BradleyTerry2 helper
   # --------------------------
-  fit_bt2 <- function(dat, ...) {
+  fit_bt2 <- function(dat, verbose, ...) {
     if (!requireNamespace("BradleyTerry2", quietly = TRUE)) {
       stop(
-        "Package 'BradleyTerry2' must be installed to use engine =
-        \"BradleyTerry2\".\n",
+        "Package 'BradleyTerry2' must be installed to use engine = \"BradleyTerry2\".\n",
         "Install it with: install.packages(\"BradleyTerry2\")",
         call. = FALSE
       )
@@ -206,14 +234,8 @@ fit_bt_model <- function(bt_data,
     names(dat)[1:3] <- c("object1", "object2", "result")
 
     # Aggregate wins for object1 vs object2
-    wins1 <- stats::aggregate(I(result == 1) ~ object1 + object2,
-      data =
-        dat, sum
-    )
-    wins0 <- stats::aggregate(I(result == 0) ~ object1 + object2,
-      data =
-        dat, sum
-    )
+    wins1 <- stats::aggregate(I(result == 1) ~ object1 + object2, data = dat, sum)
+    wins0 <- stats::aggregate(I(result == 0) ~ object1 + object2, data = dat, sum)
 
     agg <- merge(wins1, wins0, by = c("object1", "object2"), all = TRUE)
     agg[is.na(agg)] <- 0
@@ -224,13 +246,26 @@ fit_bt_model <- function(bt_data,
     agg$object1 <- factor(agg$object1, levels = players)
     agg$object2 <- factor(agg$object2, levels = players)
 
-    fit <- BradleyTerry2::BTm(
-      outcome = cbind(agg$win1, agg$win2),
-      player1 = agg$object1,
-      player2 = agg$object2,
-      data    = agg,
-      ...
-    )
+    # Fit; optionally suppress warnings when verbose = FALSE (keeps examples clean)
+    fit <- if (isTRUE(verbose)) {
+      BradleyTerry2::BTm(
+        outcome = cbind(agg$win1, agg$win2),
+        player1 = agg$object1,
+        player2 = agg$object2,
+        data    = agg,
+        ...
+      )
+    } else {
+      suppressWarnings(
+        BradleyTerry2::BTm(
+          outcome = cbind(agg$win1, agg$win2),
+          player1 = agg$object1,
+          player2 = agg$object2,
+          data    = agg,
+          ...
+        )
+      )
+    }
 
     abil <- BradleyTerry2::BTabilities(fit)
 
@@ -244,43 +279,37 @@ fit_bt_model <- function(bt_data,
       engine      = "BradleyTerry2",
       fit         = fit,
       theta       = theta,
-      reliability = NA_real_ # BTm does not report this
+      reliability = NA_real_
     )
   }
 
   # --------------------------
   # Dispatch
   # --------------------------
-
-  # Explicit engines first
   if (engine == "sirt") {
-    return(fit_sirt(bt_data, ...))
+    return(fit_sirt(bt_data, verbose = verbose, ...))
   }
 
   if (engine == "BradleyTerry2") {
-    return(fit_bt2(bt_data, ...))
+    return(fit_bt2(bt_data, verbose = verbose, ...))
   }
 
-  # engine == "auto": try sirt, then fallback to BradleyTerry2
   res_sirt <- tryCatch(
-    fit_sirt(bt_data, ...),
+    fit_sirt(bt_data, verbose = verbose, ...),
     error = function(e) e
   )
-
   if (!inherits(res_sirt, "error")) {
     return(res_sirt)
   }
 
   res_bt2 <- tryCatch(
-    fit_bt2(bt_data, ...),
+    fit_bt2(bt_data, verbose = verbose, ...),
     error = function(e) e
   )
-
   if (!inherits(res_bt2, "error")) {
     return(res_bt2)
   }
 
-  # If we get here, both engines failed
   stop(
     "Both sirt and BradleyTerry2 failed:\n",
     "sirt error: ", conditionMessage(res_sirt), "\n",

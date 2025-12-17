@@ -4,7 +4,12 @@
 \alias{fit_bt_model}
 \title{Fit a Bradley–Terry model with sirt and fallback to BradleyTerry2}
 \usage{
-fit_bt_model(bt_data, engine = c("auto", "sirt", "BradleyTerry2"), ...)
+fit_bt_model(
+  bt_data,
+  engine = c("auto", "sirt", "BradleyTerry2"),
+  verbose = TRUE,
+  ...
+)
 }
 \arguments{
 \item{bt_data}{A data frame or tibble with exactly three columns:
@@ -13,6 +18,10 @@ equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.}
 
 \item{engine}{Character string specifying the modeling engine. One of:
 \code{"auto"} (default), \code{"sirt"}, or \code{"BradleyTerry2"}.}
+
+\item{verbose}{Logical. If \code{TRUE} (default), show engine output (iterations,
+warnings). If \code{FALSE}, suppress noisy output to keep
+examples and reports clean.}
 
 \item{...}{Additional arguments passed through to \code{sirt::btm()}
 or \code{BradleyTerry2::BTm()}.}
@@ -70,9 +79,7 @@ modeling engines. MLE reliability is only available from \pkg{sirt}.
 data("example_writing_pairs")
 bt <- build_bt_data(example_writing_pairs)
 
-\dontrun{
 fit1 <- fit_bt_model(bt, engine = "sirt")
 fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
-}
 
 }

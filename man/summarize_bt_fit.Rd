@@ -4,7 +4,7 @@
 \alias{summarize_bt_fit}
 \title{Summarize a Bradley–Terry model fit}
 \usage{
-summarize_bt_fit(fit, decreasing = TRUE)
+summarize_bt_fit(fit, decreasing = TRUE, verbose = TRUE)
 }
 \arguments{
 \item{fit}{A list returned by \code{\link{fit_bt_model}}.}
@@ -12,6 +12,9 @@ summarize_bt_fit(fit, decreasing = TRUE)
 \item{decreasing}{Logical; should higher \code{theta} values receive
 lower rank numbers? If \code{TRUE} (default), the highest \code{theta}
 gets \code{rank = 1}.}
+
+\item{verbose}{Logical. If \code{TRUE} (default), emit warnings when coercing.
+If \code{FALSE}, suppress coercion warnings during ranking.}
 }
 \value{
 A tibble with columns:
@@ -36,4 +39,16 @@ returns a tibble with one row per object (e.g., writing sample), including:
 \item \code{engine}: modeling engine used ("sirt" or "BradleyTerry2")
 \item \code{reliability}: MLE reliability (for \pkg{sirt}) or \code{NA}
 }
+}
+\examples{
+# Example using built-in comparison data
+data("example_writing_pairs")
+bt <- build_bt_data(example_writing_pairs)
+
+fit1 <- fit_bt_model(bt, engine = "sirt")
+fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+
+summarize_bt_fit(fit1)
+summarize_bt_fit(fit2)
+
 }
