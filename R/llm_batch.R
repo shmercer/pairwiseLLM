@@ -60,9 +60,9 @@
 #' @param model Character scalar model name to use for the batch job.
 #'   * For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5.1"`, or `"gpt-5.2"`
 #'     (including date-stamped versions like `"gpt-5.2-2025-12-11"`).
-#'   * For `"anthropic"`, use provider names like `"claude-3-5-sonnet-latest"`
+#'   * For `"anthropic"`, use provider names like `"claude-4-5-sonnet"`
 #'     or date-stamped versions like `"claude-sonnet-4-5-20250929"`.
-#'   * For `"gemini"`, use names like `"gemini-2.0-pro-exp"`.
+#'   * For `"gemini"`, use names like `"gemini-3-pro-preview"`.
 #' @param trait_name A short name for the trait being evaluated (e.g.
 #'   `"overall_quality"`).
 #' @param trait_description A human-readable description of the trait.
@@ -97,29 +97,57 @@
 #' preserved.
 #'
 #' @examples
+#' # Requires:
+#' # - Internet access
+#' # - Provider API key set in your environment (OPENAI_API_KEY /
+#' #   ANTHROPIC_API_KEY / GEMINI_API_KEY)
+#' # - Billable API usage
 #' \dontrun{
-#' # 1. OpenAI Batch
-#' pairs <- make_pairs(c("A", "B", "C"))
+#' pairs <- tibble::tibble(
+#'   ID1   = c("S01", "S03"),
+#'   text1 = c("Text 1", "Text 3"),
+#'   ID2   = c("S02", "S04"),
+#'   text2 = c("Text 2", "Text 4")
+#' )
+#'
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' # OpenAI batch
 #' batch_openai <- llm_submit_pairs_batch(
-#'   pairs = pairs,
-#'   backend = "openai",
-#'   model = "gpt-5.2-2025-12-11",
-#'   trait_name = "overall_quality",
-#'   trait_description = "Quality of the response.",
-#'   include_thoughts = TRUE
+#'   pairs             = pairs,
+#'   backend           = "openai",
+#'   model             = "gpt-4.1",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   include_thoughts  = FALSE
 #' )
 #' res_openai <- llm_download_batch_results(batch_openai)
 #'
-#' # 2. Anthropic Batch (Claude Sonnet 4.5 date-stamped)
+#' # Anthropic batch
 #' batch_anthropic <- llm_submit_pairs_batch(
-#'   pairs = pairs,
-#'   backend = "anthropic",
-#'   model = "claude-sonnet-4-5-20250929",
-#'   trait_name = "coherence",
-#'   trait_description = "Logical flow of the text.",
-#'   include_thoughts = TRUE
+#'   pairs             = pairs,
+#'   backend           = "anthropic",
+#'   model             = "claude-4-5-sonnet",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   include_thoughts  = FALSE
 #' )
 #' res_anthropic <- llm_download_batch_results(batch_anthropic)
+#'
+#' # Gemini batch
+#' batch_gemini <- llm_submit_pairs_batch(
+#'   pairs             = pairs,
+#'   backend           = "gemini",
+#'   model             = "gemini-3-pro-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   include_thoughts  = TRUE
+#' )
+#' res_gemini <- llm_download_batch_results(batch_gemini)
 #' }
 #'
 #' @export
@@ -272,8 +300,24 @@ llm_submit_pairs_batch <- function(
 #'
 #' @examples
 #' \dontrun{
-#' batch <- llm_submit_pairs_batch(...)
+#' # Requires running a provider batch job first (API key + internet + cost).
+#'
+#' batch <- llm_submit_pairs_batch(
+#'   pairs             = tibble::tibble(
+#'     ID1   = "S01",
+#'     text1 = "Text 1",
+#'     ID2   = "S02",
+#'     text2 = "Text 2"
+#'   ),
+#'   backend           = "openai",
+#'   model             = "gpt-4.1",
+#'   trait_name        = trait_description("overall_quality")$name,
+#'   trait_description = trait_description("overall_quality")$description,
+#'   prompt_template   = set_prompt_template()
+#' )
+#'
 #' res <- llm_download_batch_results(batch)
+#' res
 #' }
 #'
 #' @export

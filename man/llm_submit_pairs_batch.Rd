@@ -28,9 +28,9 @@ through where supported.}
 \itemize{
 \item For \code{"openai"}, use models like \code{"gpt-4.1"}, \code{"gpt-5.1"}, or \code{"gpt-5.2"}
 (including date-stamped versions like \code{"gpt-5.2-2025-12-11"}).
-\item For \code{"anthropic"}, use provider names like \code{"claude-3-5-sonnet-latest"}
+\item For \code{"anthropic"}, use provider names like \code{"claude-4-5-sonnet"}
 or date-stamped versions like \code{"claude-sonnet-4-5-20250929"}.
-\item For \code{"gemini"}, use names like \code{"gemini-2.0-pro-exp"}.
+\item For \code{"gemini"}, use names like \code{"gemini-3-pro-preview"}.
 }}
 
 \item{trait_name}{A short name for the trait being evaluated (e.g.
@@ -133,29 +133,57 @@ results, parse). The returned object contains both metadata and a normalized
 \code{results} tibble. See \code{\link[=llm_download_batch_results]{llm_download_batch_results()}} to extract the results.
 }
 \examples{
+# Requires:
+# - Internet access
+# - Provider API key set in your environment (OPENAI_API_KEY /
+#   ANTHROPIC_API_KEY / GEMINI_API_KEY)
+# - Billable API usage
 \dontrun{
-# 1. OpenAI Batch
-pairs <- make_pairs(c("A", "B", "C"))
+pairs <- tibble::tibble(
+  ID1   = c("S01", "S03"),
+  text1 = c("Text 1", "Text 3"),
+  ID2   = c("S02", "S04"),
+  text2 = c("Text 2", "Text 4")
+)
+
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# OpenAI batch
 batch_openai <- llm_submit_pairs_batch(
-  pairs = pairs,
-  backend = "openai",
-  model = "gpt-5.2-2025-12-11",
-  trait_name = "overall_quality",
-  trait_description = "Quality of the response.",
-  include_thoughts = TRUE
+  pairs             = pairs,
+  backend           = "openai",
+  model             = "gpt-4.1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  include_thoughts  = FALSE
 )
 res_openai <- llm_download_batch_results(batch_openai)
 
-# 2. Anthropic Batch (Claude Sonnet 4.5 date-stamped)
+# Anthropic batch
 batch_anthropic <- llm_submit_pairs_batch(
-  pairs = pairs,
-  backend = "anthropic",
-  model = "claude-sonnet-4-5-20250929",
-  trait_name = "coherence",
-  trait_description = "Logical flow of the text.",
-  include_thoughts = TRUE
+  pairs             = pairs,
+  backend           = "anthropic",
+  model             = "claude-4-5-sonnet",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  include_thoughts  = FALSE
 )
 res_anthropic <- llm_download_batch_results(batch_anthropic)
+
+# Gemini batch
+batch_gemini <- llm_submit_pairs_batch(
+  pairs             = pairs,
+  backend           = "gemini",
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  include_thoughts  = TRUE
+)
+res_gemini <- llm_download_batch_results(batch_gemini)
 }
 
 }
