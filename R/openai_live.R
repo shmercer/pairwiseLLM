@@ -75,6 +75,8 @@ NULL
 #'
 #' @examples
 #' \dontrun{
+#' # Requires API key set and internet access
+#'
 #' # 1. Standard comparison using GPT-4.1
 #' res <- openai_compare_pair_live(
 #'   ID1 = "A", text1 = "Text A...",
@@ -331,7 +333,7 @@ openai_compare_pair_live <- function(
 #'
 #' @examples
 #' \dontrun{
-#' library(pairwiseLLM)
+#' # Requires API key set and internet access
 #'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'

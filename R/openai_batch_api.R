@@ -406,7 +406,6 @@ openai_poll_batch_until_complete <- function(
 #' @examples
 #' \dontrun{
 #' # Requires OPENAI_API_KEY and network access.
-#' library(pairwiseLLM)
 #'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'
@@ -440,7 +439,7 @@ openai_poll_batch_until_complete <- function(
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   include_thoughts  = TRUE, # automatically picks "responses" + reasoning
+#'   include_thoughts  = TRUE,
 #'   interval_seconds  = 10,
 #'   timeout_seconds   = 600
 #' )

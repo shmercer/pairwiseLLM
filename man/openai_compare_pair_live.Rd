@@ -113,6 +113,8 @@ temperature in that mode.
 }
 \examples{
 \dontrun{
+# Requires API key set and internet access
+
 # 1. Standard comparison using GPT-4.1
 res <- openai_compare_pair_live(
   ID1 = "A", text1 = "Text A...",

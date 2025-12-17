@@ -73,7 +73,7 @@ with one row per pair, making it easy to pass into
 }
 \examples{
 \dontrun{
-library(pairwiseLLM)
+# Requires API key set and internet access
 
 data("example_writing_samples", package = "pairwiseLLM")
 

@@ -123,7 +123,6 @@ is used and, for \code{"gpt-5.1"}, a default reasoning effort of
 \examples{
 \dontrun{
 # Requires OPENAI_API_KEY and network access.
-library(pairwiseLLM)
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -157,7 +156,7 @@ pipeline_resp <- run_openai_batch_pipeline(
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  include_thoughts  = TRUE, # automatically picks "responses" + reasoning
+  include_thoughts  = TRUE,
   interval_seconds  = 10,
   timeout_seconds   = 600
 )
