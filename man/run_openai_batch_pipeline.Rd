@@ -135,7 +135,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# 1) Standard chat.completions batch (no thoughts)
+# 1) Standard chat.completions batch with no thoughts
 pipeline_chat <- run_openai_batch_pipeline(
   pairs             = pairs,
   model             = "gpt-4.1",
@@ -150,7 +150,7 @@ pipeline_chat <- run_openai_batch_pipeline(
 pipeline_chat$batch$status
 head(pipeline_chat$results)
 
-# 2) Responses endpoint with reasoning summaries (thoughts) for gpt-5.1
+# 2) Responses endpoint with reasoning summaries for gpt-5.1
 pipeline_resp <- run_openai_batch_pipeline(
   pairs             = pairs,
   model             = "gpt-5.1",

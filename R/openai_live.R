@@ -85,7 +85,7 @@ NULL
 #'   temperature = 0
 #' )
 #'
-#' # 2. Reasoning comparison using GPT-5.2 (date-stamped)
+#' # 2. Reasoning comparison using GPT-5.2
 #' res_reasoning <- openai_compare_pair_live(
 #'   ID1 = "A", text1 = "Text A...",
 #'   ID2 = "B", text2 = "Text B...",
@@ -360,7 +360,7 @@ openai_compare_pair_live <- function(
 #'
 #' res_live$better_id
 #'
-#' # Using gpt-5.1 with reasoning = "low" on the responses endpoint
+#' # Using gpt-5.1 with reasoning on the responses endpoint
 #' res_live_gpt5 <- submit_openai_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "gpt-5.1",

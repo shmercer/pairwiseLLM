@@ -32,6 +32,7 @@ It corresponds to a \code{GET} request on
 }
 \examples{
 \dontrun{
+# Requires ANTHROPIC_API_KEY and network access.
 # After creating a batch:
 batch <- anthropic_create_batch(requests = my_requests)
 batch_id <- batch$id

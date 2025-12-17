@@ -85,7 +85,6 @@
 #' @examples
 #' \dontrun{
 #' # Requires TOGETHER_API_KEY set in your environment and network access.
-#' # Running these examples will incur API usage costs.
 #' library(pairwiseLLM)
 #'
 #' data("example_writing_samples", package = "pairwiseLLM")
@@ -94,7 +93,7 @@
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Example: DeepSeek-R1; uses default temperature = 0.6 if not supplied
+#' # Example: DeepSeek-R1 with default temperature = 0.6 if not supplied
 #' res_deepseek <- together_compare_pair_live(
 #'   ID1               = samples$ID[1],
 #'   text1             = samples$text[1],
@@ -109,7 +108,7 @@
 #' res_deepseek$better_id
 #' res_deepseek$thoughts
 #'
-#' # Example: Kimi-K2; uses default temperature = 0 unless overridden
+#' # Example: Kimi-K2 with default temperature = 0 unless overridden
 #' res_kimi <- together_compare_pair_live(
 #'   ID1               = samples$ID[1],
 #'   text1             = samples$text[1],
@@ -432,8 +431,7 @@ together_compare_pair_live <- function(
 #'
 #' @examples
 #' \dontrun{
-#' # Requires TOGETHER_API_KEY and network access. Running these examples will
-#' # incur API usage costs.
+#' # Requires TOGETHER_API_KEY and network access.
 #' library(pairwiseLLM)
 #'
 #' data("example_writing_samples", package = "pairwiseLLM")
@@ -673,7 +671,7 @@ submit_together_pairs_live <- function(
 }
 
 # -------------------------------------------------------------------------
-# Internal Together.ai wrappers around httr2 (mirrors .gemini_* helpers)
+# Internal Together.ai wrappers around httr2
 # -------------------------------------------------------------------------
 
 #' @keywords internal

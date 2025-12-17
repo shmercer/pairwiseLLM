@@ -148,26 +148,24 @@ res_live <- submit_llm_pairs(
 
 res_live$better_id
 
-# Live comparisons using a local Ollama backend (no API key required)
-# Make sure an Ollama server is running and the model is available, e.g.:
-#   ollama pull mistral-small3.2:24b
-#
-# res_ollama <- submit_llm_pairs(
-#   pairs             = pairs,
-#   model             = "mistral-small3.2:24b",
-#   trait_name        = td$name,
-#   trait_description = td$description,
-#   prompt_template   = tmpl,
-#   backend           = "ollama",
-#   verbose           = TRUE,
-#   status_every      = 2,
-#   progress          = TRUE,
-#   include_raw       = FALSE,
-#   think             = FALSE,
-#   num_ctx           = 8192
-# )
-#
-# res_ollama$better_id
+# Live comparisons using a local Ollama backend
+
+res_ollama <- submit_llm_pairs(
+  pairs             = pairs,
+  model             = "mistral-small3.2:24b",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  backend           = "ollama",
+  verbose           = TRUE,
+  status_every      = 2,
+  progress          = TRUE,
+  include_raw       = FALSE,
+  think             = FALSE,
+  num_ctx           = 8192
+)
+
+res_ollama$better_id
 }
 
 }

@@ -134,7 +134,7 @@ results, parse). The returned object contains both metadata and a normalized
 }
 \examples{
 \dontrun{
-# 1. OpenAI Batch (GPT-5.2 with thoughts)
+# 1. OpenAI Batch
 pairs <- make_pairs(c("A", "B", "C"))
 batch_openai <- llm_submit_pairs_batch(
   pairs = pairs,
@@ -153,7 +153,7 @@ batch_anthropic <- llm_submit_pairs_batch(
   model = "claude-sonnet-4-5-20250929",
   trait_name = "coherence",
   trait_description = "Logical flow of the text.",
-  include_thoughts = TRUE # triggers extended thinking
+  include_thoughts = TRUE
 )
 res_anthropic <- llm_download_batch_results(batch_anthropic)
 }

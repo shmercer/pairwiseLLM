@@ -173,7 +173,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# 1) Standard batch without extended thinking (temperature defaults to 0)
+# Standard batch without extended thinking
 pipeline_none <- run_anthropic_batch_pipeline(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
@@ -190,15 +190,14 @@ pipeline_none <- run_anthropic_batch_pipeline(
 pipeline_none$batch$processing_status
 head(pipeline_none$results)
 
-# 2) Batch with extended thinking and thoughts column
-#    (temperature is forced to 1 inside build_anthropic_batch_requests())
+# Batch with extended thinking and thoughts column
 pipeline_thoughts <- run_anthropic_batch_pipeline(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  include_thoughts  = TRUE, # will upgrade reasoning to "enabled" if needed
+  include_thoughts  = TRUE,
   interval_seconds  = 60,
   timeout_seconds   = 3600,
   verbose           = TRUE

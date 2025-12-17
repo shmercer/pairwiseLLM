@@ -69,31 +69,8 @@ processes.
 \examples{
 \dontrun{
 # Keep only mistral-small3.2:24b loaded in Ollama, unloading any
-# other active models that `ollama ps` reports.
+# other active models
 ensure_only_ollama_model_loaded("mistral-small3.2:24b")
-
-# Use before running a set of comparisons with the Ollama backend:
-#
-#   data("example_writing_samples", package = "pairwiseLLM")
-#   pairs <- example_writing_samples |>
-#     make_pairs() |>
-#     sample_pairs(n_pairs = 10, seed = 123) |>
-#     randomize_pair_order(seed = 456)
-#
-#   td   <- trait_description("overall_quality")
-#   tmpl <- set_prompt_template()
-#
-#   ensure_only_ollama_model_loaded("qwen3:32b")
-#
-#   res <- submit_llm_pairs(
-#     pairs             = pairs,
-#     model             = "qwen3:32b",
-#     trait_name        = td$name,
-#     trait_description = td$description,
-#     prompt_template   = tmpl,
-#     backend           = "ollama",
-#     think             = TRUE
-#   )
 }
 
 }

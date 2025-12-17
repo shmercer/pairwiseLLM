@@ -87,7 +87,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# 1. Basic chat.completions batch (no thoughts)
+# 1. Basic chat.completions batch with no thoughts
 batch_tbl_chat <- build_openai_batch_requests(
   pairs             = pairs,
   model             = "gpt-4.1",

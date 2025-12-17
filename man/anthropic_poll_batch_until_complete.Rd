@@ -43,6 +43,7 @@ Message Batches API.
 }
 \examples{
 \dontrun{
+# Requires ANTHROPIC_API_KEY and network access.
 batch <- anthropic_create_batch(requests = my_requests)
 final <- anthropic_poll_batch_until_complete(batch$id, interval_seconds = 30)
 final$processing_status

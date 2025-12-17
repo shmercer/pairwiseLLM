@@ -30,7 +30,7 @@ Given a batch ID, retrieves the batch metadata, extracts the
 
 openai_download_batch_output("batch_abc123", "batch_output.jsonl")
 
-# You can then parse the file with pairwiseLLM's parser:
+# You can then parse the file
 res <- parse_openai_batch_output("batch_output.jsonl")
 head(res)
 }

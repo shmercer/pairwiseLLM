@@ -221,7 +221,7 @@ NULL
 #'
 #' reqs_none
 #'
-#' # Batch requests with extended thinking (temperature forced to 1)
+#' # Batch requests with extended thinking
 #' reqs_reason <- build_anthropic_batch_requests(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
@@ -484,6 +484,7 @@ anthropic_create_batch <- function(
 #'
 #' @examples
 #' \dontrun{
+#' # Requires ANTHROPIC_API_KEY and network access.
 #' # After creating a batch:
 #' batch <- anthropic_create_batch(requests = my_requests)
 #' batch_id <- batch$id
@@ -538,6 +539,7 @@ anthropic_get_batch <- function(
 #'
 #' @examples
 #' \dontrun{
+#' # Requires ANTHROPIC_API_KEY and network access.
 #' batch <- anthropic_create_batch(requests = my_requests)
 #' final <- anthropic_poll_batch_until_complete(batch$id, interval_seconds = 30)
 #' final$processing_status
@@ -622,6 +624,7 @@ anthropic_poll_batch_until_complete <- function(
 #'
 #' @examples
 #' \dontrun{
+#' # Requires ANTHROPIC_API_KEY and network access.
 #' final <- anthropic_poll_batch_until_complete(batch$id)
 #' jsonl_path <- tempfile(fileext = ".jsonl")
 #' anthropic_download_batch_results(final$id, jsonl_path)
@@ -726,20 +729,8 @@ anthropic_download_batch_results <- function(
 #'
 #' @examples
 #' \dontrun{
-#' # Requires ANTHROPIC_API_KEY and a completed batch.
-#' library(pairwiseLLM)
-#'
-#' # Suppose you have already run run_anthropic_batch_pipeline() with poll =
-#' # TRUE:
-#' # pipeline <- run_anthropic_batch_pipeline(...)
-#' # jsonl_path <- pipeline$batch_output_path
-#'
-#' # You can parse the results .jsonl file directly:
-#' # tbl <- parse_anthropic_batch_output(jsonl_path)
-#' # dplyr::count(tbl, result_type)
-#'
-#' # For illustration only (do not run without a real path):
-#' # tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
+#' # Requires a completed Anthropic batch file
+#' tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
 #' }
 #'
 #' @export
@@ -1014,7 +1005,7 @@ parse_anthropic_batch_output <- function(
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # 1) Standard batch without extended thinking (temperature defaults to 0)
+#' # Standard batch without extended thinking
 #' pipeline_none <- run_anthropic_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
@@ -1031,15 +1022,14 @@ parse_anthropic_batch_output <- function(
 #' pipeline_none$batch$processing_status
 #' head(pipeline_none$results)
 #'
-#' # 2) Batch with extended thinking and thoughts column
-#' #    (temperature is forced to 1 inside build_anthropic_batch_requests())
+#' # Batch with extended thinking and thoughts column
 #' pipeline_thoughts <- run_anthropic_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   include_thoughts  = TRUE, # will upgrade reasoning to "enabled" if needed
+#'   include_thoughts  = TRUE,
 #'   interval_seconds  = 60,
 #'   timeout_seconds   = 3600,
 #'   verbose           = TRUE

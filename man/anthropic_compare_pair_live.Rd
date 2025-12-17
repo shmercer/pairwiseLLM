@@ -192,7 +192,7 @@ samples <- example_writing_samples[1:2, ]
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Short, deterministic comparison (no explicit thinking block)
+# Short, deterministic comparison with no explicit thinking block
 res_claude <- anthropic_compare_pair_live(
   ID1               = samples$ID[1],
   text1             = samples$text[1],

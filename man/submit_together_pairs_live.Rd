@@ -73,8 +73,7 @@ row per pair, making it easy to pass into \code{\link[=build_bt_data]{build_bt_d
 }
 \examples{
 \dontrun{
-# Requires TOGETHER_API_KEY and network access. Running these examples will
-# incur API usage costs.
+# Requires TOGETHER_API_KEY and network access.
 library(pairwiseLLM)
 
 data("example_writing_samples", package = "pairwiseLLM")

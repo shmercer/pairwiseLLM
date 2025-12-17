@@ -81,3 +81,24 @@ It is designed to work with the output of
 \code{\link{compute_reverse_consistency}}, but will also accept a tibble
 that looks like its \code{$details} component.
 }
+\examples{
+# Simple synthetic example
+main <- tibble::tibble(
+  ID1       = c("S1", "S1", "S2"),
+  ID2       = c("S2", "S3", "S3"),
+  better_id = c("S1", "S3", "S2")
+)
+
+rev <- tibble::tibble(
+  ID1       = c("S2", "S3", "S3"),
+  ID2       = c("S1", "S1", "S2"),
+  better_id = c("S1", "S3", "S2")
+)
+
+rc <- compute_reverse_consistency(main, rev)
+rc$summary
+
+bias <- check_positional_bias(rc)
+bias$summary
+
+}

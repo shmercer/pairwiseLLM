@@ -115,7 +115,6 @@
 #' @examples
 #' \dontrun{
 #' # Requires a running Ollama server and locally available models.
-#' # This example will not be executed automatically during package checks.
 #'
 #' library(pairwiseLLM)
 #'
@@ -129,9 +128,9 @@
 #' text1 <- example_writing_samples$text[1]
 #' text2 <- example_writing_samples$text[2]
 #'
-#' # Make sure an Ollama server is running and the model is pulled:
-#' #   ollama pull mistral-small3.2:24b
+#' # Make sure an Ollama server is running
 #'
+#' # mistral example
 #' res_mistral <- ollama_compare_pair_live(
 #'   ID1               = ID1,
 #'   text1             = text1,
@@ -145,12 +144,7 @@
 #'
 #' res_mistral$better_id
 #'
-#' # Using a Qwen model with think = TRUE automatically sets temperature to
-#' # 0.6. If the Ollama server or model is configured to return a
-#' # `thinking` field, it will be available via the `thoughts` column.
-#' #
-#' #   ollama pull qwen3:32b
-#'
+#' # qwen example with reasoning
 #' res_qwen_think <- ollama_compare_pair_live(
 #'   ID1               = ID1,
 #'   text1             = text1,
@@ -435,7 +429,6 @@ ollama_compare_pair_live <- function(
 #' @examples
 #' \dontrun{
 #' # Requires a running Ollama server and locally available models.
-#' # This example will not be executed automatically during package checks.
 #'
 #' library(pairwiseLLM)
 #'
@@ -449,10 +442,7 @@ ollama_compare_pair_live <- function(
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Live comparisons for multiple pairs using a Mistral model via Ollama.
-#' # Make sure the model is available:
-#' #   ollama pull mistral-small3.2:24b
-#'
+#' # Live comparisons for multiple pairs using a Mistral model via Ollama
 #' res_mistral <- submit_ollama_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "mistral-small3.2:24b",
@@ -466,11 +456,7 @@ ollama_compare_pair_live <- function(
 #'
 #' res_mistral$better_id
 #'
-#' # Qwen with thinking enabled: temperature is automatically set to 0.6.
-#' # You can also override the context window via num_ctx.
-#' #
-#' #   ollama pull qwen3:32b
-#'
+#' # Qwen with thinking enabled
 #' res_qwen_think <- submit_ollama_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "qwen3:32b",
@@ -751,31 +737,8 @@ submit_ollama_pairs_live <- function(
 #' @examples
 #' \dontrun{
 #' # Keep only mistral-small3.2:24b loaded in Ollama, unloading any
-#' # other active models that `ollama ps` reports.
+#' # other active models
 #' ensure_only_ollama_model_loaded("mistral-small3.2:24b")
-#'
-#' # Use before running a set of comparisons with the Ollama backend:
-#' #
-#' #   data("example_writing_samples", package = "pairwiseLLM")
-#' #   pairs <- example_writing_samples |>
-#' #     make_pairs() |>
-#' #     sample_pairs(n_pairs = 10, seed = 123) |>
-#' #     randomize_pair_order(seed = 456)
-#' #
-#' #   td   <- trait_description("overall_quality")
-#' #   tmpl <- set_prompt_template()
-#' #
-#' #   ensure_only_ollama_model_loaded("qwen3:32b")
-#' #
-#' #   res <- submit_llm_pairs(
-#' #     pairs             = pairs,
-#' #     model             = "qwen3:32b",
-#' #     trait_name        = td$name,
-#' #     trait_description = td$description,
-#' #     prompt_template   = tmpl,
-#' #     backend           = "ollama",
-#' #     think             = TRUE
-#' #   )
 #' }
 #'
 #' @seealso

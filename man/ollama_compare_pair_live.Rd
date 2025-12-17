@@ -154,7 +154,6 @@ the visible comparison decisions.
 \examples{
 \dontrun{
 # Requires a running Ollama server and locally available models.
-# This example will not be executed automatically during package checks.
 
 library(pairwiseLLM)
 
@@ -168,9 +167,9 @@ ID2 <- example_writing_samples$ID[2]
 text1 <- example_writing_samples$text[1]
 text2 <- example_writing_samples$text[2]
 
-# Make sure an Ollama server is running and the model is pulled:
-#   ollama pull mistral-small3.2:24b
+# Make sure an Ollama server is running
 
+# mistral example
 res_mistral <- ollama_compare_pair_live(
   ID1               = ID1,
   text1             = text1,
@@ -184,12 +183,7 @@ res_mistral <- ollama_compare_pair_live(
 
 res_mistral$better_id
 
-# Using a Qwen model with think = TRUE automatically sets temperature to
-# 0.6. If the Ollama server or model is configured to return a
-# `thinking` field, it will be available via the `thoughts` column.
-#
-#   ollama pull qwen3:32b
-
+# qwen example with reasoning
 res_qwen_think <- ollama_compare_pair_live(
   ID1               = ID1,
   text1             = text1,

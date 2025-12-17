@@ -211,7 +211,7 @@ NULL
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Short, deterministic comparison (no explicit thinking block)
+#' # Short, deterministic comparison with no explicit thinking block
 #' res_claude <- anthropic_compare_pair_live(
 #'   ID1               = samples$ID[1],
 #'   text1             = samples$text[1],
@@ -653,7 +653,7 @@ anthropic_compare_pair_live <- function(
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Deterministic comparisons (no extended thinking, temperature defaults to 0)
+#' # Deterministic comparisons with no extended thinking and temperature = 0
 #' res_claude <- submit_anthropic_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",
@@ -669,7 +669,7 @@ anthropic_compare_pair_live <- function(
 #'
 #' res_claude$better_id
 #'
-#' # Comparisons with extended thinking (temperature fixed at 1)
+#' # Comparisons with extended thinking and temperature = 1
 #' res_claude_reason <- submit_anthropic_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "claude-sonnet-4-5",

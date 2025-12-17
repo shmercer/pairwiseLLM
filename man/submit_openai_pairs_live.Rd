@@ -102,7 +102,7 @@ res_live <- submit_openai_pairs_live(
 
 res_live$better_id
 
-# Using gpt-5.1 with reasoning = "low" on the responses endpoint
+# Using gpt-5.1 with reasoning on the responses endpoint
 res_live_gpt5 <- submit_openai_pairs_live(
   pairs             = pairs,
   model             = "gpt-5.1",

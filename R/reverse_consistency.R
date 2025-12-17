@@ -48,7 +48,7 @@
 #' rc <- compute_reverse_consistency(main, rev)
 #' rc$summary
 #'
-#' # Using the example writing pairs: reverse the first 10 pairs
+#' # Using the example writing pairs to reverse the first 10 pairs
 #' data("example_writing_pairs")
 #' main2 <- example_writing_pairs[1:10, ]
 #' rev2 <- main2
@@ -208,6 +208,26 @@ compute_reverse_consistency <- function(main_results,
 #'       }
 #'     }
 #'   }
+#'
+#' @examples
+#' # Simple synthetic example
+#' main <- tibble::tibble(
+#'   ID1       = c("S1", "S1", "S2"),
+#'   ID2       = c("S2", "S3", "S3"),
+#'   better_id = c("S1", "S3", "S2")
+#' )
+#'
+#' rev <- tibble::tibble(
+#'   ID1       = c("S2", "S3", "S3"),
+#'   ID2       = c("S1", "S1", "S2"),
+#'   better_id = c("S1", "S3", "S2")
+#' )
+#'
+#' rc <- compute_reverse_consistency(main, rev)
+#' rc$summary
+#'
+#' bias <- check_positional_bias(rc)
+#' bias$summary
 #'
 #' @export
 check_positional_bias <- function(consistency,

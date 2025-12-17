@@ -28,8 +28,7 @@ which can then be used to create a Batch job.
 }
 \examples{
 \dontrun{
-# Requires OPENAI_API_KEY set in your environment.
-# Upload a JSONL file prepared with write_openai_batch_file():
+# Requires OPENAI_API_KEY set in your environment and network access
 
 file_obj <- openai_upload_batch_file("batch_input.jsonl")
 file_obj$id

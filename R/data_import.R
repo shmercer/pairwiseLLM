@@ -28,7 +28,7 @@
 #' samples <- read_samples_df(df, id_col = "StudentID", text_col = "Response")
 #' samples
 #'
-#' # Using the built-in example dataset (keep only ID and text)
+#' # Using the built-in example dataset
 #' data("example_writing_samples")
 #' samples2 <- read_samples_df(
 #'   example_writing_samples[, c("ID", "text")],

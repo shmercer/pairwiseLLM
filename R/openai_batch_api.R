@@ -90,8 +90,7 @@ NULL
 #'
 #' @examples
 #' \dontrun{
-#' # Requires OPENAI_API_KEY set in your environment.
-#' # Upload a JSONL file prepared with write_openai_batch_file():
+#' # Requires OPENAI_API_KEY set in your environment and network access
 #'
 #' file_obj <- openai_upload_batch_file("batch_input.jsonl")
 #' file_obj$id
@@ -134,7 +133,6 @@ openai_upload_batch_file <- function(
 #' @examples
 #' \dontrun{
 #' # Requires OPENAI_API_KEY set in your environment and network access.
-#' # Example: create a batch for a previously uploaded file.
 #'
 #' file_obj <- openai_upload_batch_file("batch_input.jsonl")
 #'
@@ -216,7 +214,7 @@ openai_get_batch <- function(
 #'
 #' openai_download_batch_output("batch_abc123", "batch_output.jsonl")
 #'
-#' # You can then parse the file with pairwiseLLM's parser:
+#' # You can then parse the file
 #' res <- parse_openai_batch_output("batch_output.jsonl")
 #' head(res)
 #' }
@@ -425,7 +423,7 @@ openai_poll_batch_until_complete <- function(
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # 1) Standard chat.completions batch (no thoughts)
+#' # 1) Standard chat.completions batch with no thoughts
 #' pipeline_chat <- run_openai_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "gpt-4.1",
@@ -440,7 +438,7 @@ openai_poll_batch_until_complete <- function(
 #' pipeline_chat$batch$status
 #' head(pipeline_chat$results)
 #'
-#' # 2) Responses endpoint with reasoning summaries (thoughts) for gpt-5.1
+#' # 2) Responses endpoint with reasoning summaries for gpt-5.1
 #' pipeline_resp <- run_openai_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "gpt-5.1",

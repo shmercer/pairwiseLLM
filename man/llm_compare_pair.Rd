@@ -171,27 +171,24 @@ res_live_gpt5 <- llm_compare_pair(
 str(res_live_gpt5$raw_response[[1]], max.level = 2)
 
 # Example: single live comparison using a local Ollama backend
-# (requires a running Ollama server and pulled model, e.g.
-#   `ollama pull mistral-small3.2:24b`)
-#
-# res_ollama <- llm_compare_pair(
-#   ID1               = samples$ID[1],
-#   text1             = samples$text[1],
-#   ID2               = samples$ID[2],
-#   text2             = samples$text[2],
-#   model             = "mistral-small3.2:24b",
-#   trait_name        = td$name,
-#   trait_description = td$description,
-#   prompt_template   = tmpl,
-#   backend           = "ollama",
-#   host              = getOption(
-#     "pairwiseLLM.ollama_host",
-#     "http://127.0.0.1:11434"
-#   ),
-#   think             = FALSE
-# )
-#
-# res_ollama$better_id
+res_ollama <- llm_compare_pair(
+  ID1               = samples$ID[1],
+  text1             = samples$text[1],
+  ID2               = samples$ID[2],
+  text2             = samples$text[2],
+  model             = "mistral-small3.2:24b",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  backend           = "ollama",
+  host              = getOption(
+     "pairwiseLLM.ollama_host",
+     "http://127.0.0.1:11434"
+  ),
+  think             = FALSE
+)
+
+res_ollama$better_id
 }
 
 }

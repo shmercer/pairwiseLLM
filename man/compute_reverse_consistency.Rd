@@ -59,7 +59,7 @@ rev <- tibble::tibble(
 rc <- compute_reverse_consistency(main, rev)
 rc$summary
 
-# Using the example writing pairs: reverse the first 10 pairs
+# Using the example writing pairs to reverse the first 10 pairs
 data("example_writing_pairs")
 main2 <- example_writing_pairs[1:10, ]
 rev2 <- main2

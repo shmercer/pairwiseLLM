@@ -279,7 +279,7 @@ register_prompt_template <- function(name,
 #' # Get the built-in default template
 #' tmpl_default <- get_prompt_template("default")
 #'
-#' # List available template names (built-in + registered)
+#' # List available template names
 #' list_prompt_templates()
 #'
 #' @seealso \code{\link{register_prompt_template}},

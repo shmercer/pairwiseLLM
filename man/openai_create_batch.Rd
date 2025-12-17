@@ -34,7 +34,6 @@ Creates and executes a batch based on a previously uploaded input file.
 \examples{
 \dontrun{
 # Requires OPENAI_API_KEY set in your environment and network access.
-# Example: create a batch for a previously uploaded file.
 
 file_obj <- openai_upload_batch_file("batch_input.jsonl")
 
