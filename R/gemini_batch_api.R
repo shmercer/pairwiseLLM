@@ -19,22 +19,16 @@
   response,
   include_thoughts = FALSE
 ) {
-  # Safe %||%
-  `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
-  if (is.null(`%||%`)) {
-    `%||%` <- function(x, y) if (!is.null(x)) x else y
-  }
-
   resp <- response
 
   # Sometimes we see list(response = [ {candidates=...} ])
   if (!is.null(resp$response) && is.null(resp$candidates) &&
-      is.list(resp$response)) {
+    is.list(resp$response)) {
     resp <- resp$response
   }
   # And that response can be a length-1 array
   if (is.list(resp) && is.null(resp$candidates) && length(resp) == 1L &&
-        is.list(resp[[1]]) && !is.null(resp[[1]]$candidates)) {
+    is.list(resp[[1]]) && !is.null(resp[[1]]$candidates)) {
     resp <- resp[[1]]
   }
 
@@ -168,8 +162,10 @@
     if (is.null(x)) {
       return(NA_real_)
     }
-    v <- suppressWarnings(as.numeric(unlist(x, recursive = TRUE,
-                                            use.names = FALSE)))
+    v <- suppressWarnings(as.numeric(unlist(x,
+      recursive = TRUE,
+      use.names = FALSE
+    )))
     if (!length(v)) {
       return(NA_real_)
     }
@@ -211,14 +207,20 @@
       c_texts <- c_texts[nzchar(c_texts)]
 
       thoughts <- if (nzchar(t_text)) t_text else NA_character_
-      content <- if (length(c_texts)) paste(c_texts, collapse = "") else
+      content <- if (length(c_texts)) {
+        paste(c_texts, collapse = "")
+      } else {
         NA_character_
+      }
     } else {
       # Default / batch-style: collapse everything into content
       c_texts <- vapply(parts, get_part_text, FUN.VALUE = character(1L))
       c_texts <- c_texts[nzchar(c_texts)]
-      content <- if (length(c_texts)) paste(c_texts, collapse = "") else
+      content <- if (length(c_texts)) {
+        paste(c_texts, collapse = "")
+      } else {
         NA_character_
+      }
     }
   }
 
@@ -228,10 +230,12 @@
   better_sample <- NA_character_
   if (!is.na(content)) {
     if (grepl("<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>", content,
-              fixed = TRUE)) {
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_1"
     } else if (grepl("<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>", content,
-                     fixed = TRUE)) {
+      fixed = TRUE
+    )) {
       better_sample <- "SAMPLE_2"
     }
   }
@@ -246,14 +250,26 @@
   # -------------------------------------------------------------------
   usage_obj <- find_named(resp, "usageMetadata")
 
-  prompt_tokens_raw <- if (!is.null(usage_obj))
-    find_named(usage_obj, "promptTokenCount") else NULL
-  completion_tokens_raw <- if (!is.null(usage_obj))
-    find_named(usage_obj, "candidatesTokenCount") else NULL
-  total_tokens_raw <- if (!is.null(usage_obj))
-    find_named(usage_obj, "totalTokenCount") else NULL
-  thoughts_token_count_raw <- if (!is.null(usage_obj))
-    find_named(usage_obj, "thoughtsTokenCount") else NULL
+  prompt_tokens_raw <- if (!is.null(usage_obj)) {
+    find_named(usage_obj, "promptTokenCount")
+  } else {
+    NULL
+  }
+  completion_tokens_raw <- if (!is.null(usage_obj)) {
+    find_named(usage_obj, "candidatesTokenCount")
+  } else {
+    NULL
+  }
+  total_tokens_raw <- if (!is.null(usage_obj)) {
+    find_named(usage_obj, "totalTokenCount")
+  } else {
+    NULL
+  }
+  thoughts_token_count_raw <- if (!is.null(usage_obj)) {
+    find_named(usage_obj, "thoughtsTokenCount")
+  } else {
+    NULL
+  }
 
   prompt_tokens <- as_num_scalar(prompt_tokens_raw)
   completion_tokens <- as_num_scalar(completion_tokens_raw)
@@ -492,7 +508,8 @@ gemini_create_batch <- function(
 ) {
   if (!is.list(requests) || length(requests) == 0L) {
     stop("`requests` must be a non-empty list of request objects.",
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 
   if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
@@ -553,7 +570,7 @@ gemini_get_batch <- function(
   api_version = "v1beta"
 ) {
   if (!is.character(batch_name) || length(batch_name) != 1L ||
-      !nzchar(batch_name)) {
+    !nzchar(batch_name)) {
     stop("`batch_name` must be a non-empty character scalar.", call. = FALSE)
   }
 
@@ -594,7 +611,7 @@ gemini_poll_batch_until_complete <- function(
   verbose = TRUE
 ) {
   if (!is.character(batch_name) || length(batch_name) != 1L ||
-      !nzchar(batch_name)) {
+    !nzchar(batch_name)) {
     stop("`batch_name` must be a non-empty character scalar.", call. = FALSE)
   }
 
@@ -616,8 +633,11 @@ gemini_poll_batch_until_complete <- function(
     )
     last_batch <- batch
 
-    state <- if (!is.null(batch$metadata$state)) batch$metadata$state else
+    state <- if (!is.null(batch$metadata$state)) {
+      batch$metadata$state
+    } else {
       NA_character_
+    }
 
     if (verbose) {
       message(sprintf(
@@ -706,7 +726,7 @@ gemini_download_batch_results <- function(
   }
 
   if (!inherits(requests_tbl, "data.frame") ||
-        !"custom_id" %in% names(requests_tbl)) {
+    !"custom_id" %in% names(requests_tbl)) {
     stop("`requests_tbl` must be a tibble/data frame with a `custom_id`
          column.",
       call. = FALSE
@@ -831,9 +851,9 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
   }
 
   if (!inherits(requests_tbl, "data.frame") ||
-        !"custom_id" %in% names(requests_tbl) ||
-        !"ID1" %in% names(requests_tbl) ||
-        !"ID2" %in% names(requests_tbl)) {
+    !"custom_id" %in% names(requests_tbl) ||
+    !"ID1" %in% names(requests_tbl) ||
+    !"ID2" %in% names(requests_tbl)) {
     stop(
       "`requests_tbl` must be a data frame with columns `custom_id`, `ID1`,
       and `ID2`.",
@@ -868,11 +888,6 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     )
   }
 
-  `%||%` <- get0("%||%", envir = asNamespace("pairwiseLLM"), inherits = FALSE)
-  if (is.null(`%||%`)) {
-    `%||%` <- function(x, y) if (!is.null(x)) x else y
-  }
-
   # Parse each line individually; if JSON parse fails, create an "errored" stub
   objs <- lapply(
     lines,
@@ -885,8 +900,10 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
             result = list(
               type = "errored",
               error = list(
-                message = paste("Failed to parse JSON line:",
-                                conditionMessage(e))
+                message = paste(
+                  "Failed to parse JSON line:",
+                  conditionMessage(e)
+                )
               )
             )
           )
@@ -915,17 +932,23 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
     result_ty <- result$type %||% NA_character_
 
     idx <- matches[i]
-    ID1 <- if (!is.na(idx)) as.character(requests_tbl$ID1[idx]) else
+    ID1 <- if (!is.na(idx)) {
+      as.character(requests_tbl$ID1[idx])
+    } else {
       NA_character_
-    ID2 <- if (!is.na(idx)) as.character(requests_tbl$ID2[idx]) else
+    }
+    ID2 <- if (!is.na(idx)) {
+      as.character(requests_tbl$ID2[idx])
+    } else {
       NA_character_
+    }
 
     # Detect include_thoughts from original request, if available
     include_thoughts <- FALSE
     if (!is.na(idx) && has_request_col) {
       req_obj <- requests_tbl$request[[idx]]
       if (!is.null(req_obj$generationConfig) &&
-            !is.null(req_obj$generationConfig$thinkingConfig) &&
+        !is.null(req_obj$generationConfig$thinkingConfig) &&
         !is.null(req_obj$generationConfig$thinkingConfig$includeThoughts)) {
         include_thoughts <-
           isTRUE(req_obj$generationConfig$thinkingConfig$includeThoughts)
@@ -1055,10 +1078,14 @@ run_gemini_batch_pipeline <- function(
   trait_description,
   prompt_template = set_prompt_template(),
   thinking_level = c("low", "medium", "high"),
-  batch_input_path = tempfile(pattern = "gemini-batch-input-",
-                              fileext = ".json"),
-  batch_output_path = tempfile(pattern = "gemini-batch-output-",
-                               fileext = ".jsonl"),
+  batch_input_path = tempfile(
+    pattern = "gemini-batch-input-",
+    fileext = ".json"
+  ),
+  batch_output_path = tempfile(
+    pattern = "gemini-batch-output-",
+    fileext = ".jsonl"
+  ),
   poll = TRUE,
   interval_seconds = 60,
   timeout_seconds = 86400,

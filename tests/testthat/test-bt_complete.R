@@ -176,45 +176,46 @@ test_that("fit_bt_model(BradleyTerry2, verbose = FALSE) runs without warnings", 
   )
 })
 
-# Optional (needs mockery + withr): auto fallback
 test_that("fit_bt_model(auto) falls back to BradleyTerry2 when sirt is unavailable", {
   skip_if_not_installed("BradleyTerry2")
-  skip_if_not_installed("mockery")
-  skip_if_not_installed("withr")
 
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
-  withr::local_package("pairwiseLLM")
 
-  mockery::stub(
-    where = fit_bt_model,
-    what = "requireNamespace",
-    how = function(pkg, quietly = TRUE) {
+  # Save originals and restore no matter what happens in the test
+  ns <- asNamespace("pairwiseLLM")
+  orig_require <- get(".require_ns", envir = ns, inherits = FALSE)
+  on.exit(assign(".require_ns", orig_require, envir = ns), add = TRUE)
+
+  testthat::local_mocked_bindings(
+    .require_ns = function(pkg, quietly = TRUE) {
       if (identical(pkg, "sirt")) {
         return(FALSE)
       }
       base::requireNamespace(pkg, quietly = quietly)
-    }
+    },
+    .env = ns
   )
 
   fit <- fit_bt_model(bt, engine = "auto", verbose = FALSE)
   expect_equal(fit$engine, "BradleyTerry2")
 })
 
-test_that("fit_bt_model(auto) falls back to BradleyTerry2 when sirt::btm errors", {
+test_that("fit_bt_model(auto) falls back to BradleyTerry2 when sirt btm errors", {
   skip_if_not_installed("BradleyTerry2")
   skip_if_not_installed("sirt")
-  skip_if_not_installed("mockery")
-  skip_if_not_installed("withr")
 
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
-  withr::local_package("pairwiseLLM")
 
-  mockery::stub(
-    where = fit_bt_model,
-    what  = "sirt::btm",
-    how   = function(...) stop("forced sirt failure for testing", call. = FALSE)
+  # Save originals and restore no matter what happens in the test
+  ns <- asNamespace("pairwiseLLM")
+  orig_btm <- get(".sirt_btm", envir = ns, inherits = FALSE)
+  on.exit(assign(".sirt_btm", orig_btm, envir = ns), add = TRUE)
+
+  testthat::local_mocked_bindings(
+    .sirt_btm = function(...) stop("forced sirt failure for testing", call. = FALSE),
+    .env = ns
   )
 
   fit <- fit_bt_model(bt, engine = "auto", verbose = FALSE)

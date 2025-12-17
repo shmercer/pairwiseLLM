@@ -124,15 +124,15 @@
 #'
 #' @export
 llm_submit_pairs_batch <- function(
-    pairs,
-    backend = c("openai", "anthropic", "gemini"),
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    include_thoughts = FALSE,
-    include_raw = FALSE,
-    ...
+  pairs,
+  backend = c("openai", "anthropic", "gemini"),
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  include_thoughts = FALSE,
+  include_raw = FALSE,
+  ...
 ) {
   backend <- match.arg(tolower(backend), c("openai", "anthropic", "gemini"))
 
@@ -169,7 +169,7 @@ llm_submit_pairs_batch <- function(
     } else {
       # Auto-select "responses" for reasoning models when thoughts are enabled
       if (is_reasoning_model && (isTRUE(include_thoughts) ||
-                                 (!is.null(reasoning) && !identical(reasoning, "none")))) {
+        (!is.null(reasoning) && !identical(reasoning, "none")))) {
         "responses"
       } else {
         "chat.completions"
@@ -241,12 +241,12 @@ llm_submit_pairs_batch <- function(
 
   # Ensure batch paths exist when provided
   if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&
-      !file.exists(out$batch_input_path)) {
+    !file.exists(out$batch_input_path)) {
     file.create(out$batch_input_path)
   }
 
   if (!is.null(out$batch_output_path) && nzchar(out$batch_output_path) &&
-      !file.exists(out$batch_output_path)) {
+    !file.exists(out$batch_output_path)) {
     file.create(out$batch_output_path)
   }
 

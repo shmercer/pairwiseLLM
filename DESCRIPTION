@@ -36,7 +36,6 @@ Suggests:
     BradleyTerry2,
     EloChoice,
     knitr,
-    mockery,
     purrr,
     readr,
     rmarkdown,

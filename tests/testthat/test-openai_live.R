@@ -786,7 +786,7 @@ testthat::test_that("openai_compare_pair_live parses dataframe reasoning summari
     .openai_resp_body_json = function(...) fake_body,
     .openai_resp_status = function(...) 200L,
     {
-      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint="responses")
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
       testthat::expect_equal(res$thoughts, "DF Summary")
     }
   )

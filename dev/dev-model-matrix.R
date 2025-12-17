@@ -21,8 +21,6 @@ has_key <- function(env) {
   nzchar(Sys.getenv(env, ""))
 }
 
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 # ---------------------------------------------------------------------
 # Output directory + logging
 # ---------------------------------------------------------------------

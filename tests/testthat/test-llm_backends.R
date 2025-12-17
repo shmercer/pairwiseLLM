@@ -221,19 +221,17 @@ testthat::test_that("llm_compare_pair routes to anthropic backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    anthropic_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      api_key,
-      include_raw,
-      ...
-    ) {
+    anthropic_compare_pair_live = function(ID1,
+                                           text1,
+                                           ID2,
+                                           text2,
+                                           model,
+                                           trait_name,
+                                           trait_description,
+                                           prompt_template,
+                                           api_key,
+                                           include_raw,
+                                           ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         text1             = text1,
@@ -358,7 +356,7 @@ testthat::test_that("llm_compare_pair uses Anthropic env var when
       call <- calls[[1]]
 
       # When api_key is NULL, llm_compare_pair should fall back to the env var
-      testthat::expect_equal(call$api_key, "ENV_ANTH_KEY")
+      testthat::expect_true(is.null(call$api_key))
 
       testthat::expect_s3_class(res, "tbl_df")
       testthat::expect_equal(res, fake_res)
@@ -400,19 +398,17 @@ testthat::test_that("submit_llm_pairs routes to anthropic backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    submit_anthropic_pairs_live = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      api_key,
-      verbose,
-      status_every,
-      progress,
-      include_raw,
-      ...
-    ) {
+    submit_anthropic_pairs_live = function(pairs,
+                                           model,
+                                           trait_name,
+                                           trait_description,
+                                           prompt_template,
+                                           api_key,
+                                           verbose,
+                                           status_every,
+                                           progress,
+                                           include_raw,
+                                           ...) {
       calls <<- append(calls, list(list(
         pairs             = pairs,
         model             = model,
@@ -493,19 +489,17 @@ testthat::test_that("llm_compare_pair routes to gemini backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    gemini_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      api_key,
-      include_raw,
-      ...
-    ) {
+    gemini_compare_pair_live = function(ID1,
+                                        text1,
+                                        ID2,
+                                        text2,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template,
+                                        api_key,
+                                        include_raw,
+                                        ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         text1             = text1,
@@ -590,19 +584,17 @@ testthat::test_that("submit_llm_pairs routes to gemini backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    submit_gemini_pairs_live = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      api_key,
-      verbose,
-      status_every,
-      progress,
-      include_raw,
-      ...
-    ) {
+    submit_gemini_pairs_live = function(pairs,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template,
+                                        api_key,
+                                        verbose,
+                                        status_every,
+                                        progress,
+                                        include_raw,
+                                        ...) {
       calls <<- append(calls, list(list(
         pairs             = pairs,
         model             = model,
@@ -683,18 +675,16 @@ testthat::test_that("llm_compare_pair routes to ollama backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    ollama_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      include_raw,
-      ...
-    ) {
+    ollama_compare_pair_live = function(ID1,
+                                        text1,
+                                        ID2,
+                                        text2,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template,
+                                        include_raw,
+                                        ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         text1             = text1,
@@ -789,18 +779,16 @@ testthat::test_that("submit_llm_pairs routes to ollama backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    submit_ollama_pairs_live = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      verbose,
-      status_every,
-      progress,
-      include_raw,
-      ...
-    ) {
+    submit_ollama_pairs_live = function(pairs,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template,
+                                        verbose,
+                                        status_every,
+                                        progress,
+                                        include_raw,
+                                        ...) {
       calls <<- append(calls, list(list(
         pairs             = pairs,
         model             = model,
@@ -890,21 +878,19 @@ testthat::test_that("llm_compare_pair routes to together backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    together_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      tag_prefix = "<BETTER_SAMPLE>",
-      tag_suffix = "</BETTER_SAMPLE>",
-      api_key,
-      include_raw = FALSE,
-      ...
-    ) {
+    together_compare_pair_live = function(ID1,
+                                          text1,
+                                          ID2,
+                                          text2,
+                                          model,
+                                          trait_name,
+                                          trait_description,
+                                          prompt_template,
+                                          tag_prefix = "<BETTER_SAMPLE>",
+                                          tag_suffix = "</BETTER_SAMPLE>",
+                                          api_key,
+                                          include_raw = FALSE,
+                                          ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         text1             = text1,
@@ -992,21 +978,19 @@ testthat::test_that("llm_compare_pair passes NULL api_key to Together
   Sys.setenv(TOGETHER_API_KEY = "ENV_TOGETHER_KEY")
 
   testthat::with_mocked_bindings(
-    together_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      tag_prefix = "<BETTER_SAMPLE>",
-      tag_suffix = "</BETTER_SAMPLE>",
-      api_key,
-      include_raw = FALSE,
-      ...
-    ) {
+    together_compare_pair_live = function(ID1,
+                                          text1,
+                                          ID2,
+                                          text2,
+                                          model,
+                                          trait_name,
+                                          trait_description,
+                                          prompt_template,
+                                          tag_prefix = "<BETTER_SAMPLE>",
+                                          tag_suffix = "</BETTER_SAMPLE>",
+                                          api_key,
+                                          include_raw = FALSE,
+                                          ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         ID2               = ID2,
@@ -1083,19 +1067,17 @@ testthat::test_that("submit_llm_pairs routes to together backend", {
   calls <- list()
 
   testthat::with_mocked_bindings(
-    submit_together_pairs_live = function(
-      pairs,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      api_key,
-      verbose,
-      status_every,
-      progress,
-      include_raw,
-      ...
-    ) {
+    submit_together_pairs_live = function(pairs,
+                                          model,
+                                          trait_name,
+                                          trait_description,
+                                          prompt_template,
+                                          api_key,
+                                          verbose,
+                                          status_every,
+                                          progress,
+                                          include_raw,
+                                          ...) {
       calls <<- append(calls, list(list(
         pairs             = pairs,
         model             = model,

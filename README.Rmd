@@ -369,7 +369,7 @@ summarize_bt_fit(bt_fit)
 ```{r, eval = FALSE}
 # res: output from submit_llm_pairs() / llm_submit_pairs_batch()
 elo_data <- build_elo_data(res)
-elo_fit  <- fit_elo_model(elo_data, runs = 5)
+elo_fit <- fit_elo_model(elo_data, runs = 5)
 
 elo_fit$elo
 elo_fit$reliability

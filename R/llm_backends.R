@@ -136,20 +136,20 @@
 #'
 #' # Example: single live comparison using a local Ollama backend
 #' res_ollama <- llm_compare_pair(
-#'   ID1               = samples$ID[1],
-#'   text1             = samples$text[1],
-#'   ID2               = samples$ID[2],
-#'   text2             = samples$text[2],
-#'   model             = "mistral-small3.2:24b",
-#'   trait_name        = td$name,
+#'   ID1 = samples$ID[1],
+#'   text1 = samples$text[1],
+#'   ID2 = samples$ID[2],
+#'   text2 = samples$text[2],
+#'   model = "mistral-small3.2:24b",
+#'   trait_name = td$name,
 #'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   backend           = "ollama",
-#'   host              = getOption(
-#'      "pairwiseLLM.ollama_host",
-#'      "http://127.0.0.1:11434"
+#'   prompt_template = tmpl,
+#'   backend = "ollama",
+#'   host = getOption(
+#'     "pairwiseLLM.ollama_host",
+#'     "http://127.0.0.1:11434"
 #'   ),
-#'   think             = FALSE
+#'   think = FALSE
 #' )
 #'
 #' res_ollama$better_id
@@ -180,9 +180,10 @@ llm_compare_pair <- function(
   ...
 ) {
   backend <- match.arg(backend)
-  endpoint <- match.arg(endpoint)
 
   if (backend == "openai") {
+    endpoint <- match.arg(endpoint)
+
     return(
       openai_compare_pair_live(
         ID1               = ID1,
@@ -194,7 +195,7 @@ llm_compare_pair <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
-        api_key           = api_key %||% Sys.getenv("OPENAI_API_KEY"),
+        api_key           = api_key,
         include_raw       = include_raw,
         ...
       )
@@ -212,7 +213,7 @@ llm_compare_pair <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key %||% Sys.getenv("ANTHROPIC_API_KEY"),
+        api_key           = api_key, # <- pass through
         include_raw       = include_raw,
         ...
       )
@@ -230,7 +231,7 @@ llm_compare_pair <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key, # backend handles default env var
+        api_key           = api_key,
         include_raw       = include_raw,
         ...
       )
@@ -439,9 +440,24 @@ submit_llm_pairs <- function(
   ...
 ) {
   backend <- match.arg(backend)
-  endpoint <- match.arg(endpoint)
+
+  .require_api_key <- function(key, env_var, backend_label) {
+    if (is.null(key) || identical(key, "")) {
+      stop(
+        backend_label, " API key not found. ",
+        "Provide `api_key =` or set ", env_var, " in your environment.",
+        call. = FALSE
+      )
+    }
+    key
+  }
 
   if (backend == "openai") {
+    endpoint <- match.arg(endpoint)
+
+    key <- api_key %||% Sys.getenv("OPENAI_API_KEY")
+    key <- .require_api_key(key, "OPENAI_API_KEY", "OpenAI")
+
     return(
       submit_openai_pairs_live(
         pairs             = pairs,
@@ -450,7 +466,7 @@ submit_llm_pairs <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
-        api_key           = api_key %||% Sys.getenv("OPENAI_API_KEY"),
+        api_key           = key,
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
@@ -461,6 +477,9 @@ submit_llm_pairs <- function(
   }
 
   if (backend == "anthropic") {
+    key <- api_key %||% Sys.getenv("ANTHROPIC_API_KEY")
+    key <- .require_api_key(key, "ANTHROPIC_API_KEY", "Anthropic")
+
     return(
       submit_anthropic_pairs_live(
         pairs             = pairs,
@@ -468,7 +487,7 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,
+        api_key           = key,
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
@@ -497,6 +516,9 @@ submit_llm_pairs <- function(
   }
 
   if (backend == "together") {
+    key <- api_key %||% Sys.getenv("TOGETHER_API_KEY")
+    key <- .require_api_key(key, "TOGETHER_API_KEY", "Together")
+
     return(
       submit_together_pairs_live(
         pairs             = pairs,
@@ -504,7 +526,7 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,
+        api_key           = key,
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,

@@ -298,23 +298,21 @@ testthat::test_that("submit_ollama_pairs_live calls
   calls <- list()
 
   testthat::with_mocked_bindings(
-    ollama_compare_pair_live = function(
-      ID1,
-      text1,
-      ID2,
-      text2,
-      model,
-      trait_name,
-      trait_description,
-      prompt_template,
-      host,
-      tag_prefix,
-      tag_suffix,
-      think,
-      num_ctx,
-      include_raw,
-      ...
-    ) {
+    ollama_compare_pair_live = function(ID1,
+                                        text1,
+                                        ID2,
+                                        text2,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template,
+                                        host,
+                                        tag_prefix,
+                                        tag_suffix,
+                                        think,
+                                        num_ctx,
+                                        include_raw,
+                                        ...) {
       calls <<- append(calls, list(list(
         ID1               = ID1,
         ID2               = ID2,

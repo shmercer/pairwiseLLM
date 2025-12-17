@@ -11,9 +11,6 @@
 #' @importFrom httr2 resp_body_string
 NULL
 
-# Small internal helper: x %||% y
-`%||%` <- function(x, y) if (!is.null(x)) x else y
-
 # Internal: parse IDs from custom_id of the form "<PREFIX>_<ID1>_vs_<ID2>"
 .parse_ids_from_custom_id <- function(custom_id) {
   if (is.null(custom_id) || is.na(custom_id) || !nzchar(custom_id)) {

@@ -1105,8 +1105,10 @@ testthat::test_that("gemini_download_batch_results warns if response count misma
   # We construct a data frame where the 'response' column is a nested data frame.
   # This ensures inlined$response satisfies is.data.frame().
   resp_df <- data.frame(
-    candidates = I(list(list(content=list(parts=list(list(text="A")))),
-                        list(content=list(parts=list(list(text="B"))))))
+    candidates = I(list(
+      list(content = list(parts = list(list(text = "A")))),
+      list(content = list(parts = list(list(text = "B"))))
+    ))
   )
 
   inlined <- data.frame(row_id = 1:2)

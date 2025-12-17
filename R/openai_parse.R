@@ -103,9 +103,6 @@ parse_openai_batch_output <- function(path,
     stop("File contains no lines: ", path, call. = FALSE)
   }
 
-  # Safe helper: x %||% y
-  `%||%` <- function(x, y) if (is.null(x)) y else x
-
   # Helper to parse ID1/ID2 from custom_id of form "<prefix>ID1_vs_ID2"
   parse_ids <- function(custom_id) {
     if (is.null(custom_id) || is.na(custom_id)) {

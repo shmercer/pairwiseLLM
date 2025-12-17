@@ -571,7 +571,7 @@ summary_tbl |>
   ) |>
   select(
     Backend = backend,
-    Model    = model,
+    Model = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
@@ -605,7 +605,7 @@ summary_tbl |>
   ) |>
   select(
     Backend = backend,
-    Model    = model,
+    Model = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
@@ -639,7 +639,7 @@ summary_tbl |>
   ) |>
   select(
     Backend = backend,
-    Model    = model,
+    Model = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
@@ -673,7 +673,7 @@ summary_tbl |>
   ) |>
   select(
     Backend = backend,
-    Model    = model,
+    Model = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,
@@ -707,7 +707,7 @@ summary_tbl |>
   ) |>
   select(
     Backend = backend,
-    Model    = model,
+    Model = model,
     Thinking = thinking,
     Prop_Consistent,
     Prop_SAMPLE_1,

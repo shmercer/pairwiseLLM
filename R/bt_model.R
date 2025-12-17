@@ -1,3 +1,20 @@
+# ------------------------------------------------------------------------------
+# Internal wrappers
+# ------------------------------------------------------------------------------
+# These small helpers serve two purposes:
+#  1) They keep `fit_bt_model()` readable by centralising namespace calls.
+#  2) They make hard-to-test branches testable *without* heavy-handed stubbing
+#     (e.g., mocking `base::requireNamespace()` or `sirt::btm()` directly).
+
+
+.require_ns <- function(pkg, quietly = TRUE) {
+  base::requireNamespace(pkg, quietly = quietly)
+}
+
+.sirt_btm <- function(...) {
+  sirt::btm(...)
+}
+
 #' Build Bradley-Terry comparison data from pairwise results
 #'
 #' This function converts pairwise comparison results into the
@@ -164,10 +181,10 @@ fit_bt_model <- function(bt_data,
   engine <- match.arg(engine)
 
   # --------------------------
-  # sirt::btm helper
+  # sirt helper
   # --------------------------
   fit_sirt <- function(dat, verbose, ...) {
-    if (!requireNamespace("sirt", quietly = TRUE)) {
+    if (!.require_ns("sirt", quietly = TRUE)) {
       stop(
         "Package 'sirt' must be installed to use engine = \"sirt\".\n",
         "Install it with: install.packages(\"sirt\")",
@@ -176,7 +193,7 @@ fit_bt_model <- function(bt_data,
     }
 
     # sirt::btm often prints iteration progress. Capture when verbose = FALSE.
-    run_btm <- function() sirt::btm(dat, ...)
+    run_btm <- function() .sirt_btm(dat, ...)
 
     fit <- if (isTRUE(verbose)) {
       run_btm()
@@ -222,7 +239,7 @@ fit_bt_model <- function(bt_data,
   # BradleyTerry2 helper
   # --------------------------
   fit_bt2 <- function(dat, verbose, ...) {
-    if (!requireNamespace("BradleyTerry2", quietly = TRUE)) {
+    if (!.require_ns("BradleyTerry2", quietly = TRUE)) {
       stop(
         "Package 'BradleyTerry2' must be installed to use engine = \"BradleyTerry2\".\n",
         "Install it with: install.packages(\"BradleyTerry2\")",

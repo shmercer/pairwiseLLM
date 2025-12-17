@@ -3,11 +3,6 @@
 #' @importFrom curl form_file
 NULL
 
-#' Internal: Null-coalescing helper
-#' @keywords internal
-#' @noRd
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 # -------------------------------------------------------------------------
 # Internal OpenAI helpers
 # -------------------------------------------------------------------------
