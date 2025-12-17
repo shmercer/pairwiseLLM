@@ -180,6 +180,8 @@ For the Responses endpoint, the function collects:
 
 ``` r
 if (FALSE) { # \dontrun{
+# Requires API key set and internet access
+
 # 1. Standard comparison using GPT-4.1
 res <- openai_compare_pair_live(
   ID1 = "A", text1 = "Text A...",
@@ -190,7 +192,7 @@ res <- openai_compare_pair_live(
   temperature = 0
 )
 
-# 2. Reasoning comparison using GPT-5.2 (date-stamped)
+# 2. Reasoning comparison using GPT-5.2
 res_reasoning <- openai_compare_pair_live(
   ID1 = "A", text1 = "Text A...",
   ID2 = "B", text2 = "Text B...",

@@ -49,6 +49,7 @@ Anthropic counterpart to
 
 ``` r
 if (FALSE) { # \dontrun{
+# Requires ANTHROPIC_API_KEY and network access.
 final <- anthropic_poll_batch_until_complete(batch$id)
 jsonl_path <- tempfile(fileext = ".jsonl")
 anthropic_download_batch_results(final$id, jsonl_path)

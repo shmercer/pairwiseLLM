@@ -100,3 +100,37 @@ A list with two elements:
 It is designed to work with the output of
 [`compute_reverse_consistency`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md),
 but will also accept a tibble that looks like its `$details` component.
+
+## Examples
+
+``` r
+# Simple synthetic example
+main <- tibble::tibble(
+  ID1       = c("S1", "S1", "S2"),
+  ID2       = c("S2", "S3", "S3"),
+  better_id = c("S1", "S3", "S2")
+)
+
+rev <- tibble::tibble(
+  ID1       = c("S2", "S3", "S3"),
+  ID2       = c("S1", "S1", "S2"),
+  better_id = c("S1", "S3", "S2")
+)
+
+rc <- compute_reverse_consistency(main, rev)
+rc$summary
+#> # A tibble: 1 × 3
+#>   n_pairs n_consistent prop_consistent
+#>     <int>        <int>           <dbl>
+#> 1       3            3               1
+
+bias <- check_positional_bias(rc)
+bias$summary
+#> # A tibble: 1 × 13
+#>   n_pairs prop_consistent boot_mean boot_lwr boot_upr p_sample1_main
+#>     <int>           <dbl>     <dbl>    <dbl>    <dbl>          <dbl>
+#> 1       3               1         1        1        1              1
+#> # ℹ 7 more variables: p_sample1_rev <dbl>, p_sample1_overall <dbl>,
+#> #   total_pos1_wins <int>, total_comparisons <int>, n_inconsistent <int>,
+#> #   n_inconsistent_pos1_bias <int>, n_inconsistent_pos2_bias <int>
+```

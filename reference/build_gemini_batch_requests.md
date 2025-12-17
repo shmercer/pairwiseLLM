@@ -115,3 +115,35 @@ A tibble with one row per pair and two main columns:
 Each pair receives a unique `custom_id` of the form
 `"GEM_<ID1>_vs_<ID2>"` and a corresponding request object containing the
 prompt and generation configuration.
+
+## Examples
+
+``` r
+data("example_writing_samples", package = "pairwiseLLM")
+
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 3, seed = 123) |>
+  randomize_pair_order(seed = 456)
+
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+reqs <- build_gemini_batch_requests(
+  pairs             = pairs,
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "low",
+  include_thoughts  = TRUE
+)
+
+reqs
+#> # A tibble: 3 × 4
+#>   custom_id      ID1   ID2   request         
+#>   <chr>          <chr> <chr> <list>          
+#> 1 GEM_S17_vs_S12 S17   S12   <named list [2]>
+#> 2 GEM_S19_vs_S15 S19   S15   <named list [2]>
+#> 3 GEM_S01_vs_S15 S01   S15   <named list [2]>
+```

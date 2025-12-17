@@ -50,3 +50,21 @@ gemini_poll_batch_until_complete(
 
 The final Batch job object as returned by
 [`gemini_get_batch`](https://shmercer.github.io/pairwiseLLM/reference/gemini_get_batch.md).
+
+## Examples
+
+``` r
+# Offline: polling parameters and batch name are plain R objects
+batch_name <- "batches/123456"
+
+# Online: poll until the batch reaches a terminal state (requires network)
+if (FALSE) { # \dontrun{
+final_batch <- gemini_poll_batch_until_complete(
+  batch_name       = batch_name,
+  interval_seconds = 10,
+  timeout_seconds  = 600,
+  verbose          = TRUE
+)
+final_batch$metadata$state
+} # }
+```

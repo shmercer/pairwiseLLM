@@ -9,7 +9,7 @@ returned by gemini_create_batch."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -84,6 +84,20 @@ returned by <code><a href="gemini_create_batch.html">gemini_create_batch</a></co
 <code>BATCH_NAME</code> is a string such as <code>"batches/123456"</code>.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Offline: basic batch name validation / object you would pass</span></span></span>
+<span class="r-in"><span><span class="va">batch_name</span> <span class="op">&lt;-</span> <span class="st">"batches/123456"</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Online: retrieve the batch state from Gemini (requires API key + network)</span></span></span>
+<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+<span class="r-in"><span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu">gemini_get_batch</span><span class="op">(</span>batch_name <span class="op">=</span> <span class="va">batch_name</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">batch</span><span class="op">$</span><span class="va">name</span></span></span>
+<span class="r-in"><span><span class="va">batch</span><span class="op">$</span><span class="va">metadata</span><span class="op">$</span><span class="va">state</span></span></span>
+<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

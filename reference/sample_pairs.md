@@ -63,7 +63,7 @@ sample_pairs(pairs_all, n_pairs = 3, seed = 123)
 #> 2 S3    Sample 3 S4    Sample 4
 #> 3 S1    Sample 1 S3    Sample 3
 
-# Using example_writing_samples: sample 10% of all pairs
+# Using built-in examples and sample 10% of all pairs
 data("example_writing_samples")
 pairs_ex <- make_pairs(example_writing_samples)
 pairs_ex_sample <- sample_pairs(pairs_ex, pair_pct = 0.10, seed = 1)

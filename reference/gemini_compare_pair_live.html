@@ -11,7 +11,7 @@ tibble that mirrors the structure used for OpenAI / Anthropic live calls."></hea
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -200,6 +200,36 @@ explicit chain-of-thought style reasoning (\"thoughts\") via the
 still using the final answer content to detect the <code>&lt;BETTER_SAMPLE&gt;</code> tag.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Requires:</span></span></span>
+<span class="r-in"><span><span class="co"># - GEMINI_API_KEY set in your environment</span></span></span>
+<span class="r-in"><span><span class="co"># - Internet access</span></span></span>
+<span class="r-in"><span><span class="co"># - Billable Gemini API usage</span></span></span>
+<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+<span class="r-in"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu">gemini_compare_pair_live</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  ID1               <span class="op">=</span> <span class="st">"S01"</span>,</span></span>
+<span class="r-in"><span>  text1             <span class="op">=</span> <span class="st">"Text 1"</span>,</span></span>
+<span class="r-in"><span>  ID2               <span class="op">=</span> <span class="st">"S02"</span>,</span></span>
+<span class="r-in"><span>  text2             <span class="op">=</span> <span class="st">"Text 2"</span>,</span></span>
+<span class="r-in"><span>  model             <span class="op">=</span> <span class="st">"gemini-3-pro-preview"</span>,</span></span>
+<span class="r-in"><span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span></span>
+<span class="r-in"><span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span></span>
+<span class="r-in"><span>  thinking_level    <span class="op">=</span> <span class="st">"low"</span>,</span></span>
+<span class="r-in"><span>  include_thoughts  <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
+<span class="r-in"><span>  include_raw       <span class="op">=</span> <span class="cn">FALSE</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">res</span></span></span>
+<span class="r-in"><span><span class="va">res</span><span class="op">$</span><span class="va">better_id</span></span></span>
+<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

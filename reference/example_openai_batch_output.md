@@ -36,11 +36,21 @@ data("example_openai_batch_output")
 
 # Inspect the first line
 cat(example_openai_batch_output[1], "\n")
-#> {"id": "batch_req_aaa111", "custom_id": "EXP_S01_vs_S02", "response": {"status_code": 200, "request_id": "req_111aaa", "body": {"id": "chatcmpl-111aaa", "object": "chat.completion", "created": 1753322001, "model": "o3-2025-04-16", "choices": [{"index": 0, "message": {"role": "assistant", "content": "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>", "refusal": null, "annotations": []}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 440, "completion_tokens": 95, "total_tokens": 535, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 64, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}, "system_fingerprint": null}}, "error": null} 
+#> {"id": "batch_req_aaa111", "custom_id": "EXP_S01_vs_S02", "response":
+#>   {"status_code": 200, "request_id": "req_111aaa", "body":
+#>   {"id": "chatcmpl-111aaa", "object": "chat.completion", "created":
+#>   1753322001, "model": "o3-2025-04-16", "choices": [{"index": 0, "message":
+#>   {"role": "assistant", "content": "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>",
+#>   "refusal": null, "annotations": []}, "finish_reason": "stop"}], "usage":
+#>   {"prompt_tokens": 440, "completion_tokens": 95, "total_tokens": 535,
+#>   "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0},
+#>   "completion_tokens_details": {"reasoning_tokens": 64, "audio_tokens": 0,
+#>   "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}},
+#>   "system_fingerprint": null}}, "error": null} 
 
 # Write to a temporary .jsonl file for parsing
 tmp <- tempfile(fileext = ".jsonl")
 writeLines(example_openai_batch_output, con = tmp)
 tmp
-#> [1] "/tmp/Rtmpj6HUn0/file1b783df02846.jsonl"
+#> [1] "/tmp/RtmpoKlFPX/file1e916b19f872.jsonl"
 ```

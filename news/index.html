@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,13 +40,43 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.1.0" id="pairwisellm-110">pairwiseLLM 1.1.0<a class="anchor" aria-label="anchor" href="#pairwisellm-110"></a></h2>
+<div class="section level3">
+<h3 id="models-1-1-0">Models<a class="anchor" aria-label="anchor" href="#models-1-1-0"></a></h3>
+<ul><li>Added GPT-5.2</li>
+<li>Ensured models can be called with date format, e.g. <code>gpt-5.2-2025-12-11</code>
+</li>
+<li>Default temperature setting is set to 0 for non-reasoning models, provider default for reasoning models (typically 1)</li>
+</ul></div>
+<div class="section level3">
+<h3 id="tests-1-1-0">Tests<a class="anchor" aria-label="anchor" href="#tests-1-1-0"></a></h3>
+<ul><li>Tests added to improve coverage</li>
+</ul></div>
+<div class="section level3">
+<h3 id="documentation-1-1-0">Documentation<a class="anchor" aria-label="anchor" href="#documentation-1-1-0"></a></h3>
+<ul><li>Changed pkgdown site layout</li>
+<li>Added codemeta.json</li>
+<li>Added repo logo</li>
+<li>Updated function examples</li>
+<li>Add references to Description</li>
+</ul></div>
+<div class="section level3">
+<h3 id="miscellaneous-1-1-0">Miscellaneous<a class="anchor" aria-label="anchor" href="#miscellaneous-1-1-0"></a></h3>
+<ul><li>No longer set global variables, now done in individual functions</li>
+<li>Added <code>verbose</code> option in <code><a href="../reference/fit_bt_model.html">fit_bt_model()</a></code> and <code><a href="../reference/summarize_bt_fit.html">summarize_bt_fit()</a></code>
+</li>
+<li>Moved null coalescing helper to separate R file</li>
+</ul></div>
+</div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.0.0" id="pairwisellm-100">pairwiseLLM 1.0.0<a class="anchor" aria-label="anchor" href="#pairwisellm-100"></a></h2>
 <ul><li>Initial release.</li>
 <li>Unified live and batch LLM comparison framework (OpenAI / Anthropic / Gemini).</li>
 <li>Live support for Together.ai and local Ollama backends.</li>
 <li>Tools for Bradley–Terry and Elo models, positional bias checks</li>
 </ul></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

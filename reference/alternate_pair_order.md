@@ -36,7 +36,6 @@ the random number generator or seeds.
 data("example_writing_samples")
 pairs <- make_pairs(example_writing_samples)
 
-# Deterministic alternation (no randomness)
 pairs_alt <- alternate_pair_order(pairs)
 
 head(pairs[, c("ID1", "ID2")])

@@ -25,7 +25,7 @@ estimates and standard errors, but not reliability.
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,7 +70,12 @@ estimates and standard errors, but not reliability.</p></li>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">fit_bt_model</span><span class="op">(</span><span class="va">bt_data</span>, engine <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"sirt"</span>, <span class="st">"BradleyTerry2"</span><span class="op">)</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">fit_bt_model</span><span class="op">(</span></span>
+<span>  <span class="va">bt_data</span>,</span>
+<span>  engine <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"sirt"</span>, <span class="st">"BradleyTerry2"</span><span class="op">)</span>,</span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  <span class="va">...</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -86,6 +91,12 @@ equal to 0 or 1. Usually produced by <code><a href="build_bt_data.html">build_bt
 <dt id="arg-engine">engine<a class="anchor" aria-label="anchor" href="#arg-engine"></a></dt>
 <dd><p>Character string specifying the modeling engine. One of:
 <code>"auto"</code> (default), <code>"sirt"</code>, or <code>"BradleyTerry2"</code>.</p></dd>
+
+
+<dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
+<dd><p>Logical. If <code>TRUE</code> (default), show engine output (iterations,
+warnings). If <code>FALSE</code>, suppress noisy output to keep
+examples and reports clean.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -133,10 +144,113 @@ modeling engines. MLE reliability is only available from <span class="pkg">sirt<
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_pairs"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">bt</span> <span class="op">&lt;-</span> <span class="fu"><a href="build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">example_writing_pairs</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="va">fit1</span> <span class="op">&lt;-</span> <span class="fu">fit_bt_model</span><span class="op">(</span><span class="va">bt</span>, engine <span class="op">=</span> <span class="st">"sirt"</span><span class="op">)</span></span></span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>NAs introduced by coercion</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 1 | Maximum parameter change=0.9874205</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 2 | Maximum parameter change=0.9604</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 3 | Maximum parameter change=0.941192</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 4 | Maximum parameter change=0.9223682</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 5 | Maximum parameter change=0.9039208</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 6 | Maximum parameter change=0.8858424</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 7 | Maximum parameter change=0.8681255</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 8 | Maximum parameter change=0.850763</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 9 | Maximum parameter change=0.8337478</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 10 | Maximum parameter change=0.8170728</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 11 | Maximum parameter change=0.8007314</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 12 | Maximum parameter change=0.7847167</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 13 | Maximum parameter change=0.7690224</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 14 | Maximum parameter change=0.7536419</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 15 | Maximum parameter change=0.7385691</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 16 | Maximum parameter change=0.7237977</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 17 | Maximum parameter change=0.7093218</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 18 | Maximum parameter change=0.6951353</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 19 | Maximum parameter change=0.6812326</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 20 | Maximum parameter change=0.667608</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 21 | Maximum parameter change=0.6542558</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 22 | Maximum parameter change=0.6411707</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 23 | Maximum parameter change=0.6283473</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 24 | Maximum parameter change=0.6157803</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 25 | Maximum parameter change=0.6034647</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 26 | Maximum parameter change=0.5913954</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 27 | Maximum parameter change=0.5795675</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 28 | Maximum parameter change=0.5679762</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 29 | Maximum parameter change=0.5566167</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 30 | Maximum parameter change=0.5454843</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 31 | Maximum parameter change=0.5345746</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 32 | Maximum parameter change=0.5238831</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 33 | Maximum parameter change=0.5134055</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 34 | Maximum parameter change=0.5031374</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 35 | Maximum parameter change=0.4930746</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 36 | Maximum parameter change=0.4832131</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 37 | Maximum parameter change=0.4735489</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 38 | Maximum parameter change=0.4640779</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 39 | Maximum parameter change=0.4547963</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 40 | Maximum parameter change=0.4457004</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 41 | Maximum parameter change=0.4367864</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 42 | Maximum parameter change=0.4280507</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 43 | Maximum parameter change=0.4194897</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 44 | Maximum parameter change=0.4110999</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 45 | Maximum parameter change=0.4028779</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 46 | Maximum parameter change=0.3948203</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 47 | Maximum parameter change=0.3869239</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 48 | Maximum parameter change=0.3791854</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 49 | Maximum parameter change=0.3716017</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 50 | Maximum parameter change=0.3641697</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 51 | Maximum parameter change=0.3568863</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 52 | Maximum parameter change=0.3497486</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 53 | Maximum parameter change=0.3427536</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 54 | Maximum parameter change=0.3358985</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 55 | Maximum parameter change=0.3291805</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 56 | Maximum parameter change=0.3225969</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 57 | Maximum parameter change=0.316145</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 58 | Maximum parameter change=0.3098221</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 59 | Maximum parameter change=0.3036257</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 60 | Maximum parameter change=0.2975531</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 61 | Maximum parameter change=0.2916021</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 62 | Maximum parameter change=0.28577</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 63 | Maximum parameter change=0.2800546</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 64 | Maximum parameter change=0.2744535</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 65 | Maximum parameter change=0.2689645</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 66 | Maximum parameter change=0.2635852</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 67 | Maximum parameter change=0.2583135</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 68 | Maximum parameter change=0.2531472</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 69 | Maximum parameter change=0.2480843</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 70 | Maximum parameter change=0.2431226</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 71 | Maximum parameter change=0.2382601</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 72 | Maximum parameter change=0.2334949</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 73 | Maximum parameter change=0.228825</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 74 | Maximum parameter change=0.2242485</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 75 | Maximum parameter change=0.2197636</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 76 | Maximum parameter change=0.2153683</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 77 | Maximum parameter change=0.2110609</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 78 | Maximum parameter change=0.2068397</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 79 | Maximum parameter change=0.2027029</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 80 | Maximum parameter change=0.1986489</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 81 | Maximum parameter change=0.1946759</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 82 | Maximum parameter change=0.1907824</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 83 | Maximum parameter change=0.1869667</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 84 | Maximum parameter change=0.1832274</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 85 | Maximum parameter change=0.1795628</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 86 | Maximum parameter change=0.1759716</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 87 | Maximum parameter change=0.1724521</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 88 | Maximum parameter change=0.1690031</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 89 | Maximum parameter change=0.165623</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 90 | Maximum parameter change=0.1623106</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 91 | Maximum parameter change=0.1590644</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 92 | Maximum parameter change=0.1558831</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 93 | Maximum parameter change=0.1527654</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 94 | Maximum parameter change=0.1497101</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 95 | Maximum parameter change=0.1467159</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 96 | Maximum parameter change=0.1437816</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 97 | Maximum parameter change=0.140906</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 98 | Maximum parameter change=0.1380878</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 99 | Maximum parameter change=0.1353261</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 100 | Maximum parameter change=0.1326196</span>
 <span class="r-in"><span><span class="va">fit2</span> <span class="op">&lt;-</span> <span class="fu">fit_bt_model</span><span class="op">(</span><span class="va">bt</span>, engine <span class="op">=</span> <span class="st">"BradleyTerry2"</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>the ‘nobars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainter to do so.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span style="color: #555555;">This warning is displayed once per session.</span></span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>the ‘findbars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainter to do so.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span style="color: #555555;">This warning is displayed once per session.</span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

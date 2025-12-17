@@ -11,7 +11,7 @@ reached. For the REST API, states have the form &quot;BATCH_STATE_*&quot;."></he
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -99,6 +99,24 @@ reached. For the REST API, states have the form "BATCH_STATE_*".</p>
 <code><a href="gemini_get_batch.html">gemini_get_batch</a></code>.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Offline: polling parameters and batch name are plain R objects</span></span></span>
+<span class="r-in"><span><span class="va">batch_name</span> <span class="op">&lt;-</span> <span class="st">"batches/123456"</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Online: poll until the batch reaches a terminal state (requires network)</span></span></span>
+<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+<span class="r-in"><span><span class="va">final_batch</span> <span class="op">&lt;-</span> <span class="fu">gemini_poll_batch_until_complete</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  batch_name       <span class="op">=</span> <span class="va">batch_name</span>,</span></span>
+<span class="r-in"><span>  interval_seconds <span class="op">=</span> <span class="fl">10</span>,</span></span>
+<span class="r-in"><span>  timeout_seconds  <span class="op">=</span> <span class="fl">600</span>,</span></span>
+<span class="r-in"><span>  verbose          <span class="op">=</span> <span class="cn">TRUE</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">final_batch</span><span class="op">$</span><span class="va">metadata</span><span class="op">$</span><span class="va">state</span></span></span>
+<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

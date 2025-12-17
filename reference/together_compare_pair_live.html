@@ -15,7 +15,7 @@ conventions (for example &amp;lt;BETTER_SAMPLE&amp;gt;...&amp;lt;/BETTER_SAMPLE&
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -218,8 +218,6 @@ defaults are not applied.</p></li>
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="co"># Requires TOGETHER_API_KEY set in your environment and network access.</span></span></span>
-<span class="r-in"><span><span class="co"># Running these examples will incur API usage costs.</span></span></span>
-<span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, <span class="op">]</span></span></span>
@@ -227,7 +225,7 @@ defaults are not applied.</p></li>
 <span class="r-in"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Example: DeepSeek-R1; uses default temperature = 0.6 if not supplied</span></span></span>
+<span class="r-in"><span><span class="co"># Example: DeepSeek-R1 with default temperature = 0.6 if not supplied</span></span></span>
 <span class="r-in"><span><span class="va">res_deepseek</span> <span class="op">&lt;-</span> <span class="fu">together_compare_pair_live</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  ID1               <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">ID</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span></span>
 <span class="r-in"><span>  text1             <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">text</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span></span>
@@ -242,7 +240,7 @@ defaults are not applied.</p></li>
 <span class="r-in"><span><span class="va">res_deepseek</span><span class="op">$</span><span class="va">better_id</span></span></span>
 <span class="r-in"><span><span class="va">res_deepseek</span><span class="op">$</span><span class="va">thoughts</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Example: Kimi-K2; uses default temperature = 0 unless overridden</span></span></span>
+<span class="r-in"><span><span class="co"># Example: Kimi-K2 with default temperature = 0 unless overridden</span></span></span>
 <span class="r-in"><span><span class="va">res_kimi</span> <span class="op">&lt;-</span> <span class="fu">together_compare_pair_live</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  ID1               <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">ID</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span></span>
 <span class="r-in"><span>  text1             <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">text</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span></span>
@@ -256,6 +254,7 @@ defaults are not applied.</p></li>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">res_kimi</span><span class="op">$</span><span class="va">better_id</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

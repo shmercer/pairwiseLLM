@@ -11,7 +11,7 @@ single JSON object representing the result for one batch request."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -81,13 +81,23 @@ a temporary file and then read/parse them as a JSONL batch file.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Inspect the first line</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">example_openai_batch_output</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>, <span class="st">"\n"</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> {"id": "batch_req_aaa111", "custom_id": "EXP_S01_vs_S02", "response": {"status_code": 200, "request_id": "req_111aaa", "body": {"id": "chatcmpl-111aaa", "object": "chat.completion", "created": 1753322001, "model": "o3-2025-04-16", "choices": [{"index": 0, "message": {"role": "assistant", "content": "&lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt;", "refusal": null, "annotations": []}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 440, "completion_tokens": 95, "total_tokens": 535, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 64, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}, "system_fingerprint": null}}, "error": null} </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> {"id": "batch_req_aaa111", "custom_id": "EXP_S01_vs_S02", "response":</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   {"status_code": 200, "request_id": "req_111aaa", "body":</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   {"id": "chatcmpl-111aaa", "object": "chat.completion", "created":</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1753322001, "model": "o3-2025-04-16", "choices": [{"index": 0, "message":</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   {"role": "assistant", "content": "&lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt;",</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   "refusal": null, "annotations": []}, "finish_reason": "stop"}], "usage":</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   {"prompt_tokens": 440, "completion_tokens": 95, "total_tokens": 535,</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0},</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   "completion_tokens_details": {"reasoning_tokens": 64, "audio_tokens": 0,</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}},</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   "system_fingerprint": null}}, "error": null} </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Write to a temporary .jsonl file for parsing</span></span></span>
 <span class="r-in"><span><span class="va">tmp</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".jsonl"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="va">example_openai_batch_output</span>, con <span class="op">=</span> <span class="va">tmp</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">tmp</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/Rtmpj6HUn0/file1b783df02846.jsonl"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmpoKlFPX/file1e916b19f872.jsonl"</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

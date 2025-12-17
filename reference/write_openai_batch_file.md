@@ -40,6 +40,7 @@ The input can either:
 
 ``` r
 if (FALSE) { # \dontrun{
+# Requires OPENAI_API_KEY and network access.
 data("example_writing_samples")
 pairs_all <- make_pairs(example_writing_samples)
 pairs_small <- sample_pairs(pairs_all, n_pairs = 5, seed = 1)

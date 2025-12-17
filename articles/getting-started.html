@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -158,9 +158,9 @@ require an API key, just that the Ollama server is running.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
 <span><span class="co">#&gt;   ID    text                                                       quality_score</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                                              <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   Writing assessment is hard. People write different things…             1</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S02   It is hard to grade writing. Some are long and some are s…             2</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S03   Assessing writing is difficult because everyone writes di…             3</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different thing…             1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S02   <span style="color: #949494;">"</span>It is hard to grade writing. Some are long and some are …             2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S03   <span style="color: #949494;">"</span>Assessing writing is difficult because everyone writes d…             3</span></span></code></pre></div>
 <p>Each sample has:</p>
 <ul>
 <li>
@@ -182,11 +182,11 @@ require an API key, just that the Ollama server is running.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 5 × 4</span></span></span>
 <span><span class="co">#&gt;   ID1   text1                                                        ID2   text2</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                                        <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   Writing assessment is hard. People write different things. … S02   It i…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S01   Writing assessment is hard. People write different things. … S03   Asse…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S01   Writing assessment is hard. People write different things. … S04   Grad…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> S01   Writing assessment is hard. People write different things. … S05   Writ…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> S01   Writing assessment is hard. People write different things. … S06   It i…</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S02   <span style="color: #949494;">"</span>It …</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S03   <span style="color: #949494;">"</span>Ass…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S04   <span style="color: #949494;">"</span>Gra…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S05   <span style="color: #949494;">"</span>Wri…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S06   <span style="color: #949494;">"</span>It …</span></span></code></pre></div>
 <p>Sample a subset of pairs:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs_small</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span><span class="va">pairs</span>, n_pairs <span class="op">=</span> <span class="fl">10</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span></span></code></pre></div>

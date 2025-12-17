@@ -36,3 +36,17 @@ A list representing the Batch job object.
 
 It corresponds to a GET request on `/v1beta/<BATCH_NAME>`, where
 `BATCH_NAME` is a string such as `"batches/123456"`.
+
+## Examples
+
+``` r
+# Offline: basic batch name validation / object you would pass
+batch_name <- "batches/123456"
+
+# Online: retrieve the batch state from Gemini (requires API key + network)
+if (FALSE) { # \dontrun{
+batch <- gemini_get_batch(batch_name = batch_name)
+batch$name
+batch$metadata$state
+} # }
+```

@@ -41,12 +41,11 @@ submit_llm_pairs(
   Model identifier for the chosen backend. For `"openai"` this should be
   an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`). For
   `"anthropic"` and `"gemini"`, use the corresponding provider model
-  names (for example `"claude-3-5-sonnet-latest"` or
-  `"gemini-2.0-pro-exp"`). For "together", use Together.ai model
-  identifiers such as `"deepseek-ai/DeepSeek-R1"` or
-  `"deepseek-ai/DeepSeek-V3"`. For `"ollama"`, use a local model name
-  known to the Ollama server (for example `"mistral-small3.2:24b"`,
-  `"qwen3:32b"`, `"gemma3:27b"`).
+  names (for example `"claude-4-5-sonnet"` or `"gemini-3-pro-preview"`).
+  For "together", use Together.ai model identifiers such as
+  `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
+  `"ollama"`, use a local model name known to the Ollama server (for
+  example `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
 
 - trait_name:
 
@@ -187,8 +186,6 @@ if (FALSE) { # \dontrun{
 # must be pulled in advance. No API key is required for the `"ollama"`
 # backend.
 
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
@@ -217,25 +214,23 @@ res_live <- submit_llm_pairs(
 
 res_live$better_id
 
-# Live comparisons using a local Ollama backend (no API key required)
-# Make sure an Ollama server is running and the model is available, e.g.:
-#   ollama pull mistral-small3.2:24b
-#
-# res_ollama <- submit_llm_pairs(
-#   pairs             = pairs,
-#   model             = "mistral-small3.2:24b",
-#   trait_name        = td$name,
-#   trait_description = td$description,
-#   prompt_template   = tmpl,
-#   backend           = "ollama",
-#   verbose           = TRUE,
-#   status_every      = 2,
-#   progress          = TRUE,
-#   include_raw       = FALSE,
-#   think             = FALSE,
-#   num_ctx           = 8192
-# )
-#
-# res_ollama$better_id
+# Live comparisons using a local Ollama backend
+
+res_ollama <- submit_llm_pairs(
+  pairs             = pairs,
+  model             = "mistral-small3.2:24b",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  backend           = "ollama",
+  verbose           = TRUE,
+  status_every      = 2,
+  progress          = TRUE,
+  include_raw       = FALSE,
+  think             = FALSE,
+  num_ctx           = 8192
+)
+
+res_ollama$better_id
 } # }
 ```

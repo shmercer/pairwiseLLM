@@ -105,9 +105,7 @@ and
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires TOGETHER_API_KEY and network access. Running these examples will
-# incur API usage costs.
-library(pairwiseLLM)
+# Requires TOGETHER_API_KEY and network access.
 
 data("example_writing_samples", package = "pairwiseLLM")
 

@@ -297,8 +297,9 @@ for (t_row in seq_len(nrow(templates_tbl))) {
     pairs_use <- get_pairs_for_direction(direction)
     is_thinking <- identical(thinking, "with_thinking")
 
-    prefix <- paste(provider, template_id, model, thinking, direction, 
-                    sep = "_")
+    prefix <- paste(provider, template_id, model, thinking, direction,
+      sep = "_"
+    )
     prefix <- gsub("[^A-Za-z0-9_.-]", "-", prefix)
 
     batch_input_path <- file.path(out_dir, paste0(prefix, "_input.jsonl"))

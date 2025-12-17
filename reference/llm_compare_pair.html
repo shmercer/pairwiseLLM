@@ -27,7 +27,7 @@ appropriate live comparison helper:
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -114,8 +114,8 @@ appropriate live comparison helper:</p><ul><li><p><code>"openai"</code>   → <c
 <dd><p>Model identifier for the chosen backend. For <code>"openai"</code> this
 should be an OpenAI model name (for example <code>"gpt-4.1"</code>, <code>"gpt-5.1"</code>).
 For <code>"anthropic"</code> and <code>"gemini"</code>, use the corresponding provider model
-names (for example <code>"claude-3-5-sonnet-latest"</code> or
-<code>"gemini-2.0-pro-exp"</code>). For "together", use Together.ai model identifiers
+names (for example <code>"claude-4-5-sonnet"</code> or
+<code>"gemini-3-pro-preview"</code>). For "together", use Together.ai model identifiers
 such as <code>"deepseek-ai/DeepSeek-R1"</code> or <code>"deepseek-ai/DeepSeek-V3"</code>. For
 <code>"ollama"</code>, use a local model name known to the Ollama server (for example
 <code>"mistral-small3.2:24b"</code>, <code>"qwen3:32b"</code>, <code>"gemma3:27b"</code>).</p></dd>
@@ -220,8 +220,6 @@ comparison results.</p></li>
 <span class="r-in"><span><span class="co"># must be pulled in advance. No API key is required for the `"ollama"`</span></span></span>
 <span class="r-in"><span><span class="co"># backend.</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, <span class="op">]</span></span></span>
 <span class="r-in"><span></span></span>
@@ -268,27 +266,24 @@ comparison results.</p></li>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">res_live_gpt5</span><span class="op">$</span><span class="va">raw_response</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, max.level <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Example: single live comparison using a local Ollama backend</span></span></span>
-<span class="r-in"><span><span class="co"># (requires a running Ollama server and pulled model, e.g.</span></span></span>
-<span class="r-in"><span><span class="co">#   `ollama pull mistral-small3.2:24b`)</span></span></span>
-<span class="r-in"><span><span class="co">#</span></span></span>
-<span class="r-in"><span><span class="co"># res_ollama &lt;- llm_compare_pair(</span></span></span>
-<span class="r-in"><span><span class="co">#   ID1               = samples$ID[1],</span></span></span>
-<span class="r-in"><span><span class="co">#   text1             = samples$text[1],</span></span></span>
-<span class="r-in"><span><span class="co">#   ID2               = samples$ID[2],</span></span></span>
-<span class="r-in"><span><span class="co">#   text2             = samples$text[2],</span></span></span>
-<span class="r-in"><span><span class="co">#   model             = "mistral-small3.2:24b",</span></span></span>
-<span class="r-in"><span><span class="co">#   trait_name        = td$name,</span></span></span>
-<span class="r-in"><span><span class="co">#   trait_description = td$description,</span></span></span>
-<span class="r-in"><span><span class="co">#   prompt_template   = tmpl,</span></span></span>
-<span class="r-in"><span><span class="co">#   backend           = "ollama",</span></span></span>
-<span class="r-in"><span><span class="co">#   host              = getOption(</span></span></span>
-<span class="r-in"><span><span class="co">#     "pairwiseLLM.ollama_host",</span></span></span>
-<span class="r-in"><span><span class="co">#     "http://127.0.0.1:11434"</span></span></span>
-<span class="r-in"><span><span class="co">#   ),</span></span></span>
-<span class="r-in"><span><span class="co">#   think             = FALSE</span></span></span>
-<span class="r-in"><span><span class="co"># )</span></span></span>
-<span class="r-in"><span><span class="co">#</span></span></span>
-<span class="r-in"><span><span class="co"># res_ollama$better_id</span></span></span>
+<span class="r-in"><span><span class="va">res_ollama</span> <span class="op">&lt;-</span> <span class="fu">llm_compare_pair</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  ID1 <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">ID</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span></span>
+<span class="r-in"><span>  text1 <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">text</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>,</span></span>
+<span class="r-in"><span>  ID2 <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">ID</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>,</span></span>
+<span class="r-in"><span>  text2 <span class="op">=</span> <span class="va">samples</span><span class="op">$</span><span class="va">text</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>,</span></span>
+<span class="r-in"><span>  model <span class="op">=</span> <span class="st">"mistral-small3.2:24b"</span>,</span></span>
+<span class="r-in"><span>  trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span></span>
+<span class="r-in"><span>  prompt_template <span class="op">=</span> <span class="va">tmpl</span>,</span></span>
+<span class="r-in"><span>  backend <span class="op">=</span> <span class="st">"ollama"</span>,</span></span>
+<span class="r-in"><span>  host <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>    <span class="st">"pairwiseLLM.ollama_host"</span>,</span></span>
+<span class="r-in"><span>    <span class="st">"http://127.0.0.1:11434"</span></span></span>
+<span class="r-in"><span>  <span class="op">)</span>,</span></span>
+<span class="r-in"><span>  think <span class="op">=</span> <span class="cn">FALSE</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">res_ollama</span><span class="op">$</span><span class="va">better_id</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

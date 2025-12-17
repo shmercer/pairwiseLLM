@@ -9,7 +9,7 @@ rather than Bradley–Terry models.
 ## Usage
 
 ``` r
-fit_elo_model(elo_data, runs = 5, ...)
+fit_elo_model(elo_data, runs = 5, verbose = FALSE, ...)
 ```
 
 ## Arguments
@@ -25,6 +25,12 @@ fit_elo_model(elo_data, runs = 5, ...)
   Integer number of randomizations to use in
   [`EloChoice::elochoice`](https://rdrr.io/pkg/EloChoice/man/elochoice.html).
   Default is 5.
+
+- verbose:
+
+  Logical. If `TRUE` (default), show any messages/warnings emitted by
+  the underlying fitting functions. If `FALSE`, suppress noisy output to
+  keep examples and reports clean.
 
 - ...:
 
@@ -114,16 +120,37 @@ e0190393.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-if (requireNamespace("EloChoice", quietly = TRUE)) {
-  data("example_writing_pairs", package = "pairwiseLLM")
+data("example_writing_pairs", package = "pairwiseLLM")
 
-  elo_data <- build_elo_data(example_writing_pairs)
+elo_data <- build_elo_data(example_writing_pairs)
 
-  fit <- fit_elo_model(elo_data, runs = 5)
-  fit$elo
-  fit$reliability
-  fit$reliability_weighted
-}
-} # }
+fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
+fit$elo
+#> # A tibble: 20 × 2
+#>    ID       elo
+#>    <chr>  <dbl>
+#>  1 S01   -383. 
+#>  2 S02   -313. 
+#>  3 S03   -374. 
+#>  4 S04   -344  
+#>  5 S05   -232. 
+#>  6 S06   -210. 
+#>  7 S07   -133. 
+#>  8 S08    -87.8
+#>  9 S09    -36.4
+#> 10 S10     -8  
+#> 11 S11     -9.2
+#> 12 S12     21.4
+#> 13 S13    188. 
+#> 14 S14    176. 
+#> 15 S15    223. 
+#> 16 S16    182. 
+#> 17 S17    270. 
+#> 18 S18    405. 
+#> 19 S19    275. 
+#> 20 S20    389. 
+fit$reliability
+#> [1] 0.8175787
+fit$reliability_weighted
+#> [1] 0.9227135
 ```

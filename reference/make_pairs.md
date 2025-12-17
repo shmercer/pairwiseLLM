@@ -41,7 +41,7 @@ pairs_all
 #> 2 S1    Sample 1 S3    Sample 3
 #> 3 S2    Sample 2 S3    Sample 3
 
-# Using the built-in example data (10 writing samples)
+# Using the built-in example data
 data("example_writing_samples")
 pairs_example <- make_pairs(example_writing_samples)
 nrow(pairs_example) # should be choose(10, 2) = 45

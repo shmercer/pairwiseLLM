@@ -86,7 +86,4 @@ head(pairs_rand[, c("ID1", "ID2")])
 #> 4 S01   S05  
 #> 5 S01   S06  
 #> 6 S07   S01  
-
-# For deterministic alternation instead of randomness, see:
-# alt_pairs <- alternate_pair_order(pairs_all)
 ```

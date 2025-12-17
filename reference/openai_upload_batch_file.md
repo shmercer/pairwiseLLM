@@ -36,8 +36,7 @@ A list representing the File object returned by the API, including `id`,
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires OPENAI_API_KEY set in your environment.
-# Upload a JSONL file prepared with write_openai_batch_file():
+# Requires OPENAI_API_KEY set in your environment and network access
 
 file_obj <- openai_upload_batch_file("batch_input.jsonl")
 file_obj$id

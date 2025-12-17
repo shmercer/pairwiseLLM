@@ -41,6 +41,7 @@ A list representing the Message Batch object, including fields such as
 
 ``` r
 if (FALSE) { # \dontrun{
+# Requires ANTHROPIC_API_KEY and network access.
 # After creating a batch:
 batch <- anthropic_create_batch(requests = my_requests)
 batch_id <- batch$id

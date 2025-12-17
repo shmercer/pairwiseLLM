@@ -176,7 +176,6 @@ When `endpoint` is not specified, it is chosen automatically:
 ``` r
 if (FALSE) { # \dontrun{
 # Requires OPENAI_API_KEY and network access.
-library(pairwiseLLM)
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -188,7 +187,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# 1) Standard chat.completions batch (no thoughts)
+# 1) Standard chat.completions batch with no thoughts
 pipeline_chat <- run_openai_batch_pipeline(
   pairs             = pairs,
   model             = "gpt-4.1",
@@ -203,14 +202,14 @@ pipeline_chat <- run_openai_batch_pipeline(
 pipeline_chat$batch$status
 head(pipeline_chat$results)
 
-# 2) Responses endpoint with reasoning summaries (thoughts) for gpt-5.1
+# 2) Responses endpoint with reasoning summaries for gpt-5.1
 pipeline_resp <- run_openai_batch_pipeline(
   pairs             = pairs,
   model             = "gpt-5.1",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  include_thoughts  = TRUE, # automatically picks "responses" + reasoning
+  include_thoughts  = TRUE,
   interval_seconds  = 10,
   timeout_seconds   = 600
 )

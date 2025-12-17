@@ -158,9 +158,6 @@ this function assumes that:
 ``` r
 if (FALSE) { # \dontrun{
 # Requires a running Ollama server and locally available models.
-# This example will not be executed automatically during package checks.
-
-library(pairwiseLLM)
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -172,10 +169,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Live comparisons for multiple pairs using a Mistral model via Ollama.
-# Make sure the model is available:
-#   ollama pull mistral-small3.2:24b
-
+# Live comparisons for multiple pairs using a Mistral model via Ollama
 res_mistral <- submit_ollama_pairs_live(
   pairs             = pairs,
   model             = "mistral-small3.2:24b",
@@ -189,11 +183,7 @@ res_mistral <- submit_ollama_pairs_live(
 
 res_mistral$better_id
 
-# Qwen with thinking enabled: temperature is automatically set to 0.6.
-# You can also override the context window via num_ctx.
-#
-#   ollama pull qwen3:32b
-
+# Qwen with thinking enabled
 res_qwen_think <- submit_ollama_pairs_live(
   pairs             = pairs,
   model             = "qwen3:32b",

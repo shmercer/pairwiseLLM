@@ -140,7 +140,7 @@ reqs_none <- build_anthropic_batch_requests(
 
 reqs_none
 
-# Batch requests with extended thinking (temperature forced to 1)
+# Batch requests with extended thinking
 reqs_reason <- build_anthropic_batch_requests(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",

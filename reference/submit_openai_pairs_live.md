@@ -103,7 +103,7 @@ and
 
 ``` r
 if (FALSE) { # \dontrun{
-library(pairwiseLLM)
+# Requires API key set and internet access
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -132,7 +132,7 @@ res_live <- submit_openai_pairs_live(
 
 res_live$better_id
 
-# Using gpt-5.1 with reasoning = "low" on the responses endpoint
+# Using gpt-5.1 with reasoning on the responses endpoint
 res_live_gpt5 <- submit_openai_pairs_live(
   pairs             = pairs,
   model             = "gpt-5.1",

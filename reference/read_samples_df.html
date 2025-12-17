@@ -11,7 +11,7 @@ column is the ID and the second column is the text."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -97,7 +97,7 @@ Can be a column name or index. Defaults to 2.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> S1    This is sample 1.     8</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> S2    This is sample 2.     9</span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Using the built-in example dataset (keep only ID and text)</span></span></span>
+<span class="r-in"><span><span class="co"># Using the built-in example dataset</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">samples2</span> <span class="op">&lt;-</span> <span class="fu">read_samples_df</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  <span class="va">example_writing_samples</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID"</span>, <span class="st">"text"</span><span class="op">)</span><span class="op">]</span>,</span></span>
@@ -108,12 +108,12 @@ Can be a column name or index. Defaults to 2.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 6 × 2</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   ID    text                                                                    </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                                                   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> S01   Writing assessment is hard. People write different things. It is confus…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> S02   It is hard to grade writing. Some are long and some are short. I do not…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span> S03   Assessing writing is difficult because everyone writes differently and …</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span> S04   Grading essays is tough work. You have to read a lot. Sometimes the han…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span> S05   Writing assessment is challenging because teachers must judge ideas, or…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span> S06   It is difficult to assess writing because it is subjective. One teacher…</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things. It is\n    …</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> S02   <span style="color: #949494;">"</span>It is hard to grade writing. Some are long and some are short. I do no…</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span> S03   <span style="color: #949494;">"</span>Assessing writing is difficult because everyone writes differently and…</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span> S04   <span style="color: #949494;">"</span>Grading essays is tough work. You have to read a lot. Sometimes the\n …</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span> S05   <span style="color: #949494;">"</span>Writing assessment is challenging because teachers must judge ideas,\n…</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span> S06   <span style="color: #949494;">"</span>It is difficult to assess writing because it is subjective. One teache…</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

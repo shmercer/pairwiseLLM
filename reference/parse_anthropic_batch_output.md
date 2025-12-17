@@ -114,19 +114,7 @@ separate `thoughts` column.
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires ANTHROPIC_API_KEY and a completed batch.
-library(pairwiseLLM)
-
-# Suppose you have already run run_anthropic_batch_pipeline() with poll =
-# TRUE:
-# pipeline <- run_anthropic_batch_pipeline(...)
-# jsonl_path <- pipeline$batch_output_path
-
-# You can parse the results .jsonl file directly:
-# tbl <- parse_anthropic_batch_output(jsonl_path)
-# dplyr::count(tbl, result_type)
-
-# For illustration only (do not run without a real path):
-# tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
+# Requires a completed Anthropic batch file
+tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
 } # }
 ```

@@ -103,7 +103,7 @@ results tibble. See llm_download_batch_results() to extract the results.'></head
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -211,9 +211,9 @@ through where supported.</p></dd>
 <dt id="arg-model">model<a class="anchor" aria-label="anchor" href="#arg-model"></a></dt>
 <dd><p>Character scalar model name to use for the batch job.</p><ul><li><p>For <code>"openai"</code>, use models like <code>"gpt-4.1"</code>, <code>"gpt-5.1"</code>, or <code>"gpt-5.2"</code>
 (including date-stamped versions like <code>"gpt-5.2-2025-12-11"</code>).</p></li>
-<li><p>For <code>"anthropic"</code>, use provider names like <code>"claude-3-5-sonnet-latest"</code>
+<li><p>For <code>"anthropic"</code>, use provider names like <code>"claude-4-5-sonnet"</code>
 or date-stamped versions like <code>"claude-sonnet-4-5-20250929"</code>.</p></li>
-<li><p>For <code>"gemini"</code>, use names like <code>"gemini-2.0-pro-exp"</code>.</p></li>
+<li><p>For <code>"gemini"</code>, use names like <code>"gemini-3-pro-preview"</code>.</p></li>
 </ul></dd>
 
 
@@ -268,29 +268,57 @@ preserved.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># 1. OpenAI Batch (GPT-5.2 with thoughts)</span></span></span>
-<span class="r-in"><span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"C"</span><span class="op">)</span><span class="op">)</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Requires:</span></span></span>
+<span class="r-in"><span><span class="co"># - Internet access</span></span></span>
+<span class="r-in"><span><span class="co"># - Provider API key set in your environment (OPENAI_API_KEY /</span></span></span>
+<span class="r-in"><span><span class="co">#   ANTHROPIC_API_KEY / GEMINI_API_KEY)</span></span></span>
+<span class="r-in"><span><span class="co"># - Billable API usage</span></span></span>
+<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+<span class="r-in"><span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="fu">tibble</span><span class="fu">::</span><span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  ID1   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"S01"</span>, <span class="st">"S03"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  text1 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Text 1"</span>, <span class="st">"Text 3"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  ID2   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"S02"</span>, <span class="st">"S04"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  text2 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Text 2"</span>, <span class="st">"Text 4"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># OpenAI batch</span></span></span>
 <span class="r-in"><span><span class="va">batch_openai</span> <span class="op">&lt;-</span> <span class="fu">llm_submit_pairs_batch</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  pairs <span class="op">=</span> <span class="va">pairs</span>,</span></span>
-<span class="r-in"><span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span></span>
-<span class="r-in"><span>  model <span class="op">=</span> <span class="st">"gpt-5.2-2025-12-11"</span>,</span></span>
-<span class="r-in"><span>  trait_name <span class="op">=</span> <span class="st">"overall_quality"</span>,</span></span>
-<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="st">"Quality of the response."</span>,</span></span>
-<span class="r-in"><span>  include_thoughts <span class="op">=</span> <span class="cn">TRUE</span></span></span>
+<span class="r-in"><span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span></span>
+<span class="r-in"><span>  backend           <span class="op">=</span> <span class="st">"openai"</span>,</span></span>
+<span class="r-in"><span>  model             <span class="op">=</span> <span class="st">"gpt-4.1"</span>,</span></span>
+<span class="r-in"><span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span></span>
+<span class="r-in"><span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span></span>
+<span class="r-in"><span>  include_thoughts  <span class="op">=</span> <span class="cn">FALSE</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">res_openai</span> <span class="op">&lt;-</span> <span class="fu"><a href="llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch_openai</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># 2. Anthropic Batch (Claude Sonnet 4.5 date-stamped)</span></span></span>
+<span class="r-in"><span><span class="co"># Anthropic batch</span></span></span>
 <span class="r-in"><span><span class="va">batch_anthropic</span> <span class="op">&lt;-</span> <span class="fu">llm_submit_pairs_batch</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  pairs <span class="op">=</span> <span class="va">pairs</span>,</span></span>
-<span class="r-in"><span>  backend <span class="op">=</span> <span class="st">"anthropic"</span>,</span></span>
-<span class="r-in"><span>  model <span class="op">=</span> <span class="st">"claude-sonnet-4-5-20250929"</span>,</span></span>
-<span class="r-in"><span>  trait_name <span class="op">=</span> <span class="st">"coherence"</span>,</span></span>
-<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="st">"Logical flow of the text."</span>,</span></span>
-<span class="r-in"><span>  include_thoughts <span class="op">=</span> <span class="cn">TRUE</span> <span class="co"># triggers extended thinking</span></span></span>
+<span class="r-in"><span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span></span>
+<span class="r-in"><span>  backend           <span class="op">=</span> <span class="st">"anthropic"</span>,</span></span>
+<span class="r-in"><span>  model             <span class="op">=</span> <span class="st">"claude-4-5-sonnet"</span>,</span></span>
+<span class="r-in"><span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span></span>
+<span class="r-in"><span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span></span>
+<span class="r-in"><span>  include_thoughts  <span class="op">=</span> <span class="cn">FALSE</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">res_anthropic</span> <span class="op">&lt;-</span> <span class="fu"><a href="llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch_anthropic</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Gemini batch</span></span></span>
+<span class="r-in"><span><span class="va">batch_gemini</span> <span class="op">&lt;-</span> <span class="fu">llm_submit_pairs_batch</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span></span>
+<span class="r-in"><span>  backend           <span class="op">=</span> <span class="st">"gemini"</span>,</span></span>
+<span class="r-in"><span>  model             <span class="op">=</span> <span class="st">"gemini-3-pro-preview"</span>,</span></span>
+<span class="r-in"><span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span></span>
+<span class="r-in"><span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span></span>
+<span class="r-in"><span>  include_thoughts  <span class="op">=</span> <span class="cn">TRUE</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">res_gemini</span> <span class="op">&lt;-</span> <span class="fu"><a href="llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch_gemini</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
