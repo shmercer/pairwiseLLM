@@ -121,3 +121,31 @@ explicit chain-of-thought style reasoning (\"thoughts\") via the
 \code{thinkingConfig} block and stores it in a separate \code{thoughts} column, while
 still using the final answer content to detect the \verb{<BETTER_SAMPLE>} tag.
 }
+\examples{
+# Requires:
+# - GEMINI_API_KEY set in your environment
+# - Internet access
+# - Billable Gemini API usage
+\dontrun{
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+res <- gemini_compare_pair_live(
+  ID1               = "S01",
+  text1             = "Text 1",
+  ID2               = "S02",
+  text2             = "Text 2",
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "low",
+  include_thoughts  = FALSE,
+  include_raw       = FALSE
+)
+
+res
+res$better_id
+}
+
+}

@@ -119,6 +119,33 @@
 #'   * `prompt_tokens`, `completion_tokens`, `total_tokens` - usage counts if
 #'     reported by the API, otherwise `NA_real_`.
 #'
+#' @examples
+#' # Requires:
+#' # - GEMINI_API_KEY set in your environment
+#' # - Internet access
+#' # - Billable Gemini API usage
+#' \dontrun{
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' res <- gemini_compare_pair_live(
+#'   ID1               = "S01",
+#'   text1             = "Text 1",
+#'   ID2               = "S02",
+#'   text2             = "Text 2",
+#'   model             = "gemini-3-pro-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "low",
+#'   include_thoughts  = FALSE,
+#'   include_raw       = FALSE
+#' )
+#'
+#' res
+#' res$better_id
+#' }
+#'
 #' @export
 gemini_compare_pair_live <- function(
   ID1,
@@ -432,6 +459,40 @@ gemini_compare_pair_live <- function(
 #'   [gemini_compare_pair_live()] (but `thinking_budget` is ignored there).
 #'
 #' @return A tibble of results (one row per pair).
+#'
+#' @examples
+#' # Requires:
+#' # - GEMINI_API_KEY set in your environment
+#' # - Internet access
+#' # - Billable Gemini API usage
+#' \dontrun{
+#' # Example pair data
+#' pairs <- tibble::tibble(
+#'   ID1   = c("S01", "S03"),
+#'   text1 = c("Text 1", "Text 3"),
+#'   ID2   = c("S02", "S04"),
+#'   text2 = c("Text 2", "Text 4")
+#' )
+#'
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' # Submit multiple live Gemini comparisons
+#' res <- submit_gemini_pairs_live(
+#'   pairs             = pairs,
+#'   model             = "gemini-3-pro-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "low",
+#'   include_thoughts  = FALSE,
+#'   progress          = TRUE
+#' )
+#'
+#' res
+#' res$better_id
+#' }
+#'
 #' @export
 submit_gemini_pairs_live <- function(
   pairs,

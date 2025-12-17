@@ -83,3 +83,37 @@ The output has one row per pair and the same columns as
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}, making it easy to pass into downstream
 Bradley-Terry / BTM pipelines.
 }
+\examples{
+# Requires:
+# - GEMINI_API_KEY set in your environment
+# - Internet access
+# - Billable Gemini API usage
+\dontrun{
+# Example pair data
+pairs <- tibble::tibble(
+  ID1   = c("S01", "S03"),
+  text1 = c("Text 1", "Text 3"),
+  ID2   = c("S02", "S04"),
+  text2 = c("Text 2", "Text 4")
+)
+
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# Submit multiple live Gemini comparisons
+res <- submit_gemini_pairs_live(
+  pairs             = pairs,
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "low",
+  include_thoughts  = FALSE,
+  progress          = TRUE
+)
+
+res
+res$better_id
+}
+
+}

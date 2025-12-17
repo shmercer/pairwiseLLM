@@ -8,6 +8,7 @@ This is a resubmission. I have addressed all reviewer comments as follows:
   - `together_compare_pair_live()` is now exported
 4. Commented out code lines in examples
   - I reviewed all functions and removed any commented out code lines.
+  - I added examples for some exported functions that did not have them
 5. `.GlobalEnv` CRAN policy
   - The following variables are now defined only within functions: 
     "key", "ID1", "ID2", "better_id", "is_consistent", "is_pos1_bias",
@@ -83,5 +84,4 @@ Tests run deterministically and without side effects:
 - Tests run successfully without requiring API keys or external binaries.
 - No test performs file I/O outside temporary directories.
 
-This ensures fast, clean CRAN checks.
 
