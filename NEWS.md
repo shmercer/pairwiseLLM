@@ -19,6 +19,7 @@
 ## Miscellaneous
 * No longer set global variables, now done in individual functions
 * Added `verbose` option in `fit_bt_model()` and `summarize_bt_fit()`
+* Moved null coalescing helper to separate R file
 
 # pairwiseLLM 1.0.0
 
@@ -26,4 +27,4 @@
 * Unified live and batch LLM comparison framework (OpenAI / Anthropic / Gemini).
 * Live support for Together.ai and local Ollama backends.
 * Tools for Bradley–Terry and Elo models, positional bias checks
-* Moved null coalescing helper to separate R file
+
