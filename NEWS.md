@@ -1,4 +1,4 @@
-# pairwiseLLM 1.0.1
+# pairwiseLLM 1.1.0
 
 ## Models
 * Added GPT-5.2
