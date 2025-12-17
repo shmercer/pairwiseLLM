@@ -116,8 +116,6 @@
 #' \dontrun{
 #' # Requires a running Ollama server and locally available models.
 #'
-#' library(pairwiseLLM)
-#'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'
 #' td <- trait_description("overall_quality")
@@ -429,8 +427,6 @@ ollama_compare_pair_live <- function(
 #' @examples
 #' \dontrun{
 #' # Requires a running Ollama server and locally available models.
-#'
-#' library(pairwiseLLM)
 #'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'

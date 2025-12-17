@@ -105,8 +105,6 @@ As with \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}, thi
 \dontrun{
 # Requires a running Ollama server and locally available models.
 
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>

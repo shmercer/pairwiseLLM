@@ -155,8 +155,6 @@ the visible comparison decisions.
 \dontrun{
 # Requires a running Ollama server and locally available models.
 
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 td <- trait_description("overall_quality")
