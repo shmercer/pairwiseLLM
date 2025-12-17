@@ -4,10 +4,8 @@ test_that("summarize_bt_fit returns a tidy tibble with expected columns", {
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
-  fit <- fit_bt_model(bt, engine = "sirt")
-  summary_tbl <- suppressWarnings(
-    summarize_bt_fit(fit)
-  )
+  fit <- fit_bt_model(bt, engine = "sirt", verbose = FALSE)
+  summary_tbl <- summarize_bt_fit(fit, verbose = FALSE)
 
   expect_s3_class(summary_tbl, "tbl_df")
 
@@ -37,12 +35,8 @@ test_that("summarize_bt_fit works with BradleyTerry2 engine as well", {
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
-  fit <- suppressWarnings(
-    fit_bt_model(bt, engine = "BradleyTerry2")
-  )
-  summary_tbl <- suppressWarnings(
-    summarize_bt_fit(fit)
-  )
+  fit <- fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE)
+  summary_tbl <- summarize_bt_fit(fit, verbose = FALSE)
 
   expect_s3_class(summary_tbl, "tbl_df")
   expected_cols <- c("ID", "theta", "se", "rank", "engine", "reliability")

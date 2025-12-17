@@ -18,6 +18,7 @@
 
 ## Miscellaneous
 * No longer set global variables, now done in individual functions
+* Added `verbose` option in `fit_bt_model()` and `summarize_bt_fit()`
 
 # pairwiseLLM 1.0.0
 

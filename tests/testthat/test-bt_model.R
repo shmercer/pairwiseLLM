@@ -57,7 +57,7 @@ test_that("fit_bt_model fits a BT model using sirt when requested", {
   data("example_writing_pairs", package = "pairwiseLLM")
 
   bt <- build_bt_data(example_writing_pairs)
-  fit <- fit_bt_model(bt, engine = "sirt")
+  fit <- fit_bt_model(bt, engine = "sirt", verbose = FALSE)
 
   # Engine label
   expect_equal(fit$engine, "sirt")
@@ -89,7 +89,7 @@ test_that("fit_bt_model fits a BT model using BradleyTerry2 when requested", {
   data("example_writing_pairs", package = "pairwiseLLM")
 
   bt <- build_bt_data(example_writing_pairs)
-  fit <- suppressWarnings(fit_bt_model(bt, engine = "BradleyTerry2"))
+  fit <- suppressWarnings(fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE))
 
   # Engine label
   expect_equal(fit$engine, "BradleyTerry2")
@@ -120,7 +120,7 @@ test_that("fit_bt_model with engine = 'auto' uses sirt when available", {
   data("example_writing_pairs", package = "pairwiseLLM")
 
   bt <- build_bt_data(example_writing_pairs)
-  fit <- fit_bt_model(bt, engine = "auto")
+  fit <- fit_bt_model(bt, engine = "auto", verbose = FALSE)
 
   expect_equal(fit$engine, "sirt")
   expect_true(all(c("ID", "theta", "se") %in% names(fit$theta)))
@@ -290,5 +290,32 @@ testthat::test_that("build_bt_data validates input columns", {
   testthat::expect_error(
     build_bt_data(bad_df),
     "must contain columns"
+  )
+})
+
+test_that("fit_bt_model quiet mode suppresses sirt warnings and progress output", {
+  skip_if_not_installed("sirt")
+
+  data("example_writing_pairs", package = "pairwiseLLM")
+  bt <- build_bt_data(example_writing_pairs)
+
+  # Should be silent (no warnings) in quiet mode
+  expect_no_warning(
+    fit_bt_model(bt, engine = "sirt", verbose = FALSE)
+  )
+})
+
+test_that("summarize_bt_fit quiet mode does not warn even with named theta vectors", {
+  # Mimic BradleyTerry2-like named numeric vectors
+  theta_df <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    theta = stats::setNames(c(1.5, -0.5, 2.0), c("A", "B", "C")),
+    se = stats::setNames(c(0.1, 0.2, 0.1), c("A", "B", "C"))
+  )
+
+  fit <- list(engine = "mock", reliability = NA_real_, theta = theta_df)
+
+  expect_no_warning(
+    summarize_bt_fit(fit, verbose = FALSE)
   )
 })
