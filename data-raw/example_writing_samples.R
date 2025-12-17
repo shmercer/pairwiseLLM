@@ -105,25 +105,40 @@ example_writing_samples <- tibble::tibble(
 # 2) Complete paired comparison table implied by quality_score
 # With 20 samples, this generates 190 pairs (20 * 19 / 2)
 pairs_matrix <- utils::combn(example_writing_samples$ID, 2)
+
+set.seed(1)
+
 example_writing_pairs <- tibble::tibble(
   ID1 = pairs_matrix[1, ],
   ID2 = pairs_matrix[2, ]
 ) |>
-  left_join(
+  dplyr::left_join(
     example_writing_samples |>
-      select(ID, q1 = quality_score),
+      dplyr::select(ID, q1 = quality_score),
     by = c("ID1" = "ID")
   ) |>
-  left_join(
+  dplyr::left_join(
     example_writing_samples |>
-      select(ID, q2 = quality_score),
+      dplyr::select(ID, q2 = quality_score),
     by = c("ID2" = "ID")
   ) |>
-  mutate(
-    # Break ties (though none exist here) or determine better ID based on score
-    better_id = if_else(q1 >= q2, ID1, ID2)
+  dplyr::mutate(
+    # Reproducible stochastic outcomes: higher quality tends to win,
+    # but not deterministically (avoids separation / convergence warnings).
+    #
+    # Tune `scale`:
+    #   larger scale -> closer to 50/50 (more noise)
+    #   smaller scale -> more deterministic (less noise)
+    #
+    # With scale = 2, a gap of 2 points gives p ~ 0.73, gap of 5 gives p ~ 0.92.
+    .gap = q2 - q1,
+    .scale = 2,
+    .eta = .gap / .scale,
+    .p_id2_wins = stats::plogis(.eta),
+    better_id = dplyr::if_else(stats::runif(dplyr::n()) < .p_id2_wins, ID2, ID1)
   ) |>
-  select(ID1, ID2, better_id)
+  dplyr::select(ID1, ID2, better_id)
+
 
 # 3) Example OpenAI Batch output lines (JSONL format)
 # Keeping a small representative sample (3 lines) to demonstrate structure.
