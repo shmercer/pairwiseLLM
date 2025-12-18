@@ -25,12 +25,12 @@ I tested the package on the following environments:
   - R 4.5.2
   - `R CMD check --as-cran` runs cleanly with no errors, warnings, or notes.
 
-- **GitHub Actions CI**, using `.github/workflows/R-CMD-check.yaml`
+- **GitHub Actions**, using `.github/workflows/R-CMD-check.yaml`
   - **ubuntu-latest**, R release
   - **ubuntu-latest**, R devel
   - **windows-latest**, R release
   - **macos-latest**, R release
-  - All CI jobs complete successfully with: 0 errors or warnings.
+  - All jobs complete successfully with: 0 errors or warnings.
 
 - `devtools::check_win_devel()`
   - No errors or warnings. Still a note about misspelled words (addressed in 
@@ -52,7 +52,7 @@ The package includes helper functions for calling external Large Language Model 
 
 - All examples involving API calls are wrapped in `\dontrun{}`.
 - All vignette chunks that would perform API requests use `eval = FALSE`.
-- Unit tests do **not** perform HTTP requests; external calls are mocked using `testthat::with_mocked_bindings`.
+- Unit tests do not perform HTTP requests; external calls are mocked using `testthat::with_mocked_bindings`.
 
 Thus, no internet access or API keys are needed for CRAN checks.
 
@@ -69,12 +69,12 @@ This complies with CRAN rules regarding external system requirements.
 ### Examples
 
 All exported functions contain examples.  
-Examples that would access external services are correctly placed in `\dontrun{}` to comply with CRAN guidelines.  
+Examples that would access external services are placed in `\dontrun{}` to comply with CRAN guidelines.  
 Examples that do not require network calls run quickly and successfully.
 
 ### Vignettes
 
-- Vignettes build cleanly with **no network access** and rely only on small built-in datasets.
+- Vignettes build cleanly with no network access and rely only on small built-in datasets.
 - All code requiring API usage is set to `eval = FALSE`, matching CRAN policies for long-running or external-service code.
 
 ### Tests
