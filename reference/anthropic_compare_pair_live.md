@@ -17,7 +17,7 @@ anthropic_compare_pair_live(
   prompt_template = set_prompt_template(),
   tag_prefix = "<BETTER_SAMPLE>",
   tag_suffix = "</BETTER_SAMPLE>",
-  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  api_key = NULL,
   anthropic_version = "2023-06-01",
   reasoning = c("none", "enabled"),
   include_raw = FALSE,

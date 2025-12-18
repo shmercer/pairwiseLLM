@@ -22,7 +22,7 @@ openai_compare_pair_live(
   endpoint = c("chat.completions", "responses"),
   tag_prefix = "<BETTER_SAMPLE>",
   tag_suffix = "</BETTER_SAMPLE>",
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   include_raw = FALSE,
   ...
 )
