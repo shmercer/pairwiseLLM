@@ -63,7 +63,7 @@
 </h1></div>
 <!-- badges: start -->
 
-<p><code>pairwiseLLM</code> provides a unified, extensible framework for generating, submitting, and modeling <strong>pairwise comparisons of writing quality</strong> using large language models (LLMs).</p>
+<p><code>pairwiseLLM</code> is a R package that provides a unified, extensible framework for generating, submitting, and modeling <strong>pairwise comparisons of writing quality</strong> using large language models (LLMs).</p>
 <p>It includes:</p>
 <ul>
 <li>Unified <strong>live</strong> and <strong>batch</strong> APIs across OpenAI, Anthropic, and Gemini<br>
@@ -504,7 +504,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res: output from submit_llm_pairs() / llm_submit_pairs_batch()</span></span>
 <span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
-<span><span class="va">elo_fit</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span></span>
 <span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability</span></span>
@@ -600,7 +600,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <li>
 <strong>Sterett H. Mercer</strong> – <em>University of British Columbia</em><br>
 UBC Faculty Profile: <a href="https://ecps.educ.ubc.ca/sterett-h-mercer/" class="external-link uri">https://ecps.educ.ubc.ca/sterett-h-mercer/</a><br>
-ResearchGate: <a href="https://www.researchgate.net/profile/Sterett_Mercer/" class="external-link uri">https://www.researchgate.net/profile/Sterett_Mercer/</a><br>
+ResearchGate: <a href="https://www.researchgate.net/profile/Sterett_Mercer" class="external-link uri">https://www.researchgate.net/profile/Sterett_Mercer</a><br>
 Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&amp;hl=en" class="external-link uri">https://scholar.google.ca/citations?user=YJg4svsAAAAJ&amp;hl=en</a>
 </li>
 </ul>
