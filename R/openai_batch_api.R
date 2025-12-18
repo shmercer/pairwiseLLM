@@ -28,10 +28,15 @@ NULL
 
 #' Internal: Create a httr2 request with auth
 #'
+#' NOTE: This function does NOT resolve API keys. Call `.openai_api_key()`
+#' at the last responsible moment in higher-level functions.
+#'
 #' @keywords internal
 #' @noRd
-.openai_request <- function(path, api_key = Sys.getenv("OPENAI_API_KEY")) {
-  api_key <- .openai_api_key(api_key)
+.openai_request <- function(path, api_key) {
+  if (is.null(api_key) || !is.character(api_key) || length(api_key) != 1L || !nzchar(api_key)) {
+    stop("`.openai_request()` requires a non-empty OpenAI API key.", call. = FALSE)
+  }
 
   httr2::request(paste0(.openai_base_url(), path)) |>
     httr2::req_auth_bearer_token(api_key)

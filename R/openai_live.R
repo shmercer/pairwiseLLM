@@ -119,7 +119,6 @@ openai_compare_pair_live <- function(
   ...
 ) {
   endpoint <- match.arg(endpoint)
-  api_key <- .openai_api_key(api_key)
 
   if (!is.character(ID1) || length(ID1) != 1L) stop("ID1 invalid")
   if (!is.character(ID2) || length(ID2) != 1L) stop("ID2 invalid")
@@ -185,6 +184,7 @@ openai_compare_pair_live <- function(
     path <- "/responses"
   }
 
+  api_key <- .openai_api_key(api_key)
   req <- .openai_request(path, api_key)
   req <- .openai_req_body_json(req, body = body)
   resp <- .openai_req_perform(req)
@@ -400,7 +400,6 @@ submit_openai_pairs_live <- function(
   ...
 ) {
   endpoint <- match.arg(endpoint)
-  api_key <- .openai_api_key(api_key)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
@@ -437,6 +436,8 @@ submit_openai_pairs_live <- function(
     }
     return(res)
   }
+
+  api_key <- .openai_api_key(api_key)
 
   if (!is.numeric(status_every) || length(status_every) != 1L ||
     status_every < 1) {
