@@ -6,11 +6,7 @@ which can then be used to create a Batch job.
 ## Usage
 
 ``` r
-openai_upload_batch_file(
-  path,
-  purpose = "batch",
-  api_key = Sys.getenv("OPENAI_API_KEY")
-)
+openai_upload_batch_file(path, purpose = "batch", api_key = NULL)
 ```
 
 ## Arguments

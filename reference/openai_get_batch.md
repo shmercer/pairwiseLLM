@@ -5,7 +5,7 @@ Retrieve an OpenAI batch
 ## Usage
 
 ``` r
-openai_get_batch(batch_id, api_key = Sys.getenv("OPENAI_API_KEY"))
+openai_get_batch(batch_id, api_key = NULL)
 ```
 
 ## Arguments

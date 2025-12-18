@@ -14,7 +14,7 @@ openai_poll_batch_until_complete(
   interval_seconds = 5,
   timeout_seconds = 600,
   max_attempts = Inf,
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   verbose = TRUE
 )
 ```

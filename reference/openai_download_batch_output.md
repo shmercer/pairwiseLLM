@@ -7,11 +7,7 @@ Given a batch ID, retrieves the batch metadata, extracts the
 ## Usage
 
 ``` r
-openai_download_batch_output(
-  batch_id,
-  path,
-  api_key = Sys.getenv("OPENAI_API_KEY")
-)
+openai_download_batch_output(batch_id, path, api_key = NULL)
 ```
 
 ## Arguments
