@@ -28,19 +28,15 @@ NULL
 
 #' Internal: Create a httr2 request with auth
 #'
-#' NOTE: This function does NOT resolve API keys. Call `.openai_api_key()`
-#' at the last responsible moment in higher-level functions.
-#'
 #' @keywords internal
 #' @noRd
-.openai_request <- function(path, api_key) {
-  if (is.null(api_key) || !is.character(api_key) || length(api_key) != 1L || !nzchar(api_key)) {
-    stop("`.openai_request()` requires a non-empty OpenAI API key.", call. = FALSE)
-  }
+.openai_request <- function(path, api_key = NULL) {
+  api_key <- .openai_api_key(api_key)
 
   httr2::request(paste0(.openai_base_url(), path)) |>
     httr2::req_auth_bearer_token(api_key)
 }
+
 
 #' Internal: Attach JSON body to an OpenAI request
 #'
@@ -292,15 +288,13 @@ openai_download_batch_output <- function(
 #'
 #' @export
 openai_poll_batch_until_complete <- function(
-  batch_id,
-  interval_seconds = 5,
-  timeout_seconds = 600,
-  max_attempts = Inf,
-  api_key = NULL,
-  verbose = TRUE
+    batch_id,
+    interval_seconds = 5,
+    timeout_seconds = 600,
+    max_attempts = Inf,
+    api_key = NULL,
+    verbose = TRUE
 ) {
-  api_key <- .openai_api_key(api_key)
-
   start_time <- Sys.time()
   attempts <- 0L
 
@@ -343,6 +337,7 @@ openai_poll_batch_until_complete <- function(
     Sys.sleep(interval_seconds)
   }
 }
+
 
 #' Run a full OpenAI batch pipeline for pairwise comparisons
 #'
@@ -419,84 +414,69 @@ openai_poll_batch_until_complete <- function(
 #'   `poll = TRUE`, otherwise `NULL`.
 #'
 #' @examples
+#' # The OpenAI batch pipeline requires:
+#' # - Internet access
+#' # - A valid OpenAI API key in OPENAI_API_KEY (or supplied via `api_key`)
+#' # - Billable API usage
+#' #
 #' \dontrun{
-#' # Requires OPENAI_API_KEY and network access.
-#'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'
 #' pairs <- example_writing_samples |>
 #'   make_pairs() |>
-#'   sample_pairs(n_pairs = 5, seed = 123) |>
+#'   sample_pairs(n_pairs = 2, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # 1) Standard chat.completions batch with no thoughts
-#' pipeline_chat <- run_openai_batch_pipeline(
+#' # Run a small batch using chat.completions
+#' out <- run_openai_batch_pipeline(
 #'   pairs             = pairs,
 #'   model             = "gpt-4.1",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   endpoint          = "chat.completions",
-#'   interval_seconds  = 10,
+#'   poll              = TRUE,
+#'   interval_seconds  = 5,
 #'   timeout_seconds   = 600
 #' )
 #'
-#' pipeline_chat$batch$status
-#' head(pipeline_chat$results)
-#'
-#' # 2) Responses endpoint with reasoning summaries for gpt-5.1
-#' pipeline_resp <- run_openai_batch_pipeline(
-#'   pairs             = pairs,
-#'   model             = "gpt-5.1",
-#'   trait_name        = td$name,
-#'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   include_thoughts  = TRUE,
-#'   interval_seconds  = 10,
-#'   timeout_seconds   = 600
-#' )
-#'
-#' pipeline_resp$batch$status
-#' head(pipeline_resp$results)
+#' print(out$batch$status)
+#' print(utils::head(out$results))
 #' }
 #'
 #' @export
 run_openai_batch_pipeline <- function(
-  pairs,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  include_thoughts = FALSE,
-  include_raw = FALSE,
-  endpoint = NULL,
-  batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
-  batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
-  poll = TRUE,
-  interval_seconds = 5,
-  timeout_seconds = 600,
-  max_attempts = Inf,
-  metadata = NULL,
-  api_key = NULL,
-  ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    include_thoughts = FALSE,
+    include_raw = FALSE,
+    endpoint = NULL,
+    batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
+    batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+    poll = TRUE,
+    interval_seconds = 5,
+    timeout_seconds = 600,
+    max_attempts = Inf,
+    metadata = NULL,
+    api_key = NULL,
+    ...
 ) {
   # If endpoint not supplied, choose automatically based on include_thoughts
   if (is.null(endpoint)) {
-    endpoint <- if (isTRUE(include_thoughts)) {
-      "responses"
-    } else {
-      "chat.completions"
-    }
+    endpoint <- if (isTRUE(include_thoughts)) "responses" else "chat.completions"
   }
   endpoint <- match.arg(endpoint, c("chat.completions", "responses"))
 
   # Endpoint for the Batch API expects the full path
   batch_api_endpoint <- switch(endpoint,
-    "chat.completions" = "/v1/chat/completions",
-    "responses"        = "/v1/responses"
+                               "chat.completions" = "/v1/chat/completions",
+                               "responses"        = "/v1/responses"
   )
 
   # 1) Build batch requests tibble
@@ -514,8 +494,6 @@ run_openai_batch_pipeline <- function(
   # 2) Write JSONL input file
   write_openai_batch_file(batch_tbl, batch_input_path)
 
-  # 3) Upload file
-  api_key <- .openai_api_key(api_key)
   file_obj <- openai_upload_batch_file(
     path    = batch_input_path,
     api_key = api_key
@@ -563,3 +541,4 @@ run_openai_batch_pipeline <- function(
     results           = results
   )
 }
+

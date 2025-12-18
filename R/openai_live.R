@@ -387,18 +387,18 @@ openai_compare_pair_live <- function(
 #'
 #' @export
 submit_openai_pairs_live <- function(
-  pairs,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  endpoint = c("chat.completions", "responses"),
-  api_key = NULL,
-  verbose = TRUE,
-  status_every = 1,
-  progress = TRUE,
-  include_raw = FALSE,
-  ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    endpoint = c("chat.completions", "responses"),
+    api_key = NULL,
+    verbose = TRUE,
+    status_every = 1,
+    progress = TRUE,
+    include_raw = FALSE,
+    ...
 ) {
   endpoint <- match.arg(endpoint)
 
@@ -432,19 +432,17 @@ submit_openai_pairs_live <- function(
       completion_tokens = numeric(0),
       total_tokens      = numeric(0)
     )
-    if (include_raw) {
-      res$raw_response <- list()
-    }
+    if (include_raw) res$raw_response <- list()
     return(res)
   }
 
+  # IMPORTANT FOR CRAN/TESTS:
+  # Do NOT resolve/validate API key here. Let openai_compare_pair_live()
+  # (or lower-level request helpers) resolve it only if a real request happens.
   if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
   status_every <- as.integer(status_every)
-
-  # ✅ Resolve key only once we're sure we'll actually make API calls
-  api_key <- .openai_api_key(api_key)
 
   fmt_secs <- function(x) sprintf("%.1fs", x)
 
@@ -483,7 +481,7 @@ submit_openai_pairs_live <- function(
       trait_description = trait_description,
       prompt_template   = prompt_template,
       endpoint          = endpoint,
-      api_key           = api_key,
+      api_key           = api_key,     # pass-through; do not resolve here
       include_raw       = include_raw,
       ...
     )
@@ -504,7 +502,7 @@ submit_openai_pairs_live <- function(
       est_rem <- avg * remain
 
       message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s,\n        total=%s",
+        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
         res$better_id,
         res$better_sample,
         res$prompt_tokens,
@@ -522,9 +520,7 @@ submit_openai_pairs_live <- function(
     out[[i]] <- res
   }
 
-  if (!is.null(pb)) {
-    close(pb)
-  }
+  if (!is.null(pb)) close(pb)
 
   if (verbose) {
     total_elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
