@@ -20,9 +20,9 @@ NULL
 
 # Base Anthropic request builder ------------------------------------------
 .anthropic_request <- function(
-  path,
-  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
-  anthropic_version = "2023-06-01"
+    path,
+    api_key = NULL,
+    anthropic_version = "2023-06-01"
 ) {
   api_key <- .anthropic_api_key(api_key)
 
@@ -258,7 +258,7 @@ anthropic_compare_pair_live <- function(
   prompt_template = set_prompt_template(),
   tag_prefix = "<BETTER_SAMPLE>",
   tag_suffix = "</BETTER_SAMPLE>",
-  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  api_key = NULL,
   anthropic_version = "2023-06-01",
   reasoning = c("none", "enabled"),
   include_raw = FALSE,
@@ -694,7 +694,7 @@ submit_anthropic_pairs_live <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  api_key = NULL,
   anthropic_version = "2023-06-01",
   reasoning = c("none", "enabled"),
   verbose = TRUE,

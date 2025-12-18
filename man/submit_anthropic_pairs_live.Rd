@@ -10,7 +10,7 @@ submit_anthropic_pairs_live(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  api_key = Sys.getenv("ANTHROPIC_API_KEY"),
+  api_key = NULL,
   anthropic_version = "2023-06-01",
   reasoning = c("none", "enabled"),
   verbose = TRUE,

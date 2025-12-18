@@ -7,7 +7,7 @@
 }
 
 #' @keywords internal
-.gemini_request <- function(path, api_key = Sys.getenv("GEMINI_API_KEY")) {
+.gemini_request <- function(path, api_key = NULL) {
   api_key <- .gemini_api_key(api_key)
 
   req <- httr2::request(.gemini_base_url())
@@ -156,7 +156,7 @@ gemini_compare_pair_live <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  api_key = Sys.getenv("GEMINI_API_KEY"),
+  api_key = NULL,
   thinking_level = c("low", "medium", "high"),
   temperature = NULL,
   top_p = NULL,
@@ -500,7 +500,7 @@ submit_gemini_pairs_live <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  api_key = Sys.getenv("GEMINI_API_KEY"),
+  api_key = NULL,
   thinking_level = c("low", "medium", "high"),
   temperature = NULL,
   top_p = NULL,

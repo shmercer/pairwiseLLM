@@ -163,21 +163,26 @@
 #'
 #' @export
 llm_compare_pair <- function(
-  ID1,
-  text1,
-  ID2,
-  text2,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
-  api_key = NULL,
-  include_raw = FALSE,
-  ...
+    ID1,
+    text1,
+    ID2,
+    text2,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+    endpoint = c("chat.completions", "responses"),
+    api_key = NULL,
+    include_raw = FALSE,
+    ...
 ) {
   backend <- match.arg(backend)
+
+  # Normalize empty-string keys to NULL
+  if (!is.null(api_key) && identical(api_key, "")) {
+    api_key <- NULL
+  }
 
   if (backend == "openai") {
     endpoint <- match.arg(endpoint)
@@ -193,7 +198,7 @@ llm_compare_pair <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
-        api_key           = api_key,
+        api_key           = api_key,  # pass through; backend enforces
         include_raw       = include_raw,
         ...
       )
@@ -211,7 +216,7 @@ llm_compare_pair <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key, # <- pass through
+        api_key           = api_key,
         include_raw       = include_raw,
         ...
       )
@@ -421,38 +426,29 @@ llm_compare_pair <- function(
 #'
 #' @export
 submit_llm_pairs <- function(
-  pairs,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
-  api_key = NULL,
-  verbose = TRUE,
-  status_every = 1,
-  progress = TRUE,
-  include_raw = FALSE,
-  ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+    endpoint = c("chat.completions", "responses"),
+    api_key = NULL,
+    verbose = TRUE,
+    status_every = 1,
+    progress = TRUE,
+    include_raw = FALSE,
+    ...
 ) {
   backend <- match.arg(backend)
 
-  .require_api_key <- function(key, env_var, backend_label) {
-    if (is.null(key) || identical(key, "")) {
-      stop(
-        backend_label, " API key not found. ",
-        "Provide `api_key =` or set ", env_var, " in your environment.",
-        call. = FALSE
-      )
-    }
-    key
+  # Normalize empty-string keys (e.g. Sys.getenv() on CRAN) to NULL
+  if (!is.null(api_key) && identical(api_key, "")) {
+    api_key <- NULL
   }
 
   if (backend == "openai") {
     endpoint <- match.arg(endpoint)
-
-    key <- api_key %||% Sys.getenv("OPENAI_API_KEY")
-    key <- .require_api_key(key, "OPENAI_API_KEY", "OpenAI")
 
     return(
       submit_openai_pairs_live(
@@ -462,7 +458,7 @@ submit_llm_pairs <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
-        api_key           = key,
+        api_key           = api_key,  # pass through; backend enforces
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
@@ -473,9 +469,6 @@ submit_llm_pairs <- function(
   }
 
   if (backend == "anthropic") {
-    key <- api_key %||% Sys.getenv("ANTHROPIC_API_KEY")
-    key <- .require_api_key(key, "ANTHROPIC_API_KEY", "Anthropic")
-
     return(
       submit_anthropic_pairs_live(
         pairs             = pairs,
@@ -483,7 +476,7 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = key,
+        api_key           = api_key,  # pass through; backend enforces
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
@@ -501,7 +494,7 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,
+        api_key           = api_key,  # pass through; backend enforces
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
@@ -512,9 +505,6 @@ submit_llm_pairs <- function(
   }
 
   if (backend == "together") {
-    key <- api_key %||% Sys.getenv("TOGETHER_API_KEY")
-    key <- .require_api_key(key, "TOGETHER_API_KEY", "Together")
-
     return(
       submit_together_pairs_live(
         pairs             = pairs,
@@ -522,7 +512,7 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = key,
+        api_key           = api_key,  # pass through; backend enforces
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,

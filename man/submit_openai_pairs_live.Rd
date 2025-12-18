@@ -11,7 +11,7 @@ submit_openai_pairs_live(
   trait_description,
   prompt_template = set_prompt_template(),
   endpoint = c("chat.completions", "responses"),
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   verbose = TRUE,
   status_every = 1,
   progress = TRUE,

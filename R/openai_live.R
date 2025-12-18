@@ -114,11 +114,12 @@ openai_compare_pair_live <- function(
   endpoint = c("chat.completions", "responses"),
   tag_prefix = "<BETTER_SAMPLE>",
   tag_suffix = "</BETTER_SAMPLE>",
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   include_raw = FALSE,
   ...
 ) {
   endpoint <- match.arg(endpoint)
+  api_key <- .openai_api_key(api_key)
 
   if (!is.character(ID1) || length(ID1) != 1L) stop("ID1 invalid")
   if (!is.character(ID2) || length(ID2) != 1L) stop("ID2 invalid")
@@ -391,7 +392,7 @@ submit_openai_pairs_live <- function(
   trait_description,
   prompt_template = set_prompt_template(),
   endpoint = c("chat.completions", "responses"),
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   verbose = TRUE,
   status_every = 1,
   progress = TRUE,
@@ -399,6 +400,7 @@ submit_openai_pairs_live <- function(
   ...
 ) {
   endpoint <- match.arg(endpoint)
+  api_key <- .openai_api_key(api_key)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")

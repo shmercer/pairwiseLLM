@@ -661,11 +661,10 @@ submit_together_pairs_live <- function(
 
 #' @keywords internal
 #' @noRd
-.together_request <- function(path, api_key = NULL) {
-  key <- .together_api_key(api_key)
-
+.together_request <- function(path, api_key) {
+  # api_key here is expected to already be resolved (non-empty)
   httr2::request(paste0(.together_base_url(), path)) |>
-    httr2::req_auth_bearer_token(key)
+    httr2::req_auth_bearer_token(api_key)
 }
 
 # -------------------------------------------------------------------------
