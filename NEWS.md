@@ -20,6 +20,7 @@
 * No longer set global variables, now done in individual functions
 * Added `verbose` option in `fit_bt_model()` and `summarize_bt_fit()`
 * Moved null coalescing helper to separate R file
+* Changed validation of API keys in multiple functions
 
 # pairwiseLLM 1.0.0
 
