@@ -32,7 +32,9 @@ knitr::opts_chunk$set(
 library(pairwiseLLM)
 ```
 
-`pairwiseLLM` provides a unified, extensible framework for generating, submitting, and modeling **pairwise comparisons of writing quality** using large language models (LLMs).
+`pairwiseLLM` is a R package that provides a unified, extensible framework for 
+generating, submitting, and modeling **pairwise comparisons of writing quality**
+using large language models (LLMs).
 
 It includes:
 
@@ -432,7 +434,7 @@ MIT License. See `LICENSE`.
 
 * **Sterett H. Mercer** – *University of British Columbia*  
   UBC Faculty Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/>  
-  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer/>  
+  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer>  
   Google Scholar: <https://scholar.google.ca/citations?user=YJg4svsAAAAJ&hl=en>
 
 ---

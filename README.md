@@ -16,8 +16,8 @@ state and is being actively
 developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 <!-- badges: end -->
 
-`pairwiseLLM` provides a unified, extensible framework for generating,
-submitting, and modeling **pairwise comparisons of writing quality**
+`pairwiseLLM` is a R package that provides a unified, extensible framework for 
+generating, submitting, and modeling **pairwise comparisons of writing quality**
 using large language models (LLMs).
 
 It includes:
@@ -390,7 +390,7 @@ summarize_bt_fit(bt_fit)
 ``` r
 # res: output from submit_llm_pairs() / llm_submit_pairs_batch()
 elo_data <- build_elo_data(res)
-elo_fit  <- fit_elo_model(elo_data, runs = 5)
+elo_fit <- fit_elo_model(elo_data, runs = 5)
 
 elo_fit$elo
 elo_fit$reliability
@@ -455,7 +455,7 @@ MIT License. See `LICENSE`.
 
 - **Sterett H. Mercer** – *University of British Columbia*  
   UBC Faculty Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/>  
-  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer/>  
+  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer>  
   Google Scholar:
   <https://scholar.google.ca/citations?user=YJg4svsAAAAJ&hl=en>
 
