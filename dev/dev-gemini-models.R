@@ -39,15 +39,10 @@ if (!nzchar(Sys.getenv("GEMINI_API_KEY"))) {
 ## ------------------------------------------------------------------
 
 gemini_models <- c(
-  "gemini-3-pro-preview",
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite"
+  "gemini-3-pro-preview"
 )
 
-modes <- c("no_thoughts", "with_thoughts")
+modes <- c("with_thoughts")
 
 ## Helper to make safe filenames from model + mode
 safe_name <- function(x) {
