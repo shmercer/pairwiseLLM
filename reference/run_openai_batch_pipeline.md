@@ -174,47 +174,36 @@ When `endpoint` is not specified, it is chosen automatically:
 ## Examples
 
 ``` r
+# The OpenAI batch pipeline requires:
+# - Internet access
+# - A valid OpenAI API key in OPENAI_API_KEY (or supplied via `api_key`)
+# - Billable API usage
+#
 if (FALSE) { # \dontrun{
-# Requires OPENAI_API_KEY and network access.
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
   make_pairs() |>
-  sample_pairs(n_pairs = 5, seed = 123) |>
+  sample_pairs(n_pairs = 2, seed = 123) |>
   randomize_pair_order(seed = 456)
 
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# 1) Standard chat.completions batch with no thoughts
-pipeline_chat <- run_openai_batch_pipeline(
+# Run a small batch using chat.completions
+out <- run_openai_batch_pipeline(
   pairs             = pairs,
   model             = "gpt-4.1",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   endpoint          = "chat.completions",
-  interval_seconds  = 10,
+  poll              = TRUE,
+  interval_seconds  = 5,
   timeout_seconds   = 600
 )
 
-pipeline_chat$batch$status
-head(pipeline_chat$results)
-
-# 2) Responses endpoint with reasoning summaries for gpt-5.1
-pipeline_resp <- run_openai_batch_pipeline(
-  pairs             = pairs,
-  model             = "gpt-5.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  include_thoughts  = TRUE,
-  interval_seconds  = 10,
-  timeout_seconds   = 600
-)
-
-pipeline_resp$batch$status
-head(pipeline_resp$results)
+print(out$batch$status)
+print(utils::head(out$results))
 } # }
 ```
