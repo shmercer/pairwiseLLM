@@ -30,6 +30,7 @@
   and
   [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
 - Moved null coalescing helper to separate R file
+- Changed validation of API keys in multiple functions
 
 ## pairwiseLLM 1.0.0
 
