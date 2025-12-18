@@ -4,7 +4,7 @@
 \alias{openai_get_batch}
 \title{Retrieve an OpenAI batch}
 \usage{
-openai_get_batch(batch_id, api_key = Sys.getenv("OPENAI_API_KEY"))
+openai_get_batch(batch_id, api_key = NULL)
 }
 \arguments{
 \item{batch_id}{The batch ID (e.g. \code{"batch_abc123"}).}

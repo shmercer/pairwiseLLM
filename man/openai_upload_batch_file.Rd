@@ -4,11 +4,7 @@
 \alias{openai_upload_batch_file}
 \title{Upload a JSONL batch file to OpenAI}
 \usage{
-openai_upload_batch_file(
-  path,
-  purpose = "batch",
-  api_key = Sys.getenv("OPENAI_API_KEY")
-)
+openai_upload_batch_file(path, purpose = "batch", api_key = NULL)
 }
 \arguments{
 \item{path}{Path to the local \code{.jsonl} file to upload.}

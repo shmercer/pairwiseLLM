@@ -20,7 +20,7 @@ run_openai_batch_pipeline(
   timeout_seconds = 600,
   max_attempts = Inf,
   metadata = NULL,
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   ...
 )
 }

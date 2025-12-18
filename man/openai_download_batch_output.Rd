@@ -4,11 +4,7 @@
 \alias{openai_download_batch_output}
 \title{Download the output file for a completed batch}
 \usage{
-openai_download_batch_output(
-  batch_id,
-  path,
-  api_key = Sys.getenv("OPENAI_API_KEY")
-)
+openai_download_batch_output(batch_id, path, api_key = NULL)
 }
 \arguments{
 \item{batch_id}{The batch ID (e.g. \code{"batch_abc123"}).}

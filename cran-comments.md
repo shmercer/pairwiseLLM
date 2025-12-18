@@ -33,11 +33,12 @@ I tested the package on the following environments:
   - All CI jobs complete successfully with: 0 errors or warnings.
 
 - `devtools::check_win_devel()`
-  - No errors, warnings, or notes
+  - No errors or warnings. Still a note about misspelled words (addressed in 
+  `inst/WORDLIST`)
 
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes
+0 errors | 0 warnings | 0 notes (other than non-misspelled words)
 
 ## Reverse dependencies
 

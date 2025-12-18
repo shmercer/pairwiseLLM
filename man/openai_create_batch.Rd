@@ -9,7 +9,7 @@ openai_create_batch(
   endpoint,
   completion_window = "24h",
   metadata = NULL,
-  api_key = Sys.getenv("OPENAI_API_KEY")
+  api_key = NULL
 )
 }
 \arguments{

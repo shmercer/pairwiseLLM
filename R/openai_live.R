@@ -184,7 +184,9 @@ openai_compare_pair_live <- function(
     path <- "/responses"
   }
 
+  # ✅ Resolve key only at the last responsible moment (right before HTTP)
   api_key <- .openai_api_key(api_key)
+
   req <- .openai_request(path, api_key)
   req <- .openai_req_body_json(req, body = body)
   resp <- .openai_req_perform(req)
@@ -253,7 +255,6 @@ openai_compare_pair_live <- function(
     }
 
     # Backwards compatibility check
-    # Ensure intermediate objects are lists before digging deeper
     if (!length(reasoning_chunks) &&
       !is.null(body$reasoning) && is.list(body$reasoning) &&
       !is.null(body$reasoning$summary) && is.list(body$reasoning$summary) &&
@@ -437,13 +438,13 @@ submit_openai_pairs_live <- function(
     return(res)
   }
 
-  api_key <- .openai_api_key(api_key)
-
-  if (!is.numeric(status_every) || length(status_every) != 1L ||
-    status_every < 1) {
+  if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
   status_every <- as.integer(status_every)
+
+  # ✅ Resolve key only once we're sure we'll actually make API calls
+  api_key <- .openai_api_key(api_key)
 
   fmt_secs <- function(x) sprintf("%.1fs", x)
 
@@ -503,8 +504,7 @@ submit_openai_pairs_live <- function(
       est_rem <- avg * remain
 
       message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s,
-        total=%s",
+        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s,\n        total=%s",
         res$better_id,
         res$better_sample,
         res$prompt_tokens,
@@ -527,9 +527,7 @@ submit_openai_pairs_live <- function(
   }
 
   if (verbose) {
-    total_elapsed <- as.numeric(difftime(Sys.time(), start_time,
-      units = "secs"
-    ))
+    total_elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
     avg <- total_elapsed / n
     message(sprintf(
       "Completed %d live pair(s) in %s (avg %.2fs per pair).",

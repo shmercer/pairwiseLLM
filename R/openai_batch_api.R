@@ -100,11 +100,13 @@ NULL
 openai_upload_batch_file <- function(
   path,
   purpose = "batch",
-  api_key = Sys.getenv("OPENAI_API_KEY")
+  api_key = NULL
 ) {
   if (!file.exists(path)) {
     stop("File does not exist: ", path, call. = FALSE)
   }
+
+  api_key <- .openai_api_key(api_key)
 
   req <- .openai_request("/files", api_key) |>
     req_body_multipart(
@@ -150,7 +152,7 @@ openai_create_batch <- function(
   endpoint,
   completion_window = "24h",
   metadata = NULL,
-  api_key = Sys.getenv("OPENAI_API_KEY")
+  api_key = NULL
 ) {
   body <- list(
     input_file_id     = input_file_id,
@@ -161,6 +163,8 @@ openai_create_batch <- function(
   if (!is.null(metadata)) {
     body$metadata <- metadata
   }
+
+  api_key <- .openai_api_key(api_key)
 
   req <- .openai_request("/batches", api_key) |>
     req_body_json(body)
@@ -187,9 +191,11 @@ openai_create_batch <- function(
 #' @export
 openai_get_batch <- function(
   batch_id,
-  api_key = Sys.getenv("OPENAI_API_KEY")
+  api_key = NULL
 ) {
   path <- paste0("/batches/", batch_id)
+
+  api_key <- .openai_api_key(api_key)
 
   req <- .openai_request(path, api_key)
   resp <- req_perform(req)
@@ -223,7 +229,7 @@ openai_get_batch <- function(
 openai_download_batch_output <- function(
   batch_id,
   path,
-  api_key = Sys.getenv("OPENAI_API_KEY")
+  api_key = NULL
 ) {
   batch <- openai_get_batch(batch_id, api_key = api_key)
 
@@ -237,6 +243,8 @@ openai_download_batch_output <- function(
   }
 
   file_path <- paste0("/files/", output_file_id, "/content")
+
+  api_key <- .openai_api_key(api_key)
 
   req <- .openai_request(file_path, api_key)
   resp <- req_perform(req)
@@ -288,9 +296,11 @@ openai_poll_batch_until_complete <- function(
   interval_seconds = 5,
   timeout_seconds = 600,
   max_attempts = Inf,
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   verbose = TRUE
 ) {
+  api_key <- .openai_api_key(api_key)
+
   start_time <- Sys.time()
   attempts <- 0L
 
@@ -470,7 +480,7 @@ run_openai_batch_pipeline <- function(
   timeout_seconds = 600,
   max_attempts = Inf,
   metadata = NULL,
-  api_key = Sys.getenv("OPENAI_API_KEY"),
+  api_key = NULL,
   ...
 ) {
   # If endpoint not supplied, choose automatically based on include_thoughts
@@ -505,6 +515,7 @@ run_openai_batch_pipeline <- function(
   write_openai_batch_file(batch_tbl, batch_input_path)
 
   # 3) Upload file
+  api_key <- .openai_api_key(api_key)
   file_obj <- openai_upload_batch_file(
     path    = batch_input_path,
     api_key = api_key
