@@ -13,7 +13,7 @@ This is a resubmission. I have addressed all reviewer comments as follows:
   - The following variables are now defined only within functions: 
     "key", "ID1", "ID2", "better_id", "is_consistent", "is_pos1_bias",
     "is_pos2_bias", "winner_pos_main", "winner_pos_rev"
-6. I added `inst/WORDLIST` to remove notes about misspelled words.
+6. I added `inst/WORDLIST` to (hopefully) remove notes about misspelled words.
 
 Thank you for your review!
 
