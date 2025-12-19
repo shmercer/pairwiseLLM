@@ -280,3 +280,179 @@ test_that("summarize_bt_fit(validates fit structure and handles named numeric + 
   out <- summarize_bt_fit(fit, verbose = FALSE)
   expect_true(is.na(out$rank[out$ID == "D"])) # NA theta
 })
+
+test_that("summarize_bt_fit handles character theta coercion and verbose=TRUE", {
+  # Mock a fit object where theta is character strings
+  theta_df <- tibble::tibble(
+    ID = c("A", "B"),
+    theta = c("1.5", "-0.5"),
+    se = c(0.1, 0.1)
+  )
+  fit <- list(engine = "mock", reliability = 0.9, theta = theta_df)
+
+  # Check coercion occurs during ranking.
+  # We suppress warnings because coercion of character to double might trigger
+  # "NAs introduced by coercion" warnings (depending on input/R version),
+  # which is expected when we force verbose=TRUE.
+  res <- suppressWarnings(summarize_bt_fit(fit, verbose = TRUE))
+
+  # Verify ranks are calculated correctly based on the coerced numeric values (1.5 > -0.5)
+  expect_equal(res$rank, c(1, 2))
+
+  # Verify the ID column is preserved
+  expect_equal(res$ID, c("A", "B"))
+})
+
+test_that("summarize_bt_fit respects decreasing=FALSE", {
+  theta_df <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    theta = c(10, 5, 1),
+    se = 0.1
+  )
+  fit <- list(engine = "mock", theta = theta_df)
+
+  # With decreasing=FALSE, lowest theta gets rank 1
+  res <- summarize_bt_fit(fit, decreasing = FALSE, verbose = FALSE)
+  expect_equal(res$rank, c(3, 2, 1))
+})
+
+test_that("summarize_bt_fit handles missing engine/reliability metadata", {
+  # Fit object missing optional fields
+  theta_df <- tibble::tibble(ID = "A", theta = 1, se = 0.1)
+  fit <- list(theta = theta_df)
+
+  res <- summarize_bt_fit(fit, verbose = FALSE)
+  expect_true(is.na(res$engine[1]))
+  expect_true(is.na(res$reliability[1]))
+})
+
+test_that("fit_bt_model errors if explicit engine is missing (sirt)", {
+  data("example_writing_pairs", package = "pairwiseLLM")
+  bt <- build_bt_data(example_writing_pairs)
+
+  ns <- asNamespace("pairwiseLLM")
+  testthat::local_mocked_bindings(
+    .require_ns = function(...) FALSE,
+    .env = ns
+  )
+
+  expect_error(
+    fit_bt_model(bt, engine = "sirt"),
+    "Package 'sirt' must be installed"
+  )
+})
+
+test_that("fit_bt_model errors if explicit engine is missing (BradleyTerry2)", {
+  data("example_writing_pairs", package = "pairwiseLLM")
+  bt <- build_bt_data(example_writing_pairs)
+
+  ns <- asNamespace("pairwiseLLM")
+  testthat::local_mocked_bindings(
+    .require_ns = function(...) FALSE,
+    .env = ns
+  )
+
+  expect_error(
+    fit_bt_model(bt, engine = "BradleyTerry2"),
+    "Package 'BradleyTerry2' must be installed"
+  )
+})
+
+test_that("fit_bt_model (sirt) errors on malformed output", {
+  # We mock .require_ns to return TRUE so we reach the sirt execution block
+  # even if sirt isn't installed locally.
+  ns <- asNamespace("pairwiseLLM")
+
+  # Prepare dummy data
+  data("example_writing_pairs", package = "pairwiseLLM")
+  bt <- build_bt_data(example_writing_pairs)
+
+  # Case 1: missing effects
+  testthat::local_mocked_bindings(
+    .require_ns = function(...) TRUE,
+    .sirt_btm = function(...) list(effects = NULL),
+    .env = ns
+  )
+  expect_error(
+    fit_bt_model(bt, engine = "sirt"),
+    "missing `effects`"
+  )
+
+  # Case 2: malformed effects columns
+  testthat::local_mocked_bindings(
+    .require_ns = function(...) TRUE,
+    .sirt_btm = function(...) list(effects = data.frame(wrong = 1)),
+    .env = ns
+  )
+  expect_error(
+    fit_bt_model(bt, engine = "sirt"),
+    "does not contain expected columns"
+  )
+})
+
+test_that("fit_bt_model reports errors from both engines when engine='auto' fails", {
+  data("example_writing_pairs", package = "pairwiseLLM")
+  bt <- build_bt_data(example_writing_pairs)
+
+  ns <- asNamespace("pairwiseLLM")
+
+  # Mock to ensure:
+  # 1. sirt check passes, but execution fails
+  # 2. BT2 check fails (simulating missing package or execution failure)
+  testthat::local_mocked_bindings(
+    .require_ns = function(pkg, ...) {
+      if (pkg == "sirt") TRUE else FALSE
+    },
+    .sirt_btm = function(...) stop("Sirt crashed"),
+    .env = ns
+  )
+
+  expect_error(
+    fit_bt_model(bt, engine = "auto"),
+    "Both sirt and BradleyTerry2 failed"
+  )
+})
+
+test_that("fit_bt_model executes verbose branches", {
+  # This test ensures the verbose=TRUE paths run without error.
+  # We explicitly mock the engines to ensure stability and avoid external dependencies.
+
+  ns <- asNamespace("pairwiseLLM")
+  data("example_writing_pairs", package = "pairwiseLLM")
+  bt <- build_bt_data(example_writing_pairs)
+
+  # 1. Test sirt verbose branch
+  testthat::with_mocked_bindings(
+    .require_ns = function(...) TRUE,
+    .sirt_btm = function(...) {
+      # Return a minimal valid sirt object
+      list(
+        effects = data.frame(
+          individual = c("A", "B"),
+          theta = c(0, 0),
+          se.theta = c(0, 0)
+        ),
+        mle.rel = 0.8
+      )
+    },
+    .env = ns,
+    {
+      expect_no_error(fit_bt_model(bt, engine = "sirt", verbose = TRUE))
+    }
+  )
+
+  # 2. Test BradleyTerry2 verbose branch
+  # We skip this if BT2 isn't installed because we can't easily mock the
+  # direct :: calls to BradleyTerry2 functions without 'mockery'.
+  skip_if_not_installed("BradleyTerry2")
+
+  # We verify the function attempts to run. We assume valid data will pass.
+  # We explicitly ensure .require_ns returns TRUE to avoid leakage from previous tests.
+  testthat::with_mocked_bindings(
+    .require_ns = function(...) TRUE,
+    .env = ns,
+    {
+      expect_no_error(fit_bt_model(bt, engine = "BradleyTerry2", verbose = TRUE))
+    }
+  )
+})

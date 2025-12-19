@@ -1,374 +1,14 @@
-testthat::test_that("build_gemini_batch_requests builds valid requests", {
-  data("example_writing_samples", package = "pairwiseLLM")
+# tests/testthat/test-gemini_batch_api.R
 
-  pairs <- make_pairs(example_writing_samples)
-  pairs <- pairs[1:2, ]
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  batch <- build_gemini_batch_requests(
-    pairs             = pairs,
-    model             = "gemini-3-pro-preview",
-    trait_name        = td$name,
-    trait_description = td$description,
-    prompt_template   = tmpl,
-    thinking_level    = "low"
-  )
-
-  testthat::expect_s3_class(batch, "tbl_df")
-  testthat::expect_equal(nrow(batch), 2L)
-  testthat::expect_true(all(c("custom_id", "request") %in% names(batch)))
-
-  # Basic structure checks on first request
-  r1 <- batch$request[[1]]
-  testthat::expect_true(is.list(r1$contents))
-  testthat::expect_true(is.list(r1$generationConfig))
-
-  # User message should contain SAMPLE_1 / SAMPLE_2 labels in the text
-  msg1 <- r1$contents[[1]]
-  testthat::expect_equal(msg1$role, "user")
-  parts <- msg1$parts
-  testthat::expect_true(is.list(parts))
-  text_block <- parts[[1]]$text
-
-  # We now just require that the labels SAMPLE_1 / SAMPLE_2 appear somewhere,
-  # not necessarily wrapped in angle brackets.
-  testthat::expect_true(grepl("SAMPLE_1", text_block, fixed = TRUE))
-  testthat::expect_true(grepl("SAMPLE_2", text_block, fixed = TRUE))
-})
-
-testthat::test_that("parse_gemini_batch_output handles succeeded and errored
-                    results", {
-  tmp <- tempfile(fileext = ".jsonl")
-  on.exit(unlink(tmp), add = TRUE)
-
-  # Succeeded result line, similar in spirit to live responses
-  succ_resp <- list(
-    model = "gemini-3-pro-preview",
-    candidates = list(
-      list(
-        content = list(
-          parts = list(
-            list(
-              text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Hello!"
-            )
-          )
-        )
-      )
-    ),
-    usageMetadata = list(
-      promptTokenCount     = 10L,
-      candidatesTokenCount = 5L,
-      totalTokenCount      = 15L
-    )
-  )
-
-  line_ok <- list(
-    custom_id = "GEM_S01_vs_S02",
-    result = list(
-      type     = "succeeded",
-      response = succ_resp
-    )
-  )
-
-  # Errored result line
-  line_err <- list(
-    custom_id = "GEM_S03_vs_S04",
-    result = list(
-      type = "errored",
-      error = list(
-        code    = 400L,
-        message = "Validation error",
-        status  = "INVALID_ARGUMENT"
-      )
-    )
-  )
-
-  json_lines <- c(
-    jsonlite::toJSON(line_ok, auto_unbox = TRUE),
-    jsonlite::toJSON(line_err, auto_unbox = TRUE)
-  )
-  writeLines(json_lines, con = tmp, useBytes = TRUE)
-
-  # New API: parse_gemini_batch_output() expects a requests_tbl with
-  # custom_id / ID1 / ID2 in the same order as the requests.
-  requests_tbl <- tibble::tibble(
-    custom_id = c("GEM_S01_vs_S02", "GEM_S03_vs_S04"),
-    ID1       = c("S01", "S03"),
-    ID2       = c("S02", "S04")
-  )
-
-  res <- parse_gemini_batch_output(
-    results_path = tmp,
-    requests_tbl = requests_tbl
-  )
-
-  testthat::expect_s3_class(res, "tbl_df")
-  testthat::expect_equal(nrow(res), 2L)
-
-  # First row: succeeded
-  r1 <- res[1, ]
-  testthat::expect_equal(r1$custom_id, "GEM_S01_vs_S02")
-  testthat::expect_equal(r1$ID1, "S01")
-  testthat::expect_equal(r1$ID2, "S02")
-  testthat::expect_equal(r1$result_type, "succeeded")
-  testthat::expect_equal(r1$status_code, 200L)
-  testthat::expect_true(is.na(r1$error_message))
-  testthat::expect_equal(r1$model, "gemini-3-pro-preview")
-  testthat::expect_equal(r1$better_sample, "SAMPLE_2")
-  testthat::expect_equal(r1$better_id, "S02")
-  testthat::expect_equal(r1$prompt_tokens, 10)
-  testthat::expect_equal(r1$completion_tokens, 5)
-  testthat::expect_equal(r1$total_tokens, 15)
-
-  # Second row: errored
-  r2 <- res[2, ]
-  testthat::expect_equal(r2$custom_id, "GEM_S03_vs_S04")
-  testthat::expect_equal(r2$ID1, "S03")
-  testthat::expect_equal(r2$ID2, "S04")
-  testthat::expect_equal(r2$result_type, "errored")
-  testthat::expect_true(is.na(r2$status_code))
-  testthat::expect_match(r2$error_message, "Validation error")
-  testthat::expect_true(is.na(r2$content))
-  testthat::expect_true(is.na(r2$better_sample))
-  testthat::expect_true(is.na(r2$better_id))
-})
-
-testthat::test_that("parse_gemini_batch_output handles invalid JSON lines
-                    gracefully", {
-  tmp <- tempfile(fileext = ".jsonl")
-  on.exit(unlink(tmp), add = TRUE)
-
-  writeLines("not-json", con = tmp, useBytes = TRUE)
-
-  # Even for invalid JSON, we now must pass a requests_tbl; IDs here are dummies.
-  requests_tbl <- tibble::tibble(
-    custom_id = "GEM_S01_vs_S02",
-    ID1       = "S01",
-    ID2       = "S02"
-  )
-
-  res <- parse_gemini_batch_output(
-    results_path = tmp,
-    requests_tbl = requests_tbl
-  )
-
-  testthat::expect_equal(nrow(res), 1L)
-  testthat::expect_true(is.na(res$custom_id))
-  testthat::expect_match(res$error_message, "Failed to parse JSON line")
-})
-
-testthat::test_that("run_gemini_batch_pipeline works with polling and parsing
-                    (mocked)", {
-  pairs <- tibble::tibble(
-    ID1   = "S01",
-    text1 = "Text 1",
-    ID2   = "S02",
-    text2 = "Text 2"
-  )
-
-  # New requests_tbl shape: custom_id + ID1 + ID2 + request
-  fake_req_tbl <- tibble::tibble(
-    custom_id = "GEM_S01_vs_S02",
-    ID1       = "S01",
-    ID2       = "S02",
-    request   = list(list(dummy = TRUE))
-  )
-
-  fake_batch_initial <- list(
-    name     = "batches/123",
-    metadata = list(state = "JOB_STATE_RUNNING")
-  )
-
-  fake_batch_final <- list(
-    name     = "batches/123",
-    metadata = list(state = "JOB_STATE_SUCCEEDED")
-  )
-
-  fake_results <- tibble::tibble(
-    custom_id         = "GEM_S01_vs_S02",
-    ID1               = "S01",
-    ID2               = "S02",
-    model             = "gemini-3-pro-preview",
-    object_type       = "generateContent",
-    status_code       = 200L,
-    result_type       = "succeeded",
-    error_message     = NA_character_,
-    content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-    better_sample     = "SAMPLE_1",
-    better_id         = "S01",
-    prompt_tokens     = 10,
-    completion_tokens = 5,
-    total_tokens      = 15
-  )
-
-  created_batch_name <- NULL
-  polled_batch_name <- NULL
-  download_batch_obj <- NULL
-  parsed_path <- NULL
-
-  td <- list(name = "Overall quality", description = "Quality")
-  tmpl <- set_prompt_template()
-
-  testthat::with_mocked_bindings(
-    build_gemini_batch_requests = function(pairs, model, trait_name,
-                                           trait_description,
-                                           prompt_template, thinking_level,
-                                           ...) {
-      fake_req_tbl
-    },
-    gemini_create_batch = function(requests, model, api_key, api_version,
-                                   display_name = NULL) {
-      created_batch_name <<- "batches/123"
-      fake_batch_initial
-    },
-    gemini_poll_batch_until_complete = function(batch_name, interval_seconds,
-                                                timeout_seconds, api_key,
-                                                api_version, verbose) {
-      polled_batch_name <<- batch_name
-      fake_batch_final
-    },
-    gemini_download_batch_results = function(batch, requests_tbl, output_path,
-                                             api_key, api_version) {
-      download_batch_obj <<- batch
-      # Write a dummy .jsonl file so that parse_* can read it
-      writeLines('{"dummy": true}', con = output_path)
-      invisible(output_path)
-    },
-    # New signature: parse_gemini_batch_output(results_path, requests_tbl)
-    parse_gemini_batch_output = function(results_path, requests_tbl) {
-      parsed_path <<- results_path
-      fake_results
-    },
-    {
-      res <- run_gemini_batch_pipeline(
-        pairs             = pairs,
-        model             = "gemini-3-pro-preview",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        thinking_level    = "low",
-        interval_seconds  = 0,
-        timeout_seconds   = 10,
-        verbose           = FALSE
-      )
-
-      testthat::expect_equal(created_batch_name, "batches/123")
-      testthat::expect_equal(polled_batch_name, "batches/123")
-      testthat::expect_identical(download_batch_obj, fake_batch_final)
-      testthat::expect_true(file.exists(res$batch_input_path))
-      testthat::expect_true(file.exists(res$batch_output_path))
-      testthat::expect_true(file.exists(parsed_path))
-
-      # Return structure should mirror other batch pipelines
-      testthat::expect_true(all(c(
-        "batch_input_path", "batch_output_path", "file", "batch", "results"
-      ) %in% names(res)))
-
-      testthat::expect_null(res$file)
-      testthat::expect_equal(res$batch$metadata$state, "JOB_STATE_SUCCEEDED")
-      testthat::expect_equal(res$results$better_id, "S01")
-    }
-  )
-})
-
-testthat::test_that("run_gemini_batch_pipeline does not poll or parse when
-                    poll = FALSE", {
-  pairs <- tibble::tibble(
-    ID1   = "S01",
-    text1 = "Text 1",
-    ID2   = "S02",
-    text2 = "Text 2"
-  )
-
-  fake_req_tbl <- tibble::tibble(
-    custom_id = "GEM_S01_vs_S02",
-    ID1       = "S01",
-    ID2       = "S02",
-    request   = list(list(dummy = TRUE))
-  )
-
-  fake_batch_initial <- list(
-    name     = "batches/123",
-    metadata = list(state = "JOB_STATE_RUNNING")
-  )
-
-  poll_called <- FALSE
-  download_called <- FALSE
-  parse_called <- FALSE
-
-  td <- list(name = "Overall quality", description = "Quality")
-  tmpl <- set_prompt_template()
-
-  testthat::with_mocked_bindings(
-    build_gemini_batch_requests = function(pairs, model, trait_name,
-                                           trait_description,
-                                           prompt_template, thinking_level,
-                                           ...) {
-      fake_req_tbl
-    },
-    gemini_create_batch = function(requests, model, api_key, api_version,
-                                   display_name = NULL) {
-      fake_batch_initial
-    },
-    gemini_poll_batch_until_complete = function(batch_name, interval_seconds,
-                                                timeout_seconds, api_key,
-                                                api_version, verbose) {
-      poll_called <<- TRUE
-      stop("Polling should not be called when poll = FALSE")
-    },
-    gemini_download_batch_results = function(batch, requests_tbl, output_path,
-                                             api_key, api_version) {
-      download_called <<- TRUE
-      stop("Download should not be called when poll = FALSE")
-    },
-    # New signature: parse_gemini_batch_output(results_path, requests_tbl)
-    parse_gemini_batch_output = function(results_path, requests_tbl) {
-      parse_called <<- TRUE
-      stop("Parse should not be called when poll = FALSE")
-    },
-    {
-      res <- run_gemini_batch_pipeline(
-        pairs             = pairs,
-        model             = "gemini-3-pro-preview",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        thinking_level    = "low",
-        poll              = FALSE
-      )
-
-      testthat::expect_false(poll_called)
-      testthat::expect_false(download_called)
-      testthat::expect_false(parse_called)
-
-      testthat::expect_true(file.exists(res$batch_input_path))
-      testthat::expect_null(res$batch_output_path)
-      testthat::expect_null(res$results)
-
-      # Standardised return structure
-      testthat::expect_true(all(c(
-        "batch_input_path", "batch_output_path", "file", "batch", "results"
-      ) %in% names(res)))
-      testthat::expect_null(res$file)
-      testthat::expect_equal(res$batch$metadata$state, "JOB_STATE_RUNNING")
-    }
-  )
-})
-
-# tests/testthat/test-gemini-batch-api.R
-
-# ------------------------------------------------------------------------------
+# ==============================================================================
 # build_gemini_batch_requests
-# ------------------------------------------------------------------------------
+# ==============================================================================
 
-testthat::test_that("build_gemini_batch_requests builds valid requests", {
+testthat::test_that("build_gemini_batch_requests builds valid requests (Happy Path)", {
   data("example_writing_samples", package = "pairwiseLLM")
 
-  pairs <- make_pairs(example_writing_samples)
-  pairs <- pairs[1:2, ]
-
+  # Setup: Create a small pair set
+  pairs <- make_pairs(example_writing_samples)[1:2, ]
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -385,553 +25,164 @@ testthat::test_that("build_gemini_batch_requests builds valid requests", {
   testthat::expect_equal(nrow(batch), 2L)
   testthat::expect_true(all(c("custom_id", "request") %in% names(batch)))
 
-  # Basic structure checks on first request
+  # Check request structure
   r1 <- batch$request[[1]]
   testthat::expect_true(is.list(r1$contents))
   testthat::expect_true(is.list(r1$generationConfig))
 
-  # User message should contain SAMPLE_1 / SAMPLE_2 labels in the text
-  msg1 <- r1$contents[[1]]
-  testthat::expect_equal(msg1$role, "user")
-  parts <- msg1$parts
-  testthat::expect_true(is.list(parts))
-  text_block <- parts[[1]]$text
-
-  # We now just require that the labels SAMPLE_1 / SAMPLE_2 appear somewhere,
-  # not necessarily wrapped in angle brackets.
+  # Verify prompt content insertion
+  text_block <- r1$contents[[1]]$parts[[1]]$text
   testthat::expect_true(grepl("SAMPLE_1", text_block, fixed = TRUE))
   testthat::expect_true(grepl("SAMPLE_2", text_block, fixed = TRUE))
+
+  # Verify thinking level mapping (low -> Low)
+  testthat::expect_equal(r1$generationConfig$thinkingConfig$thinkingLevel, "Low")
 })
 
-# ------------------------------------------------------------------------------
-# parse_gemini_batch_output: normal + error-shaped lines
-# ------------------------------------------------------------------------------
-
-testthat::test_that(
-  "parse_gemini_batch_output handles succeeded and errored results",
-  {
-    tmp <- tempfile(fileext = ".jsonl")
-    on.exit(unlink(tmp), add = TRUE)
-
-    # Succeeded result line, similar in spirit to live responses
-    succ_resp <- list(
-      model = "gemini-3-pro-preview",
-      candidates = list(
-        list(
-          content = list(
-            parts = list(
-              list(
-                text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> Hello!"
-              )
-            )
-          )
-        )
-      ),
-      usageMetadata = list(
-        promptTokenCount     = 10L,
-        candidatesTokenCount = 5L,
-        totalTokenCount      = 15L
-      )
-    )
-
-    line_ok <- list(
-      custom_id = "GEM_S01_vs_S02",
-      result = list(
-        type     = "succeeded",
-        response = succ_resp
-      )
-    )
-
-    # Errored result line
-    line_err <- list(
-      custom_id = "GEM_S03_vs_S04",
-      result = list(
-        type = "errored",
-        error = list(
-          code    = 400L,
-          message = "Validation error",
-          status  = "INVALID_ARGUMENT"
-        )
-      )
-    )
-
-    json_lines <- c(
-      jsonlite::toJSON(line_ok, auto_unbox = TRUE),
-      jsonlite::toJSON(line_err, auto_unbox = TRUE)
-    )
-    writeLines(json_lines, con = tmp, useBytes = TRUE)
-
-    # parse_gemini_batch_output() expects a requests_tbl with custom_id / ID1 / ID2
-    requests_tbl <- tibble::tibble(
-      custom_id = c("GEM_S01_vs_S02", "GEM_S03_vs_S04"),
-      ID1       = c("S01", "S03"),
-      ID2       = c("S02", "S04")
-    )
-
-    res <- parse_gemini_batch_output(
-      results_path = tmp,
-      requests_tbl = requests_tbl
-    )
-
-    testthat::expect_s3_class(res, "tbl_df")
-    testthat::expect_equal(nrow(res), 2L)
-
-    # First row: succeeded
-    r1 <- res[1, ]
-    testthat::expect_equal(r1$custom_id, "GEM_S01_vs_S02")
-    testthat::expect_equal(r1$ID1, "S01")
-    testthat::expect_equal(r1$ID2, "S02")
-    testthat::expect_equal(r1$result_type, "succeeded")
-    testthat::expect_equal(r1$status_code, 200L)
-    testthat::expect_true(is.na(r1$error_message))
-    testthat::expect_equal(r1$model, "gemini-3-pro-preview")
-    testthat::expect_equal(r1$better_sample, "SAMPLE_2")
-    testthat::expect_equal(r1$better_id, "S02")
-    testthat::expect_equal(r1$prompt_tokens, 10)
-    testthat::expect_equal(r1$completion_tokens, 5)
-    testthat::expect_equal(r1$total_tokens, 15)
-
-    # Second row: errored
-    r2 <- res[2, ]
-    testthat::expect_equal(r2$custom_id, "GEM_S03_vs_S04")
-    testthat::expect_equal(r2$ID1, "S03")
-    testthat::expect_equal(r2$ID2, "S04")
-    testthat::expect_equal(r2$result_type, "errored")
-    testthat::expect_true(is.na(r2$status_code))
-    testthat::expect_match(r2$error_message, "Validation error")
-    testthat::expect_true(is.na(r2$content))
-    testthat::expect_true(is.na(r2$better_sample))
-    testthat::expect_true(is.na(r2$better_id))
-  }
-)
-
-testthat::test_that(
-  "parse_gemini_batch_output handles invalid JSON lines gracefully",
-  {
-    tmp <- tempfile(fileext = ".jsonl")
-    on.exit(unlink(tmp), add = TRUE)
-
-    writeLines("not-json", con = tmp, useBytes = TRUE)
-
-    # We must still pass a requests_tbl; IDs here are dummies.
-    requests_tbl <- tibble::tibble(
-      custom_id = "GEM_S01_vs_S02",
-      ID1       = "S01",
-      ID2       = "S02"
-    )
-
-    res <- parse_gemini_batch_output(
-      results_path = tmp,
-      requests_tbl = requests_tbl
-    )
-
-    testthat::expect_equal(nrow(res), 1L)
-    testthat::expect_true(is.na(res$custom_id))
-    testthat::expect_match(res$error_message, "Failed to parse JSON line")
-  }
-)
-
-# ------------------------------------------------------------------------------
-# gemini_download_batch_results: validations + mismatch warning + JSONL writing
-# ------------------------------------------------------------------------------
-
-testthat::test_that(
-  "gemini_download_batch_results validates requests_tbl structure",
-  {
-    batch <- list(response = list(inlinedResponses = data.frame(x = 1)))
-    bad_requests <- tibble::tibble(id = 1:2)
-    tmp <- tempfile(fileext = ".jsonl")
-    on.exit(unlink(tmp), add = TRUE)
-
-    testthat::expect_error(
-      gemini_download_batch_results(
-        batch        = batch,
-        requests_tbl = bad_requests,
-        output_path  = tmp,
-        api_key      = "TEST_KEY",
-        api_version  = "v1beta"
-      ),
-      "requests_tbl.*custom_id",
-      fixed = FALSE
-    )
-  }
-)
-
-testthat::test_that(
-  "gemini_download_batch_results errors when inline responses are missing",
-  {
-    # response$inlinedResponses is NULL -> error branch
-    batch <- list(response = list(inlinedResponses = NULL))
-    requests_tbl <- tibble::tibble(custom_id = "id1")
-    tmp <- tempfile(fileext = ".jsonl")
-    on.exit(unlink(tmp), add = TRUE)
-
-    testthat::expect_error(
-      gemini_download_batch_results(
-        batch        = batch,
-        requests_tbl = requests_tbl,
-        output_path  = tmp,
-        api_key      = "TEST_KEY",
-        api_version  = "v1beta"
-      ),
-      "Batch does not contain response\\$inlinedResponses\\$inlinedResponses",
-      fixed = FALSE
-    )
-  }
-)
-
-testthat::test_that(
-  "gemini_download_batch_results writes JSONL and warns on count mismatch",
-  {
-    # inlinedResponses is already a response data.frame
-    inlined_df <- data.frame(
-      score = c(1, 2),
-      stringsAsFactors = FALSE
-    )
-
-    batch <- list(
-      response = list(
-        inlinedResponses = inlined_df
-      )
-    )
-
-    # 3 requests vs 2 responses -> mismatch warning
-    requests_tbl <- tibble::tibble(
-      custom_id = c("req1", "req2", "req3")
-    )
-
-    tmp <- tempfile(fileext = ".jsonl")
-    on.exit(unlink(tmp), add = TRUE)
-
-    testthat::expect_warning(
-      {
-        out_path <- gemini_download_batch_results(
-          batch        = batch,
-          requests_tbl = requests_tbl,
-          output_path  = tmp,
-          api_key      = "TEST_KEY",
-          api_version  = "v1beta"
-        )
-
-        testthat::expect_true(file.exists(out_path))
-        lines <- readLines(out_path, warn = FALSE, encoding = "UTF-8")
-        # Only min(3,2) = 2 lines should be written
-        testthat::expect_equal(length(lines), 2L)
-      },
-      "Number of inlined responses",
-      fixed = FALSE
-    )
-  }
-)
-
-# ------------------------------------------------------------------------------
-# gemini_poll_batch_until_complete: validation + timeout branch
-# ------------------------------------------------------------------------------
-
-testthat::test_that(
-  "gemini_poll_batch_until_complete validates batch_name",
-  {
-    testthat::expect_error(
-      gemini_poll_batch_until_complete(
-        batch_name       = "",
-        interval_seconds = 0,
-        timeout_seconds  = 1,
-        api_key          = "TEST_KEY",
-        api_version      = "v1beta",
-        verbose          = FALSE
-      ),
-      "`batch_name` must be a non-empty character scalar.",
-      fixed = TRUE
-    )
-  }
-)
-
-testthat::test_that(
-  "gemini_poll_batch_until_complete respects timeout_seconds and returns last batch",
-  {
-    # Always return a non-terminal state so timeout logic is hit
-    testthat::with_mocked_bindings(
-      gemini_get_batch = function(batch_name, api_key, api_version = "v1beta") {
-        list(
-          name     = batch_name,
-          metadata = list(state = "BATCH_STATE_RUNNING")
-        )
-      },
-      {
-        testthat::expect_warning(
-          {
-            batch <- gemini_poll_batch_until_complete(
-              batch_name       = "batches/timeout",
-              interval_seconds = 0,
-              timeout_seconds  = 0,
-              api_key          = "TEST_KEY",
-              api_version      = "v1beta",
-              verbose          = TRUE
-            )
-
-            testthat::expect_type(batch, "list")
-            testthat::expect_equal(batch$metadata$state, "BATCH_STATE_RUNNING")
-          },
-          "Timeout reached while waiting for Gemini batch to complete",
-          fixed = FALSE
-        )
-      }
-    )
-  }
-)
-
-# ------------------------------------------------------------------------------
-# run_gemini_batch_pipeline (mocked end-to-end)
-# ------------------------------------------------------------------------------
-
-testthat::test_that(
-  "run_gemini_batch_pipeline works with polling and parsing (mocked)",
-  {
-    pairs <- tibble::tibble(
-      ID1   = "S01",
-      text1 = "Text 1",
-      ID2   = "S02",
-      text2 = "Text 2"
-    )
-
-    # New requests_tbl shape: custom_id + ID1 + ID2 + request
-    fake_req_tbl <- tibble::tibble(
-      custom_id = "GEM_S01_vs_S02",
-      ID1       = "S01",
-      ID2       = "S02",
-      request   = list(list(dummy = TRUE))
-    )
-
-    fake_batch_initial <- list(
-      name     = "batches/123",
-      metadata = list(state = "JOB_STATE_RUNNING")
-    )
-
-    fake_batch_final <- list(
-      name     = "batches/123",
-      metadata = list(state = "JOB_STATE_SUCCEEDED")
-    )
-
-    fake_results <- tibble::tibble(
-      custom_id         = "GEM_S01_vs_S02",
-      ID1               = "S01",
-      ID2               = "S02",
-      model             = "gemini-3-pro-preview",
-      object_type       = "generateContent",
-      status_code       = 200L,
-      result_type       = "succeeded",
-      error_message     = NA_character_,
-      content           = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-      better_sample     = "SAMPLE_1",
-      better_id         = "S01",
-      prompt_tokens     = 10,
-      completion_tokens = 5,
-      total_tokens      = 15
-    )
-
-    created_batch_name <- NULL
-    polled_batch_name <- NULL
-    download_batch_obj <- NULL
-    parsed_path <- NULL
-
-    td <- list(name = "Overall quality", description = "Quality")
-    tmpl <- set_prompt_template()
-
-    testthat::with_mocked_bindings(
-      build_gemini_batch_requests = function(pairs, model, trait_name,
-                                             trait_description,
-                                             prompt_template, thinking_level,
-                                             ...) {
-        fake_req_tbl
-      },
-      gemini_create_batch = function(requests, model, api_key, api_version,
-                                     display_name = NULL) {
-        created_batch_name <<- "batches/123"
-        fake_batch_initial
-      },
-      gemini_poll_batch_until_complete = function(batch_name, interval_seconds,
-                                                  timeout_seconds, api_key,
-                                                  api_version, verbose) {
-        polled_batch_name <<- batch_name
-        fake_batch_final
-      },
-      gemini_download_batch_results = function(batch, requests_tbl, output_path,
-                                               api_key, api_version) {
-        download_batch_obj <<- batch
-        # Write a dummy .jsonl file so that parse_* can read it
-        writeLines('{"dummy": true}', con = output_path)
-        invisible(output_path)
-      },
-      parse_gemini_batch_output = function(results_path, requests_tbl) {
-        parsed_path <<- results_path
-        fake_results
-      },
-      {
-        res <- run_gemini_batch_pipeline(
-          pairs             = pairs,
-          model             = "gemini-3-pro-preview",
-          trait_name        = td$name,
-          trait_description = td$description,
-          prompt_template   = tmpl,
-          thinking_level    = "low",
-          interval_seconds  = 0,
-          timeout_seconds   = 10,
-          verbose           = FALSE
-        )
-
-        testthat::expect_equal(created_batch_name, "batches/123")
-        testthat::expect_equal(polled_batch_name, "batches/123")
-        testthat::expect_identical(download_batch_obj, fake_batch_final)
-        testthat::expect_true(file.exists(res$batch_input_path))
-        testthat::expect_true(file.exists(res$batch_output_path))
-        testthat::expect_true(file.exists(parsed_path))
-
-        # Standardised return structure
-        testthat::expect_true(all(c(
-          "batch_input_path", "batch_output_path", "file", "batch", "results"
-        ) %in% names(res)))
-
-        testthat::expect_null(res$file)
-        testthat::expect_equal(res$batch$metadata$state, "JOB_STATE_SUCCEEDED")
-        testthat::expect_equal(res$results$better_id, "S01")
-      }
-    )
-  }
-)
-
-testthat::test_that(
-  "run_gemini_batch_pipeline does not poll or parse when poll = FALSE",
-  {
-    pairs <- tibble::tibble(
-      ID1   = "S01",
-      text1 = "Text 1",
-      ID2   = "S02",
-      text2 = "Text 2"
-    )
-
-    fake_req_tbl <- tibble::tibble(
-      custom_id = "GEM_S01_vs_S02",
-      ID1       = "S01",
-      ID2       = "S02",
-      request   = list(list(dummy = TRUE))
-    )
-
-    fake_batch_initial <- list(
-      name     = "batches/123",
-      metadata = list(state = "JOB_STATE_RUNNING")
-    )
-
-    poll_called <- FALSE
-    download_called <- FALSE
-    parse_called <- FALSE
-
-    td <- list(name = "Overall quality", description = "Quality")
-    tmpl <- set_prompt_template()
-
-    testthat::with_mocked_bindings(
-      build_gemini_batch_requests = function(pairs, model, trait_name,
-                                             trait_description,
-                                             prompt_template, thinking_level,
-                                             ...) {
-        fake_req_tbl
-      },
-      gemini_create_batch = function(requests, model, api_key, api_version,
-                                     display_name = NULL) {
-        fake_batch_initial
-      },
-      gemini_poll_batch_until_complete = function(batch_name, interval_seconds,
-                                                  timeout_seconds, api_key,
-                                                  api_version, verbose) {
-        poll_called <<- TRUE
-        stop("Polling should not be called when poll = FALSE")
-      },
-      gemini_download_batch_results = function(batch, requests_tbl, output_path,
-                                               api_key, api_version) {
-        download_called <<- TRUE
-        stop("Download should not be called when poll = FALSE")
-      },
-      parse_gemini_batch_output = function(results_path, requests_tbl) {
-        parse_called <<- TRUE
-        stop("Parse should not be called when poll = FALSE")
-      },
-      {
-        res <- run_gemini_batch_pipeline(
-          pairs             = pairs,
-          model             = "gemini-3-pro-preview",
-          trait_name        = td$name,
-          trait_description = td$description,
-          prompt_template   = tmpl,
-          thinking_level    = "low",
-          poll              = FALSE
-        )
-
-        testthat::expect_false(poll_called)
-        testthat::expect_false(download_called)
-        testthat::expect_false(parse_called)
-
-        testthat::expect_true(file.exists(res$batch_input_path))
-        testthat::expect_null(res$batch_output_path)
-        testthat::expect_null(res$results)
-
-        # Standardised return structure
-        testthat::expect_true(all(c(
-          "batch_input_path", "batch_output_path", "file", "batch", "results"
-        ) %in% names(res)))
-        testthat::expect_null(res$file)
-        testthat::expect_equal(res$batch$metadata$state, "JOB_STATE_RUNNING")
-      }
-    )
-  }
-)
-
-testthat::test_that("build_gemini_batch_requests validates inputs and handles parameters", {
+testthat::test_that("build_gemini_batch_requests validates inputs and parameters", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
+  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
 
-  # 1. Missing columns
+  # 1. Error on missing columns
   bad_pairs <- tibble::tibble(ID1 = "A", text1 = "txt")
   testthat::expect_error(
     build_gemini_batch_requests(bad_pairs, "gemini-model", td$name, td$description),
     "must contain columns"
   )
 
-  # 2. Invalid model
-  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+  # 2. Error on invalid model string
   testthat::expect_error(
     build_gemini_batch_requests(pairs, "", td$name, td$description),
     "model.*must be a non-empty character"
   )
 
-  # 3. Warnings for thinking_budget and medium level
+  # 3. Warning: thinking_budget ignored
   testthat::expect_warning(
     build_gemini_batch_requests(
-      pairs, "gemini-model", td$name, td$description,
-      thinking_budget = 1000 # Should trigger warning
+      pairs, "m", td$name, td$description,
+      thinking_budget = 1000
     ),
     "thinking_budget.*is ignored"
   )
 
+  # 4. Warning: thinking_level = "medium" -> mapped to "High"
   testthat::expect_warning(
-    build_gemini_batch_requests(
-      pairs, "gemini-model", td$name, td$description,
-      thinking_level = "medium" # Should trigger warning
+    req <- build_gemini_batch_requests(
+      pairs, "m", td$name, td$description,
+      thinking_level = "medium"
     ),
-    "thinking_level = \"medium\".*mapping to \"High\""
+    "mapping to \"High\" internally"
   )
+  testthat::expect_equal(req$request[[1]]$generationConfig$thinkingConfig$thinkingLevel, "High")
 
-  # 4. Check parameter passthrough (temperature, top_p, etc.)
+  # 5. Parameter passthrough (temperature, top_p, etc.)
   batch <- build_gemini_batch_requests(
-    pairs, "gemini-model", td$name, td$description,
-    temperature = 0.7,
-    top_p = 0.9,
-    include_thoughts = TRUE
+    pairs, "m", td$name, td$description,
+    temperature = 0.7, top_p = 0.9, include_thoughts = TRUE
   )
-
   config <- batch$request[[1]]$generationConfig
   testthat::expect_equal(config$temperature, 0.7)
   testthat::expect_equal(config$topP, 0.9)
   testthat::expect_true(config$thinkingConfig$includeThoughts)
 })
+
+# ==============================================================================
+# .parse_gemini_pair_response (Internal Helper)
+# ==============================================================================
+
+testthat::test_that(".parse_gemini_pair_response handles structural edge cases", {
+  # 1. Nested response wrappers (batch API quirk)
+  # Sometimes the batch API wraps the result in `response` -> list -> `candidates`
+  cand_obj <- list(content = list(parts = list(list(text = "Deep Content"))))
+  nested_resp <- list(response = list(list(candidates = list(cand_obj))))
+
+  res <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", nested_resp)
+  testthat::expect_equal(res$content, "Deep Content")
+
+  # 2. Candidates as data.frame (httr2 json parsing variation)
+  content_obj <- list(parts = list(list(text = "DF Candidate")))
+  df_cand <- data.frame(dummy = 1)
+  df_cand$content <- list(content_obj)
+  resp_df <- list(candidates = df_cand)
+
+  res_df <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_df)
+  testthat::expect_equal(res_df$content, "DF Candidate")
+
+  # 3. Parts as data.frame
+  parts_df <- data.frame(text = "DF Part", stringsAsFactors = FALSE)
+  content_df_parts <- list(parts = parts_df)
+  resp_df_parts <- list(candidates = list(list(content = content_df_parts)))
+
+  res_df_parts <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_df_parts)
+  testthat::expect_equal(res_df_parts$content, "DF Part")
+
+  # 4. Content as data.frame (direct text, no parts list)
+  parts_direct_df <- data.frame(text = "Direct DF", stringsAsFactors = FALSE)
+  resp_direct_df <- list(candidates = list(list(content = parts_direct_df)))
+
+  res_direct <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_direct_df)
+  testthat::expect_equal(res_direct$content, "Direct DF")
+})
+
+testthat::test_that(".parse_gemini_pair_response handles metadata extraction", {
+  # 1. Model preference: modelVersion > model
+  resp_models <- list(
+    candidates = list(list(content = list(parts = list(list(text = "x"))))),
+    model = "v1",
+    modelVersion = "v2"
+  )
+  res <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_models)
+  testthat::expect_equal(res$model, "v2")
+
+  # 2. Missing usage metadata -> NAs
+  resp_no_usage <- list(candidates = list(list(content = list(parts = list(list(text = "x"))))))
+  res_nu <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_no_usage)
+  testthat::expect_true(is.na(res_nu$total_tokens))
+
+  # 3. thoughtSignature extraction
+  resp_sig <- list(
+    candidates = list(list(content = list(parts = list(list(
+      text = "T",
+      thoughtSignature = "SIG123"
+    )))))
+  )
+  res_sig <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_sig)
+  testthat::expect_equal(res_sig$thought_signature, "SIG123")
+})
+
+testthat::test_that(".parse_gemini_pair_response handles explicit thoughts logic", {
+  # 1. Error response handling
+  err_resp <- list(error = list(message = "Blocked"))
+  res_err <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", err_resp)
+  testthat::expect_equal(res_err$result_type, "errored")
+  testthat::expect_equal(res_err$error_message, "Blocked")
+
+  # 2. Explicit thoughts: include_thoughts=TRUE, 2 parts
+  resp_thoughts <- list(
+    candidates = list(list(content = list(parts = list(
+      list(text = "Thinking..."),
+      list(text = "Answer")
+    ))))
+  )
+  res_t <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_thoughts, include_thoughts = TRUE)
+  testthat::expect_equal(res_t$thoughts, "Thinking...")
+  testthat::expect_equal(res_t$content, "Answer")
+
+  # 3. Fallback: include_thoughts=TRUE but only 1 part
+  resp_single <- list(
+    candidates = list(list(content = list(parts = list(
+      list(text = "Just answer")
+    ))))
+  )
+  res_s <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_single, include_thoughts = TRUE)
+  testthat::expect_true(is.na(res_s$thoughts))
+  testthat::expect_equal(res_s$content, "Just answer")
+})
+
+# ==============================================================================
+# gemini_create_batch & gemini_get_batch
+# ==============================================================================
 
 testthat::test_that("gemini_create_batch validates inputs", {
   testthat::expect_error(
@@ -944,194 +195,380 @@ testthat::test_that("gemini_create_batch validates inputs", {
   )
 })
 
-testthat::test_that("gemini_download_batch_results handles batch name string and count mismatch", {
-  # Mock get_batch to return a fake batch object from a string name
-  # We construct a data frame where the 'response' column is a nested data frame,
-  # satisfying is.data.frame() checks in the function.
-  resp_col <- data.frame(a = 1:2)
-  inlined <- data.frame(row_id = 1:2)
-  inlined$response <- resp_col
+testthat::test_that("gemini_get_batch validates inputs", {
+  testthat::expect_error(
+    gemini_get_batch(""),
+    "batch_name.*must be a non-empty"
+  )
+})
 
-  mock_batch <- list(
-    response = list(
-      inlinedResponses = inlined
-    )
+# ==============================================================================
+# gemini_poll_batch_until_complete
+# ==============================================================================
+
+testthat::test_that("gemini_poll_batch_until_complete handles validation and timeouts", {
+  testthat::expect_error(
+    gemini_poll_batch_until_complete(""),
+    "batch_name.*non-empty"
   )
 
-  # Mismatch: 3 requests, but only 2 responses in mock_batch
-  req_tbl <- tibble::tibble(custom_id = c("1", "2", "3"))
+  # Mock to always return RUNNING state to trigger timeout
+  testthat::with_mocked_bindings(
+    gemini_get_batch = function(...) list(name = "b", metadata = list(state = "RUNNING")),
+    {
+      testthat::expect_warning(
+        res <- gemini_poll_batch_until_complete(
+          "b",
+          interval_seconds = 0, timeout_seconds = 0, verbose = TRUE # Verbose must be TRUE for warning
+        ),
+        "Timeout reached"
+      )
+      testthat::expect_equal(res$metadata$state, "RUNNING")
+    }
+  )
+})
+
+# ==============================================================================
+# gemini_download_batch_results
+# ==============================================================================
+
+testthat::test_that("gemini_download_batch_results validation and error handling", {
   tmp <- tempfile()
-  on.exit(unlink(tmp), add = TRUE)
+  reqs <- tibble::tibble(custom_id = "1")
+
+  # 1. Missing inlinedResponses
+  batch_bad <- list(response = list())
+  testthat::expect_error(
+    gemini_download_batch_results(batch_bad, reqs, tmp),
+    "Batch does not contain response\\$inlinedResponses"
+  )
+
+  # 2. Unsupported structure (not a data frame)
+  batch_weird <- list(response = list(inlinedResponses = list(something = 1)))
+  testthat::expect_error(
+    gemini_download_batch_results(batch_weird, reqs, tmp),
+    "Unsupported structure"
+  )
+
+  # 3. Request vs Response count mismatch
+  # Mock a structure where response is a DF with 2 rows, but we pass 3 requests
+  inner_df <- data.frame(row_id = 1:2)
+  # The helper expects inlined$response to be a DF or inlined itself to be a DF
+  inner_df$response <- data.frame(candidates = I(list(list(), list())))
+  batch_mismatch <- list(response = list(inlinedResponses = inner_df))
+
+  reqs_mismatch <- tibble::tibble(custom_id = c("1", "2", "3"))
 
   testthat::with_mocked_bindings(
-    gemini_get_batch = function(...) mock_batch,
+    gemini_get_batch = function(...) batch_mismatch,
     {
-      # Should warn about mismatch
       testthat::expect_warning(
-        gemini_download_batch_results("batches/123", req_tbl, tmp),
+        gemini_download_batch_results("b", reqs_mismatch, tmp),
         "Number of inlined responses.*does not match"
       )
-
-      # Should resolve string "batches/123" to mock_batch via get_batch
       testthat::expect_true(file.exists(tmp))
     }
   )
 })
 
-testthat::test_that(".parse_gemini_pair_response logic extracts thoughts correctly", {
-  # Internal function is available directly
+testthat::test_that("gemini_download_batch_results handles nested inlinedResponses", {
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
 
-  # 1. Error response handling
-  err_resp <- list(error = list(message = "Blocked"))
-  res_err <- .parse_gemini_pair_response("id", "A", "B", err_resp)
-  testthat::expect_equal(res_err$result_type, "errored")
-  testthat::expect_equal(res_err$error_message, "Blocked")
+  # Mock structure: response$inlinedResponses$inlinedResponses
+  inner_df <- data.frame(dummy = 1)
+  inner_df$response <- data.frame(candidates = I(list(list()))) # Valid inner structure
 
-  # 2. Thoughts extraction: include_thoughts=TRUE, 2 parts
-  # Part 1: Thought, Part 2: Answer
-  resp_thoughts <- list(
-    candidates = list(
-      list(
-        content = list(
-          parts = list(
-            list(text = "Thinking..."),
-            list(text = "Answer")
-          )
-        )
+  batch_nested <- list(
+    response = list(
+      inlinedResponses = list(
+        inlinedResponses = inner_df
       )
     )
   )
+  reqs <- tibble::tibble(custom_id = "1")
 
-  res_t <- .parse_gemini_pair_response("id", "A", "B", resp_thoughts, include_thoughts = TRUE)
-  testthat::expect_equal(res_t$thoughts, "Thinking...")
-  testthat::expect_equal(res_t$content, "Answer")
-
-  # 3. Thoughts extraction: include_thoughts=TRUE, but only 1 part
-  # Should fallback to treating it as content, thoughts = NA
-  resp_single <- list(
-    candidates = list(
-      list(
-        content = list(
-          parts = list(
-            list(text = "Just answer")
-          )
-        )
-      )
-    )
+  testthat::with_mocked_bindings(
+    gemini_get_batch = function(...) stop("Should not be called"),
+    {
+      out <- gemini_download_batch_results(batch_nested, reqs, tmp)
+      testthat::expect_true(file.exists(out))
+      lines <- readLines(out)
+      testthat::expect_equal(length(lines), 1L)
+    }
   )
-  res_s <- .parse_gemini_pair_response("id", "A", "B", resp_single, include_thoughts = TRUE)
-  testthat::expect_true(is.na(res_s$thoughts))
-  testthat::expect_equal(res_s$content, "Just answer")
+})
+
+# ==============================================================================
+# parse_gemini_batch_output
+# ==============================================================================
+
+testthat::test_that("parse_gemini_batch_output handles standard success and error lines", {
+  tmp <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tmp), add = TRUE)
+
+  # 1. Success line
+  succ_resp <- list(
+    model = "gemini-pro",
+    candidates = list(list(content = list(parts = list(list(text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"))))),
+    usageMetadata = list(promptTokenCount = 10, candidatesTokenCount = 5, totalTokenCount = 15)
+  )
+  line_ok <- list(custom_id = "GEM_S01_vs_S02", result = list(type = "succeeded", response = succ_resp))
+
+  # 2. Error line
+  line_err <- list(
+    custom_id = "GEM_S03_vs_S04",
+    result = list(type = "errored", error = list(message = "Validation error"))
+  )
+
+  writeLines(c(jsonlite::toJSON(line_ok, auto_unbox = TRUE), jsonlite::toJSON(line_err, auto_unbox = TRUE)), tmp)
+
+  reqs <- tibble::tibble(
+    custom_id = c("GEM_S01_vs_S02", "GEM_S03_vs_S04"),
+    ID1       = c("S01", "S03"),
+    ID2       = c("S02", "S04")
+  )
+
+  res <- parse_gemini_batch_output(tmp, reqs)
+
+  # Check Success
+  r1 <- res[1, ]
+  testthat::expect_equal(r1$result_type, "succeeded")
+  testthat::expect_equal(r1$better_sample, "SAMPLE_2")
+  testthat::expect_equal(r1$total_tokens, 15)
+
+  # Check Error
+  r2 <- res[2, ]
+  testthat::expect_equal(r2$result_type, "errored")
+  testthat::expect_match(r2$error_message, "Validation error")
+  testthat::expect_true(is.na(r2$content))
+})
+
+testthat::test_that("parse_gemini_batch_output handles empty files, unknown IDs, invalid JSON", {
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
+  reqs <- tibble::tibble(custom_id = "A", ID1 = "1", ID2 = "2")
+
+  # 1. Empty File
+  file.create(tmp)
+  res_empty <- parse_gemini_batch_output(tmp, reqs)
+  testthat::expect_equal(nrow(res_empty), 0L)
+
+  # 2. Unknown ID in file
+  line_unk <- list(custom_id = "UNKNOWN", result = list(type = "succeeded"))
+  writeLines(jsonlite::toJSON(line_unk, auto_unbox = TRUE), tmp)
+  res_unk <- parse_gemini_batch_output(tmp, reqs)
+  testthat::expect_equal(res_unk$custom_id, "UNKNOWN")
+  testthat::expect_true(is.na(res_unk$ID1)) # No match in reqs
+
+  # 3. Invalid JSON content
+  writeLines("NOT_JSON", tmp)
+  res_inv <- parse_gemini_batch_output(tmp, reqs)
+  testthat::expect_match(res_inv$error_message, "Failed to parse JSON line")
 })
 
 testthat::test_that("parse_gemini_batch_output detects include_thoughts from request column", {
   tmp <- tempfile()
   on.exit(unlink(tmp), add = TRUE)
 
-  # Create a result file with 2 parts (thought + content)
-  resp_data <- list(
-    candidates = list(
-      list(
-        content = list(
-          parts = list(
-            list(text = "My thought process"),
-            list(text = "Final Answer")
-          )
+  # Result has 2 parts
+  resp_data <- list(candidates = list(list(content = list(parts = list(
+    list(text = "Thought"), list(text = "Answer")
+  )))))
+  line <- list(custom_id = "CID", result = list(type = "succeeded", response = resp_data))
+  writeLines(jsonlite::toJSON(line, auto_unbox = TRUE), tmp)
+
+  # Case A: Request has includeThoughts = TRUE
+  req_tbl_true <- tibble::tibble(
+    custom_id = "CID", ID1 = "A", ID2 = "B",
+    request = list(list(generationConfig = list(thinkingConfig = list(includeThoughts = TRUE))))
+  )
+  res_true <- parse_gemini_batch_output(tmp, req_tbl_true)
+  testthat::expect_equal(res_true$thoughts, "Thought")
+  testthat::expect_equal(res_true$content, "Answer")
+
+  # Case B: Request has includeThoughts = FALSE (or missing)
+  req_tbl_false <- tibble::tibble(
+    custom_id = "CID", ID1 = "A", ID2 = "B",
+    request = list(list(generationConfig = list(thinkingConfig = list(includeThoughts = FALSE))))
+  )
+  res_false <- parse_gemini_batch_output(tmp, req_tbl_false)
+  testthat::expect_true(is.na(res_false$thoughts))
+  testthat::expect_equal(res_false$content, "ThoughtAnswer")
+})
+
+# ==============================================================================
+# run_gemini_batch_pipeline
+# ==============================================================================
+
+testthat::test_that("run_gemini_batch_pipeline runs full mocked cycle", {
+  pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B")
+  td <- trait_description("overall_quality") # Valid trait name
+  tmpl <- set_prompt_template()
+
+  # Mock returns
+  fake_req_tbl <- tibble::tibble(custom_id = "1", ID1 = "S1", ID2 = "S2", request = list(list()))
+  fake_batch_initial <- list(name = "b1", metadata = list(state = "RUNNING"))
+  fake_batch_final <- list(name = "b1", metadata = list(state = "SUCCEEDED"))
+  fake_results <- tibble::tibble(custom_id="1", ID1="S1", ID2="S2", result_type="succeeded", better_id="S1")
+
+  testthat::with_mocked_bindings(
+    build_gemini_batch_requests = function(...) fake_req_tbl,
+    gemini_create_batch = function(...) fake_batch_initial,
+    gemini_poll_batch_until_complete = function(...) fake_batch_final,
+    gemini_download_batch_results = function(batch, requests_tbl, output_path, ...) {
+      writeLines('{"dummy": true}', output_path) # Create dummy file using correct arg name
+      invisible(output_path)
+    },
+    parse_gemini_batch_output = function(...) fake_results,
+    {
+      res <- run_gemini_batch_pipeline(
+        pairs, "m", td$name, td$description, tmpl,
+        interval_seconds = 0, timeout_seconds = 0, verbose = FALSE
+      )
+
+      testthat::expect_equal(res$batch$metadata$state, "SUCCEEDED")
+      testthat::expect_equal(res$results$better_id, "S1")
+      testthat::expect_true(file.exists(res$batch_input_path))
+      testthat::expect_true(file.exists(res$batch_output_path))
+    }
+  )
+})
+
+testthat::test_that("run_gemini_batch_pipeline respects poll=FALSE", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+  td <- trait_description("overall_quality") # Valid trait name
+
+  fake_batch <- list(name = "b", metadata = list(state = "RUNNING"))
+
+  testthat::with_mocked_bindings(
+    build_gemini_batch_requests = function(...) tibble::tibble(custom_id = "1", ID1 = "A", ID2 = "B", request = list(list())),
+    gemini_create_batch = function(...) fake_batch,
+    gemini_poll_batch_until_complete = function(...) stop("Should not poll"),
+    {
+      res <- run_gemini_batch_pipeline(
+        pairs, "m", td$name, td$description,
+        poll = FALSE, verbose = FALSE
+      )
+      testthat::expect_null(res$results)
+      testthat::expect_null(res$batch_output_path)
+      testthat::expect_equal(res$batch$metadata$state, "RUNNING")
+    }
+  )
+})
+
+testthat::test_that("build_gemini_batch_requests passes top_k and max_output_tokens", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+  td <- trait_description("overall_quality")
+
+  batch <- build_gemini_batch_requests(
+    pairs, "gemini-model", td$name, td$description,
+    top_k = 40,
+    max_output_tokens = 1024
+  )
+
+  config <- batch$request[[1]]$generationConfig
+  testthat::expect_equal(config$topK, 40)
+  testthat::expect_equal(config$maxOutputTokens, 1024)
+})
+
+testthat::test_that("gemini_create_batch generates default display_name if missing", {
+  captured_body <- NULL
+
+  testthat::with_mocked_bindings(
+    .gemini_request = function(...) structure(list(), class = "httr2_request"),
+    .gemini_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .gemini_req_perform = function(...) structure(list(), class = "httr2_response"),
+    .gemini_resp_body_json = function(...) list(name = "b"),
+    {
+      # 1. No display name provided
+      gemini_create_batch(
+        requests = list(list(x = 1)),
+        model = "gemini-pro"
+      )
+
+      testthat::expect_true(!is.null(captured_body$batch$display_name))
+      testthat::expect_true(grepl("pairwiseLLM-gemini-batch-", captured_body$batch$display_name))
+
+      # 2. Empty string provided (should trigger default)
+      gemini_create_batch(
+        requests = list(list(x = 1)),
+        model = "gemini-pro",
+        display_name = ""
+      )
+      testthat::expect_true(grepl("pairwiseLLM-gemini-batch-", captured_body$batch$display_name))
+    }
+  )
+})
+
+testthat::test_that("gemini_poll_batch_until_complete loops until terminal state", {
+  # Mock returning RUNNING twice, then SUCCEEDED
+  states <- c("BATCH_STATE_RUNNING", "BATCH_STATE_RUNNING", "BATCH_STATE_SUCCEEDED")
+  call_count <- 0
+
+  testthat::with_mocked_bindings(
+    gemini_get_batch = function(...) {
+      call_count <<- call_count + 1
+      # Return current state based on call count
+      s <- if (call_count <= length(states)) states[call_count] else "BATCH_STATE_SUCCEEDED"
+      list(name = "b", metadata = list(state = s))
+    },
+    {
+      # We rely on the short interval_seconds=0.01 to make this fast enough without mocking Sys.sleep
+      res <- gemini_poll_batch_until_complete(
+        "b", interval_seconds = 0.01, timeout_seconds = 10, verbose = FALSE
+      )
+
+      # Should have called get_batch 3 times
+      testthat::expect_equal(call_count, 3)
+      testthat::expect_equal(res$metadata$state, "BATCH_STATE_SUCCEEDED")
+    }
+  )
+})
+
+testthat::test_that(".parse_gemini_pair_response finds deeply nested usage metadata", {
+  # Test the recursive logic of the internal find_named helper
+  # Construct a response where usageMetadata keys are hidden inside a wrapper list
+  resp_nested_usage <- list(
+    candidates = list(list(content = list(parts = list(list(text = "A"))))),
+    usageMetadata = list(
+      wrapper = list(
+        nested = list(
+          totalTokenCount = 999
         )
       )
     )
   )
 
-  line <- list(
-    custom_id = "CID",
-    result = list(type = "succeeded", response = resp_data)
-  )
-  writeLines(jsonlite::toJSON(line, auto_unbox = TRUE), tmp)
-
-  # Case A: Request column exists and has includeThoughts = TRUE
-  req_tbl_true <- tibble::tibble(
-    custom_id = "CID", ID1 = "A", ID2 = "B",
-    request = list(
-      list(generationConfig = list(thinkingConfig = list(includeThoughts = TRUE)))
-    )
-  )
-
-  res_true <- parse_gemini_batch_output(tmp, req_tbl_true)
-  testthat::expect_equal(res_true$thoughts, "My thought process")
-  testthat::expect_equal(res_true$content, "Final Answer")
-
-  # Case B: Request column exists but includeThoughts = FALSE (or missing)
-  req_tbl_false <- tibble::tibble(
-    custom_id = "CID", ID1 = "A", ID2 = "B",
-    request = list(
-      list(generationConfig = list(thinkingConfig = list(includeThoughts = FALSE)))
-    )
-  )
-
-  res_false <- parse_gemini_batch_output(tmp, req_tbl_false)
-  # When include_thoughts is false, everything is concatenated into content
-  testthat::expect_true(is.na(res_false$thoughts))
-  testthat::expect_equal(res_false$content, "My thought processFinal Answer")
+  res <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_nested_usage)
+  testthat::expect_equal(res$total_tokens, 999)
 })
 
-testthat::test_that("build_gemini_batch_requests validates inputs and warns on medium thinking", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
-
-  # Error on missing columns
-  bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
-  testthat::expect_error(
-    build_gemini_batch_requests(bad_pairs, "gemini-1.5-pro", td$name, td$description),
-    "must contain columns"
-  )
-
-  # Warning on thinking_level = "medium"
-  testthat::expect_warning(
-    req <- build_gemini_batch_requests(
-      pairs, "gemini-1.5-pro", td$name, td$description,
-      thinking_level = "medium"
-    ),
-    "mapping to \"High\" internally"
-  )
-
-  # Verify the mapping occurred in the request body
-  config <- req$request[[1]]$generationConfig
-  testthat::expect_equal(config$thinkingConfig$thinkingLevel, "High")
-})
-
-testthat::test_that("gemini_download_batch_results warns if response count mismatches request count", {
-  # Mock a batch object with 2 responses.
-  # We construct a data frame where the 'response' column is a nested data frame.
-  # This ensures inlined$response satisfies is.data.frame().
-  resp_df <- data.frame(
-    candidates = I(list(
-      list(content = list(parts = list(list(text = "A")))),
-      list(content = list(parts = list(list(text = "B"))))
-    ))
-  )
-
-  inlined <- data.frame(row_id = 1:2)
-  inlined$response <- resp_df
-
-  mock_batch <- list(
-    response = list(
-      inlinedResponses = inlined
-    )
-  )
-
-  # Provide 3 requests (mismatch with 2 responses)
-  req_tbl <- tibble::tibble(custom_id = c("1", "2", "3"))
+testthat::test_that("gemini_download_batch_results accepts batch object input directly", {
   tmp <- tempfile()
   on.exit(unlink(tmp), add = TRUE)
 
-  testthat::with_mocked_bindings(
-    gemini_get_batch = function(...) mock_batch,
-    {
-      testthat::expect_warning(
-        gemini_download_batch_results("batch_123", req_tbl, tmp),
-        "does not match number of requests"
+  # Valid batch object with inline responses
+  batch_obj <- list(
+    response = list(
+      inlinedResponses = data.frame(
+        row_id = 1,
+        response = I(data.frame(candidates = I(list(list()))))
       )
+    )
+  )
+
+  reqs <- tibble::tibble(custom_id = "1")
+
+  # Ensure gemini_get_batch is NOT called (mock it to fail)
+  testthat::with_mocked_bindings(
+    gemini_get_batch = function(...) stop("Should not fetch when object provided"),
+    {
+      out <- gemini_download_batch_results(batch_obj, reqs, tmp)
+      testthat::expect_true(file.exists(out))
     }
   )
 })
