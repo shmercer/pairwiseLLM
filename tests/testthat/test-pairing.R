@@ -259,3 +259,217 @@ testthat::test_that("check_positional_bias identifies positional bias correctly"
   testthat::expect_equal(res$summary$n_inconsistent_pos2_bias, 0)
   testthat::expect_true(res$details$is_pos1_bias[1])
 })
+
+test_that("randomize_pair_order errors if required columns are missing", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  # This has ID/text, but not ID1/text1/ID2/text2
+  bad_pairs <- example_writing_samples
+
+  expect_error(
+    randomize_pair_order(bad_pairs),
+    "`pairs` must contain columns",
+    fixed = TRUE
+  )
+})
+
+test_that("randomize_pair_order preserves unordered ID pairs", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  pairs_all <- make_pairs(example_writing_samples)
+  pairs_small <- pairs_all[1:10, ]
+
+  set.seed(123)
+  pairs_rand <- randomize_pair_order(pairs_small, seed = 123)
+
+  # Same number of rows
+  expect_equal(nrow(pairs_small), nrow(pairs_rand))
+
+  # For each row, the *set* of IDs is unchanged (only order may differ)
+  for (i in seq_len(nrow(pairs_small))) {
+    orig_ids <- sort(c(pairs_small$ID1[i], pairs_small$ID2[i]))
+    rand_ids <- sort(c(pairs_rand$ID1[i], pairs_rand$ID2[i]))
+    expect_equal(orig_ids, rand_ids)
+  }
+})
+
+test_that("randomize_pair_order uses seed for reproducibility", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  pairs_all <- make_pairs(example_writing_samples)
+  pairs_small <- pairs_all[1:20, ]
+
+  out1 <- randomize_pair_order(pairs_small, seed = 999)
+  out2 <- randomize_pair_order(pairs_small, seed = 999)
+
+  expect_identical(out1, out2)
+})
+
+test_that("randomize_pair_order flips at least one pair when n > 1", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  pairs_all <- make_pairs(example_writing_samples)
+  pairs_small <- pairs_all[1:20, ]
+
+  set.seed(42)
+  pairs_rand <- randomize_pair_order(pairs_small, seed = 42)
+
+  any_flipped <- any(
+    pairs_small$ID1 != pairs_rand$ID1 |
+      pairs_small$ID2 != pairs_rand$ID2
+  )
+
+  expect_true(any_flipped)
+})
+
+test_that("randomize_pair_order keeps text consistent with IDs", {
+  data("example_writing_samples", package = "pairwiseLLM")
+
+  pairs_all <- make_pairs(example_writing_samples)
+  pairs_small <- pairs_all[1:15, ]
+
+  # Map from ID -> text to verify alignment
+  id_text <- example_writing_samples
+  # Make sure the mapping is unique
+  expect_true(!any(duplicated(id_text$ID)))
+
+  get_text <- function(id) {
+    id_text$text[match(id, id_text$ID)]
+  }
+
+  set.seed(101)
+  pairs_rand <- randomize_pair_order(pairs_small, seed = 101)
+
+  # For each row, text1/text2 in the randomized output must match
+  # the canonical text for ID1/ID2
+  for (i in seq_len(nrow(pairs_rand))) {
+    expect_identical(pairs_rand$text1[i], get_text(pairs_rand$ID1[i]))
+    expect_identical(pairs_rand$text2[i], get_text(pairs_rand$ID2[i]))
+  }
+})
+
+test_that("sample_pairs handles empty input gracefully", {
+  empty_pairs <- tibble::tibble(
+    ID1 = character(), text1 = character(),
+    ID2 = character(), text2 = character()
+  )
+
+  # Should return empty tibble immediately
+  out <- sample_pairs(empty_pairs, pair_pct = 0.5)
+  expect_s3_class(out, "tbl_df")
+  expect_equal(nrow(out), 0)
+})
+
+test_that("sample_reverse_pairs validation errors are triggered", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "T1", ID2 = "B", text2 = "T2")
+
+  # 1. Missing columns
+  bad_pairs <- tibble::tibble(ID1 = "A")
+  expect_error(
+    sample_reverse_pairs(bad_pairs),
+    "must contain columns"
+  )
+
+  # 2. Empty input returns empty immediately (covering n == 0 check)
+  empty_pairs <- pairs[0, ]
+  out <- sample_reverse_pairs(empty_pairs, reverse_pct = 0.5)
+  expect_equal(nrow(out), 0)
+  expect_equal(names(out), names(pairs))
+
+  # 3. Missing both pct and n arguments
+  expect_error(
+    sample_reverse_pairs(pairs),
+    "Provide at least one of `reverse_pct` or `n_reverse`"
+  )
+
+  # 4. Invalid n_reverse (negative or NA)
+  expect_error(
+    sample_reverse_pairs(pairs, n_reverse = -1),
+    "must be a non-negative integer"
+  )
+  expect_error(
+    sample_reverse_pairs(pairs, n_reverse = NA_integer_),
+    "must be a non-negative integer"
+  )
+
+  # 5. Invalid reverse_pct (non-numeric, NA, or wrong length)
+  expect_error(
+    sample_reverse_pairs(pairs, reverse_pct = "bad"),
+    "must be a single numeric value"
+  )
+  expect_error(
+    sample_reverse_pairs(pairs, reverse_pct = NA_real_),
+    "must be a single numeric value"
+  )
+  expect_error(
+    sample_reverse_pairs(pairs, reverse_pct = c(0.1, 0.2)),
+    "must be a single numeric value"
+  )
+})
+
+test_that("randomize_pair_order handles empty input", {
+  empty_pairs <- tibble::tibble(
+    ID1 = character(), text1 = character(),
+    ID2 = character(), text2 = character()
+  )
+  out <- randomize_pair_order(empty_pairs)
+  expect_equal(nrow(out), 0)
+})
+
+test_that("randomize_pair_order correctly restores random seed", {
+  # This tests the on.exit() block
+  set.seed(12345)
+  runif(1) # Advance RNG
+  state_before <- .Random.seed
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "T1", ID2 = "B", text2 = "T2")
+
+  # Call with a specific seed
+  randomize_pair_order(pairs, seed = 999)
+
+  state_after <- .Random.seed
+
+  # The global RNG state should be exactly as it was before the call
+  expect_identical(state_before, state_after)
+})
+
+test_that("alternate_pair_order works correctly", {
+  # 1. Validation: Missing columns
+  expect_error(
+    alternate_pair_order(tibble::tibble(ID1 = "A")),
+    "must contain columns"
+  )
+
+  # 2. Edge case: < 2 rows (returns unchanged)
+  pairs_1 <- tibble::tibble(
+    ID1 = "A", text1 = "TA", ID2 = "B", text2 = "TB"
+  )
+  expect_equal(alternate_pair_order(pairs_1), pairs_1)
+
+  # 3. Logic: Flips even rows (2, 4, etc.)
+  pairs_4 <- tibble::tibble(
+    ID1   = c("A1", "B1", "C1", "D1"),
+    text1 = c("TA1", "TB1", "TC1", "TD1"),
+    ID2   = c("A2", "B2", "C2", "D2"),
+    text2 = c("TA2", "TB2", "TC2", "TD2")
+  )
+
+  out <- alternate_pair_order(pairs_4)
+
+  # Row 1 (odd): Unchanged
+  expect_equal(out$ID1[1], "A1")
+  expect_equal(out$ID2[1], "A2")
+
+  # Row 2 (even): Swapped
+  expect_equal(out$ID1[2], "B2")  # Was ID2
+  expect_equal(out$ID2[2], "B1")  # Was ID1
+  expect_equal(out$text1[2], "TB2")
+  expect_equal(out$text2[2], "TB1")
+
+  # Row 3 (odd): Unchanged
+  expect_equal(out$ID1[3], "C1")
+
+  # Row 4 (even): Swapped
+  expect_equal(out$ID1[4], "D2")
+  expect_equal(out$ID2[4], "D1")
+})

@@ -417,3 +417,128 @@ Registered for removal {TRAIT_NAME}, {TRAIT_DESCRIPTION},
     "No registered prompt template"
   )
 })
+
+test_that("build_prompt validation errors", {
+  # Setup valid inputs for testing one failure at a time
+  valid_tmpl <- "N: {TRAIT_NAME} D: {TRAIT_DESCRIPTION} S1: {SAMPLE_1} S2: {SAMPLE_2}"
+  valid_name <- "Trait"
+  valid_desc <- "Desc"
+  valid_t1   <- "Text1"
+  valid_t2   <- "Text2"
+
+  # template: must be single character string
+  expect_error(
+    build_prompt(template = 123, valid_name, valid_desc, valid_t1, valid_t2),
+    "must be a single character string"
+  )
+  expect_error(
+    build_prompt(template = c(valid_tmpl, valid_tmpl), valid_name, valid_desc, valid_t1, valid_t2),
+    "must be a single character string"
+  )
+
+  # trait_name: must be single character string
+  expect_error(
+    build_prompt(valid_tmpl, trait_name = 123, valid_desc, valid_t1, valid_t2),
+    "must be a single character string"
+  )
+  expect_error(
+    build_prompt(valid_tmpl, trait_name = c("A", "B"), valid_desc, valid_t1, valid_t2),
+    "must be a single character string"
+  )
+
+  # trait_desc: must be single character string
+  expect_error(
+    build_prompt(valid_tmpl, valid_name, trait_desc = NULL, valid_t1, valid_t2),
+    "must be a single character string"
+  )
+
+  # text1: must be single character string
+  # CHANGED: Use 123 instead of NA_character_ to ensure is.character() returns FALSE
+  expect_error(
+    build_prompt(valid_tmpl, valid_name, valid_desc, text1 = 123, valid_t2),
+    "must be a single character string"
+  )
+
+  # text2: must be single character string
+  expect_error(
+    build_prompt(valid_tmpl, valid_name, valid_desc, valid_t1, text2 = 1:5),
+    "must be a single character string"
+  )
+})
+
+test_that("register_prompt_template validates name input", {
+  # Name must be character scalar
+  expect_error(
+    register_prompt_template(name = 123, template = "valid"),
+    "non-empty character scalar"
+  )
+  expect_error(
+    register_prompt_template(name = c("a", "b"), template = "valid"),
+    "non-empty character scalar"
+  )
+
+  # Name must be non-empty
+  expect_error(
+    register_prompt_template(name = "", template = "valid"),
+    "non-empty character scalar"
+  )
+})
+
+test_that("get_prompt_template validates name input", {
+  expect_error(
+    get_prompt_template(name = 123),
+    "non-empty character scalar"
+  )
+  expect_error(
+    get_prompt_template(name = ""),
+    "non-empty character scalar"
+  )
+  expect_error(
+    get_prompt_template(name = character(0)),
+    "non-empty character scalar"
+  )
+})
+
+test_that("remove_prompt_template validates name input", {
+  expect_error(
+    remove_prompt_template(name = 123),
+    "non-empty character scalar"
+  )
+  expect_error(
+    remove_prompt_template(name = ""),
+    "non-empty character scalar"
+  )
+})
+
+test_that("list_prompt_templates returns empty if all sources disabled", {
+  out <- list_prompt_templates(include_builtin = FALSE, include_registered = FALSE)
+  expect_type(out, "character")
+  expect_length(out, 0)
+})
+
+test_that("Internal helper .pwllm_read_builtin_template validates inputs", {
+  # Access internal function to ensure the stopifnot lines are covered
+  # (exported functions prevent these invalid inputs from reaching here otherwise)
+  f <- pairwiseLLM:::.pwllm_read_builtin_template
+
+  expect_error(f(123))
+  expect_error(f(c("a", "b")))
+  expect_error(f(""))
+
+  # Check logic when path doesn't exist (returns NULL)
+  res <- f("this_template_does_not_exist_xyz")
+  expect_null(res)
+})
+
+test_that("Internal helper .pwllm_get_builtin_template behavior", {
+  f <- pairwiseLLM:::.pwllm_get_builtin_template
+
+  # If template doesn't exist, returns NULL
+  expect_null(f("non_existent_template"))
+
+  # If template exists (assuming 'default' is shipped with the package), returns text
+  res <- f("default")
+  expect_type(res, "character")
+  expect_length(res, 1)
+  expect_true(grepl("{TRAIT_NAME}", res, fixed = TRUE))
+})

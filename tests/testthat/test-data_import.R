@@ -100,3 +100,61 @@ test_that("read_samples_dir errors when no files match pattern", {
     "No files matching pattern"
   )
 })
+
+test_that("read_samples_df handles name collisions and preserves extra cols", {
+  # Scenario: Input has columns named "ID" and "text" that are NOT the selected ID/text
+  df <- data.frame(
+    ID = c("ignore_1", "ignore_2"),
+    text = c("ignore_text1", "ignore_text2"),
+    real_id = c("S1", "S2"),
+    real_text = c("Good 1", "Good 2"),
+    Extra = c(1, 2),
+    stringsAsFactors = FALSE
+  )
+
+  # Select real_id and real_text
+  # The function should overwrite/use "ID" and "text" for the output,
+  # effectively dropping the original "ID" and "text" columns.
+  out <- read_samples_df(df, id_col = "real_id", text_col = "real_text")
+
+  expect_equal(out$ID, c("S1", "S2"))
+  expect_equal(out$text, c("Good 1", "Good 2"))
+  expect_true("Extra" %in% names(out))
+  expect_equal(out$Extra, c(1, 2))
+
+  # Ensure no duplicate columns or "ignore" data remains
+  expect_equal(names(out), c("ID", "text", "Extra"))
+})
+
+test_that("read_samples_df works with list input (via as_tibble)", {
+  # Covers the implicit coercion in df <- tibble::as_tibble(df)
+  l <- list(
+    id = c("a", "b"),
+    txt = c("A", "B"),
+    meta = c(10, 20)
+  )
+
+  out <- read_samples_df(l, id_col = "id", text_col = "txt")
+  expect_s3_class(out, "tbl_df")
+  expect_equal(out$ID, c("a", "b"))
+  expect_equal(out$text, c("A", "B"))
+  expect_equal(out$meta, c(10, 20))
+})
+
+test_that("read_samples_dir detects duplicate IDs from filenames", {
+  tmp <- tempfile("pairwiseLLM-test-dup-")
+  dir.create(tmp)
+  on.exit(unlink(tmp, recursive = TRUE))
+
+  # Create two files that map to the same ID "sample"
+  # "sample.txt" -> ID "sample"
+  # "sample.log" -> ID "sample"
+  writeLines("content 1", file.path(tmp, "sample.txt"))
+  writeLines("content 2", file.path(tmp, "sample.log"))
+
+  # Use a pattern that matches both files
+  expect_error(
+    read_samples_dir(path = tmp, pattern = "sample\\.(txt|log)$"),
+    "Duplicate IDs detected from filenames"
+  )
+})
