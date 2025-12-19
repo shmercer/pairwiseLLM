@@ -233,7 +233,7 @@ multi_job <- llm_submit_pairs_multi_batch(
   trait_description = td$description,
   prompt_template   = tmpl,
   n_segments        = 10,
-  output_dir        = "dev-output/myjob",
+  output_dir        = "directory_name/",
   write_registry    = TRUE,
   include_thoughts  = TRUE
 )
@@ -250,9 +250,9 @@ res <- llm_resume_multi_batches(
 head(res$combined)
 ```
 
-The registry CSV lives in `dev-output/myjob/jobs_registry.csv` and
-contains all batch IDs and file paths, allowing you to resume polling
-even if the R session is interrupted.
+The registry CSV contains all batch IDs and file paths, allowing you to
+resume polling with `llm_resume_multi_batches()` even if the R session
+is interrupted.
 
 ------------------------------------------------------------------------
 

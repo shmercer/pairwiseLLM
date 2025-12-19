@@ -301,7 +301,7 @@ multi_job <- llm_submit_pairs_multi_batch(
 )
 
 # Poll and merge results.  Combined results are written to
-# "myjob/combined_results.csv" by default.
+# "myjob/combined_results.csv" or the directory you specify.
 res <- llm_resume_multi_batches(
   jobs               = multi_job$jobs,
   interval_seconds   = 30,
