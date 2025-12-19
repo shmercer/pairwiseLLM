@@ -1,8 +1,6 @@
-library(testthat)
 library(tibble)
 
 test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes registry", {
-  skip_on_cran()
   # Prepare a small set of pairs
   pairs <- tibble::tibble(
     ID1 = c("A", "B", "C", "D"),
@@ -25,9 +23,9 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes regist
   }
   # Use the same fake pipeline for all providers in this test
   with_mocked_bindings(
-    run_openai_batch_pipeline = fake_pipeline_openai,
-    run_anthropic_batch_pipeline = fake_pipeline_openai,
-    run_gemini_batch_pipeline = fake_pipeline_openai,
+    run_openai_batch_pipeline     = fake_pipeline_openai,
+    run_anthropic_batch_pipeline  = fake_pipeline_openai,
+    run_gemini_batch_pipeline     = fake_pipeline_openai,
     {
       res <- llm_submit_pairs_multi_batch(
         pairs             = pairs,
@@ -57,7 +55,6 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes regist
 # Additional validation tests ---------------------------------------------------
 
 test_that("llm_submit_pairs_multi_batch validates batch_size and n_segments inputs", {
-  skip_on_cran()
   pairs <- tibble::tibble(
     ID1 = c("A", "B"),
     text1 = c("a", "b"),
@@ -77,9 +74,9 @@ test_that("llm_submit_pairs_multi_batch validates batch_size and n_segments inpu
     )
   }
   with_mocked_bindings(
-    run_openai_batch_pipeline = fake_pipeline,
+    run_openai_batch_pipeline    = fake_pipeline,
     run_anthropic_batch_pipeline = fake_pipeline,
-    run_gemini_batch_pipeline = fake_pipeline,
+    run_gemini_batch_pipeline    = fake_pipeline,
     {
       # Error when both batch_size and n_segments are supplied
       expect_error(
@@ -133,11 +130,10 @@ test_that("llm_submit_pairs_multi_batch validates batch_size and n_segments inpu
 })
 
 test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON files", {
-  skip_on_cran()
   # Create a dummy job list for OpenAI
-  input_path <- tempfile(fileext = ".jsonl")
+  input_path  <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
-  csv_path <- tempfile(fileext = ".csv")
+  csv_path    <- tempfile(fileext = ".csv")
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "openai",
@@ -189,11 +185,10 @@ test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON fil
 })
 
 test_that("llm_resume_multi_batches processes Anthropic jobs and writes results CSV", {
-  skip_on_cran()
   # Create a dummy job list for Anthropic
-  input_path <- tempfile(fileext = ".jsonl")
+  input_path  <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
-  csv_path <- tempfile(fileext = ".csv")
+  csv_path    <- tempfile(fileext = ".csv")
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "anthropic",
@@ -242,13 +237,12 @@ test_that("llm_resume_multi_batches processes Anthropic jobs and writes results 
 })
 
 test_that("llm_resume_multi_batches processes Gemini jobs and reconstructs requests", {
-  skip_on_cran()
   # Create a temporary directory for batch files
   tmpdir <- tempfile("gemini_multi_batch_test_")
   dir.create(tmpdir, recursive = TRUE)
-  input_path <- file.path(tmpdir, "batch_01_input.jsonl")
+  input_path  <- file.path(tmpdir, "batch_01_input.jsonl")
   output_path <- file.path(tmpdir, "batch_01_output.jsonl")
-  csv_path <- file.path(tmpdir, "batch_01_results.csv")
+  csv_path    <- file.path(tmpdir, "batch_01_results.csv")
   # Prepare input JSON with a requests list
   req_payload <- list(
     requests = list(
@@ -314,7 +308,6 @@ test_that("llm_resume_multi_batches processes Gemini jobs and reconstructs reque
 })
 
 test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL", {
-  skip_on_cran()
   # Construct a jobs tibble and write registry
   tmpdir <- tempfile("multi_batch_registry_")
   dir.create(tmpdir, recursive = TRUE)
@@ -338,9 +331,9 @@ test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL",
     parse_openai_batch_output = function(path) {
       tibble::tibble(
         custom_id = "c1",
-        ID1 = "A",
-        ID2 = "B",
-        result_type = "succeeded",
+        ID1       = "A",
+        ID2       = "B",
+        result_type   = "succeeded",
         error_message = NA_character_
       )
     },
@@ -362,9 +355,8 @@ test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL",
 })
 
 test_that("llm_resume_multi_batches writes combined results CSV when requested", {
-  skip_on_cran()
   # Prepare a dummy job list with a single OpenAI job that immediately completes
-  input_path <- tempfile(fileext = ".jsonl")
+  input_path  <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   jobs <- list(list(
     segment_index     = 1L,
@@ -423,8 +415,350 @@ test_that("llm_resume_multi_batches writes combined results CSV when requested",
   )
 })
 
+# Additional tests to improve coverage of retry logic and file handling
+
+test_that("openai batch submission retries on 5xx errors and eventually succeeds", {
+  # Prepare minimal pairs for a single segment
+  pairs <- tibble::tibble(
+    ID1 = "X", text1 = "x", ID2 = "Y", text2 = "y"
+  )
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  out_dir <- tempfile("openai_retry_success_")
+  # Create a stub that fails once with a 500 error, then succeeds
+  attempt_counter <- 0L
+  fake_pipeline <- function(..., poll) {
+    attempt_counter <<- attempt_counter + 1L
+    if (attempt_counter == 1L) {
+      # simulate an httr2 500 error
+      err <- structure(list(message = "Internal Server Error"), class = c("httr2_http_500", "error", "condition"))
+      stop(err)
+    }
+    list(
+      batch_input_path  = list(...)[["batch_input_path"]],
+      batch_output_path = list(...)[["batch_output_path"]],
+      file              = NULL,
+      batch             = list(id = "openai-retry-success"),
+      results           = NULL
+    )
+  }
+  with_mocked_bindings(
+    run_openai_batch_pipeline     = fake_pipeline,
+    run_anthropic_batch_pipeline  = fake_pipeline,
+    run_gemini_batch_pipeline     = fake_pipeline,
+    {
+      res <- llm_submit_pairs_multi_batch(
+        pairs             = pairs,
+        model             = "fake-model",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "openai",
+        n_segments        = 1L,
+        output_dir        = out_dir,
+        write_registry    = FALSE,
+        verbose           = FALSE,
+        openai_max_retries = 2L
+      )
+      # Should have succeeded on the second attempt
+      expect_equal(length(res$jobs), 1L)
+      expect_identical(res$jobs[[1]]$batch_id, "openai-retry-success")
+    }
+  )
+})
+
+test_that("openai batch submission fails after maximum retries", {
+  # Minimal pairs
+  pairs <- tibble::tibble(
+    ID1 = "X", text1 = "x", ID2 = "Y", text2 = "y"
+  )
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  out_dir <- tempfile("openai_retry_fail_")
+  # Stub always throwing 5xx error
+  always_fail <- function(..., poll) {
+    err <- structure(list(message = "Internal Server Error"), class = c("httr2_http_500", "error", "condition"))
+    stop(err)
+  }
+  with_mocked_bindings(
+    run_openai_batch_pipeline    = always_fail,
+    run_anthropic_batch_pipeline = always_fail,
+    run_gemini_batch_pipeline    = always_fail,
+    {
+      expect_error(
+        llm_submit_pairs_multi_batch(
+          pairs             = pairs,
+          model             = "fake-model",
+          trait_name        = td$name,
+          trait_description = td$description,
+          prompt_template   = tmpl,
+          backend           = "openai",
+          n_segments        = 1L,
+          output_dir        = out_dir,
+          openai_max_retries = 2L,
+          verbose           = FALSE
+        ),
+        "Failed to create OpenAI batch"
+      )
+    }
+  )
+})
+
+test_that("openai download retries on 5xx errors and succeeds", {
+  # Setup job list for a single openai batch
+  input_path  <- tempfile(fileext = ".jsonl")
+  output_path <- tempfile(fileext = ".jsonl")
+  csv_path    <- tempfile(fileext = ".csv")
+  jobs <- list(list(
+    segment_index     = 1L,
+    provider          = "openai",
+    model             = "fake-model",
+    batch_id          = "openai-download-retry",
+    batch_input_path  = input_path,
+    batch_output_path = output_path,
+    csv_path          = csv_path,
+    done              = FALSE,
+    results           = NULL
+  ))
+  # Create dummy input JSONL file
+  writeLines("{}", con = input_path)
+  # Stub batch status and download with one failure then success
+  download_attempt <- 0L
+  with_mocked_bindings(
+    openai_get_batch = function(id) list(status = "completed"),
+    openai_download_batch_output = function(batch_id, path) {
+      download_attempt <<- download_attempt + 1L
+      if (download_attempt == 1L) {
+        err <- structure(list(message = "Download failed"), class = c("httr2_http_500", "error", "condition"))
+        stop(err)
+      } else {
+        writeLines('[{"custom_id":"x","ID1":"A","ID2":"B"}]', path)
+      }
+      invisible(NULL)
+    },
+    parse_openai_batch_output = function(path) {
+      tibble::tibble(
+        custom_id = "x",
+        ID1 = "A",
+        ID2 = "B",
+        result_type   = "succeeded",
+        error_message = NA_character_
+      )
+    },
+    {
+      res <- llm_resume_multi_batches(
+        jobs              = jobs,
+        interval_seconds  = 0,
+        per_job_delay     = 0,
+        write_results_csv = FALSE,
+        keep_jsonl        = FALSE,
+        verbose           = FALSE,
+        openai_max_retries = 2L
+      )
+      # Should be marked done and results captured
+      expect_true(res$jobs[[1]]$done)
+      expect_equal(nrow(res$combined), 1L)
+      expect_identical(res$combined$custom_id[1], "x")
+      # Input and output JSONL files should be deleted due to keep_jsonl=FALSE
+      expect_false(file.exists(input_path))
+      expect_false(file.exists(output_path))
+    }
+  )
+})
+
+test_that("llm_resume_multi_batches writes combined results CSV to absolute path", {
+  # Prepare a dummy openai job
+  input_path  <- tempfile(fileext = ".jsonl")
+  output_path <- tempfile(fileext = ".jsonl")
+  csv_path    <- tempfile(fileext = ".csv")
+  jobs <- list(list(
+    segment_index     = 1L,
+    provider          = "openai",
+    model             = "fake-model",
+    batch_id          = "openai-combined",
+    batch_input_path  = input_path,
+    batch_output_path = output_path,
+    csv_path          = csv_path,
+    done              = FALSE,
+    results           = NULL
+  ))
+  writeLines("{}", con = input_path)
+  # Create a temporary directory and subdirectory for combined output
+  tmp <- tempfile("combined_abs_dir_")
+  dir.create(tmp, recursive = TRUE)
+  subdir <- file.path(tmp, "sub")
+  dir.create(subdir, recursive = TRUE)
+  abs_path <- file.path(subdir, "combined.csv")
+  # Stub functions
+  with_mocked_bindings(
+    openai_get_batch = function(id) list(status = "completed"),
+    openai_download_batch_output = function(batch_id, path) {
+      writeLines('[{"custom_id":"x","ID1":"A","ID2":"B"}]', path)
+      invisible(NULL)
+    },
+    parse_openai_batch_output = function(path) {
+      tibble::tibble(
+        custom_id = "x",
+        ID1 = "A",
+        ID2 = "B",
+        result_type = "succeeded",
+        error_message = NA_character_
+      )
+    },
+    {
+      res <- llm_resume_multi_batches(
+        jobs               = jobs,
+        output_dir         = tmp,
+        interval_seconds   = 0,
+        per_job_delay      = 0,
+        write_results_csv  = FALSE,
+        keep_jsonl         = TRUE,
+        verbose            = FALSE,
+        write_combined_csv = TRUE,
+        combined_csv_path  = abs_path
+      )
+      # Combined CSV should exist at the absolute path
+      expect_true(file.exists(abs_path))
+      # Combined tibble should be returned
+      expect_equal(nrow(res$combined), 1L)
+    }
+  )
+})
+
+test_that("llm_resume_multi_batches updates registry when write_registry=TRUE", {
+  # Create initial registry and jobs list
+  tmpdir <- tempfile("registry_update_")
+  dir.create(tmpdir, recursive = TRUE)
+  pairs <- tibble::tibble(
+    ID1 = "p", text1 = "a", ID2 = "q", text2 = "b"
+  )
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  # Create single job via submit (fake pipeline to avoid network)
+  fake_pipeline <- function(..., poll) {
+    list(
+      batch_input_path  = list(...)[["batch_input_path"]],
+      batch_output_path = list(...)[["batch_output_path"]],
+      file              = NULL,
+      batch             = list(id = "openai-registry-update"),
+      results           = NULL
+    )
+  }
+  with_mocked_bindings(
+    run_openai_batch_pipeline     = fake_pipeline,
+    run_anthropic_batch_pipeline  = fake_pipeline,
+    run_gemini_batch_pipeline     = fake_pipeline,
+    {
+      sub_res <- llm_submit_pairs_multi_batch(
+        pairs             = pairs,
+        model             = "fake",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "openai",
+        n_segments        = 1L,
+        output_dir        = tmpdir,
+        write_registry    = TRUE,
+        verbose           = FALSE
+      )
+    }
+  )
+  # Now stub OpenAI functions for resume
+  with_mocked_bindings(
+    openai_get_batch = function(id) list(status = "completed"),
+    openai_download_batch_output = function(batch_id, path) {
+      writeLines('[{"custom_id":"z","ID1":"1","ID2":"2"}]', path)
+      invisible(NULL)
+    },
+    parse_openai_batch_output = function(path) {
+      tibble::tibble(
+        custom_id = "z",
+        ID1 = "1",
+        ID2 = "2",
+        result_type = "succeeded",
+        error_message = NA_character_
+      )
+    },
+    {
+      res <- llm_resume_multi_batches(
+        jobs              = NULL,
+        output_dir        = tmpdir,
+        interval_seconds  = 0,
+        per_job_delay     = 0,
+        write_results_csv = FALSE,
+        keep_jsonl        = TRUE,
+        write_registry    = TRUE,
+        verbose           = FALSE
+      )
+      # After resume, registry should reflect done = TRUE
+      reg_path <- file.path(tmpdir, "jobs_registry.csv")
+      tbl <- suppressMessages(readr::read_csv(reg_path))
+      expect_true(all(tbl$done))
+      # Combined results should have one row
+      expect_equal(nrow(res$combined), 1L)
+      # Jobs list should be updated
+      expect_true(res$jobs[[1]]$done)
+    }
+  )
+})
+
+test_that("custom tag_prefix and tag_suffix are forwarded to parse_anthropic_batch_output", {
+  # Prepare an anthropic job
+  input_path  <- tempfile(fileext = ".jsonl")
+  output_path <- tempfile(fileext = ".jsonl")
+  csv_path    <- tempfile(fileext = ".csv")
+  jobs <- list(list(
+    segment_index     = 1L,
+    provider          = "anthropic",
+    model             = "fake",
+    batch_id          = "anthropic-tag-test",
+    batch_input_path  = input_path,
+    batch_output_path = output_path,
+    csv_path          = csv_path,
+    done              = FALSE,
+    results           = NULL
+  ))
+  writeLines("{}", con = input_path)
+  # Capture the tags passed into parse
+  captured_args <- list()
+  with_mocked_bindings(
+    anthropic_get_batch = function(id) list(processing_status = "ended"),
+    anthropic_download_batch_results = function(batch_id, output_path) {
+      writeLines('[{"custom_id":"c","ID1":"i","ID2":"j"}]', output_path)
+      return(output_path)
+    },
+    parse_anthropic_batch_output = function(jsonl_path, tag_prefix, tag_suffix) {
+      captured_args$prefix <<- tag_prefix
+      captured_args$suffix <<- tag_suffix
+      tibble::tibble(
+        custom_id = "c",
+        ID1 = "i",
+        ID2 = "j",
+        result_type = "succeeded",
+        error_message = NA_character_
+      )
+    },
+    {
+      res <- llm_resume_multi_batches(
+        jobs              = jobs,
+        interval_seconds  = 0,
+        per_job_delay     = 0,
+        write_results_csv = FALSE,
+        keep_jsonl        = TRUE,
+        tag_prefix        = "<<",
+        tag_suffix        = ">>",
+        verbose           = FALSE
+      )
+      # Ensure the custom tags were forwarded
+      expect_identical(captured_args$prefix, "<<")
+      expect_identical(captured_args$suffix, ">>")
+      expect_true(res$jobs[[1]]$done)
+      expect_equal(nrow(res$combined), 1L)
+    }
+  )
+})
+
 test_that("llm_resume_multi_batches validates inputs when jobs and output_dir missing", {
-  skip_on_cran()
   # Expect error if both jobs and output_dir are NULL
   expect_error(
     llm_resume_multi_batches(
