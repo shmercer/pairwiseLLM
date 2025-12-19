@@ -661,7 +661,7 @@ jobs <- purrr::pmap(batch_grid, function(provider, model, thinking, direction) {
     trait_description  = td$description,
     prompt_template    = tmpl,
     n_segments         = 1,
-    output_dir         = out_dir,
+    output_dir         = "output",
     write_registry     = TRUE,
     include_thoughts   = (thinking == "with_thinking")
   )$jobs[[1]]
@@ -683,9 +683,9 @@ results <- llm_resume_multi_batches(
 This single call performs all polling, downloading, and parsing, writing
 per‑batch CSVs as well as a merged results CSV. If your session is
 interrupted, simply reload the registry CSV from the output directory
-and call
-[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
-again.
+(set the `output_dir` argument to the path of the folder containing the
+registry CSV) in the call to
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md).
 
 ## 9. Next Steps
 
