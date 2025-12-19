@@ -1,5 +1,22 @@
 # Changelog
 
+## pairwiseLLM 1.2.0
+
+### New features
+
+- Introduced
+  [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
+  and
+  [`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
+  to split large comparison sets across multiple batches and resume
+  polling later. These helpers support writing per‑batch and combined
+  results, along with an optional jobs registry.
+
+### Testing
+
+Added additional unit tests covering multi‑batch submission/resumption,
+retry logic, registry updates, custom tag forwarding and file handling.
+
 ## pairwiseLLM 1.1.0
 
 ### Models

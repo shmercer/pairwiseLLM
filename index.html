@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -326,12 +326,66 @@
 <hr>
 </div>
 <div class="section level2">
+<h2 id="multibatch-jobs">Multi‑Batch Jobs<a class="anchor" aria-label="anchor" href="#multibatch-jobs"></a>
+</h2>
+<p>For very large jobs or when you need to restart polling after an interruption, <strong>pairwiseLLM</strong> provides two convenience helpers that wrap the low–level batch APIs:</p>
+<ul>
+<li>
+<code><a href="reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code> — divides a table of pairwise comparisons into multiple batch jobs, uploads the input JSONL files, creates the batches, and optionally writes a <strong>registry</strong> CSV containing all batch IDs and file paths. You can split by specifying either <code>n_segments</code> (number of jobs) or <code>batch_size</code> (maximum number of pairs per job).</li>
+<li>
+<code><a href="reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code> — polls all unfinished batches, downloads and parses the results as soon as each job completes, and optionally writes per‑job result CSVs and a single <strong>combined</strong> CSV with the merged results.</li>
+</ul>
+<p>Use these helpers when your dataset is large or if you anticipate having to pause and resume the job.</p>
+<div class="section level3">
+<h3 id="example-splitting-and-resuming">Example: splitting and resuming<a class="anchor" aria-label="anchor" href="#example-splitting-and-resuming"></a>
+</h3>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># construct 100 pairs and a trait description</span></span>
+<span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span>n_pairs <span class="op">=</span> <span class="fl">100</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span>seed <span class="op">=</span> <span class="fl">456</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># 1. Submit the pairs as 10 separate batches and write a registry CSV to disk.</span></span>
+<span><span class="va">multi_job</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch</a></span><span class="op">(</span></span>
+<span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span>
+<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>,</span>
+<span>  model             <span class="op">=</span> <span class="st">"gpt-5.2"</span>,</span>
+<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>  n_segments        <span class="op">=</span> <span class="fl">10</span>,</span>
+<span>  output_dir        <span class="op">=</span> <span class="st">"dev-output/myjob"</span>,</span>
+<span>  write_registry    <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  include_thoughts  <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># 2. Later (or in a new session), resume polling and download results.</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_resume_multi_batches.html">llm_resume_multi_batches</a></span><span class="op">(</span></span>
+<span>  jobs               <span class="op">=</span> <span class="va">multi_job</span><span class="op">$</span><span class="va">jobs</span>,</span>
+<span>  interval_seconds   <span class="op">=</span> <span class="fl">60</span>,</span>
+<span>  write_results_csv  <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  write_combined_csv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  keep_jsonl         <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">combined</span><span class="op">)</span></span></code></pre></div>
+<p>The registry CSV lives in <code>dev-output/myjob/jobs_registry.csv</code> and contains all batch IDs and file paths, allowing you to resume polling even if the R session is interrupted.</p>
+<hr>
+</div>
+</div>
+<div class="section level2">
 <h2 id="api-keys">API Keys<a class="anchor" aria-label="anchor" href="#api-keys"></a>
 </h2>
 <p><code>pairwiseLLM</code> reads keys <strong>only from environment variables</strong>.<br>
 Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <strong>never written</strong> to disk.</p>
 <p>You can verify which providers are available using:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>This returns a tibble showing whether R can see the required keys for:</p>
 <ul>
@@ -346,7 +400,7 @@ Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <str
 <h3 id="setting-api-keys">Setting API Keys<a class="anchor" aria-label="anchor" href="#setting-api-keys"></a>
 </h3>
 <p>You may set keys <strong>temporarily</strong> for the current R session:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>ANTHROPIC_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>GEMINI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
@@ -359,16 +413,16 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <a class="anchor" aria-label="anchor" href="#recommended-method-adding-keys-to-renviron"></a>
 </h3>
 <p>Open your <code>.Renviron</code> file:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">usethis</span><span class="fu">::</span><span class="fu">edit_r_environ</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Add the following lines:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>OPENAI_API_KEY<span class="ot">=</span><span class="st">"your-openai-key"</span></span>
-<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>ANTHROPIC_API_KEY<span class="ot">=</span><span class="st">"your-anthropic-key"</span></span>
-<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>GEMINI_API_KEY<span class="ot">=</span><span class="st">"your-gemini-key"</span></span>
-<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>TOGETHER_API_KEY<span class="ot">=</span><span class="st">"your-together-key"</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>OPENAI_API_KEY<span class="ot">=</span><span class="st">"your-openai-key"</span></span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>ANTHROPIC_API_KEY<span class="ot">=</span><span class="st">"your-anthropic-key"</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>GEMINI_API_KEY<span class="ot">=</span><span class="st">"your-gemini-key"</span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>TOGETHER_API_KEY<span class="ot">=</span><span class="st">"your-together-key"</span></span></code></pre></div>
 <p>Save the file, then restart R.</p>
 <p>You can confirm that R now sees the keys:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -388,14 +442,14 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="view-available-templates">View available templates<a class="anchor" aria-label="anchor" href="#view-available-templates"></a>
 </h3>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/list_prompt_templates.html">list_prompt_templates</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "default" "test1"   "test2"   "test3"   "test4"   "test5"</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="show-the-default-template-truncated">Show the default template (truncated)<a class="anchor" aria-label="anchor" href="#show-the-default-template-truncated"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"...\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
@@ -418,7 +472,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="register-your-own-template">Register your own template<a class="anchor" aria-label="anchor" href="#register-your-own-template"></a>
 </h3>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/register_prompt_template.html">register_prompt_template</a></span><span class="op">(</span><span class="st">"my_template"</span>, <span class="st">"</span></span>
 <span><span class="st">Compare two essays for {TRAIT_NAME}…</span></span>
 <span><span class="st"></span></span>
@@ -434,7 +488,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="st">&lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt;</span></span>
 <span><span class="st">"</span><span class="op">)</span></span></code></pre></div>
 <p>Use it in a submission:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"my_template"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -443,7 +497,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <h2 id="trait-descriptions">Trait Descriptions<a class="anchor" aria-label="anchor" href="#trait-descriptions"></a>
 </h2>
 <p>Traits define what “quality” means.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $name</span></span>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span>
@@ -451,7 +505,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="co">#&gt; $description</span></span>
 <span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre></div>
 <p>You can also provide custom traits:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span></span>
 <span>  custom_name        <span class="op">=</span> <span class="st">"Clarity"</span>,</span>
 <span>  custom_description <span class="op">=</span> <span class="st">"How understandable, coherent, and well structured the ideas are."</span></span>
@@ -465,15 +519,15 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="typical-workflow">Typical workflow<a class="anchor" aria-label="anchor" href="#typical-workflow"></a>
 </h3>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">)</span></span>
 <span><span class="va">pairs_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sample_reverse_pairs.html">sample_reverse_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, reverse_pct <span class="op">=</span> <span class="fl">1.0</span><span class="op">)</span></span></code></pre></div>
 <p>Submit:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span>
 <span><span class="va">res_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_rev</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
 <p>Compute bias:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cons</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compute_reverse_consistency.html">compute_reverse_consistency</a></span><span class="op">(</span><span class="va">res_fwd</span>, <span class="va">res_rev</span><span class="op">)</span></span>
 <span><span class="va">bias</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/check_positional_bias.html">check_positional_bias</a></span><span class="op">(</span><span class="va">cons</span><span class="op">)</span></span>
 <span></span>
@@ -493,7 +547,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="bradleyterry-bt">Bradley–Terry (BT)<a class="anchor" aria-label="anchor" href="#bradleyterry-bt"></a>
 </h3>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
 <span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
@@ -501,7 +555,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level3">
 <h3 id="elo-modeling">Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
 </h3>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res: output from submit_llm_pairs() / llm_submit_pairs_batch()</span></span>
 <span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
 <span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
@@ -571,7 +625,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <ol style="list-style-type: decimal">
 <li>
 <p>Run:</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">session_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </li>
 <li>

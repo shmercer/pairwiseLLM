@@ -184,6 +184,72 @@ results <- llm_download_batch_results(batch)
 
 ------------------------------------------------------------------------
 
+## Multi‑Batch Jobs
+
+For very large jobs or when you need to restart polling after an
+interruption, **pairwiseLLM** provides two convenience helpers that wrap
+the low–level batch APIs:
+
+- [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
+  — divides a table of pairwise comparisons into multiple batch jobs,
+  uploads the input JSONL files, creates the batches, and optionally
+  writes a **registry** CSV containing all batch IDs and file paths. You
+  can split by specifying either `n_segments` (number of jobs) or
+  `batch_size` (maximum number of pairs per job).
+- [`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
+  — polls all unfinished batches, downloads and parses the results as
+  soon as each job completes, and optionally writes per‑job result CSVs
+  and a single **combined** CSV with the merged results.
+
+Use these helpers when your dataset is large or if you anticipate having
+to pause and resume the job.
+
+### Example: splitting and resuming
+
+``` r
+data("example_writing_samples", package = "pairwiseLLM")
+
+# construct 100 pairs and a trait description
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 100, seed = 123) |>
+  randomize_pair_order(seed = 456)
+
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# 1. Submit the pairs as 10 separate batches and write a registry CSV to disk.
+multi_job <- llm_submit_pairs_multi_batch(
+  pairs             = pairs,
+  backend           = "openai",
+  model             = "gpt-5.2",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  n_segments        = 10,
+  output_dir        = "dev-output/myjob",
+  write_registry    = TRUE,
+  include_thoughts  = TRUE
+)
+
+# 2. Later (or in a new session), resume polling and download results.
+res <- llm_resume_multi_batches(
+  jobs               = multi_job$jobs,
+  interval_seconds   = 60,
+  write_results_csv  = TRUE,
+  write_combined_csv = TRUE,
+  keep_jsonl         = FALSE
+)
+
+head(res$combined)
+```
+
+The registry CSV lives in `dev-output/myjob/jobs_registry.csv` and
+contains all batch IDs and file paths, allowing you to resume polling
+even if the R session is interrupted.
+
+------------------------------------------------------------------------
+
 ## API Keys
 
 `pairwiseLLM` reads keys **only from environment variables**.  

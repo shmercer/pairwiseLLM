@@ -637,7 +637,57 @@ if (length(unfinished) > 0L) {
 }
 ```
 
-## 8. Next Steps
+## 8. Advanced: Simplified Multi‑Batch Workflow
+
+When running multiple combinations of providers, models, templates, and
+“thinking” settings, you no longer need to manually build loops to
+create and poll batches. The multi‑batch helpers can encapsulate this
+entire process.
+
+Below, `batch_grid` is a tibble containing one row per combination of
+provider/model/thinking/direction; `tmpl` is a prompt template; and `td`
+is a trait description. For each combination we submit a single batch
+job (or split further using `n_segments`) and record its metadata:
+
+``` r
+
+jobs <- purrr::pmap(batch_grid, function(provider, model, thinking, direction) {
+  pairs_use <- get_pairs_for_direction(direction)
+  llm_submit_pairs_multi_batch(
+    pairs              = pairs_use,
+    backend            = provider,
+    model              = model,
+    trait_name         = td$name,
+    trait_description  = td$description,
+    prompt_template    = tmpl,
+    n_segments         = 1,
+    output_dir         = out_dir,
+    write_registry     = TRUE,
+    include_thoughts   = (thinking == "with_thinking")
+  )$jobs[[1]]
+})
+```
+
+Once all jobs are submitted, poll all providers and download results:
+
+``` r
+results <- llm_resume_multi_batches(
+  jobs               = jobs,
+  interval_seconds   = 60,
+  write_results_csv  = TRUE,
+  write_combined_csv = TRUE
+)
+}
+```
+
+This single call performs all polling, downloading, and parsing, writing
+per‑batch CSVs as well as a merged results CSV. If your session is
+interrupted, simply reload the registry CSV from the output directory
+and call
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
+again.
+
+## 9. Next Steps
 
 Once you have per-job results CSVs (e.g., one per template × model ×
 thinking × direction), you can:
@@ -655,7 +705,7 @@ thinking × direction), you can:
   [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md)
   (when `EloChoice` is installed)
 
-## 9. Citation
+## 10. Citation
 
 > Mercer, S. (2025). *Advanced: Submitting and Polling Multiple Batches*
 > (Version 1.0.0) \[R package vignette\]. In *pairwiseLLM: Pairwise

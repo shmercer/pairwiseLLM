@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -353,6 +353,48 @@ Together, and Ollama.</strong></p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res_batch</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="multibatch-jobs">10.3 Multi‑Batch Jobs<a class="anchor" aria-label="anchor" href="#multibatch-jobs"></a>
+</h3>
+<p>In addition to the standard batch helpers, you can split a large job
+into multiple segments using <code><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code>
+and then poll all of them with <code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code>.
+This is particularly useful when you have many pairs or want to ensure
+that you can resume if the session ends.</p>
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Generate a small set of pairs</span></span>
+<span><span class="va">pairs_small</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span>n_pairs <span class="op">=</span> <span class="fl">10</span>, seed <span class="op">=</span> <span class="fl">4321</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span>seed <span class="op">=</span> <span class="fl">8765</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Split into two batches and include reasoning/chain-of-thought</span></span>
+<span><span class="va">multi_job</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch</a></span><span class="op">(</span></span>
+<span>  pairs             <span class="op">=</span> <span class="va">pairs_small</span>,</span>
+<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>,</span>
+<span>  model             <span class="op">=</span> <span class="st">"gpt-5.1"</span>,</span>
+<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>  n_segments        <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>  output_dir        <span class="op">=</span> <span class="st">"myjob"</span>,</span>
+<span>  write_registry    <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  include_thoughts  <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Poll and merge results.  Combined results are written to</span></span>
+<span><span class="co"># "myjob/combined_results.csv" by default.</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches</a></span><span class="op">(</span></span>
+<span>  jobs               <span class="op">=</span> <span class="va">multi_job</span><span class="op">$</span><span class="va">jobs</span>,</span>
+<span>  interval_seconds   <span class="op">=</span> <span class="fl">30</span>,</span>
+<span>  write_combined_csv <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">combined</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -415,7 +457,7 @@ available.</p>
 <div class="section level4">
 <h4 id="missing-api-keys">Missing API keys<a class="anchor" aria-label="anchor" href="#missing-api-keys"></a>
 </h4>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; No LLM API keys are currently set for known backends:</span></span>
 <span><span class="co">#&gt;   - OpenAI:         OPENAI_API_KEY</span></span>
@@ -445,7 +487,9 @@ available.</p>
 <div class="section level4">
 <h4 id="timeouts">Timeouts<a class="anchor" aria-label="anchor" href="#timeouts"></a>
 </h4>
-<p>Use batch APIs for &gt;40 pairs.</p>
+<p>Use batch APIs for &gt;40 pairs. Split a large job into multiple
+segments using <code><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code> and then p
+all all of them with <code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code></p>
 </div>
 <div class="section level4">
 <h4 id="positional-bias">Positional bias<a class="anchor" aria-label="anchor" href="#positional-bias"></a>

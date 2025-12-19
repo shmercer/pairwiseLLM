@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -698,7 +698,50 @@ safely recover and continue.</p>
 <span><span class="op">}</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="next-steps">8. Next Steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
+<h2 id="advanced-simplified-multibatch-workflow">8. Advanced: Simplified Multi‑Batch Workflow<a class="anchor" aria-label="anchor" href="#advanced-simplified-multibatch-workflow"></a>
+</h2>
+<p>When running multiple combinations of providers, models, templates,
+and “thinking” settings, you no longer need to manually build loops to
+create and poll batches. The multi‑batch helpers can encapsulate this
+entire process.</p>
+<p>Below, <code>batch_grid</code> is a tibble containing one row per
+combination of provider/model/thinking/direction; <code>tmpl</code> is a
+prompt template; and <code>td</code> is a trait description. For each
+combination we submit a single batch job (or split further using
+<code>n_segments</code>) and record its metadata:</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span></span>
+<span><span class="va">jobs</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/pmap.html" class="external-link">pmap</a></span><span class="op">(</span><span class="va">batch_grid</span>, <span class="kw">function</span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">pairs_use</span> <span class="op">&lt;-</span> <span class="fu">get_pairs_for_direction</span><span class="op">(</span><span class="va">direction</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch</a></span><span class="op">(</span></span>
+<span>    pairs              <span class="op">=</span> <span class="va">pairs_use</span>,</span>
+<span>    backend            <span class="op">=</span> <span class="va">provider</span>,</span>
+<span>    model              <span class="op">=</span> <span class="va">model</span>,</span>
+<span>    trait_name         <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>    trait_description  <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>    prompt_template    <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>    n_segments         <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>    output_dir         <span class="op">=</span> <span class="va">out_dir</span>,</span>
+<span>    write_registry     <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    include_thoughts   <span class="op">=</span> <span class="op">(</span><span class="va">thinking</span> <span class="op">==</span> <span class="st">"with_thinking"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span><span class="op">$</span><span class="va">jobs</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<p>Once all jobs are submitted, poll all providers and download
+results:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>results <span class="ot">&lt;-</span> <span class="fu">llm_resume_multi_batches</span>(</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="at">jobs               =</span> jobs,</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">interval_seconds   =</span> <span class="dv">60</span>,</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">write_results_csv  =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">write_combined_csv =</span> <span class="cn">TRUE</span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>)</span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="er">}</span></span></code></pre></div>
+<p>This single call performs all polling, downloading, and parsing,
+writing per‑batch CSVs as well as a merged results CSV. If your session
+is interrupted, simply reload the registry CSV from the output directory
+and call <code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code> again.</p>
+</div>
+<div class="section level2">
+<h2 id="next-steps">9. Next Steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
 </h2>
 <p>Once you have per-job results CSVs (e.g., one per template × model ×
 thinking × direction), you can:</p>
@@ -719,7 +762,7 @@ thinking × direction), you can:</p>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="citation">9. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
+<h2 id="citation">10. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
 <p>Mercer, S. (2025). <em>Advanced: Submitting and Polling Multiple

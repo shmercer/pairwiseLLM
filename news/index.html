@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,17 @@
       <small>Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.2.0" id="pairwisellm-120">pairwiseLLM 1.2.0<a class="anchor" aria-label="anchor" href="#pairwisellm-120"></a></h2>
+<div class="section level3">
+<h3 id="new-features-1-2-0">New features<a class="anchor" aria-label="anchor" href="#new-features-1-2-0"></a></h3>
+<ul><li>Introduced <code><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code> and <code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code> to split large comparison sets across multiple batches and resume polling later. These helpers support writing per‑batch and combined results, along with an optional jobs registry.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="testing-1-2-0">Testing<a class="anchor" aria-label="anchor" href="#testing-1-2-0"></a></h3>
+<p>Added additional unit tests covering multi‑batch submission/resumption, retry logic, registry updates, custom tag forwarding and file handling.</p>
+</div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.1.0" id="pairwisellm-110">pairwiseLLM 1.1.0<a class="anchor" aria-label="anchor" href="#pairwisellm-110"></a></h2>
 <div class="section level3">

@@ -62,8 +62,12 @@
   : Backend-agnostic live comparison for a single pair of samples
 - [`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md)
   : Extract results from a pairwiseLLM batch object
+- [`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
+  : Resume polling and download results for multiple batch jobs
 - [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
   : Submit pairs to an LLM backend via batch API
+- [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
+  : Multi‑batch submission and polling wrappers
 - [`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md)
   : Create all unordered pairs of writing samples
 - [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)

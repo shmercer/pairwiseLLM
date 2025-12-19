@@ -43,7 +43,9 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/list_prompt_templates.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/make_pairs.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.html</loc></url>

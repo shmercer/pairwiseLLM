@@ -289,6 +289,51 @@ res_batch <- llm_download_batch_results(batch)
 head(res_batch)
 ```
 
+### 10.3 Multi‑Batch Jobs
+
+In addition to the standard batch helpers, you can split a large job
+into multiple segments using
+[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
+and then poll all of them with
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md).
+This is particularly useful when you have many pairs or want to ensure
+that you can resume if the session ends.
+
+``` r
+# Generate a small set of pairs
+pairs_small <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 10, seed = 4321) |>
+  randomize_pair_order(seed = 8765)
+
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# Split into two batches and include reasoning/chain-of-thought
+multi_job <- llm_submit_pairs_multi_batch(
+  pairs             = pairs_small,
+  backend           = "openai",
+  model             = "gpt-5.1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  n_segments        = 2,
+  output_dir        = "myjob",
+  write_registry    = TRUE,
+  include_thoughts  = TRUE
+)
+
+# Poll and merge results.  Combined results are written to
+# "myjob/combined_results.csv" by default.
+res <- llm_resume_multi_batches(
+  jobs               = multi_job$jobs,
+  interval_seconds   = 30,
+  write_combined_csv = TRUE
+)
+
+head(res$combined)
+```
+
 ------------------------------------------------------------------------
 
 ## 11. Backend-Specific Tools
@@ -360,7 +405,11 @@ Use the default template or set `include_thoughts = FALSE`.
 
 #### Timeouts
 
-Use batch APIs for \>40 pairs.
+Use batch APIs for \>40 pairs. Split a large job into multiple segments
+using
+[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
+and then p all all of them with
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
 
 #### Positional bias
 
