@@ -35,6 +35,8 @@ Imports:
 Suggests:
     BradleyTerry2,
     EloChoice,
+    future,
+    future.apply,
     knitr,
     mockery,
     purrr,
