@@ -52,5 +52,5 @@ cat(example_openai_batch_output[1], "\n")
 tmp <- tempfile(fileext = ".jsonl")
 writeLines(example_openai_batch_output, con = tmp)
 tmp
-#> [1] "/tmp/Rtmp8PwsZh/file1e8c78ac9473.jsonl"
+#> [1] "/tmp/Rtmp1pjfsD/file1ba71b8f78a2.jsonl"
 ```
