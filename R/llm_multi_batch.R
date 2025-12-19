@@ -56,6 +56,16 @@
 #' @param ... Additional arguments passed through to the provider‑specific
 #'   `run_*_batch_pipeline()` function.  These may include arguments such as
 #'   `include_thoughts`, `reasoning`, `include_raw`, `temperature`, etc.
+
+#' @param openai_max_retries Integer giving the maximum number of times
+#'   to retry the initial OpenAI batch submission when a transient
+#'   HTTP 5xx error occurs.  When creating a segment on the OpenAI
+#'   backend, [run_openai_batch_pipeline()] internally uploads the
+#'   JSONL file and creates the batch.  On rare occasions this call
+#'   can return a 500 error; specifying a positive value here
+#'   (e.g. 3) will automatically retry the submission up to that
+#'   many times.  Between retries, the function sleeps for a brief
+#'   period proportional to the current attempt.  Defaults to 3.
 #'
 #' @return A list with two elements: `jobs`, a list of per‑batch metadata
 #'   (similar to the example in the advanced vignette), and `registry`,
@@ -68,7 +78,7 @@
 #' @examples
 #' # Example: split a small set of pairs into five segments, submit
 #' # them to the Gemini backend, and then poll and combine the results.
-#' # Requires funded API key and internet access.
+#' # Requires a funded API key and internet access.
 #' \dontrun{
 #' # Construct ten random pairs from the example writing samples
 #' set.seed(123)
@@ -123,7 +133,8 @@ llm_submit_pairs_multi_batch <- function(
   write_registry = FALSE,
   keep_jsonl = TRUE,
   verbose = FALSE,
-  ...
+  ...,
+  openai_max_retries = 3
 ) {
   backend <- match.arg(backend)
 
@@ -183,17 +194,57 @@ llm_submit_pairs_multi_batch <- function(
 
     # Submit the batch without polling
     if (backend == "openai") {
-      pipeline <- run_openai_batch_pipeline(
-        pairs             = pairs_seg,
-        model             = model,
-        trait_name        = trait_name,
-        trait_description = trait_description,
-        prompt_template   = prompt_template,
-        batch_input_path  = input_path,
-        batch_output_path = output_path,
-        poll              = FALSE,
-        ...
-      )
+      # Retry the OpenAI batch submission up to openai_max_retries times
+      oa_success <- FALSE
+      oa_attempt <- 0L
+      pipeline <- NULL
+      while (!oa_success && oa_attempt < openai_max_retries) {
+        oa_attempt <- oa_attempt + 1L
+        pipeline <- tryCatch(
+          {
+            run_openai_batch_pipeline(
+              pairs             = pairs_seg,
+              model             = model,
+              trait_name        = trait_name,
+              trait_description = trait_description,
+              prompt_template   = prompt_template,
+              batch_input_path  = input_path,
+              batch_output_path = output_path,
+              poll              = FALSE,
+              ...
+            )
+          },
+          error = function(e) {
+            # Retry on HTTP 5xx errors; propagate others
+            if (inherits(e, "httr2_http_500") || inherits(e, "httr2_http_502") ||
+              inherits(e, "httr2_http_503") || inherits(e, "httr2_http_504") ||
+              inherits(e, "httr2_http_522") || inherits(e, "httr2_http_524")) {
+              if (isTRUE(verbose)) {
+                message(sprintf(
+                  "[llm_submit_pairs_multi_batch] Error creating OpenAI batch (segment %d, attempt %d/%d): %s",
+                  seg, oa_attempt, openai_max_retries, conditionMessage(e)
+                ))
+              }
+              Sys.sleep(oa_attempt) # simple linear backoff
+              return(NULL)
+            } else {
+              stop(e)
+            }
+          }
+        )
+        if (!is.null(pipeline)) {
+          oa_success <- TRUE
+        }
+      }
+      if (!oa_success) {
+        stop(
+          sprintf(
+            "Failed to create OpenAI batch for segment %d after %d attempts.",
+            seg, openai_max_retries
+          ),
+          call. = FALSE
+        )
+      }
       batch_id <- pipeline$batch$id
       # When verbose, confirm file uploaded successfully (OpenAI uploads the input file)
       if (isTRUE(verbose)) {
@@ -329,6 +380,16 @@ llm_submit_pairs_multi_batch <- function(
 #'   case it will be used exactly as given.  Otherwise the file name is
 #'   assumed to be relative to `output_dir`.  This argument is ignored when
 #'   `write_combined_csv = FALSE`.
+
+#' @param openai_max_retries Integer giving the maximum number of times to
+#'   retry certain OpenAI API calls when a transient HTTP 5xx error occurs.
+#'   In particular, when downloading batch output with
+#'   [openai_download_batch_output()], the function will attempt to fetch
+#'   the output file up to `openai_max_retries` times if an
+#'   `httr2_http_500` error is raised.  Between retries the function sleeps
+#'   for `per_job_delay` seconds.  Set to a small positive value (e.g. 3)
+#'   to automatically recover from occasional server errors.  Defaults to 3.
+
 #' @param write_registry Logical; if `TRUE`, a CSV registry of batch jobs
 #'   will be written (or updated) at the end of polling.  When reading
 #'   jobs from a saved registry via `output_dir`, this argument can be used
@@ -386,7 +447,8 @@ llm_resume_multi_batches <- function(
   tag_suffix = "</BETTER_SAMPLE>",
   verbose = FALSE,
   write_combined_csv = FALSE,
-  combined_csv_path = NULL
+  combined_csv_path = NULL,
+  openai_max_retries = 3
 ) {
   # Validate inputs; either jobs must be supplied or output_dir must be provided
   if (is.null(jobs)) {
@@ -450,33 +512,92 @@ llm_resume_multi_batches <- function(
 
       # Poll based on provider type
       if (provider == "openai") {
-        batch <- openai_get_batch(batch_id)
-        status <- batch$status %||% "unknown"
-        if (isTRUE(verbose)) {
-          message(sprintf(
-            "[llm_resume_multi_batches] OpenAI batch %s status: %s",
-            batch_id, status
-          ))
-        }
-        # Terminal states as per vignette
-        if (status %in% c("completed", "failed", "cancelled", "expired")) {
-          if (identical(status, "completed")) {
-            # Download and parse
-            openai_download_batch_output(
-              batch_id = batch_id,
-              path     = job$batch_output_path
-            )
-            res <- parse_openai_batch_output(job$batch_output_path)
-            jobs[[j]]$results <- res
-            if (isTRUE(write_results_csv)) {
-              readr::write_csv(res, job$csv_path)
+        # Wrap the OpenAI batch retrieval in tryCatch to handle transient errors
+        batch <- tryCatch(
+          openai_get_batch(batch_id),
+          error = function(e) {
+            if (isTRUE(verbose)) {
+              message(sprintf(
+                "[llm_resume_multi_batches] Error retrieving OpenAI batch %s: %s",
+                batch_id, conditionMessage(e)
+              ))
             }
-            if (!isTRUE(keep_jsonl)) {
-              unlink(job$batch_input_path)
-              unlink(job$batch_output_path)
-            }
+            return(NULL)
           }
-          jobs[[j]]$done <- TRUE
+        )
+        if (!is.null(batch)) {
+          status <- batch$status %||% "unknown"
+          if (isTRUE(verbose)) {
+            message(sprintf(
+              "[llm_resume_multi_batches] OpenAI batch %s status: %s",
+              batch_id, status
+            ))
+          }
+          # Terminal states as per API: completed, failed, cancelled, expired
+          if (status %in% c("completed", "failed", "cancelled", "expired")) {
+            if (identical(status, "completed")) {
+              # Download and parse with retry logic on 5xx errors
+              success <- FALSE
+              attempt <- 0L
+              while (!success && attempt < openai_max_retries) {
+                attempt <- attempt + 1L
+                try_res <- tryCatch(
+                  {
+                    openai_download_batch_output(
+                      batch_id = batch_id,
+                      path     = job$batch_output_path
+                    )
+                    TRUE
+                  },
+                  error = function(e) {
+                    # Only retry on HTTP 5xx errors; propagate other errors
+                    cls <- class(e)
+                    if (inherits(e, "httr2_http_500") || inherits(e, "httr2_http_502") ||
+                      inherits(e, "httr2_http_503") || inherits(e, "httr2_http_504") ||
+                      inherits(e, "httr2_http_522") || inherits(e, "httr2_http_524") ||
+                      inherits(e, "httr2_http_error") && grepl("^5", as.character(e$response$status_code))) {
+                      if (isTRUE(verbose)) {
+                        message(sprintf(
+                          "[llm_resume_multi_batches] Error downloading OpenAI batch %s (attempt %d/%d): %s",
+                          batch_id, attempt, openai_max_retries, conditionMessage(e)
+                        ))
+                      }
+                      Sys.sleep(per_job_delay)
+                      return(FALSE)
+                    } else {
+                      # Unexpected error: propagate
+                      stop(e)
+                    }
+                  }
+                )
+                if (isTRUE(try_res)) {
+                  success <- TRUE
+                }
+              }
+              if (success) {
+                res <- parse_openai_batch_output(job$batch_output_path)
+                jobs[[j]]$results <- res
+                if (isTRUE(write_results_csv)) {
+                  readr::write_csv(res, job$csv_path)
+                }
+                if (!isTRUE(keep_jsonl)) {
+                  unlink(job$batch_input_path)
+                  unlink(job$batch_output_path)
+                }
+              } else {
+                # If retries exhausted, leave job unfinished for next round
+                if (isTRUE(verbose)) {
+                  message(sprintf(
+                    "[llm_resume_multi_batches] Failed to download OpenAI batch %s after %d attempts; will retry in next round.",
+                    batch_id, openai_max_retries
+                  ))
+                }
+                next
+              }
+            }
+            # Mark job as done regardless of completion status
+            jobs[[j]]$done <- TRUE
+          }
         }
       } else if (provider == "anthropic") {
         batch <- anthropic_get_batch(batch_id)

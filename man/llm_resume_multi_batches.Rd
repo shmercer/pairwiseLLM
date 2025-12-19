@@ -16,7 +16,8 @@ llm_resume_multi_batches(
   tag_suffix = "</BETTER_SAMPLE>",
   verbose = FALSE,
   write_combined_csv = FALSE,
-  combined_csv_path = NULL
+  combined_csv_path = NULL,
+  openai_max_retries = 3
 )
 }
 \arguments{
@@ -78,6 +79,15 @@ directory component (i.e. \code{dirname(combined_csv_path) != "."}).  In that
 case it will be used exactly as given.  Otherwise the file name is
 assumed to be relative to \code{output_dir}.  This argument is ignored when
 \code{write_combined_csv = FALSE}.}
+
+\item{openai_max_retries}{Integer giving the maximum number of times to
+retry certain OpenAI API calls when a transient HTTP 5xx error occurs.
+In particular, when downloading batch output with
+\code{\link[=openai_download_batch_output]{openai_download_batch_output()}}, the function will attempt to fetch
+the output file up to \code{openai_max_retries} times if an
+\code{httr2_http_500} error is raised.  Between retries the function sleeps
+for \code{per_job_delay} seconds.  Set to a small positive value (e.g. 3)
+to automatically recover from occasional server errors.  Defaults to 3.}
 }
 \value{
 A list with two elements: \code{jobs}, the updated jobs list with each

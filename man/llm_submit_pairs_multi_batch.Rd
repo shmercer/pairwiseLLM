@@ -17,7 +17,8 @@ llm_submit_pairs_multi_batch(
   write_registry = FALSE,
   keep_jsonl = TRUE,
   verbose = FALSE,
-  ...
+  ...,
+  openai_max_retries = 3
 )
 }
 \arguments{
@@ -70,6 +71,16 @@ has been created along with the input file path.  Defaults to \code{FALSE}.}
 \item{...}{Additional arguments passed through to the provider‑specific
 \verb{run_*_batch_pipeline()} function.  These may include arguments such as
 \code{include_thoughts}, \code{reasoning}, \code{include_raw}, \code{temperature}, etc.}
+
+\item{openai_max_retries}{Integer giving the maximum number of times
+to retry the initial OpenAI batch submission when a transient
+HTTP 5xx error occurs.  When creating a segment on the OpenAI
+backend, \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}} internally uploads the
+JSONL file and creates the batch.  On rare occasions this call
+can return a 500 error; specifying a positive value here
+(e.g. 3) will automatically retry the submission up to that
+many times.  Between retries, the function sleeps for a brief
+period proportional to the current attempt.  Defaults to 3.}
 }
 \value{
 A list with two elements: \code{jobs}, a list of per‑batch metadata
@@ -103,7 +114,7 @@ written to a CSV registry for later resumption.
 \examples{
 # Example: split a small set of pairs into five segments, submit
 # them to the Gemini backend, and then poll and combine the results.
-# Requires funded API key and internet access.
+# Requires a funded API key and internet access.
 \dontrun{
 # Construct ten random pairs from the example writing samples
 set.seed(123)
