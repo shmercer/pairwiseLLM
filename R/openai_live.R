@@ -296,14 +296,21 @@ openai_compare_pair_live <- function(
 
 #' Live OpenAI comparisons for a tibble of pairs
 #'
-#' This is a thin row-wise wrapper around
+#' This is a robust row-wise wrapper around
 #' \code{\link{openai_compare_pair_live}}. It takes a tibble of pairs
-#'  (ID1 / text1 / ID2 / text2), submits each pair to
-#' the OpenAI API, and binds the results into a single tibble.
+#' (ID1 / text1 / ID2 / text2), submits each pair to the OpenAI API, and
+#' collects the results.
 #'
-#' The output has the same columns as \code{\link{openai_compare_pair_live}},
-#' with one row per pair, making it easy to pass into
-#' \code{\link{build_bt_data}} and \code{\link{fit_bt_model}}.
+#' This function improves upon simple looping by offering:
+#' \itemize{
+#'   \item **Parallel Processing:** Uses the \code{future} package to process
+#'     multiple pairs simultaneously.
+#'   \item **Incremental Saving:** Writes results to a CSV file as they complete.
+#'     If the process is interrupted, re-running the function with the same
+#'     \code{save_path} will automatically skip pairs that were already successfully processed.
+#'   \item **Error Separation:** Returns valid results and failed pairs separately,
+#'     making it easier to debug or retry specific failures.
+#' }
 #'
 #' @param pairs Tibble or data frame with at least columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2}. Typically created by
@@ -320,18 +327,36 @@ openai_compare_pair_live <- function(
 #' @param api_key Optional OpenAI API key.
 #' @param verbose Logical; if TRUE, prints status, timing, and result summaries.
 #' @param status_every Integer; print status / timing for every
-#'   \code{status_every}-th pair. Defaults to 1 (every pair). Errors are always
-#'   printed.
+#'   \code{status_every}-th pair. Defaults to 1 (every pair).
 #' @param progress Logical; if TRUE, shows a textual progress bar.
 #' @param include_raw Logical; if TRUE, each row of the returned tibble will
 #'   include a \code{raw_response} list-column with the parsed JSON body from
-#'   OpenAI.
+#'   OpenAI. Note: Raw responses are not saved to the incremental CSV file.
+#' @param save_path Character string; optional file path (e.g., "output.csv")
+#'   to save results incrementally. If the file exists, the function reads it
+#'   to identify and skip pairs that have already been processed (resume mode).
+#'   Requires the \code{readr} package.
+#' @param parallel Logical; if TRUE, enables parallel processing using
+#'   \code{future.apply}. Requires the \code{future} and \code{future.apply}
+#'   packages.
+#' @param workers Integer; the number of parallel workers (threads) to use if
+#'   \code{parallel = TRUE}. Defaults to 1.
+#'   \strong{Guidance:} A value between 4 and 8 is usually safe. Setting this
+#'   too high (e.g., >20) may trigger OpenAI rate limit errors (HTTP 429)
+#'   depending on your usage tier.
 #' @param ... Additional OpenAI parameters (temperature, top_p, logprobs,
 #'   reasoning, and so on) passed on to \code{openai_compare_pair_live}.
 #'
-#' @return A tibble with one row per pair and the same columns as
-#'   \code{\link{openai_compare_pair_live}}, including a \code{thoughts}
-#'   column for reasoning summaries (when available).
+#' @return A list containing two elements:
+#' \describe{
+#'   \item{results}{A tibble with one row per successfully processed pair and
+#'     columns such as \code{better_id}, \code{better_sample}, \code{thoughts},
+#'     and \code{content}. See \code{\link{openai_compare_pair_live}} for
+#'     details.}
+#'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
+#'     failed to process (due to API errors or timeouts), along with an
+#'     \code{error_message} column. These can be easily re-submitted.}
+#' }
 #'
 #' @examples
 #' \dontrun{
@@ -341,195 +366,289 @@ openai_compare_pair_live <- function(
 #'
 #' pairs <- example_writing_samples |>
 #'   make_pairs() |>
-#'   sample_pairs(n_pairs = 5, seed = 123) |>
+#'   sample_pairs(n_pairs = 10, seed = 123) |>
 #'   randomize_pair_order(seed = 456)
 #'
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Live comparisons for multiple pairs
-#' res_live <- submit_openai_pairs_live(
+#' # 1. Sequential execution with incremental saving
+#' # If interrupted, running this again will resume progress.
+#' res_seq <- submit_openai_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "gpt-4.1",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   endpoint          = "chat.completions",
-#'   temperature       = 0,
-#'   verbose           = TRUE,
-#'   status_every      = 2,
-#'   progress          = TRUE,
-#'   include_raw       = FALSE
+#'   save_path         = "results_seq.csv"
 #' )
 #'
-#' res_live$better_id
-#'
-#' # Using gpt-5.1 with reasoning on the responses endpoint
-#' res_live_gpt5 <- submit_openai_pairs_live(
+#' # 2. Parallel execution (faster)
+#' # Note: On Windows, this opens background R sessions.
+#' res_par <- submit_openai_pairs_live(
 #'   pairs             = pairs,
-#'   model             = "gpt-5.1",
+#'   model             = "gpt-4.1",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   endpoint          = "responses",
-#'   reasoning         = "low",
-#'   temperature       = NULL,
-#'   top_p             = NULL,
-#'   logprobs          = NULL,
-#'   verbose           = TRUE,
-#'   status_every      = 3,
-#'   progress          = TRUE,
-#'   include_raw       = TRUE
+#'   save_path         = "results_par.csv",
+#'   parallel          = TRUE,
+#'   workers           = 4
 #' )
 #'
-#' str(res_live_gpt5$raw_response[[1]], max.level = 2)
+#' # Inspect results
+#' head(res_par$results)
+#'
+#' # Check for failures
+#' if (nrow(res_par$failed_pairs) > 0) {
+#'   message("Some pairs failed:")
+#'   print(res_par$failed_pairs)
+#' }
 #' }
 #'
 #' @export
 submit_openai_pairs_live <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    endpoint = c("chat.completions", "responses"),
-    api_key = NULL,
-    verbose = TRUE,
-    status_every = 1,
-    progress = TRUE,
-    include_raw = FALSE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  endpoint = c("chat.completions", "responses"),
+  api_key = NULL,
+  verbose = TRUE,
+  status_every = 1,
+  progress = TRUE,
+  include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
+  ...
 ) {
   endpoint <- match.arg(endpoint)
-
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols <- setdiff(required_cols, names(pairs))
 
-  if (length(missing_cols) > 0L) {
-    stop(
-      "`pairs` must contain columns: ",
-      paste(required_cols, collapse = ", "),
-      call. = FALSE
+  if (!all(required_cols %in% names(pairs))) {
+    stop("`pairs` must contain columns: ", paste(required_cols, collapse = ", "), call. = FALSE)
+  }
+
+  # --- Pre-flight Checks: Dependencies & Directories ---
+  if (!is.null(save_path)) {
+    if (!requireNamespace("readr", quietly = TRUE)) {
+      stop("The 'readr' package is required for incremental saving. Please install it.", call. = FALSE)
+    }
+    save_dir <- dirname(save_path)
+    if (!dir.exists(save_dir) && save_dir != ".") {
+      if (verbose) message(sprintf("Creating output directory: '%s'", save_dir))
+      dir.create(save_dir, recursive = TRUE)
+    }
+  }
+
+  # --- Handle Parallel Plan Internally ---
+  # We use 'multisession' as it is robust across Windows, Mac, and Linux.
+  if (parallel && workers > 1) {
+    if (!requireNamespace("future", quietly = TRUE) || !requireNamespace("future.apply", quietly = TRUE)) {
+      stop("Packages 'future' and 'future.apply' are required for parallel processing.", call. = FALSE)
+    }
+
+    if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
+
+    # Set the plan and capture the OLD plan to restore it on exit
+    old_plan <- future::plan("multisession", workers = workers)
+    on.exit(future::plan(old_plan), add = TRUE)
+  }
+
+  # --- Resume Logic ---
+  existing_results <- NULL
+  if (!is.null(save_path) && file.exists(save_path)) {
+    if (verbose) message(sprintf("Found existing file at '%s'. Checking for resumable pairs...", save_path))
+    tryCatch(
+      {
+        existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
+
+        # We assume custom_id is constructed as LIVE_<ID1>_vs_<ID2>
+        existing_ids <- existing_results$custom_id
+        current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+
+        # Identify new pairs
+        to_process_idx <- !current_ids %in% existing_ids
+
+        if (sum(!to_process_idx) > 0) {
+          if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
+          pairs <- pairs[to_process_idx, ]
+        }
+      },
+      error = function(e) {
+        warning("Could not read existing save file to resume. Processing all pairs. Error: ", e$message, call. = FALSE)
+      }
     )
   }
 
   n <- nrow(pairs)
-  if (n == 0L) {
+
+  # Empty Result Helper
+  empty_res <- function() {
     res <- tibble::tibble(
-      custom_id         = character(0),
-      ID1               = character(0),
-      ID2               = character(0),
-      model             = character(0),
-      object_type       = character(0),
-      status_code       = integer(0),
-      error_message     = character(0),
-      thoughts          = character(0),
-      content           = character(0),
-      better_sample     = character(0),
-      better_id         = character(0),
-      prompt_tokens     = numeric(0),
-      completion_tokens = numeric(0),
-      total_tokens      = numeric(0)
+      custom_id = character(0), ID1 = character(0), ID2 = character(0),
+      model = character(0), object_type = character(0), status_code = integer(0),
+      error_message = character(0), thoughts = character(0), content = character(0),
+      better_sample = character(0), better_id = character(0),
+      prompt_tokens = numeric(0), completion_tokens = numeric(0), total_tokens = numeric(0)
     )
     if (include_raw) res$raw_response <- list()
     return(res)
   }
 
-  # IMPORTANT FOR CRAN/TESTS:
-  # Do NOT resolve/validate API key here. Let openai_compare_pair_live()
-  # (or lower-level request helpers) resolve it only if a real request happens.
+  if (n == 0L) {
+    if (verbose) message("No new pairs to process.")
+    final_res <- if (!is.null(existing_results)) existing_results else empty_res()
+    # If resuming and all are done, failed_pairs is empty relative to the *new* input
+    return(list(results = final_res, failed_pairs = pairs[0, ]))
+  }
+
   if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
-  status_every <- as.integer(status_every)
 
   fmt_secs <- function(x) sprintf("%.1fs", x)
+  all_new_results <- vector("list", n)
 
-  if (verbose) {
-    message(sprintf(
-      "Submitting %d live pair(s) for comparison (model=%s, endpoint=%s)...",
-      n, model, endpoint
-    ))
+  # Determine if we really can use parallel
+  use_parallel <- parallel && workers > 1 && requireNamespace("future.apply", quietly = TRUE)
+
+  # --- Execution ---
+  if (use_parallel) {
+    if (verbose) message(sprintf("Processing %d pairs in PARALLEL...", n))
+
+    # Chunking to allow incremental saving during parallel execution
+    chunk_size <- 20
+    chunks <- split(seq_len(n), ceiling(seq_len(n) / chunk_size))
+
+    start_time <- Sys.time()
+    pb <- if (progress) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
+    total_processed <- 0
+
+    for (chunk_indices in chunks) {
+      work_fn <- function(i) {
+        id1 <- as.character(pairs$ID1[i])
+        id2 <- as.character(pairs$ID2[i])
+        tryCatch(
+          {
+            openai_compare_pair_live(
+              ID1 = id1, text1 = as.character(pairs$text1[i]),
+              ID2 = id2, text2 = as.character(pairs$text2[i]),
+              model = model, trait_name = trait_name, trait_description = trait_description,
+              prompt_template = prompt_template, endpoint = endpoint,
+              api_key = api_key, include_raw = include_raw, ...
+            )
+          },
+          error = function(e) {
+            tibble::tibble(
+              custom_id = sprintf("LIVE_%s_vs_%s", id1, id2),
+              ID1 = id1, ID2 = id2, model = model, object_type = NA_character_,
+              status_code = NA_integer_,
+              error_message = paste0("Error: ", conditionMessage(e)),
+              thoughts = NA_character_, content = NA_character_,
+              better_sample = NA_character_, better_id = NA_character_,
+              prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
+              raw_response = if (include_raw) list(NULL) else NULL
+            )
+          }
+        )
+      }
+
+      # Execute chunk
+      chunk_results_list <- future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+      all_new_results[chunk_indices] <- chunk_results_list
+
+      # Incremental Save
+      if (!is.null(save_path)) {
+        chunk_df <- dplyr::bind_rows(chunk_results_list)
+        if ("raw_response" %in% names(chunk_df)) chunk_df$raw_response <- NULL
+
+        write_mode <- if (file.exists(save_path)) "append" else "write"
+        tryCatch(
+          {
+            readr::write_csv(chunk_df, save_path, append = (write_mode == "append"))
+          },
+          error = function(e) warning("Failed to save incremental results: ", e$message, call. = FALSE)
+        )
+      }
+
+      total_processed <- total_processed + length(chunk_indices)
+      if (!is.null(pb)) utils::setTxtProgressBar(pb, total_processed)
+    }
+    if (!is.null(pb)) close(pb)
+  } else {
+    # Sequential Execution
+    if (verbose) message(sprintf("Processing %d pairs SEQUENTIALLY...", n))
+    start_time <- Sys.time()
+    pb <- if (progress) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
+
+    for (i in seq_len(n)) {
+      res <- tryCatch(
+        {
+          openai_compare_pair_live(
+            ID1 = as.character(pairs$ID1[i]), text1 = as.character(pairs$text1[i]),
+            ID2 = as.character(pairs$ID2[i]), text2 = as.character(pairs$text2[i]),
+            model = model, trait_name = trait_name, trait_description = trait_description,
+            prompt_template = prompt_template, endpoint = endpoint,
+            api_key = api_key, include_raw = include_raw, ...
+          )
+        },
+        error = function(e) {
+          tibble::tibble(
+            custom_id = sprintf("LIVE_%s_vs_%s", pairs$ID1[i], pairs$ID2[i]),
+            ID1 = as.character(pairs$ID1[i]), ID2 = as.character(pairs$ID2[i]), model = model,
+            object_type = NA_character_, status_code = NA_integer_,
+            error_message = paste0("Error: ", conditionMessage(e)),
+            thoughts = NA_character_, content = NA_character_,
+            better_sample = NA_character_, better_id = NA_character_,
+            prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
+            raw_response = if (include_raw) list(NULL) else NULL
+          )
+        }
+      )
+      all_new_results[[i]] <- res
+
+      if (!is.null(save_path)) {
+        write_df <- res
+        if ("raw_response" %in% names(write_df)) write_df$raw_response <- NULL
+        col_names <- !file.exists(save_path)
+        tryCatch(
+          {
+            readr::write_csv(write_df, save_path, append = !col_names, col_names = col_names)
+          },
+          error = function(e) warning("Failed to save incremental result: ", e$message, call. = FALSE)
+        )
+      }
+      if (!is.null(pb)) utils::setTxtProgressBar(pb, i)
+    }
+    if (!is.null(pb)) close(pb)
   }
 
-  pb <- NULL
-  if (progress && n > 0L) {
-    pb <- utils::txtProgressBar(min = 0, max = n, style = 3)
-  }
-
-  start_time <- Sys.time()
-  out <- vector("list", n)
-
-  for (i in seq_len(n)) {
-    show_status <- verbose && (i %% status_every == 1L)
-
-    if (show_status) {
-      message(sprintf(
-        "[Live pair %d of %d] Comparing %s vs %s ...",
-        i, n, pairs$ID1[i], pairs$ID2[i]
-      ))
-    }
-
-    res <- openai_compare_pair_live(
-      ID1               = as.character(pairs$ID1[i]),
-      text1             = as.character(pairs$text1[i]),
-      ID2               = as.character(pairs$ID2[i]),
-      text2             = as.character(pairs$text2[i]),
-      model             = model,
-      trait_name        = trait_name,
-      trait_description = trait_description,
-      prompt_template   = prompt_template,
-      endpoint          = endpoint,
-      api_key           = api_key,     # pass-through; do not resolve here
-      include_raw       = include_raw,
-      ...
-    )
-
-    if (!is.null(pb)) {
-      utils::setTxtProgressBar(pb, i)
-    }
-
-    if (!is.na(res$error_message)) {
-      message(sprintf(
-        "    WARNING: API Error (status %s): %s",
-        res$status_code, res$error_message
-      ))
-    } else if (show_status) {
-      elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-      avg <- elapsed / i
-      remain <- n - i
-      est_rem <- avg * remain
-
-      message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
-        res$better_id,
-        res$better_sample,
-        res$prompt_tokens,
-        res$completion_tokens,
-        res$total_tokens
-      ))
-      message(sprintf(
-        "    Timing: elapsed=%s | avg/pair=%s | est remaining=%s",
-        fmt_secs(elapsed),
-        fmt_secs(avg),
-        fmt_secs(est_rem)
-      ))
-    }
-
-    out[[i]] <- res
-  }
-
-  if (!is.null(pb)) close(pb)
+  new_results_df <- dplyr::bind_rows(all_new_results)
 
   if (verbose) {
     total_elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-    avg <- total_elapsed / n
     message(sprintf(
-      "Completed %d live pair(s) in %s (avg %.2fs per pair).",
-      n, fmt_secs(total_elapsed), avg
+      "Completed %d pairs in %s (avg %.2fs/pair).",
+      n, fmt_secs(total_elapsed), total_elapsed / n
     ))
   }
 
-  dplyr::bind_rows(out)
+  # Merge existing (resume) results with new results
+  final_results <- if (!is.null(existing_results)) {
+    dplyr::bind_rows(existing_results, new_results_df)
+  } else {
+    new_results_df
+  }
+
+  # Filter failures
+  failed_mask <- !is.na(final_results$error_message) |
+    (final_results$status_code >= 400 & !is.na(final_results$status_code))
+
+  list(
+    results = final_results,
+    failed_pairs = final_results[failed_mask, ]
+  )
 }
