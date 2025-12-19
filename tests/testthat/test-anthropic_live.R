@@ -34,10 +34,7 @@ testthat::test_that("anthropic_compare_pair_live parses /v1/messages correctly",
     .anthropic_api_key = function(...) "FAKEKEY",
     .anthropic_req_body_json = function(req, body) req,
     .anthropic_req_perform = function(req) {
-      structure(list(),
-        class =
-          "fake_resp"
-      )
+      structure(list(), class = "fake_resp")
     },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
@@ -105,10 +102,7 @@ testthat::test_that("anthropic_compare_pair_live returns error row on
     .anthropic_api_key = function(...) "FAKEKEY",
     .anthropic_req_body_json = function(req, body) req,
     .anthropic_req_perform = function(req) {
-      structure(list(),
-        class =
-          "fake_resp"
-      )
+      structure(list(), class = "fake_resp")
     },
     .anthropic_resp_body_json = function(...) stop("boom"),
     .anthropic_resp_status = function(...) 500L,
@@ -132,6 +126,93 @@ testthat::test_that("anthropic_compare_pair_live returns error row on
       )
       testthat::expect_true(is.na(res$better_sample))
       testthat::expect_true(is.null(res$raw_response[[1]]))
+    }
+  )
+})
+
+# ---------------------------------------------------------------------
+
+testthat::test_that("anthropic_compare_pair_live handles HTTP errors (status >= 300)", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Mock error response body
+  error_body <- list(
+    type = "error",
+    error = list(
+      type = "invalid_request_error",
+      message = "Overloaded"
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) req,
+    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) error_body,
+    .anthropic_resp_status = function(...) 503L,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
+        model = "claude-sonnet", trait_name = td$name, trait_description = td$description,
+        prompt_template = tmpl
+      )
+
+      testthat::expect_equal(res$status_code, 503L)
+      testthat::expect_equal(res$error_message, "Overloaded")
+      testthat::expect_true(is.na(res$better_sample))
+    }
+  )
+})
+
+# ---------------------------------------------------------------------
+
+testthat::test_that("anthropic_compare_pair_live handles missing tags and empty content", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Case 1: Text exists but no tags
+  body_no_tags <- list(
+    model = "claude",
+    content = list(list(type = "text", text = "I cannot decide."))
+  )
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) req,
+    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) body_no_tags,
+    .anthropic_resp_status = function(...) 200L,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
+        model = "claude", trait_name = td$name, trait_description = td$description,
+        prompt_template = tmpl
+      )
+      testthat::expect_equal(res$content, "I cannot decide.")
+      testthat::expect_true(is.na(res$better_sample))
+      testthat::expect_true(is.na(res$better_id))
+    }
+  )
+
+  # Case 2: Content is empty/null
+  body_empty <- list(model = "claude", content = list())
+
+  # FIX: Ensure we mock .anthropic_req_perform and .anthropic_api_key here too,
+  # otherwise it tries to make a real network request.
+  testthat::with_mocked_bindings(
+    .anthropic_api_key = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) req,
+    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) body_empty,
+    .anthropic_resp_status = function(...) 200L,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
+        model = "claude", trait_name = td$name, trait_description = td$description
+      )
+      testthat::expect_true(is.na(res$content))
+      testthat::expect_true(is.na(res$better_sample))
     }
   )
 })
@@ -170,10 +251,7 @@ testthat::test_that("anthropic_compare_pair_live applies recommended
       req
     },
     .anthropic_req_perform = function(req) {
-      structure(list(),
-        class =
-          "fake_resp"
-      )
+      structure(list(), class = "fake_resp")
     },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
@@ -200,6 +278,33 @@ testthat::test_that("anthropic_compare_pair_live applies recommended
       testthat::expect_equal(b$model, "claude-sonnet-4-5")
       testthat::expect_equal(b$max_tokens, 768)
       testthat::expect_equal(b$temperature, 0)
+    }
+  )
+})
+
+testthat::test_that("anthropic_compare_pair_live passes top_p parameter", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  bodies <- list()
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) {
+      bodies <<- append(bodies, list(body))
+      req
+    },
+    .anthropic_req_perform = function(...) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) list(),
+    .anthropic_resp_status = function(...) 200L,
+    {
+      anthropic_compare_pair_live(
+        ID1 = "A", text1 = "a", ID2 = "B", text2 = "b", model = "claude",
+        trait_name = td$name, trait_description = td$description,
+        top_p = 0.95
+      )
+
+      testthat::expect_equal(bodies[[1]]$top_p, 0.95)
     }
   )
 })
@@ -337,10 +442,7 @@ testthat::test_that("anthropic_compare_pair_live defaults and thinking
       req
     },
     .anthropic_req_perform = function(req) {
-      structure(list(),
-        class =
-          "fake_resp"
-      )
+      structure(list(), class = "fake_resp")
     },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
@@ -432,10 +534,7 @@ testthat::test_that("anthropic_compare_pair_live upgrades reasoning when
       req
     },
     .anthropic_req_perform = function(req) {
-      structure(list(),
-        class =
-          "fake_resp"
-      )
+      structure(list(), class = "fake_resp")
     },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
@@ -507,10 +606,7 @@ testthat::test_that("anthropic_compare_pair_live parses reasoning-enabled
       req
     },
     .anthropic_req_perform = function(req) {
-      structure(list(),
-        class =
-          "fake_resp"
-      )
+      structure(list(), class = "fake_resp")
     },
     .anthropic_resp_body_json = function(...) fake_body,
     .anthropic_resp_status = function(...) 200L,
@@ -804,7 +900,7 @@ testthat::test_that("submit_anthropic_pairs_live is resilient to individual pair
       res <- suppressMessages(
         submit_anthropic_pairs_live(
           pairs, "claude", td$name, td$description,
-          verbose = FALSE, progress = FALSE
+          verbose = TRUE, progress = TRUE, include_raw = TRUE
         )
       )
 
@@ -814,6 +910,9 @@ testthat::test_that("submit_anthropic_pairs_live is resilient to individual pair
       testthat::expect_equal(res$ID1[1], "S1")
       testthat::expect_match(res$error_message[1], "Simulated Network Error")
       testthat::expect_true(is.na(res$status_code[1]))
+      # Check include_raw behaviour on error
+      testthat::expect_type(res$raw_response, "list")
+      testthat::expect_null(res$raw_response[[1]])
 
       # Row 2: Succeeded
       testthat::expect_equal(res$ID1[2], "S2")

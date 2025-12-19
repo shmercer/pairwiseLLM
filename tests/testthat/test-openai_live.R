@@ -791,3 +791,121 @@ testthat::test_that("openai_compare_pair_live parses dataframe reasoning summari
     }
   )
 })
+
+testthat::test_that("openai_compare_pair_live validates ID2, text1, and model", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Invalid ID2
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = 123, text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "ID2 invalid"
+  )
+
+  # Invalid text1
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = list(), ID2 = "B", text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "text1 invalid"
+  )
+
+  # Invalid model
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
+      model = 123, trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "model invalid"
+  )
+})
+
+testthat::test_that("openai_compare_pair_live passes optional parameters (top_p, logprobs)", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured_body <- NULL
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(),
+    .openai_resp_status = function(...) 200L,
+    {
+      # 1. Chat Completions
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-4", td$name, td$description, tmpl,
+        endpoint = "chat.completions",
+        top_p = 0.9,
+        logprobs = TRUE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.9)
+      testthat::expect_equal(captured_body$logprobs, TRUE)
+
+      # 2. Responses
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-5.1", td$name, td$description, tmpl,
+        endpoint = "responses",
+        top_p = 0.8,
+        logprobs = FALSE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.8)
+      testthat::expect_equal(captured_body$logprobs, FALSE)
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live constructs generic HTTP error message", {
+  td <- trait_description("overall_quality")
+  # Response with error status but no body$error object (triggering the else if status >= 400 block)
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(), # Empty body
+    .openai_resp_status = function(...) 418L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-4", td$name, td$description)
+      testthat::expect_equal(res$status_code, 418L)
+      testthat::expect_equal(res$error_message, "HTTP 418")
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live parses dataframe reasoning summaries", {
+  td <- trait_description("overall_quality")
+
+  # output structure where summary is a data.frame
+  fake_body <- list(
+    object = "response",
+    model = "gpt-5.1",
+    output = list(
+      list(
+        type = "reasoning",
+        summary = data.frame(text = "DF Summary", stringsAsFactors = FALSE)
+      )
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
+      testthat::expect_equal(res$thoughts, "DF Summary")
+    }
+  )
+})
