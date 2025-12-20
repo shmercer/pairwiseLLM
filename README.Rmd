@@ -125,6 +125,64 @@ library(pairwiseLLM)
 
 ---
 
+## API Keys
+
+`pairwiseLLM` reads keys **only from environment variables**.  
+Keys are **never printed**, **never stored**, and **never written** to disk.
+
+You can verify which providers are available using:
+
+```r
+check_llm_api_keys()
+```
+
+This returns a tibble showing whether R can see the required keys for:
+
+- OpenAI  
+- Anthropic  
+- Google Gemini
+- Together.ai
+
+### Setting API Keys
+
+You may set keys **temporarily** for the current R session:
+
+```r
+Sys.setenv(OPENAI_API_KEY = "your-key-here")
+Sys.setenv(ANTHROPIC_API_KEY = "your-key-here")
+Sys.setenv(GEMINI_API_KEY = "your-key-here")
+Sys.setenv(TOGETHER_API_KEY = "your-key-here")
+```
+
+…but for normal use and for reproducible analyses, it is **strongly recommended**  
+to store them in your `~/.Renviron` file.
+
+### Recommended method: Adding keys to `~/.Renviron`
+
+Open your `.Renviron` file:
+
+```r
+usethis::edit_r_environ()
+```
+
+Add the following lines:
+
+```
+OPENAI_API_KEY="your-openai-key"
+ANTHROPIC_API_KEY="your-anthropic-key"
+GEMINI_API_KEY="your-gemini-key"
+TOGETHER_API_KEY="your-together-key"
+```
+
+Save the file, then restart R.
+
+You can confirm that R now sees the keys:
+
+```r
+check_llm_api_keys()
+```
+---
+
 ## Core Concepts
 
 At a high level, `pairwiseLLM` workflows follow this structure:
@@ -137,6 +195,73 @@ At a high level, `pairwiseLLM` workflows follow this structure:
 6. **Modeling** – convert pairwise results to latent scores via BT or Elo.
 
 The package provides helpers for each step.
+
+---
+
+## Prompt Templates & Registry
+
+`pairwiseLLM` includes:
+
+* A **default template** tested for positional bias  
+* Support for **multiple templates stored by name**  
+* User-defined templates via `register_prompt_template()`
+
+### View available templates
+
+```{r}
+list_prompt_templates()
+```
+
+### Show the default template (truncated)
+
+```{r}
+tmpl <- get_prompt_template("default")
+cat(substr(tmpl, 1, 400), "...\n")
+```
+
+### Register your own template
+
+```{r, eval = FALSE}
+register_prompt_template("my_template", "
+Compare two essays for {TRAIT_NAME}…
+
+{TRAIT_NAME} is defined as {TRAIT_DESCRIPTION}.
+
+SAMPLE 1:
+{SAMPLE_1}
+
+SAMPLE 2:
+{SAMPLE_2}
+
+<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> or
+<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
+")
+```
+
+Use it in a submission:
+
+```{r, eval = FALSE}
+tmpl <- get_prompt_template("my_template")
+```
+
+---
+
+## Trait Descriptions
+
+Traits define what “quality” means.
+
+```{r}
+trait_description("overall_quality")
+```
+
+You can also provide custom traits:
+
+```{r, eval = FALSE}
+trait_description(
+  custom_name        = "Clarity",
+  custom_description = "How understandable, coherent, and well structured the ideas are."
+)
+```
 
 ---
 
@@ -279,131 +404,6 @@ head(res$combined)
 
 The registry CSV contains all batch IDs and file paths, allowing you to resume 
 polling with `llm_resume_multi_batches()` even if the R session is interrupted.
-
----
-
-## API Keys
-
-`pairwiseLLM` reads keys **only from environment variables**.  
-Keys are **never printed**, **never stored**, and **never written** to disk.
-
-You can verify which providers are available using:
-
-```r
-check_llm_api_keys()
-```
-
-This returns a tibble showing whether R can see the required keys for:
-
-- OpenAI  
-- Anthropic  
-- Google Gemini
-- Together.ai
-
-### Setting API Keys
-
-You may set keys **temporarily** for the current R session:
-
-```r
-Sys.setenv(OPENAI_API_KEY = "your-key-here")
-Sys.setenv(ANTHROPIC_API_KEY = "your-key-here")
-Sys.setenv(GEMINI_API_KEY = "your-key-here")
-Sys.setenv(TOGETHER_API_KEY = "your-key-here")
-```
-
-…but for normal use and for reproducible analyses, it is **strongly recommended**  
-to store them in your `~/.Renviron` file.
-
-### Recommended method: Adding keys to `~/.Renviron`
-
-Open your `.Renviron` file:
-
-```r
-usethis::edit_r_environ()
-```
-
-Add the following lines:
-
-```
-OPENAI_API_KEY="your-openai-key"
-ANTHROPIC_API_KEY="your-anthropic-key"
-GEMINI_API_KEY="your-gemini-key"
-TOGETHER_API_KEY="your-together-key"
-```
-
-Save the file, then restart R.
-
-You can confirm that R now sees the keys:
-
-```r
-check_llm_api_keys()
-```
----
-
-## Prompt Templates & Registry
-
-`pairwiseLLM` includes:
-
-* A **default template** tested for positional bias  
-* Support for **multiple templates stored by name**  
-* User-defined templates via `register_prompt_template()`
-
-### View available templates
-
-```{r}
-list_prompt_templates()
-```
-
-### Show the default template (truncated)
-
-```{r}
-tmpl <- get_prompt_template("default")
-cat(substr(tmpl, 1, 400), "...\n")
-```
-
-### Register your own template
-
-```{r, eval = FALSE}
-register_prompt_template("my_template", "
-Compare two essays for {TRAIT_NAME}…
-
-{TRAIT_NAME} is defined as {TRAIT_DESCRIPTION}.
-
-SAMPLE 1:
-{SAMPLE_1}
-
-SAMPLE 2:
-{SAMPLE_2}
-
-<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE> or
-<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
-")
-```
-
-Use it in a submission:
-
-```{r, eval = FALSE}
-tmpl <- get_prompt_template("my_template")
-```
-
----
-
-## Trait Descriptions
-
-Traits define what “quality” means.
-
-```{r}
-trait_description("overall_quality")
-```
-
-You can also provide custom traits:
-
-```{r, eval = FALSE}
-trait_description(
-  custom_name        = "Clarity",
-  custom_description = "How understandable, coherent, and well structured the ideas are."
-)
-```
 
 ---
 
