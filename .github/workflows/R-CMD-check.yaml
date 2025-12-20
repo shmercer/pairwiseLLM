@@ -49,14 +49,18 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
 
-      # Manual setup for macOS (Fixes 'pak' network error & 'knitr not found')
+      # Manual setup for macOS to bypass 'pak' network errors and recursive dep issues
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          install.packages('remotes')
-          install.packages(c('knitr', 'rmarkdown'))
-          remotes::install_deps(dependencies = TRUE)
-          remotes::install_cran("rcmdcheck")
+          # 1. Install remotes
+          install.packages('remotes', type = 'binary')
+
+          # 2. Explicitly install known missing/troublesome packages as binaries
+          install.packages(c('knitr', 'rmarkdown', 'vctrs', 'rcmdcheck'), type = 'binary')
+
+          # 3. Install remaining dependencies, strictly forcing binaries to avoid compilation failures
+          remotes::install_deps(dependencies = TRUE, type = "binary")
         shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
