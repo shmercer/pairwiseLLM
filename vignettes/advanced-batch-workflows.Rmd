@@ -16,20 +16,26 @@ knitr::opts_chunk$set(
 
 # 1. Overview
 
-This vignette demonstrates how to use **pairwiseLLM** for more complex **batch workflows**, including:
+This vignette demonstrates how to use **pairwiseLLM** for **Batch API workflows** (server-side batching), which are distinct from the live API calls described in the [Getting Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html) vignette.
 
-- Submitting many batches at once (e.g., across templates, providers, models, and “thinking” settings)
-- Polling batches until they complete
-- Downloading and parsing batch results
-- Writing a **batch registry CSV** so you can safely **resume** after interruptions
+Batch workflows are ideal for large-scale jobs because they:
+- Allow submitting thousands of pairs at once.
+- Are often cheaper (e.g., 50% discount on OpenAI).
+- Avoid client-side timeout and connection issues.
+- Can be polled and resumed even if your local R session ends.
 
-The examples are based on the A/B template testing dev scripts for:
+Supported Batch API providers:
+- **OpenAI** (via `run_openai_batch_pipeline()`)
+- **Anthropic** (via `run_anthropic_batch_pipeline()`)
+- **Gemini** (via low-level helpers such as `build_gemini_batch_requests()`)
 
-- OpenAI (via `run_openai_batch_pipeline()` + `openai_get_batch()`)
-- Anthropic (via `run_anthropic_batch_pipeline()` + `anthropic_get_batch()`)
-- Gemini (via low-level helpers such as `build_gemini_batch_requests()` and `gemini_create_batch()`)
+> **Note:** **Together.ai** and **Ollama** do not currently support a native Batch API compatible with this workflow. For those providers, use the **live** API wrapper `submit_llm_pairs()` as described in the [Getting Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html) vignette.
 
-At present, batch helpers are implemented for OpenAI, Anthropic, and Gemini. Together.ai and Ollama are supported only via the live APIs (`submit_llm_pairs()` / `llm_compare_pair()`).
+In this vignette, we will cover:
+- Submitting many batches (e.g., across templates, providers, and models).
+- Polling batches until completion.
+- Downloading and parsing results.
+- Using a **batch registry CSV** to safely resume interrupted jobs.
 
 > Note: All heavy API calls in this vignette are set to `eval = FALSE` so that the vignette remains CRAN-safe. You can enable them in your own project.
 
