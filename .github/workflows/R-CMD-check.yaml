@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {os: macos-latest,   r: 'release'}
+          # macOS removed per request (will check via rhub manually)
           - {os: windows-latest, r: 'release'}
           - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest,   r: 'release'}
@@ -42,26 +42,10 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
-      # Standard setup for Linux/Windows (uses pak for speed & sysreqs)
       - uses: r-lib/actions/setup-r-dependencies@v2
-        if: runner.os != 'macOS'
         with:
           extra-packages: any::rcmdcheck
           needs: check
-
-      # Manual setup for macOS to bypass 'pak' network errors and recursive dep issues
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          # 1. Install remotes
-          install.packages('remotes', type = 'binary')
-
-          # 2. Explicitly install known missing/troublesome packages as binaries
-          install.packages(c('knitr', 'rmarkdown', 'vctrs', 'rcmdcheck'), type = 'binary')
-
-          # 3. Install remaining dependencies, strictly forcing binaries to avoid compilation failures
-          remotes::install_deps(dependencies = TRUE, type = "binary")
-        shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
         with:
