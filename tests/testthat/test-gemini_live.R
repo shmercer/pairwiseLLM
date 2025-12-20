@@ -871,3 +871,77 @@ test_that("submit_gemini_pairs_live warns on CSV write failure", {
     )
   })
 })
+
+test_that("submit_gemini_pairs_live handles resume read error and parallel write error", {
+  skip_if_not_installed("future")
+  skip_if_not_installed("future.apply")
+  skip_if_not_installed("readr")
+
+  ns <- asNamespace("pairwiseLLM")
+
+  # Use a directory as the save_path to trigger read/write errors.
+  bad_path <- tempdir()
+
+  pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B")
+
+  # Mock internal function
+  local_mocked_bindings(
+    gemini_compare_pair_live = function(...) {
+      tibble::tibble(
+        custom_id = "id", ID1 = "S1", ID2 = "S2", model = "m",
+        status_code = 200L, error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  # Wrap in suppressWarnings so that system-level warnings (like "Permission denied"
+  # from trying to read a directory) are silenced, while expect_warning still
+  # captures and verifies the specific package warnings we care about.
+  suppressWarnings({
+    expect_warning(
+      expect_warning(
+        submit_gemini_pairs_live(
+          pairs, "m", "t", "d",
+          save_path = bad_path,
+          parallel = TRUE, workers = 2,
+          verbose = FALSE
+        ),
+        "Could not read existing save file"
+      ),
+      "Failed to save incremental results"
+    )
+  })
+})
+
+test_that("submit_gemini_pairs_live outputs verbose messages", {
+  ns <- asNamespace("pairwiseLLM")
+  pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B")
+
+  local_mocked_bindings(
+    gemini_compare_pair_live = function(...) {
+      tibble::tibble(
+        custom_id = "id", ID1 = "S1", ID2 = "S2", model = "m",
+        status_code = 200L, error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  # Capture all messages generated during execution
+  msgs <- capture_messages(
+    submit_gemini_pairs_live(
+      pairs, "m", "t", "d",
+      verbose = TRUE, status_every = 1, parallel = FALSE
+    )
+  )
+
+  # Expect at least two messages (Start + Per-pair + Completion)
+  expect_true(length(msgs) >= 2)
+
+  # Check startup message content
+  expect_true(any(grepl("Submitting 1 live pair", msgs)))
+
+  # Check per-pair status message content
+  expect_true(any(grepl("Comparing S1 vs S2", msgs)))
+})

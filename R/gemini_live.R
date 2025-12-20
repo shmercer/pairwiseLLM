@@ -560,7 +560,7 @@ submit_gemini_pairs_live <- function(
     stop("`pairs` must contain columns: ", paste(required_cols, collapse = ", "), call. = FALSE)
   }
 
-  # --- Pre-flight Checks: Dependencies & Directories ---
+  # --- Pre-flight Checks ---
   if (!is.null(save_path)) {
     if (!requireNamespace("readr", quietly = TRUE)) {
       stop("The 'readr' package is required for incremental saving. Please install it.", call. = FALSE)
@@ -572,14 +572,12 @@ submit_gemini_pairs_live <- function(
     }
   }
 
-  # --- Handle Parallel Plan Internally ---
+  # --- Parallel Plan ---
   if (parallel && workers > 1) {
     if (!requireNamespace("future", quietly = TRUE) || !requireNamespace("future.apply", quietly = TRUE)) {
       stop("Packages 'future' and 'future.apply' are required for parallel processing.", call. = FALSE)
     }
-
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
-
     old_plan <- future::plan("multisession", workers = workers)
     on.exit(future::plan(old_plan), add = TRUE)
   }
@@ -591,12 +589,9 @@ submit_gemini_pairs_live <- function(
     tryCatch(
       {
         existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
-
         existing_ids <- existing_results$custom_id
         current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
-
         to_process_idx <- !current_ids %in% existing_ids
-
         if (sum(!to_process_idx) > 0) {
           if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
           pairs <- pairs[to_process_idx, ]
@@ -613,20 +608,11 @@ submit_gemini_pairs_live <- function(
   # Helper for empty result
   empty_res <- function() {
     res <- tibble::tibble(
-      custom_id         = character(0),
-      ID1               = character(0),
-      ID2               = character(0),
-      model             = character(0),
-      object_type       = character(0),
-      status_code       = integer(0),
-      error_message     = character(0),
-      thoughts          = character(0),
-      content           = character(0),
-      better_sample     = character(0),
-      better_id         = character(0),
-      prompt_tokens     = numeric(0),
-      completion_tokens = numeric(0),
-      total_tokens      = numeric(0)
+      custom_id = character(0), ID1 = character(0), ID2 = character(0),
+      model = character(0), object_type = character(0), status_code = integer(0),
+      error_message = character(0), thoughts = character(0), content = character(0),
+      better_sample = character(0), better_id = character(0),
+      prompt_tokens = numeric(0), completion_tokens = numeric(0), total_tokens = numeric(0)
     )
     if (include_raw) res$raw_response <- list()
     return(res)
@@ -641,12 +627,11 @@ submit_gemini_pairs_live <- function(
   if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
-
+  status_every <- as.integer(status_every)
   thinking_level <- match.arg(thinking_level)
   fmt_secs <- function(x) sprintf("%.1fs", x)
   all_new_results <- vector("list", n)
 
-  # Determine if we really can use parallel
   use_parallel <- parallel && workers > 1 && requireNamespace("future.apply", quietly = TRUE)
 
   # --- Execution ---
@@ -664,27 +649,16 @@ submit_gemini_pairs_live <- function(
       work_fn <- function(i) {
         id1 <- as.character(pairs$ID1[i])
         id2 <- as.character(pairs$ID2[i])
-
         tryCatch(
           {
             gemini_compare_pair_live(
-              ID1               = id1,
-              text1             = as.character(pairs$text1[i]),
-              ID2               = id2,
-              text2             = as.character(pairs$text2[i]),
-              model             = model,
-              trait_name        = trait_name,
-              trait_description = trait_description,
-              prompt_template   = prompt_template,
-              api_key           = api_key,
-              thinking_level    = thinking_level,
-              temperature       = temperature,
-              top_p             = top_p,
-              top_k             = top_k,
-              max_output_tokens = max_output_tokens,
-              api_version       = api_version,
-              include_raw       = include_raw,
-              include_thoughts  = include_thoughts,
+              ID1 = id1, text1 = as.character(pairs$text1[i]),
+              ID2 = id2, text2 = as.character(pairs$text2[i]),
+              model = model, trait_name = trait_name, trait_description = trait_description,
+              prompt_template = prompt_template, api_key = api_key,
+              thinking_level = thinking_level, temperature = temperature,
+              top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
+              api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
               ...
             )
           },
@@ -706,11 +680,9 @@ submit_gemini_pairs_live <- function(
       chunk_results_list <- future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
       all_new_results[chunk_indices] <- chunk_results_list
 
-      # Incremental Save
       if (!is.null(save_path)) {
         chunk_df <- dplyr::bind_rows(chunk_results_list)
         if ("raw_response" %in% names(chunk_df)) chunk_df$raw_response <- NULL
-
         write_mode <- if (file.exists(save_path)) "append" else "write"
         tryCatch(
           {
@@ -726,7 +698,13 @@ submit_gemini_pairs_live <- function(
     if (!is.null(pb)) close(pb)
   } else {
     # Sequential Execution
-    if (verbose) message(sprintf("Processing %d pairs SEQUENTIALLY (Gemini)...", n))
+    if (verbose) {
+      message(sprintf(
+        "Submitting %d live pair(s) for comparison (model=%s, backend=gemini, thinking_level=%s, include_thoughts=%s)...",
+        n, model, thinking_level, include_thoughts
+      ))
+    }
+
     start_time <- Sys.time()
     pb <- if (progress) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
 
@@ -734,26 +712,26 @@ submit_gemini_pairs_live <- function(
       id1_i <- as.character(pairs$ID1[i])
       id2_i <- as.character(pairs$ID2[i])
 
+      # FIX: Correct status logic for 1-based index
+      show_status <- verbose && ((i - 1) %% status_every == 0L)
+
+      if (show_status) {
+        message(sprintf(
+          "[Gemini live pair %d of %d] Comparing %s vs %s ...",
+          i, n, id1_i, id2_i
+        ))
+      }
+
       res <- tryCatch(
         {
           gemini_compare_pair_live(
-            ID1               = id1_i,
-            text1             = as.character(pairs$text1[i]),
-            ID2               = id2_i,
-            text2             = as.character(pairs$text2[i]),
-            model             = model,
-            trait_name        = trait_name,
-            trait_description = trait_description,
-            prompt_template   = prompt_template,
-            api_key           = api_key,
-            thinking_level    = thinking_level,
-            temperature       = temperature,
-            top_p             = top_p,
-            top_k             = top_k,
-            max_output_tokens = max_output_tokens,
-            api_version       = api_version,
-            include_raw       = include_raw,
-            include_thoughts  = include_thoughts,
+            ID1 = id1_i, text1 = as.character(pairs$text1[i]),
+            ID2 = id2_i, text2 = as.character(pairs$text2[i]),
+            model = model, trait_name = trait_name, trait_description = trait_description,
+            prompt_template = prompt_template, api_key = api_key,
+            thinking_level = thinking_level, temperature = temperature,
+            top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
+            api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
             ...
           )
         },
@@ -783,7 +761,18 @@ submit_gemini_pairs_live <- function(
           error = function(e) warning("Failed to save incremental result: ", e$message, call. = FALSE)
         )
       }
+
       if (!is.null(pb)) utils::setTxtProgressBar(pb, i)
+
+      if (show_status) {
+        elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+        avg <- elapsed / i
+        remaining <- avg * (n - i)
+        message(sprintf(
+          "  Elapsed: %s | Avg per pair: %s | Est. remaining: %s",
+          fmt_secs(elapsed), fmt_secs(avg), fmt_secs(remaining)
+        ))
+      }
     }
     if (!is.null(pb)) close(pb)
   }
