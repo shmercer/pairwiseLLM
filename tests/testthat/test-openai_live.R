@@ -1086,3 +1086,259 @@ testthat::test_that("submit_openai_pairs_live validates inputs", {
     "positive integer"
   )
 })
+
+testthat::test_that("submit_openai_pairs_live: Directory creation & Raw response cleanup", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+
+  # Use a path in a new subdirectory to test dir.create (Lines 441-442)
+  tmp_dir <- tempfile()
+  tmp_file <- file.path(tmp_dir, "out.csv")
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  # Mock the comparison to return a result with raw_response
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(...) {
+      res <- tibble::tibble(
+        custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+        model = "gpt-4.1", status_code = 200, error_message = NA,
+        thoughts = NA_character_, content = "content",
+        better_sample = NA_character_, better_id = NA_character_,
+        prompt_tokens = 1, completion_tokens = 1, total_tokens = 2
+      )
+      res$raw_response <- list(list(foo = "bar"))
+      res
+    },
+    .env = pll_ns,
+    {
+      out <- capture.output(
+        {
+          res <- submit_openai_pairs_live(
+            pairs, "gpt-4.1", td$name, td$description,
+            save_path = tmp_file, verbose = TRUE, include_raw = TRUE
+          )
+        },
+        type = "message"
+      )
+
+      # Check directory creation message (Line 441)
+      testthat::expect_true(any(grepl("Creating output directory", out)))
+      testthat::expect_true(dir.exists(tmp_dir))
+
+      # Check verbose timing messages
+      testthat::expect_true(any(grepl("Completed 1 pairs", out)))
+
+      # Check that raw_response was removed from the saved file (Line 615 check)
+      saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+      testthat::expect_false("raw_response" %in% names(saved))
+
+      # But present in the returned object
+      testthat::expect_true("raw_response" %in% names(res$results))
+    }
+  )
+  unlink(tmp_dir, recursive = TRUE)
+})
+
+testthat::test_that("submit_openai_pairs_live: Resume logic (Read Error Handling)", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp <- tempfile(fileext = ".csv")
+  file.create(tmp)
+
+  # Mock read_csv to throw an error, forcing the tryCatch error handler (Line 481)
+  testthat::with_mocked_bindings(
+    read_csv = function(...) stop("Mock Read Error"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        openai_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "gpt-4.1", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_openai_pairs_live(
+              pairs, "gpt-4.1", td$name, td$description,
+              save_path = tmp, verbose = FALSE
+            ),
+            "Could not read existing save file"
+          )
+        }
+      )
+    }
+  )
+  unlink(tmp)
+})
+
+testthat::test_that("submit_openai_pairs_live: Sequential Save Error Handling", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering Lines 617-619 warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Disk full"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        openai_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "gpt-4.1", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_openai_pairs_live(
+              pairs, "gpt-4.1", td$name, td$description,
+              save_path = tmp_file, verbose = FALSE
+            ),
+            "Failed to save incremental result"
+          )
+        }
+      )
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live: Parallel Execution & Save Error", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  # Use 2 pairs to ensure the loop runs
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"), text1 = c("a", "b"),
+    ID2 = c("C", "D"), text2 = c("c", "d")
+  )
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # We force parallel execution.
+  # We do NOT mock openai_compare_pair_live, so the workers will execute real code.
+  # Since there is no API key/network, they will fail and return error tibbles.
+  # This covers the parallel worker tryCatch (Lines 535-555).
+
+  # We mock write_csv in the main process to throw an error (Lines 573-574).
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Parallel Disk full"),
+    .package = "readr",
+    {
+      capture.output({
+        testthat::expect_warning(
+          res <- submit_openai_pairs_live(
+            pairs,
+            model = "gpt-4.1",
+            trait_name = td$name,
+            trait_description = td$description,
+            parallel = TRUE, workers = 2,
+            save_path = tmp_file, verbose = TRUE,
+            api_key = "FAKE_KEY"
+          ),
+          "Failed to save incremental results"
+        )
+      })
+
+      # Verify we got failures from the workers
+      testthat::expect_equal(nrow(res$failed_pairs), 2L)
+      # The error message comes from the worker tryCatch
+      testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Parallel execution with include_raw = TRUE.
+  # The workers will fail (fake key), returning a tibble WITH `raw_response`.
+  # The main process must strip this column before saving (Line 566).
+
+  testthat::expect_warning(
+    submit_openai_pairs_live(
+      pairs, "gpt-4.1", td$name, td$description,
+      parallel = TRUE, workers = 2,
+      save_path = tmp_file, verbose = FALSE,
+      include_raw = TRUE,
+      api_key = "FAKE_KEY"
+    ),
+    regexp = NA # Should NOT warn about save failure
+  )
+
+  testthat::expect_true(file.exists(tmp_file))
+  saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+
+  # Verify processed (failed) row exists but raw_response is gone
+  testthat::expect_equal(nrow(saved), 1L)
+  testthat::expect_false("raw_response" %in% names(saved))
+})
+
+testthat::test_that("submit_openai_pairs_live: Sequential Internal Error Handling", {
+  # Covers the sequential loop tryCatch error handler (Lines 598-609)
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(...) stop("Sequential Internal Crash"),
+    .env = pll_ns,
+    {
+      res <- submit_openai_pairs_live(
+        pairs, "gpt-4.1", td$name, td$description,
+        verbose = FALSE
+      )
+
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_match(res$failed_pairs$error_message, "Sequential Internal Crash")
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live: Resume Verbose Message", {
+  testthat::skip_if_not_installed("readr")
+  td <- trait_description("overall_quality")
+  tmp <- tempfile(fileext = ".csv")
+
+  # Create an existing result file
+  existing <- tibble::tibble(
+    custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+    model = "m", status_code = 200, error_message = NA
+  )
+  readr::write_csv(existing, tmp)
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  # Run with verbose = TRUE to trigger the messages
+  # We do not mock the API here because the function should skip the pair before calling the API
+  out <- capture.output({
+    res <- submit_openai_pairs_live(
+      pairs, "model", td$name, td$description,
+      save_path = tmp, verbose = TRUE
+    )
+  }, type = "message")
+
+  testthat::expect_true(any(grepl("Found existing file", out)))
+  testthat::expect_true(any(grepl("Skipping 1 pairs already present", out)))
+
+  # Ensure the result contains the skipped row
+  testthat::expect_equal(nrow(res$results), 1L)
+  testthat::expect_equal(res$results$custom_id, "LIVE_A_vs_B")
+
+  unlink(tmp)
+})
