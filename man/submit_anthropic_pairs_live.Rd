@@ -18,6 +18,9 @@ submit_anthropic_pairs_live(
   progress = TRUE,
   include_raw = FALSE,
   include_thoughts = NULL,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 }
@@ -52,14 +55,13 @@ submit_anthropic_pairs_live(
 summaries.}
 
 \item{status_every}{Integer; print status / timing for every
-\code{status_every}-th pair. Defaults to 1 (every pair). Errors are always
-printed.}
+\code{status_every}-th pair. Defaults to 1 (every pair).}
 
 \item{progress}{Logical; if \code{TRUE}, shows a textual progress bar.}
 
 \item{include_raw}{Logical; if \code{TRUE}, each row of the returned tibble
 will include a \code{raw_response} list-column with the parsed JSON body
-from Anthropic.}
+from Anthropic. Note: Raw responses are not saved to the incremental CSV file.}
 
 \item{include_thoughts}{Logical or \code{NULL}; forwarded to
 \code{\link{anthropic_compare_pair_live}}. When \code{TRUE} and
@@ -68,24 +70,50 @@ thinking mode (\code{reasoning = "enabled"}), which implies
 \code{temperature = 1} and adds a \code{thinking} block. When
 \code{FALSE} or \code{NULL}, \code{reasoning} is used as-is.}
 
+\item{save_path}{Character string; optional file path (e.g., "output.csv")
+to save results incrementally. If the file exists, the function reads it
+to identify and skip pairs that have already been processed (resume mode).
+Requires the \code{readr} package.}
+
+\item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
+\code{future.apply}. Requires the \code{future} and \code{future.apply}
+packages.}
+
+\item{workers}{Integer; the number of parallel workers (threads) to use if
+\code{parallel = TRUE}. Defaults to 1.
+\strong{Guidance:} Anthropic rate limits vary significantly by tier. Start
+conservatively (e.g., 2-4 workers) to avoid HTTP 429 errors.}
+
 \item{...}{Additional Anthropic parameters (for example \code{temperature},
 \code{top_p}, \code{max_tokens}) passed on to
 \code{\link{anthropic_compare_pair_live}}.}
 }
 \value{
-A tibble with one row per pair and the same columns as
-\code{\link{anthropic_compare_pair_live}}.
+A list containing two elements:
+\describe{
+\item{results}{A tibble with one row per successfully processed pair.}
+\item{failed_pairs}{A tibble containing the rows from \code{pairs} that
+failed to process (due to API errors or timeouts), along with an
+\code{error_message} column.}
+}
 }
 \description{
-This is a thin row-wise wrapper around
+This is a robust row-wise wrapper around
 \code{\link{anthropic_compare_pair_live}}. It takes a tibble of pairs
 (ID1 / text1 / ID2 / text2), submits each pair to the Anthropic
-Messages API, and binds the results into a single tibble.
+Messages API, and collects the results.
 }
 \details{
-The output has the same columns as \code{\link{anthropic_compare_pair_live}},
-with one row per pair, making it easy to pass into
-\code{\link{build_bt_data}} and \code{\link{fit_bt_model}}.
+This function offers:
+\itemize{
+\item \strong{Parallel Processing:} Uses the \code{future} package to process
+multiple pairs simultaneously.
+\item \strong{Incremental Saving:} Writes results to a CSV file as they complete.
+If the process is interrupted, re-running the function with the same
+\code{save_path} will automatically skip pairs that were already successfully processed.
+\item \strong{Error Separation:} Returns valid results and failed pairs separately,
+making it easier to debug or retry specific failures.
+}
 
 \strong{Temperature and reasoning behaviour}
 
@@ -109,7 +137,6 @@ request. When \code{include_thoughts = FALSE} (the default), and you leave
 \examples{
 \dontrun{
 # Requires ANTHROPIC_API_KEY and network access.
-library(pairwiseLLM)
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -121,7 +148,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Deterministic comparisons with no extended thinking and temperature = 0
+# 1. Sequential execution with incremental saving
 res_claude <- submit_anthropic_pairs_live(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
@@ -129,30 +156,29 @@ res_claude <- submit_anthropic_pairs_live(
   trait_description = td$description,
   prompt_template   = tmpl,
   reasoning         = "none",
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE
+  save_path         = "results_seq.csv"
 )
 
-res_claude$better_id
-
-# Comparisons with extended thinking and temperature = 1
-res_claude_reason <- submit_anthropic_pairs_live(
+# 2. Parallel execution (faster)
+res_par <- submit_anthropic_pairs_live(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  reasoning         = "enabled",
-  include_thoughts  = TRUE,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = TRUE
+  save_path         = "results_par.csv",
+  parallel          = TRUE,
+  workers           = 4
 )
 
-res_claude_reason$better_id
+# Inspect results
+head(res_par$results)
+
+# Check for failures
+if (nrow(res_par$failed_pairs) > 0) {
+  message("Some pairs failed:")
+  print(res_par$failed_pairs)
+}
 }
 
 }

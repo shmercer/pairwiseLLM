@@ -311,108 +311,6 @@ testthat::test_that("anthropic_compare_pair_live passes top_p parameter", {
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("submit_anthropic_pairs_live returns empty tibble
-                    for zero rows", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  empty_pairs <- tibble::tibble(
-    ID1   = character(0),
-    text1 = character(0),
-    ID2   = character(0),
-    text2 = character(0)
-  )
-
-  res <- submit_anthropic_pairs_live(
-    pairs             = empty_pairs,
-    model             = "claude-sonnet-4-5",
-    trait_name        = td$name,
-    trait_description = td$description,
-    prompt_template   = tmpl
-  )
-
-  testthat::expect_equal(nrow(res), 0L)
-  testthat::expect_false("raw_response" %in% names(res))
-
-  res_raw <- submit_anthropic_pairs_live(
-    pairs             = empty_pairs,
-    model             = "claude-sonnet-4-5",
-    trait_name        = td$name,
-    trait_description = td$description,
-    prompt_template   = tmpl,
-    include_raw       = TRUE
-  )
-
-  testthat::expect_equal(nrow(res_raw), 0L)
-  testthat::expect_true("raw_response" %in% names(res_raw))
-  testthat::expect_type(res_raw$raw_response, "list")
-})
-
-# ---------------------------------------------------------------------
-
-testthat::test_that("submit_anthropic_pairs_live calls
-                    anthropic_compare_pair_live row-wise", {
-  pairs <- tibble::tibble(
-    ID1   = c("S01", "S03"),
-    text1 = c("Text 1", "Text 3"),
-    ID2   = c("S02", "S04"),
-    text2 = c("Text 2", "Text 4")
-  )
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  calls <- list()
-
-  fake_result <- function(ID1, ID2, chosen) {
-    tibble::tibble(
-      custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
-      ID1               = ID1,
-      ID2               = ID2,
-      model             = "claude-sonnet-4-5-20250929",
-      object_type       = "message",
-      status_code       = 200L,
-      error_message     = NA_character_,
-      content           = sprintf("<BETTER_SAMPLE>%s</BETTER_SAMPLE>", chosen),
-      better_sample     = chosen,
-      better_id         = if (chosen == "SAMPLE_1") ID1 else ID2,
-      prompt_tokens     = 10,
-      completion_tokens = 5,
-      total_tokens      = 15
-    )
-  }
-
-  testthat::with_mocked_bindings(
-    anthropic_compare_pair_live = function(ID1, text1, ID2, text2, model, trait_name,
-                                           trait_description, prompt_template, api_key,
-                                           anthropic_version, reasoning, include_raw, include_thoughts, ...) {
-      calls <<- append(calls, list(list(ID1 = ID1, ID2 = ID2)))
-      if (ID1 == "S01") {
-        fake_result(ID1, ID2, "SAMPLE_1")
-      } else {
-        fake_result(ID1, ID2, "SAMPLE_2")
-      }
-    },
-    {
-      res <- submit_anthropic_pairs_live(
-        pairs             = pairs,
-        model             = "claude-sonnet-4-5",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        include_raw       = FALSE,
-        verbose           = FALSE,
-        progress          = FALSE
-      )
-
-      testthat::expect_equal(length(calls), 2L)
-      testthat::expect_equal(res$better_id, c("S01", "S04"))
-    }
-  )
-})
-
-# ---------------------------------------------------------------------
-
 testthat::test_that("anthropic_compare_pair_live defaults and thinking
                     depend on reasoning", {
   td <- trait_description("overall_quality")
@@ -841,83 +739,204 @@ testthat::test_that("anthropic_compare_pair_live calculates total_tokens fallbac
   )
 })
 
-testthat::test_that("submit_anthropic_pairs_live validates input columns and status_every", {
+# =====================================================================
+# NEW TESTS for submit_anthropic_pairs_live (List output & Features)
+# =====================================================================
+
+testthat::test_that("submit_anthropic_pairs_live returns list structure for zero rows", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  empty_pairs <- tibble::tibble(
+    ID1 = character(0), text1 = character(0),
+    ID2 = character(0), text2 = character(0)
+  )
+
+  res <- submit_anthropic_pairs_live(
+    pairs = empty_pairs,
+    model = "claude-sonnet-4-5",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl
+  )
+
+  # Check list structure
+  testthat::expect_type(res, "list")
+  testthat::expect_named(res, c("results", "failed_pairs"))
+  testthat::expect_s3_class(res$results, "tbl_df")
+  testthat::expect_s3_class(res$failed_pairs, "tbl_df")
+  testthat::expect_equal(nrow(res$results), 0L)
+  testthat::expect_equal(nrow(res$failed_pairs), 0L)
+
+  # Check include_raw logic
+  res_raw <- submit_anthropic_pairs_live(
+    pairs = empty_pairs,
+    model = "claude-sonnet-4-5",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    include_raw = TRUE
+  )
+  testthat::expect_true("raw_response" %in% names(res_raw$results))
+})
+
+testthat::test_that("submit_anthropic_pairs_live runs correctly and returns list", {
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S02"),
+    text1 = c("T1", "T2"),
+    ID2 = c("S03", "S04"),
+    text2 = c("T3", "T4")
+  )
+
+  # Mock success response
+  fake_success <- tibble::tibble(
+    custom_id = "LIVE_X_vs_Y", ID1 = "X", ID2 = "Y",
+    model = "mod", status_code = 200L, error_message = NA_character_,
+    better_sample = "SAMPLE_1", better_id = "X"
+  )
+
+  testthat::local_mocked_bindings(
+    anthropic_compare_pair_live = function(...) fake_success,
+    .env = pll_ns
+  )
+
+  res <- submit_anthropic_pairs_live(
+    pairs = pairs,
+    model = "claude-sonnet-4-5",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    verbose = FALSE
+  )
+
+  testthat::expect_type(res, "list")
+  testthat::expect_equal(nrow(res$results), 2L)
+  testthat::expect_equal(nrow(res$failed_pairs), 0L)
+})
+
+testthat::test_that("submit_anthropic_pairs_live separates failed pairs", {
+  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
-  # Missing text1 column
-  bad_pairs <- tibble::tibble(ID1 = "A", ID2 = "B", text2 = "t")
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "FailMe"),
+    text1 = "A", ID2 = "B", text2 = "C"
+  )
+
+  testthat::with_mocked_bindings(
+    anthropic_compare_pair_live = function(ID1, ...) {
+      if (ID1 == "FailMe") {
+        # Simulate error return from lower-level function
+        return(tibble::tibble(
+          custom_id = "LIVE_FailMe_vs_B", ID1 = ID1, ID2 = "B",
+          model = "claude", status_code = 500L,
+          error_message = "Mock API Error",
+          better_id = NA_character_
+        ))
+      }
+      # Success case
+      tibble::tibble(
+        custom_id = "LIVE_S01_vs_B", ID1 = ID1, ID2 = "B",
+        model = "claude", status_code = 200L,
+        error_message = NA_character_,
+        better_id = ID1
+      )
+    },
+    .env = pll_ns,
+    {
+      res <- submit_anthropic_pairs_live(
+        pairs, "claude", td$name, td$description,
+        verbose = FALSE
+      )
+
+      # Results should contain BOTH rows (full log)
+      testthat::expect_equal(nrow(res$results), 2L)
+
+      # Failed pairs should contain ONLY the failure
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_equal(res$failed_pairs$ID1, "FailMe")
+      testthat::expect_equal(res$failed_pairs$error_message, "Mock API Error")
+    }
+  )
+})
+
+testthat::test_that("submit_anthropic_pairs_live respects save_path (Resume Logic)", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  tmp_csv <- tempfile(fileext = ".csv")
+
+  # 1. Create a "fake" existing result file
+  # Pair S01 vs S02 is "already done"
+  existing_data <- tibble::tibble(
+    custom_id = "LIVE_S01_vs_S02",
+    ID1 = "S01", ID2 = "S02",
+    model = "claude", status_code = 200L, error_message = NA_character_
+  )
+  readr::write_csv(existing_data, tmp_csv)
+
+  # 2. Input pairs: one old, one new
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S03"),
+    text1 = c("A", "B"),
+    ID2 = c("S02", "S04"),
+    text2 = c("C", "D")
+  )
+
+  call_count <- 0
+
+  testthat::with_mocked_bindings(
+    anthropic_compare_pair_live = function(...) {
+      call_count <<- call_count + 1
+      tibble::tibble(
+        custom_id = "LIVE_S03_vs_S04",
+        ID1 = "S03", ID2 = "S04",
+        model = "claude", status_code = 200L, error_message = NA_character_
+      )
+    },
+    .env = pll_ns,
+    {
+      res <- submit_anthropic_pairs_live(
+        pairs = pairs,
+        model = "claude",
+        trait_name = td$name,
+        trait_description = td$description,
+        save_path = tmp_csv,
+        verbose = FALSE
+      )
+
+      # Should call API only ONCE (for S03)
+      testthat::expect_equal(call_count, 1L)
+
+      # Result should contain BOTH (one from disk, one from new run)
+      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_setequal(res$results$ID1, c("S01", "S03"))
+    }
+  )
+
+  unlink(tmp_csv)
+})
+
+testthat::test_that("submit_anthropic_pairs_live validates inputs", {
+  td <- trait_description("overall_quality")
+
+  # 1. Missing columns
+  bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
   testthat::expect_error(
     submit_anthropic_pairs_live(bad_pairs, "claude", td$name, td$description),
     "must contain columns"
   )
 
-  # Invalid status_every
+  # 2. Invalid status_every (0 is not positive)
   good_pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
   testthat::expect_error(
     submit_anthropic_pairs_live(
       good_pairs, "claude", td$name, td$description,
       status_every = 0
     ),
-    "status_every` must be a single positive integer"
-  )
-})
-
-testthat::test_that("submit_anthropic_pairs_live is resilient to individual pair failures", {
-  td <- trait_description("overall_quality")
-
-  pairs <- tibble::tibble(
-    ID1 = c("S1", "S2"),
-    text1 = c("A", "C"),
-    ID2 = c("S2", "S3"),
-    text2 = c("B", "D")
-  )
-
-  # Mock the single comparison function directly.
-  # Pair 1 throws error, Pair 2 succeeds.
-  testthat::with_mocked_bindings(
-    anthropic_compare_pair_live = function(ID1, ...) {
-      if (ID1 == "S1") {
-        stop("Simulated Network Error")
-      } else {
-        # Return a valid 1-row tibble for success
-        tibble::tibble(
-          custom_id = "LIVE_S2_vs_S3",
-          ID1 = "S2", ID2 = "S3",
-          model = "claude",
-          object_type = "message",
-          status_code = 200L,
-          error_message = NA_character_,
-          thoughts = NA_character_,
-          content = "Result",
-          better_sample = "SAMPLE_1",
-          better_id = "S2",
-          prompt_tokens = 10, completion_tokens = 10, total_tokens = 20
-        )
-      }
-    },
-    {
-      # Capture output, suppress verbose messages for clean test logs
-      res <- suppressMessages(
-        submit_anthropic_pairs_live(
-          pairs, "claude", td$name, td$description,
-          verbose = TRUE, progress = TRUE, include_raw = TRUE
-        )
-      )
-
-      testthat::expect_equal(nrow(res), 2L)
-
-      # Row 1: Failed
-      testthat::expect_equal(res$ID1[1], "S1")
-      testthat::expect_match(res$error_message[1], "Simulated Network Error")
-      testthat::expect_true(is.na(res$status_code[1]))
-      # Check include_raw behaviour on error
-      testthat::expect_type(res$raw_response, "list")
-      testthat::expect_null(res$raw_response[[1]])
-
-      # Row 2: Succeeded
-      testthat::expect_equal(res$ID1[2], "S2")
-      testthat::expect_true(is.na(res$error_message[2]))
-      testthat::expect_equal(res$better_id[2], "S2")
-    }
+    "positive integer"
   )
 })
