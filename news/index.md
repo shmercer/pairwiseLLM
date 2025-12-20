@@ -7,9 +7,9 @@
 - Parallel Processing:
   - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
     and backend-specific live functions (OpenAI, Anthropic, Gemini,
-    Together) now support parallel execution via `parallel = TRUE` and
-    `workers = n` (requires the [future](https://future.futureverse.org)
-    package).
+    Together, Ollama) now support parallel execution via
+    `parallel = TRUE` and `workers = n` (requires the
+    [future](https://future.futureverse.org) package).
 - Incremental Saving & Resume:
   - Added `save_path` argument to live submission functions. Results are
     saved to CSV incrementally, allowing interrupted jobs to resume

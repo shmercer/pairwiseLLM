@@ -1,10 +1,10 @@
 # Live Ollama comparisons for a tibble of pairs
 
-`submit_ollama_pairs_live()` is a thin row-wise wrapper around
+`submit_ollama_pairs_live()` is a robust row-wise wrapper around
 [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md).
 It takes a tibble of pairs (`ID1` / `text1` / `ID2` / `text2`), submits
-each pair to a local Ollama server, and binds the results into a single
-tibble.
+each pair to a local (or remote) Ollama server, and collects the
+results.
 
 ## Usage
 
@@ -22,6 +22,9 @@ submit_ollama_pairs_live(
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 ```
@@ -91,6 +94,25 @@ submit_ollama_pairs_live(
 
   Logical; if `TRUE`, each row of the returned tibble will include a
   `raw_response` list-column with the parsed JSON body from Ollama.
+  Note: Raw responses are not saved to the incremental CSV file.
+
+- save_path:
+
+  Character string; optional file path (e.g., "output.csv") to save
+  results incrementally. If the file exists, the function reads it to
+  identify and skip pairs that have already been processed (resume
+  mode). Requires the `readr` package.
+
+- parallel:
+
+  Logical; if `TRUE`, enables parallel processing using `future.apply`.
+  Requires the `future` and `future.apply` packages. Defaults to
+  `FALSE`.
+
+- workers:
+
+  Integer; the number of parallel workers (threads) to use if
+  `parallel = TRUE`. Defaults to 1.
 
 - ...:
 
@@ -99,20 +121,31 @@ submit_ollama_pairs_live(
 
 ## Value
 
-A tibble with one row per pair and the same columns as
-[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
-including an optional `raw_response` column when `include_raw = TRUE`.
+A list containing two elements:
+
+- results:
+
+  A tibble with one row per successfully processed pair.
+
+- failed_pairs:
+
+  A tibble containing the rows from `pairs` that failed to process (due
+  to API errors or timeouts), along with an `error_message` column.
 
 ## Details
 
-This helper mirrors
-[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
-but targets a local Ollama instance rather than a cloud API. It is
-intended to offer a similar interface and return shape, so results can
-be passed directly into
-[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
-and
-[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md).
+This function offers:
+
+- **Incremental Saving:** Writes results to a CSV file as they complete.
+  If the process is interrupted, re-running the function with the same
+  `save_path` will automatically skip pairs that were already
+  successfully processed.
+
+- **Parallel Processing:** Uses the `future` package to process multiple
+  pairs simultaneously. **Note:** Since Ollama typically runs locally on
+  the GPU, parallel processing may degrade performance or cause
+  out-of-memory errors unless the hardware can handle concurrent
+  requests. Defaults are set to sequential processing.
 
 Temperature and context length are controlled as follows:
 
@@ -127,8 +160,7 @@ Temperature and context length are controlled as follows:
 In most user-facing workflows, it is more convenient to call
 [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
 with `backend = "ollama"` rather than using `submit_ollama_pairs_live()`
-directly. The backend-neutral wrapper will route arguments to the
-appropriate backend helper and ensure a consistent return shape.
+directly.
 
 As with
 [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
@@ -147,12 +179,6 @@ this function assumes that:
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
   for backend-agnostic comparisons over tibbles of pairs.
 
-- [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
-  [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
-  and
-  [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
-  for other backend-specific implementations.
-
 ## Examples
 
 ``` r
@@ -169,33 +195,18 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Live comparisons for multiple pairs using a Mistral model via Ollama
+# Live comparisons with incremental saving
 res_mistral <- submit_ollama_pairs_live(
   pairs             = pairs,
   model             = "mistral-small3.2:24b",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE
+  save_path         = "ollama_results.csv",
+  verbose           = TRUE
 )
 
-res_mistral$better_id
-
-# Qwen with thinking enabled
-res_qwen_think <- submit_ollama_pairs_live(
-  pairs             = pairs,
-  model             = "qwen3:32b",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  think             = TRUE,
-  num_ctx           = 16384,
-  verbose           = FALSE,
-  progress          = FALSE
-)
-
-res_qwen_think$better_id
+# Access results
+res_mistral$results
 } # }
 ```

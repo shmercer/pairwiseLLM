@@ -131,7 +131,8 @@ The package provides helpers for each step.
 Use the unified API for direct API calls. The
 [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
 function supports **parallel processing** and **incremental output
-saving** for the OpenAI, Anthropic, Gemini, and Together backends.
+saving** for all supported backends (OpenAI, Anthropic, Gemini,
+Together, and Ollama).
 
 - [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
   — compare one pair  

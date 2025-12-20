@@ -5,9 +5,33 @@ comparison for multiple pairs. It takes a tibble of pairs (`ID1`,
 `text1`, `ID2`, `text2`), submits each pair to the selected backend, and
 aggregates the results.
 
+`submit_llm_pairs()` is a backend-neutral wrapper around row-wise
+comparison for multiple pairs. It takes a tibble of pairs (`ID1`,
+`text1`, `ID2`, `text2`), submits each pair to the selected backend, and
+aggregates the results.
+
 ## Usage
 
 ``` r
+submit_llm_pairs(
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  endpoint = c("chat.completions", "responses"),
+  api_key = NULL,
+  verbose = TRUE,
+  status_every = 1,
+  progress = TRUE,
+  include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
+  ...
+)
+
 submit_llm_pairs(
   pairs,
   model,
@@ -111,14 +135,13 @@ submit_llm_pairs(
   Character string; optional file path (e.g., "output.csv") to save
   results incrementally. If the file exists, the function reads it to
   identify and skip pairs that have already been processed (resume
-  mode). Supported by `"openai"`, `"anthropic"`, `"gemini"`, and
-  `"together"`.
+  mode). Supported by all backends.
 
 - parallel:
 
   Logical; if `TRUE`, enables parallel processing using `future.apply`.
-  Requires the `future` package. Supported by `"openai"`, `"anthropic"`,
-  `"gemini"`, and `"together"`.
+  Requires the `future` package. Supported by all backends (though
+  defaults may vary).
 
 - workers:
 
@@ -160,6 +183,17 @@ Note: The `"ollama"` backend currently returns a single tibble of
 results (failures may throw errors or appear as NA rows depending on
 implementation).
 
+A list containing:
+
+- results:
+
+  A tibble with one row per successfully processed pair.
+
+- failed_pairs:
+
+  A tibble containing rows that failed to process (for supported
+  backends).
+
 ## Details
 
 This function supports parallel processing, incremental saving, and
@@ -183,7 +217,38 @@ At present, the following backends are implemented:
 - `"ollama"` →
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
 
+This function supports parallel processing, incremental saving, and
+resume capability for the `"openai"`, `"anthropic"`, `"gemini"`,
+`"together"`, and `"ollama"` backends.
+
+At present, the following backends are implemented:
+
+- `"openai"` →
+  [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
+
+- `"anthropic"` →
+  [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md)
+
+- `"gemini"` →
+  [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
+
+- `"together"` →
+  [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
+
+- `"ollama"` →
+  [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
+
 ## See also
+
+- [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+  [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+  [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+  [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+  and
+  [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
+  for backend-specific implementations.
+
+&nbsp;
 
 - [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
   [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
@@ -238,5 +303,47 @@ res_ollama <- submit_llm_pairs(
 )
 
 res_ollama$better_id
+} # }
+
+if (FALSE) { # \dontrun{
+# Requires an API key for the chosen cloud backend.
+
+data("example_writing_samples", package = "pairwiseLLM")
+
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 5, seed = 123) |>
+  randomize_pair_order(seed = 456)
+
+td <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# Parallel execution with OpenAI (requires future package)
+res_live <- submit_llm_pairs(
+  pairs             = pairs,
+  model             = "gpt-4.1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  backend           = "openai",
+  endpoint          = "chat.completions",
+  parallel          = TRUE,
+  workers           = 4,
+  save_path         = "results_openai.csv"
+)
+
+# Live comparisons using a local Ollama backend with incremental saving
+res_ollama <- submit_llm_pairs(
+  pairs             = pairs,
+  model             = "mistral-small3.2:24b",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  backend           = "ollama",
+  save_path         = "results_ollama.csv",
+  verbose           = TRUE
+)
+
+res_ollama$results
 } # }
 ```

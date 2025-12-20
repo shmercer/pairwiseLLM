@@ -182,13 +182,13 @@ set_prompt_template(file = "my_template.txt")
 
 ## 6. Live Pairwise Comparisons
 
-The unified wrapper works for **OpenAI, Anthropic, Gemini, Together, and
+he unified wrapper works for **OpenAI, Anthropic, Gemini, Together, and
 Ollama.**
 
 It now supports **parallel processing** and **incremental output file
-saving** (resume capability) for cloud backends. The function returns a
-list containing `$results` (successful comparisons) and `$failed_pairs`
-(errors).
+saving** (resume capability) for **all** supported backends. The
+function returns a list containing `$results` (successful comparisons)
+and `$failed_pairs` (errors).
 
 ``` r
 # Example using parallel processing and incremental saving

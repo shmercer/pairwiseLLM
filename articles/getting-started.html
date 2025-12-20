@@ -255,12 +255,12 @@ require an API key, just that the Ollama server is running.</p>
 <div class="section level2">
 <h2 id="live-pairwise-comparisons">6. Live Pairwise Comparisons<a class="anchor" aria-label="anchor" href="#live-pairwise-comparisons"></a>
 </h2>
-<p>The unified wrapper works for <strong>OpenAI, Anthropic, Gemini,
+<p>he unified wrapper works for <strong>OpenAI, Anthropic, Gemini,
 Together, and Ollama.</strong></p>
 <p>It now supports <strong>parallel processing</strong> and
 <strong>incremental output file saving</strong> (resume capability) for
-cloud backends. The function returns a list containing
-<code>$results</code> (successful comparisons) and
+<strong>all</strong> supported backends. The function returns a list
+containing <code>$results</code> (successful comparisons) and
 <code>$failed_pairs</code> (errors).</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Example using parallel processing and incremental saving</span></span>
