@@ -95,100 +95,6 @@ testthat::test_that("llm_compare_pair uses default backend and endpoint", {
 })
 
 # ---------------------------------------------------------------------
-
-testthat::test_that("submit_llm_pairs uses default backend and endpoint", {
-  pairs <- tibble::tibble(
-    ID1   = c("S01", "S03"),
-    text1 = c("Text 1", "Text 3"),
-    ID2   = c("S02", "S04"),
-    text2 = c("Text 2", "Text 4")
-  )
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  fake_res <- tibble::tibble(
-    custom_id = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
-    ID1 = pairs$ID1,
-    ID2 = pairs$ID2,
-    model = "gpt-4.1",
-    object_type = "chat.completion",
-    status_code = c(200L, 200L),
-    error_message = c(NA_character_, NA_character_),
-    thoughts = c(NA_character_, NA_character_),
-    content = c(
-      "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-      "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
-    ),
-    better_sample = c("SAMPLE_1", "SAMPLE_2"),
-    better_id = c("S01", "S04"),
-    prompt_tokens = c(10, 11),
-    completion_tokens = c(5, 6),
-    total_tokens = c(15, 17)
-  )
-
-  calls <- list()
-
-  testthat::with_mocked_bindings(
-    submit_openai_pairs_live = function(pairs,
-                                        model,
-                                        trait_name,
-                                        trait_description,
-                                        prompt_template,
-                                        endpoint,
-                                        api_key,
-                                        verbose,
-                                        status_every,
-                                        progress,
-                                        include_raw,
-                                        ...) {
-      calls <<- append(calls, list(list(
-        pairs             = pairs,
-        model             = model,
-        trait_name        = trait_name,
-        trait_description = trait_description,
-        prompt_template   = prompt_template,
-        endpoint          = endpoint,
-        api_key           = api_key,
-        verbose           = verbose,
-        status_every      = status_every,
-        progress          = progress,
-        include_raw       = include_raw,
-        dots              = list(...)
-      )))
-      fake_res
-    },
-    {
-      # Note: backend and endpoint are omitted, using defaults
-      res <- submit_llm_pairs(
-        pairs             = pairs,
-        model             = "gpt-4.1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl
-      )
-
-      testthat::expect_equal(length(calls), 1L)
-      call <- calls[[1]]
-
-      # Defaults should resolve to backend = "openai", endpoint =
-      # "chat.completions"
-      testthat::expect_equal(call$endpoint, "chat.completions")
-      testthat::expect_true("api_key" %in% names(call))
-      # Defaults for verbose / status_every / progress / include_raw
-      testthat::expect_true(call$verbose)
-      testthat::expect_equal(call$status_every, 1L)
-      testthat::expect_true(call$progress)
-      testthat::expect_false(call$include_raw)
-
-      # Wrapper returns backend result
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(res, fake_res)
-    }
-  )
-})
-
-# ---------------------------------------------------------------------
 # Routing: anthropic backend
 # ---------------------------------------------------------------------
 
@@ -364,98 +270,6 @@ testthat::test_that("llm_compare_pair uses Anthropic env var when
   )
 })
 
-testthat::test_that("submit_llm_pairs routes to anthropic backend", {
-  pairs <- tibble::tibble(
-    ID1   = c("S01", "S03"),
-    text1 = c("Text 1", "Text 3"),
-    ID2   = c("S02", "S04"),
-    text2 = c("Text 2", "Text 4")
-  )
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  fake_res <- tibble::tibble(
-    custom_id = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
-    ID1 = pairs$ID1,
-    ID2 = pairs$ID2,
-    model = "claude-3-5-sonnet-latest",
-    object_type = "message",
-    status_code = c(200L, 200L),
-    error_message = c(NA_character_, NA_character_),
-    thoughts = c("Thoughts 1", "Thoughts 2"),
-    content = c(
-      "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-      "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
-    ),
-    better_sample = c("SAMPLE_1", "SAMPLE_2"),
-    better_id = c("S01", "S04"),
-    prompt_tokens = c(20, 22),
-    completion_tokens = c(10, 12),
-    total_tokens = c(30, 34)
-  )
-
-  calls <- list()
-
-  testthat::with_mocked_bindings(
-    submit_anthropic_pairs_live = function(pairs,
-                                           model,
-                                           trait_name,
-                                           trait_description,
-                                           prompt_template,
-                                           api_key,
-                                           verbose,
-                                           status_every,
-                                           progress,
-                                           include_raw,
-                                           ...) {
-      calls <<- append(calls, list(list(
-        pairs             = pairs,
-        model             = model,
-        trait_name        = trait_name,
-        trait_description = trait_description,
-        prompt_template   = prompt_template,
-        api_key           = api_key,
-        verbose           = verbose,
-        status_every      = status_every,
-        progress          = progress,
-        include_raw       = include_raw,
-        dots              = list(...)
-      )))
-      fake_res
-    },
-    {
-      res <- submit_llm_pairs(
-        pairs             = pairs,
-        model             = "claude-3-5-sonnet-latest",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        backend           = "anthropic",
-        api_key           = "ANTH_KEY",
-        verbose           = FALSE,
-        progress          = FALSE,
-        include_raw       = TRUE,
-        include_thoughts  = TRUE
-      )
-
-      testthat::expect_equal(length(calls), 1L)
-      call <- calls[[1]]
-
-      testthat::expect_equal(call$model, "claude-3-5-sonnet-latest")
-      testthat::expect_equal(call$api_key, "ANTH_KEY")
-      testthat::expect_false(call$verbose)
-      testthat::expect_false(call$progress)
-      testthat::expect_true(call$include_raw)
-      testthat::expect_true("include_thoughts" %in% names(call$dots))
-      testthat::expect_true(call$dots$include_thoughts)
-
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(res, fake_res)
-    }
-  )
-})
-
 # ---------------------------------------------------------------------
 # Routing: gemini backend
 # ---------------------------------------------------------------------
@@ -541,98 +355,6 @@ testthat::test_that("llm_compare_pair routes to gemini backend", {
       testthat::expect_equal(call$ID2, ID2)
       testthat::expect_equal(call$model, "gemini-2.0-pro-exp")
       testthat::expect_equal(call$api_key, "GEMINI_KEY")
-      testthat::expect_true("include_thoughts" %in% names(call$dots))
-      testthat::expect_true(call$dots$include_thoughts)
-
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(res, fake_res)
-    }
-  )
-})
-
-testthat::test_that("submit_llm_pairs routes to gemini backend", {
-  pairs <- tibble::tibble(
-    ID1   = c("S01", "S03"),
-    text1 = c("Text 1", "Text 3"),
-    ID2   = c("S02", "S04"),
-    text2 = c("Text 2", "Text 4")
-  )
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  fake_res <- tibble::tibble(
-    custom_id = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
-    ID1 = pairs$ID1,
-    ID2 = pairs$ID2,
-    model = "gemini-2.0-pro-exp",
-    object_type = "generateContent",
-    status_code = c(200L, 200L),
-    error_message = c(NA_character_, NA_character_),
-    thoughts = c("Gemini thoughts 1", "Gemini thoughts 2"),
-    content = c(
-      "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-      "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
-    ),
-    better_sample = c("SAMPLE_1", "SAMPLE_2"),
-    better_id = c("S01", "S04"),
-    prompt_tokens = c(30, 32),
-    completion_tokens = c(15, 17),
-    total_tokens = c(45, 49)
-  )
-
-  calls <- list()
-
-  testthat::with_mocked_bindings(
-    submit_gemini_pairs_live = function(pairs,
-                                        model,
-                                        trait_name,
-                                        trait_description,
-                                        prompt_template,
-                                        api_key,
-                                        verbose,
-                                        status_every,
-                                        progress,
-                                        include_raw,
-                                        ...) {
-      calls <<- append(calls, list(list(
-        pairs             = pairs,
-        model             = model,
-        trait_name        = trait_name,
-        trait_description = trait_description,
-        prompt_template   = prompt_template,
-        api_key           = api_key,
-        verbose           = verbose,
-        status_every      = status_every,
-        progress          = progress,
-        include_raw       = include_raw,
-        dots              = list(...)
-      )))
-      fake_res
-    },
-    {
-      res <- submit_llm_pairs(
-        pairs             = pairs,
-        model             = "gemini-2.0-pro-exp",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        backend           = "gemini",
-        api_key           = "GEMINI_KEY",
-        verbose           = FALSE,
-        progress          = FALSE,
-        include_raw       = TRUE,
-        include_thoughts  = TRUE
-      )
-
-      testthat::expect_equal(length(calls), 1L)
-      call <- calls[[1]]
-
-      testthat::expect_equal(call$model, "gemini-2.0-pro-exp")
-      testthat::expect_equal(call$api_key, "GEMINI_KEY")
-      testthat::expect_false(call$verbose)
-      testthat::expect_false(call$progress)
-      testthat::expect_true(call$include_raw)
       testthat::expect_true("include_thoughts" %in% names(call$dots))
       testthat::expect_true(call$dots$include_thoughts)
 
@@ -1033,100 +755,6 @@ testthat::test_that("llm_compare_pair passes NULL api_key to Together
   )
 })
 
-testthat::test_that("submit_llm_pairs routes to together backend", {
-  pairs <- tibble::tibble(
-    ID1   = c("S01", "S03"),
-    text1 = c("Text 1", "Text 3"),
-    ID2   = c("S02", "S04"),
-    text2 = c("Text 2", "Text 4")
-  )
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  fake_res <- tibble::tibble(
-    custom_id = c("LIVE_S01_vs_S02", "LIVE_S03_vs_S04"),
-    ID1 = pairs$ID1,
-    ID2 = pairs$ID2,
-    model = "deepseek-ai/DeepSeek-R1",
-    object_type = "chat.completion",
-    status_code = c(200L, 200L),
-    error_message = c(NA_character_, NA_character_),
-    thoughts = c("Thoughts 1", "Thoughts 2"),
-    content = c(
-      "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-      "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
-    ),
-    better_sample = c("SAMPLE_1", "SAMPLE_2"),
-    better_id = c("S01", "S04"),
-    prompt_tokens = c(20, 22),
-    completion_tokens = c(10, 12),
-    total_tokens = c(30, 34)
-  )
-
-  calls <- list()
-
-  testthat::with_mocked_bindings(
-    submit_together_pairs_live = function(pairs,
-                                          model,
-                                          trait_name,
-                                          trait_description,
-                                          prompt_template,
-                                          api_key,
-                                          verbose,
-                                          status_every,
-                                          progress,
-                                          include_raw,
-                                          ...) {
-      calls <<- append(calls, list(list(
-        pairs             = pairs,
-        model             = model,
-        trait_name        = trait_name,
-        trait_description = trait_description,
-        prompt_template   = prompt_template,
-        api_key           = api_key,
-        verbose           = verbose,
-        status_every      = status_every,
-        progress          = progress,
-        include_raw       = include_raw,
-        dots              = list(...)
-      )))
-      fake_res
-    },
-    {
-      res <- submit_llm_pairs(
-        pairs             = pairs,
-        model             = "deepseek-ai/DeepSeek-R1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        backend           = "together",
-        api_key           = "TOGETHER_KEY",
-        verbose           = FALSE,
-        progress          = FALSE,
-        include_raw       = TRUE,
-        temperature       = 0.6
-      )
-
-      testthat::expect_equal(length(calls), 1L)
-      call <- calls[[1]]
-
-      testthat::expect_equal(call$model, "deepseek-ai/DeepSeek-R1")
-      testthat::expect_equal(call$api_key, "TOGETHER_KEY")
-      testthat::expect_false(call$verbose)
-      testthat::expect_false(call$progress)
-      testthat::expect_true(call$include_raw)
-
-      # Temperature forwarded via ...
-      testthat::expect_true("temperature" %in% names(call$dots))
-      testthat::expect_equal(call$dots$temperature, 0.6)
-
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(res, fake_res)
-    }
-  )
-})
-
 testthat::test_that("llm_compare_pair prioritizes explicit api_key over environment", {
   # We mock the specific backend function (e.g. openai) to capture arguments
   captured_args <- NULL
@@ -1228,127 +856,59 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
       # Test each backend dispatch
       # OpenAI with explicit endpoint
       res_openai <- llm_compare_pair(ID1, text1, ID2, text2, model,
-                                     trait_name, trait_description,
-                                     prompt_template = tmpl,
-                                     backend = "openai", endpoint = "chat.completions",
-                                     temperature = 0.7)
+        trait_name, trait_description,
+        prompt_template = tmpl,
+        backend = "openai", endpoint = "chat.completions",
+        temperature = 0.7
+      )
       expect_equal(res_openai$backend, "openai")
       # Ensure the correct backend helper was called and temperature forwarded
       expect_identical(last_args$fn, "openai")
       expect_true("temperature" %in% names(last_args$args))
       # Anthropic
       res_anthropic <- llm_compare_pair(ID1, text1, ID2, text2, model,
-                                        trait_name, trait_description,
-                                        prompt_template = tmpl,
-                                        backend = "anthropic", reasoning = "low")
+        trait_name, trait_description,
+        prompt_template = tmpl,
+        backend = "anthropic", reasoning = "low"
+      )
       expect_equal(res_anthropic$backend, "anthropic")
       expect_identical(last_args$fn, "anthropic")
       expect_true("reasoning" %in% names(last_args$args))
       # Gemini
       res_gemini <- llm_compare_pair(ID1, text1, ID2, text2, model,
-                                     trait_name, trait_description,
-                                     prompt_template = tmpl,
-                                     backend = "gemini", include_thoughts = TRUE)
+        trait_name, trait_description,
+        prompt_template = tmpl,
+        backend = "gemini", include_thoughts = TRUE
+      )
       expect_equal(res_gemini$backend, "gemini")
       expect_identical(last_args$fn, "gemini")
       expect_true("include_thoughts" %in% names(last_args$args))
       # Together
       res_together <- llm_compare_pair(ID1, text1, ID2, text2, model,
-                                       trait_name, trait_description,
-                                       prompt_template = tmpl,
-                                       backend = "together", api_key = "key", include_raw = TRUE)
+        trait_name, trait_description,
+        prompt_template = tmpl,
+        backend = "together", api_key = "key", include_raw = TRUE
+      )
       expect_equal(res_together$backend, "together")
       expect_identical(last_args$fn, "together")
       expect_true("api_key" %in% names(last_args$args))
       expect_true(last_args$args$include_raw)
       # Ollama
       res_ollama <- llm_compare_pair(ID1, text1, ID2, text2, model,
-                                     trait_name, trait_description,
-                                     prompt_template = tmpl,
-                                     backend = "ollama", host = "http://localhost:11434")
+        trait_name, trait_description,
+        prompt_template = tmpl,
+        backend = "ollama", host = "http://localhost:11434"
+      )
       expect_equal(res_ollama$backend, "ollama")
       expect_identical(last_args$fn, "ollama")
       expect_true("host" %in% names(last_args$args))
       # Unsupported backend should error
       expect_error(
         llm_compare_pair(ID1, text1, ID2, text2, model,
-                         trait_name, trait_description,
-                         prompt_template = tmpl,
-                         backend = "invalid"),
-        "should be one of \"openai\", \"anthropic\", \"gemini\", \"together\", \"ollama\""
-      )
-    }
-  )
-})
-
-test_that("submit_llm_pairs dispatches to correct backend helper", {
-  # Create a simple pairs tibble
-  pairs_tbl <- tibble::tibble(ID1 = c("a","b"), text1 = c("a1","b1"),
-                              ID2 = c("c","d"), text2 = c("c1","d1"))
-  trait_name <- "Quality"
-  trait_description <- "Description"
-  model <- "modelX"
-  tmpl <- set_prompt_template()
-  last_call <- list()
-  # Stubs for backend-specific submit helpers
-  with_mocked_bindings(
-    submit_openai_pairs_live = function(...) {
-      last_call <<- list(fn = "openai", args = list(...))
-      tibble::tibble(provider = "openai")
-    },
-    submit_anthropic_pairs_live = function(...) {
-      last_call <<- list(fn = "anthropic", args = list(...))
-      tibble::tibble(provider = "anthropic")
-    },
-    submit_gemini_pairs_live = function(...) {
-      last_call <<- list(fn = "gemini", args = list(...))
-      tibble::tibble(provider = "gemini")
-    },
-    submit_together_pairs_live = function(...) {
-      last_call <<- list(fn = "together", args = list(...))
-      tibble::tibble(provider = "together")
-    },
-    submit_ollama_pairs_live = function(...) {
-      last_call <<- list(fn = "ollama", args = list(...))
-      tibble::tibble(provider = "ollama")
-    },
-    {
-      # Test each backend
-      res_openai <- submit_llm_pairs(pairs_tbl, model, trait_name, trait_description,
-                                     prompt_template = tmpl, backend = "openai",
-                                     endpoint = "responses", verbose = FALSE, status_every = 1,
-                                     include_raw = TRUE)
-      expect_equal(res_openai$provider, "openai")
-      expect_equal(last_call$fn, "openai")
-      expect_true(last_call$args$include_raw)
-      # Anthropic
-      res_anthropic <- submit_llm_pairs(pairs_tbl, model, trait_name, trait_description,
-                                        prompt_template = tmpl, backend = "anthropic",
-                                        verbose = FALSE)
-      expect_equal(res_anthropic$provider, "anthropic")
-      expect_equal(last_call$fn, "anthropic")
-      # Gemini
-      res_gemini <- submit_llm_pairs(pairs_tbl, model, trait_name, trait_description,
-                                     prompt_template = tmpl, backend = "gemini",
-                                     verbose = FALSE)
-      expect_equal(res_gemini$provider, "gemini")
-      expect_equal(last_call$fn, "gemini")
-      # Together
-      res_together <- submit_llm_pairs(pairs_tbl, model, trait_name, trait_description,
-                                       prompt_template = tmpl, backend = "together",
-                                       verbose = FALSE, status_every = 1)
-      expect_equal(res_together$provider, "together")
-      expect_equal(last_call$fn, "together")
-      # Ollama
-      res_ollama <- submit_llm_pairs(pairs_tbl, model, trait_name, trait_description,
-                                     prompt_template = tmpl, backend = "ollama",
-                                     verbose = FALSE, status_every = 1)
-      expect_equal(res_ollama$provider, "ollama")
-      expect_equal(last_call$fn, "ollama")
-      # Unsupported backend
-      expect_error(
-        submit_llm_pairs(pairs_tbl, model, trait_name, trait_description,
-                         prompt_template = tmpl, backend = "fake"),
+          trait_name, trait_description,
+          prompt_template = tmpl,
+          backend = "invalid"
+        ),
         "should be one of \"openai\", \"anthropic\", \"gemini\", \"together\", \"ollama\""
       )
     }
@@ -1397,7 +957,8 @@ test_that(".retry_httr2_request handles httr2_http errors and rethrows when non-
   mk_error <- function(status) {
     resp <- httr2::response(status_code = status)
     structure(list(message = paste0("HTTP ", status), response = resp),
-              class = c("httr2_http", "error", "condition"))
+      class = c("httr2_http", "error", "condition")
+    )
   }
 
   # Mock: Throw 400 immediately
@@ -1425,7 +986,8 @@ test_that(".retry_httr2_request retries on httr2_http transient errors and event
   mk_error <- function(status) {
     resp <- httr2::response(status_code = status)
     structure(list(message = paste0("HTTP ", status), response = resp),
-              class = c("httr2_http", "error", "condition"))
+      class = c("httr2_http", "error", "condition")
+    )
   }
 
   # Mock: Throw 503 (transient) twice, then return 200
@@ -1445,4 +1007,237 @@ test_that(".retry_httr2_request retries on httr2_http transient errors and event
   expect_equal(attempt_env$count, 3L)
   expect_s3_class(out, "httr2_response")
   expect_equal(out$status_code, 200L)
+})
+
+# =====================================================================
+#   UPDATED Tests for submit_llm_pairs() (Wrapper Dispatch)
+# =====================================================================
+
+testthat::test_that("submit_llm_pairs uses default backend (OpenAI) and returns list", {
+  pairs <- tibble::tibble(
+    ID1   = c("S01", "S03"),
+    text1 = c("Text 1", "Text 3"),
+    ID2   = c("S02", "S04"),
+    text2 = c("Text 2", "Text 4")
+  )
+
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Mock return value (LIST structure)
+  fake_res <- list(
+    results = tibble::tibble(custom_id = "LIVE_S01_vs_S02", status_code = 200L),
+    failed_pairs = tibble::tibble(ID1 = character(0))
+  )
+
+  calls <- list()
+
+  testthat::with_mocked_bindings(
+    submit_openai_pairs_live = function(...) {
+      # Capture arguments
+      calls <<- append(calls, list(list(...)))
+      fake_res
+    },
+    {
+      # Note: backend omitted -> defaults to "openai"
+      res <- submit_llm_pairs(
+        pairs             = pairs,
+        model             = "gpt-4.1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl
+      )
+
+      testthat::expect_equal(length(calls), 1L)
+      call <- calls[[1]]
+
+      # Check defaults passed to inner function
+      testthat::expect_equal(call$endpoint, "chat.completions")
+      testthat::expect_true(call$verbose)
+      testthat::expect_equal(call$status_every, 1L)
+      testthat::expect_true(call$progress)
+      testthat::expect_false(call$include_raw)
+
+      # Check parallel/save defaults (NULL/FALSE)
+      testthat::expect_false(call$parallel)
+      testthat::expect_equal(call$workers, 1)
+      testthat::expect_null(call$save_path)
+
+      # Wrapper returns the list from the backend
+      testthat::expect_type(res, "list")
+      testthat::expect_named(res, c("results", "failed_pairs"))
+    }
+  )
+})
+
+testthat::test_that("submit_llm_pairs routes to anthropic backend with new args", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  fake_res <- list(results = tibble::tibble(model = "claude"), failed_pairs = tibble::tibble())
+  calls <- list()
+
+  testthat::with_mocked_bindings(
+    submit_anthropic_pairs_live = function(...) {
+      calls <<- append(calls, list(list(...)))
+      fake_res
+    },
+    {
+      res <- submit_llm_pairs(
+        pairs             = pairs,
+        model             = "claude-3-5-sonnet",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "anthropic",
+        api_key           = "ANTH_KEY",
+        parallel          = TRUE,
+        workers           = 4,
+        save_path         = "test.csv"
+      )
+
+      testthat::expect_equal(length(calls), 1L)
+      call <- calls[[1]]
+
+      testthat::expect_equal(call$model, "claude-3-5-sonnet")
+      testthat::expect_equal(call$api_key, "ANTH_KEY")
+      testthat::expect_true(call$parallel)
+      testthat::expect_equal(call$workers, 4)
+      testthat::expect_equal(call$save_path, "test.csv")
+
+      testthat::expect_equal(res, fake_res)
+    }
+  )
+})
+
+testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  fake_res <- list(results = tibble::tibble(model = "gemini"), failed_pairs = tibble::tibble())
+  calls <- list()
+
+  testthat::with_mocked_bindings(
+    submit_gemini_pairs_live = function(...) {
+      calls <<- append(calls, list(list(...)))
+      fake_res
+    },
+    {
+      res <- submit_llm_pairs(
+        pairs             = pairs,
+        model             = "gemini-pro",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "gemini",
+        api_key           = "GEMINI_KEY",
+        parallel          = FALSE,
+        save_path         = NULL
+      )
+
+      testthat::expect_equal(length(calls), 1L)
+      call <- calls[[1]]
+
+      testthat::expect_equal(call$model, "gemini-pro")
+      testthat::expect_equal(call$api_key, "GEMINI_KEY")
+      testthat::expect_false(call$parallel)
+      testthat::expect_null(call$save_path)
+
+      testthat::expect_equal(res, fake_res)
+    }
+  )
+})
+
+testthat::test_that("submit_llm_pairs routes to together backend with new args", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  fake_res <- list(results = tibble::tibble(model = "together"), failed_pairs = tibble::tibble())
+  calls <- list()
+
+  testthat::with_mocked_bindings(
+    submit_together_pairs_live = function(...) {
+      calls <<- append(calls, list(list(...)))
+      fake_res
+    },
+    {
+      res <- submit_llm_pairs(
+        pairs             = pairs,
+        model             = "deepseek-ai/DeepSeek-R1",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "together",
+        api_key           = "TOGETHER_KEY",
+        include_raw       = TRUE,
+        parallel          = TRUE
+      )
+
+      testthat::expect_equal(length(calls), 1L)
+      call <- calls[[1]]
+
+      testthat::expect_equal(call$model, "deepseek-ai/DeepSeek-R1")
+      testthat::expect_equal(call$api_key, "TOGETHER_KEY")
+      testthat::expect_true(call$parallel)
+      testthat::expect_true(call$include_raw)
+
+      testthat::expect_equal(res, fake_res)
+    }
+  )
+})
+
+testthat::test_that("submit_llm_pairs routes to ollama backend (legacy structure)", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Ollama backend return mock
+  fake_res <- tibble::tibble(model = "ollama-model")
+
+  # We use a catch-all signature function(...) to ensure we see exactly
+  # what arguments are passed by the wrapper, regardless of specific naming.
+  captured_args <- NULL
+
+  testthat::with_mocked_bindings(
+    submit_ollama_pairs_live = function(...) {
+      captured_args <<- list(...)
+      fake_res
+    },
+    {
+      res <- submit_llm_pairs(
+        pairs             = pairs,
+        model             = "mistral-small",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "ollama",
+        # Arguments that should be forwarded via ...
+        num_ctx           = 4096,
+        host              = "http://localhost:11434",
+        # Arguments that should NOT be forwarded (consumed by wrapper)
+        save_path         = "ignored.csv",
+        parallel          = TRUE
+      )
+
+      # 1. Verify backend result
+      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_equal(res, fake_res)
+
+      # 2. Verify arguments forwarded to ollama backend
+      testthat::expect_equal(captured_args$model, "mistral-small")
+
+      # Check extras were passed
+      testthat::expect_equal(captured_args$num_ctx, 4096)
+      testthat::expect_equal(captured_args$host, "http://localhost:11434")
+
+      # 3. Verify arguments EXCLUDED (consumed by wrapper signature)
+      # Because submit_llm_pairs consumes save_path/parallel as named args
+      # and does NOT pass them to ollama in the explicit call, they should be missing.
+      testthat::expect_null(captured_args$save_path)
+      testthat::expect_null(captured_args$parallel)
+    }
+  )
 })
