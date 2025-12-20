@@ -17,6 +17,9 @@ submit_llm_pairs(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 }
@@ -70,11 +73,22 @@ backends that support it.}
 include a \code{raw_response} list-column with the parsed JSON body from the
 backend (for backends that support this).}
 
+\item{save_path}{Character string; optional file path (e.g., "output.csv")
+to save results incrementally. If the file exists, the function reads it
+to identify and skip pairs that have already been processed (resume mode).
+Supported by \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, and \code{"together"}.}
+
+\item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
+\code{future.apply}. Requires the \code{future} package. Supported by
+\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, and \code{"together"}.}
+
+\item{workers}{Integer; the number of parallel workers (threads) to use if
+\code{parallel = TRUE}. Defaults to 1.}
+
 \item{...}{Additional backend-specific parameters. For \code{"openai"} these
-are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} (and ultimately
-\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}) and typically include \code{temperature},
-\code{top_p}, \code{logprobs}, \code{reasoning}, and \code{include_thoughts}. For
-\code{"anthropic"} and \code{"gemini"}, they are forwarded to
+are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} and typically include
+\code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, and \code{include_thoughts}.
+For \code{"anthropic"} and \code{"gemini"}, they are forwarded to
 \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}} or \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} and
 may include options such as \code{max_output_tokens}, \code{include_thoughts}, and
 provider-specific controls. For \code{"ollama"}, arguments are forwarded to
@@ -82,41 +96,37 @@ provider-specific controls. For \code{"ollama"}, arguments are forwarded to
 \code{num_ctx}, and other Ollama-specific options.}
 }
 \value{
-A tibble with one row per pair and the same columns as the
-underlying backend-specific helper for the selected backend. All
-backends are intended to return a compatible structure suitable for
-\code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}}.
+A list containing:
+\describe{
+\item{results}{A tibble with one row per successfully processed pair.}
+\item{failed_pairs}{A tibble containing rows that failed to process (for
+supported backends).}
+}
+Note: The \code{"ollama"} backend currently returns a single tibble of results
+(failures may throw errors or appear as NA rows depending on implementation).
 }
 \description{
 \code{submit_llm_pairs()} is a backend-neutral wrapper around row-wise comparison
 for multiple pairs. It takes a tibble of pairs (\code{ID1}, \code{text1}, \code{ID2},
-\code{text2}), submits each pair to the selected backend, and binds the results
-into a single tibble.
+\code{text2}), submits each pair to the selected backend, and aggregates the results.
 }
 \details{
+This function supports parallel processing, incremental saving, and resume
+capability for the \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, and \code{"together"}
+backends.
+
 At present, the following backends are implemented:
 \itemize{
 \item \code{"openai"}   → \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}
 \item \code{"anthropic"} → \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}
 \item \code{"gemini"}   → \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}
-\item \code{"together"}  → \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}
+\item \code{"together"}  → \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}
 \item \code{"ollama"}   → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
 }
-
-Each backend-specific helper returns a tibble with one row per pair and a
-compatible set of columns, including a \code{thoughts} column (reasoning /
-thinking text when available), \code{content} (visible assistant output),
-\code{better_sample}, \code{better_id}, and token usage fields.
 }
 \examples{
 \dontrun{
-# Requires an API key for the chosen cloud backend. For OpenAI, set
-# OPENAI_API_KEY in your environment. Running these examples will incur
-# API usage costs.
-#
-# For local Ollama use, an Ollama server must be running and the models
-# must be pulled in advance. No API key is required for the `"ollama"`
-# backend.
+# Requires an API key for the chosen cloud backend.
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -128,7 +138,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Live comparisons for multiple pairs using the OpenAI backend
+# Parallel execution with OpenAI (requires future package)
 res_live <- submit_llm_pairs(
   pairs             = pairs,
   model             = "gpt-4.1",
@@ -137,17 +147,15 @@ res_live <- submit_llm_pairs(
   prompt_template   = tmpl,
   backend           = "openai",
   endpoint          = "chat.completions",
-  temperature       = 0,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE
+  parallel          = TRUE,
+  workers           = 4,
+  save_path         = "results_openai.csv"
 )
 
-res_live$better_id
+# Check results
+head(res_live$results)
 
 # Live comparisons using a local Ollama backend
-
 res_ollama <- submit_llm_pairs(
   pairs             = pairs,
   model             = "mistral-small3.2:24b",
@@ -155,12 +163,7 @@ res_ollama <- submit_llm_pairs(
   trait_description = td$description,
   prompt_template   = tmpl,
   backend           = "ollama",
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE,
-  think             = FALSE,
-  num_ctx           = 8192
+  verbose           = TRUE
 )
 
 res_ollama$better_id
@@ -172,8 +175,5 @@ res_ollama$better_id
 \item \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
 \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, and
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for backend-specific implementations.
-\item \code{\link[=llm_compare_pair]{llm_compare_pair()}} for single-pair comparisons.
-\item \code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}} for Bradley–Terry modelling of
-comparison results.
 }
 }

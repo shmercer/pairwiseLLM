@@ -163,19 +163,19 @@
 #'
 #' @export
 llm_compare_pair <- function(
-    ID1,
-    text1,
-    ID2,
-    text2,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
-    endpoint = c("chat.completions", "responses"),
-    api_key = NULL,
-    include_raw = FALSE,
-    ...
+  ID1,
+  text1,
+  ID2,
+  text2,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  endpoint = c("chat.completions", "responses"),
+  api_key = NULL,
+  include_raw = FALSE,
+  ...
 ) {
   backend <- match.arg(backend)
 
@@ -198,7 +198,7 @@ llm_compare_pair <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
-        api_key           = api_key,  # pass through; backend enforces
+        api_key           = api_key,
         include_raw       = include_raw,
         ...
       )
@@ -288,22 +288,20 @@ llm_compare_pair <- function(
 #'
 #' `submit_llm_pairs()` is a backend-neutral wrapper around row-wise comparison
 #' for multiple pairs. It takes a tibble of pairs (`ID1`, `text1`, `ID2`,
-#' `text2`), submits each pair to the selected backend, and binds the results
-#' into a single tibble.
+#' `text2`), submits each pair to the selected backend, and aggregates the results.
+#'
+#' This function supports parallel processing, incremental saving, and resume
+#' capability for the `"openai"`, `"anthropic"`, `"gemini"`, and `"together"`
+#' backends.
 #'
 #' At present, the following backends are implemented:
 #' \itemize{
 #'   \item `"openai"`   → [submit_openai_pairs_live()]
 #'   \item `"anthropic"` → [submit_anthropic_pairs_live()]
 #'   \item `"gemini"`   → [submit_gemini_pairs_live()]
-#'   \item `"together"`  → [together_compare_pair_live()]
+#'   \item `"together"`  → [submit_together_pairs_live()]
 #'   \item `"ollama"`   → [submit_ollama_pairs_live()]
 #' }
-#'
-#' Each backend-specific helper returns a tibble with one row per pair and a
-#' compatible set of columns, including a `thoughts` column (reasoning /
-#' thinking text when available), `content` (visible assistant output),
-#' `better_sample`, `better_id`, and token usage fields.
 #'
 #' @param pairs Tibble or data frame with at least columns `ID1`, `text1`,
 #'   `ID2`, `text2`. Typically created by [make_pairs()], [sample_pairs()], and
@@ -342,31 +340,37 @@ llm_compare_pair <- function(
 #' @param include_raw Logical; if `TRUE`, each row of the returned tibble will
 #'   include a `raw_response` list-column with the parsed JSON body from the
 #'   backend (for backends that support this).
+#' @param save_path Character string; optional file path (e.g., "output.csv")
+#'   to save results incrementally. If the file exists, the function reads it
+#'   to identify and skip pairs that have already been processed (resume mode).
+#'   Supported by `"openai"`, `"anthropic"`, `"gemini"`, and `"together"`.
+#' @param parallel Logical; if `TRUE`, enables parallel processing using
+#'   \code{future.apply}. Requires the \code{future} package. Supported by
+#'   `"openai"`, `"anthropic"`, `"gemini"`, and `"together"`.
+#' @param workers Integer; the number of parallel workers (threads) to use if
+#'   \code{parallel = TRUE}. Defaults to 1.
 #' @param ... Additional backend-specific parameters. For `"openai"` these
-#'   are forwarded to [submit_openai_pairs_live()] (and ultimately
-#'   [openai_compare_pair_live()]) and typically include `temperature`,
-#'   `top_p`, `logprobs`, `reasoning`, and `include_thoughts`. For
-#'   `"anthropic"` and `"gemini"`, they are forwarded to
+#'   are forwarded to [submit_openai_pairs_live()] and typically include
+#'   `temperature`, `top_p`, `logprobs`, `reasoning`, and `include_thoughts`.
+#'   For `"anthropic"` and `"gemini"`, they are forwarded to
 #'   [submit_anthropic_pairs_live()] or [submit_gemini_pairs_live()] and
 #'   may include options such as `max_output_tokens`, `include_thoughts`, and
 #'   provider-specific controls. For `"ollama"`, arguments are forwarded to
 #'   [submit_ollama_pairs_live()] and may include `host`, `think`,
 #'   `num_ctx`, and other Ollama-specific options.
 #'
-#' @return A tibble with one row per pair and the same columns as the
-#'   underlying backend-specific helper for the selected backend. All
-#'   backends are intended to return a compatible structure suitable for
-#'   [build_bt_data()] and [fit_bt_model()].
+#' @return A list containing:
+#' \describe{
+#'   \item{results}{A tibble with one row per successfully processed pair.}
+#'   \item{failed_pairs}{A tibble containing rows that failed to process (for
+#'     supported backends).}
+#' }
+#' Note: The `"ollama"` backend currently returns a single tibble of results
+#' (failures may throw errors or appear as NA rows depending on implementation).
 #'
 #' @examples
 #' \dontrun{
-#' # Requires an API key for the chosen cloud backend. For OpenAI, set
-#' # OPENAI_API_KEY in your environment. Running these examples will incur
-#' # API usage costs.
-#' #
-#' # For local Ollama use, an Ollama server must be running and the models
-#' # must be pulled in advance. No API key is required for the `"ollama"`
-#' # backend.
+#' # Requires an API key for the chosen cloud backend.
 #'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'
@@ -378,7 +382,7 @@ llm_compare_pair <- function(
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Live comparisons for multiple pairs using the OpenAI backend
+#' # Parallel execution with OpenAI (requires future package)
 #' res_live <- submit_llm_pairs(
 #'   pairs             = pairs,
 #'   model             = "gpt-4.1",
@@ -387,17 +391,15 @@ llm_compare_pair <- function(
 #'   prompt_template   = tmpl,
 #'   backend           = "openai",
 #'   endpoint          = "chat.completions",
-#'   temperature       = 0,
-#'   verbose           = TRUE,
-#'   status_every      = 2,
-#'   progress          = TRUE,
-#'   include_raw       = FALSE
+#'   parallel          = TRUE,
+#'   workers           = 4,
+#'   save_path         = "results_openai.csv"
 #' )
 #'
-#' res_live$better_id
+#' # Check results
+#' head(res_live$results)
 #'
 #' # Live comparisons using a local Ollama backend
-#'
 #' res_ollama <- submit_llm_pairs(
 #'   pairs             = pairs,
 #'   model             = "mistral-small3.2:24b",
@@ -405,12 +407,7 @@ llm_compare_pair <- function(
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   backend           = "ollama",
-#'   verbose           = TRUE,
-#'   status_every      = 2,
-#'   progress          = TRUE,
-#'   include_raw       = FALSE,
-#'   think             = FALSE,
-#'   num_ctx           = 8192
+#'   verbose           = TRUE
 #' )
 #'
 #' res_ollama$better_id
@@ -420,29 +417,29 @@ llm_compare_pair <- function(
 #' * [submit_openai_pairs_live()], [submit_anthropic_pairs_live()],
 #'   [submit_gemini_pairs_live()], [submit_together_pairs_live()], and
 #'   [submit_ollama_pairs_live()] for backend-specific implementations.
-#' * [llm_compare_pair()] for single-pair comparisons.
-#' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
-#'   comparison results.
 #'
 #' @export
 submit_llm_pairs <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
-    endpoint = c("chat.completions", "responses"),
-    api_key = NULL,
-    verbose = TRUE,
-    status_every = 1,
-    progress = TRUE,
-    include_raw = FALSE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  endpoint = c("chat.completions", "responses"),
+  api_key = NULL,
+  verbose = TRUE,
+  status_every = 1,
+  progress = TRUE,
+  include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
+  ...
 ) {
   backend <- match.arg(backend)
 
-  # Normalize empty-string keys (e.g. Sys.getenv() on CRAN) to NULL
+  # Normalize empty-string keys to NULL
   if (!is.null(api_key) && identical(api_key, "")) {
     api_key <- NULL
   }
@@ -458,11 +455,14 @@ submit_llm_pairs <- function(
         trait_description = trait_description,
         prompt_template   = prompt_template,
         endpoint          = endpoint,
-        api_key           = api_key,  # pass through; backend enforces
+        api_key           = api_key,
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
         include_raw       = include_raw,
+        save_path         = save_path,
+        parallel          = parallel,
+        workers           = workers,
         ...
       )
     )
@@ -476,11 +476,14 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,  # pass through; backend enforces
+        api_key           = api_key,
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
         include_raw       = include_raw,
+        save_path         = save_path,
+        parallel          = parallel,
+        workers           = workers,
         ...
       )
     )
@@ -494,11 +497,14 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,  # pass through; backend enforces
+        api_key           = api_key,
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
         include_raw       = include_raw,
+        save_path         = save_path,
+        parallel          = parallel,
+        workers           = workers,
         ...
       )
     )
@@ -512,17 +518,22 @@ submit_llm_pairs <- function(
         trait_name        = trait_name,
         trait_description = trait_description,
         prompt_template   = prompt_template,
-        api_key           = api_key,  # pass through; backend enforces
+        api_key           = api_key,
         verbose           = verbose,
         status_every      = status_every,
         progress          = progress,
         include_raw       = include_raw,
+        save_path         = save_path,
+        parallel          = parallel,
+        workers           = workers,
         ...
       )
     )
   }
 
   if (backend == "ollama") {
+    # Note: 'ollama' backend has not been updated with save_path/parallel args yet.
+    # They are excluded from this call to avoid errors or warnings in '...'
     return(
       submit_ollama_pairs_live(
         pairs             = pairs,
@@ -567,11 +578,10 @@ submit_llm_pairs <- function(
       error = function(e) e
     )
 
-    # SUCCESS PATH: got a real response object
+    # SUCCESS PATH
     if (!inherits(resp_or_err, "error")) {
       status <- httr2::resp_status(resp_or_err)
 
-      # If status is not transient OR we've exhausted attempts, return
       if (!(status %in% transient_status) || attempt >= max_attempts) {
         return(resp_or_err)
       }
@@ -586,10 +596,9 @@ submit_llm_pairs <- function(
       next
     }
 
-    # ERROR PATH: got an error/condition instead of a response
+    # ERROR PATH
     err <- resp_or_err
 
-    # For httr2 HTTP errors, inspect status if available
     if (inherits(err, "httr2_http")) {
       resp_err <- err$response
       status <- tryCatch(
@@ -611,7 +620,7 @@ submit_llm_pairs <- function(
       }
     }
 
-    # Non-transient error or out of attempts: rethrow
+    # Non-transient or exhausted attempts
     stop(err)
   }
 }

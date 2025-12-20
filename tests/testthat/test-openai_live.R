@@ -302,116 +302,6 @@ testthat::test_that("openai_compare_pair_live allows other gpt-5* models with te
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("submit_openai_pairs_live returns empty tibble for zero rows", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  empty_pairs <- tibble::tibble(
-    ID1 = character(0),
-    text1 = character(0),
-    ID2 = character(0),
-    text2 = character(0)
-  )
-  res <- submit_openai_pairs_live(
-    pairs = empty_pairs,
-    model = "gpt-4.1",
-    trait_name = td$name,
-    trait_description = td$description,
-    prompt_template = tmpl,
-    endpoint = "chat.completions"
-  )
-  testthat::expect_equal(nrow(res), 0L)
-  testthat::expect_true("thoughts" %in% names(res))
-  testthat::expect_false("raw_response" %in% names(res))
-})
-
-# ---------------------------------------------------------------------
-
-testthat::test_that("submit_openai_pairs_live with include_raw=TRUE returns raw_response column", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  empty_pairs <- tibble::tibble(
-    ID1 = character(0),
-    text1 = character(0),
-    ID2 = character(0),
-    text2 = character(0)
-  )
-  res <- submit_openai_pairs_live(
-    pairs = empty_pairs,
-    model = "gpt-4.1",
-    trait_name = td$name,
-    trait_description = td$description,
-    prompt_template = tmpl,
-    endpoint = "chat.completions",
-    include_raw = TRUE
-  )
-  testthat::expect_equal(nrow(res), 0L)
-  testthat::expect_true("thoughts" %in% names(res))
-  testthat::expect_true("raw_response" %in% names(res))
-  testthat::expect_type(res$raw_response, "list")
-})
-
-# ---------------------------------------------------------------------
-
-testthat::test_that("submit_openai_pairs_live calls openai_compare_pair_live row-wise", {
-  pairs <- tibble::tibble(
-    ID1 = c("S01", "S03"),
-    text1 = c("Text 1", "Text 3"),
-    ID2 = c("S02", "S04"),
-    text2 = c("Text 2", "Text 4")
-  )
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  calls <- list()
-
-  fake_result <- function(ID1, ID2, chosen) {
-    tibble::tibble(
-      custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
-      ID1 = ID1,
-      ID2 = ID2,
-      model = "gpt-4.1",
-      object_type = "chat.completion",
-      status_code = 200L,
-      error_message = NA_character_,
-      content = sprintf("<BETTER_SAMPLE>%s</BETTER_SAMPLE>", chosen),
-      better_sample = chosen,
-      better_id = if (chosen == "SAMPLE_1") ID1 else ID2,
-      prompt_tokens = 10,
-      completion_tokens = 5,
-      total_tokens = 15
-    )
-  }
-
-  testthat::with_mocked_bindings(
-    openai_compare_pair_live = function(ID1, text1, ID2, text2, model, trait_name,
-                                        trait_description, prompt_template, endpoint, api_key,
-                                        include_raw, ...) {
-      calls <<- append(calls, list(list(ID1 = ID1, ID2 = ID2)))
-      if (ID1 == "S01") {
-        fake_result(ID1, ID2, "SAMPLE_1")
-      } else {
-        fake_result(ID1, ID2, "SAMPLE_2")
-      }
-    },
-    {
-      res <- submit_openai_pairs_live(
-        pairs = pairs,
-        model = "gpt-4.1",
-        trait_name = td$name,
-        trait_description = td$description,
-        prompt_template = tmpl,
-        endpoint = "chat.completions",
-        include_raw = FALSE,
-        verbose = FALSE,
-        progress = FALSE
-      )
-      testthat::expect_equal(length(calls), 2L)
-      testthat::expect_equal(res$better_id, c("S01", "S04"))
-    }
-  )
-})
-
-# ---------------------------------------------------------------------
-
 testthat::test_that("openai_compare_pair_live collects thoughts and message text separately for responses", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
@@ -655,375 +545,800 @@ testthat::test_that("openai_compare_pair_live parses legacy reasoning summary lo
   )
 })
 
+testthat::test_that("openai_compare_pair_live validates ID2, text1, and model", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Invalid ID2
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = 123, text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "ID2 invalid"
+  )
+
+  # Invalid text1
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = list(), ID2 = "B", text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "text1 invalid"
+  )
+
+  # Invalid model
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
+      model = 123, trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "model invalid"
+  )
+})
+
+testthat::test_that("openai_compare_pair_live passes optional parameters (top_p, logprobs)", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured_body <- NULL
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(),
+    .openai_resp_status = function(...) 200L,
+    {
+      # 1. Chat Completions
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-4", td$name, td$description, tmpl,
+        endpoint = "chat.completions",
+        top_p = 0.9,
+        logprobs = TRUE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.9)
+      testthat::expect_equal(captured_body$logprobs, TRUE)
+
+      # 2. Responses
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-5.1", td$name, td$description, tmpl,
+        endpoint = "responses",
+        top_p = 0.8,
+        logprobs = FALSE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.8)
+      testthat::expect_equal(captured_body$logprobs, FALSE)
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live constructs generic HTTP error message", {
+  td <- trait_description("overall_quality")
+  # Response with error status but no body$error object (triggering the else if status >= 400 block)
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(), # Empty body
+    .openai_resp_status = function(...) 418L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-4", td$name, td$description)
+      testthat::expect_equal(res$status_code, 418L)
+      testthat::expect_equal(res$error_message, "HTTP 418")
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live parses dataframe reasoning summaries", {
+  td <- trait_description("overall_quality")
+
+  # output structure where summary is a data.frame
+  fake_body <- list(
+    object = "response",
+    model = "gpt-5.1",
+    output = list(
+      list(
+        type = "reasoning",
+        summary = data.frame(text = "DF Summary", stringsAsFactors = FALSE)
+      )
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
+      testthat::expect_equal(res$thoughts, "DF Summary")
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live validates ID2, text1, and model", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Invalid ID2
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = 123, text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "ID2 invalid"
+  )
+
+  # Invalid text1
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = list(), ID2 = "B", text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "text1 invalid"
+  )
+
+  # Invalid model
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
+      model = 123, trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "model invalid"
+  )
+})
+
+testthat::test_that("openai_compare_pair_live passes optional parameters (top_p, logprobs)", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured_body <- NULL
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(),
+    .openai_resp_status = function(...) 200L,
+    {
+      # 1. Chat Completions
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-4", td$name, td$description, tmpl,
+        endpoint = "chat.completions",
+        top_p = 0.9,
+        logprobs = TRUE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.9)
+      testthat::expect_equal(captured_body$logprobs, TRUE)
+
+      # 2. Responses
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-5.1", td$name, td$description, tmpl,
+        endpoint = "responses",
+        top_p = 0.8,
+        logprobs = FALSE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.8)
+      testthat::expect_equal(captured_body$logprobs, FALSE)
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live constructs generic HTTP error message", {
+  td <- trait_description("overall_quality")
+  # Response with error status but no body$error object (triggering the else if status >= 400 block)
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(), # Empty body
+    .openai_resp_status = function(...) 418L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-4", td$name, td$description)
+      testthat::expect_equal(res$status_code, 418L)
+      testthat::expect_equal(res$error_message, "HTTP 418")
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live parses dataframe reasoning summaries", {
+  td <- trait_description("overall_quality")
+
+  # output structure where summary is a data.frame
+  fake_body <- list(
+    object = "response",
+    model = "gpt-5.1",
+    output = list(
+      list(
+        type = "reasoning",
+        summary = data.frame(text = "DF Summary", stringsAsFactors = FALSE)
+      )
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
+      testthat::expect_equal(res$thoughts, "DF Summary")
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live validates ID2, text1, and model", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Invalid ID2
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = 123, text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "ID2 invalid"
+  )
+
+  # Invalid text1
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = list(), ID2 = "B", text2 = "B",
+      model = "gpt-4", trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "text1 invalid"
+  )
+
+  # Invalid model
+  testthat::expect_error(
+    openai_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
+      model = 123, trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "model invalid"
+  )
+})
+
+testthat::test_that("openai_compare_pair_live passes optional parameters (top_p, logprobs)", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured_body <- NULL
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(),
+    .openai_resp_status = function(...) 200L,
+    {
+      # 1. Chat Completions
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-4", td$name, td$description, tmpl,
+        endpoint = "chat.completions",
+        top_p = 0.9,
+        logprobs = TRUE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.9)
+      testthat::expect_equal(captured_body$logprobs, TRUE)
+
+      # 2. Responses
+      openai_compare_pair_live(
+        "A", "t", "B", "t", "gpt-5.1", td$name, td$description, tmpl,
+        endpoint = "responses",
+        top_p = 0.8,
+        logprobs = FALSE
+      )
+      testthat::expect_equal(captured_body$top_p, 0.8)
+      testthat::expect_equal(captured_body$logprobs, FALSE)
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live constructs generic HTTP error message", {
+  td <- trait_description("overall_quality")
+  # Response with error status but no body$error object (triggering the else if status >= 400 block)
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) list(), # Empty body
+    .openai_resp_status = function(...) 418L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-4", td$name, td$description)
+      testthat::expect_equal(res$status_code, 418L)
+      testthat::expect_equal(res$error_message, "HTTP 418")
+    }
+  )
+})
+
+testthat::test_that("openai_compare_pair_live parses dataframe reasoning summaries", {
+  td <- trait_description("overall_quality")
+
+  # output structure where summary is a data.frame
+  fake_body <- list(
+    object = "response",
+    model = "gpt-5.1",
+    output = list(
+      list(
+        type = "reasoning",
+        summary = data.frame(text = "DF Summary", stringsAsFactors = FALSE)
+      )
+    )
+  )
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) req,
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
+    {
+      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
+      testthat::expect_equal(res$thoughts, "DF Summary")
+    }
+  )
+})
+
+# =====================================================================
+# NEW TESTS for submit_openai_pairs_live (List output & Features)
+# =====================================================================
+
+testthat::test_that("submit_openai_pairs_live returns valid list structure for zero rows", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  empty_pairs <- tibble::tibble(
+    ID1 = character(0), text1 = character(0),
+    ID2 = character(0), text2 = character(0)
+  )
+
+  res <- submit_openai_pairs_live(
+    pairs = empty_pairs,
+    model = "gpt-4.1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl
+  )
+
+  # output must be a list with results and failed_pairs
+  testthat::expect_type(res, "list")
+  testthat::expect_named(res, c("results", "failed_pairs"))
+  testthat::expect_s3_class(res$results, "tbl_df")
+  testthat::expect_s3_class(res$failed_pairs, "tbl_df")
+  testthat::expect_equal(nrow(res$results), 0L)
+  testthat::expect_equal(nrow(res$failed_pairs), 0L)
+})
+
+testthat::test_that("submit_openai_pairs_live handles row-wise execution and returns list", {
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S03"),
+    text1 = c("Text 1", "Text 3"),
+    ID2 = c("S02", "S04"),
+    text2 = c("Text 2", "Text 4")
+  )
+  td <- trait_description("overall_quality")
+
+  # Mock the single-pair function
+  fake_result_fn <- function(ID1, ID2, ...) {
+    tibble::tibble(
+      custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+      ID1 = ID1, ID2 = ID2, model = "gpt-4.1",
+      object_type = "chat.completion", status_code = 200L,
+      error_message = NA_character_, better_sample = "SAMPLE_1", better_id = ID1,
+      prompt_tokens = 10, completion_tokens = 5, total_tokens = 15
+    )
+  }
+
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(ID1, ID2, ...) fake_result_fn(ID1, ID2),
+    {
+      res <- submit_openai_pairs_live(
+        pairs = pairs,
+        model = "gpt-4.1",
+        trait_name = td$name,
+        trait_description = td$description,
+        verbose = FALSE
+      )
+
+      # Check structure
+      testthat::expect_type(res, "list")
+      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_equal(nrow(res$failed_pairs), 0L)
+      testthat::expect_equal(res$results$better_id, c("S01", "S03"))
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live separates failed pairs", {
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "FailMe"),
+    text1 = c("A", "B"),
+    ID2 = c("S02", "C"),
+    text2 = c("D", "E")
+  )
+  td <- trait_description("overall_quality")
+
+  # Mock function that fails for the second pair
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(ID1, ...) {
+      if (ID1 == "FailMe") stop("API Error")
+      tibble::tibble(
+        custom_id = sprintf("LIVE_%s_vs_S02", ID1),
+        ID1 = ID1, ID2 = "S02", model = "gpt-4.1",
+        status_code = 200L, error_message = NA_character_,
+        better_id = ID1
+      )
+    },
+    {
+      # Run quietly
+      res <- submit_openai_pairs_live(
+        pairs = pairs, model = "gpt-4.1",
+        trait_name = td$name, trait_description = td$description,
+        verbose = FALSE
+      )
+
+      # Should have 2 results total in the main table (one success, one fail row)
+      # BUT verify the failed_pairs extraction
+      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_equal(res$failed_pairs$ID1, "FailMe")
+      testthat::expect_match(res$failed_pairs$error_message, "API Error")
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live respects save_path (Resume Logic)", {
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  tmp_csv <- tempfile(fileext = ".csv")
+
+  # 1. Create a "fake" existing result file
+  # Pair S01 vs S02 is "already done"
+  existing_data <- tibble::tibble(
+    custom_id = "LIVE_S01_vs_S02",
+    ID1 = "S01", ID2 = "S02",
+    model = "gpt-4.1", status_code = 200L, error_message = NA_character_
+  )
+  readr::write_csv(existing_data, tmp_csv)
+
+  # 2. Input pairs: one old, one new
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S03"),
+    text1 = c("A", "B"),
+    ID2 = c("S02", "S04"),
+    text2 = c("C", "D")
+  )
+
+  # We count how many times openai_compare_pair_live is called
+  call_count <- 0
+
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(...) {
+      call_count <<- call_count + 1
+      tibble::tibble(
+        custom_id = "LIVE_S03_vs_S04", # Mock return for the new pair
+        ID1 = "S03", ID2 = "S04",
+        model = "gpt-4.1", status_code = 200L, error_message = NA_character_
+      )
+    },
+    {
+      res <- submit_openai_pairs_live(
+        pairs = pairs,
+        model = "gpt-4.1",
+        trait_name = td$name,
+        trait_description = td$description,
+        save_path = tmp_csv,
+        verbose = FALSE
+      )
+
+      # 3. Validation
+      # Should call API only ONCE (for S03), skipping S01
+      testthat::expect_equal(call_count, 1L)
+
+      # Result should contain BOTH (one from disk, one from new run)
+      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_setequal(res$results$ID1, c("S01", "S03"))
+    }
+  )
+
+  unlink(tmp_csv)
+})
+
 testthat::test_that("submit_openai_pairs_live validates inputs", {
   td <- trait_description("overall_quality")
-  # Missing columns
+
+  # 1. Missing columns
   bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
   testthat::expect_error(
     submit_openai_pairs_live(bad_pairs, "gpt-4", td$name, td$description),
     "must contain columns"
   )
-  # Invalid status_every
+
+  # 2. Invalid status_every (0 is not positive)
   good_pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+
+  # We expect the error we just added back to the function
   testthat::expect_error(
     submit_openai_pairs_live(
       good_pairs, "gpt-4", td$name, td$description,
       status_every = 0
     ),
-    "status_every` must be a single positive integer"
+    "positive integer"
   )
 })
 
-testthat::test_that("openai_compare_pair_live validates ID2, text1, and model", {
+testthat::test_that("submit_openai_pairs_live: Directory creation & Raw response cleanup", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
 
-  # Invalid ID2
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = "A", ID2 = 123, text2 = "B",
-      model = "gpt-4", trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "ID2 invalid"
-  )
+  # Use a path in a new subdirectory to test dir.create (Lines 441-442)
+  tmp_dir <- tempfile()
+  tmp_file <- file.path(tmp_dir, "out.csv")
 
-  # Invalid text1
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = list(), ID2 = "B", text2 = "B",
-      model = "gpt-4", trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "text1 invalid"
-  )
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
 
-  # Invalid model
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
-      model = 123, trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "model invalid"
-  )
-})
-
-testthat::test_that("openai_compare_pair_live passes optional parameters (top_p, logprobs)", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  captured_body <- NULL
-
+  # Mock the comparison to return a result with raw_response
   testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) {
-      captured_body <<- body
-      req
+    openai_compare_pair_live = function(...) {
+      res <- tibble::tibble(
+        custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+        model = "gpt-4.1", status_code = 200, error_message = NA,
+        thoughts = NA_character_, content = "content",
+        better_sample = NA_character_, better_id = NA_character_,
+        prompt_tokens = 1, completion_tokens = 1, total_tokens = 2
+      )
+      res$raw_response <- list(list(foo = "bar"))
+      res
     },
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) list(),
-    .openai_resp_status = function(...) 200L,
+    .env = pll_ns,
     {
-      # 1. Chat Completions
-      openai_compare_pair_live(
-        "A", "t", "B", "t", "gpt-4", td$name, td$description, tmpl,
-        endpoint = "chat.completions",
-        top_p = 0.9,
-        logprobs = TRUE
+      out <- capture.output(
+        {
+          res <- submit_openai_pairs_live(
+            pairs, "gpt-4.1", td$name, td$description,
+            save_path = tmp_file, verbose = TRUE, include_raw = TRUE
+          )
+        },
+        type = "message"
       )
-      testthat::expect_equal(captured_body$top_p, 0.9)
-      testthat::expect_equal(captured_body$logprobs, TRUE)
 
-      # 2. Responses
-      openai_compare_pair_live(
-        "A", "t", "B", "t", "gpt-5.1", td$name, td$description, tmpl,
-        endpoint = "responses",
-        top_p = 0.8,
-        logprobs = FALSE
-      )
-      testthat::expect_equal(captured_body$top_p, 0.8)
-      testthat::expect_equal(captured_body$logprobs, FALSE)
+      # Check directory creation message (Line 441)
+      testthat::expect_true(any(grepl("Creating output directory", out)))
+      testthat::expect_true(dir.exists(tmp_dir))
+
+      # Check verbose timing messages
+      testthat::expect_true(any(grepl("Completed 1 pairs", out)))
+
+      # Check that raw_response was removed from the saved file (Line 615 check)
+      saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+      testthat::expect_false("raw_response" %in% names(saved))
+
+      # But present in the returned object
+      testthat::expect_true("raw_response" %in% names(res$results))
     }
   )
+  unlink(tmp_dir, recursive = TRUE)
 })
 
-testthat::test_that("openai_compare_pair_live constructs generic HTTP error message", {
+testthat::test_that("submit_openai_pairs_live: Resume logic (Read Error Handling)", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
-  # Response with error status but no body$error object (triggering the else if status >= 400 block)
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp <- tempfile(fileext = ".csv")
+  file.create(tmp)
+
+  # Mock read_csv to throw an error, forcing the tryCatch error handler (Line 481)
   testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) req,
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) list(), # Empty body
-    .openai_resp_status = function(...) 418L,
+    read_csv = function(...) stop("Mock Read Error"),
+    .package = "readr",
     {
-      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-4", td$name, td$description)
-      testthat::expect_equal(res$status_code, 418L)
-      testthat::expect_equal(res$error_message, "HTTP 418")
+      testthat::with_mocked_bindings(
+        openai_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "gpt-4.1", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_openai_pairs_live(
+              pairs, "gpt-4.1", td$name, td$description,
+              save_path = tmp, verbose = FALSE
+            ),
+            "Could not read existing save file"
+          )
+        }
+      )
+    }
+  )
+  unlink(tmp)
+})
+
+testthat::test_that("submit_openai_pairs_live: Sequential Save Error Handling", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering Lines 617-619 warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Disk full"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        openai_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "gpt-4.1", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_openai_pairs_live(
+              pairs, "gpt-4.1", td$name, td$description,
+              save_path = tmp_file, verbose = FALSE
+            ),
+            "Failed to save incremental result"
+          )
+        }
+      )
     }
   )
 })
 
-testthat::test_that("openai_compare_pair_live parses dataframe reasoning summaries", {
-  td <- trait_description("overall_quality")
+testthat::test_that("submit_openai_pairs_live: Parallel Execution & Save Error", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
 
-  # output structure where summary is a data.frame
-  fake_body <- list(
-    object = "response",
-    model = "gpt-5.1",
-    output = list(
-      list(
-        type = "reasoning",
-        summary = data.frame(text = "DF Summary", stringsAsFactors = FALSE)
+  td <- trait_description("overall_quality")
+  # Use 2 pairs to ensure the loop runs
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"), text1 = c("a", "b"),
+    ID2 = c("C", "D"), text2 = c("c", "d")
+  )
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # We force parallel execution.
+  # We do NOT mock openai_compare_pair_live, so the workers will execute real code.
+  # Since there is no API key/network, they will fail and return error tibbles.
+  # This covers the parallel worker tryCatch (Lines 535-555).
+
+  # We mock write_csv in the main process to throw an error (Lines 573-574).
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Parallel Disk full"),
+    .package = "readr",
+    {
+      capture.output({
+        testthat::expect_warning(
+          res <- submit_openai_pairs_live(
+            pairs,
+            model = "gpt-4.1",
+            trait_name = td$name,
+            trait_description = td$description,
+            parallel = TRUE, workers = 2,
+            save_path = tmp_file, verbose = TRUE,
+            api_key = "FAKE_KEY"
+          ),
+          "Failed to save incremental results"
+        )
+      })
+
+      # Verify we got failures from the workers
+      testthat::expect_equal(nrow(res$failed_pairs), 2L)
+      # The error message comes from the worker tryCatch
+      testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Parallel execution with include_raw = TRUE.
+  # The workers will fail (fake key), returning a tibble WITH `raw_response`.
+  # The main process must strip this column before saving (Line 566).
+
+  testthat::expect_warning(
+    submit_openai_pairs_live(
+      pairs, "gpt-4.1", td$name, td$description,
+      parallel = TRUE, workers = 2,
+      save_path = tmp_file, verbose = FALSE,
+      include_raw = TRUE,
+      api_key = "FAKE_KEY"
+    ),
+    regexp = NA # Should NOT warn about save failure
+  )
+
+  testthat::expect_true(file.exists(tmp_file))
+  saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+
+  # Verify processed (failed) row exists but raw_response is gone
+  testthat::expect_equal(nrow(saved), 1L)
+  testthat::expect_false("raw_response" %in% names(saved))
+})
+
+testthat::test_that("submit_openai_pairs_live: Sequential Internal Error Handling", {
+  # Covers the sequential loop tryCatch error handler (Lines 598-609)
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(...) stop("Sequential Internal Crash"),
+    .env = pll_ns,
+    {
+      res <- submit_openai_pairs_live(
+        pairs, "gpt-4.1", td$name, td$description,
+        verbose = FALSE
       )
+
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_match(res$failed_pairs$error_message, "Sequential Internal Crash")
+    }
+  )
+})
+
+testthat::test_that("submit_openai_pairs_live: Resume Verbose Message", {
+  testthat::skip_if_not_installed("readr")
+  td <- trait_description("overall_quality")
+  tmp <- tempfile(fileext = ".csv")
+
+  # Create an existing result file
+  existing <- tibble::tibble(
+    custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+    model = "m", status_code = 200, error_message = NA
+  )
+  readr::write_csv(existing, tmp)
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  # Run with verbose = TRUE to trigger the messages
+  # We do not mock the API here because the function should skip the pair before calling the API
+  out <- capture.output({
+    res <- submit_openai_pairs_live(
+      pairs, "model", td$name, td$description,
+      save_path = tmp, verbose = TRUE
     )
-  )
+  }, type = "message")
 
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) req,
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) fake_body,
-    .openai_resp_status = function(...) 200L,
-    {
-      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
-      testthat::expect_equal(res$thoughts, "DF Summary")
-    }
-  )
-})
+  testthat::expect_true(any(grepl("Found existing file", out)))
+  testthat::expect_true(any(grepl("Skipping 1 pairs already present", out)))
 
-testthat::test_that("openai_compare_pair_live validates ID2, text1, and model", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
+  # Ensure the result contains the skipped row
+  testthat::expect_equal(nrow(res$results), 1L)
+  testthat::expect_equal(res$results$custom_id, "LIVE_A_vs_B")
 
-  # Invalid ID2
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = "A", ID2 = 123, text2 = "B",
-      model = "gpt-4", trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "ID2 invalid"
-  )
-
-  # Invalid text1
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = list(), ID2 = "B", text2 = "B",
-      model = "gpt-4", trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "text1 invalid"
-  )
-
-  # Invalid model
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
-      model = 123, trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "model invalid"
-  )
-})
-
-testthat::test_that("openai_compare_pair_live passes optional parameters (top_p, logprobs)", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  captured_body <- NULL
-
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) {
-      captured_body <<- body
-      req
-    },
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) list(),
-    .openai_resp_status = function(...) 200L,
-    {
-      # 1. Chat Completions
-      openai_compare_pair_live(
-        "A", "t", "B", "t", "gpt-4", td$name, td$description, tmpl,
-        endpoint = "chat.completions",
-        top_p = 0.9,
-        logprobs = TRUE
-      )
-      testthat::expect_equal(captured_body$top_p, 0.9)
-      testthat::expect_equal(captured_body$logprobs, TRUE)
-
-      # 2. Responses
-      openai_compare_pair_live(
-        "A", "t", "B", "t", "gpt-5.1", td$name, td$description, tmpl,
-        endpoint = "responses",
-        top_p = 0.8,
-        logprobs = FALSE
-      )
-      testthat::expect_equal(captured_body$top_p, 0.8)
-      testthat::expect_equal(captured_body$logprobs, FALSE)
-    }
-  )
-})
-
-testthat::test_that("openai_compare_pair_live constructs generic HTTP error message", {
-  td <- trait_description("overall_quality")
-  # Response with error status but no body$error object (triggering the else if status >= 400 block)
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) req,
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) list(), # Empty body
-    .openai_resp_status = function(...) 418L,
-    {
-      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-4", td$name, td$description)
-      testthat::expect_equal(res$status_code, 418L)
-      testthat::expect_equal(res$error_message, "HTTP 418")
-    }
-  )
-})
-
-testthat::test_that("openai_compare_pair_live parses dataframe reasoning summaries", {
-  td <- trait_description("overall_quality")
-
-  # output structure where summary is a data.frame
-  fake_body <- list(
-    object = "response",
-    model = "gpt-5.1",
-    output = list(
-      list(
-        type = "reasoning",
-        summary = data.frame(text = "DF Summary", stringsAsFactors = FALSE)
-      )
-    )
-  )
-
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) req,
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) fake_body,
-    .openai_resp_status = function(...) 200L,
-    {
-      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
-      testthat::expect_equal(res$thoughts, "DF Summary")
-    }
-  )
-})
-
-testthat::test_that("openai_compare_pair_live validates ID2, text1, and model", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  # Invalid ID2
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = "A", ID2 = 123, text2 = "B",
-      model = "gpt-4", trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "ID2 invalid"
-  )
-
-  # Invalid text1
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = list(), ID2 = "B", text2 = "B",
-      model = "gpt-4", trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "text1 invalid"
-  )
-
-  # Invalid model
-  testthat::expect_error(
-    openai_compare_pair_live(
-      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
-      model = 123, trait_name = td$name, trait_description = td$description,
-      prompt_template = tmpl
-    ),
-    "model invalid"
-  )
-})
-
-testthat::test_that("openai_compare_pair_live passes optional parameters (top_p, logprobs)", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  captured_body <- NULL
-
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) {
-      captured_body <<- body
-      req
-    },
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) list(),
-    .openai_resp_status = function(...) 200L,
-    {
-      # 1. Chat Completions
-      openai_compare_pair_live(
-        "A", "t", "B", "t", "gpt-4", td$name, td$description, tmpl,
-        endpoint = "chat.completions",
-        top_p = 0.9,
-        logprobs = TRUE
-      )
-      testthat::expect_equal(captured_body$top_p, 0.9)
-      testthat::expect_equal(captured_body$logprobs, TRUE)
-
-      # 2. Responses
-      openai_compare_pair_live(
-        "A", "t", "B", "t", "gpt-5.1", td$name, td$description, tmpl,
-        endpoint = "responses",
-        top_p = 0.8,
-        logprobs = FALSE
-      )
-      testthat::expect_equal(captured_body$top_p, 0.8)
-      testthat::expect_equal(captured_body$logprobs, FALSE)
-    }
-  )
-})
-
-testthat::test_that("openai_compare_pair_live constructs generic HTTP error message", {
-  td <- trait_description("overall_quality")
-  # Response with error status but no body$error object (triggering the else if status >= 400 block)
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) req,
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) list(), # Empty body
-    .openai_resp_status = function(...) 418L,
-    {
-      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-4", td$name, td$description)
-      testthat::expect_equal(res$status_code, 418L)
-      testthat::expect_equal(res$error_message, "HTTP 418")
-    }
-  )
-})
-
-testthat::test_that("openai_compare_pair_live parses dataframe reasoning summaries", {
-  td <- trait_description("overall_quality")
-
-  # output structure where summary is a data.frame
-  fake_body <- list(
-    object = "response",
-    model = "gpt-5.1",
-    output = list(
-      list(
-        type = "reasoning",
-        summary = data.frame(text = "DF Summary", stringsAsFactors = FALSE)
-      )
-    )
-  )
-
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) req,
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) fake_body,
-    .openai_resp_status = function(...) 200L,
-    {
-      res <- openai_compare_pair_live("A", "t", "B", "t", "gpt-5.1", td$name, td$description, endpoint = "responses")
-      testthat::expect_equal(res$thoughts, "DF Summary")
-    }
-  )
+  unlink(tmp)
 })

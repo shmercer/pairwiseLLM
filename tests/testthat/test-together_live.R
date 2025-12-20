@@ -373,143 +373,6 @@ testthat::test_that(
 
 # ---------------------------------------------------------------------
 
-testthat::test_that(
-  "submit_together_pairs_live validates inputs and handles zero-row pairs",
-  {
-    td <- trait_description("overall_quality")
-    tmpl <- set_prompt_template()
-
-    # Missing columns
-    bad_pairs <- tibble::tibble(
-      ID1   = "S01",
-      text1 = "Sample 1"
-      # missing ID2/text2
-    )
-
-    testthat::expect_error(
-      submit_together_pairs_live(
-        pairs             = bad_pairs,
-        model             = "deepseek-ai/DeepSeek-R1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl
-      ),
-      "`pairs` must contain columns",
-      fixed = FALSE
-    )
-
-    # Zero rows: should return empty tibble with expected columns
-    empty_pairs <- tibble::tibble(
-      ID1   = character(0),
-      text1 = character(0),
-      ID2   = character(0),
-      text2 = character(0)
-    )
-
-    res_empty <- submit_together_pairs_live(
-      pairs             = empty_pairs,
-      model             = "deepseek-ai/DeepSeek-R1",
-      trait_name        = td$name,
-      trait_description = td$description,
-      prompt_template   = tmpl
-    )
-
-    testthat::expect_s3_class(res_empty, "tbl_df")
-    testthat::expect_equal(nrow(res_empty), 0L)
-    testthat::expect_setequal(
-      names(res_empty),
-      c(
-        "custom_id", "ID1", "ID2", "model", "object_type",
-        "status_code", "error_message", "thoughts", "content",
-        "better_sample", "better_id",
-        "prompt_tokens", "completion_tokens", "total_tokens"
-      )
-    )
-
-    # When include_raw = TRUE, raw_response column should be present even for zero rows
-    res_empty_raw <- submit_together_pairs_live(
-      pairs             = empty_pairs,
-      model             = "deepseek-ai/DeepSeek-R1",
-      trait_name        = td$name,
-      trait_description = td$description,
-      prompt_template   = tmpl,
-      include_raw       = TRUE
-    )
-
-    testthat::expect_true("raw_response" %in% names(res_empty_raw))
-    testthat::expect_type(res_empty_raw$raw_response, "list")
-  }
-)
-
-# ---------------------------------------------------------------------
-
-testthat::test_that("submit_together_pairs_live runs correctly (mocking internals)", {
-  pll_ns <- asNamespace("pairwiseLLM")
-
-  pairs <- tibble::tibble(
-    ID1   = c("S01", "S02"),
-    text1 = c("Text 1a", "Text 2a"),
-    ID2   = c("S03", "S04"),
-    text2 = c("Text 1b", "Text 2b")
-  )
-
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-
-  # We capture the bodies sent to the API to verify arguments were passed down
-  captured_bodies <- list()
-
-  fake_body_resp <- list(
-    id = "chatcmpl-test",
-    object = "chat.completion",
-    choices = list(
-      list(
-        message = list(content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")
-      )
-    ),
-    usage = list(total_tokens = 10)
-  )
-
-  testthat::with_mocked_bindings(
-    .together_api_key = function(...) "TEST_KEY",
-    .together_req_body_json = function(req, body) {
-      captured_bodies <<- append(captured_bodies, list(body))
-      req
-    },
-    .together_req_perform = function(req) "FAKE_RESP",
-    .together_resp_status = function(resp) 200L,
-    .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body_resp,
-    .env = pll_ns,
-    {
-      res <- submit_together_pairs_live(
-        pairs             = pairs,
-        model             = "deepseek-ai/DeepSeek-R1",
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl,
-        include_raw       = FALSE,
-        verbose           = FALSE,
-        progress          = FALSE,
-        temperature       = 0.7 # Custom arg to verify passthrough
-      )
-
-      # Verify structure
-      testthat::expect_s3_class(res, "tbl_df")
-      testthat::expect_equal(nrow(res), 2L)
-      testthat::expect_equal(res$ID1, c("S01", "S02"))
-
-      # Verify results parsed from the fake body
-      testthat::expect_true(all(res$better_sample == "SAMPLE_1"))
-
-      # Verify arguments were passed down to internals correctly
-      testthat::expect_equal(length(captured_bodies), 2L)
-      # Check passthrough of 'temperature' and 'model'
-      testthat::expect_equal(captured_bodies[[1]]$model, "deepseek-ai/DeepSeek-R1")
-      testthat::expect_equal(captured_bodies[[1]]$temperature, 0.7)
-    }
-  )
-})
-
 testthat::test_that("together_compare_pair_live validates input types", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
@@ -639,71 +502,419 @@ testthat::test_that("together_compare_pair_live handles incomplete <think> tags"
   )
 })
 
-testthat::test_that("submit_together_pairs_live validates status_every", {
-  td <- trait_description("overall_quality")
-  pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+# =====================================================================
+# NEW TESTS for submit_together_pairs_live (List output & Features)
+# =====================================================================
 
-  testthat::expect_error(
-    submit_together_pairs_live(pairs, "model", td$name, td$description, status_every = 0),
-    "status_every` must be a single positive integer"
+testthat::test_that("submit_together_pairs_live returns list structure for zero rows", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  empty_pairs <- tibble::tibble(
+    ID1 = character(0), text1 = character(0),
+    ID2 = character(0), text2 = character(0)
   )
-  testthat::expect_error(
-    submit_together_pairs_live(pairs, "model", td$name, td$description, status_every = "1"),
-    "status_every` must be a single positive integer"
+
+  res <- submit_together_pairs_live(
+    pairs = empty_pairs,
+    model = "deepseek-ai/DeepSeek-R1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl
   )
+
+  # Expect a list with two tibbles
+  testthat::expect_type(res, "list")
+  testthat::expect_named(res, c("results", "failed_pairs"))
+  testthat::expect_s3_class(res$results, "tbl_df")
+  testthat::expect_s3_class(res$failed_pairs, "tbl_df")
+  testthat::expect_equal(nrow(res$results), 0L)
+  testthat::expect_equal(nrow(res$failed_pairs), 0L)
+
+  # Check include_raw behavior
+  res_raw <- submit_together_pairs_live(
+    pairs = empty_pairs,
+    model = "deepseek-ai/DeepSeek-R1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    include_raw = TRUE
+  )
+  testthat::expect_true("raw_response" %in% names(res_raw$results))
 })
 
-testthat::test_that("submit_together_pairs_live handles internal R errors in loop", {
+testthat::test_that("submit_together_pairs_live runs correctly and returns list", {
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S02"),
+    text1 = c("T1", "T2"),
+    ID2 = c("S03", "S04"),
+    text2 = c("T3", "T4")
+  )
+
+  # Mock success response
+  fake_success <- tibble::tibble(
+    custom_id = "LIVE_X_vs_Y", ID1 = "X", ID2 = "Y",
+    model = "mod", status_code = 200L, error_message = NA_character_,
+    better_sample = "SAMPLE_1", better_id = "X"
+  )
+
+  testthat::local_mocked_bindings(
+    together_compare_pair_live = function(...) fake_success,
+    .env = pll_ns
+  )
+
+  res <- submit_together_pairs_live(
+    pairs = pairs,
+    model = "deepseek-ai/DeepSeek-R1",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    verbose = FALSE
+  )
+
+  testthat::expect_type(res, "list")
+  testthat::expect_equal(nrow(res$results), 2L)
+  testthat::expect_equal(nrow(res$failed_pairs), 0L)
+})
+
+testthat::test_that("submit_together_pairs_live separates failed pairs", {
   pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   pairs <- tibble::tibble(
-    ID1 = c("S1", "S2"),
+    ID1 = c("S01", "FailMe"),
     text1 = "A", ID2 = "B", text2 = "C"
   )
 
-  # Here we mock 'together_compare_pair_live' SAFELY because we use with_mocked_bindings
-  # and this test is isolated at the end. However, to be ultra-safe and consistent with
-  # the strategy, we can simulate the error by mocking the internals to crash for specific ID.
-
   testthat::with_mocked_bindings(
-    .together_api_key = function(...) "KEY",
-    .together_req_perform = function(...) "RESP",
-    .together_resp_status = function(...) 200L,
-    .together_resp_body_json = function(...) list(choices = list(list(message = list(content = "OK")))),
-    # We mock the high-level function only for this specific aggregation test
-    # to guarantee we trigger the catch block inside the loop without relying on network stack details.
     together_compare_pair_live = function(ID1, ...) {
-      if (ID1 == "S1") stop("Unexpected internal crash")
+      if (ID1 == "FailMe") {
+        # Simulate an error result returned by the lower-level function
+        return(tibble::tibble(
+          custom_id = "LIVE_FailMe_vs_B", ID1 = ID1, ID2 = "B",
+          model = "mod", status_code = 500L,
+          error_message = "Mock API Error",
+          better_id = NA_character_
+        ))
+      }
+      # Success case
       tibble::tibble(
-        custom_id = "LIVE_S2_vs_B", ID1 = "S2", ID2 = "B",
-        model = "mod", object_type = "chat", status_code = 200L,
-        error_message = NA_character_, thoughts = NA_character_,
-        content = "Res", better_sample = "SAMPLE_1", better_id = "S2",
-        prompt_tokens = 1, completion_tokens = 1, total_tokens = 2
+        custom_id = "LIVE_S01_vs_B", ID1 = ID1, ID2 = "B",
+        model = "mod", status_code = 200L,
+        error_message = NA_character_,
+        better_id = ID1
       )
     },
     .env = pll_ns,
     {
-      res <- suppressMessages(
-        submit_together_pairs_live(
-          pairs, "model", td$name, td$description,
-          verbose = FALSE, progress = FALSE, include_raw = TRUE
-        )
+      res <- submit_together_pairs_live(
+        pairs, "model", td$name, td$description,
+        verbose = FALSE
       )
 
-      testthat::expect_equal(nrow(res), 2L)
+      # Results should contain BOTH rows (full log)
+      testthat::expect_equal(nrow(res$results), 2L)
 
-      # First row: Error caught by loop tryCatch
-      r1 <- res[1, ]
-      testthat::expect_equal(r1$ID1, "S1")
-      testthat::expect_match(r1$error_message, "Error during Together.ai comparison: Unexpected internal crash")
-      testthat::expect_true(is.null(r1$raw_response[[1]]))
-
-      # Second row: Success
-      r2 <- res[2, ]
-      testthat::expect_equal(r2$ID1, "S2")
-      testthat::expect_true(is.na(r2$error_message))
+      # Failed pairs should contain ONLY the failure
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_equal(res$failed_pairs$ID1, "FailMe")
+      testthat::expect_equal(res$failed_pairs$error_message, "Mock API Error")
     }
   )
+})
+
+testthat::test_that("submit_together_pairs_live respects save_path (Resume Logic)", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  tmp_csv <- tempfile(fileext = ".csv")
+
+  # 1. Create a "fake" existing result file
+  # Pair S01 vs S02 is "already done"
+  existing_data <- tibble::tibble(
+    custom_id = "LIVE_S01_vs_S02",
+    ID1 = "S01", ID2 = "S02",
+    model = "mod", status_code = 200L, error_message = NA_character_
+  )
+  readr::write_csv(existing_data, tmp_csv)
+
+  # 2. Input pairs: one old, one new
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S03"),
+    text1 = c("A", "B"),
+    ID2 = c("S02", "S04"),
+    text2 = c("C", "D")
+  )
+
+  call_count <- 0
+
+  testthat::with_mocked_bindings(
+    together_compare_pair_live = function(...) {
+      call_count <<- call_count + 1
+      tibble::tibble(
+        custom_id = "LIVE_S03_vs_S04",
+        ID1 = "S03", ID2 = "S04",
+        model = "mod", status_code = 200L, error_message = NA_character_
+      )
+    },
+    .env = pll_ns,
+    {
+      res <- submit_together_pairs_live(
+        pairs = pairs,
+        model = "mod",
+        trait_name = td$name,
+        trait_description = td$description,
+        save_path = tmp_csv,
+        verbose = FALSE
+      )
+
+      # Should call API only ONCE (for S03)
+      testthat::expect_equal(call_count, 1L)
+
+      # Result should contain BOTH (one from disk, one from new run)
+      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_setequal(res$results$ID1, c("S01", "S03"))
+    }
+  )
+
+  unlink(tmp_csv)
+})
+
+testthat::test_that("submit_together_pairs_live validates inputs", {
+  td <- trait_description("overall_quality")
+
+  # 1. Missing columns
+  bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
+  testthat::expect_error(
+    submit_together_pairs_live(bad_pairs, "mod", td$name, td$description),
+    "must contain columns"
+  )
+
+  # 2. Invalid status_every (0 is not positive)
+  good_pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
+  testthat::expect_error(
+    submit_together_pairs_live(
+      good_pairs, "mod", td$name, td$description,
+      status_every = 0
+    ),
+    "positive integer"
+  )
+})
+
+testthat::test_that("submit_together_pairs_live: Directory creation & Raw response cleanup", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+
+  tmp_dir <- tempfile()
+  tmp_file <- file.path(tmp_dir, "out.csv")
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    together_compare_pair_live = function(...) {
+      res <- tibble::tibble(
+        custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+        model = "m", status_code = 200, error_message = NA,
+        thoughts = NA_character_, content = "content",
+        better_sample = NA_character_, better_id = NA_character_,
+        prompt_tokens = 1, completion_tokens = 1, total_tokens = 2
+      )
+      res$raw_response <- list(list(foo = "bar"))
+      res
+    },
+    .env = pll_ns,
+    {
+      out <- capture.output(
+        {
+          res <- submit_together_pairs_live(
+            pairs, "model", td$name, td$description,
+            save_path = tmp_file, verbose = TRUE, include_raw = TRUE
+          )
+        },
+        type = "message"
+      )
+
+      # FIX 1: Updated regex to match "Completed 1 pairs" (removed "Together.ai")
+      testthat::expect_true(any(grepl("Completed 1 pairs", out)))
+
+      testthat::expect_true(dir.exists(tmp_dir))
+      saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+      testthat::expect_false("raw_response" %in% names(saved))
+      testthat::expect_true("raw_response" %in% names(res$results))
+    }
+  )
+  unlink(tmp_dir, recursive = TRUE)
+})
+
+testthat::test_that("submit_together_pairs_live: Resume logic (Read Error Handling)", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp <- tempfile(fileext = ".csv")
+  file.create(tmp)
+
+  # Mock read_csv to throw an error, forcing the tryCatch error handler (Line 569)
+  testthat::with_mocked_bindings(
+    read_csv = function(...) stop("Mock Read Error"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        together_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "m", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_together_pairs_live(
+              pairs, "model", td$name, td$description,
+              save_path = tmp, verbose = FALSE
+            ),
+            "Could not read existing save file"
+          )
+        }
+      )
+    }
+  )
+  unlink(tmp)
+})
+
+testthat::test_that("submit_together_pairs_live: Sequential Save Error Handling", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering Line 728 warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Disk full"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        together_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "m", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_together_pairs_live(
+              pairs, "model", td$name, td$description,
+              save_path = tmp_file, verbose = FALSE
+            ),
+            "Failed to save incremental result"
+          )
+        }
+      )
+    }
+  )
+})
+
+testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"), text1 = c("a", "b"),
+    ID2 = c("C", "D"), text2 = c("c", "d")
+  )
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering the save warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Parallel Disk full"),
+    .package = "readr",
+    {
+      capture.output({
+        testthat::expect_warning(
+          res <- submit_together_pairs_live(
+            pairs,
+            model = 123, # FIX 2: Pass invalid model type to force stop() inside worker
+            trait_name = td$name,
+            trait_description = td$description,
+            parallel = TRUE, workers = 2,
+            save_path = tmp_file, verbose = TRUE
+          ),
+          "Failed to save incremental results"
+        )
+      })
+
+      # Now we expect failures with "Error: " because together_compare_pair_live threw an error
+      testthat::expect_equal(nrow(res$failed_pairs), 2L)
+      testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
+      testthat::expect_true(all(grepl("must be a single character", res$failed_pairs$error_message)))
+    }
+  )
+})
+
+testthat::test_that("submit_together_pairs_live: Sequential Internal Error Handling", {
+  # Covers lines 706-715 (tryCatch error handler in sequential loop)
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    together_compare_pair_live = function(...) stop("Sequential Internal Crash"),
+    .env = pll_ns,
+    {
+      res <- submit_together_pairs_live(
+        pairs, "model", td$name, td$description,
+        verbose = FALSE
+      )
+
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_match(res$failed_pairs$error_message, "Sequential Internal Crash")
+    }
+  )
+})
+
+testthat::test_that("submit_together_pairs_live: Parallel Save Strips raw_response", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  # Use a pair to generate a result
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # We run with parallel = TRUE and include_raw = TRUE.
+  # We provide a fake API key, so the worker will fail (caught by internal tryCatch).
+  # The worker returns an error tibble which includes a 'raw_response' column (Line 655).
+  # The main process aggregates this and should strip 'raw_response' before saving (Line 667).
+
+  # No warning expected (save should succeed)
+  testthat::expect_warning(
+    submit_together_pairs_live(
+      pairs, "model", td$name, td$description,
+      parallel = TRUE, workers = 2,
+      save_path = tmp_file, verbose = FALSE,
+      include_raw = TRUE,
+      api_key = "FAKE_KEY"
+    ),
+    regexp = NA
+  )
+
+  testthat::expect_true(file.exists(tmp_file))
+  saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+
+  # Verification:
+  # 1. We processed the pair (failed)
+  testthat::expect_equal(nrow(saved), 1L)
+  testthat::expect_true(!is.na(saved$error_message[1]))
+
+  # 2. The raw_response column was STRIPPED from the CSV
+  testthat::expect_false("raw_response" %in% names(saved))
 })

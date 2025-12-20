@@ -542,3 +542,628 @@ run_openai_batch_pipeline <- function(
   )
 }
 
+#' Build OpenAI batch JSONL lines for paired comparisons
+#'
+#' This helper constructs one JSON object per pair of writing samples,
+#' suitable for use with the OpenAI batch API. It supports both
+#' \code{/v1/chat/completions} and \code{/v1/responses} endpoints.
+#'
+#' @param pairs A data frame or tibble with columns \code{ID1}, \code{text1},
+#'   \code{ID2}, and \code{text2}.
+#' @param model Character scalar giving the OpenAI model name.
+#'   Supports standard names (e.g. \code{"gpt-4.1"}) and date-stamped versions
+#'   (e.g. \code{"gpt-5.2-2025-12-11"}).
+#' @param trait_name Short label for the trait (e.g., "Overall Quality").
+#' @param trait_description Full-text definition of the trait.
+#' @param prompt_template Character template containing the placeholders
+#'   \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}}, \code{{SAMPLE_1}},
+#'   and \code{{SAMPLE_2}}. Defaults to \code{set_prompt_template()}.
+#' @param endpoint Which OpenAI endpoint to target. One of
+#'   \code{"chat.completions"} (default) or \code{"responses"}.
+#' @param temperature Optional temperature parameter. Defaults to `0` for
+#'   standard models (deterministic). Must be `NULL` for reasoning models
+#'   (enabled).
+#' @param top_p Optional top_p parameter.
+#' @param logprobs Optional logprobs parameter.
+#' @param reasoning Optional reasoning effort for \code{gpt-5.1/5.2} when using
+#'   the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
+#'   \code{"medium"}, or \code{"high"}.
+#' @param include_thoughts Logical; if TRUE and using \code{responses} endpoint
+#'   with reasoning, requests a summary. Defaults \code{reasoning} to \code{"low"}
+#'   for gpt-5.1/5.2 if not specified.
+#' @param request_id_prefix String prefix for \code{custom_id}; the full
+#'   ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.
+#'
+#' @return A tibble with one row per pair and columns:
+#'   \itemize{
+#'     \item \code{custom_id}: ID string used by the batch API.
+#'     \item \code{method}: HTTP method (\code{"POST"}).
+#'     \item \code{url}: Endpoint path (\code{"/v1/chat/completions"} or
+#'           \code{"/v1/responses"}).
+#'     \item \code{body}: List column containing the request body.
+#'   }
+#'
+#' @examples
+#' \dontrun{
+#' # Requires OPENAI_API_KEY and network access.
+#' library(pairwiseLLM)
+#'
+#' data("example_writing_samples", package = "pairwiseLLM")
+#'
+#' pairs <- example_writing_samples |>
+#'   make_pairs() |>
+#'   sample_pairs(n_pairs = 3, seed = 123) |>
+#'   randomize_pair_order(seed = 456)
+#'
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' # 1. Basic chat.completions batch with no thoughts
+#' batch_tbl_chat <- build_openai_batch_requests(
+#'   pairs             = pairs,
+#'   model             = "gpt-4.1",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   endpoint          = "chat.completions",
+#'   temperature       = 0
+#' )
+#'
+#' # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
+#' batch_resp <- build_openai_batch_requests(
+#'   pairs = pairs,
+#'   model = "gpt-5.2-2025-12-11",
+#'   trait_name = td$name,
+#'   trait_description = td$description,
+#'   prompt_template = tmpl,
+#'   endpoint = "responses",
+#'   include_thoughts = TRUE, # implies reasoning="low" if not set
+#'   reasoning = "medium"
+#' )
+#' batch_tbl_chat
+#' batch_tbl_resp
+#' }
+#'
+#' @import tibble
+#' @export
+build_openai_batch_requests <- function(pairs,
+                                        model,
+                                        trait_name,
+                                        trait_description,
+                                        prompt_template = set_prompt_template(),
+                                        endpoint = c(
+                                          "chat.completions",
+                                          "responses"
+                                        ),
+                                        temperature = NULL,
+                                        top_p = NULL,
+                                        logprobs = NULL,
+                                        reasoning = NULL,
+                                        include_thoughts = FALSE,
+                                        request_id_prefix = "EXP") {
+  endpoint <- match.arg(endpoint)
+  pairs <- tibble::as_tibble(pairs)
+
+  if (nrow(pairs) == 0L) {
+    return(tibble::tibble(
+      custom_id = character(0), method = character(0), url = character(0), body = list()
+    ))
+  }
+
+  # Validate model vs temperature / top_p / logprobs / reasoning
+  is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
+
+  # Default reasoning if thoughts requested on responses endpoint
+  if (endpoint == "responses" && isTRUE(include_thoughts) && is.null(reasoning)) {
+    if (is_reasoning_model) {
+      reasoning <- "low"
+    } else {
+      warning("include_thoughts requested for non-reasoning model; ignores thoughts.", call. = FALSE)
+    }
+  }
+
+  reasoning_active <- is_reasoning_model && (!is.null(reasoning) && reasoning != "none")
+
+  # Apply default temperature = 0 if strictly not reasoning
+  if (is.null(temperature) && !reasoning_active) {
+    temperature <- 0
+  }
+
+  # Validation: only strict check for ACTIVE reasoning
+  if (is_reasoning_model && reasoning_active) {
+    if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
+      stop("For gpt-5.1/5.2 with reasoning, temperature/top_p/logprobs must be NULL.", call. = FALSE)
+    }
+  }
+
+  out_list <- vector("list", nrow(pairs))
+
+  for (i in seq_len(nrow(pairs))) {
+    id1 <- as.character(pairs$ID1[i])
+    id2 <- as.character(pairs$ID2[i])
+    prompt <- build_prompt(
+      template = prompt_template,
+      trait_name = trait_name,
+      trait_desc = trait_description,
+      text1 = as.character(pairs$text1[i]),
+      text2 = as.character(pairs$text2[i])
+    )
+    custom_id <- sprintf("%s_%s_vs_%s", request_id_prefix, id1, id2)
+
+    if (endpoint == "chat.completions") {
+      body <- list(model = model, messages = list(list(role = "user", content = prompt)))
+      if (!is.null(temperature)) body$temperature <- temperature
+      if (!is.null(top_p)) body$top_p <- top_p
+      if (!is.null(logprobs)) body$logprobs <- logprobs
+      obj <- list(custom_id = custom_id, method = "POST", url = "/v1/chat/completions", body = body)
+    } else {
+      body <- list(model = model, input = prompt)
+      if (!is.null(reasoning)) {
+        block <- list(effort = reasoning)
+        if (!identical(reasoning, "none") && isTRUE(include_thoughts)) block$summary <- "auto"
+        body$reasoning <- block
+      }
+      if (!is.null(temperature)) body$temperature <- temperature
+      if (!is.null(top_p)) body$top_p <- top_p
+      if (!is.null(logprobs)) body$logprobs <- logprobs
+      obj <- list(custom_id = custom_id, method = "POST", url = "/v1/responses", body = body)
+    }
+    out_list[[i]] <- obj
+  }
+
+  tibble::tibble(
+    custom_id = vapply(out_list, `[[`, character(1), "custom_id"),
+    method = vapply(out_list, `[[`, character(1), "method"),
+    url = vapply(out_list, `[[`, character(1), "url"),
+    body = lapply(out_list, `[[`, "body")
+  )
+}
+
+#' Write an OpenAI batch table to a JSONL file
+#'
+#' This helper takes the output of \code{\link{build_openai_batch_requests}}
+#' (or a compatible table) and writes one JSON object per line, in the
+#' format expected by the OpenAI batch API.
+#'
+#' The input can either:
+#' \itemize{
+#'   \item Already contain a character column \code{jsonl} (one JSON string
+#'         per row), in which case that column is used directly, or
+#'   \item Contain the columns \code{custom_id}, \code{method},
+#'         \code{url}, and \code{body}, in which case the JSON strings are
+#'         constructed automatically.
+#' }
+#'
+#' @param batch_tbl A data frame or tibble, typically the result of
+#'   \code{\link{build_openai_batch_requests}}.
+#' @param path File path where the JSONL file should be written.
+#'
+#' @return Invisibly returns \code{path}.
+#'
+#' @examples
+#' \dontrun{
+#' # Requires OPENAI_API_KEY and network access.
+#' data("example_writing_samples")
+#' pairs_all <- make_pairs(example_writing_samples)
+#' pairs_small <- sample_pairs(pairs_all, n_pairs = 5, seed = 1)
+#'
+#' td <- trait_description("overall_quality")
+#' tmpl <- set_prompt_template()
+#'
+#' batch_tbl <- build_openai_batch_requests(
+#'   pairs             = pairs_small,
+#'   model             = "gpt-4.1",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl
+#' )
+#'
+#' write_openai_batch_file(batch_tbl, "batch_forward.jsonl")
+#' }
+#'
+#' @importFrom jsonlite toJSON
+#' @export
+write_openai_batch_file <- function(batch_tbl, path) {
+  batch_tbl <- tibble::as_tibble(batch_tbl)
+
+  # If a jsonl column already exists, use it directly (backward compatible)
+  if ("jsonl" %in% names(batch_tbl)) {
+    json_lines <- batch_tbl$jsonl
+    if (!is.character(json_lines)) {
+      stop("`jsonl` column must be a character vector.", call. = FALSE)
+    }
+  } else {
+    # Otherwise, construct JSONL from custom_id / method / url / body
+    required_cols <- c("custom_id", "method", "url", "body")
+    missing_cols <- setdiff(required_cols, names(batch_tbl))
+    if (length(missing_cols) > 0L) {
+      stop(
+        "`batch_tbl` must have either a `jsonl` column or columns: ",
+        paste(required_cols, collapse = ", "),
+        call. = FALSE
+      )
+    }
+
+    n <- nrow(batch_tbl)
+    if (n == 0L) {
+      json_lines <- character(0)
+    } else {
+      json_lines <- vapply(
+        seq_len(n),
+        function(i) {
+          jsonlite::toJSON(
+            list(
+              custom_id = batch_tbl$custom_id[i],
+              method    = batch_tbl$method[i],
+              url       = batch_tbl$url[i],
+              body      = batch_tbl$body[[i]]
+            ),
+            auto_unbox = TRUE
+          )
+        },
+        FUN.VALUE = character(1)
+      )
+    }
+  }
+
+  # Write one JSON object per line
+  con <- file(path, open = "w", encoding = "UTF-8")
+  on.exit(close(con), add = TRUE)
+  writeLines(json_lines, con = con, sep = "\n")
+
+  invisible(path)
+}
+
+#' Parse an OpenAI Batch output JSONL file
+#'
+#' This function reads an OpenAI Batch API output file (JSONL) and extracts
+#' pairwise comparison results for use with Bradley–Terry models. It supports
+#' both the Chat Completions endpoint (where \code{object = "chat.completion"})
+#' and the Responses endpoint (where \code{object = "response"}), including
+#' GPT-5.1 with reasoning.
+#'
+#' For each line, the function:
+#' \itemize{
+#'   \item extracts \code{custom_id} and parses \code{ID1} and \code{ID2}
+#'         from the pattern \code{"<prefix>ID1_vs_ID2"},
+#'   \item pulls the raw LLM content containing the
+#'         \code{<BETTER_SAMPLE>...</BETTER_SAMPLE>} tag,
+#'   \item determines whether \code{SAMPLE_1} or \code{SAMPLE_2} was
+#'         selected and maps that to \code{better_id},
+#'   \item collects model name and token usage statistics (including
+#'         reasoning tokens for GPT-5.1 Responses),
+#'   \item when using the Responses endpoint with reasoning, separates
+#'         reasoning summaries into the \code{thoughts} column and visible
+#'         assistant output into \code{content}.
+#' }
+#'
+#' The returned data frame is suitable as input for
+#' \code{\link{build_bt_data}}.
+#'
+#' @param path Path to a JSONL output file downloaded from the OpenAI Batch
+#'   API.
+#' @param tag_prefix Character string marking the start of the better-sample
+#'   tag. Defaults to \code{"<BETTER_SAMPLE>"}.
+#' @param tag_suffix Character string marking the end of the better-sample
+#'   tag. Defaults to \code{"</BETTER_SAMPLE>"}.
+#'
+#' @return A tibble with one row per successfully parsed comparison and
+#'   columns:
+#'   \describe{
+#'     \item{custom_id}{The \code{custom_id} from the batch request.}
+#'     \item{ID1, ID2}{Sample IDs inferred from \code{custom_id}.}
+#'     \item{model}{The model name reported by the API.}
+#'     \item{object_type}{The OpenAI response object type
+#'           (e.g., \code{"chat.completion"} or \code{"response"}).}
+#'     \item{status_code}{HTTP-style status code from the batch output.}
+#'     \item{error_message}{Error message, if present; otherwise \code{NA}.}
+#'     \item{thoughts}{Reasoning / thinking summary text when available
+#'           (for Responses with reasoning); otherwise \code{NA}.}
+#'     \item{content}{The raw assistant visible content string (the LLM's
+#'           output), used to locate the \code{<BETTER_SAMPLE>} tag. For
+#'           Responses with reasoning this does not include reasoning
+#'           summaries, which are kept in \code{thoughts}.}
+#'     \item{better_sample}{Either \code{"SAMPLE_1"}, \code{"SAMPLE_2"},
+#'           or \code{NA} if the tag was not found.}
+#'     \item{better_id}{\code{ID1} if \code{SAMPLE_1} was chosen, \code{ID2}
+#'           if \code{SAMPLE_2} was chosen, or \code{NA}.}
+#'     \item{prompt_tokens}{Prompt/input token count (if reported).}
+#'     \item{completion_tokens}{Completion/output token count (if reported).}
+#'     \item{total_tokens}{Total tokens (if reported).}
+#'     \item{prompt_cached_tokens}{Cached prompt tokens (if reported via
+#'           \code{input_tokens_details$cached_tokens}); otherwise \code{NA}.}
+#'     \item{reasoning_tokens}{Reasoning tokens (if reported via
+#'           \code{output_tokens_details$reasoning_tokens}); otherwise
+#'           \code{NA}.}
+#'   }
+#'
+#' @examples
+#' # Create a temporary JSONL file containing a simulated OpenAI batch result
+#' tf <- tempfile(fileext = ".jsonl")
+#'
+#' # A single line of JSON representing a successful Chat Completion
+#' # custom_id implies "LIVE_" prefix, ID1="A", ID2="B"
+#' json_line <- paste0(
+#'   '{"custom_id": "LIVE_A_vs_B", ',
+#'   '"response": {"status_code": 200, "body": {',
+#'   '"object": "chat.completion", ',
+#'   '"model": "gpt-4", ',
+#'   '"choices": [{"message": {"content": "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>"}}], ',
+#'   '"usage": {"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60}}}}'
+#' )
+#'
+#' writeLines(json_line, tf)
+#'
+#' # Parse the output
+#' res <- parse_openai_batch_output(tf)
+#'
+#' # Inspect the result
+#' print(res$better_id)
+#' print(res$prompt_tokens)
+#'
+#' # Clean up
+#' unlink(tf)
+#'
+#' @import tibble
+#' @importFrom jsonlite fromJSON
+#' @export
+parse_openai_batch_output <- function(path,
+                                      tag_prefix = "<BETTER_SAMPLE>",
+                                      tag_suffix = "</BETTER_SAMPLE>") {
+  if (!file.exists(path)) {
+    stop("File does not exist: ", path, call. = FALSE)
+  }
+
+  lines <- readLines(path, warn = FALSE)
+  if (length(lines) == 0L) {
+    stop("File contains no lines: ", path, call. = FALSE)
+  }
+
+  # Helper to parse ID1/ID2 from custom_id of form "<prefix>ID1_vs_ID2"
+  parse_ids <- function(custom_id) {
+    if (is.null(custom_id) || is.na(custom_id)) {
+      return(list(ID1 = NA_character_, ID2 = NA_character_))
+    }
+    parts <- strsplit(custom_id, "_vs_", fixed = TRUE)[[1]]
+    if (length(parts) != 2L) {
+      return(list(ID1 = NA_character_, ID2 = NA_character_))
+    }
+    left <- parts[1]
+    right <- parts[2]
+
+    # ID2 is everything after "_vs_"
+    id2 <- right
+
+    # ID1 is the substring of 'left' after the last underscore.
+    # e.g., "EXP_S01" -> "S01"
+    m <- regexpr("_[^_]*$", left)
+    if (m[1] > 0) {
+      id1 <- substring(left, m[1] + 1L)
+    } else {
+      id1 <- left
+    }
+
+    list(ID1 = id1, ID2 = id2)
+  }
+
+  out <- vector("list", length(lines))
+
+  for (i in seq_along(lines)) {
+    line_raw <- lines[[i]]
+    if (!nzchar(line_raw)) {
+      out[[i]] <- NULL
+      next
+    }
+
+    # Use simplifyVector = FALSE so nested structures stay as lists
+    obj <- tryCatch(
+      jsonlite::fromJSON(line_raw, simplifyVector = FALSE),
+      error = function(e) NULL
+    )
+
+    if (is.null(obj)) {
+      out[[i]] <- NULL
+      next
+    }
+
+    custom_id <- obj$custom_id %||% NA_character_
+
+    # Parse IDs immediately so they are available even if body is missing
+    ids <- parse_ids(custom_id)
+    ID1 <- ids$ID1
+    ID2 <- ids$ID2
+
+    response <- obj$response
+    status_code <- response$status_code %||% NA_integer_
+
+    # Error message (if any)
+    err <- obj$error
+    error_message <- if (!is.null(err) && !is.null(err$message)) {
+      err$message
+    } else {
+      NA_character_
+    }
+
+    body <- response$body
+    if (is.null(body)) {
+      out[[i]] <- tibble::tibble(
+        custom_id = custom_id,
+        ID1 = ID1,
+        ID2 = ID2,
+        model = NA_character_,
+        object_type = NA_character_,
+        status_code = status_code,
+        error_message = error_message,
+        thoughts = NA_character_,
+        content = NA_character_,
+        better_sample = NA_character_,
+        better_id = NA_character_,
+        prompt_tokens = NA_real_,
+        completion_tokens = NA_real_,
+        total_tokens = NA_real_,
+        prompt_cached_tokens = NA_real_,
+        reasoning_tokens = NA_real_
+      )
+      next
+    }
+
+    object_type <- body$object %||% NA_character_
+    model <- body$model %||% NA_character_
+
+    thoughts <- NA_character_
+    content <- NA_character_
+
+    if (identical(object_type, "chat.completion")) {
+      # Chat Completions: choices[[1]]$message$content
+      choices <- body$choices %||% list()
+      if (length(choices) >= 1L) {
+        message_obj <- choices[[1]]$message
+        if (!is.null(message_obj) && !is.null(message_obj$content)) {
+          content <- as.character(message_obj$content)
+        }
+      }
+    } else if (identical(object_type, "response")) {
+      # Responses endpoint: collect reasoning summaries into `thoughts` and
+      # message text into `content`.
+      reasoning_chunks <- character(0)
+      message_chunks <- character(0)
+
+      output <- body$output %||% list()
+      if (length(output) > 0L) {
+        for (out_el in output) {
+          # Reasoning summaries: output item with type = "reasoning"
+          if (!is.null(out_el$type) && identical(out_el$type, "reasoning")) {
+            rs <- out_el$summary
+            if (!is.null(rs) && length(rs) > 0L) {
+              if (is.list(rs) && !is.data.frame(rs)) {
+                for (s in rs) {
+                  if (!is.null(s$text)) {
+                    reasoning_chunks <- c(
+                      reasoning_chunks,
+                      as.character(s$text %||% "")
+                    )
+                  }
+                }
+              } else if (is.data.frame(rs) && "text" %in% names(rs)) {
+                reasoning_chunks <- c(
+                  reasoning_chunks,
+                  as.character(rs$text)
+                )
+              }
+            }
+          }
+
+          # Visible output text (assistant message, etc.)
+          blocks <- out_el$content %||% list()
+          if (length(blocks) > 0L) {
+            for (b in blocks) {
+              # For Responses, content blocks often use "text" or "output_text"
+              txt <- b$text %||% b$output_text %||% NULL
+              if (!is.null(txt)) {
+                message_chunks <- c(
+                  message_chunks,
+                  as.character(txt %||% "")
+                )
+              }
+            }
+          }
+        }
+      }
+
+      # Backwards compatibility: some fixtures store reasoning summary at
+      # body$reasoning$summary$text. If we have no reasoning_chunks yet, try
+      # that shape. If summary is a character scalar (e.g. "auto"/"detailed"),
+      # treat it as configuration and ignore it for thoughts.
+      if (!length(reasoning_chunks) &&
+          !is.null(body$reasoning) &&
+          !is.null(body$reasoning$summary)) {
+        rs <- body$reasoning$summary
+
+        if (is.list(rs) && !is.null(rs$text)) {
+          reasoning_chunks <- c(
+            reasoning_chunks,
+            as.character(rs$text %||% "")
+          )
+        }
+        # Character summaries (e.g. "auto", "detailed") are ignored.
+      }
+
+      if (length(reasoning_chunks)) {
+        thoughts <- paste(reasoning_chunks, collapse = " ")
+      }
+
+      if (length(message_chunks)) {
+        content <- paste(message_chunks, collapse = "")
+      } else {
+        content <- NA_character_
+      }
+    }
+
+    # Extract better_sample via simple tag search
+    better_sample <- NA_character_
+    if (!is.na(content)) {
+      if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content,
+                fixed = TRUE
+      )) {
+        better_sample <- "SAMPLE_1"
+      } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content,
+                       fixed = TRUE
+      )) {
+        better_sample <- "SAMPLE_2"
+      }
+    }
+
+    better_id <- NA_character_
+    if (!is.na(better_sample)) {
+      if (better_sample == "SAMPLE_1") {
+        better_id <- ID1
+      } else if (better_sample == "SAMPLE_2") {
+        better_id <- ID2
+      }
+    }
+
+    # Usage: harmonize token counts across object types
+    usage <- body$usage %||% list()
+
+    # Chat completions: prompt_tokens, completion_tokens, total_tokens
+    # Responses (gpt-5.x): input_tokens, output_tokens, total_tokens
+    prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
+    completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||%
+      NA_real_
+    total_tokens <- usage$total_tokens %||% NA_real_
+
+    # Detailed token info when available
+    input_details <- usage$input_tokens_details %||% list()
+    output_details <- usage$output_tokens_details %||% list()
+
+    prompt_cached_tokens <- input_details$cached_tokens %||% NA_real_
+    reasoning_tokens <- output_details$reasoning_tokens %||% NA_real_
+
+    out[[i]] <- tibble::tibble(
+      custom_id            = custom_id,
+      ID1                  = ID1,
+      ID2                  = ID2,
+      model                = model,
+      object_type          = object_type,
+      status_code          = status_code,
+      error_message        = error_message,
+      thoughts             = thoughts,
+      content              = content,
+      better_sample        = better_sample,
+      better_id            = better_id,
+      prompt_tokens        = as.numeric(prompt_tokens),
+      completion_tokens    = as.numeric(completion_tokens),
+      total_tokens         = as.numeric(total_tokens),
+      prompt_cached_tokens = as.numeric(prompt_cached_tokens),
+      reasoning_tokens     = as.numeric(reasoning_tokens)
+    )
+  }
+
+  # Drop NULL entries and bind rows
+  out <- Filter(Negate(is.null), out)
+  if (length(out) == 0L) {
+    return(tibble::tibble())
+  }
+
+  dplyr::bind_rows(out)
+}

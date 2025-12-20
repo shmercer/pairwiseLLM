@@ -142,10 +142,15 @@ The package provides helpers for each step.
 
 ## Live Comparisons
 
-Use the unified API:
+Use the unified API for direct API calls. The `submit_llm_pairs()` function supports **parallel processing** and **incremental output saving** for the OpenAI, Anthropic, Gemini, and Together backends.
 
 * `llm_compare_pair()` — compare one pair  
 * `submit_llm_pairs()` — compare many pairs at once
+
+**Key Features:**
+* **Parallel Execution:** Set `parallel = TRUE` and `workers = n` to speed up processing.
+* **Resume Capability:** Provide a `save_path` (e.g., `"results.csv"`). The function writes results as they finish. If interrupted, running the command again will automatically skip pairs already present in the file.
+* **Robust Output:** Returns a list containing `$results` (successful comparisons) and `$failed_pairs` (errors), ensuring one bad request doesn't crash the whole job.
 
 Example:
 
@@ -154,20 +159,32 @@ data("example_writing_samples")
 
 pairs <- example_writing_samples |>
   make_pairs() |>
-  sample_pairs(5, seed = 123) |>
+  sample_pairs(10, seed = 123) |>
   randomize_pair_order()
 
 td <- trait_description("overall_quality")
 tmpl <- get_prompt_template("default")
 
-res <- submit_llm_pairs(
+# Run in parallel with incremental saving
+res_list <- submit_llm_pairs(
   pairs             = pairs,
   backend           = "openai",
   model             = "gpt-4o",
   trait_name        = td$name,
   trait_description = td$description,
-  prompt_template   = tmpl
+  prompt_template   = tmpl,
+  parallel          = TRUE,
+  workers           = 4,
+  save_path         = "live_results.csv"
 )
+
+# Inspect successes
+head(res_list$results)
+
+# Inspect failures (if any)
+if (nrow(res_list$failed_pairs) > 0) {
+  print(res_list$failed_pairs)
+}
 ```
 
 ---
@@ -398,14 +415,17 @@ pairs_rev <- sample_reverse_pairs(pairs_fwd, reverse_pct = 1.0)
 Submit:
 
 ```{r, eval = FALSE}
-res_fwd <- submit_llm_pairs(pairs_fwd, model = "gpt-4o", backend = "openai", ...)
-res_rev <- submit_llm_pairs(pairs_rev, model = "gpt-4o", backend = "openai", ...)
+# Submit forward pairs
+out_fwd <- submit_llm_pairs(pairs_fwd, model = "gpt-4o", backend = "openai", ...)
+
+# Submit reverse pairs
+out_rev <- submit_llm_pairs(pairs_rev, model = "gpt-4o", backend = "openai", ...)
 ```
 
 Compute bias:
 
 ```{r, eval = FALSE}
-cons <- compute_reverse_consistency(res_fwd, res_rev)
+cons <- compute_reverse_consistency(out_fwd$results, out_rev$results)
 bias <- check_positional_bias(cons)
 
 cons$summary
@@ -423,7 +443,8 @@ Five included templates have been tested across different backend providers. Com
 ### Bradley–Terry (BT)
 
 ```{r, eval = FALSE}
-bt_data <- build_bt_data(res)
+# res_list: output from submit_llm_pairs() 
+bt_data <- build_bt_data(res_list$results)
 bt_fit <- fit_bt_model(bt_data)
 summarize_bt_fit(bt_fit)
 ```
@@ -431,8 +452,8 @@ summarize_bt_fit(bt_fit)
 ### Elo Modeling
 
 ```{r, eval = FALSE}
-# res: output from submit_llm_pairs() / llm_submit_pairs_batch()
-elo_data <- build_elo_data(res)
+# res_list: output from submit_llm_pairs() 
+elo_data <- build_elo_data(res_list$results)
 elo_fit <- fit_elo_model(elo_data, runs = 5)
 
 elo_fit$elo
@@ -503,4 +524,4 @@ MIT License. See `LICENSE`.
 
 ## Citation
 
-> Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons with large language models (Version 1.0.0) [R package; Computer software]. https://github.com/shmercer/pairwiseLLM
+> Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons with large language models (Version 1.2.0) [R package; Computer software]. https://github.com/shmercer/pairwiseLLM
