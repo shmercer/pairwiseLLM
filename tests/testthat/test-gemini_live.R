@@ -651,3 +651,223 @@ testthat::test_that("submit_gemini_pairs_live validates inputs", {
     "positive integer"
   )
 })
+
+# =============================================================================
+# Additional tests for submit_gemini_pairs_live coverage
+# =============================================================================
+
+test_that("submit_gemini_pairs_live creates output directory if missing", {
+  skip_if_not_installed("readr")
+  ns <- asNamespace("pairwiseLLM")
+
+  # Setup unique temp directory
+  temp_dir <- tempfile("gemini_test_dir")
+  on.exit(unlink(temp_dir, recursive = TRUE))
+
+  save_path <- file.path(temp_dir, "results.csv")
+
+  pairs <- tibble::tibble(
+    ID1 = "S1", text1 = "A",
+    ID2 = "S2", text2 = "B"
+  )
+
+  # Mock successful comparison
+  local_mocked_bindings(
+    gemini_compare_pair_live = function(...) {
+      tibble::tibble(
+        custom_id = "cid", ID1 = "S1", ID2 = "S2", model = "m",
+        status_code = 200L, error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  # Run
+  res <- submit_gemini_pairs_live(
+    pairs, "model", "trait", "desc",
+    save_path = save_path, verbose = FALSE
+  )
+
+  # Assert directory was created
+  expect_true(dir.exists(temp_dir))
+  expect_true(file.exists(save_path))
+})
+
+test_that("submit_gemini_pairs_live resume logic skips existing pairs", {
+  skip_if_not_installed("readr")
+  ns <- asNamespace("pairwiseLLM")
+
+  csv_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(csv_file))
+
+  # Create "existing" results for S1 vs S2
+  existing <- tibble::tibble(
+    custom_id = "LIVE_S1_vs_S2",
+    ID1 = "S1", ID2 = "S2", model = "m", status_code = 200
+  )
+  readr::write_csv(existing, csv_file)
+
+  # Input pairs: S1 vs S2 (done) and S3 vs S4 (new)
+  pairs <- tibble::tibble(
+    ID1 = c("S1", "S3"), text1 = c("A", "C"),
+    ID2 = c("S2", "S4"), text2 = c("B", "D")
+  )
+
+  calls <- 0
+
+  local_mocked_bindings(
+    gemini_compare_pair_live = function(ID1, ...) {
+      calls <<- calls + 1
+      tibble::tibble(
+        custom_id = sprintf("LIVE_%s_vs_S4", ID1),
+        ID1 = ID1, ID2 = "S4", model = "m", status_code = 200L,
+        error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  res <- submit_gemini_pairs_live(
+    pairs, "model", "trait", "desc",
+    save_path = csv_file, verbose = TRUE
+  )
+
+  # Should only process the second pair
+  expect_equal(calls, 1)
+  # Result should combine existing (disk) + new (memory)
+  expect_equal(nrow(res$results), 2)
+})
+
+test_that("submit_gemini_pairs_live runs parallel logic (coverage test)", {
+  skip_if_not_installed("future")
+  skip_if_not_installed("future.apply")
+  skip_if_not_installed("readr")
+
+  ns <- asNamespace("pairwiseLLM")
+  csv_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(csv_file))
+
+  pairs <- tibble::tibble(
+    ID1 = c("S1", "S2", "S3"),
+    text1 = "txt",
+    ID2 = c("T1", "T2", "T3"),
+    text2 = "txt"
+  )
+
+  # NOTE: Mocks defined here via local_mocked_bindings do NOT transfer to
+  # future::multisession workers. The workers will execute the real function,
+  # which will fail (e.g. 404 or auth error) because valid keys/models aren't present.
+  # This test validates that the parallel chunking/binding logic handles these
+  # worker failures gracefully and returns a valid object structure.
+
+  # We suppress warnings about connection errors/404s from the workers
+  res <- suppressWarnings(
+    submit_gemini_pairs_live(
+      pairs, "gemini-dummy-model", "trait", "desc",
+      parallel = TRUE, workers = 2,
+      save_path = csv_file,
+      include_raw = TRUE,
+      verbose = FALSE
+    )
+  )
+
+  # 1. Check Results Structure
+  # All 3 pairs should be present in the results (even if they failed)
+  expect_equal(nrow(res$results), 3)
+
+  # All 3 likely failed due to missing mocks in workers
+  expect_equal(nrow(res$failed_pairs), 3)
+
+  # 2. Check CSV existence and content
+  expect_true(file.exists(csv_file))
+  csv_data <- readr::read_csv(csv_file, show_col_types = FALSE)
+  expect_equal(nrow(csv_data), 3)
+
+  # 3. Check raw_response stripped from CSV but present in object
+  expect_true("raw_response" %in% names(res$results))
+  expect_false("raw_response" %in% names(csv_data))
+})
+
+test_that("submit_gemini_pairs_live sequential saves and catches errors", {
+  skip_if_not_installed("readr")
+  ns <- asNamespace("pairwiseLLM")
+  csv_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(csv_file))
+
+  pairs <- tibble::tibble(
+    ID1 = c("S1", "S2"), text1 = "A",
+    ID2 = c("T1", "T2"), text2 = "B"
+  )
+
+  local_mocked_bindings(
+    gemini_compare_pair_live = function(ID1, include_raw, ...) {
+      if (ID1 == "S2") stop("Seq Error")
+      tibble::tibble(
+        custom_id = "cid", ID1 = ID1, ID2 = "T", model = "m",
+        status_code = 200L, error_message = NA_character_,
+        raw_response = if (include_raw) list(list(a = 1)) else NULL
+      )
+    },
+    .env = ns
+  )
+
+  res <- submit_gemini_pairs_live(
+    pairs, "m", "t", "d",
+    save_path = csv_file,
+    include_raw = TRUE,
+    verbose = FALSE,
+    parallel = FALSE # Explicit sequential
+  )
+
+  # 1. Check Results count
+  expect_equal(nrow(res$results), 2)
+  expect_true(is.na(res$results$error_message[res$results$ID1 == "S1"]))
+  expect_match(res$results$error_message[res$results$ID1 == "S2"], "Seq Error")
+
+  # $failed_pairs contains only the failure
+  expect_equal(nrow(res$failed_pairs), 1)
+  expect_match(res$failed_pairs$error_message, "Seq Error")
+
+  # 2. Check CSV
+  expect_true(file.exists(csv_file))
+
+  # Suppress "parsing issues" warning from read_csv
+  csv_data <- suppressWarnings(readr::read_csv(csv_file, show_col_types = FALSE))
+
+  expect_equal(nrow(csv_data), 2)
+  expect_false("raw_response" %in% names(csv_data))
+})
+
+test_that("submit_gemini_pairs_live warns on CSV write failure", {
+  skip_if_not_installed("readr")
+  ns <- asNamespace("pairwiseLLM")
+
+  # Provide an invalid path (directory as file) to trigger write failure
+  bad_path <- tempdir()
+
+  pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "T1", text2 = "B")
+
+  local_mocked_bindings(
+    gemini_compare_pair_live = function(...) {
+      tibble::tibble(
+        custom_id = "cid", ID1 = "S1", ID2 = "T1", model = "m",
+        status_code = 200L, error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  # We suppress warnings to mute the "Could not read existing save file" warning
+  # that occurs because bad_path exists (as a dir) but fails to read.
+  # expect_warning will still capture the specific "Failed to save" warning we care about.
+  suppressWarnings({
+    expect_warning(
+      submit_gemini_pairs_live(
+        pairs, "m", "t", "d",
+        save_path = bad_path,
+        verbose = FALSE
+      ),
+      "Failed to save incremental result"
+    )
+  })
+})
