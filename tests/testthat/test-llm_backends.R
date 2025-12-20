@@ -1189,16 +1189,17 @@ testthat::test_that("submit_llm_pairs routes to together backend with new args",
   )
 })
 
-testthat::test_that("submit_llm_pairs routes to ollama backend (legacy structure)", {
+testthat::test_that("submit_llm_pairs routes to ollama backend and forwards new args", {
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  # Ollama backend return mock
-  fake_res <- tibble::tibble(model = "ollama-model")
+  # Ollama backend return mock (new list structure)
+  fake_res <- list(
+    results = tibble::tibble(model = "ollama-model"),
+    failed_pairs = tibble::tibble()
+  )
 
-  # We use a catch-all signature function(...) to ensure we see exactly
-  # what arguments are passed by the wrapper, regardless of specific naming.
   captured_args <- NULL
 
   testthat::with_mocked_bindings(
@@ -1206,6 +1207,7 @@ testthat::test_that("submit_llm_pairs routes to ollama backend (legacy structure
       captured_args <<- list(...)
       fake_res
     },
+    .package = "pairwiseLLM",
     {
       res <- submit_llm_pairs(
         pairs             = pairs,
@@ -1214,30 +1216,27 @@ testthat::test_that("submit_llm_pairs routes to ollama backend (legacy structure
         trait_description = td$description,
         prompt_template   = tmpl,
         backend           = "ollama",
-        # Arguments that should be forwarded via ...
+        # Options
         num_ctx           = 4096,
         host              = "http://localhost:11434",
-        # Arguments that should NOT be forwarded (consumed by wrapper)
-        save_path         = "ignored.csv",
-        parallel          = TRUE
+        save_path         = "results.csv",
+        parallel          = TRUE,
+        workers           = 2
       )
 
       # 1. Verify backend result
-      testthat::expect_s3_class(res, "tbl_df")
+      testthat::expect_type(res, "list")
       testthat::expect_equal(res, fake_res)
 
       # 2. Verify arguments forwarded to ollama backend
       testthat::expect_equal(captured_args$model, "mistral-small")
-
-      # Check extras were passed
       testthat::expect_equal(captured_args$num_ctx, 4096)
       testthat::expect_equal(captured_args$host, "http://localhost:11434")
 
-      # 3. Verify arguments EXCLUDED (consumed by wrapper signature)
-      # Because submit_llm_pairs consumes save_path/parallel as named args
-      # and does NOT pass them to ollama in the explicit call, they should be missing.
-      testthat::expect_null(captured_args$save_path)
-      testthat::expect_null(captured_args$parallel)
+      # 3. Verify save_path and parallel ARE passed
+      testthat::expect_equal(captured_args$save_path, "results.csv")
+      testthat::expect_true(captured_args$parallel)
+      testthat::expect_equal(captured_args$workers, 2)
     }
   )
 })

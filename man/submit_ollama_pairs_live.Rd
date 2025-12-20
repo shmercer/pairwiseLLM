@@ -17,6 +17,9 @@ submit_ollama_pairs_live(
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 }
@@ -57,27 +60,50 @@ default is \code{8192L}.}
 
 \item{include_raw}{Logical; if \code{TRUE}, each row of the returned tibble will
 include a \code{raw_response} list-column with the parsed JSON body from
-Ollama.}
+Ollama. Note: Raw responses are not saved to the incremental CSV file.}
+
+\item{save_path}{Character string; optional file path (e.g., "output.csv")
+to save results incrementally. If the file exists, the function reads it
+to identify and skip pairs that have already been processed (resume mode).
+Requires the \code{readr} package.}
+
+\item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
+\code{future.apply}. Requires the \code{future} and \code{future.apply}
+packages. Defaults to \code{FALSE}.}
+
+\item{workers}{Integer; the number of parallel workers (threads) to use if
+\code{parallel = TRUE}. Defaults to 1.}
 
 \item{...}{Reserved for future extensions and forwarded to
 \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}.}
 }
 \value{
-A tibble with one row per pair and the same columns as
-\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}, including an optional \code{raw_response}
-column when \code{include_raw = TRUE}.
+A list containing two elements:
+\describe{
+\item{results}{A tibble with one row per successfully processed pair.}
+\item{failed_pairs}{A tibble containing the rows from \code{pairs} that
+failed to process (due to API errors or timeouts), along with an
+\code{error_message} column.}
+}
 }
 \description{
-\code{submit_ollama_pairs_live()} is a thin row-wise wrapper around
+\code{submit_ollama_pairs_live()} is a robust row-wise wrapper around
 \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}. It takes a tibble of pairs (\code{ID1} / \code{text1} /
-\code{ID2} / \code{text2}), submits each pair to a local Ollama server, and binds
-the results into a single tibble.
+\code{ID2} / \code{text2}), submits each pair to a local (or remote) Ollama server,
+and collects the results.
 }
 \details{
-This helper mirrors \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} but targets a local
-Ollama instance rather than a cloud API. It is intended to offer a similar
-interface and return shape, so results can be passed directly into
-\code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}}.
+This function offers:
+\itemize{
+\item \strong{Incremental Saving:} Writes results to a CSV file as they complete.
+If the process is interrupted, re-running the function with the same
+\code{save_path} will automatically skip pairs that were already successfully processed.
+\item \strong{Parallel Processing:} Uses the \code{future} package to process
+multiple pairs simultaneously. \strong{Note:} Since Ollama typically runs
+locally on the GPU, parallel processing may degrade performance or cause
+out-of-memory errors unless the hardware can handle concurrent requests.
+Defaults are set to sequential processing.
+}
 
 Temperature and context length are controlled as follows:
 \itemize{
@@ -90,9 +116,7 @@ Temperature and context length are controlled as follows:
 
 In most user-facing workflows, it is more convenient to call
 \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} with \code{backend = "ollama"} rather than using
-\code{submit_ollama_pairs_live()} directly. The backend-neutral wrapper will
-route arguments to the appropriate backend helper and ensure a consistent
-return shape.
+\code{submit_ollama_pairs_live()} directly.
 
 As with \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}, this function assumes that:
 \itemize{
@@ -115,34 +139,19 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Live comparisons for multiple pairs using a Mistral model via Ollama
+# Live comparisons with incremental saving
 res_mistral <- submit_ollama_pairs_live(
   pairs             = pairs,
   model             = "mistral-small3.2:24b",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE
+  save_path         = "ollama_results.csv",
+  verbose           = TRUE
 )
 
-res_mistral$better_id
-
-# Qwen with thinking enabled
-res_qwen_think <- submit_ollama_pairs_live(
-  pairs             = pairs,
-  model             = "qwen3:32b",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  think             = TRUE,
-  num_ctx           = 16384,
-  verbose           = FALSE,
-  progress          = FALSE
-)
-
-res_qwen_think$better_id
+# Access results
+res_mistral$results
 }
 
 }
@@ -151,8 +160,5 @@ res_qwen_think$better_id
 \item \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}} for single-pair Ollama comparisons.
 \item \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} for backend-agnostic comparisons over tibbles of
 pairs.
-\item \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
-and \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} for other backend-specific
-implementations.
 }
 }
