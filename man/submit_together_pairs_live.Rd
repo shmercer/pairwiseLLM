@@ -15,6 +15,9 @@ submit_together_pairs_live(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 }
@@ -43,33 +46,59 @@ to \code{TOGETHER_API_KEY} via \code{.together_api_key()}.}
 summaries.}
 
 \item{status_every}{Integer; print status / timing for every
-\code{status_every}-th pair. Defaults to 1 (every pair). Errors are always
-printed.}
+\code{status_every}-th pair. Defaults to 1 (every pair).}
 
 \item{progress}{Logical; if \code{TRUE}, shows a textual progress bar.}
 
 \item{include_raw}{Logical; if \code{TRUE}, each row of the returned tibble will
 include a \code{raw_response} list-column with the parsed JSON body from
-Together.ai.}
+Together.ai. Note: Raw responses are not saved to the incremental CSV file.}
+
+\item{save_path}{Character string; optional file path (e.g., "output.csv")
+to save results incrementally. If the file exists, the function reads it
+to identify and skip pairs that have already been processed (resume mode).
+Requires the \code{readr} package.}
+
+\item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
+\code{future.apply}. Requires the \code{future} and \code{future.apply}
+packages.}
+
+\item{workers}{Integer; the number of parallel workers (threads) to use if
+\code{parallel = TRUE}. Defaults to 1.
+\strong{Guidance:} Together.ai rate limits vary by usage tier. Start with
+4 to 8 workers to avoid hitting HTTP 429 errors.}
 
 \item{...}{Additional Together.ai parameters, such as \code{temperature}, \code{top_p},
 or other provider-specific options. These are forwarded to
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}.}
 }
 \value{
-A tibble with one row per pair and the same columns as
-\code{\link[=together_compare_pair_live]{together_compare_pair_live()}}.
+A list containing two elements:
+\describe{
+\item{results}{A tibble with one row per successfully processed pair and
+columns such as \code{better_id}, \code{better_sample}, \code{thoughts}, and \code{content}.}
+\item{failed_pairs}{A tibble containing the rows from \code{pairs} that failed
+to process (due to API errors or timeouts), along with an
+\code{error_message} column. These can be easily re-submitted.}
+}
 }
 \description{
-\code{submit_together_pairs_live()} is a thin row-wise wrapper around
+\code{submit_together_pairs_live()} is a robust row-wise wrapper around
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}. It takes a tibble of pairs (\code{ID1}, \code{text1},
 \code{ID2}, \code{text2}), submits each pair to the Together.ai Chat Completions API,
-and binds the results into a single tibble.
+and collects the results.
 }
 \details{
-The output has the same columns as \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}, with one
-row per pair, making it easy to pass into \code{\link[=build_bt_data]{build_bt_data()}} and
-\code{\link[=fit_bt_model]{fit_bt_model()}}.
+This function improves upon simple looping by offering:
+\itemize{
+\item \strong{Parallel Processing:} Uses the \code{future} package to process
+multiple pairs simultaneously.
+\item \strong{Incremental Saving:} Writes results to a CSV file as they complete.
+If the process is interrupted, re-running the function with the same
+\code{save_path} will automatically skip pairs that were already successfully processed.
+\item \strong{Error Separation:} Returns valid results and failed pairs separately,
+making it easier to debug or retry specific failures.
+}
 }
 \examples{
 \dontrun{
@@ -79,27 +108,44 @@ data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
   make_pairs() |>
-  sample_pairs(n_pairs = 5, seed = 123) |>
+  sample_pairs(n_pairs = 10, seed = 123) |>
   randomize_pair_order(seed = 456)
 
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Live comparisons for multiple pairs using DeepSeek-R1
-res_live <- submit_together_pairs_live(
+# 1. Sequential execution with incremental saving
+# If interrupted, running this again will resume progress.
+res_seq <- submit_together_pairs_live(
   pairs             = pairs,
   model             = "deepseek-ai/DeepSeek-R1",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  temperature       = 0.6,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE
+  save_path         = "results_seq.csv"
 )
 
-res_live$better_id
+# 2. Parallel execution (faster)
+# Note: On Windows, this opens background R sessions.
+res_par <- submit_together_pairs_live(
+  pairs             = pairs,
+  model             = "deepseek-ai/DeepSeek-R1",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  save_path         = "results_par.csv",
+  parallel          = TRUE,
+  workers           = 4
+)
+
+# Inspect results
+head(res_par$results)
+
+# Check for failures
+if (nrow(res_par$failed_pairs) > 0) {
+  message("Some pairs failed:")
+  print(res_par$failed_pairs)
+}
 }
 
 }
