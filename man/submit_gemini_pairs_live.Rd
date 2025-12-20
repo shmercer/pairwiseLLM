@@ -22,6 +22,9 @@ submit_gemini_pairs_live(
   progress = TRUE,
   include_raw = FALSE,
   include_thoughts = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 }
@@ -61,27 +64,56 @@ pair).}
 
 \item{progress}{Logical; show a text progress bar.}
 
-\item{include_raw}{Logical; include \code{raw_response} list-column.}
+\item{include_raw}{Logical; if \code{TRUE}, each row of the returned tibble will
+include a \code{raw_response} list-column with the parsed JSON body.
+Note: Raw responses are not saved to the incremental CSV file.}
 
 \item{include_thoughts}{Logical; if \code{TRUE}, requests explicit reasoning
 output from Gemini and stores it in the \code{thoughts} column of the result,
 mirroring \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}.}
 
+\item{save_path}{Character string; optional file path (e.g., "output.csv")
+to save results incrementally. If the file exists, the function reads it
+to identify and skip pairs that have already been processed (resume mode).
+Requires the \code{readr} package.}
+
+\item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
+\code{future.apply}. Requires the \code{future} and \code{future.apply}
+packages.}
+
+\item{workers}{Integer; the number of parallel workers (threads) to use if
+\code{parallel = TRUE}. Defaults to 1.
+\strong{Guidance:} Start conservatively (e.g., 2-4 workers) to avoid hitting
+HTTP 429 errors, as Gemini rate limits can be strict depending on your tier.}
+
 \item{...}{Reserved for future extensions; passed through to
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}} (but \code{thinking_budget} is ignored there).}
 }
 \value{
-A tibble of results (one row per pair).
+A list containing two elements:
+\describe{
+\item{results}{A tibble with one row per successfully processed pair.}
+\item{failed_pairs}{A tibble containing the rows from \code{pairs} that
+failed to process (due to API errors or timeouts), along with an
+\code{error_message} column.}
+}
 }
 \description{
-This is a thin row-wise wrapper around \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. It takes
-a tibble of pairs (\code{ID1} / \code{text1} / \code{ID2} / \code{text2}), submits each pair to
-Gemini 3 Pro, and binds the results into a single tibble.
+This is a robust row-wise wrapper around \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. It
+takes a tibble of pairs (\code{ID1} / \code{text1} / \code{ID2} / \code{text2}), submits each
+pair to the Google Gemini API, and collects the results.
 }
 \details{
-The output has one row per pair and the same columns as
-\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}, making it easy to pass into downstream
-Bradley-Terry / BTM pipelines.
+This function offers:
+\itemize{
+\item \strong{Parallel Processing:} Uses the \code{future} package to process
+multiple pairs simultaneously.
+\item \strong{Incremental Saving:} Writes results to a CSV file as they complete.
+If the process is interrupted, re-running the function with the same
+\code{save_path} will automatically skip pairs that were already successfully processed.
+\item \strong{Error Separation:} Returns valid results and failed pairs separately,
+making it easier to debug or retry specific failures.
+}
 }
 \examples{
 # Requires:
@@ -100,20 +132,30 @@ pairs <- tibble::tibble(
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Submit multiple live Gemini comparisons
-res <- submit_gemini_pairs_live(
+# 1. Sequential execution with incremental saving
+res_seq <- submit_gemini_pairs_live(
   pairs             = pairs,
   model             = "gemini-3-pro-preview",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  thinking_level    = "low",
-  include_thoughts  = FALSE,
-  progress          = TRUE
+  save_path         = "results_gemini_seq.csv"
 )
 
-res
-res$better_id
+# 2. Parallel execution (faster)
+res_par <- submit_gemini_pairs_live(
+  pairs             = pairs,
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  save_path         = "results_gemini_par.csv",
+  parallel          = TRUE,
+  workers           = 4
+)
+
+# Inspect results
+head(res_par$results)
 }
 
 }
