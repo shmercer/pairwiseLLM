@@ -940,3 +940,263 @@ testthat::test_that("submit_anthropic_pairs_live validates inputs", {
     "positive integer"
   )
 })
+
+testthat::test_that("submit_anthropic_pairs_live: Sequential error handling (catch block)", {
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  # Force error in internal function to hit lines 931-940
+  testthat::with_mocked_bindings(
+    anthropic_compare_pair_live = function(...) stop("Sequential Error"),
+    .env = pll_ns,
+    {
+      res <- submit_anthropic_pairs_live(
+        pairs, "model", td$name, td$description,
+        verbose = FALSE
+      )
+
+      # Should be in failed_pairs with the caught error message
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_match(res$failed_pairs$error_message, "Sequential Error")
+      testthat::expect_equal(res$failed_pairs$ID1, "A")
+    }
+  )
+})
+
+
+testthat::test_that("submit_anthropic_pairs_live: Directory creation & Raw response cleanup", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+
+  # Use a path in a new subdirectory to test dir.create (Lines 750-751)
+  tmp_dir <- tempfile()
+  tmp_file <- file.path(tmp_dir, "out.csv")
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    anthropic_compare_pair_live = function(...) {
+      # Return result with raw_response to test removal logic (Line 947)
+      res <- tibble::tibble(
+        custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+        model = "m", status_code = 200, error_message = NA
+      )
+      res$raw_response <- list(list(foo = "bar"))
+      res
+    },
+    .env = pll_ns,
+    {
+      out <- capture.output(
+        {
+          res <- submit_anthropic_pairs_live(
+            pairs, "model", td$name, td$description,
+            save_path = tmp_file, verbose = TRUE, include_raw = TRUE
+          )
+        },
+        type = "message"
+      )
+
+      # Check directory creation message
+      testthat::expect_true(any(grepl("Creating output directory", out)))
+      testthat::expect_true(dir.exists(tmp_dir))
+
+      # Check that raw_response was removed from the saved file
+      saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+      testthat::expect_false("raw_response" %in% names(saved))
+
+      # But present in the returned object
+      testthat::expect_true("raw_response" %in% names(res$results))
+    }
+  )
+  unlink(tmp_dir, recursive = TRUE)
+})
+
+testthat::test_that("submit_anthropic_pairs_live: Parallel execution & Parallel error handling", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr") # We will use save_path here too
+
+  td <- trait_description("overall_quality")
+
+  # Define enough pairs to potentially trigger chunking if chunk_size was small,
+  # but mainly to test the parallel loop mechanics.
+  pairs_par <- tibble::tibble(
+    ID1 = c("A", "B"), text1 = c("a", "b"),
+    ID2 = c("C", "D"), text2 = c("c", "d")
+  )
+
+  tmp_par <- tempfile(fileext = ".csv")
+
+  # We run with parallel = TRUE and workers = 2.
+  # We do NOT mock anthropic_compare_pair_live here. This means the workers
+  # will execute the real function, fail (due to fake API key / no network),
+  # and trigger the tryCatch inside 'work_fn' (Lines 868-881).
+  # This covers the parallel block, the chunk loop, and the parallel error handling.
+
+  out_par <- capture.output(
+    {
+      res_par <- submit_anthropic_pairs_live(
+        pairs_par, "model", td$name, td$description,
+        parallel = TRUE, workers = 2, verbose = TRUE,
+        api_key = "fake_key", # Ensure failure
+        save_path = tmp_par
+      )
+    },
+    type = "message"
+  )
+
+  # Check parallel message (Line 834)
+  testthat::expect_true(any(grepl("Processing 2 pairs in PARALLEL", out_par)))
+
+  # Check that we captured the failures from workers
+  testthat::expect_equal(nrow(res_par$failed_pairs), 2L)
+  testthat::expect_true(all(!is.na(res_par$failed_pairs$error_message)))
+
+  # Check incremental save worked in parallel (Lines 887-897)
+  # Even though they failed, the error tibble is saved.
+  testthat::expect_true(file.exists(tmp_par))
+  saved_par <- readr::read_csv(tmp_par, show_col_types = FALSE)
+  testthat::expect_equal(nrow(saved_par), 2L)
+
+  unlink(tmp_par)
+})
+
+testthat::test_that("submit_anthropic_pairs_live: Parallel Save Failure", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("readr")
+
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # 3. Test File Save Failure (Parallel) (Line 896)
+  # Tricky part: We need to allow the parallel worker to run (requireNamespace = TRUE),
+  # but fail the write_csv in the main process.
+
+  testthat::with_mocked_bindings(
+    # We must ensure we don't block the parallel workers from starting
+    # so we don't mock requireNamespace here.
+
+    # Mock write_csv to fail
+    write_csv = function(...) stop("Parallel Disk full"),
+    .package = "readr",
+    {
+      # We force parallel execution.
+      # Since we aren't mocking the internal worker function here, it might fail or succeed
+      # depending on the environment (likely fail due to missing API key),
+      # but it WILL attempt to save the result (even an error result) to CSV.
+
+      testthat::expect_warning(
+        submit_anthropic_pairs_live(
+          pairs, "model", td$name, td$description,
+          parallel = TRUE, workers = 2, save_path = tmp_file, verbose = FALSE
+        ),
+        "Failed to save incremental results"
+      )
+    }
+  )
+})
+
+testthat::test_that("submit_anthropic_pairs_live: Resume logic (Read Error Handling)", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp <- tempfile(fileext = ".csv")
+
+  # Create a dummy file so the function attempts to read it
+  file.create(tmp)
+
+  # Mock read_csv to throw an error, forcing the tryCatch error handler (Line 787)
+  testthat::with_mocked_bindings(
+    read_csv = function(...) stop("Mock Read Error"),
+    .package = "readr",
+    {
+      # Mock the internal API call to return success so the function proceeds
+      testthat::with_mocked_bindings(
+        anthropic_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "m", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_anthropic_pairs_live(
+              pairs, "model", td$name, td$description,
+              save_path = tmp, verbose = FALSE
+            ),
+            "Could not read existing save file"
+          )
+        }
+      )
+    }
+  )
+  unlink(tmp)
+})
+
+testthat::test_that("submit_anthropic_pairs_live: Sequential Save Error Handling", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering Line 953 warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Disk full"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        anthropic_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "m", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_anthropic_pairs_live(
+              pairs, "model", td$name, td$description,
+              save_path = tmp_file, verbose = FALSE
+            ),
+            "Failed to save incremental result"
+          )
+        }
+      )
+    }
+  )
+})
+
+testthat::test_that("submit_anthropic_pairs_live: Parallel Save Error Handling", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering Line 896 warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Parallel Disk full"),
+    .package = "readr",
+    {
+      # We force parallel execution. The worker function is NOT mocked, so it will
+      # execute the real code, likely fail (missing API key), and return an error tibble.
+      # The main process then attempts to save this error tibble and hits our mock error.
+
+      testthat::expect_warning(
+        submit_anthropic_pairs_live(
+          pairs, "model", td$name, td$description,
+          parallel = TRUE, workers = 2, save_path = tmp_file, verbose = FALSE
+        ),
+        "Failed to save incremental results"
+      )
+    }
+  )
+})
