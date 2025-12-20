@@ -703,3 +703,218 @@ testthat::test_that("submit_together_pairs_live validates inputs", {
     "positive integer"
   )
 })
+
+testthat::test_that("submit_together_pairs_live: Directory creation & Raw response cleanup", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+
+  tmp_dir <- tempfile()
+  tmp_file <- file.path(tmp_dir, "out.csv")
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    together_compare_pair_live = function(...) {
+      res <- tibble::tibble(
+        custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+        model = "m", status_code = 200, error_message = NA,
+        thoughts = NA_character_, content = "content",
+        better_sample = NA_character_, better_id = NA_character_,
+        prompt_tokens = 1, completion_tokens = 1, total_tokens = 2
+      )
+      res$raw_response <- list(list(foo = "bar"))
+      res
+    },
+    .env = pll_ns,
+    {
+      out <- capture.output(
+        {
+          res <- submit_together_pairs_live(
+            pairs, "model", td$name, td$description,
+            save_path = tmp_file, verbose = TRUE, include_raw = TRUE
+          )
+        },
+        type = "message"
+      )
+
+      # FIX 1: Updated regex to match "Completed 1 pairs" (removed "Together.ai")
+      testthat::expect_true(any(grepl("Completed 1 pairs", out)))
+
+      testthat::expect_true(dir.exists(tmp_dir))
+      saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+      testthat::expect_false("raw_response" %in% names(saved))
+      testthat::expect_true("raw_response" %in% names(res$results))
+    }
+  )
+  unlink(tmp_dir, recursive = TRUE)
+})
+
+testthat::test_that("submit_together_pairs_live: Resume logic (Read Error Handling)", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp <- tempfile(fileext = ".csv")
+  file.create(tmp)
+
+  # Mock read_csv to throw an error, forcing the tryCatch error handler (Line 569)
+  testthat::with_mocked_bindings(
+    read_csv = function(...) stop("Mock Read Error"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        together_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "m", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_together_pairs_live(
+              pairs, "model", td$name, td$description,
+              save_path = tmp, verbose = FALSE
+            ),
+            "Could not read existing save file"
+          )
+        }
+      )
+    }
+  )
+  unlink(tmp)
+})
+
+testthat::test_that("submit_together_pairs_live: Sequential Save Error Handling", {
+  testthat::skip_if_not_installed("readr")
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering Line 728 warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Disk full"),
+    .package = "readr",
+    {
+      testthat::with_mocked_bindings(
+        together_compare_pair_live = function(...) {
+          tibble::tibble(
+            custom_id = "LIVE_A_vs_B", ID1 = "A", ID2 = "B",
+            model = "m", status_code = 200, error_message = NA
+          )
+        },
+        .env = pll_ns,
+        {
+          testthat::expect_warning(
+            submit_together_pairs_live(
+              pairs, "model", td$name, td$description,
+              save_path = tmp_file, verbose = FALSE
+            ),
+            "Failed to save incremental result"
+          )
+        }
+      )
+    }
+  )
+})
+
+testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"), text1 = c("a", "b"),
+    ID2 = c("C", "D"), text2 = c("c", "d")
+  )
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # Mock write_csv to throw an error (triggering the save warning)
+  testthat::with_mocked_bindings(
+    write_csv = function(...) stop("Parallel Disk full"),
+    .package = "readr",
+    {
+      capture.output({
+        testthat::expect_warning(
+          res <- submit_together_pairs_live(
+            pairs,
+            model = 123, # FIX 2: Pass invalid model type to force stop() inside worker
+            trait_name = td$name,
+            trait_description = td$description,
+            parallel = TRUE, workers = 2,
+            save_path = tmp_file, verbose = TRUE
+          ),
+          "Failed to save incremental results"
+        )
+      })
+
+      # Now we expect failures with "Error: " because together_compare_pair_live threw an error
+      testthat::expect_equal(nrow(res$failed_pairs), 2L)
+      testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
+      testthat::expect_true(all(grepl("must be a single character", res$failed_pairs$error_message)))
+    }
+  )
+})
+
+testthat::test_that("submit_together_pairs_live: Sequential Internal Error Handling", {
+  # Covers lines 706-715 (tryCatch error handler in sequential loop)
+  pll_ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    together_compare_pair_live = function(...) stop("Sequential Internal Crash"),
+    .env = pll_ns,
+    {
+      res <- submit_together_pairs_live(
+        pairs, "model", td$name, td$description,
+        verbose = FALSE
+      )
+
+      testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_match(res$failed_pairs$error_message, "Sequential Internal Crash")
+    }
+  )
+})
+
+testthat::test_that("submit_together_pairs_live: Parallel Save Strips raw_response", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  # Use a pair to generate a result
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  tmp_file <- tempfile(fileext = ".csv")
+
+  # We run with parallel = TRUE and include_raw = TRUE.
+  # We provide a fake API key, so the worker will fail (caught by internal tryCatch).
+  # The worker returns an error tibble which includes a 'raw_response' column (Line 655).
+  # The main process aggregates this and should strip 'raw_response' before saving (Line 667).
+
+  # No warning expected (save should succeed)
+  testthat::expect_warning(
+    submit_together_pairs_live(
+      pairs, "model", td$name, td$description,
+      parallel = TRUE, workers = 2,
+      save_path = tmp_file, verbose = FALSE,
+      include_raw = TRUE,
+      api_key = "FAKE_KEY"
+    ),
+    regexp = NA
+  )
+
+  testthat::expect_true(file.exists(tmp_file))
+  saved <- readr::read_csv(tmp_file, show_col_types = FALSE)
+
+  # Verification:
+  # 1. We processed the pair (failed)
+  testthat::expect_equal(nrow(saved), 1L)
+  testthat::expect_true(!is.na(saved$error_message[1]))
+
+  # 2. The raw_response column was STRIPPED from the CSV
+  testthat::expect_false("raw_response" %in% names(saved))
+})
