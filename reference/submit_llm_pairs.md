@@ -3,7 +3,7 @@
 `submit_llm_pairs()` is a backend-neutral wrapper around row-wise
 comparison for multiple pairs. It takes a tibble of pairs (`ID1`,
 `text1`, `ID2`, `text2`), submits each pair to the selected backend, and
-binds the results into a single tibble.
+aggregates the results.
 
 ## Usage
 
@@ -21,6 +21,9 @@ submit_llm_pairs(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 ```
@@ -103,13 +106,30 @@ submit_llm_pairs(
   `raw_response` list-column with the parsed JSON body from the backend
   (for backends that support this).
 
+- save_path:
+
+  Character string; optional file path (e.g., "output.csv") to save
+  results incrementally. If the file exists, the function reads it to
+  identify and skip pairs that have already been processed (resume
+  mode). Supported by `"openai"`, `"anthropic"`, `"gemini"`, and
+  `"together"`.
+
+- parallel:
+
+  Logical; if `TRUE`, enables parallel processing using `future.apply`.
+  Requires the `future` package. Supported by `"openai"`, `"anthropic"`,
+  `"gemini"`, and `"together"`.
+
+- workers:
+
+  Integer; the number of parallel workers (threads) to use if
+  `parallel = TRUE`. Defaults to 1.
+
 - ...:
 
   Additional backend-specific parameters. For `"openai"` these are
   forwarded to
   [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
-  (and ultimately
-  [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md))
   and typically include `temperature`, `top_p`, `logprobs`, `reasoning`,
   and `include_thoughts`. For `"anthropic"` and `"gemini"`, they are
   forwarded to
@@ -125,14 +145,26 @@ submit_llm_pairs(
 
 ## Value
 
-A tibble with one row per pair and the same columns as the underlying
-backend-specific helper for the selected backend. All backends are
-intended to return a compatible structure suitable for
-[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
-and
-[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md).
+A list containing:
+
+- results:
+
+  A tibble with one row per successfully processed pair.
+
+- failed_pairs:
+
+  A tibble containing rows that failed to process (for supported
+  backends).
+
+Note: The `"ollama"` backend currently returns a single tibble of
+results (failures may throw errors or appear as NA rows depending on
+implementation).
 
 ## Details
+
+This function supports parallel processing, incremental saving, and
+resume capability for the `"openai"`, `"anthropic"`, `"gemini"`, and
+`"together"` backends.
 
 At present, the following backends are implemented:
 
@@ -146,15 +178,10 @@ At present, the following backends are implemented:
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
 
 - `"together"` →
-  [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
+  [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
 
 - `"ollama"` →
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
-
-Each backend-specific helper returns a tibble with one row per pair and
-a compatible set of columns, including a `thoughts` column (reasoning /
-thinking text when available), `content` (visible assistant output),
-`better_sample`, `better_id`, and token usage fields.
 
 ## See also
 
@@ -166,25 +193,11 @@ thinking text when available), `content` (visible assistant output),
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
   for backend-specific implementations.
 
-- [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
-  for single-pair comparisons.
-
-- [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
-  and
-  [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
-  for Bradley–Terry modelling of comparison results.
-
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires an API key for the chosen cloud backend. For OpenAI, set
-# OPENAI_API_KEY in your environment. Running these examples will incur
-# API usage costs.
-#
-# For local Ollama use, an Ollama server must be running and the models
-# must be pulled in advance. No API key is required for the `"ollama"`
-# backend.
+# Requires an API key for the chosen cloud backend.
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -196,7 +209,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Live comparisons for multiple pairs using the OpenAI backend
+# Parallel execution with OpenAI (requires future package)
 res_live <- submit_llm_pairs(
   pairs             = pairs,
   model             = "gpt-4.1",
@@ -205,17 +218,15 @@ res_live <- submit_llm_pairs(
   prompt_template   = tmpl,
   backend           = "openai",
   endpoint          = "chat.completions",
-  temperature       = 0,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE
+  parallel          = TRUE,
+  workers           = 4,
+  save_path         = "results_openai.csv"
 )
 
-res_live$better_id
+# Check results
+head(res_live$results)
 
 # Live comparisons using a local Ollama backend
-
 res_ollama <- submit_llm_pairs(
   pairs             = pairs,
   model             = "mistral-small3.2:24b",
@@ -223,12 +234,7 @@ res_ollama <- submit_llm_pairs(
   trait_description = td$description,
   prompt_template   = tmpl,
   backend           = "ollama",
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE,
-  think             = FALSE,
-  num_ctx           = 8192
+  verbose           = TRUE
 )
 
 res_ollama$better_id

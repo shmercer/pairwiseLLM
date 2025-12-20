@@ -40,6 +40,27 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.3.0" id="pairwisellm-130">pairwiseLLM 1.3.0<a class="anchor" aria-label="anchor" href="#pairwisellm-130"></a></h2>
+<div class="section level3">
+<h3 id="new-features-1-3-0">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-3-0"></a></h3>
+<ul><li>Parallel Processing:
+<ul><li>
+<code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> and backend-specific live functions (OpenAI, Anthropic, Gemini, Together) now support parallel execution via <code>parallel = TRUE</code> and <code>workers = n</code> (requires the <a href="https://future.futureverse.org" class="external-link">future</a> package).</li>
+</ul></li>
+<li>Incremental Saving &amp; Resume:
+<ul><li>Added <code>save_path</code> argument to live submission functions. Results are saved to CSV incrementally, allowing interrupted jobs to resume automatically by skipping previously processed pairs.</li>
+</ul></li>
+<li>Robust Error Handling:
+<ul><li>Failed API calls no longer stop the entire process. Failures are captured and returned separately, allowing for easier inspection and re-submission.</li>
+</ul></li>
+</ul></div>
+<div class="section level3">
+<h3 id="breaking-changes-1-3-0">Breaking Changes<a class="anchor" aria-label="anchor" href="#breaking-changes-1-3-0"></a></h3>
+<ul><li>
+<code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> and its backend-specific counterparts now return a <strong>list</strong> containing two elements: <code>$results</code> (a tibble of successful comparisons) and <code>$failed_pairs</code> (a tibble of inputs that failed). Previous versions returned a single tibble.</li>
+</ul></div>
+</div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.2.0" id="pairwisellm-120">pairwiseLLM 1.2.0<a class="anchor" aria-label="anchor" href="#pairwisellm-120"></a></h2>
 <div class="section level3">
 <h3 id="new-features-1-2-0">New features<a class="anchor" aria-label="anchor" href="#new-features-1-2-0"></a></h3>

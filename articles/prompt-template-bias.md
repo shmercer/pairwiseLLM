@@ -76,12 +76,12 @@ At a high level, the testing pipeline works as follows:
         where applicable)
       - Direction (`forward` vs `reverse`)
 
-    - Submit the forward and reverse pairs to the provider’s batch API
-      using dev scripts such as:
-
-      - `dev/dev-positional-bias-all-models.R`
-      - `dev/dev-positional-bias-all-models-rebuild.R`
-      - `dev/dev-together-template-positional-bias.R`
+    - Submit the forward and reverse pairs. You can do this using the
+      package’s Batch API helpers (for large-scale jobs) or the live API
+      wrapper
+      [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+      with `parallel = TRUE` (for faster turnaround on smaller test
+      sets).
 
     - Store responses as CSVs, including the model’s `<BETTER_SAMPLE>`
       decision and derived `better_id`.

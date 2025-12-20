@@ -2,34 +2,36 @@
 
 ## 1. Overview
 
-This vignette demonstrates how to use **pairwiseLLM** for more complex
-**batch workflows**, including:
+This vignette demonstrates how to use **pairwiseLLM** for **Batch API
+workflows** (server-side batching), which are distinct from the live API
+calls described in the [Getting
+Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+vignette.
 
-- Submitting many batches at once (e.g., across templates, providers,
-  models, and “thinking” settings)
-- Polling batches until they complete
-- Downloading and parsing batch results
-- Writing a **batch registry CSV** so you can safely **resume** after
-  interruptions
+Batch workflows are ideal for large-scale jobs because they: - Allow
+submitting thousands of pairs at once. - Are often cheaper (e.g., 50%
+discount on OpenAI). - Avoid client-side timeout and connection
+issues. - Can be polled and resumed even if your local R session ends.
 
-The examples are based on the A/B template testing dev scripts for:
+Supported Batch API providers: - **OpenAI** (via
+[`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md)) -
+**Anthropic** (via
+[`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md)) -
+**Gemini** (via low-level helpers such as
+[`build_gemini_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_gemini_batch_requests.md))
 
-- OpenAI (via
-  [`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md) +
-  [`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md))
-- Anthropic (via
-  [`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md) +
-  [`anthropic_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_get_batch.md))
-- Gemini (via low-level helpers such as
-  [`build_gemini_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_gemini_batch_requests.md)
-  and
-  [`gemini_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_create_batch.md))
+> **Note:** **Together.ai** and **Ollama** do not currently support a
+> native Batch API compatible with this workflow. For those providers,
+> use the **live** API wrapper
+> [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+> as described in the [Getting
+> Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+> vignette.
 
-At present, batch helpers are implemented for OpenAI, Anthropic, and
-Gemini. Together.ai and Ollama are supported only via the live APIs
-([`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
-/
-[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)).
+In this vignette, we will cover: - Submitting many batches (e.g., across
+templates, providers, and models). - Polling batches until completion. -
+Downloading and parsing results. - Using a **batch registry CSV** to
+safely resume interrupted jobs.
 
 > Note: All heavy API calls in this vignette are set to `eval = FALSE`
 > so that the vignette remains CRAN-safe. You can enable them in your

@@ -1,5 +1,32 @@
 # Changelog
 
+## pairwiseLLM 1.3.0
+
+### New Features
+
+- Parallel Processing:
+  - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+    and backend-specific live functions (OpenAI, Anthropic, Gemini,
+    Together) now support parallel execution via `parallel = TRUE` and
+    `workers = n` (requires the [future](https://future.futureverse.org)
+    package).
+- Incremental Saving & Resume:
+  - Added `save_path` argument to live submission functions. Results are
+    saved to CSV incrementally, allowing interrupted jobs to resume
+    automatically by skipping previously processed pairs.
+- Robust Error Handling:
+  - Failed API calls no longer stop the entire process. Failures are
+    captured and returned separately, allowing for easier inspection and
+    re-submission.
+
+### Breaking Changes
+
+- [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+  and its backend-specific counterparts now return a **list** containing
+  two elements: `$results` (a tibble of successful comparisons) and
+  `$failed_pairs` (a tibble of inputs that failed). Previous versions
+  returned a single tibble.
+
 ## pairwiseLLM 1.2.0
 
 ### New features

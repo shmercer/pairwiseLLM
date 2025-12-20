@@ -155,15 +155,11 @@ via <code>get_prompt_template("testX")</code>.</li>
 <li>Direction (<code>forward</code> vs <code>reverse</code>)</li>
 </ul>
 </li>
-<li>
-<p>Submit the forward and reverse pairs to the provider’s batch API
-using dev scripts such as:</p>
-<ul>
-<li><code>dev/dev-positional-bias-all-models.R</code></li>
-<li><code>dev/dev-positional-bias-all-models-rebuild.R</code></li>
-<li><code>dev/dev-together-template-positional-bias.R</code></li>
-</ul>
-</li>
+<li><p>Submit the forward and reverse pairs. You can do this using the
+package’s Batch API helpers (for large-scale jobs) or the live API
+wrapper <code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> with
+<code>parallel = TRUE</code> (for faster turnaround on smaller test
+sets).</p></li>
 <li><p>Store responses as CSVs, including the model’s
 <code>&lt;BETTER_SAMPLE&gt;</code> decision and derived
 <code>better_id</code>.</p></li>

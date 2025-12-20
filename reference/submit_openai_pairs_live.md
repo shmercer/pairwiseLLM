@@ -1,9 +1,9 @@
 # Live OpenAI comparisons for a tibble of pairs
 
-This is a thin row-wise wrapper around
+This is a robust row-wise wrapper around
 [`openai_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md).
 It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each
-pair to the OpenAI API, and binds the results into a single tibble.
+pair to the OpenAI API, and collects the results.
 
 ## Usage
 
@@ -20,6 +20,9 @@ submit_openai_pairs_live(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 ```
@@ -68,7 +71,7 @@ submit_openai_pairs_live(
 - status_every:
 
   Integer; print status / timing for every `status_every`-th pair.
-  Defaults to 1 (every pair). Errors are always printed.
+  Defaults to 1 (every pair).
 
 - progress:
 
@@ -78,6 +81,26 @@ submit_openai_pairs_live(
 
   Logical; if TRUE, each row of the returned tibble will include a
   `raw_response` list-column with the parsed JSON body from OpenAI.
+  Note: Raw responses are not saved to the incremental CSV file.
+
+- save_path:
+
+  Character string; optional file path (e.g., "output.csv") to save
+  results incrementally. If the file exists, the function reads it to
+  identify and skip pairs that have already been processed (resume
+  mode). Requires the `readr` package.
+
+- parallel:
+
+  Logical; if TRUE, enables parallel processing using `future.apply`.
+  Requires the `future` and `future.apply` packages.
+
+- workers:
+
+  Integer; the number of parallel workers (threads) to use if
+  `parallel = TRUE`. Defaults to 1. **Guidance:** A value between 4 and
+  8 is usually safe. Setting this too high (e.g., \>20) may trigger
+  OpenAI rate limit errors (HTTP 429) depending on your usage tier.
 
 - ...:
 
@@ -86,18 +109,35 @@ submit_openai_pairs_live(
 
 ## Value
 
-A tibble with one row per pair and the same columns as
-[`openai_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
-including a `thoughts` column for reasoning summaries (when available).
+A list containing two elements:
+
+- results:
+
+  A tibble with one row per successfully processed pair and columns such
+  as `better_id`, `better_sample`, `thoughts`, and `content`. See
+  [`openai_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md)
+  for details.
+
+- failed_pairs:
+
+  A tibble containing the rows from `pairs` that failed to process (due
+  to API errors or timeouts), along with an `error_message` column.
+  These can be easily re-submitted.
 
 ## Details
 
-The output has the same columns as
-[`openai_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
-with one row per pair, making it easy to pass into
-[`build_bt_data`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
-and
-[`fit_bt_model`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md).
+This function improves upon simple looping by offering:
+
+- **Parallel Processing:** Uses the `future` package to process multiple
+  pairs simultaneously.
+
+- **Incremental Saving:** Writes results to a CSV file as they complete.
+  If the process is interrupted, re-running the function with the same
+  `save_path` will automatically skip pairs that were already
+  successfully processed.
+
+- **Error Separation:** Returns valid results and failed pairs
+  separately, making it easier to debug or retry specific failures.
 
 ## Examples
 
@@ -109,47 +149,42 @@ data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
   make_pairs() |>
-  sample_pairs(n_pairs = 5, seed = 123) |>
+  sample_pairs(n_pairs = 10, seed = 123) |>
   randomize_pair_order(seed = 456)
 
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Live comparisons for multiple pairs
-res_live <- submit_openai_pairs_live(
+# 1. Sequential execution with incremental saving
+# If interrupted, running this again will resume progress.
+res_seq <- submit_openai_pairs_live(
   pairs             = pairs,
   model             = "gpt-4.1",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  endpoint          = "chat.completions",
-  temperature       = 0,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE
+  save_path         = "results_seq.csv"
 )
 
-res_live$better_id
-
-# Using gpt-5.1 with reasoning on the responses endpoint
-res_live_gpt5 <- submit_openai_pairs_live(
+# 2. Parallel execution (faster)
+# Note: On Windows, this opens background R sessions.
+res_par <- submit_openai_pairs_live(
   pairs             = pairs,
-  model             = "gpt-5.1",
+  model             = "gpt-4.1",
   trait_name        = td$name,
   trait_description = td$description,
-  prompt_template   = tmpl,
-  endpoint          = "responses",
-  reasoning         = "low",
-  temperature       = NULL,
-  top_p             = NULL,
-  logprobs          = NULL,
-  verbose           = TRUE,
-  status_every      = 3,
-  progress          = TRUE,
-  include_raw       = TRUE
+  save_path         = "results_par.csv",
+  parallel          = TRUE,
+  workers           = 4
 )
 
-str(res_live_gpt5$raw_response[[1]], max.level = 2)
+# Inspect results
+head(res_par$results)
+
+# Check for failures
+if (nrow(res_par$failed_pairs) > 0) {
+  message("Some pairs failed:")
+  print(res_par$failed_pairs)
+}
 } # }
 ```

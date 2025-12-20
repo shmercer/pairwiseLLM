@@ -271,7 +271,7 @@
 <div class="section level2">
 <h2 id="live-comparisons">Live Comparisons<a class="anchor" aria-label="anchor" href="#live-comparisons"></a>
 </h2>
-<p>Use the unified API:</p>
+<p>Use the unified API for direct API calls. The <code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> function supports <strong>parallel processing</strong> and <strong>incremental output saving</strong> for the OpenAI, Anthropic, Gemini, and Together backends.</p>
 <ul>
 <li>
 <code><a href="reference/llm_compare_pair.html">llm_compare_pair()</a></code> — compare one pair<br>
@@ -279,26 +279,39 @@
 <li>
 <code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> — compare many pairs at once</li>
 </ul>
+<p><strong>Key Features:</strong> * <strong>Parallel Execution:</strong> Set <code>parallel = TRUE</code> and <code>workers = n</code> to speed up processing. * <strong>Resume Capability:</strong> Provide a <code>save_path</code> (e.g., <code>"results.csv"</code>). The function writes results as they finish. If interrupted, running the command again will automatically skip pairs already present in the file. * <strong>Robust Output:</strong> Returns a list containing <code>$results</code> (successful comparisons) and <code>$failed_pairs</code> (errors), ensuring one bad request doesn’t crash the whole job.</p>
 <p>Example:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span><span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span><span class="fl">10</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
+<span><span class="co"># Run in parallel with incremental saving</span></span>
+<span><span class="va">res_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
 <span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span>
 <span>  backend           <span class="op">=</span> <span class="st">"openai"</span>,</span>
 <span>  model             <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
 <span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
 <span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>  parallel          <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  workers           <span class="op">=</span> <span class="fl">4</span>,</span>
+<span>  save_path         <span class="op">=</span> <span class="st">"live_results.csv"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Inspect successes</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Inspect failures (if any)</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_pairs</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_pairs</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
 <hr>
 </div>
 <div class="section level2">
@@ -524,11 +537,14 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="va">pairs_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sample_reverse_pairs.html">sample_reverse_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, reverse_pct <span class="op">=</span> <span class="fl">1.0</span><span class="op">)</span></span></code></pre></div>
 <p>Submit:</p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span>
-<span><span class="va">res_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_rev</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="co"># Submit forward pairs</span></span>
+<span><span class="va">out_fwd</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_fwd</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Submit reverse pairs</span></span>
+<span><span class="va">out_rev</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">pairs_rev</span>, model <span class="op">=</span> <span class="st">"gpt-4o"</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
 <p>Compute bias:</p>
 <div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cons</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compute_reverse_consistency.html">compute_reverse_consistency</a></span><span class="op">(</span><span class="va">res_fwd</span>, <span class="va">res_rev</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">cons</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compute_reverse_consistency.html">compute_reverse_consistency</a></span><span class="op">(</span><span class="va">out_fwd</span><span class="op">$</span><span class="va">results</span>, <span class="va">out_rev</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="va">bias</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/check_positional_bias.html">check_positional_bias</a></span><span class="op">(</span><span class="va">cons</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">cons</span><span class="op">$</span><span class="va">summary</span></span>
@@ -548,7 +564,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <h3 id="bradleyterry-bt">Bradley–Terry (BT)<a class="anchor" aria-label="anchor" href="#bradleyterry-bt"></a>
 </h3>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># res_list: output from submit_llm_pairs() </span></span>
+<span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -556,8 +573,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <h3 id="elo-modeling">Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
 </h3>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># res: output from submit_llm_pairs() / llm_submit_pairs_batch()</span></span>
-<span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># res_list: output from submit_llm_pairs() </span></span>
+<span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span></span>
@@ -664,7 +681,7 @@ Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&a
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons with large language models (Version 1.0.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
+<p>Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality comparisons with large language models (Version 1.2.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
 </div>

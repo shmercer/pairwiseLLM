@@ -1,10 +1,9 @@
 # Live Anthropic (Claude) comparisons for a tibble of pairs
 
-This is a thin row-wise wrapper around
+This is a robust row-wise wrapper around
 [`anthropic_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md).
 It takes a tibble of pairs (ID1 / text1 / ID2 / text2), submits each
-pair to the Anthropic Messages API, and binds the results into a single
-tibble.
+pair to the Anthropic Messages API, and collects the results.
 
 ## Usage
 
@@ -23,6 +22,9 @@ submit_anthropic_pairs_live(
   progress = TRUE,
   include_raw = FALSE,
   include_thoughts = NULL,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 ```
@@ -79,7 +81,7 @@ submit_anthropic_pairs_live(
 - status_every:
 
   Integer; print status / timing for every `status_every`-th pair.
-  Defaults to 1 (every pair). Errors are always printed.
+  Defaults to 1 (every pair).
 
 - progress:
 
@@ -89,6 +91,7 @@ submit_anthropic_pairs_live(
 
   Logical; if `TRUE`, each row of the returned tibble will include a
   `raw_response` list-column with the parsed JSON body from Anthropic.
+  Note: Raw responses are not saved to the incremental CSV file.
 
 - include_thoughts:
 
@@ -99,6 +102,25 @@ submit_anthropic_pairs_live(
   `temperature = 1` and adds a `thinking` block. When `FALSE` or `NULL`,
   `reasoning` is used as-is.
 
+- save_path:
+
+  Character string; optional file path (e.g., "output.csv") to save
+  results incrementally. If the file exists, the function reads it to
+  identify and skip pairs that have already been processed (resume
+  mode). Requires the `readr` package.
+
+- parallel:
+
+  Logical; if `TRUE`, enables parallel processing using `future.apply`.
+  Requires the `future` and `future.apply` packages.
+
+- workers:
+
+  Integer; the number of parallel workers (threads) to use if
+  `parallel = TRUE`. Defaults to 1. **Guidance:** Anthropic rate limits
+  vary significantly by tier. Start conservatively (e.g., 2-4 workers)
+  to avoid HTTP 429 errors.
+
 - ...:
 
   Additional Anthropic parameters (for example `temperature`, `top_p`,
@@ -107,17 +129,31 @@ submit_anthropic_pairs_live(
 
 ## Value
 
-A tibble with one row per pair and the same columns as
-[`anthropic_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md).
+A list containing two elements:
+
+- results:
+
+  A tibble with one row per successfully processed pair.
+
+- failed_pairs:
+
+  A tibble containing the rows from `pairs` that failed to process (due
+  to API errors or timeouts), along with an `error_message` column.
 
 ## Details
 
-The output has the same columns as
-[`anthropic_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
-with one row per pair, making it easy to pass into
-[`build_bt_data`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
-and
-[`fit_bt_model`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md).
+This function offers:
+
+- **Parallel Processing:** Uses the `future` package to process multiple
+  pairs simultaneously.
+
+- **Incremental Saving:** Writes results to a CSV file as they complete.
+  If the process is interrupted, re-running the function with the same
+  `save_path` will automatically skip pairs that were already
+  successfully processed.
+
+- **Error Separation:** Returns valid results and failed pairs
+  separately, making it easier to debug or retry specific failures.
 
 **Temperature and reasoning behaviour**
 
@@ -144,7 +180,6 @@ request. When `include_thoughts = FALSE` (the default), and you leave
 ``` r
 if (FALSE) { # \dontrun{
 # Requires ANTHROPIC_API_KEY and network access.
-library(pairwiseLLM)
 
 data("example_writing_samples", package = "pairwiseLLM")
 
@@ -156,7 +191,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Deterministic comparisons with no extended thinking and temperature = 0
+# 1. Sequential execution with incremental saving
 res_claude <- submit_anthropic_pairs_live(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
@@ -164,29 +199,28 @@ res_claude <- submit_anthropic_pairs_live(
   trait_description = td$description,
   prompt_template   = tmpl,
   reasoning         = "none",
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = FALSE
+  save_path         = "results_seq.csv"
 )
 
-res_claude$better_id
-
-# Comparisons with extended thinking and temperature = 1
-res_claude_reason <- submit_anthropic_pairs_live(
+# 2. Parallel execution (faster)
+res_par <- submit_anthropic_pairs_live(
   pairs             = pairs,
   model             = "claude-sonnet-4-5",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  reasoning         = "enabled",
-  include_thoughts  = TRUE,
-  verbose           = TRUE,
-  status_every      = 2,
-  progress          = TRUE,
-  include_raw       = TRUE
+  save_path         = "results_par.csv",
+  parallel          = TRUE,
+  workers           = 4
 )
 
-res_claude_reason$better_id
+# Inspect results
+head(res_par$results)
+
+# Check for failures
+if (nrow(res_par$failed_pairs) > 0) {
+  message("Some pairs failed:")
+  print(res_par$failed_pairs)
+}
 } # }
 ```

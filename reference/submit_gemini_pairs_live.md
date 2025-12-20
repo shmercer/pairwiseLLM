@@ -1,9 +1,9 @@
 # Live Google Gemini comparisons for a tibble of pairs
 
-This is a thin row-wise wrapper around
+This is a robust row-wise wrapper around
 [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md).
 It takes a tibble of pairs (`ID1` / `text1` / `ID2` / `text2`), submits
-each pair to Gemini 3 Pro, and binds the results into a single tibble.
+each pair to the Google Gemini API, and collects the results.
 
 ## Usage
 
@@ -26,6 +26,9 @@ submit_gemini_pairs_live(
   progress = TRUE,
   include_raw = FALSE,
   include_thoughts = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 )
 ```
@@ -101,13 +104,34 @@ submit_gemini_pairs_live(
 
 - include_raw:
 
-  Logical; include `raw_response` list-column.
+  Logical; if `TRUE`, each row of the returned tibble will include a
+  `raw_response` list-column with the parsed JSON body. Note: Raw
+  responses are not saved to the incremental CSV file.
 
 - include_thoughts:
 
   Logical; if `TRUE`, requests explicit reasoning output from Gemini and
   stores it in the `thoughts` column of the result, mirroring
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md).
+
+- save_path:
+
+  Character string; optional file path (e.g., "output.csv") to save
+  results incrementally. If the file exists, the function reads it to
+  identify and skip pairs that have already been processed (resume
+  mode). Requires the `readr` package.
+
+- parallel:
+
+  Logical; if `TRUE`, enables parallel processing using `future.apply`.
+  Requires the `future` and `future.apply` packages.
+
+- workers:
+
+  Integer; the number of parallel workers (threads) to use if
+  `parallel = TRUE`. Defaults to 1. **Guidance:** Start conservatively
+  (e.g., 2-4 workers) to avoid hitting HTTP 429 errors, as Gemini rate
+  limits can be strict depending on your tier.
 
 - ...:
 
@@ -117,13 +141,31 @@ submit_gemini_pairs_live(
 
 ## Value
 
-A tibble of results (one row per pair).
+A list containing two elements:
+
+- results:
+
+  A tibble with one row per successfully processed pair.
+
+- failed_pairs:
+
+  A tibble containing the rows from `pairs` that failed to process (due
+  to API errors or timeouts), along with an `error_message` column.
 
 ## Details
 
-The output has one row per pair and the same columns as
-[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
-making it easy to pass into downstream Bradley-Terry / BTM pipelines.
+This function offers:
+
+- **Parallel Processing:** Uses the `future` package to process multiple
+  pairs simultaneously.
+
+- **Incremental Saving:** Writes results to a CSV file as they complete.
+  If the process is interrupted, re-running the function with the same
+  `save_path` will automatically skip pairs that were already
+  successfully processed.
+
+- **Error Separation:** Returns valid results and failed pairs
+  separately, making it easier to debug or retry specific failures.
 
 ## Examples
 
@@ -144,19 +186,29 @@ pairs <- tibble::tibble(
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Submit multiple live Gemini comparisons
-res <- submit_gemini_pairs_live(
+# 1. Sequential execution with incremental saving
+res_seq <- submit_gemini_pairs_live(
   pairs             = pairs,
   model             = "gemini-3-pro-preview",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  thinking_level    = "low",
-  include_thoughts  = FALSE,
-  progress          = TRUE
+  save_path         = "results_gemini_seq.csv"
 )
 
-res
-res$better_id
+# 2. Parallel execution (faster)
+res_par <- submit_gemini_pairs_live(
+  pairs             = pairs,
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  save_path         = "results_gemini_par.csv",
+  parallel          = TRUE,
+  workers           = 4
+)
+
+# Inspect results
+head(res_par$results)
 } # }
 ```
