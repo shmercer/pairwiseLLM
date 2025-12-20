@@ -138,14 +138,17 @@ saving** for the OpenAI, Anthropic, Gemini, and Together backends.
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
   — compare many pairs at once
 
-**Key Features:** \* **Parallel Execution:** Set `parallel = TRUE` and
-`workers = n` to speed up processing. \* **Resume Capability:** Provide
-a `save_path` (e.g., `"results.csv"`). The function writes results as
-they finish. If interrupted, running the command again will
-automatically skip pairs already present in the file. \* **Robust
-Output:** Returns a list containing `$results` (successful comparisons)
-and `$failed_pairs` (errors), ensuring one bad request doesn’t crash the
-whole job.
+Key Features:
+
+- Parallel Execution: Set `parallel = TRUE` and `workers = n` to speed
+  up processing.
+- Resume Capability: Provide a `save_path` (e.g., `"results.csv"`). The
+  function writes results as they finish. If interrupted, running the
+  command again will automatically skip pairs already present in the
+  file.
+- Robust Output: Returns a list containing `$results` (successful
+  comparisons) and `$failed_pairs` (errors), ensuring one bad request
+  doesn’t crash the whole job.
 
 Example:
 
