@@ -2,7 +2,7 @@
 
 ## New Features
 *   Parallel Processing: 
-    - `submit_llm_pairs()` and backend-specific live functions (OpenAI, Anthropic, Gemini, Together) now support parallel execution via `parallel = TRUE` and `workers = n` (requires the `{future}` package).
+    - `submit_llm_pairs()` and backend-specific live functions (OpenAI, Anthropic, Gemini, Together, Ollama) now support parallel execution via `parallel = TRUE` and `workers = n` (requires the `{future}` package).
 *   Incremental Saving & Resume: 
     - Added `save_path` argument to live submission functions. Results are saved to CSV incrementally, allowing interrupted jobs to resume automatically by skipping previously processed pairs.
 *   Robust Error Handling: 

@@ -142,7 +142,7 @@ The package provides helpers for each step.
 
 ## Live Comparisons
 
-Use the unified API for direct API calls. The `submit_llm_pairs()` function supports **parallel processing** and **incremental output saving** for the OpenAI, Anthropic, Gemini, and Together backends.
+Use the unified API for direct API calls. The `submit_llm_pairs()` function supports **parallel processing** and **incremental output saving** for all supported backends (OpenAI, Anthropic, Gemini, Together, and Ollama).
 
 * `llm_compare_pair()` — compare one pair  
 * `submit_llm_pairs()` — compare many pairs at once

@@ -138,22 +138,23 @@ The package provides helpers for each step.
 
 Use the unified API for direct API calls. The `submit_llm_pairs()`
 function supports **parallel processing** and **incremental output
-saving** for the OpenAI, Anthropic, Gemini, and Together backends.
+saving** for all supported backends (OpenAI, Anthropic, Gemini,
+Together, and Ollama).
 
 - `llm_compare_pair()` — compare one pair  
 - `submit_llm_pairs()` — compare many pairs at once
 
-Key Features: 
+Key Features:
 
-- Parallel Execution: Set `parallel = TRUE` and
-`workers = n` to speed up processing. 
-- Resume Capability: Provide
-a `save_path` (e.g., `"results.csv"`). The function writes results as
-they finish. If interrupted, running the command again will
-automatically skip pairs already present in the file. 
-- Robust Output: Returns a list containing `$results` (successful comparisons)
-and `$failed_pairs` (errors), ensuring one bad request doesn’t crash the
-whole job.
+- Parallel Execution: Set `parallel = TRUE` and `workers = n` to speed
+  up processing.
+- Resume Capability: Provide a `save_path` (e.g., `"results.csv"`). The
+  function writes results as they finish. If interrupted, running the
+  command again will automatically skip pairs already present in the
+  file.
+- Robust Output: Returns a list containing `$results` (successful
+  comparisons) and `$failed_pairs` (errors), ensuring one bad request
+  doesn’t crash the whole job.
 
 Example:
 

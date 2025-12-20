@@ -360,15 +360,22 @@ ollama_compare_pair_live <- function(
 
 #' Live Ollama comparisons for a tibble of pairs
 #'
-#' `submit_ollama_pairs_live()` is a thin row-wise wrapper around
+#' `submit_ollama_pairs_live()` is a robust row-wise wrapper around
 #' [ollama_compare_pair_live()]. It takes a tibble of pairs (`ID1` / `text1` /
-#' `ID2` / `text2`), submits each pair to a local Ollama server, and binds
-#' the results into a single tibble.
+#' `ID2` / `text2`), submits each pair to a local (or remote) Ollama server,
+#' and collects the results.
 #'
-#' This helper mirrors [submit_openai_pairs_live()] but targets a local
-#' Ollama instance rather than a cloud API. It is intended to offer a similar
-#' interface and return shape, so results can be passed directly into
-#' [build_bt_data()] and [fit_bt_model()].
+#' This function offers:
+#' \itemize{
+#'   \item **Incremental Saving:** Writes results to a CSV file as they complete.
+#'     If the process is interrupted, re-running the function with the same
+#'     \code{save_path} will automatically skip pairs that were already successfully processed.
+#'   \item **Parallel Processing:** Uses the \code{future} package to process
+#'     multiple pairs simultaneously. \strong{Note:} Since Ollama typically runs
+#'     locally on the GPU, parallel processing may degrade performance or cause
+#'     out-of-memory errors unless the hardware can handle concurrent requests.
+#'     Defaults are set to sequential processing.
+#' }
 #'
 #' Temperature and context length are controlled as follows:
 #'
@@ -403,20 +410,31 @@ ollama_compare_pair_live <- function(
 #'   default is `8192L`.
 #' @param include_raw Logical; if `TRUE`, each row of the returned tibble will
 #'   include a `raw_response` list-column with the parsed JSON body from
-#'   Ollama.
+#'   Ollama. Note: Raw responses are not saved to the incremental CSV file.
+#' @param save_path Character string; optional file path (e.g., "output.csv")
+#'   to save results incrementally. If the file exists, the function reads it
+#'   to identify and skip pairs that have already been processed (resume mode).
+#'   Requires the \code{readr} package.
+#' @param parallel Logical; if `TRUE`, enables parallel processing using
+#'   \code{future.apply}. Requires the \code{future} and \code{future.apply}
+#'   packages. Defaults to `FALSE`.
+#' @param workers Integer; the number of parallel workers (threads) to use if
+#'   \code{parallel = TRUE}. Defaults to 1.
 #' @param ... Reserved for future extensions and forwarded to
 #'   [ollama_compare_pair_live()].
 #'
-#' @return A tibble with one row per pair and the same columns as
-#'   [ollama_compare_pair_live()], including an optional `raw_response`
-#'   column when `include_raw = TRUE`.
+#' @return A list containing two elements:
+#' \describe{
+#'   \item{results}{A tibble with one row per successfully processed pair.}
+#'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
+#'     failed to process (due to API errors or timeouts), along with an
+#'     \code{error_message} column.}
+#' }
 #'
 #' @details
 #' In most user-facing workflows, it is more convenient to call
 #' [submit_llm_pairs()] with `backend = "ollama"` rather than using
-#' `submit_ollama_pairs_live()` directly. The backend-neutral wrapper will
-#' route arguments to the appropriate backend helper and ensure a consistent
-#' return shape.
+#' `submit_ollama_pairs_live()` directly.
 #'
 #' As with [ollama_compare_pair_live()], this function assumes that:
 #'
@@ -438,43 +456,25 @@ ollama_compare_pair_live <- function(
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Live comparisons for multiple pairs using a Mistral model via Ollama
+#' # Live comparisons with incremental saving
 #' res_mistral <- submit_ollama_pairs_live(
 #'   pairs             = pairs,
 #'   model             = "mistral-small3.2:24b",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   verbose           = TRUE,
-#'   status_every      = 2,
-#'   progress          = TRUE
+#'   save_path         = "ollama_results.csv",
+#'   verbose           = TRUE
 #' )
 #'
-#' res_mistral$better_id
-#'
-#' # Qwen with thinking enabled
-#' res_qwen_think <- submit_ollama_pairs_live(
-#'   pairs             = pairs,
-#'   model             = "qwen3:32b",
-#'   trait_name        = td$name,
-#'   trait_description = td$description,
-#'   prompt_template   = tmpl,
-#'   think             = TRUE,
-#'   num_ctx           = 16384,
-#'   verbose           = FALSE,
-#'   progress          = FALSE
-#' )
-#'
-#' res_qwen_think$better_id
+#' # Access results
+#' res_mistral$results
 #' }
 #'
 #' @seealso
 #' * [ollama_compare_pair_live()] for single-pair Ollama comparisons.
 #' * [submit_llm_pairs()] for backend-agnostic comparisons over tibbles of
 #'   pairs.
-#' * [submit_openai_pairs_live()], [submit_anthropic_pairs_live()],
-#'   and [submit_gemini_pairs_live()] for other backend-specific
-#'   implementations.
 #'
 #' @export
 submit_ollama_pairs_live <- function(
@@ -490,6 +490,9 @@ submit_ollama_pairs_live <- function(
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,
+  save_path = NULL,
+  parallel = FALSE,
+  workers = 1,
   ...
 ) {
   pairs <- tibble::as_tibble(pairs)
@@ -504,8 +507,55 @@ submit_ollama_pairs_live <- function(
     )
   }
 
+  # --- Pre-flight Checks (Save Path) ---
+  if (!is.null(save_path)) {
+    if (!requireNamespace("readr", quietly = TRUE)) {
+      stop("The 'readr' package is required for incremental saving. Please install it.", call. = FALSE)
+    }
+    save_dir <- dirname(save_path)
+    if (!dir.exists(save_dir) && save_dir != ".") {
+      if (verbose) message(sprintf("Creating output directory: '%s'", save_dir))
+      dir.create(save_dir, recursive = TRUE)
+    }
+  }
+
+  # --- Parallel Plan ---
+  if (parallel && workers > 1) {
+    if (!requireNamespace("future", quietly = TRUE) || !requireNamespace("future.apply", quietly = TRUE)) {
+      stop("Packages 'future' and 'future.apply' are required for parallel processing.", call. = FALSE)
+    }
+    if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
+    old_plan <- future::plan("multisession", workers = workers)
+    on.exit(future::plan(old_plan), add = TRUE)
+  }
+
+  # --- Resume Logic ---
+  existing_results <- NULL
+  if (!is.null(save_path) && file.exists(save_path)) {
+    if (verbose) message(sprintf("Found existing file at '%s'. Checking for resumable pairs...", save_path))
+    tryCatch(
+      {
+        existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
+        if ("custom_id" %in% names(existing_results)) {
+          existing_ids <- existing_results$custom_id
+          current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+          to_process_idx <- !current_ids %in% existing_ids
+          if (sum(!to_process_idx) > 0) {
+            if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
+            pairs <- pairs[to_process_idx, ]
+          }
+        }
+      },
+      error = function(e) {
+        warning("Could not read existing save file to resume. Processing all pairs. Error: ", e$message, call. = FALSE)
+      }
+    )
+  }
+
   n <- nrow(pairs)
-  if (n == 0L) {
+
+  # Helper for empty result
+  empty_res <- function() {
     res <- tibble::tibble(
       custom_id         = character(0),
       ID1               = character(0),
@@ -528,6 +578,12 @@ submit_ollama_pairs_live <- function(
     return(res)
   }
 
+  if (n == 0L) {
+    if (verbose) message("No new pairs to process.")
+    final_res <- if (!is.null(existing_results)) existing_results else empty_res()
+    return(list(results = final_res, failed_pairs = pairs[0, ]))
+  }
+
   if (!is.numeric(status_every) || length(status_every) != 1L ||
     status_every < 1) {
     stop("`status_every` must be a single positive integer.", call. = FALSE)
@@ -536,132 +592,210 @@ submit_ollama_pairs_live <- function(
 
   fmt_secs <- function(x) sprintf("%.1fs", x)
 
-  if (verbose) {
-    message(sprintf(
-      "Submitting %d live pair(s) for comparison (backend=ollama, model=%s)...",
-      n, model
-    ))
-  }
+  use_parallel <- parallel && workers > 1 && requireNamespace("future.apply", quietly = TRUE)
+  all_new_results <- vector("list", n)
 
-  pb <- NULL
-  if (progress && n > 0L) {
-    pb <- utils::txtProgressBar(min = 0, max = n, style = 3)
-  }
+  # --- Execution ---
+  if (use_parallel) {
+    if (verbose) message(sprintf("Processing %d pairs in PARALLEL (Ollama, %d workers)...", n, workers))
 
-  start_time <- Sys.time()
-  out <- vector("list", n)
+    # We process in chunks to allow for some progress updates and incremental writes
+    chunk_size <- 10 # Smaller chunk size for local LLMs usually safer
+    chunks <- split(seq_len(n), ceiling(seq_len(n) / chunk_size))
 
-  for (i in seq_len(n)) {
-    show_status <- verbose && (i %% status_every == 1L)
+    start_time <- Sys.time()
+    pb <- if (progress) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
+    total_processed <- 0
 
-    id1_i <- as.character(pairs$ID1[i])
-    id2_i <- as.character(pairs$ID2[i])
-
-    if (show_status) {
-      message(sprintf(
-        "[Live pair %d of %d] Comparing %s vs %s ...",
-        i, n, id1_i, id2_i
-      ))
-    }
-
-    res <- tryCatch(
-      ollama_compare_pair_live(
-        ID1               = id1_i,
-        text1             = as.character(pairs$text1[i]),
-        ID2               = id2_i,
-        text2             = as.character(pairs$text2[i]),
-        model             = model,
-        trait_name        = trait_name,
-        trait_description = trait_description,
-        prompt_template   = prompt_template,
-        host              = host,
-        think             = think,
-        num_ctx           = num_ctx,
-        include_raw       = include_raw,
-        ...
-      ),
-      error = function(e) {
-        if (verbose) {
-          message(sprintf(
-            "    ERROR: Ollama comparison failed for pair %s vs %s: %s",
-            id1_i,
-            id2_i,
-            conditionMessage(e)
-          ))
-        }
-
-        out_row <- tibble::tibble(
-          custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
-          ID1 = id1_i,
-          ID2 = id2_i,
-          model = model,
-          object_type = NA_character_,
-          status_code = NA_integer_,
-          error_message = paste0(
-            "Error during Ollama comparison: ",
-            conditionMessage(e)
-          ),
-          thoughts = NA_character_,
-          content = NA_character_,
-          better_sample = NA_character_,
-          better_id = NA_character_,
-          prompt_tokens = NA_real_,
-          completion_tokens = NA_real_,
-          total_tokens = NA_real_
+    for (chunk_indices in chunks) {
+      work_fn <- function(i) {
+        id1_i <- as.character(pairs$ID1[i])
+        id2_i <- as.character(pairs$ID2[i])
+        tryCatch(
+          {
+            ollama_compare_pair_live(
+              ID1               = id1_i,
+              text1             = as.character(pairs$text1[i]),
+              ID2               = id2_i,
+              text2             = as.character(pairs$text2[i]),
+              model             = model,
+              trait_name        = trait_name,
+              trait_description = trait_description,
+              prompt_template   = prompt_template,
+              host              = host,
+              think             = think,
+              num_ctx           = num_ctx,
+              include_raw       = include_raw,
+              ...
+            )
+          },
+          error = function(e) {
+            # Return error row
+            tibble::tibble(
+              custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+              ID1 = id1_i,
+              ID2 = id2_i,
+              model = model,
+              object_type = NA_character_,
+              status_code = NA_integer_,
+              error_message = paste0("Error: ", conditionMessage(e)),
+              thoughts = NA_character_,
+              content = NA_character_,
+              better_sample = NA_character_,
+              better_id = NA_character_,
+              prompt_tokens = NA_real_,
+              completion_tokens = NA_real_,
+              total_tokens = NA_real_,
+              raw_response = if (include_raw) list(NULL) else NULL
+            )
+          }
         )
-
-        if (include_raw) {
-          out_row$raw_response <- list(NULL)
-        }
-
-        out_row
       }
-    )
 
-    if (!is.null(pb)) {
-      utils::setTxtProgressBar(pb, i)
+      chunk_results_list <- future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+      all_new_results[chunk_indices] <- chunk_results_list
+
+      # Incremental Save
+      if (!is.null(save_path)) {
+        chunk_df <- dplyr::bind_rows(chunk_results_list)
+        if ("raw_response" %in% names(chunk_df)) chunk_df$raw_response <- NULL
+        write_mode <- if (file.exists(save_path)) "append" else "write"
+        tryCatch(
+          {
+            readr::write_csv(chunk_df, save_path, append = (write_mode == "append"))
+          },
+          error = function(e) warning("Failed to save incremental results: ", e$message, call. = FALSE)
+        )
+      }
+
+      total_processed <- total_processed + length(chunk_indices)
+      if (!is.null(pb)) utils::setTxtProgressBar(pb, total_processed)
     }
-
-    if (!is.na(res$error_message)) {
+    if (!is.null(pb)) close(pb)
+  } else {
+    # --- Sequential Execution ---
+    if (verbose) {
       message(sprintf(
-        "    WARNING: Ollama error (status %s): %s",
-        res$status_code, res$error_message
-      ))
-    } else if (show_status) {
-      elapsed <- as.numeric(difftime(Sys.time(), start_time,
-        units = "secs"
-      ))
-      avg <- elapsed / i
-      remain <- n - i
-      est_rem <- avg * remain
-
-      message(sprintf(
-        "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
-        res$better_id,
-        res$better_sample,
-        res$prompt_tokens,
-        res$completion_tokens,
-        res$total_tokens
-      ))
-      message(sprintf(
-        "    Timing: elapsed=%s | avg/pair=%s | est remaining=%s",
-        fmt_secs(elapsed),
-        fmt_secs(avg),
-        fmt_secs(est_rem)
+        "Submitting %d live pair(s) for comparison (backend=ollama, model=%s)...",
+        n, model
       ))
     }
 
-    out[[i]] <- res
-  }
+    start_time <- Sys.time()
+    pb <- if (progress && n > 0L) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
 
-  if (!is.null(pb)) {
-    close(pb)
+    for (i in seq_len(n)) {
+      show_status <- verbose && ((i - 1) %% status_every == 0L)
+
+      id1_i <- as.character(pairs$ID1[i])
+      id2_i <- as.character(pairs$ID2[i])
+
+      if (show_status) {
+        message(sprintf(
+          "[Live pair %d of %d] Comparing %s vs %s ...",
+          i, n, id1_i, id2_i
+        ))
+      }
+
+      res <- tryCatch(
+        ollama_compare_pair_live(
+          ID1               = id1_i,
+          text1             = as.character(pairs$text1[i]),
+          ID2               = id2_i,
+          text2             = as.character(pairs$text2[i]),
+          model             = model,
+          trait_name        = trait_name,
+          trait_description = trait_description,
+          prompt_template   = prompt_template,
+          host              = host,
+          think             = think,
+          num_ctx           = num_ctx,
+          include_raw       = include_raw,
+          ...
+        ),
+        error = function(e) {
+          if (verbose) {
+            message(sprintf(
+              "    ERROR: Ollama comparison failed for pair %s vs %s: %s",
+              id1_i, id2_i, conditionMessage(e)
+            ))
+          }
+
+          out_row <- tibble::tibble(
+            custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+            ID1 = id1_i,
+            ID2 = id2_i,
+            model = model,
+            object_type = NA_character_,
+            status_code = NA_integer_,
+            error_message = paste0(
+              "Error during Ollama comparison: ",
+              conditionMessage(e)
+            ),
+            thoughts = NA_character_,
+            content = NA_character_,
+            better_sample = NA_character_,
+            better_id = NA_character_,
+            prompt_tokens = NA_real_,
+            completion_tokens = NA_real_,
+            total_tokens = NA_real_
+          )
+
+          if (include_raw) {
+            out_row$raw_response <- list(NULL)
+          }
+
+          out_row
+        }
+      )
+      all_new_results[[i]] <- res
+
+      # Incremental Save
+      if (!is.null(save_path)) {
+        write_df <- res
+        if ("raw_response" %in% names(write_df)) write_df$raw_response <- NULL
+        col_names <- !file.exists(save_path)
+        tryCatch(
+          {
+            readr::write_csv(write_df, save_path, append = !col_names, col_names = col_names)
+          },
+          error = function(e) warning("Failed to save incremental result: ", e$message, call. = FALSE)
+        )
+      }
+
+      if (!is.null(pb)) {
+        utils::setTxtProgressBar(pb, i)
+      }
+
+      if (!is.na(res$error_message) && verbose) {
+        # Error already printed in tryCatch if verbose
+      } else if (show_status) {
+        elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+        avg <- elapsed / i
+        remain <- n - i
+        est_rem <- avg * remain
+
+        message(sprintf(
+          "    Result: %s preferred (%s) | tokens: prompt=%s, completion=%s, total=%s",
+          res$better_id,
+          res$better_sample,
+          res$prompt_tokens,
+          res$completion_tokens,
+          res$total_tokens
+        ))
+        message(sprintf(
+          "    Timing: elapsed=%s | avg/pair=%s | est remaining=%s",
+          fmt_secs(elapsed),
+          fmt_secs(avg),
+          fmt_secs(est_rem)
+        ))
+      }
+    }
+    if (!is.null(pb)) close(pb)
   }
 
   if (verbose) {
-    total_elapsed <- as.numeric(difftime(Sys.time(), start_time,
-      units = "secs"
-    ))
+    total_elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
     avg <- total_elapsed / n
     message(sprintf(
       "Completed %d live pair(s) in %s (avg %.2fs per pair).",
@@ -669,7 +803,21 @@ submit_ollama_pairs_live <- function(
     ))
   }
 
-  dplyr::bind_rows(out)
+  new_results_df <- dplyr::bind_rows(all_new_results)
+
+  final_results <- if (!is.null(existing_results)) {
+    dplyr::bind_rows(existing_results, new_results_df)
+  } else {
+    new_results_df
+  }
+
+  # Identify failures
+  failed_mask <- !is.na(final_results$error_message)
+
+  list(
+    results = final_results,
+    failed_pairs = final_results[failed_mask, ]
+  )
 }
 
 #' Ensure only one Ollama model is loaded in memory
