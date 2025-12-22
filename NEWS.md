@@ -8,6 +8,9 @@
 *   Robust Error Handling: 
     - Failed API calls no longer stop the entire process. Failures are captured and returned separately, allowing for easier inspection and re-submission.
 
+## Bug fixes
+*   The prompt format for anthropic batch comparisons now match the anthropic live format.
+
 ## Breaking Changes
 *   `submit_llm_pairs()` and its backend-specific counterparts now return a **list** containing two elements: `$results` (a tibble of successful comparisons) and `$failed_pairs` (a tibble of inputs that failed). Previous versions returned a single tibble.
 
