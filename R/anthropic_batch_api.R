@@ -331,7 +331,7 @@ build_anthropic_batch_requests <- function(
       temperature = temperature,
       messages = list(
         list(
-          role    = "user",
+          role = "user",
           content = list(
             list(
               type = "text",
