@@ -407,6 +407,81 @@ that you can resume if the session ends.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">combined</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="estimating-cost-before-you-run">10.4 Estimating cost before you run<a class="anchor" aria-label="anchor" href="#estimating-cost-before-you-run"></a>
+</h3>
+<p>For large jobs, it is often useful to estimate token usage and cost
+before launching a live run or submitting a batch.
+<code>pairwiseLLM</code> includes
+<code><a href="../reference/estimate_llm_pairs_cost.html">estimate_llm_pairs_cost()</a></code>, which runs a small
+<strong>pilot</strong> (paid live calls) and then estimates the rest of
+the job by calibrating input tokens from prompt byte length.</p>
+<p>The output includes both:</p>
+<ul>
+<li>
+<strong>Expected cost</strong> (using mean output tokens from the
+pilot)</li>
+<li>
+<strong>Budget cost</strong> (using a high quantile of pilot output
+tokens, controlled by <code>budget_quantile</code>)</li>
+</ul>
+<p>If you are running a discounted batch workflow, set
+<code>mode = "batch"</code> and supply a <code>batch_discount</code>
+multiplier.</p>
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create a moderate set of pairs</span></span>
+<span><span class="va">pairs_big</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span>n_pairs <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span>seed <span class="op">=</span> <span class="fl">456</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">est</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/estimate_llm_pairs_cost.html">estimate_llm_pairs_cost</a></span><span class="op">(</span></span>
+<span>  pairs <span class="op">=</span> <span class="va">pairs_big</span>,</span>
+<span>  backend <span class="op">=</span> <span class="st">"anthropic"</span>,                <span class="co"># "openai", "anthropic", "gemini", "together"</span></span>
+<span>  model <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>  mode <span class="op">=</span> <span class="st">"batch"</span>,</span>
+<span>  batch_discount <span class="op">=</span> <span class="fl">0.5</span>,                 <span class="co"># set to 1 for no discount</span></span>
+<span>  n_test <span class="op">=</span> <span class="fl">10</span>,                          <span class="co"># paid pilot calls (live)</span></span>
+<span>  budget_quantile <span class="op">=</span> <span class="fl">0.9</span>,                <span class="co"># p90 output tokens</span></span>
+<span>  cost_per_million_input <span class="op">=</span> <span class="fl">3.0</span>,         <span class="co"># fill in your provider pricing</span></span>
+<span>  cost_per_million_output <span class="op">=</span> <span class="fl">15.0</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">est</span><span class="op">$</span><span class="va">summary</span></span></code></pre></div>
+<p>Avoid paying twice: reuse pilot results</p>
+<p>The estimator returns both the pilot output and the pairs not
+included in the pilot (remaining_pairs). Use remaining_pairs to submit
+only the remaining work after you are satisfied with the estimate:</p>
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">remaining_pairs</span> <span class="op">&lt;-</span> <span class="va">est</span><span class="op">$</span><span class="va">remaining_pairs</span></span>
+<span></span>
+<span><span class="co"># Example: submit only the remaining pairs as a batch</span></span>
+<span></span>
+<span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
+<span>          backend <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
+<span>          model <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
+<span>          pairs <span class="op">=</span> <span class="va">remaining_pairs</span>,</span>
+<span>          trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>          trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>          prompt_template <span class="op">=</span> <span class="va">tmpl</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span></code></pre></div>
+<p>Notes:</p>
+<ul>
+<li>The estimator does not require a provider tokenizer; it uses prompt
+byte length calibrated on the pilot.</li>
+<li>Ollama is not supported in the estimator (local models do not incur
+token costs).</li>
+<li>Reasoning/thinking tokens are treated as output tokens for
+pricing.</li>
+</ul>
 <hr>
 </div>
 </div>
@@ -469,7 +544,7 @@ available.</p>
 <div class="section level4">
 <h4 id="missing-api-keys">Missing API keys<a class="anchor" aria-label="anchor" href="#missing-api-keys"></a>
 </h4>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; No LLM API keys are currently set for known backends:</span></span>
 <span><span class="co">#&gt;   - OpenAI:         OPENAI_API_KEY</span></span>

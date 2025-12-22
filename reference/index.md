@@ -34,6 +34,8 @@
   : Compute consistency between forward and reverse pair comparisons
 - [`ensure_only_ollama_model_loaded()`](https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.md)
   : Ensure only one Ollama model is loaded in memory
+- [`estimate_llm_pairs_cost()`](https://shmercer.github.io/pairwiseLLM/reference/estimate_llm_pairs_cost.md)
+  : Estimate LLM token usage and cost for a set of pairwise comparisons
 - [`example_openai_batch_output`](https://shmercer.github.io/pairwiseLLM/reference/example_openai_batch_output.md)
   : Example OpenAI Batch output (JSONL lines)
 - [`example_writing_pairs`](https://shmercer.github.io/pairwiseLLM/reference/example_writing_pairs.md)
@@ -90,6 +92,8 @@
   : Parse Gemini batch JSONL output into a tibble of pairwise results
 - [`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md)
   : Parse an OpenAI Batch output JSONL file
+- [`print(`*`<pairwiseLLM_cost_estimate>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/print.pairwiseLLM_cost_estimate.md)
+  : Print a pairwiseLLM cost estimate
 - [`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md)
   : Randomly assign samples to positions SAMPLE_1 and SAMPLE_2
 - [`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md)
