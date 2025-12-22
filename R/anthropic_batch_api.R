@@ -317,34 +317,27 @@ build_anthropic_batch_requests <- function(
     # Top-p and other extras can be passed through directly.
     top_p <- dots$top_p
 
-    system_msg <- sprintf(
-      "%s\n\nTrait: %s\n\nDescription:\n%s",
-      prompt_template,
-      trait_name,
-      trait_description
-    )
-
-    user_msg <- list(
-      list(
-        type = "text",
-        text = paste0(
-          "<SAMPLE_1>\n", text1, "\n</SAMPLE_1>\n\n",
-          "<SAMPLE_2>\n", text2, "\n</SAMPLE_2>"
-        )
-      )
+    prompt <- build_prompt(
+      template   = prompt_template,
+      trait_name = trait_name,
+      trait_desc = trait_description,
+      text1      = text1,
+      text2      = text2
     )
 
     params <- list(
       model = model,
       max_tokens = max_tokens,
       temperature = temperature,
-      system = list(
-        list(type = "text", text = system_msg)
-      ),
       messages = list(
         list(
-          role    = "user",
-          content = user_msg
+          role = "user",
+          content = list(
+            list(
+              type = "text",
+              text = prompt
+            )
+          )
         )
       )
     )

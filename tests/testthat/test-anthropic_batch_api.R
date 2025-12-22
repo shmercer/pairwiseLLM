@@ -24,7 +24,9 @@ testthat::test_that("build_anthropic_batch_requests builds valid requests", {
   p1 <- batch$params[[1]]
   testthat::expect_equal(p1$model, "claude-sonnet-4-5")
   testthat::expect_true(is.list(p1$messages))
-  testthat::expect_true(is.list(p1$system))
+
+  # NEW: Batch should match anthropic live formatting => no system field
+  testthat::expect_false("system" %in% names(p1))
 
   # With reasoning = "none", temperature should default to 0 and there
   # should be no thinking block; max_tokens should default to 768.
@@ -32,13 +34,24 @@ testthat::test_that("build_anthropic_batch_requests builds valid requests", {
   testthat::expect_equal(p1$max_tokens, 768)
   testthat::expect_false("thinking" %in% names(p1))
 
-  # User message should contain SAMPLE_1/SAMPLE_2 tags in text
+  # NEW: User message contains the full build_prompt() output
   msg1 <- p1$messages[[1]]
   testthat::expect_equal(msg1$role, "user")
   testthat::expect_true(is.list(msg1$content))
+  testthat::expect_equal(msg1$content[[1]]$type, "text")
+
   text_block <- msg1$content[[1]]$text
-  testthat::expect_true(grepl("<SAMPLE_1>", text_block, fixed = TRUE))
-  testthat::expect_true(grepl("<SAMPLE_2>", text_block, fixed = TRUE))
+
+  expected_prompt <- build_prompt(
+    template   = tmpl,
+    trait_name = td$name,
+    trait_desc = td$description,
+    text1      = pairs$text1[1],
+    text2      = pairs$text2[1]
+  )
+
+  # Strongest parity check: exact string match to build_prompt()
+  testthat::expect_identical(text_block, expected_prompt)
 })
 
 testthat::test_that("build_anthropic_batch_requests enforces reasoning
