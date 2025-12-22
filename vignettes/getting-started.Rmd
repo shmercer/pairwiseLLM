@@ -324,6 +324,74 @@ res <- llm_resume_multi_batches(
 head(res$combined)
 ```
 
+## 10.4 Estimating cost before you run
+
+For large jobs, it is often useful to estimate token usage and cost before launching a live run or submitting a batch.
+`pairwiseLLM` includes `estimate_llm_pairs_cost()`, which runs a small **pilot** (paid live calls) and then estimates
+the rest of the job by calibrating input tokens from prompt byte length.
+
+The output includes both:
+
+- **Expected cost** (using mean output tokens from the pilot)
+- **Budget cost** (using a high quantile of pilot output tokens, controlled by `budget_quantile`)
+
+If you are running a discounted batch workflow, set `mode = "batch"` and supply a `batch_discount` multiplier.
+
+```{r, eval=FALSE}
+# Create a moderate set of pairs
+pairs_big <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 200, seed = 123) |>
+  randomize_pair_order(seed = 456)
+
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+est <- estimate_llm_pairs_cost(
+  pairs = pairs_big,
+  backend = "anthropic",                # "openai", "anthropic", "gemini", "together"
+  model = "claude-sonnet-4-5",
+  trait_name = td$name,
+  trait_description = td$description,
+  prompt_template = tmpl,
+  mode = "batch",
+  batch_discount = 0.5,                 # set to 1 for no discount
+  n_test = 10,                          # paid pilot calls (live)
+  budget_quantile = 0.9,                # p90 output tokens
+  cost_per_million_input = 3.0,         # fill in your provider pricing
+  cost_per_million_output = 15.0
+)
+
+est$summary
+```
+
+Avoid paying twice: reuse pilot results
+
+The estimator returns both the pilot output and the pairs not included in the pilot (remaining_pairs).
+Use remaining_pairs to submit only the remaining work after you are satisfied with the estimate:
+
+```{r, eval=FALSE}
+remaining_pairs <- est$remaining_pairs
+
+# Example: submit only the remaining pairs as a batch
+
+batch <- llm_submit_pairs_batch(
+          backend = "anthropic",
+          model = "claude-sonnet-4-5",
+          pairs = remaining_pairs,
+          trait_name = td$name,
+          trait_description = td$description,
+          prompt_template = tmpl)
+
+results <- llm_download_batch_results(batch)
+```
+
+Notes:
+
+- The estimator does not require a provider tokenizer; it uses prompt byte length calibrated on the pilot.
+- Ollama is not supported in the estimator (local models do not incur token costs).
+- Reasoning/thinking tokens are treated as output tokens for pricing.
+
 ---
 
 # 11. Backend-Specific Tools
