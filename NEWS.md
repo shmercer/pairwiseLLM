@@ -1,4 +1,4 @@
-# pairwiseLLM 1.3.0
+# pairwiseLLM 1.2.0
 
 ## New Features
 *   Parallel Processing: 
@@ -7,23 +7,15 @@
     - Added `save_path` argument to live submission functions. Results are saved to CSV incrementally, allowing interrupted jobs to resume automatically by skipping previously processed pairs.
 *   Robust Error Handling: 
     - Failed API calls no longer stop the entire process. Failures are captured and returned separately, allowing for easier inspection and re-submission.
+*   Added `estimate_llm_pairs_cost()` to estimate costs in live and batch mode.
+*   Introduced `llm_submit_pairs_multi_batch()` and `llm_resume_multi_batches()` to split large comparison sets across multiple batches and resume polling later.
+    These helpers support writing per‑batch and combined results, along with an optional jobs registry.
+
+## Bug fixes
+*   The prompt format for anthropic batch comparisons now match the anthropic live format.
 
 ## Breaking Changes
 *   `submit_llm_pairs()` and its backend-specific counterparts now return a **list** containing two elements: `$results` (a tibble of successful comparisons) and `$failed_pairs` (a tibble of inputs that failed). Previous versions returned a single tibble.
-
-# pairwiseLLM 1.2.0
-
-## New features
-
-* Introduced `llm_submit_pairs_multi_batch()` and `llm_resume_multi_batches()` to
-split large comparison sets across multiple batches and resume polling later.
-These helpers support writing per‑batch and combined results, along with an
-optional jobs registry.
-
-## Testing
-
-Added additional unit tests covering multi‑batch submission/resumption,
-retry logic, registry updates, custom tag forwarding and file handling.
 
 # pairwiseLLM 1.1.0
 

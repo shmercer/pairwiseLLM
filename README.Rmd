@@ -345,6 +345,78 @@ results <- llm_download_batch_results(batch)
 
 ---
 
+## Cost Estimation
+
+Before running a large live or batch job, you can estimate token usage and cost with
+`estimate_llm_pairs_cost()`. The estimator:
+
+- Runs a small pilot on `n_test` pairs (live calls) to observe `prompt_tokens` and `completion_tokens`
+- Uses the pilot to calibrate a **prompt-bytes → input-tokens** model for the remaining pairs
+- Estimates output tokens for the remaining pairs using the pilot distribution 
+and calculates costs (expected = 50th %ile; budget = 90th %ile).
+
+### Example (batch pricing discount + budget cost)
+
+```{r, eval = FALSE}
+data("example_writing_samples", package = "pairwiseLLM")
+
+pairs <- example_writing_samples |>
+  make_pairs() |>
+  sample_pairs(n_pairs = 200, seed = 123) |>
+  randomize_pair_order(seed = 456)
+
+td   <- trait_description("overall_quality")
+tmpl <- set_prompt_template()
+
+# Estimate cost using a small pilot run (live calls).
+# If your provider offers discounted batch pricing, set batch_discount accordingly.
+est <- estimate_llm_pairs_cost(
+  pairs = pairs,
+  backend = "openai",
+  model = "gpt-4.1",
+  endpoint = "chat.completions",
+  trait_name = td$name,
+  trait_description = td$description,
+  prompt_template = tmpl,
+  mode = "batch",
+  batch_discount = 0.5,              # e.g., batch costs 50 percent of live
+  n_test = 10,                       # number of paid pilot calls
+  budget_quantile = 0.9,             # "budget" uses p90 output tokens
+  cost_per_million_input = 3.00,     # set these to your provider pricing
+  cost_per_million_output = 12.00
+)
+
+est
+est$summary
+```
+
+### Reuse pilot results (avoid paying twice)
+
+By default, the estimator returns the pilot results and the remaining pairs. This lets you
+run the pilot once, then submit only the remaining pairs:
+
+```{r, eval = FALSE}
+# Pairs not included in the pilot:
+remaining_pairs <- est$remaining_pairs
+
+# Submit remaining pairs using your preferred workflow (live):
+res_live <- submit_llm_pairs(remaining_pairs, backend = "openai", model = "gpt-4.1", ...)
+
+# For batch:
+batch <- llm_submit_pairs_batch(
+          backend = "openai",
+          model = "gpt-4.1",
+          pairs = remaining_pairs,
+          trait_name = td$name,
+          trait_description = td$description,
+          prompt_template = tmpl)
+
+results <- llm_download_batch_results(batch)
+
+```
+
+---
+
 ## Multi‑Batch Jobs
 
 For very large jobs or when you need to restart polling after an interruption, **pairwiseLLM**

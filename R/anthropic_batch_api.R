@@ -342,6 +342,7 @@ build_anthropic_batch_requests <- function(
       )
     )
 
+
     if (!is.null(top_p)) {
       params$top_p <- top_p
     }
