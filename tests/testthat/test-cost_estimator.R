@@ -119,36 +119,46 @@ testthat::test_that("estimate_llm_pairs_cost validates inputs", {
   # Note: match.arg fails before the specific ollama check in the source code,
   # so we expect the standard match.arg error message.
   testthat::expect_error(
-    estimate_llm_pairs_cost(pairs, model = "m", trait_name = "t", trait_description = "d",
-                            backend = "ollama", cost_per_million_input = 1, cost_per_million_output = 1),
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = "t", trait_description = "d",
+      backend = "ollama", cost_per_million_input = 1, cost_per_million_output = 1
+    ),
     "should be one of"
   )
 
   # Missing columns
   testthat::expect_error(
-    estimate_llm_pairs_cost(tibble::tibble(x = 1), model = "m", trait_name = "t", trait_description = "d",
-                            cost_per_million_input = 1, cost_per_million_output = 1),
+    estimate_llm_pairs_cost(tibble::tibble(x = 1),
+      model = "m", trait_name = "t", trait_description = "d",
+      cost_per_million_input = 1, cost_per_million_output = 1
+    ),
     "must contain columns: ID1"
   )
 
   # Invalid numerics
   testthat::expect_error(
-    estimate_llm_pairs_cost(pairs, model = "m", trait_name = "t", trait_description = "d",
-                            cost_per_million_input = "bad", cost_per_million_output = 1),
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = "t", trait_description = "d",
+      cost_per_million_input = "bad", cost_per_million_output = 1
+    ),
     "cost_per_million_input"
   )
 
   # Empty pairs
   testthat::expect_error(
-    estimate_llm_pairs_cost(pairs[0,], model = "m", trait_name = "t", trait_description = "d",
-                            cost_per_million_input = 1, cost_per_million_output = 1),
+    estimate_llm_pairs_cost(pairs[0, ],
+      model = "m", trait_name = "t", trait_description = "d",
+      cost_per_million_input = 1, cost_per_million_output = 1
+    ),
     "pairs` has 0 rows"
   )
 
   # Invalid n_test
   testthat::expect_error(
-    estimate_llm_pairs_cost(pairs, model = "m", trait_name = "t", trait_description = "d",
-                            n_test = -1, cost_per_million_input = 1, cost_per_million_output = 1),
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = "t", trait_description = "d",
+      n_test = -1, cost_per_million_input = 1, cost_per_million_output = 1
+    ),
     "non-negative integer"
   )
 })
@@ -230,7 +240,7 @@ testthat::test_that("estimate_llm_pairs_cost handles stratification edge cases",
   # Edge Case: Topping up logic
   pairs_mix <- tibble::tibble(
     ID1 = 1:20,
-    text1 = c(rep("a", 10), rep(paste(rep("a", 100), collapse=""), 10)), # Clear separation
+    text1 = c(rep("a", 10), rep(paste(rep("a", 100), collapse = ""), 10)), # Clear separation
     ID2 = 1:20, text2 = "b"
   )
 
@@ -337,4 +347,161 @@ testthat::test_that("Internal helpers function correctly", {
   # Predict negative clamping
   calib_neg <- list(coefficients = c(intercept = -100, slope = 0))
   testthat::expect_equal(pairwiseLLM:::.predict_prompt_tokens(calib_neg, 10), 0)
+})
+
+testthat::test_that("estimate_llm_pairs_cost validates detailed inputs", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
+  td <- trait_description("overall_quality")
+
+  # 1. Validation: model must be character
+  testthat::expect_error(
+    estimate_llm_pairs_cost(pairs,
+      model = 1, trait_name = td$name, trait_description = td$description,
+      cost_per_million_input = 1, cost_per_million_output = 1
+    ),
+    "model.*must be a single character"
+  )
+
+  # 2. Validation: trait_name must be character
+  testthat::expect_error(
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = 1, trait_description = td$description,
+      cost_per_million_input = 1, cost_per_million_output = 1
+    ),
+    "trait_name.*must be a single character"
+  )
+
+  # 3. Validation: trait_description must be character
+  testthat::expect_error(
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = td$name, trait_description = 1,
+      cost_per_million_input = 1, cost_per_million_output = 1
+    ),
+    "trait_description.*must be a single character"
+  )
+
+  # 4. Validation: cost_per_million_output must be numeric
+  testthat::expect_error(
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = td$name, trait_description = td$description,
+      cost_per_million_input = 1, cost_per_million_output = "bad"
+    ),
+    "cost_per_million_output.*must be a single numeric"
+  )
+
+  # 5. Validation: batch_discount > 0
+  testthat::expect_error(
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = td$name, trait_description = td$description,
+      cost_per_million_input = 1, cost_per_million_output = 1,
+      mode = "batch", batch_discount = 0
+    ),
+    "batch_discount.*must be a single numeric value > 0"
+  )
+
+  # 6. Validation: budget_quantile in (0, 1)
+  testthat::expect_error(
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = td$name, trait_description = td$description,
+      cost_per_million_input = 1, cost_per_million_output = 1,
+      budget_quantile = 1.1
+    ),
+    "budget_quantile.*must be a single numeric value in"
+  )
+
+  # 7. Validation: Missing columns (constructs the error message)
+  testthat::expect_error(
+    estimate_llm_pairs_cost(tibble::tibble(x = 1),
+      model = "m", trait_name = td$name, trait_description = td$description,
+      cost_per_million_input = 1, cost_per_million_output = 1
+    ),
+    "must contain columns: ID1, text1, ID2, text2"
+  )
+})
+
+testthat::test_that("estimate_llm_pairs_cost triggers stratified sampling top-up logic", {
+  # Setup: Create a scenario where stratified allocation asks for more items
+  # from a stratum than exist, forcing the 'top up' logic (lines 248-254) to run.
+  # We use 3 items with byte lengths that create distinct strata.
+  # If we have 2 strata and n_test=3: allocation might be c(2, 1).
+  # If the first stratum only has 1 item, we get 1+1=2 items total.
+  # We need 3, so top-up triggers for the last item.
+
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B", "C"),
+    text1 = c("a", "b", paste(rep("c", 1000), collapse="")), # Distinct lengths
+    ID2 = c("A", "B", "C"),
+    text2 = c("a", "b", "c")
+  )
+  td <- trait_description("overall_quality")
+
+  fake_submit <- function(pairs, ...) {
+    # Return dummy results for however many pairs are requested
+    tibble::tibble(
+      status_code = 200,
+      prompt_tokens = rep(10, nrow(pairs)),
+      completion_tokens = rep(10, nrow(pairs))
+    )
+  }
+
+  # Suppress warnings about "perfect fit" during calibration
+  est <- suppressWarnings(estimate_llm_pairs_cost(
+    pairs = pairs, model = "m", trait_name = td$name, trait_description = td$description,
+    n_test = 3, test_strategy = "stratified_prompt_bytes",
+    cost_per_million_input = 1, cost_per_million_output = 1,
+    .submit_fun = fake_submit
+  ))
+
+  # Verify that we ended up with the requested number of tests
+  # (proving the top-up logic successfully filled the gap)
+  testthat::expect_equal(est$summary$n_test, 3)
+  testthat::expect_equal(nrow(est$test_pairs), 3)
+})
+
+testthat::test_that("estimate_llm_pairs_cost handles pilot mismatch and first strategy", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
+  td <- trait_description("overall_quality")
+
+  # Trigger 1: Strategy "first" (line 213)
+  # Trigger 2: Mismatch between requested n_test and pilot results row count (line 313 recycling)
+  fake_submit_mismatch <- function(pairs, ...) {
+    # Return 2 rows even though 1 pair passed
+    tibble::tibble(
+      status_code = 200,
+      prompt_tokens = c(10, 20),
+      completion_tokens = c(5, 5)
+    )
+  }
+
+  est <- estimate_llm_pairs_cost(
+    pairs = pairs, model = "m", trait_name = td$name, trait_description = td$description,
+    n_test = 1, test_strategy = "first",
+    cost_per_million_input = 1, cost_per_million_output = 1,
+    .submit_fun = fake_submit_mismatch
+  )
+
+  # Check that "first" strategy was used (implied by execution path)
+  testthat::expect_equal(est$summary$n_test, 1)
+
+  # Check that mismatch logic summed the tokens correctly (10+20=30)
+  testthat::expect_equal(est$summary$pilot_prompt_tokens, 30)
+})
+
+testthat::test_that("estimate_llm_pairs_cost falls back to default submitter", {
+  # This tests the line: if (is.null(submit_fun)) submit_fun <- submit_llm_pairs
+  # We set n_test = 0 so that 'submit_fun' is resolved but never CALLED.
+  # This covers the resolution logic without requiring API keys or network.
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
+  td <- trait_description("overall_quality")
+
+  est <- estimate_llm_pairs_cost(
+    pairs = pairs, model = "gpt-4", trait_name = td$name, trait_description = td$description,
+    backend = "openai", n_test = 0,
+    cost_per_million_input = 1, cost_per_million_output = 1
+    # No .submit_fun passed, triggers fallback
+  )
+
+  testthat::expect_s3_class(est, "pairwiseLLM_cost_estimate")
+  testthat::expect_equal(est$summary$n_test, 0)
 })
