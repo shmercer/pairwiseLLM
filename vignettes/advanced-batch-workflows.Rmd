@@ -19,23 +19,33 @@ knitr::opts_chunk$set(
 This vignette demonstrates how to use **pairwiseLLM** for **Batch API workflows** (server-side batching), which are distinct from the live API calls described in the [Getting Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html) vignette.
 
 Batch workflows are ideal for large-scale jobs because they:
-- Allow submitting thousands of pairs at once.
-- Are often cheaper (e.g., 50% discount on OpenAI).
-- Avoid client-side timeout and connection issues.
-- Can be polled and resumed even if your local R session ends.
+
+- Allow submitting thousands of pairs at once  
+- Are often cheaper (e.g., discounted batch pricing on some providers)  
+- Avoid client-side timeout and connection issues  
+- Can be polled and resumed even if your local R session ends  
 
 Supported Batch API providers:
-- **OpenAI** (via `run_openai_batch_pipeline()`)
-- **Anthropic** (via `run_anthropic_batch_pipeline()`)
-- **Gemini** (via low-level helpers such as `build_gemini_batch_requests()`)
+
+- **OpenAI** (batch pipeline: `run_openai_batch_pipeline()`)
+- **Anthropic** (batch pipeline: `run_anthropic_batch_pipeline()`)
+- **Gemini** (batch pipeline: `run_gemini_batch_pipeline()`)
+
+> **Recommended approach:** For *multiple* batches (e.g., templates × providers × models × forward/reverse), use:
+> 
+> - `llm_submit_pairs_multi_batch()` to **split + submit** jobs (no polling; writes an optional registry CSV)
+> - `llm_resume_multi_batches()` to **poll + download + parse** results (can resume from a registry on disk)
+>
+> These helpers orchestrate the provider-specific pipelines without forcing you to write your own polling loops.
 
 > **Note:** **Together.ai** and **Ollama** do not currently support a native Batch API compatible with this workflow. For those providers, use the **live** API wrapper `submit_llm_pairs()` as described in the [Getting Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html) vignette.
 
 In this vignette, we will cover:
-- Submitting many batches (e.g., across templates, providers, and models).
-- Polling batches until completion.
-- Downloading and parsing results.
-- Using a **batch registry CSV** to safely resume interrupted jobs.
+
+- Designing a grid of provider/model/thinking/direction combinations
+- Submitting *many* batch jobs using the multi-batch helpers
+- Polling and resuming safely via on-disk registries
+- Producing per-run and merged results tables
 
 > Note: All heavy API calls in this vignette are set to `eval = FALSE` so that the vignette remains CRAN-safe. You can enable them in your own project.
 
@@ -72,7 +82,6 @@ Check which are set:
 check_llm_api_keys()
 ```
 
-
 # 3. Example Data and Prompt Template
 
 We use the built-in writing samples and a single trait (`overall_quality`).
@@ -88,7 +97,8 @@ Default prompt template:
 
 ```{r}
 tmpl <- set_prompt_template()
-cat(substr(tmpl, 1, 400), "...\n")
+cat(substr(tmpl, 1, 400), "...
+")
 ```
 
 Construct a modest number of pairs to keep the example light:
@@ -120,7 +130,6 @@ get_pairs_for_direction <- function(direction = c("forward", "reverse")) {
   }
 }
 ```
-
 
 # 4. Designing the Batch Grid
 
@@ -184,8 +193,8 @@ batch_grid <- dplyr::bind_rows(
 batch_grid
 ```
 
-We will also imagine multiple prompt templates have been registered. For 
-simplicity, we use the same `tmpl` string, but in practice you would substitute 
+We will also imagine multiple prompt templates have been registered. For
+simplicity, we use the same `tmpl` string, but in practice you would substitute
 different text:
 
 ```{r}
@@ -197,436 +206,201 @@ templates_tbl <- tibble::tibble(
 templates_tbl
 ```
 
+# 5. Submitting Many Batches with the Multi‑Batch Helpers
 
-# 5. Phase 1: Submitting Many Batches (No Polling Yet)
+The key idea is:
 
-We will:
+- Each **combination** of `(template_id, provider, model, thinking, direction)` becomes a **run**
+- Each run writes its files into its own subdirectory (so file names never collide)
+- Within each run you can still split into multiple segments using `batch_size` or `n_segments`
 
-1. Loop over all `(template_id, provider, model, thinking, direction)` combinations.
-2. Submit a batch for each combination.
-3. Record metadata (including `batch_id`) in an in-memory `jobs` list.
-4. Write a **batch index CSV** to disk.
-
-Create an output directory:
+## 5.1 Create a run plan and output directory
 
 ```{r, eval=FALSE}
-out_dir <- "dev-output/advanced-multi-batch"
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+out_root <- "dev-output/advanced-multi-batch"
+dir.create(out_root, recursive = TRUE, showWarnings = FALSE)
+
+run_plan <- tidyr::crossing(
+  templates_tbl |> tidyr::unnest(prompt_template),
+  batch_grid
+) |>
+  mutate(
+    run_id = paste(template_id, provider, model, thinking, direction, sep = "__"),
+    run_id = gsub("[^A-Za-z0-9_.-]+", "-", run_id),
+    run_dir = file.path(out_root, run_id)
+  )
+
+run_plan |> dplyr::select(run_id, template_id, provider, model, thinking, direction, run_dir)
 ```
 
-Submit all batches:
+## 5.2 Submit all runs (no polling)
+
+Below we submit each run using `llm_submit_pairs_multi_batch()`. This returns a `jobs` list and writes a `jobs_registry.csv` under each run directory (because `write_registry = TRUE`).
+
+Provider-specific options can be forwarded via `...`. In the example below we:
+
+- Enable “thinking” output where applicable
+- Ask providers to include raw outputs in addition to parsed tags (helpful for debugging)
 
 ```{r, eval=FALSE}
-jobs <- list()
+submit_one_run <- function(template_id, prompt_template, provider, model, thinking, direction, run_dir) {
+  pairs_use   <- get_pairs_for_direction(direction)
+  is_thinking <- identical(thinking, "with_thinking")
 
-for (t_row in seq_len(nrow(templates_tbl))) {
-  template_id <- templates_tbl$template_id[t_row]
-  tmpl_string <- templates_tbl$prompt_template[[t_row]]
+  # Provider-specific knobs (passed through via ...)
+  extra_args <- list()
 
-  for (i in seq_len(nrow(batch_grid))) {
-    row <- batch_grid[i, ]
-
-    provider <- row$provider
-    model <- row$model
-    thinking <- row$thinking
-    direction <- row$direction
-
-    message(
-      "Submitting batch: template=", template_id,
-      " | ", provider, " / ", model,
-      " / ", thinking, " / ", direction
-    )
-
-    pairs_use <- get_pairs_for_direction(direction)
-    is_thinking <- identical(thinking, "with_thinking")
-
-    prefix <- paste(provider, template_id, model, thinking, direction,
-      sep = "_"
-    )
-    prefix <- gsub("[^A-Za-z0-9_.-]", "-", prefix)
-
-    batch_input_path <- file.path(out_dir, paste0(prefix, "_input.jsonl"))
-    batch_output_path <- file.path(out_dir, paste0(prefix, "_output.jsonl"))
-    csv_path <- file.path(out_dir, paste0(prefix, ".csv"))
-
-    if (identical(provider, "openai")) {
-      # OpenAI: use the helpers from the dev scripts
-      include_thoughts <- is_thinking && grepl("^gpt-5\\.1", model)
-
-      pipeline <- run_openai_batch_pipeline(
-        pairs             = pairs_use,
-        model             = model,
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl_string,
-        include_thoughts  = include_thoughts,
-        include_raw       = TRUE,
-        batch_input_path  = batch_input_path,
-        batch_output_path = batch_output_path,
-        poll              = FALSE
-      )
-
-      jobs[[length(jobs) + 1L]] <- list(
-        template_id       = template_id,
-        provider          = provider,
-        model             = model,
-        thinking          = thinking,
-        direction         = direction,
-        prefix            = prefix,
-        batch_type        = "openai",
-        batch_id          = pipeline$batch$id,
-        batch_input_path  = pipeline$batch_input_path,
-        batch_output_path = batch_output_path,
-        csv_path          = csv_path,
-        done              = FALSE,
-        results           = NULL
-      )
-    } else if (identical(provider, "anthropic")) {
-      # Anthropic: use run_anthropic_batch_pipeline()
-      reasoning <- if (is_thinking) "enabled" else "none"
-      temperature_arg <- if (!is_thinking) 0 else NULL
-
-      pipeline <- run_anthropic_batch_pipeline(
-        pairs             = pairs_use,
-        model             = model,
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl_string,
-        reasoning         = reasoning,
-        include_thoughts  = is_thinking,
-        batch_input_path  = batch_input_path,
-        batch_output_path = batch_output_path,
-        poll              = FALSE,
-        temperature       = temperature_arg,
-        include_raw       = TRUE
-      )
-
-      jobs[[length(jobs) + 1L]] <- list(
-        template_id       = template_id,
-        provider          = provider,
-        model             = model,
-        thinking          = thinking,
-        direction         = direction,
-        prefix            = prefix,
-        batch_type        = "anthropic",
-        batch_id          = pipeline$batch$id,
-        batch_input_path  = pipeline$batch_input_path,
-        batch_output_path = batch_output_path,
-        csv_path          = csv_path,
-        done              = FALSE,
-        results           = NULL
-      )
-    } else if (identical(provider, "gemini")) {
-      # Gemini: typically use low-level helpers, as in the dev scripts
-      req_tbl <- build_gemini_batch_requests(
-        pairs             = pairs_use,
-        model             = model,
-        trait_name        = td$name,
-        trait_description = td$description,
-        prompt_template   = tmpl_string,
-        thinking_level    = "low", # example
-        include_thoughts  = TRUE
-      )
-
-      batch <- gemini_create_batch(
-        requests    = req_tbl$request,
-        model       = model,
-        api_key     = Sys.getenv("GEMINI_API_KEY"),
-        api_version = "v1beta"
-      )
-
-      batch_name <- batch$name %||% stop(
-        "Gemini batch did not return a `name` field.",
-        call. = FALSE
-      )
-
-      jobs[[length(jobs) + 1L]] <- list(
-        template_id       = template_id,
-        provider          = provider,
-        model             = model,
-        thinking          = thinking,
-        direction         = direction,
-        prefix            = prefix,
-        batch_type        = "gemini",
-        batch_id          = batch_name,
-        batch_input_path  = batch_input_path,
-        batch_output_path = batch_output_path,
-        csv_path          = csv_path,
-        done              = FALSE,
-        results           = NULL
-      )
-    }
+  if (identical(provider, "openai")) {
+    # Only request thoughts for models that support them in this workflow
+    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5\.1", model)
+    extra_args$include_raw      <- TRUE
+  } else if (identical(provider, "anthropic")) {
+    extra_args$reasoning        <- if (is_thinking) "enabled" else "none"
+    extra_args$include_thoughts <- is_thinking
+    extra_args$include_raw      <- TRUE
+    # Optional: set deterministic temperature when not using reasoning
+    # Optional: set deterministic temperature when not using reasoning
+    if (!is_thinking) extra_args$temperature <- 0
+  } else if (identical(provider, "gemini")) {
+    extra_args$include_thoughts <- TRUE
+    extra_args$thinking_level   <- "low"   # example
+    extra_args$include_raw      <- TRUE
   }
+
+  message(
+    "Submitting: ", template_id, " | ", provider, " / ", model,
+    " / ", thinking, " / ", direction
+  )
+
+  # Split strategy:
+  # - For real jobs, use batch_size (e.g., 500–5000) or n_segments (e.g., 10–50)
+  # - Here we keep it simple and submit a single segment per run
+  do.call(
+    llm_submit_pairs_multi_batch,
+    c(
+      list(
+        pairs             = pairs_use,
+        backend           = provider,
+        model             = model,
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = prompt_template,
+        n_segments        = 1L,
+        output_dir        = run_dir,
+        write_registry    = TRUE,
+        verbose           = TRUE
+      ),
+      extra_args
+    )
+  )
 }
-```
 
-## 5.1 Writing a Batch Registry CSV (Important!)
-
-To avoid losing batch IDs if your session dies, write a compact index of all jobs to disk:
-
-```{r, eval=FALSE}
-jobs_tbl <- tibble::tibble(
-  idx = seq_along(jobs),
-  template_id = vapply(jobs, `[[`, character(1), "template_id"),
-  provider = vapply(jobs, `[[`, character(1), "provider"),
-  model = vapply(jobs, `[[`, character(1), "model"),
-  thinking = vapply(jobs, `[[`, character(1), "thinking"),
-  direction = vapply(jobs, `[[`, character(1), "direction"),
-  prefix = vapply(jobs, `[[`, character(1), "prefix"),
-  batch_type = vapply(jobs, `[[`, character(1), "batch_type"),
-  batch_id = vapply(jobs, `[[`, character(1), "batch_id"),
-  batch_input_path = vapply(jobs, `[[`, character(1), "batch_input_path"),
-  batch_output_path = vapply(jobs, `[[`, character(1), "batch_output_path"),
-  csv_path = vapply(jobs, `[[`, character(1), "csv_path")
+run_results <- purrr::pmap(
+  run_plan,
+  submit_one_run
 )
 
-jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
-readr::write_csv(jobs_tbl, jobs_index_path)
+# Store a lightweight manifest so you can resume later without rebuilding run_plan
+manifest <- run_plan |>
+  mutate(registry_path = file.path(run_dir, "jobs_registry.csv"))
 
-jobs_index_path
+manifest_path <- file.path(out_root, "run_manifest.csv")
+readr::write_csv(manifest, manifest_path)
+
+manifest_path
 ```
 
-You can now **stop R** or close RStudio safely — all critical details are in `batch_jobs_index.csv`.
+At this point, each run directory contains:
 
+- JSONL input/output placeholders (one per segment)
+- A `jobs_registry.csv` that records all batch IDs and file paths for that run
 
-# 6. Phase 2: Polling, Downloading, and Parsing
+You can safely stop R or restart your machine after submission.
 
-In a *new* session, you can:
+# 6. Polling, Downloading, and Parsing (Resumable)
 
-1. Reload the batch index CSV  
-2. Rebuild the `jobs` list  
-3. Poll providers for batch status  
-4. Download and parse results when complete  
-5. Save per-job CSVs of parsed results  
-
-First, helper functions for terminal states:
+To poll all runs, read the manifest and call `llm_resume_multi_batches()` for each `run_dir`. If you restart R, you can resume **without** keeping the `jobs` objects in memory by setting `jobs = NULL` and pointing to `output_dir` (the function will load `jobs_registry.csv`).
 
 ```{r, eval=FALSE}
-is_terminal_openai <- function(status) {
-  status %in% c("completed", "failed", "cancelled", "expired")
+manifest_path <- file.path(out_root, "run_manifest.csv")
+manifest <- readr::read_csv(manifest_path, show_col_types = FALSE)
+
+poll_one_run <- function(run_dir) {
+  llm_resume_multi_batches(
+    jobs               = NULL,   # load from jobs_registry.csv in run_dir
+    output_dir         = run_dir,
+    interval_seconds   = 60,
+    per_job_delay      = 2,
+    write_results_csv  = TRUE,   # writes batch_XX_results.csv files
+    write_registry     = TRUE,   # refreshes jobs_registry.csv with done flags
+    keep_jsonl         = TRUE,
+    verbose            = TRUE,
+    write_combined_csv = TRUE,   # writes combined_results.csv inside run_dir
+    combined_csv_path  = "combined_results.csv"
+  )
 }
 
-is_terminal_anthropic <- function(status) {
-  status %in% c("ended", "errored", "canceled", "expired")
-}
-
-is_terminal_gemini <- function(state) {
-  state %in% c("SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED")
-}
+polled <- purrr::map(manifest$run_dir, poll_one_run)
 ```
 
-Now the polling loop, with a small delay between jobs to reduce 429 (rate limit) risks:
+## 6.1 Building a single merged results table (all runs)
+
+Each element of `polled` contains a `combined` tibble for that run (i.e., all segments bound together). We can attach run metadata (template/provider/model/thinking/direction) and then bind all runs into one master table.
 
 ```{r, eval=FALSE}
-interval_seconds <- 60
-per_job_delay <- 2 # seconds between polling calls
+combined_all <- purrr::map2_dfr(
+  polled,
+  seq_len(nrow(manifest)),
+  function(res, i) {
+    meta <- manifest[i, ]
+    if (is.null(res$combined)) return(NULL)
 
-# Reload batch index
-jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
-jobs_tbl <- readr::read_csv(jobs_index_path, show_col_types = FALSE)
-
-# Rebuild jobs list skeleton
-jobs <- purrr::pmap(
-  jobs_tbl,
-  function(idx, template_id, provider, model, thinking, direction,
-           prefix, batch_type, batch_id,
-           batch_input_path, batch_output_path, csv_path, ...) {
-    list(
-      template_id       = template_id,
-      provider          = provider,
-      model             = model,
-      thinking          = thinking,
-      direction         = direction,
-      prefix            = prefix,
-      batch_type        = batch_type,
-      batch_id          = batch_id,
-      batch_input_path  = batch_input_path,
-      batch_output_path = batch_output_path,
-      csv_path          = csv_path,
-      done              = FALSE,
-      results           = NULL
-    )
+    res$combined |>
+      mutate(
+        template_id = meta$template_id,
+        provider    = meta$provider,
+        model       = meta$model,
+        thinking    = meta$thinking,
+        direction   = meta$direction,
+        run_id      = meta$run_id
+      )
   }
 )
 
-unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
+combined_path <- file.path(out_root, "combined_all_runs.csv")
+readr::write_csv(combined_all, combined_path)
 
-while (length(unfinished) > 0L) {
-  message("Polling ", length(unfinished), " unfinished batch(es)...")
-
-  for (j in unfinished) {
-    job <- jobs[[j]]
-    if (job$done) next
-
-    batch_type <- job$batch_type
-
-    if (identical(batch_type, "openai")) {
-      batch <- openai_get_batch(job$batch_id)
-      status <- batch$status %||% "unknown"
-      message("  [OpenAI] ", job$prefix, " status: ", status)
-
-      if (is_terminal_openai(status)) {
-        if (identical(status, "completed")) {
-          openai_download_batch_output(
-            batch_id = job$batch_id,
-            path     = job$batch_output_path
-          )
-
-          res <- parse_openai_batch_output(job$batch_output_path)
-          jobs[[j]]$results <- res
-          readr::write_csv(res, job$csv_path)
-          message("    -> Results written to: ", job$csv_path)
-        }
-        jobs[[j]]$done <- TRUE
-      }
-    } else if (identical(batch_type, "anthropic")) {
-      batch <- anthropic_get_batch(job$batch_id)
-      status <- batch$processing_status %||% "unknown"
-      message("  [Anthropic] ", job$prefix, " status: ", status)
-
-      if (is_terminal_anthropic(status)) {
-        if (identical(status, "ended")) {
-          output_path <- anthropic_download_batch_results(
-            batch_id    = job$batch_id,
-            output_path = job$batch_output_path
-          )
-
-          res <- parse_anthropic_batch_output(
-            jsonl_path  = output_path,
-            tag_prefix  = "<BETTER_SAMPLE>",
-            tag_suffix  = "</BETTER_SAMPLE>"
-          )
-
-          jobs[[j]]$results <- res
-          readr::write_csv(res, job$csv_path)
-          message("    -> Results written to: ", job$csv_path)
-        }
-        jobs[[j]]$done <- TRUE
-      }
-    } else if (identical(batch_type, "gemini")) {
-      batch <- gemini_get_batch(job$batch_id)
-      state <- batch$state %||% "STATE_UNSPECIFIED"
-      message("  [Gemini] ", job$prefix, " state: ", state)
-
-      if (is_terminal_gemini(state)) {
-        if (identical(state, "SUCCEEDED")) {
-          raw_res <- gemini_download_batch_results(job$batch_id)
-
-          res <- parse_gemini_batch_output(
-            raw_results = raw_res,
-            tag_prefix  = "<BETTER_SAMPLE>",
-            tag_suffix  = "</BETTER_SAMPLE>"
-          )
-
-          jobs[[j]]$results <- res
-          readr::write_csv(res, job$csv_path)
-          message("    -> Results written to: ", job$csv_path)
-        }
-        jobs[[j]]$done <- TRUE
-      }
-    }
-
-    Sys.sleep(per_job_delay)
-  }
-
-  unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
-
-  if (length(unfinished) > 0L) {
-    message("Sleeping ", interval_seconds, " seconds before next poll...")
-    Sys.sleep(interval_seconds)
-  }
-}
-
-message("All batches have reached a terminal state.")
+combined_path
 ```
-
-At the end of this loop:
-
-- All completed batches have their outputs downloaded.
-- Each job has a parsed results CSV (`csv_path`).
-- You can now perform consistency and positional-bias analyses, or fit BT/Elo models.
-
 
 # 7. Resuming After Interruption
 
-If the polling loop is interrupted:
+Resuming jobs is possible:
 
-1. Restart R.
-2. Reload `batch_jobs_index.csv`.
-3. Rebuild `jobs` as above.
-4. Recompute `unfinished` and re-enter the polling loop.
+- Submission writes `jobs_registry.csv` under each run directory
+- Polling can be restarted at any time by calling `llm_resume_multi_batches(jobs = NULL, output_dir = <run_dir>)`
+- If you keep a `run_manifest.csv` with `run_dir` paths, resuming *all* runs is just a loop
 
-Because all of the essential metadata (provider, model, template, direction, batch IDs, file paths) is stored in the registry CSV, you can safely recover and continue.
-
-For example:
+Example: resume only unfinished runs (based on each run’s registry):
 
 ```{r, eval=FALSE}
-jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
-jobs_tbl <- readr::read_csv(jobs_index_path, show_col_types = FALSE)
+manifest <- readr::read_csv(file.path(out_root, "run_manifest.csv"), show_col_types = FALSE)
 
-# Rebuild jobs list as before...
-# Then:
-unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
-
-if (length(unfinished) > 0L) {
-  message("Resuming polling for ", length(unfinished), " unfinished batch(es).")
-  # ... re-enter the polling loop ...
-} else {
-  message("All jobs are already complete.")
+needs_poll <- function(run_dir) {
+  reg_path <- file.path(run_dir, "jobs_registry.csv")
+  if (!file.exists(reg_path)) return(FALSE)
+  reg <- readr::read_csv(reg_path, show_col_types = FALSE)
+  any(!as.logical(reg$done))
 }
+
+unfinished_dirs <- manifest$run_dir[vapply(manifest$run_dir, needs_poll, logical(1))]
+
+polled <- purrr::map(unfinished_dirs, poll_one_run)
 ```
 
-# 8. Advanced: Simplified Multi‑Batch Workflow
+# 8. Next Steps
 
-When running multiple combinations of providers, models, templates, and
-“thinking” settings, you no longer need to manually build loops to create and
-poll batches.  The multi‑batch helpers can encapsulate this entire process.
-
-Below, `batch_grid` is a tibble containing one row per combination of
-provider/model/thinking/direction; `tmpl` is a prompt template; and
-`td` is a trait description.  For each combination we submit a single batch
-job (or split further using `n_segments`) and record its metadata:
-
-```{r, eval=FALSE}
-
-jobs <- purrr::pmap(batch_grid, function(provider, model, thinking, direction) {
-  pairs_use <- get_pairs_for_direction(direction)
-  llm_submit_pairs_multi_batch(
-    pairs              = pairs_use,
-    backend            = provider,
-    model              = model,
-    trait_name         = td$name,
-    trait_description  = td$description,
-    prompt_template    = tmpl,
-    n_segments         = 1,
-    output_dir         = "output",
-    write_registry     = TRUE,
-    include_thoughts   = (thinking == "with_thinking")
-  )$jobs[[1]]
-})
-```
-
-Once all jobs are submitted, poll all providers and download results:
-
-```{r, eval=FALSE}
-results <- llm_resume_multi_batches(
-  jobs               = jobs,
-  interval_seconds   = 60,
-  write_results_csv  = TRUE,
-  write_combined_csv = TRUE
-)
-}
-```
-
-This single call performs all polling, downloading, and parsing, writing
-per‑batch CSVs as well as a merged results CSV.  If your session is
-interrupted, simply reload the registry CSV from the output directory (set the 
-`output_dir` argument to the path of the folder containing the registry CSV) in 
-the call to `llm_resume_multi_batches()`.
-
-# 9. Next Steps
-
-Once you have per-job results CSVs (e.g., one per template × model × thinking × direction), you can:
+Once you have per-run results CSVs (e.g., one per template × model × thinking × direction), you can:
 
 - Compute **reverse consistency** with `compute_reverse_consistency()`
 - Analyze **positional bias** with `check_positional_bias()`
@@ -634,9 +408,8 @@ Once you have per-job results CSVs (e.g., one per template × model × thinking 
 - Fit **Bradley–Terry** models with `build_bt_data()` + `fit_bt_model()`
 - Fit **Elo** models with `fit_elo_model()` (when `EloChoice` is installed)
 
+# 9. Citation
 
-# 10. Citation
-
-> Mercer, S. (2025). *Advanced: Submitting and Polling Multiple Batches* (Version 1.0.0) [R package vignette]. 
-In *pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation*. 
-https://shmercer.github.io/pairwiseLLM/
+> Mercer, S. (2025). *Advanced: Submitting and polling multiple batches* [R package vignette]. 
+In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*. 
+https://doi.org/10.32614/CRAN.package.pairwiseLLM
