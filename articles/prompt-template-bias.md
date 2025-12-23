@@ -1383,26 +1383,7 @@ configuration.
 
 ------------------------------------------------------------------------
 
-## 11. Applying this workflow to new templates
-
-To evaluate new prompt templates on your own data:
-
-1.  **Add the templates**
-
-    - Create text files under `inst/templates/` (or wherever your
-      registry expects them).
-    - Register them so that `get_prompt_template("my_new_template")`
-      works.
-
-2.  **Update the dev script**
-
-    - Modify `template_ids` in your dev script to include the new IDs.
-    - Re-run the dev script that submits batch jobs and polls for
-      results (for example, a variant of
-      `dev-anthropic-gemini-template-ab-test.R` and/or
-      `dev-openai-template-ab-test.R`).
-
-## 12. Conclusion
+## 11. Conclusion
 
 This vignette demonstrates a reproducible workflow for detecting and
 quantifying positional bias in prompt templates.
@@ -1416,9 +1397,11 @@ rapid inspection and informed template selection. Templates that show:
 
 are strong candidates for production scoring pipelines in `pairwiseLLM`.
 
-## 13. Citation
+------------------------------------------------------------------------
 
-> Mercer, S. (2025). *Prompt Template Positional Bias Testing* (Version
-> 1.0.0) \[R package vignette\]. In *pairwiseLLM: Pairwise Comparison
-> Tools for Large Language Model-Based Writing Evaluation*.
-> <https://shmercer.github.io/pairwiseLLM/>
+## 12. Citation
+
+> Mercer, S. (2025). *Prompt template positional bias testing* \[R
+> package vignette\]. In *pairwiseLLM: Pairwise comparison tools for
+> large language model-based writing evaluation*.
+> <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

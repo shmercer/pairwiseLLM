@@ -75,15 +75,43 @@
 for <strong>Batch API workflows</strong> (server-side batching), which
 are distinct from the live API calls described in the <a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
 Started</a> vignette.</p>
-<p>Batch workflows are ideal for large-scale jobs because they: - Allow
-submitting thousands of pairs at once. - Are often cheaper (e.g., 50%
-discount on OpenAI). - Avoid client-side timeout and connection issues.
-- Can be polled and resumed even if your local R session ends.</p>
-<p>Supported Batch API providers: - <strong>OpenAI</strong> (via
-<code><a href="../reference/run_openai_batch_pipeline.html">run_openai_batch_pipeline()</a></code>) - <strong>Anthropic</strong>
-(via <code><a href="../reference/run_anthropic_batch_pipeline.html">run_anthropic_batch_pipeline()</a></code>) -
-<strong>Gemini</strong> (via low-level helpers such as
-<code><a href="../reference/build_gemini_batch_requests.html">build_gemini_batch_requests()</a></code>)</p>
+<p>Batch workflows are ideal for large-scale jobs because they:</p>
+<ul>
+<li>Allow submitting thousands of pairs at once<br>
+</li>
+<li>Are often cheaper (e.g., discounted batch pricing on some
+providers)<br>
+</li>
+<li>Avoid client-side timeout and connection issues<br>
+</li>
+<li>Can be polled and resumed even if your local R session ends</li>
+</ul>
+<p>Supported Batch API providers:</p>
+<ul>
+<li>
+<strong>OpenAI</strong> (batch pipeline:
+<code><a href="../reference/run_openai_batch_pipeline.html">run_openai_batch_pipeline()</a></code>)</li>
+<li>
+<strong>Anthropic</strong> (batch pipeline:
+<code><a href="../reference/run_anthropic_batch_pipeline.html">run_anthropic_batch_pipeline()</a></code>)</li>
+<li>
+<strong>Gemini</strong> (batch pipeline:
+<code><a href="../reference/run_gemini_batch_pipeline.html">run_gemini_batch_pipeline()</a></code>)</li>
+</ul>
+<blockquote>
+<p><strong>Recommended approach:</strong> For <em>multiple</em> batches
+(e.g., templates × providers × models × forward/reverse), use:</p>
+<ul>
+<li>
+<code><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code> to <strong>split +
+submit</strong> jobs (no polling; writes an optional registry CSV)</li>
+<li>
+<code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code> to <strong>poll + download +
+parse</strong> results (can resume from a registry on disk)</li>
+</ul>
+<p>These helpers orchestrate the provider-specific pipelines without
+forcing you to write your own polling loops.</p>
+</blockquote>
 <blockquote>
 <p><strong>Note:</strong> <strong>Together.ai</strong> and
 <strong>Ollama</strong> do not currently support a native Batch API
@@ -92,10 +120,15 @@ compatible with this workflow. For those providers, use the
 described in the <a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
 Started</a> vignette.</p>
 </blockquote>
-<p>In this vignette, we will cover: - Submitting many batches (e.g.,
-across templates, providers, and models). - Polling batches until
-completion. - Downloading and parsing results. - Using a <strong>batch
-registry CSV</strong> to safely resume interrupted jobs.</p>
+<p>In this vignette, we will cover:</p>
+<ul>
+<li>Designing a grid of provider/model/thinking/direction
+combinations</li>
+<li>Submitting <em>many</em> batch jobs using the multi-batch
+helpers</li>
+<li>Polling and resuming safely via on-disk registries</li>
+<li>Producing per-run and merged results tables</li>
+</ul>
 <blockquote>
 <p>Note: All heavy API calls in this vignette are set to
 <code>eval = FALSE</code> so that the vignette remains CRAN-safe. You
@@ -182,7 +215,8 @@ companion vignette:</p>
 <p>Default prompt template:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"...\n"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"...</span></span>
+<span><span class="st">"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; TRAIT: {TRAIT_NAME}</span></span>
@@ -321,432 +355,223 @@ practice you would substitute different text:</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> test5       <span style="color: #949494;">&lt;chr [1]&gt;</span></span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="phase-1-submitting-many-batches-no-polling-yet">5. Phase 1: Submitting Many Batches (No Polling Yet)<a class="anchor" aria-label="anchor" href="#phase-1-submitting-many-batches-no-polling-yet"></a>
+<h2 id="submitting-many-batches-with-the-multibatch-helpers">5. Submitting Many Batches with the Multi‑Batch Helpers<a class="anchor" aria-label="anchor" href="#submitting-many-batches-with-the-multibatch-helpers"></a>
 </h2>
-<p>We will:</p>
-<ol style="list-style-type: decimal">
-<li>Loop over all
-<code>(template_id, provider, model, thinking, direction)</code>
-combinations.</li>
-<li>Submit a batch for each combination.</li>
-<li>Record metadata (including <code>batch_id</code>) in an in-memory
-<code>jobs</code> list.</li>
-<li>Write a <strong>batch index CSV</strong> to disk.</li>
-</ol>
-<p>Create an output directory:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">out_dir</span> <span class="op">&lt;-</span> <span class="st">"dev-output/advanced-multi-batch"</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">out_dir</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<p>Submit all batches:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">jobs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="kw">for</span> <span class="op">(</span><span class="va">t_row</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">templates_tbl</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">template_id</span> <span class="op">&lt;-</span> <span class="va">templates_tbl</span><span class="op">$</span><span class="va">template_id</span><span class="op">[</span><span class="va">t_row</span><span class="op">]</span></span>
-<span>  <span class="va">tmpl_string</span> <span class="op">&lt;-</span> <span class="va">templates_tbl</span><span class="op">$</span><span class="va">prompt_template</span><span class="op">[[</span><span class="va">t_row</span><span class="op">]</span><span class="op">]</span></span>
-<span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">batch_grid</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">row</span> <span class="op">&lt;-</span> <span class="va">batch_grid</span><span class="op">[</span><span class="va">i</span>, <span class="op">]</span></span>
-<span></span>
-<span>    <span class="va">provider</span> <span class="op">&lt;-</span> <span class="va">row</span><span class="op">$</span><span class="va">provider</span></span>
-<span>    <span class="va">model</span> <span class="op">&lt;-</span> <span class="va">row</span><span class="op">$</span><span class="va">model</span></span>
-<span>    <span class="va">thinking</span> <span class="op">&lt;-</span> <span class="va">row</span><span class="op">$</span><span class="va">thinking</span></span>
-<span>    <span class="va">direction</span> <span class="op">&lt;-</span> <span class="va">row</span><span class="op">$</span><span class="va">direction</span></span>
-<span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span></span>
-<span>      <span class="st">"Submitting batch: template="</span>, <span class="va">template_id</span>,</span>
-<span>      <span class="st">" | "</span>, <span class="va">provider</span>, <span class="st">" / "</span>, <span class="va">model</span>,</span>
-<span>      <span class="st">" / "</span>, <span class="va">thinking</span>, <span class="st">" / "</span>, <span class="va">direction</span></span>
-<span>    <span class="op">)</span></span>
-<span></span>
-<span>    <span class="va">pairs_use</span> <span class="op">&lt;-</span> <span class="fu">get_pairs_for_direction</span><span class="op">(</span><span class="va">direction</span><span class="op">)</span></span>
-<span>    <span class="va">is_thinking</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">thinking</span>, <span class="st">"with_thinking"</span><span class="op">)</span></span>
-<span></span>
-<span>    <span class="va">prefix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">provider</span>, <span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>,</span>
-<span>      sep <span class="op">=</span> <span class="st">"_"</span></span>
-<span>    <span class="op">)</span></span>
-<span>    <span class="va">prefix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">gsub</a></span><span class="op">(</span><span class="st">"[^A-Za-z0-9_.-]"</span>, <span class="st">"-"</span>, <span class="va">prefix</span><span class="op">)</span></span>
-<span></span>
-<span>    <span class="va">batch_input_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">prefix</span>, <span class="st">"_input.jsonl"</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="va">batch_output_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">prefix</span>, <span class="st">"_output.jsonl"</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="va">csv_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">prefix</span>, <span class="st">".csv"</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span>    <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"openai"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="co"># OpenAI: use the helpers from the dev scripts</span></span>
-<span>      <span class="va">include_thoughts</span> <span class="op">&lt;-</span> <span class="va">is_thinking</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"^gpt-5\\.1"</span>, <span class="va">model</span><span class="op">)</span></span>
-<span></span>
-<span>      <span class="va">pipeline</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_openai_batch_pipeline.html">run_openai_batch_pipeline</a></span><span class="op">(</span></span>
-<span>        pairs             <span class="op">=</span> <span class="va">pairs_use</span>,</span>
-<span>        model             <span class="op">=</span> <span class="va">model</span>,</span>
-<span>        trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>        trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>        prompt_template   <span class="op">=</span> <span class="va">tmpl_string</span>,</span>
-<span>        include_thoughts  <span class="op">=</span> <span class="va">include_thoughts</span>,</span>
-<span>        include_raw       <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>        batch_input_path  <span class="op">=</span> <span class="va">batch_input_path</span>,</span>
-<span>        batch_output_path <span class="op">=</span> <span class="va">batch_output_path</span>,</span>
-<span>        poll              <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>      <span class="op">)</span></span>
-<span></span>
-<span>      <span class="va">jobs</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">jobs</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1L</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>        template_id       <span class="op">=</span> <span class="va">template_id</span>,</span>
-<span>        provider          <span class="op">=</span> <span class="va">provider</span>,</span>
-<span>        model             <span class="op">=</span> <span class="va">model</span>,</span>
-<span>        thinking          <span class="op">=</span> <span class="va">thinking</span>,</span>
-<span>        direction         <span class="op">=</span> <span class="va">direction</span>,</span>
-<span>        prefix            <span class="op">=</span> <span class="va">prefix</span>,</span>
-<span>        batch_type        <span class="op">=</span> <span class="st">"openai"</span>,</span>
-<span>        batch_id          <span class="op">=</span> <span class="va">pipeline</span><span class="op">$</span><span class="va">batch</span><span class="op">$</span><span class="va">id</span>,</span>
-<span>        batch_input_path  <span class="op">=</span> <span class="va">pipeline</span><span class="op">$</span><span class="va">batch_input_path</span>,</span>
-<span>        batch_output_path <span class="op">=</span> <span class="va">batch_output_path</span>,</span>
-<span>        csv_path          <span class="op">=</span> <span class="va">csv_path</span>,</span>
-<span>        done              <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>        results           <span class="op">=</span> <span class="cn">NULL</span></span>
-<span>      <span class="op">)</span></span>
-<span>    <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"anthropic"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="co"># Anthropic: use run_anthropic_batch_pipeline()</span></span>
-<span>      <span class="va">reasoning</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">is_thinking</span><span class="op">)</span> <span class="st">"enabled"</span> <span class="kw">else</span> <span class="st">"none"</span></span>
-<span>      <span class="va">temperature_arg</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="va">is_thinking</span><span class="op">)</span> <span class="fl">0</span> <span class="kw">else</span> <span class="cn">NULL</span></span>
-<span></span>
-<span>      <span class="va">pipeline</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_anthropic_batch_pipeline.html">run_anthropic_batch_pipeline</a></span><span class="op">(</span></span>
-<span>        pairs             <span class="op">=</span> <span class="va">pairs_use</span>,</span>
-<span>        model             <span class="op">=</span> <span class="va">model</span>,</span>
-<span>        trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>        trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>        prompt_template   <span class="op">=</span> <span class="va">tmpl_string</span>,</span>
-<span>        reasoning         <span class="op">=</span> <span class="va">reasoning</span>,</span>
-<span>        include_thoughts  <span class="op">=</span> <span class="va">is_thinking</span>,</span>
-<span>        batch_input_path  <span class="op">=</span> <span class="va">batch_input_path</span>,</span>
-<span>        batch_output_path <span class="op">=</span> <span class="va">batch_output_path</span>,</span>
-<span>        poll              <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>        temperature       <span class="op">=</span> <span class="va">temperature_arg</span>,</span>
-<span>        include_raw       <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span>      <span class="op">)</span></span>
-<span></span>
-<span>      <span class="va">jobs</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">jobs</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1L</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>        template_id       <span class="op">=</span> <span class="va">template_id</span>,</span>
-<span>        provider          <span class="op">=</span> <span class="va">provider</span>,</span>
-<span>        model             <span class="op">=</span> <span class="va">model</span>,</span>
-<span>        thinking          <span class="op">=</span> <span class="va">thinking</span>,</span>
-<span>        direction         <span class="op">=</span> <span class="va">direction</span>,</span>
-<span>        prefix            <span class="op">=</span> <span class="va">prefix</span>,</span>
-<span>        batch_type        <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
-<span>        batch_id          <span class="op">=</span> <span class="va">pipeline</span><span class="op">$</span><span class="va">batch</span><span class="op">$</span><span class="va">id</span>,</span>
-<span>        batch_input_path  <span class="op">=</span> <span class="va">pipeline</span><span class="op">$</span><span class="va">batch_input_path</span>,</span>
-<span>        batch_output_path <span class="op">=</span> <span class="va">batch_output_path</span>,</span>
-<span>        csv_path          <span class="op">=</span> <span class="va">csv_path</span>,</span>
-<span>        done              <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>        results           <span class="op">=</span> <span class="cn">NULL</span></span>
-<span>      <span class="op">)</span></span>
-<span>    <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"gemini"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="co"># Gemini: typically use low-level helpers, as in the dev scripts</span></span>
-<span>      <span class="va">req_tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_gemini_batch_requests.html">build_gemini_batch_requests</a></span><span class="op">(</span></span>
-<span>        pairs             <span class="op">=</span> <span class="va">pairs_use</span>,</span>
-<span>        model             <span class="op">=</span> <span class="va">model</span>,</span>
-<span>        trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>        trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>        prompt_template   <span class="op">=</span> <span class="va">tmpl_string</span>,</span>
-<span>        thinking_level    <span class="op">=</span> <span class="st">"low"</span>, <span class="co"># example</span></span>
-<span>        include_thoughts  <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span>      <span class="op">)</span></span>
-<span></span>
-<span>      <span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gemini_create_batch.html">gemini_create_batch</a></span><span class="op">(</span></span>
-<span>        requests    <span class="op">=</span> <span class="va">req_tbl</span><span class="op">$</span><span class="va">request</span>,</span>
-<span>        model       <span class="op">=</span> <span class="va">model</span>,</span>
-<span>        api_key     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"GEMINI_API_KEY"</span><span class="op">)</span>,</span>
-<span>        api_version <span class="op">=</span> <span class="st">"v1beta"</span></span>
-<span>      <span class="op">)</span></span>
-<span></span>
-<span>      <span class="va">batch_name</span> <span class="op">&lt;-</span> <span class="va">batch</span><span class="op">$</span><span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span></span>
-<span>        <span class="st">"Gemini batch did not return a `name` field."</span>,</span>
-<span>        call. <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>      <span class="op">)</span></span>
-<span></span>
-<span>      <span class="va">jobs</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">jobs</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1L</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>        template_id       <span class="op">=</span> <span class="va">template_id</span>,</span>
-<span>        provider          <span class="op">=</span> <span class="va">provider</span>,</span>
-<span>        model             <span class="op">=</span> <span class="va">model</span>,</span>
-<span>        thinking          <span class="op">=</span> <span class="va">thinking</span>,</span>
-<span>        direction         <span class="op">=</span> <span class="va">direction</span>,</span>
-<span>        prefix            <span class="op">=</span> <span class="va">prefix</span>,</span>
-<span>        batch_type        <span class="op">=</span> <span class="st">"gemini"</span>,</span>
-<span>        batch_id          <span class="op">=</span> <span class="va">batch_name</span>,</span>
-<span>        batch_input_path  <span class="op">=</span> <span class="va">batch_input_path</span>,</span>
-<span>        batch_output_path <span class="op">=</span> <span class="va">batch_output_path</span>,</span>
-<span>        csv_path          <span class="op">=</span> <span class="va">csv_path</span>,</span>
-<span>        done              <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>        results           <span class="op">=</span> <span class="cn">NULL</span></span>
-<span>      <span class="op">)</span></span>
-<span>    <span class="op">}</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<p>The key idea is:</p>
+<ul>
+<li>Each <strong>combination</strong> of
+<code>(template_id, provider, model, thinking, direction)</code> becomes
+a <strong>run</strong>
+</li>
+<li>Each run writes its files into its own subdirectory (so file names
+never collide)</li>
+<li>Within each run you can still split into multiple segments using
+<code>batch_size</code> or <code>n_segments</code>
+</li>
+</ul>
 <div class="section level3">
-<h3 id="writing-a-batch-registry-csv-important">5.1 Writing a Batch Registry CSV (Important!)<a class="anchor" aria-label="anchor" href="#writing-a-batch-registry-csv-important"></a>
+<h3 id="create-a-run-plan-and-output-directory">5.1 Create a run plan and output directory<a class="anchor" aria-label="anchor" href="#create-a-run-plan-and-output-directory"></a>
 </h3>
-<p>To avoid losing batch IDs if your session dies, write a compact index
-of all jobs to disk:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">jobs_tbl</span> <span class="op">&lt;-</span> <span class="fu">tibble</span><span class="fu">::</span><span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span>
-<span>  idx <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">jobs</span><span class="op">)</span>,</span>
-<span>  template_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"template_id"</span><span class="op">)</span>,</span>
-<span>  provider <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"provider"</span><span class="op">)</span>,</span>
-<span>  model <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"model"</span><span class="op">)</span>,</span>
-<span>  thinking <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"thinking"</span><span class="op">)</span>,</span>
-<span>  direction <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"direction"</span><span class="op">)</span>,</span>
-<span>  prefix <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"prefix"</span><span class="op">)</span>,</span>
-<span>  batch_type <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"batch_type"</span><span class="op">)</span>,</span>
-<span>  batch_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"batch_id"</span><span class="op">)</span>,</span>
-<span>  batch_input_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"batch_input_path"</span><span class="op">)</span>,</span>
-<span>  batch_output_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"batch_output_path"</span><span class="op">)</span>,</span>
-<span>  csv_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"csv_path"</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">out_root</span> <span class="op">&lt;-</span> <span class="st">"dev-output/advanced-multi-batch"</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">out_root</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">jobs_index_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="st">"batch_jobs_index.csv"</span><span class="op">)</span></span>
-<span><span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/write_delim.html" class="external-link">write_csv</a></span><span class="op">(</span><span class="va">jobs_tbl</span>, <span class="va">jobs_index_path</span><span class="op">)</span></span>
+<span><span class="va">run_plan</span> <span class="op">&lt;-</span> <span class="fu">tidyr</span><span class="fu">::</span><span class="fu"><a href="https://tidyr.tidyverse.org/reference/expand.html" class="external-link">crossing</a></span><span class="op">(</span></span>
+<span>  <span class="va">templates_tbl</span> <span class="op">|&gt;</span> <span class="fu">tidyr</span><span class="fu">::</span><span class="fu"><a href="https://tidyr.tidyverse.org/reference/unnest.html" class="external-link">unnest</a></span><span class="op">(</span><span class="va">prompt_template</span><span class="op">)</span>,</span>
+<span>  <span class="va">batch_grid</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
+<span>    run_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>, sep <span class="op">=</span> <span class="st">"__"</span><span class="op">)</span>,</span>
+<span>    run_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">gsub</a></span><span class="op">(</span><span class="st">"[^A-Za-z0-9_.-]+"</span>, <span class="st">"-"</span>, <span class="va">run_id</span><span class="op">)</span>,</span>
+<span>    run_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="va">run_id</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span></span>
-<span><span class="va">jobs_index_path</span></span></code></pre></div>
-<p>You can now <strong>stop R</strong> or close RStudio safely — all
-critical details are in <code>batch_jobs_index.csv</code>.</p>
+<span><span class="va">run_plan</span> <span class="op">|&gt;</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">run_id</span>, <span class="va">template_id</span>, <span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>, <span class="va">run_dir</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="submit-all-runs-no-polling">5.2 Submit all runs (no polling)<a class="anchor" aria-label="anchor" href="#submit-all-runs-no-polling"></a>
+</h3>
+<p>Below we submit each run using
+<code><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code>. This returns a
+<code>jobs</code> list and writes a <code>jobs_registry.csv</code> under
+each run directory (because <code>write_registry = TRUE</code>).</p>
+<p>Provider-specific options can be forwarded via <code>...</code>. In
+the example below we:</p>
+<ul>
+<li>Enable “thinking” output where applicable</li>
+<li>Ask providers to include raw outputs in addition to parsed tags
+(helpful for debugging)</li>
+</ul>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>submit_one_run <span class="ot">&lt;-</span> <span class="cf">function</span>(template_id, prompt_template, provider, model, thinking, direction, run_dir) {</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  pairs_use   <span class="ot">&lt;-</span> <span class="fu">get_pairs_for_direction</span>(direction)</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  is_thinking <span class="ot">&lt;-</span> <span class="fu">identical</span>(thinking, <span class="st">"with_thinking"</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="co"># Provider-specific knobs (passed through via ...)</span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>  extra_args <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">identical</span>(provider, <span class="st">"openai"</span>)) {</span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>    <span class="co"># Only request thoughts for models that support them in this workflow</span></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_thoughts <span class="ot">&lt;-</span> is_thinking <span class="sc">&amp;&amp;</span> <span class="fu">grepl</span>(<span class="st">"^gpt-5\.1"</span>, model)</span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_raw      <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  } <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">identical</span>(provider, <span class="st">"anthropic"</span>)) {</span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>    extra_args<span class="sc">$</span>reasoning        <span class="ot">&lt;-</span> <span class="cf">if</span> (is_thinking) <span class="st">"enabled"</span> <span class="cf">else</span> <span class="st">"none"</span></span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_thoughts <span class="ot">&lt;-</span> is_thinking</span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_raw      <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a>    <span class="cf">if</span> (<span class="sc">!</span>is_thinking) extra_args<span class="sc">$</span>temperature <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a>  } <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">identical</span>(provider, <span class="st">"gemini"</span>)) {</span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_thoughts <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a>    extra_args<span class="sc">$</span>thinking_level   <span class="ot">&lt;-</span> <span class="st">"low"</span>   <span class="co"># example</span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_raw      <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
+<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a>  }</span>
+<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a></span>
+<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a>  <span class="fu">message</span>(</span>
+<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a>    <span class="st">"Submitting: "</span>, template_id, <span class="st">" | "</span>, provider, <span class="st">" / "</span>, model,</span>
+<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a>    <span class="st">" / "</span>, thinking, <span class="st">" / "</span>, direction</span>
+<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a>  )</span>
+<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a></span>
+<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a>  <span class="co"># Split strategy:</span></span>
+<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a>  <span class="co"># - For real jobs, use batch_size (e.g., 500–5000) or n_segments (e.g., 10–50)</span></span>
+<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a>  <span class="co"># - Here we keep it simple and submit a single segment per run</span></span>
+<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a>  <span class="fu">do.call</span>(</span>
+<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a>    llm_submit_pairs_multi_batch,</span>
+<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a>    <span class="fu">c</span>(</span>
+<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a>      <span class="fu">list</span>(</span>
+<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a>        <span class="at">pairs             =</span> pairs_use,</span>
+<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a>        <span class="at">backend           =</span> provider,</span>
+<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a>        <span class="at">model             =</span> model,</span>
+<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a>        <span class="at">trait_name        =</span> td<span class="sc">$</span>name,</span>
+<span id="cb9-41"><a href="#cb9-41" tabindex="-1"></a>        <span class="at">trait_description =</span> td<span class="sc">$</span>description,</span>
+<span id="cb9-42"><a href="#cb9-42" tabindex="-1"></a>        <span class="at">prompt_template   =</span> prompt_template,</span>
+<span id="cb9-43"><a href="#cb9-43" tabindex="-1"></a>        <span class="at">n_segments        =</span> <span class="dv">1</span><span class="dt">L</span>,</span>
+<span id="cb9-44"><a href="#cb9-44" tabindex="-1"></a>        <span class="at">output_dir        =</span> run_dir,</span>
+<span id="cb9-45"><a href="#cb9-45" tabindex="-1"></a>        <span class="at">write_registry    =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb9-46"><a href="#cb9-46" tabindex="-1"></a>        <span class="at">verbose           =</span> <span class="cn">TRUE</span></span>
+<span id="cb9-47"><a href="#cb9-47" tabindex="-1"></a>      ),</span>
+<span id="cb9-48"><a href="#cb9-48" tabindex="-1"></a>      extra_args</span>
+<span id="cb9-49"><a href="#cb9-49" tabindex="-1"></a>    )</span>
+<span id="cb9-50"><a href="#cb9-50" tabindex="-1"></a>  )</span>
+<span id="cb9-51"><a href="#cb9-51" tabindex="-1"></a>}</span>
+<span id="cb9-52"><a href="#cb9-52" tabindex="-1"></a></span>
+<span id="cb9-53"><a href="#cb9-53" tabindex="-1"></a>run_results <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">pmap</span>(</span>
+<span id="cb9-54"><a href="#cb9-54" tabindex="-1"></a>  run_plan,</span>
+<span id="cb9-55"><a href="#cb9-55" tabindex="-1"></a>  submit_one_run</span>
+<span id="cb9-56"><a href="#cb9-56" tabindex="-1"></a>)</span>
+<span id="cb9-57"><a href="#cb9-57" tabindex="-1"></a></span>
+<span id="cb9-58"><a href="#cb9-58" tabindex="-1"></a><span class="co"># Store a lightweight manifest so you can resume later without rebuilding run_plan</span></span>
+<span id="cb9-59"><a href="#cb9-59" tabindex="-1"></a>manifest <span class="ot">&lt;-</span> run_plan <span class="sc">|&gt;</span></span>
+<span id="cb9-60"><a href="#cb9-60" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">registry_path =</span> <span class="fu">file.path</span>(run_dir, <span class="st">"jobs_registry.csv"</span>))</span>
+<span id="cb9-61"><a href="#cb9-61" tabindex="-1"></a></span>
+<span id="cb9-62"><a href="#cb9-62" tabindex="-1"></a>manifest_path <span class="ot">&lt;-</span> <span class="fu">file.path</span>(out_root, <span class="st">"run_manifest.csv"</span>)</span>
+<span id="cb9-63"><a href="#cb9-63" tabindex="-1"></a>readr<span class="sc">::</span><span class="fu">write_csv</span>(manifest, manifest_path)</span>
+<span id="cb9-64"><a href="#cb9-64" tabindex="-1"></a></span>
+<span id="cb9-65"><a href="#cb9-65" tabindex="-1"></a>manifest_path</span></code></pre></div>
+<p>At this point, each run directory contains:</p>
+<ul>
+<li>JSONL input/output placeholders (one per segment)</li>
+<li>A <code>jobs_registry.csv</code> that records all batch IDs and file
+paths for that run</li>
+</ul>
+<p>You can safely stop R or restart your machine after submission.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="phase-2-polling-downloading-and-parsing">6. Phase 2: Polling, Downloading, and Parsing<a class="anchor" aria-label="anchor" href="#phase-2-polling-downloading-and-parsing"></a>
+<h2 id="polling-downloading-and-parsing-resumable">6. Polling, Downloading, and Parsing (Resumable)<a class="anchor" aria-label="anchor" href="#polling-downloading-and-parsing-resumable"></a>
 </h2>
-<p>In a <em>new</em> session, you can:</p>
-<ol style="list-style-type: decimal">
-<li>Reload the batch index CSV<br>
-</li>
-<li>Rebuild the <code>jobs</code> list<br>
-</li>
-<li>Poll providers for batch status<br>
-</li>
-<li>Download and parse results when complete<br>
-</li>
-<li>Save per-job CSVs of parsed results</li>
-</ol>
-<p>First, helper functions for terminal states:</p>
+<p>To poll all runs, read the manifest and call
+<code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code> for each <code>run_dir</code>.
+If you restart R, you can resume <strong>without</strong> keeping the
+<code>jobs</code> objects in memory by setting <code>jobs = NULL</code>
+and pointing to <code>output_dir</code> (the function will load
+<code>jobs_registry.csv</code>).</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">manifest_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"run_manifest.csv"</span><span class="op">)</span></span>
+<span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">manifest_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">poll_one_run</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">run_dir</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches</a></span><span class="op">(</span></span>
+<span>    jobs               <span class="op">=</span> <span class="cn">NULL</span>,   <span class="co"># load from jobs_registry.csv in run_dir</span></span>
+<span>    output_dir         <span class="op">=</span> <span class="va">run_dir</span>,</span>
+<span>    interval_seconds   <span class="op">=</span> <span class="fl">60</span>,</span>
+<span>    per_job_delay      <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>    write_results_csv  <span class="op">=</span> <span class="cn">TRUE</span>,   <span class="co"># writes batch_XX_results.csv files</span></span>
+<span>    write_registry     <span class="op">=</span> <span class="cn">TRUE</span>,   <span class="co"># refreshes jobs_registry.csv with done flags</span></span>
+<span>    keep_jsonl         <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    verbose            <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    write_combined_csv <span class="op">=</span> <span class="cn">TRUE</span>,   <span class="co"># writes combined_results.csv inside run_dir</span></span>
+<span>    combined_csv_path  <span class="op">=</span> <span class="st">"combined_results.csv"</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">polled</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/map.html" class="external-link">map</a></span><span class="op">(</span><span class="va">manifest</span><span class="op">$</span><span class="va">run_dir</span>, <span class="va">poll_one_run</span><span class="op">)</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="building-a-single-merged-results-table-all-runs">6.1 Building a single merged results table (all runs)<a class="anchor" aria-label="anchor" href="#building-a-single-merged-results-table-all-runs"></a>
+</h3>
+<p>Each element of <code>polled</code> contains a <code>combined</code>
+tibble for that run (i.e., all segments bound together). We can attach
+run metadata (template/provider/model/thinking/direction) and then bind
+all runs into one master table.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">is_terminal_openai</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">status</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">status</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"completed"</span>, <span class="st">"failed"</span>, <span class="st">"cancelled"</span>, <span class="st">"expired"</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
+<code class="sourceCode R"><span><span class="va">combined_all</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/map_dfr.html" class="external-link">map2_dfr</a></span><span class="op">(</span></span>
+<span>  <span class="va">polled</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">manifest</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">res</span>, <span class="va">i</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">meta</span> <span class="op">&lt;-</span> <span class="va">manifest</span><span class="op">[</span><span class="va">i</span>, <span class="op">]</span></span>
+<span>    <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">combined</span><span class="op">)</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">is_terminal_anthropic</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">status</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">status</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ended"</span>, <span class="st">"errored"</span>, <span class="st">"canceled"</span>, <span class="st">"expired"</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">is_terminal_gemini</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">state</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">state</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"SUCCEEDED"</span>, <span class="st">"FAILED"</span>, <span class="st">"CANCELLED"</span>, <span class="st">"EXPIRED"</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p>Now the polling loop, with a small delay between jobs to reduce 429
-(rate limit) risks:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">interval_seconds</span> <span class="op">&lt;-</span> <span class="fl">60</span></span>
-<span><span class="va">per_job_delay</span> <span class="op">&lt;-</span> <span class="fl">2</span> <span class="co"># seconds between polling calls</span></span>
-<span></span>
-<span><span class="co"># Reload batch index</span></span>
-<span><span class="va">jobs_index_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="st">"batch_jobs_index.csv"</span><span class="op">)</span></span>
-<span><span class="va">jobs_tbl</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">jobs_index_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Rebuild jobs list skeleton</span></span>
-<span><span class="va">jobs</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/pmap.html" class="external-link">pmap</a></span><span class="op">(</span></span>
-<span>  <span class="va">jobs_tbl</span>,</span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="va">idx</span>, <span class="va">template_id</span>, <span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>,</span>
-<span>           <span class="va">prefix</span>, <span class="va">batch_type</span>, <span class="va">batch_id</span>,</span>
-<span>           <span class="va">batch_input_path</span>, <span class="va">batch_output_path</span>, <span class="va">csv_path</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      template_id       <span class="op">=</span> <span class="va">template_id</span>,</span>
-<span>      provider          <span class="op">=</span> <span class="va">provider</span>,</span>
-<span>      model             <span class="op">=</span> <span class="va">model</span>,</span>
-<span>      thinking          <span class="op">=</span> <span class="va">thinking</span>,</span>
-<span>      direction         <span class="op">=</span> <span class="va">direction</span>,</span>
-<span>      prefix            <span class="op">=</span> <span class="va">prefix</span>,</span>
-<span>      batch_type        <span class="op">=</span> <span class="va">batch_type</span>,</span>
-<span>      batch_id          <span class="op">=</span> <span class="va">batch_id</span>,</span>
-<span>      batch_input_path  <span class="op">=</span> <span class="va">batch_input_path</span>,</span>
-<span>      batch_output_path <span class="op">=</span> <span class="va">batch_output_path</span>,</span>
-<span>      csv_path          <span class="op">=</span> <span class="va">csv_path</span>,</span>
-<span>      done              <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>      results           <span class="op">=</span> <span class="cn">NULL</span></span>
-<span>    <span class="op">)</span></span>
+<span>    <span class="va">res</span><span class="op">$</span><span class="va">combined</span> <span class="op">|&gt;</span></span>
+<span>      <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
+<span>        template_id <span class="op">=</span> <span class="va">meta</span><span class="op">$</span><span class="va">template_id</span>,</span>
+<span>        provider    <span class="op">=</span> <span class="va">meta</span><span class="op">$</span><span class="va">provider</span>,</span>
+<span>        model       <span class="op">=</span> <span class="va">meta</span><span class="op">$</span><span class="va">model</span>,</span>
+<span>        thinking    <span class="op">=</span> <span class="va">meta</span><span class="op">$</span><span class="va">thinking</span>,</span>
+<span>        direction   <span class="op">=</span> <span class="va">meta</span><span class="op">$</span><span class="va">direction</span>,</span>
+<span>        run_id      <span class="op">=</span> <span class="va">meta</span><span class="op">$</span><span class="va">run_id</span></span>
+<span>      <span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">unfinished</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/logical.html" class="external-link">logical</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"done"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">combined_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"combined_all_runs.csv"</span><span class="op">)</span></span>
+<span><span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/write_delim.html" class="external-link">write_csv</a></span><span class="op">(</span><span class="va">combined_all</span>, <span class="va">combined_path</span><span class="op">)</span></span>
 <span></span>
-<span><span class="kw">while</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">unfinished</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0L</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Polling "</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">unfinished</span><span class="op">)</span>, <span class="st">" unfinished batch(es)..."</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">j</span> <span class="kw">in</span> <span class="va">unfinished</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">job</span> <span class="op">&lt;-</span> <span class="va">jobs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span></span>
-<span>    <span class="kw">if</span> <span class="op">(</span><span class="va">job</span><span class="op">$</span><span class="va">done</span><span class="op">)</span> <span class="kw">next</span></span>
-<span></span>
-<span>    <span class="va">batch_type</span> <span class="op">&lt;-</span> <span class="va">job</span><span class="op">$</span><span class="va">batch_type</span></span>
-<span></span>
-<span>    <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">batch_type</span>, <span class="st">"openai"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/openai_get_batch.html">openai_get_batch</a></span><span class="op">(</span><span class="va">job</span><span class="op">$</span><span class="va">batch_id</span><span class="op">)</span></span>
-<span>      <span class="va">status</span> <span class="op">&lt;-</span> <span class="va">batch</span><span class="op">$</span><span class="va">status</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="st">"unknown"</span></span>
-<span>      <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"  [OpenAI] "</span>, <span class="va">job</span><span class="op">$</span><span class="va">prefix</span>, <span class="st">" status: "</span>, <span class="va">status</span><span class="op">)</span></span>
-<span></span>
-<span>      <span class="kw">if</span> <span class="op">(</span><span class="fu">is_terminal_openai</span><span class="op">(</span><span class="va">status</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>        <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">status</span>, <span class="st">"completed"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>          <span class="fu"><a href="../reference/openai_download_batch_output.html">openai_download_batch_output</a></span><span class="op">(</span></span>
-<span>            batch_id <span class="op">=</span> <span class="va">job</span><span class="op">$</span><span class="va">batch_id</span>,</span>
-<span>            path     <span class="op">=</span> <span class="va">job</span><span class="op">$</span><span class="va">batch_output_path</span></span>
-<span>          <span class="op">)</span></span>
-<span></span>
-<span>          <span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parse_openai_batch_output.html">parse_openai_batch_output</a></span><span class="op">(</span><span class="va">job</span><span class="op">$</span><span class="va">batch_output_path</span><span class="op">)</span></span>
-<span>          <span class="va">jobs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">results</span> <span class="op">&lt;-</span> <span class="va">res</span></span>
-<span>          <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/write_delim.html" class="external-link">write_csv</a></span><span class="op">(</span><span class="va">res</span>, <span class="va">job</span><span class="op">$</span><span class="va">csv_path</span><span class="op">)</span></span>
-<span>          <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"    -&gt; Results written to: "</span>, <span class="va">job</span><span class="op">$</span><span class="va">csv_path</span><span class="op">)</span></span>
-<span>        <span class="op">}</span></span>
-<span>        <span class="va">jobs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">done</span> <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
-<span>      <span class="op">}</span></span>
-<span>    <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">batch_type</span>, <span class="st">"anthropic"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/anthropic_get_batch.html">anthropic_get_batch</a></span><span class="op">(</span><span class="va">job</span><span class="op">$</span><span class="va">batch_id</span><span class="op">)</span></span>
-<span>      <span class="va">status</span> <span class="op">&lt;-</span> <span class="va">batch</span><span class="op">$</span><span class="va">processing_status</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="st">"unknown"</span></span>
-<span>      <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"  [Anthropic] "</span>, <span class="va">job</span><span class="op">$</span><span class="va">prefix</span>, <span class="st">" status: "</span>, <span class="va">status</span><span class="op">)</span></span>
-<span></span>
-<span>      <span class="kw">if</span> <span class="op">(</span><span class="fu">is_terminal_anthropic</span><span class="op">(</span><span class="va">status</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>        <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">status</span>, <span class="st">"ended"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>          <span class="va">output_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/anthropic_download_batch_results.html">anthropic_download_batch_results</a></span><span class="op">(</span></span>
-<span>            batch_id    <span class="op">=</span> <span class="va">job</span><span class="op">$</span><span class="va">batch_id</span>,</span>
-<span>            output_path <span class="op">=</span> <span class="va">job</span><span class="op">$</span><span class="va">batch_output_path</span></span>
-<span>          <span class="op">)</span></span>
-<span></span>
-<span>          <span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parse_anthropic_batch_output.html">parse_anthropic_batch_output</a></span><span class="op">(</span></span>
-<span>            jsonl_path  <span class="op">=</span> <span class="va">output_path</span>,</span>
-<span>            tag_prefix  <span class="op">=</span> <span class="st">"&lt;BETTER_SAMPLE&gt;"</span>,</span>
-<span>            tag_suffix  <span class="op">=</span> <span class="st">"&lt;/BETTER_SAMPLE&gt;"</span></span>
-<span>          <span class="op">)</span></span>
-<span></span>
-<span>          <span class="va">jobs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">results</span> <span class="op">&lt;-</span> <span class="va">res</span></span>
-<span>          <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/write_delim.html" class="external-link">write_csv</a></span><span class="op">(</span><span class="va">res</span>, <span class="va">job</span><span class="op">$</span><span class="va">csv_path</span><span class="op">)</span></span>
-<span>          <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"    -&gt; Results written to: "</span>, <span class="va">job</span><span class="op">$</span><span class="va">csv_path</span><span class="op">)</span></span>
-<span>        <span class="op">}</span></span>
-<span>        <span class="va">jobs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">done</span> <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
-<span>      <span class="op">}</span></span>
-<span>    <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">batch_type</span>, <span class="st">"gemini"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gemini_get_batch.html">gemini_get_batch</a></span><span class="op">(</span><span class="va">job</span><span class="op">$</span><span class="va">batch_id</span><span class="op">)</span></span>
-<span>      <span class="va">state</span> <span class="op">&lt;-</span> <span class="va">batch</span><span class="op">$</span><span class="va">state</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="st">"STATE_UNSPECIFIED"</span></span>
-<span>      <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"  [Gemini] "</span>, <span class="va">job</span><span class="op">$</span><span class="va">prefix</span>, <span class="st">" state: "</span>, <span class="va">state</span><span class="op">)</span></span>
-<span></span>
-<span>      <span class="kw">if</span> <span class="op">(</span><span class="fu">is_terminal_gemini</span><span class="op">(</span><span class="va">state</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>        <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">state</span>, <span class="st">"SUCCEEDED"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>          <span class="va">raw_res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/gemini_download_batch_results.html">gemini_download_batch_results</a></span><span class="op">(</span><span class="va">job</span><span class="op">$</span><span class="va">batch_id</span><span class="op">)</span></span>
-<span></span>
-<span>          <span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parse_gemini_batch_output.html">parse_gemini_batch_output</a></span><span class="op">(</span></span>
-<span>            raw_results <span class="op">=</span> <span class="va">raw_res</span>,</span>
-<span>            tag_prefix  <span class="op">=</span> <span class="st">"&lt;BETTER_SAMPLE&gt;"</span>,</span>
-<span>            tag_suffix  <span class="op">=</span> <span class="st">"&lt;/BETTER_SAMPLE&gt;"</span></span>
-<span>          <span class="op">)</span></span>
-<span></span>
-<span>          <span class="va">jobs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">results</span> <span class="op">&lt;-</span> <span class="va">res</span></span>
-<span>          <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/write_delim.html" class="external-link">write_csv</a></span><span class="op">(</span><span class="va">res</span>, <span class="va">job</span><span class="op">$</span><span class="va">csv_path</span><span class="op">)</span></span>
-<span>          <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"    -&gt; Results written to: "</span>, <span class="va">job</span><span class="op">$</span><span class="va">csv_path</span><span class="op">)</span></span>
-<span>        <span class="op">}</span></span>
-<span>        <span class="va">jobs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">done</span> <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
-<span>      <span class="op">}</span></span>
-<span>    <span class="op">}</span></span>
-<span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/Sys.sleep.html" class="external-link">Sys.sleep</a></span><span class="op">(</span><span class="va">per_job_delay</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span></span>
-<span>  <span class="va">unfinished</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/logical.html" class="external-link">logical</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"done"</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">unfinished</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0L</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Sleeping "</span>, <span class="va">interval_seconds</span>, <span class="st">" seconds before next poll..."</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/Sys.sleep.html" class="external-link">Sys.sleep</a></span><span class="op">(</span><span class="va">interval_seconds</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"All batches have reached a terminal state."</span><span class="op">)</span></span></code></pre></div>
-<p>At the end of this loop:</p>
-<ul>
-<li>All completed batches have their outputs downloaded.</li>
-<li>Each job has a parsed results CSV (<code>csv_path</code>).</li>
-<li>You can now perform consistency and positional-bias analyses, or fit
-BT/Elo models.</li>
-</ul>
+<span><span class="va">combined_path</span></span></code></pre></div>
+</div>
 </div>
 <div class="section level2">
 <h2 id="resuming-after-interruption">7. Resuming After Interruption<a class="anchor" aria-label="anchor" href="#resuming-after-interruption"></a>
 </h2>
-<p>If the polling loop is interrupted:</p>
-<ol style="list-style-type: decimal">
-<li>Restart R.</li>
-<li>Reload <code>batch_jobs_index.csv</code>.</li>
-<li>Rebuild <code>jobs</code> as above.</li>
-<li>Recompute <code>unfinished</code> and re-enter the polling
-loop.</li>
-</ol>
-<p>Because all of the essential metadata (provider, model, template,
-direction, batch IDs, file paths) is stored in the registry CSV, you can
-safely recover and continue.</p>
-<p>For example:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">jobs_index_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="st">"batch_jobs_index.csv"</span><span class="op">)</span></span>
-<span><span class="va">jobs_tbl</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">jobs_index_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<p>Resuming jobs is possible:</p>
+<ul>
+<li>Submission writes <code>jobs_registry.csv</code> under each run
+directory</li>
+<li>Polling can be restarted at any time by calling
+<code>llm_resume_multi_batches(jobs = NULL, output_dir = &lt;run_dir&gt;)</code>
+</li>
+<li>If you keep a <code>run_manifest.csv</code> with
+<code>run_dir</code> paths, resuming <em>all</em> runs is just a
+loop</li>
+</ul>
+<p>Example: resume only unfinished runs (based on each run’s
+registry):</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"run_manifest.csv"</span><span class="op">)</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Rebuild jobs list as before...</span></span>
-<span><span class="co"># Then:</span></span>
-<span><span class="va">unfinished</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">jobs</span>, <span class="va">`[[`</span>, <span class="fu"><a href="https://rdrr.io/r/base/logical.html" class="external-link">logical</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, <span class="st">"done"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">needs_poll</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">run_dir</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">reg_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">run_dir</span>, <span class="st">"jobs_registry.csv"</span><span class="op">)</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">reg_path</span><span class="op">)</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span></span>
+<span>  <span class="va">reg</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">reg_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/any.html" class="external-link">any</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/logical.html" class="external-link">as.logical</a></span><span class="op">(</span><span class="va">reg</span><span class="op">$</span><span class="va">done</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
 <span></span>
-<span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">unfinished</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0L</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Resuming polling for "</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">unfinished</span><span class="op">)</span>, <span class="st">" unfinished batch(es)."</span><span class="op">)</span></span>
-<span>  <span class="co"># ... re-enter the polling loop ...</span></span>
-<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"All jobs are already complete."</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<span><span class="va">unfinished_dirs</span> <span class="op">&lt;-</span> <span class="va">manifest</span><span class="op">$</span><span class="va">run_dir</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">manifest</span><span class="op">$</span><span class="va">run_dir</span>, <span class="va">needs_poll</span>, <span class="fu"><a href="https://rdrr.io/r/base/logical.html" class="external-link">logical</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">]</span></span>
+<span></span>
+<span><span class="va">polled</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/map.html" class="external-link">map</a></span><span class="op">(</span><span class="va">unfinished_dirs</span>, <span class="va">poll_one_run</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="advanced-simplified-multibatch-workflow">8. Advanced: Simplified Multi‑Batch Workflow<a class="anchor" aria-label="anchor" href="#advanced-simplified-multibatch-workflow"></a>
+<h2 id="next-steps">8. Next Steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
 </h2>
-<p>When running multiple combinations of providers, models, templates,
-and “thinking” settings, you no longer need to manually build loops to
-create and poll batches. The multi‑batch helpers can encapsulate this
-entire process.</p>
-<p>Below, <code>batch_grid</code> is a tibble containing one row per
-combination of provider/model/thinking/direction; <code>tmpl</code> is a
-prompt template; and <code>td</code> is a trait description. For each
-combination we submit a single batch job (or split further using
-<code>n_segments</code>) and record its metadata:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span></span>
-<span><span class="va">jobs</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/pmap.html" class="external-link">pmap</a></span><span class="op">(</span><span class="va">batch_grid</span>, <span class="kw">function</span><span class="op">(</span><span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">pairs_use</span> <span class="op">&lt;-</span> <span class="fu">get_pairs_for_direction</span><span class="op">(</span><span class="va">direction</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch</a></span><span class="op">(</span></span>
-<span>    pairs              <span class="op">=</span> <span class="va">pairs_use</span>,</span>
-<span>    backend            <span class="op">=</span> <span class="va">provider</span>,</span>
-<span>    model              <span class="op">=</span> <span class="va">model</span>,</span>
-<span>    trait_name         <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>    trait_description  <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>    prompt_template    <span class="op">=</span> <span class="va">tmpl</span>,</span>
-<span>    n_segments         <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>    output_dir         <span class="op">=</span> <span class="st">"output"</span>,</span>
-<span>    write_registry     <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    include_thoughts   <span class="op">=</span> <span class="op">(</span><span class="va">thinking</span> <span class="op">==</span> <span class="st">"with_thinking"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span><span class="op">$</span><span class="va">jobs</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
-<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
-<p>Once all jobs are submitted, poll all providers and download
-results:</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>results <span class="ot">&lt;-</span> <span class="fu">llm_resume_multi_batches</span>(</span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="at">jobs               =</span> jobs,</span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">interval_seconds   =</span> <span class="dv">60</span>,</span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">write_results_csv  =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">write_combined_csv =</span> <span class="cn">TRUE</span></span>
-<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>)</span>
-<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="er">}</span></span></code></pre></div>
-<p>This single call performs all polling, downloading, and parsing,
-writing per‑batch CSVs as well as a merged results CSV. If your session
-is interrupted, simply reload the registry CSV from the output directory
-(set the <code>output_dir</code> argument to the path of the folder
-containing the registry CSV) in the call to
-<code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code>.</p>
-</div>
-<div class="section level2">
-<h2 id="next-steps">9. Next Steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
-</h2>
-<p>Once you have per-job results CSVs (e.g., one per template × model ×
+<p>Once you have per-run results CSVs (e.g., one per template × model ×
 thinking × direction), you can:</p>
 <ul>
 <li>Compute <strong>reverse consistency</strong> with
@@ -765,13 +590,13 @@ thinking × direction), you can:</p>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="citation">10. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
+<h2 id="citation">9. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. (2025). <em>Advanced: Submitting and Polling Multiple
-Batches</em> (Version 1.0.0) [R package vignette]. In <em>pairwiseLLM:
-Pairwise Comparison Tools for Large Language Model-Based Writing
-Evaluation</em>. <a href="https://shmercer.github.io/pairwiseLLM/" class="uri">https://shmercer.github.io/pairwiseLLM/</a></p>
+<p>Mercer, S. (2025). <em>Advanced: Submitting and polling multiple
+batches</em> [R package vignette]. In <em>pairwiseLLM: Pairwise
+comparison tools for large language model-based writing evaluation</em>.
+<a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

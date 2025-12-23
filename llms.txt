@@ -42,7 +42,8 @@ see:
 
 ## Supported Models
 
-The following models are confirmed to work for pairwise comparisons:
+The following models are confirmed to work for pairwise comparisons.
+Other similar models may work, but have not been fully tested.
 
 | Provider                                             | Model                         | Reasoning Mode? |
 |------------------------------------------------------|-------------------------------|-----------------|
@@ -85,7 +86,7 @@ comparisons via
 
 ## Installation
 
-Once the package is available on CRAN, install with:
+`pairwiseLLM` is available on CRAN, install with:
 
 ``` r
 install.packages("pairwiseLLM")
@@ -108,7 +109,7 @@ library(pairwiseLLM)
 
 ## API Keys
 
-`pairwiseLLM` reads keys **only from environment variables**.  
+`pairwiseLLM` reads keys only from environment variables.  
 Keys are **never printed**, **never stored**, and **never written** to
 disk.
 
@@ -136,8 +137,7 @@ Sys.setenv(GEMINI_API_KEY = "your-key-here")
 Sys.setenv(TOGETHER_API_KEY = "your-key-here")
 ```
 
-…but for normal use and for reproducible analyses, it is **strongly
-recommended**  
+…but it is **strongly recommended**  
 to store them in your `~/.Renviron` file.
 
 ### Recommended method: Adding keys to `~/.Renviron`
@@ -341,7 +341,7 @@ if (nrow(res_list$failed_pairs) > 0) {
 
 ## Batch Comparisons
 
-Large-scale runs use:
+Most providers give a discount for batch jobs. For large-scale runs use:
 
 - [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)  
 - [`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md)
@@ -636,8 +636,8 @@ MIT License. See `LICENSE`.
 
 ## Citation
 
-> Mercer, S. H. (2025). pairwiseLLM: Pairwise writing quality
-> comparisons with large language models (Version 1.2.0) \[R package;
+> Mercer, S. H. (2025). *pairwiseLLM: Pairwise writing quality
+> comparisons with large language models* (Version 1.2.0) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>
 
 # Package index

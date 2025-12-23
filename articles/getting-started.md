@@ -64,7 +64,8 @@ key, just that the Ollama server is running.
 
 ## 3. Example Writing Data
 
-The package ships with 20 authentic student writing samples:
+The package ships with 20 simulated student writing samples with clear
+differences in quality:
 
 ``` r
 data("example_writing_samples", package = "pairwiseLLM")
@@ -165,7 +166,7 @@ cat(substr(tmpl, 1, 300))
 #> 1.  **Ad
 ```
 
-Placeholders required:
+Placeholders required in custom prompt templates:
 
 - `{TRAIT_NAME}`
 - `{TRAIT_DESCRIPTION}`
@@ -182,10 +183,10 @@ set_prompt_template(file = "my_template.txt")
 
 ## 6. Live Pairwise Comparisons
 
-he unified wrapper works for **OpenAI, Anthropic, Gemini, Together, and
+The unified wrapper works for **OpenAI, Anthropic, Gemini, Together, and
 Ollama.**
 
-It now supports **parallel processing** and **incremental output file
+It supports **parallel processing** and **incremental output file
 saving** (resume capability) for **all** supported backends. The
 function returns a list containing `$results` (successful comparisons)
 and `$failed_pairs` (errors).
@@ -227,8 +228,9 @@ available) and content (final answer)
 
 ## 7. Preparing Data for BT or Elo Modeling
 
-Convert the LLM output (specifically the `$results` tibble) to a
-3-column BT dataset:
+Convert the LLM output (specifically the `$results` tibble for
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+output) to a 3-column BT dataset:
 
 ``` r
 # res_list: output list from submit_llm_pairs()
@@ -264,7 +266,7 @@ The output includes:
 
 - latent θ ability scores  
 - SEs  
-- reliability (sirt engine)
+- reliability (when using `sirt` engine)
 
 ------------------------------------------------------------------------
 
@@ -491,16 +493,12 @@ check_llm_api_keys()
 #> 4 together  Together.ai   TOGETHER_API_KEY  FALSE
 ```
 
-#### Getting chain-of-thought leakage
-
-Use the default template or set `include_thoughts = FALSE`.
-
 #### Timeouts
 
 Use batch APIs for \>40 pairs. Split a large job into multiple segments
 using
 [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
-and then p all all of them with
+and then poll/download all of them with
 [`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
 
 #### Positional bias
@@ -516,7 +514,7 @@ for a full example).
 
 ## 13. Citation
 
-> Mercer, S. (2025). *Getting started with pairwiseLLM* (Version 1.0.0)
-> \[R package vignette\]. In *pairwiseLLM: Pairwise Comparison Tools for
-> Large Language Model-Based Writing Evaluation*.
-> <https://shmercer.github.io/pairwiseLLM/>
+> Mercer, S. (2025). *Getting started with pairwiseLLM* \[R package
+> vignette\]. In *pairwiseLLM: Pairwise comparison tools for large
+> language model-based writing evaluation*.
+> <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

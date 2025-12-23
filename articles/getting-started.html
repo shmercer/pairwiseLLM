@@ -151,7 +151,8 @@ require an API key, just that the Ollama server is running.</p>
 <div class="section level2">
 <h2 id="example-writing-data">3. Example Writing Data<a class="anchor" aria-label="anchor" href="#example-writing-data"></a>
 </h2>
-<p>The package ships with 20 authentic student writing samples:</p>
+<p>The package ships with 20 simulated student writing samples with
+clear differences in quality:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">example_writing_samples</span>, n <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
@@ -239,7 +240,7 @@ require an API key, just that the Ollama server is running.</p>
 <span><span class="co">#&gt; EVALUATION PROCESS (Mental Simulation):</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; 1.  **Ad</span></span></code></pre></div>
-<p>Placeholders required:</p>
+<p>Placeholders required in custom prompt templates:</p>
 <ul>
 <li><code>{TRAIT_NAME}</code></li>
 <li><code>{TRAIT_DESCRIPTION}</code></li>
@@ -255,9 +256,9 @@ require an API key, just that the Ollama server is running.</p>
 <div class="section level2">
 <h2 id="live-pairwise-comparisons">6. Live Pairwise Comparisons<a class="anchor" aria-label="anchor" href="#live-pairwise-comparisons"></a>
 </h2>
-<p>he unified wrapper works for <strong>OpenAI, Anthropic, Gemini,
+<p>The unified wrapper works for <strong>OpenAI, Anthropic, Gemini,
 Together, and Ollama.</strong></p>
-<p>It now supports <strong>parallel processing</strong> and
+<p>It supports <strong>parallel processing</strong> and
 <strong>incremental output file saving</strong> (resume capability) for
 <strong>all</strong> supported backends. The function returns a list
 containing <code>$results</code> (successful comparisons) and
@@ -295,8 +296,9 @@ containing <code>$results</code> (successful comparisons) and
 <div class="section level2">
 <h2 id="preparing-data-for-bt-or-elo-modeling">7. Preparing Data for BT or Elo Modeling<a class="anchor" aria-label="anchor" href="#preparing-data-for-bt-or-elo-modeling"></a>
 </h2>
-<p>Convert the LLM output (specifically the <code>$results</code>
-tibble) to a 3-column BT dataset:</p>
+<p>Convert the LLM output (specifically the <code>$results</code> tibble
+for <code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> output) to a 3-column BT
+dataset:</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res_list: output list from submit_llm_pairs()</span></span>
 <span><span class="co"># We extract the $results tibble for modeling</span></span>
@@ -323,7 +325,7 @@ tibble) to a 3-column BT dataset:</p>
 </li>
 <li>SEs<br>
 </li>
-<li>reliability (sirt engine)</li>
+<li>reliability (when using <code>sirt</code> engine)</li>
 </ul>
 <hr>
 </div>
@@ -566,17 +568,12 @@ available.</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> together  Together.ai   TOGETHER_API_KEY  FALSE</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="getting-chain-of-thought-leakage">Getting chain-of-thought leakage<a class="anchor" aria-label="anchor" href="#getting-chain-of-thought-leakage"></a>
-</h4>
-<p>Use the default template or set
-<code>include_thoughts = FALSE</code>.</p>
-</div>
-<div class="section level4">
 <h4 id="timeouts">Timeouts<a class="anchor" aria-label="anchor" href="#timeouts"></a>
 </h4>
 <p>Use batch APIs for &gt;40 pairs. Split a large job into multiple
-segments using <code><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code> and then p
-all all of them with <code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code></p>
+segments using <code><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code> and then
+poll/download all of them with
+<code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code></p>
 </div>
 <div class="section level4">
 <h4 id="positional-bias">Positional bias<a class="anchor" aria-label="anchor" href="#positional-bias"></a>
@@ -591,9 +588,9 @@ for a full example).</p>
 <h2 id="citation">13. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. (2025). <em>Getting started with pairwiseLLM</em> (Version
-1.0.0) [R package vignette]. In <em>pairwiseLLM: Pairwise Comparison
-Tools for Large Language Model-Based Writing Evaluation</em>. <a href="https://shmercer.github.io/pairwiseLLM/" class="uri">https://shmercer.github.io/pairwiseLLM/</a></p>
+<p>Mercer, S. (2025). <em>Getting started with pairwiseLLM</em> [R
+package vignette]. In <em>pairwiseLLM: Pairwise comparison tools for
+large language model-based writing evaluation</em>. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

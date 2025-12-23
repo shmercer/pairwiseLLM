@@ -2838,34 +2838,7 @@ thinking configuration.</caption>
 </div>
 </div>
 <div class="section level2">
-<h2 id="applying-this-workflow-to-new-templates">11. Applying this workflow to new templates<a class="anchor" aria-label="anchor" href="#applying-this-workflow-to-new-templates"></a>
-</h2>
-<p>To evaluate new prompt templates on your own data:</p>
-<ol style="list-style-type: decimal">
-<li>
-<p><strong>Add the templates</strong></p>
-<ul>
-<li>Create text files under <code>inst/templates/</code> (or wherever
-your registry expects them).</li>
-<li>Register them so that
-<code>get_prompt_template("my_new_template")</code> works.</li>
-</ul>
-</li>
-<li>
-<p><strong>Update the dev script</strong></p>
-<ul>
-<li>Modify <code>template_ids</code> in your dev script to include the
-new IDs.</li>
-<li>Re-run the dev script that submits batch jobs and polls for results
-(for example, a variant of
-<code>dev-anthropic-gemini-template-ab-test.R</code> and/or
-<code>dev-openai-template-ab-test.R</code>).</li>
-</ul>
-</li>
-</ol>
-</div>
-<div class="section level2">
-<h2 id="conclusion">12. Conclusion<a class="anchor" aria-label="anchor" href="#conclusion"></a>
+<h2 id="conclusion">11. Conclusion<a class="anchor" aria-label="anchor" href="#conclusion"></a>
 </h2>
 <p>This vignette demonstrates a reproducible workflow for detecting and
 quantifying positional bias in prompt templates.</p>
@@ -2883,15 +2856,15 @@ providers and models, and<br>
 </ul>
 <p>are strong candidates for production scoring pipelines in
 <code>pairwiseLLM</code>.</p>
+<hr>
 </div>
 <div class="section level2">
-<h2 id="citation">13. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
+<h2 id="citation">12. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. (2025). <em>Prompt Template Positional Bias Testing</em>
-(Version 1.0.0) [R package vignette]. In <em>pairwiseLLM: Pairwise
-Comparison Tools for Large Language Model-Based Writing Evaluation</em>.
-<a href="https://shmercer.github.io/pairwiseLLM/" class="uri">https://shmercer.github.io/pairwiseLLM/</a></p>
+<p>Mercer, S. (2025). <em>Prompt template positional bias testing</em>
+[R package vignette]. In <em>pairwiseLLM: Pairwise comparison tools for
+large language model-based writing evaluation</em>. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
