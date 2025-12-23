@@ -33,6 +33,7 @@
 
 - The prompt format for anthropic batch comparisons now match the
   anthropic live format.
+- Reverse consistency functions can now handle duplicate pairs.
 
 ### Breaking Changes
 
