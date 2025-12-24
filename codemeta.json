@@ -4,17 +4,23 @@
   "identifier": "pairwiseLLM",
   "description": "Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers ('OpenAI', 'Anthropic', 'Google Gemini', 'Together AI', and locally-hosted 'Ollama' models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry (1952) <doi:10.2307/2334029> or Elo rating methods to derive writing quality scores. For information on the method of pairwise comparisons, see Thurstone (1927) <doi:10.1037/h0070288> and Heldsinger & Humphry (2010) <doi:10.1007/BF03216919>. For information on Elo ratings, see Clark et al. (2018) <doi:10.1371/journal.pone.0190393>.",
   "name": "pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation",
-  "relatedLink": "https://shmercer.github.io/pairwiseLLM/",
+  "relatedLink": ["https://shmercer.github.io/pairwiseLLM/", "https://CRAN.R-project.org/package=pairwiseLLM"],
   "codeRepository": "https://github.com/shmercer/pairwiseLLM",
   "issueTracker": "https://github.com/shmercer/pairwiseLLM/issues",
   "license": "https://spdx.org/licenses/MIT",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "R",
     "url": "https://r-project.org"
   },
   "runtimePlatform": "R version 4.5.2 (2025-10-31 ucrt)",
+  "provider": {
+    "@id": "https://cran.r-project.org",
+    "@type": "Organization",
+    "name": "Comprehensive R Archive Network (CRAN)",
+    "url": "https://cran.r-project.org"
+  },
   "author": [
     {
       "@type": "Person",
@@ -57,6 +63,30 @@
         "url": "https://cran.r-project.org"
       },
       "sameAs": "https://CRAN.R-project.org/package=EloChoice"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "future",
+      "name": "future",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=future"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "future.apply",
+      "name": "future.apply",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=future.apply"
     },
     {
       "@type": "SoftwareApplication",
@@ -288,7 +318,7 @@
     },
     "SystemRequirements": null
   },
-  "fileSize": "967.858KB",
+  "fileSize": "1425.058KB",
   "citation": [
     {
       "@type": "SoftwareSourceCode",
@@ -301,8 +331,8 @@
         }
       ],
       "name": "pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation",
-      "url": "https://CRAN.R-project.org/package=pairwiseLLM",
-      "description": "R package version 1.1.0"
+      "url": "https://doi.org/10.32614/CRAN.package.pairwiseLLM",
+      "description": "R package version 1.2.0"
     }
   ],
   "releaseNotes": "https://github.com/shmercer/pairwiseLLM/blob/main/NEWS.md",
