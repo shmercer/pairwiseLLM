@@ -4,27 +4,28 @@
 \alias{build_bt_data}
 \title{Build Bradley-Terry comparison data from pairwise results}
 \usage{
-build_bt_data(results, judge_col = NULL)
+build_bt_data(results, judge = NULL)
 }
 \arguments{
 \item{results}{A data frame or tibble with columns \code{ID1},
 \code{ID2}, and \code{better_id}.}
 
-\item{judge_col}{Optional character column name in \code{results}
-identifying the judge/rater (for example, a model name). If
-provided, the output includes a \code{judge} column.}
+\item{judge}{Optional character scalar. The name of a column in
+\code{results} identifying the judge (e.g., \code{"model"} or
+\code{"backend"}). If supplied, the returned tibble includes a \code{judge}
+column and drops rows where \code{judge} is missing.}
 }
 \value{
-A tibble with columns:
+A tibble with:
 \itemize{
 \item \code{object1}: ID from \code{ID1}
 \item \code{object2}: ID from \code{ID2}
 \item \code{result}: numeric value, 1 if \code{better_id == ID1},
 0 if \code{better_id == ID2}
-\item \code{judge}: (optional) judge/rater identifier, only when
-\code{judge_col} is provided
+\item \code{judge}: (optional) judge identifier when \code{judge} is supplied
 }
-Rows with invalid or missing \code{better_id} are dropped.
+Rows with invalid or missing \code{better_id} are dropped. If \code{judge} is
+supplied, rows with missing \code{judge} are also dropped.
 }
 \description{
 This function converts pairwise comparison results into the
@@ -40,11 +41,9 @@ is the ID of the better sample. Rows where \code{better_id}
 does not match either \code{ID1} or \code{ID2} (including
 \code{NA}) are excluded.
 
-Optionally, a judge/rater column can be carried through for
-multi-judge modeling (e.g., different models/backends). When
-\code{judge_col} is provided, the output includes a fourth
-column \code{judge} (character), suitable for passing into
-\code{sirt::btm()}.
+Optionally, you can include a \dQuote{judge} identifier (e.g., model/backend)
+by supplying \code{judge}. When provided, the output includes a 4th column
+named \code{judge} (character). Rows with missing \code{judge} are excluded.
 }
 \examples{
 results <- tibble::tibble(
@@ -56,16 +55,10 @@ results <- tibble::tibble(
 bt_data <- build_bt_data(results)
 bt_data
 
-# Carry through judge/model labels
-results2 <- tibble::tibble(
-  ID1       = c("S1", "S1", "S2"),
-  ID2       = c("S2", "S3", "S3"),
-  better_id = c("S1", "S3", "S2"),
-  model     = c("gpt-4o", "gpt-4o", "o1")
-)
-
-bt_data2 <- build_bt_data(results2, judge_col = "model")
-bt_data2
+# Include judge/model information
+results_j <- dplyr::mutate(results, model = c("mA", "mB", "mA"))
+bt_j <- build_bt_data(results_j, judge = "model")
+bt_j
 
 # Using the example writing pairs
 data("example_writing_pairs")

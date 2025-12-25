@@ -29,28 +29,27 @@
 #' does not match either \code{ID1} or \code{ID2} (including
 #' \code{NA}) are excluded.
 #'
-#' Optionally, a judge/rater column can be carried through for
-#' multi-judge modeling (e.g., different models/backends). When
-#' \code{judge_col} is provided, the output includes a fourth
-#' column \code{judge} (character), suitable for passing into
-#' \code{sirt::btm()}.
+#' Optionally, you can include a \dQuote{judge} identifier (e.g., model/backend)
+#' by supplying \code{judge}. When provided, the output includes a 4th column
+#' named \code{judge} (character). Rows with missing \code{judge} are excluded.
 #'
 #' @param results A data frame or tibble with columns \code{ID1},
 #'   \code{ID2}, and \code{better_id}.
-#' @param judge_col Optional character column name in \code{results}
-#'   identifying the judge/rater (for example, a model name). If
-#'   provided, the output includes a \code{judge} column.
+#' @param judge Optional character scalar. The name of a column in
+#'   \code{results} identifying the judge (e.g., \code{"model"} or
+#'   \code{"backend"}). If supplied, the returned tibble includes a \code{judge}
+#'   column and drops rows where \code{judge} is missing.
 #'
-#' @return A tibble with columns:
-#'   \itemize{
-#'     \item \code{object1}: ID from \code{ID1}
-#'     \item \code{object2}: ID from \code{ID2}
-#'     \item \code{result}: numeric value, 1 if \code{better_id == ID1},
-#'       0 if \code{better_id == ID2}
-#'     \item \code{judge}: (optional) judge/rater identifier, only when
-#'       \code{judge_col} is provided
-#'   }
-#'   Rows with invalid or missing \code{better_id} are dropped.
+#' @return A tibble with:
+#' \itemize{
+#'   \item \code{object1}: ID from \code{ID1}
+#'   \item \code{object2}: ID from \code{ID2}
+#'   \item \code{result}: numeric value, 1 if \code{better_id == ID1},
+#'     0 if \code{better_id == ID2}
+#'   \item \code{judge}: (optional) judge identifier when \code{judge} is supplied
+#' }
+#' Rows with invalid or missing \code{better_id} are dropped. If \code{judge} is
+#' supplied, rows with missing \code{judge} are also dropped.
 #'
 #' @examples
 #' results <- tibble::tibble(
@@ -62,16 +61,10 @@
 #' bt_data <- build_bt_data(results)
 #' bt_data
 #'
-#' # Carry through judge/model labels
-#' results2 <- tibble::tibble(
-#'   ID1       = c("S1", "S1", "S2"),
-#'   ID2       = c("S2", "S3", "S3"),
-#'   better_id = c("S1", "S3", "S2"),
-#'   model     = c("gpt-4o", "gpt-4o", "o1")
-#' )
-#'
-#' bt_data2 <- build_bt_data(results2, judge_col = "model")
-#' bt_data2
+#' # Include judge/model information
+#' results_j <- dplyr::mutate(results, model = c("mA", "mB", "mA"))
+#' bt_j <- build_bt_data(results_j, judge = "model")
+#' bt_j
 #'
 #' # Using the example writing pairs
 #' data("example_writing_pairs")
@@ -79,7 +72,7 @@
 #' head(bt_ex)
 #'
 #' @export
-build_bt_data <- function(results, judge_col = NULL) {
+build_bt_data <- function(results, judge = NULL) {
   results <- tibble::as_tibble(results)
 
   required_cols <- c("ID1", "ID2", "better_id")
@@ -91,12 +84,12 @@ build_bt_data <- function(results, judge_col = NULL) {
     )
   }
 
-  if (!is.null(judge_col)) {
-    if (!is.character(judge_col) || length(judge_col) != 1L) {
-      stop("`judge_col` must be a single character column name.", call. = FALSE)
+  if (!is.null(judge)) {
+    if (!is.character(judge) || length(judge) != 1L || is.na(judge) || nchar(judge) == 0L) {
+      stop("`judge` must be a non-empty character scalar.", call. = FALSE)
     }
-    if (!judge_col %in% names(results)) {
-      stop("`judge_col` must name a column in `results`.", call. = FALSE)
+    if (!(judge %in% names(results))) {
+      stop("`judge` column not found in `results`: ", judge, call. = FALSE)
     }
   }
 
@@ -108,11 +101,8 @@ build_bt_data <- function(results, judge_col = NULL) {
     better_id = as.character(.data$better_id)
   )
 
-  if (!is.null(judge_col)) {
-    results <- dplyr::mutate(
-      results,
-      judge = as.character(.data[[judge_col]])
-    )
+  if (!is.null(judge)) {
+    results[[judge]] <- as.character(results[[judge]])
   }
 
   out <- dplyr::mutate(
@@ -124,28 +114,29 @@ build_bt_data <- function(results, judge_col = NULL) {
     )
   )
 
-  # Drop rows where better_id doesn't match either member of the dyad
   out <- dplyr::filter(out, !is.na(.data$result))
 
-  if (is.null(judge_col)) {
+  if (!is.null(judge)) {
+    out <- dplyr::filter(out, !is.na(.data[[judge]]))
     out <- dplyr::transmute(
       out,
       object1 = .data$ID1,
       object2 = .data$ID2,
-      result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
+      result  = as.numeric(.data$result), # sirt::btm is happiest with numeric 0/1
+      judge   = .data[[judge]]
     )
   } else {
     out <- dplyr::transmute(
       out,
       object1 = .data$ID1,
       object2 = .data$ID2,
-      result  = as.numeric(.data$result),
-      judge   = .data$judge
+      result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
     )
   }
 
   tibble::as_tibble(out)
 }
+
 
 #' Fit a Bradley–Terry model with sirt and fallback to BradleyTerry2
 #'

@@ -89,66 +89,66 @@ test_that("build_bt_data works when inputs are factors and returns character col
   expect_type(bt$object2, "character")
 })
 
-test_that("build_bt_data includes a judge column when judge_col is provided", {
+test_that("build_bt_data ignores a judge column unless requested", {
   results <- tibble::tibble(
-    ID1       = c("S1", "S1", "S2"),
-    ID2       = c("S2", "S3", "S3"),
-    better_id = c("S1", "S3", "S2"),
-    model     = factor(c("gpt-4o", "gpt-4o", "o1"))
+    ID1       = c("S1", "S2"),
+    ID2       = c("S2", "S3"),
+    better_id = c("S1", "S3"),
+    judge     = c("mA", "mB")
   )
 
-  bt <- build_bt_data(results, judge_col = "model")
+  bt <- build_bt_data(results, judge = NULL)
 
-  expect_identical(names(bt), c("object1", "object2", "result", "judge"))
-  expect_type(bt$judge, "character")
-  expect_equal(bt$judge, c("gpt-4o", "gpt-4o", "o1"))
+  expect_identical(names(bt), c("object1", "object2", "result"))
+  expect_false("judge" %in% names(bt))
 })
 
-test_that("build_bt_data errors if judge_col is specified but missing", {
+test_that("build_bt_data can include a judge column when requested", {
   results <- tibble::tibble(
-    ID1       = c("S1", "S1"),
+    ID1       = c("S1", "S1", "S2", "S3"),
+    ID2       = c("S2", "S3", "S3", "S4"),
+    better_id = c("S1", "S3", "S2", "NOT_AN_ID"),
+    model     = factor(c("mA", "mB", NA, "mA"))
+  )
+
+  bt <- build_bt_data(results, judge = "model")
+
+  # Row 4 dropped (invalid better_id), row 3 dropped (missing judge)
+  expect_identical(names(bt), c("object1", "object2", "result", "judge"))
+  expect_equal(nrow(bt), 2L)
+
+  expect_equal(bt$object1, c("S1", "S1"))
+  expect_equal(bt$object2, c("S2", "S3"))
+  expect_equal(bt$result, c(1, 0))
+
+  expect_type(bt$judge, "character")
+  expect_equal(bt$judge, c("mA", "mB"))
+})
+
+test_that("build_bt_data errors when judge column is missing", {
+  results <- tibble::tibble(
+    ID1       = c("S1", "S2"),
     ID2       = c("S2", "S3"),
     better_id = c("S1", "S3")
   )
 
   expect_error(
-    build_bt_data(results, judge_col = "model"),
-    "`judge_col` must name a column in `results`\\."
+    build_bt_data(results, judge = "model"),
+    "judge.*not found"
   )
 })
 
-test_that("build_bt_data errors if judge_col is not a single character name", {
+test_that("build_bt_data errors when judge argument is invalid", {
   results <- tibble::tibble(
-    ID1       = c("S1", "S1"),
+    ID1       = c("S1", "S2"),
     ID2       = c("S2", "S3"),
     better_id = c("S1", "S3"),
-    model     = c("a", "b")
+    model     = c("mA", "mB")
   )
 
-  expect_error(
-    build_bt_data(results, judge_col = 123),
-    "`judge_col` must be a single character column name\\."
-  )
-
-  expect_error(
-    build_bt_data(results, judge_col = c("model", "other")),
-    "`judge_col` must be a single character column name\\."
-  )
-})
-
-test_that("build_bt_data with judge_col still filters invalid better_id rows", {
-  results <- tibble::tibble(
-    ID1       = c("S1", "S1", "S2"),
-    ID2       = c("S2", "S3", "S3"),
-    better_id = c("S1", "NO_MATCH", "S2"),
-    model     = c("gpt-4o", "gpt-4o", "o1")
-  )
-
-  bt <- build_bt_data(results, judge_col = "model")
-
-  # Middle row is invalid (better_id doesn't match ID1 or ID2), so it should drop
-  expect_equal(nrow(bt), 2L)
-  expect_equal(bt$judge, c("gpt-4o", "o1"))
+  expect_error(build_bt_data(results, judge = ""), "must be a non-empty character")
+  expect_error(build_bt_data(results, judge = NA_character_), "must be a non-empty character")
+  expect_error(build_bt_data(results, judge = c("a", "b")), "must be a non-empty character")
 })
 
 # -------------------------------------------------------------------------
