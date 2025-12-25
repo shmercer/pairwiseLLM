@@ -4,19 +4,25 @@
 \alias{build_bt_data}
 \title{Build Bradley-Terry comparison data from pairwise results}
 \usage{
-build_bt_data(results)
+build_bt_data(results, judge_col = NULL)
 }
 \arguments{
 \item{results}{A data frame or tibble with columns \code{ID1},
 \code{ID2}, and \code{better_id}.}
+
+\item{judge_col}{Optional character column name in \code{results}
+identifying the judge/rater (for example, a model name). If
+provided, the output includes a \code{judge} column.}
 }
 \value{
-A tibble with three columns:
+A tibble with columns:
 \itemize{
 \item \code{object1}: ID from \code{ID1}
 \item \code{object2}: ID from \code{ID2}
 \item \code{result}: numeric value, 1 if \code{better_id == ID1},
 0 if \code{better_id == ID2}
+\item \code{judge}: (optional) judge/rater identifier, only when
+\code{judge_col} is provided
 }
 Rows with invalid or missing \code{better_id} are dropped.
 }
@@ -33,6 +39,12 @@ It assumes that the input contains columns \code{ID1},
 is the ID of the better sample. Rows where \code{better_id}
 does not match either \code{ID1} or \code{ID2} (including
 \code{NA}) are excluded.
+
+Optionally, a judge/rater column can be carried through for
+multi-judge modeling (e.g., different models/backends). When
+\code{judge_col} is provided, the output includes a fourth
+column \code{judge} (character), suitable for passing into
+\code{sirt::btm()}.
 }
 \examples{
 results <- tibble::tibble(
@@ -43,6 +55,17 @@ results <- tibble::tibble(
 
 bt_data <- build_bt_data(results)
 bt_data
+
+# Carry through judge/model labels
+results2 <- tibble::tibble(
+  ID1       = c("S1", "S1", "S2"),
+  ID2       = c("S2", "S3", "S3"),
+  better_id = c("S1", "S3", "S2"),
+  model     = c("gpt-4o", "gpt-4o", "o1")
+)
+
+bt_data2 <- build_bt_data(results2, judge_col = "model")
+bt_data2
 
 # Using the example writing pairs
 data("example_writing_pairs")

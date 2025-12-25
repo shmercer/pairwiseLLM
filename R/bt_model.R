@@ -29,15 +29,26 @@
 #' does not match either \code{ID1} or \code{ID2} (including
 #' \code{NA}) are excluded.
 #'
+#' Optionally, a judge/rater column can be carried through for
+#' multi-judge modeling (e.g., different models/backends). When
+#' \code{judge_col} is provided, the output includes a fourth
+#' column \code{judge} (character), suitable for passing into
+#' \code{sirt::btm()}.
+#'
 #' @param results A data frame or tibble with columns \code{ID1},
 #'   \code{ID2}, and \code{better_id}.
+#' @param judge_col Optional character column name in \code{results}
+#'   identifying the judge/rater (for example, a model name). If
+#'   provided, the output includes a \code{judge} column.
 #'
-#' @return A tibble with three columns:
+#' @return A tibble with columns:
 #'   \itemize{
 #'     \item \code{object1}: ID from \code{ID1}
 #'     \item \code{object2}: ID from \code{ID2}
 #'     \item \code{result}: numeric value, 1 if \code{better_id == ID1},
 #'       0 if \code{better_id == ID2}
+#'     \item \code{judge}: (optional) judge/rater identifier, only when
+#'       \code{judge_col} is provided
 #'   }
 #'   Rows with invalid or missing \code{better_id} are dropped.
 #'
@@ -51,13 +62,24 @@
 #' bt_data <- build_bt_data(results)
 #' bt_data
 #'
+#' # Carry through judge/model labels
+#' results2 <- tibble::tibble(
+#'   ID1       = c("S1", "S1", "S2"),
+#'   ID2       = c("S2", "S3", "S3"),
+#'   better_id = c("S1", "S3", "S2"),
+#'   model     = c("gpt-4o", "gpt-4o", "o1")
+#' )
+#'
+#' bt_data2 <- build_bt_data(results2, judge_col = "model")
+#' bt_data2
+#'
 #' # Using the example writing pairs
 #' data("example_writing_pairs")
 #' bt_ex <- build_bt_data(example_writing_pairs)
 #' head(bt_ex)
 #'
 #' @export
-build_bt_data <- function(results) {
+build_bt_data <- function(results, judge_col = NULL) {
   results <- tibble::as_tibble(results)
 
   required_cols <- c("ID1", "ID2", "better_id")
@@ -69,6 +91,15 @@ build_bt_data <- function(results) {
     )
   }
 
+  if (!is.null(judge_col)) {
+    if (!is.character(judge_col) || length(judge_col) != 1L) {
+      stop("`judge_col` must be a single character column name.", call. = FALSE)
+    }
+    if (!judge_col %in% names(results)) {
+      stop("`judge_col` must name a column in `results`.", call. = FALSE)
+    }
+  }
+
   # Ensure character IDs (avoid factors / labelled types)
   results <- dplyr::mutate(
     results,
@@ -76,6 +107,13 @@ build_bt_data <- function(results) {
     ID2 = as.character(.data$ID2),
     better_id = as.character(.data$better_id)
   )
+
+  if (!is.null(judge_col)) {
+    results <- dplyr::mutate(
+      results,
+      judge = as.character(.data[[judge_col]])
+    )
+  }
 
   out <- dplyr::mutate(
     results,
@@ -86,14 +124,25 @@ build_bt_data <- function(results) {
     )
   )
 
+  # Drop rows where better_id doesn't match either member of the dyad
   out <- dplyr::filter(out, !is.na(.data$result))
 
-  out <- dplyr::transmute(
-    out,
-    object1 = .data$ID1,
-    object2 = .data$ID2,
-    result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
-  )
+  if (is.null(judge_col)) {
+    out <- dplyr::transmute(
+      out,
+      object1 = .data$ID1,
+      object2 = .data$ID2,
+      result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
+    )
+  } else {
+    out <- dplyr::transmute(
+      out,
+      object1 = .data$ID1,
+      object2 = .data$ID2,
+      result  = as.numeric(.data$result),
+      judge   = .data$judge
+    )
+  }
 
   tibble::as_tibble(out)
 }

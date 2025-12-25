@@ -89,6 +89,68 @@ test_that("build_bt_data works when inputs are factors and returns character col
   expect_type(bt$object2, "character")
 })
 
+test_that("build_bt_data includes a judge column when judge_col is provided", {
+  results <- tibble::tibble(
+    ID1       = c("S1", "S1", "S2"),
+    ID2       = c("S2", "S3", "S3"),
+    better_id = c("S1", "S3", "S2"),
+    model     = factor(c("gpt-4o", "gpt-4o", "o1"))
+  )
+
+  bt <- build_bt_data(results, judge_col = "model")
+
+  expect_identical(names(bt), c("object1", "object2", "result", "judge"))
+  expect_type(bt$judge, "character")
+  expect_equal(bt$judge, c("gpt-4o", "gpt-4o", "o1"))
+})
+
+test_that("build_bt_data errors if judge_col is specified but missing", {
+  results <- tibble::tibble(
+    ID1       = c("S1", "S1"),
+    ID2       = c("S2", "S3"),
+    better_id = c("S1", "S3")
+  )
+
+  expect_error(
+    build_bt_data(results, judge_col = "model"),
+    "`judge_col` must name a column in `results`\\."
+  )
+})
+
+test_that("build_bt_data errors if judge_col is not a single character name", {
+  results <- tibble::tibble(
+    ID1       = c("S1", "S1"),
+    ID2       = c("S2", "S3"),
+    better_id = c("S1", "S3"),
+    model     = c("a", "b")
+  )
+
+  expect_error(
+    build_bt_data(results, judge_col = 123),
+    "`judge_col` must be a single character column name\\."
+  )
+
+  expect_error(
+    build_bt_data(results, judge_col = c("model", "other")),
+    "`judge_col` must be a single character column name\\."
+  )
+})
+
+test_that("build_bt_data with judge_col still filters invalid better_id rows", {
+  results <- tibble::tibble(
+    ID1       = c("S1", "S1", "S2"),
+    ID2       = c("S2", "S3", "S3"),
+    better_id = c("S1", "NO_MATCH", "S2"),
+    model     = c("gpt-4o", "gpt-4o", "o1")
+  )
+
+  bt <- build_bt_data(results, judge_col = "model")
+
+  # Middle row is invalid (better_id doesn't match ID1 or ID2), so it should drop
+  expect_equal(nrow(bt), 2L)
+  expect_equal(bt$judge, c("gpt-4o", "o1"))
+})
+
 # -------------------------------------------------------------------------
 # fit_bt_model tests
 # -------------------------------------------------------------------------
