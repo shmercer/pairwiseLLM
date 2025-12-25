@@ -157,17 +157,141 @@ test_that("build_bt_data with judge_col still filters invalid better_id rows", {
 
 test_that("fit_bt_model validates input columns", {
   bad_data <- tibble::tibble(object1 = "A", object2 = "B") # 2 columns
-
   expect_error(
     fit_bt_model(bad_data),
-    "must have exactly three columns"
+    "must have exactly three columns, or four columns including `judge`"
   )
 
-  bad_data2 <- tibble::tibble(A = 1, B = 2, C = 3, D = 4) # 4 columns
+  bad_data2 <- tibble::tibble(A = 1, B = 2, C = 3, D = 4, E = 5) # 5 columns
   expect_error(
     fit_bt_model(bad_data2),
-    "must have exactly three columns"
+    "must have exactly three columns, or four columns including `judge`"
   )
+})
+
+test_that("fit_bt_model (sirt) accepts 4-column bt_data with judge and returns diagnostics", {
+  skip_if_not_installed("sirt")
+
+  ns <- asNamespace("pairwiseLLM")
+
+  bt <- tibble::tibble(
+    object1 = c("A", "A"),
+    object2 = c("B", "C"),
+    result  = c(1, 0),
+    judge   = c("m1", "m1")
+  )
+
+  # --- robust, non-leaking override of .sirt_btm ---
+  was_locked <- bindingIsLocked(".sirt_btm", ns)
+  if (was_locked) unlockBinding(".sirt_btm", ns)
+
+  orig_btm <- get(".sirt_btm", envir = ns, inherits = FALSE)
+  on.exit(
+    {
+      assign(".sirt_btm", orig_btm, envir = ns)
+      if (was_locked) lockBinding(".sirt_btm", ns)
+    },
+    add = TRUE
+  )
+
+  captured_judge <- NULL
+
+  assign(".sirt_btm", function(dat, ..., judge = NULL) {
+    captured_judge <<- judge
+    list(
+      effects = data.frame(
+        individual = c("A", "B", "C"),
+        theta      = c(0.1, -0.1, 0.0),
+        se.theta   = c(0.2, 0.2, 0.2),
+        infit      = c(1.0, 1.1, 0.9),
+        outfit     = c(1.0, 0.95, 1.05)
+      ),
+      mle.rel = 0.91,
+      sepG = 3.2,
+      fit_judges = data.frame(judge = "m1", infit = 1.0, outfit = 1.0),
+      probs = matrix(0.5, nrow = 1)
+    )
+  }, envir = ns)
+
+  fit <- fit_bt_model(
+    bt,
+    engine = "sirt",
+    verbose = FALSE,
+    return_diagnostics = TRUE,
+    include_residuals = FALSE
+  )
+
+  expect_equal(captured_judge, c("m1", "m1"))
+
+  expect_equal(fit$engine, "sirt")
+  expect_true(is.list(fit$diagnostics))
+  expect_equal(fit$diagnostics$sepG, 3.2)
+
+  expect_s3_class(fit$diagnostics$item_fit, "tbl_df")
+  expect_true(all(c("ID", "infit", "outfit") %in% names(fit$diagnostics$item_fit)))
+
+  expect_s3_class(fit$diagnostics$judge_fit, "tbl_df")
+  expect_true(is.null(fit$diagnostics$residuals))
+})
+
+test_that("fit_bt_model (sirt) respects explicit judge argument and includes residuals when requested", {
+  skip_if_not_installed("sirt")
+
+  ns <- asNamespace("pairwiseLLM")
+
+  bt <- tibble::tibble(
+    object1 = c("A", "A"),
+    object2 = c("B", "C"),
+    result  = c(1, 0),
+    judge   = c("m1", "m1")
+  )
+
+  # --- robust, non-leaking override of .sirt_btm ---
+  was_locked <- bindingIsLocked(".sirt_btm", ns)
+  if (was_locked) unlockBinding(".sirt_btm", ns)
+
+  orig_btm <- get(".sirt_btm", envir = ns, inherits = FALSE)
+  on.exit(
+    {
+      assign(".sirt_btm", orig_btm, envir = ns)
+      if (was_locked) lockBinding(".sirt_btm", ns)
+    },
+    add = TRUE
+  )
+
+  captured_judge <- NULL
+
+  assign(".sirt_btm", function(dat, ..., judge = NULL) {
+    captured_judge <<- judge
+    list(
+      effects = data.frame(
+        individual = c("A", "B", "C"),
+        theta      = c(0.1, -0.1, 0.0),
+        se.theta   = c(0.2, 0.2, 0.2)
+        # no infit/outfit -> item_fit should be NULL
+      ),
+      mle.rel = 0.91,
+      sepG = 3.2,
+      residuals = data.frame(obs = 1, resid = 0.0)
+      # no fit_judges -> judge_fit should be NULL
+    )
+  }, envir = ns)
+
+  fit <- fit_bt_model(
+    bt,
+    engine = "sirt",
+    verbose = FALSE,
+    return_diagnostics = TRUE,
+    include_residuals = TRUE,
+    judge = "override"
+  )
+
+  expect_identical(captured_judge, "override")
+
+  expect_equal(fit$engine, "sirt")
+  expect_true(is.null(fit$diagnostics$item_fit))
+  expect_true(is.null(fit$diagnostics$judge_fit))
+  expect_s3_class(fit$diagnostics$residuals, "tbl_df")
 })
 
 test_that("fit_bt_model fits a BT model using sirt when requested (quiet)", {
@@ -282,6 +406,18 @@ test_that("fit_bt_model(auto) falls back to BradleyTerry2 when sirt btm errors",
 
   fit <- fit_bt_model(bt, engine = "auto", verbose = FALSE)
   expect_equal(fit$engine, "BradleyTerry2")
+})
+
+test_that("fit_bt_model ignores judge column for BradleyTerry2", {
+  skip_if_not_installed("BradleyTerry2")
+
+  data("example_writing_pairs", package = "pairwiseLLM")
+  bt <- build_bt_data(example_writing_pairs)
+  bt$judge <- "m1"
+
+  fit <- fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE)
+  expect_equal(fit$engine, "BradleyTerry2")
+  expect_true(all(c("ID", "theta", "se") %in% names(fit$theta)))
 })
 
 # -------------------------------------------------------------------------

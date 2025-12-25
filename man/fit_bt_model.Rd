@@ -8,13 +8,15 @@ fit_bt_model(
   bt_data,
   engine = c("auto", "sirt", "BradleyTerry2"),
   verbose = TRUE,
+  return_diagnostics = FALSE,
+  include_residuals = FALSE,
   ...
 )
 }
 \arguments{
-\item{bt_data}{A data frame or tibble with exactly three columns:
-two character ID columns and one numeric \code{result} column
-equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.}
+\item{bt_data}{A data frame or tibble with either three columns
+(\code{object1}, \code{object2}, \code{result}) or four columns including
+\code{judge}. Usually produced by \code{\link{build_bt_data}}.}
 
 \item{engine}{Character string specifying the modeling engine. One of:
 \code{"auto"} (default), \code{"sirt"}, or \code{"BradleyTerry2"}.}
@@ -22,6 +24,12 @@ equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.}
 \item{verbose}{Logical. If \code{TRUE} (default), show engine output (iterations,
 warnings). If \code{FALSE}, suppress noisy output to keep
 examples and reports clean.}
+
+\item{return_diagnostics}{Logical. If \code{TRUE}, return a \code{diagnostics}
+list when using the \pkg{sirt} engine. Defaults to \code{FALSE}.}
+
+\item{include_residuals}{Logical. If \code{TRUE} and \code{return_diagnostics = TRUE},
+include residuals (if available) in the diagnostics. Defaults to \code{FALSE}.}
 
 \item{...}{Additional arguments passed through to \code{sirt::btm()}
 or \code{BradleyTerry2::BTm()}.}
@@ -43,6 +51,12 @@ A tibble with columns:
 MLE reliability (sirt engine only). \code{NA} for
 \pkg{BradleyTerry2} models.
 }
+\item{diagnostics}{
+\code{NULL} unless \code{return_diagnostics = TRUE} and
+the \pkg{sirt} engine is used. When returned, includes selected
+fields from \code{sirt::btm()} output (e.g., separation index,
+optional item/judge fit, probabilities, and optional residuals).
+}
 }
 }
 \description{
@@ -63,23 +77,38 @@ When \code{engine = "auto"} (the default), the function attempts
 only if necessary. In all cases, the output format is standardized, so
 downstream code can rely on consistent fields.
 
-The input \code{bt_data} must contain exactly three columns:
+The input \code{bt_data} must contain either:
 \enumerate{
-\item object1: character ID for the first item in the pair
-\item object2: character ID for the second item
-\item result: numeric indicator (1 = object1 wins, 0 = object2 wins)
+\item three columns: \code{object1}, \code{object2}, \code{result}, or
+\item four columns: \code{object1}, \code{object2}, \code{result}, \code{judge}
 }
+
+Where \code{object1} and \code{object2} are item IDs and \code{result} is a
+numeric indicator (1 = \code{object1} wins, 0 = \code{object2} wins).
+If a \code{judge} column is included, it is used by the \pkg{sirt} engine
+(and ignored by \pkg{BradleyTerry2}).
 
 Ability estimates (\code{theta}) represent latent "writing quality"
 parameters on a log-odds scale. Standard errors are included for both
 modeling engines. MLE reliability is only available from \pkg{sirt}.
 }
 \examples{
-# Example using built-in comparison data
 data("example_writing_pairs")
 bt <- build_bt_data(example_writing_pairs)
 
-fit1 <- fit_bt_model(bt, engine = "sirt")
-fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+if (requireNamespace("sirt", quietly = TRUE)) {
+  fit1 <- fit_bt_model(bt, engine = "sirt", verbose = FALSE)
+}
+
+if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
+  fit2 <- fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE)
+}
+
+# Judge column example (sirt only)
+bt_j <- bt
+bt_j$judge <- "judge_1"
+if (requireNamespace("sirt", quietly = TRUE)) {
+  fit3 <- fit_bt_model(bt_j, engine = "sirt", verbose = FALSE, return_diagnostics = TRUE)
+}
 
 }
