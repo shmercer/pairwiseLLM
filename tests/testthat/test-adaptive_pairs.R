@@ -184,3 +184,48 @@ test_that("select_adaptive_pairs can return empty when no candidates remain", {
 
   expect_equal(nrow(out), 0L)
 })
+
+test_that("select_adaptive_pairs seed handling works when .Random.seed does not exist", {
+  # Save and remove any existing .Random.seed to force had_seed == FALSE
+  had_seed_before <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  if (had_seed_before) {
+    old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    rm(".Random.seed", envir = .GlobalEnv)
+    on.exit(assign(".Random.seed", old_seed, envir = .GlobalEnv), add = TRUE)
+  } else {
+    on.exit(
+      {
+        if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
+        }
+      },
+      add = TRUE
+    )
+  }
+
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+  theta <- tibble::tibble(ID = c("A", "B"), theta = c(0, 0.1), se = c(0.5, 0.5))
+
+  out <- select_adaptive_pairs(samples, theta, n_pairs = 1, seed = 1)
+  expect_equal(nrow(out), 1L)
+
+  # Since there was no seed before, function should clean it up afterward
+  expect_false(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
+})
+
+test_that("select_adaptive_pairs restores .Random.seed when it exists", {
+  # Ensure .Random.seed exists
+  stats::runif(1)
+
+  old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  on.exit(assign(".Random.seed", old_seed, envir = .GlobalEnv), add = TRUE)
+
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+  theta <- tibble::tibble(ID = c("A", "B", "C"), theta = c(0, 0.1, 0.2), se = c(1, 1, 1))
+
+  out <- select_adaptive_pairs(samples, theta, n_pairs = 1, seed = 1)
+  expect_equal(nrow(out), 1L)
+
+  # RNG state should be restored exactly
+  expect_identical(get(".Random.seed", envir = .GlobalEnv, inherits = FALSE), old_seed)
+})
