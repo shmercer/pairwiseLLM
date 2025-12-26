@@ -330,7 +330,7 @@ check_positional_bias <- function(consistency,
   required <- c(
     "key",
     "ID1_main", "ID2_main", "better_id_main",
-    "ID1_rev",  "ID2_rev",  "better_id_rev",
+    "ID1_rev", "ID2_rev", "better_id_rev",
     "is_consistent"
   )
   missing <- setdiff(required, names(details))
@@ -381,11 +381,8 @@ check_positional_bias <- function(consistency,
   boot_upr <- stats::quantile(boot_props, probs = 1 - alpha / 2)
   boot_mean <- mean(boot_props)
 
-  # Positional bias: how often does SAMPLE_1 (position 1) win?
-  # -- forward (main) direction --
-  wins_sample1_main <- sum(details$better_id_main == details$ID1_main,
-    na.rm = TRUE
-  )
+  # Positional bias: how often does position 1 win?
+  wins_sample1_main <- sum(details$better_id_main == details$ID1_main, na.rm = TRUE)
   n_valid_main <- sum(
     !is.na(details$better_id_main) &
       (details$better_id_main == details$ID1_main |
@@ -398,10 +395,7 @@ check_positional_bias <- function(consistency,
     NA_real_
   }
 
-  # -- reverse direction --
-  wins_sample1_rev <- sum(details$better_id_rev == details$ID1_rev,
-    na.rm = TRUE
-  )
+  wins_sample1_rev <- sum(details$better_id_rev == details$ID1_rev, na.rm = TRUE)
   n_valid_rev <- sum(
     !is.na(details$better_id_rev) &
       (details$better_id_rev == details$ID1_rev |
@@ -414,12 +408,23 @@ check_positional_bias <- function(consistency,
     NA_real_
   }
 
-  # ---- overall position-1 bias test (forward + reverse combined) ----
   total_pos1_wins <- wins_sample1_main + wins_sample1_rev
   total_comparisons <- n_valid_main + n_valid_rev
 
   p_sample1_overall <- if (total_comparisons > 0L) {
     stats::binom.test(total_pos1_wins, total_comparisons, p = 0.5)$p.value
+  } else {
+    NA_real_
+  }
+
+  # NEW: signed bias summary (numeric scalar)
+  prop_pos1_wins_overall <- if (total_comparisons > 0L) {
+    total_pos1_wins / total_comparisons
+  } else {
+    NA_real_
+  }
+  mean_signed <- if (is.finite(prop_pos1_wins_overall)) {
+    prop_pos1_wins_overall - 0.5
   } else {
     NA_real_
   }
@@ -440,7 +445,6 @@ check_positional_bias <- function(consistency,
     n_pos1_bias <- sum(inconsistent$is_pos1_bias, na.rm = TRUE)
     n_pos2_bias <- sum(inconsistent$is_pos2_bias, na.rm = TRUE)
 
-    # Merge flags back into main details tibble
     details <- details |>
       dplyr::left_join(
         inconsistent |>
@@ -455,23 +459,26 @@ check_positional_bias <- function(consistency,
   }
 
   summary <- tibble::tibble(
-    n_pairs                  = n_pairs,
-    prop_consistent          = prop_consistent,
-    boot_mean                = boot_mean,
-    boot_lwr                 = as.numeric(boot_lwr),
-    boot_upr                 = as.numeric(boot_upr),
-    p_sample1_main           = p_sample1_main,
-    p_sample1_rev            = p_sample1_rev,
-    p_sample1_overall        = p_sample1_overall,
-    total_pos1_wins          = total_pos1_wins,
-    total_comparisons        = total_comparisons,
-    n_inconsistent           = n_inconsistent,
+    n_pairs = n_pairs,
+    prop_consistent = prop_consistent,
+    boot_mean = boot_mean,
+    boot_lwr = as.numeric(boot_lwr),
+    boot_upr = as.numeric(boot_upr),
+    p_sample1_main = p_sample1_main,
+    p_sample1_rev = p_sample1_rev,
+    p_sample1_overall = p_sample1_overall,
+    total_pos1_wins = total_pos1_wins,
+    total_comparisons = total_comparisons,
+    prop_pos1_wins_overall = prop_pos1_wins_overall,
+    mean_signed = mean_signed,
+    n_inconsistent = n_inconsistent,
     n_inconsistent_pos1_bias = n_pos1_bias,
     n_inconsistent_pos2_bias = n_pos2_bias
   )
 
   list(
     summary = summary,
-    details = details
+    details = details,
+    mean_signed = mean_signed
   )
 }
