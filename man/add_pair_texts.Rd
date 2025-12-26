@@ -2,48 +2,52 @@
 % Please edit documentation in R/pairing.R
 \name{add_pair_texts}
 \alias{add_pair_texts}
-\title{Add text columns to a table of ID pairs}
+\title{Add text columns (text1/text2) to a pairs table}
 \usage{
-add_pair_texts(pairs, samples, overwrite = FALSE)
+add_pair_texts(
+  pairs,
+  samples,
+  id1_col = NULL,
+  id2_col = NULL,
+  overwrite = TRUE
+)
 }
 \arguments{
-\item{pairs}{A tibble/data.frame containing either \code{ID1}/\code{ID2} or
-\code{object1}/\code{object2}.}
+\item{pairs}{A data frame of pair IDs. Must contain either \code{ID1}/\code{ID2},
+\code{object1}/\code{object2}, or the columns given by \code{id1_col} and \code{id2_col}.}
 
-\item{samples}{A tibble/data.frame with columns \code{ID} and \code{text}.}
+\item{samples}{A data frame with columns \code{ID} and \code{text}.}
 
-\item{overwrite}{Logical. If \code{TRUE}, overwrite existing \code{text1}/\code{text2}
-columns in \code{pairs}. If \code{FALSE} (default), only missing values are filled.}
+\item{id1_col, id2_col}{Optional. Column names in \code{pairs} holding the first and
+second IDs. If \code{NULL}, inferred from \code{pairs} (\code{ID1}/\code{ID2} or \code{object1}/\code{object2}).}
+
+\item{overwrite}{Logical. If \code{TRUE} (default), any existing \code{text1}/\code{text2}
+columns in \code{pairs} are overwritten from \code{samples}. If \code{FALSE}, existing
+non-missing \code{text1}/\code{text2} values are preserved and only missing values are
+filled.}
 }
 \value{
-A tibble containing \code{ID1}, \code{text1}, \code{ID2}, \code{text2},
-plus any additional columns from \code{pairs}.
+A tibble with \code{ID1}, \code{text1}, \code{ID2}, \code{text2}, plus any other columns
+originally present in \code{pairs}.
 }
 \description{
-Many workflows (including LLM judging via \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}) expect pairs
-to include the text shown to the judge (\code{text1}/\code{text2}). However,
-some helpers return only IDs (e.g., core-linking selectors) to keep outputs
-lightweight. This function joins texts from \code{samples} onto a pairs table.
+Joins \code{samples$text} onto a pairs table using pair IDs, creating (or filling)
+\code{text1} and \code{text2}.
 }
 \details{
 Supported input schemas for \code{pairs}:
 \itemize{
 \item \code{ID1}/\code{ID2}
-\item \code{object1}/\code{object2} (will be renamed to \code{ID1}/\code{ID2})
+\item \code{object1}/\code{object2}
+\item or specify \code{id1_col}/\code{id2_col}
 }
-
-Any additional columns in \code{pairs} (e.g., \code{pair_type}) are preserved.
 }
 \examples{
-samples <- tibble::tibble(
-  ID = c("A", "B", "C"),
-  text = c("alpha", "beta", "gamma")
-)
-pairs_ids <- tibble::tibble(ID1 = c("A", "B"), ID2 = c("C", "A"))
-add_pair_texts(pairs_ids, samples)
+samples <- tibble::tibble(ID = c("A", "B"), text = c("aaa", "bbb"))
+pairs <- tibble::tibble(ID1 = "A", ID2 = "B")
+add_pair_texts(pairs, samples)
 
-# Works with BT data schema too:
-bt_pairs <- tibble::tibble(object1 = "A", object2 = "B")
-add_pair_texts(bt_pairs, samples)
-
+# Preserve existing non-missing text
+pairs2 <- tibble::tibble(ID1 = "A", ID2 = "B", text1 = "keep", text2 = NA_character_)
+add_pair_texts(pairs2, samples, overwrite = FALSE)
 }
