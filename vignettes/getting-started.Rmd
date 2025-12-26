@@ -8,13 +8,6 @@ vignette: >
 ---
 
 ```{r, include=FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  eval = TRUE
-)
-
-library(pairwiseLLM)
 library(dplyr)
 ```
 
@@ -170,18 +163,9 @@ It supports **parallel processing** and **incremental output file saving** (resu
 
 ```{r, eval=FALSE}
 # Example using parallel processing and incremental saving
-res_list <- submit_llm_pairs(
-  pairs             = pairs_small,
-  backend           = "openai", # also "anthropic", "gemini", "together"
-  model             = "gpt-4o",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  # New features:
-  parallel          = TRUE,
-  workers           = 4,
-  save_path         = "live_results.csv"
-)
+
+
+# also "anthropic", "gemini", "together"
 ```
 
 Preview results:
@@ -296,13 +280,11 @@ pairs_small <- example_writing_samples |>
   sample_pairs(n_pairs = 10, seed = 4321) |>
   randomize_pair_order(seed = 8765)
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 # Split into two batches and include reasoning/chain-of-thought
-multi_job <- llm_submit_pairs_multi_batch(
-  pairs             = pairs_small,
-  backend           = "openai",
+multi_job <- llm_submit_pairs_multi_batch(,
   model             = "gpt-5.1",
   trait_name        = td$name,
   trait_description = td$description,
@@ -344,21 +326,21 @@ pairs_big <- example_writing_samples |>
   sample_pairs(n_pairs = 200, seed = 123) |>
   randomize_pair_order(seed = 456)
 
-td   <- trait_description("overall_quality")
+td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 est <- estimate_llm_pairs_cost(
   pairs = pairs_big,
-  backend = "anthropic",                # "openai", "anthropic", "gemini", "together"
+  backend = "anthropic", # "openai", "anthropic", "gemini", "together"
   model = "claude-sonnet-4-5",
   trait_name = td$name,
   trait_description = td$description,
   prompt_template = tmpl,
   mode = "batch",
-  batch_discount = 0.5,                 # set to 1 for no discount
-  n_test = 10,                          # paid pilot calls (live)
-  budget_quantile = 0.9,                # p90 output tokens
-  cost_per_million_input = 3.0,         # fill in your provider pricing
+  batch_discount = 0.5, # set to 1 for no discount
+  n_test = 10, # paid pilot calls (live)
+  budget_quantile = 0.9, # p90 output tokens
+  cost_per_million_input = 3.0, # fill in your provider pricing
   cost_per_million_output = 15.0
 )
 
@@ -376,12 +358,13 @@ remaining_pairs <- est$remaining_pairs
 # Example: submit only the remaining pairs as a batch
 
 batch <- llm_submit_pairs_batch(
-          backend = "anthropic",
-          model = "claude-sonnet-4-5",
-          pairs = remaining_pairs,
-          trait_name = td$name,
-          trait_description = td$description,
-          prompt_template = tmpl)
+  backend = "anthropic",
+  model = "claude-sonnet-4-5",
+  pairs = remaining_pairs,
+  trait_name = td$name,
+  trait_description = td$description,
+  prompt_template = tmpl
+)
 
 results <- llm_download_batch_results(batch)
 ```

@@ -372,12 +372,13 @@ select_core_link_pairs <- function(samples,
 #' @param fit A list returned by \code{\link{fit_bt_model}} that contains
 #'   a \code{$theta} tibble with columns \code{ID}, \code{theta}, \code{se}.
 #' @param core_ids Character vector of core IDs.
+#' @param include_text Logical. If `TRUE`, add `text1`/`text2` columns by joining from `samples` (via [add_pair_texts()]). Default `FALSE`.
 #' @param ... Passed through to \code{\link{select_core_link_pairs}} (e.g.,
 #'   \code{existing_pairs}, \code{round_size}, \code{seed}, etc.).
 #'
 #' @return A list with:
 #' \describe{
-#'   \item{pairs}{Tibble of proposed pairs (ID1, ID2, pair_type).}
+#'   \item{pairs}{Tibble of proposed pairs. Always includes `ID1`, `ID2`, and `pair_type`; if `include_text = TRUE`, also includes `text1` and `text2`.}
 #'   \item{plan}{One-row tibble summarizing how many of each pair_type were returned.}
 #' }
 #'
@@ -390,11 +391,17 @@ select_core_link_pairs <- function(samples,
 #' head(out$pairs)
 #'
 #' @export
-bt_core_link_round <- function(samples, fit, core_ids, ...) {
+bt_core_link_round <- function(samples, fit, core_ids, include_text = FALSE, ...) {
   if (!is.list(fit) || is.null(fit$theta)) {
     stop("`fit` must be a list (from `fit_bt_model()`) containing `$theta`.", call. = FALSE)
   }
+
   pairs <- select_core_link_pairs(samples = samples, theta = fit$theta, core_ids = core_ids, ...)
+
+  if (isTRUE(include_text) && nrow(pairs) > 0L) {
+    pairs <- add_pair_texts(pairs, samples)
+  }
+
   plan <- tibble::tibble(
     n_total = nrow(pairs),
     n_core_new = sum(pairs$pair_type == "core_new"),

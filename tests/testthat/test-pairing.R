@@ -461,8 +461,8 @@ test_that("alternate_pair_order works correctly", {
   expect_equal(out$ID2[1], "A2")
 
   # Row 2 (even): Swapped
-  expect_equal(out$ID1[2], "B2")  # Was ID2
-  expect_equal(out$ID2[2], "B1")  # Was ID1
+  expect_equal(out$ID1[2], "B2") # Was ID2
+  expect_equal(out$ID2[2], "B1") # Was ID1
   expect_equal(out$text1[2], "TB2")
   expect_equal(out$text2[2], "TB1")
 
@@ -472,4 +472,66 @@ test_that("alternate_pair_order works correctly", {
   # Row 4 (even): Swapped
   expect_equal(out$ID1[4], "D2")
   expect_equal(out$ID2[4], "D1")
+})
+
+
+test_that("add_pair_texts joins text1/text2 onto ID pairs and preserves extra columns", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "beta", "gamma")
+  )
+
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"),
+    ID2 = c("C", "A"),
+    pair_type = c("core_new", "new_new")
+  )
+
+  out <- add_pair_texts(pairs, samples)
+
+  expect_true(all(c("ID1", "text1", "ID2", "text2", "pair_type") %in% names(out)))
+  expect_equal(out$ID1, pairs$ID1)
+  expect_equal(out$ID2, pairs$ID2)
+  expect_equal(out$text1, c("alpha", "beta"))
+  expect_equal(out$text2, c("gamma", "alpha"))
+  expect_equal(out$pair_type, pairs$pair_type)
+})
+
+test_that("add_pair_texts supports object1/object2 schema and can fill/overwrite text columns", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "beta")
+  )
+
+  bt_pairs <- tibble::tibble(object1 = "A", object2 = "B")
+  out_bt <- add_pair_texts(bt_pairs, samples)
+  expect_true(all(c("ID1", "text1", "ID2", "text2") %in% names(out_bt)))
+  expect_false(any(c("object1", "object2") %in% names(out_bt)))
+  expect_equal(out_bt$text1, "alpha")
+  expect_equal(out_bt$text2, "beta")
+
+  pairs_partial <- tibble::tibble(
+    ID1 = "A",
+    text1 = NA_character_,
+    ID2 = "B",
+    text2 = "CUSTOM"
+  )
+
+  out_fill <- add_pair_texts(pairs_partial, samples, overwrite = FALSE)
+  expect_equal(out_fill$text1, "alpha")
+  expect_equal(out_fill$text2, "CUSTOM")
+
+  out_over <- add_pair_texts(pairs_partial, samples, overwrite = TRUE)
+  expect_equal(out_over$text1, "alpha")
+  expect_equal(out_over$text2, "beta")
+})
+
+test_that("add_pair_texts errors when pair IDs are not present in samples", {
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
+  bad_pairs <- tibble::tibble(ID1 = "A", ID2 = "Z")
+
+  expect_error(
+    add_pair_texts(bad_pairs, samples),
+    "samples\\$ID|must be present"
+  )
 })

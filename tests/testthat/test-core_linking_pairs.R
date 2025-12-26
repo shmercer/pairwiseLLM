@@ -425,3 +425,21 @@ testthat::test_that("bt_core_link_round validates fit and returns a plan", {
     out$plan$n_total
   )
 })
+
+
+testthat::test_that("bt_core_link_round can optionally include text1/text2 columns", {
+  samples <- tibble::tibble(ID = paste0("S", 1:6), text = paste("t", 1:6))
+  theta <- tibble::tibble(ID = samples$ID, theta = seq(-1, 1, length.out = 6), se = rep(0.4, 6))
+  fit <- list(theta = theta)
+
+  out_no <- bt_core_link_round(samples, fit, core_ids = paste0("S", 1:2), round_size = 4, seed = 1)
+  testthat::expect_true(all(c("ID1", "ID2", "pair_type") %in% names(out_no$pairs)))
+  testthat::expect_false(any(c("text1", "text2") %in% names(out_no$pairs)))
+
+  out_yes <- bt_core_link_round(samples, fit, core_ids = paste0("S", 1:2), round_size = 4, seed = 1, include_text = TRUE)
+  testthat::expect_true(all(c("ID1", "text1", "ID2", "text2", "pair_type") %in% names(out_yes$pairs)))
+  # spot-check mapping consistency
+  map <- stats::setNames(samples$text, samples$ID)
+  testthat::expect_identical(out_yes$pairs$text1, unname(map[out_yes$pairs$ID1]))
+  testthat::expect_identical(out_yes$pairs$text2, unname(map[out_yes$pairs$ID2]))
+})

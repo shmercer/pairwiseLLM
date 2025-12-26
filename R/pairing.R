@@ -68,6 +68,115 @@ make_pairs <- function(samples) {
   out
 }
 
+
+#' Add text columns to a table of ID pairs
+#'
+#' Many workflows (including LLM judging via [submit_llm_pairs()]) expect pairs
+#' to include the text shown to the judge (\code{text1}/\code{text2}). However,
+#' some helpers return only IDs (e.g., core-linking selectors) to keep outputs
+#' lightweight. This function joins texts from \code{samples} onto a pairs table.
+#'
+#' Supported input schemas for \code{pairs}:
+#' \itemize{
+#'   \item \code{ID1}/\code{ID2}
+#'   \item \code{object1}/\code{object2} (will be renamed to \code{ID1}/\code{ID2})
+#' }
+#'
+#' Any additional columns in \code{pairs} (e.g., \code{pair_type}) are preserved.
+#'
+#' @param pairs A tibble/data.frame containing either \code{ID1}/\code{ID2} or
+#'   \code{object1}/\code{object2}.
+#' @param samples A tibble/data.frame with columns \code{ID} and \code{text}.
+#' @param overwrite Logical. If \code{TRUE}, overwrite existing \code{text1}/\code{text2}
+#'   columns in \code{pairs}. If \code{FALSE} (default), only missing values are filled.
+#'
+#' @return A tibble containing \code{ID1}, \code{text1}, \code{ID2}, \code{text2},
+#'   plus any additional columns from \code{pairs}.
+#'
+#' @examples
+#' samples <- tibble::tibble(
+#'   ID = c("A", "B", "C"),
+#'   text = c("alpha", "beta", "gamma")
+#' )
+#' pairs_ids <- tibble::tibble(ID1 = c("A", "B"), ID2 = c("C", "A"))
+#' add_pair_texts(pairs_ids, samples)
+#'
+#' # Works with BT data schema too:
+#' bt_pairs <- tibble::tibble(object1 = "A", object2 = "B")
+#' add_pair_texts(bt_pairs, samples)
+#'
+#' @export
+add_pair_texts <- function(pairs, samples, overwrite = FALSE) {
+  pairs <- tibble::as_tibble(pairs)
+  samples <- tibble::as_tibble(samples)
+
+  if (!all(c("ID", "text") %in% names(samples))) {
+    stop("`samples` must have columns 'ID' and 'text'.", call. = FALSE)
+  }
+
+  # Normalize samples mapping
+  samp_ids <- as.character(samples$ID)
+  if (anyNA(samp_ids) || any(samp_ids == "")) {
+    stop("`samples$ID` must be non-missing and non-empty.", call. = FALSE)
+  }
+  if (any(duplicated(samp_ids))) {
+    stop("`samples$ID` must be unique.", call. = FALSE)
+  }
+
+  text_map <- stats::setNames(as.character(samples$text), samp_ids)
+
+  # Normalize pairs schema
+  if (!all(c("ID1", "ID2") %in% names(pairs))) {
+    if (all(c("object1", "object2") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = object1, ID2 = object2)
+    } else {
+      stop("`pairs` must contain columns: ID1, ID2 (or object1, object2).", call. = FALSE)
+    }
+  }
+
+  pairs <- dplyr::mutate(
+    pairs,
+    ID1 = trimws(as.character(.data$ID1)),
+    ID2 = trimws(as.character(.data$ID2))
+  )
+
+  if (anyNA(pairs$ID1) || anyNA(pairs$ID2) || any(pairs$ID1 == "") || any(pairs$ID2 == "")) {
+    stop("`pairs$ID1` and `pairs$ID2` must be non-missing and non-empty.", call. = FALSE)
+  }
+
+  bad1 <- !(pairs$ID1 %in% samp_ids)
+  bad2 <- !(pairs$ID2 %in% samp_ids)
+  if (any(bad1) || any(bad2)) {
+    stop("All pair IDs must be present in `samples$ID`.", call. = FALSE)
+  }
+
+  # Add/fill text columns
+  if (!("text1" %in% names(pairs))) {
+    pairs$text1 <- unname(text_map[pairs$ID1])
+  } else if (isTRUE(overwrite)) {
+    pairs$text1 <- unname(text_map[pairs$ID1])
+  } else {
+    fill <- is.na(pairs$text1)
+    if (any(fill)) pairs$text1[fill] <- unname(text_map[pairs$ID1[fill]])
+  }
+
+  if (!("text2" %in% names(pairs))) {
+    pairs$text2 <- unname(text_map[pairs$ID2])
+  } else if (isTRUE(overwrite)) {
+    pairs$text2 <- unname(text_map[pairs$ID2])
+  } else {
+    fill <- is.na(pairs$text2)
+    if (any(fill)) pairs$text2[fill] <- unname(text_map[pairs$ID2[fill]])
+  }
+
+  # Keep a stable column order for LLM submission convenience
+  pairs <- dplyr::relocate(pairs, text1, .after = ID1)
+  pairs <- dplyr::relocate(pairs, text2, .after = ID2)
+
+  pairs
+}
+
+
 #' Randomly sample pairs of writing samples
 #'
 #' This function samples a subset of rows from a pairs data frame

@@ -336,7 +336,9 @@ bt_run_adaptive <- function(samples,
 
       # Remaining need mapping
       remaining <- !is_missing & !(out == ID1 | out == ID2)
-      if (!any(remaining)) return(out)
+      if (!any(remaining)) {
+        return(out)
+      }
 
       idx <- which(remaining)
       tok_full <- toupper(trimws(out[idx]))
@@ -626,10 +628,23 @@ bt_run_adaptive <- function(samples,
   # optional post-stop reverse audit (no effect on adaptive loop)
   reverse_out <- NULL
   if (isTRUE(reverse_audit) && nrow(results) > 0L) {
+    # Eligible forward pairs for audit: unique *unordered* pairs with non-missing winners.
+    # If both orientations (A,B) and (B,A) exist in `results`, keep only one representative.
     uniq_pairs <- results |>
       dplyr::filter(!is.na(.data$better_id)) |>
-      dplyr::transmute(ID1 = as.character(.data$ID1), ID2 = as.character(.data$ID2)) |>
-      dplyr::distinct()
+      dplyr::transmute(
+        ID1 = as.character(.data$ID1),
+        ID2 = as.character(.data$ID2),
+        key = paste(
+          pmin(as.character(.data$ID1), as.character(.data$ID2)),
+          pmax(as.character(.data$ID1), as.character(.data$ID2)),
+          sep = "||"
+        )
+      ) |>
+      dplyr::group_by(.data$key) |>
+      dplyr::slice(1) |>
+      dplyr::ungroup() |>
+      dplyr::select("ID1", "ID2")
 
     uniq_pairs_txt <- .add_texts(uniq_pairs)
 
