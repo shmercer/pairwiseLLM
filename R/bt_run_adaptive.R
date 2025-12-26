@@ -19,56 +19,100 @@
 #' stopping+pairing helper is \code{\link{bt_adaptive_round}}.
 #'
 #' @param samples A tibble/data.frame with columns \code{ID} and \code{text}.
-#' @param judge_fun A function that accepts a tibble of pairs (columns
-#' \code{ID1}, \code{text1}, \code{ID2}, \code{text2}) and returns a tibble of
-#' results with columns \code{ID1}, \code{ID2}, and \code{better_id}. If
-#' \code{judge} is provided, the returned tibble must also include that column.
-#'  `better_id` may be returned as `ID1`/`ID2` or positional labels like
-#'  `SAMPLE_1`/`SAMPLE_2` (also `1`/`2`); these are normalized to the
-#'  corresponding IDs.
-#' @param initial_results Optional tibble/data.frame of already-scored pairs
-#' with columns \code{ID1}, \code{ID2}, \code{better_id} (and optional judge column).
-#' If \code{NULL} (default) or empty, the runner will generate an initial bootstrap
-#' set of \code{init_round_size} random pairs and score them first.
-#' @param judge Optional character scalar. If supplied, this is treated as the name
-#' of a column in results identifying the judge/backend/model. It is passed to
-#' \code{\link{build_bt_data}} so that sirt can use judge information when available.
+#' \code{ID} must be unique and non-missing; \code{text} is the content shown to the judge.
 #'
-#' @param engine Character scalar passed through to \code{fit_fun} as its \code{engine}
-#' argument. Default \code{"sirt"}.
-#' @param fit_verbose Logical passed to \code{fit_fun}. Default \code{FALSE}.
-#' @param return_diagnostics Logical passed to \code{fit_fun}. Default \code{TRUE}.
-#' @param include_residuals Logical passed to \code{fit_fun}. Default \code{FALSE}.
+#' @param judge_fun A function that accepts a tibble of pairs with columns
+#' \code{ID1}, \code{text1}, \code{ID2}, \code{text2} and returns a tibble with
+#' columns \code{ID1}, \code{ID2}, and \code{better_id}.
+#' If \code{judge} is provided, the returned tibble must also include that judge column.
+#' \code{better_id} may be returned as the literal winning ID (\code{ID1} or \code{ID2})
+#' or as common positional labels (e.g., \code{SAMPLE_1}/\code{SAMPLE_2},
+#' \code{ID1}/\code{ID2}, \code{1}/\code{2}, \code{0}/\code{1}, \code{A}/\code{B},
+#' \code{LEFT}/\code{RIGHT}); these are normalized to the corresponding IDs.
+#' Blank/NA-like winners are treated as missing (\code{NA}) and are ignored in scoring.
 #'
-#' @param round_size Integer number of new pairs to propose each adaptive round.
-#' @param init_round_size Integer number of bootstrap pairs to score before the
-#' first model fit (only used when \code{initial_results} is empty). Default:
-#' \code{round_size}.
-#' @param max_rounds Integer maximum number of adaptive rounds (excluding the bootstrap
-#' scoring step). Default 50.
+#' @param initial_results Optional tibble/data.frame of already-scored pairs with columns
+#' \code{ID1}, \code{ID2}, \code{better_id} (and optional judge column). When provided,
+#' these results are used as the starting state (and no bootstrap is performed unless
+#' \code{initial_results} is empty).
 #'
-#' @param se_probs,fit_bounds Passed to \code{\link{bt_adaptive_round}}.
-#' @param reliability_target,sepG_target,rel_se_p90_target,rel_se_p90_min_improve,
-#' max_item_misfit_prop,max_judge_misfit_prop Passed to \code{\link{bt_adaptive_round}}.
+#' @param judge Optional character scalar giving the name of the column in results that
+#' identifies the judge/backend/model (e.g., \code{"gpt4o"} vs \code{"claude"}).
+#' When provided, the column must be present in outputs from \code{judge_fun} and is
+#' passed to \code{\link{build_bt_data}} so engines that support judge effects can use it.
 #'
-#' @param k_neighbors,min_judgments,forbid_repeats,balance_positions Passed to
-#' \code{\link{bt_adaptive_round}} (and ultimately \code{\link{select_adaptive_pairs}}).
+#' @param engine Character scalar passed to \code{fit_fun} as its \code{engine} argument.
+#' Default \code{"sirt"}.
+#' @param fit_verbose Logical; passed to \code{fit_fun} as \code{verbose}. Default \code{FALSE}.
+#' @param return_diagnostics Logical; passed to \code{fit_fun}. If \code{TRUE}, attempt to
+#' return engine-specific diagnostics (e.g., item fit, separation/reliability). Default \code{TRUE}.
+#' @param include_residuals Logical; passed to \code{fit_fun}. If \code{TRUE}, request
+#' residual/probability outputs when supported (may increase compute/memory). Default \code{FALSE}.
 #'
-#' @param seed_pairs Optional integer. When provided, pair generation is reproducible
-#' across runs and the RNG state is restored to its prior value (or returned to
-#' "uninitialized" if it was missing).
+#' @param round_size Integer. Number of new pairs to propose and score in each adaptive round.
+#' If \code{0}, the runner will fit once (if possible) and then stop without proposing new pairs.
+#' @param init_round_size Integer. Number of bootstrap (random) pairs to score before the first
+#' model fit when \code{initial_results} is \code{NULL} or empty. Default: \code{round_size}.
+#' @param max_rounds Integer. Maximum number of adaptive rounds to run (excluding the bootstrap
+#' scoring step). Default \code{50}.
 #'
-#' @param reverse_audit Logical; if \code{TRUE}, run a post-stop reverse-order audit.
-#' Default \code{FALSE}.
-#' @param reverse_pct Optional proportion (0..1) of already-judged unique pairs to
-#' reverse and re-score for the audit. Ignored if \code{n_reverse} is provided.
-#' @param n_reverse Optional integer number of pairs to reverse for the audit.
-#' @param reverse_seed Optional integer seed for selecting the audit subset.
+#' @param se_probs Numeric vector of probabilities in (0, 1) used when summarizing the
+#' distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
+#' Passed to \code{\link{bt_adaptive_round}}.
+#' @param fit_bounds Numeric length-2 vector giving acceptable infit/outfit (or analogous) bounds
+#' when available. Passed to \code{\link{bt_adaptive_round}}.
 #'
-#' @param fit_fun Function used to fit the model. Default \code{\link{fit_bt_model}}.
-#' This is primarily a test hook; most users should keep the default.
-#' @param build_bt_fun Function used to build BT data from results. Default
-#' \code{\link{build_bt_data}}.
+#' @param reliability_target Numeric. Target reliability/separation-based criterion used by
+#' \code{\link{bt_adaptive_round}} for stopping decisions.
+#' @param sepG_target Numeric. Target separation index (or analogous) used by
+#' \code{\link{bt_adaptive_round}} for stopping decisions.
+#' @param rel_se_p90_target Numeric. Target value for the 90th percentile of item SE (or a
+#' comparable uncertainty summary) used for stopping. Passed to \code{\link{bt_adaptive_round}}.
+#' @param rel_se_p90_min_improve Numeric. Minimum required improvement in the uncertainty summary
+#' relative to the previous round; if improvement falls below this, stopping may be allowed
+#' (depending on other criteria). Passed to \code{\link{bt_adaptive_round}}.
+#' @param max_item_misfit_prop Numeric between 0 and 1 (inclusive). Maximum
+#' allowed proportion of item misfit flags
+#' (based on \code{fit_bounds}/diagnostics) before stopping is disallowed. Passed to
+#' \code{\link{bt_adaptive_round}}.
+#' @param max_judge_misfit_prop Numeric between 0 and 1 (inclusive). Maximum
+#' allowed proportion of judge misfit flags before stopping is disallowed
+#' (when judge diagnostics are available). Passed to \code{\link{bt_adaptive_round}}.
+#'
+#' @param k_neighbors Integer. When ability estimates are available, restrict candidate pair
+#' selection to approximately local neighborhoods in \code{theta} (e.g., near neighbors) to focus
+#' comparisons where they are most informative. If \code{theta} is not available (early rounds),
+#' selection falls back to non-theta heuristics. Passed to \code{\link{bt_adaptive_round}} /
+#' \code{\link{select_adaptive_pairs}}.
+#' @param min_judgments Integer. Minimum number of total judgments per item to prioritize before
+#' focusing on adaptive informativeness/uncertainty. Passed to \code{\link{bt_adaptive_round}}.
+#' @param forbid_repeats Logical. If \code{TRUE}, unordered pairs (A,B) are not repeated across
+#' rounds. Passed to \code{\link{bt_adaptive_round}} / \code{\link{select_adaptive_pairs}}.
+#' @param balance_positions Logical. If \code{TRUE}, attempt to balance how often each item appears
+#' in the first vs second position (\code{ID1} vs \code{ID2}) to mitigate positional bias.
+#' Passed to \code{\link{bt_adaptive_round}} / \code{\link{select_adaptive_pairs}}.
+#'
+#' @param seed_pairs Optional integer seed used for bootstrap pair generation as
+#' \code{seed_pairs}, and for adaptive rounds as \code{seed_pairs + round}.
+#' The RNG state is restored to its prior value (or returned to "uninitialized" if it was missing).
+#' Note: this controls pair selection reproducibility; it does not control randomness inside
+#' \code{judge_fun} unless your \code{judge_fun} uses it explicitly.
+#'
+#' @param reverse_audit Logical. If \code{TRUE}, run a post-stop reverse-order audit by selecting
+#' a subset of forward-scored pairs, reversing their order, and re-scoring them. This does not
+#' affect adaptive sampling decisions (it is post-hoc).
+#' @param reverse_pct Numeric between 0 and 1 (inclusive). Proportion of eligible unique forward pairs to reverse
+#' for the audit. Eligible pairs are unique unordered forward pairs with non-missing
+#' \code{better_id}. Ignored if \code{n_reverse} is provided.
+#' @param n_reverse Optional integer. Number of eligible unique forward pairs to reverse for the
+#' audit. If provided, overrides \code{reverse_pct}.
+#' @param reverse_seed Optional integer seed used only for selecting which pairs to reverse
+#' (RNG state is restored afterward).
+#'
+#' @param fit_fun Function used to fit the BT model. Default \code{\link{fit_bt_model}}.
+#' Primarily intended as a test hook; most users should keep the default.
+#' @param build_bt_fun Function used to convert results into BT data. Default
+#' \code{\link{build_bt_data}}. Primarily intended as a test hook.
 #' @param ... Additional arguments passed through to \code{fit_fun}.
 #'
 #' @return A list with elements:
