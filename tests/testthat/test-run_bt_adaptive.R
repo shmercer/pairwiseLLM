@@ -36,7 +36,9 @@ test_that("bt_run_adaptive validates inputs and judge output", {
   )
 
   # judge column required when judge= is provided
-  good_no_judge <- function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  good_no_judge <- function(pairs) {
+    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  }
   expect_error(
     bt_run_adaptive(
       samples,
@@ -57,7 +59,7 @@ test_that("bt_run_adaptive validates inputs and judge output", {
       rel_se_p90_target = NA_real_,
       rel_se_p90_min_improve = NA_real_
     ),
-    "missing judge column"
+    "include a `model` column|must include a `model` column|judge.*provided"
   )
 })
 
@@ -372,3 +374,180 @@ test_that("bt_run_adaptive maps 1/0 better_id encodings", {
 
   expect_true(all(out$results$better_id %in% c(out$results$ID1, out$results$ID2)))
 })
+
+test_that("bt_run_adaptive normalizes common winner encodings in initial_results", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("a", "b", "c")
+  )
+
+  initial_results <- tibble::tibble(
+    ID1 = c("A", "B", "C", "A"),
+    ID2 = c("B", "C", "A", "C"),
+    better_id = c("SAMPLE_1 is better", "0", "Winner: A", "N/A")
+  )
+
+  out <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = function(pairs) stop("judge_fun should not be called"),
+    initial_results = initial_results,
+    init_round_size = 0,
+    max_rounds = 0
+  )
+
+  expect_identical(out$results$better_id, c("A", "C", "A", NA_character_))
+})
+
+test_that("bt_run_adaptive bootstrap works with repeats allowed and no position balancing", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste0("t", LETTERS[1:6])
+  )
+  true_theta <- stats::setNames(c(3, 2, 1, 0, -1, -2), samples$ID)
+
+  judge_fun <- function(pairs) {
+    simulate_bt_judge(pairs, true_theta = true_theta, deterministic = TRUE, seed = 999)
+  }
+
+  fit_fun <- function(bt_data, ...) {
+    list(
+      engine = "mock",
+      reliability = 0.95,
+      theta = tibble::tibble(ID = samples$ID, theta = rep(0, 6), se = rep(1, 6)),
+      diagnostics = list(sepG = 3.5)
+    )
+  }
+
+  out <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = judge_fun,
+    fit_fun = fit_fun,
+    engine = "mock",
+    init_round_size = 10,
+    round_size = 0,
+    max_rounds = 0,
+    forbid_repeats = FALSE,
+    balance_positions = FALSE,
+    seed_pairs = 123
+  )
+
+  expect_equal(nrow(out$pairs_bootstrap), 10)
+  expect_equal(nrow(out$results), 10)
+  expect_true(all(!is.na(out$results$better_id)))
+})
+
+test_that("bt_run_adaptive breaks when judge returns no rows for an adaptive round", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste0("t", LETTERS[1:6])
+  )
+  true_theta <- stats::setNames(c(3, 2, 1, 0, -1, -2), samples$ID)
+
+  i <- 0L
+  judge_fun <- function(pairs) {
+    i <<- i + 1L
+    if (i == 1L) {
+      simulate_bt_judge(pairs, true_theta = true_theta, deterministic = TRUE, seed = 1)
+    } else {
+      tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
+    }
+  }
+
+  fit_fun <- function(bt_data, ...) {
+    list(
+      engine = "mock",
+      reliability = 0.95,
+      theta = tibble::tibble(ID = samples$ID, theta = rep(0, 6), se = rep(1, 6)),
+      diagnostics = list(sepG = 3.5)
+    )
+  }
+
+  out <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = judge_fun,
+    fit_fun = fit_fun,
+    engine = "mock",
+    init_round_size = 2,
+    round_size = 2,
+    max_rounds = 2,
+    rel_se_p90_target = NA_real_,
+    rel_se_p90_min_improve = NA_real_,
+    seed_pairs = 10
+  )
+
+  expect_true(nrow(out$results) >= 2)
+})
+
+test_that("bt_run_adaptive reverse audit branches: reverse_pct=0 vs n_reverse override", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:4],
+    text = paste0("t", LETTERS[1:4])
+  )
+
+  initial_results <- tibble::tibble(
+    ID1 = c("A", "B"),
+    ID2 = c("C", "D"),
+    better_id = c("A", "D")
+  )
+
+  # reverse_pct = 0 => no reversals
+  out0 <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = function(pairs) stop("judge_fun should not be called for pct=0, max_rounds=0"),
+    initial_results = initial_results,
+    init_round_size = 0,
+    max_rounds = 0,
+    reverse_audit = TRUE,
+    reverse_pct = 0,
+    reverse_seed = 1
+  )
+  expect_true(is.list(out0$reverse_audit))
+  expect_equal(nrow(out0$reverse_audit$pairs_reversed), 0)
+  expect_null(out0$reverse_audit$consistency)
+
+  # n_reverse overrides reverse_pct
+  true_theta <- stats::setNames(c(2, 1, 0, -1), samples$ID)
+  judge_fun2 <- function(pairs) simulate_bt_judge(pairs, true_theta = true_theta, deterministic = TRUE, seed = 1)
+
+  out1 <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = judge_fun2,
+    initial_results = initial_results,
+    init_round_size = 0,
+    max_rounds = 0,
+    reverse_audit = TRUE,
+    reverse_pct = 0,
+    n_reverse = 1,
+    reverse_seed = 1
+  )
+  expect_equal(nrow(out1$reverse_audit$pairs_reversed), 1)
+  expect_true(is.list(out1$reverse_audit$consistency))
+})
+
+test_that("bt_run_adaptive validates reverse_pct when n_reverse is NULL", {
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
+  initial_results <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+
+  expect_error(
+    bt_run_adaptive(
+      samples = samples,
+      judge_fun = function(pairs) pairs,
+      initial_results = initial_results,
+      init_round_size = 0,
+      max_rounds = 0,
+      reverse_audit = TRUE,
+      reverse_pct = "bad",
+      n_reverse = NULL
+    ),
+    "reverse_pct"
+  )
+})
+
+test_that("bt_run_adaptive errors on duplicate sample IDs", {
+  samples <- tibble::tibble(ID = c("A", "A"), text = c("a", "b"))
+  expect_error(
+    bt_run_adaptive(samples = samples, judge_fun = function(pairs) pairs, max_rounds = 0),
+    "must be unique"
+  )
+})
+

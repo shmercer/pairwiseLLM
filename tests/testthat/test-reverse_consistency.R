@@ -217,3 +217,60 @@ test_that("compute_reverse_consistency excludes keys with a tie in reverse major
   expect_true(is.na(rc$summary$prop_consistent))
   expect_equal(nrow(rc$details), 0)
 })
+
+test_that("compute_reverse_consistency returns empty summary when one side has no usable votes", {
+  main <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+  rev <- tibble::tibble(ID1 = "B", ID2 = "A", better_id = NA_character_)
+
+  out <- compute_reverse_consistency(main, rev)
+  expect_equal(out$summary$n_pairs, 0L)
+  expect_true(is.na(out$summary$prop_consistent))
+  expect_equal(nrow(out$details), 0L)
+})
+
+test_that("compute_reverse_consistency handles disjoint keys (no overlap)", {
+  main <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+  rev <- tibble::tibble(ID1 = "C", ID2 = "D", better_id = "C")
+
+  out <- compute_reverse_consistency(main, rev)
+  expect_equal(out$summary$n_pairs, 0L)
+  expect_true(is.na(out$summary$prop_consistent))
+})
+
+test_that("compute_reverse_consistency chooses deterministic most_common_order on tie", {
+  # same unordered pair shown in both orders equally often in main
+  main <- tibble::tibble(
+    ID1 = c("A", "B"),
+    ID2 = c("B", "A"),
+    better_id = c("A", "A")
+  )
+  rev <- tibble::tibble(
+    ID1 = c("B", "A"),
+    ID2 = c("A", "B"),
+    better_id = c("A", "A")
+  )
+
+  out <- compute_reverse_consistency(main, rev)
+  expect_equal(out$summary$n_pairs, 1L)
+  expect_equal(out$summary$prop_consistent, 1)
+  expect_equal(out$details$ID1_main[[1]], "A")
+  expect_equal(out$details$ID2_main[[1]], "B")
+})
+
+test_that("compute_reverse_consistency drops ties in majority vote", {
+  # tie in main -> should be excluded from n_pairs after filtering
+  main <- tibble::tibble(
+    ID1 = c("A", "A"),
+    ID2 = c("B", "B"),
+    better_id = c("A", "B") # tie
+  )
+  rev <- tibble::tibble(
+    ID1 = c("B", "B"),
+    ID2 = c("A", "A"),
+    better_id = c("A", "A")
+  )
+
+  out <- compute_reverse_consistency(main, rev)
+  expect_equal(out$summary$n_pairs, 0L)
+  expect_true(is.na(out$summary$prop_consistent))
+})

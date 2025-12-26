@@ -265,112 +265,133 @@ bt_run_adaptive <- function(samples,
     f()
   }
 
-  # helper: validate judge results (and normalize positional winner labels)
-  .validate_results <- function(res) {
+  # helper: validate judge results (and normalize positional/winner labels)
+  .validate_results <- function(res, judge_col = NULL) {
     res <- tibble::as_tibble(res)
-    req <- c("ID1", "ID2", "better_id")
-    miss <- setdiff(req, names(res))
-    if (length(miss) > 0L) {
-      stop("`judge_fun` output must contain columns: ", paste(req, collapse = ", "), call. = FALSE)
+
+    required <- c("ID1", "ID2", "better_id")
+    missing <- setdiff(required, names(res))
+    if (length(missing) > 0L) {
+      stop("`judge_fun` must return columns: ", paste(required, collapse = ", "), call. = FALSE)
     }
 
+    if (!is.null(judge_col)) {
+      if (!is.character(judge_col) || length(judge_col) != 1L || !nzchar(judge_col)) {
+        stop("`judge` must be a non-empty character scalar.", call. = FALSE)
+      }
+      if (!judge_col %in% names(res)) {
+        stop("`judge_fun` must include a `", judge_col, "` column when `judge` is provided.", call. = FALSE)
+      }
+    }
+
+    # Coerce to character + trim IDs
     res$ID1 <- trimws(as.character(res$ID1))
     res$ID2 <- trimws(as.character(res$ID2))
-    res$better_id <- trimws(as.character(res$better_id))
+    res$better_id <- as.character(res$better_id)
 
-    # Treat common "missing winner" encodings as NA (avoids false "invalid" errors)
-    # NOTE: build_bt_data() will drop these rows later (result==NA -> filtered out).
-    missing_tokens <- c("", "NA", "N/A", "NULL", "NONE", "<NA>")
-    tok_upper <- toupper(res$better_id)
-    res$better_id[tok_upper %in% missing_tokens] <- NA_character_
-
-    bad_ids <- !(res$ID1 %in% ids) | !(res$ID2 %in% ids)
-    if (any(bad_ids, na.rm = TRUE)) stop("`judge_fun` returned IDs not present in `samples$ID`.", call. = FALSE)
-
-    # Helper: normalize a single winner string to ID1/ID2 (or NA if unrecognized)
-    normalize_winner <- function(win, id1, id2) {
-      if (is.na(win)) {
-        return(NA_character_)
-      }
-
-      w <- trimws(as.character(win))
-      w <- gsub('^["\']+|["\']+$', "", w)
-
-      # Exact match (case-sensitive + case-insensitive)
-      if (identical(w, id1)) {
-        return(id1)
-      }
-      if (identical(w, id2)) {
-        return(id2)
-      }
-      if (toupper(w) == toupper(id1)) {
-        return(id1)
-      }
-      if (toupper(w) == toupper(id2)) {
-        return(id2)
-      }
-
-      w_up <- toupper(w)
-
-      # If winner string contains exactly one of the IDs
-      has1 <- grepl(toupper(id1), w_up, fixed = TRUE)
-      has2 <- grepl(toupper(id2), w_up, fixed = TRUE)
-      if (isTRUE(has1) && !isTRUE(has2)) {
-        return(id1)
-      }
-      if (isTRUE(has2) && !isTRUE(has1)) {
-        return(id2)
-      }
-
-      # Robust token mapping (handles "SAMPLE_1 is better", "Option A", "1"/"0", TRUE/FALSE)
-      tok <- gsub("[^A-Z0-9]+", "", w_up)
-
-      # Treat 1/TRUE as ID1, and 0/2/FALSE as ID2 (covers BT result encodings)
-      map1 <- tok %in% c("1", "TRUE", "S1", "SAMPLE1", "ID1", "A", "OPTIONA", "CHOICEA", "WINNER1", "FIRST", "LEFT")
-      map2 <- tok %in% c("0", "2", "FALSE", "S2", "SAMPLE2", "ID2", "B", "OPTIONB", "CHOICEB", "WINNER2", "SECOND", "RIGHT")
-
-      if (isTRUE(map1) && !isTRUE(map2)) {
-        return(id1)
-      }
-      if (isTRUE(map2) && !isTRUE(map1)) {
-        return(id2)
-      }
-
-      NA_character_
+    if (any(is.na(res$ID1)) || any(is.na(res$ID2)) || any(res$ID1 == "") || any(res$ID2 == "")) {
+      stop("`ID1` and `ID2` must be non-missing and non-empty in results.", call. = FALSE)
+    }
+    if (any(res$ID1 == res$ID2)) {
+      stop("`judge_fun` returned pairs with ID1 == ID2.", call. = FALSE)
+    }
+    if (any(!(res$ID1 %in% ids)) || any(!(res$ID2 %in% ids))) {
+      stop("`judge_fun` returned IDs not present in `samples$ID`.", call. = FALSE)
     }
 
-    # Normalize any non-ID winners
-    needs_map <- !is.na(res$better_id) & !(res$better_id == res$ID1 | res$better_id == res$ID2)
-    if (any(needs_map, na.rm = TRUE)) {
-      mapped <- mapply(
-        normalize_winner,
-        win = res$better_id[needs_map],
-        id1 = res$ID1[needs_map],
-        id2 = res$ID2[needs_map],
-        USE.NAMES = FALSE
+    if (!is.null(judge_col)) {
+      # allow character/integer labels, but not missing
+      if (any(is.na(res[[judge_col]]))) {
+        stop("`judge_fun` output has missing values in judge column: ", judge_col, call. = FALSE)
+      }
+      res[[judge_col]] <- as.character(res[[judge_col]])
+    }
+
+    .escape_regex <- function(x) {
+      gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x)
+    }
+
+    .normalize_better_id <- function(better_id, ID1, ID2) {
+      n <- length(better_id)
+
+      # Make sure we have character and trim
+      b <- trimws(as.character(better_id))
+      # Strip surrounding quotes
+      b <- gsub('^["\']+|["\']+$', "", b)
+
+      # Treat NA-like tokens as NA
+      tok_upper <- toupper(b)
+      tok_compact <- gsub("[^A-Z0-9]+", "", tok_upper)
+      missing_tokens <- c("", "NA", "NAN", "NULL", "NONE", "N/A", "<NA>", "TIE", "EQUAL", "MISSING")
+      miss_compact <- gsub("[^A-Z0-9]+", "", missing_tokens)
+      is_missing <- is.na(b) | tok_compact %in% miss_compact
+      out <- rep(NA_character_, n)
+      out[!is_missing] <- b[!is_missing]
+
+      # Exact match to ID1/ID2
+      exact1 <- !is_missing & (out == ID1)
+      exact2 <- !is_missing & (out == ID2)
+      out[exact1] <- ID1[exact1]
+      out[exact2] <- ID2[exact2]
+
+      # Remaining need mapping
+      remaining <- !is_missing & !(out == ID1 | out == ID2)
+      if (!any(remaining)) return(out)
+
+      idx <- which(remaining)
+      tok_full <- toupper(trimws(out[idx]))
+      tok_full2 <- gsub("[^A-Z0-9]+", "", tok_full)
+
+      # Positional label detection (exact or substring)
+      pos1 <- tok_full2 %in% c("SAMPLE1", "ID1", "POS1", "LEFT", "L", "1", "A", "FIRST", "TRUE") |
+        grepl("SAMPLE1", tok_full2, fixed = TRUE) |
+        grepl("ID1", tok_full2, fixed = TRUE) |
+        grepl("POS1", tok_full2, fixed = TRUE)
+
+      pos2 <- tok_full2 %in% c("SAMPLE2", "ID2", "POS2", "RIGHT", "R", "2", "0", "B", "SECOND", "FALSE") |
+        grepl("SAMPLE2", tok_full2, fixed = TRUE) |
+        grepl("ID2", tok_full2, fixed = TRUE) |
+        grepl("POS2", tok_full2, fixed = TRUE)
+
+      only1 <- pos1 & !pos2
+      only2 <- pos2 & !pos1
+
+      out[idx[only1]] <- ID1[idx[only1]]
+      out[idx[only2]] <- ID2[idx[only2]]
+
+      # If still unresolved, try detecting mention of exactly one ID in free text ("Winner: A")
+      unresolved <- idx[!(only1 | only2)]
+      if (length(unresolved) > 0L) {
+        for (i in unresolved) {
+          s <- as.character(out[i])
+          id1 <- ID1[i]
+          id2 <- ID2[i]
+
+          m1 <- grepl(paste0("\\b", .escape_regex(id1), "\\b"), s, ignore.case = TRUE)
+          m2 <- grepl(paste0("\\b", .escape_regex(id2), "\\b"), s, ignore.case = TRUE)
+
+          if (m1 && !m2) out[i] <- id1
+          if (m2 && !m1) out[i] <- id2
+        }
+      }
+
+      out
+    }
+
+    res$better_id <- .normalize_better_id(res$better_id, res$ID1, res$ID2)
+
+    bad <- !is.na(res$better_id) & !(res$better_id == res$ID1 | res$better_id == res$ID2)
+    if (any(bad)) {
+      # Show a few original entries for debugging
+      bad_idx <- which(bad)
+      examples <- unique(as.character(res$better_id[bad_idx]))
+      examples <- examples[!is.na(examples)]
+      examples <- head(examples, 3)
+      stop(
+        "`judge_fun` returned `better_id` values that are not equal to ID1 or ID2.",
+        if (length(examples) > 0L) paste0(" Examples: ", paste(examples, collapse = ", ")) else "",
+        call. = FALSE
       )
-
-      if (any(is.na(mapped))) {
-        bad_vals <- unique(res$better_id[needs_map])[seq_len(min(5, sum(needs_map)))]
-        stop(
-          "`judge_fun` returned `better_id` values that are not equal to ID1 or ID2. ",
-          "Examples: ", paste(bad_vals, collapse = ", "),
-          call. = FALSE
-        )
-      }
-
-      res$better_id[needs_map] <- mapped
-    }
-
-    ok_better <- is.na(res$better_id) | (res$better_id == res$ID1) | (res$better_id == res$ID2)
-    if (any(!ok_better, na.rm = TRUE)) {
-      stop("`judge_fun` returned `better_id` values that are not equal to ID1 or ID2.", call. = FALSE)
-    }
-
-    if (!is.null(judge)) {
-      if (!(judge %in% names(res))) stop("`judge_fun` output is missing judge column: ", judge, call. = FALSE)
-      if (any(is.na(res[[judge]]))) stop("`judge_fun` output has missing values in judge column: ", judge, call. = FALSE)
-      res[[judge]] <- as.character(res[[judge]])
     }
 
     res
@@ -397,12 +418,10 @@ bt_run_adaptive <- function(samples,
     }
 
     existing_pairs <- tibble::as_tibble(existing_pairs)
-    if (nrow(existing_pairs) == 0L) {
-      pos1_counts <- stats::setNames(integer(length(ids)), ids)
-      pos2_counts <- stats::setNames(integer(length(ids)), ids)
-    } else {
-      pos1_counts <- stats::setNames(integer(length(ids)), ids)
-      pos2_counts <- stats::setNames(integer(length(ids)), ids)
+
+    pos1_counts <- stats::setNames(integer(length(ids)), ids)
+    pos2_counts <- stats::setNames(integer(length(ids)), ids)
+    if (nrow(existing_pairs) > 0L) {
       tab1 <- table(existing_pairs$ID1[existing_pairs$ID1 %in% ids])
       tab2 <- table(existing_pairs$ID2[existing_pairs$ID2 %in% ids])
       pos1_counts[names(tab1)] <- as.integer(tab1)
@@ -426,7 +445,7 @@ bt_run_adaptive <- function(samples,
     out_ID2 <- character()
     out_key <- character()
 
-    # CRAN-safe seed handling; run loop in this scope (lintr-friendly)
+    # CRAN-safe seed handling; run loop in this scope
     had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
     old_seed <- NULL
     if (!is.null(seed)) {
@@ -475,13 +494,12 @@ bt_run_adaptive <- function(samples,
             id2 <- a
           }
         }
+        imbalance[match(id1, ids)] <- imbalance[match(id1, ids)] + 1L
+        imbalance[match(id2, ids)] <- imbalance[match(id2, ids)] - 1L
       } else {
         id1 <- a
         id2 <- b
       }
-
-      imbalance[match(id1, ids)] <- imbalance[match(id1, ids)] + 1L
-      imbalance[match(id2, ids)] <- imbalance[match(id2, ids)] - 1L
 
       out_ID1 <- c(out_ID1, id1)
       out_ID2 <- c(out_ID2, id2)
@@ -491,11 +509,12 @@ bt_run_adaptive <- function(samples,
     .add_texts(tibble::tibble(ID1 = out_ID1, ID2 = out_ID2))
   }
 
-  # normalize initial results
-  if (is.null(initial_results)) {
+  # normalize initial results (NULL or 0-row => empty start)
+  if (is.null(initial_results) || (is.data.frame(initial_results) && nrow(initial_results) == 0L)) {
     results <- tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
+    if (!is.null(judge)) results[[judge]] <- character()
   } else {
-    results <- .validate_results(initial_results)
+    results <- .validate_results(initial_results, judge_col = judge)
     results <- tibble::as_tibble(results)
   }
 
@@ -510,7 +529,7 @@ bt_run_adaptive <- function(samples,
 
     if (nrow(pairs_bootstrap) > 0L) {
       res0 <- judge_fun(pairs_bootstrap)
-      res0 <- .validate_results(res0)
+      res0 <- .validate_results(res0, judge_col = judge)
       results <- dplyr::bind_rows(results, res0)
     }
   }
@@ -582,7 +601,7 @@ bt_run_adaptive <- function(samples,
     if (nrow(pairs_next) == 0L) break
 
     res_next <- judge_fun(pairs_next)
-    res_next <- .validate_results(res_next)
+    res_next <- .validate_results(res_next, judge_col = judge)
 
     n_added <- nrow(res_next)
     if (n_added > 0L) {
@@ -624,6 +643,9 @@ bt_run_adaptive <- function(samples,
       if (!is.numeric(reverse_pct) || length(reverse_pct) != 1L || is.na(reverse_pct)) {
         stop("`reverse_pct` must be a single numeric value when `n_reverse` is NULL.", call. = FALSE)
       }
+      if (reverse_pct < 0 || reverse_pct > 1) {
+        stop("`reverse_pct` must be between 0 and 1 (inclusive) when `n_reverse` is NULL.", call. = FALSE)
+      }
       if (reverse_pct <= 0) k <- 0L else if (reverse_pct >= 1) k <- n_all else k <- as.integer(round(n_all * reverse_pct))
       k <- min(max(k, 0L), n_all)
     }
@@ -641,10 +663,12 @@ bt_run_adaptive <- function(samples,
     }
 
     rev_results <- tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
+    if (!is.null(judge)) rev_results[[judge]] <- character()
     consistency <- NULL
+
     if (nrow(rev_pairs) > 0L) {
       rev_results <- judge_fun(rev_pairs)
-      rev_results <- .validate_results(rev_results)
+      rev_results <- .validate_results(rev_results, judge_col = judge)
 
       # Ensure we compute consistency only on audited unordered keys (avoids n_pairs==0)
       add_key <- function(df) {
