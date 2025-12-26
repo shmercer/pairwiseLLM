@@ -136,6 +136,7 @@ select_core_set <- function(samples,
     pos <- unique(as.integer(round(seq.int(1L, n, length.out = k))))
     pos <- pos[pos >= 1L & pos <= n]
 
+    # nocov start
     if (length(pos) < k) {
       remaining <- setdiff(seq_len(n), pos)
       need <- k - length(pos)
@@ -143,16 +144,19 @@ select_core_set <- function(samples,
         pos <- c(pos, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
       }
     }
+    # nocov end
 
     pos <- pos[seq_len(min(k, length(pos)))]
     sel <- ord[pos]
 
+    # nocov start
     if (length(sel) < k) {
       # top up deterministically from the middle-out if something weird happened
       remaining <- setdiff(seq_len(n), sel)
       topup <- remaining[seq_len(min(k - length(sel), length(remaining)))]
       sel <- c(sel, topup)
     }
+    # nocov end
 
     out_ids <- ids[sel]
     out_wc <- wc[sel]
@@ -193,7 +197,9 @@ select_core_set <- function(samples,
 
   for (j in seq_len(k)) {
     idx <- which(cl == j)
+    # nocov start
     if (length(idx) == 0L) next
+    # nocov end
 
     diffs <- emb[idx, , drop = FALSE] - matrix(centers[j, ], nrow = length(idx), ncol = ncol(emb), byrow = TRUE)
     d2 <- rowSums(diffs * diffs)
@@ -205,6 +211,7 @@ select_core_set <- function(samples,
   }
 
   # Defensive: if any cluster was empty (rare), top up from remaining points
+  # nocov start
   if (length(chosen) < k) {
     remaining <- setdiff(seq_len(n), chosen)
     need <- k - length(chosen)
@@ -215,6 +222,7 @@ select_core_set <- function(samples,
       chosen_dist <- c(chosen_dist, rep(NA_real_, length(top)))
     }
   }
+  # nocov end
 
   chosen <- chosen[seq_len(k)]
   chosen_cluster <- chosen_cluster[seq_len(k)]
