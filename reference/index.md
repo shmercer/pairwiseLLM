@@ -19,6 +19,8 @@
   propose next pairs
 - [`bt_core_link_round()`](https://shmercer.github.io/pairwiseLLM/reference/bt_core_link_round.md)
   : Propose a core-linking round given an existing BT fit
+- [`bt_run_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/bt_run_adaptive.md)
+  : Run a round-based adaptive BT workflow end-to-end
 - [`bt_should_stop()`](https://shmercer.github.io/pairwiseLLM/reference/bt_should_stop.md)
   : Decide whether to stop adaptive sampling based on stop metrics
 - [`bt_stop_metrics()`](https://shmercer.github.io/pairwiseLLM/reference/bt_stop_metrics.md)
@@ -131,6 +133,8 @@
   : Select a core set of items for BT linking
 - [`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
   : Get or set a prompt template for pairwise comparisons
+- [`simulate_bt_judge()`](https://shmercer.github.io/pairwiseLLM/reference/simulate_bt_judge.md)
+  : Simulate a judge for BT pairwise comparisons
 - [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md)
   : Live Anthropic (Claude) comparisons for a tibble of pairs
 - [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)

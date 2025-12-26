@@ -126,11 +126,12 @@ rc$summary
 
 bias <- check_positional_bias(rc)
 bias$summary
-#> # A tibble: 1 × 13
+#> # A tibble: 1 × 15
 #>   n_pairs prop_consistent boot_mean boot_lwr boot_upr p_sample1_main
 #>     <int>           <dbl>     <dbl>    <dbl>    <dbl>          <dbl>
 #> 1       3               1         1        1        1              1
-#> # ℹ 7 more variables: p_sample1_rev <dbl>, p_sample1_overall <dbl>,
-#> #   total_pos1_wins <int>, total_comparisons <int>, n_inconsistent <int>,
+#> # ℹ 9 more variables: p_sample1_rev <dbl>, p_sample1_overall <dbl>,
+#> #   total_pos1_wins <int>, total_comparisons <int>,
+#> #   prop_pos1_wins_overall <dbl>, mean_signed <dbl>, n_inconsistent <int>,
 #> #   n_inconsistent_pos1_bias <int>, n_inconsistent_pos2_bias <int>
 ```
