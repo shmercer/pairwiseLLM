@@ -388,7 +388,7 @@ bt_run_adaptive <- function(samples,
       bad_idx <- which(bad)
       examples <- unique(as.character(res$better_id[bad_idx]))
       examples <- examples[!is.na(examples)]
-      examples <- head(examples, 3)
+      examples <- utils::head(examples, 3)
       stop(
         "`judge_fun` returned `better_id` values that are not equal to ID1 or ID2.",
         if (length(examples) > 0L) paste0(" Examples: ", paste(examples, collapse = ", ")) else "",
