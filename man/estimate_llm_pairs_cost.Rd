@@ -10,7 +10,7 @@ estimate_llm_pairs_cost(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together"),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   mode = c("live", "batch"),
   n_test = 25,
@@ -41,7 +41,8 @@ estimate_llm_pairs_cost(
 \code{\link{set_prompt_template}}.}
 
 \item{backend}{Backend for the pilot run; one of \code{"openai"},
-\code{"anthropic"}, \code{"gemini"}, or \code{"together"}.}
+\code{"anthropic"}, \code{"gemini"}, or \code{"together"}. \code{"ollama"}
+can be specified, but is not supported for cost estimation.}
 
 \item{endpoint}{OpenAI endpoint; one of \code{"chat.completions"} or
 \code{"responses"}. Ignored for other backends.}
