@@ -128,7 +128,11 @@ add_pair_texts <- function(pairs, samples, overwrite = FALSE) {
   # Normalize pairs schema
   if (!all(c("ID1", "ID2") %in% names(pairs))) {
     if (all(c("object1", "object2") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = object1, ID2 = object2)
+      pairs <- dplyr::rename(
+        pairs,
+        ID1 = dplyr::all_of("object1"),
+        ID2 = dplyr::all_of("object2")
+      )
     } else {
       stop("`pairs` must contain columns: ID1, ID2 (or object1, object2).", call. = FALSE)
     }
@@ -170,8 +174,16 @@ add_pair_texts <- function(pairs, samples, overwrite = FALSE) {
   }
 
   # Keep a stable column order for LLM submission convenience
-  pairs <- dplyr::relocate(pairs, text1, .after = ID1)
-  pairs <- dplyr::relocate(pairs, text2, .after = ID2)
+  pairs <- dplyr::relocate(
+    pairs,
+    dplyr::all_of("text1"),
+    .after = dplyr::all_of("ID1")
+  )
+  pairs <- dplyr::relocate(
+    pairs,
+    dplyr::all_of("text2"),
+    .after = dplyr::all_of("ID2")
+  )
 
   pairs
 }
