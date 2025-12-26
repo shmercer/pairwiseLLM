@@ -271,7 +271,6 @@ sample_reverse_pairs <- function(pairs,
 #' pairs_all <- make_pairs(example_writing_samples)
 #'
 #' # Randomly flip the order within pairs
-#' set.seed(123)
 #' pairs_rand <- randomize_pair_order(pairs_all, seed = 123)
 #'
 #' head(pairs_all[, c("ID1", "ID2")])
@@ -297,12 +296,21 @@ randomize_pair_order <- function(pairs, seed = NULL) {
   }
 
   if (!is.null(seed)) {
-    old_seed <- .Random.seed
+    seed <- as.integer(seed)
+    if (length(seed) != 1L || is.na(seed)) {
+      stop("`seed` must be a single integer.", call. = FALSE)
+    }
+
+    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    old_seed <- NULL
+    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+
     on.exit(
       {
-        # Restore previous RNG state to avoid surprising callers
-        if (exists("old_seed", inherits = FALSE)) {
-          .Random.seed <<- old_seed
+        if (had_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
         }
       },
       add = TRUE
@@ -317,7 +325,6 @@ randomize_pair_order <- function(pairs, seed = NULL) {
   }
 
   flip <- stats::runif(n) < 0.5
-
   out <- pairs
 
   idx <- which(flip)

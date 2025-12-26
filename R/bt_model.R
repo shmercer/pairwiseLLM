@@ -29,17 +29,27 @@
 #' does not match either \code{ID1} or \code{ID2} (including
 #' \code{NA}) are excluded.
 #'
+#' Optionally, you can include a \dQuote{judge} identifier (e.g., model/backend)
+#' by supplying \code{judge}. When provided, the output includes a 4th column
+#' named \code{judge} (character). Rows with missing \code{judge} are excluded.
+#'
 #' @param results A data frame or tibble with columns \code{ID1},
 #'   \code{ID2}, and \code{better_id}.
+#' @param judge Optional character scalar. The name of a column in
+#'   \code{results} identifying the judge (e.g., \code{"model"} or
+#'   \code{"backend"}). If supplied, the returned tibble includes a \code{judge}
+#'   column and drops rows where \code{judge} is missing.
 #'
-#' @return A tibble with three columns:
-#'   \itemize{
-#'     \item \code{object1}: ID from \code{ID1}
-#'     \item \code{object2}: ID from \code{ID2}
-#'     \item \code{result}: numeric value, 1 if \code{better_id == ID1},
-#'       0 if \code{better_id == ID2}
-#'   }
-#'   Rows with invalid or missing \code{better_id} are dropped.
+#' @return A tibble with:
+#' \itemize{
+#'   \item \code{object1}: ID from \code{ID1}
+#'   \item \code{object2}: ID from \code{ID2}
+#'   \item \code{result}: numeric value, 1 if \code{better_id == ID1},
+#'     0 if \code{better_id == ID2}
+#'   \item \code{judge}: (optional) judge identifier when \code{judge} is supplied
+#' }
+#' Rows with invalid or missing \code{better_id} are dropped. If \code{judge} is
+#' supplied, rows with missing \code{judge} are also dropped.
 #'
 #' @examples
 #' results <- tibble::tibble(
@@ -51,13 +61,18 @@
 #' bt_data <- build_bt_data(results)
 #' bt_data
 #'
+#' # Include judge/model information
+#' results_j <- dplyr::mutate(results, model = c("mA", "mB", "mA"))
+#' bt_j <- build_bt_data(results_j, judge = "model")
+#' bt_j
+#'
 #' # Using the example writing pairs
 #' data("example_writing_pairs")
 #' bt_ex <- build_bt_data(example_writing_pairs)
 #' head(bt_ex)
 #'
 #' @export
-build_bt_data <- function(results) {
+build_bt_data <- function(results, judge = NULL) {
   results <- tibble::as_tibble(results)
 
   required_cols <- c("ID1", "ID2", "better_id")
@@ -69,6 +84,15 @@ build_bt_data <- function(results) {
     )
   }
 
+  if (!is.null(judge)) {
+    if (!is.character(judge) || length(judge) != 1L || is.na(judge) || nchar(judge) == 0L) {
+      stop("`judge` must be a non-empty character scalar.", call. = FALSE)
+    }
+    if (!(judge %in% names(results))) {
+      stop("`judge` column not found in `results`: ", judge, call. = FALSE)
+    }
+  }
+
   # Ensure character IDs (avoid factors / labelled types)
   results <- dplyr::mutate(
     results,
@@ -76,6 +100,10 @@ build_bt_data <- function(results) {
     ID2 = as.character(.data$ID2),
     better_id = as.character(.data$better_id)
   )
+
+  if (!is.null(judge)) {
+    results[[judge]] <- as.character(results[[judge]])
+  }
 
   out <- dplyr::mutate(
     results,
@@ -88,15 +116,27 @@ build_bt_data <- function(results) {
 
   out <- dplyr::filter(out, !is.na(.data$result))
 
-  out <- dplyr::transmute(
-    out,
-    object1 = .data$ID1,
-    object2 = .data$ID2,
-    result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
-  )
+  if (!is.null(judge)) {
+    out <- dplyr::filter(out, !is.na(.data[[judge]]))
+    out <- dplyr::transmute(
+      out,
+      object1 = .data$ID1,
+      object2 = .data$ID2,
+      result  = as.numeric(.data$result), # sirt::btm is happiest with numeric 0/1
+      judge   = .data[[judge]]
+    )
+  } else {
+    out <- dplyr::transmute(
+      out,
+      object1 = .data$ID1,
+      object2 = .data$ID2,
+      result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
+    )
+  }
 
   tibble::as_tibble(out)
 }
+
 
 #' Fit a Bradley–Terry model with sirt and fallback to BradleyTerry2
 #'
@@ -117,25 +157,33 @@ build_bt_data <- function(results) {
 #' downstream code can rely on consistent fields.
 #'
 #' @details
-#' The input \code{bt_data} must contain exactly three columns:
+#' The input \code{bt_data} must contain either:
 #' \enumerate{
-#'   \item object1: character ID for the first item in the pair
-#'   \item object2: character ID for the second item
-#'   \item result: numeric indicator (1 = object1 wins, 0 = object2 wins)
+#'   \item three columns: \code{object1}, \code{object2}, \code{result}, or
+#'   \item four columns: \code{object1}, \code{object2}, \code{result}, \code{judge}
 #' }
+#'
+#' Where \code{object1} and \code{object2} are item IDs and \code{result} is a
+#' numeric indicator (1 = \code{object1} wins, 0 = \code{object2} wins).
+#' If a \code{judge} column is included, it is used by the \pkg{sirt} engine
+#' (and ignored by \pkg{BradleyTerry2}).
 #'
 #' Ability estimates (\code{theta}) represent latent "writing quality"
 #' parameters on a log-odds scale. Standard errors are included for both
 #' modeling engines. MLE reliability is only available from \pkg{sirt}.
 #'
-#' @param bt_data A data frame or tibble with exactly three columns:
-#'   two character ID columns and one numeric \code{result} column
-#'   equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.
+#' @param bt_data A data frame or tibble with either three columns
+#'   (\code{object1}, \code{object2}, \code{result}) or four columns including
+#'   \code{judge}. Usually produced by \code{\link{build_bt_data}}.
 #' @param engine Character string specifying the modeling engine. One of:
 #'   \code{"auto"} (default), \code{"sirt"}, or \code{"BradleyTerry2"}.
 #' @param verbose Logical. If \code{TRUE} (default), show engine output (iterations,
 #'   warnings). If \code{FALSE}, suppress noisy output to keep
 #'   examples and reports clean.
+#' @param return_diagnostics Logical. If \code{TRUE}, return a \code{diagnostics}
+#'   list when using the \pkg{sirt} engine. Defaults to \code{FALSE}.
+#' @param include_residuals Logical. If \code{TRUE} and \code{return_diagnostics = TRUE},
+#'   include residuals (if available) in the diagnostics. Defaults to \code{FALSE}.
 #' @param ... Additional arguments passed through to \code{sirt::btm()}
 #'   or \code{BradleyTerry2::BTm()}.
 #'
@@ -155,15 +203,32 @@ build_bt_data <- function(results) {
 #'       MLE reliability (sirt engine only). \code{NA} for
 #'       \pkg{BradleyTerry2} models.
 #'   }
+#'   \item{diagnostics}{
+#'       \code{NULL} unless \code{return_diagnostics = TRUE} and
+#'       the \pkg{sirt} engine is used. When returned, includes selected
+#'       fields from \code{sirt::btm()} output (e.g., separation index,
+#'       optional item/judge fit, probabilities, and optional residuals).
+#'   }
 #' }
 #'
 #' @examples
-#' # Example using built-in comparison data
 #' data("example_writing_pairs")
 #' bt <- build_bt_data(example_writing_pairs)
 #'
-#' fit1 <- fit_bt_model(bt, engine = "sirt")
-#' fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+#' if (requireNamespace("sirt", quietly = TRUE)) {
+#'   fit1 <- fit_bt_model(bt, engine = "sirt", verbose = FALSE)
+#' }
+#'
+#' if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
+#'   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE)
+#' }
+#'
+#' # Judge column example (sirt only)
+#' bt_j <- bt
+#' bt_j$judge <- "judge_1"
+#' if (requireNamespace("sirt", quietly = TRUE)) {
+#'   fit3 <- fit_bt_model(bt_j, engine = "sirt", verbose = FALSE, return_diagnostics = TRUE)
+#' }
 #'
 #' @import tibble
 #' @import dplyr
@@ -172,10 +237,25 @@ build_bt_data <- function(results) {
 fit_bt_model <- function(bt_data,
                          engine = c("auto", "sirt", "BradleyTerry2"),
                          verbose = TRUE,
+                         return_diagnostics = FALSE,
+                         include_residuals = FALSE,
                          ...) {
   bt_data <- as.data.frame(bt_data)
-  if (ncol(bt_data) != 3L) {
-    stop("`bt_data` must have exactly three columns.", call. = FALSE)
+
+  if (!ncol(bt_data) %in% c(3L, 4L)) {
+    stop(
+      "`bt_data` must have exactly three columns, or four columns including `judge`.",
+      call. = FALSE
+    )
+  }
+
+  has_judge <- (ncol(bt_data) == 4L)
+
+  # Normalize column names; do not depend on incoming names
+  if (has_judge) {
+    names(bt_data)[1:4] <- c("object1", "object2", "result", "judge")
+  } else {
+    names(bt_data)[1:3] <- c("object1", "object2", "result")
   }
 
   engine <- match.arg(engine)
@@ -183,7 +263,7 @@ fit_bt_model <- function(bt_data,
   # --------------------------
   # sirt helper
   # --------------------------
-  fit_sirt <- function(dat, verbose, ...) {
+  fit_sirt <- function(dat, verbose, return_diagnostics, include_residuals, ...) {
     if (!.require_ns("sirt", quietly = TRUE)) {
       stop(
         "Package 'sirt' must be installed to use engine = \"sirt\".\n",
@@ -192,8 +272,23 @@ fit_bt_model <- function(bt_data,
       )
     }
 
+    dat <- as.data.frame(dat)
+
+    # sirt::btm expects the 3-column paired data; judge is passed separately if present
+    dat3 <- dat[, 1:3, drop = FALSE]
+    names(dat3) <- c("object1", "object2", "result")
+
+    dots <- list(...)
+
+    if (ncol(dat) == 4L) {
+      # Only add judge if the caller did not explicitly supply it in ...
+      if (!("judge" %in% names(dots))) {
+        dots <- c(list(judge = dat$judge), dots)
+      }
+    }
+
     # sirt::btm often prints iteration progress. Capture when verbose = FALSE.
-    run_btm <- function() .sirt_btm(dat, ...)
+    run_btm <- function() do.call(.sirt_btm, c(list(dat3), dots))
 
     fit <- if (isTRUE(verbose)) {
       run_btm()
@@ -227,11 +322,47 @@ fit_bt_model <- function(bt_data,
       se    = effects$se.theta
     )
 
+    diagnostics <- NULL
+    if (isTRUE(return_diagnostics)) {
+      diagnostics <- list(
+        mle_rel = fit$mle.rel,
+        sepG    = fit$sepG
+      )
+
+      # Item fit (if present)
+      fit_cols <- intersect(names(effects), c("infit", "outfit"))
+      if (length(fit_cols) > 0L) {
+        item_fit <- effects[, c("individual", fit_cols), drop = FALSE]
+        names(item_fit)[names(item_fit) == "individual"] <- "ID" # avoids tidyselect warning
+        diagnostics$item_fit <- tibble::as_tibble(item_fit)
+      } else {
+        diagnostics$item_fit <- NULL
+      }
+
+      # Judge fit (if available)
+      if (!is.null(fit$fit_judges)) {
+        diagnostics$judge_fit <- tibble::as_tibble(fit$fit_judges)
+      } else {
+        diagnostics$judge_fit <- NULL
+      }
+
+      # Estimated probabilities (if available)
+      diagnostics$probs <- fit$probs
+
+      # Residuals can be large; include only when explicitly requested
+      if (isTRUE(include_residuals) && !is.null(fit$residuals)) {
+        diagnostics$residuals <- tibble::as_tibble(fit$residuals)
+      } else {
+        diagnostics$residuals <- NULL
+      }
+    }
+
     list(
       engine      = "sirt",
       fit         = fit,
       theta       = theta,
-      reliability = fit$mle.rel
+      reliability = fit$mle.rel,
+      diagnostics = diagnostics
     )
   }
 
@@ -248,6 +379,9 @@ fit_bt_model <- function(bt_data,
     }
 
     dat <- as.data.frame(dat)
+
+    # Ignore judge column if present
+    dat <- dat[, 1:3, drop = FALSE]
     names(dat)[1:3] <- c("object1", "object2", "result")
 
     # Aggregate wins for object1 vs object2
@@ -296,7 +430,8 @@ fit_bt_model <- function(bt_data,
       engine      = "BradleyTerry2",
       fit         = fit,
       theta       = theta,
-      reliability = NA_real_
+      reliability = NA_real_,
+      diagnostics = NULL
     )
   }
 
@@ -304,7 +439,12 @@ fit_bt_model <- function(bt_data,
   # Dispatch
   # --------------------------
   if (engine == "sirt") {
-    return(fit_sirt(bt_data, verbose = verbose, ...))
+    return(fit_sirt(bt_data,
+      verbose = verbose,
+      return_diagnostics = return_diagnostics,
+      include_residuals = include_residuals,
+      ...
+    ))
   }
 
   if (engine == "BradleyTerry2") {
@@ -312,7 +452,12 @@ fit_bt_model <- function(bt_data,
   }
 
   res_sirt <- tryCatch(
-    fit_sirt(bt_data, verbose = verbose, ...),
+    fit_sirt(bt_data,
+      verbose = verbose,
+      return_diagnostics = return_diagnostics,
+      include_residuals = include_residuals,
+      ...
+    ),
     error = function(e) e
   )
   if (!inherits(res_sirt, "error")) {

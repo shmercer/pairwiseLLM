@@ -116,14 +116,18 @@ testthat::test_that("estimate_llm_pairs_cost validates inputs", {
   td <- trait_description("overall_quality")
 
   # Backend ollama
-  # Note: match.arg fails before the specific ollama check in the source code,
-  # so we expect the standard match.arg error message.
   testthat::expect_error(
-    estimate_llm_pairs_cost(pairs,
-      model = "m", trait_name = "t", trait_description = "d",
-      backend = "ollama", cost_per_million_input = 1, cost_per_million_output = 1
+    estimate_llm_pairs_cost(
+      pairs = pairs,
+      backend = "ollama",
+      model = "dummy",
+      trait_name = td$name,
+      trait_description = td$description,
+      n_test = 0,
+      cost_per_million_input = 1,
+      cost_per_million_output = 1
     ),
-    "should be one of"
+    "backend.*ollama.*not supported for cost estimation"
   )
 
   # Missing columns
@@ -429,7 +433,7 @@ testthat::test_that("estimate_llm_pairs_cost triggers stratified sampling top-up
 
   pairs <- tibble::tibble(
     ID1 = c("A", "B", "C"),
-    text1 = c("a", "b", paste(rep("c", 1000), collapse="")), # Distinct lengths
+    text1 = c("a", "b", paste(rep("c", 1000), collapse = "")), # Distinct lengths
     ID2 = c("A", "B", "C"),
     text2 = c("a", "b", "c")
   )
@@ -504,4 +508,104 @@ testthat::test_that("estimate_llm_pairs_cost falls back to default submitter", {
 
   testthat::expect_s3_class(est, "pairwiseLLM_cost_estimate")
   testthat::expect_equal(est$summary$n_test, 0)
+})
+
+test_that("estimate_llm_pairs_cost rejects backend=ollama with explicit message", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "x", ID2 = "B", text2 = "y")
+  td <- trait_description("overall_quality")
+
+  expect_error(
+    estimate_llm_pairs_cost(
+      pairs = pairs,
+      backend = "ollama",
+      model = "dummy",
+      trait_name = td$name,
+      trait_description = td$description,
+      n_test = 0,
+      cost_per_million_input = 1,
+      cost_per_million_output = 1
+    ),
+    "not supported for cost estimation"
+  )
+})
+
+test_that("estimate_llm_pairs_cost validates seed and restores RNG state (CRAN-safe)", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "x", ID2 = "B", text2 = "y")
+  td <- trait_description("overall_quality")
+
+  submit_stub <- function(...) {
+    tibble::tibble(status_code = 200L, prompt_tokens = 10L, completion_tokens = 5L)
+  }
+
+  # invalid seed -> error; suppress coercion warning
+  expect_error(
+    suppressWarnings(
+      estimate_llm_pairs_cost(
+        pairs = pairs,
+        backend = "openai",
+        model = "dummy",
+        trait_name = td$name,
+        trait_description = td$description,
+        n_test = 1,
+        test_strategy = "random",
+        seed = "not_an_int",
+        cost_per_million_input = 1,
+        cost_per_million_output = 1,
+        .submit_fun = submit_stub
+      )
+    ),
+    "seed.*single integer"
+  )
+
+  # Case 1: .Random.seed exists -> restored exactly
+  set.seed(1)
+  old <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+
+  estimate_llm_pairs_cost(
+    pairs = pairs,
+    backend = "openai",
+    model = "dummy",
+    trait_name = td$name,
+    trait_description = td$description,
+    n_test = 1,
+    test_strategy = "random",
+    seed = 999,
+    cost_per_million_input = 1,
+    cost_per_million_output = 1,
+    .submit_fun = submit_stub
+  )
+
+  expect_equal(get(".Random.seed", envir = .GlobalEnv, inherits = FALSE), old)
+
+  # Case 2: .Random.seed missing -> stays missing after
+  had <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  saved <- NULL
+  if (had) {
+    saved <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    rm(".Random.seed", envir = .GlobalEnv)
+  }
+  on.exit(
+    {
+      if (had) assign(".Random.seed", saved, envir = .GlobalEnv)
+    },
+    add = TRUE
+  )
+
+  expect_false(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
+
+  estimate_llm_pairs_cost(
+    pairs = pairs,
+    backend = "openai",
+    model = "dummy",
+    trait_name = td$name,
+    trait_description = td$description,
+    n_test = 1,
+    test_strategy = "random",
+    seed = 123,
+    cost_per_million_input = 1,
+    cost_per_million_output = 1,
+    .submit_fun = submit_stub
+  )
+
+  expect_false(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
 })

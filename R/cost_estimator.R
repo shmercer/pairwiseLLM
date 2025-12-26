@@ -25,7 +25,8 @@
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}.
 #' @param backend Backend for the pilot run; one of \code{"openai"},
-#'   \code{"anthropic"}, \code{"gemini"}, or \code{"together"}.
+#'   \code{"anthropic"}, \code{"gemini"}, or \code{"together"}. \code{"ollama"}
+#'   can be specified, but is not supported for cost estimation.
 #' @param endpoint OpenAI endpoint; one of \code{"chat.completions"} or
 #'   \code{"responses"}. Ignored for other backends.
 #' @param mode Target execution mode for the full job; one of \code{"live"} or
@@ -103,24 +104,24 @@
 #' }
 #' @export
 estimate_llm_pairs_cost <- function(
-    pairs,
-    model,
-    trait_name,
-    trait_description,
-    prompt_template = set_prompt_template(),
-    backend = c("openai", "anthropic", "gemini", "together"),
-    endpoint = c("chat.completions", "responses"),
-    mode = c("live", "batch"),
-    n_test = 25,
-    test_strategy = c("stratified_prompt_bytes", "random", "first"),
-    seed = NULL,
-    cost_per_million_input,
-    cost_per_million_output,
-    batch_discount = 1,
-    budget_quantile = 0.9,
-    return_test_results = TRUE,
-    return_remaining_pairs = TRUE,
-    ...
+  pairs,
+  model,
+  trait_name,
+  trait_description,
+  prompt_template = set_prompt_template(),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  endpoint = c("chat.completions", "responses"),
+  mode = c("live", "batch"),
+  n_test = 25,
+  test_strategy = c("stratified_prompt_bytes", "random", "first"),
+  seed = NULL,
+  cost_per_million_input,
+  cost_per_million_output,
+  batch_discount = 1,
+  budget_quantile = 0.9,
+  return_test_results = TRUE,
+  return_remaining_pairs = TRUE,
+  ...
 ) {
   backend <- match.arg(backend)
   mode <- match.arg(mode)
@@ -128,7 +129,8 @@ estimate_llm_pairs_cost <- function(
 
   if (identical(backend, "ollama")) {
     stop("`backend = \"ollama\"` is not supported for cost estimation (local models have no token cost).",
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 
   pairs <- tibble::as_tibble(pairs)
@@ -163,7 +165,7 @@ estimate_llm_pairs_cost <- function(
     stop("`batch_discount` must be a single numeric value > 0.", call. = FALSE)
   }
   if (!is.numeric(budget_quantile) || length(budget_quantile) != 1L ||
-      is.na(budget_quantile) || budget_quantile <= 0 || budget_quantile >= 1) {
+    is.na(budget_quantile) || budget_quantile <= 0 || budget_quantile >= 1) {
     stop("`budget_quantile` must be a single numeric value in (0, 1).", call. = FALSE)
   }
 
@@ -200,10 +202,26 @@ estimate_llm_pairs_cost <- function(
   # Select pilot indices
   # ------------------------------------------------------------------
   if (!is.null(seed) && test_strategy != "first") {
-    old_seed <- .Random.seed
-    on.exit({
-      if (!is.null(old_seed)) .Random.seed <<- old_seed
-    }, add = TRUE)
+    seed <- as.integer(seed)
+    if (length(seed) != 1L || is.na(seed)) {
+      stop("`seed` must be a single integer.", call. = FALSE)
+    }
+
+    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    old_seed <- NULL
+    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+
+    on.exit(
+      {
+        if (had_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
+        }
+      },
+      add = TRUE
+    )
+
     set.seed(seed)
   }
 
@@ -233,7 +251,7 @@ estimate_llm_pairs_cost <- function(
         # Allocate approximately evenly across strata
         k <- length(by_stratum)
         base <- n_test %/% k
-        rem  <- n_test %% k
+        rem <- n_test %% k
         alloc <- rep(base, k)
         if (rem > 0) alloc[seq_len(rem)] <- alloc[seq_len(rem)] + 1L
 
@@ -532,17 +550,20 @@ print.pairwiseLLM_cost_estimate <- function(x, ...) {
   cat(
     "Estimated prompt tokens:              ",
     format(round(s$expected_total_prompt_tokens), big.mark = ","),
-    "\n", sep = ""
+    "\n",
+    sep = ""
   )
   cat(
     "Estimated completion tokens (expected): ",
     format(round(s$expected_total_completion_tokens), big.mark = ","),
-    "\n", sep = ""
+    "\n",
+    sep = ""
   )
   cat(
     "Estimated completion tokens (budget):   ",
     format(round(s$budget_total_completion_tokens), big.mark = ","),
-    "\n", sep = ""
+    "\n",
+    sep = ""
   )
 
   cat("Expected cost:", format(s$expected_cost_total, digits = 6), "\n")
@@ -587,7 +608,7 @@ print.pairwiseLLM_cost_estimate <- function(x, ...) {
   if (n == 0L) {
     return(list(
       method = "fallback_bytes_per_token",
-      coefficients = c(intercept = 0, slope = 1/4),
+      coefficients = c(intercept = 0, slope = 1 / 4),
       n_used = 0L,
       rmse = NA_real_,
       r_squared = NA_real_
