@@ -80,29 +80,24 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
   n_rev_B <- NULL
   is_rev_tie <- NULL
 
-  is_consistent <- NULL
+  # ---- validate inputs early (so we error cleanly, not inside dplyr) ----
+  validate_required_cols <- function(df, name) {
+    req <- c("ID1", "ID2", "better_id")
+    miss <- setdiff(req, names(df))
+    if (length(miss) > 0L) {
+      stop(
+        "`", name, "` must contain columns: ", paste(req, collapse = ", "),
+        call. = FALSE
+      )
+    }
+  }
 
   main_results <- tibble::as_tibble(main_results)
   reverse_results <- tibble::as_tibble(reverse_results)
+  validate_required_cols(main_results, "main_results")
+  validate_required_cols(reverse_results, "reverse_results")
 
-  required_cols <- c("ID1", "ID2", "better_id")
-
-  if (!all(required_cols %in% names(main_results))) {
-    stop(
-      "`main_results` must contain columns: ",
-      paste(required_cols, collapse = ", "),
-      call. = FALSE
-    )
-  }
-  if (!all(required_cols %in% names(reverse_results))) {
-    stop(
-      "`reverse_results` must contain columns: ",
-      paste(required_cols, collapse = ", "),
-      call. = FALSE
-    )
-  }
-
-  # Helper: majority vote for better_id (ties -> NA)
+  # Helper: majority vote over a vector; ties => NA
   majority_vote <- function(x) {
     x <- as.character(x)
     x <- x[!is.na(x)]
@@ -122,9 +117,18 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
   # If tied, take the first in sorted order (stable, deterministic).
   most_common_order <- function(id1, id2) {
     ord <- paste(as.character(id1), as.character(id2), sep = "||")
+    if (length(ord) == 0L) {
+      return(c(NA_character_, NA_character_))
+    }
     tab <- table(ord)
+    if (length(tab) == 0L) {
+      return(c(NA_character_, NA_character_))
+    }
     mx <- max(tab)
     winners <- sort(names(tab)[tab == mx])
+    if (length(winners) == 0L) {
+      return(c(NA_character_, NA_character_))
+    }
     parts <- strsplit(winners[[1]], "\\|\\|")[[1]]
     c(parts[[1]], parts[[2]])
   }
@@ -150,7 +154,17 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
     ) |>
     dplyr::filter(!is.na(better_id))
 
-  # Summarize each direction to ONE row per key (majority winner + representative ordering)
+  # If either direction has no usable votes, return a clean empty result
+  if (nrow(main) == 0L || nrow(rev) == 0L) {
+    summary_tbl <- tibble::tibble(
+      n_pairs = 0L,
+      n_consistent = 0L,
+      prop_consistent = NA_real_
+    )
+    return(list(summary = summary_tbl, details = tibble::tibble()))
+  }
+
+  # Summarize each direction to ONE row per key
   main_sum <- main |>
     dplyr::group_by(key) |>
     dplyr::summarise(
@@ -181,10 +195,8 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
     ) |>
     dplyr::select(-.tmp)
 
-  # Overlap keys (reverse may be a sample; that's fine)
   joined <- dplyr::inner_join(main_sum, rev_sum, by = "key")
 
-  # Exclude keys where either direction has no unique majority winner
   if (nrow(joined) > 0L) {
     keep <- !is.na(joined$better_id_main) & !is.na(joined$better_id_rev)
     joined <- joined[keep, , drop = FALSE]
@@ -193,21 +205,17 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
     joined$is_consistent <- logical(0)
   }
 
-  # Summary (now counts KEYS, not raw rows)
   n_pairs <- nrow(joined)
-  n_consistent <- if (n_pairs > 0L) sum(joined$is_consistent) else 0L
+  n_consistent <- if (n_pairs > 0L) sum(joined$is_consistent, na.rm = TRUE) else 0L
   prop_consistent <- if (n_pairs > 0L) n_consistent / n_pairs else NA_real_
 
   summary_tbl <- tibble::tibble(
-    n_pairs         = n_pairs,
-    n_consistent    = n_consistent,
+    n_pairs = n_pairs,
+    n_consistent = n_consistent,
     prop_consistent = prop_consistent
   )
 
-  list(
-    summary = summary_tbl,
-    details = joined
-  )
+  list(summary = summary_tbl, details = joined)
 }
 
 #' Check positional bias and bootstrap consistency reliability
