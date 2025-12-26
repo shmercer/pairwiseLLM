@@ -108,7 +108,7 @@ estimate_llm_pairs_cost <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together"),
+  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   mode = c("live", "batch"),
   n_test = 25,
