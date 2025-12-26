@@ -656,6 +656,15 @@ MIT License. See `LICENSE`.
   : Retrieve an Anthropic Message Batch by ID
 - [`anthropic_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_poll_batch_until_complete.md)
   : Poll an Anthropic Message Batch until completion
+- [`bt_adaptive_round()`](https://shmercer.github.io/pairwiseLLM/reference/bt_adaptive_round.md)
+  : Run one adaptive round: compute metrics, decide stopping, and
+  propose next pairs
+- [`bt_core_link_round()`](https://shmercer.github.io/pairwiseLLM/reference/bt_core_link_round.md)
+  : Propose a core-linking round given an existing BT fit
+- [`bt_should_stop()`](https://shmercer.github.io/pairwiseLLM/reference/bt_should_stop.md)
+  : Decide whether to stop adaptive sampling based on stop metrics
+- [`bt_stop_metrics()`](https://shmercer.github.io/pairwiseLLM/reference/bt_stop_metrics.md)
+  : Compute stopping metrics from a Bradley–Terry model fit
 - [`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md)
   : Build Anthropic Message Batch requests from a tibble of pairs
 - [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
@@ -756,6 +765,12 @@ MIT License. See `LICENSE`.
   : Randomly sample pairs of writing samples
 - [`sample_reverse_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.md)
   : Sample reversed versions of a subset of pairs
+- [`select_adaptive_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/select_adaptive_pairs.md)
+  : Select adaptive pairs for the next round of comparisons
+- [`select_core_link_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/select_core_link_pairs.md)
+  : Select core-linking pairs for BT scaling across batches/waves
+- [`select_core_set()`](https://shmercer.github.io/pairwiseLLM/reference/select_core_set.md)
+  : Select a core set of items for BT linking
 - [`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
   : Get or set a prompt template for pairwise comparisons
 - [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md)

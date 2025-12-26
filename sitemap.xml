@@ -15,6 +15,10 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/anthropic_download_batch_results.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/anthropic_get_batch.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/anthropic_poll_batch_until_complete.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/bt_adaptive_round.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/bt_core_link_round.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/bt_should_stop.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/bt_stop_metrics.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.html</loc></url>
@@ -69,6 +73,9 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/sample_pairs.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/select_adaptive_pairs.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/select_core_link_pairs.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/select_core_set.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.html</loc></url>

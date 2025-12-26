@@ -58,7 +58,7 @@ first object, 0 for a win of the second).</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">build_bt_data</span><span class="op">(</span><span class="va">results</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">build_bt_data</span><span class="op">(</span><span class="va">results</span>, judge <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -69,14 +69,23 @@ first object, 0 for a win of the second).</p>
 <dd><p>A data frame or tibble with columns <code>ID1</code>,
 <code>ID2</code>, and <code>better_id</code>.</p></dd>
 
+
+<dt id="arg-judge">judge<a class="anchor" aria-label="anchor" href="#arg-judge"></a></dt>
+<dd><p>Optional character scalar. The name of a column in
+<code>results</code> identifying the judge (e.g., <code>"model"</code> or
+<code>"backend"</code>). If supplied, the returned tibble includes a <code>judge</code>
+column and drops rows where <code>judge</code> is missing.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A tibble with three columns:</p><ul><li><p><code>object1</code>: ID from <code>ID1</code></p></li>
+    <p>A tibble with:</p><ul><li><p><code>object1</code>: ID from <code>ID1</code></p></li>
 <li><p><code>object2</code>: ID from <code>ID2</code></p></li>
 <li><p><code>result</code>: numeric value, 1 if <code>better_id == ID1</code>,
 0 if <code>better_id == ID2</code></p></li>
-</ul><p>Rows with invalid or missing <code>better_id</code> are dropped.</p>
+<li><p><code>judge</code>: (optional) judge identifier when <code>judge</code> is supplied</p></li>
+</ul><p>Rows with invalid or missing <code>better_id</code> are dropped. If <code>judge</code> is
+supplied, rows with missing <code>judge</code> are also dropped.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -85,6 +94,9 @@ first object, 0 for a win of the second).</p>
 is the ID of the better sample. Rows where <code>better_id</code>
 does not match either <code>ID1</code> or <code>ID2</code> (including
 <code>NA</code>) are excluded.</p>
+<p>Optionally, you can include a “judge” identifier (e.g., model/backend)
+by supplying <code>judge</code>. When provided, the output includes a 4th column
+named <code>judge</code> (character). Rows with missing <code>judge</code> are excluded.</p>
     </div>
 
     <div class="section level2">
@@ -103,6 +115,17 @@ does not match either <code>ID1</code> or <code>ID2</code> (including
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> S1      S2           1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> S1      S3           0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span> S2      S3           1</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Include judge/model information</span></span></span>
+<span class="r-in"><span><span class="va">results_j</span> <span class="op">&lt;-</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span><span class="va">results</span>, model <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mA"</span>, <span class="st">"mB"</span>, <span class="st">"mA"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">bt_j</span> <span class="op">&lt;-</span> <span class="fu">build_bt_data</span><span class="op">(</span><span class="va">results_j</span>, judge <span class="op">=</span> <span class="st">"model"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">bt_j</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 3 × 4</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   object1 object2 result judge</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> S1      S2           1 mA   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> S1      S3           0 mB   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span> S2      S3           1 mA   </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Using the example writing pairs</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_pairs"</span><span class="op">)</span></span></span>

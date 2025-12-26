@@ -63,7 +63,6 @@ data("example_writing_samples", package = "pairwiseLLM")
 pairs_all <- make_pairs(example_writing_samples)
 
 # Randomly flip the order within pairs
-set.seed(123)
 pairs_rand <- randomize_pair_order(pairs_all, seed = 123)
 
 head(pairs_all[, c("ID1", "ID2")])
