@@ -25,7 +25,8 @@
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}.
 #' @param backend Backend for the pilot run; one of \code{"openai"},
-#'   \code{"anthropic"}, \code{"gemini"}, or \code{"together"}.
+#'   \code{"anthropic"}, \code{"gemini"}, or \code{"together"}. \code{"ollama"}
+#'   can be specified, but is not supported for cost estimation.
 #' @param endpoint OpenAI endpoint; one of \code{"chat.completions"} or
 #'   \code{"responses"}. Ignored for other backends.
 #' @param mode Target execution mode for the full job; one of \code{"live"} or
