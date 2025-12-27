@@ -27,6 +27,22 @@
 #' @param embeddings Optional embedding matrix for embeddings-based core selection
 #'   (\code{core_method} in \code{c("auto","pam","clara","embeddings")}).
 #'
+#' @param linking Whether to apply anchoring/linking so theta estimates are reported
+#'   on a stable scale defined by the baseline core fit. One of
+#'   \code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
+#'   linking is applied only when core drift exceeds the thresholds below.
+#' @param linking_method Linking method. Currently only \code{"mean_sd"} is supported,
+#'   which applies an affine transform to match the mean and standard deviation of
+#'   core thetas to the baseline core fit.
+#' @param linking_cor_target In \code{linking = "auto"}, apply linking when the core
+#'   Pearson correlation between baseline and current raw thetas is below this value.
+#' @param linking_p90_abs_shift_target In \code{linking = "auto"}, apply linking when the
+#'   90th percentile of the absolute core-theta shift (baseline vs current raw) exceeds
+#'   this value.
+#' @param linking_max_abs_shift_target In \code{linking = "auto"}, apply linking when the
+#'   maximum absolute core-theta shift (baseline vs current raw) exceeds this value.
+#' @param linking_min_n Minimum number of core IDs required to estimate the linking
+#'   transform. If fewer are available, linking is skipped.
 #' @param judge_fun Function that accepts a tibble of pairs with columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
 #'   \code{ID1}, \code{ID2}, \code{better_id}. If \code{judge} is provided, the output

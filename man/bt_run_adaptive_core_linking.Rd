@@ -87,6 +87,28 @@ using embeddings-based core selection (\code{core_method} in
 \item{embeddings_metric}{Distance metric for embeddings selection. Passed to
 \code{\link{select_core_set}}.}
 
+\item{linking}{Whether to apply anchoring/linking so theta estimates are reported
+on a stable scale defined by the baseline core fit. One of
+\code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
+linking is applied only when core drift exceeds the thresholds below.}
+
+\item{linking_method}{Linking method. Currently only \code{"mean_sd"} is supported,
+which applies an affine transform to match the mean and standard deviation of
+core thetas to the baseline core fit.}
+
+\item{linking_cor_target}{In \code{linking = "auto"}, apply linking when the core
+Pearson correlation between baseline and current raw thetas is below this value.}
+
+\item{linking_p90_abs_shift_target}{In \code{linking = "auto"}, apply linking when the
+90th percentile of the absolute core-theta shift (baseline vs current raw) exceeds
+this value.}
+
+\item{linking_max_abs_shift_target}{In \code{linking = "auto"}, apply linking when the
+maximum absolute core-theta shift (baseline vs current raw) exceeds this value.}
+
+\item{linking_min_n}{Minimum number of core IDs required to estimate the linking
+transform. If fewer are available, linking is skipped.}
+
 \item{seed_core}{Optional integer seed for reproducible core selection.}
 
 \item{initial_results}{Optional tibble/data.frame of already-scored pairs with columns
