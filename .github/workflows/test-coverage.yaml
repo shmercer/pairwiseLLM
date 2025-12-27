@@ -39,63 +39,67 @@ jobs:
           )
           print(cov)
 
-          # Save coverage object for debugging / artifacts
           saveRDS(cov, "cov.rds")
 
           # Write cobertura report for Codecov
           covr::to_cobertura(cov)
 
           # ------------------------------------------------------------
-          # Uncovered line reporting (compatible with older covr versions)
-          # - Report uncovered lines for all instrumented R/*.R files
+          # Uncovered line reporting (structured CSV + readable MD)
           # ------------------------------------------------------------
-          cov_df <- as.data.frame(cov)
-
-          # Restrict to R source files (keeps output useful and small)
-          files_to_report <- sort(unique(cov_df$filename[grepl("^R/.*\\.R$", cov_df$filename)]))
-
-          # Get all uncovered lines once (some covr versions don't support file=)
           z_all <- covr::zero_coverage(cov)
 
-          md <- c("# Uncovered line ranges (covr::zero_coverage)", "")
-          rows <- list()
+          # Restrict to R source files
+          z_r <- z_all[grepl("^R/.*\\.R$", z_all$filename), , drop = FALSE]
 
-          for (f in files_to_report) {
-            z <- z_all[z_all$filename == f, , drop = FALSE]
-            if (is.null(z) || nrow(z) == 0) next
-
-            txt <- paste(utils::capture.output(print(z)), collapse = "\n")
-            md <- c(md, paste0("## ", f), "```", txt, "```", "")
-
-            rows[[length(rows) + 1]] <- data.frame(
-              file = f,
-              uncovered = txt,
-              stringsAsFactors = FALSE
-            )
+          # Write a tidy CSV: one row per uncovered line
+          # (Most covr versions provide: filename, functions, line, value)
+          cols <- intersect(c("filename", "functions", "line", "value"), names(z_r))
+          if (length(cols) < 2) {
+            # Fallback: write whatever covr gave us
+            utils::write.csv(z_r, "uncovered_lines.csv", row.names = FALSE)
+          } else {
+            utils::write.csv(z_r[, cols, drop = FALSE], "uncovered_lines.csv", row.names = FALSE)
           }
 
-          if (length(rows) == 0) {
+          # Helper to collapse integer lines to ranges (e.g., 1-3, 8, 10-12)
+          collapse_ranges <- function(x) {
+            x <- sort(unique(as.integer(x)))
+            if (length(x) == 0) return(character())
+            runs <- split(x, cumsum(c(1, diff(x) != 1)))
+            vapply(runs, function(r) {
+              if (length(r) == 1) as.character(r)
+              else paste0(min(r), "-", max(r))
+            }, character(1))
+          }
+
+          md <- c("# Uncovered line ranges (covr::zero_coverage)", "")
+          if (nrow(z_r) == 0) {
             md <- c(md, "_No uncovered lines found in `R/` files._")
-            out_csv <- data.frame(file = character(), uncovered = character(), stringsAsFactors = FALSE)
           } else {
-            out_csv <- do.call(rbind, rows)
+            files <- sort(unique(z_r$filename))
+            for (f in files) {
+              sub <- z_r[z_r$filename == f, , drop = FALSE]
+              line_ranges <- collapse_ranges(sub$line)
+              md <- c(md, paste0("## ", f))
+              md <- c(md, "", paste0("**Lines:** ", paste(line_ranges, collapse = ", ")), "")
+              md <- c(md, "```", paste(utils::capture.output(print(sub)), collapse = "\n"), "```", "")
+            }
           }
 
           writeLines(md, "uncovered_lines.md")
-          utils::write.csv(out_csv, "uncovered_lines.csv", row.names = FALSE)
 
           # Add a short pointer to GitHub Actions Summary
           summ <- Sys.getenv("GITHUB_STEP_SUMMARY")
           if (nzchar(summ)) {
             cat("## Coverage: uncovered lines\n\n", file = summ, append = TRUE)
-            cat("- Generated uncovered-line report for files under `R/`.\n", file = summ, append = TRUE)
+            cat("- Wrote `uncovered_lines.csv` (tidy rows) and `uncovered_lines.md` (grouped by file).\n", file = summ, append = TRUE)
             cat("- See artifact: `covr-uncovered-lines`.\n", file = summ, append = TRUE)
           }
         shell: Rscript {0}
 
       - uses: codecov/codecov-action@v5
         with:
-          # Fail if error if not on PR, or if on PR and token is given
           fail_ci_if_error: ${{ github.event_name != 'pull_request' || secrets.CODECOV_TOKEN }}
           files: ./cobertura.xml
           plugins: noop
