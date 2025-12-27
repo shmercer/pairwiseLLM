@@ -1396,3 +1396,131 @@ test_that("llm_resume_multi_batches handles Gemini failure states and cleans up"
     }
   )
 })
+
+library(tibble)
+
+test_that("llm_submit_pairs_multi_batch retries OpenAI submission on transient 5xx errors", {
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"),
+    text1 = c("a", "b"),
+    ID2 = c("C", "D"),
+    text2 = c("c", "d")
+  )
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  calls <- 0L
+  fake_openai <- function(..., poll) {
+    calls <<- calls + 1L
+    if (calls < 3L) {
+      e <- structure(
+        list(message = "boom", call = NULL),
+        class = c("httr2_http_500", "error", "condition")
+      )
+      stop(e)
+    }
+    list(
+      batch_input_path  = list(...)[["batch_input_path"]],
+      batch_output_path = list(...)[["batch_output_path"]],
+      file              = NULL,
+      batch             = list(id = "openai-OK"),
+      results           = NULL
+    )
+  }
+
+  with_mocked_bindings(
+    run_openai_batch_pipeline = fake_openai,
+    {
+      res <- llm_submit_pairs_multi_batch(
+        pairs              = pairs,
+        model              = "fake-model",
+        trait_name         = td$name,
+        trait_description  = td$description,
+        prompt_template    = tmpl,
+        backend            = "openai",
+        n_segments         = 1L,
+        output_dir         = tempfile("mb_retry_"),
+        write_registry     = FALSE,
+        verbose            = FALSE,
+        openai_max_retries = 3L
+      )
+      expect_equal(calls, 3L)
+      expect_equal(res$jobs[[1]]$batch_id, "openai-OK")
+    }
+  )
+})
+
+test_that("llm_resume_multi_batches can remove JSONL files when keep_jsonl = FALSE", {
+  input_path <- tempfile(fileext = ".jsonl")
+  output_path <- tempfile(fileext = ".jsonl")
+  csv_path <- tempfile(fileext = ".csv")
+
+  writeLines("{}", con = input_path)
+  writeLines("{}", con = output_path)
+
+  jobs <- list(list(
+    segment_index     = 1L,
+    provider          = "openai",
+    model             = "fake-model",
+    batch_id          = "openai-001",
+    batch_input_path  = input_path,
+    batch_output_path = output_path,
+    csv_path          = csv_path,
+    done              = FALSE,
+    results           = NULL
+  ))
+
+  with_mocked_bindings(
+    openai_get_batch = function(id) list(status = "completed"),
+    openai_download_batch_output = function(batch_id, path) {
+      writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B"}]', path)
+      invisible(NULL)
+    },
+    parse_openai_batch_output = function(path) {
+      tibble::tibble(
+        custom_id = "c1",
+        ID1 = "A",
+        ID2 = "B",
+        result_type = "succeeded",
+        error_message = NA_character_
+      )
+    },
+    {
+      res <- llm_resume_multi_batches(
+        jobs              = jobs,
+        interval_seconds  = 0,
+        per_job_delay     = 0,
+        write_results_csv = FALSE,
+        keep_jsonl        = FALSE,
+        verbose           = FALSE
+      )
+      expect_true(res$jobs[[1]]$done)
+      expect_false(file.exists(input_path))
+      expect_false(file.exists(output_path))
+      expect_equal(nrow(res$combined), 1L)
+    }
+  )
+})
+
+test_that("llm_resume_multi_batches errors on unsupported provider type", {
+  jobs <- list(list(
+    segment_index     = 1L,
+    provider          = "weird",
+    model             = "m",
+    batch_id          = "id",
+    batch_input_path  = tempfile(fileext = ".jsonl"),
+    batch_output_path = tempfile(fileext = ".jsonl"),
+    csv_path          = tempfile(fileext = ".csv"),
+    done              = FALSE,
+    results           = NULL
+  ))
+
+  expect_error(
+    llm_resume_multi_batches(
+      jobs = jobs,
+      interval_seconds = 0,
+      per_job_delay = 0
+    ),
+    "Unsupported provider type"
+  )
+})

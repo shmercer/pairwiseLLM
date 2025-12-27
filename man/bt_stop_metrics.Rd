@@ -4,66 +4,87 @@
 \alias{bt_stop_metrics}
 \title{Compute stopping metrics from a Bradley–Terry model fit}
 \usage{
-bt_stop_metrics(fit, se_probs = c(0.5, 0.9, 0.95), fit_bounds = c(0.7, 1.3))
+bt_stop_metrics(
+  fit,
+  ids = NULL,
+  prev_fit = NULL,
+  core_ids = NULL,
+  se_probs = c(0.5, 0.9, 0.95),
+  fit_bounds = c(0.7, 1.3)
+)
 }
 \arguments{
-\item{fit}{A list returned by \code{\link{fit_bt_model}}.}
+\item{fit}{A list returned by \code{\link{fit_bt_model}} containing a \code{$theta}
+tibble/data frame with columns \code{ID}, \code{theta}, \code{se}.}
+
+\item{ids}{Optional character vector of item IDs to compute precision summaries on.
+If \code{NULL}, uses all items in \code{fit$theta}.}
+
+\item{prev_fit}{Optional prior fit (same structure as \code{fit}) used for drift metrics.
+Must be provided together with \code{core_ids}.}
+
+\item{core_ids}{Optional character vector of core IDs used for drift metrics.
+Must be provided together with \code{prev_fit}.}
 
 \item{se_probs}{Numeric vector of probabilities for SE quantiles. Default:
 \code{c(0.5, 0.9, 0.95)}.}
 
-\item{fit_bounds}{Numeric length-2 vector giving lower/upper bounds for
-acceptable infit/outfit. Default: \code{c(0.7, 1.3)}.}
+\item{fit_bounds}{Numeric length-2 vector giving lower/upper bounds for acceptable
+infit/outfit when diagnostics are available. Default: \code{c(0.7, 1.3)}.}
 }
 \value{
-A one-row tibble with summary metrics. Key columns include:
-\describe{
-\item{engine}{Modeling engine used ("sirt", "BradleyTerry2", or \code{NA}).}
-\item{n_items}{Number of objects in \code{fit$theta}.}
-\item{theta_sd}{SD of \code{theta}.}
-\item{se_mean}{Mean SE.}
-\item{se_p90}{90th percentile SE (if requested in \code{se_probs}).}
-\item{se_p95}{95th percentile SE (if requested in \code{se_probs}).}
-\item{se_max}{Maximum SE.}
-\item{rel_se_mean}{\code{se_mean / theta_sd} (scale-free; \code{NA} if \code{theta_sd <= 0}).}
-\item{rel_se_p90}{\code{se_p90 / theta_sd} (scale-free; \code{NA} if \code{theta_sd <= 0}).}
-\item{reliability}{MLE reliability (typically for \pkg{sirt}) or \code{NA}.}
-\item{sepG}{Separation index if available, otherwise \code{NA}.}
-\item{item_misfit_prop}{Proportion of items with infit/outfit outside \code{fit_bounds}.}
-\item{judge_misfit_prop}{Proportion of judges with infit/outfit outside \code{fit_bounds}.}
-}
+A one-row tibble of stopping metrics.
 }
 \description{
-This helper computes round-level summary metrics that are useful for adaptive
-sampling and stopping decisions. It is designed to work with the object returned
-by \code{\link{fit_bt_model}}.
+This helper computes round-level summary metrics used for adaptive sampling and
+stopping decisions. It is designed to work with the object returned by
+\code{\link{fit_bt_model}} (which includes \code{fit$theta} with columns
+\code{ID}, \code{theta}, and \code{se}).
 }
 \details{
-The output includes precision summaries (SE distribution), scale summaries
-(SD of \code{theta}), and scale-free precision metrics (SE / SD(theta)).
-If diagnostic outputs are available (from \code{fit_bt_model(..., return_diagnostics = TRUE)}
-using the \pkg{sirt} engine), the output also includes separation index (\code{sepG})
-and item/judge misfit proportions based on infit/outfit bounds.
+The output is a one-row tibble with:
+\itemize{
+\item Precision summaries (e.g., SE mean, max, and quantiles),
+\item Scale summaries (SD of \code{theta}),
+\item Scale-free precision metrics (SE divided by SD of \code{theta}),
+\item Optional fit/diagnostic summaries (separation index and misfit proportions),
+\item Optional drift metrics for a core set relative to a prior fit.
+}
+
+You can compute precision summaries on a subset of IDs (e.g., only newly-added
+items) via \code{ids}. Drift metrics are added when both \code{prev_fit} and
+\code{core_ids} are provided.
 }
 \examples{
-# Minimal example using a mock fit object (runs without sirt installed)
-fit_mock <- list(
+# A minimal, CRAN-safe "mock fit" with the required structure:
+fit <- list(
   engine = "mock",
-  reliability = 0.90,
   theta = tibble::tibble(
-    ID = c("A", "B", "C"),
-    theta = c(0.0, 1.0, -1.0),
-    se = c(0.3, 0.2, 0.4)
+    ID = c("A", "B", "C", "D"),
+    theta = c(0, 1, 2, 3),
+    se = c(0.20, 0.30, 0.40, 0.50)
   )
 )
-bt_stop_metrics(fit_mock)
 
-# Real example (only runs if sirt is installed)
-if (requireNamespace("sirt", quietly = TRUE)) {
-  data("example_writing_pairs", package = "pairwiseLLM")
-  bt <- build_bt_data(example_writing_pairs)
-  fit <- fit_bt_model(bt, engine = "sirt", verbose = FALSE, return_diagnostics = TRUE)
-  bt_stop_metrics(fit)
-}
+# Compute metrics on all items
+bt_stop_metrics(fit)
+
+# Compute metrics only on a subset (e.g., newly-added items)
+bt_stop_metrics(fit, ids = c("A", "C"))
+
+# Add core drift metrics relative to a previous fit
+prev_fit <- list(
+  engine = "mock",
+  theta = tibble::tibble(
+    ID = c("A", "B", "C", "D"),
+    theta = c(0, 0.5, 2.5, 3),
+    se = c(0.20, 0.20, 0.20, 0.20)
+  )
+)
+bt_stop_metrics(
+  fit,
+  prev_fit = prev_fit,
+  core_ids = c("A", "B", "C", "D")
+)
 
 }

@@ -12,14 +12,18 @@ bt_should_stop(
   rel_se_p90_target = 0.3,
   rel_se_p90_min_improve = 0.01,
   max_item_misfit_prop = 0.05,
-  max_judge_misfit_prop = 0.05
+  max_judge_misfit_prop = 0.05,
+  core_theta_cor_target = NA_real_,
+  core_theta_spearman_target = NA_real_,
+  core_max_abs_shift_target = NA_real_,
+  core_p90_abs_shift_target = NA_real_
 )
 }
 \arguments{
 \item{metrics}{A one-row tibble returned by \code{\link{bt_stop_metrics}}.}
 
 \item{prev_metrics}{Optional one-row tibble of prior-round metrics (same shape as
-\code{metrics}). Used to compute percent improvement criteria.}
+\code{metrics}). Used to compute percent improvement for the stability criterion.}
 
 \item{reliability_target}{Optional numeric. If not \code{NA}, require
 \code{metrics$reliability >= reliability_target}.}
@@ -31,46 +35,101 @@ bt_should_stop(
 \code{metrics$rel_se_p90 <= rel_se_p90_target}.}
 
 \item{rel_se_p90_min_improve}{Optional numeric. If not \code{NA} and \code{prev_metrics}
-is provided, compute percent improvement
-\code{(prev - current) / prev}. Stalling is defined as
-\code{improve_pct <= rel_se_p90_min_improve}.}
+is provided, compute percent improvement \code{(prev - current) / prev}. Stalling is
+defined as \code{improve_pct <= rel_se_p90_min_improve}.}
 
 \item{max_item_misfit_prop}{Optional numeric. If not \code{NA}, require
 \code{metrics$item_misfit_prop <= max_item_misfit_prop} (when metric is available).}
 
 \item{max_judge_misfit_prop}{Optional numeric. If not \code{NA}, require
 \code{metrics$judge_misfit_prop <= max_judge_misfit_prop} (when metric is available).}
+
+\item{core_theta_cor_target}{Optional numeric. If not \code{NA}, require
+\code{metrics$core_theta_cor >= core_theta_cor_target}.}
+
+\item{core_theta_spearman_target}{Optional numeric. If not \code{NA}, require
+\code{metrics$core_theta_spearman >= core_theta_spearman_target}.}
+
+\item{core_max_abs_shift_target}{Optional numeric. If not \code{NA}, require
+\code{metrics$core_max_abs_shift <= core_max_abs_shift_target}.}
+
+\item{core_p90_abs_shift_target}{Optional numeric. If not \code{NA}, require
+\code{metrics$core_p90_abs_shift <= core_p90_abs_shift_target}.}
 }
 \value{
 A list with:
 \describe{
 \item{stop}{Logical; \code{TRUE} if stopping criteria are met.}
-\item{details}{A tibble giving each criterion, its value, threshold, and pass/fail.}
+\item{details}{A tibble listing each criterion, its value, threshold, and pass/fail.}
 \item{improve}{A tibble with computed percent improvement (if \code{prev_metrics} supplied).}
 }
 }
 \description{
-This helper applies combined stopping criteria to the output of
-\code{\link{bt_stop_metrics}}. It is intended for round-based adaptive sampling:
-compute metrics each round, then call this function to decide whether to continue.
+Applies combined stopping criteria to the output of \code{\link{bt_stop_metrics}}.
+Intended use is round-based adaptive sampling:
 }
 \details{
-Stopping requires:
-\itemize{
-\item Reliability and separation thresholds (if provided), AND
-\item Fit thresholds (item/judge misfit proportions, if provided), AND
-\item Either precision target is met (\code{rel_se_p90 <= rel_se_p90_target}), OR
-improvement has stalled relative to the previous round
-(\code{rel_se_p90_improve_pct <= rel_se_p90_min_improve}).
+\enumerate{
+\item Fit or update the model,
+\item Compute metrics with \code{bt_stop_metrics()},
+\item Decide stop/continue with \code{bt_should_stop()}.
 }
+
+The decision can incorporate:
+\itemize{
+\item Reliability and separation thresholds (when available),
+\item Fit thresholds (item/judge misfit proportions; when available),
+\item Precision target (\code{rel_se_p90 <= rel_se_p90_target}),
+\item Optional stability criterion vs \code{prev_metrics},
+\item Optional drift guardrails for core linking workflows (disabled by default).
+}
+
+Core drift guardrails are enabled by setting one or more \code{core_*_target}
+arguments (otherwise they default to \code{NA} and are ignored).
 }
 \examples{
-m1 <- tibble::tibble(
-  reliability = 0.92, sepG = 3.2, rel_se_p90 = 0.25,
-  item_misfit_prop = 0.00, judge_misfit_prop = 0.00
+# Example metrics (as if returned by bt_stop_metrics())
+m <- tibble::tibble(
+  reliability = 0.92,
+  sepG = 3.2,
+  rel_se_p90 = 0.25,
+  item_misfit_prop = 0.00,
+  judge_misfit_prop = 0.00
 )
-res <- bt_should_stop(m1, reliability_target = 0.90, sepG_target = 3.0, rel_se_p90_target = 0.30)
-res$stop
-res$details
+
+# Stop if precision target is met and other thresholds pass
+bt_should_stop(m, rel_se_p90_target = 0.30)$stop
+
+# Include a previous round to evaluate stability (diminishing returns)
+prev_m <- tibble::tibble(
+  reliability = 0.91,
+  sepG = 3.1,
+  rel_se_p90 = 0.26,
+  item_misfit_prop = 0.00,
+  judge_misfit_prop = 0.00
+)
+bt_should_stop(m, prev_metrics = prev_m, rel_se_p90_min_improve = 0.01)$stop
+
+# Drift gating example: only stop if core drift guardrails pass
+m2 <- dplyr::bind_cols(
+  m,
+  tibble::tibble(
+    core_theta_cor = 0.80,
+    core_theta_spearman = 1.00,
+    core_max_abs_shift = 0.60,
+    core_p90_abs_shift = 0.50
+  )
+)
+
+# This will NOT stop because correlation guardrail fails (0.80 < 0.90)
+bt_should_stop(m2, core_theta_cor_target = 0.90)$stop
+
+# This WILL stop because drift thresholds are relaxed
+bt_should_stop(
+  m2,
+  core_theta_cor_target = 0.70,
+  core_max_abs_shift_target = 0.70,
+  core_p90_abs_shift_target = 0.60
+)$stop
 
 }

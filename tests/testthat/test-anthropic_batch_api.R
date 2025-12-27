@@ -738,3 +738,50 @@ testthat::test_that("internal helper .parse_anthropic_pair_message handles missi
   testthat::expect_true(is.na(res$thoughts))
   testthat::expect_true(is.na(res$better_sample))
 })
+
+test_that("build_anthropic_batch_requests validates required pair columns", {
+  bad_pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B") # missing text2
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  expect_error(
+    build_anthropic_batch_requests(
+      pairs             = bad_pairs,
+      model             = "claude-test",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl
+    ),
+    "pairs"
+  )
+})
+
+test_that("anthropic_create_batch validates requests input", {
+  expect_error(
+    anthropic_create_batch(requests = list(), api_key = "x"),
+    "requests"
+  )
+})
+
+test_that("anthropic_download_batch_results errors if results_url missing", {
+  with_mocked_bindings(
+    anthropic_get_batch = function(...) list(results_url = ""),
+    {
+      expect_error(
+        anthropic_download_batch_results(
+          batch_id = "b1",
+          output_path = tempfile(fileext = ".jsonl"),
+          api_key = "x"
+        ),
+        "results_url"
+      )
+    }
+  )
+})
+
+test_that("parse_anthropic_batch_output errors on missing jsonl_path", {
+  expect_error(
+    parse_anthropic_batch_output(jsonl_path = tempfile(fileext = ".jsonl_missing")),
+    "does not exist"
+  )
+})

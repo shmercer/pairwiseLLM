@@ -573,3 +573,48 @@ testthat::test_that("gemini_download_batch_results accepts batch object input di
     }
   )
 })
+
+test_that("parse_gemini_batch_output validates inputs", {
+  req <- tibble::tibble(custom_id = "c1", ID1 = "A", ID2 = "B", request = list(list()))
+  tmp <- tempfile(fileext = ".jsonl")
+  writeLines('{"custom_id":"c1","result":{"type":"succeeded","response":{}}}', tmp)
+
+  # Missing required columns in requests_tbl
+  expect_error(
+    parse_gemini_batch_output(tmp, dplyr::select(req, -custom_id)),
+    "requests_tbl"
+  )
+
+  # Missing results_path
+  expect_error(
+    parse_gemini_batch_output(tempfile(fileext = ".jsonl_missing"), req),
+    "results_path"
+  )
+})
+
+test_that("run_gemini_batch_pipeline errors if create_batch response lacks name", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  testthat::local_mocked_bindings(
+    gemini_create_batch = function(...) list(), # no $name
+    .env = asNamespace("pairwiseLLM")
+  )
+
+  expect_error(
+    run_gemini_batch_pipeline(
+      pairs             = pairs,
+      model             = "fake-model",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl,
+      poll              = TRUE,   # must be TRUE to reach the `name` check
+      interval_seconds  = 0,
+      timeout_seconds   = 0,
+      api_key           = "x",
+      verbose           = FALSE
+    ),
+    "did not contain a `name` field"
+  )
+})
