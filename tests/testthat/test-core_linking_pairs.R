@@ -425,3 +425,72 @@ testthat::test_that("bt_core_link_round validates fit and returns a plan", {
     out$plan$n_total
   )
 })
+
+
+testthat::test_that("bt_core_link_round can optionally include text1/text2 columns", {
+  samples <- tibble::tibble(ID = paste0("S", 1:6), text = paste("t", 1:6))
+  theta <- tibble::tibble(ID = samples$ID, theta = seq(-1, 1, length.out = 6), se = rep(0.4, 6))
+  fit <- list(theta = theta)
+
+  out_no <- bt_core_link_round(samples, fit, core_ids = paste0("S", 1:2), round_size = 4, seed = 1)
+  testthat::expect_true(all(c("ID1", "ID2", "pair_type") %in% names(out_no$pairs)))
+  testthat::expect_false(any(c("text1", "text2") %in% names(out_no$pairs)))
+
+  out_yes <- bt_core_link_round(samples, fit, core_ids = paste0("S", 1:2), round_size = 4, seed = 1, include_text = TRUE)
+  testthat::expect_true(all(c("ID1", "text1", "ID2", "text2", "pair_type") %in% names(out_yes$pairs)))
+  # spot-check mapping consistency
+  map <- stats::setNames(samples$text, samples$ID)
+  testthat::expect_identical(out_yes$pairs$text1, unname(map[out_yes$pairs$ID1]))
+  testthat::expect_identical(out_yes$pairs$text2, unname(map[out_yes$pairs$ID2]))
+})
+
+test_that("select_core_link_pairs can allow repeats when forbid_repeats = FALSE", {
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
+  theta <- tibble::tibble(ID = c("A", "B"), theta = c(0, 0), se = c(1, 1))
+
+  existing <- tibble::tibble(ID1 = "A", ID2 = "B")
+
+  pairs <- select_core_link_pairs(
+    samples = samples,
+    theta = theta,
+    core_ids = "A",
+    new_ids = "B",
+    round_size = 1L,
+    existing_pairs = existing,
+    forbid_repeats = FALSE,
+    within_batch_frac = 0,
+    core_audit_frac = 0,
+    balance_positions = FALSE,
+    seed = 1
+  )
+
+  expect_equal(nrow(pairs), 1L)
+  key <- pairwiseLLM:::.unordered_pair_key(pairs$ID1, pairs$ID2)
+  expect_equal(key, pairwiseLLM:::.unordered_pair_key("A", "B"))
+  expect_equal(pairs$pair_type, "core_new")
+})
+
+test_that("select_core_link_pairs falls back to random candidate order when focus theta is NA", {
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
+  # focus is new_id ("B"); make its theta NA to hit allow_theta && is.na(f_th) branch
+  theta <- tibble::tibble(ID = c("A", "B"), theta = c(0, NA_real_), se = c(1, 1))
+
+  pairs <- select_core_link_pairs(
+    samples = samples,
+    theta = theta,
+    core_ids = "A",
+    new_ids = "B",
+    round_size = 1L,
+    existing_pairs = NULL,
+    within_batch_frac = 0,
+    core_audit_frac = 0,
+    balance_positions = FALSE,
+    seed = 2
+  )
+
+  expect_equal(nrow(pairs), 1L)
+  expect_equal(
+    pairwiseLLM:::.unordered_pair_key(pairs$ID1, pairs$ID2),
+    pairwiseLLM:::.unordered_pair_key("A", "B")
+  )
+})

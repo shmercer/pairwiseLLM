@@ -410,7 +410,7 @@ testthat::test_that("run_gemini_batch_pipeline runs full mocked cycle", {
   fake_req_tbl <- tibble::tibble(custom_id = "1", ID1 = "S1", ID2 = "S2", request = list(list()))
   fake_batch_initial <- list(name = "b1", metadata = list(state = "RUNNING"))
   fake_batch_final <- list(name = "b1", metadata = list(state = "SUCCEEDED"))
-  fake_results <- tibble::tibble(custom_id="1", ID1="S1", ID2="S2", result_type="succeeded", better_id="S1")
+  fake_results <- tibble::tibble(custom_id = "1", ID1 = "S1", ID2 = "S2", result_type = "succeeded", better_id = "S1")
 
   testthat::with_mocked_bindings(
     build_gemini_batch_requests = function(...) fake_req_tbl,
@@ -519,7 +519,8 @@ testthat::test_that("gemini_poll_batch_until_complete loops until terminal state
     {
       # We rely on the short interval_seconds=0.01 to make this fast enough without mocking Sys.sleep
       res <- gemini_poll_batch_until_complete(
-        "b", interval_seconds = 0.01, timeout_seconds = 10, verbose = FALSE
+        "b",
+        interval_seconds = 0.01, timeout_seconds = 10, verbose = FALSE
       )
 
       # Should have called get_batch 3 times
@@ -570,5 +571,50 @@ testthat::test_that("gemini_download_batch_results accepts batch object input di
       out <- gemini_download_batch_results(batch_obj, reqs, tmp)
       testthat::expect_true(file.exists(out))
     }
+  )
+})
+
+test_that("parse_gemini_batch_output validates inputs", {
+  req <- tibble::tibble(custom_id = "c1", ID1 = "A", ID2 = "B", request = list(list()))
+  tmp <- tempfile(fileext = ".jsonl")
+  writeLines('{"custom_id":"c1","result":{"type":"succeeded","response":{}}}', tmp)
+
+  # Missing required columns in requests_tbl
+  expect_error(
+    parse_gemini_batch_output(tmp, dplyr::select(req, -custom_id)),
+    "requests_tbl"
+  )
+
+  # Missing results_path
+  expect_error(
+    parse_gemini_batch_output(tempfile(fileext = ".jsonl_missing"), req),
+    "results_path"
+  )
+})
+
+test_that("run_gemini_batch_pipeline errors if create_batch response lacks name", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  testthat::local_mocked_bindings(
+    gemini_create_batch = function(...) list(), # no $name
+    .env = asNamespace("pairwiseLLM")
+  )
+
+  expect_error(
+    run_gemini_batch_pipeline(
+      pairs             = pairs,
+      model             = "fake-model",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl,
+      poll              = TRUE,   # must be TRUE to reach the `name` check
+      interval_seconds  = 0,
+      timeout_seconds   = 0,
+      api_key           = "x",
+      verbose           = FALSE
+    ),
+    "did not contain a `name` field"
   )
 })

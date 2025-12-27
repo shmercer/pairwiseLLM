@@ -111,29 +111,6 @@ select_adaptive_pairs <- function(samples,
     stop("`min_judgments` must be a non-negative integer.", call. = FALSE)
   }
 
-  # Seed handling: do not permanently change RNG state, even if .Random.seed is not yet created
-  if (!is.null(seed)) {
-    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (had_seed) {
-      old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    }
-
-    on.exit(
-      {
-        if (had_seed) {
-          assign(".Random.seed", old_seed, envir = .GlobalEnv)
-        } else {
-          if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-            rm(".Random.seed", envir = .GlobalEnv)
-          }
-        }
-      },
-      add = TRUE
-    )
-
-    set.seed(seed)
-  }
-
   # Normalize IDs to character
   samples <- dplyr::mutate(samples, ID = as.character(.data$ID), text = as.character(.data$text))
   theta <- dplyr::mutate(theta, ID = as.character(.data$ID))
@@ -143,222 +120,193 @@ select_adaptive_pairs <- function(samples,
     stop("At least two samples are required to select pairs.", call. = FALSE)
   }
 
-  # Join theta/se onto all samples; fill missing estimates (cold-start/new items)
-  joined <- dplyr::left_join(
-    dplyr::select(samples, dplyr::all_of(c("ID", "text"))),
-    dplyr::select(theta, dplyr::all_of(c("ID", "theta", "se"))),
-    by = "ID"
-  )
-
-  se_fill <- suppressWarnings(max(joined$se, na.rm = TRUE))
-  if (!is.finite(se_fill)) {
-    se_fill <- 1
-  } else {
-    se_fill <- se_fill * 2
-  }
-
-  joined <- dplyr::mutate(
-    joined,
-    theta = dplyr::if_else(is.na(.data$theta), 0, as.double(.data$theta)),
-    se = dplyr::if_else(is.na(.data$se), se_fill, as.double(.data$se))
-  )
-
-  # Build lookup from ID -> text
-  text_map <- stats::setNames(joined$text, joined$ID)
-
-  # ------------------------------------------------------------------
-  # Existing pairs: counts + repeat prevention
-  # ------------------------------------------------------------------
-  existing_key <- character()
-  pos1_counts <- stats::setNames(integer(length(ids)), ids)
-  pos2_counts <- stats::setNames(integer(length(ids)), ids)
-  total_counts <- stats::setNames(integer(length(ids)), ids)
-
-  normalize_existing <- function(x) {
-    if (is.null(x)) {
-      return(NULL)
-    }
-    x <- tibble::as_tibble(x)
-    if (all(c("ID1", "ID2") %in% names(x))) {
-      out <- dplyr::transmute(x,
-        ID1 = as.character(.data$ID1),
-        ID2 = as.character(.data$ID2)
-      )
-      return(out)
-    }
-    if (all(c("object1", "object2") %in% names(x))) {
-      out <- dplyr::transmute(x,
-        ID1 = as.character(.data$object1),
-        ID2 = as.character(.data$object2)
-      )
-      return(out)
-    }
-    NULL
-  }
-
-  ex <- normalize_existing(existing_pairs)
-
-  if (!is.null(ex) && nrow(ex) > 0L) {
-    # position counts
-    ex1 <- ex$ID1
-    ex2 <- ex$ID2
-
-    keep1 <- ex1 %in% ids
-    keep2 <- ex2 %in% ids
-
-    # position counts only for known ids
-    if (any(keep1)) {
-      tab1 <- table(ex1[keep1])
-      pos1_counts[names(tab1)] <- pos1_counts[names(tab1)] + as.integer(tab1)
-    }
-    if (any(keep2)) {
-      tab2 <- table(ex2[keep2])
-      pos2_counts[names(tab2)] <- pos2_counts[names(tab2)] + as.integer(tab2)
-    }
-
-    # total counts (unordered)
-    all_ids <- c(ex1[keep1], ex2[keep2])
-    if (length(all_ids) > 0L) {
-      tab_all <- table(all_ids)
-      total_counts[names(tab_all)] <- total_counts[names(tab_all)] + as.integer(tab_all)
-    }
-
-    # repeat-prevention key (unordered)
-    a <- pmin(ex1, ex2)
-    b <- pmax(ex1, ex2)
-    existing_key <- paste0(a, "\r", b)
-    existing_key <- unique(existing_key)
-  }
-
   # Early return: n_pairs == 0
   if (n_pairs == 0L) {
     return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
   }
 
-  # ------------------------------------------------------------------
-  # Candidate generation: k-nearest neighbors in theta-sorted order
-  # ------------------------------------------------------------------
-  ord <- order(joined$theta, joined$ID, na.last = TRUE)
-  joined <- joined[ord, , drop = FALSE]
+  # Wrap all stochastic steps so we do not permanently change RNG state
+  out <- .with_seed_restore(
+    seed,
+    f = function() {
+      # Join theta/se onto all samples; fill missing estimates (cold-start/new items)
+      joined <- dplyr::left_join(
+        dplyr::select(samples, dplyr::all_of(c("ID", "text"))),
+        dplyr::select(theta, dplyr::all_of(c("ID", "theta", "se"))),
+        by = "ID"
+      )
 
-  id_vec <- joined$ID
-  th_vec <- as.double(joined$theta)
-  se_vec <- as.double(joined$se)
-
-  # map counts into sorted order
-  tot_vec <- as.integer(total_counts[id_vec])
-  p1_vec <- as.integer(pos1_counts[id_vec])
-  p2_vec <- as.integer(pos2_counts[id_vec])
-
-  n <- length(id_vec)
-  k_neighbors <- min(k_neighbors, max(n - 1L, 1L))
-
-  cand_i <- integer()
-  cand_j <- integer()
-  cand_score <- double()
-
-  # helper: unordered key for a pair by index
-  pair_key <- function(i, j) {
-    a <- id_vec[[i]]
-    b <- id_vec[[j]]
-    if (a <= b) paste0(a, "\r", b) else paste0(b, "\r", a)
-  }
-
-  for (i in seq_len(n)) {
-    hi <- min(n, i + k_neighbors)
-    if (hi <= i) next
-    js <- (i + 1L):hi
-
-    for (j in js) {
-      if (isTRUE(forbid_repeats) && length(existing_key) > 0L) {
-        kkey <- pair_key(i, j)
-        if (kkey %in% existing_key) next
+      se_fill <- suppressWarnings(max(joined$se, na.rm = TRUE))
+      if (!is.finite(se_fill)) {
+        se_fill <- 1
+      } else {
+        se_fill <- se_fill * 2
       }
 
-      # predicted probability / information (max at 0.5)
-      d <- th_vec[[i]] - th_vec[[j]]
-      p <- 1 / (1 + exp(-d))
-      info <- p * (1 - p)
+      joined <- dplyr::mutate(
+        joined,
+        theta = dplyr::if_else(is.na(.data$theta), 0, as.double(.data$theta)),
+        se = dplyr::if_else(is.na(.data$se), se_fill, as.double(.data$se))
+      )
 
-      need_i <- max(0, min_judgments - tot_vec[[i]])
-      need_j <- max(0, min_judgments - tot_vec[[j]])
+      # ------------------------------------------------------------------
+      # Existing pairs: counts + repeat prevention
+      # ------------------------------------------------------------------
+      existing_key <- character()
+      pos1_counts <- stats::setNames(integer(length(ids)), ids)
+      pos2_counts <- stats::setNames(integer(length(ids)), ids)
+      total_counts <- stats::setNames(integer(length(ids)), ids)
 
-      score <- info * (se_vec[[i]] + se_vec[[j]]) * (1 + need_i + need_j)
+      ex <- .normalize_existing_pairs(existing_pairs, err_arg = "existing_pairs")
 
-      cand_i <- c(cand_i, i)
-      cand_j <- c(cand_j, j)
-      cand_score <- c(cand_score, score)
-    }
-  }
+      if (nrow(ex) > 0L) {
+        ex1 <- ex$ID1
+        ex2 <- ex$ID2
 
-  if (length(cand_score) == 0L) {
-    return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
-  }
+        keep1 <- ex1 %in% ids
+        keep2 <- ex2 %in% ids
 
-  o <- order(cand_score, decreasing = TRUE)
-  cand_i <- cand_i[o]
-  cand_j <- cand_j[o]
+        # position counts only for known ids
+        if (any(keep1)) {
+          tab1 <- table(ex1[keep1])
+          pos1_counts[names(tab1)] <- pos1_counts[names(tab1)] + as.integer(tab1)
+        }
+        if (any(keep2)) {
+          tab2 <- table(ex2[keep2])
+          pos2_counts[names(tab2)] <- pos2_counts[names(tab2)] + as.integer(tab2)
+        }
 
-  take <- min(n_pairs, length(cand_i))
-  cand_i <- cand_i[seq_len(take)]
-  cand_j <- cand_j[seq_len(take)]
+        # total counts (unordered)
+        all_ids <- c(ex1[keep1], ex2[keep2])
+        if (length(all_ids) > 0L) {
+          tab_all <- table(all_ids)
+          total_counts[names(tab_all)] <- total_counts[names(tab_all)] + as.integer(tab_all)
+        }
 
-  # ------------------------------------------------------------------
-  # Orient pairs (position balancing) + construct output
-  # ------------------------------------------------------------------
-  out_ID1 <- character(take)
-  out_ID2 <- character(take)
+        # repeat-prevention key (unordered)
+        existing_key <- unique(.unordered_pair_key(ex1, ex2))
+      }
 
-  # mutable counts while building this round
-  p1 <- p1_vec
-  p2 <- p2_vec
+      # ------------------------------------------------------------------
+      # Candidate generation: k-nearest neighbors in theta-sorted order
+      # ------------------------------------------------------------------
+      ord <- order(joined$theta, joined$ID, na.last = TRUE)
+      joined <- joined[ord, , drop = FALSE]
 
-  for (k in seq_len(take)) {
-    i <- cand_i[[k]]
-    j <- cand_j[[k]]
+      id_vec <- joined$ID
+      th_vec <- as.double(joined$theta)
+      se_vec <- as.double(joined$se)
 
-    a <- id_vec[[i]]
-    b <- id_vec[[j]]
+      # map counts into sorted order
+      tot_vec <- as.integer(total_counts[id_vec])
+      p1_vec <- as.integer(pos1_counts[id_vec])
+      p2_vec <- as.integer(pos2_counts[id_vec])
 
-    if (isTRUE(balance_positions)) {
-      imb_a <- p1[[i]] - p2[[i]]
-      imb_b <- p1[[j]] - p2[[j]]
+      n <- length(id_vec)
+      k_neighbors2 <- min(k_neighbors, max(n - 1L, 1L))
 
-      if (imb_a > imb_b) {
-        # a has "too many" as ID1; place it as ID2
-        out_ID1[[k]] <- b
-        out_ID2[[k]] <- a
-        p1[[j]] <- p1[[j]] + 1L
-        p2[[i]] <- p2[[i]] + 1L
-      } else if (imb_a < imb_b) {
-        out_ID1[[k]] <- a
-        out_ID2[[k]] <- b
-        p1[[i]] <- p1[[i]] + 1L
-        p2[[j]] <- p2[[j]] + 1L
-      } else {
-        # tie: randomize
-        if (stats::runif(1) < 0.5) {
-          out_ID1[[k]] <- a
-          out_ID2[[k]] <- b
-          p1[[i]] <- p1[[i]] + 1L
-          p2[[j]] <- p2[[j]] + 1L
-        } else {
-          out_ID1[[k]] <- b
-          out_ID2[[k]] <- a
-          p1[[j]] <- p1[[j]] + 1L
-          p2[[i]] <- p2[[i]] + 1L
+      cand_i <- integer()
+      cand_j <- integer()
+      cand_score <- double()
+
+      for (i in seq_len(n)) {
+        hi <- min(n, i + k_neighbors2)
+        if (hi <= i) next
+        js <- (i + 1L):hi
+
+        for (j in js) {
+          if (isTRUE(forbid_repeats) && length(existing_key) > 0L) {
+            kkey <- .unordered_pair_key(id_vec[[i]], id_vec[[j]])
+            if (kkey %in% existing_key) next
+          }
+
+          # predicted probability / information (max at 0.5)
+          d <- th_vec[[i]] - th_vec[[j]]
+          p <- 1 / (1 + exp(-d))
+          info <- p * (1 - p)
+
+          need_i <- max(0, min_judgments - tot_vec[[i]])
+          need_j <- max(0, min_judgments - tot_vec[[j]])
+
+          score <- info * (se_vec[[i]] + se_vec[[j]]) * (1 + need_i + need_j)
+
+          cand_i <- c(cand_i, i)
+          cand_j <- c(cand_j, j)
+          cand_score <- c(cand_score, score)
         }
       }
-    } else {
-      out_ID1[[k]] <- a
-      out_ID2[[k]] <- b
-    }
-  }
 
-  tibble::tibble(
-    ID1 = out_ID1,
-    text1 = unname(text_map[out_ID1]),
-    ID2 = out_ID2,
-    text2 = unname(text_map[out_ID2])
+      if (length(cand_score) == 0L) {
+        return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
+      }
+
+      o <- order(cand_score, decreasing = TRUE)
+      cand_i <- cand_i[o]
+      cand_j <- cand_j[o]
+
+      take <- min(n_pairs, length(cand_i))
+      cand_i <- cand_i[seq_len(take)]
+      cand_j <- cand_j[seq_len(take)]
+
+      # ------------------------------------------------------------------
+      # Orient pairs (position balancing) + construct output
+      # ------------------------------------------------------------------
+      out_ID1 <- character(take)
+      out_ID2 <- character(take)
+
+      # mutable counts while building this round
+      p1 <- p1_vec
+      p2 <- p2_vec
+
+      for (k in seq_len(take)) {
+        i <- cand_i[[k]]
+        j <- cand_j[[k]]
+
+        a <- id_vec[[i]]
+        b <- id_vec[[j]]
+
+        if (isTRUE(balance_positions)) {
+          imb_a <- p1[[i]] - p2[[i]]
+          imb_b <- p1[[j]] - p2[[j]]
+
+          if (imb_a > imb_b) {
+            # a has "too many" as ID1; place it as ID2
+            out_ID1[[k]] <- b
+            out_ID2[[k]] <- a
+            p1[[j]] <- p1[[j]] + 1L
+            p2[[i]] <- p2[[i]] + 1L
+          } else if (imb_a < imb_b) {
+            out_ID1[[k]] <- a
+            out_ID2[[k]] <- b
+            p1[[i]] <- p1[[i]] + 1L
+            p2[[j]] <- p2[[j]] + 1L
+          } else {
+            # tie: randomize
+            if (stats::runif(1) < 0.5) {
+              out_ID1[[k]] <- a
+              out_ID2[[k]] <- b
+              p1[[i]] <- p1[[i]] + 1L
+              p2[[j]] <- p2[[j]] + 1L
+            } else {
+              out_ID1[[k]] <- b
+              out_ID2[[k]] <- a
+              p1[[j]] <- p1[[j]] + 1L
+              p2[[i]] <- p2[[i]] + 1L
+            }
+          }
+        } else {
+          out_ID1[[k]] <- a
+          out_ID2[[k]] <- b
+        }
+      }
+
+      .add_pair_texts(
+        tibble::tibble(ID1 = out_ID1, ID2 = out_ID2),
+        samples = samples
+      )
+    },
+    arg_name = "seed"
   )
+
+  out
 }

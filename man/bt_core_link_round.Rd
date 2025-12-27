@@ -4,7 +4,7 @@
 \alias{bt_core_link_round}
 \title{Propose a core-linking round given an existing BT fit}
 \usage{
-bt_core_link_round(samples, fit, core_ids, ...)
+bt_core_link_round(samples, fit, core_ids, include_text = FALSE, ...)
 }
 \arguments{
 \item{samples}{A tibble/data.frame with columns \code{ID} and \code{text}.}
@@ -14,13 +14,16 @@ a \code{$theta} tibble with columns \code{ID}, \code{theta}, \code{se}.}
 
 \item{core_ids}{Character vector of core IDs.}
 
-\item{...}{Passed through to \code{\link{select_core_link_pairs}} (e.g.,
-\code{existing_pairs}, \code{round_size}, \code{seed}, etc.).}
+\item{include_text}{If TRUE, attach \code{text1}/\code{text2} columns by joining
+against \code{samples}.}
+
+\item{...}{Passed through to \code{select_core_link_pairs()} (e.g., \code{existing_pairs},
+\code{round_size}, \code{seed}, etc.).}
 }
 \value{
 A list with:
 \describe{
-\item{pairs}{Tibble of proposed pairs (ID1, ID2, pair_type).}
+\item{pairs}{Tibble of proposed pairs (ID1, ID2, pair_type; plus text columns if requested).}
 \item{plan}{One-row tibble summarizing how many of each pair_type were returned.}
 }
 }

@@ -116,10 +116,6 @@ sample_pairs <- function(pairs,
     return(pairs)
   }
 
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-
   pair_pct <- max(min(pair_pct, 1), 0) # clamp
 
   n_from_pct <- floor(pair_pct * n)
@@ -134,9 +130,15 @@ sample_pairs <- function(pairs,
     return(pairs)
   }
 
-  idx <- sample.int(n, size = k)
+  idx <- .with_seed_restore(
+    seed,
+    f = function() sample.int(n, size = k),
+    arg_name = "seed"
+  )
+
   pairs[idx, , drop = FALSE]
 }
+
 
 #' Sample reversed versions of a subset of pairs
 #'
@@ -193,10 +195,6 @@ sample_reverse_pairs <- function(pairs,
     )
   }
 
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-
   # If n_reverse is provided, it takes precedence
   if (!is.null(n_reverse)) {
     k <- as.integer(n_reverse)
@@ -226,7 +224,12 @@ sample_reverse_pairs <- function(pairs,
   }
 
   k <- min(k, n)
-  idx <- sample.int(n, k)
+
+  idx <- .with_seed_restore(
+    seed,
+    f = function() sample.int(n, k),
+    arg_name = "seed"
+  )
 
   selected <- pairs[idx, required_cols]
 
@@ -237,6 +240,7 @@ sample_reverse_pairs <- function(pairs,
     text2 = selected$text1
   )
 }
+
 
 #' Randomly assign samples to positions SAMPLE_1 and SAMPLE_2
 #'
@@ -295,52 +299,37 @@ randomize_pair_order <- function(pairs, seed = NULL) {
     )
   }
 
-  if (!is.null(seed)) {
-    seed <- as.integer(seed)
-    if (length(seed) != 1L || is.na(seed)) {
-      stop("`seed` must be a single integer.", call. = FALSE)
-    }
-
-    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    old_seed <- NULL
-    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-
-    on.exit(
-      {
-        if (had_seed) {
-          assign(".Random.seed", old_seed, envir = .GlobalEnv)
-        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-          rm(".Random.seed", envir = .GlobalEnv)
-        }
-      },
-      add = TRUE
-    )
-
-    set.seed(seed)
-  }
-
   n <- nrow(pairs)
   if (n == 0L) {
     return(pairs)
   }
 
-  flip <- stats::runif(n) < 0.5
-  out <- pairs
+  out <- .with_seed_restore(
+    seed,
+    f = function() {
+      flip <- stats::runif(n) < 0.5
+      out <- pairs
 
-  idx <- which(flip)
-  if (length(idx) > 0L) {
-    id1_tmp <- out$ID1[idx]
-    text1_tmp <- out$text1[idx]
+      idx <- which(flip)
+      if (length(idx) > 0L) {
+        id1_tmp <- out$ID1[idx]
+        text1_tmp <- out$text1[idx]
 
-    out$ID1[idx] <- out$ID2[idx]
-    out$text1[idx] <- out$text2[idx]
+        out$ID1[idx] <- out$ID2[idx]
+        out$text1[idx] <- out$text2[idx]
 
-    out$ID2[idx] <- id1_tmp
-    out$text2[idx] <- text1_tmp
-  }
+        out$ID2[idx] <- id1_tmp
+        out$text2[idx] <- text1_tmp
+      }
+
+      out
+    },
+    arg_name = "seed"
+  )
 
   out
 }
+
 
 #' Deterministically alternate sample order in pairs
 #'
@@ -407,3 +396,133 @@ alternate_pair_order <- function(pairs) {
 
   out
 }
+
+
+#' Add text columns (text1/text2) to a pairs table
+#'
+#' Joins `samples$text` onto a pairs table using pair IDs, creating (or filling)
+#' `text1` and `text2`.
+#'
+#' Supported input schemas for `pairs`:
+#' - `ID1`/`ID2`
+#' - `object1`/`object2`
+#' - or specify `id1_col`/`id2_col`
+#'
+#' @param pairs A data frame of pair IDs. Must contain either `ID1`/`ID2`,
+#'   `object1`/`object2`, or the columns given by `id1_col` and `id2_col`.
+#' @param samples A data frame with columns `ID` and `text`.
+#' @param id1_col,id2_col Optional. Column names in `pairs` holding the first and
+#'   second IDs. If `NULL`, inferred from `pairs` (`ID1`/`ID2` or `object1`/`object2`).
+#' @param overwrite Logical. If `TRUE` (default), any existing `text1`/`text2`
+#'   columns in `pairs` are overwritten from `samples`. If `FALSE`, existing
+#'   non-missing `text1`/`text2` values are preserved and only missing values are
+#'   filled.
+#'
+#' @return A tibble with `ID1`, `text1`, `ID2`, `text2`, plus any other columns
+#'   originally present in `pairs`.
+#'
+#' @examples
+#' samples <- tibble::tibble(ID = c("A", "B"), text = c("aaa", "bbb"))
+#' pairs <- tibble::tibble(ID1 = "A", ID2 = "B")
+#' add_pair_texts(pairs, samples)
+#'
+#' # Preserve existing non-missing text
+#' pairs2 <- tibble::tibble(ID1 = "A", ID2 = "B", text1 = "keep", text2 = NA_character_)
+#' add_pair_texts(pairs2, samples, overwrite = FALSE)
+#' @export
+add_pair_texts <- function(pairs,
+                           samples,
+                           id1_col = NULL,
+                           id2_col = NULL,
+                           overwrite = TRUE) {
+  pairs <- tibble::as_tibble(pairs)
+  samples <- tibble::as_tibble(samples)
+
+  if (!is.logical(overwrite) || length(overwrite) != 1L || is.na(overwrite)) {
+    stop("`overwrite` must be a single TRUE/FALSE value.", call. = FALSE)
+  }
+
+  if (!all(c("ID", "text") %in% names(samples))) {
+    stop("`samples` must have columns 'ID' and 'text'.", call. = FALSE)
+  }
+
+  # Infer ID columns if not specified
+  if (is.null(id1_col) || is.null(id2_col)) {
+    if (all(c("ID1", "ID2") %in% names(pairs))) {
+      id1_col <- "ID1"
+      id2_col <- "ID2"
+    } else if (all(c("object1", "object2") %in% names(pairs))) {
+      id1_col <- "object1"
+      id2_col <- "object2"
+    } else {
+      stop(
+        "`pairs` must contain either columns ID1/ID2 or object1/object2 (or specify `id1_col` and `id2_col`).",
+        call. = FALSE
+      )
+    }
+  }
+
+  if (!all(c(id1_col, id2_col) %in% names(pairs))) {
+    stop("`pairs` does not contain the specified ID columns.", call. = FALSE)
+  }
+
+  # Standardize to ID1/ID2
+  if (id1_col != "ID1" || id2_col != "ID2") {
+    pairs <- dplyr::rename(
+      pairs,
+      ID1 = dplyr::all_of(id1_col),
+      ID2 = dplyr::all_of(id2_col)
+    )
+  }
+
+  # Preserve existing text columns if overwrite = FALSE
+  has_text1 <- "text1" %in% names(pairs)
+  has_text2 <- "text2" %in% names(pairs)
+
+  if (overwrite) {
+    pairs <- dplyr::select(pairs, -dplyr::any_of(c("text1", "text2")))
+    has_text1 <- FALSE
+    has_text2 <- FALSE
+  }
+
+  ids <- as.character(samples$ID)
+  txt <- as.character(samples$text)
+
+  id1 <- as.character(pairs$ID1)
+  id2 <- as.character(pairs$ID2)
+
+  miss1 <- setdiff(unique(id1[!is.na(id1) & id1 != ""]), ids)
+  miss2 <- setdiff(unique(id2[!is.na(id2) & id2 != ""]), ids)
+  if (length(miss1) > 0L) {
+    stop("Some IDs in `ID1` are not present in `samples$ID`.", call. = FALSE)
+  }
+  if (length(miss2) > 0L) {
+    stop("Some IDs in `ID2` are not present in `samples$ID`.", call. = FALSE)
+  }
+
+  lookup1 <- tibble::tibble(ID1 = ids, text1_join = txt)
+  lookup2 <- tibble::tibble(ID2 = ids, text2_join = txt)
+
+  out <- dplyr::left_join(pairs, lookup1, by = "ID1")
+  out <- dplyr::left_join(out, lookup2, by = "ID2")
+
+  # Apply overwrite policy
+  if (has_text1) {
+    if (!overwrite) out$text1 <- dplyr::coalesce(out$text1, out$text1_join)
+  } else {
+    out$text1 <- out$text1_join
+  }
+
+  if (has_text2) {
+    if (!overwrite) out$text2 <- dplyr::coalesce(out$text2, out$text2_join)
+  } else {
+    out$text2 <- out$text2_join
+  }
+
+  out <- dplyr::select(out, -dplyr::any_of(c("text1_join", "text2_join")))
+
+  out <- dplyr::relocate(out, dplyr::all_of("text1"), .after = dplyr::all_of("ID1"))
+  out <- dplyr::relocate(out, dplyr::all_of("text2"), .after = dplyr::all_of("ID2"))
+  out
+}
+

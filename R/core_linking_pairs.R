@@ -150,218 +150,189 @@ select_core_link_pairs <- function(samples,
     return(tibble::tibble(ID1 = character(0), ID2 = character(0), pair_type = character(0)))
   }
 
-  # Seed handling (CRAN-safe: restore prior RNG state / or remove if uninitialized)
-  if (!is.null(seed)) {
-    seed <- as.integer(seed)
-    if (length(seed) != 1L || is.na(seed)) stop("`seed` must be a single integer.", call. = FALSE)
-
-    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    old_seed <- NULL
-    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-
-    on.exit(
-      {
-        if (had_seed) {
-          assign(".Random.seed", old_seed, envir = .GlobalEnv)
-        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-          rm(".Random.seed", envir = .GlobalEnv)
-        }
-      },
-      add = TRUE
-    )
-    set.seed(seed)
-  }
-
-  normalize_existing_pairs <- function(x) {
-    if (is.null(x)) {
-      return(tibble::tibble(ID1 = character(0), ID2 = character(0)))
-    }
-    x <- tibble::as_tibble(x)
-    if (all(c("ID1", "ID2") %in% names(x))) {
-      return(tibble::tibble(ID1 = as.character(x$ID1), ID2 = as.character(x$ID2)))
-    }
-    if (all(c("object1", "object2") %in% names(x))) {
-      return(tibble::tibble(ID1 = as.character(x$object1), ID2 = as.character(x$object2)))
-    }
-    stop("`existing_pairs` must have columns ID1/ID2 or object1/object2.", call. = FALSE)
-  }
-
-  pair_key <- function(a, b) {
-    lo <- ifelse(a <= b, a, b)
-    hi <- ifelse(a <= b, b, a)
-    paste0(lo, "||", hi)
-  }
-
-  existing <- normalize_existing_pairs(existing_pairs)
-  existing <- dplyr::filter(existing, !is.na(.data$ID1), !is.na(.data$ID2), .data$ID1 != "", .data$ID2 != "")
-  existing <- dplyr::filter(existing, .data$ID1 %in% ids, .data$ID2 %in% ids, .data$ID1 != .data$ID2)
-
-  existing_keys <- pair_key(existing$ID1, existing$ID2)
-
-  # counts + position balance from existing pairs
-  all_seen <- c(existing$ID1, existing$ID2)
-  n_j <- as.integer(table(factor(all_seen, levels = ids)))
-  n_pos1 <- as.integer(table(factor(existing$ID1, levels = ids)))
-  n_pos2 <- as.integer(table(factor(existing$ID2, levels = ids)))
-  imbalance <- n_pos1 - n_pos2
-
-  # theta/se aligned to ids
-  theta0 <- theta[, c("ID", "theta", "se")]
-  theta0$ID <- as.character(theta0$ID)
-  theta_map <- theta0[match(ids, theta0$ID), , drop = FALSE]
-  cur_theta <- theta_map$theta
-  cur_se <- theta_map$se
-
-  # priority: ensure low-judgment items are preferred; tie-break by larger SE (or missing SE)
-  priority_score <- function(id_vec) {
-    idx <- match(id_vec, ids)
-    need <- pmax(0L, min_judgments - n_j[idx])
-    se_val <- cur_se[idx]
-    se_val[is.na(se_val)] <- max(se_val, na.rm = TRUE)
-    se_val[is.infinite(se_val)] <- 0
-    # large weight on "need", then SE
-    as.numeric(need) * 1e6 + as.numeric(se_val) * 1e3
-  }
-
-  pick_focus <- function(pool_ids) {
-    if (length(pool_ids) == 0L) {
-      return(NA_character_)
-    }
-    sc <- priority_score(pool_ids)
-    mx <- max(sc)
-    top <- pool_ids[sc == mx]
-    if (length(top) == 1L) {
-      return(top)
-    }
-    sample(top, size = 1L)
-  }
-
-  choose_opponent <- function(focus_id, opponent_pool, forbid_keys, allow_theta = TRUE) {
-    if (length(opponent_pool) == 0L) {
-      return(NA_character_)
-    }
-    opponent_pool <- setdiff(opponent_pool, focus_id)
-    if (length(opponent_pool) == 0L) {
-      return(NA_character_)
-    }
-
-    f_idx <- match(focus_id, ids)
-    f_th <- cur_theta[f_idx]
-
-    cand <- opponent_pool
-    if (allow_theta && !is.na(f_th)) {
-      o_idx <- match(cand, ids)
-      o_th <- cur_theta[o_idx]
-      ok <- !is.na(o_th)
-      if (any(ok)) {
-        cand_ok <- cand[ok]
-        d <- abs(o_th[ok] - f_th)
-        ord <- order(d)
-        cand_ok <- cand_ok[ord]
-        cand <- cand_ok[seq_len(min(k_neighbors, length(cand_ok)))]
+  out <- .with_seed_restore(
+    seed,
+    f = function() {
+      pair_key <- function(a, b) {
+        .unordered_pair_key(a, b)
       }
-    } else {
-      # randomize candidate order
-      cand <- sample(cand, size = length(cand))
-    }
 
-    # try candidates in order
-    for (opp in cand) {
-      key <- pair_key(focus_id, opp)
-      if (isTRUE(forbid_repeats) && key %in% forbid_keys) next
-      return(opp)
-    }
-    NA_character_
-  }
+      existing <- .normalize_existing_pairs(existing_pairs, err_arg = "existing_pairs")
+      existing <- dplyr::filter(existing, !is.na(.data$ID1), !is.na(.data$ID2), .data$ID1 != "", .data$ID2 != "")
+      existing <- dplyr::filter(existing, .data$ID1 %in% ids, .data$ID2 %in% ids, .data$ID1 != .data$ID2)
 
-  place_pair <- function(a, b) {
-    if (!isTRUE(balance_positions)) {
-      return(c(a, b))
-    }
-    ia <- match(a, ids)
-    ib <- match(b, ids)
-    # put more-overused-as-ID1 item into ID2
-    if (imbalance[ia] > imbalance[ib]) {
-      return(c(b, a))
-    }
-    if (imbalance[ib] > imbalance[ia]) {
-      return(c(a, b))
-    }
-    # tie -> random
-    if (sample(c(TRUE, FALSE), 1L)) c(a, b) else c(b, a)
-  }
+      existing_keys <- pair_key(existing$ID1, existing$ID2)
 
-  add_pair <- function(focus_id, pool, type, forbid_keys) {
-    opp <- choose_opponent(focus_id, pool, forbid_keys, allow_theta = TRUE)
-    if (is.na(opp)) {
-      return(NULL)
-    }
-    placed <- place_pair(focus_id, opp)
-    id1 <- placed[1]
-    id2 <- placed[2]
+      # counts + position balance from existing pairs
+      all_seen <- c(existing$ID1, existing$ID2)
+      n_j <- as.integer(table(factor(all_seen, levels = ids)))
+      n_pos1 <- as.integer(table(factor(existing$ID1, levels = ids)))
+      n_pos2 <- as.integer(table(factor(existing$ID2, levels = ids)))
+      imbalance <- n_pos1 - n_pos2
 
-    # update running stats (existing + selected)
-    i1 <- match(id1, ids)
-    i2 <- match(id2, ids)
-    n_j[i1] <<- n_j[i1] + 1L
-    n_j[i2] <<- n_j[i2] + 1L
-    imbalance[i1] <<- imbalance[i1] + 1L
-    imbalance[i2] <<- imbalance[i2] - 1L
+      # theta/se aligned to ids
+      theta0 <- theta[, c("ID", "theta", "se")]
+      theta0$ID <- as.character(theta0$ID)
+      theta_map <- theta0[match(ids, theta0$ID), , drop = FALSE]
+      cur_theta <- theta_map$theta
+      cur_se <- theta_map$se
 
-    tibble::tibble(ID1 = id1, ID2 = id2, pair_type = type)
-  }
+      # priority: ensure low-judgment items are preferred; tie-break by larger SE (or missing SE)
+      priority_score <- function(id_vec) {
+        idx <- match(id_vec, ids)
+        need <- pmax(0L, min_judgments - n_j[idx])
+        se_val <- cur_se[idx]
+        se_val[is.na(se_val)] <- suppressWarnings(max(se_val, na.rm = TRUE))
+        se_val[!is.finite(se_val)] <- 0
+        # large weight on "need", then SE
+        as.numeric(need) * 1e6 + as.numeric(se_val) * 1e3
+      }
 
-  # allocate counts
-  n_audit <- as.integer(floor(round_size * core_audit_frac))
-  remain <- round_size - n_audit
-  n_within <- as.integer(floor(remain * within_batch_frac))
-  n_link <- remain - n_within
+      pick_focus <- function(pool_ids) {
+        if (length(pool_ids) == 0L) {
+          return(NA_character_)
+        }
+        sc <- priority_score(pool_ids)
+        mx <- max(sc)
+        top <- pool_ids[sc == mx]
+        if (length(top) == 1L) {
+          return(top)
+        }
+        sample(top, size = 1L)
+      }
 
-  out <- list()
-  forbid_keys <- existing_keys
+      choose_opponent <- function(focus_id, opponent_pool, forbid_keys, allow_theta = TRUE) {
+        if (length(opponent_pool) == 0L) {
+          return(NA_character_)
+        }
+        opponent_pool <- setdiff(opponent_pool, focus_id)
+        if (length(opponent_pool) == 0L) {
+          return(NA_character_)
+        }
 
-  # core↔core audit
-  if (n_audit > 0L && length(core_ids) >= 2L) {
-    for (i in seq_len(n_audit)) {
-      focus <- pick_focus(core_ids)
-      if (is.na(focus)) break
-      row <- add_pair(focus, setdiff(core_ids, focus), "core_core", forbid_keys)
-      if (is.null(row)) break
-      forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
-      out[[length(out) + 1L]] <- row
-    }
-  }
+        f_idx <- match(focus_id, ids)
+        f_th <- cur_theta[f_idx]
 
-  # new↔new within-batch
-  if (n_within > 0L && length(new_ids) >= 2L) {
-    for (i in seq_len(n_within)) {
-      focus <- pick_focus(new_ids)
-      if (is.na(focus)) break
-      row <- add_pair(focus, setdiff(new_ids, focus), "new_new", forbid_keys)
-      if (is.null(row)) break
-      forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
-      out[[length(out) + 1L]] <- row
-    }
-  }
+        cand <- opponent_pool
+        if (allow_theta && !is.na(f_th)) {
+          o_idx <- match(cand, ids)
+          o_th <- cur_theta[o_idx]
+          ok <- !is.na(o_th)
+          if (any(ok)) {
+            cand_ok <- cand[ok]
+            d <- abs(o_th[ok] - f_th)
+            ord <- order(d)
+            cand_ok <- cand_ok[ord]
+            cand <- cand_ok[seq_len(min(k_neighbors, length(cand_ok)))]
+          }
+        } else {
+          # randomize candidate order
+          cand <- sample(cand, size = length(cand))
+        }
 
-  # core↔new linking
-  if (n_link > 0L && length(core_ids) >= 1L && length(new_ids) >= 1L) {
-    for (i in seq_len(n_link)) {
-      focus <- pick_focus(new_ids)
-      if (is.na(focus)) break
-      row <- add_pair(focus, core_ids, "core_new", forbid_keys)
-      if (is.null(row)) break
-      forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
-      out[[length(out) + 1L]] <- row
-    }
-  }
+        # try candidates in order
+        for (opp in cand) {
+          key <- pair_key(focus_id, opp)
+          if (isTRUE(forbid_repeats) && key %in% forbid_keys) next
+          return(opp)
+        }
+        NA_character_
+      }
 
-  if (length(out) == 0L) {
-    tibble::tibble(ID1 = character(0), ID2 = character(0), pair_type = character(0))
-  } else {
-    dplyr::bind_rows(out)
-  }
+      place_pair <- function(a, b) {
+        if (!isTRUE(balance_positions)) {
+          return(c(a, b))
+        }
+        ia <- match(a, ids)
+        ib <- match(b, ids)
+        # put more-overused-as-ID1 item into ID2
+        if (imbalance[ia] > imbalance[ib]) {
+          return(c(b, a))
+        }
+        if (imbalance[ib] > imbalance[ia]) {
+          return(c(a, b))
+        }
+        # tie -> random
+        if (sample(c(TRUE, FALSE), 1L)) c(a, b) else c(b, a)
+      }
+
+      add_pair <- function(focus_id, pool, type, forbid_keys) {
+        opp <- choose_opponent(focus_id, pool, forbid_keys, allow_theta = TRUE)
+        if (is.na(opp)) {
+          return(NULL)
+        }
+        placed <- place_pair(focus_id, opp)
+        id1 <- placed[1]
+        id2 <- placed[2]
+
+        # update running stats (existing + selected)
+        i1 <- match(id1, ids)
+        i2 <- match(id2, ids)
+        n_j[i1] <<- n_j[i1] + 1L
+        n_j[i2] <<- n_j[i2] + 1L
+        imbalance[i1] <<- imbalance[i1] + 1L
+        imbalance[i2] <<- imbalance[i2] - 1L
+
+        tibble::tibble(ID1 = id1, ID2 = id2, pair_type = type)
+      }
+
+      # allocate counts
+      n_audit <- as.integer(floor(round_size * core_audit_frac))
+      remain <- round_size - n_audit
+      n_within <- as.integer(floor(remain * within_batch_frac))
+      n_link <- remain - n_within
+
+      out <- list()
+      forbid_keys <- existing_keys
+
+      # core↔core audit
+      if (n_audit > 0L && length(core_ids) >= 2L) {
+        for (i in seq_len(n_audit)) {
+          focus <- pick_focus(core_ids)
+          if (is.na(focus)) break
+          row <- add_pair(focus, setdiff(core_ids, focus), "core_core", forbid_keys)
+          if (is.null(row)) break
+          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          out[[length(out) + 1L]] <- row
+        }
+      }
+
+      # new↔new within-batch
+      if (n_within > 0L && length(new_ids) >= 2L) {
+        for (i in seq_len(n_within)) {
+          focus <- pick_focus(new_ids)
+          if (is.na(focus)) break
+          row <- add_pair(focus, setdiff(new_ids, focus), "new_new", forbid_keys)
+          if (is.null(row)) break
+          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          out[[length(out) + 1L]] <- row
+        }
+      }
+
+      # core↔new linking
+      if (n_link > 0L && length(core_ids) >= 1L && length(new_ids) >= 1L) {
+        for (i in seq_len(n_link)) {
+          focus <- pick_focus(new_ids)
+          if (is.na(focus)) break
+          row <- add_pair(focus, core_ids, "core_new", forbid_keys)
+          if (is.null(row)) break
+          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          out[[length(out) + 1L]] <- row
+        }
+      }
+
+      if (length(out) == 0L) {
+        tibble::tibble(ID1 = character(0), ID2 = character(0), pair_type = character(0))
+      } else {
+        dplyr::bind_rows(out)
+      }
+    },
+    arg_name = "seed"
+  )
+
+  out
 }
+
 
 #' Propose a core-linking round given an existing BT fit
 #'
@@ -372,12 +343,14 @@ select_core_link_pairs <- function(samples,
 #' @param fit A list returned by \code{\link{fit_bt_model}} that contains
 #'   a \code{$theta} tibble with columns \code{ID}, \code{theta}, \code{se}.
 #' @param core_ids Character vector of core IDs.
-#' @param ... Passed through to \code{\link{select_core_link_pairs}} (e.g.,
-#'   \code{existing_pairs}, \code{round_size}, \code{seed}, etc.).
+#' @param include_text If TRUE, attach `text1`/`text2` columns by joining
+#'   against `samples`.
+#' @param ... Passed through to `select_core_link_pairs()` (e.g., `existing_pairs`,
+#'   `round_size`, `seed`, etc.).
 #'
 #' @return A list with:
 #' \describe{
-#'   \item{pairs}{Tibble of proposed pairs (ID1, ID2, pair_type).}
+#'   \item{pairs}{Tibble of proposed pairs (ID1, ID2, pair_type; plus text columns if requested).}
 #'   \item{plan}{One-row tibble summarizing how many of each pair_type were returned.}
 #' }
 #'
@@ -390,11 +363,14 @@ select_core_link_pairs <- function(samples,
 #' head(out$pairs)
 #'
 #' @export
-bt_core_link_round <- function(samples, fit, core_ids, ...) {
+bt_core_link_round <- function(samples, fit, core_ids, include_text = FALSE, ...) {
   if (!is.list(fit) || is.null(fit$theta)) {
     stop("`fit` must be a list (from `fit_bt_model()`) containing `$theta`.", call. = FALSE)
   }
   pairs <- select_core_link_pairs(samples = samples, theta = fit$theta, core_ids = core_ids, ...)
+  if (isTRUE(include_text) && nrow(pairs) > 0L) {
+    pairs <- add_pair_texts(pairs, samples = samples)
+  }
   plan <- tibble::tibble(
     n_total = nrow(pairs),
     n_core_new = sum(pairs$pair_type == "core_new"),
