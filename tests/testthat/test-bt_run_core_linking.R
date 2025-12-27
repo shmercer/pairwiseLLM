@@ -305,3 +305,237 @@ test_that("bt_run_core_linking populates warm_start fit metadata and sets final_
   # remains the most recent fit at that point (warm_start fit), but batch index in meta stays 0
   expect_equal(meta_b1$batch_index, 0L)
 })
+
+test_that("bt_run_core_linking validates samples$ID and core_ids strictly", {
+  ok_samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+  batches <- list(c("C"))
+  judge_fun <- function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+
+  # Missing / empty IDs
+  bad1 <- ok_samples
+  bad1$ID[1] <- NA_character_
+  expect_error(
+    bt_run_core_linking(bad1, batches = batches, core_ids = c("B", "C"), judge_fun = judge_fun),
+    "samples\\$ID.*non-missing"
+  )
+
+  bad2 <- ok_samples
+  bad2$ID[1] <- ""
+  expect_error(
+    bt_run_core_linking(bad2, batches = batches, core_ids = c("B", "C"), judge_fun = judge_fun),
+    "samples\\$ID.*non-missing"
+  )
+
+  # Duplicate IDs
+  bad3 <- ok_samples
+  bad3$ID[3] <- "B"
+  expect_error(
+    bt_run_core_linking(bad3, batches = batches, core_ids = c("B", "C"), judge_fun = judge_fun),
+    "samples\\$ID.*unique"
+  )
+
+  # core_ids validation: duplicates / not present / too short
+  expect_error(
+    bt_run_core_linking(ok_samples, batches = batches, core_ids = c("A", "B", "B"), judge_fun = judge_fun),
+    "core_ids.*unique"
+  )
+  expect_error(
+    bt_run_core_linking(ok_samples, batches = batches, core_ids = c("A", "Z"), judge_fun = judge_fun),
+    "present in `samples\\$ID`"
+  )
+  expect_error(
+    bt_run_core_linking(ok_samples, batches = batches, core_ids = c("A"), judge_fun = judge_fun),
+    "must include at least 2 IDs"
+  )
+})
+
+test_that(".normalize_batches_list errors on empty/invalid batches", {
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+  core_ids <- c("A", "B")
+  judge_fun <- function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+
+  # Empty batch element
+  expect_error(
+    bt_run_core_linking(samples, batches = list(character(0)), core_ids = core_ids, judge_fun = judge_fun),
+    "Each batch must contain at least one ID"
+  )
+
+  # NA / empty string in batch
+  expect_error(
+    bt_run_core_linking(samples, batches = list(c("C", NA_character_)), core_ids = core_ids, judge_fun = judge_fun),
+    "non-missing and non-empty"
+  )
+  expect_error(
+    bt_run_core_linking(samples, batches = list(c("C", "")), core_ids = core_ids, judge_fun = judge_fun),
+    "non-missing and non-empty"
+  )
+
+  # Unknown ID
+  expect_error(
+    bt_run_core_linking(samples, batches = list(c("Z")), core_ids = core_ids, judge_fun = judge_fun),
+    "present in `samples\\$ID`"
+  )
+})
+
+test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_method random)", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:8],
+    text = paste("text", LETTERS[1:8])
+  )
+  batches <- list(c("G", "H"))
+
+  # deterministic simulated judge + mock fit
+  true_theta <- setNames(seq(8, 1), LETTERS[1:8])
+  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
+
+  mock_fit <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(0.5, length(ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  # Mock select_core_set so the chosen core cannot overlap with the batch IDs.
+  testthat::local_mocked_bindings(
+    select_core_set = function(...) c("A", "B", "C"),
+    .env = asNamespace("pairwiseLLM")
+  )
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = NULL, # cover core selection branch
+    core_method = "random",
+    core_size = 3,
+    seed = 123,
+    judge_fun = judge_fun,
+    fit_fun = mock_fit,
+    engine = "mock",
+    round_size = 10,
+    max_rounds_per_batch = 1,
+    forbid_repeats = FALSE,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_,
+    rel_se_p90_target = 999,
+    verbose = FALSE
+  )
+
+  expect_true(is.character(out$core_ids))
+  expect_equal(out$core_ids, c("A", "B", "C"))
+  expect_true(all(out$core_ids %in% samples$ID))
+})
+
+test_that("bt_run_core_linking covers drift_reference = baseline branch", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste("text", LETTERS[1:6])
+  )
+  batches <- list(c("D"))
+  core_ids <- c("A", "B", "C")
+  true_theta <- c(A = 3, B = 2, C = 1, D = 0, E = -1, F = -2)
+
+  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
+
+  mock_fit <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(0.25, length(ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = core_ids,
+    judge_fun = judge_fun,
+    fit_fun = mock_fit,
+    engine = "mock",
+    round_size = 10,
+    max_rounds_per_batch = 1,
+    forbid_repeats = FALSE,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_,
+    rel_se_p90_target = 0.0001,
+    drift_reference = "baseline", # cover baseline branch
+    verbose = FALSE
+  )
+
+  # We don't assert drift values; we just ensure the run completes with baseline reference.
+  expect_true(nrow(out$batch_summary) == 1L)
+})
+
+test_that("bt_run_core_linking emits progress messages when verbose = TRUE", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste("text", LETTERS[1:6])
+  )
+  batches <- list(c("D"))
+  core_ids <- c("A", "B", "C")
+  true_theta <- c(A = 3, B = 2, C = 1, D = 0, E = -1, F = -2)
+
+  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
+
+  mock_fit <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(0.25, length(ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  # Cover the "Batch ..." message line
+  expect_message(
+    bt_run_core_linking(
+      samples = samples,
+      batches = batches,
+      core_ids = core_ids,
+      judge_fun = judge_fun,
+      fit_fun = mock_fit,
+      engine = "mock",
+      round_size = 10,
+      max_rounds_per_batch = 1,
+      forbid_repeats = FALSE,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_,
+      rel_se_p90_target = 999,
+      verbose = TRUE
+    ),
+    "Batch 1:"
+  )
+
+  # Cover the "Round ..." message line
+  expect_message(
+    bt_run_core_linking(
+      samples = samples,
+      batches = batches,
+      core_ids = core_ids,
+      judge_fun = judge_fun,
+      fit_fun = mock_fit,
+      engine = "mock",
+      round_size = 10,
+      max_rounds_per_batch = 1,
+      forbid_repeats = FALSE,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_,
+      rel_se_p90_target = 999,
+      verbose = TRUE
+    ),
+    "Round 1:"
+  )
+})

@@ -195,10 +195,19 @@ bt_run_core_linking <- function(samples,
       seed = seed
     )
   } else {
-    core_ids <- unique(as.character(core_ids))
-    if (anyNA(core_ids) || any(core_ids == "")) stop("`core_ids` must be non-missing and non-empty.", call. = FALSE)
-    if (any(duplicated(core_ids))) stop("`core_ids` must be unique.", call. = FALSE)
-    if (!all(core_ids %in% ids_all)) stop("All `core_ids` must be present in `samples$ID`.", call. = FALSE)
+    core_ids_in <- as.character(core_ids)
+
+    if (anyNA(core_ids_in) || any(core_ids_in == "")) {
+      stop("`core_ids` must be non-missing and non-empty.", call. = FALSE)
+    }
+    if (any(duplicated(core_ids_in))) {
+      stop("`core_ids` must be unique.", call. = FALSE)
+    }
+    if (!all(core_ids_in %in% ids_all)) {
+      stop("All `core_ids` must be present in `samples$ID`.", call. = FALSE)
+    }
+
+    core_ids <- unique(core_ids_in)
   }
   if (length(core_ids) < 2L) stop("`core_ids` must include at least 2 IDs.", call. = FALSE)
 
