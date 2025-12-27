@@ -2,6 +2,8 @@
 
 ## All functions
 
+- [`add_pair_texts()`](https://shmercer.github.io/pairwiseLLM/reference/add_pair_texts.md)
+  : Add text columns (text1/text2) to a pairs table
 - [`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md)
   : Deterministically alternate sample order in pairs
 - [`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md)
@@ -19,6 +21,8 @@
   propose next pairs
 - [`bt_core_link_round()`](https://shmercer.github.io/pairwiseLLM/reference/bt_core_link_round.md)
   : Propose a core-linking round given an existing BT fit
+- [`bt_drift_metrics()`](https://shmercer.github.io/pairwiseLLM/reference/bt_drift_metrics.md)
+  : Compute drift metrics between two theta estimates
 - [`bt_run_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/bt_run_adaptive.md)
   : Run a round-based adaptive BT workflow end-to-end
 - [`bt_should_stop()`](https://shmercer.github.io/pairwiseLLM/reference/bt_should_stop.md)

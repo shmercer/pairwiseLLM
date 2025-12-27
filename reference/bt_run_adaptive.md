@@ -354,11 +354,12 @@ out <- bt_run_adaptive(
   rel_se_p90_min_improve = NA_real_
 )
 out$rounds
-#> # A tibble: 1 × 18
-#>   round n_new_pairs_scored n_total_results stop  engine n_items theta_sd se_mean
-#>   <int>              <int>           <int> <lgl> <chr>    <int>    <dbl>   <dbl>
-#> 1     1                  0               2 TRUE  mock         3    0.577   0.902
-#> # ℹ 10 more variables: se_max <dbl>, rel_se_mean <dbl>, rel_se_p90 <dbl>,
-#> #   reliability <dbl>, sepG <dbl>, item_misfit_prop <dbl>,
-#> #   judge_misfit_prop <dbl>, se_p50 <dbl>, se_p90 <dbl>, se_p95 <dbl>
+#> # A tibble: 1 × 19
+#>   round n_new_pairs_scored n_total_results stop  engine n_items n_total_items
+#>   <int>              <int>           <int> <lgl> <chr>    <int>         <int>
+#> 1     1                  0               2 TRUE  mock         3             3
+#> # ℹ 12 more variables: theta_sd <dbl>, se_mean <dbl>, se_max <dbl>,
+#> #   rel_se_mean <dbl>, rel_se_p90 <dbl>, reliability <dbl>, sepG <dbl>,
+#> #   item_misfit_prop <dbl>, judge_misfit_prop <dbl>, se_p50 <dbl>,
+#> #   se_p90 <dbl>, se_p95 <dbl>
 ```

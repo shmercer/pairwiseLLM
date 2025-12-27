@@ -155,13 +155,13 @@ require an API key, just that the Ollama server is running.</p>
 clear differences in quality:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
-<span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">example_writing_samples</span>, n <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
-<span><span class="co">#&gt;   ID    text                                                       quality_score</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                                              <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different thing…             1</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S02   <span style="color: #949494;">"</span>It is hard to grade writing. Some are long and some are …             2</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S03   <span style="color: #949494;">"</span>Assessing writing is difficult because everyone writes d…             3</span></span></code></pre></div>
+<span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">example_writing_samples</span>, n <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
+<span><span class="co">##   ID    text                                                       quality_score</span></span>
+<span><span class="co">##   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                                              <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">1</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different thing…             1</span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">2</span> S02   <span style="color: #949494;">"</span>It is hard to grade writing. Some are long and some are …             2</span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">3</span> S03   <span style="color: #949494;">"</span>Assessing writing is difficult because everyone writes d…             3</span></span></code></pre>
 <p>Each sample has:</p>
 <ul>
 <li>
@@ -175,24 +175,24 @@ clear differences in quality:</p>
 <h2 id="constructing-pairwise-comparisons">4. Constructing Pairwise Comparisons<a class="anchor" aria-label="anchor" href="#constructing-pairwise-comparisons"></a>
 </h2>
 <p>Create all unordered pairs:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">pairs</span>, n <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 5 × 4</span></span></span>
-<span><span class="co">#&gt;   ID1   text1                                                        ID2   text2</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                                        <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S02   <span style="color: #949494;">"</span>It …</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S03   <span style="color: #949494;">"</span>Ass…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S04   <span style="color: #949494;">"</span>Gra…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S05   <span style="color: #949494;">"</span>Wri…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S06   <span style="color: #949494;">"</span>It …</span></span></code></pre></div>
+<span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">pairs</span>, n <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## <span style="color: #949494;"># A tibble: 5 × 4</span></span></span>
+<span><span class="co">##   ID1   text1                                                        ID2   text2</span></span>
+<span><span class="co">##   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                                        <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">1</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S02   <span style="color: #949494;">"</span>It …</span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">2</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S03   <span style="color: #949494;">"</span>Ass…</span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">3</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S04   <span style="color: #949494;">"</span>Gra…</span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">4</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S05   <span style="color: #949494;">"</span>Wri…</span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">5</span> S01   <span style="color: #949494;">"</span>Writing assessment is hard. People write different things.… S06   <span style="color: #949494;">"</span>It …</span></span></code></pre>
 <p>Sample a subset of pairs:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs_small</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span><span class="va">pairs</span>, n_pairs <span class="op">=</span> <span class="fl">10</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span></span></code></pre></div>
 <p>Randomize SAMPLE_1 / SAMPLE_2 order:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs_small</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span><span class="va">pairs_small</span>, seed <span class="op">=</span> <span class="fl">99</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -202,16 +202,16 @@ clear differences in quality:</p>
 <div class="section level3">
 <h3 id="using-a-built-in-trait">5.1 Using a built-in trait<a class="anchor" aria-label="anchor" href="#using-a-built-in-trait"></a>
 </h3>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
-<span><span class="va">td</span></span>
-<span><span class="co">#&gt; $name</span></span>
-<span><span class="co">#&gt; [1] "Overall Quality"</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $description</span></span>
-<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre></div>
+<span><span class="va">td</span></span></code></pre></div>
+<pre><code><span><span class="co">## $name</span></span>
+<span><span class="co">## [1] "Overall Quality"</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $description</span></span>
+<span><span class="co">## [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre>
 <p>Or define your own:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">td_custom</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span></span>
 <span>  custom_name <span class="op">=</span> <span class="st">"Clarity"</span>,</span>
 <span>  custom_description <span class="op">=</span> <span class="st">"How clearly and effectively ideas are expressed."</span></span>
@@ -221,25 +221,25 @@ clear differences in quality:</p>
 <h3 id="using-or-customizing-prompt-templates">5.2 Using or customizing prompt templates<a class="anchor" aria-label="anchor" href="#using-or-customizing-prompt-templates"></a>
 </h3>
 <p>Load default prompt:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">300</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; TRAIT: {TRAIT_NAME}</span></span>
-<span><span class="co">#&gt; DEFINITION: {TRAIT_DESCRIPTION}</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; SAMPLES:</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; === SAMPLE_1 ===</span></span>
-<span><span class="co">#&gt; {SAMPLE_1}</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; === SAMPLE_2 ===</span></span>
-<span><span class="co">#&gt; {SAMPLE_2}</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; EVALUATION PROCESS (Mental Simulation):</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; 1.  **Ad</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">300</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## TRAIT: {TRAIT_NAME}</span></span>
+<span><span class="co">## DEFINITION: {TRAIT_DESCRIPTION}</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## SAMPLES:</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## === SAMPLE_1 ===</span></span>
+<span><span class="co">## {SAMPLE_1}</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## === SAMPLE_2 ===</span></span>
+<span><span class="co">## {SAMPLE_2}</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## EVALUATION PROCESS (Mental Simulation):</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## 1.  **Ad</span></span></code></pre>
 <p>Placeholders required in custom prompt templates:</p>
 <ul>
 <li><code>{TRAIT_NAME}</code></li>
@@ -248,7 +248,7 @@ clear differences in quality:</p>
 <li><code>{SAMPLE_2}</code></li>
 </ul>
 <p>Load a template from file:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span>file <span class="op">=</span> <span class="st">"my_template.txt"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
@@ -263,22 +263,13 @@ Together, and Ollama.</strong></p>
 <strong>all</strong> supported backends. The function returns a list
 containing <code>$results</code> (successful comparisons) and
 <code>$failed_pairs</code> (errors).</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Example using parallel processing and incremental saving</span></span>
-<span><span class="va">res_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
-<span>  pairs             <span class="op">=</span> <span class="va">pairs_small</span>,</span>
-<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>, <span class="co"># also "anthropic", "gemini", "together"</span></span>
-<span>  model             <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
-<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
-<span>  <span class="co"># New features:</span></span>
-<span>  parallel          <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  workers           <span class="op">=</span> <span class="fl">4</span>,</span>
-<span>  save_path         <span class="op">=</span> <span class="st">"live_results.csv"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<span></span>
+<span></span>
+<span><span class="co"># also "anthropic", "gemini", "together"</span></span></code></pre></div>
 <p>Preview results:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Successes are in the $results tibble</span></span>
 <span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
@@ -299,13 +290,13 @@ containing <code>$results</code> (successful comparisons) and
 <p>Convert the LLM output (specifically the <code>$results</code> tibble
 for <code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> output) to a 3-column BT
 dataset:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res_list: output list from submit_llm_pairs()</span></span>
 <span><span class="co"># We extract the $results tibble for modeling</span></span>
 <span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">bt_data</span>, <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 <p>and/or a dataset for Elo modeling:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res_list: output from submit_llm_pairs()</span></span>
 <span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span></code></pre></div>
 <hr>
@@ -314,10 +305,10 @@ dataset:</p>
 <h2 id="bradleyterry-modeling">8. Bradley–Terry Modeling<a class="anchor" aria-label="anchor" href="#bradleyterry-modeling"></a>
 </h2>
 <p>Fit model:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span></code></pre></div>
 <p>Summarize results:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
 <p>The output includes:</p>
 <ul>
@@ -332,7 +323,7 @@ dataset:</p>
 <div class="section level2">
 <h2 id="elo-modeling">9. Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
 </h2>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">elo_fit</span></span></code></pre></div>
 <p>Outputs:</p>
@@ -351,7 +342,7 @@ dataset:</p>
 <div class="section level3">
 <h3 id="submit-a-batch">10.1 Submit a batch<a class="anchor" aria-label="anchor" href="#submit-a-batch"></a>
 </h3>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
 <span>  backend            <span class="op">=</span> <span class="st">"openai"</span>,</span>
 <span>  model              <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
@@ -364,7 +355,7 @@ dataset:</p>
 <div class="section level3">
 <h3 id="download-results">10.2 Download results<a class="anchor" aria-label="anchor" href="#download-results"></a>
 </h3>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res_batch</span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -376,20 +367,18 @@ into multiple segments using <code><a href="../reference/llm_submit_pairs_multi_
 and then poll all of them with <code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code>.
 This is particularly useful when you have many pairs or want to ensure
 that you can resume if the session ends.</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Generate a small set of pairs</span></span>
 <span><span class="va">pairs_small</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span>n_pairs <span class="op">=</span> <span class="fl">10</span>, seed <span class="op">=</span> <span class="fl">4321</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span>seed <span class="op">=</span> <span class="fl">8765</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Split into two batches and include reasoning/chain-of-thought</span></span>
 <span><span class="va">multi_job</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch</a></span><span class="op">(</span></span>
-<span>  pairs             <span class="op">=</span> <span class="va">pairs_small</span>,</span>
-<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>,</span>
 <span>  model             <span class="op">=</span> <span class="st">"gpt-5.1"</span>,</span>
 <span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
 <span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
@@ -431,28 +420,28 @@ tokens, controlled by <code>budget_quantile</code>)</li>
 <p>If you are running a discounted batch workflow, set
 <code>mode = "batch"</code> and supply a <code>batch_discount</code>
 multiplier.</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a moderate set of pairs</span></span>
 <span><span class="va">pairs_big</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/sample_pairs.html">sample_pairs</a></span><span class="op">(</span>n_pairs <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">123</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/randomize_pair_order.html">randomize_pair_order</a></span><span class="op">(</span>seed <span class="op">=</span> <span class="fl">456</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">td</span>   <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">est</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/estimate_llm_pairs_cost.html">estimate_llm_pairs_cost</a></span><span class="op">(</span></span>
 <span>  pairs <span class="op">=</span> <span class="va">pairs_big</span>,</span>
-<span>  backend <span class="op">=</span> <span class="st">"anthropic"</span>,                <span class="co"># "openai", "anthropic", "gemini", "together"</span></span>
+<span>  backend <span class="op">=</span> <span class="st">"anthropic"</span>, <span class="co"># "openai", "anthropic", "gemini", "together"</span></span>
 <span>  model <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
 <span>  trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
 <span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
 <span>  prompt_template <span class="op">=</span> <span class="va">tmpl</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"batch"</span>,</span>
-<span>  batch_discount <span class="op">=</span> <span class="fl">0.5</span>,                 <span class="co"># set to 1 for no discount</span></span>
-<span>  n_test <span class="op">=</span> <span class="fl">10</span>,                          <span class="co"># paid pilot calls (live)</span></span>
-<span>  budget_quantile <span class="op">=</span> <span class="fl">0.9</span>,                <span class="co"># p90 output tokens</span></span>
-<span>  cost_per_million_input <span class="op">=</span> <span class="fl">3.0</span>,         <span class="co"># fill in your provider pricing</span></span>
+<span>  batch_discount <span class="op">=</span> <span class="fl">0.5</span>, <span class="co"># set to 1 for no discount</span></span>
+<span>  n_test <span class="op">=</span> <span class="fl">10</span>, <span class="co"># paid pilot calls (live)</span></span>
+<span>  budget_quantile <span class="op">=</span> <span class="fl">0.9</span>, <span class="co"># p90 output tokens</span></span>
+<span>  cost_per_million_input <span class="op">=</span> <span class="fl">3.0</span>, <span class="co"># fill in your provider pricing</span></span>
 <span>  cost_per_million_output <span class="op">=</span> <span class="fl">15.0</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -461,18 +450,19 @@ multiplier.</p>
 <p>The estimator returns both the pilot output and the pairs not
 included in the pilot (remaining_pairs). Use remaining_pairs to submit
 only the remaining work after you are satisfied with the estimate:</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">remaining_pairs</span> <span class="op">&lt;-</span> <span class="va">est</span><span class="op">$</span><span class="va">remaining_pairs</span></span>
 <span></span>
 <span><span class="co"># Example: submit only the remaining pairs as a batch</span></span>
 <span></span>
 <span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
-<span>          backend <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
-<span>          model <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
-<span>          pairs <span class="op">=</span> <span class="va">remaining_pairs</span>,</span>
-<span>          trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>          trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>          prompt_template <span class="op">=</span> <span class="va">tmpl</span><span class="op">)</span></span>
+<span>  backend <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"claude-sonnet-4-5"</span>,</span>
+<span>  pairs <span class="op">=</span> <span class="va">remaining_pairs</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template <span class="op">=</span> <span class="va">tmpl</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span></code></pre></div>
 <p>Notes:</p>
@@ -546,26 +536,26 @@ available.</p>
 <div class="section level4">
 <h4 id="missing-api-keys">Missing API keys<a class="anchor" aria-label="anchor" href="#missing-api-keys"></a>
 </h4>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; No LLM API keys are currently set for known backends:</span></span>
-<span><span class="co">#&gt;   - OpenAI:         OPENAI_API_KEY</span></span>
-<span><span class="co">#&gt;   - Anthropic:      ANTHROPIC_API_KEY</span></span>
-<span><span class="co">#&gt;   - Google Gemini:  GEMINI_API_KEY</span></span>
-<span><span class="co">#&gt;   - Together.ai:    TOGETHER_API_KEY</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:</span></span>
-<span><span class="co">#&gt;   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"</span></span>
-<span><span class="co">#&gt;   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"</span></span>
-<span><span class="co">#&gt;   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"</span></span>
-<span><span class="co">#&gt;   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 4 × 4</span></span></span>
-<span><span class="co">#&gt;   backend   service       env_var           has_key</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> openai    OpenAI        OPENAI_API_KEY    FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> anthropic Anthropic     ANTHROPIC_API_KEY FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> gemini    Google Gemini GEMINI_API_KEY    FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> together  Together.ai   TOGETHER_API_KEY  FALSE</span></span></code></pre></div>
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## No LLM API keys are currently set for known backends:</span></span>
+<span><span class="co">##   - OpenAI:         OPENAI_API_KEY</span></span>
+<span><span class="co">##   - Anthropic:      ANTHROPIC_API_KEY</span></span>
+<span><span class="co">##   - Google Gemini:  GEMINI_API_KEY</span></span>
+<span><span class="co">##   - Together.ai:    TOGETHER_API_KEY</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:</span></span>
+<span><span class="co">##   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"</span></span>
+<span><span class="co">##   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"</span></span>
+<span><span class="co">##   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"</span></span>
+<span><span class="co">##   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"</span></span></code></pre>
+<pre><code><span><span class="co">## <span style="color: #949494;"># A tibble: 4 × 4</span></span></span>
+<span><span class="co">##   backend   service       env_var           has_key</span></span>
+<span><span class="co">##   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>  </span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">1</span> openai    OpenAI        OPENAI_API_KEY    FALSE  </span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">2</span> anthropic Anthropic     ANTHROPIC_API_KEY FALSE  </span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">3</span> gemini    Google Gemini GEMINI_API_KEY    FALSE  </span></span>
+<span><span class="co">## <span style="color: #BCBCBC;">4</span> together  Together.ai   TOGETHER_API_KEY  FALSE</span></span></code></pre>
 </div>
 <div class="section level4">
 <h4 id="timeouts">Timeouts<a class="anchor" aria-label="anchor" href="#timeouts"></a>

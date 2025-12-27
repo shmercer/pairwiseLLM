@@ -49,7 +49,7 @@ fit$theta from a model fitted by fit_bt_model."></head><body>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">bt_core_link_round</span><span class="op">(</span><span class="va">samples</span>, <span class="va">fit</span>, <span class="va">core_ids</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">bt_core_link_round</span><span class="op">(</span><span class="va">samples</span>, <span class="va">fit</span>, <span class="va">core_ids</span>, include_text <span class="op">=</span> <span class="cn">FALSE</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -69,15 +69,20 @@ a <code>$theta</code> tibble with columns <code>ID</code>, <code>theta</code>, <
 <dd><p>Character vector of core IDs.</p></dd>
 
 
+<dt id="arg-include-text">include_text<a class="anchor" aria-label="anchor" href="#arg-include-text"></a></dt>
+<dd><p>If TRUE, attach <code>text1</code>/<code>text2</code> columns by joining
+against <code>samples</code>.</p></dd>
+
+
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Passed through to <code><a href="select_core_link_pairs.html">select_core_link_pairs</a></code> (e.g.,
-<code>existing_pairs</code>, <code>round_size</code>, <code>seed</code>, etc.).</p></dd>
+<dd><p>Passed through to <code><a href="select_core_link_pairs.html">select_core_link_pairs()</a></code> (e.g., <code>existing_pairs</code>,
+<code>round_size</code>, <code>seed</code>, etc.).</p></dd>
 
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list with:</p><dl><dt>pairs</dt>
-<dd><p>Tibble of proposed pairs (ID1, ID2, pair_type).</p></dd>
+<dd><p>Tibble of proposed pairs (ID1, ID2, pair_type; plus text columns if requested).</p></dd>
 
 <dt>plan</dt>
 <dd><p>One-row tibble summarizing how many of each pair_type were returned.</p></dd>
@@ -100,12 +105,12 @@ a <code>$theta</code> tibble with columns <code>ID</code>, <code>theta</code>, <
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 6 × 3</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   ID1   ID2   pair_type</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> S6    S8    new_new  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> S1    S5    core_new </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span> S4    S1    core_new </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span> S7    S1    core_new </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span> S3    S6    core_new </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span> S5    S2    core_new </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> S4    S6    new_new  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> S2    S7    core_new </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span> S8    S2    core_new </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span> S5    S2    core_new </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span> S3    S4    core_new </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span> S7    S1    core_new </span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
