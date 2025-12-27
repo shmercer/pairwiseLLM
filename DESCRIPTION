@@ -42,6 +42,7 @@ Suggests:
     mockery,
     purrr,
     readr,
+    reticulate,
     rmarkdown,
     sirt,
     stringr,
