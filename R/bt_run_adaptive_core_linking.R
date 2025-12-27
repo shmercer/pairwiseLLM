@@ -83,6 +83,7 @@
 #' @param se_probs Numeric vector of probabilities in (0,1) for SE quantiles (passed to
 #' \code{\link{bt_stop_metrics}}).
 #' @param fit_bounds Numeric length-2 vector giving acceptable infit/outfit bounds (passed to
+#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
 #' \code{\link{bt_stop_metrics}}).
 #'
 #' @param reliability_target,sepG_target,rel_se_p90_target,rel_se_p90_min_improve,max_item_misfit_prop,max_judge_misfit_prop
@@ -205,6 +206,7 @@ bt_run_adaptive_core_linking <- function(samples,
                                          seed_pairs = NULL,
                                          se_probs = c(0.5, 0.9, 0.95),
                                          fit_bounds = c(0.7, 1.3),
+                                         stopping_tier = c("strong", "good", "very_strong"),
                                          reliability_target = 0.90,
                                          sepG_target = 3.0,
                                          rel_se_p90_target = 0.30,
@@ -230,6 +232,22 @@ bt_run_adaptive_core_linking <- function(samples,
   if (!is.function(judge_fun)) {
     stop("`judge_fun` must be a function.", call. = FALSE)
   }
+
+  stopping_tier <- match.arg(stopping_tier)
+  stop_params <- bt_stop_tiers()[[stopping_tier]]
+
+  # Override tier defaults only when the caller explicitly supplies thresholds.
+  if (!missing(reliability_target)) stop_params$reliability_target <- reliability_target
+  if (!missing(sepG_target)) stop_params$sepG_target <- sepG_target
+  if (!missing(rel_se_p90_target)) stop_params$rel_se_p90_target <- rel_se_p90_target
+  if (!missing(rel_se_p90_min_improve)) stop_params$rel_se_p90_min_improve <- rel_se_p90_min_improve
+  if (!missing(max_item_misfit_prop)) stop_params$max_item_misfit_prop <- max_item_misfit_prop
+  if (!missing(max_judge_misfit_prop)) stop_params$max_judge_misfit_prop <- max_judge_misfit_prop
+  if (!missing(core_theta_cor_target)) stop_params$core_theta_cor_target <- core_theta_cor_target
+  if (!missing(core_theta_spearman_target)) stop_params$core_theta_spearman_target <- core_theta_spearman_target
+  if (!missing(core_max_abs_shift_target)) stop_params$core_max_abs_shift_target <- core_max_abs_shift_target
+  if (!missing(core_p90_abs_shift_target)) stop_params$core_p90_abs_shift_target <- core_p90_abs_shift_target
+
 
   # Normalize batches
   if (is.character(batches)) {
@@ -570,19 +588,9 @@ bt_run_adaptive_core_linking <- function(samples,
         fit_bounds = fit_bounds
       )
 
-      decision <- bt_should_stop(
-        m,
-        prev_metrics = prev_metrics,
-        reliability_target = reliability_target,
-        sepG_target = sepG_target,
-        rel_se_p90_target = rel_se_p90_target,
-        rel_se_p90_min_improve = rel_se_p90_min_improve,
-        max_item_misfit_prop = max_item_misfit_prop,
-        max_judge_misfit_prop = max_judge_misfit_prop,
-        core_theta_cor_target = core_theta_cor_target,
-        core_theta_spearman_target = core_theta_spearman_target,
-        core_max_abs_shift_target = core_max_abs_shift_target,
-        core_p90_abs_shift_target = core_p90_abs_shift_target
+      decision <- do.call(
+        bt_should_stop,
+        c(list(metrics = m, prev_metrics = prev_metrics), stop_params)
       )
 
       stop_now <- isTRUE(decision$stop)

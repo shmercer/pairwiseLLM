@@ -30,6 +30,7 @@ bt_run_core_linking(
   balance_positions = TRUE,
   se_probs = c(0.5, 0.9, 0.95),
   fit_bounds = c(0.7, 1.3),
+  stopping_tier = c("strong", "good", "very_strong"),
   reliability_target = 0.9,
   sepG_target = 3,
   rel_se_p90_target = 0.3,
@@ -104,6 +105,8 @@ output of \code{judge_fun}). Used as a warm start.}
 \item{se_probs}{Passed to \code{\link{bt_stop_metrics}}.}
 
 \item{fit_bounds}{Passed to \code{\link{bt_stop_metrics}} when diagnostics are available.}
+
+\item{stopping_tier}{Preset stopping thresholds to use (good/strong/very_strong).}
 
 \item{reliability_target}{Passed to \code{\link{bt_should_stop}}.}
 

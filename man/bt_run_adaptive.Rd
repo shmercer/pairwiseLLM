@@ -18,6 +18,7 @@ bt_run_adaptive(
   max_rounds = 50,
   se_probs = c(0.5, 0.9, 0.95),
   fit_bounds = c(0.7, 1.3),
+  stopping_tier = c("strong", "good", "very_strong"),
   reliability_target = 0.9,
   sepG_target = 3,
   rel_se_p90_target = 0.3,
@@ -86,7 +87,9 @@ scoring step). Default \code{50}.}
 distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 Passed to \code{\link{bt_adaptive_round}}.}
 
-\item{fit_bounds}{Numeric length-2 vector giving acceptable infit/outfit (or analogous) bounds
+\item{fit_bounds}{Numeric length-2 vector giving acceptable infit/outfit (or analogous) bounds}
+
+\item{stopping_tier}{Preset stopping thresholds to use (good/strong/very_strong).
 when available. Passed to \code{\link{bt_adaptive_round}}.}
 
 \item{reliability_target}{Numeric. Target reliability/separation-based criterion used by

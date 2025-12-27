@@ -263,3 +263,33 @@ test_that("bt_should_stop can gate stopping on core drift thresholds", {
   )
   expect_true(res_pass$stop)
 })
+
+
+test_that("bt_stop_tiers exposes expected presets", {
+  tiers <- bt_stop_tiers()
+  expect_true(all(c("good", "strong", "very_strong") %in% names(tiers)))
+  expect_true(is.list(tiers$strong))
+  expect_equal(tiers$strong$rel_se_p90_target, 0.30)
+})
+
+test_that("bt_should_stop_tier applies tier defaults and allows overrides", {
+  m <- tibble::tibble(
+    reliability = 0.88,
+    sepG = 2.6,
+    rel_se_p90 = 0.38,
+    item_misfit_prop = 0.00,
+    judge_misfit_prop = 0.00
+  )
+
+  # "good" should stop (looser reliability + precision thresholds)
+  res_good <- bt_should_stop_tier(m, tier = "good")
+  expect_true(res_good$stop)
+
+  # "strong" should NOT stop (reliability 0.88 < 0.90 and rel_se_p90 0.38 > 0.30)
+  res_strong <- bt_should_stop_tier(m, tier = "strong")
+  expect_false(res_strong$stop)
+
+  # Override within the tier
+  res_override <- bt_should_stop_tier(m, tier = "good", reliability_target = 0.90)
+  expect_false(res_override$stop)
+})

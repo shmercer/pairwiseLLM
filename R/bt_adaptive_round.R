@@ -28,6 +28,7 @@
 #' @param se_probs Numeric vector of probabilities for SE quantiles passed to
 #'   \code{\link{bt_stop_metrics}}. Default: \code{c(0.5, 0.9, 0.95)}.
 #' @param fit_bounds Numeric length-2 vector giving lower/upper acceptable
+#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
 #'   infit/outfit bounds. Default: \code{c(0.7, 1.3)}.
 #'
 #' @param reliability_target Optional numeric. If not \code{NA}, require
@@ -88,6 +89,7 @@ bt_adaptive_round <- function(samples,
                               round_size,
                               se_probs = c(0.5, 0.9, 0.95),
                               fit_bounds = c(0.7, 1.3),
+                              stopping_tier = c("strong", "good", "very_strong"),
                               reliability_target = 0.90,
                               sepG_target = 3.0,
                               rel_se_p90_target = 0.30,
@@ -116,15 +118,24 @@ bt_adaptive_round <- function(samples,
 
   metrics <- bt_stop_metrics(fit, se_probs = se_probs, fit_bounds = fit_bounds)
 
-  decision <- bt_should_stop(
-    metrics,
-    prev_metrics = prev_metrics,
-    reliability_target = reliability_target,
-    sepG_target = sepG_target,
-    rel_se_p90_target = rel_se_p90_target,
-    rel_se_p90_min_improve = rel_se_p90_min_improve,
-    max_item_misfit_prop = max_item_misfit_prop,
-    max_judge_misfit_prop = max_judge_misfit_prop
+  stopping_tier <- match.arg(stopping_tier)
+  tier_params <- bt_stop_tiers()[[stopping_tier]]
+
+  stop_overrides <- list()
+  if (!missing(reliability_target)) stop_overrides$reliability_target <- reliability_target
+  if (!missing(sepG_target)) stop_overrides$sepG_target <- sepG_target
+  if (!missing(rel_se_p90_target)) stop_overrides$rel_se_p90_target <- rel_se_p90_target
+  if (!missing(rel_se_p90_min_improve)) stop_overrides$rel_se_p90_min_improve <- rel_se_p90_min_improve
+  if (!missing(max_item_misfit_prop)) stop_overrides$max_item_misfit_prop <- max_item_misfit_prop
+  if (!missing(max_judge_misfit_prop)) stop_overrides$max_judge_misfit_prop <- max_judge_misfit_prop
+
+
+  tier_params <- utils::modifyList(tier_params, stop_overrides)
+
+
+  decision <- do.call(
+    bt_should_stop,
+    c(list(metrics = metrics, prev_metrics = prev_metrics), tier_params)
   )
 
   # If caller requests no new pairs, return empty next-pairs but still return metrics/decision.

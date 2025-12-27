@@ -53,6 +53,7 @@
 #'
 #' @param se_probs Passed to \code{\link{bt_stop_metrics}}.
 #' @param fit_bounds Passed to \code{\link{bt_stop_metrics}} when diagnostics are available.
+#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
 #'
 #' @param reliability_target Passed to \code{\link{bt_should_stop}}.
 #' @param sepG_target Passed to \code{\link{bt_should_stop}}.
@@ -168,6 +169,7 @@ bt_run_core_linking <- function(samples,
                                 balance_positions = TRUE,
                                 se_probs = c(0.5, 0.9, 0.95),
                                 fit_bounds = c(0.7, 1.3),
+                                stopping_tier = c("strong", "good", "very_strong"),
                                 reliability_target = 0.90,
                                 sepG_target = 3.0,
                                 rel_se_p90_target = 0.30,
@@ -196,6 +198,22 @@ bt_run_core_linking <- function(samples,
 
   drift_reference <- match.arg(drift_reference)
   core_method <- match.arg(core_method)
+
+  stopping_tier <- match.arg(stopping_tier)
+  stop_params <- bt_stop_tiers()[[stopping_tier]]
+
+  # Override tier defaults only when the caller explicitly supplies thresholds.
+  if (!missing(reliability_target)) stop_params$reliability_target <- reliability_target
+  if (!missing(sepG_target)) stop_params$sepG_target <- sepG_target
+  if (!missing(rel_se_p90_target)) stop_params$rel_se_p90_target <- rel_se_p90_target
+  if (!missing(rel_se_p90_min_improve)) stop_params$rel_se_p90_min_improve <- rel_se_p90_min_improve
+  if (!missing(max_item_misfit_prop)) stop_params$max_item_misfit_prop <- max_item_misfit_prop
+  if (!missing(max_judge_misfit_prop)) stop_params$max_judge_misfit_prop <- max_judge_misfit_prop
+  if (!missing(core_theta_cor_target)) stop_params$core_theta_cor_target <- core_theta_cor_target
+  if (!missing(core_theta_spearman_target)) stop_params$core_theta_spearman_target <- core_theta_spearman_target
+  if (!missing(core_max_abs_shift_target)) stop_params$core_max_abs_shift_target <- core_max_abs_shift_target
+  if (!missing(core_p90_abs_shift_target)) stop_params$core_p90_abs_shift_target <- core_p90_abs_shift_target
+
 
   batches <- .normalize_batches_list(batches, ids_all)
 
@@ -446,19 +464,9 @@ bt_run_core_linking <- function(samples,
       metrics <- dplyr::mutate(metrics, batch_index = batch_i, round_index = round_i)
       metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 
-      stop_dec <- bt_should_stop(
-        metrics = metrics,
-        prev_metrics = prev_metrics,
-        reliability_target = reliability_target,
-        sepG_target = sepG_target,
-        rel_se_p90_target = rel_se_p90_target,
-        rel_se_p90_min_improve = rel_se_p90_min_improve,
-        max_item_misfit_prop = max_item_misfit_prop,
-        max_judge_misfit_prop = max_judge_misfit_prop,
-        core_theta_cor_target = core_theta_cor_target,
-        core_theta_spearman_target = core_theta_spearman_target,
-        core_max_abs_shift_target = core_max_abs_shift_target,
-        core_p90_abs_shift_target = core_p90_abs_shift_target
+      stop_dec <- do.call(
+        bt_should_stop,
+        c(list(metrics = metrics, prev_metrics = prev_metrics), stop_params)
       )
 
       prev_metrics <- metrics

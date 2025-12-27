@@ -65,6 +65,7 @@
 #' distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 #' Passed to \code{\link{bt_adaptive_round}}.
 #' @param fit_bounds Numeric length-2 vector giving acceptable infit/outfit (or analogous) bounds
+#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
 #' when available. Passed to \code{\link{bt_adaptive_round}}.
 #'
 #' @param reliability_target Numeric. Target reliability/separation-based criterion used by
@@ -210,6 +211,7 @@ bt_run_adaptive <- function(samples,
                             max_rounds = 50,
                             se_probs = c(0.5, 0.9, 0.95),
                             fit_bounds = c(0.7, 1.3),
+                            stopping_tier = c("strong", "good", "very_strong"),
                             reliability_target = 0.90,
                             sepG_target = 3.0,
                             rel_se_p90_target = 0.30,
@@ -228,7 +230,6 @@ bt_run_adaptive <- function(samples,
                             fit_fun = fit_bt_model,
                             build_bt_fun = build_bt_data,
                             ...) {
-
   tag_fit <- function(fit,
                       round_index,
                       stage,
@@ -439,6 +440,7 @@ bt_run_adaptive <- function(samples,
       round_size = round_size,
       se_probs = se_probs,
       fit_bounds = fit_bounds,
+      stopping_tier = stopping_tier,
       reliability_target = reliability_target,
       sepG_target = sepG_target,
       rel_se_p90_target = rel_se_p90_target,
