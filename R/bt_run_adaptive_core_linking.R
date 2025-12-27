@@ -189,6 +189,12 @@ bt_run_adaptive_core_linking <- function(samples,
                                          core_pct = NULL,
                                          embeddings = NULL,
                                          embeddings_metric = c("euclidean", "cosine"),
+                                         linking = c("auto", "always", "never"),
+                                         linking_method = c("mean_sd"),
+                                         linking_cor_target = 0.98,
+                                         linking_p90_abs_shift_target = 0.15,
+                                         linking_max_abs_shift_target = 0.30,
+                                         linking_min_n = 3L,
                                          seed_core = NULL,
                                          initial_results = NULL,
                                          judge = NULL,
@@ -271,6 +277,22 @@ bt_run_adaptive_core_linking <- function(samples,
     stop("All batch IDs must be present in `samples$ID`.", call. = FALSE)
   }
 
+  linking <- match.arg(linking)
+  linking_method <- match.arg(linking_method)
+  if (!is.numeric(linking_cor_target) || length(linking_cor_target) != 1L) {
+    stop("`linking_cor_target` must be a single numeric value.", call. = FALSE)
+  }
+  if (!is.numeric(linking_p90_abs_shift_target) || length(linking_p90_abs_shift_target) != 1L) {
+    stop("`linking_p90_abs_shift_target` must be a single numeric value.", call. = FALSE)
+  }
+  if (!is.numeric(linking_max_abs_shift_target) || length(linking_max_abs_shift_target) != 1L) {
+    stop("`linking_max_abs_shift_target` must be a single numeric value.", call. = FALSE)
+  }
+  linking_min_n <- as.integer(linking_min_n)
+  if (length(linking_min_n) != 1L || is.na(linking_min_n) || linking_min_n < 2L) {
+    stop("`linking_min_n` must be a single integer >= 2.", call. = FALSE)
+  }
+
   # Core selection
   if (is.null(core_ids)) {
     core_method <- match.arg(core_method)
@@ -323,6 +345,76 @@ bt_run_adaptive_core_linking <- function(samples,
       ...
     )
     list(bt_data = bt_data, fit = fit)
+  }
+
+  apply_linking <- function(fit, reference_fit) {
+    if (linking == "never") {
+      fit$linking <- list(mode = linking, method = linking_method, applied = FALSE, reason = "never")
+      return(fit)
+    }
+    if (is.null(fit) || is.null(fit$theta) || is.null(reference_fit) || is.null(reference_fit$theta)) {
+      fit$linking <- list(mode = linking, method = linking_method, applied = FALSE, reason = "missing_theta")
+      return(fit)
+    }
+
+    drift_tbl <- bt_drift_metrics(
+      current = fit,
+      previous = reference_fit,
+      ids = core_ids,
+      prefix = "core_"
+    )
+
+    do_apply <- FALSE
+    reason <- NA_character_
+    if (linking == "always") {
+      do_apply <- TRUE
+      reason <- "always"
+    } else if (linking == "auto") {
+      do_apply <- .bt_should_apply_linking(
+        drift_tbl,
+        cor_target = linking_cor_target,
+        p90_abs_shift_target = linking_p90_abs_shift_target,
+        max_abs_shift_target = linking_max_abs_shift_target
+      )
+      reason <- if (isTRUE(do_apply)) "auto_trigger" else "auto_no_trigger"
+    }
+
+    fit$linking <- list(
+      mode = linking,
+      method = linking_method,
+      applied = isTRUE(do_apply),
+      reason = reason,
+      reference = "baseline",
+      trigger_thresholds = list(
+        cor_target = linking_cor_target,
+        p90_abs_shift_target = linking_p90_abs_shift_target,
+        max_abs_shift_target = linking_max_abs_shift_target
+      ),
+      drift = drift_tbl
+    )
+
+    if (!isTRUE(do_apply)) {
+      return(fit)
+    }
+
+    lk <- bt_link_thetas(
+      current = fit,
+      reference = reference_fit,
+      ids = core_ids,
+      method = linking_method,
+      min_n = linking_min_n
+    )
+
+    fit$linking$a <- lk$a
+    fit$linking$b <- lk$b
+    fit$linking$n_core <- lk$n_core
+
+    fit$theta <- dplyr::left_join(
+      tibble::as_tibble(fit$theta),
+      dplyr::select(lk$theta, dplyr::all_of(c("ID", "theta_linked", "se_linked"))),
+      by = "ID"
+    )
+    fit
   }
 
   # Internal helper: bookkeeping state
@@ -424,6 +516,7 @@ bt_run_adaptive_core_linking <- function(samples,
   # Bootstrap fit if needed
   current_fit <- NULL
   bootstrap_fit <- NULL
+  baseline_fit <- NULL
   batch_summary <- tibble::tibble()
 
   if (nrow(results) == 0L) {
@@ -448,6 +541,8 @@ bt_run_adaptive_core_linking <- function(samples,
     if (!is.null(fr$fit)) {
       current_fit <- fr$fit
       bootstrap_fit <- fr$fit
+      baseline_fit <- fr$fit
+      current_fit <- apply_linking(current_fit, baseline_fit)
       attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "bootstrap", batch_index = 0L, round_index = 0L)
       fits[[length(fits) + 1L]] <- current_fit
       final_fits[["bootstrap"]] <- current_fit
@@ -465,6 +560,8 @@ bt_run_adaptive_core_linking <- function(samples,
   } else {
     fr <- fit_from_results(results)
     current_fit <- fr$fit
+    baseline_fit <- current_fit
+    current_fit <- apply_linking(current_fit, baseline_fit)
   }
 
   if (is.null(current_fit)) {
@@ -576,6 +673,9 @@ bt_run_adaptive_core_linking <- function(samples,
         )
         break
       }
+
+      # Link to the baseline core scale (optionally, based on drift).
+      current_fit <- apply_linking(current_fit, baseline_fit)
 
       attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "round", batch_index = b, round_index = r, new_ids = new_ids)
       fits[[length(fits) + 1L]] <- current_fit
