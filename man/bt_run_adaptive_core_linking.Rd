@@ -9,7 +9,7 @@ bt_run_adaptive_core_linking(
   batches,
   judge_fun,
   core_ids = NULL,
-  core_method = c("random", "token_stratified", "embeddings"),
+  core_method = c("auto", "pam", "clara", "embeddings", "token_stratified", "random"),
   core_size = NULL,
   core_pct = NULL,
   embeddings = NULL,
@@ -66,15 +66,17 @@ the returned tibble must also include that judge column.}
 selected using \code{core_method} and sizing arguments.}
 
 \item{core_method}{Method passed to \code{\link{select_core_set}} when \code{core_ids}
-is \code{NULL}. One of \code{"random"}, \code{"token_stratified"}, or
-\code{"embeddings"}.}
+is \code{NULL}. One of \code{"auto"}, \code{"pam"}, \code{"clara"},
+\code{"embeddings"} (alias for \code{"auto"}), \code{"token_stratified"},
+or \code{"random"}.}
 
 \item{core_size}{Optional integer core size passed to \code{\link{select_core_set}}.}
 
 \item{core_pct}{Optional numeric core proportion passed to \code{\link{select_core_set}}.}
 
 \item{embeddings}{Optional embedding matrix passed to \code{\link{select_core_set}} when
-\code{core_method="embeddings"}.}
+using embeddings-based core selection (\code{core_method} in
+\code{c("auto","pam","clara","embeddings")}).}
 
 \item{embeddings_metric}{Distance metric for embeddings selection. Passed to
 \code{\link{select_core_set}}.}

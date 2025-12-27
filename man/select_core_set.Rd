@@ -8,9 +8,12 @@ select_core_set(
   samples,
   core_size = NULL,
   core_pct = 0.1,
-  method = c("embeddings", "token_stratified", "random"),
+  method = c("auto", "pam", "clara", "embeddings", "token_stratified", "random"),
   embeddings = NULL,
   distance = c("cosine", "euclidean"),
+  clara_threshold = 2000L,
+  clara_samples = 5L,
+  clara_sampsize = NULL,
   seed = NULL
 )
 }
@@ -23,11 +26,13 @@ uses \code{core_pct * nrow(samples)} (clamped to \code{[2, n]}).}
 \item{core_pct}{Proportion used when \code{core_size} is \code{NULL}.
 Must be in \code{(0, 1]}.}
 
-\item{method}{Selection method: \code{"embeddings"}, \code{"token_stratified"},
+\item{method}{Selection method: \code{"auto"}, \code{"pam"}, \code{"clara"},
+\code{"embeddings"} (alias for \code{"auto"}), \code{"token_stratified"},
 or \code{"random"}.}
 
 \item{embeddings}{Optional numeric matrix of embeddings (rows correspond to
-samples). Required when \code{method = "embeddings"}.
+samples). Required when \code{method} uses embeddings
+(\code{method} in \code{c("auto","pam","clara","embeddings")}).
 If \code{rownames(embeddings)} are present, they must contain all sample IDs
 and will be used to align rows. Otherwise \code{nrow(embeddings)} must equal
 \code{nrow(samples)} and rows are assumed to be in the same order as
@@ -35,6 +40,15 @@ and will be used to align rows. Otherwise \code{nrow(embeddings)} must equal
 
 \item{distance}{Distance used within embeddings selection. For \code{"cosine"},
 embeddings are L2-normalized and Euclidean distance is applied.}
+
+\item{clara_threshold}{Integer. When \code{method = "auto"} (or \code{"embeddings"}),
+uses PAM when \code{nrow(samples) <= clara_threshold} and CLARA otherwise.}
+
+\item{clara_samples}{Integer number of CLARA samples (passed to
+\code{cluster::clara}).}
+
+\item{clara_sampsize}{Optional integer CLARA subsample size (passed to
+\code{cluster::clara}). If \code{NULL}, uses a conservative heuristic.}
 
 \item{seed}{Optional integer seed. When provided, RNG state is restored to its
 prior value (or returned to "uninitialized" if it was missing).}
@@ -46,8 +60,9 @@ A tibble with columns:
 \item \code{method}: selection method
 \item \code{core_rank}: 1..core_size
 \item \code{word_count}: word count (only populated for token_stratified)
-\item \code{cluster}: k-means cluster label (only for embeddings)
-\item \code{centroid_dist}: squared distance to cluster centroid (embeddings)
+\item \code{cluster}: cluster label (only for embeddings-based methods)
+\item \code{centroid_dist}: squared distance from the selected medoid to the
+centroid of its cluster (embeddings-based methods)
 }
 }
 \description{
@@ -57,8 +72,9 @@ to be reused across waves/batches for linking Bradley-Terry (BT) scales.
 \details{
 This function does not run any LLM calls. It selects items using one of:
 \itemize{
-\item \code{"embeddings"}: k-means clustering on a supplied embedding matrix,
-then chooses one medoid (nearest-to-centroid item) per cluster.
+\item \code{"auto"} / \code{"embeddings"}: clustering on a supplied embedding
+matrix, then chooses one medoid per cluster. By default, uses PAM for
+smaller datasets and CLARA for larger datasets.
 \item \code{"token_stratified"}: picks items spaced across the distribution
 of word counts (fast fallback when embeddings are not available).
 \item \code{"random"}: uniform random sample without replacement.

@@ -212,6 +212,47 @@ testthat::test_that("select_core_set embeddings validates embeddings alignment i
   )
 })
 
+testthat::test_that("select_core_set auto chooses PAM vs CLARA and 'embeddings' is an alias", {
+  samples <- tibble::tibble(
+    ID = paste0("S", 1:6),
+    text = paste("t", 1:6)
+  )
+  emb <- matrix(rnorm(6 * 3), nrow = 6, ncol = 3)
+  rownames(emb) <- samples$ID
+
+  cap <- new.env(parent = emptyenv())
+  cap$called <- character(0)
+
+  testthat::local_mocked_bindings(
+    .select_medoids_pam = function(emb, k) {
+      cap$called <- c(cap$called, "pam")
+      list(medoids = c(1L, 4L), clustering = c(1L, 1L, 1L, 2L, 2L, 2L))
+    },
+    .select_medoids_clara = function(emb, k, samples = 5L, sampsize = NULL) {
+      cap$called <- c(cap$called, "clara")
+      list(medoids = c(2L, 5L), clustering = c(1L, 1L, 1L, 2L, 2L, 2L))
+    },
+    .package = "pairwiseLLM"
+  )
+
+  # auto -> PAM when n <= clara_threshold
+  out1 <- select_core_set(samples, core_size = 2, method = "auto", embeddings = emb, clara_threshold = 6L, seed = 1)
+  testthat::expect_true("pam" %in% cap$called)
+  testthat::expect_equal(out1$ID, c("S1", "S4"))
+
+  # auto -> CLARA when n > clara_threshold
+  cap$called <- character(0)
+  out2 <- select_core_set(samples, core_size = 2, method = "auto", embeddings = emb, clara_threshold = 5L, seed = 1)
+  testthat::expect_true("clara" %in% cap$called)
+  testthat::expect_equal(out2$ID, c("S2", "S5"))
+
+  # 'embeddings' is an alias for auto (should follow the same branch logic)
+  cap$called <- character(0)
+  out3 <- select_core_set(samples, core_size = 2, method = "embeddings", embeddings = emb, clara_threshold = 5L, seed = 1)
+  testthat::expect_true("clara" %in% cap$called)
+  testthat::expect_equal(out3$ID, c("S2", "S5"))
+})
+
 testthat::test_that("select_core_set embeddings succeeds with and without rownames; cosine path exercised", {
   samples <- tibble::tibble(ID = paste0("S", 1:6), text = paste("t", 1:6))
 
@@ -233,13 +274,20 @@ testthat::test_that("select_core_set embeddings succeeds with and without rownam
   testthat::expect_true(all(out2$ID %in% samples$ID))
 })
 
-testthat::test_that("select_core_set embeddings surfaces kmeans failure with clear error", {
+testthat::test_that("select_core_set surfaces embedding-clustering failures with clear error", {
   samples <- tibble::tibble(ID = paste0("S", 1:5), text = paste("t", 1:5))
-  # all rows identical -> only 1 distinct point -> kmeans should fail when centers >= 2
-  emb <- matrix(0, nrow = 5, ncol = 3)
+  emb <- matrix(rnorm(5 * 3), nrow = 5, ncol = 3)
+  rownames(emb) <- samples$ID
+
+  testthat::local_mocked_bindings(
+    .select_medoids_from_embeddings = function(...) {
+      stop("forced failure")
+    },
+    .package = "pairwiseLLM"
+  )
 
   testthat::expect_error(
     select_core_set(samples, core_size = 3, method = "embeddings", embeddings = emb, distance = "euclidean"),
-    "k-means failed"
+    "Embedding clustering failed"
   )
 })

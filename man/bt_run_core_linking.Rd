@@ -8,7 +8,7 @@ bt_run_core_linking(
   samples,
   batches,
   core_ids = NULL,
-  core_method = c("embeddings", "token_stratified", "random"),
+  core_method = c("auto", "pam", "clara", "embeddings", "token_stratified", "random"),
   core_size = 30,
   embeddings = NULL,
   judge_fun,
@@ -62,7 +62,8 @@ Passed to \code{\link{select_core_set}}.}
 
 \item{core_size}{Core size used when \code{core_ids} is \code{NULL}.}
 
-\item{embeddings}{Optional embedding matrix for \code{core_method = "embeddings"}.}
+\item{embeddings}{Optional embedding matrix for embeddings-based core selection
+(\code{core_method} in \code{c("auto","pam","clara","embeddings")}).}
 
 \item{judge_fun}{Function that accepts a tibble of pairs with columns \code{ID1},
 \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
