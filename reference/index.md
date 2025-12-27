@@ -25,6 +25,8 @@
   : Compute drift metrics between two theta estimates
 - [`bt_run_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/bt_run_adaptive.md)
   : Run a round-based adaptive BT workflow end-to-end
+- [`bt_run_core_linking()`](https://shmercer.github.io/pairwiseLLM/reference/bt_run_core_linking.md)
+  : Run a core-linking batch workflow end-to-end (round-based)
 - [`bt_should_stop()`](https://shmercer.github.io/pairwiseLLM/reference/bt_should_stop.md)
   : Decide whether to stop adaptive sampling based on stop metrics
 - [`bt_stop_metrics()`](https://shmercer.github.io/pairwiseLLM/reference/bt_stop_metrics.md)
