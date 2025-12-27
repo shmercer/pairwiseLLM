@@ -2,39 +2,32 @@
 #'
 #' This runner orchestrates a multi-wave (batch) workflow using a stable core
 #' linking set. For each batch of new items, it runs a round-based loop:
-#' \enumerate{
-#'   \item propose pairs using core-linking allocation (core↔new + new↔new + optional core↔core audit),
-#'   \item score pairs via a user-provided \code{judge_fun} (LLM/human/simulator),
-#'   \item append results,
-#'   \item fit a BT model,
-#'   \item compute stopping metrics on the batch's new IDs (with optional core drift metrics),
-#'   \item stop or continue until \code{max_rounds_per_batch} is reached.
-#' }
+#' propose pairs (core↔new + new↔new + optional core↔core audit), score the pairs
+#' via \code{judge_fun}, append results, fit a BT model, compute stop metrics on
+#' the batch's new IDs (optionally including core drift), then stop or continue.
 #'
-#' The stopping decision is typically driven by precision on the batch's new items
-#' (e.g., \code{rel_se_p90}) and can optionally be gated by core drift guardrails
+#' Stopping is typically driven by precision on the batch's new items (e.g.,
+#' \code{rel_se_p90}) and can be gated by core drift guardrails
 #' (via \code{core_*_target} thresholds).
 #'
 #' @param samples A tibble/data.frame with columns \code{ID} and \code{text}. \code{ID}
 #'   must be unique and non-missing.
-#' @param batches A list where each element is a character vector of IDs to be added
-#'   in that batch (i.e., "new items"). IDs must be present in \code{samples$ID}.
-#' @param core_ids Optional character vector of core IDs. If \code{NULL}, core IDs
-#'   are selected using \code{\link{select_core_set}}.
+#' @param batches A non-empty list where each element is a character vector of IDs to
+#'   be added in that batch. IDs must be present in \code{samples$ID}.
+#' @param core_ids Optional character vector of core IDs. If \code{NULL}, core IDs are
+#'   selected using \code{\link{select_core_set}}.
 #' @param core_method Core selection method used when \code{core_ids} is \code{NULL}.
 #'   Passed to \code{\link{select_core_set}}.
 #' @param core_size Core size used when \code{core_ids} is \code{NULL}.
-#' @param embeddings Optional embedding matrix for \code{core_method="embeddings"}.
+#' @param embeddings Optional embedding matrix for \code{core_method = "embeddings"}.
 #'
-#' @param judge_fun Function that accepts a tibble of pairs with columns
-#'   \code{ID1}, \code{text1}, \code{ID2}, \code{text2} and returns a tibble with
-#'   columns \code{ID1}, \code{ID2}, \code{better_id}. If \code{judge} is provided,
-#'   it must also include a column named \code{judge}.
-#' @param initial_results Optional tibble of already-judged results (same schema as
+#' @param judge_fun Function that accepts a tibble of pairs with columns \code{ID1},
+#'   \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
+#'   \code{ID1}, \code{ID2}, \code{better_id}. If \code{judge} is provided, the output
+#'   must also include that column.
+#' @param initial_results Optional tibble of previously-judged results (same schema as
 #'   output of \code{judge_fun}). Used as a warm start.
-#' @param judge Optional string naming the judge column (e.g., "model"). If provided,
-#'   \code{judge_fun} output must include this column and it will be passed through
-#'   to \code{\link{build_bt_data}}.
+#' @param judge Optional string naming the judge column to pass through to modeling.
 #'
 #' @param fit_fun Function that fits a BT model from BT data (default \code{\link{fit_bt_model}}).
 #' @param build_bt_fun Function to build BT data from results (default \code{\link{build_bt_data}}).
@@ -63,14 +56,18 @@
 #' @param max_item_misfit_prop Passed to \code{\link{bt_should_stop}}.
 #' @param max_judge_misfit_prop Passed to \code{\link{bt_should_stop}}.
 #'
-#' @param core_theta_cor_target Optional drift guardrail for Pearson correlation (default \code{NA} = disabled).
-#' @param core_theta_spearman_target Optional drift guardrail for Spearman correlation (default \code{NA} = disabled).
-#' @param core_max_abs_shift_target Optional drift guardrail for maximum abs shift (default \code{NA} = disabled).
-#' @param core_p90_abs_shift_target Optional drift guardrail for p90 abs shift (default \code{NA} = disabled).
+#' @param core_theta_cor_target Optional drift guardrail for Pearson correlation
+#'   (default \code{NA} = disabled).
+#' @param core_theta_spearman_target Optional drift guardrail for Spearman correlation
+#'   (default \code{NA} = disabled).
+#' @param core_max_abs_shift_target Optional drift guardrail for maximum abs shift
+#'   (default \code{NA} = disabled).
+#' @param core_p90_abs_shift_target Optional drift guardrail for p90 abs shift
+#'   (default \code{NA} = disabled).
 #'
 #' @param drift_reference Drift reference for computing core drift metrics:
-#'   \code{"previous_round"} (default) compares to the prior round's fit;
-#'   \code{"baseline"} compares to a fixed baseline fit.
+#'   \code{"previous_round"} compares to the prior round's fit; \code{"baseline"} compares
+#'   to a fixed baseline fit.
 #' @param seed Optional integer seed used to make pair proposal reproducible across runs.
 #' @param verbose Logical; print minimal progress per batch/round.
 #' @param ... Additional arguments forwarded to \code{fit_fun}.
@@ -80,28 +77,31 @@
 #'   \item{core_ids}{Core linking IDs used.}
 #'   \item{batches}{Normalized batches list.}
 #'   \item{results}{All judged results (canonicalized \code{better_id}).}
-#'   \item{fits}{List of fits per round with batch/round metadata.}
+#'   \item{fits}{List of per-round fits (including bootstrap/warm start).}
+#'   \item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"}).}
 #'   \item{metrics}{Tibble of stop metrics per round (computed on batch new IDs).}
 #'   \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 #' }
 #'
 #' @examples
-#' # Minimal CRAN-safe example using the simulator judge and a mock fit function.
+#' # CRAN-safe example (no APIs, no sirt): deterministic simulated judging + mock fit.
 #' samples <- tibble::tibble(
 #'   ID = LETTERS[1:6],
 #'   text = paste("text", LETTERS[1:6])
 #' )
 #' batches <- list(batch1 = c("D", "E"), batch2 = c("F"))
 #' core_ids <- c("A", "B", "C")
+#'
+#' # Deterministic simulated judge (always picks the higher true theta)
 #' true_theta <- c(A = 2, B = 1, C = 0, D = -1, E = -2, F = -3)
 #' judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
 #'
-#' # A tiny mock fit function that returns decreasing SE over rounds.
+#' # Tiny mock fit: returns required structure (ID/theta/se)
 #' round <- 0
 #' mock_fit <- function(bt_data, ...) {
 #'   round <<- round + 1
 #'   ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
-#'   se <- rep(max(0.50 - 0.10 * round, 0.05), length(ids))
+#'   se <- rep(max(0.60 - 0.15 * round, 0.05), length(ids))
 #'   list(
 #'     engine = "mock",
 #'     reliability = NA_real_,
@@ -117,14 +117,15 @@
 #'   judge_fun = judge_fun,
 #'   fit_fun = mock_fit,
 #'   engine = "mock",
-#'   round_size = 6,
+#'   round_size = 8,
 #'   max_rounds_per_batch = 3,
-#'   # disable reliability/separation thresholds for the mock engine
+#'   # disable thresholds requiring sirt diagnostics for this example
 #'   reliability_target = NA_real_,
 #'   sepG_target = NA_real_,
 #'   max_item_misfit_prop = NA_real_,
 #'   max_judge_misfit_prop = NA_real_,
-#'   rel_se_p90_target = 0.60
+#'   rel_se_p90_target = 0.80,
+#'   verbose = FALSE
 #' )
 #' out$batch_summary
 #'
@@ -207,7 +208,6 @@ bt_run_core_linking <- function(samples,
     results <- .validate_judge_results(initial_results, ids = ids_all, judge_col = judge)
   }
 
-  # Internal helpers for fit + metrics
   compute_fit <- function(res_tbl) {
     bt_data <- if (is.null(judge)) build_bt_fun(res_tbl) else build_bt_fun(res_tbl, judge = judge)
     fit_fun(
@@ -220,7 +220,20 @@ bt_run_core_linking <- function(samples,
     )
   }
 
-  # Seeded helper for consistent per-round seeds
+  # Attach metadata to a fit without mutating its internal structure
+  tag_fit <- function(fit, batch_index, round_index, stage, n_results, n_pairs_this_round, new_ids) {
+    attr(fit, "bt_run_core_linking") <- list(
+      batch_index = batch_index,
+      round_index = round_index,
+      stage = stage,
+      n_results = n_results,
+      n_pairs_this_round = n_pairs_this_round,
+      n_new_ids = length(new_ids),
+      new_ids = new_ids
+    )
+    fit
+  }
+
   round_seed <- function(batch_i, round_i) {
     if (is.null(seed)) {
       return(NULL)
@@ -229,17 +242,29 @@ bt_run_core_linking <- function(samples,
   }
 
   fits <- list()
+  final_fits <- list()
   metrics_hist <- tibble::tibble()
   batch_summary <- tibble::tibble()
 
-  # If we have no prior results, do a minimal core bootstrap so theta exists.
   current_fit <- NULL
   baseline_fit <- NULL
+
+  # Bootstrap if needed so theta exists before first batch
   if (nrow(results) > 0L) {
     current_fit <- compute_fit(results)
+    current_fit <- tag_fit(
+      current_fit,
+      batch_index = 0L,
+      round_index = 0L,
+      stage = "warm_start",
+      n_results = nrow(results),
+      n_pairs_this_round = 0L,
+      new_ids = character(0)
+    )
+    fits[[length(fits) + 1L]] <- current_fit
     baseline_fit <- current_fit
+    final_fits[["bootstrap"]] <- current_fit
   } else {
-    # bootstrap: propose core↔core pairs only (audit-only round)
     fake_theta <- tibble::tibble(ID = ids_all, theta = rep(0, length(ids_all)), se = rep(1, length(ids_all)))
     boot <- bt_core_link_round(
       samples = samples,
@@ -265,29 +290,35 @@ bt_run_core_linking <- function(samples,
     boot_res <- judge_fun(boot$pairs)
     boot_res <- .validate_judge_results(boot_res, ids = ids_all, judge_col = judge)
 
-    # avoid many-to-many join warnings when duplicates are possible
     boot_meta <- dplyr::distinct(
       dplyr::select(boot$pairs, dplyr::all_of(c("ID1", "ID2", "pair_type"))),
       dplyr::across(dplyr::all_of(c("ID1", "ID2"))),
       .keep_all = TRUE
     )
+    boot_res <- dplyr::left_join(boot_res, boot_meta, by = c("ID1", "ID2"))
 
-    boot_res <- dplyr::left_join(
-      boot_res,
-      boot_meta,
-      by = c("ID1", "ID2")
-    )
+    boot_res <- dplyr::mutate(boot_res, batch_index = 0L, round_index = 1L)
 
     results <- dplyr::bind_rows(results, boot_res)
     current_fit <- compute_fit(results)
+    current_fit <- tag_fit(
+      current_fit,
+      batch_index = 0L,
+      round_index = 1L,
+      stage = "bootstrap",
+      n_results = nrow(results),
+      n_pairs_this_round = nrow(boot$pairs),
+      new_ids = character(0)
+    )
+    fits[[length(fits) + 1L]] <- current_fit
     baseline_fit <- current_fit
+    final_fits[["bootstrap"]] <- current_fit
   }
 
   seen_ids <- unique(core_ids)
 
   for (batch_i in seq_along(batches)) {
     batch_ids <- unique(as.character(batches[[batch_i]]))
-    # New IDs for this batch (exclude those already introduced or in core)
     new_ids <- setdiff(batch_ids, seen_ids)
 
     if (isTRUE(verbose)) {
@@ -310,6 +341,7 @@ bt_run_core_linking <- function(samples,
           stop_reason = stop_reason
         )
       )
+      final_fits[[paste0("batch_", batch_i)]] <- current_fit
       next
     }
 
@@ -347,24 +379,14 @@ bt_run_core_linking <- function(samples,
       res_round <- judge_fun(pairs)
       res_round <- .validate_judge_results(res_round, ids = ids_all, judge_col = judge)
 
-      # avoid many-to-many join warnings when duplicates are possible
       pair_meta <- dplyr::distinct(
         dplyr::select(pairs, dplyr::all_of(c("ID1", "ID2", "pair_type"))),
         dplyr::across(dplyr::all_of(c("ID1", "ID2"))),
         .keep_all = TRUE
       )
+      res_round <- dplyr::left_join(res_round, pair_meta, by = c("ID1", "ID2"))
 
-      res_round <- dplyr::left_join(
-        res_round,
-        pair_meta,
-        by = c("ID1", "ID2")
-      )
-
-      res_round <- dplyr::mutate(
-        res_round,
-        batch_index = batch_i,
-        round_index = round_i
-      )
+      res_round <- dplyr::mutate(res_round, batch_index = batch_i, round_index = round_i)
 
       results <- dplyr::bind_rows(results, res_round)
 
@@ -376,6 +398,16 @@ bt_run_core_linking <- function(samples,
       }
 
       current_fit <- compute_fit(results)
+      current_fit <- tag_fit(
+        current_fit,
+        batch_index = as.integer(batch_i),
+        round_index = as.integer(round_i),
+        stage = "batch_round",
+        n_results = nrow(results),
+        n_pairs_this_round = nrow(pairs),
+        new_ids = new_ids
+      )
+      fits[[length(fits) + 1L]] <- current_fit
 
       metrics <- bt_stop_metrics(
         fit = current_fit,
@@ -435,6 +467,8 @@ bt_run_core_linking <- function(samples,
         stop_reason = stop_reason
       )
     )
+
+    final_fits[[paste0("batch_", batch_i)]] <- current_fit
   }
 
   list(
@@ -442,6 +476,7 @@ bt_run_core_linking <- function(samples,
     batches = batches,
     results = results,
     fits = fits,
+    final_fits = final_fits,
     metrics = metrics_hist,
     batch_summary = batch_summary
   )

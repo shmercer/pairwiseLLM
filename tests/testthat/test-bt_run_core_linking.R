@@ -163,4 +163,145 @@ test_that("bt_run_core_linking can gate stopping on core drift (prevents stop un
   expect_equal(out$batch_summary$stop_reason[[1]], "max_rounds")
 })
 
+test_that("bt_run_core_linking populates per-round fits and per-batch final_fits (bootstrap path)", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:5],
+    text = paste("text", LETTERS[1:5])
+  )
+  batches <- list(c("D"))
+  core_ids <- c("A", "B", "C")
+  true_theta <- c(A = 2, B = 1, C = 0, D = -1, E = -2)
 
+  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
+
+  round <- 0
+  mock_fit <- function(bt_data, ...) {
+    round <<- round + 1
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    se <- rep(max(0.60 - 0.15 * round, 0.05), length(ids))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = se),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = core_ids,
+    judge_fun = judge_fun,
+    fit_fun = mock_fit,
+    engine = "mock",
+    round_size = 8,
+    max_rounds_per_batch = 2,
+    forbid_repeats = FALSE, # avoid exhausting pairs in tiny toy example
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_,
+    rel_se_p90_target = 0.80,
+    verbose = FALSE
+  )
+
+  # New return elements exist and are populated
+  expect_true("fits" %in% names(out))
+  expect_true("final_fits" %in% names(out))
+  expect_true(is.list(out$fits))
+  expect_true(is.list(out$final_fits))
+  expect_true(length(out$fits) >= 2L) # bootstrap + at least one batch round
+  expect_true("bootstrap" %in% names(out$final_fits))
+  expect_true("batch_1" %in% names(out$final_fits))
+
+  # Metadata attribute exists on fits
+  meta1 <- attr(out$fits[[1]], "bt_run_core_linking")
+  expect_true(is.list(meta1))
+  expect_true(all(c("batch_index", "round_index", "stage", "n_results", "n_pairs_this_round", "new_ids") %in% names(meta1)))
+  expect_equal(meta1$batch_index, 0L)
+
+  # Ensure we have at least one tagged batch_round fit
+  stages <- vapply(out$fits, function(f) {
+    m <- attr(f, "bt_run_core_linking")
+    if (is.null(m)) NA_character_ else as.character(m$stage)
+  }, character(1))
+  expect_true(any(stages %in% c("bootstrap", "warm_start")))
+  expect_true(any(stages == "batch_round"))
+
+  # final_fits are fits and carry metadata
+  meta_boot <- attr(out$final_fits[["bootstrap"]], "bt_run_core_linking")
+  expect_true(is.list(meta_boot))
+  expect_equal(meta_boot$batch_index, 0L)
+
+  meta_b1 <- attr(out$final_fits[["batch_1"]], "bt_run_core_linking")
+  expect_true(is.list(meta_b1))
+  expect_equal(meta_b1$batch_index, 1L)
+})
+
+test_that("bt_run_core_linking populates warm_start fit metadata and sets final_fits for no_new_ids batch", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:4],
+    text = paste("text", LETTERS[1:4])
+  )
+  core_ids <- c("A", "B", "C")
+
+  # Warm start: provide one existing judgment
+  initial_results <- tibble::tibble(
+    custom_id = "c1",
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A"
+  )
+
+  # Batch requests only core IDs -> no_new_ids branch should trigger
+  batches <- list(c("A", "B"))
+
+  judge_fun <- function(pairs) {
+    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  }
+
+  mock_fit <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(0.5, length(ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = core_ids,
+    judge_fun = judge_fun,
+    initial_results = initial_results,
+    fit_fun = mock_fit,
+    engine = "mock",
+    round_size = 6,
+    max_rounds_per_batch = 2,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_,
+    rel_se_p90_target = 0.80,
+    verbose = FALSE
+  )
+
+  # Warm-start should create one fit and tag it
+  expect_true(length(out$fits) >= 1L)
+  meta <- attr(out$fits[[1]], "bt_run_core_linking")
+  expect_true(is.list(meta))
+  expect_equal(meta$stage, "warm_start")
+  expect_equal(meta$batch_index, 0L)
+
+  # no_new_ids batch should still set final_fits for that batch
+  expect_true("bootstrap" %in% names(out$final_fits))
+  expect_true("batch_1" %in% names(out$final_fits))
+  expect_equal(out$batch_summary$stop_reason[[1]], "no_new_ids")
+
+  meta_b1 <- attr(out$final_fits[["batch_1"]], "bt_run_core_linking")
+  expect_true(is.list(meta_b1))
+  # remains the most recent fit at that point (warm_start fit), but batch index in meta stays 0
+  expect_equal(meta_b1$batch_index, 0L)
+})

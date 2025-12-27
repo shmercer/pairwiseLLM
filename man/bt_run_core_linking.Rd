@@ -50,30 +50,28 @@ bt_run_core_linking(
 \item{samples}{A tibble/data.frame with columns \code{ID} and \code{text}. \code{ID}
 must be unique and non-missing.}
 
-\item{batches}{A list where each element is a character vector of IDs to be added
-in that batch (i.e., "new items"). IDs must be present in \code{samples$ID}.}
+\item{batches}{A non-empty list where each element is a character vector of IDs to
+be added in that batch. IDs must be present in \code{samples$ID}.}
 
-\item{core_ids}{Optional character vector of core IDs. If \code{NULL}, core IDs
-are selected using \code{\link{select_core_set}}.}
+\item{core_ids}{Optional character vector of core IDs. If \code{NULL}, core IDs are
+selected using \code{\link{select_core_set}}.}
 
 \item{core_method}{Core selection method used when \code{core_ids} is \code{NULL}.
 Passed to \code{\link{select_core_set}}.}
 
 \item{core_size}{Core size used when \code{core_ids} is \code{NULL}.}
 
-\item{embeddings}{Optional embedding matrix for \code{core_method="embeddings"}.}
+\item{embeddings}{Optional embedding matrix for \code{core_method = "embeddings"}.}
 
-\item{judge_fun}{Function that accepts a tibble of pairs with columns
-\code{ID1}, \code{text1}, \code{ID2}, \code{text2} and returns a tibble with
-columns \code{ID1}, \code{ID2}, \code{better_id}. If \code{judge} is provided,
-it must also include a column named \code{judge}.}
+\item{judge_fun}{Function that accepts a tibble of pairs with columns \code{ID1},
+\code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
+\code{ID1}, \code{ID2}, \code{better_id}. If \code{judge} is provided, the output
+must also include that column.}
 
-\item{initial_results}{Optional tibble of already-judged results (same schema as
+\item{initial_results}{Optional tibble of previously-judged results (same schema as
 output of \code{judge_fun}). Used as a warm start.}
 
-\item{judge}{Optional string naming the judge column (e.g., "model"). If provided,
-\code{judge_fun} output must include this column and it will be passed through
-to \code{\link{build_bt_data}}.}
+\item{judge}{Optional string naming the judge column to pass through to modeling.}
 
 \item{fit_fun}{Function that fits a BT model from BT data (default \code{\link{fit_bt_model}}).}
 
@@ -119,17 +117,21 @@ to \code{\link{build_bt_data}}.}
 
 \item{max_judge_misfit_prop}{Passed to \code{\link{bt_should_stop}}.}
 
-\item{core_theta_cor_target}{Optional drift guardrail for Pearson correlation (default \code{NA} = disabled).}
+\item{core_theta_cor_target}{Optional drift guardrail for Pearson correlation
+(default \code{NA} = disabled).}
 
-\item{core_theta_spearman_target}{Optional drift guardrail for Spearman correlation (default \code{NA} = disabled).}
+\item{core_theta_spearman_target}{Optional drift guardrail for Spearman correlation
+(default \code{NA} = disabled).}
 
-\item{core_max_abs_shift_target}{Optional drift guardrail for maximum abs shift (default \code{NA} = disabled).}
+\item{core_max_abs_shift_target}{Optional drift guardrail for maximum abs shift
+(default \code{NA} = disabled).}
 
-\item{core_p90_abs_shift_target}{Optional drift guardrail for p90 abs shift (default \code{NA} = disabled).}
+\item{core_p90_abs_shift_target}{Optional drift guardrail for p90 abs shift
+(default \code{NA} = disabled).}
 
 \item{drift_reference}{Drift reference for computing core drift metrics:
-\code{"previous_round"} (default) compares to the prior round's fit;
-\code{"baseline"} compares to a fixed baseline fit.}
+\code{"previous_round"} compares to the prior round's fit; \code{"baseline"} compares
+to a fixed baseline fit.}
 
 \item{seed}{Optional integer seed used to make pair proposal reproducible across runs.}
 
@@ -143,7 +145,8 @@ A list with:
 \item{core_ids}{Core linking IDs used.}
 \item{batches}{Normalized batches list.}
 \item{results}{All judged results (canonicalized \code{better_id}).}
-\item{fits}{List of fits per round with batch/round metadata.}
+\item{fits}{List of per-round fits (including bootstrap/warm start).}
+\item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"}).}
 \item{metrics}{Tibble of stop metrics per round (computed on batch new IDs).}
 \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 }
@@ -151,37 +154,34 @@ A list with:
 \description{
 This runner orchestrates a multi-wave (batch) workflow using a stable core
 linking set. For each batch of new items, it runs a round-based loop:
-\enumerate{
-\item propose pairs using core-linking allocation (core↔new + new↔new + optional core↔core audit),
-\item score pairs via a user-provided \code{judge_fun} (LLM/human/simulator),
-\item append results,
-\item fit a BT model,
-\item compute stopping metrics on the batch's new IDs (with optional core drift metrics),
-\item stop or continue until \code{max_rounds_per_batch} is reached.
-}
+propose pairs (core↔new + new↔new + optional core↔core audit), score the pairs
+via \code{judge_fun}, append results, fit a BT model, compute stop metrics on
+the batch's new IDs (optionally including core drift), then stop or continue.
 }
 \details{
-The stopping decision is typically driven by precision on the batch's new items
-(e.g., \code{rel_se_p90}) and can optionally be gated by core drift guardrails
+Stopping is typically driven by precision on the batch's new items (e.g.,
+\code{rel_se_p90}) and can be gated by core drift guardrails
 (via \code{core_*_target} thresholds).
 }
 \examples{
-# Minimal CRAN-safe example using the simulator judge and a mock fit function.
+# CRAN-safe example (no APIs, no sirt): deterministic simulated judging + mock fit.
 samples <- tibble::tibble(
   ID = LETTERS[1:6],
   text = paste("text", LETTERS[1:6])
 )
 batches <- list(batch1 = c("D", "E"), batch2 = c("F"))
 core_ids <- c("A", "B", "C")
+
+# Deterministic simulated judge (always picks the higher true theta)
 true_theta <- c(A = 2, B = 1, C = 0, D = -1, E = -2, F = -3)
 judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
 
-# A tiny mock fit function that returns decreasing SE over rounds.
+# Tiny mock fit: returns required structure (ID/theta/se)
 round <- 0
 mock_fit <- function(bt_data, ...) {
   round <<- round + 1
   ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
-  se <- rep(max(0.50 - 0.10 * round, 0.05), length(ids))
+  se <- rep(max(0.60 - 0.15 * round, 0.05), length(ids))
   list(
     engine = "mock",
     reliability = NA_real_,
@@ -197,14 +197,15 @@ out <- bt_run_core_linking(
   judge_fun = judge_fun,
   fit_fun = mock_fit,
   engine = "mock",
-  round_size = 6,
+  round_size = 8,
   max_rounds_per_batch = 3,
-  # disable reliability/separation thresholds for the mock engine
+  # disable thresholds requiring sirt diagnostics for this example
   reliability_target = NA_real_,
   sepG_target = NA_real_,
   max_item_misfit_prop = NA_real_,
   max_judge_misfit_prop = NA_real_,
-  rel_se_p90_target = 0.60
+  rel_se_p90_target = 0.80,
+  verbose = FALSE
 )
 out$batch_summary
 
