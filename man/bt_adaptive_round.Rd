@@ -12,6 +12,7 @@ bt_adaptive_round(
   round_size,
   se_probs = c(0.5, 0.9, 0.95),
   fit_bounds = c(0.7, 1.3),
+  stopping_tier = c("strong", "good", "very_strong"),
   reliability_target = 0.9,
   sepG_target = 3,
   rel_se_p90_target = 0.3,
@@ -46,7 +47,9 @@ by \code{\link{bt_stop_metrics}}), used for stability-based stopping.}
 \item{se_probs}{Numeric vector of probabilities for SE quantiles passed to
 \code{\link{bt_stop_metrics}}. Default: \code{c(0.5, 0.9, 0.95)}.}
 
-\item{fit_bounds}{Numeric length-2 vector giving lower/upper acceptable
+\item{fit_bounds}{Numeric length-2 vector giving lower/upper acceptable}
+
+\item{stopping_tier}{Preset stopping thresholds to use (good/strong/very_strong).
 infit/outfit bounds. Default: \code{c(0.7, 1.3)}.}
 
 \item{reliability_target}{Optional numeric. If not \code{NA}, require

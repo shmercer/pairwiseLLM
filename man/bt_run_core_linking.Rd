@@ -8,9 +8,15 @@ bt_run_core_linking(
   samples,
   batches,
   core_ids = NULL,
-  core_method = c("embeddings", "token_stratified", "random"),
+  core_method = c("auto", "pam", "clara", "embeddings", "token_stratified", "random"),
   core_size = 30,
   embeddings = NULL,
+  linking = c("auto", "always", "never"),
+  linking_method = c("mean_sd"),
+  linking_cor_target = 0.98,
+  linking_p90_abs_shift_target = 0.15,
+  linking_max_abs_shift_target = 0.3,
+  linking_min_n = 3L,
   judge_fun,
   initial_results = NULL,
   judge = NULL,
@@ -30,6 +36,7 @@ bt_run_core_linking(
   balance_positions = TRUE,
   se_probs = c(0.5, 0.9, 0.95),
   fit_bounds = c(0.7, 1.3),
+  stopping_tier = c("strong", "good", "very_strong"),
   reliability_target = 0.9,
   sepG_target = 3,
   rel_se_p90_target = 0.3,
@@ -61,7 +68,30 @@ Passed to \code{\link{select_core_set}}.}
 
 \item{core_size}{Core size used when \code{core_ids} is \code{NULL}.}
 
-\item{embeddings}{Optional embedding matrix for \code{core_method = "embeddings"}.}
+\item{embeddings}{Optional embedding matrix for embeddings-based core selection
+(\code{core_method} in \code{c("auto","pam","clara","embeddings")}).}
+
+\item{linking}{Whether to apply anchoring/linking so theta estimates are reported
+on a stable scale defined by the baseline core fit. One of
+\code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
+linking is applied only when core drift exceeds the thresholds below.}
+
+\item{linking_method}{Linking method. Currently only \code{"mean_sd"} is supported,
+which applies an affine transform to match the mean and standard deviation of
+core thetas to the baseline core fit.}
+
+\item{linking_cor_target}{In \code{linking = "auto"}, apply linking when the core
+Pearson correlation between baseline and current raw thetas is below this value.}
+
+\item{linking_p90_abs_shift_target}{In \code{linking = "auto"}, apply linking when the
+90th percentile of the absolute core-theta shift (baseline vs current raw) exceeds
+this value.}
+
+\item{linking_max_abs_shift_target}{In \code{linking = "auto"}, apply linking when the
+maximum absolute core-theta shift (baseline vs current raw) exceeds this value.}
+
+\item{linking_min_n}{Minimum number of core IDs required to estimate the linking
+transform. If fewer are available, linking is skipped.}
 
 \item{judge_fun}{Function that accepts a tibble of pairs with columns \code{ID1},
 \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
@@ -104,6 +134,8 @@ output of \code{judge_fun}). Used as a warm start.}
 \item{se_probs}{Passed to \code{\link{bt_stop_metrics}}.}
 
 \item{fit_bounds}{Passed to \code{\link{bt_stop_metrics}} when diagnostics are available.}
+
+\item{stopping_tier}{Preset stopping thresholds to use (good/strong/very_strong).}
 
 \item{reliability_target}{Passed to \code{\link{bt_should_stop}}.}
 
@@ -148,6 +180,14 @@ A list with:
 \item{fits}{List of per-round fits (including bootstrap/warm start).}
 \item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"}).}
 \item{metrics}{Tibble of stop metrics per round (computed on batch new IDs).}
+\item{state}{A tibble with one row per scoring round (including bootstrap/warm start)
+containing bookkeeping summaries of the accumulated results (overall and for the
+current batch's new IDs). The overall fields include
+\code{n_unique_unordered_pairs}, appearance quantiles, \code{pos_imbalance_max},
+\code{n_self_pairs}, \code{n_missing_better_id}, and \code{n_judges} (if applicable).
+New-ID-restricted fields are prefixed with \code{new_}. Rows also include
+\code{batch_index}, \code{round_index}, \code{stage}, and (when applicable)
+\code{stop_reason}.}
 \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 }
 }
@@ -162,6 +202,11 @@ the batch's new IDs (optionally including core drift), then stop or continue.
 Stopping is typically driven by precision on the batch's new items (e.g.,
 \code{rel_se_p90}) and can be gated by core drift guardrails
 (via \code{core_*_target} thresholds).
+
+The runner also records a compact per-round \emph{state snapshot} that summarizes
+the accumulated judged results after each round. These summaries are returned in
+\code{$state} and include both overall counts (all IDs) and \code{new_}-prefixed
+counts restricted to the current batch's new IDs.
 }
 \examples{
 # CRAN-safe example (no APIs, no sirt): deterministic simulated judging + mock fit.

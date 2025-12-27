@@ -10,6 +10,11 @@
 #' \code{rel_se_p90}) and can be gated by core drift guardrails
 #' (via \code{core_*_target} thresholds).
 #'
+#' The runner also records a compact per-round \emph{state snapshot} that summarizes
+#' the accumulated judged results after each round. These summaries are returned in
+#' \code{$state} and include both overall counts (all IDs) and \code{new_}-prefixed
+#' counts restricted to the current batch's new IDs.
+#'
 #' @param samples A tibble/data.frame with columns \code{ID} and \code{text}. \code{ID}
 #'   must be unique and non-missing.
 #' @param batches A non-empty list where each element is a character vector of IDs to
@@ -19,8 +24,25 @@
 #' @param core_method Core selection method used when \code{core_ids} is \code{NULL}.
 #'   Passed to \code{\link{select_core_set}}.
 #' @param core_size Core size used when \code{core_ids} is \code{NULL}.
-#' @param embeddings Optional embedding matrix for \code{core_method = "embeddings"}.
+#' @param embeddings Optional embedding matrix for embeddings-based core selection
+#'   (\code{core_method} in \code{c("auto","pam","clara","embeddings")}).
 #'
+#' @param linking Whether to apply anchoring/linking so theta estimates are reported
+#'   on a stable scale defined by the baseline core fit. One of
+#'   \code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
+#'   linking is applied only when core drift exceeds the thresholds below.
+#' @param linking_method Linking method. Currently only \code{"mean_sd"} is supported,
+#'   which applies an affine transform to match the mean and standard deviation of
+#'   core thetas to the baseline core fit.
+#' @param linking_cor_target In \code{linking = "auto"}, apply linking when the core
+#'   Pearson correlation between baseline and current raw thetas is below this value.
+#' @param linking_p90_abs_shift_target In \code{linking = "auto"}, apply linking when the
+#'   90th percentile of the absolute core-theta shift (baseline vs current raw) exceeds
+#'   this value.
+#' @param linking_max_abs_shift_target In \code{linking = "auto"}, apply linking when the
+#'   maximum absolute core-theta shift (baseline vs current raw) exceeds this value.
+#' @param linking_min_n Minimum number of core IDs required to estimate the linking
+#'   transform. If fewer are available, linking is skipped.
 #' @param judge_fun Function that accepts a tibble of pairs with columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
 #'   \code{ID1}, \code{ID2}, \code{better_id}. If \code{judge} is provided, the output
@@ -48,6 +70,7 @@
 #'
 #' @param se_probs Passed to \code{\link{bt_stop_metrics}}.
 #' @param fit_bounds Passed to \code{\link{bt_stop_metrics}} when diagnostics are available.
+#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
 #'
 #' @param reliability_target Passed to \code{\link{bt_should_stop}}.
 #' @param sepG_target Passed to \code{\link{bt_should_stop}}.
@@ -80,6 +103,14 @@
 #'   \item{fits}{List of per-round fits (including bootstrap/warm start).}
 #'   \item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"}).}
 #'   \item{metrics}{Tibble of stop metrics per round (computed on batch new IDs).}
+#'   \item{state}{A tibble with one row per scoring round (including bootstrap/warm start)
+#'   containing bookkeeping summaries of the accumulated results (overall and for the
+#'   current batch's new IDs). The overall fields include
+#'   \code{n_unique_unordered_pairs}, appearance quantiles, \code{pos_imbalance_max},
+#'   \code{n_self_pairs}, \code{n_missing_better_id}, and \code{n_judges} (if applicable).
+#'   New-ID-restricted fields are prefixed with \code{new_}. Rows also include
+#'   \code{batch_index}, \code{round_index}, \code{stage}, and (when applicable)
+#'   \code{stop_reason}.}
 #'   \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 #' }
 #'
@@ -133,9 +164,15 @@
 bt_run_core_linking <- function(samples,
                                 batches,
                                 core_ids = NULL,
-                                core_method = c("embeddings", "token_stratified", "random"),
+                                core_method = c("auto", "pam", "clara", "embeddings", "token_stratified", "random"),
                                 core_size = 30,
                                 embeddings = NULL,
+                                linking = c("auto", "always", "never"),
+                                linking_method = c("mean_sd"),
+                                linking_cor_target = 0.98,
+                                linking_p90_abs_shift_target = 0.15,
+                                linking_max_abs_shift_target = 0.30,
+                                linking_min_n = 3L,
                                 judge_fun,
                                 initial_results = NULL,
                                 judge = NULL,
@@ -155,6 +192,7 @@ bt_run_core_linking <- function(samples,
                                 balance_positions = TRUE,
                                 se_probs = c(0.5, 0.9, 0.95),
                                 fit_bounds = c(0.7, 1.3),
+                                stopping_tier = c("strong", "good", "very_strong"),
                                 reliability_target = 0.90,
                                 sepG_target = 3.0,
                                 rel_se_p90_target = 0.30,
@@ -184,6 +222,38 @@ bt_run_core_linking <- function(samples,
   drift_reference <- match.arg(drift_reference)
   core_method <- match.arg(core_method)
 
+  linking <- match.arg(linking)
+  linking_method <- match.arg(linking_method)
+  if (!is.numeric(linking_cor_target) || length(linking_cor_target) != 1L) {
+    stop("`linking_cor_target` must be a single numeric value.", call. = FALSE)
+  }
+  if (!is.numeric(linking_p90_abs_shift_target) || length(linking_p90_abs_shift_target) != 1L) {
+    stop("`linking_p90_abs_shift_target` must be a single numeric value.", call. = FALSE)
+  }
+  if (!is.numeric(linking_max_abs_shift_target) || length(linking_max_abs_shift_target) != 1L) {
+    stop("`linking_max_abs_shift_target` must be a single numeric value.", call. = FALSE)
+  }
+  linking_min_n <- as.integer(linking_min_n)
+  if (length(linking_min_n) != 1L || is.na(linking_min_n) || linking_min_n < 2L) {
+    stop("`linking_min_n` must be a single integer >= 2.", call. = FALSE)
+  }
+
+  stopping_tier <- match.arg(stopping_tier)
+  stop_params <- bt_stop_tiers()[[stopping_tier]]
+
+  # Override tier defaults only when the caller explicitly supplies thresholds.
+  if (!missing(reliability_target)) stop_params$reliability_target <- reliability_target
+  if (!missing(sepG_target)) stop_params$sepG_target <- sepG_target
+  if (!missing(rel_se_p90_target)) stop_params$rel_se_p90_target <- rel_se_p90_target
+  if (!missing(rel_se_p90_min_improve)) stop_params$rel_se_p90_min_improve <- rel_se_p90_min_improve
+  if (!missing(max_item_misfit_prop)) stop_params$max_item_misfit_prop <- max_item_misfit_prop
+  if (!missing(max_judge_misfit_prop)) stop_params$max_judge_misfit_prop <- max_judge_misfit_prop
+  if (!missing(core_theta_cor_target)) stop_params$core_theta_cor_target <- core_theta_cor_target
+  if (!missing(core_theta_spearman_target)) stop_params$core_theta_spearman_target <- core_theta_spearman_target
+  if (!missing(core_max_abs_shift_target)) stop_params$core_max_abs_shift_target <- core_max_abs_shift_target
+  if (!missing(core_p90_abs_shift_target)) stop_params$core_p90_abs_shift_target <- core_p90_abs_shift_target
+
+
   batches <- .normalize_batches_list(batches, ids_all)
 
   if (is.null(core_ids)) {
@@ -195,7 +265,6 @@ bt_run_core_linking <- function(samples,
       seed = seed
     )
 
-    # select_core_set() returns a tibble with column ID; extract IDs robustly
     if (is.data.frame(core_out) && "ID" %in% names(core_out)) {
       core_ids <- as.character(core_out$ID)
     } else {
@@ -226,9 +295,9 @@ bt_run_core_linking <- function(samples,
 
     core_ids <- unique(core_ids_in)
   }
+
   if (length(core_ids) < 2L) stop("`core_ids` must include at least 2 IDs.", call. = FALSE)
 
-  # Normalize initial results (optional warm start)
   results <- tibble::tibble()
   if (!is.null(initial_results)) {
     results <- .validate_judge_results(initial_results, ids = ids_all, judge_col = judge)
@@ -246,7 +315,75 @@ bt_run_core_linking <- function(samples,
     )
   }
 
-  # Attach metadata to a fit without mutating its internal structure
+  apply_linking <- function(fit, reference_fit) {
+    if (is.null(fit) || is.null(fit$theta) || is.null(reference_fit) || is.null(reference_fit$theta)) {
+      return(fit)
+    }
+
+    drift_tbl <- bt_drift_metrics(
+      current = fit,
+      previous = reference_fit,
+      ids = core_ids,
+      prefix = "core_"
+    )
+
+    do_apply <- FALSE
+    reason <- NA_character_
+    if (linking == "never") {
+      do_apply <- FALSE
+      reason <- "never"
+    } else if (linking == "always") {
+      do_apply <- TRUE
+      reason <- "always"
+    } else if (linking == "auto") {
+      do_apply <- .bt_should_apply_linking(
+        drift_tbl,
+        cor_target = linking_cor_target,
+        p90_abs_shift_target = linking_p90_abs_shift_target,
+        max_abs_shift_target = linking_max_abs_shift_target
+      )
+      reason <- if (isTRUE(do_apply)) "auto_trigger" else "auto_no_trigger"
+    }
+
+    fit$linking <- list(
+      mode = linking,
+      method = linking_method,
+      applied = isTRUE(do_apply),
+      reason = reason,
+      reference = "baseline",
+      trigger_thresholds = list(
+        cor_target = linking_cor_target,
+        p90_abs_shift_target = linking_p90_abs_shift_target,
+        max_abs_shift_target = linking_max_abs_shift_target
+      ),
+      drift = drift_tbl
+    )
+
+    if (!isTRUE(do_apply)) {
+      return(fit)
+    }
+
+    lk <- bt_link_thetas(
+      current = fit,
+      reference = reference_fit,
+      ids = core_ids,
+      method = linking_method,
+      min_n = linking_min_n
+    )
+
+    fit$linking$a <- lk$a
+    fit$linking$b <- lk$b
+    fit$linking$n_core <- lk$n_core
+
+    fit$theta <- dplyr::left_join(
+      tibble::as_tibble(fit$theta),
+      dplyr::select(lk$theta, dplyr::all_of(c("ID", "theta_linked", "se_linked"))),
+      by = "ID"
+    )
+
+    fit
+  }
+
   tag_fit <- function(fit, batch_index, round_index, stage, n_results, n_pairs_this_round, new_ids) {
     attr(fit, "bt_run_core_linking") <- list(
       batch_index = batch_index,
@@ -270,26 +407,23 @@ bt_run_core_linking <- function(samples,
   fits <- list()
   final_fits <- list()
   metrics_hist <- tibble::tibble()
+  state_hist <- tibble::tibble()
   batch_summary <- tibble::tibble()
 
   current_fit <- NULL
   baseline_fit <- NULL
 
-  # Bootstrap if needed so theta exists before first batch
   if (nrow(results) > 0L) {
     current_fit <- compute_fit(results)
-    current_fit <- tag_fit(
-      current_fit,
-      batch_index = 0L,
-      round_index = 0L,
-      stage = "warm_start",
-      n_results = nrow(results),
-      n_pairs_this_round = 0L,
-      new_ids = character(0)
-    )
-    fits[[length(fits) + 1L]] <- current_fit
     baseline_fit <- current_fit
+    current_fit <- apply_linking(current_fit, baseline_fit)
+    current_fit <- tag_fit(current_fit, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
+    fits[[length(fits) + 1L]] <- current_fit
     final_fits[["bootstrap"]] <- current_fit
+
+    st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+    st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 0L, stage = "warm_start", stop_reason = NA_character_)
+    state_hist <- dplyr::bind_rows(state_hist, st0)
   } else {
     fake_theta <- tibble::tibble(ID = ids_all, theta = rep(0, length(ids_all)), se = rep(1, length(ids_all)))
     boot <- bt_core_link_round(
@@ -322,23 +456,19 @@ bt_run_core_linking <- function(samples,
       .keep_all = TRUE
     )
     boot_res <- dplyr::left_join(boot_res, boot_meta, by = c("ID1", "ID2"))
-
     boot_res <- dplyr::mutate(boot_res, batch_index = 0L, round_index = 1L)
 
     results <- dplyr::bind_rows(results, boot_res)
     current_fit <- compute_fit(results)
-    current_fit <- tag_fit(
-      current_fit,
-      batch_index = 0L,
-      round_index = 1L,
-      stage = "bootstrap",
-      n_results = nrow(results),
-      n_pairs_this_round = nrow(boot$pairs),
-      new_ids = character(0)
-    )
-    fits[[length(fits) + 1L]] <- current_fit
     baseline_fit <- current_fit
+    current_fit <- apply_linking(current_fit, baseline_fit)
+    current_fit <- tag_fit(current_fit, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
+    fits[[length(fits) + 1L]] <- current_fit
     final_fits[["bootstrap"]] <- current_fit
+
+    st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+    st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 1L, stage = "bootstrap", stop_reason = NA_character_)
+    state_hist <- dplyr::bind_rows(state_hist, st0)
   }
 
   seen_ids <- unique(core_ids)
@@ -410,10 +540,9 @@ bt_run_core_linking <- function(samples,
         dplyr::across(dplyr::all_of(c("ID1", "ID2"))),
         .keep_all = TRUE
       )
+
       res_round <- dplyr::left_join(res_round, pair_meta, by = c("ID1", "ID2"))
-
       res_round <- dplyr::mutate(res_round, batch_index = batch_i, round_index = round_i)
-
       results <- dplyr::bind_rows(results, res_round)
 
       prev_fit_for_drift <- NULL
@@ -424,16 +553,16 @@ bt_run_core_linking <- function(samples,
       }
 
       current_fit <- compute_fit(results)
-      current_fit <- tag_fit(
-        current_fit,
-        batch_index = as.integer(batch_i),
-        round_index = as.integer(round_i),
-        stage = "batch_round",
-        n_results = nrow(results),
-        n_pairs_this_round = nrow(pairs),
-        new_ids = new_ids
-      )
+      # Link to the baseline core scale (optionally, based on drift).
+      current_fit <- apply_linking(current_fit, baseline_fit)
+      current_fit <- tag_fit(current_fit, as.integer(batch_i), as.integer(round_i), "batch_round", nrow(results), nrow(pairs), new_ids)
       fits[[length(fits) + 1L]] <- current_fit
+
+      st_all <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+      st_new <- .bt_round_state(results, ids = new_ids, judge_col = judge, prefix = "new_")
+      st <- dplyr::bind_cols(st_all, st_new)
+      st <- dplyr::mutate(st, batch_index = as.integer(batch_i), round_index = as.integer(round_i), stage = "batch_round")
+      state_hist <- dplyr::bind_rows(state_hist, st)
 
       metrics <- bt_stop_metrics(
         fit = current_fit,
@@ -447,19 +576,9 @@ bt_run_core_linking <- function(samples,
       metrics <- dplyr::mutate(metrics, batch_index = batch_i, round_index = round_i)
       metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 
-      stop_dec <- bt_should_stop(
-        metrics = metrics,
-        prev_metrics = prev_metrics,
-        reliability_target = reliability_target,
-        sepG_target = sepG_target,
-        rel_se_p90_target = rel_se_p90_target,
-        rel_se_p90_min_improve = rel_se_p90_min_improve,
-        max_item_misfit_prop = max_item_misfit_prop,
-        max_judge_misfit_prop = max_judge_misfit_prop,
-        core_theta_cor_target = core_theta_cor_target,
-        core_theta_spearman_target = core_theta_spearman_target,
-        core_max_abs_shift_target = core_max_abs_shift_target,
-        core_p90_abs_shift_target = core_p90_abs_shift_target
+      stop_dec <- do.call(
+        bt_should_stop,
+        c(list(metrics = metrics, prev_metrics = prev_metrics), stop_params)
       )
 
       prev_metrics <- metrics
@@ -475,11 +594,17 @@ bt_run_core_linking <- function(samples,
 
       if (isTRUE(stop_dec$stop)) {
         stop_reason <- "stopped"
+        state_hist[nrow(state_hist), "stop_reason"] <- "stopped"
         break
       }
     }
 
     if (is.na(stop_reason)) stop_reason <- "max_rounds"
+    if (stop_reason == "max_rounds" && nrow(state_hist) > 0L) {
+      # mark last state row of this batch as max_rounds
+      idx <- which(state_hist$batch_index == batch_i)
+      if (length(idx) > 0L) state_hist[idx[length(idx)], "stop_reason"] <- "max_rounds"
+    }
 
     seen_ids <- unique(c(seen_ids, new_ids))
 
@@ -504,6 +629,7 @@ bt_run_core_linking <- function(samples,
     fits = fits,
     final_fits = final_fits,
     metrics = metrics_hist,
+    state = state_hist,
     batch_summary = batch_summary
   )
 }

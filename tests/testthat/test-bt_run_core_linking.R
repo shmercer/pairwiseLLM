@@ -382,7 +382,7 @@ test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_m
     ID = LETTERS[1:10],
     text = paste("text", LETTERS[1:10])
   )
-  batches <- list(c("I", "J"))  # include some new IDs (they're in samples)
+  batches <- list(c("I", "J")) # include some new IDs (they're in samples)
 
   # deterministic simulated judge + mock fit
   true_theta <- setNames(seq(10, 1), LETTERS[1:10])
@@ -401,7 +401,7 @@ test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_m
   out <- bt_run_core_linking(
     samples = samples,
     batches = batches,
-    core_ids = NULL,                # cover core selection branch
+    core_ids = NULL, # cover core selection branch
     core_method = "random",
     core_size = 3,
     seed = 123,
@@ -533,4 +533,173 @@ test_that("bt_run_core_linking emits progress messages when verbose = TRUE", {
     ),
     "Round 1:"
   )
+})
+
+test_that("bt_run_core_linking returns state snapshots including new_ prefixed fields", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste("text", LETTERS[1:6])
+  )
+  batches <- list(c("D"))
+  core_ids <- c("A", "B", "C")
+  true_theta <- c(A = 3, B = 2, C = 1, D = 0, E = -1, F = -2)
+
+  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
+
+  mock_fit <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(0.5, length(ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = core_ids,
+    judge_fun = judge_fun,
+    fit_fun = mock_fit,
+    engine = "mock",
+    round_size = 10,
+    max_rounds_per_batch = 1,
+    forbid_repeats = FALSE,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_,
+    rel_se_p90_target = 999,
+    verbose = FALSE
+  )
+
+  expect_true("state" %in% names(out))
+  expect_true(is.data.frame(out$state))
+  expect_true(nrow(out$state) >= 1L)
+
+  # Expect both all-state and new_-prefixed fields
+  expect_true(all(c("n_results", "n_unique_unordered_pairs", "batch_index", "round_index") %in% names(out$state)))
+  expect_true(any(grepl("^new_", names(out$state))))
+
+  # Sanity invariants
+  expect_true(all(out$state$n_self_pairs == 0L))
+})
+
+test_that("bt_run_core_linking passes overridden stopping thresholds into bt_should_stop", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C", "D", "E"),
+    text = paste0("txt_", seq_len(5))
+  )
+
+  core_ids <- c("A", "B", "C")
+  batches <- list(c("D", "E"))
+
+  # Warm start avoids the bootstrap core audit round.
+  initial_results <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+
+  judge_fun <- function(pairs) {
+    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  }
+
+  build_bt_fun <- function(res_tbl, judge = NULL) {
+    res_tbl
+  }
+
+  fit_fun <- function(bt_data,
+                      engine = "sirt",
+                      verbose = FALSE,
+                      return_diagnostics = TRUE,
+                      include_residuals = FALSE,
+                      ...) {
+    ids <- sort(unique(c(as.character(bt_data$ID1), as.character(bt_data$ID2))))
+    list(
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(1, length(ids))),
+      engine = engine,
+      reliability = 0.99,
+      diagnostics = list(sepG = 10)
+    )
+  }
+
+  cap <- new.env(parent = emptyenv())
+
+  testthat::local_mocked_bindings(
+    bt_should_stop = function(metrics,
+                              prev_metrics = NULL,
+                              reliability_target = 0.90,
+                              sepG_target = 3.0,
+                              rel_se_p90_target = 0.30,
+                              rel_se_p90_min_improve = 0.01,
+                              max_item_misfit_prop = 0.05,
+                              max_judge_misfit_prop = 0.05,
+                              core_theta_cor_target = NA_real_,
+                              core_theta_spearman_target = NA_real_,
+                              core_max_abs_shift_target = NA_real_,
+                              core_p90_abs_shift_target = NA_real_) {
+      cap$args <- list(
+        reliability_target = reliability_target,
+        sepG_target = sepG_target,
+        rel_se_p90_target = rel_se_p90_target,
+        rel_se_p90_min_improve = rel_se_p90_min_improve,
+        max_item_misfit_prop = max_item_misfit_prop,
+        max_judge_misfit_prop = max_judge_misfit_prop,
+        core_theta_cor_target = core_theta_cor_target,
+        core_theta_spearman_target = core_theta_spearman_target,
+        core_max_abs_shift_target = core_max_abs_shift_target,
+        core_p90_abs_shift_target = core_p90_abs_shift_target
+      )
+
+      list(stop = TRUE, reasons = "forced")
+    },
+    .package = "pairwiseLLM"
+  )
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = core_ids,
+    judge_fun = judge_fun,
+    initial_results = initial_results,
+    fit_fun = fit_fun,
+    build_bt_fun = build_bt_fun,
+
+    # keep tiny so the test is fast and deterministic
+    round_size = 4,
+    max_rounds_per_batch = 1,
+    min_judgments = 1,
+    forbid_repeats = FALSE,
+    balance_positions = FALSE,
+
+    # Choose a tier but override every threshold explicitly to hit the
+    # "if (!missing(...))" branches in bt_run_core_linking().
+    stopping_tier = "good",
+    reliability_target = 0.12,
+    sepG_target = 9.0,
+    rel_se_p90_target = 0.99,
+    rel_se_p90_min_improve = 0.123,
+    max_item_misfit_prop = 0.321,
+    max_judge_misfit_prop = 0.222,
+    core_theta_cor_target = 0.111,
+    core_theta_spearman_target = 0.2222,
+    core_max_abs_shift_target = 0.3333,
+    core_p90_abs_shift_target = 0.4444,
+    verbose = FALSE,
+    fit_verbose = FALSE
+  )
+
+  expect_true(is.list(out))
+  expect_true(exists("args", envir = cap, inherits = FALSE))
+
+  expect_equal(cap$args$reliability_target, 0.12)
+  expect_equal(cap$args$sepG_target, 9.0)
+  expect_equal(cap$args$rel_se_p90_target, 0.99)
+  expect_equal(cap$args$rel_se_p90_min_improve, 0.123)
+
+  expect_equal(cap$args$max_item_misfit_prop, 0.321)
+  expect_equal(cap$args$max_judge_misfit_prop, 0.222)
+
+  expect_equal(cap$args$core_theta_cor_target, 0.111)
+  expect_equal(cap$args$core_theta_spearman_target, 0.2222)
+  expect_equal(cap$args$core_max_abs_shift_target, 0.3333)
+  expect_equal(cap$args$core_p90_abs_shift_target, 0.4444)
 })

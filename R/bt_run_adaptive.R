@@ -10,6 +10,11 @@
 #' \item repeat until stopping criteria are met or \code{max_rounds} is reached.
 #' }
 #'
+#' In addition to per-round stop metrics, \code{bt_run_adaptive()} records a compact
+#' per-round \emph{state snapshot} (counts of unique unordered pairs judged, ID appearance
+#' distribution, position imbalance, and basic missingness checks). This is intended for
+#' debugging and monitoring convergence/coverage over rounds.
+#'
 #' \strong{No reverse-order checks during adaptive sampling.}
 #' Optionally, after stopping (or hitting \code{max_rounds}), you can run a
 #' post-hoc reverse-order audit on a random subset of already-judged pairs and
@@ -60,6 +65,7 @@
 #' distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 #' Passed to \code{\link{bt_adaptive_round}}.
 #' @param fit_bounds Numeric length-2 vector giving acceptable infit/outfit (or analogous) bounds
+#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
 #' when available. Passed to \code{\link{bt_adaptive_round}}.
 #'
 #' @param reliability_target Numeric. Target reliability/separation-based criterion used by
@@ -119,11 +125,22 @@
 #' \describe{
 #' \item{results}{All accumulated forward-direction results (ID1, ID2, better_id, ...).}
 #' \item{bt_data}{BT data built from \code{results}.}
-#' \item{fits}{List of per-round fit objects (one per adaptive round).}
-#' \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag).}
+#' \item{fits}{List of per-round fit objects (one per adaptive round). Each fit is
+#' tagged with per-round metadata in the \code{attr(fit, "bt_run_adaptive")} attribute.}
+#' \item{final_fit}{The final fit object (the last element of \code{fits}), or \code{NULL}
+#' if no fit was run.}
+#' \item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
+#' \code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
+#' or \code{"no_results"}).}
+#' \item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
+#' \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag + stop_reason).}
+#' \item{state}{A tibble with one row per adaptive round containing bookkeeping summaries
+#'   of the accumulated results at that round (e.g., \code{n_unique_unordered_pairs},
+#'   appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
+#'   \code{n_missing_better_id}), plus \code{round}, \code{stop}, and \code{stop_reason}.}
 #' \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
 #' \item{reverse_audit}{NULL unless \code{reverse_audit=TRUE}; then contains audit
-#' pairs, reverse results, and consistency outputs.}
+#' pairs, reverse results, and consistency outputs (post-hoc; does not affect stopping).}
 #' }
 #'
 #' @examples
@@ -194,6 +211,7 @@ bt_run_adaptive <- function(samples,
                             max_rounds = 50,
                             se_probs = c(0.5, 0.9, 0.95),
                             fit_bounds = c(0.7, 1.3),
+                            stopping_tier = c("strong", "good", "very_strong"),
                             reliability_target = 0.90,
                             sepG_target = 3.0,
                             rel_se_p90_target = 0.30,
@@ -212,6 +230,23 @@ bt_run_adaptive <- function(samples,
                             fit_fun = fit_bt_model,
                             build_bt_fun = build_bt_data,
                             ...) {
+  tag_fit <- function(fit,
+                      round_index,
+                      stage,
+                      n_results,
+                      n_pairs_this_round,
+                      stop_reason) {
+    meta <- list(
+      round_index = as.integer(round_index),
+      stage = as.character(stage),
+      n_results = as.integer(n_results),
+      n_pairs_this_round = as.integer(n_pairs_this_round),
+      stop_reason = as.character(stop_reason)
+    )
+    attr(fit, "bt_run_adaptive") <- meta
+    fit
+  }
+
   samples <- tibble::as_tibble(samples)
   if (!all(c("ID", "text") %in% names(samples))) {
     stop("`samples` must contain columns: ID, text", call. = FALSE)
@@ -361,10 +396,13 @@ bt_run_adaptive <- function(samples,
   }
 
   fits <- list()
+  final_fit <- NULL
   rounds_list <- list()
+  state_list <- list()
   prev_metrics <- NULL
+  stop_reason <- NA_character_
+  stop_round <- NA_integer_
 
-  # adaptive rounds
   for (r in seq_len(max_rounds)) {
     if (nrow(results) == 0L) break
 
@@ -383,7 +421,16 @@ bt_run_adaptive <- function(samples,
       ...
     )
 
+    fit <- tag_fit(
+      fit,
+      round_index = r,
+      stage = "round_fit",
+      n_results = nrow(results),
+      n_pairs_this_round = NA_integer_,
+      stop_reason = NA_character_
+    )
     fits[[length(fits) + 1L]] <- fit
+    final_fit <- fit
 
     round_out <- bt_adaptive_round(
       samples = samples,
@@ -393,6 +440,7 @@ bt_run_adaptive <- function(samples,
       round_size = round_size,
       se_probs = se_probs,
       fit_bounds = fit_bounds,
+      stopping_tier = stopping_tier,
       reliability_target = reliability_target,
       sepG_target = sepG_target,
       rel_se_p90_target = rel_se_p90_target,
@@ -410,21 +458,48 @@ bt_run_adaptive <- function(samples,
     decision <- round_out$decision
     pairs_next <- round_out$pairs_next
 
+    this_reason <- NA_character_
+    if (isTRUE(decision$stop)) {
+      this_reason <- "stopped"
+    } else if (round_size == 0L) {
+      this_reason <- "round_size_zero"
+    } else if (nrow(pairs_next) == 0L) {
+      this_reason <- "no_pairs"
+    }
+
+    # If we are stopping before scoring new pairs, state reflects current results
+    st_now <- .bt_round_state(results, ids = ids, judge_col = judge)
+    st_now <- dplyr::mutate(st_now, round = as.integer(r), stop = isTRUE(decision$stop), stop_reason = this_reason)
+    state_list[[length(state_list) + 1L]] <- st_now
+
     rounds_list[[length(rounds_list) + 1L]] <- dplyr::bind_cols(
       tibble::tibble(
         round = as.integer(r),
         n_new_pairs_scored = 0L,
         n_total_results = as.integer(nrow(results)),
-        stop = isTRUE(decision$stop)
+        stop = isTRUE(decision$stop),
+        stop_reason = this_reason
       ),
       metrics
     )
 
     prev_metrics <- metrics
 
-    if (isTRUE(decision$stop)) break
-    if (round_size == 0L) break
-    if (nrow(pairs_next) == 0L) break
+    if (!is.na(this_reason)) {
+      stop_reason <- this_reason
+      stop_round <- as.integer(r)
+
+      fits[[length(fits)]] <- tag_fit(
+        fits[[length(fits)]],
+        round_index = r,
+        stage = "round_fit",
+        n_results = nrow(results),
+        n_pairs_this_round = NA_integer_,
+        stop_reason = this_reason
+      )
+      final_fit <- fits[[length(fits)]]
+      break
+    }
 
     res_next <- judge_fun(pairs_next)
     res_next <- .validate_judge_results(res_next, ids = ids, judge_col = judge)
@@ -434,12 +509,70 @@ bt_run_adaptive <- function(samples,
       results <- dplyr::bind_rows(results, res_next)
       rounds_list[[length(rounds_list)]][["n_new_pairs_scored"]] <- as.integer(n_added)
       rounds_list[[length(rounds_list)]][["n_total_results"]] <- as.integer(nrow(results))
+
+      # update the most recent state row to reflect post-append counts
+      state_list[[length(state_list)]] <- dplyr::mutate(
+        .bt_round_state(results, ids = ids, judge_col = judge),
+        round = as.integer(r),
+        stop = FALSE,
+        stop_reason = NA_character_
+      )
     } else {
+      rounds_list[[length(rounds_list)]][["stop_reason"]] <- "no_new_results"
+      stop_reason <- "no_new_results"
+      stop_round <- as.integer(r)
+
+      fits[[length(fits)]] <- tag_fit(
+        fits[[length(fits)]],
+        round_index = r,
+        stage = "round_fit",
+        n_results = nrow(results),
+        n_pairs_this_round = NA_integer_,
+        stop_reason = "no_new_results"
+      )
+      final_fit <- fits[[length(fits)]]
+
+      # mark state with terminal reason
+      state_list[[length(state_list)]] <- dplyr::mutate(
+        state_list[[length(state_list)]],
+        stop = TRUE,
+        stop_reason = "no_new_results"
+      )
       break
     }
   }
 
+  if (is.na(stop_reason)) {
+    if (length(rounds_list) == 0L) {
+      stop_reason <- "no_results"
+    } else {
+      stop_reason <- "max_rounds"
+      stop_round <- as.integer(max_rounds)
+      rounds_list[[length(rounds_list)]][["stop_reason"]] <- "max_rounds"
+
+      if (length(fits) > 0L) {
+        fits[[length(fits)]] <- tag_fit(
+          fits[[length(fits)]],
+          round_index = max_rounds,
+          stage = "round_fit",
+          n_results = nrow(results),
+          n_pairs_this_round = NA_integer_,
+          stop_reason = "max_rounds"
+        )
+        final_fit <- fits[[length(fits)]]
+      }
+      if (length(state_list) > 0L) {
+        state_list[[length(state_list)]] <- dplyr::mutate(
+          state_list[[length(state_list)]],
+          stop = TRUE,
+          stop_reason = "max_rounds"
+        )
+      }
+    }
+  }
+
   rounds_tbl <- if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list)
+  state_tbl <- if (length(state_list) == 0L) tibble::tibble() else dplyr::bind_rows(state_list)
 
   bt_data_final <- if (nrow(results) == 0L) {
     tibble::tibble(object1 = character(), object2 = character(), result = numeric())
@@ -449,7 +582,7 @@ bt_run_adaptive <- function(samples,
     build_bt_fun(results, judge = judge)
   }
 
-  # optional post-stop reverse audit (no effect on adaptive loop)
+  # optional post-stop reverse audit (unchanged)
   reverse_out <- NULL
   if (isTRUE(reverse_audit) && nrow(results) > 0L) {
     uniq_pairs <- results |>
@@ -457,7 +590,6 @@ bt_run_adaptive <- function(samples,
       dplyr::transmute(ID1 = as.character(.data$ID1), ID2 = as.character(.data$ID2))
 
     uniq_pairs <- .distinct_unordered_pairs(uniq_pairs, id1_col = "ID1", id2_col = "ID2")
-
     uniq_pairs_txt <- .add_pair_texts(uniq_pairs, samples = samples)
 
     n_all <- nrow(uniq_pairs_txt)
@@ -497,12 +629,9 @@ bt_run_adaptive <- function(samples,
       rev_results <- judge_fun(rev_pairs)
       rev_results <- .validate_judge_results(rev_results, ids = ids, judge_col = judge)
 
-      # Ensure we compute consistency only on audited unordered keys (avoids n_pairs==0)
       add_key <- function(df) {
         df |>
-          dplyr::mutate(
-            key = .unordered_pair_key(.data$ID1, .data$ID2)
-          )
+          dplyr::mutate(key = .unordered_pair_key(.data$ID1, .data$ID2))
       }
 
       main_audit <- add_key(results) |>
@@ -533,7 +662,11 @@ bt_run_adaptive <- function(samples,
     results = results,
     bt_data = bt_data_final,
     fits = fits,
+    final_fit = final_fit,
+    stop_reason = stop_reason,
+    stop_round = stop_round,
     rounds = rounds_tbl,
+    state = state_tbl,
     pairs_bootstrap = pairs_bootstrap,
     reverse_audit = reverse_out
   )

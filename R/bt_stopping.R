@@ -222,6 +222,110 @@ bt_stop_metrics <- function(fit,
   out
 }
 
+
+#' Preset stopping tiers for adaptive sampling
+#'
+#' Returns named lists of default stopping thresholds that can be used with
+#' \code{\link{bt_should_stop}}. These tiers are intended as convenient presets;
+#' you can always override any threshold explicitly.
+#'
+#' Tiers:
+#' \describe{
+#'   \item{good}{Less stringent. Faster, lower precision.}
+#'   \item{strong}{Recommended default. Balanced. (Matches current numeric defaults.)}
+#'   \item{very_strong}{Most stringent. Highest precision.}
+#' }
+#'
+#' @return A named list with elements \code{good}, \code{strong}, and \code{very_strong}.
+#'   Each element is a named list of arguments suitable for \code{bt_should_stop()}.
+#'
+#' @examples
+#' tiers <- bt_stop_tiers()
+#' names(tiers)
+#' tiers$strong$rel_se_p90_target
+#'
+#' @export
+bt_stop_tiers <- function() {
+  list(
+    good = list(
+      reliability_target = 0.85,
+      sepG_target = 2.5,
+      rel_se_p90_target = 0.40,
+      rel_se_p90_min_improve = 0.02,
+      max_item_misfit_prop = 0.05,
+      max_judge_misfit_prop = 0.05,
+      core_theta_cor_target = NA_real_,
+      core_theta_spearman_target = NA_real_,
+      core_max_abs_shift_target = NA_real_,
+      core_p90_abs_shift_target = NA_real_
+    ),
+    strong = list(
+      reliability_target = 0.90,
+      sepG_target = 3.0,
+      rel_se_p90_target = 0.30,
+      rel_se_p90_min_improve = 0.01,
+      max_item_misfit_prop = 0.05,
+      max_judge_misfit_prop = 0.05,
+      core_theta_cor_target = NA_real_,
+      core_theta_spearman_target = NA_real_,
+      core_max_abs_shift_target = NA_real_,
+      core_p90_abs_shift_target = NA_real_
+    ),
+    very_strong = list(
+      reliability_target = 0.95,
+      sepG_target = 3.5,
+      rel_se_p90_target = 0.20,
+      rel_se_p90_min_improve = 0.005,
+      max_item_misfit_prop = 0.05,
+      max_judge_misfit_prop = 0.05,
+      core_theta_cor_target = NA_real_,
+      core_theta_spearman_target = NA_real_,
+      core_max_abs_shift_target = NA_real_,
+      core_p90_abs_shift_target = NA_real_
+    )
+  )
+}
+
+#' Decide whether to stop using a preset stopping tier
+#'
+#' Convenience wrapper around \code{\link{bt_should_stop}} that applies a preset tier
+#' from \code{\link{bt_stop_tiers}} and then applies any explicit overrides supplied
+#' via \code{...}.
+#'
+#' @inheritParams bt_should_stop
+#' @param tier Stopping tier preset. One of \code{"good"}, \code{"strong"}, \code{"very_strong"}.
+#' @param ... Named overrides for any thresholds accepted by \code{bt_should_stop()}.
+#'
+#' @return See \code{\link{bt_should_stop}}.
+#'
+#' @examples
+#' m <- tibble::tibble(
+#'   reliability = 0.88, sepG = 2.6, rel_se_p90 = 0.38,
+#'   item_misfit_prop = 0, judge_misfit_prop = 0
+#' )
+#' bt_should_stop_tier(m, tier = "good")$stop
+#' bt_should_stop_tier(m, tier = "strong")$stop
+#'
+#' @export
+bt_should_stop_tier <- function(metrics,
+                                prev_metrics = NULL,
+                                tier = c("strong", "good", "very_strong"),
+                                ...) {
+  tier <- match.arg(tier)
+  tiers <- bt_stop_tiers()
+  params <- tiers[[tier]]
+
+  overrides <- list(...)
+  # Drop NULL overrides so they don't clobber tier values.
+  overrides <- overrides[!vapply(overrides, is.null, logical(1))]
+  params <- utils::modifyList(params, overrides)
+
+  do.call(
+    bt_should_stop,
+    c(list(metrics = metrics, prev_metrics = prev_metrics), params)
+  )
+}
+
 #' Decide whether to stop adaptive sampling based on stop metrics
 #'
 #' Applies combined stopping criteria to the output of \code{\link{bt_stop_metrics}}.
