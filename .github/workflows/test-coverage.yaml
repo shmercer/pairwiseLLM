@@ -24,7 +24,7 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::covr, any::xml2
+          extra-packages: any::covr, any::xml2, any::jsonlite
           needs: coverage
 
       - name: Test coverage
@@ -32,10 +32,63 @@ jobs:
           cov <- covr::package_coverage(
             quiet = FALSE,
             clean = FALSE,
-            install_path = file.path(normalizePath(Sys.getenv("RUNNER_TEMP"), winslash = "/"), "package")
+            install_path = file.path(
+              normalizePath(Sys.getenv("RUNNER_TEMP"), winslash = "/"),
+              "package"
+            )
           )
           print(cov)
+
+          # Save coverage object for debugging / artifacts
+          saveRDS(cov, "cov.rds")
+
+          # Write cobertura report for Codecov
           covr::to_cobertura(cov)
+
+          # ------------------------------------------------------------
+          # Uncovered line reporting (no hard-coded file list)
+          # - PRs: report uncovered lines for all instrumented R/*.R
+          # - Push: report uncovered lines for all R/*.R
+          # ------------------------------------------------------------
+          cov_df <- as.data.frame(cov)
+
+          # Restrict to R source files (keeps output useful and small)
+          files_to_report <- sort(unique(cov_df$filename[grepl("^R/.*\\.R$", cov_df$filename)]))
+
+          md <- c("# Uncovered line ranges (covr::zero_coverage)", "")
+          rows <- list()
+
+          for (f in files_to_report) {
+            z <- covr::zero_coverage(cov, file = f)
+            if (is.null(z) || nrow(z) == 0) next
+
+            txt <- paste(utils::capture.output(print(z)), collapse = "\n")
+            md <- c(md, paste0("## ", f), "```", txt, "```", "")
+
+            rows[[length(rows) + 1]] <- data.frame(
+              file = f,
+              uncovered = txt,
+              stringsAsFactors = FALSE
+            )
+          }
+
+          if (length(rows) == 0) {
+            md <- c(md, "_No uncovered lines found in `R/` files._")
+            out_csv <- data.frame(file = character(), uncovered = character(), stringsAsFactors = FALSE)
+          } else {
+            out_csv <- do.call(rbind, rows)
+          }
+
+          writeLines(md, "uncovered_lines.md")
+          utils::write.csv(out_csv, "uncovered_lines.csv", row.names = FALSE)
+
+          # Add a short pointer to GitHub Actions Summary
+          summ <- Sys.getenv("GITHUB_STEP_SUMMARY")
+          if (nzchar(summ)) {
+            cat("## Coverage: uncovered lines\n\n", file = summ, append = TRUE)
+            cat("- Generated uncovered-line report for files under `R/`.\n", file = summ, append = TRUE)
+            cat("- See artifact: `covr-uncovered-lines`.\n", file = summ, append = TRUE)
+          }
         shell: Rscript {0}
 
       - uses: codecov/codecov-action@v5
@@ -46,6 +99,16 @@ jobs:
           plugins: noop
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload uncovered lines report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: covr-uncovered-lines
+          path: |
+            uncovered_lines.md
+            uncovered_lines.csv
+            cov.rds
 
       - name: Show testthat output
         if: always()
