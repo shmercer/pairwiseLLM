@@ -876,3 +876,132 @@ test_that("bt_run_adaptive reverse audit de-duplicates unordered pairs in initia
   expect_true(is.list(out$reverse_audit))
   expect_equal(nrow(out$reverse_audit$pairs_reversed), 1L)
 })
+
+test_that("bt_run_adaptive returns stop metadata and tags fits", {
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+
+  # No results, no bootstrap => no fit.
+  judge_never <- function(pairs) stop("judge_fun should not be called")
+  out0 <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = judge_never,
+    init_round_size = 0,
+    max_rounds = 3
+  )
+  expect_identical(out0$stop_reason, "no_results")
+  expect_true(is.null(out0$final_fit))
+  expect_equal(length(out0$fits), 0L)
+
+  # Provide a minimal starting result; round_size==0 should stop after fitting.
+  initial_results <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+  fit_fun <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data[[1]], bt_data[[2]])))
+    list(engine = "mock", reliability = 0, theta = tibble::tibble(ID = ids, theta = 0, se = 1), diagnostics = list(sepG = 0))
+  }
+  out1 <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = judge_never,
+    initial_results = initial_results,
+    fit_fun = fit_fun,
+    engine = "mock",
+    round_size = 0,
+    max_rounds = 2,
+    rel_se_p90_target = 0,
+    rel_se_p90_min_improve = NA_real_
+  )
+  expect_identical(out1$stop_reason, "round_size_zero")
+  expect_identical(out1$stop_round, 1L)
+  expect_true(is.list(attr(out1$fits[[1]], "bt_run_adaptive")))
+  expect_identical(attr(out1$fits[[1]], "bt_run_adaptive")$stop_reason, "round_size_zero")
+  expect_identical(out1$final_fit, out1$fits[[length(out1$fits)]])
+})
+
+test_that("bt_run_adaptive stop_reason reflects common termination paths", {
+  # no_pairs when repeats are forbidden and only one unordered pair exists.
+  samples2 <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
+  initial_results <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+  fit_fun <- function(bt_data, ...) {
+    list(engine = "mock", reliability = 0, theta = tibble::tibble(ID = c("A", "B"), theta = c(0, 1), se = 1), diagnostics = list(sepG = 0))
+  }
+  judge_fun <- function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  out_np <- bt_run_adaptive(
+    samples = samples2,
+    judge_fun = judge_fun,
+    initial_results = initial_results,
+    fit_fun = fit_fun,
+    engine = "mock",
+    max_rounds = 5,
+    round_size = 1,
+    rel_se_p90_target = 0,
+    rel_se_p90_min_improve = NA_real_,
+    forbid_repeats = TRUE,
+    balance_positions = FALSE
+  )
+  expect_identical(out_np$stop_reason, "no_pairs")
+  expect_identical(out_np$rounds$stop_reason[[1]], "no_pairs")
+
+  # no_new_results when judge returns 0 new results.
+  judge_empty <- function(pairs) tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
+  out_nr <- bt_run_adaptive(
+    samples = tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c")),
+    judge_fun = judge_empty,
+    initial_results = tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A"),
+    fit_fun = function(bt_data, ...) {
+      list(engine = "mock", reliability = 0, theta = tibble::tibble(ID = c("A", "B", "C"), theta = c(0, 1, 2), se = 1), diagnostics = list(sepG = 0))
+    },
+    engine = "mock",
+    max_rounds = 5,
+    round_size = 1,
+    rel_se_p90_target = 0,
+    rel_se_p90_min_improve = NA_real_,
+    forbid_repeats = FALSE,
+    balance_positions = FALSE
+  )
+  expect_identical(out_nr$stop_reason, "no_new_results")
+  expect_identical(out_nr$rounds$stop_reason[[1]], "no_new_results")
+
+  # stopped when stop criteria are satisfied.
+  fit_stop <- function(bt_data, ...) {
+    list(
+      engine = "mock",
+      reliability = 0.95,
+      theta = tibble::tibble(ID = c("A", "B", "C", "D"), theta = c(-2, -1, 1, 2), se = rep(0.05, 4)),
+      diagnostics = list(sepG = 3.5)
+    )
+  }
+  samples4 <- tibble::tibble(ID = c("A", "B", "C", "D"), text = c("a", "b", "c", "d"))
+  out_stop <- bt_run_adaptive(
+    samples = samples4,
+    judge_fun = function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1),
+    init_round_size = 2,
+    max_rounds = 5,
+    round_size = 2,
+    fit_fun = fit_stop,
+    engine = "mock"
+  )
+  expect_identical(out_stop$stop_reason, "stopped")
+  expect_true(isTRUE(out_stop$rounds$stop[[1]]))
+  expect_identical(attr(out_stop$final_fit, "bt_run_adaptive")$stop_reason, "stopped")
+
+  # max_rounds when stop criteria are never met and rounds exhaust.
+  fit_never <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data[[1]], bt_data[[2]])))
+    list(engine = "mock", reliability = 0, theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = 1), diagnostics = list(sepG = 0))
+  }
+  out_max <- bt_run_adaptive(
+    samples = tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c")),
+    judge_fun = function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1),
+    init_round_size = 1,
+    max_rounds = 2,
+    round_size = 1,
+    fit_fun = fit_never,
+    engine = "mock",
+    forbid_repeats = FALSE,
+    balance_positions = FALSE,
+    rel_se_p90_target = 0,
+    rel_se_p90_min_improve = NA_real_
+  )
+  expect_identical(out_max$stop_reason, "max_rounds")
+  expect_identical(out_max$rounds$stop_reason[[nrow(out_max$rounds)]], "max_rounds")
+  expect_identical(attr(out_max$final_fit, "bt_run_adaptive")$stop_reason, "max_rounds")
+})

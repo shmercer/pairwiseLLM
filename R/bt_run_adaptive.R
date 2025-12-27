@@ -119,7 +119,14 @@
 #' \describe{
 #' \item{results}{All accumulated forward-direction results (ID1, ID2, better_id, ...).}
 #' \item{bt_data}{BT data built from \code{results}.}
-#' \item{fits}{List of per-round fit objects (one per adaptive round).}
+#' \item{fits}{List of per-round fit objects (one per adaptive round). Each fit is
+#' tagged with per-round metadata in the \code{attr(fit, "bt_run_adaptive")} attribute.}
+#' \item{final_fit}{The final fit object (the last element of \code{fits}), or \code{NULL}
+#' if no fit was run.}
+#' \item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
+#' \code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
+#' or \code{"no_results"}).}
+#' \item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
 #' \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag).}
 #' \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
 #' \item{reverse_audit}{NULL unless \code{reverse_audit=TRUE}; then contains audit
@@ -212,6 +219,23 @@ bt_run_adaptive <- function(samples,
                             fit_fun = fit_bt_model,
                             build_bt_fun = build_bt_data,
                             ...) {
+  tag_fit <- function(fit,
+                      round_index,
+                      stage,
+                      n_results,
+                      n_pairs_this_round,
+                      stop_reason) {
+    meta <- list(
+      round_index = as.integer(round_index),
+      stage = as.character(stage),
+      n_results = as.integer(n_results),
+      n_pairs_this_round = as.integer(n_pairs_this_round),
+      stop_reason = as.character(stop_reason)
+    )
+    attr(fit, "bt_run_adaptive") <- meta
+    fit
+  }
+
   samples <- tibble::as_tibble(samples)
   if (!all(c("ID", "text") %in% names(samples))) {
     stop("`samples` must contain columns: ID, text", call. = FALSE)
@@ -361,8 +385,11 @@ bt_run_adaptive <- function(samples,
   }
 
   fits <- list()
+  final_fit <- NULL
   rounds_list <- list()
   prev_metrics <- NULL
+  stop_reason <- NA_character_
+  stop_round <- NA_integer_
 
   # adaptive rounds
   for (r in seq_len(max_rounds)) {
@@ -383,7 +410,16 @@ bt_run_adaptive <- function(samples,
       ...
     )
 
+    fit <- tag_fit(
+      fit,
+      round_index = r,
+      stage = "round_fit",
+      n_results = nrow(results),
+      n_pairs_this_round = NA_integer_,
+      stop_reason = NA_character_
+    )
     fits[[length(fits) + 1L]] <- fit
+    final_fit <- fit
 
     round_out <- bt_adaptive_round(
       samples = samples,
@@ -410,21 +446,45 @@ bt_run_adaptive <- function(samples,
     decision <- round_out$decision
     pairs_next <- round_out$pairs_next
 
+    this_reason <- NA_character_
+    if (isTRUE(decision$stop)) {
+      this_reason <- "stopped"
+    } else if (round_size == 0L) {
+      this_reason <- "round_size_zero"
+    } else if (nrow(pairs_next) == 0L) {
+      this_reason <- "no_pairs"
+    }
+
     rounds_list[[length(rounds_list) + 1L]] <- dplyr::bind_cols(
       tibble::tibble(
         round = as.integer(r),
         n_new_pairs_scored = 0L,
         n_total_results = as.integer(nrow(results)),
-        stop = isTRUE(decision$stop)
+        stop = isTRUE(decision$stop),
+        stop_reason = this_reason
       ),
       metrics
     )
 
     prev_metrics <- metrics
 
-    if (isTRUE(decision$stop)) break
-    if (round_size == 0L) break
-    if (nrow(pairs_next) == 0L) break
+    if (!is.na(this_reason)) {
+      stop_reason <- this_reason
+      stop_round <- as.integer(r)
+      # Tag the last fit with the terminal reason.
+      if (length(fits) > 0L) {
+        fits[[length(fits)]] <- tag_fit(
+          fits[[length(fits)]],
+          round_index = r,
+          stage = "round_fit",
+          n_results = nrow(results),
+          n_pairs_this_round = NA_integer_,
+          stop_reason = this_reason
+        )
+        final_fit <- fits[[length(fits)]]
+      }
+      break
+    }
 
     res_next <- judge_fun(pairs_next)
     res_next <- .validate_judge_results(res_next, ids = ids, judge_col = judge)
@@ -435,7 +495,43 @@ bt_run_adaptive <- function(samples,
       rounds_list[[length(rounds_list)]][["n_new_pairs_scored"]] <- as.integer(n_added)
       rounds_list[[length(rounds_list)]][["n_total_results"]] <- as.integer(nrow(results))
     } else {
+      rounds_list[[length(rounds_list)]][["stop_reason"]] <- "no_new_results"
+      stop_reason <- "no_new_results"
+      stop_round <- as.integer(r)
+      if (length(fits) > 0L) {
+        fits[[length(fits)]] <- tag_fit(
+          fits[[length(fits)]],
+          round_index = r,
+          stage = "round_fit",
+          n_results = nrow(results),
+          n_pairs_this_round = NA_integer_,
+          stop_reason = "no_new_results"
+        )
+        final_fit <- fits[[length(fits)]]
+      }
       break
+    }
+  }
+
+  if (is.na(stop_reason)) {
+    if (length(rounds_list) == 0L) {
+      stop_reason <- "no_results"
+    } else {
+      stop_reason <- "max_rounds"
+      stop_round <- as.integer(max_rounds)
+      rounds_list[[length(rounds_list)]][["stop_reason"]] <- "max_rounds"
+
+      if (length(fits) > 0L) {
+        fits[[length(fits)]] <- tag_fit(
+          fits[[length(fits)]],
+          round_index = max_rounds,
+          stage = "round_fit",
+          n_results = nrow(results),
+          n_pairs_this_round = NA_integer_,
+          stop_reason = "max_rounds"
+        )
+        final_fit <- fits[[length(fits)]]
+      }
     }
   }
 
@@ -533,6 +629,9 @@ bt_run_adaptive <- function(samples,
     results = results,
     bt_data = bt_data_final,
     fits = fits,
+    final_fit = final_fit,
+    stop_reason = stop_reason,
+    stop_round = stop_round,
     rounds = rounds_tbl,
     pairs_bootstrap = pairs_bootstrap,
     reverse_audit = reverse_out

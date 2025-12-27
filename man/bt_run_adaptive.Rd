@@ -160,7 +160,14 @@ A list with elements:
 \describe{
 \item{results}{All accumulated forward-direction results (ID1, ID2, better_id, ...).}
 \item{bt_data}{BT data built from \code{results}.}
-\item{fits}{List of per-round fit objects (one per adaptive round).}
+\item{fits}{List of per-round fit objects (one per adaptive round). Each fit is
+tagged with per-round metadata in the \code{attr(fit, "bt_run_adaptive")} attribute.}
+\item{final_fit}{The final fit object (the last element of \code{fits}), or \code{NULL}
+if no fit was run.}
+\item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
+\code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
+or \code{"no_results"}).}
+\item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
 \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag).}
 \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
 \item{reverse_audit}{NULL unless \code{reverse_audit=TRUE}; then contains audit
