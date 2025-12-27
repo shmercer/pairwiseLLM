@@ -10,6 +10,11 @@
 #' \code{rel_se_p90}) and can be gated by core drift guardrails
 #' (via \code{core_*_target} thresholds).
 #'
+#' The runner also records a compact per-round \emph{state snapshot} that summarizes
+#' the accumulated judged results after each round. These summaries are returned in
+#' \code{$state} and include both overall counts (all IDs) and \code{new_}-prefixed
+#' counts restricted to the current batch's new IDs.
+#'
 #' @param samples A tibble/data.frame with columns \code{ID} and \code{text}. \code{ID}
 #'   must be unique and non-missing.
 #' @param batches A non-empty list where each element is a character vector of IDs to
@@ -80,6 +85,14 @@
 #'   \item{fits}{List of per-round fits (including bootstrap/warm start).}
 #'   \item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"}).}
 #'   \item{metrics}{Tibble of stop metrics per round (computed on batch new IDs).}
+#'   \item{state}{A tibble with one row per scoring round (including bootstrap/warm start)
+#'   containing bookkeeping summaries of the accumulated results (overall and for the
+#'   current batch's new IDs). The overall fields include
+#'   \code{n_unique_unordered_pairs}, appearance quantiles, \code{pos_imbalance_max},
+#'   \code{n_self_pairs}, \code{n_missing_better_id}, and \code{n_judges} (if applicable).
+#'   New-ID-restricted fields are prefixed with \code{new_}. Rows also include
+#'   \code{batch_index}, \code{round_index}, \code{stage}, and (when applicable)
+#'   \code{stop_reason}.}
 #'   \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 #' }
 #'
@@ -195,7 +208,6 @@ bt_run_core_linking <- function(samples,
       seed = seed
     )
 
-    # select_core_set() returns a tibble with column ID; extract IDs robustly
     if (is.data.frame(core_out) && "ID" %in% names(core_out)) {
       core_ids <- as.character(core_out$ID)
     } else {
@@ -226,9 +238,9 @@ bt_run_core_linking <- function(samples,
 
     core_ids <- unique(core_ids_in)
   }
+
   if (length(core_ids) < 2L) stop("`core_ids` must include at least 2 IDs.", call. = FALSE)
 
-  # Normalize initial results (optional warm start)
   results <- tibble::tibble()
   if (!is.null(initial_results)) {
     results <- .validate_judge_results(initial_results, ids = ids_all, judge_col = judge)
@@ -246,7 +258,6 @@ bt_run_core_linking <- function(samples,
     )
   }
 
-  # Attach metadata to a fit without mutating its internal structure
   tag_fit <- function(fit, batch_index, round_index, stage, n_results, n_pairs_this_round, new_ids) {
     attr(fit, "bt_run_core_linking") <- list(
       batch_index = batch_index,
@@ -270,26 +281,22 @@ bt_run_core_linking <- function(samples,
   fits <- list()
   final_fits <- list()
   metrics_hist <- tibble::tibble()
+  state_hist <- tibble::tibble()
   batch_summary <- tibble::tibble()
 
   current_fit <- NULL
   baseline_fit <- NULL
 
-  # Bootstrap if needed so theta exists before first batch
   if (nrow(results) > 0L) {
     current_fit <- compute_fit(results)
-    current_fit <- tag_fit(
-      current_fit,
-      batch_index = 0L,
-      round_index = 0L,
-      stage = "warm_start",
-      n_results = nrow(results),
-      n_pairs_this_round = 0L,
-      new_ids = character(0)
-    )
+    current_fit <- tag_fit(current_fit, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
     fits[[length(fits) + 1L]] <- current_fit
     baseline_fit <- current_fit
     final_fits[["bootstrap"]] <- current_fit
+
+    st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+    st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 0L, stage = "warm_start", stop_reason = NA_character_)
+    state_hist <- dplyr::bind_rows(state_hist, st0)
   } else {
     fake_theta <- tibble::tibble(ID = ids_all, theta = rep(0, length(ids_all)), se = rep(1, length(ids_all)))
     boot <- bt_core_link_round(
@@ -322,23 +329,18 @@ bt_run_core_linking <- function(samples,
       .keep_all = TRUE
     )
     boot_res <- dplyr::left_join(boot_res, boot_meta, by = c("ID1", "ID2"))
-
     boot_res <- dplyr::mutate(boot_res, batch_index = 0L, round_index = 1L)
 
     results <- dplyr::bind_rows(results, boot_res)
     current_fit <- compute_fit(results)
-    current_fit <- tag_fit(
-      current_fit,
-      batch_index = 0L,
-      round_index = 1L,
-      stage = "bootstrap",
-      n_results = nrow(results),
-      n_pairs_this_round = nrow(boot$pairs),
-      new_ids = character(0)
-    )
+    current_fit <- tag_fit(current_fit, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
     fits[[length(fits) + 1L]] <- current_fit
     baseline_fit <- current_fit
     final_fits[["bootstrap"]] <- current_fit
+
+    st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+    st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 1L, stage = "bootstrap", stop_reason = NA_character_)
+    state_hist <- dplyr::bind_rows(state_hist, st0)
   }
 
   seen_ids <- unique(core_ids)
@@ -410,10 +412,9 @@ bt_run_core_linking <- function(samples,
         dplyr::across(dplyr::all_of(c("ID1", "ID2"))),
         .keep_all = TRUE
       )
+
       res_round <- dplyr::left_join(res_round, pair_meta, by = c("ID1", "ID2"))
-
       res_round <- dplyr::mutate(res_round, batch_index = batch_i, round_index = round_i)
-
       results <- dplyr::bind_rows(results, res_round)
 
       prev_fit_for_drift <- NULL
@@ -424,16 +425,14 @@ bt_run_core_linking <- function(samples,
       }
 
       current_fit <- compute_fit(results)
-      current_fit <- tag_fit(
-        current_fit,
-        batch_index = as.integer(batch_i),
-        round_index = as.integer(round_i),
-        stage = "batch_round",
-        n_results = nrow(results),
-        n_pairs_this_round = nrow(pairs),
-        new_ids = new_ids
-      )
+      current_fit <- tag_fit(current_fit, as.integer(batch_i), as.integer(round_i), "batch_round", nrow(results), nrow(pairs), new_ids)
       fits[[length(fits) + 1L]] <- current_fit
+
+      st_all <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+      st_new <- .bt_round_state(results, ids = new_ids, judge_col = judge, prefix = "new_")
+      st <- dplyr::bind_cols(st_all, st_new)
+      st <- dplyr::mutate(st, batch_index = as.integer(batch_i), round_index = as.integer(round_i), stage = "batch_round")
+      state_hist <- dplyr::bind_rows(state_hist, st)
 
       metrics <- bt_stop_metrics(
         fit = current_fit,
@@ -475,11 +474,17 @@ bt_run_core_linking <- function(samples,
 
       if (isTRUE(stop_dec$stop)) {
         stop_reason <- "stopped"
+        state_hist[nrow(state_hist), "stop_reason"] <- "stopped"
         break
       }
     }
 
     if (is.na(stop_reason)) stop_reason <- "max_rounds"
+    if (stop_reason == "max_rounds" && nrow(state_hist) > 0L) {
+      # mark last state row of this batch as max_rounds
+      idx <- which(state_hist$batch_index == batch_i)
+      if (length(idx) > 0L) state_hist[idx[length(idx)], "stop_reason"] <- "max_rounds"
+    }
 
     seen_ids <- unique(c(seen_ids, new_ids))
 
@@ -504,6 +509,7 @@ bt_run_core_linking <- function(samples,
     fits = fits,
     final_fits = final_fits,
     metrics = metrics_hist,
+    state = state_hist,
     batch_summary = batch_summary
   )
 }

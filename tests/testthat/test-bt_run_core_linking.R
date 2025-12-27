@@ -382,7 +382,7 @@ test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_m
     ID = LETTERS[1:10],
     text = paste("text", LETTERS[1:10])
   )
-  batches <- list(c("I", "J"))  # include some new IDs (they're in samples)
+  batches <- list(c("I", "J")) # include some new IDs (they're in samples)
 
   # deterministic simulated judge + mock fit
   true_theta <- setNames(seq(10, 1), LETTERS[1:10])
@@ -401,7 +401,7 @@ test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_m
   out <- bt_run_core_linking(
     samples = samples,
     batches = batches,
-    core_ids = NULL,                # cover core selection branch
+    core_ids = NULL, # cover core selection branch
     core_method = "random",
     core_size = 3,
     seed = 123,
@@ -533,4 +533,55 @@ test_that("bt_run_core_linking emits progress messages when verbose = TRUE", {
     ),
     "Round 1:"
   )
+})
+
+test_that("bt_run_core_linking returns state snapshots including new_ prefixed fields", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste("text", LETTERS[1:6])
+  )
+  batches <- list(c("D"))
+  core_ids <- c("A", "B", "C")
+  true_theta <- c(A = 3, B = 2, C = 1, D = 0, E = -1, F = -2)
+
+  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
+
+  mock_fit <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(0.5, length(ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = core_ids,
+    judge_fun = judge_fun,
+    fit_fun = mock_fit,
+    engine = "mock",
+    round_size = 10,
+    max_rounds_per_batch = 1,
+    forbid_repeats = FALSE,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_,
+    rel_se_p90_target = 999,
+    verbose = FALSE
+  )
+
+  expect_true("state" %in% names(out))
+  expect_true(is.data.frame(out$state))
+  expect_true(nrow(out$state) >= 1L)
+
+  # Expect both all-state and new_-prefixed fields
+  expect_true(all(c("n_results", "n_unique_unordered_pairs", "batch_index", "round_index") %in% names(out$state)))
+  expect_true(any(grepl("^new_", names(out$state))))
+
+  # Sanity invariants
+  expect_true(all(out$state$n_self_pairs == 0L))
 })

@@ -1005,3 +1005,39 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
   expect_identical(out_max$rounds$stop_reason[[nrow(out_max$rounds)]], "max_rounds")
   expect_identical(attr(out_max$final_fit, "bt_run_adaptive")$stop_reason, "max_rounds")
 })
+
+test_that("bt_run_adaptive returns state snapshots per round", {
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+
+  initial_results <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+
+  fit_fun <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data[[1]], bt_data[[2]])))
+    list(
+      engine = "mock",
+      reliability = 0,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(1, length(ids))),
+      diagnostics = list(sepG = 0)
+    )
+  }
+
+  # round_size==0 forces early stop; state should still have one row
+  out <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = function(pairs) stop("should not be called"),
+    initial_results = initial_results,
+    fit_fun = fit_fun,
+    engine = "mock",
+    round_size = 0,
+    max_rounds = 2,
+    rel_se_p90_target = 0,
+    rel_se_p90_min_improve = NA_real_
+  )
+
+  expect_true("state" %in% names(out))
+  expect_true(is.data.frame(out$state))
+  expect_equal(nrow(out$state), 1L)
+  expect_true(all(c("n_results", "n_unique_unordered_pairs", "pos_imbalance_max", "round", "stop_reason") %in% names(out$state)))
+  expect_equal(out$state$n_self_pairs[[1]], 0L)
+})
+

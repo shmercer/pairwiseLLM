@@ -148,6 +148,14 @@ A list with:
 \item{fits}{List of per-round fits (including bootstrap/warm start).}
 \item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"}).}
 \item{metrics}{Tibble of stop metrics per round (computed on batch new IDs).}
+\item{state}{A tibble with one row per scoring round (including bootstrap/warm start)
+containing bookkeeping summaries of the accumulated results (overall and for the
+current batch's new IDs). The overall fields include
+\code{n_unique_unordered_pairs}, appearance quantiles, \code{pos_imbalance_max},
+\code{n_self_pairs}, \code{n_missing_better_id}, and \code{n_judges} (if applicable).
+New-ID-restricted fields are prefixed with \code{new_}. Rows also include
+\code{batch_index}, \code{round_index}, \code{stage}, and (when applicable)
+\code{stop_reason}.}
 \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 }
 }
@@ -162,6 +170,11 @@ the batch's new IDs (optionally including core drift), then stop or continue.
 Stopping is typically driven by precision on the batch's new items (e.g.,
 \code{rel_se_p90}) and can be gated by core drift guardrails
 (via \code{core_*_target} thresholds).
+
+The runner also records a compact per-round \emph{state snapshot} that summarizes
+the accumulated judged results after each round. These summaries are returned in
+\code{$state} and include both overall counts (all IDs) and \code{new_}-prefixed
+counts restricted to the current batch's new IDs.
 }
 \examples{
 # CRAN-safe example (no APIs, no sirt): deterministic simulated judging + mock fit.

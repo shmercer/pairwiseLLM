@@ -168,10 +168,14 @@ if no fit was run.}
 \code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
 or \code{"no_results"}).}
 \item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
-\item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag).}
+\item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag + stop_reason).}
+\item{state}{A tibble with one row per adaptive round containing bookkeeping summaries
+of the accumulated results at that round (e.g., \code{n_unique_unordered_pairs},
+appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
+\code{n_missing_better_id}), plus \code{round}, \code{stop}, and \code{stop_reason}.}
 \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
 \item{reverse_audit}{NULL unless \code{reverse_audit=TRUE}; then contains audit
-pairs, reverse results, and consistency outputs.}
+pairs, reverse results, and consistency outputs (post-hoc; does not affect stopping).}
 }
 }
 \description{
@@ -186,6 +190,11 @@ This exported runner implements the core adaptive loop:
 }
 }
 \details{
+In addition to per-round stop metrics, \code{bt_run_adaptive()} records a compact
+per-round \emph{state snapshot} (counts of unique unordered pairs judged, ID appearance
+distribution, position imbalance, and basic missingness checks). This is intended for
+debugging and monitoring convergence/coverage over rounds.
+
 \strong{No reverse-order checks during adaptive sampling.}
 Optionally, after stopping (or hitting \code{max_rounds}), you can run a
 post-hoc reverse-order audit on a random subset of already-judged pairs and
