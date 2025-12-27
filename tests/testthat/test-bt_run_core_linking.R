@@ -379,13 +379,13 @@ test_that(".normalize_batches_list errors on empty/invalid batches", {
 
 test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_method random)", {
   samples <- tibble::tibble(
-    ID = LETTERS[1:8],
-    text = paste("text", LETTERS[1:8])
+    ID = LETTERS[1:10],
+    text = paste("text", LETTERS[1:10])
   )
-  batches <- list(c("G", "H"))
+  batches <- list(c("I", "J"))  # include some new IDs (they're in samples)
 
   # deterministic simulated judge + mock fit
-  true_theta <- setNames(seq(8, 1), LETTERS[1:8])
+  true_theta <- setNames(seq(10, 1), LETTERS[1:10])
   judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
 
   mock_fit <- function(bt_data, ...) {
@@ -398,23 +398,17 @@ test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_m
     )
   }
 
-  # Mock select_core_set so the chosen core cannot overlap with the batch IDs.
-  testthat::local_mocked_bindings(
-    select_core_set = function(...) c("A", "B", "C"),
-    .env = asNamespace("pairwiseLLM")
-  )
-
   out <- bt_run_core_linking(
     samples = samples,
     batches = batches,
-    core_ids = NULL, # cover core selection branch
+    core_ids = NULL,                # cover core selection branch
     core_method = "random",
     core_size = 3,
     seed = 123,
     judge_fun = judge_fun,
     fit_fun = mock_fit,
     engine = "mock",
-    round_size = 10,
+    round_size = 12,
     max_rounds_per_batch = 1,
     forbid_repeats = FALSE,
     reliability_target = NA_real_,
@@ -426,8 +420,9 @@ test_that("bt_run_core_linking can select core_ids when core_ids is NULL (core_m
   )
 
   expect_true(is.character(out$core_ids))
-  expect_equal(out$core_ids, c("A", "B", "C"))
+  expect_equal(length(out$core_ids), 3L)
   expect_true(all(out$core_ids %in% samples$ID))
+  expect_false(anyDuplicated(out$core_ids) > 0L)
 })
 
 test_that("bt_run_core_linking covers drift_reference = baseline branch", {

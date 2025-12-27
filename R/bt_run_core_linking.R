@@ -187,13 +187,30 @@ bt_run_core_linking <- function(samples,
   batches <- .normalize_batches_list(batches, ids_all)
 
   if (is.null(core_ids)) {
-    core_ids <- select_core_set(
+    core_out <- select_core_set(
       samples = samples,
       core_size = core_size,
       method = core_method,
       embeddings = embeddings,
       seed = seed
     )
+
+    # select_core_set() returns a tibble with column ID; extract IDs robustly
+    if (is.data.frame(core_out) && "ID" %in% names(core_out)) {
+      core_ids <- as.character(core_out$ID)
+    } else {
+      core_ids <- as.character(core_out)
+    }
+
+    if (anyNA(core_ids) || any(core_ids == "")) {
+      stop("`core_ids` must be non-missing and non-empty.", call. = FALSE)
+    }
+    if (any(duplicated(core_ids))) {
+      stop("`core_ids` must be unique.", call. = FALSE)
+    }
+    if (!all(core_ids %in% ids_all)) {
+      stop("All `core_ids` must be present in `samples$ID`.", call. = FALSE)
+    }
   } else {
     core_ids_in <- as.character(core_ids)
 
