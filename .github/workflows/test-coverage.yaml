@@ -46,20 +46,22 @@ jobs:
           covr::to_cobertura(cov)
 
           # ------------------------------------------------------------
-          # Uncovered line reporting (no hard-coded file list)
-          # - PRs: report uncovered lines for all instrumented R/*.R
-          # - Push: report uncovered lines for all R/*.R
+          # Uncovered line reporting (compatible with older covr versions)
+          # - Report uncovered lines for all instrumented R/*.R files
           # ------------------------------------------------------------
           cov_df <- as.data.frame(cov)
 
           # Restrict to R source files (keeps output useful and small)
           files_to_report <- sort(unique(cov_df$filename[grepl("^R/.*\\.R$", cov_df$filename)]))
 
+          # Get all uncovered lines once (some covr versions don't support file=)
+          z_all <- covr::zero_coverage(cov)
+
           md <- c("# Uncovered line ranges (covr::zero_coverage)", "")
           rows <- list()
 
           for (f in files_to_report) {
-            z <- covr::zero_coverage(cov, file = f)
+            z <- z_all[z_all$filename == f, , drop = FALSE]
             if (is.null(z) || nrow(z) == 0) next
 
             txt <- paste(utils::capture.output(print(z)), collapse = "\n")
