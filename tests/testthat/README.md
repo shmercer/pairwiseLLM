@@ -1,25 +1,31 @@
 # testthat organization
 
-These tests are numbered to make the execution order and intent easy to scan.
-The prefix groups tests by the corresponding `R/` module(s).
+Tests are numbered to make execution order and intent easy to scan. The numeric
+prefix groups tests by the corresponding `R/` module(s).
 
-## 10xx — Data / example datasets
+## 10–19 — Data / example datasets
 - Import helpers and built-in datasets.
 
-## 20xx — Pair generation, core selection, allocation
+## 20–29 — Pair generation, core selection, allocation
 - Pairing, reverse-pair handling, adaptive/core-link pair construction, allocation policies/presets.
 
-## 30xx — Models, metrics, embeddings, judge diagnostics
+## 30–39 — Models, metrics, embeddings, judge diagnostics
 - BT/Elo modeling helpers, drift/stopping metrics, embeddings utilities, judge diagnostics.
 
-## 40xx — Rounds and runners
+## 40–49 — Rounds and runners
 - Round state objects and end-to-end runners (adaptive, core linking, hybrid).
 
-## 50xx — LLM backends + API integration
+## 50–59 — LLM backends + API integration
 - Provider-specific and shared LLM batch/live plumbing.
 
-## 70xx — Misc safety
+## 70–79 — Misc safety
 - Seed / reproducibility safeguards.
+
+### Supplemental / branch-coverage tests
+Occasionally we add focused tests that exercise hard-to-hit branches without
+reorganizing the primary sequence. These use 3-digit numbers within a group
+(e.g., `245-...`, `315-...`, `465-...`) so they remain near the relevant section
+and avoid renumbering existing files.
 
 Notes:
 - File names are stable and map closely to the `R/*.R` sources.
