@@ -217,6 +217,11 @@ bt_run_core_linking <- function(samples,
                                 drift_reference = c("previous_round", "baseline"),
                                 seed = NULL,
                                 verbose = TRUE,
+                                checkpoint_dir = NULL,
+                                resume_from = NULL,
+                                checkpoint_every = 1L,
+                                checkpoint_store_fits = TRUE,
+                                checkpoint_overwrite = TRUE,
                                 ...) {
   samples <- tibble::as_tibble(samples)
   if (!all(c("ID", "text") %in% names(samples))) {
@@ -278,6 +283,14 @@ bt_run_core_linking <- function(samples,
   if (!missing(core_max_abs_shift_target)) stop_params$core_max_abs_shift_target <- core_max_abs_shift_target
   if (!missing(core_p90_abs_shift_target)) stop_params$core_p90_abs_shift_target <- core_p90_abs_shift_target
 
+  checkpoint_every <- as.integer(checkpoint_every)
+  if (is.na(checkpoint_every) || checkpoint_every < 1L) {
+    stop("`checkpoint_every` must be an integer >= 1.", call. = FALSE)
+  }
+  if (!is.null(resume_from) && (is.null(checkpoint_dir) || !nzchar(checkpoint_dir))) {
+    checkpoint_dir <- resume_from
+  }
+
 
   batches <- .normalize_batches_list(batches, ids_all)
 
@@ -326,6 +339,68 @@ bt_run_core_linking <- function(samples,
   results <- tibble::tibble()
   if (!is.null(initial_results)) {
     results <- .validate_judge_results(initial_results, ids = ids_all, judge_col = judge)
+  }
+
+  # ---- resume / checkpoint state ----
+  checkpoint_payload_last <- NULL
+  batch_start <- 1L
+  round_start <- 1L
+  resume_in_batch <- FALSE
+  resume_new_ids <- NULL
+  resume_prev_metrics <- NULL
+
+  if (!is.null(resume_from)) {
+    chk <- .bt_read_checkpoint(resume_from)
+    .bt_validate_checkpoint(chk, run_type = "core_linking", ids = ids_all)
+
+    if (!is.null(chk$core_ids)) {
+      core_ids_chk <- as.character(chk$core_ids)
+      if (length(core_ids_chk) != length(core_ids) || any(sort(core_ids_chk) != sort(core_ids))) {
+        stop("Checkpoint core_ids do not match current `core_ids`.", call. = FALSE)
+      }
+    }
+
+    if (!is.null(chk$random_seed)) {
+      try(assign(".Random.seed", chk$random_seed, envir = .GlobalEnv), silent = TRUE)
+    }
+
+    # restore persisted state
+    results <- tibble::as_tibble(chk$results)
+    fits <- chk$fits %||% list()
+    final_fits <- chk$final_fits %||% list()
+    metrics_hist <- tibble::as_tibble(chk$metrics %||% tibble::tibble())
+    state_hist <- tibble::as_tibble(chk$state %||% tibble::tibble())
+    batch_summary <- tibble::as_tibble(chk$batch_summary %||% tibble::tibble())
+
+    current_fit <- chk$current_fit %||% NULL
+    baseline_fit <- chk$baseline_fit %||% NULL
+    seen_ids <- unique(as.character(chk$seen_ids %||% core_ids))
+
+    within_batch_frac <- chk$within_batch_frac %||% within_batch_frac
+    core_audit_frac <- chk$core_audit_frac %||% core_audit_frac
+
+    batch_start <- as.integer(chk$next_batch_index %||% 1L)
+    round_start <- as.integer(chk$next_round_index %||% 1L)
+    if (is.na(batch_start) || batch_start < 1L) batch_start <- 1L
+    if (is.na(round_start) || round_start < 1L) round_start <- 1L
+
+    resume_in_batch <- isTRUE(chk$in_batch)
+    resume_new_ids <- chk$new_ids_current %||% NULL
+    resume_prev_metrics <- chk$prev_metrics_current %||% NULL
+
+    if (isTRUE(chk$completed)) {
+      out <- chk$out %||% list(
+        core_ids = core_ids,
+        batches = batches,
+        results = results,
+        fits = fits,
+        final_fits = final_fits,
+        metrics = metrics_hist,
+        state = state_hist,
+        batch_summary = batch_summary
+      )
+      return(.as_pairwise_run(out, run_type = "core_linking"))
+    }
   }
 
   compute_fit <- function(res_tbl) {
@@ -429,76 +504,140 @@ bt_run_core_linking <- function(samples,
     as.integer(seed) + as.integer(batch_i) * 10000L + as.integer(round_i)
   }
 
-  fits <- list()
-  final_fits <- list()
-  metrics_hist <- tibble::tibble()
-  state_hist <- tibble::tibble()
-  batch_summary <- tibble::tibble()
+  if (is.null(resume_from)) {
+    fits <- list()
+    final_fits <- list()
+    metrics_hist <- tibble::tibble()
+    state_hist <- tibble::tibble()
+    batch_summary <- tibble::tibble()
 
-  current_fit <- NULL
-  baseline_fit <- NULL
+    current_fit <- NULL
+    baseline_fit <- NULL
 
-  if (nrow(results) > 0L) {
-    current_fit <- compute_fit(results)
-    baseline_fit <- current_fit
-    current_fit <- apply_linking(current_fit, baseline_fit)
-    current_fit <- tag_fit(current_fit, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
-    fits[[length(fits) + 1L]] <- current_fit
-    final_fits[["bootstrap"]] <- current_fit
+    if (nrow(results) > 0L) {
+      current_fit <- compute_fit(results)
+      baseline_fit <- current_fit
+      current_fit <- apply_linking(current_fit, baseline_fit)
+      current_fit <- tag_fit(current_fit, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
+      fits[[length(fits) + 1L]] <- current_fit
+      final_fits[["bootstrap"]] <- current_fit
 
-    st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
-    st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 0L, stage = "warm_start", stop_reason = NA_character_)
-    state_hist <- dplyr::bind_rows(state_hist, st0)
-  } else {
-    fake_theta <- tibble::tibble(ID = ids_all, theta = rep(0, length(ids_all)), se = rep(1, length(ids_all)))
-    boot <- bt_core_link_round(
-      samples = samples,
-      fit = list(theta = fake_theta),
-      core_ids = core_ids,
-      include_text = TRUE,
-      new_ids = character(0),
-      round_size = min(round_size, max(1L, length(core_ids))),
-      within_batch_frac = 0,
-      core_audit_frac = 1,
-      k_neighbors = k_neighbors,
-      min_judgments = min_judgments,
-      existing_pairs = if (nrow(results) > 0L) results else NULL,
-      forbid_repeats = forbid_repeats,
-      balance_positions = balance_positions,
-      seed = round_seed(0L, 1L)
-    )
+      st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+      st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 0L, stage = "warm_start", stop_reason = NA_character_)
+      state_hist <- dplyr::bind_rows(state_hist, st0)
+    } else {
+      fake_theta <- tibble::tibble(ID = ids_all, theta = rep(0, length(ids_all)), se = rep(1, length(ids_all)))
+      boot <- bt_core_link_round(
+        samples = samples,
+        fit = list(theta = fake_theta),
+        core_ids = core_ids,
+        include_text = TRUE,
+        new_ids = character(0),
+        round_size = min(round_size, max(1L, length(core_ids))),
+        within_batch_frac = 0,
+        core_audit_frac = 1,
+        k_neighbors = k_neighbors,
+        min_judgments = min_judgments,
+        existing_pairs = if (nrow(results) > 0L) results else NULL,
+        forbid_repeats = forbid_repeats,
+        balance_positions = balance_positions,
+        seed = round_seed(0L, 1L)
+      )
 
-    if (nrow(boot$pairs) == 0L) {
-      stop("Core bootstrap produced 0 pairs. Reduce constraints or increase core size.", call. = FALSE)
+      if (nrow(boot$pairs) == 0L) {
+        stop("Core bootstrap produced 0 pairs. Reduce constraints or increase core size.", call. = FALSE)
+      }
+
+      boot_res <- judge_fun(boot$pairs)
+      boot_res <- .validate_judge_results(boot_res, ids = ids_all, judge_col = judge)
+
+      boot_meta <- dplyr::distinct(
+        dplyr::select(boot$pairs, dplyr::all_of(c("ID1", "ID2", "pair_type"))),
+        dplyr::across(dplyr::all_of(c("ID1", "ID2"))),
+        .keep_all = TRUE
+      )
+      boot_res <- dplyr::left_join(boot_res, boot_meta, by = c("ID1", "ID2"))
+      boot_res <- dplyr::mutate(boot_res, batch_index = 0L, round_index = 1L)
+
+      results <- dplyr::bind_rows(results, boot_res)
+      current_fit <- compute_fit(results)
+      baseline_fit <- current_fit
+      current_fit <- apply_linking(current_fit, baseline_fit)
+      current_fit <- tag_fit(current_fit, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
+      fits[[length(fits) + 1L]] <- current_fit
+      final_fits[["bootstrap"]] <- current_fit
+
+      st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
+      st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 1L, stage = "bootstrap", stop_reason = NA_character_)
+      state_hist <- dplyr::bind_rows(state_hist, st0)
     }
 
-    boot_res <- judge_fun(boot$pairs)
-    boot_res <- .validate_judge_results(boot_res, ids = ids_all, judge_col = judge)
-
-    boot_meta <- dplyr::distinct(
-      dplyr::select(boot$pairs, dplyr::all_of(c("ID1", "ID2", "pair_type"))),
-      dplyr::across(dplyr::all_of(c("ID1", "ID2"))),
-      .keep_all = TRUE
-    )
-    boot_res <- dplyr::left_join(boot_res, boot_meta, by = c("ID1", "ID2"))
-    boot_res <- dplyr::mutate(boot_res, batch_index = 0L, round_index = 1L)
-
-    results <- dplyr::bind_rows(results, boot_res)
-    current_fit <- compute_fit(results)
-    baseline_fit <- current_fit
-    current_fit <- apply_linking(current_fit, baseline_fit)
-    current_fit <- tag_fit(current_fit, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
-    fits[[length(fits) + 1L]] <- current_fit
-    final_fits[["bootstrap"]] <- current_fit
-
-    st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
-    st0 <- dplyr::mutate(st0, batch_index = 0L, round_index = 1L, stage = "bootstrap", stop_reason = NA_character_)
-    state_hist <- dplyr::bind_rows(state_hist, st0)
+    seen_ids <- unique(core_ids)
   }
 
-  seen_ids <- unique(core_ids)
+  .make_checkpoint_payload <- function(next_batch_index,
+                                       next_round_index,
+                                       in_batch,
+                                       new_ids_current = NULL,
+                                       prev_metrics_current = NULL,
+                                       completed = FALSE,
+                                       out = NULL) {
+    seed_now <- NULL
+    if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+      seed_now <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    }
+    list(
+      run_type = "core_linking",
+      ids = ids_all,
+      core_ids = core_ids,
+      batches = batches,
+      results = results,
+      fits = if (isTRUE(checkpoint_store_fits)) fits else NULL,
+      final_fits = if (isTRUE(checkpoint_store_fits)) final_fits else NULL,
+      metrics = metrics_hist,
+      state = state_hist,
+      batch_summary = batch_summary,
+      current_fit = if (isTRUE(checkpoint_store_fits)) current_fit else NULL,
+      baseline_fit = if (isTRUE(checkpoint_store_fits)) baseline_fit else NULL,
+      seen_ids = seen_ids,
+      within_batch_frac = within_batch_frac,
+      core_audit_frac = core_audit_frac,
+      next_batch_index = as.integer(next_batch_index),
+      next_round_index = as.integer(next_round_index),
+      in_batch = isTRUE(in_batch),
+      new_ids_current = new_ids_current,
+      prev_metrics_current = prev_metrics_current,
+      random_seed = seed_now,
+      completed = isTRUE(completed),
+      out = out
+    )
+  }
 
-  for (batch_i in seq_along(batches)) {
+  .write_checkpoint_now <- function(payload, batch_i = NULL, round_i = NULL) {
+    if (is.null(checkpoint_dir) || !nzchar(checkpoint_dir)) {
+      return(invisible(NULL))
+    }
+    .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
+    if (!is.null(batch_i) && !is.null(round_i)) {
+      # encode batch/round in the per-round snapshot index for easier browsing
+      snap_round <- as.integer(batch_i) * 1000L + as.integer(round_i)
+      .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", round = snap_round, overwrite = checkpoint_overwrite)
+    }
+    invisible(NULL)
+  }
+
+  if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+    on.exit(
+      {
+        if (!is.null(checkpoint_payload_last)) {
+          .bt_write_checkpoint(checkpoint_dir, checkpoint_payload_last, basename = "run_state", overwrite = checkpoint_overwrite)
+        }
+      },
+      add = TRUE
+    )
+  }
+
+  for (batch_i in seq.int(from = batch_start, to = length(batches))) {
     batch_ids <- unique(as.character(batches[[batch_i]]))
     new_ids <- setdiff(batch_ids, seen_ids)
 
@@ -509,6 +648,15 @@ bt_run_core_linking <- function(samples,
     stop_reason <- NA_character_
     rounds_used <- 0L
     prev_metrics <- NULL
+
+    resuming_this_batch <- isTRUE(resume_in_batch) && batch_i == batch_start
+    if (resuming_this_batch) {
+      if (!is.null(resume_new_ids)) {
+        new_ids <- unique(as.character(resume_new_ids))
+      }
+      prev_metrics <- resume_prev_metrics
+      rounds_used <- max(0L, as.integer(round_start) - 1L)
+    }
 
     if (length(new_ids) == 0L) {
       stop_reason <- "no_new_ids"
@@ -526,7 +674,9 @@ bt_run_core_linking <- function(samples,
       next
     }
 
-    for (round_i in seq_len(max_rounds_per_batch)) {
+    round_i_from <- if (resuming_this_batch) as.integer(round_start) else 1L
+    if (is.na(round_i_from) || round_i_from < 1L) round_i_from <- 1L
+    for (round_i in seq.int(from = round_i_from, to = max_rounds_per_batch)) {
       rounds_used <- round_i
 
       theta_for_pairs <- current_fit$theta
@@ -667,6 +817,19 @@ bt_run_core_linking <- function(samples,
         message(msg)
       }
 
+      # checkpoint after completing this round (safe point)
+      checkpoint_payload_last <- .make_checkpoint_payload(
+        next_batch_index = as.integer(batch_i),
+        next_round_index = as.integer(round_i + 1L),
+        in_batch = TRUE,
+        new_ids_current = new_ids,
+        prev_metrics_current = prev_metrics,
+        completed = FALSE
+      )
+      if ((as.integer(round_i) %% checkpoint_every) == 0L) {
+        .write_checkpoint_now(checkpoint_payload_last, batch_i = batch_i, round_i = round_i)
+      }
+
       if (isTRUE(stop_dec$stop)) {
         stop_reason <- "stopped"
         state_hist[nrow(state_hist), "stop_reason"] <- "stopped"
@@ -695,6 +858,21 @@ bt_run_core_linking <- function(samples,
     )
 
     final_fits[[paste0("batch_", batch_i)]] <- current_fit
+
+    # checkpoint at batch boundary (next batch starts at round 1)
+    checkpoint_payload_last <- .make_checkpoint_payload(
+      next_batch_index = as.integer(batch_i + 1L),
+      next_round_index = 1L,
+      in_batch = FALSE,
+      new_ids_current = NULL,
+      prev_metrics_current = NULL,
+      completed = FALSE
+    )
+    .write_checkpoint_now(checkpoint_payload_last)
+
+    # once we successfully progress past a resumed batch, treat future batches as fresh
+    resume_in_batch <- FALSE
+    round_start <- 1L
   }
 
 
@@ -743,6 +921,20 @@ bt_run_core_linking <- function(samples,
     state = state_hist,
     batch_summary = batch_summary
   )
+
+  # final checkpoint with full return object
+  if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+    checkpoint_payload_last <- .make_checkpoint_payload(
+      next_batch_index = as.integer(length(batches) + 1L),
+      next_round_index = 1L,
+      in_batch = FALSE,
+      new_ids_current = NULL,
+      prev_metrics_current = NULL,
+      completed = TRUE,
+      out = out
+    )
+    .write_checkpoint_now(checkpoint_payload_last)
+  }
 
   .as_pairwise_run(out, run_type = "core_linking")
 }

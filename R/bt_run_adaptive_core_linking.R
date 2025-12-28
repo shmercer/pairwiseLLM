@@ -253,6 +253,11 @@ bt_run_adaptive_core_linking <- function(samples,
                                          core_theta_spearman_target = NA_real_,
                                          core_max_abs_shift_target = NA_real_,
                                          core_p90_abs_shift_target = NA_real_,
+                                         checkpoint_dir = NULL,
+                                         resume_from = NULL,
+                                         checkpoint_every = 1L,
+                                         checkpoint_store_fits = TRUE,
+                                         checkpoint_overwrite = TRUE,
                                          fit_fun = fit_bt_model,
                                          build_bt_fun = build_bt_data,
                                          ...) {
@@ -287,6 +292,20 @@ bt_run_adaptive_core_linking <- function(samples,
   if (!missing(core_theta_spearman_target)) stop_params$core_theta_spearman_target <- core_theta_spearman_target
   if (!missing(core_max_abs_shift_target)) stop_params$core_max_abs_shift_target <- core_max_abs_shift_target
   if (!missing(core_p90_abs_shift_target)) stop_params$core_p90_abs_shift_target <- core_p90_abs_shift_target
+
+  checkpoint_every <- as.integer(checkpoint_every)
+  if (is.na(checkpoint_every) || checkpoint_every < 1L) {
+    stop("`checkpoint_every` must be a positive integer.", call. = FALSE)
+  }
+  if (!is.null(resume_from)) {
+    resume_from <- as.character(resume_from)
+    if (length(resume_from) != 1L || !nzchar(resume_from)) stop("`resume_from` must be a non-empty string.", call. = FALSE)
+    if (is.null(checkpoint_dir)) checkpoint_dir <- resume_from
+  }
+  if (!is.null(checkpoint_dir)) {
+    checkpoint_dir <- as.character(checkpoint_dir)
+    if (length(checkpoint_dir) != 1L || !nzchar(checkpoint_dir)) stop("`checkpoint_dir` must be a non-empty string.", call. = FALSE)
+  }
 
 
   # Normalize batches
@@ -551,69 +570,189 @@ bt_run_adaptive_core_linking <- function(samples,
     core_p90_abs_shift_target
   )))
 
-  fits <- list()
-  final_fits <- list()
-  metrics_rows <- list()
-  state_rows <- list()
+  # ---- resume / checkpoint state ----
+  checkpoint_payload_last <- NULL
+  batch_start <- 1L
+  round_start <- 1L
+  resume_in_batch <- FALSE
+  resume_new_ids <- NULL
+  resume_prev_metrics <- NULL
 
-  # Bootstrap fit if needed
-  current_fit <- NULL
-  bootstrap_fit <- NULL
-  baseline_fit <- NULL
-  batch_summary <- tibble::tibble()
+  if (!is.null(resume_from)) {
+    chk <- .bt_read_checkpoint(resume_from)
+    .bt_validate_checkpoint(chk, run_type = "adaptive_core_linking", ids = ids_all)
 
-  if (nrow(results) == 0L) {
-    init_round_size <- as.integer(init_round_size)
-    if (is.na(init_round_size) || init_round_size < 0L) {
-      stop("`init_round_size` must be a non-negative integer.", call. = FALSE)
+    # sanity-check core + batches against caller inputs
+    if (!is.null(chk$core_ids)) {
+      if (!setequal(as.character(chk$core_ids), core_ids)) {
+        stop("Resume checkpoint does not match `core_ids`.", call. = FALSE)
+      }
     }
-    if (init_round_size > 0L) {
-      core_samples <- dplyr::filter(samples, .data$ID %in% core_ids)
-      core_pairs <- make_pairs(core_samples)
-      core_pairs <- sample_pairs(core_pairs, n_pairs = min(init_round_size, nrow(core_pairs)), seed = seed_pairs)
-
-      judged0 <- judge_fun(core_pairs)
-      judged0 <- .validate_judge_results(judged0, ids = ids_all, judge_col = judge)
-      judged0$stage <- "bootstrap"
-      judged0$batch_index <- 0L
-      judged0$round_index <- 0L
-      results <- dplyr::bind_rows(results, judged0)
+    if (!is.null(chk$batches)) {
+      # compare by flattened ID sets to avoid overly strict list ordering issues
+      if (!setequal(unique(unlist(chk$batches, use.names = FALSE)), all_batch_ids)) {
+        stop("Resume checkpoint does not match `batches`.", call. = FALSE)
+      }
     }
 
-    fr <- fit_from_results(results)
-    if (!is.null(fr$fit)) {
-      current_fit <- fr$fit
-      bootstrap_fit <- fr$fit
-      baseline_fit <- fr$fit
-      current_fit <- apply_linking(current_fit, baseline_fit)
-      attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "bootstrap", batch_index = 0L, round_index = 0L)
-      fits[[length(fits) + 1L]] <- current_fit
-      final_fits[["bootstrap"]] <- current_fit
+    if (!is.null(chk$random_seed)) {
+      try(assign(".Random.seed", chk$random_seed, envir = .GlobalEnv), silent = TRUE)
     }
 
-    state_rows[[length(state_rows) + 1L]] <- state_row(
-      results,
-      new_ids = character(0),
-      batch_index = 0L,
-      round_index = 0L,
-      stage = "bootstrap",
-      stop = FALSE,
-      stop_reason = NA_character_
+    # restore state
+    results <- tibble::as_tibble(chk$results)
+    fits <- chk$fits %||% list()
+    final_fits <- chk$final_fits %||% list()
+    metrics_rows <- chk$metrics_rows %||% list()
+    state_rows <- chk$state_rows %||% list()
+    batch_summary <- chk$batch_summary %||% tibble::tibble()
+    current_fit <- chk$current_fit %||% NULL
+    bootstrap_fit <- chk$bootstrap_fit %||% NULL
+    baseline_fit <- chk$baseline_fit %||% NULL
+    seen_ids <- chk$seen_ids %||% core_ids
+    within_batch_frac <- chk$within_batch_frac %||% within_batch_frac
+    core_audit_frac <- chk$core_audit_frac %||% core_audit_frac
+    batch_start <- as.integer(chk$next_batch_index %||% 1L)
+    round_start <- as.integer(chk$next_round_index %||% 1L)
+    resume_in_batch <- isTRUE(chk$in_batch)
+    resume_new_ids <- chk$new_ids_current %||% NULL
+    resume_prev_metrics <- chk$prev_metrics_current %||% NULL
+
+    if (isTRUE(chk$completed) && !is.null(chk$out)) {
+      return(.as_pairwise_run(chk$out, run_type = "adaptive_core_linking"))
+    }
+  }
+
+  .make_checkpoint_payload <- function(next_batch_index,
+                                       next_round_index,
+                                       in_batch,
+                                       new_ids_current = NULL,
+                                       prev_metrics_current = NULL,
+                                       completed = FALSE,
+                                       out = NULL) {
+    list(
+      run_type = "adaptive_core_linking",
+      ids = ids_all,
+      core_ids = core_ids,
+      batches = batches,
+      timestamp = Sys.time(),
+      completed = completed,
+      next_batch_index = as.integer(next_batch_index),
+      next_round_index = as.integer(next_round_index),
+      in_batch = isTRUE(in_batch),
+      new_ids_current = new_ids_current,
+      prev_metrics_current = prev_metrics_current,
+      within_batch_frac = within_batch_frac,
+      core_audit_frac = core_audit_frac,
+      results = results,
+      fits = if (isTRUE(checkpoint_store_fits)) fits else NULL,
+      final_fits = if (isTRUE(checkpoint_store_fits)) final_fits else NULL,
+      metrics_rows = metrics_rows,
+      state_rows = state_rows,
+      batch_summary = batch_summary,
+      current_fit = current_fit,
+      bootstrap_fit = bootstrap_fit,
+      baseline_fit = baseline_fit,
+      seen_ids = seen_ids,
+      random_seed = if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) get(".Random.seed", envir = .GlobalEnv, inherits = FALSE) else NULL,
+      out = out
     )
-  } else {
-    fr <- fit_from_results(results)
-    current_fit <- fr$fit
-    baseline_fit <- current_fit
-    current_fit <- apply_linking(current_fit, baseline_fit)
+  }
+
+  .write_checkpoint_now <- function(payload, batch_i = NULL, round_i = NULL) {
+    if (is.null(checkpoint_dir) || !nzchar(checkpoint_dir)) {
+      return(invisible(NULL))
+    }
+    .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
+    if (!is.null(batch_i) && !is.null(round_i)) {
+      tag <- sprintf("batch%03d_round%03d", as.integer(batch_i), as.integer(round_i))
+      .bt_write_checkpoint(checkpoint_dir, payload, basename = paste0("run_state_", tag), overwrite = checkpoint_overwrite)
+    }
+    invisible(NULL)
+  }
+
+  on.exit(
+    {
+      if (!is.null(checkpoint_payload_last) && !is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+        .write_checkpoint_now(checkpoint_payload_last)
+      }
+    },
+    add = TRUE
+  )
+
+  if (is.null(resume_from)) {
+    fits <- list()
+    final_fits <- list()
+    metrics_rows <- list()
+    state_rows <- list()
+  }
+
+  if (is.null(resume_from)) {
+    # Bootstrap fit if needed
+    current_fit <- NULL
+    bootstrap_fit <- NULL
+    baseline_fit <- NULL
+    batch_summary <- tibble::tibble()
+
+    if (nrow(results) == 0L) {
+      init_round_size <- as.integer(init_round_size)
+      if (is.na(init_round_size) || init_round_size < 0L) {
+        stop("`init_round_size` must be a non-negative integer.", call. = FALSE)
+      }
+      if (init_round_size > 0L) {
+        core_samples <- dplyr::filter(samples, .data$ID %in% core_ids)
+        core_pairs <- make_pairs(core_samples)
+        core_pairs <- sample_pairs(core_pairs, n_pairs = min(init_round_size, nrow(core_pairs)), seed = seed_pairs)
+
+        judged0 <- judge_fun(core_pairs)
+        judged0 <- .validate_judge_results(judged0, ids = ids_all, judge_col = judge)
+        judged0$stage <- "bootstrap"
+        judged0$batch_index <- 0L
+        judged0$round_index <- 0L
+        results <- dplyr::bind_rows(results, judged0)
+      }
+
+      fr <- fit_from_results(results)
+      if (!is.null(fr$fit)) {
+        current_fit <- fr$fit
+        bootstrap_fit <- fr$fit
+        baseline_fit <- fr$fit
+        current_fit <- apply_linking(current_fit, baseline_fit)
+        attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "bootstrap", batch_index = 0L, round_index = 0L)
+        fits[[length(fits) + 1L]] <- current_fit
+        final_fits[["bootstrap"]] <- current_fit
+      }
+
+      state_rows[[length(state_rows) + 1L]] <- state_row(
+        results,
+        new_ids = character(0),
+        batch_index = 0L,
+        round_index = 0L,
+        stage = "bootstrap",
+        stop = FALSE,
+        stop_reason = NA_character_
+      )
+    } else {
+      fr <- fit_from_results(results)
+      current_fit <- fr$fit
+      baseline_fit <- current_fit
+      current_fit <- apply_linking(current_fit, baseline_fit)
+    }
+
+    if (is.null(current_fit)) {
+      stop("No BT fit could be computed (no non-missing results).", call. = FALSE)
+    }
   }
 
   if (is.null(current_fit)) {
-    stop("No BT fit could be computed (no non-missing results).", call. = FALSE)
+    stop("No BT fit available to start/resume the workflow.", call. = FALSE)
   }
 
   # Process each batch
-  seen_ids <- core_ids
-  for (b in seq_along(batches)) {
+  if (is.null(resume_from)) {
+    seen_ids <- core_ids
+  }
+  for (b in seq.int(from = batch_start, to = length(batches))) {
     batch_ids <- batches[[b]]
     new_ids <- setdiff(batch_ids, seen_ids)
     seen_ids <- unique(c(seen_ids, batch_ids))
@@ -645,7 +784,18 @@ bt_run_adaptive_core_linking <- function(samples,
     stop_reason <- NA_character_
     rounds_used <- 0L
 
-    for (r in seq_len(max_rounds_per_batch)) {
+    resuming_this_batch <- isTRUE(resume_in_batch) && b == batch_start
+    if (resuming_this_batch) {
+      if (!is.null(resume_new_ids)) {
+        new_ids <- unique(as.character(resume_new_ids))
+      }
+      prev_metrics <- resume_prev_metrics
+      rounds_used <- max(0L, as.integer(round_start) - 1L)
+    }
+
+    r_from <- if (resuming_this_batch) as.integer(round_start) else 1L
+    if (is.na(r_from) || r_from < 1L) r_from <- 1L
+    for (r in seq.int(from = r_from, to = max_rounds_per_batch)) {
       rounds_used <- r
 
       # Propose pairs
@@ -818,6 +968,20 @@ bt_run_adaptive_core_linking <- function(samples,
         core_audit_frac <- alloc$core_audit_frac
       }
 
+      # checkpoint after completing this round (safe point)
+      checkpoint_payload_last <- .make_checkpoint_payload(
+        next_batch_index = as.integer(b),
+        next_round_index = as.integer(r + 1L),
+        in_batch = TRUE,
+        new_ids_current = new_ids,
+        prev_metrics_current = prev_metrics,
+        completed = FALSE,
+        out = NULL
+      )
+      if ((r %% checkpoint_every) == 0L) {
+        .write_checkpoint_now(checkpoint_payload_last, batch_i = b, round_i = r)
+      }
+
       if (stop_now) {
         break
       }
@@ -844,6 +1008,19 @@ bt_run_adaptive_core_linking <- function(samples,
       n_results_total = nrow(results)
     )
     batch_summary <- dplyr::bind_rows(batch_summary, batch_summary_row)
+
+    # checkpoint at batch boundary
+    checkpoint_payload_last <- .make_checkpoint_payload(
+      next_batch_index = as.integer(b + 1L),
+      next_round_index = 1L,
+      in_batch = FALSE,
+      new_ids_current = NULL,
+      prev_metrics_current = NULL,
+      completed = FALSE,
+      out = NULL
+    )
+    .write_checkpoint_now(checkpoint_payload_last, batch_i = b, round_i = rounds_used)
+    resume_in_batch <- FALSE
   }
 
   bt_data <- build_bt_fun(results, judge = judge)
@@ -888,6 +1065,20 @@ bt_run_adaptive_core_linking <- function(samples,
     batch_summary = batch_summary,
     state = state
   )
+
+  # final checkpoint with full return object
+  if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+    checkpoint_payload_last <- .make_checkpoint_payload(
+      next_batch_index = as.integer(length(batches) + 1L),
+      next_round_index = 1L,
+      in_batch = FALSE,
+      new_ids_current = NULL,
+      prev_metrics_current = NULL,
+      completed = TRUE,
+      out = out
+    )
+    .write_checkpoint_now(checkpoint_payload_last, batch_i = length(batches), round_i = NA_integer_)
+  }
 
   .as_pairwise_run(out, run_type = "adaptive_core_linking")
 }

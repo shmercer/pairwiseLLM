@@ -1,3 +1,11 @@
+# pairwiseLLM 1.3.0
+
+## New Features
+*   Resumable adaptive workflows: `bt_run_adaptive()`, `bt_run_core_linking()`, and
+    `bt_run_adaptive_core_linking()` now support checkpointing and resume via
+    `checkpoint_dir`, `resume_from`, and `checkpoint_every`.
+    Checkpoints include enough state to continue after an error or interruption.
+
 # pairwiseLLM 1.2.0
 
 ## New Features

@@ -229,6 +229,11 @@ bt_run_adaptive <- function(samples,
                             reverse_seed = NULL,
                             fit_fun = fit_bt_model,
                             build_bt_fun = build_bt_data,
+                            checkpoint_dir = NULL,
+                            resume_from = NULL,
+                            checkpoint_every = 1L,
+                            checkpoint_store_fits = TRUE,
+                            checkpoint_overwrite = TRUE,
                             ...) {
   tag_fit <- function(fit,
                       round_index,
@@ -273,6 +278,15 @@ bt_run_adaptive <- function(samples,
 
   max_rounds <- as.integer(max_rounds)
   if (is.na(max_rounds) || max_rounds < 0L) stop("`max_rounds` must be a non-negative integer.", call. = FALSE)
+
+  checkpoint_every <- as.integer(checkpoint_every)
+  if (is.na(checkpoint_every) || checkpoint_every < 1L) {
+    stop("`checkpoint_every` must be an integer >= 1.", call. = FALSE)
+  }
+
+  if (!is.null(resume_from) && (is.null(checkpoint_dir) || !nzchar(checkpoint_dir))) {
+    checkpoint_dir <- resume_from
+  }
 
   # helper: random bootstrap pairs (unique unordered, optional position balancing)
   .bootstrap_pairs <- function(n_pairs, existing_pairs, seed = NULL) {
@@ -370,18 +384,74 @@ bt_run_adaptive <- function(samples,
     .add_pair_texts(pairs_id, samples = samples)
   }
 
+  # ---- resume / checkpoint state ----
+  checkpoint_payload_last <- NULL
+  rounds_tbl_prev <- tibble::tibble()
+  state_tbl_prev <- tibble::tibble()
+  start_round <- 1L
+
+  if (!is.null(resume_from)) {
+    chk <- .bt_read_checkpoint(resume_from)
+    .bt_validate_checkpoint(chk, run_type = "adaptive", ids = ids)
+
+    if (!is.null(chk$random_seed)) {
+      # best-effort restore RNG state for deterministic continuation
+      try(assign(".Random.seed", chk$random_seed, envir = .GlobalEnv), silent = TRUE)
+    }
+
+    results <- tibble::as_tibble(chk$results)
+    pairs_bootstrap <- tibble::as_tibble(chk$pairs_bootstrap %||% tibble::tibble(
+      ID1 = character(), text1 = character(), ID2 = character(), text2 = character()
+    ))
+
+    fits <- chk$fits %||% list()
+    final_fit <- chk$final_fit %||% NULL
+    prev_metrics <- chk$prev_metrics %||% NULL
+
+    stop_reason <- chk$stop_reason %||% NA_character_
+    stop_round <- chk$stop_round %||% NA_integer_
+
+    rounds_tbl_prev <- tibble::as_tibble(chk$rounds %||% tibble::tibble())
+    state_tbl_prev <- tibble::as_tibble(chk$state %||% tibble::tibble())
+
+    start_round <- as.integer(chk$next_round %||% (nrow(rounds_tbl_prev) + 1L))
+    if (is.na(start_round) || start_round < 1L) start_round <- nrow(rounds_tbl_prev) + 1L
+
+    # if the checkpoint indicates completion, return it as-is
+    if (isTRUE(chk$completed)) {
+      out <- chk$out %||% list(
+        results = results,
+        bt_data = if (nrow(results) == 0L) tibble::tibble(object1 = character(), object2 = character(), result = numeric()) else build_bt_fun(results, judge = judge),
+        fits = fits,
+        final_fit = final_fit,
+        stop_reason = stop_reason,
+        stop_round = stop_round,
+        rounds = rounds_tbl_prev,
+        state = state_tbl_prev,
+        pairs_bootstrap = pairs_bootstrap,
+        reverse_audit = NULL
+      )
+      return(.as_pairwise_run(out, run_type = "adaptive"))
+    }
+  }
+
   # normalize initial results (NULL or 0-row => empty start)
-  if (is.null(initial_results) || (is.data.frame(initial_results) && nrow(initial_results) == 0L)) {
-    results <- tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
-    if (!is.null(judge)) results[[judge]] <- character()
-  } else {
-    results <- .validate_judge_results(initial_results, ids = ids, judge_col = judge)
-    results <- tibble::as_tibble(results)
+  if (is.null(resume_from)) {
+    if (is.null(initial_results) || (is.data.frame(initial_results) && nrow(initial_results) == 0L)) {
+      results <- tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
+      if (!is.null(judge)) results[[judge]] <- character()
+    } else {
+      results <- .validate_judge_results(initial_results, ids = ids, judge_col = judge)
+      results <- tibble::as_tibble(results)
+    }
   }
 
   # bootstrap scoring step (if no initial results)
-  pairs_bootstrap <- tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character())
-  if (nrow(results) == 0L && init_round_size > 0L) {
+  if (is.null(resume_from)) {
+    pairs_bootstrap <- tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character())
+  }
+
+  if (is.null(resume_from) && nrow(results) == 0L && init_round_size > 0L) {
     pairs_bootstrap <- .bootstrap_pairs(
       n_pairs = init_round_size,
       existing_pairs = results,
@@ -395,15 +465,68 @@ bt_run_adaptive <- function(samples,
     }
   }
 
-  fits <- list()
-  final_fit <- NULL
+  if (is.null(resume_from)) {
+    fits <- list()
+    final_fit <- NULL
+    prev_metrics <- NULL
+    stop_reason <- NA_character_
+    stop_round <- NA_integer_
+  }
+
   rounds_list <- list()
   state_list <- list()
-  prev_metrics <- NULL
-  stop_reason <- NA_character_
-  stop_round <- NA_integer_
 
-  for (r in seq_len(max_rounds)) {
+  .make_checkpoint_payload <- function(next_round, completed = FALSE, out = NULL) {
+    rounds_now <- dplyr::bind_rows(rounds_tbl_prev, if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list))
+    state_now <- dplyr::bind_rows(state_tbl_prev, if (length(state_list) == 0L) tibble::tibble() else dplyr::bind_rows(state_list))
+    seed_now <- NULL
+    if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+      seed_now <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    }
+    list(
+      run_type = "adaptive",
+      ids = ids,
+      created_at = as.character(Sys.time()),
+      results = results,
+      pairs_bootstrap = pairs_bootstrap,
+      fits = if (isTRUE(checkpoint_store_fits)) fits else NULL,
+      final_fit = if (isTRUE(checkpoint_store_fits)) final_fit else NULL,
+      prev_metrics = prev_metrics,
+      stop_reason = stop_reason,
+      stop_round = stop_round,
+      rounds = rounds_now,
+      state = state_now,
+      next_round = as.integer(next_round),
+      random_seed = seed_now,
+      completed = isTRUE(completed),
+      out = out
+    )
+  }
+
+  .write_checkpoint_now <- function(payload, round_index = NULL) {
+    if (is.null(checkpoint_dir) || !nzchar(checkpoint_dir)) {
+      return(invisible(NULL))
+    }
+    .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
+    if (!is.null(round_index)) {
+      .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", round = round_index, overwrite = checkpoint_overwrite)
+    }
+    invisible(NULL)
+  }
+
+  # on exit (including errors/interrupts), write the last completed checkpoint
+  if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+    on.exit(
+      {
+        if (!is.null(checkpoint_payload_last)) {
+          .bt_write_checkpoint(checkpoint_dir, checkpoint_payload_last, basename = "run_state", overwrite = checkpoint_overwrite)
+        }
+      },
+      add = TRUE
+    )
+  }
+
+  for (r in seq.int(from = start_round, to = max_rounds)) {
     if (nrow(results) == 0L) break
 
     bt_data <- if (is.null(judge)) {
@@ -498,6 +621,9 @@ bt_run_adaptive <- function(samples,
         stop_reason = this_reason
       )
       final_fit <- fits[[length(fits)]]
+
+      checkpoint_payload_last <- .make_checkpoint_payload(next_round = r + 1L, completed = TRUE)
+      .write_checkpoint_now(checkpoint_payload_last, round_index = r)
       break
     }
 
@@ -517,6 +643,8 @@ bt_run_adaptive <- function(samples,
         stop = FALSE,
         stop_reason = NA_character_
       )
+
+      # checkpoint bookkeeping updated at end-of-round (below)
     } else {
       rounds_list[[length(rounds_list)]][["stop_reason"]] <- "no_new_results"
       stop_reason <- "no_new_results"
@@ -538,7 +666,16 @@ bt_run_adaptive <- function(samples,
         stop = TRUE,
         stop_reason = "no_new_results"
       )
+
+      checkpoint_payload_last <- .make_checkpoint_payload(next_round = r + 1L, completed = TRUE)
+      .write_checkpoint_now(checkpoint_payload_last, round_index = r)
       break
+    }
+
+    # checkpoint after successfully finishing this round
+    checkpoint_payload_last <- .make_checkpoint_payload(next_round = r + 1L, completed = FALSE)
+    if ((r %% checkpoint_every) == 0L) {
+      .write_checkpoint_now(checkpoint_payload_last, round_index = r)
     }
   }
 
@@ -571,8 +708,14 @@ bt_run_adaptive <- function(samples,
     }
   }
 
-  rounds_tbl <- if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list)
-  state_tbl <- if (length(state_list) == 0L) tibble::tibble() else dplyr::bind_rows(state_list)
+  rounds_tbl <- dplyr::bind_rows(
+    rounds_tbl_prev,
+    if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list)
+  )
+  state_tbl <- dplyr::bind_rows(
+    state_tbl_prev,
+    if (length(state_list) == 0L) tibble::tibble() else dplyr::bind_rows(state_list)
+  )
 
   bt_data_final <- if (nrow(results) == 0L) {
     tibble::tibble(object1 = character(), object2 = character(), result = numeric())
@@ -670,6 +813,13 @@ bt_run_adaptive <- function(samples,
     pairs_bootstrap = pairs_bootstrap,
     reverse_audit = reverse_out
   )
+
+  # write a final checkpoint including the returned object
+  if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+    next_round_final <- if (is.na(stop_round)) as.integer(nrow(rounds_tbl) + 1L) else as.integer(stop_round + 1L)
+    checkpoint_payload_last <- .make_checkpoint_payload(next_round = next_round_final, completed = TRUE, out = out)
+    .write_checkpoint_now(checkpoint_payload_last, round_index = stop_round)
+  }
 
   .as_pairwise_run(out, run_type = "adaptive")
 }
