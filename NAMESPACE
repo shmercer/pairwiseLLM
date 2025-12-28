@@ -2,6 +2,8 @@
 
 S3method(print,pairwiseLLM_cost_estimate)
 export(add_pair_texts)
+export(allocation_audit_on_drift)
+export(allocation_precision_ramp)
 export(alternate_pair_order)
 export(anthropic_compare_pair_live)
 export(anthropic_create_batch)
