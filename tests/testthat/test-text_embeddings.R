@@ -195,3 +195,42 @@ test_that("compute_text_embeddings wraps encode() errors with a helpful message"
     "Embedding computation failed: boom from encode"
   )
 })
+
+testthat::test_that("compute_text_embeddings validates data.frame input with missing text column", {
+  df <- tibble::tibble(ID = "A", txt = "hello")
+  testthat::expect_error(
+    pairwiseLLM::compute_text_embeddings(df),
+    "column named 'text'"
+  )
+})
+
+testthat::test_that("reticulate wrapper helpers are callable", {
+  # .has_reticulate() line is always coverable (TRUE/FALSE)
+  has_rt <- pairwiseLLM:::.has_reticulate()
+  testthat::expect_type(has_rt, "logical")
+  testthat::expect_equal(length(has_rt), 1L)
+
+  if (!isTRUE(has_rt)) testthat::skip("reticulate not installed")
+
+  # Ensure reticulate has a Python available; if not, skip so tests are robust
+  py_ok <- FALSE
+  tryCatch(
+    {
+      py_ok <- reticulate::py_available(initialize = TRUE)
+    },
+    error = function(e) {
+      py_ok <- FALSE
+    }
+  )
+  if (!isTRUE(py_ok)) testthat::skip("Python not available for reticulate")
+
+  # These hit lines 135, 139, 143
+  testthat::expect_type(pairwiseLLM:::.rt_py_module_available("math"), "logical")
+
+  mod <- pairwiseLLM:::.rt_import("math")
+  testthat::expect_false(is.null(mod))
+
+  py_vec <- reticulate::r_to_py(c(1, 2, 3))
+  r_vec <- pairwiseLLM:::.rt_py_to_r(py_vec)
+  testthat::expect_equal(as.numeric(r_vec), c(1, 2, 3))
+})
