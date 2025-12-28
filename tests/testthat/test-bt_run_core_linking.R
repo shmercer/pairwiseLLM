@@ -703,3 +703,100 @@ test_that("bt_run_core_linking passes overridden stopping thresholds into bt_sho
   expect_equal(cap$args$core_max_abs_shift_target, 0.3333)
   expect_equal(cap$args$core_p90_abs_shift_target, 0.4444)
 })
+
+test_that("bt_run_core_linking allocation_fun can update allocations between rounds", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste("text", LETTERS[1:6])
+  )
+  batches <- list(c("D", "E"))
+  core_ids <- c("A", "B", "C")
+  true_theta <- c(A = 2, B = 1, C = 0, D = -1, E = -2, F = -3)
+
+  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE)
+
+  # Stable fit with non-zero SE so we never meet rel_se_p90_target = 0
+  fit_fun <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(0.5, length(ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  allocation_fun <- function(state) {
+    # push both up; helper will clamp to satisfy within + core <= 1
+    list(within_batch_frac = state$within_batch_frac + 0.2, core_audit_frac = state$core_audit_frac)
+  }
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = batches,
+    core_ids = core_ids,
+    judge_fun = judge_fun,
+    fit_fun = fit_fun,
+    engine = "mock",
+    round_size = 8,
+    max_rounds_per_batch = 2,
+    forbid_repeats = FALSE,
+    within_batch_frac = 0.1,
+    core_audit_frac = 0.1,
+    allocation_fun = allocation_fun,
+    # ensure we do not stop early
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    rel_se_p90_target = 0,
+    rel_se_p90_min_improve = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_,
+    verbose = FALSE
+  )
+
+  m <- dplyr::filter(out$metrics, batch_index == 1)
+  expect_equal(nrow(m), 2L)
+  expect_equal(m$within_batch_frac[[1]], 0.1)
+  expect_equal(m$core_audit_frac[[1]], 0.1)
+  expect_equal(m$within_batch_frac[[2]], 0.3)
+  expect_equal(m$core_audit_frac[[2]], 0.1)
+})
+
+test_that("bt_run_core_linking errors when allocation_fun returns a non-list", {
+  samples <- tibble::tibble(ID = LETTERS[1:4], text = paste0("t", LETTERS[1:4]))
+  batches <- list(c("C"))
+  core_ids <- c("A", "B")
+
+  judge_fun <- function(pairs) {
+    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  }
+  fit_fun <- function(bt_data, ...) {
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    list(engine = "mock", theta = tibble::tibble(ID = ids, theta = seq_along(ids), se = rep(1, length(ids))))
+  }
+
+  bad_alloc <- function(state) 0.2
+
+  expect_error(
+    bt_run_core_linking(
+      samples = samples,
+      batches = batches,
+      core_ids = core_ids,
+      judge_fun = judge_fun,
+      fit_fun = fit_fun,
+      engine = "mock",
+      round_size = 4,
+      max_rounds_per_batch = 1,
+      forbid_repeats = FALSE,
+      allocation_fun = bad_alloc,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      rel_se_p90_target = 0,
+      rel_se_p90_min_improve = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_,
+      verbose = FALSE
+    ),
+    "allocation_fun.*return"
+  )
+})

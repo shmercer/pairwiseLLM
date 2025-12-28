@@ -88,7 +88,11 @@
 #' @param within_batch_frac Numeric in \code{[0,1]}. Fraction of non-audit pairs allocated to new\eqn{\leftrightarrow}new
 #' within-batch comparisons (passed to \code{\link{select_core_link_pairs}}).
 #' @param core_audit_frac Numeric in \code{[0,1]}. Fraction of pairs allocated to core\eqn{\leftrightarrow}core audits
-#' (passed to \code{\link{select_core_link_pairs}}).
+#'   (passed to \code{\link{select_core_link_pairs}}).
+#' @param allocation_fun Optional function to update `within_batch_frac` and/or `core_audit_frac`
+#'   between rounds. It is called after metrics are computed each round with a state list and
+#'   should return NULL (no change) or a list with elements `within_batch_frac` and/or
+#'   `core_audit_frac`.
 #'
 #' @param k_neighbors Integer. Passed to \code{\link{select_core_link_pairs}}.
 #' @param min_judgments Integer. Passed to \code{\link{select_core_link_pairs}}.
@@ -223,6 +227,7 @@ bt_run_adaptive_core_linking <- function(samples,
                                          max_rounds_per_batch = 50,
                                          within_batch_frac = 0.25,
                                          core_audit_frac = 0.05,
+                                         allocation_fun = NULL,
                                          k_neighbors = 10,
                                          min_judgments = 12,
                                          forbid_repeats = TRUE,
@@ -255,6 +260,10 @@ bt_run_adaptive_core_linking <- function(samples,
 
   if (!is.function(judge_fun)) {
     stop("`judge_fun` must be a function.", call. = FALSE)
+  }
+
+  if (!is.null(allocation_fun) && !is.function(allocation_fun)) {
+    stop("`allocation_fun` must be a function or NULL.", call. = FALSE)
   }
 
   stopping_tier <- match.arg(stopping_tier)
@@ -624,14 +633,17 @@ bt_run_adaptive_core_linking <- function(samples,
       # Propose pairs
       seed_this <- if (is.null(seed_pairs)) NULL else as.integer(seed_pairs + b * 1000L + r)
 
+      within_batch_frac_this <- within_batch_frac
+      core_audit_frac_this <- core_audit_frac
+
       prop <- bt_core_link_round(
         samples = samples,
         fit = current_fit,
         core_ids = core_ids,
         new_ids = new_ids,
         round_size = round_size,
-        within_batch_frac = within_batch_frac,
-        core_audit_frac = core_audit_frac,
+        within_batch_frac = within_batch_frac_this,
+        core_audit_frac = core_audit_frac_this,
         k_neighbors = k_neighbors,
         min_judgments = min_judgments,
         existing_pairs = results,
@@ -706,6 +718,8 @@ bt_run_adaptive_core_linking <- function(samples,
         fit_bounds = fit_bounds
       )
 
+      prev_metrics_for_state <- prev_metrics
+
       decision <- do.call(
         bt_should_stop,
         c(list(metrics = m, prev_metrics = prev_metrics), stop_params)
@@ -716,6 +730,8 @@ bt_run_adaptive_core_linking <- function(samples,
 
       m$batch_index <- as.integer(b)
       m$round_index <- as.integer(r)
+      m$within_batch_frac <- within_batch_frac_this
+      m$core_audit_frac <- core_audit_frac_this
       m$stage <- "round"
       m$stop <- stop_now
       m$stop_reason <- stop_reason
@@ -737,6 +753,33 @@ bt_run_adaptive_core_linking <- function(samples,
 
       if (stop_now) {
         break
+      }
+
+      if (!is.null(allocation_fun)) {
+        alloc_state <- list(
+          stage = "round",
+          batch_index = as.integer(b),
+          round_index = as.integer(r),
+          within_batch_frac = within_batch_frac_this,
+          core_audit_frac = core_audit_frac_this,
+          metrics = m,
+          prev_metrics = prev_metrics_for_state,
+          stop = decision,
+          n_results_total = nrow(results),
+          n_pairs_proposed = nrow(pairs_next),
+          n_new_ids = length(new_ids),
+          new_ids = new_ids,
+          core_ids = core_ids,
+          plan = prop$plan
+        )
+        alloc <- .bt_apply_allocation_fun(
+          allocation_fun = allocation_fun,
+          state = alloc_state,
+          within_batch_frac = within_batch_frac,
+          core_audit_frac = core_audit_frac
+        )
+        within_batch_frac <- alloc$within_batch_frac
+        core_audit_frac <- alloc$core_audit_frac
       }
 
       prev_metrics <- m

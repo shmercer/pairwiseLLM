@@ -30,6 +30,7 @@ bt_run_core_linking(
   max_rounds_per_batch = 50,
   within_batch_frac = 0.25,
   core_audit_frac = 0.1,
+  allocation_fun = NULL,
   k_neighbors = 10,
   min_judgments = 12,
   forbid_repeats = TRUE,
@@ -119,9 +120,15 @@ output of \code{judge_fun}). Used as a warm start.}
 
 \item{max_rounds_per_batch}{Maximum rounds to run for each batch.}
 
-\item{within_batch_frac}{Fraction of each round allocated to new↔new comparisons.}
+\item{within_batch_frac}{Fraction of each round allocated to new<->new comparisons.}
 
-\item{core_audit_frac}{Fraction of each round allocated to core↔core audit comparisons.}
+\item{core_audit_frac}{Fraction of each round allocated to core<->core audit comparisons.}
+
+\item{allocation_fun}{Optional function to update \code{within_batch_frac} and/or \code{core_audit_frac}
+between rounds. It is called after metrics are computed each round with a state list containing
+(at minimum) \code{batch_index}, \code{round_index}, \code{within_batch_frac}, \code{core_audit_frac}, \code{metrics},
+and \code{prev_metrics}. It should return NULL (no change) or a list with elements
+\code{within_batch_frac} and/or \code{core_audit_frac}.}
 
 \item{k_neighbors}{Passed to \code{\link{select_core_link_pairs}}.}
 

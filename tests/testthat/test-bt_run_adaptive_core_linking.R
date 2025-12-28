@@ -573,3 +573,118 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
   expect_equal(out_max0$batch_summary$stop_reason[[1]], "max_rounds")
   expect_true(nrow(out_max0$metrics) == 0L)
 })
+
+test_that("bt_run_adaptive_core_linking allocation_fun can update allocations between rounds", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:8],
+    text = paste0("t", LETTERS[1:8])
+  )
+  all_ids <- samples$ID
+  true_theta <- stats::setNames(seq(2, -1.5, length.out = 8), samples$ID)
+
+  judge_fun <- function(pairs) {
+    b <- ifelse(true_theta[pairs$ID1] >= true_theta[pairs$ID2], pairs$ID1, pairs$ID2)
+    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = b)
+  }
+
+  # Simple fit that returns theta/se for all IDs
+  fit_fun <- function(bt_data, ...) {
+    bt_data <- tibble::as_tibble(bt_data)
+    wins <- stats::setNames(rep(0L, length(all_ids)), all_ids)
+    n_j <- stats::setNames(rep(0L, length(all_ids)), all_ids)
+    for (i in seq_len(nrow(bt_data))) {
+      a <- bt_data$object1[[i]]
+      b <- bt_data$object2[[i]]
+      r <- bt_data$result[[i]]
+      if (r == 1) wins[a] <- wins[a] + 1L else wins[b] <- wins[b] + 1L
+      n_j[a] <- n_j[a] + 1L
+      n_j[b] <- n_j[b] + 1L
+    }
+    theta <- as.numeric(wins - stats::median(wins))
+    se <- rep(1, length(all_ids))
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = all_ids, theta = theta, se = se),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  alloc <- function(state) {
+    list(within_batch_frac = state$within_batch_frac + 0.2)
+  }
+
+  out <- bt_run_adaptive_core_linking(
+    samples = samples,
+    batches = list(c("D", "E")),
+    judge_fun = judge_fun,
+    core_ids = c("A", "B", "C"),
+    seed_pairs = 11,
+    fit_fun = fit_fun,
+    engine = "mock",
+    round_size = 4,
+    init_round_size = 4,
+    max_rounds_per_batch = 2,
+    forbid_repeats = FALSE,
+    within_batch_frac = 0.1,
+    core_audit_frac = 0.1,
+    allocation_fun = alloc,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    rel_se_p90_target = 0,
+    rel_se_p90_min_improve = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_
+  )
+
+  m <- dplyr::filter(out$metrics, batch_index == 1L, stage == "round")
+  expect_equal(nrow(m), 2L)
+  expect_equal(m$within_batch_frac[[1]], 0.1)
+  expect_equal(m$within_batch_frac[[2]], 0.3)
+  expect_equal(m$core_audit_frac[[1]], 0.1)
+  expect_equal(m$core_audit_frac[[2]], 0.1)
+})
+
+test_that("bt_run_adaptive_core_linking errors when allocation_fun returns a non-list", {
+  samples <- tibble::tibble(
+    ID = LETTERS[1:6],
+    text = paste0("t", LETTERS[1:6])
+  )
+  all_ids <- samples$ID
+
+  judge_fun <- function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  fit_fun <- function(bt_data, ...) {
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = all_ids, theta = seq_along(all_ids), se = rep(1, length(all_ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  bad_alloc <- function(state) 0.2
+
+  expect_error(
+    bt_run_adaptive_core_linking(
+      samples = samples,
+      batches = list(c("D")),
+      judge_fun = judge_fun,
+      core_ids = c("A", "B", "C"),
+      seed_pairs = 11,
+      fit_fun = fit_fun,
+      engine = "mock",
+      round_size = 4,
+      init_round_size = 4,
+      max_rounds_per_batch = 1,
+      forbid_repeats = FALSE,
+      allocation_fun = bad_alloc,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      rel_se_p90_target = 0,
+      rel_se_p90_min_improve = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_
+    ),
+    "allocation_fun.*return"
+  )
+})

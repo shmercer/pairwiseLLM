@@ -32,6 +32,7 @@ bt_run_adaptive_core_linking(
   max_rounds_per_batch = 50,
   within_batch_frac = 0.25,
   core_audit_frac = 0.05,
+  allocation_fun = NULL,
   k_neighbors = 10,
   min_judgments = 12,
   forbid_repeats = TRUE,
@@ -140,6 +141,11 @@ within-batch comparisons (passed to \code{\link{select_core_link_pairs}}).}
 
 \item{core_audit_frac}{Numeric in \code{[0,1]}. Fraction of pairs allocated to core\eqn{\leftrightarrow}core audits
 (passed to \code{\link{select_core_link_pairs}}).}
+
+\item{allocation_fun}{Optional function to update \code{within_batch_frac} and/or \code{core_audit_frac}
+between rounds. It is called after metrics are computed each round with a state list and
+should return NULL (no change) or a list with elements \code{within_batch_frac} and/or
+\code{core_audit_frac}.}
 
 \item{k_neighbors}{Integer. Passed to \code{\link{select_core_link_pairs}}.}
 

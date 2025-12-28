@@ -61,8 +61,13 @@
 #'
 #' @param round_size Target number of pairs proposed per round (per batch).
 #' @param max_rounds_per_batch Maximum rounds to run for each batch.
-#' @param within_batch_frac Fraction of each round allocated to new↔new comparisons.
-#' @param core_audit_frac Fraction of each round allocated to core↔core audit comparisons.
+#' @param within_batch_frac Fraction of each round allocated to new<->new comparisons.
+#' @param core_audit_frac Fraction of each round allocated to core<->core audit comparisons.
+#' @param allocation_fun Optional function to update `within_batch_frac` and/or `core_audit_frac`
+#'   between rounds. It is called after metrics are computed each round with a state list containing
+#'   (at minimum) `batch_index`, `round_index`, `within_batch_frac`, `core_audit_frac`, `metrics`,
+#'   and `prev_metrics`. It should return NULL (no change) or a list with elements
+#'   `within_batch_frac` and/or `core_audit_frac`.
 #' @param k_neighbors Passed to \code{\link{select_core_link_pairs}}.
 #' @param min_judgments Passed to \code{\link{select_core_link_pairs}}.
 #' @param forbid_repeats Forbid repeat unordered pairs across the entire run.
@@ -186,6 +191,7 @@ bt_run_core_linking <- function(samples,
                                 max_rounds_per_batch = 50,
                                 within_batch_frac = 0.25,
                                 core_audit_frac = 0.10,
+                                allocation_fun = NULL,
                                 k_neighbors = 10,
                                 min_judgments = 12,
                                 forbid_repeats = TRUE,
@@ -218,6 +224,10 @@ bt_run_core_linking <- function(samples,
   if (!is.function(judge_fun)) stop("`judge_fun` must be a function.", call. = FALSE)
   if (!is.function(fit_fun)) stop("`fit_fun` must be a function.", call. = FALSE)
   if (!is.function(build_bt_fun)) stop("`build_bt_fun` must be a function.", call. = FALSE)
+
+  if (!is.null(allocation_fun) && !is.function(allocation_fun)) {
+    stop("`allocation_fun` must be a function or NULL.", call. = FALSE)
+  }
 
   drift_reference <- match.arg(drift_reference)
   core_method <- match.arg(core_method)
@@ -509,6 +519,9 @@ bt_run_core_linking <- function(samples,
         theta_for_pairs <- tibble::tibble(ID = ids_all, theta = rep(0, length(ids_all)), se = rep(1, length(ids_all)))
       }
 
+      within_batch_frac_this <- within_batch_frac
+      core_audit_frac_this <- core_audit_frac
+
       round_out <- bt_core_link_round(
         samples = samples,
         fit = list(theta = theta_for_pairs),
@@ -516,8 +529,8 @@ bt_run_core_linking <- function(samples,
         include_text = TRUE,
         new_ids = new_ids,
         round_size = round_size,
-        within_batch_frac = within_batch_frac,
-        core_audit_frac = core_audit_frac,
+        within_batch_frac = within_batch_frac_this,
+        core_audit_frac = core_audit_frac_this,
         k_neighbors = k_neighbors,
         min_judgments = min_judgments,
         existing_pairs = if (nrow(results) > 0L) results else NULL,
@@ -573,8 +586,19 @@ bt_run_core_linking <- function(samples,
         fit_bounds = fit_bounds
       )
 
-      metrics <- dplyr::mutate(metrics, batch_index = batch_i, round_index = round_i)
+      metrics <- dplyr::mutate(metrics,
+        batch_index = batch_i,
+        round_index = round_i,
+        within_batch_frac = within_batch_frac_this,
+        core_audit_frac = core_audit_frac_this,
+        n_pairs_proposed = nrow(pairs),
+        n_core_new = sum(pairs$pair_type == "core_new"),
+        n_new_new = sum(pairs$pair_type == "new_new"),
+        n_core_core = sum(pairs$pair_type == "core_core")
+      )
       metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
+
+      prev_metrics_for_state <- prev_metrics
 
       stop_dec <- do.call(
         bt_should_stop,
@@ -582,6 +606,33 @@ bt_run_core_linking <- function(samples,
       )
 
       prev_metrics <- metrics
+
+      if (!isTRUE(stop_dec$stop) && !is.null(allocation_fun)) {
+        alloc_state <- list(
+          stage = "batch_round",
+          batch_index = as.integer(batch_i),
+          round_index = as.integer(round_i),
+          within_batch_frac = within_batch_frac_this,
+          core_audit_frac = core_audit_frac_this,
+          metrics = metrics,
+          prev_metrics = prev_metrics_for_state,
+          stop = stop_dec,
+          n_results_total = nrow(results),
+          n_pairs_proposed = nrow(pairs),
+          n_new_ids = length(new_ids),
+          new_ids = new_ids,
+          core_ids = core_ids,
+          plan = round_out$plan
+        )
+        alloc <- .bt_apply_allocation_fun(
+          allocation_fun = allocation_fun,
+          state = alloc_state,
+          within_batch_frac = within_batch_frac,
+          core_audit_frac = core_audit_frac
+        )
+        within_batch_frac <- alloc$within_batch_frac
+        core_audit_frac <- alloc$core_audit_frac
+      }
 
       if (isTRUE(verbose)) {
         msg <- paste0(
