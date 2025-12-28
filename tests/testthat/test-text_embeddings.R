@@ -234,3 +234,122 @@ testthat::test_that("reticulate wrapper helpers are callable", {
   r_vec <- pairwiseLLM:::.rt_py_to_r(py_vec)
   testthat::expect_equal(as.numeric(r_vec), c(1, 2, 3))
 })
+
+test_that("compute_text_embeddings validates cache arguments", {
+  expect_error(compute_text_embeddings("a", cache_dir = 1), "cache_dir")
+  expect_error(compute_text_embeddings("a", use_cache = NA), "use_cache")
+  expect_error(compute_text_embeddings("a", overwrite = NA), "overwrite")
+})
+
+test_that(".compute_text_embeddings_cached writes and reuses cache", {
+  dir <- withr::local_tempdir()
+  texts <- c("a", "b")
+
+  calls <- 0L
+  fake_compute1 <- function(t) {
+    calls <<- calls + 1L
+    matrix(seq_along(t) * 1.0, ncol = 1)
+  }
+
+  mat1 <- pairwiseLLM:::.compute_text_embeddings_cached(
+    texts = texts,
+    ids = NULL,
+    engine = "sentence_transformers",
+    model = "m1",
+    batch_size = 32L,
+    normalize = FALSE,
+    device = NULL,
+    show_progress = FALSE,
+    dots = list(),
+    cache_dir = dir,
+    use_cache = TRUE,
+    overwrite = FALSE,
+    compute_fn = fake_compute1
+  )
+
+  expect_equal(calls, 1L)
+  expect_true(is.matrix(mat1))
+  expect_type(mat1, "double")
+
+  # Second call should hit cache and not call compute_fn
+  fake_compute2 <- function(t) {
+    calls <<- calls + 1L
+    matrix(rep(999, length(t)), ncol = 1)
+  }
+
+  mat2 <- pairwiseLLM:::.compute_text_embeddings_cached(
+    texts = texts,
+    ids = NULL,
+    engine = "sentence_transformers",
+    model = "m1",
+    batch_size = 32L,
+    normalize = FALSE,
+    device = NULL,
+    show_progress = FALSE,
+    dots = list(),
+    cache_dir = dir,
+    use_cache = TRUE,
+    overwrite = FALSE,
+    compute_fn = fake_compute2
+  )
+
+  expect_equal(calls, 1L)
+  expect_equal(mat2, mat1)
+
+  # Overwrite forces recompute
+  mat3 <- pairwiseLLM:::.compute_text_embeddings_cached(
+    texts = texts,
+    ids = NULL,
+    engine = "sentence_transformers",
+    model = "m1",
+    batch_size = 32L,
+    normalize = FALSE,
+    device = NULL,
+    show_progress = FALSE,
+    dots = list(),
+    cache_dir = dir,
+    use_cache = TRUE,
+    overwrite = TRUE,
+    compute_fn = fake_compute2
+  )
+  expect_equal(calls, 2L)
+  expect_equal(as.numeric(mat3[, 1]), rep(999, 2))
+})
+
+test_that("compute_text_embeddings can load cache without reticulate", {
+  dir <- withr::local_tempdir()
+  texts <- c("a", "b")
+  ids <- c("id1", "id2")
+
+  key <- pairwiseLLM:::.embeddings_cache_key(
+    texts = texts,
+    engine = "sentence_transformers",
+    model = "all-MiniLM-L6-v2",
+    batch_size = 32L,
+    normalize = FALSE,
+    device = NULL,
+    show_progress = FALSE,
+    dots = list()
+  )
+  path <- pairwiseLLM:::.embeddings_cache_path(dir, key)
+
+  expected <- matrix(c(1, 2), ncol = 1)
+  saveRDS(list(embeddings = expected, meta = list(n = 2L)), path)
+
+  testthat::local_mocked_bindings(
+    .has_reticulate = function() FALSE,
+    .package = "pairwiseLLM"
+  )
+
+  emb <- compute_text_embeddings(
+    texts,
+    ids = ids,
+    cache_dir = dir,
+    use_cache = TRUE,
+    overwrite = FALSE,
+    show_progress = FALSE
+  )
+
+  expect_equal(unname(emb), expected)
+  expect_equal(rownames(emb), ids)
+})

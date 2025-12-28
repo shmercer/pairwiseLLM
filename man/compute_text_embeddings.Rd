@@ -13,6 +13,9 @@ compute_text_embeddings(
   normalize = FALSE,
   device = NULL,
   show_progress = interactive(),
+  cache_dir = NULL,
+  use_cache = TRUE,
+  overwrite = FALSE,
   ...
 )
 }
@@ -41,6 +44,16 @@ selects a default.}
 \item{show_progress}{Logical; show a progress bar during encoding when the
 backend supports it.}
 
+\item{cache_dir}{Optional directory to cache computed embeddings as \code{.rds}
+files. If \code{NULL} (default), caching is disabled.}
+
+\item{use_cache}{Logical; when \code{TRUE} and \code{cache_dir} is provided,
+reuse cached embeddings when available. When \code{FALSE}, embeddings are
+computed fresh (and the cache is not read or written).}
+
+\item{overwrite}{Logical; when \code{TRUE} and \code{cache_dir} is provided,
+overwrite any existing cache entry for the current inputs.}
+
 \item{...}{Additional keyword arguments forwarded to the Python
 \code{encode()} method.}
 }
@@ -63,7 +76,7 @@ the \code{SentenceTransformer} API.
 \dontrun{
 # Requires reticulate + Python package sentence-transformers.
 texts <- c("hello world", "goodbye")
-emb <- compute_text_embeddings(texts)
+emb <- compute_text_embeddings(texts, cache_dir = tempdir())
 dim(emb)
 }
 
