@@ -125,6 +125,11 @@ output of \code{judge_fun}). Used as a warm start.}
 
 \item{core_audit_frac}{Fraction of each round allocated to core<->core audit comparisons.}
 
+\item{allocation}{Allocation preset controlling how within-batch and auditing
+fractions may be adjusted between rounds. One of \code{"fixed"}, \code{"precision_ramp"},
+or \code{"audit_on_drift"}. If \code{allocation_fun} is supplied, it takes precedence
+and \code{allocation} is ignored.}
+
 \item{allocation_fun}{Optional function to update \code{within_batch_frac} and/or \code{core_audit_frac}
 between rounds. It is called after metrics are computed each round with a state list containing
 (at minimum) \code{batch_index}, \code{round_index}, \code{within_batch_frac}, \code{core_audit_frac}, \code{metrics},

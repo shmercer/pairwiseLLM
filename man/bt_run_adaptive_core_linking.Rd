@@ -143,6 +143,11 @@ within-batch comparisons (passed to \code{\link{select_core_link_pairs}}).}
 \item{core_audit_frac}{Numeric in \code{[0,1]}. Fraction of pairs allocated to core\eqn{\leftrightarrow}core audits
 (passed to \code{\link{select_core_link_pairs}}).}
 
+\item{allocation}{Allocation preset controlling how within-batch and auditing
+fractions may be adjusted between rounds. One of \code{"fixed"}, \code{"precision_ramp"},
+or \code{"audit_on_drift"}. If \code{allocation_fun} is supplied, it takes precedence
+and \code{allocation} is ignored.}
+
 \item{allocation_fun}{Optional function to update \code{within_batch_frac} and/or \code{core_audit_frac}
 between rounds. It is called after metrics are computed each round with a state list and
 should return NULL (no change) or a list with elements \code{within_batch_frac} and/or

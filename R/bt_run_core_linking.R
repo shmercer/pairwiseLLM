@@ -63,6 +63,10 @@
 #' @param max_rounds_per_batch Maximum rounds to run for each batch.
 #' @param within_batch_frac Fraction of each round allocated to new<->new comparisons.
 #' @param core_audit_frac Fraction of each round allocated to core<->core audit comparisons.
+#' @param allocation Allocation preset controlling how within-batch and auditing
+#'   fractions may be adjusted between rounds. One of `"fixed"`, `"precision_ramp"`,
+#'   or `"audit_on_drift"`. If `allocation_fun` is supplied, it takes precedence
+#'   and `allocation` is ignored.
 #' @param allocation_fun Optional function to update `within_batch_frac` and/or `core_audit_frac`
 #'   between rounds. It is called after metrics are computed each round with a state list containing
 #'   (at minimum) `batch_index`, `round_index`, `within_batch_frac`, `core_audit_frac`, `metrics`,
