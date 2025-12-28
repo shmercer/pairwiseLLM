@@ -1,10 +1,32 @@
 # pairwiseLLM 1.3.0
 
-## New Features
-*   Resumable adaptive workflows: `bt_run_adaptive()`, `bt_run_core_linking()`, and
-    `bt_run_adaptive_core_linking()` now support checkpointing and resume via
-    `checkpoint_dir`, `resume_from`, and `checkpoint_every`.
-    Checkpoints include enough state to continue after an error or interruption.
+## New features
+* Resumable orchestration runners: `bt_run_adaptive()`, `bt_run_core_linking()`, and
+  `bt_run_adaptive_core_linking()` support checkpointing and resume via `checkpoint_dir`,
+  `resume_from`, and `checkpoint_every`.
+* Adaptive sampling workflow: round-based pair proposal + fit + metrics + stopping via
+  `select_adaptive_pairs()`, `bt_adaptive_round()`, and `bt_run_adaptive()`, with preset
+  stopping tiers (`bt_stop_metrics()`, `bt_should_stop()`).
+* Core set + core-linking workflows: core set selection (`select_core_set()`), core-link pair
+  selection (`select_core_link_pairs()`), per-round planning (`bt_core_link_round()`), and
+  batch runners (`bt_run_core_linking()`, `bt_run_adaptive_core_linking()`).
+* Multi-judge support in BT data/modeling: `build_bt_data()` can include an optional judge
+  column; `fit_bt_model()` accepts 3- or 4-column BT data and can fit judge-aware models
+  (SIRT engine), enabling judge/model diagnostics.
+* Richer SIRT diagnostics returned from `fit_bt_model()` (e.g., separation, fit statistics),
+  powering stopping and QA.
+
+## Improvements
+* Validation/reporting: standardized validation helpers and structured reports (with an option
+  for strict enforcement) across submission + orchestration flows.
+* Reverse audit tooling: optional post-stop reversal audit to quantify consistency when pairs
+  are presented in reversed order (and support positional-bias QA).
+* Embeddings integration: support for embeddings-backed workflows (including a reticulate-based
+  path), while still accepting user-supplied embedding matrices.
+
+## Maintenance
+* Expanded and updated unit tests for new branches and helper utilities (targeting ≥95% coverage for
+  new/changed code).
 
 # pairwiseLLM 1.2.0
 
@@ -56,4 +78,3 @@
 * Unified live and batch LLM comparison framework (OpenAI / Anthropic / Gemini).
 * Live support for Together.ai and local Ollama backends.
 * Tools for Bradley–Terry and Elo models, positional bias checks
-

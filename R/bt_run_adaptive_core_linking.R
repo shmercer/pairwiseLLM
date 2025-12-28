@@ -752,7 +752,8 @@ bt_run_adaptive_core_linking <- function(samples,
   if (is.null(resume_from)) {
     seen_ids <- core_ids
   }
-  for (b in seq.int(from = batch_start, to = length(batches))) {
+  batch_seq <- if (batch_start <= length(batches)) seq.int(from = batch_start, to = length(batches)) else integer(0)
+  for (b in batch_seq) {
     batch_ids <- batches[[b]]
     new_ids <- setdiff(batch_ids, seen_ids)
     seen_ids <- unique(c(seen_ids, batch_ids))
@@ -795,7 +796,8 @@ bt_run_adaptive_core_linking <- function(samples,
 
     r_from <- if (resuming_this_batch) as.integer(round_start) else 1L
     if (is.na(r_from) || r_from < 1L) r_from <- 1L
-    for (r in seq.int(from = r_from, to = max_rounds_per_batch)) {
+    round_seq <- if (r_from <= max_rounds_per_batch) seq.int(from = r_from, to = max_rounds_per_batch) else integer(0)
+    for (r in round_seq) {
       rounds_used <- r
 
       # Propose pairs

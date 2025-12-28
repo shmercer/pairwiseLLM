@@ -36,6 +36,11 @@ bt_run_adaptive(
   reverse_seed = NULL,
   fit_fun = fit_bt_model,
   build_bt_fun = build_bt_data,
+  checkpoint_dir = NULL,
+  resume_from = NULL,
+  checkpoint_every = 1L,
+  checkpoint_store_fits = TRUE,
+  checkpoint_overwrite = TRUE,
   ...
 )
 }

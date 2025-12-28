@@ -52,6 +52,11 @@ bt_run_adaptive_core_linking(
   core_theta_spearman_target = NA_real_,
   core_max_abs_shift_target = NA_real_,
   core_p90_abs_shift_target = NA_real_,
+  checkpoint_dir = NULL,
+  resume_from = NULL,
+  checkpoint_every = 1L,
+  checkpoint_store_fits = TRUE,
+  checkpoint_overwrite = TRUE,
   fit_fun = fit_bt_model,
   build_bt_fun = build_bt_data,
   ...

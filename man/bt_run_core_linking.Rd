@@ -52,6 +52,11 @@ bt_run_core_linking(
   drift_reference = c("previous_round", "baseline"),
   seed = NULL,
   verbose = TRUE,
+  checkpoint_dir = NULL,
+  resume_from = NULL,
+  checkpoint_every = 1L,
+  checkpoint_store_fits = TRUE,
+  checkpoint_overwrite = TRUE,
   ...
 )
 }

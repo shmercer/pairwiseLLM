@@ -637,7 +637,8 @@ bt_run_core_linking <- function(samples,
     )
   }
 
-  for (batch_i in seq.int(from = batch_start, to = length(batches))) {
+  batch_seq <- if (batch_start <= length(batches)) seq.int(from = batch_start, to = length(batches)) else integer(0)
+  for (batch_i in batch_seq) {
     batch_ids <- unique(as.character(batches[[batch_i]]))
     new_ids <- setdiff(batch_ids, seen_ids)
 
@@ -676,7 +677,8 @@ bt_run_core_linking <- function(samples,
 
     round_i_from <- if (resuming_this_batch) as.integer(round_start) else 1L
     if (is.na(round_i_from) || round_i_from < 1L) round_i_from <- 1L
-    for (round_i in seq.int(from = round_i_from, to = max_rounds_per_batch)) {
+    round_seq <- if (round_i_from <= max_rounds_per_batch) seq.int(from = round_i_from, to = max_rounds_per_batch) else integer(0)
+    for (round_i in round_seq) {
       rounds_used <- round_i
 
       theta_for_pairs <- current_fit$theta

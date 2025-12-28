@@ -526,7 +526,8 @@ bt_run_adaptive <- function(samples,
     )
   }
 
-  for (r in seq.int(from = start_round, to = max_rounds)) {
+  round_seq <- if (start_round <= max_rounds) seq.int(from = start_round, to = max_rounds) else integer(0)
+  for (r in round_seq) {
     if (nrow(results) == 0L) break
 
     bt_data <- if (is.null(judge)) {
@@ -680,7 +681,13 @@ bt_run_adaptive <- function(samples,
   }
 
   if (is.na(stop_reason)) {
-    if (length(rounds_list) == 0L) {
+    if (start_round > max_rounds) {
+      stop_reason <- "max_rounds"
+      stop_round <- as.integer(max_rounds)
+    } else if (max_rounds == 0L) {
+      stop_reason <- "max_rounds"
+      stop_round <- 0L
+    } else if (nrow(rounds_tbl_prev) + length(rounds_list) == 0L) {
       stop_reason <- "no_results"
     } else {
       stop_reason <- "max_rounds"
