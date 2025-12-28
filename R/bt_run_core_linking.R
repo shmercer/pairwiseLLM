@@ -237,8 +237,13 @@ bt_run_core_linking <- function(samples,
   drift_reference <- match.arg(drift_reference)
   core_method <- match.arg(core_method)
 
+  allocation_fun_user <- !is.null(allocation_fun)
   allocation <- match.arg(allocation)
-  if (is.null(allocation_fun) && allocation != "fixed") {
+  allocation_source <- "fixed"
+  if (allocation_fun_user) {
+    allocation_source <- "allocation_fun"
+  } else if (allocation != "fixed") {
+    allocation_source <- "preset"
     allocation_fun <- switch(allocation,
       precision_ramp = allocation_precision_ramp(),
       audit_on_drift = allocation_audit_on_drift(),
@@ -431,7 +436,8 @@ bt_run_core_linking <- function(samples,
 
   fits <- list()
   final_fits <- list()
-  metrics_hist <- tibble::tibble()
+  # Standardize metrics schema up-front so empty runs still return the same columns.
+  metrics_hist <- .bt_metrics_template(se_probs)
   state_hist <- tibble::tibble()
   batch_summary <- tibble::tibble()
 
@@ -601,24 +607,51 @@ bt_run_core_linking <- function(samples,
         fit_bounds = fit_bounds
       )
 
-      metrics <- dplyr::mutate(metrics,
-        batch_index = batch_i,
-        round_index = round_i,
-        within_batch_frac = within_batch_frac_this,
-        core_audit_frac = core_audit_frac_this,
-        n_pairs_proposed = nrow(pairs),
-        n_core_new = sum(pairs$pair_type == "core_new"),
-        n_new_new = sum(pairs$pair_type == "new_new"),
-        n_core_core = sum(pairs$pair_type == "core_core")
-      )
-      metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
-
       prev_metrics_for_state <- prev_metrics
 
       stop_dec <- do.call(
         bt_should_stop,
         c(list(metrics = metrics, prev_metrics = prev_metrics), stop_params)
       )
+
+      stop_now <- isTRUE(stop_dec$stop)
+      stop_reason_metric <- if (stop_now) "stopped" else NA_character_
+
+      metrics <- dplyr::mutate(
+        metrics,
+        batch_index = as.integer(batch_i),
+        round_index = as.integer(round_i),
+        stage = "round",
+        stop = stop_now,
+        stop_reason = stop_reason_metric,
+        allocation = allocation,
+        allocation_source = allocation_source,
+        within_batch_frac = within_batch_frac_this,
+        core_audit_frac = core_audit_frac_this,
+        round_size = as.integer(round_size),
+        n_pairs_proposed = nrow(pairs),
+        n_results_total = nrow(results),
+        n_new_ids = length(new_ids),
+        n_core_new = sum(pairs$pair_type == "core_new"),
+        n_new_new = sum(pairs$pair_type == "new_new"),
+        n_core_core = sum(pairs$pair_type == "core_core")
+      )
+
+      # Map baseline linking drift (stored in fit$linking$drift with core_-prefixed columns)
+      if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift)) {
+        ld <- tibble::as_tibble(current_fit$linking$drift)
+        if (nrow(ld) == 1L) {
+          if ("core_theta_cor" %in% names(ld)) metrics$linking_theta_cor <- as.double(ld$core_theta_cor[[1]])
+          if ("core_theta_spearman" %in% names(ld)) metrics$linking_theta_spearman <- as.double(ld$core_theta_spearman[[1]])
+          if ("core_mean_abs_shift" %in% names(ld)) metrics$linking_mean_abs_shift <- as.double(ld$core_mean_abs_shift[[1]])
+          if ("core_p90_abs_shift" %in% names(ld)) metrics$linking_p90_abs_shift <- as.double(ld$core_p90_abs_shift[[1]])
+          if ("core_p95_abs_shift" %in% names(ld)) metrics$linking_p95_abs_shift <- as.double(ld$core_p95_abs_shift[[1]])
+          if ("core_max_abs_shift" %in% names(ld)) metrics$linking_max_abs_shift <- as.double(ld$core_max_abs_shift[[1]])
+          if ("core_mean_signed_shift" %in% names(ld)) metrics$linking_mean_signed_shift <- as.double(ld$core_mean_signed_shift[[1]])
+        }
+      }
+
+      metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 
       prev_metrics <- metrics
 
@@ -687,6 +720,8 @@ bt_run_core_linking <- function(samples,
 
     final_fits[[paste0("batch_", batch_i)]] <- current_fit
   }
+
+  metrics_hist <- .bt_align_metrics(metrics_hist, se_probs = se_probs)
 
   list(
     core_ids = core_ids,

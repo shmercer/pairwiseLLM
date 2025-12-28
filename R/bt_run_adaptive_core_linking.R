@@ -271,6 +271,20 @@ bt_run_adaptive_core_linking <- function(samples,
     stop("`allocation_fun` must be a function or NULL.", call. = FALSE)
   }
 
+  allocation_fun_user <- !is.null(allocation_fun)
+  allocation <- match.arg(allocation)
+  allocation_source <- "fixed"
+  if (allocation_fun_user) {
+    allocation_source <- "allocation_fun"
+  } else if (allocation != "fixed") {
+    allocation_source <- "preset"
+    allocation_fun <- switch(allocation,
+      precision_ramp = allocation_precision_ramp(),
+      audit_on_drift = allocation_audit_on_drift(),
+      NULL
+    )
+  }
+
   stopping_tier <- match.arg(stopping_tier)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
 
@@ -326,15 +340,6 @@ bt_run_adaptive_core_linking <- function(samples,
   # Core selection
   if (is.null(core_ids)) {
     core_method <- match.arg(core_method)
-
-    allocation <- match.arg(allocation)
-    if (is.null(allocation_fun) && allocation != "fixed") {
-      allocation_fun <- switch(allocation,
-        precision_ramp = allocation_precision_ramp(),
-        audit_on_drift = allocation_audit_on_drift(),
-        NULL
-      )
-    }
 
     embeddings_metric <- match.arg(embeddings_metric)
 
@@ -747,13 +752,32 @@ bt_run_adaptive_core_linking <- function(samples,
       m$round_index <- as.integer(r)
       m$within_batch_frac <- within_batch_frac_this
       m$core_audit_frac <- core_audit_frac_this
+      m$allocation <- allocation
+      m$allocation_source <- allocation_source
+      m$round_size <- as.integer(round_size)
       m$stage <- "round"
       m$stop <- stop_now
       m$stop_reason <- stop_reason
       m$n_pairs_proposed <- nrow(pairs_next)
+      m$n_results_total <- nrow(results)
+      m$n_new_ids <- length(new_ids)
       m$n_core_new <- sum(pairs_next$pair_type == "core_new")
       m$n_new_new <- sum(pairs_next$pair_type == "new_new")
       m$n_core_core <- sum(pairs_next$pair_type == "core_core")
+
+      # Map baseline linking drift (stored in fit$linking$drift with core_-prefixed columns)
+      if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift)) {
+        ld <- tibble::as_tibble(current_fit$linking$drift)
+        if (nrow(ld) == 1L) {
+          if ("core_theta_cor" %in% names(ld)) m$linking_theta_cor <- as.double(ld$core_theta_cor[[1]])
+          if ("core_theta_spearman" %in% names(ld)) m$linking_theta_spearman <- as.double(ld$core_theta_spearman[[1]])
+          if ("core_mean_abs_shift" %in% names(ld)) m$linking_mean_abs_shift <- as.double(ld$core_mean_abs_shift[[1]])
+          if ("core_p90_abs_shift" %in% names(ld)) m$linking_p90_abs_shift <- as.double(ld$core_p90_abs_shift[[1]])
+          if ("core_p95_abs_shift" %in% names(ld)) m$linking_p95_abs_shift <- as.double(ld$core_p95_abs_shift[[1]])
+          if ("core_max_abs_shift" %in% names(ld)) m$linking_max_abs_shift <- as.double(ld$core_max_abs_shift[[1]])
+          if ("core_mean_signed_shift" %in% names(ld)) m$linking_mean_signed_shift <- as.double(ld$core_mean_signed_shift[[1]])
+        }
+      }
 
       metrics_rows[[length(metrics_rows) + 1L]] <- m
       state_rows[[length(state_rows) + 1L]] <- state_row(
@@ -823,11 +847,12 @@ bt_run_adaptive_core_linking <- function(samples,
 
   bt_data <- build_bt_fun(results, judge = judge)
 
-  metrics <- if (length(metrics_rows) == 0L) {
+  metrics_raw <- if (length(metrics_rows) == 0L) {
     tibble::tibble()
   } else {
     dplyr::bind_rows(metrics_rows)
   }
+  metrics <- .bt_align_metrics(metrics_raw, se_probs = se_probs)
 
   state <- dplyr::bind_rows(state_rows)
 
