@@ -68,3 +68,46 @@ testthat::test_that("allocation_audit_on_drift adjusts core_audit_frac up and ba
   state$core_audit_frac <- 0.10
   testthat::expect_null(f(state))
 })
+
+testthat::test_that("allocation policies return NULL for non-finite inputs and cover baseline-below adjustment", {
+  # allocation_precision_ramp non-finite cur/prev -> NULL (covers early return)
+  f <- allocation_precision_ramp(step = 0.2, max_within = 0.8)
+  state <- list(
+    metrics = tibble::tibble(rel_se_p90 = NA_real_),
+    prev_metrics = tibble::tibble(rel_se_p90 = 0.8),
+    within_batch_frac = 0.1,
+    core_audit_frac = 0.1
+  )
+  testthat::expect_null(f(state))
+
+  # non-finite within -> NULL (covers within check)
+  state$metrics$rel_se_p90 <- 0.4
+  state$prev_metrics$rel_se_p90 <- 0.6
+  state$within_batch_frac <- NA_real_
+  testthat::expect_null(f(state))
+
+  # allocation_audit_on_drift missing metric -> NULL
+  g <- allocation_audit_on_drift(drift_metric = "linking_max_abs_shift")
+  state2 <- list(metrics = tibble::tibble(other = 0.1), core_audit_frac = 0.1)
+  testthat::expect_null(g(state2))
+
+  # non-finite drift -> NULL
+  state3 <- list(metrics = tibble::tibble(linking_max_abs_shift = NA_real_), core_audit_frac = 0.1)
+  testthat::expect_null(g(state3))
+
+  # non-finite audit -> NULL
+  state4 <- list(metrics = tibble::tibble(linking_max_abs_shift = 0.05), core_audit_frac = NA_real_)
+  testthat::expect_null(g(state4))
+
+  # low drift and audit below baseline -> increases toward baseline (covers audit < base branch)
+  g2 <- allocation_audit_on_drift(
+    drift_metric = "linking_max_abs_shift",
+    drift_threshold = 0.2,
+    step = 0.05,
+    base_core_audit = 0.10,
+    max_core_audit = 0.40
+  )
+  state5 <- list(metrics = tibble::tibble(linking_max_abs_shift = 0.01), core_audit_frac = 0.00)
+  out <- g2(state5)
+  testthat::expect_equal(out$core_audit_frac, 0.05)
+})
