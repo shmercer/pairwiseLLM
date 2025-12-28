@@ -13,6 +13,9 @@ llm_submit_pairs_batch(
   prompt_template = set_prompt_template(),
   include_thoughts = FALSE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
+  normalize_winner = FALSE,
   ...
 )
 }
@@ -52,6 +55,17 @@ or a compatible character scalar.}
 
 \item{include_raw}{Logical; whether to include raw provider responses in the
 result (where supported by backends).}
+
+\item{validate}{Logical; if \code{TRUE}, attach a compact \code{validation_report} to the
+returned object using \code{\link[=validate_backend_results]{validate_backend_results()}}.}
+
+\item{validate_strict}{Logical; only used when \code{validate = TRUE}. If \code{TRUE},
+enforce validity and error on invalid winners. If \code{FALSE} (default),
+validation is report-only.}
+
+\item{normalize_winner}{Logical; only used when \code{validate = TRUE}. If \code{TRUE},
+normalize common winner tokens (e.g., \code{"SAMPLE_1"}, \code{"SAMPLE_2"}, \code{"1"}, \code{"2"})
+into the corresponding IDs before validation.}
 
 \item{...}{Additional arguments passed through to the backend-specific
 \verb{run_*_batch_pipeline()} functions. This can include provider-specific

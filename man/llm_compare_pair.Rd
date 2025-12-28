@@ -17,6 +17,8 @@ llm_compare_pair(
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   ...
 )
 }
@@ -29,17 +31,9 @@ llm_compare_pair(
 
 \item{text2}{Character string containing the second sample's text.}
 
-\item{model}{Model identifier for the chosen backend. For \code{"openai"} this
-should be an OpenAI model name (for example \code{"gpt-4.1"}, \code{"gpt-5.1"}).
-For \code{"anthropic"} and \code{"gemini"}, use the corresponding provider model
-names (for example \code{"claude-4-5-sonnet"} or
-\code{"gemini-3-pro-preview"}). For "together", use Together.ai model identifiers
-such as \code{"deepseek-ai/DeepSeek-R1"} or \code{"deepseek-ai/DeepSeek-V3"}. For
-\code{"ollama"}, use a local model name known to the Ollama server (for example
-\code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).}
+\item{model}{Model identifier for the chosen backend.}
 
-\item{trait_name}{Short label for the trait (for example
-\code{"Overall Quality"}).}
+\item{trait_name}{Short label for the trait (for example \code{"Overall Quality"}).}
 
 \item{trait_description}{Full-text definition of the trait.}
 
@@ -51,35 +45,30 @@ One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, 
 
 \item{endpoint}{Character scalar specifying which endpoint family to use
 for backends that support multiple live APIs. For the \code{"openai"} backend
-this must be one of \code{"chat.completions"} or \code{"responses"}, matching
-\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}. For \code{"anthropic"}, \code{"gemini"}, and
-\code{"ollama"}, this argument is currently ignored.}
+this must be one of \code{"chat.completions"} or \code{"responses"}. For \code{"anthropic"},
+\code{"gemini"}, \code{"together"}, and \code{"ollama"}, this argument is currently ignored.}
 
 \item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
 backend-specific helper will use its own default environment variable
 (for example \code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, \code{GEMINI_API_KEY},
-\code{TOGETHER_API_KEY}). For \code{"ollama"}, this argument is ignored (no API key
-is required for local inference).}
+\code{TOGETHER_API_KEY}). For \code{"ollama"}, this argument is ignored.}
 
 \item{include_raw}{Logical; if \code{TRUE}, the returned tibble includes a
-\code{raw_response} list-column with the parsed JSON body (or \code{NULL} on parse
-failure). Support for this may vary across backends.}
+\code{raw_response} list-column when supported by the backend.}
 
-\item{...}{Additional backend-specific parameters. For \code{"openai"} these
-are passed on to \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}} and typically include
-arguments such as \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, and
-\code{include_thoughts}. For \code{"anthropic"} and \code{"gemini"} they are forwarded to
-the corresponding live helper and may include parameters such as
-\code{reasoning}, \code{include_thoughts}, \code{max_output_tokens}, or
-provider-specific options. For \code{"ollama"}, arguments are forwarded to
-\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}} and may include \code{host}, \code{think},
-\code{num_ctx}, and other Ollama-specific controls.}
+\item{validate}{Logical; if \code{TRUE}, request validation/diagnostics from the
+backend helper (when supported).}
+
+\item{validate_strict}{Logical; only used when \code{validate = TRUE}. If \code{TRUE},
+enforce validity and error on invalid winners; if \code{FALSE}, validation is
+report-only.}
+
+\item{...}{Additional backend-specific parameters forwarded to the selected
+backend helper.}
 }
 \value{
 A tibble with one row and the same columns as the underlying
-backend-specific live helper (for example \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
-for \code{"openai"}). All backends are intended to return a compatible
-structure including \code{thoughts}, \code{content}, and token counts.
+backend-specific live helper.
 }
 \description{
 \code{llm_compare_pair()} is a thin wrapper around backend-specific comparison
@@ -87,11 +76,11 @@ functions. It currently supports the \code{"openai"}, \code{"anthropic"}, \code{
 \code{"together"}, and \code{"ollama"} backends and forwards the call to the
 appropriate live comparison helper:
 \itemize{
-\item \code{"openai"}   → \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
+\item \code{"openai"}    → \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
 \item \code{"anthropic"} → \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}}
-\item \code{"gemini"}   → \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}
+\item \code{"gemini"}    → \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}
 \item \code{"together"}  → \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}
-\item \code{"ollama"}   → \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}
+\item \code{"ollama"}    → \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}
 }
 }
 \details{
@@ -109,94 +98,12 @@ including:
 
 For the \code{"openai"} backend, the \code{endpoint} argument controls whether
 the Chat Completions API (\code{"chat.completions"}) or the Responses API
-(\code{"responses"}) is used. For the \code{"anthropic"}, \code{"gemini"}, and
-\code{"ollama"} backends, \code{endpoint} is currently ignored and the default
+(\code{"responses"}) is used. For the \code{"anthropic"}, \code{"gemini"}, \code{"together"},
+and \code{"ollama"} backends, \code{endpoint} is currently ignored and the default
 live API for that provider is used.
-}
-\examples{
-\dontrun{
-# Requires an API key for the chosen cloud backend. For OpenAI, set
-# OPENAI_API_KEY in your environment. Running these examples will incur
-# API usage costs.
-#
-# For local Ollama use, an Ollama server must be running and the models
-# must be pulled in advance. No API key is required for the `"ollama"`
-# backend.
 
-data("example_writing_samples", package = "pairwiseLLM")
-samples <- example_writing_samples[1:2, ]
-
-td <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-# Single live comparison using the OpenAI backend and chat.completions
-res_live <- llm_compare_pair(
-  ID1               = samples$ID[1],
-  text1             = samples$text[1],
-  ID2               = samples$ID[2],
-  text2             = samples$text[2],
-  model             = "gpt-4.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  backend           = "openai",
-  endpoint          = "chat.completions",
-  temperature       = 0
-)
-
-res_live$better_id
-
-# Using the OpenAI responses endpoint with gpt-5.1 and reasoning = "low"
-res_live_gpt5 <- llm_compare_pair(
-  ID1               = samples$ID[1],
-  text1             = samples$text[1],
-  ID2               = samples$ID[2],
-  text2             = samples$text[2],
-  model             = "gpt-5.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  backend           = "openai",
-  endpoint          = "responses",
-  reasoning         = "low",
-  include_thoughts  = TRUE,
-  temperature       = NULL,
-  top_p             = NULL,
-  logprobs          = NULL,
-  include_raw       = TRUE
-)
-
-str(res_live_gpt5$raw_response[[1]], max.level = 2)
-
-# Example: single live comparison using a local Ollama backend
-res_ollama <- llm_compare_pair(
-  ID1 = samples$ID[1],
-  text1 = samples$text[1],
-  ID2 = samples$ID[2],
-  text2 = samples$text[2],
-  model = "mistral-small3.2:24b",
-  trait_name = td$name,
-  trait_description = td$description,
-  prompt_template = tmpl,
-  backend = "ollama",
-  host = getOption(
-    "pairwiseLLM.ollama_host",
-    "http://127.0.0.1:11434"
-  ),
-  think = FALSE
-)
-
-res_ollama$better_id
-}
-
-}
-\seealso{
-\itemize{
-\item \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}, \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
-\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}, \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}, and
-\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}} for backend-specific implementations.
-\item \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} for row-wise comparisons over a tibble of pairs.
-\item \code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}} for Bradley–Terry modelling of
-comparison results.
-}
+Optional validation can be enabled via \code{validate}. When enabled, the
+backend helper may compute a compact diagnostic report (for example, invalid
+winner tokens) without interrupting pipelines. If \code{validate_strict = TRUE},
+validation is enforced and invalid winners may error.
 }

@@ -67,6 +67,9 @@
 #'   many times.  Between retries, the function sleeps for a brief
 #'   period proportional to the current attempt.  Defaults to 3.
 #'
+#' @param validate Logical; if `TRUE`, attach a compact `validation_report` to the output (computed by [validate_backend_results()]). For `llm_submit_pairs_multi_batch()` this value is recorded in the job metadata so that downstream workflows can apply consistent validation defaults.
+#' @param validate_strict Logical; only used when `validate = TRUE`. If `TRUE`, enforce validity by calling [validate_pairwise_results()] (errors on invalid winners). If `FALSE` (default), validation is report-only.
+#' @param normalize_winner Logical; only used when `validate = TRUE`. If `TRUE`, normalize common winner tokens before validating (see [validate_backend_results()]).
 #' @return A list with two elements: `jobs`, a list of per‑batch metadata
 #'   (similar to the example in the advanced vignette), and `registry`,
 #'   a tibble summarising all jobs.  The `registry` contains columns
@@ -134,7 +137,10 @@ llm_submit_pairs_multi_batch <- function(
   keep_jsonl = TRUE,
   verbose = FALSE,
   ...,
-  openai_max_retries = 3
+  openai_max_retries = 3,
+  validate = FALSE,
+  validate_strict = FALSE,
+  normalize_winner = FALSE
 ) {
   backend <- match.arg(backend)
 
@@ -402,6 +408,10 @@ llm_submit_pairs_multi_batch <- function(
 #'   and current state on each polling round, as well as summary messages
 #'   when combined results are written to disk.  Defaults to `FALSE`.
 #'
+#' @param validate Logical; if `TRUE`, attach a compact `validation_report` to the output (computed by [validate_backend_results()]). For `llm_submit_pairs_multi_batch()` this value is recorded in the job metadata so that downstream workflows can apply consistent validation defaults.
+#' @param validate_strict Logical; only used when `validate = TRUE`. If `TRUE`, enforce validity by calling [validate_pairwise_results()] (errors on invalid winners). If `FALSE` (default), validation is report-only.
+#' @param normalize_winner Logical; only used when `validate = TRUE`. If `TRUE`, normalize common winner tokens before validating (see [validate_backend_results()]).
+#' @param max_rounds Optional integer; maximum number of polling rounds before stopping with an error. If `NULL` (default), a conservative cap is applied only when `interval_seconds == 0` and `per_job_delay == 0`.
 #' @return A list with two elements: `jobs`, the updated jobs list with each
 #'   element containing parsed results and a `done` flag, and `combined`,
 #'   a tibble obtained by binding all completed results (`NULL` if no batches
@@ -448,8 +458,15 @@ llm_resume_multi_batches <- function(
   verbose = FALSE,
   write_combined_csv = FALSE,
   combined_csv_path = NULL,
-  openai_max_retries = 3
+  openai_max_retries = 3,
+  validate = FALSE,
+  validate_strict = FALSE,
+  normalize_winner = FALSE,
+  max_rounds = NULL
 ) {
+  validation_report <- NULL
+
+
   # Validate inputs; either jobs must be supplied or output_dir must be provided
   if (is.null(jobs)) {
     if (is.null(output_dir)) {
@@ -494,7 +511,25 @@ llm_resume_multi_batches <- function(
 
   unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
 
+  # Prevent accidental infinite loops during testing or misconfigured polling.
+  # If max_rounds is NULL, apply a conservative cap only when polling would spin
+  # (interval_seconds == 0 and per_job_delay == 0). Otherwise, no cap is applied.
+  if (is.null(max_rounds)) {
+    max_rounds_internal <- if (identical(interval_seconds, 0) && identical(per_job_delay, 0)) 1000L else Inf
+  } else {
+    max_rounds_internal <- max_rounds
+  }
+  round_i <- 0L
+
   while (length(unfinished) > 0L) {
+    round_i <- round_i + 1L
+    if (is.finite(max_rounds_internal) && round_i > max_rounds_internal) {
+      stop(
+        "Polling exceeded max_rounds (", max_rounds_internal, ") without completing all jobs. ",
+        "This usually indicates a job that never reaches a terminal status in the mocked API or provider response.",
+        call. = FALSE
+      )
+    }
     for (j in unfinished) {
       job <- jobs[[j]]
       if (job$done) next
@@ -757,6 +792,29 @@ llm_resume_multi_batches <- function(
     NULL
   }
 
+
+  # Validate combined results if requested
+  if (isTRUE(validate)) {
+    if (is.null(combined)) {
+      validation_report <- list(
+        backend = "llm_resume_multi_batches",
+        n_rows = 0L,
+        n_missing_id = 0L,
+        n_missing_winner = 0L,
+        n_invalid_winner = 0L
+      )
+    } else {
+      vr <- validate_backend_results(
+        combined,
+        backend = "llm_resume_multi_batches",
+        normalize_winner = isTRUE(normalize_winner),
+        strict = isTRUE(validate_strict),
+        return_report = TRUE
+      )
+      combined <- vr$data
+      validation_report <- vr$report
+    }
+  }
   # Optionally write the combined results to CSV
   if (isTRUE(write_combined_csv) && !is.null(combined)) {
     # Determine the file path: if user provided combined_csv_path, use it;
@@ -792,5 +850,5 @@ llm_resume_multi_batches <- function(
     }
   }
 
-  invisible(list(jobs = jobs, combined = combined))
+  invisible(list(jobs = jobs, combined = combined, validation_report = validation_report))
 }

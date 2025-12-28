@@ -449,6 +449,8 @@ together_compare_pair_live <- function(
 #'   or other provider-specific options. These are forwarded to
 #'   [together_compare_pair_live()].
 #'
+#' @param validate Logical; if `TRUE`, attach a compact `validation_report` computed by [validate_backend_results()].
+#' @param validate_strict Logical; only used when `validate = TRUE`. If `TRUE`, enforce validity by calling [validate_pairwise_results()] (errors on invalid winners). If `FALSE` (default), validation is report-only.
 #' @return A list containing two elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair and

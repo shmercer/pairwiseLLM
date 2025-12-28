@@ -104,7 +104,7 @@ judge_summary <- function(results, judge_col = "judge", compute_reverse = TRUE) 
       # Split rows into "main" and "reverse" based on lexicographic ordering
       is_main <- dfv$ID1 <= dfv$ID2
       main_df <- dfv[is_main, , drop = FALSE]
-      rev_df  <- dfv[!is_main, , drop = FALSE]
+      rev_df <- dfv[!is_main, , drop = FALSE]
 
       # compute_reverse_consistency expects ID1/ID2/better_id columns
       if (nrow(main_df) > 0L && nrow(rev_df) > 0L) {
@@ -132,10 +132,11 @@ judge_summary <- function(results, judge_col = "judge", compute_reverse = TRUE) 
   }
 
   by_judge <- results |>
-    dplyr::group_by(.judge) |>
+    dplyr::group_by(.data$.judge) |>
     dplyr::group_modify(~ summarize_one(.x)) |>
     dplyr::ungroup() |>
-    dplyr::rename(judge = .judge)
+    dplyr::mutate(judge = .data$.judge) |>
+    dplyr::select(-dplyr::all_of(".judge"))
 
   overall <- summarize_one(results)
 
@@ -259,9 +260,9 @@ judge_fit_summary <- function(fit, fit_bounds = c(0.7, 1.3), top_n = 5L) {
   outfit_max <- if (n_judges == 0L) NA_real_ else max(details$outfit, na.rm = TRUE)
 
   worst <- details |>
-    dplyr::arrange(dplyr::desc(deviation)) |>
+    dplyr::arrange(dplyr::desc(.data$deviation)) |>
     dplyr::slice_head(n = top_n) |>
-    dplyr::pull(judge)
+    dplyr::pull(dplyr::all_of("judge"))
 
   summary <- tibble::tibble(
     has_judge_fit = TRUE,
@@ -276,7 +277,7 @@ judge_fit_summary <- function(fit, fit_bounds = c(0.7, 1.3), top_n = 5L) {
   )
 
   details <- details |>
-    dplyr::select(judge, infit, outfit, is_misfit, deviation)
+    dplyr::select(dplyr::all_of(c("judge", "infit", "outfit", "is_misfit", "deviation")))
 
   list(summary = summary, details = details)
 }

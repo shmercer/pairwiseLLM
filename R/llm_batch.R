@@ -76,6 +76,14 @@
 #'     (unless overridden) and sets `temperature = 1`.
 #' @param include_raw Logical; whether to include raw provider responses in the
 #'   result (where supported by backends).
+#' @param validate Logical; if `TRUE`, attach a compact `validation_report` to the
+#'   returned object using [validate_backend_results()].
+#' @param validate_strict Logical; only used when `validate = TRUE`. If `TRUE`,
+#'   enforce validity and error on invalid winners. If `FALSE` (default),
+#'   validation is report-only.
+#' @param normalize_winner Logical; only used when `validate = TRUE`. If `TRUE`,
+#'   normalize common winner tokens (e.g., `"SAMPLE_1"`, `"SAMPLE_2"`, `"1"`, `"2"`)
+#'   into the corresponding IDs before validation.
 #' @param ... Additional arguments passed through to the backend-specific
 #'   `run_*_batch_pipeline()` functions. This can include provider-specific
 #'   options such as temperature or batch configuration fields. For OpenAI,
@@ -160,6 +168,9 @@ llm_submit_pairs_batch <- function(
   prompt_template = set_prompt_template(),
   include_thoughts = FALSE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
+  normalize_winner = FALSE,
   ...
 ) {
   backend <- match.arg(tolower(backend), c("openai", "anthropic", "gemini"))
@@ -266,6 +277,18 @@ llm_submit_pairs_batch <- function(
   }
 
   out$backend <- backend
+
+  # Optional validation/summarization of parsed results
+  if (isTRUE(validate) && !is.null(out$results)) {
+    out <- .apply_backend_validation_to_submit_output(
+      output = out,
+      backend = paste0(backend, "_batch"),
+      validate = TRUE,
+      validate_strict = isTRUE(validate_strict),
+      normalize_winner = isTRUE(normalize_winner)
+    )
+  }
+
 
   # Ensure batch paths exist when provided
   if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&

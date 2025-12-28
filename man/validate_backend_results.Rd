@@ -79,7 +79,12 @@ res <- tibble::tibble(
 )
 
 # Report-only mode (default): does not error on invalid rows
-out <- validate_backend_results(res, backend = "demo", normalize_winner = TRUE, return_report = TRUE)
+out <- validate_backend_results(
+  res,
+  backend = "demo",
+  normalize_winner = TRUE,
+  return_report = TRUE
+)
 out$report$n_invalid_winner
 
 # Strict mode: enforce validity (errors on invalid winners)

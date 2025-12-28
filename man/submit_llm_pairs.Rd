@@ -17,25 +17,8 @@ submit_llm_pairs(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
-  save_path = NULL,
-  parallel = FALSE,
-  workers = 1,
-  ...
-)
-
-submit_llm_pairs(
-  pairs,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
-  api_key = NULL,
-  verbose = TRUE,
-  status_every = 1,
-  progress = TRUE,
-  include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
@@ -44,17 +27,9 @@ submit_llm_pairs(
 }
 \arguments{
 \item{pairs}{Tibble or data frame with at least columns \code{ID1}, \code{text1},
-\code{ID2}, \code{text2}. Typically created by \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=sample_pairs]{sample_pairs()}}, and
-\code{\link[=randomize_pair_order]{randomize_pair_order()}}.}
+\code{ID2}, \code{text2}.}
 
-\item{model}{Model identifier for the chosen backend. For \code{"openai"} this
-should be an OpenAI model name (for example \code{"gpt-4.1"}, \code{"gpt-5.1"}).
-For \code{"anthropic"} and \code{"gemini"}, use the corresponding provider model
-names (for example \code{"claude-4-5-sonnet"} or
-\code{"gemini-3-pro-preview"}). For "together", use Together.ai model identifiers
-such as \code{"deepseek-ai/DeepSeek-R1"} or \code{"deepseek-ai/DeepSeek-V3"}. For
-\code{"ollama"}, use a local model name known to the Ollama server (for example
-\code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).}
+\item{model}{Model identifier for the chosen backend.}
 
 \item{trait_name}{Trait name to pass through to the backend-specific
 comparison function (for example \code{"Overall Quality"}).}
@@ -64,207 +39,63 @@ comparison function (for example \code{"Overall Quality"}).}
 \item{prompt_template}{Prompt template string, typically from
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
-\item{backend}{Character scalar indicating which LLM provider to use.
-One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, or \code{"ollama"}.}
+\item{backend}{Character scalar indicating which LLM provider to use.}
 
 \item{endpoint}{Character scalar specifying which endpoint family to use for
 backends that support multiple live APIs. For the \code{"openai"} backend this
-must be one of \code{"chat.completions"} or \code{"responses"}, matching
-\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"}, \code{"gemini"}, \code{"together"},
-and \code{"ollama"}, this is currently ignored.}
+must be one of \code{"chat.completions"} or \code{"responses"}. For other backends,
+this argument is currently ignored.}
 
 \item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
 backend-specific helper will use its own default environment variable.
-For \code{"ollama"}, this argument is ignored (no API key is required for
-local inference).}
+For \code{"ollama"}, this argument is ignored.}
 
-\item{verbose}{Logical; if \code{TRUE}, prints status, timing, and result
-summaries (for backends that support it).}
+\item{verbose}{Logical; if \code{TRUE}, prints status updates.}
 
-\item{status_every}{Integer; print status and timing for every
-\code{status_every}-th pair. Defaults to 1 (every pair). Errors are always
-printed.}
+\item{status_every}{Integer; print status every \code{status_every} pairs.}
 
-\item{progress}{Logical; if \code{TRUE}, shows a textual progress bar for
-backends that support it.}
+\item{progress}{Logical; if \code{TRUE}, shows a textual progress indicator when supported.}
 
-\item{include_raw}{Logical; if \code{TRUE}, each row of the returned tibble will
-include a \code{raw_response} list-column with the parsed JSON body from the
-backend (for backends that support this).}
+\item{include_raw}{Logical; if \code{TRUE}, include a \code{raw_response} list-column when supported.}
 
-\item{save_path}{Character string; optional file path (e.g., "output.csv")
-to save results incrementally. If the file exists, the function reads it
-to identify and skip pairs that have already been processed (resume mode).
-Supported by all backends.}
+\item{validate}{Logical; if \code{TRUE}, attach a compact \code{validation_report} to the
+returned list using \code{\link[=validate_backend_results]{validate_backend_results()}}.}
 
-\item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
-\code{future.apply}. Requires the \code{future} package. Supported by
-all backends (though defaults may vary).}
+\item{validate_strict}{Logical; only used when \code{validate = TRUE}. If \code{TRUE},
+enforce validity (error on invalid winners); if \code{FALSE}, validation is report-only.}
 
-\item{workers}{Integer; the number of parallel workers (threads) to use if
-\code{parallel = TRUE}. Defaults to 1.}
+\item{save_path}{Optional path to save results incrementally. If the file exists,
+the function will resume by skipping already processed pairs when supported.}
 
-\item{...}{Additional backend-specific parameters. For \code{"openai"} these
-are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} and typically include
-\code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, and \code{include_thoughts}.
-For \code{"anthropic"} and \code{"gemini"}, they are forwarded to
-\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}} or \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} and
-may include options such as \code{max_output_tokens}, \code{include_thoughts}, and
-provider-specific controls. For \code{"ollama"}, arguments are forwarded to
-\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} and may include \code{host}, \code{think},
-\code{num_ctx}, and other Ollama-specific options.}
+\item{parallel}{Logical; if \code{TRUE}, enable parallel processing (requires \pkg{future}).}
+
+\item{workers}{Integer; number of parallel workers when \code{parallel = TRUE}.}
+
+\item{...}{Additional backend-specific parameters forwarded to the selected backend helper.}
 }
 \value{
 A list containing:
 \describe{
 \item{results}{A tibble with one row per successfully processed pair.}
-\item{failed_pairs}{A tibble containing rows that failed to process (for
-supported backends).}
-}
-Note: The \code{"ollama"} backend currently returns a single tibble of results
-(failures may throw errors or appear as NA rows depending on implementation).
-
-A list containing:
-\describe{
-\item{results}{A tibble with one row per successfully processed pair.}
-\item{failed_pairs}{A tibble containing rows that failed to process (for
-supported backends).}
+\item{failed_pairs}{A tibble of pairs that failed to process when supported.}
+\item{validation_report}{Present when \code{validate = TRUE}.}
 }
 }
 \description{
 \code{submit_llm_pairs()} is a backend-neutral wrapper around row-wise comparison
 for multiple pairs. It takes a tibble of pairs (\code{ID1}, \code{text1}, \code{ID2},
-\code{text2}), submits each pair to the selected backend, and aggregates the results.
-
-\code{submit_llm_pairs()} is a backend-neutral wrapper around row-wise comparison
-for multiple pairs. It takes a tibble of pairs (\code{ID1}, \code{text1}, \code{ID2},
-\code{text2}), submits each pair to the selected backend, and aggregates the results.
+\code{text2}), submits each pair to the selected backend, and aggregates results.
 }
 \details{
-This function supports parallel processing, incremental saving, and resume
-capability for the \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, and \code{"together"}
-backends.
+This function supports parallel processing and incremental saving/resume via
+\code{save_path} for all currently supported backends.
 
 At present, the following backends are implemented:
 \itemize{
-\item \code{"openai"}   → \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}
+\item \code{"openai"}    → \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}
 \item \code{"anthropic"} → \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}
-\item \code{"gemini"}   → \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}
+\item \code{"gemini"}    → \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}
 \item \code{"together"}  → \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}
-\item \code{"ollama"}   → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
-}
-
-This function supports parallel processing, incremental saving, and resume
-capability for the \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"},
-and \code{"ollama"} backends.
-
-At present, the following backends are implemented:
-\itemize{
-\item \code{"openai"}   → \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}
-\item \code{"anthropic"} → \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}
-\item \code{"gemini"}   → \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}
-\item \code{"together"}  → \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}
-\item \code{"ollama"}   → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
-}
-}
-\examples{
-\dontrun{
-# Requires an API key for the chosen cloud backend.
-
-data("example_writing_samples", package = "pairwiseLLM")
-
-pairs <- example_writing_samples |>
-  make_pairs() |>
-  sample_pairs(n_pairs = 5, seed = 123) |>
-  randomize_pair_order(seed = 456)
-
-td <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-# Parallel execution with OpenAI (requires future package)
-res_live <- submit_llm_pairs(
-  pairs             = pairs,
-  model             = "gpt-4.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  backend           = "openai",
-  endpoint          = "chat.completions",
-  parallel          = TRUE,
-  workers           = 4,
-  save_path         = "results_openai.csv"
-)
-
-# Check results
-head(res_live$results)
-
-# Live comparisons using a local Ollama backend
-res_ollama <- submit_llm_pairs(
-  pairs             = pairs,
-  model             = "mistral-small3.2:24b",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  backend           = "ollama",
-  verbose           = TRUE
-)
-
-res_ollama$better_id
-}
-
-\dontrun{
-# Requires an API key for the chosen cloud backend.
-
-data("example_writing_samples", package = "pairwiseLLM")
-
-pairs <- example_writing_samples |>
-  make_pairs() |>
-  sample_pairs(n_pairs = 5, seed = 123) |>
-  randomize_pair_order(seed = 456)
-
-td <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-# Parallel execution with OpenAI (requires future package)
-res_live <- submit_llm_pairs(
-  pairs             = pairs,
-  model             = "gpt-4.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  backend           = "openai",
-  endpoint          = "chat.completions",
-  parallel          = TRUE,
-  workers           = 4,
-  save_path         = "results_openai.csv"
-)
-
-# Live comparisons using a local Ollama backend with incremental saving
-res_ollama <- submit_llm_pairs(
-  pairs             = pairs,
-  model             = "mistral-small3.2:24b",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  backend           = "ollama",
-  save_path         = "results_ollama.csv",
-  verbose           = TRUE
-)
-
-res_ollama$results
-}
-
-}
-\seealso{
-\itemize{
-\item \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
-\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, and
-\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for backend-specific implementations.
-}
-
-\itemize{
-\item \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
-\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, and
-\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for backend-specific implementations.
+\item \code{"ollama"}    → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
 }
 }

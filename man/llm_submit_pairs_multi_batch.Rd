@@ -18,7 +18,10 @@ llm_submit_pairs_multi_batch(
   keep_jsonl = TRUE,
   verbose = FALSE,
   ...,
-  openai_max_retries = 3
+  openai_max_retries = 3,
+  validate = FALSE,
+  validate_strict = FALSE,
+  normalize_winner = FALSE
 )
 }
 \arguments{
@@ -81,6 +84,12 @@ can return a 500 error; specifying a positive value here
 (e.g. 3) will automatically retry the submission up to that
 many times.  Between retries, the function sleeps for a brief
 period proportional to the current attempt.  Defaults to 3.}
+
+\item{validate}{Logical; if \code{TRUE}, attach a compact \code{validation_report} to the output (computed by \code{\link[=validate_backend_results]{validate_backend_results()}}). For \code{llm_submit_pairs_multi_batch()} this value is recorded in the job metadata so that downstream workflows can apply consistent validation defaults.}
+
+\item{validate_strict}{Logical; only used when \code{validate = TRUE}. If \code{TRUE}, enforce validity by calling \code{\link[=validate_pairwise_results]{validate_pairwise_results()}} (errors on invalid winners). If \code{FALSE} (default), validation is report-only.}
+
+\item{normalize_winner}{Logical; only used when \code{validate = TRUE}. If \code{TRUE}, normalize common winner tokens before validating (see \code{\link[=validate_backend_results]{validate_backend_results()}}).}
 }
 \value{
 A list with two elements: \code{jobs}, a list of per‑batch metadata

@@ -17,7 +17,11 @@ llm_resume_multi_batches(
   verbose = FALSE,
   write_combined_csv = FALSE,
   combined_csv_path = NULL,
-  openai_max_retries = 3
+  openai_max_retries = 3,
+  validate = FALSE,
+  validate_strict = FALSE,
+  normalize_winner = FALSE,
+  max_rounds = NULL
 )
 }
 \arguments{
@@ -88,6 +92,14 @@ the output file up to \code{openai_max_retries} times if an
 \code{httr2_http_500} error is raised.  Between retries the function sleeps
 for \code{per_job_delay} seconds.  Set to a small positive value (e.g. 3)
 to automatically recover from occasional server errors.  Defaults to 3.}
+
+\item{validate}{Logical; if \code{TRUE}, attach a compact \code{validation_report} to the output (computed by \code{\link[=validate_backend_results]{validate_backend_results()}}). For \code{llm_submit_pairs_multi_batch()} this value is recorded in the job metadata so that downstream workflows can apply consistent validation defaults.}
+
+\item{validate_strict}{Logical; only used when \code{validate = TRUE}. If \code{TRUE}, enforce validity by calling \code{\link[=validate_pairwise_results]{validate_pairwise_results()}} (errors on invalid winners). If \code{FALSE} (default), validation is report-only.}
+
+\item{normalize_winner}{Logical; only used when \code{validate = TRUE}. If \code{TRUE}, normalize common winner tokens before validating (see \code{\link[=validate_backend_results]{validate_backend_results()}}).}
+
+\item{max_rounds}{Optional integer; maximum number of polling rounds before stopping with an error. If \code{NULL} (default), a conservative cap is applied only when \code{interval_seconds == 0} and \code{per_job_delay == 0}.}
 }
 \value{
 A list with two elements: \code{jobs}, the updated jobs list with each

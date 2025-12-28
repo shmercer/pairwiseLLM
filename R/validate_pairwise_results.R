@@ -117,7 +117,7 @@ validate_pairwise_results <- function(results,
     bad_idx <- which(invalid)
     examples <- unique(as.character(winner[bad_idx]))
     examples <- examples[!is.na(examples)]
-    examples <- head(examples, 5)
+    examples <- utils::head(examples, 5)
     stop(
       "`results` winner column must match `", id1_col, "` or `", id2_col,
       "` (or be missing). Examples of invalid winners: ",

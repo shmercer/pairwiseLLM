@@ -70,6 +70,10 @@ pair).}
 include a \code{raw_response} list-column with the parsed JSON body.
 Note: Raw responses are not saved to the incremental CSV file.}
 
+\item{validate}{Logical; if \code{TRUE}, attach a compact \code{validation_report} computed by \code{\link[=validate_backend_results]{validate_backend_results()}}.}
+
+\item{validate_strict}{Logical; only used when \code{validate = TRUE}. If \code{TRUE}, enforce validity by calling \code{\link[=validate_pairwise_results]{validate_pairwise_results()}} (errors on invalid winners). If \code{FALSE} (default), validation is report-only.}
+
 \item{include_thoughts}{Logical; if \code{TRUE}, requests explicit reasoning
 output from Gemini and stores it in the \code{thoughts} column of the result,
 mirroring \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}.}

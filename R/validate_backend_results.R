@@ -55,7 +55,12 @@
 #' )
 #'
 #' # Report-only mode (default): does not error on invalid rows
-#' out <- validate_backend_results(res, backend = "demo", normalize_winner = TRUE, return_report = TRUE)
+#' out <- validate_backend_results(
+#'   res,
+#'   backend = "demo",
+#'   normalize_winner = TRUE,
+#'   return_report = TRUE
+#' )
 #' out$report$n_invalid_winner
 #'
 #' # Strict mode: enforce validity (errors on invalid winners)
@@ -156,15 +161,17 @@ validate_backend_results <- function(results,
 
 #' @keywords internal
 .apply_backend_validation_to_submit_output <- function(output,
-                                                      backend,
-                                                      validate = FALSE,
-                                                      validate_strict = FALSE,
-                                                      normalize_winner = FALSE,
-                                                      id1_col = "ID1",
-                                                      id2_col = "ID2",
-                                                      winner_col = "better_id",
-                                                      judge_col = NULL) {
-  if (!isTRUE(validate)) return(output)
+                                                       backend,
+                                                       validate = FALSE,
+                                                       validate_strict = FALSE,
+                                                       normalize_winner = FALSE,
+                                                       id1_col = "ID1",
+                                                       id2_col = "ID2",
+                                                       winner_col = "better_id",
+                                                       judge_col = NULL) {
+  if (!isTRUE(validate)) {
+    return(output)
+  }
 
   if (!is.list(output) || is.null(output$results)) {
     stop("`output` must be a list with a `results` element.", call. = FALSE)

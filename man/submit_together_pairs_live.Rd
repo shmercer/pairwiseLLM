@@ -56,6 +56,10 @@ summaries.}
 include a \code{raw_response} list-column with the parsed JSON body from
 Together.ai. Note: Raw responses are not saved to the incremental CSV file.}
 
+\item{validate}{Logical; if \code{TRUE}, attach a compact \code{validation_report} computed by \code{\link[=validate_backend_results]{validate_backend_results()}}.}
+
+\item{validate_strict}{Logical; only used when \code{validate = TRUE}. If \code{TRUE}, enforce validity by calling \code{\link[=validate_pairwise_results]{validate_pairwise_results()}} (errors on invalid winners). If \code{FALSE} (default), validation is report-only.}
+
 \item{save_path}{Character string; optional file path (e.g., "output.csv")
 to save results incrementally. If the file exists, the function reads it
 to identify and skip pairs that have already been processed (resume mode).
