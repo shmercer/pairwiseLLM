@@ -227,6 +227,7 @@ bt_run_adaptive_core_linking <- function(samples,
                                          max_rounds_per_batch = 50,
                                          within_batch_frac = 0.25,
                                          core_audit_frac = 0.05,
+                                         allocation = c("fixed", "precision_ramp", "audit_on_drift"),
                                          allocation_fun = NULL,
                                          k_neighbors = 10,
                                          min_judgments = 12,
@@ -321,6 +322,16 @@ bt_run_adaptive_core_linking <- function(samples,
   # Core selection
   if (is.null(core_ids)) {
     core_method <- match.arg(core_method)
+
+    allocation <- match.arg(allocation)
+    if (is.null(allocation_fun) && allocation != "fixed") {
+      allocation_fun <- switch(allocation,
+        precision_ramp = allocation_precision_ramp(),
+        audit_on_drift = allocation_audit_on_drift(),
+        NULL
+      )
+    }
+
     embeddings_metric <- match.arg(embeddings_metric)
 
     core_args <- list(

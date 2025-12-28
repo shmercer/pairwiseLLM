@@ -191,6 +191,7 @@ bt_run_core_linking <- function(samples,
                                 max_rounds_per_batch = 50,
                                 within_batch_frac = 0.25,
                                 core_audit_frac = 0.10,
+                                allocation = c("fixed", "precision_ramp", "audit_on_drift"),
                                 allocation_fun = NULL,
                                 k_neighbors = 10,
                                 min_judgments = 12,
@@ -231,6 +232,16 @@ bt_run_core_linking <- function(samples,
 
   drift_reference <- match.arg(drift_reference)
   core_method <- match.arg(core_method)
+
+  allocation <- match.arg(allocation)
+  if (is.null(allocation_fun) && allocation != "fixed") {
+    allocation_fun <- switch(allocation,
+      precision_ramp = allocation_precision_ramp(),
+      audit_on_drift = allocation_audit_on_drift(),
+      NULL
+    )
+  }
+
 
   linking <- match.arg(linking)
   linking_method <- match.arg(linking_method)
