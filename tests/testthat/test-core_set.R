@@ -126,9 +126,35 @@ testthat::test_that("select_core_set core_pct and core_size validation branches 
   )
 
   # core_size=NULL path (core_pct determines k)
-  out <- select_core_set(samples, core_size = NULL, core_pct = 0.40, method = "random", seed = 1)
+  out <- select_core_set(samples, core_size = NULL, core_pct = 0.40, min_core = 2, max_core = 500L, method = "random", seed = 1)
   testthat::expect_equal(nrow(out), 4)
   testthat::expect_true(all(out$ID %in% samples$ID))
+})
+
+testthat::test_that("select_core_set auto-size clamps to min_core and max_core", {
+  # min_core default (30) should clamp small core_pct selections up.
+  samples_100 <- tibble::tibble(ID = paste0("S", 1:100), text = rep("x y z", 100))
+  out_min <- select_core_set(samples_100, core_size = NULL, core_pct = 0.10, method = "random", seed = 1)
+  testthat::expect_equal(nrow(out_min), 30)
+
+  # max_core default (500) should clamp very large core_pct selections down.
+  n_big <- 1000
+  samples_1000 <- tibble::tibble(ID = paste0("S", 1:n_big), text = rep("x", n_big))
+  out_max <- select_core_set(samples_1000, core_size = NULL, core_pct = 0.90, method = "random", seed = 1)
+  testthat::expect_equal(nrow(out_max), 500)
+
+  # If n < min_core, clamp to n.
+  samples_10 <- tibble::tibble(ID = paste0("S", 1:10), text = rep("x", 10))
+  out_small <- select_core_set(samples_10, core_size = NULL, core_pct = 0.40, method = "random", seed = 1)
+  testthat::expect_equal(nrow(out_small), 10)
+})
+
+testthat::test_that("select_core_set validates min_core/max_core", {
+  samples <- tibble::tibble(ID = paste0("S", 1:10), text = rep("x", 10))
+  testthat::expect_error(
+    select_core_set(samples, core_size = NULL, core_pct = 0.40, min_core = 10, max_core = 5, method = "random"),
+    "min_core.*max_core"
+  )
 })
 
 testthat::test_that("select_core_set seed validation and CRAN-safe restoration (seed present and missing)", {

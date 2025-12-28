@@ -8,6 +8,8 @@ select_core_set(
   samples,
   core_size = NULL,
   core_pct = 0.1,
+  min_core = 30L,
+  max_core = 500L,
   method = c("auto", "pam", "clara", "embeddings", "token_stratified", "random"),
   embeddings = NULL,
   distance = c("cosine", "euclidean"),
@@ -21,10 +23,18 @@ select_core_set(
 \item{samples}{A tibble/data.frame with columns \code{ID} and \code{text}.}
 
 \item{core_size}{Integer number of core items to select. If \code{NULL},
-uses \code{core_pct * nrow(samples)} (clamped to \code{[2, n]}).}
+uses \code{core_pct * nrow(samples)} and clamps to
+\code{[min_core, max_core]} and \code{[2, nrow(samples)]}.}
 
 \item{core_pct}{Proportion used when \code{core_size} is \code{NULL}.
 Must be in \code{(0, 1]}.}
+
+\item{min_core}{Integer. When \code{core_size} is \code{NULL}, the selected
+core size will be at least \code{min_core} (unless \code{nrow(samples)} is
+smaller).}
+
+\item{max_core}{Integer. When \code{core_size} is \code{NULL}, the selected
+core size will be at most \code{max_core}.}
 
 \item{method}{Selection method: \code{"auto"}, \code{"pam"}, \code{"clara"},
 \code{"embeddings"} (alias for \code{"auto"}), \code{"token_stratified"},

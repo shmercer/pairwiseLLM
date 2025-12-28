@@ -15,9 +15,15 @@
 #'
 #' @param samples A tibble/data.frame with columns \code{ID} and \code{text}.
 #' @param core_size Integer number of core items to select. If \code{NULL},
-#'   uses \code{core_pct * nrow(samples)} (clamped to \code{[2, n]}).
+#'   uses \code{core_pct * nrow(samples)} and clamps to
+#'   \code{[min_core, max_core]} and \code{[2, nrow(samples)]}.
 #' @param core_pct Proportion used when \code{core_size} is \code{NULL}.
 #'   Must be in \code{(0, 1]}.
+#' @param min_core Integer. When \code{core_size} is \code{NULL}, the selected
+#'   core size will be at least \code{min_core} (unless \code{nrow(samples)} is
+#'   smaller).
+#' @param max_core Integer. When \code{core_size} is \code{NULL}, the selected
+#'   core size will be at most \code{max_core}.
 #' @param method Selection method: \code{"auto"}, \code{"pam"}, \code{"clara"},
 #'   \code{"embeddings"} (alias for \code{"auto"}), \code{"token_stratified"},
 #'   or \code{"random"}.
@@ -74,6 +80,8 @@
 select_core_set <- function(samples,
                             core_size = NULL,
                             core_pct = 0.10,
+                            min_core = 30L,
+                            max_core = 500L,
                             method = c("auto", "pam", "clara", "embeddings", "token_stratified", "random"),
                             embeddings = NULL,
                             distance = c("cosine", "euclidean"),
@@ -122,8 +130,23 @@ select_core_set <- function(samples,
     stop("`core_pct` must be a single numeric value in (0, 1].", call. = FALSE)
   }
 
+  if (!is.numeric(min_core) || length(min_core) != 1L || is.na(min_core) || min_core < 2) {
+    stop("`min_core` must be a single integer >= 2.", call. = FALSE)
+  }
+  if (!is.numeric(max_core) || length(max_core) != 1L || is.na(max_core) || max_core < 2) {
+    stop("`max_core` must be a single integer >= 2.", call. = FALSE)
+  }
+  min_core <- as.integer(min_core)
+  max_core <- as.integer(max_core)
+  if (min_core > max_core) {
+    stop("`min_core` cannot exceed `max_core`.", call. = FALSE)
+  }
+
   if (is.null(core_size)) {
     k <- as.integer(round(core_pct * n))
+    # Clamp heuristic for auto-sizing.
+    k <- max(k, min_core)
+    k <- min(k, max_core, n)
   } else {
     k <- as.integer(core_size)
   }

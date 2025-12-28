@@ -13,7 +13,7 @@ bt_run_adaptive_core_linking(
   core_size = NULL,
   core_pct = NULL,
   embeddings = NULL,
-  embeddings_metric = c("euclidean", "cosine"),
+  embeddings_metric = c("cosine", "euclidean"),
   linking = c("auto", "always", "never"),
   linking_method = c("mean_sd"),
   linking_cor_target = 0.98,

@@ -208,7 +208,7 @@ bt_run_adaptive_core_linking <- function(samples,
                                          core_size = NULL,
                                          core_pct = NULL,
                                          embeddings = NULL,
-                                         embeddings_metric = c("euclidean", "cosine"),
+                                         embeddings_metric = c("cosine", "euclidean"),
                                          linking = c("auto", "always", "never"),
                                          linking_method = c("mean_sd"),
                                          linking_cor_target = 0.98,
@@ -751,10 +751,6 @@ bt_run_adaptive_core_linking <- function(samples,
         stop_reason = stop_reason
       )
 
-      if (stop_now) {
-        break
-      }
-
       if (!is.null(allocation_fun)) {
         alloc_state <- list(
           stage = "round",
@@ -780,6 +776,10 @@ bt_run_adaptive_core_linking <- function(samples,
         )
         within_batch_frac <- alloc$within_batch_frac
         core_audit_frac <- alloc$core_audit_frac
+      }
+
+      if (stop_now) {
+        break
       }
 
       prev_metrics <- m
