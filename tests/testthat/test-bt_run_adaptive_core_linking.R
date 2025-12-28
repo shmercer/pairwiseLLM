@@ -688,3 +688,165 @@ test_that("bt_run_adaptive_core_linking errors when allocation_fun returns a non
     "allocation_fun.*return"
   )
 })
+
+testthat::test_that("bt_run_adaptive_core_linking covers additional validation branches", {
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
+  judge_fun <- function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+  fit_fun <- function(bt_data, ...) {
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = samples$ID, theta = c(0, 1), se = c(1, 1)),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  # samples with <2 rows
+  one_row <- tibble::tibble(ID = "A", text = "a")
+  testthat::expect_error(
+    bt_run_adaptive_core_linking(
+      samples = one_row,
+      batches = list("A"),
+      judge_fun = judge_fun,
+      core_ids = c("A", "B"),
+      fit_fun = fit_fun,
+      round_size = 1,
+      init_round_size = 0,
+      max_rounds_per_batch = 0,
+      rel_se_p90_target = 0,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      rel_se_p90_min_improve = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_
+    ),
+    "at least 2"
+  )
+
+  # core_ids length < 2
+  testthat::expect_error(
+    bt_run_adaptive_core_linking(
+      samples = samples,
+      batches = list("A"),
+      judge_fun = judge_fun,
+      core_ids = "A",
+      fit_fun = fit_fun,
+      round_size = 1,
+      init_round_size = 0,
+      max_rounds_per_batch = 0,
+      rel_se_p90_target = 0,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      rel_se_p90_min_improve = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_
+    ),
+    "at least 2"
+  )
+
+  # invalid linking targets (must be scalar)
+  testthat::expect_error(
+    bt_run_adaptive_core_linking(
+      samples = samples,
+      batches = list("A"),
+      judge_fun = judge_fun,
+      core_ids = c("A", "B"),
+      fit_fun = fit_fun,
+      linking_cor_target = c(0.9, 0.8),
+      round_size = 1,
+      init_round_size = 0,
+      max_rounds_per_batch = 0,
+      rel_se_p90_target = 0,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      rel_se_p90_min_improve = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_
+    ),
+    "linking_cor_target"
+  )
+
+  testthat::expect_error(
+    bt_run_adaptive_core_linking(
+      samples = samples,
+      batches = list("A"),
+      judge_fun = judge_fun,
+      core_ids = c("A", "B"),
+      fit_fun = fit_fun,
+      linking_min_n = 0,
+      round_size = 1,
+      init_round_size = 0,
+      max_rounds_per_batch = 0,
+      rel_se_p90_target = 0,
+      reliability_target = NA_real_,
+      sepG_target = NA_real_,
+      rel_se_p90_min_improve = NA_real_,
+      max_item_misfit_prop = NA_real_,
+      max_judge_misfit_prop = NA_real_
+    ),
+    "linking_min_n"
+  )
+})
+
+testthat::test_that("bt_run_adaptive_core_linking can record missing_theta and exercises drift reference selection", {
+  samples <- tibble::tibble(ID = c("A", "B", "C", "D"), text = paste0("t", 1:4))
+  judge_fun <- function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
+
+  # Fit with theta=NULL; we avoid rounds by providing no new ids in the batch.
+  fit_no_theta <- function(bt_data, ...) {
+    list(engine = "mock", reliability = NA_real_, theta = NULL, diagnostics = list(sepG = NA_real_))
+  }
+
+  out <- bt_run_adaptive_core_linking(
+    samples = samples,
+    batches = list(c("A", "B")),
+    judge_fun = judge_fun,
+    core_ids = c("A", "B"),
+    fit_fun = fit_no_theta,
+    round_size = 1,
+    init_round_size = 1,
+    max_rounds_per_batch = 1,
+    rel_se_p90_target = 0,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    rel_se_p90_min_improve = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_
+  )
+  testthat::expect_identical(out$final_fits$bootstrap$linking$reason, "missing_theta")
+
+  # Exercise drift reference selection for b==1 (bootstrap_fit NULL via initial_results) and b>1.
+  all_ids <- samples$ID
+  fit_theta <- function(bt_data, ...) {
+    list(
+      engine = "mock",
+      reliability = NA_real_,
+      theta = tibble::tibble(ID = all_ids, theta = seq_along(all_ids), se = rep(1, length(all_ids))),
+      diagnostics = list(sepG = NA_real_)
+    )
+  }
+
+  out2 <- bt_run_adaptive_core_linking(
+    samples = samples,
+    batches = list(c("C"), c("D")),
+    judge_fun = judge_fun,
+    core_ids = c("A", "B"),
+    initial_results = tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A"),
+    fit_fun = fit_theta,
+    # explicitly pass drift targets so the "missing()" overrides execute
+    core_theta_cor_target = 0.99,
+    core_theta_spearman_target = 0.99,
+    core_p90_abs_shift_target = 0.5,
+    round_size = 1,
+    init_round_size = 0,
+    max_rounds_per_batch = 1,
+    rel_se_p90_target = 0,
+    reliability_target = NA_real_,
+    sepG_target = NA_real_,
+    rel_se_p90_min_improve = NA_real_,
+    max_item_misfit_prop = NA_real_,
+    max_judge_misfit_prop = NA_real_
+  )
+
+  testthat::expect_true(all(c("batch1", "batch2") %in% names(out2$final_fits)))
+})

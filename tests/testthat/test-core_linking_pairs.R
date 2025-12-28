@@ -208,6 +208,69 @@ testthat::test_that("select_core_link_pairs can return empty when no candidates 
   testthat::expect_equal(nrow(out), 0L)
 })
 
+testthat::test_that("select_core_link_pairs covers row-count and ID validation branches", {
+  # row-count validation (must be >= 2 rows with ID/text)
+  one_row <- tibble::tibble(ID = "A", text = "a")
+  theta <- tibble::tibble(ID = c("A", "B"), theta = c(0, 0), se = c(0.5, 0.5))
+  testthat::expect_error(
+    pairwiseLLM::select_core_link_pairs(
+      samples = one_row,
+      theta = theta,
+      core_ids = "A",
+      round_size = 1
+    ),
+    "at least 2 rows"
+  )
+
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+  theta3 <- tibble::tibble(ID = samples$ID, theta = c(0, 1, 2), se = c(0.2, 0.2, 0.2))
+
+  # core_ids must be non-missing and unique
+  testthat::expect_error(
+    pairwiseLLM::select_core_link_pairs(samples, theta3, core_ids = c("A", NA_character_), round_size = 1),
+    "non-missing"
+  )
+  testthat::expect_error(
+    pairwiseLLM::select_core_link_pairs(samples, theta3, core_ids = c("A", "A"), round_size = 1),
+    "unique"
+  )
+
+  # new_ids must be non-missing, unique, and present in samples$ID
+  testthat::expect_error(
+    pairwiseLLM::select_core_link_pairs(samples, theta3, core_ids = c("A", "B"), new_ids = c("C", NA_character_), round_size = 1),
+    "new_ids.*non-missing"
+  )
+  testthat::expect_error(
+    pairwiseLLM::select_core_link_pairs(samples, theta3, core_ids = c("A", "B"), new_ids = c("C", "C"), round_size = 1),
+    "new_ids.*unique"
+  )
+  testthat::expect_error(
+    pairwiseLLM::select_core_link_pairs(samples, theta3, core_ids = c("A", "B"), new_ids = "Z", round_size = 1),
+    "samples\\$ID"
+  )
+})
+
+testthat::test_that("select_core_link_pairs can fail to find opponent when new_ids overlap core_ids", {
+  # This exercises the choose_opponent() branch where removing focus_id
+  # leaves no opponent candidates (returns NA and yields 0 pairs).
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+  theta <- tibble::tibble(ID = samples$ID, theta = c(0, 1, 2), se = c(0.2, 0.2, 0.2))
+
+  out <- pairwiseLLM::select_core_link_pairs(
+    samples = samples,
+    theta = theta,
+    core_ids = "A",              # length 1 allowed for core_new linking
+    new_ids = "A",               # overlap with core_ids
+    round_size = 3,
+    core_audit_frac = 0,
+    within_batch_frac = 0,
+    forbid_repeats = TRUE,
+    seed = 1
+  )
+
+  testthat::expect_equal(nrow(out), 0L)
+})
+
 testthat::test_that("select_core_link_pairs normalizes existing_pairs schemas and rejects unknown schemas", {
   samples <- tibble::tibble(ID = paste0("S", 1:8), text = paste("t", 1:8))
   theta <- tibble::tibble(ID = samples$ID, theta = rnorm(8), se = runif(8, 0.2, 0.6))

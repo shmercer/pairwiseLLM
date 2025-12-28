@@ -229,3 +229,28 @@ test_that("select_adaptive_pairs restores .Random.seed when it exists", {
   # RNG state should be restored exactly
   expect_identical(get(".Random.seed", envir = .GlobalEnv, inherits = FALSE), old_seed)
 })
+
+test_that("select_adaptive_pairs counts existing first-position IDs even when some are out-of-sample", {
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
+  theta <- tibble::tibble(ID = samples$ID, theta = c(0, 0.1, 0.2), se = c(1, 1, 1))
+
+  # Mix of in-sample and out-of-sample IDs in ID1; only in-sample should contribute.
+  existing_pairs <- tibble::tibble(
+    ID1 = c("A", "X", "A"),
+    ID2 = c("B", "A", "C")
+  )
+
+  out <- select_adaptive_pairs(
+    samples = samples,
+    theta = theta,
+    n_pairs = 1,
+    existing_pairs = existing_pairs,
+    forbid_repeats = TRUE,
+    balance_positions = TRUE,
+    seed = 1
+  )
+
+  expect_equal(nrow(out), 1L)
+  expect_true(all(out$ID1 %in% samples$ID))
+  expect_true(all(out$ID2 %in% samples$ID))
+})
