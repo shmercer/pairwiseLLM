@@ -271,20 +271,6 @@ bt_run_adaptive_core_linking <- function(samples,
     stop("`allocation_fun` must be a function or NULL.", call. = FALSE)
   }
 
-  allocation_fun_user <- !is.null(allocation_fun)
-  allocation <- match.arg(allocation)
-  allocation_source <- "fixed"
-  if (allocation_fun_user) {
-    allocation_source <- "allocation_fun"
-  } else if (allocation != "fixed") {
-    allocation_source <- "preset"
-    allocation_fun <- switch(allocation,
-      precision_ramp = allocation_precision_ramp(),
-      audit_on_drift = allocation_audit_on_drift(),
-      NULL
-    )
-  }
-
   stopping_tier <- match.arg(stopping_tier)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
 
@@ -340,6 +326,15 @@ bt_run_adaptive_core_linking <- function(samples,
   # Core selection
   if (is.null(core_ids)) {
     core_method <- match.arg(core_method)
+
+    allocation <- match.arg(allocation)
+    if (is.null(allocation_fun) && allocation != "fixed") {
+      allocation_fun <- switch(allocation,
+        precision_ramp = allocation_precision_ramp(),
+        audit_on_drift = allocation_audit_on_drift(),
+        NULL
+      )
+    }
 
     embeddings_metric <- match.arg(embeddings_metric)
 
@@ -472,6 +467,7 @@ bt_run_adaptive_core_linking <- function(samples,
         stage = stage,
         stop = stop,
         stop_reason = stop_reason,
+        n_new_ids = as.integer(length(new_ids)),
         n_results = 0L,
         n_unique_unordered_pairs = 0L,
         appear_p50 = NA_real_,
@@ -738,6 +734,27 @@ bt_run_adaptive_core_linking <- function(samples,
         fit_bounds = fit_bounds
       )
 
+      # ---- A3: bring core/linking drift columns into `m` and create aliases ----
+      # Drift table is stored on the fit (core_-prefixed columns).
+      if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift)) {
+        drift_tbl <- tibble::as_tibble(current_fit$linking$drift)
+        if (nrow(drift_tbl) == 1L) {
+          for (nm in names(drift_tbl)) {
+            if (!(nm %in% names(m))) {
+              m[[nm]] <- drift_tbl[[nm]][[1]]
+            }
+          }
+        }
+      }
+
+      # Always populate core_n (kept in the canonical metrics schema)
+      m$core_n <- as.integer(length(core_ids))
+
+      # Ensure both naming schemes exist: core_* and linking_* (keeps MORE, not less)
+      m <- .bt_add_drift_aliases(m)
+
+      # ------------------------------------------------------------------------
+
       prev_metrics_for_state <- prev_metrics
 
       decision <- do.call(
@@ -752,34 +769,16 @@ bt_run_adaptive_core_linking <- function(samples,
       m$round_index <- as.integer(r)
       m$within_batch_frac <- within_batch_frac_this
       m$core_audit_frac <- core_audit_frac_this
-      m$allocation <- allocation
-      m$allocation_source <- allocation_source
-      m$round_size <- as.integer(round_size)
       m$stage <- "round"
       m$stop <- stop_now
       m$stop_reason <- stop_reason
       m$n_pairs_proposed <- nrow(pairs_next)
-      m$n_results_total <- nrow(results)
-      m$n_new_ids <- length(new_ids)
       m$n_core_new <- sum(pairs_next$pair_type == "core_new")
       m$n_new_new <- sum(pairs_next$pair_type == "new_new")
       m$n_core_core <- sum(pairs_next$pair_type == "core_core")
 
-      # Map baseline linking drift (stored in fit$linking$drift with core_-prefixed columns)
-      if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift)) {
-        ld <- tibble::as_tibble(current_fit$linking$drift)
-        if (nrow(ld) == 1L) {
-          if ("core_theta_cor" %in% names(ld)) m$linking_theta_cor <- as.double(ld$core_theta_cor[[1]])
-          if ("core_theta_spearman" %in% names(ld)) m$linking_theta_spearman <- as.double(ld$core_theta_spearman[[1]])
-          if ("core_mean_abs_shift" %in% names(ld)) m$linking_mean_abs_shift <- as.double(ld$core_mean_abs_shift[[1]])
-          if ("core_p90_abs_shift" %in% names(ld)) m$linking_p90_abs_shift <- as.double(ld$core_p90_abs_shift[[1]])
-          if ("core_p95_abs_shift" %in% names(ld)) m$linking_p95_abs_shift <- as.double(ld$core_p95_abs_shift[[1]])
-          if ("core_max_abs_shift" %in% names(ld)) m$linking_max_abs_shift <- as.double(ld$core_max_abs_shift[[1]])
-          if ("core_mean_signed_shift" %in% names(ld)) m$linking_mean_signed_shift <- as.double(ld$core_mean_signed_shift[[1]])
-        }
-      }
-
       metrics_rows[[length(metrics_rows) + 1L]] <- m
+
       state_rows[[length(state_rows) + 1L]] <- state_row(
         results,
         new_ids = new_ids,
@@ -847,14 +846,34 @@ bt_run_adaptive_core_linking <- function(samples,
 
   bt_data <- build_bt_fun(results, judge = judge)
 
-  metrics_raw <- if (length(metrics_rows) == 0L) {
+  metrics <- if (length(metrics_rows) == 0L) {
     tibble::tibble()
   } else {
     dplyr::bind_rows(metrics_rows)
   }
-  metrics <- .bt_align_metrics(metrics_raw, se_probs = se_probs)
 
   state <- dplyr::bind_rows(state_rows)
+
+
+  # Backfill internal round-state quantiles from appearance aliases where available
+  if (nrow(state) > 0L) {
+    if (!("median_appearances" %in% names(state)) && ("appear_p50" %in% names(state))) {
+      state$median_appearances <- state$appear_p50
+    }
+    if (!("p90_appearances" %in% names(state)) && ("appear_p90" %in% names(state))) {
+      state$p90_appearances <- state$appear_p90
+    }
+    if (!("new_median_appearances" %in% names(state)) && ("new_appear_p50" %in% names(state))) {
+      state$new_median_appearances <- state$new_appear_p50
+    }
+    if (!("new_p90_appearances" %in% names(state)) && ("new_appear_p90" %in% names(state))) {
+      state$new_p90_appearances <- state$new_appear_p90
+    }
+  }
+
+  # Ensure standardized metrics + state schema (superset across runners)
+  metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
+  state <- .bt_align_state(state)
 
   list(
     core_ids = core_ids,

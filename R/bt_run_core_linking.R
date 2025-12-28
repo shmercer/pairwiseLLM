@@ -237,13 +237,8 @@ bt_run_core_linking <- function(samples,
   drift_reference <- match.arg(drift_reference)
   core_method <- match.arg(core_method)
 
-  allocation_fun_user <- !is.null(allocation_fun)
   allocation <- match.arg(allocation)
-  allocation_source <- "fixed"
-  if (allocation_fun_user) {
-    allocation_source <- "allocation_fun"
-  } else if (allocation != "fixed") {
-    allocation_source <- "preset"
+  if (is.null(allocation_fun) && allocation != "fixed") {
     allocation_fun <- switch(allocation,
       precision_ramp = allocation_precision_ramp(),
       audit_on_drift = allocation_audit_on_drift(),
@@ -436,8 +431,7 @@ bt_run_core_linking <- function(samples,
 
   fits <- list()
   final_fits <- list()
-  # Standardize metrics schema up-front so empty runs still return the same columns.
-  metrics_hist <- .bt_metrics_template(se_probs)
+  metrics_hist <- tibble::tibble()
   state_hist <- tibble::tibble()
   batch_summary <- tibble::tibble()
 
@@ -595,7 +589,7 @@ bt_run_core_linking <- function(samples,
       st_all <- .bt_round_state(results, ids = ids_all, judge_col = judge)
       st_new <- .bt_round_state(results, ids = new_ids, judge_col = judge, prefix = "new_")
       st <- dplyr::bind_cols(st_all, st_new)
-      st <- dplyr::mutate(st, batch_index = as.integer(batch_i), round_index = as.integer(round_i), stage = "batch_round")
+      st <- dplyr::mutate(st, batch_index = as.integer(batch_i), round_index = as.integer(round_i), stage = "batch_round", stop = FALSE, stop_reason = NA_character_, n_new_ids = as.integer(length(new_ids)))
       state_hist <- dplyr::bind_rows(state_hist, st)
 
       metrics <- bt_stop_metrics(
@@ -607,51 +601,33 @@ bt_run_core_linking <- function(samples,
         fit_bounds = fit_bounds
       )
 
+      # Add bookkeeping / allocation columns (do NOT pass these into bt_stop_metrics())
+      metrics <- dplyr::mutate(
+        metrics,
+        batch_index = batch_i,
+        round_index = round_i,
+        stage = "batch_round",
+        within_batch_frac = within_batch_frac_this,
+        core_audit_frac = core_audit_frac_this,
+        n_pairs_proposed = nrow(pairs),
+        n_core_new = sum(pairs$pair_type == "core_new"),
+        n_new_new = sum(pairs$pair_type == "new_new"),
+        n_core_core = sum(pairs$pair_type == "core_core"),
+        core_n = as.integer(length(core_ids))
+      )
+
+      # A3: ensure both naming schemes exist (core_* and linking_*)
+      # (Requires .bt_add_drift_aliases() to exist; see helper below.)
+      metrics <- .bt_add_drift_aliases(metrics)
+
+      metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
+
       prev_metrics_for_state <- prev_metrics
 
       stop_dec <- do.call(
         bt_should_stop,
         c(list(metrics = metrics, prev_metrics = prev_metrics), stop_params)
       )
-
-      stop_now <- isTRUE(stop_dec$stop)
-      stop_reason_metric <- if (stop_now) "stopped" else NA_character_
-
-      metrics <- dplyr::mutate(
-        metrics,
-        batch_index = as.integer(batch_i),
-        round_index = as.integer(round_i),
-        stage = "round",
-        stop = stop_now,
-        stop_reason = stop_reason_metric,
-        allocation = allocation,
-        allocation_source = allocation_source,
-        within_batch_frac = within_batch_frac_this,
-        core_audit_frac = core_audit_frac_this,
-        round_size = as.integer(round_size),
-        n_pairs_proposed = nrow(pairs),
-        n_results_total = nrow(results),
-        n_new_ids = length(new_ids),
-        n_core_new = sum(pairs$pair_type == "core_new"),
-        n_new_new = sum(pairs$pair_type == "new_new"),
-        n_core_core = sum(pairs$pair_type == "core_core")
-      )
-
-      # Map baseline linking drift (stored in fit$linking$drift with core_-prefixed columns)
-      if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift)) {
-        ld <- tibble::as_tibble(current_fit$linking$drift)
-        if (nrow(ld) == 1L) {
-          if ("core_theta_cor" %in% names(ld)) metrics$linking_theta_cor <- as.double(ld$core_theta_cor[[1]])
-          if ("core_theta_spearman" %in% names(ld)) metrics$linking_theta_spearman <- as.double(ld$core_theta_spearman[[1]])
-          if ("core_mean_abs_shift" %in% names(ld)) metrics$linking_mean_abs_shift <- as.double(ld$core_mean_abs_shift[[1]])
-          if ("core_p90_abs_shift" %in% names(ld)) metrics$linking_p90_abs_shift <- as.double(ld$core_p90_abs_shift[[1]])
-          if ("core_p95_abs_shift" %in% names(ld)) metrics$linking_p95_abs_shift <- as.double(ld$core_p95_abs_shift[[1]])
-          if ("core_max_abs_shift" %in% names(ld)) metrics$linking_max_abs_shift <- as.double(ld$core_max_abs_shift[[1]])
-          if ("core_mean_signed_shift" %in% names(ld)) metrics$linking_mean_signed_shift <- as.double(ld$core_mean_signed_shift[[1]])
-        }
-      }
-
-      metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 
       prev_metrics <- metrics
 
@@ -721,7 +697,41 @@ bt_run_core_linking <- function(samples,
     final_fits[[paste0("batch_", batch_i)]] <- current_fit
   }
 
+
+  # Derive appearance quantile aliases used by adaptive runner (if absent)
+  if (nrow(state_hist) > 0L) {
+    if (!("appear_p50" %in% names(state_hist)) && ("median_appearances" %in% names(state_hist))) {
+      state_hist$appear_p50 <- state_hist$median_appearances
+    } else if (("appear_p50" %in% names(state_hist)) && ("median_appearances" %in% names(state_hist))) {
+      state_hist$appear_p50 <- dplyr::coalesce(state_hist$appear_p50, state_hist$median_appearances)
+    }
+
+    if (!("appear_p90" %in% names(state_hist)) && ("p90_appearances" %in% names(state_hist))) {
+      state_hist$appear_p90 <- state_hist$p90_appearances
+    } else if (("appear_p90" %in% names(state_hist)) && ("p90_appearances" %in% names(state_hist))) {
+      state_hist$appear_p90 <- dplyr::coalesce(state_hist$appear_p90, state_hist$p90_appearances)
+    }
+
+    if (!("new_appear_p50" %in% names(state_hist)) && ("new_median_appearances" %in% names(state_hist))) {
+      state_hist$new_appear_p50 <- state_hist$new_median_appearances
+    } else if (("new_appear_p50" %in% names(state_hist)) && ("new_median_appearances" %in% names(state_hist))) {
+      state_hist$new_appear_p50 <- dplyr::coalesce(state_hist$new_appear_p50, state_hist$new_median_appearances)
+    }
+
+    if (!("new_appear_p90" %in% names(state_hist)) && ("new_p90_appearances" %in% names(state_hist))) {
+      state_hist$new_appear_p90 <- state_hist$new_p90_appearances
+    } else if (("new_appear_p90" %in% names(state_hist)) && ("new_p90_appearances" %in% names(state_hist))) {
+      state_hist$new_appear_p90 <- dplyr::coalesce(state_hist$new_appear_p90, state_hist$new_p90_appearances)
+    }
+
+    # Mark stop rows where a stop_reason has been recorded
+    if (!("stop" %in% names(state_hist))) state_hist$stop <- FALSE
+    state_hist$stop <- ifelse(is.na(state_hist$stop_reason), FALSE, TRUE)
+  }
+
+  # Ensure standardized metrics + state schema (superset across runners)
   metrics_hist <- .bt_align_metrics(metrics_hist, se_probs = se_probs)
+  state_hist <- .bt_align_state(state_hist)
 
   list(
     core_ids = core_ids,

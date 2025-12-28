@@ -49,23 +49,23 @@
     judge_misfit_prop = double(),
 
     # Drift metrics (bt_drift_metrics with prefix core_)
-    core_n = integer(),
-    core_theta_cor = double(),
-    core_theta_spearman = double(),
-    core_mean_abs_shift = double(),
-    core_p90_abs_shift = double(),
-    core_p95_abs_shift = double(),
-    core_max_abs_shift = double(),
-    core_mean_signed_shift = double(),
+    core_n                = integer(),
+    core_mean_abs_shift   = numeric(),
+    core_p90_abs_shift    = numeric(),
+    core_p95_abs_shift    = numeric(),
+    core_max_abs_shift    = numeric(),
+    core_mean_signed_shift= numeric(),
+    core_theta_cor        = numeric(),
+    core_theta_spearman   = numeric(),
 
     # Linking drift (baseline drift used to decide/apply linking)
-    linking_theta_cor = double(),
-    linking_theta_spearman = double(),
-    linking_mean_abs_shift = double(),
-    linking_p90_abs_shift = double(),
-    linking_p95_abs_shift = double(),
-    linking_max_abs_shift = double(),
-    linking_mean_signed_shift = double()
+    linking_mean_abs_shift   = numeric(),
+    linking_p90_abs_shift    = numeric(),
+    linking_p95_abs_shift    = numeric(),
+    linking_max_abs_shift    = numeric(),
+    linking_mean_signed_shift= numeric(),
+    linking_theta_cor        = numeric(),
+    linking_theta_spearman   = numeric(),
   )
 
   for (nm in se_cols) {
