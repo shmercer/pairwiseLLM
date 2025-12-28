@@ -21,6 +21,8 @@ submit_gemini_pairs_live(
   status_every = 1L,
   progress = TRUE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = FALSE,
   save_path = NULL,
   parallel = FALSE,

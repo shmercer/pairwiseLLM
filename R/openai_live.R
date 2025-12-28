@@ -41,6 +41,11 @@ NULL
 #' @param tag_suffix Suffix for the better-sample tag.
 #' @param api_key Optional OpenAI API key.
 #' @param include_raw Logical; if TRUE, adds a \code{raw_response} column.
+#' @param validate Logical; if TRUE, validate the parsed results using
+#'   \code{\link{validate_backend_results}} and attach a
+#'   \code{validation_report} element to the returned list. Defaults to FALSE.
+#' @param validate_strict Logical; if TRUE, validation is strict and errors on
+#'   invalid winners and other violations. Defaults to FALSE (report-only).
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
 #'   and (optionally) \code{include_thoughts}. The same validation rules for
@@ -116,6 +121,8 @@ openai_compare_pair_live <- function(
   tag_suffix = "</BETTER_SAMPLE>",
   api_key = NULL,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   ...
 ) {
   endpoint <- match.arg(endpoint)
@@ -418,6 +425,8 @@ submit_openai_pairs_live <- function(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
@@ -647,8 +656,14 @@ submit_openai_pairs_live <- function(
   failed_mask <- !is.na(final_results$error_message) |
     (final_results$status_code >= 400 & !is.na(final_results$status_code))
 
-  list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+  .apply_backend_validation_to_submit_output(
+    list(
+      results = final_results,
+      failed_pairs = final_results[failed_mask, ]
+    ),
+    backend = "openai_live",
+    validate = validate,
+    validate_strict = validate_strict,
+    normalize_winner = FALSE
   )
 }

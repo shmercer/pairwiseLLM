@@ -17,6 +17,8 @@ submit_anthropic_pairs_live(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = NULL,
   save_path = NULL,
   parallel = FALSE,

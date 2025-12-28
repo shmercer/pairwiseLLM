@@ -153,3 +153,36 @@ validate_backend_results <- function(results,
   }
   res_use
 }
+
+#' @keywords internal
+.apply_backend_validation_to_submit_output <- function(output,
+                                                      backend,
+                                                      validate = FALSE,
+                                                      validate_strict = FALSE,
+                                                      normalize_winner = FALSE,
+                                                      id1_col = "ID1",
+                                                      id2_col = "ID2",
+                                                      winner_col = "better_id",
+                                                      judge_col = NULL) {
+  if (!isTRUE(validate)) return(output)
+
+  if (!is.list(output) || is.null(output$results)) {
+    stop("`output` must be a list with a `results` element.", call. = FALSE)
+  }
+
+  vr <- validate_backend_results(
+    output$results,
+    backend = backend,
+    id1_col = id1_col,
+    id2_col = id2_col,
+    winner_col = winner_col,
+    judge_col = judge_col,
+    normalize_winner = normalize_winner,
+    strict = isTRUE(validate_strict),
+    return_report = TRUE
+  )
+
+  output$results <- vr$data
+  output$validation_report <- vr$report
+  output
+}

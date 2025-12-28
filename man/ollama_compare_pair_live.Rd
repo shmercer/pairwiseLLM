@@ -19,6 +19,8 @@ ollama_compare_pair_live(
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   ...
 )
 }
@@ -61,7 +63,14 @@ from the response whenever one is present.}
 \item{num_ctx}{Integer; context window to use via \code{options$num_ctx}.
 The default is \code{8192L}.}
 
-\item{include_raw}{Logical; if \code{TRUE}, adds a list-column
+\item{include_raw}{Logical; if \code{TRUE}, adds a list-column}
+
+\item{validate}{Logical; if TRUE, validate the parsed results using
+\code{\link{validate_backend_results}} and attach a
+\code{validation_report} element to the returned list. Defaults to FALSE.}
+
+\item{validate_strict}{Logical; if TRUE, validation is strict and errors on
+invalid winners and other violations. Defaults to FALSE (report-only).
 \code{raw_response} containing the parsed JSON body returned by Ollama
 (or \code{NULL} on parse failure). This is useful for debugging.}
 

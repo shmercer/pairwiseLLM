@@ -108,6 +108,11 @@ NULL
 #'       the default \code{max_tokens} and constrains \code{temperature}.
 #'   }
 #' @param include_raw Logical; if \code{TRUE}, adds a list-column
+#' @param validate Logical; if TRUE, validate the parsed results using
+#'   \code{\link{validate_backend_results}} and attach a
+#'   \code{validation_report} element to the returned list. Defaults to FALSE.
+#' @param validate_strict Logical; if TRUE, validation is strict and errors on
+#'   invalid winners and other violations. Defaults to FALSE (report-only).
 #'   \code{raw_response} containing the parsed JSON body returned by Anthropic
 #'   (or \code{NULL} on parse failure). This is useful for debugging parsing
 #'   problems.
@@ -262,6 +267,8 @@ anthropic_compare_pair_live <- function(
   anthropic_version = "2023-06-01",
   reasoning = c("none", "enabled"),
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = NULL,
   ...
 ) {
@@ -721,6 +728,8 @@ submit_anthropic_pairs_live <- function(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = NULL,
   save_path = NULL,
   parallel = FALSE,
@@ -977,8 +986,14 @@ submit_anthropic_pairs_live <- function(
   failed_mask <- !is.na(final_results$error_message) |
     (final_results$status_code >= 400 & !is.na(final_results$status_code))
 
-  list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+  .apply_backend_validation_to_submit_output(
+    list(
+      results = final_results,
+      failed_pairs = final_results[failed_mask, ]
+    ),
+    backend = "anthropic_live",
+    validate = validate,
+    validate_strict = validate_strict,
+    normalize_winner = FALSE
   )
 }

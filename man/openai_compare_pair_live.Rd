@@ -18,6 +18,8 @@ openai_compare_pair_live(
   tag_suffix = "</BETTER_SAMPLE>",
   api_key = NULL,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   ...
 )
 }
@@ -48,6 +50,13 @@ openai_compare_pair_live(
 \item{api_key}{Optional OpenAI API key.}
 
 \item{include_raw}{Logical; if TRUE, adds a \code{raw_response} column.}
+
+\item{validate}{Logical; if TRUE, validate the parsed results using
+\code{\link{validate_backend_results}} and attach a
+\code{validation_report} element to the returned list. Defaults to FALSE.}
+
+\item{validate_strict}{Logical; if TRUE, validation is strict and errors on
+invalid winners and other violations. Defaults to FALSE (report-only).}
 
 \item{...}{Additional OpenAI parameters, for example
 \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},

@@ -21,6 +21,8 @@ gemini_compare_pair_live(
   max_output_tokens = NULL,
   api_version = "v1beta",
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = FALSE,
   ...
 )
@@ -67,7 +69,14 @@ omitted.}
 \item{api_version}{API version to use, default \code{"v1beta"}. For plain text
 pairwise comparisons v1beta is recommended.}
 
-\item{include_raw}{Logical; if \code{TRUE}, the returned tibble includes a
+\item{include_raw}{Logical; if \code{TRUE}, the returned tibble includes a}
+
+\item{validate}{Logical; if TRUE, validate the parsed results using
+\code{\link{validate_backend_results}} and attach a
+\code{validation_report} element to the returned list. Defaults to FALSE.}
+
+\item{validate_strict}{Logical; if TRUE, validation is strict and errors on
+invalid winners and other violations. Defaults to FALSE (report-only).
 \code{raw_response} list-column with the parsed JSON body.}
 
 \item{include_thoughts}{Logical; if \code{TRUE}, requests explicit reasoning

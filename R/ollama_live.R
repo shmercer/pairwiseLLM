@@ -57,6 +57,11 @@
 #' @param num_ctx Integer; context window to use via \code{options$num_ctx}.
 #'   The default is \code{8192L}.
 #' @param include_raw Logical; if \code{TRUE}, adds a list-column
+#' @param validate Logical; if TRUE, validate the parsed results using
+#'   \code{\link{validate_backend_results}} and attach a
+#'   \code{validation_report} element to the returned list. Defaults to FALSE.
+#' @param validate_strict Logical; if TRUE, validation is strict and errors on
+#'   invalid winners and other violations. Defaults to FALSE (report-only).
 #'   \code{raw_response} containing the parsed JSON body returned by Ollama
 #'   (or \code{NULL} on parse failure). This is useful for debugging.
 #' @param ... Reserved for future extensions.
@@ -182,6 +187,8 @@ ollama_compare_pair_live <- function(
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   ...
 ) {
   if (!is.character(ID1) || length(ID1) != 1L) {
@@ -490,6 +497,8 @@ submit_ollama_pairs_live <- function(
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
@@ -814,9 +823,15 @@ submit_ollama_pairs_live <- function(
   # Identify failures
   failed_mask <- !is.na(final_results$error_message)
 
-  list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+  .apply_backend_validation_to_submit_output(
+    list(
+      results = final_results,
+      failed_pairs = final_results[failed_mask, ]
+    ),
+    backend = "ollama_live",
+    validate = validate,
+    validate_strict = validate_strict,
+    normalize_winner = FALSE
   )
 }
 

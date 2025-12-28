@@ -17,6 +17,8 @@ submit_ollama_pairs_live(
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   save_path = NULL,
   parallel = FALSE,
   workers = 1,

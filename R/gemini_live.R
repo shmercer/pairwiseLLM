@@ -92,6 +92,11 @@
 #' @param api_version API version to use, default `"v1beta"`. For plain text
 #'   pairwise comparisons v1beta is recommended.
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
+#' @param validate Logical; if TRUE, validate the parsed results using
+#'   \code{\link{validate_backend_results}} and attach a
+#'   \code{validation_report} element to the returned list. Defaults to FALSE.
+#' @param validate_strict Logical; if TRUE, validation is strict and errors on
+#'   invalid winners and other violations. Defaults to FALSE (report-only).
 #'   `raw_response` list-column with the parsed JSON body.
 #' @param include_thoughts Logical; if `TRUE`, requests explicit reasoning
 #'   output from Gemini via `generationConfig$thinkingConfig` and stores the
@@ -164,6 +169,8 @@ gemini_compare_pair_live <- function(
   max_output_tokens = NULL,
   api_version = "v1beta",
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = FALSE,
   ...
 ) {
@@ -547,6 +554,8 @@ submit_gemini_pairs_live <- function(
   status_every = 1L,
   progress = TRUE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = FALSE,
   save_path = NULL,
   parallel = FALSE,
@@ -796,8 +805,14 @@ submit_gemini_pairs_live <- function(
   failed_mask <- !is.na(final_results$error_message) |
     (final_results$status_code >= 400 & !is.na(final_results$status_code))
 
-  list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+  .apply_backend_validation_to_submit_output(
+    list(
+      results = final_results,
+      failed_pairs = final_results[failed_mask, ]
+    ),
+    backend = "gemini_live",
+    validate = validate,
+    validate_strict = validate_strict,
+    normalize_winner = FALSE
   )
 }

@@ -17,6 +17,8 @@ together_compare_pair_live(
   tag_suffix = "</BETTER_SAMPLE>",
   api_key = NULL,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   ...
 )
 }
@@ -51,7 +53,14 @@ together_compare_pair_live(
 falls back to the \code{TOGETHER_API_KEY} environment variable via
 \code{.together_api_key()}.}
 
-\item{include_raw}{Logical; if \code{TRUE}, adds a list-column \code{raw_response}
+\item{include_raw}{Logical; if \code{TRUE}, adds a list-column \code{raw_response}}
+
+\item{validate}{Logical; if TRUE, validate the parsed results using
+\code{\link{validate_backend_results}} and attach a
+\code{validation_report} element to the returned list. Defaults to FALSE.}
+
+\item{validate_strict}{Logical; if TRUE, validation is strict and errors on
+invalid winners and other violations. Defaults to FALSE (report-only).
 containing the parsed JSON body returned by Together.ai (or \code{NULL} on parse
 failure). This is useful for debugging parsing problems.}
 

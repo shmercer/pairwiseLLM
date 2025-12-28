@@ -19,6 +19,8 @@ anthropic_compare_pair_live(
   anthropic_version = "2023-06-01",
   reasoning = c("none", "enabled"),
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   include_thoughts = NULL,
   ...
 )
@@ -65,7 +67,14 @@ sending a \code{thinking} block with a token budget; this also changes
 the default \code{max_tokens} and constrains \code{temperature}.
 }}
 
-\item{include_raw}{Logical; if \code{TRUE}, adds a list-column
+\item{include_raw}{Logical; if \code{TRUE}, adds a list-column}
+
+\item{validate}{Logical; if TRUE, validate the parsed results using
+\code{\link{validate_backend_results}} and attach a
+\code{validation_report} element to the returned list. Defaults to FALSE.}
+
+\item{validate_strict}{Logical; if TRUE, validation is strict and errors on
+invalid winners and other violations. Defaults to FALSE (report-only).
 \code{raw_response} containing the parsed JSON body returned by Anthropic
 (or \code{NULL} on parse failure). This is useful for debugging parsing
 problems.}

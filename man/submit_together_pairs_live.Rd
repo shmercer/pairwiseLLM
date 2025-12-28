@@ -15,6 +15,8 @@ submit_together_pairs_live(
   status_every = 1,
   progress = TRUE,
   include_raw = FALSE,
+  validate = FALSE,
+  validate_strict = FALSE,
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
