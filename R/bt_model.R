@@ -105,6 +105,20 @@ build_bt_data <- function(results, judge = NULL) {
     results[[judge]] <- as.character(results[[judge]])
   }
 
+  # Validate and normalize winners (allow missing winners; they'll be dropped below)
+  results <- validate_pairwise_results(
+    results,
+    id1_col = "ID1",
+    id2_col = "ID2",
+    winner_col = "better_id",
+    judge_col = judge,
+    ids = NULL,
+    allow_missing_winner = TRUE,
+    allow_self = FALSE,
+    normalize_winner = TRUE,
+    return_report = FALSE
+  )
+
   out <- dplyr::mutate(
     results,
     result = dplyr::case_when(

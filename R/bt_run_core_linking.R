@@ -733,7 +733,7 @@ bt_run_core_linking <- function(samples,
   metrics_hist <- .bt_align_metrics(metrics_hist, se_probs = se_probs)
   state_hist <- .bt_align_state(state_hist)
 
-  list(
+  out <- list(
     core_ids = core_ids,
     batches = batches,
     results = results,
@@ -743,6 +743,8 @@ bt_run_core_linking <- function(samples,
     state = state_hist,
     batch_summary = batch_summary
   )
+
+  .as_pairwise_run(out, run_type = "core_linking")
 }
 
 # ---- internal ----

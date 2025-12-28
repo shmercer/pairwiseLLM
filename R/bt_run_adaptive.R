@@ -658,7 +658,7 @@ bt_run_adaptive <- function(samples,
     )
   }
 
-  list(
+  out <- list(
     results = results,
     bt_data = bt_data_final,
     fits = fits,
@@ -670,6 +670,8 @@ bt_run_adaptive <- function(samples,
     pairs_bootstrap = pairs_bootstrap,
     reverse_audit = reverse_out
   )
+
+  .as_pairwise_run(out, run_type = "adaptive")
 }
 
 #' Simulate a judge for BT pairwise comparisons

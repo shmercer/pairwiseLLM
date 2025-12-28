@@ -877,7 +877,7 @@ bt_run_adaptive_core_linking <- function(samples,
   metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
   state <- .bt_align_state(state)
 
-  list(
+  out <- list(
     core_ids = core_ids,
     batches = batches,
     results = results,
@@ -888,4 +888,6 @@ bt_run_adaptive_core_linking <- function(samples,
     batch_summary = batch_summary,
     state = state
   )
+
+  .as_pairwise_run(out, run_type = "adaptive_core_linking")
 }

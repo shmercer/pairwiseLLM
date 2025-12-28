@@ -16,18 +16,27 @@ test_that("build_bt_data converts better_id into binary result", {
   expect_equal(bt$result, c(1, 0, 1, 0))
 })
 
-test_that("build_bt_data drops rows with invalid or missing better_id", {
+test_that("build_bt_data errors on invalid better_id and drops missing winners", {
+  # Invalid better_id should error (validate_pairwise_results is strict here)
+  results_bad <- tibble::tibble(
+    ID1       = c("S1", "S2"),
+    ID2       = c("S2", "S3"),
+    better_id = c("S1", "NOT_AN_ID")
+  )
+  expect_error(build_bt_data(results_bad), "must match `ID1` or `ID2`")
+
+  # Missing better_id is allowed but will be dropped from bt_data (result becomes NA)
   results <- tibble::tibble(
-    ID1       = c("S1", "S2", "S3", "S4"),
-    ID2       = c("S2", "S3", "S4", "S1"),
-    better_id = c("S1", "NOT_AN_ID", NA, "S1")
+    ID1       = c("S1", "S2", "S3"),
+    ID2       = c("S2", "S3", "S1"),
+    better_id = c("S1", NA, "S1")
   )
 
   bt <- build_bt_data(results)
 
-  # Only rows 1 and 4 are valid
+  # Only rows 1 and 3 remain (row 2 dropped because winner is missing -> result NA)
   expect_equal(nrow(bt), 2)
-  expect_equal(bt$object1, c("S1", "S4"))
+  expect_equal(bt$object1, c("S1", "S3"))
   expect_equal(bt$object2, c("S2", "S1"))
   expect_equal(bt$result, c(1, 0))
 })
@@ -105,24 +114,27 @@ test_that("build_bt_data ignores a judge column unless requested", {
 
 test_that("build_bt_data can include a judge column when requested", {
   results <- tibble::tibble(
-    ID1       = c("S1", "S1", "S2", "S3"),
-    ID2       = c("S2", "S3", "S3", "S4"),
-    better_id = c("S1", "S3", "S2", "NOT_AN_ID"),
-    model     = factor(c("mA", "mB", NA, "mA"))
+    ID1       = c("S1", "S1", "S2"),
+    ID2       = c("S2", "S3", "S3"),
+    better_id = c("S1", "S3", "S2"),
+    model     = factor(c("mA", "mB", "mA"))
   )
 
   bt <- build_bt_data(results, judge = "model")
 
-  # Row 4 dropped (invalid better_id), row 3 dropped (missing judge)
   expect_identical(names(bt), c("object1", "object2", "result", "judge"))
-  expect_equal(nrow(bt), 2L)
-
-  expect_equal(bt$object1, c("S1", "S1"))
-  expect_equal(bt$object2, c("S2", "S3"))
-  expect_equal(bt$result, c(1, 0))
-
+  expect_equal(nrow(bt), 3L)
   expect_type(bt$judge, "character")
-  expect_equal(bt$judge, c("mA", "mB"))
+  expect_equal(bt$judge, c("mA", "mB", "mA"))
+
+  # Missing judge values should error (validate_pairwise_results enforces non-missing judge)
+  results2 <- tibble::tibble(
+    ID1       = c("S1", "S2"),
+    ID2       = c("S2", "S3"),
+    better_id = c("S1", "S3"),
+    model     = factor(c("mA", NA))
+  )
+  expect_error(build_bt_data(results2, judge = "model"), "missing values")
 })
 
 test_that("build_bt_data errors when judge column is missing", {
