@@ -79,13 +79,23 @@
 .bt_validate_checkpoint <- function(chk, run_type, ids) {
   if (!is.list(chk)) stop("Invalid checkpoint payload (not a list).", call. = FALSE)
   if (is.null(chk$run_type) || !identical(as.character(chk$run_type), as.character(run_type))) {
-    stop("Checkpoint run_type mismatch. Expected `", run_type, "`.", call. = FALSE)
+    .abort_checkpoint_mismatch(
+      field = "run_type",
+      expected = as.character(run_type),
+      actual = chk$run_type,
+      hint = "If you changed the runner type between runs, restart without `resume_from`."
+    )
   }
   if (!is.null(chk$ids)) {
     ids_chk <- sort(as.character(chk$ids))
     ids_now <- sort(as.character(ids))
     if (length(ids_chk) != length(ids_now) || any(ids_chk != ids_now)) {
-      stop("Checkpoint sample IDs do not match current `samples$ID`.", call. = FALSE)
+      .abort_checkpoint_mismatch(
+        field = "samples$ID",
+        expected = ids_now,
+        actual = ids_chk,
+        hint = "You are trying to resume with a different sample set. Restart without `resume_from` or use the same `samples`."
+      )
     }
   }
   invisible(chk)

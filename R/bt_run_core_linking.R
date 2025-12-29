@@ -272,7 +272,18 @@ bt_run_core_linking <- function(samples,
   }
 
   drift_reference <- match.arg(drift_reference)
-  core_method <- match.arg(core_method)
+
+  # `core_method` is only relevant when we need to select a core set.
+  # When `core_ids` is supplied, we skip strict validation and treat it as "fixed".
+  if (is.null(core_ids)) {
+    core_method <- match.arg(core_method)
+  } else {
+    if (missing(core_method) || length(core_method) != 1L) {
+      core_method <- "fixed"
+    } else {
+      core_method <- as.character(core_method)[1]
+    }
+  }
 
   allocation <- match.arg(allocation)
   if (is.null(allocation_fun) && allocation != "fixed") {
@@ -388,7 +399,12 @@ bt_run_core_linking <- function(samples,
     if (!is.null(chk$core_ids)) {
       core_ids_chk <- as.character(chk$core_ids)
       if (length(core_ids_chk) != length(core_ids) || any(sort(core_ids_chk) != sort(core_ids))) {
-        stop("Checkpoint core_ids do not match current `core_ids`.", call. = FALSE)
+        .abort_checkpoint_mismatch(
+          field = "core_ids",
+          expected = core_ids,
+          actual = core_ids_chk,
+          hint = "If you changed `core_ids` between runs, restart without `resume_from`."
+        )
       }
     }
 
@@ -726,7 +742,7 @@ bt_run_core_linking <- function(samples,
     }
 
     if (length(new_ids) == 0L) {
-      stop_reason <- "no_new_ids"
+      stop_reason <- .bt_resolve_stop_reason(no_new_ids = TRUE)
       batch_summary <- dplyr::bind_rows(
         batch_summary,
         tibble::tibble(
@@ -774,7 +790,7 @@ bt_run_core_linking <- function(samples,
 
       pairs <- round_out$pairs
       if (nrow(pairs) == 0L) {
-        stop_reason <- "no_pairs"
+        stop_reason <- .bt_resolve_stop_reason(no_pairs = TRUE)
         break
       }
 
@@ -899,13 +915,13 @@ bt_run_core_linking <- function(samples,
       }
 
       if (isTRUE(stop_dec$stop)) {
-        stop_reason <- "stopped"
-        state_hist[nrow(state_hist), "stop_reason"] <- "stopped"
+        stop_reason <- .bt_resolve_stop_reason(stopped = TRUE)
+        state_hist[nrow(state_hist), "stop_reason"] <- stop_reason
         break
       }
     }
 
-    if (is.na(stop_reason)) stop_reason <- "max_rounds"
+    if (is.na(stop_reason)) stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
     if (stop_reason == "max_rounds" && nrow(state_hist) > 0L) {
       # mark last state row of this batch as max_rounds
       idx <- which(state_hist$batch_index == batch_i)

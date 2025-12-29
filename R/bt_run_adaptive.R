@@ -619,15 +619,13 @@ bt_run_adaptive <- function(samples,
     decision <- round_out$decision
     pairs_next <- round_out$pairs_next
 
-    this_reason <- NA_character_
-    if (isTRUE(decision$stop)) {
-      this_reason <- "stopped"
-    } else if (round_size == 0L) {
-      this_reason <- "round_size_zero"
-    } else if (nrow(pairs_next) == 0L) {
-      this_reason <- "no_pairs"
-    }
-
+    this_reason <- .bt_resolve_stop_reason(
+      stopped = isTRUE(decision$stop),
+      reached_max_rounds = FALSE,
+      max_rounds_is_zero = FALSE,
+      round_size_zero = (round_size == 0L),
+      no_pairs = (nrow(pairs_next) == 0L)
+    )
     # If we are stopping before scoring new pairs, state reflects current results
     st_now <- .bt_round_state(results, ids = ids, judge_col = judge)
     st_now <- dplyr::mutate(st_now, round = as.integer(r), stop = isTRUE(decision$stop), stop_reason = this_reason)
@@ -684,8 +682,9 @@ bt_run_adaptive <- function(samples,
 
       # checkpoint bookkeeping updated at end-of-round (below)
     } else {
-      rounds_list[[length(rounds_list)]][["stop_reason"]] <- "no_new_results"
-      stop_reason <- "no_new_results"
+      this_reason <- .bt_resolve_stop_reason(no_new_results = TRUE)
+      rounds_list[[length(rounds_list)]][["stop_reason"]] <- this_reason
+      stop_reason <- this_reason
       stop_round <- as.integer(r)
 
       fits[[length(fits)]] <- tag_fit(
@@ -718,19 +717,18 @@ bt_run_adaptive <- function(samples,
   }
 
   if (is.na(stop_reason)) {
-    if (start_round > max_rounds) {
-      stop_reason <- "max_rounds"
-      stop_round <- as.integer(max_rounds)
-    } else if (max_rounds == 0L) {
-      stop_reason <- "max_rounds"
+    if (max_rounds == 0L) {
+      stop_reason <- .bt_resolve_stop_reason(max_rounds_is_zero = TRUE)
       stop_round <- 0L
-    } else if (nrow(rounds_tbl_prev) + length(rounds_list) == 0L) {
-      stop_reason <- "no_results"
-    } else {
-      stop_reason <- "max_rounds"
+    } else if (start_round > max_rounds) {
+      stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
       stop_round <- as.integer(max_rounds)
-      rounds_list[[length(rounds_list)]][["stop_reason"]] <- "max_rounds"
-
+    } else if (nrow(rounds_tbl_prev) + length(rounds_list) == 0L) {
+      stop_reason <- .bt_resolve_stop_reason(no_results = TRUE)
+    } else {
+      stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
+      stop_round <- as.integer(max_rounds)
+      rounds_list[[length(rounds_list)]][["stop_reason"]] <- stop_reason
       if (length(fits) > 0L) {
         fits[[length(fits)]] <- tag_fit(
           fits[[length(fits)]],

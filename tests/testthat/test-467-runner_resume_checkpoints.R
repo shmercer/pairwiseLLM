@@ -492,7 +492,7 @@ test_that("resume_from errors clearly when missing or incompatible", {
       max_rounds = 1,
       resume_from = tmp
     ),
-    "Checkpoint sample IDs do not match"
+    "Resume checkpoint does not match `samples\\$ID`\\.(.|\n)*Expected:(.|\n)*Actual:"
   )
 })
 
@@ -695,4 +695,116 @@ test_that("bt_run_adaptive_core_linking recomputes fits on resume when checkpoin
   )
 
   expect_equal(nrow(out$batch_summary), 2L)
+})
+
+test_that("resume mismatch errors include Expected/Actual for core_ids and batches", {
+  samples <- tibble::tibble(ID = LETTERS[1:10], text = paste0("t", LETTERS[1:10]))
+  batches <- list(c("F", "G", "H"), c("I", "J"))
+  core_ids <- c("A", "B", "C", "D", "E")
+  true_theta <- stats::setNames(seq(2, -3.0, length.out = nrow(samples)), samples$ID)
+
+  judge_fun_ok <- function(pairs) {
+    pairwiseLLM::simulate_bt_judge(pairs, true_theta = true_theta, deterministic = TRUE, seed = 1)
+  }
+
+  # --- core_ids mismatch (checkpoint created by SAME runner type) ---
+  tmp <- tempfile("pairwiseLLM_chk_")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+
+  # Create checkpoint using adaptive_core_linking runner
+  out <- bt_run_adaptive_core_linking(
+    samples = samples, batches = batches,
+    core_ids = core_ids, core_method = "fixed", core_size = length(core_ids), embeddings = NULL,
+    linking = "never",
+    judge_fun = judge_fun_ok,
+    fit_fun = .mock_fit_all, engine = "mock",
+    round_size = 6, max_rounds_per_batch = 1, within_batch_frac = 1, core_audit_frac = 0,
+    min_judgments = 1, forbid_repeats = TRUE, balance_positions = TRUE,
+    reliability_target = Inf,
+    checkpoint_dir = tmp, checkpoint_store_fits = FALSE,
+    seed_pairs = 1, verbose = FALSE
+  )
+
+  core_ids2 <- c("A", "B", "C") # different
+  expect_error(
+    bt_run_adaptive_core_linking(
+      samples = samples, batches = batches,
+      core_ids = core_ids2, core_method = "fixed", core_size = length(core_ids2), embeddings = NULL,
+      linking = "never",
+      judge_fun = judge_fun_ok,
+      fit_fun = .mock_fit_all, engine = "mock",
+      round_size = 6, max_rounds_per_batch = 1, within_batch_frac = 1, core_audit_frac = 0,
+      min_judgments = 1, forbid_repeats = TRUE, balance_positions = TRUE,
+      reliability_target = Inf,
+      resume_from = tmp, checkpoint_dir = tmp, checkpoint_store_fits = FALSE,
+      seed_pairs = 1, verbose = FALSE
+    ),
+    "Resume checkpoint does not match `core_ids`\\..*Expected:.*Actual:"
+  )
+
+  # --- batches mismatch (checkpoint created by SAME runner type) ---
+  tmp2 <- tempfile("pairwiseLLM_chk_")
+  dir.create(tmp2, recursive = TRUE, showWarnings = FALSE)
+
+  out2 <- bt_run_adaptive_core_linking(
+    samples = samples, batches = batches,
+    core_ids = core_ids, core_method = "fixed", core_size = length(core_ids), embeddings = NULL,
+    linking = "never",
+    judge_fun = judge_fun_ok,
+    fit_fun = .mock_fit_all, engine = "mock",
+    round_size = 6, max_rounds_per_batch = 1, within_batch_frac = 1, core_audit_frac = 0,
+    min_judgments = 1, forbid_repeats = TRUE, balance_positions = TRUE,
+    reliability_target = Inf,
+    checkpoint_dir = tmp2, checkpoint_store_fits = FALSE,
+    seed_pairs = 1, verbose = FALSE
+  )
+
+  batches2 <- list(c("F", "G")) # different
+  expect_error(
+    bt_run_adaptive_core_linking(
+      samples = samples, batches = batches2,
+      core_ids = core_ids, core_method = "fixed", core_size = length(core_ids), embeddings = NULL,
+      linking = "never",
+      judge_fun = judge_fun_ok,
+      fit_fun = .mock_fit_all, engine = "mock",
+      round_size = 6, max_rounds_per_batch = 1, within_batch_frac = 1, core_audit_frac = 0,
+      min_judgments = 1, forbid_repeats = TRUE, balance_positions = TRUE,
+      reliability_target = Inf,
+      resume_from = tmp2, checkpoint_dir = tmp2, checkpoint_store_fits = FALSE,
+      seed_pairs = 1, verbose = FALSE
+    ),
+    "Resume checkpoint does not match `batches`\\..*Expected:.*Actual:"
+  )
+})
+
+test_that("adaptive_core_linking no-fit error includes diagnostic counts", {
+  samples <- tibble::tibble(ID = LETTERS[1:6], text = paste0("t", LETTERS[1:6]))
+  batches <- list(c("D", "E", "F"))
+  core_ids <- c("A", "B", "C")
+
+  # Initial results with all winners missing -> bt_data empty -> fit NULL
+  initial_results <- tibble::tibble(
+    ID1 = c("A", "A"),
+    ID2 = c("B", "C"),
+    better_id = c(NA_character_, NA_character_),
+    judge = "mock"
+  )
+
+  expect_error(
+    bt_run_adaptive_core_linking(
+      samples = samples,
+      batches = batches,
+      core_ids = core_ids,
+      linking = "never",
+      initial_results = initial_results,
+      judge = "judge",
+      judge_fun = function(pairs) pairs, # should not be reached
+      fit_fun = .mock_fit_all,
+      engine = "mock",
+      max_rounds_per_batch = 1,
+      checkpoint_store_fits = FALSE,
+      verbose = FALSE
+    ),
+    "n_results=(.|\n)*n_non_missing_better_id="
+  )
 })

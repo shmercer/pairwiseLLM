@@ -442,11 +442,17 @@ bt_run_adaptive_core_linking <- function(samples,
   }
 
   apply_linking <- function(fit, reference_fit) {
+    # Important: do not coerce NULL into a list via `$<-`.
+    # If we have no fit, we want downstream code to trip the structured no-fit
+    # diagnostics (via `.abort_no_fit()`), not a confusing `$theta`-missing error.
+    if (is.null(fit)) {
+      return(NULL)
+    }
     if (linking == "never") {
       fit$linking <- list(mode = linking, method = linking_method, applied = FALSE, reason = "never")
       return(fit)
     }
-    if (is.null(fit) || is.null(fit$theta) || is.null(reference_fit) || is.null(reference_fit$theta)) {
+    if (is.null(fit$theta) || is.null(reference_fit) || is.null(reference_fit$theta)) {
       fit$linking <- list(mode = linking, method = linking_method, applied = FALSE, reason = "missing_theta")
       return(fit)
     }
@@ -618,13 +624,23 @@ bt_run_adaptive_core_linking <- function(samples,
     # sanity-check core + batches against caller inputs
     if (!is.null(chk$core_ids)) {
       if (!setequal(as.character(chk$core_ids), core_ids)) {
-        stop("Resume checkpoint does not match `core_ids`.", call. = FALSE)
+        .abort_checkpoint_mismatch(
+          field = "core_ids",
+          expected = core_ids,
+          actual = chk$core_ids,
+          hint = "If you changed `core_ids` between runs, restart without `resume_from`."
+        )
       }
     }
     if (!is.null(chk$batches)) {
       # compare by flattened ID sets to avoid overly strict list ordering issues
       if (!setequal(unique(unlist(chk$batches, use.names = FALSE)), all_batch_ids)) {
-        stop("Resume checkpoint does not match `batches`.", call. = FALSE)
+        .abort_checkpoint_mismatch(
+          field = "batches",
+          expected = batches,
+          actual = chk$batches,
+          hint = "If you changed `batches` between runs, restart without `resume_from`."
+        )
       }
     }
 
@@ -802,12 +818,24 @@ bt_run_adaptive_core_linking <- function(samples,
     }
 
     if (is.null(current_fit)) {
-      stop("No BT fit could be computed (no non-missing results).", call. = FALSE)
+      .abort_no_fit(
+        stage = "initial_fit",
+        results = results,
+        ids = ids_all,
+        judge_col = judge,
+        hint = "Ensure `initial_results` contains at least one non-missing `better_id` and valid IDs."
+      )
     }
   }
 
   if (is.null(current_fit)) {
-    stop("No BT fit available to start/resume the workflow.", call. = FALSE)
+    .abort_no_fit(
+      stage = "start_resume",
+      results = results,
+      ids = ids_all,
+      judge_col = judge,
+      hint = "No usable fit could be created from the current results. Check missing `better_id` and resume inputs."
+    )
   }
 
   # Process each batch
@@ -827,7 +855,7 @@ bt_run_adaptive_core_linking <- function(samples,
         batch_index = as.integer(b),
         n_new_ids = 0L,
         rounds_used = 0L,
-        stop_reason = "no_new_ids",
+        stop_reason = .bt_resolve_stop_reason(no_new_ids = TRUE),
         n_results_total = nrow(results)
       ))
       next
@@ -888,7 +916,7 @@ bt_run_adaptive_core_linking <- function(samples,
       pairs_next <- prop$pairs
 
       if (nrow(pairs_next) == 0L) {
-        stop_reason <- "no_pairs"
+        stop_reason <- .bt_resolve_stop_reason(no_pairs = TRUE)
         state_rows[[length(state_rows) + 1L]] <- state_row(
           results,
           new_ids = new_ids,
@@ -921,7 +949,7 @@ bt_run_adaptive_core_linking <- function(samples,
       fr <- fit_from_results(results)
       current_fit <- fr$fit
       if (is.null(current_fit)) {
-        stop_reason <- "no_results"
+        stop_reason <- .bt_resolve_stop_reason(no_results = TRUE)
         state_rows[[length(state_rows) + 1L]] <- state_row(
           results,
           new_ids = new_ids,
@@ -979,7 +1007,7 @@ bt_run_adaptive_core_linking <- function(samples,
       )
 
       stop_now <- isTRUE(decision$stop)
-      stop_reason <- if (stop_now) "stopped" else NA_character_
+      stop_reason <- .bt_resolve_stop_reason(stopped = stop_now)
 
       m$batch_index <- as.integer(b)
       m$round_index <- as.integer(r)
@@ -1052,12 +1080,12 @@ bt_run_adaptive_core_linking <- function(samples,
 
       prev_metrics <- m
       if (r == max_rounds_per_batch) {
-        stop_reason <- "max_rounds"
+        stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
       }
     }
 
     if (is.na(stop_reason)) {
-      stop_reason <- "max_rounds"
+      stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
     }
 
     # Save final fit for batch

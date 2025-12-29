@@ -35,6 +35,13 @@
 * Expanded and updated unit tests for new branches and helper utilities (targeting ≥95% coverage for
   new/changed code).
 
+## Bug fixes
+* When `core_ids` are supplied to `bt_run_core_linking()`, `core_method` is no longer strictly
+  validated; this avoids premature `match.arg()` errors during resume/checkpoint workflows and
+  supports a "fixed"/caller-supplied core.
+* In `bt_run_adaptive_core_linking()`, linking metadata no longer coerces a NULL fit into a partial
+  list; runs with unusable `initial_results` now fail fast with structured no-fit diagnostics.
+
 # pairwiseLLM 1.2.0
 
 ## New Features
