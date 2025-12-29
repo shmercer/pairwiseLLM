@@ -785,3 +785,234 @@ test_that("parse_anthropic_batch_output errors on missing jsonl_path", {
     "does not exist"
   )
 })
+test_that(".parse_ids_from_custom_id returns NA IDs on malformed custom_id", {
+  res <- pairwiseLLM:::.parse_ids_from_custom_id("ANTH_S01_vs_S02_extra_vs_S03")
+  expect_true(is.na(res$ID1))
+  expect_true(is.na(res$ID2))
+})
+
+test_that(".parse_anthropic_pair_message detects SAMPLE_1 as better", {
+  body <- list(
+    type = "message",
+    model = "claude-test",
+    content = list(
+      list(type = "text", text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")
+    ),
+    usage = list(input_tokens = 1L, output_tokens = 1L)
+  )
+
+  res <- pairwiseLLM:::.parse_anthropic_pair_message(body, ID1 = "X", ID2 = "Y")
+  expect_equal(res$better_sample, "SAMPLE_1")
+  expect_equal(res$better_id, "X")
+})
+
+test_that("build_anthropic_batch_requests supports reasoning='enabled' and validates thinking budget", {
+  data("example_writing_samples", package = "pairwiseLLM")
+  pairs <- make_pairs(example_writing_samples)[1:1, ]
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  # Provide temperature=1 so the code takes the `dots$temperature` branch
+  reqs <- build_anthropic_batch_requests(
+    pairs = pairs,
+    model = "claude-sonnet-4-5",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    reasoning = "enabled",
+    temperature = 1,
+    max_tokens = 2048,
+    thinking_budget_tokens = 1024
+  )
+  expect_equal(nrow(reqs), 1L)
+  expect_true(is.list(reqs$params[[1]]$thinking))
+
+  # thinking_budget_tokens must be < max_tokens
+  expect_error(
+    build_anthropic_batch_requests(
+      pairs = pairs,
+      model = "claude-sonnet-4-5",
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl,
+      reasoning = "enabled",
+      temperature = 1,
+      max_tokens = 1024,
+      thinking_budget_tokens = 1024
+    ),
+    "must be smaller than `max_tokens`",
+    fixed = TRUE
+  )
+})
+
+test_that("anthropic_create_batch and anthropic_get_batch build correct request paths", {
+  seen <- new.env(parent = emptyenv())
+
+  fake_request <- function(path, api_key, anthropic_version) {
+    seen$last_path <- path
+    structure(list(path = path), class = "fake_req")
+  }
+  fake_req_body_json <- function(req, body) {
+    seen$last_body <- body
+    req
+  }
+  fake_req_perform <- function(req) {
+    seen$perform_path <- req$path
+    structure(list(ok = TRUE), class = "fake_resp")
+  }
+  fake_resp_body_json <- function(resp, simplifyVector = TRUE) {
+    # Return something that the caller expects as a parsed response
+    list(id = "msgbatch_123", processing_status = "in_progress", request_counts = list())
+  }
+
+  testthat::local_mocked_bindings(
+    .anthropic_request = fake_request,
+    .anthropic_req_body_json = fake_req_body_json,
+    .anthropic_req_perform = fake_req_perform,
+    .anthropic_resp_body_json = fake_resp_body_json,
+    .package = "pairwiseLLM"
+  )
+
+  out <- pairwiseLLM::anthropic_create_batch(requests = list(list(custom_id = "X", params = list())))
+
+  expect_equal(seen$perform_path, "/v1/messages/batches")
+  expect_true(is.list(seen$last_body$requests))
+  expect_equal(out$id, "msgbatch_123")
+
+  # reset capture for get
+  rm(list = c("last_path", "last_body", "perform_path"), envir = seen)
+
+  out2 <- pairwiseLLM::anthropic_get_batch(batch_id = "msgbatch_123")
+
+  expect_equal(seen$perform_path, "/v1/messages/batches/msgbatch_123")
+  expect_equal(out2$id, "msgbatch_123")
+})
+
+test_that("anthropic_poll_batch_until_complete logs status when verbose and warns on timeout", {
+  calls <- 0L
+  fake_get <- function(batch_id, ...) {
+    calls <<- calls + 1L
+    list(
+      id = batch_id,
+      processing_status = if (calls == 1L) "processing" else "ended",
+      request_counts = list(processing = 1L, succeeded = 0L, errored = 0L, canceled = 0L, expired = 0L)
+    )
+  }
+
+  testthat::local_mocked_bindings(
+    anthropic_get_batch = fake_get,
+    .package = "pairwiseLLM"
+  )
+
+  msgs <- testthat::capture_messages({
+    out <- pairwiseLLM::anthropic_poll_batch_until_complete(
+      batch_id = "msgbatch_123",
+      interval_seconds = 0,
+      timeout_seconds = Inf,
+      verbose = TRUE
+    )
+    expect_equal(out$processing_status, "ended")
+  })
+  expect_true(any(grepl("status:", msgs, fixed = TRUE)))
+
+  # Timeout warning path
+  calls <- 0L
+  testthat::local_mocked_bindings(
+    anthropic_get_batch = function(batch_id, ...) {
+      calls <<- calls + 1L
+      list(
+        id = batch_id,
+        processing_status = "processing",
+        request_counts = list(processing = 1L, succeeded = 0L, errored = 0L, canceled = 0L, expired = 0L)
+      )
+    },
+    .package = "pairwiseLLM"
+  )
+
+  testthat::expect_warning(
+    pairwiseLLM::anthropic_poll_batch_until_complete(
+      batch_id = "msgbatch_123",
+      interval_seconds = 0,
+      timeout_seconds = 0,
+      verbose = TRUE
+    ),
+    "Timeout reached"
+  )
+})
+
+test_that("anthropic_download_batch_results errors without results_url and writes jsonl when present", {
+  tmp <- tempfile(fileext = ".jsonl")
+
+  # Missing results_url branch
+  testthat::local_mocked_bindings(
+    anthropic_get_batch = function(...) list(id = "msgbatch_123", processing_status = "ended", results_url = ""),
+    .package = "pairwiseLLM"
+  )
+
+  expect_error(
+    pairwiseLLM::anthropic_download_batch_results(batch_id = "msgbatch_123", output_path = tmp),
+    "no `results_url`",
+    fixed = TRUE
+  )
+
+  # Present results_url branch, avoid network:
+  testthat::local_mocked_bindings(
+    anthropic_get_batch = function(...) {
+      list(
+        id = "msgbatch_123",
+        processing_status = "ended",
+        results_url = "https://example.com/results.jsonl"
+      )
+    },
+    .package = "pairwiseLLM"
+  )
+
+  testthat::local_mocked_bindings(
+    .anthropic_req_perform = function(req) {
+      # Return a real httr2_response so httr2::resp_body_string() accepts it
+      httr2::response(
+        url = req$url,
+        status_code = 200L,
+        headers = list(`content-type` = "application/jsonl"),
+        body = charToRaw('{"custom_id":"X","result":{"type":"succeeded"}}\n')
+      )
+    },
+    .package = "pairwiseLLM"
+  )
+
+  pairwiseLLM::anthropic_download_batch_results(
+    batch_id = "msgbatch_123",
+    output_path = tmp
+  )
+
+  expect_true(file.exists(tmp))
+  txt <- readLines(tmp, warn = FALSE)
+  expect_true(length(txt) >= 1L)
+  expect_true(grepl('"custom_id"', txt[[1]], fixed = TRUE))
+})
+
+test_that("parse_anthropic_batch_output skips blank lines", {
+  # One blank line and one valid line
+  line_ok <- jsonlite::toJSON(
+    list(
+      custom_id = "ANTH_S01_vs_S02",
+      result = list(
+        type = "succeeded",
+        message = list(
+          type = "message",
+          model = "claude-test",
+          content = list(list(type = "text", text = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"))
+        )
+      )
+    ),
+    auto_unbox = TRUE
+  )
+
+  tmp <- tempfile(fileext = ".jsonl")
+  writeLines(c("", "   ", line_ok), tmp)
+
+  out <- parse_anthropic_batch_output(tmp)
+  expect_equal(nrow(out), 1L)
+  expect_equal(out$ID1[[1]], "S01")
+  expect_equal(out$ID2[[1]], "S02")
+})

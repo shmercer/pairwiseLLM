@@ -1524,3 +1524,150 @@ test_that("llm_resume_multi_batches errors on unsupported provider type", {
     "Unsupported provider type"
   )
 })
+
+test_that("llm_submit_pairs_multi_batch retries OpenAI 5xx errors and logs when verbose", {
+  td <- list(name = "TASK", description = "Task")
+  tmpl <- "<PROMPT>{{ID1}} vs {{ID2}}</PROMPT>"
+  pairs <- tibble::tibble(ID1 = c("A", "B"), ID2 = c("C", "D"))
+  out_dir <- tempfile("llm_mb_")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+  attempt <- 0L
+  fake_pipeline_openai_retry <- function(...) {
+    attempt <<- attempt + 1L
+    if (attempt == 1L) {
+      rlang::abort("server error", class = "httr2_http_500")
+    }
+    list(batch = list(id = "openai-retry-ok"))
+  }
+
+  testthat::local_mocked_bindings(
+    run_openai_batch_pipeline = fake_pipeline_openai_retry,
+    .package = "pairwiseLLM"
+  )
+
+  res <- NULL
+  msgs <- testthat::capture_messages({
+    res <- pairwiseLLM::llm_submit_pairs_multi_batch(
+      pairs = pairs,
+      model = "fake-model",
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl,
+      backend = "openai",
+      batch_size = 2,
+      output_dir = out_dir,
+      verbose = TRUE,
+      openai_max_retries = 2
+    )
+  })
+
+  expect_true(any(grepl("Error creating OpenAI batch", msgs, fixed = TRUE)))
+  expect_equal(res$registry$batch_id[[1]], "openai-retry-ok")
+})
+
+test_that("llm_submit_pairs_multi_batch logs Gemini creation message when verbose", {
+  td <- list(name = "TASK", description = "Task")
+  tmpl <- "<PROMPT>{{ID1}} vs {{ID2}}</PROMPT>"
+  pairs <- tibble::tibble(ID1 = c("A", "B"), ID2 = c("C", "D"))
+  out_dir <- tempfile("llm_mb_")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+  fake_pipeline_gemini <- function(...) {
+    list(batch = list(name = "gemini-batch-test"))
+  }
+
+  testthat::local_mocked_bindings(
+    run_gemini_batch_pipeline = fake_pipeline_gemini,
+    .package = "pairwiseLLM"
+  )
+
+  msgs <- testthat::capture_messages({
+    pairwiseLLM::llm_submit_pairs_multi_batch(
+      pairs = pairs,
+      model = "fake-model",
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl,
+      backend = "gemini",
+      batch_size = 2,
+      output_dir = out_dir,
+      verbose = TRUE
+    )
+  })
+
+  expect_true(any(grepl("Gemini batch created", msgs, fixed = TRUE)))
+  expect_true(any(grepl("gemini-batch-test", msgs, fixed = TRUE)))
+})
+
+test_that("llm_resume_multi_batches returns empty validation report when combined results are NULL", {
+  # All jobs done but no results present -> combined = NULL
+  tmp <- tempfile("test_llm_resume_null_")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+
+  jobs <- list(list(
+    segment_index     = 1L,
+    provider          = "openai",
+    model             = "fake",
+    batch_id          = "b1",
+    batch_input_path  = file.path(tmp, "in.jsonl"),
+    batch_output_path = file.path(tmp, "out.jsonl"),
+    csv_path          = file.path(tmp, "out.csv"),
+    done              = TRUE,
+    results           = NULL
+  ))
+
+  res <- llm_resume_multi_batches(
+    jobs = jobs,
+    output_dir = tmp,
+    validate = TRUE,
+    max_rounds = 0,
+    interval_seconds = 0,
+    per_job_delay = 0
+  )
+
+  expect_true(is.list(res$validation_report))
+  expect_equal(res$validation_report$n_rows, 0L)
+  expect_equal(res$validation_report$n_missing_id, 0L)
+  expect_equal(res$validation_report$n_invalid_winner, 0L)
+})
+
+test_that("llm_resume_multi_batches writes combined CSV and logs when verbose", {
+  tmp <- tempfile("test_llm_resume_combined_")
+  dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+
+  jobs <- list(list(
+    segment_index = 1L,
+    provider = "openai",
+    model = "fake",
+    batch_id = "b1",
+    batch_input_path = file.path(tmp, "in.jsonl"),
+    batch_output_path = file.path(tmp, "out.jsonl"),
+    csv_path = file.path(tmp, "out.csv"),
+    done = TRUE,
+    results = tibble::tibble(
+      ID1 = "A", ID2 = "B",
+      winner = "ID1",
+      result_type = "succeeded"
+    )
+  ))
+
+  combined_path <- file.path(tmp, "combined.csv")
+
+  msgs <- testthat::capture_messages({
+    res <- llm_resume_multi_batches(
+      jobs               = jobs,
+      output_dir         = tmp,
+      write_combined_csv = TRUE,
+      combined_csv_path  = combined_path,
+      verbose            = TRUE,
+      max_rounds         = 0,
+      interval_seconds   = 0,
+      per_job_delay      = 0
+    )
+    expect_true(file.exists(combined_path))
+    expect_equal(nrow(res$combined), 1L)
+  })
+
+  expect_true(any(grepl("Combined results written", msgs, fixed = TRUE)))
+})
