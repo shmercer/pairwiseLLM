@@ -943,14 +943,27 @@ test_that("anthropic_poll_batch_until_complete logs status when verbose and warn
 test_that("anthropic_download_batch_results errors without results_url and writes jsonl when present", {
   tmp <- tempfile(fileext = ".jsonl")
 
+  # Ensure CI has a key so header construction doesn't fail
+  withr::local_envvar(c(ANTHROPIC_API_KEY = "test-key"))
+
   # Missing results_url branch
   testthat::local_mocked_bindings(
-    anthropic_get_batch = function(...) list(id = "msgbatch_123", processing_status = "ended", results_url = ""),
+    anthropic_get_batch = function(...) {
+      list(
+        id = "msgbatch_123",
+        processing_status = "ended",
+        results_url = ""
+      )
+    },
     .package = "pairwiseLLM"
   )
 
   expect_error(
-    pairwiseLLM::anthropic_download_batch_results(batch_id = "msgbatch_123", output_path = tmp),
+    pairwiseLLM::anthropic_download_batch_results(
+      batch_id = "msgbatch_123",
+      output_path = tmp,
+      api_key = "test-key"
+    ),
     "no `results_url`",
     fixed = TRUE
   )
@@ -969,7 +982,6 @@ test_that("anthropic_download_batch_results errors without results_url and write
 
   testthat::local_mocked_bindings(
     .anthropic_req_perform = function(req) {
-      # Return a real httr2_response so httr2::resp_body_string() accepts it
       httr2::response(
         url = req$url,
         status_code = 200L,
@@ -982,7 +994,8 @@ test_that("anthropic_download_batch_results errors without results_url and write
 
   pairwiseLLM::anthropic_download_batch_results(
     batch_id = "msgbatch_123",
-    output_path = tmp
+    output_path = tmp,
+    api_key = "test-key"
   )
 
   expect_true(file.exists(tmp))
