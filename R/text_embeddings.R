@@ -93,6 +93,16 @@ compute_text_embeddings <- function(x,
     stop("`device` must be NULL or a single character string.", call. = FALSE)
   }
 
+  # Convenience: allow cache_dir to be configured via environment variable.
+  # This is useful for project-level configuration (for example, a local
+  # `.Renviron`) so users don't need to pass `cache_dir` explicitly everywhere.
+  if (is.null(cache_dir)) {
+    env_cache <- trimws(Sys.getenv("PAIRWISELLM_EMBEDDINGS_CACHE_DIR", unset = ""))
+    if (nzchar(env_cache)) {
+      cache_dir <- env_cache
+    }
+  }
+
   if (!is.null(cache_dir) && (!is.character(cache_dir) || length(cache_dir) != 1L || is.na(cache_dir))) {
     stop("`cache_dir` must be NULL or a single directory path.", call. = FALSE)
   }

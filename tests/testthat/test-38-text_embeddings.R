@@ -353,3 +353,43 @@ test_that("compute_text_embeddings can load cache without reticulate", {
   expect_equal(unname(emb), expected)
   expect_equal(rownames(emb), ids)
 })
+
+test_that("compute_text_embeddings can resolve cache_dir from env var", {
+  dir <- withr::local_tempdir()
+  withr::local_envvar(PAIRWISELLM_EMBEDDINGS_CACHE_DIR = dir)
+
+  texts <- c("a", "b")
+  ids <- c("id1", "id2")
+
+  key <- pairwiseLLM:::.embeddings_cache_key(
+    texts = texts,
+    engine = "sentence_transformers",
+    model = "all-MiniLM-L6-v2",
+    batch_size = 32L,
+    normalize = FALSE,
+    device = NULL,
+    show_progress = FALSE,
+    dots = list()
+  )
+  path <- pairwiseLLM:::.embeddings_cache_path(dir, key)
+
+  expected <- matrix(c(10, 20), ncol = 1)
+  saveRDS(list(embeddings = expected, meta = list(n = 2L)), path)
+
+  testthat::local_mocked_bindings(
+    .has_reticulate = function() FALSE,
+    .package = "pairwiseLLM"
+  )
+
+  emb <- compute_text_embeddings(
+    texts,
+    ids = ids,
+    cache_dir = NULL,
+    use_cache = TRUE,
+    overwrite = FALSE,
+    show_progress = FALSE
+  )
+
+  expect_equal(unname(emb), expected)
+  expect_equal(rownames(emb), ids)
+})
