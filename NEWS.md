@@ -4,6 +4,9 @@
 * Resumable orchestration runners: `bt_run_adaptive()`, `bt_run_core_linking()`, and
   `bt_run_adaptive_core_linking()` support checkpointing and resume via `checkpoint_dir`,
   `resume_from`, and `checkpoint_every`.
+* Resuming is now supported even when `checkpoint_store_fits = FALSE`: on resume,
+  the runners recompute the necessary model fits from saved results (including the
+  baseline reference fit), keeping checkpoints small while still being safely resumable.
 * Adaptive sampling workflow: round-based pair proposal + fit + metrics + stopping via
   `select_adaptive_pairs()`, `bt_adaptive_round()`, and `bt_run_adaptive()`, with preset
   stopping tiers (`bt_stop_metrics()`, `bt_should_stop()`).

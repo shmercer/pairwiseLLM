@@ -642,6 +642,7 @@ bt_run_adaptive_core_linking <- function(samples,
     current_fit <- chk$current_fit %||% NULL
     bootstrap_fit <- chk$bootstrap_fit %||% NULL
     baseline_fit <- chk$baseline_fit %||% NULL
+    baseline_results_n <- as.integer(chk$baseline_results_n %||% NA_integer_)
     seen_ids <- chk$seen_ids %||% core_ids
     within_batch_frac <- chk$within_batch_frac %||% within_batch_frac
     core_audit_frac <- chk$core_audit_frac %||% core_audit_frac
@@ -713,6 +714,32 @@ bt_run_adaptive_core_linking <- function(samples,
     add = TRUE
   )
 
+
+  # If resuming and checkpoint_store_fits was FALSE, recompute fits needed for drift/linking.
+  if (!is.null(resume_from) && !isTRUE(chk$completed)) {
+    if (is.na(baseline_results_n) || baseline_results_n < 0L) baseline_results_n <- NA_integer_
+    if (is.null(baseline_fit) && nrow(results) > 0L) {
+      n_base <- baseline_results_n
+      if (is.na(n_base) || n_base <= 0L) n_base <- nrow(results)
+      n_base <- min(n_base, nrow(results))
+      if (n_base > 0L) {
+        fr_base <- fit_from_results(results[seq_len(n_base), , drop = FALSE])
+        baseline_fit <- fr_base$fit
+        bootstrap_fit <- baseline_fit
+      }
+    }
+    if (is.null(current_fit) && nrow(results) > 0L) {
+      fr_all <- fit_from_results(results)
+      current_fit <- fr_all$fit
+      if (!is.null(current_fit) && !is.null(baseline_fit)) {
+        current_fit <- apply_linking(current_fit, baseline_fit)
+      }
+      if (!is.null(current_fit)) {
+        attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "resume_recompute")
+      }
+    }
+  }
+
   if (is.null(resume_from)) {
     fits <- list()
     final_fits <- list()
@@ -725,6 +752,7 @@ bt_run_adaptive_core_linking <- function(samples,
     current_fit <- NULL
     bootstrap_fit <- NULL
     baseline_fit <- NULL
+    baseline_results_n <- NA_integer_
     batch_summary <- tibble::tibble()
 
     if (nrow(results) == 0L) {
@@ -750,6 +778,7 @@ bt_run_adaptive_core_linking <- function(samples,
         current_fit <- fr$fit
         bootstrap_fit <- fr$fit
         baseline_fit <- fr$fit
+        baseline_results_n <- nrow(results)
         current_fit <- apply_linking(current_fit, baseline_fit)
         attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "bootstrap", batch_index = 0L, round_index = 0L)
         fits[[length(fits) + 1L]] <- current_fit

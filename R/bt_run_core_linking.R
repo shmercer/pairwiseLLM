@@ -406,6 +406,7 @@ bt_run_core_linking <- function(samples,
 
     current_fit <- chk$current_fit %||% NULL
     baseline_fit <- chk$baseline_fit %||% NULL
+    baseline_results_n <- as.integer(chk$baseline_results_n %||% NA_integer_)
     seen_ids <- unique(as.character(chk$seen_ids %||% core_ids))
 
     within_batch_frac <- chk$within_batch_frac %||% within_batch_frac
@@ -536,6 +537,35 @@ bt_run_core_linking <- function(samples,
     as.integer(seed) + as.integer(batch_i) * 10000L + as.integer(round_i)
   }
 
+
+  # If resuming and checkpoint_store_fits was FALSE, recompute fits needed for drift/linking.
+  # We intentionally keep checkpoints small by allowing fits to be recomputed from saved results.
+  if (!is.null(resume_from) && !isTRUE(chk$completed)) {
+    # Restore baseline_results_n if missing (best-effort fallback)
+    if (is.na(baseline_results_n) || baseline_results_n < 0L) {
+      baseline_results_n <- NA_integer_
+    }
+    if (is.null(baseline_fit) && nrow(results) > 0L) {
+      n_base <- baseline_results_n
+      if (is.na(n_base) || n_base <= 0L) n_base <- nrow(results)
+      n_base <- min(n_base, nrow(results))
+      if (n_base > 0L) {
+        baseline_fit <- compute_fit(results[seq_len(n_base), , drop = FALSE])
+      }
+    }
+    if (is.null(current_fit) && nrow(results) > 0L) {
+      current_fit <- compute_fit(results)
+      if (!is.null(baseline_fit)) {
+        current_fit <- apply_linking(current_fit, baseline_fit)
+      }
+      # tag for debugging; not stored unless checkpoint_store_fits=TRUE
+      current_fit <- tag_fit(
+        current_fit, batch_start - 1L, round_start - 1L, "resume_recompute",
+        nrow(results), 0L, character(0)
+      )
+    }
+  }
+
   if (is.null(resume_from)) {
     fits <- list()
     final_fits <- list()
@@ -545,10 +575,12 @@ bt_run_core_linking <- function(samples,
 
     current_fit <- NULL
     baseline_fit <- NULL
+    baseline_results_n <- NA_integer_
 
     if (nrow(results) > 0L) {
       current_fit <- compute_fit(results)
       baseline_fit <- current_fit
+      baseline_results_n <- nrow(results)
       current_fit <- apply_linking(current_fit, baseline_fit)
       current_fit <- tag_fit(current_fit, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
       fits[[length(fits) + 1L]] <- current_fit
@@ -594,6 +626,7 @@ bt_run_core_linking <- function(samples,
       results <- dplyr::bind_rows(results, boot_res)
       current_fit <- compute_fit(results)
       baseline_fit <- current_fit
+      baseline_results_n <- nrow(results)
       current_fit <- apply_linking(current_fit, baseline_fit)
       current_fit <- tag_fit(current_fit, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
       fits[[length(fits) + 1L]] <- current_fit
@@ -631,6 +664,7 @@ bt_run_core_linking <- function(samples,
       batch_summary = batch_summary,
       current_fit = if (isTRUE(checkpoint_store_fits)) current_fit else NULL,
       baseline_fit = if (isTRUE(checkpoint_store_fits)) baseline_fit else NULL,
+      baseline_results_n = as.integer(baseline_results_n %||% NA_integer_),
       seen_ids = seen_ids,
       within_batch_frac = within_batch_frac,
       core_audit_frac = core_audit_frac,
