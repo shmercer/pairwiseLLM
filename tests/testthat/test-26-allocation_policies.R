@@ -111,3 +111,39 @@ testthat::test_that("allocation policies return NULL for non-finite inputs and c
   out <- g2(state5)
   testthat::expect_equal(out$core_audit_frac, 0.05)
 })
+
+testthat::test_that("allocation_compose merges multiple policies in order", {
+  ramp <- allocation_precision_ramp(step = 0.2, max_within = 0.8)
+  audit <- allocation_audit_on_drift(
+    drift_metric = "linking_max_abs_shift",
+    drift_threshold = 0.20,
+    step = 0.05,
+    base_core_audit = 0.10,
+    max_core_audit = 0.40
+  )
+
+  composed <- allocation_compose(ramp, audit)
+
+  state <- list(
+    metrics = tibble::tibble(rel_se_p90 = 0.40, linking_max_abs_shift = 0.35),
+    prev_metrics = tibble::tibble(rel_se_p90 = 0.55, linking_max_abs_shift = 0.10),
+    within_batch_frac = 0.10,
+    core_audit_frac = 0.10
+  )
+
+  out <- composed(state)
+  testthat::expect_type(out, "list")
+  testthat::expect_equal(out$within_batch_frac, 0.30)
+  testthat::expect_equal(out$core_audit_frac, 0.15)
+
+  # Later policy overrides earlier fields when both set the same name
+  f1 <- function(state) list(within_batch_frac = 0.2)
+  f2 <- function(state) list(within_batch_frac = 0.4)
+  composed2 <- allocation_compose(f1, f2)
+  out2 <- composed2(list(within_batch_frac = 0.1))
+  testthat::expect_equal(out2$within_batch_frac, 0.4)
+
+  # Input validation
+  testthat::expect_error(allocation_compose(NULL), "At least one")
+  testthat::expect_error(allocation_compose(1), "must be functions")
+})

@@ -188,9 +188,14 @@ judge_fit_summary <- function(fit, fit_bounds = c(0.7, 1.3), top_n = 5L) {
   lower <- min(fit_bounds)
   upper <- max(fit_bounds)
 
-  top_n <- as.integer(top_n)
-  if (is.na(top_n) || top_n < 0L) {
-    stop("`top_n` must be a non-negative integer.", call. = FALSE)
+  # Allow top_n = Inf as a convenient "include all" sentinel
+  if (is.infinite(top_n)) {
+    top_n <- .Machine$integer.max
+  } else {
+    top_n <- as.integer(top_n)
+    if (is.na(top_n) || top_n < 0L) {
+      stop("`top_n` must be a non-negative integer.", call. = FALSE)
+    }
   }
 
   extract_judge_fit <- function(x) {
@@ -280,4 +285,47 @@ judge_fit_summary <- function(fit, fit_bounds = c(0.7, 1.3), top_n = 5L) {
     dplyr::select(dplyr::all_of(c("judge", "infit", "outfit", "is_misfit", "deviation")))
 
   list(summary = summary, details = details)
+}
+
+
+#' Identify misfitting judges from a Bradley--Terry fit
+#'
+#' Convenience wrapper around [judge_fit_summary()] that returns the judge IDs
+#' flagged as misfitting (based on `fit_bounds`).
+#'
+#' When no judge-fit diagnostics are available, this function returns a
+#' zero-length character vector.
+#'
+#' @param fit A fit object accepted by [judge_fit_summary()].
+#' @param fit_bounds Numeric length-2 vector giving acceptable fit bounds for
+#'   `infit` and `outfit`.
+#'
+#' @return Character vector of judge IDs flagged as misfitting, sorted by
+#'   decreasing deviation.
+#'
+#' @examples
+#' fit <- list(
+#'   diagnostics = list(
+#'     judge_fit = tibble::tibble(
+#'       judge = c("mA", "mB"),
+#'       infit = c(1.0, 1.6),
+#'       outfit = c(1.1, 1.0)
+#'     )
+#'   )
+#' )
+#' judge_misfit_judges(fit)
+#'
+#' @export
+judge_misfit_judges <- function(fit, fit_bounds = c(0.7, 1.3)) {
+  out <- judge_fit_summary(fit, fit_bounds = fit_bounds, top_n = Inf)
+  det <- out$details
+  if (is.null(det) || !inherits(det, "data.frame") || nrow(det) == 0L) {
+    return(character())
+  }
+  det <- det[det$is_misfit %in% TRUE, , drop = FALSE]
+  if (nrow(det) == 0L) {
+    return(character())
+  }
+  det <- det[order(-det$deviation), , drop = FALSE]
+  as.character(det$judge)
 }

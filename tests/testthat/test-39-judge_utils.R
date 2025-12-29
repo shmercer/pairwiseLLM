@@ -104,3 +104,23 @@ test_that("judge_fit_summary validates inputs and table schema", {
   bad_tbl <- tibble::tibble(judge = "mA", infit = 1)
   expect_error(judge_fit_summary(bad_tbl), "must contain columns")
 })
+
+test_that("judge_misfit_judges returns misfit judge IDs and handles missing diagnostics", {
+  fit <- list(
+    diagnostics = list(
+      judge_fit = tibble::tibble(
+        judge = c("mA", "mB", "mC"),
+        infit = c(1.0, 1.6, 0.9),
+        outfit = c(1.0, 1.0, 0.2)
+      )
+    )
+  )
+
+  mis <- judge_misfit_judges(fit, fit_bounds = c(0.7, 1.3))
+  expect_type(mis, "character")
+  expect_true(all(mis %in% c("mB", "mC")))
+  expect_false(any(mis == "mA"))
+
+  # Missing diagnostics -> empty
+  expect_equal(judge_misfit_judges(list()), character())
+})
