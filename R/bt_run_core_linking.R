@@ -326,6 +326,15 @@ bt_run_core_linking <- function(samples,
   if (!missing(core_max_abs_shift_target)) stop_params$core_max_abs_shift_target <- core_max_abs_shift_target
   if (!missing(core_p90_abs_shift_target)) stop_params$core_p90_abs_shift_target <- core_p90_abs_shift_target
 
+  round_size <- as.integer(round_size)
+  if (length(round_size) != 1L || is.na(round_size) || round_size < 0L) {
+    stop("`round_size` must be a single non-negative integer.", call. = FALSE)
+  }
+  max_rounds_per_batch <- as.integer(max_rounds_per_batch)
+  if (length(max_rounds_per_batch) != 1L || is.na(max_rounds_per_batch) || max_rounds_per_batch < 0L) {
+    stop("`max_rounds_per_batch` must be a single non-negative integer.", call. = FALSE)
+  }
+
   checkpoint_every <- as.integer(checkpoint_every)
   if (is.na(checkpoint_every) || checkpoint_every < 1L) {
     stop("`checkpoint_every` must be an integer >= 1.", call. = FALSE)
@@ -382,6 +391,72 @@ bt_run_core_linking <- function(samples,
   results <- tibble::tibble()
   if (!is.null(initial_results)) {
     results <- .validate_judge_results(initial_results, ids = ids_all, judge_col = judge)
+  }
+
+  # If the caller explicitly requests no new sampling and provides no initial
+  # results, stop immediately with a consistent stop reason (rather than
+  # failing the initial fit with 0 results).
+  if (is.null(resume_from) && nrow(results) == 0L && round_size == 0L) {
+    out <- list(
+      core_ids = core_ids,
+      batches = batches,
+      results = results,
+      fits = list(),
+      final_fits = list(),
+      metrics = .bt_align_metrics(tibble::tibble(), se_probs = se_probs),
+      state = .bt_align_state(tibble::tibble()),
+      batch_summary = tibble::tibble(),
+      stop_reason = .bt_resolve_stop_reason(round_size_zero = TRUE),
+      stop_round = 0L
+    )
+
+    if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+      payload <- list(
+        run_type = "core_linking",
+        ids = ids_all,
+        core_ids = core_ids,
+        batches = batches,
+        timestamp = Sys.time(),
+        completed = TRUE,
+        out = out
+      )
+      .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
+    }
+
+    return(.as_pairwise_run(out, run_type = "core_linking"))
+  }
+
+  # If the caller explicitly requests no new sampling and provides no initial
+  # results, stop immediately with a consistent stop reason (rather than
+  # failing the initial fit with 0 results).
+  if (is.null(resume_from) && nrow(results) == 0L && round_size == 0L) {
+    out <- list(
+      core_ids = core_ids,
+      batches = batches,
+      results = results,
+      fits = list(),
+      final_fits = list(),
+      metrics = .bt_align_metrics(tibble::tibble(), se_probs = se_probs),
+      state = .bt_align_state(tibble::tibble()),
+      batch_summary = tibble::tibble(),
+      stop_reason = .bt_resolve_stop_reason(round_size_zero = TRUE),
+      stop_round = 0L
+    )
+
+    if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+      payload <- list(
+        run_type = "core_linking",
+        ids = ids_all,
+        core_ids = core_ids,
+        batches = batches,
+        timestamp = Sys.time(),
+        completed = TRUE,
+        out = out
+      )
+      .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
+    }
+
+    return(.as_pairwise_run(out, run_type = "core_linking"))
   }
 
   # ---- resume / checkpoint state ----
@@ -1003,7 +1078,11 @@ bt_run_core_linking <- function(samples,
     final_fits = final_fits,
     metrics = metrics_hist,
     state = state_hist,
-    batch_summary = batch_summary
+    batch_summary = batch_summary,
+    # Top-level stopping summary (batch-level stop reasons are in `batch_summary`).
+    # For batched runners, we surface the *final batch's* stop_reason as the overall stop_reason.
+    stop_reason = if (nrow(batch_summary) == 0L) NA_character_ else as.character(batch_summary$stop_reason[[nrow(batch_summary)]]),
+    stop_round = if (nrow(batch_summary) == 0L) NA_integer_ else as.integer(sum(batch_summary$rounds_used, na.rm = TRUE))
   )
 
   # final checkpoint with full return object

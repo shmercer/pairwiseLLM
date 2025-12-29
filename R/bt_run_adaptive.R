@@ -723,6 +723,9 @@ bt_run_adaptive <- function(samples,
     } else if (start_round > max_rounds) {
       stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
       stop_round <- as.integer(max_rounds)
+    } else if (round_size == 0L && init_round_size == 0L && (nrow(rounds_tbl_prev) + length(rounds_list) == 0L)) {
+      stop_reason <- .bt_resolve_stop_reason(round_size_zero = TRUE)
+      stop_round <- 0L
     } else if (nrow(rounds_tbl_prev) + length(rounds_list) == 0L) {
       stop_reason <- .bt_resolve_stop_reason(no_results = TRUE)
     } else {

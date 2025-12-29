@@ -892,6 +892,20 @@ test_that("bt_run_adaptive returns stop metadata and tags fits", {
   expect_true(is.null(out0$final_fit))
   expect_equal(length(out0$fits), 0L)
 
+  # If both init_round_size and round_size are 0, stop_reason should be
+  # round_size_zero (not no_results).
+  out00 <- bt_run_adaptive(
+    samples = samples,
+    judge_fun = judge_never,
+    init_round_size = 0,
+    round_size = 0,
+    max_rounds = 10
+  )
+  expect_identical(out00$stop_reason, "round_size_zero")
+  expect_identical(out00$stop_round, 0L)
+  expect_true(is.null(out00$final_fit))
+  expect_equal(length(out00$fits), 0L)
+
   # Provide a minimal starting result; round_size==0 should stop after fitting.
   initial_results <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
   fit_fun <- function(bt_data, ...) {
@@ -1040,4 +1054,3 @@ test_that("bt_run_adaptive returns state snapshots per round", {
   expect_true(all(c("n_results", "n_unique_unordered_pairs", "pos_imbalance_max", "round", "stop_reason") %in% names(out$state)))
   expect_equal(out$state$n_self_pairs[[1]], 0L)
 })
-

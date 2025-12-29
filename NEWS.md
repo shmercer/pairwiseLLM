@@ -30,6 +30,15 @@
   path), while still accepting user-supplied embedding matrices.
 * Judge QA: `judge_fit_summary()` now accepts `top_n = Inf`, and `judge_misfit_judges()` provides
   a simple way to extract misfit judge IDs from a fit.
+* Batched runners (`bt_run_core_linking()` and `bt_run_adaptive_core_linking()`) now return
+  top-level `stop_reason` and `stop_round` fields for consistency with `bt_run_adaptive()`.
+* Resume/checkpoint mismatch errors now label the current-run inputs as `Requested:` and the
+  saved checkpoint payload as `Checkpoint:` to make debugging resume issues more intuitive.
+* When `round_size = 0` (and `init_round_size = 0` for adaptive modes) and no `initial_results`
+  are provided, runners now stop cleanly with `stop_reason = "round_size_zero"` (instead of
+  returning `no_results` or erroring during the initial fit).
+* `bt_run_adaptive_core_linking()` now accepts a `seed` argument as an alias for `seed_pairs`
+  to avoid partial argument matching issues when both `seed_pairs` and `seed_core` are present.
 
 ## Maintenance
 * Expanded and updated unit tests for new branches and helper utilities (targeting ≥95% coverage for

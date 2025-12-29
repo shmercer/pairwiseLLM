@@ -492,7 +492,7 @@ test_that("resume_from errors clearly when missing or incompatible", {
       max_rounds = 1,
       resume_from = tmp
     ),
-    "Resume checkpoint does not match `samples\\$ID`\\.(.|\n)*Expected:(.|\n)*Actual:"
+    "Resume checkpoint does not match `samples\\$ID`\\.(.|\n)*Requested:(.|\n)*Checkpoint:"
   )
 })
 
@@ -697,6 +697,8 @@ test_that("bt_run_adaptive_core_linking recomputes fits on resume when checkpoin
   expect_equal(nrow(out$batch_summary), 2L)
 })
 
+
+
 test_that("resume mismatch errors include Expected/Actual for core_ids and batches", {
   samples <- tibble::tibble(ID = LETTERS[1:10], text = paste0("t", LETTERS[1:10]))
   batches <- list(c("F", "G", "H"), c("I", "J"))
@@ -707,12 +709,11 @@ test_that("resume mismatch errors include Expected/Actual for core_ids and batch
     pairwiseLLM::simulate_bt_judge(pairs, true_theta = true_theta, deterministic = TRUE, seed = 1)
   }
 
-  # --- core_ids mismatch (checkpoint created by SAME runner type) ---
   tmp <- tempfile("pairwiseLLM_chk_")
   dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
 
-  # Create checkpoint using adaptive_core_linking runner
-  out <- bt_run_adaptive_core_linking(
+  # Create a checkpoint
+  out <- bt_run_core_linking(
     samples = samples, batches = batches,
     core_ids = core_ids, core_method = "fixed", core_size = length(core_ids), embeddings = NULL,
     linking = "never",
@@ -722,12 +723,14 @@ test_that("resume mismatch errors include Expected/Actual for core_ids and batch
     min_judgments = 1, forbid_repeats = TRUE, balance_positions = TRUE,
     reliability_target = Inf,
     checkpoint_dir = tmp, checkpoint_store_fits = FALSE,
-    seed_pairs = 1, verbose = FALSE
+    seed = 1, verbose = FALSE
   )
+  expect_true(file.exists(file.path(tmp, "run_state.rds")))
 
-  core_ids2 <- c("A", "B", "C") # different
+  # core_ids mismatch on resume
+  core_ids2 <- c("A", "B", "C", "D") # different
   expect_error(
-    bt_run_adaptive_core_linking(
+    bt_run_core_linking(
       samples = samples, batches = batches,
       core_ids = core_ids2, core_method = "fixed", core_size = length(core_ids2), embeddings = NULL,
       linking = "never",
@@ -737,18 +740,17 @@ test_that("resume mismatch errors include Expected/Actual for core_ids and batch
       min_judgments = 1, forbid_repeats = TRUE, balance_positions = TRUE,
       reliability_target = Inf,
       resume_from = tmp, checkpoint_dir = tmp, checkpoint_store_fits = FALSE,
-      seed_pairs = 1, verbose = FALSE
+      seed = 1, verbose = FALSE
     ),
-    "Resume checkpoint does not match `core_ids`\\..*Expected:.*Actual:"
+    "Resume checkpoint does not match `core_ids`\\..*Requested:.*Checkpoint:"
   )
 
-  # --- batches mismatch (checkpoint created by SAME runner type) ---
+  # batches mismatch on resume (adaptive_core_linking runner)
   tmp2 <- tempfile("pairwiseLLM_chk_")
   dir.create(tmp2, recursive = TRUE, showWarnings = FALSE)
 
   out2 <- bt_run_adaptive_core_linking(
-    samples = samples, batches = batches,
-    core_ids = core_ids, core_method = "fixed", core_size = length(core_ids), embeddings = NULL,
+    samples = samples, batches = batches, core_ids = core_ids,
     linking = "never",
     judge_fun = judge_fun_ok,
     fit_fun = .mock_fit_all, engine = "mock",
@@ -758,12 +760,12 @@ test_that("resume mismatch errors include Expected/Actual for core_ids and batch
     checkpoint_dir = tmp2, checkpoint_store_fits = FALSE,
     seed_pairs = 1, verbose = FALSE
   )
+  expect_true(file.exists(file.path(tmp2, "run_state.rds")))
 
-  batches2 <- list(c("F", "G")) # different
+  batches2 <- list(c("F", "G", "H"), c("I")) # different
   expect_error(
     bt_run_adaptive_core_linking(
-      samples = samples, batches = batches2,
-      core_ids = core_ids, core_method = "fixed", core_size = length(core_ids), embeddings = NULL,
+      samples = samples, batches = batches2, core_ids = core_ids,
       linking = "never",
       judge_fun = judge_fun_ok,
       fit_fun = .mock_fit_all, engine = "mock",
@@ -773,7 +775,7 @@ test_that("resume mismatch errors include Expected/Actual for core_ids and batch
       resume_from = tmp2, checkpoint_dir = tmp2, checkpoint_store_fits = FALSE,
       seed_pairs = 1, verbose = FALSE
     ),
-    "Resume checkpoint does not match `batches`\\..*Expected:.*Actual:"
+    "Resume checkpoint does not match `batches`\\..*Requested:.*Checkpoint:"
   )
 })
 

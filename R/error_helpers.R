@@ -9,8 +9,8 @@
 
   msg <- paste0(
     "Resume checkpoint does not match `", field, "`.\n",
-    "Expected:\n", expected_str, "\n",
-    "Actual:\n", actual_str
+    "Requested:\n", expected_str, "\n",
+    "Checkpoint:\n", actual_str
   )
   if (!is.null(hint) && nzchar(as.character(hint))) {
     msg <- paste0(msg, "\nHint: ", as.character(hint))

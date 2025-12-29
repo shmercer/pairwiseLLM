@@ -23,6 +23,29 @@ test_that("bt_run_core_linking validates inputs", {
   )
 })
 
+test_that("bt_run_core_linking returns round_size_zero when no sampling is requested", {
+  samples <- tibble::tibble(ID = LETTERS[1:6], text = paste0("t", LETTERS[1:6]))
+  judge_never <- function(pairs) stop("judge_fun should not be called")
+
+  out <- bt_run_core_linking(
+    samples = samples,
+    batches = list(LETTERS[4:6]),
+    core_ids = LETTERS[1:3],
+    linking = "never",
+    judge_fun = judge_never,
+    fit_fun = function(...) stop("fit_fun should not be called"),
+    engine = "mock",
+    round_size = 0,
+    max_rounds_per_batch = 10,
+    reliability_target = Inf,
+    seed_pairs = 1
+  )
+
+  expect_identical(out$stop_reason, "round_size_zero")
+  expect_identical(out$stop_round, 0L)
+  expect_equal(nrow(out$results), 0L)
+})
+
 test_that("bt_run_core_linking requires judge column when judge is provided", {
   samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
   batches <- list(c("C"))
@@ -101,6 +124,11 @@ test_that("bt_run_core_linking runs batches and stops based on precision on new 
 
   expect_equal(nrow(out$batch_summary), 2L)
   expect_true(all(out$batch_summary$n_new > 0))
+
+  # top-level stop summary mirrors final batch stop
+  expect_true(!is.null(out$stop_reason))
+  expect_equal(out$stop_reason, out$batch_summary$stop_reason[[nrow(out$batch_summary)]])
+  expect_true(is.integer(out$stop_round) || is.na(out$stop_round))
 
   # metrics should be computed on new IDs per batch (n_items equals batch new count)
   expect_true(all(out$metrics$n_items %in% c(1L, 2L)))

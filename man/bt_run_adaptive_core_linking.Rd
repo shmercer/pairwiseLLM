@@ -38,6 +38,7 @@ bt_run_adaptive_core_linking(
   min_judgments = 12,
   forbid_repeats = TRUE,
   balance_positions = TRUE,
+  seed = NULL,
   seed_pairs = NULL,
   se_probs = c(0.5, 0.9, 0.95),
   fit_bounds = c(0.7, 1.3),
@@ -165,6 +166,9 @@ should return NULL (no change) or a list with elements \code{within_batch_frac} 
 \item{forbid_repeats}{Logical. Passed to \code{\link{select_core_link_pairs}}.}
 
 \item{balance_positions}{Logical. Passed to \code{\link{select_core_link_pairs}}.}
+
+\item{seed}{Optional integer alias for \code{seed_pairs} (backwards compatibility).
+Prefer \code{seed_pairs} going forward.}
 
 \item{seed_pairs}{Optional integer seed used for bootstrap pair sampling and for each round
 as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored afterward.}

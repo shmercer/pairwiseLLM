@@ -35,11 +35,11 @@ test_that("checkpointing helpers write, read, and validate payloads", {
   # validate errors
   expect_error(
     pairwiseLLM:::.bt_validate_checkpoint(chk1, run_type = "core_linking", ids = c("A", "B", "C")),
-    "`run_type`"
+    "Resume checkpoint does not match `run_type`\\.(.|\\n)*Requested:(.|\\n)*Checkpoint:"
   )
   expect_error(
     pairwiseLLM:::.bt_validate_checkpoint(chk1, run_type = "adaptive", ids = c("A", "B", "D")),
-    "Resume checkpoint does not match `samples\\$ID`\\."
+    "`samples\\$ID`"
   )
   expect_error(
     pairwiseLLM:::.bt_validate_checkpoint("not a list", run_type = "adaptive", ids = c("A", "B", "C")),

@@ -68,6 +68,30 @@ test_that("bt_run_adaptive_core_linking selects core_ids when NULL (random) and 
   expect_true(nrow(out$metrics) >= 1)
 })
 
+test_that("bt_run_adaptive_core_linking returns round_size_zero when no sampling is requested", {
+  samples <- tibble::tibble(ID = LETTERS[1:6], text = paste0("t", LETTERS[1:6]))
+  judge_never <- function(pairs) stop("judge_fun should not be called")
+
+  out <- bt_run_adaptive_core_linking(
+    samples = samples,
+    batches = list(LETTERS[4:6]),
+    core_ids = LETTERS[1:3],
+    linking = "never",
+    judge_fun = judge_never,
+    fit_fun = function(...) stop("fit_fun should not be called"),
+    engine = "mock",
+    round_size = 0,
+    init_round_size = 0,
+    max_rounds_per_batch = 10,
+    reliability_target = Inf,
+    seed_pairs = 1
+  )
+
+  expect_identical(out$stop_reason, "round_size_zero")
+  expect_identical(out$stop_round, 0L)
+  expect_equal(nrow(out$results), 0L)
+})
+
 test_that("bt_run_adaptive_core_linking drift gating can prevent stopping (hits max_rounds)", {
   samples <- tibble::tibble(
     ID = LETTERS[1:8],
@@ -550,6 +574,8 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
     max_judge_misfit_prop = NA_real_
   )
   expect_equal(out_stopped$batch_summary$stop_reason[[1]], "stopped")
+  expect_equal(out_stopped$stop_reason, "stopped")
+  expect_true(is.integer(out_stopped$stop_round) || is.na(out_stopped$stop_round))
   expect_true(nrow(out_stopped$metrics) >= 1L)
 
   # ---- max_rounds fallback via max_rounds_per_batch=0 (seq_len(0) => no loop) ----
@@ -571,6 +597,8 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
     max_judge_misfit_prop = NA_real_
   )
   expect_equal(out_max0$batch_summary$stop_reason[[1]], "max_rounds")
+  expect_equal(out_max0$stop_reason, "max_rounds")
+  expect_true(is.integer(out_max0$stop_round) || is.na(out_max0$stop_round))
   expect_true(nrow(out_max0$metrics) == 0L)
 })
 

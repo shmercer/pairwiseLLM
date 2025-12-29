@@ -103,6 +103,8 @@
 #' @param forbid_repeats Logical. Passed to \code{\link{select_core_link_pairs}}.
 #' @param balance_positions Logical. Passed to \code{\link{select_core_link_pairs}}.
 #'
+#' @param seed Optional integer alias for `seed_pairs` (backwards compatibility).
+#'   Prefer `seed_pairs` going forward.
 #' @param seed_pairs Optional integer seed used for bootstrap pair sampling and for each round
 #' as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored afterward.
 #'
@@ -272,6 +274,7 @@ bt_run_adaptive_core_linking <- function(samples,
                                          min_judgments = 12,
                                          forbid_repeats = TRUE,
                                          balance_positions = TRUE,
+                                         seed = NULL,
                                          seed_pairs = NULL,
                                          se_probs = c(0.5, 0.9, 0.95),
                                          fit_bounds = c(0.7, 1.3),
@@ -313,6 +316,39 @@ bt_run_adaptive_core_linking <- function(samples,
 
   stopping_tier <- match.arg(stopping_tier)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
+
+  # Back-compat: accept `seed=` as an alias for `seed_pairs=`. (Avoid partial
+  # matching ambiguity with `seed_core`/`seed_pairs`.)
+  if (!is.null(seed)) {
+    seed <- as.integer(seed)
+    if (length(seed) != 1L || is.na(seed)) {
+      stop("`seed` must be a single integer (or NULL).", call. = FALSE)
+    }
+    if (is.null(seed_pairs)) {
+      seed_pairs <- seed
+    } else {
+      seed_pairs_i <- as.integer(seed_pairs)
+      if (length(seed_pairs_i) != 1L || is.na(seed_pairs_i)) {
+        stop("`seed_pairs` must be a single integer (or NULL).", call. = FALSE)
+      }
+      if (!identical(seed_pairs_i, seed)) {
+        stop("Do not supply both `seed` and `seed_pairs` (they must be identical).", call. = FALSE)
+      }
+    }
+  }
+
+  round_size <- as.integer(round_size)
+  if (length(round_size) != 1L || is.na(round_size) || round_size < 0L) {
+    stop("`round_size` must be a non-negative integer.", call. = FALSE)
+  }
+  init_round_size <- as.integer(init_round_size)
+  if (length(init_round_size) != 1L || is.na(init_round_size) || init_round_size < 0L) {
+    stop("`init_round_size` must be a non-negative integer.", call. = FALSE)
+  }
+  max_rounds_per_batch <- as.integer(max_rounds_per_batch)
+  if (length(max_rounds_per_batch) != 1L || is.na(max_rounds_per_batch) || max_rounds_per_batch < 0L) {
+    stop("`max_rounds_per_batch` must be a non-negative integer.", call. = FALSE)
+  }
 
   # Override tier defaults only when the caller explicitly supplies thresholds.
   if (!missing(reliability_target)) stop_params$reliability_target <- reliability_target
@@ -422,6 +458,43 @@ bt_run_adaptive_core_linking <- function(samples,
 
   if (nrow(results) > 0L) {
     results <- .validate_judge_results(results, ids = ids_all, judge_col = judge)
+  }
+
+  # If the caller explicitly requests no new sampling and provides no initial
+  # results, stop immediately with a consistent stop reason (rather than
+  # failing the initial fit with 0 results).
+  if (is.null(resume_from) && nrow(results) == 0L && init_round_size == 0L && round_size == 0L) {
+    bt_data <- build_bt_fun(results, judge = judge)
+    out <- list(
+      core_ids = core_ids,
+      batches = batches,
+      results = results,
+      bt_data = bt_data,
+      fits = list(),
+      final_fits = list(),
+      metrics = .bt_align_metrics(tibble::tibble(), se_probs = se_probs),
+      batch_summary = tibble::tibble(),
+      state = .bt_align_state(tibble::tibble()),
+      stop_reason = .bt_resolve_stop_reason(round_size_zero = TRUE),
+      stop_round = 0L,
+      stop_batch = 0L,
+      engine = engine
+    )
+
+    if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
+      payload <- list(
+        run_type = "adaptive_core_linking",
+        ids = ids_all,
+        core_ids = core_ids,
+        batches = batches,
+        timestamp = Sys.time(),
+        completed = TRUE,
+        out = out
+      )
+      .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
+    }
+
+    return(.as_pairwise_run(out, run_type = "adaptive_core_linking"))
   }
 
   # Internal helper: fit on current results
@@ -1155,7 +1228,11 @@ bt_run_adaptive_core_linking <- function(samples,
     final_fits = final_fits,
     metrics = metrics,
     batch_summary = batch_summary,
-    state = state
+    state = state,
+    # Top-level stopping summary (batch-level stop reasons are in `batch_summary`).
+    # For batched runners, we surface the *final batch's* stop_reason as the overall stop_reason.
+    stop_reason = if (nrow(batch_summary) == 0L) NA_character_ else as.character(batch_summary$stop_reason[[nrow(batch_summary)]]),
+    stop_round = if (nrow(batch_summary) == 0L) NA_integer_ else as.integer(sum(batch_summary$rounds_used, na.rm = TRUE))
   )
 
   # final checkpoint with full return object
