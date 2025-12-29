@@ -262,7 +262,7 @@ and decide whether to stop via \code{\link{bt_should_stop}}.
 If \code{core_ids} is \code{NULL}, the core set can be selected from \code{samples}
 using \code{\link{select_core_set}}.
 
-\strong{Checkpointing \& resuming:} If \code{checkpoint_dir} is provided, this
+\strong{Checkpointing and resuming:} If \code{checkpoint_dir} is provided, this
 function writes a checkpoint at the last completed safe point (typically after a
 round completes within a batch, and at batch boundaries). If an error occurs
 mid-round, the checkpoint reflects the most recently completed round. Resume by

@@ -238,7 +238,7 @@ compute forward-vs-reverse consistency via \code{\link{compute_reverse_consisten
 The default modeling function is \code{\link{fit_bt_model}} and the default
 stopping+pairing helper is \code{\link{bt_adaptive_round}}.
 
-\strong{Checkpointing \& resuming:} If \code{checkpoint_dir} is provided, this
+\strong{Checkpointing and resuming:} If \code{checkpoint_dir} is provided, this
 function writes a checkpoint representing the \emph{last completed safe point}
 of the adaptive loop (i.e., after a round has fully completed). If the run is
 interrupted or errors occur mid-round, the checkpoint corresponds to the most

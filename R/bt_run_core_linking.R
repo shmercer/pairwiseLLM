@@ -131,7 +131,7 @@
 #' @param ... Additional arguments forwarded to \code{fit_fun}.
 #'
 #' @details
-#' \strong{Checkpointing \& resuming:} If \code{checkpoint_dir} is provided, this
+#' \strong{Checkpointing and resuming:} If \code{checkpoint_dir} is provided, this
 #' function writes a checkpoint representing the last completed safe point (after a
 #' round completes, and at batch boundaries). If the run is interrupted, resume by
 #' calling again with \code{resume_from = checkpoint_dir}.
