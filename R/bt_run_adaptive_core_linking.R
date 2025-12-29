@@ -126,7 +126,40 @@
 #' Primarily intended as a test hook.
 #' @param build_bt_fun Function used to convert results into BT data. Default
 #' \code{\link{build_bt_data}}. Primarily intended as a test hook.
+#'
+#' @param checkpoint_dir Optional directory path for writing checkpoint files during
+#'   the run. If provided, the runner writes \code{run_state.rds} (and optionally
+#'   per-round snapshot files) after completed rounds and/or batch boundaries. Use
+#'   this to resume long jobs after interruption or errors.
+#'
+#' @param resume_from Optional directory path containing a prior checkpoint file
+#'   \code{run_state.rds} created by \code{bt_run_adaptive_core_linking()}. When
+#'   provided, the run resumes from the saved state, including accumulated results,
+#'   batch/round indices, and stopping/metrics history. The \code{samples}, batch
+#'   definitions, and \code{core_ids} must be compatible with the checkpoint.
+#'
+#' @param checkpoint_every Integer controlling how frequently per-round snapshot
+#'   files are written. A value of \code{1} writes a snapshot after every completed
+#'   round; a value of \code{2} writes snapshots every other round, etc. The main
+#'   file \code{run_state.rds} is still updated at safe points even when
+#'   \code{checkpoint_every > 1}.
+#'
+#' @param checkpoint_store_fits Logical indicating whether to store fitted model
+#'   objects (BT fits and diagnostics) inside checkpoint files. Set to \code{FALSE}
+#'   to reduce checkpoint size; fits may be recomputed after resuming.
+#'
+#' @param checkpoint_overwrite Logical indicating whether to overwrite an existing
+#'   \code{run_state.rds} file in \code{checkpoint_dir}. If \code{FALSE} and a
+#'   checkpoint already exists, the function should error rather than overwrite.
+#'
 #' @param ... Additional arguments passed through to \code{fit_fun}.
+#'
+#' @details
+#' \strong{Checkpointing \& resuming:} If \code{checkpoint_dir} is provided, this
+#' function writes a checkpoint at the last completed safe point (typically after a
+#' round completes within a batch, and at batch boundaries). If an error occurs
+#' mid-round, the checkpoint reflects the most recently completed round. Resume by
+#' calling again with \code{resume_from = checkpoint_dir}.
 #'
 #' @return A list with:
 #' \describe{

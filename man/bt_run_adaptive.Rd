@@ -161,6 +161,33 @@ Primarily intended as a test hook; most users should keep the default.}
 \item{build_bt_fun}{Function used to convert results into BT data. Default
 \code{\link{build_bt_data}}. Primarily intended as a test hook.}
 
+\item{checkpoint_dir}{Optional directory path for writing checkpoint files during
+a run. If provided, the runner writes a checkpoint file named
+\code{run_state.rds} (and optionally per-round snapshot files) after completed
+rounds. Use this to resume long jobs after interruption or errors.}
+
+\item{resume_from}{Optional directory path containing a prior checkpoint file
+\code{run_state.rds} created by \code{bt_run_adaptive()}. When provided, the
+run resumes from the saved state (including accumulated results and round
+counters) rather than starting from scratch. The \code{samples} argument must
+match the checkpoint's sample IDs (and typically the same runner configuration
+should be used).}
+
+\item{checkpoint_every}{Integer controlling how frequently per-round snapshot
+checkpoint files are written. A value of \code{1} writes a snapshot after every
+completed round; a value of \code{2} writes snapshots every other round, etc.
+The main file \code{run_state.rds} is still updated at safe points even when
+\code{checkpoint_every > 1}.}
+
+\item{checkpoint_store_fits}{Logical indicating whether to store fitted model
+objects (e.g., BT model fits and diagnostics) inside checkpoint files. Set to
+\code{FALSE} to reduce checkpoint size and speed up checkpoint writes; in that
+case, model fits will be recomputed as needed after resuming.}
+
+\item{checkpoint_overwrite}{Logical indicating whether to overwrite an existing
+\code{run_state.rds} file in \code{checkpoint_dir}. If \code{FALSE} and a
+checkpoint file already exists, the function should error rather than overwrite.}
+
 \item{...}{Additional arguments passed through to \code{fit_fun}.}
 }
 \value{
@@ -210,6 +237,14 @@ compute forward-vs-reverse consistency via \code{\link{compute_reverse_consisten
 
 The default modeling function is \code{\link{fit_bt_model}} and the default
 stopping+pairing helper is \code{\link{bt_adaptive_round}}.
+
+\strong{Checkpointing \& resuming:} If \code{checkpoint_dir} is provided, this
+function writes a checkpoint representing the \emph{last completed safe point}
+of the adaptive loop (i.e., after a round has fully completed). If the run is
+interrupted or errors occur mid-round, the checkpoint corresponds to the most
+recently completed round. Resume by calling the function again with
+\code{resume_from = checkpoint_dir} (and typically the same key settings such as
+\code{round_size}, repeat controls, and selection strategy).
 }
 \examples{
 # Minimal self-contained example that does not require sirt:

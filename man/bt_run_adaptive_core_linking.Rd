@@ -185,6 +185,31 @@ as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored aft
 \code{NA}, the runner computes core drift metrics per round by comparing the current fit to
 the prior batch's final fit (or the bootstrap fit for the first batch).}
 
+\item{checkpoint_dir}{Optional directory path for writing checkpoint files during
+the run. If provided, the runner writes \code{run_state.rds} (and optionally
+per-round snapshot files) after completed rounds and/or batch boundaries. Use
+this to resume long jobs after interruption or errors.}
+
+\item{resume_from}{Optional directory path containing a prior checkpoint file
+\code{run_state.rds} created by \code{bt_run_adaptive_core_linking()}. When
+provided, the run resumes from the saved state, including accumulated results,
+batch/round indices, and stopping/metrics history. The \code{samples}, batch
+definitions, and \code{core_ids} must be compatible with the checkpoint.}
+
+\item{checkpoint_every}{Integer controlling how frequently per-round snapshot
+files are written. A value of \code{1} writes a snapshot after every completed
+round; a value of \code{2} writes snapshots every other round, etc. The main
+file \code{run_state.rds} is still updated at safe points even when
+\code{checkpoint_every > 1}.}
+
+\item{checkpoint_store_fits}{Logical indicating whether to store fitted model
+objects (BT fits and diagnostics) inside checkpoint files. Set to \code{FALSE}
+to reduce checkpoint size; fits may be recomputed after resuming.}
+
+\item{checkpoint_overwrite}{Logical indicating whether to overwrite an existing
+\code{run_state.rds} file in \code{checkpoint_dir}. If \code{FALSE} and a
+checkpoint already exists, the function should error rather than overwrite.}
+
 \item{fit_fun}{Function used to fit the BT model. Default \code{\link{fit_bt_model}}.
 Primarily intended as a test hook.}
 
@@ -236,6 +261,12 @@ and decide whether to stop via \code{\link{bt_should_stop}}.
 
 If \code{core_ids} is \code{NULL}, the core set can be selected from \code{samples}
 using \code{\link{select_core_set}}.
+
+\strong{Checkpointing \& resuming:} If \code{checkpoint_dir} is provided, this
+function writes a checkpoint at the last completed safe point (typically after a
+round completes within a batch, and at batch boundaries). If an error occurs
+mid-round, the checkpoint reflects the most recently completed round. Resume by
+calling again with \code{resume_from = checkpoint_dir}.
 }
 \examples{
 # Simple simulated judge: higher true theta wins
