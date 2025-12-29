@@ -94,6 +94,11 @@ test_that("judge_fit_summary summarizes misfit and worst judges", {
   # accept a data.frame directly
   out2 <- judge_fit_summary(fit$diagnostics$judge_fit)
   expect_true(out2$summary$has_judge_fit[[1]])
+
+  # top_n = Inf should be accepted (no integer-coercion warning)
+  out3 <- judge_fit_summary(fit, top_n = Inf)
+  expect_true(out3$summary$has_judge_fit[[1]])
+  expect_length(out3$summary$worst_judges[[1]], 2L)
 })
 
 
@@ -105,22 +110,26 @@ test_that("judge_fit_summary validates inputs and table schema", {
   expect_error(judge_fit_summary(bad_tbl), "must contain columns")
 })
 
+
 test_that("judge_misfit_judges returns misfit judge IDs and handles missing diagnostics", {
   fit <- list(
     diagnostics = list(
       judge_fit = tibble::tibble(
         judge = c("mA", "mB", "mC"),
-        infit = c(1.0, 1.6, 0.9),
-        outfit = c(1.0, 1.0, 0.2)
+        infit = c(1.0, 1.4, 0.6),
+        outfit = c(1.0, 1.2, 1.0)
       )
     )
   )
 
-  mis <- judge_misfit_judges(fit, fit_bounds = c(0.7, 1.3))
-  expect_type(mis, "character")
-  expect_true(all(mis %in% c("mB", "mC")))
-  expect_false(any(mis == "mA"))
+  print(pairwiseLLM::judge_fit_summary(fit, fit_bounds = c(0.7, 1.3), top_n = Inf)$details)
 
-  # Missing diagnostics -> empty
-  expect_equal(judge_misfit_judges(list()), character())
+  ids <- pairwiseLLM::judge_misfit_judges(fit, fit_bounds = c(0.7, 1.3))
+  expect_equal(ids, c("mB", "mC"))
+
+  # max_n limits results
+  expect_equal(pairwiseLLM::judge_misfit_judges(fit, max_n = 1L), "mB")
+
+  # missing diagnostics => empty
+  expect_equal(pairwiseLLM::judge_misfit_judges(list()), character())
 })

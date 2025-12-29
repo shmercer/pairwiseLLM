@@ -4,6 +4,9 @@
 * Resumable orchestration runners: `bt_run_adaptive()`, `bt_run_core_linking()`, and
   `bt_run_adaptive_core_linking()` support checkpointing and resume via `checkpoint_dir`,
   `resume_from`, and `checkpoint_every`.
+* Resuming is now supported even when `checkpoint_store_fits = FALSE`: on resume,
+  the runners recompute the necessary model fits from saved results (including the
+  baseline reference fit), keeping checkpoints small while still being safely resumable.
 * Adaptive sampling workflow: round-based pair proposal + fit + metrics + stopping via
   `select_adaptive_pairs()`, `bt_adaptive_round()`, and `bt_run_adaptive()`, with preset
   stopping tiers (`bt_stop_metrics()`, `bt_should_stop()`).
@@ -19,14 +22,14 @@
 ## Improvements
 * Validation/reporting: standardized validation helpers and structured reports (with an option
   for strict enforcement) across submission + orchestration flows.
+* Allocation hooks: added `allocation_compose()` to combine multiple `allocation_fun` policies
+  in orchestration runners.
 * Reverse audit tooling: optional post-stop reversal audit to quantify consistency when pairs
   are presented in reversed order (and support positional-bias QA).
 * Embeddings integration: support for embeddings-backed workflows (including a reticulate-based
   path), while still accepting user-supplied embedding matrices.
-* Allocation policies can now be composed via `allocation_compose()` to build custom
-  per-round allocation behavior (e.g., precision ramp + drift-triggered auditing).
-* Added `judge_misfit_judges()` convenience helper to quickly extract misfitting judges
-  from judge-fit diagnostics.
+* Judge QA: `judge_fit_summary()` now accepts `top_n = Inf`, and `judge_misfit_judges()` provides
+  a simple way to extract misfit judge IDs from a fit.
 
 ## Maintenance
 * Expanded and updated unit tests for new branches and helper utilities (targeting ≥95% coverage for

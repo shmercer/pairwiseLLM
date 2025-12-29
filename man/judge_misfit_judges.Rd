@@ -2,27 +2,30 @@
 % Please edit documentation in R/judge_utils.R
 \name{judge_misfit_judges}
 \alias{judge_misfit_judges}
-\title{Identify misfitting judges from a Bradley--Terry fit}
+\title{Identify misfit judges from a BT fit}
 \usage{
-judge_misfit_judges(fit, fit_bounds = c(0.7, 1.3))
+judge_misfit_judges(fit, fit_bounds = c(0.7, 1.3), max_n = Inf)
 }
 \arguments{
-\item{fit}{A fit object accepted by \code{\link[=judge_fit_summary]{judge_fit_summary()}}.}
+\item{fit}{A list returned by \code{\link[=fit_bt_model]{fit_bt_model()}} or a data frame/tibble with
+judge fit columns.}
 
-\item{fit_bounds}{Numeric length-2 vector giving acceptable fit bounds for
-\code{infit} and \code{outfit}.}
+\item{fit_bounds}{Numeric vector of length 2 giving acceptable bounds for
+\code{infit} and \code{outfit}. Default is \code{c(0.7, 1.3)}.}
+
+\item{max_n}{Optional non-negative integer limiting the number of judge IDs
+returned. Use \code{Inf} to return all misfit judges. Default is \code{Inf}.}
 }
 \value{
-Character vector of judge IDs flagged as misfitting, sorted by
-decreasing deviation.
+A character vector of judge IDs flagged as misfit.
 }
 \description{
 Convenience wrapper around \code{\link[=judge_fit_summary]{judge_fit_summary()}} that returns the judge IDs
-flagged as misfitting (based on \code{fit_bounds}).
+flagged as misfit (outside \code{fit_bounds}) based on infit/outfit diagnostics.
 }
 \details{
-When no judge-fit diagnostics are available, this function returns a
-zero-length character vector.
+If the input fit object does not contain judge-fit diagnostics, this
+function returns an empty character vector.
 }
 \examples{
 fit <- list(

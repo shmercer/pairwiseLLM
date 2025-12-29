@@ -2,38 +2,28 @@
 % Please edit documentation in R/allocation_policies.R
 \name{allocation_compose}
 \alias{allocation_compose}
-\title{Compose multiple allocation policies}
+\title{Compose multiple allocation functions}
 \usage{
 allocation_compose(...)
 }
 \arguments{
-\item{...}{One or more allocation functions (each a function or \code{NULL}).}
+\item{...}{Allocation functions (or \code{NULL}) to compose.}
 }
 \value{
 A function suitable for passing as \code{allocation_fun}.
 }
 \description{
-Combines multiple \code{allocation_fun} functions into a single function.
+Create an \code{allocation_fun} by composing multiple allocation functions.
+Each function is called in order, and their (list) outputs are merged.
 }
 \details{
-The returned function calls each policy in order with the same \code{state}
-object and merges their outputs. If multiple policies set the same
-field (e.g., \code{within_batch_frac}), later policies take precedence.
-
-This is useful when you want to combine, for example,
-\code{\link[=allocation_precision_ramp]{allocation_precision_ramp()}} and \code{\link[=allocation_audit_on_drift]{allocation_audit_on_drift()}}.
+The returned function is compatible with the \code{allocation_fun} argument of
+\code{\link[=bt_run_core_linking]{bt_run_core_linking()}} and \code{\link[=bt_run_adaptive_core_linking]{bt_run_adaptive_core_linking()}}.
 }
 \examples{
-alloc <- allocation_compose(
-  allocation_precision_ramp(step = 0.2, max_within = 0.8),
-  allocation_audit_on_drift(drift_threshold = 0.2, step = 0.05)
-)
-state <- list(
-  within_batch_frac = 0.1,
-  core_audit_frac = 0.1,
-  metrics = data.frame(rel_se_p90 = 0.5, linking_max_abs_shift = 0.3),
-  prev_metrics = data.frame(rel_se_p90 = 0.8)
-)
-alloc(state)
+f1 <- function(state) list(within_batch_frac = 0.2)
+f2 <- function(state) list(core_audit_frac = 0.1)
+alloc <- allocation_compose(f1, f2)
+alloc(list())
 
 }
