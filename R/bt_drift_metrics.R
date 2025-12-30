@@ -73,6 +73,14 @@ bt_drift_metrics <- function(current,
     stop("`prefix` must be a single string.", call. = FALSE)
   }
 
+  .prefixed_row <- function(prefix, values) {
+    # Avoid tidy-eval `:=` in package code to prevent R CMD check notes.
+    stopifnot(is.character(prefix), length(prefix) == 1L)
+    stopifnot(is.list(values), length(values) > 0L)
+    names(values) <- paste0(prefix, names(values))
+    tibble::as_tibble(values)
+  }
+
   cur <- .as_theta_tibble(current, arg_name = "current")
   base <- .as_theta_tibble(baseline, arg_name = "baseline")
 
@@ -96,16 +104,16 @@ bt_drift_metrics <- function(current,
 
   n <- nrow(cur)
   if (n == 0L) {
-    return(tibble::tibble(
-      !!paste0(prefix, "n") := 0L,
-      !!paste0(prefix, "theta_cor") := NA_real_,
-      !!paste0(prefix, "theta_spearman") := NA_real_,
-      !!paste0(prefix, "mean_abs_shift") := NA_real_,
-      !!paste0(prefix, "p90_abs_shift") := NA_real_,
-      !!paste0(prefix, "p95_abs_shift") := NA_real_,
-      !!paste0(prefix, "max_abs_shift") := NA_real_,
-      !!paste0(prefix, "mean_signed_shift") := NA_real_
-    ))
+    return(.prefixed_row(prefix, list(
+      n = 0L,
+      theta_cor = NA_real_,
+      theta_spearman = NA_real_,
+      mean_abs_shift = NA_real_,
+      p90_abs_shift = NA_real_,
+      p95_abs_shift = NA_real_,
+      max_abs_shift = NA_real_,
+      mean_signed_shift = NA_real_
+    )))
   }
 
   delta <- cur$theta - base$theta
@@ -135,14 +143,14 @@ bt_drift_metrics <- function(current,
   max_abs_shift <- max(abs_delta, na.rm = TRUE)
   mean_signed_shift <- mean(delta, na.rm = TRUE)
 
-  tibble::tibble(
-    !!paste0(prefix, "n") := as.integer(n),
-    !!paste0(prefix, "theta_cor") := as.numeric(theta_cor),
-    !!paste0(prefix, "theta_spearman") := as.numeric(theta_spear),
-    !!paste0(prefix, "mean_abs_shift") := as.numeric(mean_abs_shift),
-    !!paste0(prefix, "p90_abs_shift") := as.numeric(p90_abs_shift),
-    !!paste0(prefix, "p95_abs_shift") := as.numeric(p95_abs_shift),
-    !!paste0(prefix, "max_abs_shift") := as.numeric(max_abs_shift),
-    !!paste0(prefix, "mean_signed_shift") := as.numeric(mean_signed_shift)
-  )
+  .prefixed_row(prefix, list(
+    n = as.integer(n),
+    theta_cor = as.numeric(theta_cor),
+    theta_spearman = as.numeric(theta_spear),
+    mean_abs_shift = as.numeric(mean_abs_shift),
+    p90_abs_shift = as.numeric(p90_abs_shift),
+    p95_abs_shift = as.numeric(p95_abs_shift),
+    max_abs_shift = as.numeric(max_abs_shift),
+    mean_signed_shift = as.numeric(mean_signed_shift)
+  ))
 }

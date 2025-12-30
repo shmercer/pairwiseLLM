@@ -621,7 +621,7 @@ bt_run_adaptive_core_linking <- function(samples,
 
     fit$theta <- dplyr::left_join(
       fit$theta,
-      dplyr::select(lk$theta, ID, theta_linked, se_linked),
+      dplyr::select(lk$theta, dplyr::all_of(c("ID", "theta_linked", "se_linked"))),
       by = "ID"
     )
 

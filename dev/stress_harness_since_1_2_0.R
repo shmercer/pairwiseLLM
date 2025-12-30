@@ -725,8 +725,6 @@ judge_ok_80 <- judge_deterministic(true_theta_80, seed = 1)
   }
 )
 
-.h_run(
-
 .h_run("adaptive_core_linking: linking=always reduces baseline drift (mock drifting fitter)", {
   fit_fun <- make_fit_mock_drifting()
   out <- bt_run_adaptive_core_linking(
@@ -756,6 +754,7 @@ judge_ok_80 <- judge_deterministic(true_theta_80, seed = 1)
   stopifnot(any(is.finite(pre) & is.finite(post) & post < pre, na.rm = TRUE))
 })
 
+.h_run(
   "adaptive_core_linking: core selection token_stratified (core_ids=NULL)",
   {
     out <- bt_run_adaptive_core_linking(
