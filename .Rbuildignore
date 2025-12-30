@@ -15,3 +15,4 @@
 ^CRAN-SUBMISSION$
 ^codemeta\.json$
 ^tests/testthat/bad.csv$
+^\.Rprofile$
