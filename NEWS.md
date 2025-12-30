@@ -28,34 +28,12 @@
   are presented in reversed order (and support positional-bias QA).
 * Embeddings integration: support for embeddings-backed workflows (including a reticulate-based
   path), while still accepting user-supplied embedding matrices.
-* Embeddings caching can now be configured project-wide via the environment variable
-  `PAIRWISELLM_EMBEDDINGS_CACHE_DIR` (used by `compute_text_embeddings()` when `cache_dir = NULL`).
-  Added helpers that **print** project-level `.Renviron` instructions (rather than writing files):
-  `set_project_embeddings_cache_dir()` and `set_project_reticulate_python()`.
 * Judge QA: `judge_fit_summary()` now accepts `top_n = Inf`, and `judge_misfit_judges()` provides
   a simple way to extract misfit judge IDs from a fit.
-* Batched runners (`bt_run_core_linking()` and `bt_run_adaptive_core_linking()`) now return
-  top-level `stop_reason` and `stop_round` fields for consistency with `bt_run_adaptive()`.
-* Resume/checkpoint mismatch errors now label the current-run inputs as `Requested:` and the
-  saved checkpoint payload as `Checkpoint:` to make debugging resume issues more intuitive.
-* When `round_size = 0` (and `init_round_size = 0` for adaptive modes) and no `initial_results`
-  are provided, runners now stop cleanly with `stop_reason = "round_size_zero"` (instead of
-  returning `no_results` or erroring during the initial fit).
-* `bt_run_adaptive_core_linking()` now accepts a `seed` argument as an alias for `seed_pairs`
-  to avoid partial argument matching issues when both `seed_pairs` and `seed_core` are present.
-* Fixed Rd usage for `bt_run_adaptive_core_linking()` so the `seed` argument is documented in both
-  usage and arguments.
 
 ## Maintenance
 * Expanded and updated unit tests for new branches and helper utilities (targeting ≥95% coverage for
   new/changed code).
-
-## Bug fixes
-* When `core_ids` are supplied to `bt_run_core_linking()`, `core_method` is no longer strictly
-  validated; this avoids premature `match.arg()` errors during resume/checkpoint workflows and
-  supports a "fixed"/caller-supplied core.
-* In `bt_run_adaptive_core_linking()`, linking metadata no longer coerces a NULL fit into a partial
-  list; runs with unusable `initial_results` now fail fast with structured no-fit diagnostics.
 
 # pairwiseLLM 1.2.0
 
@@ -100,8 +78,6 @@
 * Added `verbose` option in `fit_bt_model()` and `summarize_bt_fit()`
 * Moved null coalescing helper to separate R file
 * Changed validation of API keys in multiple functions
-* Add comprehensive developer stress harness for adaptive + linking workflows (`inst/dev/stress_harness_since_1_2_0.R`).
-* Document `seed` as an alias for `seed_pairs` in `bt_run_adaptive_core_linking()`.
 
 # pairwiseLLM 1.0.0
 
