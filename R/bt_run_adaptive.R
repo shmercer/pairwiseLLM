@@ -294,6 +294,15 @@ bt_run_adaptive <- function(samples,
     stop("`samples` must contain columns: ID, text", call. = FALSE)
   }
 
+  # Capture and sanitize `...` forwarded to fit_fun. This prevents collisions like
+  # `verbose` (often intended for runner logging) being passed twice to fit_fun.
+  .fit_dots <- list(...)
+  if (!is.null(.fit_dots$verbose) && missing(fit_verbose)) {
+    fit_verbose <- isTRUE(.fit_dots$verbose)
+  }
+  .fit_dots <- .clean_fit_dots(.fit_dots)
+
+
   ids <- as.character(samples$ID)
   if (length(ids) < 2L) stop("`samples` must contain at least 2 rows.", call. = FALSE)
   if (anyNA(ids) || any(ids == "")) stop("`samples$ID` must be non-missing and non-empty.", call. = FALSE)
@@ -496,7 +505,7 @@ bt_run_adaptive <- function(samples,
     )
 
     if (nrow(pairs_bootstrap) > 0L) {
-      res0 <- judge_fun(pairs_bootstrap)
+      res0 <- .coerce_judge_output(judge_fun(pairs_bootstrap))
       res0 <- .validate_judge_results(res0, ids = ids, judge_col = judge)
       results <- dplyr::bind_rows(results, res0)
     }
@@ -573,13 +582,18 @@ bt_run_adaptive <- function(samples,
       build_bt_fun(results, judge = judge)
     }
 
-    fit <- fit_fun(
-      bt_data,
-      engine = engine,
-      verbose = fit_verbose,
-      return_diagnostics = return_diagnostics,
-      include_residuals = include_residuals,
-      ...
+    fit <- do.call(
+      fit_fun,
+      c(
+        list(
+          bt_data,
+          engine = engine,
+          verbose = fit_verbose,
+          return_diagnostics = return_diagnostics,
+          include_residuals = include_residuals
+        ),
+        .fit_dots
+      )
     )
 
     fit <- tag_fit(
@@ -663,7 +677,7 @@ bt_run_adaptive <- function(samples,
       break
     }
 
-    res_next <- judge_fun(pairs_next)
+    res_next <- .coerce_judge_output(judge_fun(pairs_next))
     res_next <- .validate_judge_results(res_next, ids = ids, judge_col = judge)
 
     n_added <- nrow(res_next)
@@ -814,7 +828,7 @@ bt_run_adaptive <- function(samples,
     consistency <- NULL
 
     if (nrow(rev_pairs) > 0L) {
-      rev_results <- judge_fun(rev_pairs)
+      rev_results <- .coerce_judge_output(judge_fun(rev_pairs))
       rev_results <- .validate_judge_results(rev_results, ids = ids, judge_col = judge)
 
       add_key <- function(df) {

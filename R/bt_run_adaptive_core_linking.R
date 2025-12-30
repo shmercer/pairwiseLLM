@@ -319,6 +319,15 @@ bt_run_adaptive_core_linking <- function(samples,
   stopping_tier <- match.arg(stopping_tier)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
 
+  # Capture and sanitize `...` forwarded to fit_fun. This prevents collisions like
+  # `verbose` (often intended for runner logging) being passed twice to fit_fun.
+  .fit_dots <- list(...)
+  if (!is.null(.fit_dots$verbose) && missing(fit_verbose)) {
+    fit_verbose <- isTRUE(.fit_dots$verbose)
+  }
+  .fit_dots <- .clean_fit_dots(.fit_dots)
+
+
   # Back-compat: accept `seed=` as an alias for `seed_pairs=`. (Avoid partial
   # matching ambiguity with `seed_core`/`seed_pairs`.)
   if (!is.null(seed)) {
@@ -505,13 +514,18 @@ bt_run_adaptive_core_linking <- function(samples,
     if (nrow(bt_data) == 0L) {
       return(list(bt_data = bt_data, fit = NULL))
     }
-    fit <- fit_fun(
-      bt_data,
-      engine = engine,
-      verbose = fit_verbose,
-      return_diagnostics = return_diagnostics,
-      include_residuals = include_residuals,
-      ...
+    fit <- do.call(
+      fit_fun,
+      c(
+        list(
+          bt_data,
+          engine = engine,
+          verbose = fit_verbose,
+          return_diagnostics = return_diagnostics,
+          include_residuals = include_residuals
+        ),
+        .fit_dots
+      )
     )
 
     # Normalize a completely invalid fit to NULL.
@@ -906,7 +920,7 @@ bt_run_adaptive_core_linking <- function(samples,
         core_pairs <- make_pairs(core_samples)
         core_pairs <- sample_pairs(core_pairs, n_pairs = min(init_round_size, nrow(core_pairs)), seed = seed_pairs)
 
-        judged0 <- judge_fun(core_pairs)
+        judged0 <- .coerce_judge_output(judge_fun(core_pairs))
         judged0 <- .validate_judge_results(judged0, ids = ids_all, judge_col = judge)
         judged0$stage <- "bootstrap"
         judged0$batch_index <- 0L
@@ -1054,7 +1068,7 @@ bt_run_adaptive_core_linking <- function(samples,
         break
       }
 
-      judged <- judge_fun(pairs_next)
+      judged <- .coerce_judge_output(judge_fun(pairs_next))
       judged <- .validate_judge_results(judged, ids = ids_all, judge_col = judge)
 
       # Attach pair_type + metadata

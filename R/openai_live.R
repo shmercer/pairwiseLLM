@@ -273,16 +273,17 @@ openai_compare_pair_live <- function(
     if (length(message_chunks)) content <- paste(message_chunks, collapse = "")
   }
 
-  better_sample <- NA_character_
-  if (!is.na(content)) {
-    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content, fixed = TRUE)) {
-      better_sample <- "SAMPLE_1"
-    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content, fixed = TRUE)) {
-      better_sample <- "SAMPLE_2"
-    }
-  }
+  better_sample <- .extract_better_sample(
+    content,
+    tag_prefix = tag_prefix,
+    tag_suffix = tag_suffix
+  )
 
-  better_id <- if (!is.na(better_sample)) (if (better_sample == "SAMPLE_1") ID1 else ID2) else NA_character_
+  better_id <- if (!is.na(better_sample)) {
+    if (better_sample == "SAMPLE_1") ID1 else ID2
+  } else {
+    NA_character_
+  }
 
   usage <- body$usage %||% list()
 

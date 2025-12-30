@@ -314,6 +314,15 @@ bt_run_core_linking <- function(samples,
   stopping_tier <- match.arg(stopping_tier)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
 
+  # Capture and sanitize `...` forwarded to fit_fun. This prevents collisions like
+  # `verbose` (often intended for runner logging) being passed twice to fit_fun.
+  .fit_dots <- list(...)
+  if (!is.null(.fit_dots$verbose) && missing(fit_verbose)) {
+    fit_verbose <- isTRUE(.fit_dots$verbose)
+  }
+  .fit_dots <- .clean_fit_dots(.fit_dots)
+
+
   # Override tier defaults only when the caller explicitly supplies thresholds.
   if (!missing(reliability_target)) stop_params$reliability_target <- reliability_target
   if (!missing(sepG_target)) stop_params$sepG_target <- sepG_target
@@ -529,13 +538,18 @@ bt_run_core_linking <- function(samples,
 
   compute_fit <- function(res_tbl) {
     bt_data <- if (is.null(judge)) build_bt_fun(res_tbl) else build_bt_fun(res_tbl, judge = judge)
-    out <- fit_fun(
-      bt_data,
-      engine = engine,
-      verbose = fit_verbose,
-      return_diagnostics = return_diagnostics,
-      include_residuals = include_residuals,
-      ...
+    out <- do.call(
+      fit_fun,
+      c(
+        list(
+          bt_data,
+          engine = engine,
+          verbose = fit_verbose,
+          return_diagnostics = return_diagnostics,
+          include_residuals = include_residuals
+        ),
+        .fit_dots
+      )
     )
 
     # Defensive validation: downstream linking/metrics assume `$theta` exists.
@@ -724,7 +738,7 @@ bt_run_core_linking <- function(samples,
         stop("Core bootstrap produced 0 pairs. Reduce constraints or increase core size.", call. = FALSE)
       }
 
-      boot_res <- judge_fun(boot$pairs)
+      boot_res <- .coerce_judge_output(judge_fun(boot$pairs))
       boot_res <- .validate_judge_results(boot_res, ids = ids_all, judge_col = judge)
 
       boot_meta <- dplyr::distinct(
@@ -906,7 +920,7 @@ bt_run_core_linking <- function(samples,
         break
       }
 
-      res_round <- judge_fun(pairs)
+      res_round <- .coerce_judge_output(judge_fun(pairs))
       res_round <- .validate_judge_results(res_round, ids = ids_all, judge_col = judge)
 
       pair_meta <- dplyr::distinct(
