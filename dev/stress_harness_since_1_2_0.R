@@ -240,17 +240,20 @@ fit_real_or_mock <- function(bt_data, engine = "auto", verbose = FALSE, return_d
 .h_div("Project environment helpers")
 
 .h_run(
-  "project env: can write project .Renviron entries",
+  "project env: print project .Renviron instructions (no file writing)",
   {
     tmp <- withr::local_tempdir()
     f <- file.path(tmp, ".Renviron")
-    set_project_reticulate_python("/tmp/python", file = f, overwrite = TRUE)
-    set_project_embeddings_cache_dir("./.cache/pairwiseLLM", file = f, overwrite = TRUE)
-    readLines(f, warn = FALSE)
+    entry1 <- suppressMessages(set_project_reticulate_python("/tmp/python", file = f, overwrite = TRUE))
+    entry2 <- suppressMessages(set_project_reticulate_python("/tmp/other", file = f, overwrite = TRUE))
+    entry3 <- suppressMessages(set_project_embeddings_cache_dir("./.cache/pairwiseLLM", file = f, overwrite = TRUE))
+    list(entry1 = entry1, entry2 = entry2, entry3 = entry3, file = f, file_exists = file.exists(f))
   },
   validate = function(out) {
-    .h_expect(any(grepl("^RETICULATE_PYTHON=", out)))
-    .h_expect(any(grepl("^PAIRWISELLM_EMBEDDINGS_CACHE_DIR=", out)))
+    .h_expect(identical(out$entry1, 'RETICULATE_PYTHON="/tmp/python"'))
+    .h_expect(identical(out$entry2, 'RETICULATE_PYTHON="/tmp/other"'))
+    .h_expect(identical(out$entry3, 'PAIRWISELLM_EMBEDDINGS_CACHE_DIR="./.cache/pairwiseLLM"'))
+    .h_expect(!isTRUE(out$file_exists), "Expected no file writing; .Renviron should not be created.")
   }
 )
 

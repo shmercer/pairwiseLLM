@@ -41,7 +41,9 @@ NULL
   if (!is.character(value) || length(value) != 1L || is.na(value) || !nzchar(value)) {
     stop("`value` must be a single non-empty string.", call. = FALSE)
   }
-  paste0(key, "=", shQuote(value))
+  # Use a stable quoting style across platforms so instructions are
+  # copy/pasteable and tests behave consistently.
+  paste0(key, "=", shQuote(value, type = "cmd"))
 }
 
 .print_project_env_instructions <- function(entry, file = ".Renviron") {
