@@ -43,7 +43,10 @@ NULL
   }
   # Use a stable quoting style across platforms so instructions are
   # copy/pasteable and tests behave consistently.
-  paste0(key, "=", shQuote(value, type = "cmd"))
+  #
+  # We always use double-quotes for .Renviron entries.
+  value_escaped <- gsub('"', '\\"', value, fixed = TRUE)
+  paste0(key, '="', value_escaped, '"')
 }
 
 .print_project_env_instructions <- function(entry, file = ".Renviron") {

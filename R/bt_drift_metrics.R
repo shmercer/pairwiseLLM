@@ -1,144 +1,148 @@
-#' Compute drift metrics between two theta estimates
-#'
-#' This helper summarizes how a set of item scores (theta) has changed between two
-#' model fits (e.g., across waves/batches when using a core linking set).
-#'
-#' Inputs can be:
-#' \itemize{
-#'   \item A list returned by \code{\link{fit_bt_model}} (uses \code{$theta}),
-#'   \item A tibble/data frame containing columns \code{ID} and \code{theta}, or
-#'   \item A named numeric vector of theta values.
-#' }
-#'
-#' @param current Current theta estimates.
-#' @param previous Previous theta estimates.
-#' @param ids Optional character vector of IDs to compute drift on (e.g., a core set).
-#'   If \code{NULL}, uses the intersection of IDs present in both inputs.
-#' @param prefix Optional string prefix to apply to output column names.
-#' @param abs_shift_probs Numeric vector of probabilities for absolute-shift quantiles.
-#'   Default \code{c(0.9, 0.95)}.
-#' @param methods Character vector indicating which correlation(s) to compute.
-#'   Supported: \code{"pearson"}, \code{"spearman"}. Default both.
-#'
-#' @return A one-row tibble with drift summary columns, including:
-#' \describe{
-#'   \item{<prefix>n}{Number of items used for drift computation.}
-#'   \item{<prefix>theta_cor}{Pearson correlation between current and previous theta (if requested).}
-#'   \item{<prefix>theta_spearman}{Spearman correlation between current and previous theta (if requested).}
-#'   \item{<prefix>mean_abs_shift}{Mean absolute shift in theta.}
-#'   \item{<prefix>p90_abs_shift}{90th percentile absolute shift (if requested).}
-#'   \item{<prefix>p95_abs_shift}{95th percentile absolute shift (if requested).}
-#'   \item{<prefix>max_abs_shift}{Maximum absolute shift.}
-#'   \item{<prefix>mean_signed_shift}{Mean signed shift (current - previous).}
-#' }
-#'
-#' @examples
-#' cur <- tibble::tibble(ID = c("A", "B", "C"), theta = c(0, 1, 2))
-#' prev <- tibble::tibble(ID = c("A", "B", "C"), theta = c(0, 0.5, 2.5))
-#' bt_drift_metrics(cur, prev, prefix = "core_")
-#'
-#' @import tibble
-#' @export
-bt_drift_metrics <- function(current,
-                             previous,
-                             ids = NULL,
-                             prefix = "",
-                             abs_shift_probs = c(0.9, 0.95),
-                             methods = c("pearson", "spearman")) {
-  extract_theta <- function(x, arg_name) {
-    # Only treat as a "fit" if it's a list that is NOT a data.frame/tibble.
-    # (tibbles are lists too, and may have a 'theta' column.)
-    if (is.list(x) && !inherits(x, "data.frame") && !is.null(x$theta)) {
-      x <- x$theta
-    }
+# Drift metrics between two theta scales
+#
+# This is an internal helper used by the linking workflows to decide whether
+# to link, and to record diagnostics about drift.
 
-    if (is.numeric(x) && !is.null(names(x))) {
-      return(tibble::tibble(ID = names(x), theta = as.double(unname(x))))
-    }
-
-    x_tbl <- tibble::as_tibble(x)
-    if (!all(c("ID", "theta") %in% names(x_tbl))) {
+.as_theta_tibble <- function(x, arg_name = "current") {
+  # 1) Fit object (list) with $theta
+  if (is.list(x) && !inherits(x, "data.frame")) {
+    if ("theta" %in% names(x) && is.null(x$theta)) {
       stop(
-        "`", arg_name, "` must be a fit (with `$theta`), a tibble with columns ID/theta, or a named numeric vector.",
+        "`", arg_name, "$theta` is NULL. ",
+        "Fits must contain a `$theta` tibble with columns ID/theta ",
+        "(and optional se).",
         call. = FALSE
       )
     }
-    tibble::tibble(ID = as.character(x_tbl$ID), theta = as.double(unname(x_tbl$theta)))
+    if (!is.null(x$theta)) {
+      x <- x$theta
+    }
+  }
+
+  # 2) Named numeric vector
+  if (is.numeric(x) && !is.null(names(x))) {
+    out <- tibble::tibble(ID = names(x), theta = as.numeric(x))
+    return(out)
+  }
+
+  # 3) data.frame / tibble
+  if (inherits(x, "data.frame")) {
+    if (!("ID" %in% names(x)) || !("theta" %in% names(x))) {
+      stop(
+        "`", arg_name, "` must have columns ID and theta.",
+        call. = FALSE
+      )
+    }
+    out <- tibble::as_tibble(x)
+    out <- dplyr::select(out, dplyr::any_of(c("ID", "theta", "se")))
+    out$ID <- as.character(out$ID)
+    out$theta <- as.numeric(out$theta)
+    return(out)
+  }
+
+  stop(
+    "`", arg_name,
+    "` must be a fit (with `$theta`), a tibble with columns ID/theta, or a named numeric vector.",
+    call. = FALSE
+  )
+}
+
+#' Compute drift metrics between two theta sets
+#'
+#' @param current A fit (list with `$theta`), a tibble/data.frame with columns
+#'   `ID` and `theta`, or a named numeric vector.
+#' @param baseline Same as `current`.
+#' @param ids Optional character vector. If provided, metrics are computed on
+#'   the intersection of `ids` with the IDs present in both inputs.
+#' @param prefix Prefix for column names in the returned tibble.
+#'
+#' @return A one-row tibble of drift metrics.
+#'
+#' @keywords internal
+bt_drift_metrics <- function(current,
+                             baseline = NULL,
+                             previous = NULL,
+                             ids = NULL,
+                             prefix = "") {
+  if (is.null(baseline) && !is.null(previous)) baseline <- previous
+  if (is.null(baseline)) {
+    stop("`baseline` (or `previous`) must be provided.", call. = FALSE)
   }
 
   if (!is.character(prefix) || length(prefix) != 1L || is.na(prefix)) {
     stop("`prefix` must be a single string.", call. = FALSE)
   }
 
-  if (!is.numeric(abs_shift_probs) || length(abs_shift_probs) < 1L || any(!is.finite(abs_shift_probs))) {
-    stop("`abs_shift_probs` must be a numeric vector of finite probabilities.", call. = FALSE)
-  }
-
-  methods <- unique(as.character(methods))
-  ok_methods <- c("pearson", "spearman")
-  if (length(methods) < 1L || any(!methods %in% ok_methods)) {
-    stop("`methods` must be any of: pearson, spearman.", call. = FALSE)
-  }
-
-  cur <- extract_theta(current, "current")
-  prev <- extract_theta(previous, "previous")
+  cur <- .as_theta_tibble(current, arg_name = "current")
+  base <- .as_theta_tibble(baseline, arg_name = "baseline")
 
   if (!is.null(ids)) {
     if (!is.character(ids)) {
-      stop("`ids` must be a character vector when provided.", call. = FALSE)
+      stop("`ids` must be a character vector of IDs.", call. = FALSE)
     }
-    ids <- unique(ids)
+    if (length(ids) < 1L || anyNA(ids) || any(!nzchar(ids))) {
+      stop("`ids` must be a non-empty character vector of IDs.", call. = FALSE)
+    }
     cur <- cur[cur$ID %in% ids, , drop = FALSE]
-    prev <- prev[prev$ID %in% ids, , drop = FALSE]
+    base <- base[base$ID %in% ids, , drop = FALSE]
   }
 
-  joined <- dplyr::inner_join(cur, prev, by = "ID", suffix = c("_cur", "_prev"))
+  overlap <- intersect(cur$ID, base$ID)
+  cur <- cur[cur$ID %in% overlap, , drop = FALSE]
+  base <- base[base$ID %in% overlap, , drop = FALSE]
 
-  n <- nrow(joined)
+  # Align baseline to current ID order
+  base <- base[match(cur$ID, base$ID), , drop = FALSE]
+
+  n <- nrow(cur)
   if (n == 0L) {
-    out <- tibble::tibble(
-      n = 0L,
-      mean_abs_shift = NA_real_,
-      max_abs_shift = NA_real_,
-      mean_signed_shift = NA_real_
-    )
-    for (p in abs_shift_probs) {
-      nm <- paste0("p", as.integer(round(100 * p)), "_abs_shift")
-      out[[nm]] <- NA_real_
-    }
-    if ("pearson" %in% methods) out$theta_cor <- NA_real_
-    if ("spearman" %in% methods) out$theta_spearman <- NA_real_
-  } else {
-    delta <- as.double(joined$theta_cur - joined$theta_prev)
-    abs_delta <- abs(delta)
-
-    safe_q <- function(x, p) {
-      if (all(is.na(x))) {
-        return(NA_real_)
-      }
-      as.numeric(stats::quantile(x, probs = p, na.rm = TRUE, names = FALSE, type = 7))
-    }
-
-    out <- tibble::tibble(
-      n = n,
-      mean_abs_shift = if (all(is.na(abs_delta))) NA_real_ else mean(abs_delta, na.rm = TRUE),
-      max_abs_shift = if (all(is.na(abs_delta))) NA_real_ else max(abs_delta, na.rm = TRUE),
-      mean_signed_shift = if (all(is.na(delta))) NA_real_ else mean(delta, na.rm = TRUE)
-    )
-
-    for (p in abs_shift_probs) {
-      nm <- paste0("p", as.integer(round(100 * p)), "_abs_shift")
-      out[[nm]] <- safe_q(abs_delta, p)
-    }
-
-    if ("pearson" %in% methods) {
-      out$theta_cor <- suppressWarnings(stats::cor(joined$theta_cur, joined$theta_prev, use = "pairwise.complete.obs"))
-    }
-    if ("spearman" %in% methods) {
-      out$theta_spearman <- suppressWarnings(stats::cor(joined$theta_cur, joined$theta_prev, use = "pairwise.complete.obs", method = "spearman"))
-    }
+    return(tibble::tibble(
+      !!paste0(prefix, "n") := 0L,
+      !!paste0(prefix, "theta_cor") := NA_real_,
+      !!paste0(prefix, "theta_spearman") := NA_real_,
+      !!paste0(prefix, "mean_abs_shift") := NA_real_,
+      !!paste0(prefix, "p90_abs_shift") := NA_real_,
+      !!paste0(prefix, "p95_abs_shift") := NA_real_,
+      !!paste0(prefix, "max_abs_shift") := NA_real_,
+      !!paste0(prefix, "mean_signed_shift") := NA_real_
+    ))
   }
 
-  names(out) <- paste0(prefix, names(out))
-  out
+  delta <- cur$theta - base$theta
+  abs_delta <- abs(delta)
+
+  safe_cor <- function(x, y, method = c("pearson", "spearman")) {
+    method <- match.arg(method)
+    if (length(x) < 2L || length(y) < 2L) {
+      return(NA_real_)
+    }
+    if (is.na(stats::sd(x, na.rm = TRUE)) || is.na(stats::sd(y, na.rm = TRUE))) {
+      return(NA_real_)
+    }
+    if (stats::sd(x, na.rm = TRUE) == 0 || stats::sd(y, na.rm = TRUE) == 0) {
+      return(NA_real_)
+    }
+    suppressWarnings(stats::cor(x, y, method = method, use = "complete.obs"))
+  }
+
+  # Correlations require >= 2 points
+  theta_cor <- safe_cor(cur$theta, base$theta, method = "pearson")
+  theta_spear <- safe_cor(cur$theta, base$theta, method = "spearman")
+
+  mean_abs_shift <- mean(abs_delta, na.rm = TRUE)
+  p90_abs_shift <- as.numeric(stats::quantile(abs_delta, probs = 0.90, na.rm = TRUE, names = FALSE, type = 7))
+  p95_abs_shift <- as.numeric(stats::quantile(abs_delta, probs = 0.95, na.rm = TRUE, names = FALSE, type = 7))
+  max_abs_shift <- max(abs_delta, na.rm = TRUE)
+  mean_signed_shift <- mean(delta, na.rm = TRUE)
+
+  tibble::tibble(
+    !!paste0(prefix, "n") := as.integer(n),
+    !!paste0(prefix, "theta_cor") := as.numeric(theta_cor),
+    !!paste0(prefix, "theta_spearman") := as.numeric(theta_spear),
+    !!paste0(prefix, "mean_abs_shift") := as.numeric(mean_abs_shift),
+    !!paste0(prefix, "p90_abs_shift") := as.numeric(p90_abs_shift),
+    !!paste0(prefix, "p95_abs_shift") := as.numeric(p95_abs_shift),
+    !!paste0(prefix, "max_abs_shift") := as.numeric(max_abs_shift),
+    !!paste0(prefix, "mean_signed_shift") := as.numeric(mean_signed_shift)
+  )
 }

@@ -9,3 +9,4 @@ docs
 /doc/
 /Meta/
 tests/testthat/bad.csv
+.Rprofile

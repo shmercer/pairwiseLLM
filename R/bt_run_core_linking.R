@@ -529,7 +529,7 @@ bt_run_core_linking <- function(samples,
 
   compute_fit <- function(res_tbl) {
     bt_data <- if (is.null(judge)) build_bt_fun(res_tbl) else build_bt_fun(res_tbl, judge = judge)
-    fit_fun(
+    out <- fit_fun(
       bt_data,
       engine = engine,
       verbose = fit_verbose,
@@ -537,73 +537,94 @@ bt_run_core_linking <- function(samples,
       include_residuals = include_residuals,
       ...
     )
+
+    # Defensive validation: downstream linking/metrics assume `$theta` exists.
+    if (!is.list(out) || !"theta" %in% names(out) || is.null(out$theta)) {
+      stop(
+        "`fit_fun()` must return a fit list that contains a `$theta` tibble with columns `ID` and `theta`.",
+        call. = FALSE
+      )
+    }
+    out
   }
 
   apply_linking <- function(fit, reference_fit) {
-    if (is.null(fit) || is.null(fit$theta) || is.null(reference_fit) || is.null(reference_fit$theta)) {
-      return(fit)
-    }
-
-    drift_tbl <- bt_drift_metrics(
-      current = fit,
-      previous = reference_fit,
-      ids = core_ids,
-      prefix = "core_"
-    )
-
-    do_apply <- FALSE
-    reason <- NA_character_
-    if (linking == "never") {
-      do_apply <- FALSE
-      reason <- "never"
-    } else if (linking == "always") {
-      do_apply <- TRUE
-      reason <- "always"
-    } else if (linking == "auto") {
-      do_apply <- .bt_should_apply_linking(
-        drift_tbl,
-        cor_target = linking_cor_target,
-        p90_abs_shift_target = linking_p90_abs_shift_target,
-        max_abs_shift_target = linking_max_abs_shift_target
-      )
-      reason <- if (isTRUE(do_apply)) "auto_trigger" else "auto_no_trigger"
-    }
+    # Record drift *before* linking (used for diagnostics + auto-link decision).
+    # Note: .bt_should_apply_linking expects drift columns with the `core_` prefix.
+    drift_core <- bt_drift_metrics(fit, reference_fit, ids = core_ids, prefix = "core_")
+    drift_linking <- drift_core
+    names(drift_linking) <- sub("^core_", "linking_", names(drift_linking))
 
     fit$linking <- list(
       mode = linking,
-      method = linking_method,
-      applied = isTRUE(do_apply),
-      reason = reason,
       reference = "baseline",
-      trigger_thresholds = list(
-        cor_target = linking_cor_target,
-        p90_abs_shift_target = linking_p90_abs_shift_target,
-        max_abs_shift_target = linking_max_abs_shift_target
-      ),
-      drift = drift_tbl
+      method = linking_method,
+      applied = FALSE,
+      reason = NA_character_,
+      a = NA_real_,
+      b = NA_real_,
+      n_core = length(core_ids),
+      min_n = linking_min_n,
+      threshold_r = linking_cor_target,
+      threshold_p90 = linking_p90_abs_shift_target,
+      drift_pre = drift_linking,
+      drift_post = NULL
     )
 
-    if (!isTRUE(do_apply)) {
+    if (isTRUE(linking == "never")) {
+      fit$linking$reason <- "never"
       return(fit)
     }
 
+    # Overlap on requested core IDs (informational only). Linking can still
+    # proceed (and will fall back to an identity transform when overlap is
+    # small).
+    n_overlap <- drift_core$core_n
+    fit$linking$n_overlap <- n_overlap
+
+    if (isTRUE(linking == "auto")) {
+      apply <- .bt_should_apply_linking(
+        drift_tbl = drift_core,
+        trigger_cor = linking_cor_target,
+        trigger_p90_abs_shift = linking_p90_abs_shift_target,
+        trigger_max_abs_shift = linking_max_abs_shift_target
+      )
+      fit$linking$reason <- if (isTRUE(apply)) "auto_trigger" else "auto_no_trigger"
+      if (!isTRUE(apply)) {
+        return(fit)
+      }
+    } else if (isTRUE(linking == "always")) {
+      fit$linking$reason <- "always"
+    } else {
+      stop("Invalid `linking`. Expected one of: 'never', 'auto', 'always'.", call. = FALSE)
+    }
+
+    # Apply linking: attach theta_linked/se_linked to preserve the original
+    # scale and provide linked values on the reference scale.
     lk <- bt_link_thetas(
-      current = fit,
-      reference = reference_fit,
+      fit,
+      reference_fit,
       ids = core_ids,
       method = linking_method,
       min_n = linking_min_n
     )
 
+    fit$theta <- dplyr::left_join(
+      fit$theta,
+      dplyr::select(lk$theta, ID, theta_linked, se_linked),
+      by = "ID"
+    )
+    # Keep the original `theta`/`se` columns and add `theta_linked`/`se_linked`.
+    # Downstream code can choose which scale to use.
+
+    fit$linking$applied <- TRUE
     fit$linking$a <- lk$a
     fit$linking$b <- lk$b
     fit$linking$n_core <- lk$n_core
 
-    fit$theta <- dplyr::left_join(
-      tibble::as_tibble(fit$theta),
-      dplyr::select(lk$theta, dplyr::all_of(c("ID", "theta_linked", "se_linked"))),
-      by = "ID"
-    )
+    # Drift after linking (diagnostic only)
+    drift_post <- bt_drift_metrics(fit, reference_fit, ids = core_ids, prefix = "linking_post_")
+    fit$linking$drift_post <- drift_post
 
     fit
   }
@@ -825,7 +846,23 @@ bt_run_core_linking <- function(samples,
           n_requested = length(batch_ids),
           n_new = 0L,
           rounds_used = 0L,
-          stop_reason = stop_reason
+          stop_reason = stop_reason,
+          linking_mode = if (!is.null(current_fit$linking)) current_fit$linking$mode else NA_character_,
+          linking_method = if (!is.null(current_fit$linking)) current_fit$linking$method else NA_character_,
+          linking_applied = if (!is.null(current_fit$linking)) isTRUE(current_fit$linking$applied) else NA,
+          linking_reason = if (!is.null(current_fit$linking)) current_fit$linking$reason else NA_character_,
+          linking_p90_abs_shift = if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift_pre)) {
+            d <- current_fit$linking$drift_pre
+            if (is.data.frame(d) && nrow(d) > 0L && "linking_p90_abs_shift" %in% names(d)) as.numeric(d$linking_p90_abs_shift[[1]]) else NA_real_
+          } else {
+            NA_real_
+          },
+          linking_post_p90_abs_shift = if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift_post)) {
+            d <- current_fit$linking$drift_post
+            if (is.data.frame(d) && nrow(d) > 0L && "linking_post_p90_abs_shift" %in% names(d)) as.numeric(d$linking_post_p90_abs_shift[[1]]) else NA_real_
+          } else {
+            NA_real_
+          }
         )
       )
       final_fits[[paste0("batch_", batch_i)]] <- current_fit
@@ -925,6 +962,41 @@ bt_run_core_linking <- function(samples,
         core_n = as.integer(length(core_ids))
       )
 
+
+      # Add linking diagnostics (drift-to-baseline pre/post linking + parameters).
+      if (!is.null(current_fit$linking) && is.list(current_fit$linking)) {
+        lk <- current_fit$linking
+        lk_chr <- function(x) if (is.null(x) || length(x) == 0L) NA_character_ else as.character(x[[1]])
+        lk_num <- function(x) if (is.null(x) || length(x) == 0L) NA_real_ else as.numeric(x[[1]])
+        lk_int <- function(x) if (is.null(x) || length(x) == 0L) NA_integer_ else as.integer(x[[1]])
+
+        metrics <- dplyr::mutate(
+          metrics,
+          linking_mode = lk_chr(lk$mode),
+          linking_reference = lk_chr(lk$reference),
+          linking_method = lk_chr(lk$method),
+          linking_applied = isTRUE(lk$applied),
+          linking_reason = lk_chr(lk$reason),
+          linking_a = lk_num(lk$a),
+          linking_b = lk_num(lk$b),
+          linking_n_core = lk_int(lk$n_core),
+          linking_min_n = lk_int(lk$min_n),
+          linking_threshold_r = lk_num(lk$threshold_r),
+          linking_threshold_p90 = lk_num(lk$threshold_p90)
+        )
+
+        if (!is.null(lk$drift_pre) && is.data.frame(lk$drift_pre) && nrow(lk$drift_pre) > 0L) {
+          dr <- as.data.frame(lk$drift_pre)[1, , drop = FALSE]
+          dr$ids <- NULL
+          for (nm in names(dr)) metrics[[nm]] <- dr[[nm]][1]
+        }
+        if (!is.null(lk$drift_post) && is.data.frame(lk$drift_post) && nrow(lk$drift_post) > 0L) {
+          drp <- as.data.frame(lk$drift_post)[1, , drop = FALSE]
+          drp$ids <- NULL
+          for (nm in names(drp)) metrics[[nm]] <- drp[[nm]][1]
+        }
+      }
+
       # A3: ensure both naming schemes exist (core_* and linking_*)
       # (Requires .bt_add_drift_aliases() to exist; see helper below.)
       metrics <- .bt_add_drift_aliases(metrics)
@@ -1012,7 +1084,23 @@ bt_run_core_linking <- function(samples,
         n_requested = length(batch_ids),
         n_new = length(new_ids),
         rounds_used = rounds_used,
-        stop_reason = stop_reason
+        stop_reason = stop_reason,
+        linking_mode = if (!is.null(current_fit$linking)) current_fit$linking$mode else NA_character_,
+        linking_method = if (!is.null(current_fit$linking)) current_fit$linking$method else NA_character_,
+        linking_applied = if (!is.null(current_fit$linking)) isTRUE(current_fit$linking$applied) else NA,
+        linking_reason = if (!is.null(current_fit$linking)) current_fit$linking$reason else NA_character_,
+        linking_p90_abs_shift = if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift_pre)) {
+          d <- current_fit$linking$drift_pre
+          if (is.data.frame(d) && nrow(d) > 0L && "linking_p90_abs_shift" %in% names(d)) as.numeric(d$linking_p90_abs_shift[[1]]) else NA_real_
+        } else {
+          NA_real_
+        },
+        linking_post_p90_abs_shift = if (!is.null(current_fit$linking) && !is.null(current_fit$linking$drift_post)) {
+          d <- current_fit$linking$drift_post
+          if (is.data.frame(d) && nrow(d) > 0L && "linking_post_p90_abs_shift" %in% names(d)) as.numeric(d$linking_post_p90_abs_shift[[1]]) else NA_real_
+        } else {
+          NA_real_
+        }
       )
     )
 

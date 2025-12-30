@@ -216,6 +216,33 @@ fit_mock <- function(bt_data, ...) {
   )
 }
 
+make_fit_mock_drifting <- function() {
+  local({
+    .i <- 0L
+    function(bt_data, ...) {
+      .i <<- .i + 1L
+      bt_data <- as.data.frame(bt_data)
+      o1 <- bt_data[[1]]
+      o2 <- bt_data[[2]]
+      ids <- sort(unique(c(o1, o2)))
+      base <- seq_along(ids)
+
+      # Baseline fit uses scale=1, offset=0; subsequent fits drift.
+      scale <- if (.i == 1L) 1 else 1.8
+      offset <- if (.i == 1L) 0 else 7
+
+      list(
+        engine = "mock_drifting",
+        reliability = NA_real_,
+        theta = tibble::tibble(ID = ids, theta = base * scale + offset, se = rep(1, length(ids))),
+        diagnostics = list(sepG = NA_real_)
+      )
+    }
+  })
+}
+
+
+
 fit_real_or_mock <- function(bt_data, engine = "auto", verbose = FALSE, return_diagnostics = TRUE, ...) {
   if (.can_real_fit()) {
     fit_bt_model(bt_data, engine = engine, verbose = verbose, return_diagnostics = return_diagnostics, ...)
@@ -596,6 +623,73 @@ core_ids_24 <- LETTERS[1:5]
 )
 
 # -------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 2b) Linking diagnostics / metrics (pre/post drift + parameters)
+# ---------------------------------------------------------------------------
+
+.h_run("bt_link_thetas() basic properties", {
+  fit1 <- list(theta = tibble::tibble(ID = LETTERS[1:5], theta = 1:5, se = rep(1, 5)))
+  fit2 <- list(theta = tibble::tibble(ID = LETTERS[1:5], theta = (1:5) * 2 + 10, se = rep(1, 5)))
+  lk <- bt_link_thetas(fit2, fit1, ids = LETTERS[1:5], method = "mean_sd")
+  stopifnot(is.list(lk), all(c("a", "b", "theta", "n_core") %in% names(lk)))
+  stopifnot(nrow(lk$theta) == 5L)
+})
+
+.h_run("bt_run_core_linking() linking=always reduces baseline drift (mock drifting fitter)", {
+  fit_fun <- make_fit_mock_drifting()
+  out <- bt_run_core_linking(
+    data = sample_data,
+    id_col = "ID",
+    text_col = "text",
+    judge_fun = judge_mock,
+    fit_fun = fit_fun,
+    batch_size = 12,
+    round_size = 6,
+    within_batch_frac = 0.6,
+    core_ids = LETTERS[1:5],
+    max_rounds_per_batch = 2,
+    linking = "always",
+    linking_min_n = 5,
+    linking_cor_target = 0.999,
+    linking_p90_abs_shift_target = 0.01,
+    show_progress = FALSE
+  )
+
+  stopifnot(is.data.frame(out$metrics), "linking_applied" %in% names(out$metrics))
+  stopifnot(any(out$metrics$linking_applied, na.rm = TRUE))
+  stopifnot(all(c("linking_p90_abs_shift", "linking_post_p90_abs_shift") %in% names(out$metrics)))
+
+  pre <- out$metrics$linking_p90_abs_shift
+  post <- out$metrics$linking_post_p90_abs_shift
+  stopifnot(any(is.finite(pre) & is.finite(post) & post < pre, na.rm = TRUE))
+
+  stopifnot(all(c("theta_original", "theta_linked") %in% names(out$results)))
+  stopifnot(any(abs(out$results$theta - out$results$theta_original) > 1e-8, na.rm = TRUE))
+})
+
+.h_run("bt_run_core_linking() linking=auto does not trigger under stable fits", {
+  out <- bt_run_core_linking(
+    data = sample_data,
+    id_col = "ID",
+    text_col = "text",
+    judge_fun = judge_mock,
+    fit_fun = fit_mock,
+    batch_size = 10,
+    round_size = 6,
+    within_batch_frac = 0.6,
+    core_ids = LETTERS[1:5],
+    max_rounds_per_batch = 1,
+    linking = "auto",
+    linking_min_n = 5,
+    linking_cor_target = 0.99,
+    linking_p90_abs_shift_target = 0.01,
+    show_progress = FALSE
+  )
+  stopifnot(is.data.frame(out$metrics), "linking_applied" %in% names(out$metrics))
+  stopifnot(!any(out$metrics$linking_applied, na.rm = TRUE))
+})
+
 # 3) bt_run_adaptive_core_linking (allocation/linking/core selection)
 # -------------------------------------------------------------------------
 
@@ -632,6 +726,36 @@ judge_ok_80 <- judge_deterministic(true_theta_80, seed = 1)
 )
 
 .h_run(
+
+.h_run("adaptive_core_linking: linking=always reduces baseline drift (mock drifting fitter)", {
+  fit_fun <- make_fit_mock_drifting()
+  out <- bt_run_adaptive_core_linking(
+    data = sample_data,
+    id_col = "ID",
+    text_col = "text",
+    judge_fun = judge_mock,
+    fit_fun = fit_fun,
+    batch_size = 12,
+    round_size = 6,
+    within_batch_frac = 0.6,
+    core_ids = LETTERS[1:5],
+    max_rounds_per_batch = 2,
+    linking = "always",
+    linking_min_n = 5,
+    linking_cor_target = 0.999,
+    linking_p90_abs_shift_target = 0.01,
+    show_progress = FALSE
+  )
+
+  stopifnot(is.data.frame(out$metrics), "linking_applied" %in% names(out$metrics))
+  stopifnot(any(out$metrics$linking_applied, na.rm = TRUE))
+  stopifnot(all(c("linking_p90_abs_shift", "linking_post_p90_abs_shift") %in% names(out$metrics)))
+
+  pre <- out$metrics$linking_p90_abs_shift
+  post <- out$metrics$linking_post_p90_abs_shift
+  stopifnot(any(is.finite(pre) & is.finite(post) & post < pre, na.rm = TRUE))
+})
+
   "adaptive_core_linking: core selection token_stratified (core_ids=NULL)",
   {
     out <- bt_run_adaptive_core_linking(

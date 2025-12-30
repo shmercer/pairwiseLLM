@@ -56,39 +56,50 @@ bt_link_thetas <- function(current,
                            min_n = 3L) {
   method <- match.arg(method)
 
+  # ---- Validation ----
+  if (!is.numeric(min_n) || length(min_n) != 1L || is.na(min_n) || min_n < 2L) {
+    stop("`min_n` must be a single integer >= 2.", call. = FALSE)
+  }
+  min_n <- as.integer(min_n)
+  if (!is.null(ids)) {
+    # Keep error wording stable for tests and user clarity.
+    if (!is.character(ids)) {
+      stop("`ids` must be a character vector.", call. = FALSE)
+    }
+    if (length(ids) < 1L || anyNA(ids) || any(!nzchar(ids))) {
+      stop("`ids` must be a non-empty character vector.", call. = FALSE)
+    }
+  }
   extract_tbl <- function(x, arg_name) {
-    # Only treat as a fit if it's a list that is NOT a data.frame/tibble.
-    if (is.list(x) && !inherits(x, "data.frame") && !is.null(x$theta)) {
-      x <- x$theta
+    # Accept: fit objects (list with $theta), tibbles/data.frames with ID/theta,
+    # or named numeric vectors.
+    if (is.list(x) && !inherits(x, c("data.frame", "tbl"))) {
+      if ("theta" %in% names(x)) {
+        if (is.null(x$theta)) {
+          stop(paste0("`", arg_name, "` must be a fit (with `$theta`), a tibble with columns ID/theta, or a named numeric vector."),
+            call. = FALSE
+          )
+        }
+        x <- x$theta
+      }
     }
 
     if (is.numeric(x) && !is.null(names(x))) {
-      return(tibble::tibble(ID = names(x), theta = as.double(unname(x)), se = NA_real_))
+      return(tibble::tibble(ID = names(x), theta = as.numeric(x), se = rep(NA_real_, length(x))))
     }
 
-    x_tbl <- tibble::as_tibble(x)
-    if (!all(c("ID", "theta") %in% names(x_tbl))) {
-      stop(
-        "`", arg_name, "` must be a fit (with `$theta`), a tibble with columns ID/theta, or a named numeric vector.",
-        call. = FALSE
-      )
+    if (inherits(x, c("data.frame", "tbl"))) {
+      tbl <- tibble::as_tibble(x)
+      if (!("ID" %in% names(tbl) && "theta" %in% names(tbl))) {
+        stop(paste0("`", arg_name, "` must have columns ID and theta."), call. = FALSE)
+      }
+      return(tbl[, c("ID", "theta", intersect(names(tbl), "se")), drop = FALSE])
     }
-    out <- tibble::tibble(
-      ID = as.character(x_tbl$ID),
-      theta = as.double(unname(x_tbl$theta)),
-      se = if ("se" %in% names(x_tbl)) as.double(unname(x_tbl$se)) else NA_real_
+
+    stop(paste0("`", arg_name, "` must be a fit (with `$theta`), a tibble with columns ID/theta, or a named numeric vector."),
+      call. = FALSE
     )
-    out
   }
-
-  if (!is.null(ids) && !is.character(ids)) {
-    stop("`ids` must be a character vector when provided.", call. = FALSE)
-  }
-  min_n <- as.integer(min_n)
-  if (length(min_n) != 1L || is.na(min_n) || min_n < 2L) {
-    stop("`min_n` must be a single integer >= 2.", call. = FALSE)
-  }
-
   cur <- extract_tbl(current, "current")
   ref <- extract_tbl(reference, "reference")
 
@@ -96,7 +107,7 @@ bt_link_thetas <- function(current,
   if (is.null(ids)) {
     core_ids <- intersect(cur$ID, ref$ID)
   } else {
-    core_ids <- intersect(unique(as.character(ids)), intersect(cur$ID, ref$ID))
+    core_ids <- intersect(unique(ids), intersect(cur$ID, ref$ID))
   }
 
   cur_core <- cur[cur$ID %in% core_ids, , drop = FALSE]
@@ -125,12 +136,17 @@ bt_link_thetas <- function(current,
     }
   }
 
+
+  # Standard errors are optional; use NA_real_ when absent
+  se_cur <- if ("se" %in% names(cur)) cur$se else rep(NA_real_, nrow(cur))
+  if (is.null(se_cur) || length(se_cur) == 0L) se_cur <- rep(NA_real_, nrow(cur))
+
   out_theta <- tibble::tibble(
     ID = cur$ID,
     theta = cur$theta,
-    se = cur$se,
+    se = se_cur,
     theta_linked = as.double(a + b * cur$theta),
-    se_linked = ifelse(is.na(cur$se), NA_real_, abs(b) * cur$se)
+    se_linked = ifelse(is.na(se_cur), NA_real_, abs(b) * se_cur)
   )
 
   list(
@@ -144,26 +160,48 @@ bt_link_thetas <- function(current,
 
 
 .bt_should_apply_linking <- function(drift_tbl,
-                                     cor_target = 0.98,
-                                     p90_abs_shift_target = 0.15,
-                                     max_abs_shift_target = 0.30) {
-  # drift_tbl is one-row tibble from bt_drift_metrics with prefix core_
-  if (is.null(drift_tbl) || nrow(drift_tbl) != 1L) {
+                                     trigger_cor = 0.98,
+                                     trigger_p90_abs_shift = 0.15,
+                                     trigger_max_abs_shift = 0.30,
+                                     ...) {
+  dots <- list(...)
+  # Back-compat: allow older names trigger_p90 / trigger_max
+  if (!is.null(dots$trigger_p90) && is.finite(dots$trigger_p90)) {
+    trigger_p90_abs_shift <- dots$trigger_p90
+  }
+  if (!is.null(dots$trigger_max) && is.finite(dots$trigger_max)) {
+    trigger_max_abs_shift <- dots$trigger_max
+  }
+
+  # Must return a single logical
+  if (is.null(drift_tbl) || !inherits(drift_tbl, c("data.frame", "tbl"))) {
     return(FALSE)
   }
-  cor_val <- drift_tbl$core_theta_cor
-  p90_val <- drift_tbl$core_p90_abs_shift
-  max_val <- drift_tbl$core_max_abs_shift
+  drift_tbl <- tibble::as_tibble(drift_tbl)
+  if (nrow(drift_tbl) != 1L) {
+    return(FALSE)
+  }
 
-  trig <- FALSE
-  if (is.finite(cor_target) && !is.na(cor_val) && is.finite(cor_val)) {
-    trig <- trig || (cor_val < cor_target)
+  # Support multiple schema versions
+  cor_val <- NA_real_
+  if ("core_theta_cor" %in% names(drift_tbl)) {
+    cor_val <- drift_tbl$core_theta_cor
+  } else if ("core_cor" %in% names(drift_tbl)) {
+    cor_val <- drift_tbl$core_cor
+  } else if ("core_pearson_cor" %in% names(drift_tbl)) {
+    cor_val <- drift_tbl$core_pearson_cor
   }
-  if (is.finite(p90_abs_shift_target) && !is.na(p90_val) && is.finite(p90_val)) {
-    trig <- trig || (p90_val > p90_abs_shift_target)
+
+  p90_val <- if ("core_p90_abs_shift" %in% names(drift_tbl)) drift_tbl$core_p90_abs_shift else NA_real_
+  max_val <- if ("core_max_abs_shift" %in% names(drift_tbl)) drift_tbl$core_max_abs_shift else NA_real_
+
+  if (!is.finite(cor_val) && !is.finite(p90_val) && !is.finite(max_val)) {
+    return(FALSE)
   }
-  if (is.finite(max_abs_shift_target) && !is.na(max_val) && is.finite(max_val)) {
-    trig <- trig || (max_val > max_abs_shift_target)
-  }
-  trig
+
+  cor_trig <- is.finite(cor_val) && cor_val < trigger_cor
+  p90_trig <- is.finite(p90_val) && p90_val > trigger_p90_abs_shift
+  max_trig <- is.finite(max_val) && max_val > trigger_max_abs_shift
+
+  isTRUE(cor_trig || p90_trig || max_trig)
 }

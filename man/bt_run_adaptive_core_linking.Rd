@@ -59,7 +59,10 @@ bt_run_adaptive_core_linking(
   checkpoint_store_fits = TRUE,
   checkpoint_overwrite = TRUE,
   fit_fun = fit_bt_model,
-  build_bt_fun = build_bt_data,
+  build_bt_fun = function(results, judge = NULL, ...) {
+     build_bt_data(results, ...)
+
+    },
   ...
 )
 }
