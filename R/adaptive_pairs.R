@@ -101,14 +101,19 @@ select_adaptive_pairs <- function(samples,
     stop("`n_pairs` must be a non-negative integer.", call. = FALSE)
   }
 
-  k_neighbors <- as.integer(k_neighbors)
-  if (is.na(k_neighbors) || k_neighbors < 1L) {
-    stop("`k_neighbors` must be a positive integer.", call. = FALSE)
+  # Allow NULL / Inf as a convenience for "all neighbors".
+  if (is.null(k_neighbors) || isTRUE(is.infinite(k_neighbors))) {
+    k_neighbors <- Inf
+  }
+  if (!is.numeric(k_neighbors) || length(k_neighbors) != 1L || is.na(k_neighbors)) {
+    stop("`k_neighbors` must be a positive integer, or NULL/Inf for all neighbors.", call. = FALSE)
   }
 
+  # Allow NULL to disable the minimum-judgments heuristic.
+  if (is.null(min_judgments)) min_judgments <- 0L
   min_judgments <- as.integer(min_judgments)
   if (is.na(min_judgments) || min_judgments < 0L) {
-    stop("`min_judgments` must be a non-negative integer.", call. = FALSE)
+    stop("`min_judgments` must be NULL or a non-negative integer.", call. = FALSE)
   }
 
   # Normalize IDs to character

@@ -139,9 +139,15 @@ select_core_link_pairs <- function(samples,
     stop("`within_batch_frac + core_audit_frac` must be <= 1.", call. = FALSE)
   }
 
-  k_neighbors <- as.integer(k_neighbors)
-  if (is.na(k_neighbors) || k_neighbors < 1L) stop("`k_neighbors` must be an integer >= 1.", call. = FALSE)
+  # Allow NULL / Inf as a convenience for "all neighbors".
+  if (is.null(k_neighbors) || isTRUE(is.infinite(k_neighbors))) k_neighbors <- Inf
+  if (!is.numeric(k_neighbors) || length(k_neighbors) != 1L || is.na(k_neighbors) || k_neighbors < 1) {
+    stop("`k_neighbors` must be a single numeric/integer >= 1 (or NULL/Inf for all).", call. = FALSE)
+  }
+  # We'll clamp to (n_ids - 1) later once we know the full candidate ID set.
 
+  # Allow NULL to disable the minimum-judgments heuristic.
+  if (is.null(min_judgments)) min_judgments <- 0L
   min_judgments <- as.integer(min_judgments)
   if (is.na(min_judgments) || min_judgments < 0L) stop("`min_judgments` must be an integer >= 0.", call. = FALSE)
 
@@ -367,7 +373,44 @@ bt_core_link_round <- function(samples, fit, core_ids, include_text = FALSE, ...
   if (!is.list(fit) || is.null(fit$theta)) {
     stop("`fit` must be a list (from `fit_bt_model()`) containing `$theta`.", call. = FALSE)
   }
-  pairs <- select_core_link_pairs(samples = samples, theta = fit$theta, core_ids = core_ids, ...)
+  dots <- rlang::list2(...)
+  pairs <- do.call(
+    select_core_link_pairs,
+    c(list(samples = samples, theta = fit$theta, core_ids = core_ids), dots)
+  )
+
+  # Fallbacks for "no_pairs": try to relax the most common causes of premature
+  # exhaustion while preserving forbid_repeats. In small smoke tests it is easy
+  # to run out of pairs when kNN restrictions or strict position-balancing leave
+  # no feasible edges.
+  if (nrow(pairs) == 0L) {
+    n_ids <- nrow(fit$theta)
+
+    # 1) Expand the neighbor set to "all" if k_neighbors was limiting.
+    k_in <- dots$k_neighbors
+    if (is.null(k_in) || isTRUE(is.infinite(k_in)) || isTRUE(k_in >= (n_ids - 1L))) {
+      # already "all"
+    } else {
+      dots2 <- dots
+      dots2$k_neighbors <- n_ids - 1L
+      pairs2 <- do.call(select_core_link_pairs, c(list(samples = samples, theta = fit$theta, core_ids = core_ids), dots2))
+      if (nrow(pairs2) > 0L) {
+        pairs <- pairs2
+        attr(pairs, "fallback") <- "expanded_k_neighbors"
+      }
+    }
+
+    # 2) If still empty, relax position balancing.
+    if (nrow(pairs) == 0L && isTRUE(dots$balance_positions)) {
+      dots2 <- dots
+      dots2$balance_positions <- FALSE
+      pairs2 <- do.call(select_core_link_pairs, c(list(samples = samples, theta = fit$theta, core_ids = core_ids), dots2))
+      if (nrow(pairs2) > 0L) {
+        pairs <- pairs2
+        attr(pairs, "fallback") <- "disabled_balance_positions"
+      }
+    }
+  }
   if (isTRUE(include_text) && nrow(pairs) > 0L) {
     pairs <- add_pair_texts(pairs, samples = samples)
   }

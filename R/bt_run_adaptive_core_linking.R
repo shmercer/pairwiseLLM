@@ -1175,6 +1175,11 @@ bt_run_adaptive_core_linking <- function(samples,
       m$stop <- stop_now
       m$stop_reason <- stop_reason
       m$n_pairs_proposed <- nrow(pairs_next)
+      # Convenience counters (historical names are kept for debugging ergonomics)
+      m$n_results_total <- nrow(results)
+      m$n_pairs_total <- nrow(results)
+      m$n_pairs_new <- nrow(judged)
+      m$n_missing_better_id <- sum(is.na(results$better_id))
       m$n_core_new <- sum(pairs_next$pair_type == "core_new")
       m$n_new_new <- sum(pairs_next$pair_type == "new_new")
       m$n_core_core <- sum(pairs_next$pair_type == "core_core")
@@ -1203,6 +1208,8 @@ bt_run_adaptive_core_linking <- function(samples,
           stop = decision,
           n_results_total = nrow(results),
           n_pairs_proposed = nrow(pairs_next),
+          n_results_total = nrow(results),
+          n_missing_better_id = sum(is.na(results$better_id)),
           n_new_ids = length(new_ids),
           new_ids = new_ids,
           core_ids = core_ids,

@@ -102,6 +102,18 @@ bt_drift_metrics <- function(current,
   # Align baseline to current ID order
   base <- base[match(cur$ID, base$ID), , drop = FALSE]
 
+  # BT scales are only identifiable up to a global sign flip. If the new fit is
+  # effectively the negative of the baseline, naive drift diagnostics will show
+  # correlations near -1 and (spuriously) huge shifts. We therefore flip the
+  # baseline to make the Pearson correlation non-negative (when defined).
+  flip_applied <- FALSE
+  cor_raw <- suppressWarnings(stats::cor(cur$theta, base$theta, use = "complete.obs"))
+  if (is.finite(cor_raw) && cor_raw < 0) {
+    base$theta <- -base$theta
+    if (!is.null(base$se)) base$se <- base$se
+    flip_applied <- TRUE
+  }
+
   n <- nrow(cur)
   if (n == 0L) {
     return(.prefixed_row(prefix, list(
@@ -145,6 +157,7 @@ bt_drift_metrics <- function(current,
 
   .prefixed_row(prefix, list(
     n = as.integer(n),
+    flip_applied = isTRUE(flip_applied),
     theta_cor = as.numeric(theta_cor),
     theta_spearman = as.numeric(theta_spear),
     mean_abs_shift = as.numeric(mean_abs_shift),

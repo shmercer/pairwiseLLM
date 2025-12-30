@@ -38,6 +38,25 @@ MAX_ROUNDS <- 3
 # Local null-coalescing helper (avoids relying on rlang for smoke tests)
 `%||%` <- function(x, y) if (is.null(x)) y else x
 .ts <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
+write_bt_run_diagnostics <- function(out, dir, name) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  # Always save the full object for post-mortem debugging.
+  saveRDS(out, file.path(dir, paste0(name, "_out.rds")))
+  if (!is.null(out$metrics)) {
+    write_csv(out$metrics, file.path(dir, paste0(name, "_metrics.csv")))
+  }
+  if (!is.null(out$state)) {
+    write_csv(out$state, file.path(dir, paste0(name, "_state.csv")))
+  }
+  if (!is.null(out$results)) {
+    write_csv(out$results, file.path(dir, paste0(name, "_results.csv")))
+  }
+  if (!is.null(out$batch_summary)) {
+    write_csv(out$batch_summary, file.path(dir, paste0(name, "_batch_summary.csv")))
+  }
+  invisible(TRUE)
+}
 .dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
 
 .short <- function(x, n = 240) {
@@ -195,6 +214,12 @@ run_one <- function(judge_fun, label) {
         init_round_size = BOOTSTRAP_N,
         max_rounds_per_batch = MAX_ROUNDS,
 
+        # Debug-friendly defaults:
+        forbid_repeats = TRUE,
+        balance_positions = TRUE,
+        k_neighbors = Inf,      # treat as "all" in the updated selection code
+        min_judgments = NULL,   # rely on reliability-based stopping by default
+
         linking = "never",
         seed_pairs = 123,
         return_diagnostics = TRUE
@@ -235,6 +260,11 @@ run_one <- function(judge_fun, label) {
 # ---- Execute ----
 # Live (recommended first for debugging)
 out_live <- run_one(judge_openai_live, "adaptive_core_linking + openai_live")
+
+# Persist diagnostics for reproducibility / post-mortems.
+out_dir <- file.path(getwd(), "dev", "smoke_outputs", paste0("smoke_", format(Sys.time(), "%Y%m%d_%H%M%S")))
+write_bt_run_diagnostics(out_live, out_dir, "openai_live")
+message("\nSaved smoke test outputs to: ", out_dir)
 
 # Batch (optional; slower)
 # out_batch <- run_one(judge_openai_batch, "adaptive_core_linking + openai_batch")
