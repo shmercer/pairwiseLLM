@@ -378,7 +378,9 @@ gemini_compare_pair_live <- function(
   # Parse <BETTER_SAMPLE> tag from content
   # ---------------------------------------------------------------------------
 
-  better_sample <- .extract_better_sample(content, tag_prefix = tag_prefix, tag_suffix = tag_suffix)
+  # Gemini compare does not currently expose tag_prefix/tag_suffix args.
+  # Use the shared helper defaults (<BETTER_SAMPLE>...</BETTER_SAMPLE>).
+  better_sample <- .extract_better_sample(content)
 
   better_id <- NA_character_
   if (!is.na(better_sample)) {
