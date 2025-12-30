@@ -45,7 +45,7 @@ MAX_ROUNDS <- 3
   ifelse(nchar(x) <= n, x, paste0(substr(x, 1, n), "…"))
 }
 
-.print_results_summary <- function(res, label = "results") {
+.print_results_summary <- function(res, backend = "openai", label = "results") {
   if (is.null(res)) {
     .dbg(label, ": <NULL>")
     return(invisible(NULL))
@@ -55,7 +55,7 @@ MAX_ROUNDS <- 3
   # Basic backend validation summary (non-strict; allow missing winners so we can inspect)
   rep <- validate_backend_results(
     res,
-    backend = label,
+    backend = backend,
     normalize_winner = TRUE,
     strict = FALSE,
     return_report = TRUE
@@ -114,21 +114,9 @@ samples <- tibble(
   )
 )
 
-# ---- Prompt template (structured) ----
-tmpl <- set_prompt_template(
-  template = c(
-    "You will compare two writing samples and decide which is better overall.",
-    "",
-    "<SAMPLE_1>{text1}</SAMPLE_1>",
-    "",
-    "<SAMPLE_2>{text2}</SAMPLE_2>",
-    "",
-    "Return ONLY one of the following tags:",
-    "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
-    "or",
-    "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>"
-  )
-)
+# ---- Trait + Prompt template (structured) ----
+td <- trait_description("overall_quality")
+tmpl <- get_prompt_template("default")
 
 # ---- Judge functions (live + batch) ----
 judge_openai_live <- function(pairs) {
@@ -136,16 +124,19 @@ judge_openai_live <- function(pairs) {
 
   out <- submit_llm_pairs(
     pairs = pairs,
-    backend = "openai_live",
+    backend = "openai",
     model = "gpt-4o-mini",
+    trait_name = td$name,
+    trait_description = td$description,
     prompt_template = tmpl,
+    endpoint = "chat.completions",
     temperature = 0,
     include_raw = TRUE,     # keep raw for debugging
     status_every = 1L
   )
 
   .dbg("judge_openai_live: elapsed=", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2), "s")
-  .print_results_summary(out$results, label = "openai_live")
+  .print_results_summary(out$results, backend = "openai", label = "openai_live")
 
   out
 }
@@ -155,8 +146,10 @@ judge_openai_batch <- function(pairs) {
 
   batch <- llm_submit_pairs_batch(
     pairs = pairs,
-    backend = "openai_batch",
+    backend = "openai",
     model = "gpt-4o-mini",
+    trait_name = td$name,
+    trait_description = td$description,
     prompt_template = tmpl,
     temperature = 0
   )
@@ -169,7 +162,7 @@ judge_openai_batch <- function(pairs) {
 
   res <- llm_download_batch_results(batch)
   .dbg("judge_openai_batch: elapsed=", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2), "s")
-  .print_results_summary(res, label = "openai_batch")
+  .print_results_summary(res, backend = "openai", label = "openai_batch")
 
   res
 }
@@ -178,20 +171,31 @@ judge_openai_batch <- function(pairs) {
 run_one <- function(judge_fun, label) {
   .dbg("===== Running: ", label, " =====")
 
+  # Single batch containing all sample IDs (smoke-test default)
+  batches <- list(samples$ID)
+
+  # Provide explicit core IDs to bypass select_core_set() (and any embeddings requirements).
+  # Use a strict subset so the batch actually introduces "new IDs".
+  core_ids <- samples$ID[seq_len(min(5L, nrow(samples)))]
+
   out <- tryCatch(
     {
       bt_run_adaptive_core_linking(
         samples = samples,
+        batches = batches,
         judge_fun = judge_fun,
+
+        core_ids = core_ids,     # ✅ bypass select_core_set()
+        # core_method/core_size omitted on purpose
+
         engine = "auto",
         fit_verbose = TRUE,
+
         round_size = ROUND_SIZE,
         init_round_size = BOOTSTRAP_N,
-        max_rounds = MAX_ROUNDS,
-        core_size = N_CORE,
-        core_method = "pam",
-        # keep linkage conservative for smoke tests
-        linking = "off",
+        max_rounds_per_batch = MAX_ROUNDS,
+
+        linking = "never",
         seed_pairs = 123,
         return_diagnostics = TRUE
       )
@@ -200,7 +204,12 @@ run_one <- function(judge_fun, label) {
       .dbg("ERROR in ", label, ": ", conditionMessage(e))
       .dbg("Backtrace (best-effort):")
       if (requireNamespace("rlang", quietly = TRUE)) {
-        print(rlang::last_trace(drop = FALSE))
+        tr <- try(rlang::last_trace(drop = FALSE), silent = TRUE)
+        if (inherits(tr, "try-error")) {
+          traceback()
+        } else {
+          print(tr)
+        }
       } else {
         traceback()
       }
@@ -210,10 +219,16 @@ run_one <- function(judge_fun, label) {
 
   .dbg("Finished: ", label)
   .dbg("Results rows: ", nrow(out$results))
-  if (!is.null(out$final_fit)) {
-    .dbg("Final fit theta head:")
-    print(head(out$final_fit$theta))
+
+  # Runner outputs differ; safest is to check final_fits
+  if (!is.null(out$final_fits) && length(out$final_fits) > 0L) {
+    last_fit <- out$final_fits[[length(out$final_fits)]]
+    if (!is.null(last_fit$theta)) {
+      .dbg("Final fit theta head:")
+      print(head(last_fit$theta))
+    }
   }
+
   out
 }
 
