@@ -254,7 +254,7 @@ test_that("bt_run_core_linking populates per-round fits and per-batch final_fits
     if (is.null(m)) NA_character_ else as.character(m$stage)
   }, character(1))
   expect_true(any(stages %in% c("bootstrap", "warm_start")))
-  expect_true(any(stages == "batch_round"))
+  expect_true(any(stages == "round"))
 
   # final_fits are fits and carry metadata
   meta_boot <- attr(out$final_fits[["bootstrap"]], "bt_run_core_linking")

@@ -33,7 +33,7 @@ testthat::test_that("allocation preset 'precision_ramp' updates within_batch_fra
 
   out <- bt_run_core_linking(
     samples = samples,
-    batches = list(c("C", "D")),     # <- 2 new IDs ensures >=3 unique rounds possible
+    batches = list(c("C", "D")), # <- 2 new IDs ensures >=3 unique rounds possible
     judge_fun = judge_fun,
     core_ids = c("A", "B"),
     fit_fun = fit_fun,

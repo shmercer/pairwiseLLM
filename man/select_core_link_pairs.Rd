@@ -39,15 +39,17 @@ If \code{NULL}, uses \code{setdiff(samples$ID, core_ids)}.}
 
 \item{core_audit_frac}{Fraction (0..1) of pairs allocated to core↔core.}
 
-\item{k_neighbors}{Integer controlling how strongly pairing is localized by
-current \code{theta}: when both sides have non-missing \code{theta}, the
-opponent is chosen from among the \code{k_neighbors} closest candidates.}
+\item{k_neighbors}{Integer controlling how strongly pairing is localized by}
 
 \item{min_judgments}{Minimum number of total appearances (across both positions)
 an item should have before it is deprioritized. Used as a soft priority rule.}
 
 \item{existing_pairs}{Optional data.frame of already-judged pairs. Accepted column
 schemas are either \code{ID1}/\code{ID2} or \code{object1}/\code{object2}.}
+
+\item{forbid_keys}{Character vector of pair keys (as produced by \code{pair_key()}) that should not be proposed.
+current \code{theta}: when both sides have non-missing \code{theta}, the
+opponent is chosen from among the \code{k_neighbors} closest candidates.}
 
 \item{forbid_repeats}{Logical; if \code{TRUE} (default) do not repeat unordered pairs.}
 

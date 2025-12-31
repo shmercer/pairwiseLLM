@@ -18,6 +18,8 @@ bt_stop_metrics(
 \item{fit}{A list returned by \code{\link{fit_bt_model}} containing a \code{$theta}
 tibble/data frame with columns \code{ID}, \code{theta}, \code{se}.}
 
+\item{metrics}{Deprecated. Retained for backward compatibility with older calls that passed \code{metrics} as the second positional argument. Use \verb{ids=} and \verb{fit_bounds=} instead.}
+
 \item{ids}{Optional character vector of item IDs to compute precision summaries on.
 If \code{NULL}, uses all items in \code{fit$theta}.}
 

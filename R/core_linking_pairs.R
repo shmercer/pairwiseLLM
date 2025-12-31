@@ -36,6 +36,7 @@
 #' @param within_batch_frac Fraction (0..1) of non-audit pairs allocated to new↔new.
 #' @param core_audit_frac Fraction (0..1) of pairs allocated to core↔core.
 #' @param k_neighbors Integer controlling how strongly pairing is localized by
+#' @param forbid_keys Character vector of pair keys (as produced by `pair_key()`) that should not be proposed.
 #'   current \code{theta}: when both sides have non-missing \code{theta}, the
 #'   opponent is chosen from among the \code{k_neighbors} closest candidates.
 #' @param min_judgments Minimum number of total appearances (across both positions)

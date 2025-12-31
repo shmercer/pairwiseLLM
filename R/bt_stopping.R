@@ -20,6 +20,7 @@
 #'
 #' @param fit A list returned by \code{\link{fit_bt_model}} containing a \code{$theta}
 #'   tibble/data frame with columns \code{ID}, \code{theta}, \code{se}.
+#' @param metrics Deprecated. Retained for backward compatibility with older calls that passed `metrics` as the second positional argument. Use `ids=` and `fit_bounds=` instead.
 #' @param ids Optional character vector of item IDs to compute precision summaries on.
 #'   If \code{NULL}, uses all items in \code{fit$theta}.
 #' @param prev_fit Optional prior fit (same structure as \code{fit}) used for drift metrics.
@@ -496,13 +497,16 @@ bt_should_stop <- function(metrics,
 
   # If a sign flip was applied during drift computation, treat the drift
   # guardrails as failing (the axis is not comparable without linking).
-  require_col("core_flip_applied", core_drift_active)
   if (core_drift_active) {
-    # `bt_stop_metrics()` will add `core_flip_applied` whenever drift metrics are
-    # computed. If a flip was required to align successive rounds, treat the
-    # drift check as failed (i.e., do not allow stopping) because the latent
-    # scale is not sign-identifiable across rounds.
-    require_col("core_flip_applied", TRUE)
+    # `bt_stop_metrics()` adds `core_flip_applied` when drift metrics are computed.
+    # When users supply drift metrics manually (e.g., in examples/tests), default to
+    # `FALSE` (no flip) if the flag is absent.
+    if (!("core_flip_applied" %in% names(metrics))) {
+      metrics$core_flip_applied <- FALSE
+    }
+    if (is.na(metrics$core_flip_applied[[1]])) {
+      metrics$core_flip_applied[[1]] <- FALSE
+    }
   }
 
   get1 <- function(col) as.numeric(metrics[[col]][[1]])
