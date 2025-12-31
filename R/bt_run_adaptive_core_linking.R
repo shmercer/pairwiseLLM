@@ -92,6 +92,25 @@
 #' @param return_diagnostics Logical; passed to \code{fit_fun}. Default \code{TRUE}.
 #' @param include_residuals Logical; passed to \code{fit_fun}. Default \code{FALSE}.
 #'
+#' @param fit_engine_running Running fitting engine used to propose the *next* round
+#'   of pairs. One of \code{"bt"} (use BT thetas; default) or \code{"rank_centrality"}
+#'   (use Rank Centrality scores as the running theta while retaining BT standard
+#'   errors for uncertainty-driven sampling).
+#' @param store_running_estimates Logical; if TRUE, store the running-fit object
+#'   in \code{out$fits}. If FALSE, store the BT fit.
+#' @param rc_smoothing Numeric smoothing parameter forwarded to
+#'   \code{\link{fit_rank_centrality}} when \code{fit_engine_running="rank_centrality"}
+#'   or when final refit computes Rank Centrality. Default \code{0.5}.
+#' @param rc_damping Numeric damping/teleport parameter in \code{[0,1)} forwarded to
+#'   \code{\link{fit_rank_centrality}}. Use \code{>0} for unique stationary
+#'   distributions on disconnected graphs. Default \code{0}.
+#' @param final_refit Logical; if TRUE (default), compute final BT and Rank Centrality
+#'   estimates on the full result set via \code{\link{compute_final_estimates}} and
+#'   return them as \code{out$estimates}.
+#' @param final_bt_bias_reduction Logical; if TRUE (default), attempt bias-reduced
+#'   BT fitting (Firth / br=TRUE) in the final refit (falls back to MLE if unavailable).
+#'
+#'
 #' @param round_size Integer. Number of new pairs to propose and score per round within each
 #' batch.
 #' @param init_round_size Integer. Number of bootstrap pairs to score on the core set before
@@ -278,6 +297,12 @@ bt_run_adaptive_core_linking <- function(samples,
                                          fit_verbose = FALSE,
                                          return_diagnostics = TRUE,
                                          include_residuals = FALSE,
+                                         fit_engine_running = c("bt", "rank_centrality"),
+                                         store_running_estimates = TRUE,
+                                         rc_smoothing = 0.5,
+                                         rc_damping = 0,
+                                         final_refit = TRUE,
+                                         final_bt_bias_reduction = TRUE,
                                          round_size = 50,
                                          init_round_size = round_size,
                                          max_rounds_per_batch = 50,
@@ -333,6 +358,11 @@ bt_run_adaptive_core_linking <- function(samples,
 
   stopping_tier <- match.arg(stopping_tier)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
+
+  fit_engine_running <- match.arg(fit_engine_running)
+  store_running_estimates <- isTRUE(store_running_estimates)
+  final_refit <- isTRUE(final_refit)
+  final_bt_bias_reduction <- isTRUE(final_bt_bias_reduction)
 
   # Capture and sanitize `...` forwarded to fit_fun. This prevents collisions like
   # `verbose` (often intended for runner logging) being passed twice to fit_fun.
@@ -920,6 +950,18 @@ bt_run_adaptive_core_linking <- function(samples,
       current_fit <- fr_all$fit
       if (!is.null(current_fit) && !is.null(baseline_fit)) {
         current_fit <- apply_linking(current_fit, baseline_fit)
+        mk_running <- make_running_fit(bt_data = fr$bt_data, fit_bt = current_fit)
+        current_fit_running <- mk_running$fit_running
+        current_rc_fit <- mk_running$rc_fit
+        mk_running <- make_running_fit(bt_data = fr$bt_data, fit_bt = current_fit)
+        current_fit_running <- mk_running$fit_running
+        current_rc_fit <- mk_running$rc_fit
+        mk_running <- make_running_fit(bt_data = fr$bt_data, fit_bt = current_fit)
+        current_fit_running <- mk_running$fit_running
+        current_rc_fit <- mk_running$rc_fit
+        mk_running <- make_running_fit(bt_data = fr_all$bt_data, fit_bt = current_fit)
+        current_fit_running <- mk_running$fit_running
+        current_rc_fit <- mk_running$rc_fit
       }
       if (!is.null(current_fit)) {
         attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "resume_recompute")
@@ -935,8 +977,84 @@ bt_run_adaptive_core_linking <- function(samples,
   }
 
   if (is.null(resume_from)) {
+    # Internal helper: create a "running" fit used for proposing the *next* round
+    # of pairs. This can differ from the BT fit used for stop metrics and linking.
+    #
+    # - If fit_engine_running == "bt", we use the (possibly linked) BT thetas.
+    # - If fit_engine_running == "rank_centrality", we compute Rank Centrality
+    #   scores from the current bt_data, but keep BT standard errors (se) so
+    #   pair selection can still prioritize uncertain items. The returned fit's
+    #   `theta` tibble is augmented with `theta_bt`, `theta_bt_linked`,
+    #   `theta_rc`, and `pi_rc`.
+    make_running_fit <- function(bt_data, fit_bt) {
+      if (is.null(fit_bt) || is.null(fit_bt$theta)) {
+        return(list(fit_running = fit_bt, rc_fit = NULL))
+      }
+
+      theta_bt <- tibble::as_tibble(fit_bt$theta)
+      if (!("se" %in% names(theta_bt))) theta_bt$se <- NA_real_
+
+      if (fit_engine_running == "bt") {
+        theta_bt_linked <- if ("theta_linked" %in% names(theta_bt)) theta_bt$theta_linked else theta_bt$theta
+        theta_run <- tibble::tibble(
+          ID = as.character(theta_bt$ID),
+          theta = as.numeric(theta_bt_linked),
+          se = as.numeric(theta_bt$se),
+          theta_bt = as.numeric(theta_bt$theta),
+          theta_bt_linked = as.numeric(theta_bt_linked),
+          se_bt = as.numeric(theta_bt$se),
+          theta_rc = NA_real_,
+          pi_rc = NA_real_
+        )
+        fit_running <- fit_bt
+        fit_running$engine_running <- "bt"
+        fit_running$theta <- theta_run
+        fit_running$theta_bt <- tibble::tibble(ID = theta_run$ID, theta = theta_run$theta_bt, se = theta_run$se_bt)
+        fit_running$theta_rc <- NULL
+        fit_running$rc_diagnostics <- NULL
+        return(list(fit_running = fit_running, rc_fit = NULL))
+      }
+
+      rc_fit <- fit_rank_centrality(
+        bt_data,
+        ids = as.character(theta_bt$ID),
+        smoothing = rc_smoothing,
+        damping = rc_damping,
+        verbose = FALSE
+      )
+
+      theta_rc_tbl <- tibble::as_tibble(rc_fit$theta) %>%
+        dplyr::transmute(ID = as.character(.data$ID), theta_rc = as.numeric(.data$theta), pi_rc = as.numeric(.data$pi))
+
+      theta_bt_linked <- if ("theta_linked" %in% names(theta_bt)) as.numeric(theta_bt$theta_linked) else as.numeric(theta_bt$theta)
+      theta_join <- theta_bt %>%
+        dplyr::transmute(
+          ID = as.character(.data$ID),
+          theta_bt = as.numeric(.data$theta),
+          theta_bt_linked = theta_bt_linked,
+          se_bt = as.numeric(.data$se)
+        ) %>%
+        dplyr::left_join(theta_rc_tbl, by = "ID")
+
+      theta_run <- theta_join %>%
+        dplyr::mutate(
+          theta = dplyr::if_else(is.na(.data$theta_rc), .data$theta_bt_linked, .data$theta_rc),
+          se = .data$se_bt
+        ) %>%
+        dplyr::select(ID, theta, se, theta_bt, theta_bt_linked, se_bt, theta_rc, pi_rc)
+
+      fit_running <- fit_bt
+      fit_running$engine_running <- "rank_centrality"
+      fit_running$theta <- theta_run
+      fit_running$theta_bt <- tibble::tibble(ID = theta_run$ID, theta = theta_run$theta_bt, se = theta_run$se_bt)
+      fit_running$theta_rc <- tibble::tibble(ID = theta_run$ID, theta = theta_run$theta_rc, pi = theta_run$pi_rc)
+      fit_running$rc_diagnostics <- rc_fit$diagnostics
+      list(fit_running = fit_running, rc_fit = rc_fit)
+    }
+
     # Bootstrap fit if needed
     current_fit <- NULL
+    current_fit_running <- NULL
     bootstrap_fit <- NULL
     baseline_fit <- NULL
     baseline_results_n <- NA_integer_
@@ -976,7 +1094,7 @@ bt_run_adaptive_core_linking <- function(samples,
         baseline_results_n <- nrow(results)
         current_fit <- apply_linking(current_fit, baseline_fit)
         attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "bootstrap", batch_index = 0L, round_index = 0L)
-        fits[[length(fits) + 1L]] <- current_fit
+        fits[[length(fits) + 1L]] <- if (store_running_estimates && !is.null(current_fit_running)) current_fit_running else current_fit
         final_fits[["bootstrap"]] <- current_fit
       }
 
@@ -993,7 +1111,7 @@ bt_run_adaptive_core_linking <- function(samples,
       fr <- fit_from_results(results)
       current_fit <- fr$fit
       baseline_fit <- .bt_prepare_reference_fit(
-        fit = current_fit,
+        fit = current_fit_running %||% current_fit,
         bt_data = fr$bt_data,
         core_ids = core_ids,
         scale_method = reference_scale_method,
@@ -1153,7 +1271,7 @@ bt_run_adaptive_core_linking <- function(samples,
       current_fit <- apply_linking(current_fit, baseline_fit)
 
       attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "round", batch_index = b, round_index = r, new_ids = new_ids)
-      fits[[length(fits) + 1L]] <- current_fit
+      fits[[length(fits) + 1L]] <- if (store_running_estimates && !is.null(current_fit_running)) current_fit_running else current_fit
 
       # Compute metrics on new IDs (and optional drift)
       m <- bt_stop_metrics(
@@ -1377,6 +1495,21 @@ bt_run_adaptive_core_linking <- function(samples,
   metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
   state <- .bt_align_state(state)
 
+  # Final refit: compute BT (optionally bias-reduced) and Rank Centrality estimates
+  # on the full set of accumulated results. This is intended for end-users: the
+  # adaptive loop may use a different "running" engine for pair proposal, but the
+  # final estimates table always includes both BT and Rank Centrality outputs.
+  final_est <- NULL
+  if (isTRUE(final_refit) && nrow(results) > 0L) {
+    final_est <- compute_final_estimates(
+      results = results,
+      ids = ids_all,
+      bt_bias_reduction = final_bt_bias_reduction,
+      rc_smoothing = rc_smoothing,
+      rc_damping = rc_damping
+    )
+  }
+
   out <- list(
     core_ids = core_ids,
     batches = batches,
@@ -1384,6 +1517,8 @@ bt_run_adaptive_core_linking <- function(samples,
     bt_data = bt_data,
     fits = fits,
     final_fits = final_fits,
+    estimates = if (is.null(final_est)) tibble::tibble() else final_est$estimates,
+    final_models = if (is.null(final_est)) list() else list(bt = final_est$bt_fit, rc = final_est$rc_fit, diagnostics = final_est$diagnostics),
     metrics = metrics,
     batch_summary = batch_summary,
     state = state,

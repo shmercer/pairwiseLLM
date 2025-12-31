@@ -29,6 +29,12 @@ bt_run_adaptive_core_linking(
   fit_verbose = FALSE,
   return_diagnostics = TRUE,
   include_residuals = FALSE,
+  fit_engine_running = c("bt", "rank_centrality"),
+  store_running_estimates = TRUE,
+  rc_smoothing = 0.5,
+  rc_damping = 0,
+  final_refit = TRUE,
+  final_bt_bias_reduction = TRUE,
   round_size = 50,
   init_round_size = round_size,
   max_rounds_per_batch = 50,
@@ -154,6 +160,29 @@ Default \code{"sirt"}.}
 \item{return_diagnostics}{Logical; passed to \code{fit_fun}. Default \code{TRUE}.}
 
 \item{include_residuals}{Logical; passed to \code{fit_fun}. Default \code{FALSE}.}
+
+\item{fit_engine_running}{Running fitting engine used to propose the \emph{next} round
+of pairs. One of \code{"bt"} (use BT thetas; default) or \code{"rank_centrality"}
+(use Rank Centrality scores as the running theta while retaining BT standard
+errors for uncertainty-driven sampling).}
+
+\item{store_running_estimates}{Logical; if TRUE, store the running-fit object
+in \code{out$fits}. If FALSE, store the BT fit.}
+
+\item{rc_smoothing}{Numeric smoothing parameter forwarded to
+\code{\link{fit_rank_centrality}} when \code{fit_engine_running="rank_centrality"}
+or when final refit computes Rank Centrality. Default \code{0.5}.}
+
+\item{rc_damping}{Numeric damping/teleport parameter in \code{[0,1)} forwarded to
+\code{\link{fit_rank_centrality}}. Use \code{>0} for unique stationary
+distributions on disconnected graphs. Default \code{0}.}
+
+\item{final_refit}{Logical; if TRUE (default), compute final BT and Rank Centrality
+estimates on the full result set via \code{\link{compute_final_estimates}} and
+return them as \code{out$estimates}.}
+
+\item{final_bt_bias_reduction}{Logical; if TRUE (default), attempt bias-reduced
+BT fitting (Firth / br=TRUE) in the final refit (falls back to MLE if unavailable).}
 
 \item{round_size}{Integer. Number of new pairs to propose and score per round within each
 batch.}
