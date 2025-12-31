@@ -100,6 +100,11 @@ test_that("bt_run_adaptive_core_linking drift gating can prevent stopping (hits 
   all_ids <- samples$ID
   true_theta <- stats::setNames(seq(2, -1.5, length.out = 8), samples$ID)
 
+  # Make `core_ids` available in the enclosing environment for the mock fit_fun.
+  # The production runner passes core IDs through `bt_run_adaptive_core_linking()`,
+  # but the mock here references `core_ids` as a free variable.
+  core_ids <- c("A", "B", "C")
+
   judge_fun <- function(pairs) {
     b <- ifelse(true_theta[pairs$ID1] >= true_theta[pairs$ID2], pairs$ID1, pairs$ID2)
     tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = b)
@@ -133,7 +138,7 @@ test_that("bt_run_adaptive_core_linking drift gating can prevent stopping (hits 
     samples = samples,
     batches = list(c("D", "E")),
     judge_fun = judge_fun,
-    core_ids = c("A", "B", "C"),
+    core_ids = core_ids,
     seed_pairs = 11,
     fit_fun = fit_fun,
     engine = "mock",

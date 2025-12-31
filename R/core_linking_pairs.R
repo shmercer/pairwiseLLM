@@ -33,12 +33,18 @@
 #' @param new_ids Optional character vector of IDs designating the "new batch".
 #'   If \code{NULL}, uses \code{setdiff(samples$ID, core_ids)}.
 #' @param round_size Integer number of pairs to select. Can be \code{0}.
-#' @param within_batch_frac Fraction (0..1) of non-audit pairs allocated to new↔new.
-#' @param core_audit_frac Fraction (0..1) of pairs allocated to core↔core.
-#' @param k_neighbors Integer controlling how strongly pairing is localized by
-#' @param forbid_keys Character vector of pair keys (as produced by `pair_key()`) that should not be proposed.
-#'   current \code{theta}: when both sides have non-missing \code{theta}, the
+#' @param within_batch_frac Fraction in \eqn{[0,1]} of non-audit pairs allocated to
+#'   new (within-batch) comparisons.
+#' @param core_audit_frac Fraction in \eqn{[0,1]} of pairs allocated to core
+#'   "audit" comparisons to monitor drift within the core.
+#' @param k_neighbors Integer controlling how strongly pairing is localized by the
+#'   current \code{theta}. When both sides have non-missing \code{theta}, the
 #'   opponent is chosen from among the \code{k_neighbors} closest candidates.
+#'   Use \code{Inf} (or \code{NULL}) to allow all candidates.
+#' @param forbid_keys Character vector of unordered pair keys (as produced by the
+#'   internal helper \code{.unordered_pair_key()}) that
+#'   should never be proposed (in addition to any keys implied by
+#'   \code{existing_pairs} when \code{forbid_repeats = TRUE}).
 #' @param min_judgments Minimum number of total appearances (across both positions)
 #'   an item should have before it is deprioritized. Used as a soft priority rule.
 #' @param existing_pairs Optional data.frame of already-judged pairs. Accepted column
@@ -304,7 +310,15 @@ select_core_link_pairs <- function(samples,
       n_audit <- 0L
       if (core_audit_frac > 0 && length(core_ids) >= 2L) {
         n_audit <- as.integer(round(round_size * core_audit_frac))
-        n_audit <- max(1L, n_audit)
+
+        # IMPORTANT: do not force an audit minimum that would crowd out all
+        # non-audit pairs. With very small rounds (e.g., round_size == 1),
+        # forcing n_audit >= 1 can leave zero capacity for core\u2194new linking
+        # pairs, which breaks anchoring of new IDs and can produce empty per-round
+        # metrics.
+        if (round_size >= 2L && n_audit < 1L) {
+          n_audit <- 1L
+        }
       }
       n_audit <- min(n_audit, round_size)
 
@@ -313,8 +327,12 @@ select_core_link_pairs <- function(samples,
       n_within <- 0L
       if (remain > 0 && within_batch_frac > 0 && length(new_ids) >= 2L) {
         n_within <- as.integer(round(remain * within_batch_frac))
-        # ensure at least 1 within-batch pair when requested and possible
-        n_within <- max(1L, n_within)
+
+        # Similarly, do not force a within-batch minimum that eliminates all
+        # core\u2194new anchoring when the remaining budget is tiny.
+        if (remain >= 2L && n_within < 1L) {
+          n_within <- 1L
+        }
       }
       n_within <- min(n_within, remain)
 
