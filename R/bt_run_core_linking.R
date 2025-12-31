@@ -66,6 +66,18 @@
 #' @param return_diagnostics Passed to \code{fit_fun} when \code{fit_fun = fit_bt_model}.
 #' @param include_residuals Passed to \code{fit_fun} when \code{fit_fun = fit_bt_model}.
 #'
+#' @param fit_engine_running Running fitting engine used to propose the *next* round
+#'   of pairs. One of \code{"bt"} (default; uses the linked BT thetas when available)
+#'   or \code{"rank_centrality"} (Rank Centrality via \code{\link{fit_rank_centrality}}).
+#' @param store_running_estimates Logical; if TRUE (default) store the per-round
+#'   \emph{running} fits in \code{$fits}. When FALSE, store the raw BT fits.
+#' @param rc_smoothing,rc_damping Passed to \code{\link{fit_rank_centrality}} when
+#'   \code{fit_engine_running = "rank_centrality"}.
+#' @param final_refit Logical; if TRUE (default), compute a final combined estimates
+#'   table via \code{\link{compute_final_estimates}} on all accumulated results.
+#' @param final_bt_bias_reduction Logical; if TRUE (default), attempt bias-reduced
+#'   Bradley--Terry (Firth) at the final refit when \code{final_refit = TRUE}.
+#'
 #' @param round_size Target number of pairs proposed per round (per batch).
 #' @param max_rounds_per_batch Maximum rounds to run for each batch.
 #' @param within_batch_frac Fraction of each round allocated to new<->new comparisons.
@@ -232,6 +244,12 @@ bt_run_core_linking <- function(samples,
                                 fit_verbose = FALSE,
                                 return_diagnostics = TRUE,
                                 include_residuals = FALSE,
+                                fit_engine_running = c("bt", "rank_centrality"),
+                                store_running_estimates = TRUE,
+                                rc_smoothing = 0.5,
+                                rc_damping = 0,
+                                final_refit = TRUE,
+                                final_bt_bias_reduction = TRUE,
                                 round_size = 50,
                                 max_rounds_per_batch = 50,
                                 within_batch_frac = 0.25,
@@ -334,6 +352,18 @@ bt_run_core_linking <- function(samples,
     fit_verbose <- isTRUE(.fit_dots$verbose)
   }
   .fit_dots <- .clean_fit_dots(.fit_dots)
+
+  fit_engine_running <- match.arg(fit_engine_running)
+  store_running_estimates <- isTRUE(store_running_estimates)
+  final_refit <- isTRUE(final_refit)
+  final_bt_bias_reduction <- isTRUE(final_bt_bias_reduction)
+
+  if (!is.numeric(rc_smoothing) || length(rc_smoothing) != 1L || is.na(rc_smoothing) || rc_smoothing < 0) {
+    stop("`rc_smoothing` must be a single numeric value >= 0.", call. = FALSE)
+  }
+  if (!is.numeric(rc_damping) || length(rc_damping) != 1L || is.na(rc_damping) || rc_damping < 0 || rc_damping > 1) {
+    stop("`rc_damping` must be a single numeric value in [0, 1].", call. = FALSE)
+  }
 
 
   # Override tier defaults only when the caller explicitly supplies thresholds.
@@ -505,6 +535,18 @@ bt_run_core_linking <- function(samples,
       }
     }
 
+    if (!is.null(chk$fit_engine_running)) {
+      eng_chk <- as.character(chk$fit_engine_running)[1]
+      if (!identical(eng_chk, fit_engine_running)) {
+        .abort_checkpoint_mismatch(
+          field = "fit_engine_running",
+          expected = fit_engine_running,
+          actual = eng_chk,
+          hint = "If you changed the running engine between runs, restart without `resume_from`."
+        )
+      }
+    }
+
     if (!is.null(chk$random_seed)) {
       try(assign(".Random.seed", chk$random_seed, envir = .GlobalEnv), silent = TRUE)
     }
@@ -518,6 +560,7 @@ bt_run_core_linking <- function(samples,
     batch_summary <- tibble::as_tibble(chk$batch_summary %||% tibble::tibble())
 
     current_fit <- chk$current_fit %||% NULL
+    current_fit_running <- chk$current_fit_running %||% NULL
     baseline_fit <- chk$baseline_fit %||% NULL
     baseline_results_n <- as.integer(chk$baseline_results_n %||% NA_integer_)
     seen_ids <- unique(as.character(chk$seen_ids %||% core_ids))
@@ -539,8 +582,11 @@ bt_run_core_linking <- function(samples,
         core_ids = core_ids,
         batches = batches,
         results = results,
+        bt_data = bt_data,
         fits = fits,
         final_fits = final_fits,
+        estimates = estimates,
+        final_models = final_models,
         metrics = metrics_hist,
         state = state_hist,
         batch_summary = batch_summary
@@ -666,6 +712,76 @@ bt_run_core_linking <- function(samples,
     fit
   }
 
+  make_running_fit <- function(bt_data, fit_bt, fit_engine_running, rc_smoothing, rc_damping) {
+    rc_fit <- tryCatch(
+      fit_rank_centrality(
+        bt_data,
+        ids = fit_bt$theta$ID,
+        smoothing = rc_smoothing,
+        damping = rc_damping
+      ),
+      error = function(e) NULL
+    )
+
+    # Prefer linked BT thetas for stability when available.
+    theta_bt_linked <- NULL
+    if (!is.null(fit_bt$theta) && ("theta_linked" %in% names(fit_bt$theta))) {
+      theta_bt_linked <- dplyr::transmute(fit_bt$theta, ID, theta = .data$theta_linked, se = .data$se_linked)
+    }
+
+    theta_bt <- dplyr::select(fit_bt$theta, dplyr::all_of(intersect(c("ID", "theta", "se"), names(fit_bt$theta))))
+    names(theta_bt)[names(theta_bt) == "theta"] <- "theta_bt"
+    names(theta_bt)[names(theta_bt) == "se"] <- "se_bt"
+
+    theta_run <- if (identical(fit_engine_running, "rank_centrality") && !is.null(rc_fit) && !is.null(rc_fit$theta)) {
+      dplyr::transmute(rc_fit$theta, ID, theta = .data$theta)
+    } else if (!is.null(theta_bt_linked)) {
+      theta_bt_linked
+    } else {
+      dplyr::transmute(fit_bt$theta, ID, theta = .data$theta, se = .data$se)
+    }
+
+    # Ensure `se` exists for the running table (used by pair selection).
+    if (!("se" %in% names(theta_run))) {
+      theta_run <- dplyr::left_join(theta_run, dplyr::select(fit_bt$theta, ID, se = .data$se), by = "ID")
+    }
+
+    # Attach both sets of thetas/ranks for transparency.
+    theta_run <- dplyr::left_join(theta_run, theta_bt, by = "ID")
+    if (!is.null(theta_bt_linked)) {
+      theta_run <- dplyr::left_join(
+        theta_run,
+        dplyr::rename(theta_bt_linked, theta_bt_linked = .data$theta, se_bt_linked = .data$se),
+        by = "ID"
+      )
+    }
+
+    if (!is.null(rc_fit) && !is.null(rc_fit$pi) && is.numeric(rc_fit$pi)) {
+      theta_run$pi_rc <- as.numeric(rc_fit$pi[match(theta_run$ID, names(rc_fit$pi))])
+      if ("theta" %in% names(rc_fit$theta)) {
+        theta_run$theta_rc <- as.numeric(rc_fit$theta$theta[match(theta_run$ID, rc_fit$theta$ID)])
+      }
+    } else {
+      theta_run$pi_rc <- NA_real_
+      theta_run$theta_rc <- NA_real_
+    }
+
+    theta_run$rank_running <- .rank_from_score(theta_run$theta)
+    theta_run$rank_bt <- if ("theta_bt" %in% names(theta_run)) .rank_from_score(theta_run$theta_bt) else NA_integer_
+    theta_run$rank_rc <- if ("theta_rc" %in% names(theta_run)) .rank_from_score(theta_run$theta_rc) else NA_integer_
+
+    list(
+      engine_running = fit_engine_running,
+      engine_bt = fit_bt$engine %||% NA_character_,
+      engine_rc = "rank_centrality",
+      reliability = fit_bt$reliability %||% NA_real_,
+      theta = theta_run,
+      diagnostics = fit_bt$diagnostics %||% list(),
+      bt_fit = fit_bt,
+      rc_fit = rc_fit
+    )
+  }
+
   tag_fit <- function(fit, batch_index, round_index, stage, n_results, n_pairs_this_round, new_ids) {
     attr(fit, "bt_run_core_linking") <- list(
       batch_index = batch_index,
@@ -719,6 +835,20 @@ bt_run_core_linking <- function(samples,
         current_fit, batch_start - 1L, round_start - 1L, "resume_recompute",
         nrow(results), 0L, character(0)
       )
+
+      if (is.null(current_fit_running) && !is.null(current_fit$bt_data)) {
+        current_fit_running <- make_running_fit(
+          bt_data = current_fit$bt_data,
+          fit_bt = current_fit,
+          fit_engine_running = fit_engine_running,
+          rc_smoothing = rc_smoothing,
+          rc_damping = rc_damping
+        )
+        current_fit_running <- tag_fit(
+          current_fit_running, batch_start - 1L, round_start - 1L, "resume_recompute",
+          nrow(results), 0L, character(0)
+        )
+      }
     }
   }
 
@@ -730,6 +860,7 @@ bt_run_core_linking <- function(samples,
     batch_summary <- tibble::tibble()
 
     current_fit <- NULL
+    current_fit_running <- NULL
     baseline_fit <- NULL
     baseline_results_n <- NA_integer_
 
@@ -745,7 +876,17 @@ bt_run_core_linking <- function(samples,
       baseline_results_n <- nrow(results)
       current_fit <- apply_linking(current_fit, baseline_fit)
       current_fit <- tag_fit(current_fit, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
-      fits[[length(fits) + 1L]] <- current_fit
+
+      current_fit_running <- make_running_fit(
+        bt_data = current_fit$bt_data,
+        fit_bt = current_fit,
+        fit_engine_running = fit_engine_running,
+        rc_smoothing = rc_smoothing,
+        rc_damping = rc_damping
+      )
+      current_fit_running <- tag_fit(current_fit_running, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
+
+      fits[[length(fits) + 1L]] <- if (store_running_estimates) current_fit_running else current_fit
       final_fits[["bootstrap"]] <- current_fit
 
       st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
@@ -797,7 +938,17 @@ bt_run_core_linking <- function(samples,
       baseline_results_n <- nrow(results)
       current_fit <- apply_linking(current_fit, baseline_fit)
       current_fit <- tag_fit(current_fit, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
-      fits[[length(fits) + 1L]] <- current_fit
+
+      current_fit_running <- make_running_fit(
+        bt_data = current_fit$bt_data,
+        fit_bt = current_fit,
+        fit_engine_running = fit_engine_running,
+        rc_smoothing = rc_smoothing,
+        rc_damping = rc_damping
+      )
+      current_fit_running <- tag_fit(current_fit_running, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
+
+      fits[[length(fits) + 1L]] <- if (store_running_estimates) current_fit_running else current_fit
       final_fits[["bootstrap"]] <- current_fit
 
       st0 <- .bt_round_state(results, ids = ids_all, judge_col = judge)
@@ -825,12 +976,19 @@ bt_run_core_linking <- function(samples,
       core_ids = core_ids,
       batches = batches,
       results = results,
+      fit_engine_running = fit_engine_running,
+      store_running_estimates = store_running_estimates,
+      rc_smoothing = rc_smoothing,
+      rc_damping = rc_damping,
+      final_refit = final_refit,
+      final_bt_bias_reduction = final_bt_bias_reduction,
       fits = if (isTRUE(checkpoint_store_fits)) fits else NULL,
       final_fits = if (isTRUE(checkpoint_store_fits)) final_fits else NULL,
       metrics = metrics_hist,
       state = state_hist,
       batch_summary = batch_summary,
       current_fit = if (isTRUE(checkpoint_store_fits)) current_fit else NULL,
+      current_fit_running = if (isTRUE(checkpoint_store_fits)) current_fit_running else NULL,
       baseline_fit = if (isTRUE(checkpoint_store_fits)) baseline_fit else NULL,
       baseline_results_n = as.integer(baseline_results_n %||% NA_integer_),
       seen_ids = seen_ids,
@@ -931,8 +1089,12 @@ bt_run_core_linking <- function(samples,
     for (round_i in round_seq) {
       rounds_used <- round_i
 
-      theta_for_pairs <- current_fit$theta
-      if (is.null(theta_for_pairs)) {
+      theta_for_pairs <- current_fit_running$theta %||% current_fit$theta
+      if (!is.null(theta_for_pairs)) {
+        # bt_core_link_round expects ID/theta/se (it ignores extra columns).
+        theta_for_pairs <- dplyr::select(theta_for_pairs, dplyr::all_of(intersect(c("ID", "theta", "se"), names(theta_for_pairs))))
+      }
+      if (is.null(theta_for_pairs) || !all(c("ID", "theta", "se") %in% names(theta_for_pairs))) {
         theta_for_pairs <- tibble::tibble(ID = ids_all, theta = rep(0, length(ids_all)), se = rep(1, length(ids_all)))
       }
 
@@ -987,7 +1149,17 @@ bt_run_core_linking <- function(samples,
       current_fit <- apply_linking(current_fit, baseline_fit)
       # Backwards-compatible stage label used throughout the package/tests.
       current_fit <- tag_fit(current_fit, as.integer(batch_i), as.integer(round_i), "round", nrow(results), nrow(pairs), new_ids)
-      fits[[length(fits) + 1L]] <- current_fit
+
+      current_fit_running <- make_running_fit(
+        bt_data = current_fit$bt_data,
+        fit_bt = current_fit,
+        fit_engine_running = fit_engine_running,
+        rc_smoothing = rc_smoothing,
+        rc_damping = rc_damping
+      )
+      current_fit_running <- tag_fit(current_fit_running, as.integer(batch_i), as.integer(round_i), "round", nrow(results), nrow(pairs), new_ids)
+
+      fits[[length(fits) + 1L]] <- if (store_running_estimates) current_fit_running else current_fit
 
       st_all <- .bt_round_state(results, ids = ids_all, judge_col = judge)
       st_new <- .bt_round_state(results, ids = new_ids, judge_col = judge, prefix = "new_")
@@ -1221,12 +1393,37 @@ bt_run_core_linking <- function(samples,
   metrics_hist <- .bt_align_metrics(metrics_hist, se_probs = se_probs)
   state_hist <- .bt_align_state(state_hist)
 
+  bt_data <- NULL
+  estimates <- NULL
+  final_models <- NULL
+  if (nrow(results) > 0L) {
+    bt_data <- build_bt_fun(results, judge)
+  }
+  if (isTRUE(final_refit) && nrow(results) > 0L) {
+    final_out <- compute_final_estimates(
+      results = results,
+      ids = ids_all,
+      bt_bias_reduction = final_bt_bias_reduction,
+      rc_smoothing = rc_smoothing,
+      rc_damping = rc_damping
+    )
+    estimates <- final_out$estimates
+    final_models <- list(
+      bt = final_out$bt_fit,
+      rc = final_out$rc_fit,
+      diagnostics = final_out$diagnostics
+    )
+  }
+
   out <- list(
     core_ids = core_ids,
     batches = batches,
     results = results,
+    bt_data = bt_data,
     fits = fits,
     final_fits = final_fits,
+    estimates = estimates,
+    final_models = final_models,
     metrics = metrics_hist,
     state = state_hist,
     batch_summary = batch_summary,

@@ -28,6 +28,12 @@ bt_run_core_linking(
   fit_verbose = FALSE,
   return_diagnostics = TRUE,
   include_residuals = FALSE,
+  fit_engine_running = c("bt", "rank_centrality"),
+  store_running_estimates = TRUE,
+  rc_smoothing = 0.5,
+  rc_damping = 0,
+  final_refit = TRUE,
+  final_bt_bias_reduction = TRUE,
   round_size = 50,
   max_rounds_per_batch = 50,
   within_batch_frac = 0.25,
@@ -132,6 +138,22 @@ output of \code{judge_fun}). Used as a warm start.}
 \item{return_diagnostics}{Passed to \code{fit_fun} when \code{fit_fun = fit_bt_model}.}
 
 \item{include_residuals}{Passed to \code{fit_fun} when \code{fit_fun = fit_bt_model}.}
+
+\item{fit_engine_running}{Running fitting engine used to propose the \emph{next} round
+of pairs. One of \code{"bt"} (default; uses the linked BT thetas when available)
+or \code{"rank_centrality"} (Rank Centrality via \code{\link{fit_rank_centrality}}).}
+
+\item{store_running_estimates}{Logical; if TRUE (default) store the per-round
+\emph{running} fits in \code{$fits}. When FALSE, store the raw BT fits.}
+
+\item{rc_smoothing, rc_damping}{Passed to \code{\link{fit_rank_centrality}} when
+\code{fit_engine_running = "rank_centrality"}.}
+
+\item{final_refit}{Logical; if TRUE (default), compute a final combined estimates
+table via \code{\link{compute_final_estimates}} on all accumulated results.}
+
+\item{final_bt_bias_reduction}{Logical; if TRUE (default), attempt bias-reduced
+Bradley--Terry (Firth) at the final refit when \code{final_refit = TRUE}.}
 
 \item{round_size}{Target number of pairs proposed per round (per batch).}
 
