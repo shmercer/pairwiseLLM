@@ -30,8 +30,19 @@
   path), while still accepting user-supplied embedding matrices.
 * Judge QA: `judge_fit_summary()` now accepts `top_n = Inf`, and `judge_misfit_judges()` provides
   a simple way to extract misfit judge IDs from a fit.
+* Adaptive/core-linking pair selection:
+  - `select_adaptive_pairs()` now enforces `k_neighbors >= 1` (and accepts `NULL`/`Inf` as a convenience
+    for "use all neighbors").
+  - `select_core_link_pairs()` now accepts `k_neighbors = NULL/Inf` for "use all neighbors" and an
+    advanced `forbid_keys` option to forbid repeats via precomputed pair keys.
+* Drift diagnostics:
+  - `bt_drift_metrics()` now safely returns `NA` drift correlations when there are no complete overlapping
+    element pairs (instead of erroring), and accepts legacy argument names (`theta`, `baseline_theta`,
+    `core_ids`).
+  - Drift aliasing now includes `*_n` and `*_flip_applied` so runner metrics schemas stay aligned.
 
 ## Maintenance
+* Robustness: `bt_stop_metrics()` no longer errors when `ids` include items not yet present in `fit$theta` (common when introducing new IDs); it now returns partial/NA metrics instead of aborting a run.
 * Expanded and updated unit tests for new branches and helper utilities (targeting ≥95% coverage for
   new/changed code).
 
@@ -51,6 +62,8 @@
 ## Bug fixes
 *   The prompt format for anthropic batch comparisons now match the anthropic live format.
 *   Reverse consistency functions can now handle duplicate pairs.
+*   `bt_drift_metrics()` now safely handles cases with no overlapping items (correlations/shift metrics are returned as `NA` rather than erroring), validates `methods` and `abs_shift_probs`, and supports legacy argument names (`theta`, `baseline_theta`, `core_ids`). Legacy calls now default to `prefix = "core_"` so sign-flip safeguards cannot silently produce near `-1` correlations.
+*   Per-round metrics schemas are now consistent between core-linking and adaptive-core-linking runners, including drift `*_n` / `*_flip_applied` fields and pair-count columns (`n_pairs_total`, `n_pairs_new`, `n_missing_better_id`).
 
 ## Breaking Changes
 *   `submit_llm_pairs()` and its backend-specific counterparts now return a **list** containing two elements: `$results` (a tibble of successful comparisons) and `$failed_pairs` (a tibble of inputs that failed). Previous versions returned a single tibble.

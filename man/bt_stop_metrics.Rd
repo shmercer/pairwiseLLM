@@ -6,6 +6,7 @@
 \usage{
 bt_stop_metrics(
   fit,
+  metrics = NULL,
   ids = NULL,
   prev_fit = NULL,
   core_ids = NULL,

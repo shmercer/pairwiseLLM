@@ -42,6 +42,9 @@
 #'   an item should have before it is deprioritized. Used as a soft priority rule.
 #' @param existing_pairs Optional data.frame of already-judged pairs. Accepted column
 #'   schemas are either \code{ID1}/\code{ID2} or \code{object1}/\code{object2}.
+#' @param forbid_keys Optional character vector of precomputed unordered pair keys to forbid.
+#'   This is an advanced option intended for callers who already maintain a key set.
+#'   Keys must match the internal format (as produced by \code{pair_key()}).
 #' @param forbid_repeats Logical; if \code{TRUE} (default) do not repeat unordered pairs.
 #' @param balance_positions Logical; if \code{TRUE} (default), attempt to balance
 #'   first vs second position frequencies.
@@ -88,6 +91,7 @@ select_core_link_pairs <- function(samples,
                                    k_neighbors = 10,
                                    min_judgments = 12,
                                    existing_pairs = NULL,
+                                   forbid_keys = character(0),
                                    forbid_repeats = TRUE,
                                    balance_positions = TRUE,
                                    seed = NULL) {
@@ -168,6 +172,11 @@ select_core_link_pairs <- function(samples,
       existing <- dplyr::filter(existing, .data$ID1 %in% ids, .data$ID2 %in% ids, .data$ID1 != .data$ID2)
 
       existing_keys <- pair_key(existing$ID1, existing$ID2)
+      # Combine with caller-provided forbids.
+      if (is.null(forbid_keys)) forbid_keys <- character(0)
+      if (!is.character(forbid_keys)) forbid_keys <- as.character(forbid_keys)
+      forbid_keys <- forbid_keys[!is.na(forbid_keys)]
+      existing_keys <- unique(c(existing_keys, forbid_keys))
 
       # counts + position balance from existing pairs
       all_seen <- c(existing$ID1, existing$ID2)

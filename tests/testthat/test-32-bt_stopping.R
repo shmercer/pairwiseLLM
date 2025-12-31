@@ -293,3 +293,40 @@ test_that("bt_should_stop_tier applies tier defaults and allows overrides", {
   res_override <- bt_should_stop_tier(m, tier = "good", reliability_target = 0.90)
   expect_false(res_override$stop)
 })
+
+
+test_that("bt_stop_metrics tolerates ids not present in fit$theta", {
+  fit <- list(
+    theta = tibble::tibble(
+      ID = c("A", "B", "C"),
+      theta = c(0.10, 0.20, 0.30),
+      se = c(0.05, 0.10, 0.15)
+    )
+  )
+
+  # Provide baseline metrics (these get recomputed when ids is supplied).
+  metrics <- list(
+    reliability = 0.90,
+    sepG = 2.00,
+    rel_se_p90 = 0.20,
+    rel_se_p95 = 0.20,
+    rel_se_max = 0.20,
+    rel_se_mean = 0.20,
+    rel_se_sd = 0.20,
+    rel_se_median = 0.20,
+    rel_se_min = 0.20
+  )
+
+  out_ab <- bt_stop_metrics(fit, metrics, ids = c("A", "B"))
+  expect_true(is.data.frame(out_ab))
+  expect_equal(nrow(out_ab), 1)
+
+  out_abz <- bt_stop_metrics(fit, metrics, ids = c("A", "B", "Z"))
+  expect_true(is.data.frame(out_abz))
+  expect_equal(nrow(out_abz), 1)
+
+  # Missing IDs should not change summaries for the IDs that *are* present.
+  expect_equal(out_abz$reliability, out_ab$reliability)
+  expect_equal(out_abz$sepG, out_ab$sepG)
+  expect_equal(out_abz$rel_se_p90, out_ab$rel_se_p90)
+})

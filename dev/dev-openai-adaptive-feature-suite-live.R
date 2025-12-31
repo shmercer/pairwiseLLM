@@ -14,12 +14,14 @@
 #   - Keep costs low: uses gpt-4o-mini and small batches.
 #   - Embeddings are generated as a deterministic random matrix by default
 #     to avoid Python/reticulate setup in a smoke test.
+#   - This script writes per-scenario diagnostics to dev/feature_suite_outputs/.
 
 suppressPackageStartupMessages({
   library(dplyr)
   library(tibble)
   library(purrr)
   library(glue)
+  library(readr)
   library(devtools)
 })
 
@@ -28,6 +30,33 @@ devtools::load_all()
 if (nchar(Sys.getenv("OPENAI_API_KEY")) == 0L) {
   stop("OPENAI_API_KEY env var is not set.", call. = FALSE)
 }
+
+# ----------------------------
+# Output directory
+# ----------------------------
+.ts <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+.ts_compact <- function() format(Sys.time(), "%Y%m%d_%H%M%S")
+.dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
+
+OUT_DIR <- file.path(getwd(), "dev", "feature_suite_outputs", paste0("run_", .ts_compact()))
+dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+.dbg("Feature-suite outputs will be written to: ", OUT_DIR)
+
+write_bt_run_diagnostics <- function(out, dir, name) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  saveRDS(out, file.path(dir, paste0(name, "_out.rds")))
+  if (!is.null(out$metrics)) write_csv(out$metrics, file.path(dir, paste0(name, "_metrics.csv")))
+  if (!is.null(out$state)) write_csv(out$state, file.path(dir, paste0(name, "_state.csv")))
+  if (!is.null(out$results)) write_csv(out$results, file.path(dir, paste0(name, "_results.csv")))
+  if (!is.null(out$batch_summary)) write_csv(out$batch_summary, file.path(dir, paste0(name, "_batch_summary.csv")))
+  invisible(TRUE)
+}
+
+# Script-level env so judge callbacks can write per-call snapshots
+.FS_ENV <- new.env(parent = emptyenv())
+.FS_ENV$scenario <- NA_character_
+.FS_ENV$judge_call <- 0L
+.FS_ENV$out_dir <- OUT_DIR
 
 # ----------------------------
 # Global knobs (keep it cheap)
@@ -46,14 +75,13 @@ BATCH_SIZE <- 5
 N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
-.ts <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-.dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
 
 .short <- function(x, n = 220) {
   x <- ifelse(is.na(x), NA_character_, as.character(x))
   ifelse(nchar(x) <= n, x, paste0(substr(x, 1, n), "…"))
 }
 
+# Robust summary that doesn't depend on validate_backend_results' internal schema.
 .print_results_summary <- function(res, label = "results") {
   if (is.null(res)) {
     .dbg(label, ": <NULL>")
@@ -61,18 +89,23 @@ N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
   }
   res <- tibble::as_tibble(res)
 
-  rep <- validate_backend_results(
-    res,
-    backend = "openai",
-    normalize_winner = TRUE,
-    strict = FALSE,
-    return_report = TRUE
-  )
+  n_rows <- nrow(res)
+  n_missing_winner <- if ("better_id" %in% names(res)) sum(is.na(res$better_id) | res$better_id == "", na.rm = TRUE) else NA_integer_
+  n_missing_id <- 0L
+  if (all(c("ID1", "ID2") %in% names(res))) {
+    n_missing_id <- sum(is.na(res$ID1) | res$ID1 == "" | is.na(res$ID2) | res$ID2 == "", na.rm = TRUE)
+  } else {
+    n_missing_id <- NA_integer_
+  }
+  n_invalid_winner <- NA_integer_
+  if (all(c("ID1", "ID2", "better_id") %in% names(res))) {
+    n_invalid_winner <- sum(!(res$better_id %in% c(res$ID1, res$ID2)) & !(is.na(res$better_id) | res$better_id == ""), na.rm = TRUE)
+  }
 
-  .dbg(label, ": n=", rep$n_rows,
-       " | missing_winner=", rep$n_missing_winner,
-       " | missing_id=", rep$n_missing_id,
-       " | invalid_winner=", rep$n_invalid_winner)
+  .dbg(label, ": n=", n_rows,
+       " | missing_winner=", n_missing_winner,
+       " | missing_id=", n_missing_id,
+       " | invalid_winner=", n_invalid_winner)
 
   if ("status_code" %in% names(res)) {
     sc <- sort(table(res$status_code), decreasing = TRUE)
@@ -88,7 +121,7 @@ N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
   }
 
   bad <- res %>%
-    mutate(.missing_winner = is.na(better_id) | better_id == "") %>%
+    mutate(.missing_winner = ("better_id" %in% names(res)) && (is.na(better_id) | better_id == "")) %>%
     filter(.missing_winner) %>%
     select(any_of(c("ID1", "ID2", "better_id", "better_sample", "status_code", "error_message", "content"))) %>%
     head(3)
@@ -97,7 +130,33 @@ N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
     print(bad %>% mutate(content = .short(content, 240)))
   }
 
-  invisible(rep)
+  invisible(list(
+    n_rows = n_rows,
+    n_missing_winner = n_missing_winner,
+    n_missing_id = n_missing_id,
+    n_invalid_winner = n_invalid_winner
+  ))
+}
+
+.write_judge_snapshot <- function(out, pairs, label = "judge") {
+  scn <- .FS_ENV$scenario %||% "unknown"
+  .FS_ENV$judge_call <- .FS_ENV$judge_call + 1L
+  k <- sprintf("%02d", .FS_ENV$judge_call)
+
+  dir <- file.path(.FS_ENV$out_dir, scn, "judge_calls")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+
+  # Save pairs proposed and results returned for this judge call.
+  if (!is.null(pairs)) {
+    try(write_csv(as_tibble(pairs), file.path(dir, paste0(label, "_", k, "_pairs.csv"))), silent = TRUE)
+  }
+  if (!is.null(out$results)) {
+    try(write_csv(as_tibble(out$results), file.path(dir, paste0(label, "_", k, "_results.csv"))), silent = TRUE)
+  }
+  # Raw output (if present) can be large; save as RDS for post-mortem.
+  try(saveRDS(out, file.path(dir, paste0(label, "_", k, "_raw.rds"))), silent = TRUE)
+
+  invisible(TRUE)
 }
 
 # ----------------------------
@@ -126,11 +185,13 @@ make_samples <- function(n_total) {
 
 samples <- make_samples(N_TOTAL)
 
-# Batches: first batch contains core IDs (so runner prints 0 new), then add new IDs.
+# Batches:
+# `bt_run_adaptive_core_linking()` expects each element to be the *new IDs introduced in that batch*.
+# The runner always has access to `core_ids` separately, so we do NOT include core IDs in batch 1.
 core_ids_default <- samples$ID[seq_len(CORE_SIZE)]
 rest_ids <- setdiff(samples$ID, core_ids_default)
 batch_ids <- split(rest_ids, ceiling(seq_along(rest_ids) / BATCH_SIZE))
-batches_default <- c(list(core_ids_default), unname(batch_ids))
+batches_default <- unname(batch_ids)
 
 # ----------------------------
 # Embeddings (deterministic)
@@ -184,6 +245,8 @@ judge_openai_live <- function(pairs) {
 
   .dbg("judge_openai_live: elapsed=", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2), "s")
   .print_results_summary(out$results, label = "openai_live")
+  .write_judge_snapshot(out, pairs, label = "openai_live")
+
   out
 }
 
@@ -215,6 +278,9 @@ summarize_run <- function(out, scenario) {
 run_scenario <- function(scn) {
   .dbg("===== Scenario: ", scn$name, " =====")
 
+  .FS_ENV$scenario <- scn$name
+  .FS_ENV$judge_call <- 0L
+
   # Merge defaults with scenario overrides
   args <- modifyList(
     list(
@@ -243,7 +309,13 @@ run_scenario <- function(scn) {
       allocation_fun = NULL,
 
       # Stopping defaults
-      stopping_tier = "strong"
+      stopping_tier = "strong",
+
+      # Selection defaults for a smoke test:
+      forbid_repeats = TRUE,
+      balance_positions = TRUE,
+      k_neighbors = Inf,
+      min_judgments = NULL
     ),
     scn$args
   )
@@ -265,6 +337,9 @@ run_scenario <- function(scn) {
     }
   )
 
+  # Persist scenario outputs
+  write_bt_run_diagnostics(out, file.path(OUT_DIR, scn$name), scn$name)
+
   # Print a compact end summary
   .dbg("Finished: ", scn$name,
        " | stop_reason=", out$stop_reason %||% "<NA>",
@@ -278,13 +353,13 @@ run_scenario <- function(scn) {
       "reliability", "sepG", "rel_se_p90",
       "item_misfit_prop", "judge_misfit_prop",
       "linking_applied", "linking_reason",
-      "core_n", "n_pairs_proposed"
+      "core_n", "n_pairs_proposed", "n_pairs_total", "n_pairs_new",
+      "n_missing_better_id"
     ))))
   }
 
   out
 }
-
 
 # ----------------------------
 # Scenario matrix
@@ -360,7 +435,6 @@ scenarios <- list(
   )
 )
 
-
 # ----------------------------
 # Execute
 # ----------------------------
@@ -380,5 +454,9 @@ summary_tbl <- bind_rows(rows) %>%
 
 .dbg("\n===== Feature-suite summary =====")
 print(summary_tbl)
+
+# Save overall summary as well.
+try(write_csv(summary_tbl, file.path(OUT_DIR, "feature_suite_summary.csv")), silent = TRUE)
+try(saveRDS(list(summary = summary_tbl, outs = outs), file.path(OUT_DIR, "feature_suite_full_outs.rds")), silent = TRUE)
 
 invisible(list(summary = summary_tbl, outs = outs))

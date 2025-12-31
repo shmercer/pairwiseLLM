@@ -67,6 +67,7 @@
 #'
 #' @export
 bt_stop_metrics <- function(fit,
+                            metrics = NULL,
                             ids = NULL,
                             prev_fit = NULL,
                             core_ids = NULL,
@@ -79,6 +80,17 @@ bt_stop_metrics <- function(fit,
     )
   }
 
+  # Compatibility shim: older callers sometimes used
+  #   bt_stop_metrics(fit, ids)
+  # while newer code may use
+  #   bt_stop_metrics(fit, metrics, ids = ...)
+  # If the 2nd positional argument looks like an ids vector and `ids` is not
+  # explicitly provided, treat it as `ids`.
+  if (!is.null(metrics) && is.null(ids) && is.character(metrics)) {
+    ids <- metrics
+    metrics <- NULL
+  }
+
   theta_tbl <- tibble::as_tibble(fit$theta)
   theta_tbl_all <- theta_tbl
   n_total_items <- nrow(theta_tbl_all)
@@ -89,16 +101,31 @@ bt_stop_metrics <- function(fit,
   }
 
   # Optional: compute precision summaries on a subset of IDs
+  # Optional: compute precision summaries on a subset of IDs.
+  #
+  # IMPORTANT: During adaptive runs, it's normal for newly introduced IDs to not yet
+  # appear in `fit$theta` until they've been judged at least once. In that case we
+  # keep those IDs as explicit NA rows so downstream summary code yields NA/partial
+  # metrics instead of aborting the whole run.
   if (!is.null(ids)) {
     if (!is.character(ids)) {
       stop("`ids` must be a character vector when provided.", call. = FALSE)
     }
     ids_u <- unique(ids)
-    missing_ids <- setdiff(ids_u, as.character(theta_tbl_all$ID))
-    if (length(missing_ids) > 0L) {
+    idx <- match(ids_u, as.character(theta_tbl_all$ID))
+
+    # If *none* of the requested ids are present, fail fast (tests expect this).
+    # If *some* are present, keep missing ones as explicit NA rows so summaries
+    # can still be computed for the overlapping subset.
+    if (all(is.na(idx))) {
       stop("All `ids` must be present in `fit$theta$ID`.", call. = FALSE)
     }
-    theta_tbl <- theta_tbl_all[match(ids_u, as.character(theta_tbl_all$ID)), , drop = FALSE]
+
+    theta_tbl <- theta_tbl_all[idx, , drop = FALSE]
+    # Fill IDs for rows created by NA match so downstream checks can refer to them.
+    if (anyNA(idx)) {
+      theta_tbl$ID[is.na(theta_tbl$ID)] <- ids_u[is.na(idx)]
+    }
   }
 
   required_cols <- c("ID", "theta", "se")

@@ -7,6 +7,7 @@
 # Notes:
 #   - The runners forward `...` to `fit_fun`. Do NOT pass `verbose=`; use `fit_verbose=`.
 #   - This file is meant to be run interactively (not as part of tests).
+#   - Outputs are written to dev/smoke_outputs/ for post-mortem debugging.
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -22,7 +23,6 @@ suppressPackageStartupMessages({
 devtools::load_all()
 
 # ---- Config ----
-# OpenAI API key must be present for live/batch.
 if (nchar(Sys.getenv("OPENAI_API_KEY")) == 0L) {
   stop("OPENAI_API_KEY env var is not set.", call. = FALSE)
 }
@@ -33,31 +33,25 @@ BOOTSTRAP_N <- 12
 ROUND_SIZE <- 8
 MAX_ROUNDS <- 3
 
-# ---- Helpers ----
-
-# Local null-coalescing helper (avoids relying on rlang for smoke tests)
 `%||%` <- function(x, y) if (is.null(x)) y else x
 .ts <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+.ts_compact <- function() format(Sys.time(), "%Y%m%d_%H%M%S")
+.dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
+
+# Output dir
+out_dir <- file.path(getwd(), "dev", "smoke_outputs", paste0("smoke_", .ts_compact()))
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+.dbg("Smoke outputs will be written to: ", out_dir)
 
 write_bt_run_diagnostics <- function(out, dir, name) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-  # Always save the full object for post-mortem debugging.
   saveRDS(out, file.path(dir, paste0(name, "_out.rds")))
-  if (!is.null(out$metrics)) {
-    write_csv(out$metrics, file.path(dir, paste0(name, "_metrics.csv")))
-  }
-  if (!is.null(out$state)) {
-    write_csv(out$state, file.path(dir, paste0(name, "_state.csv")))
-  }
-  if (!is.null(out$results)) {
-    write_csv(out$results, file.path(dir, paste0(name, "_results.csv")))
-  }
-  if (!is.null(out$batch_summary)) {
-    write_csv(out$batch_summary, file.path(dir, paste0(name, "_batch_summary.csv")))
-  }
+  if (!is.null(out$metrics)) write_csv(out$metrics, file.path(dir, paste0(name, "_metrics.csv")))
+  if (!is.null(out$state)) write_csv(out$state, file.path(dir, paste0(name, "_state.csv")))
+  if (!is.null(out$results)) write_csv(out$results, file.path(dir, paste0(name, "_results.csv")))
+  if (!is.null(out$batch_summary)) write_csv(out$batch_summary, file.path(dir, paste0(name, "_batch_summary.csv")))
   invisible(TRUE)
 }
-.dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
 
 .short <- function(x, n = 240) {
   x <- ifelse(is.na(x), NA_character_, as.character(x))
@@ -71,19 +65,18 @@ write_bt_run_diagnostics <- function(out, dir, name) {
   }
   res <- tibble::as_tibble(res)
 
-  # Basic backend validation summary (non-strict; allow missing winners so we can inspect)
-  rep <- validate_backend_results(
-    res,
-    backend = backend,
-    normalize_winner = TRUE,
-    strict = FALSE,
-    return_report = TRUE
-  )
+  n_rows <- nrow(res)
+  n_missing_winner <- if ("better_id" %in% names(res)) sum(is.na(res$better_id) | res$better_id == "", na.rm = TRUE) else NA_integer_
+  n_missing_id <- if (all(c("ID1","ID2") %in% names(res))) sum(is.na(res$ID1) | res$ID1 == "" | is.na(res$ID2) | res$ID2 == "", na.rm = TRUE) else NA_integer_
+  n_invalid_winner <- NA_integer_
+  if (all(c("ID1", "ID2", "better_id") %in% names(res))) {
+    n_invalid_winner <- sum(!(res$better_id %in% c(res$ID1, res$ID2)) & !(is.na(res$better_id) | res$better_id == ""), na.rm = TRUE)
+  }
 
-  .dbg(label, ": n=", rep$n_rows,
-       " | missing_winner=", rep$n_missing_winner,
-       " | missing_id=", rep$n_missing_id,
-       " | invalid_winner=", rep$n_invalid_winner)
+  .dbg(label, ": n=", n_rows,
+       " | missing_winner=", n_missing_winner,
+       " | missing_id=", n_missing_id,
+       " | invalid_winner=", n_invalid_winner)
 
   if ("status_code" %in% names(res)) {
     sc <- sort(table(res$status_code), decreasing = TRUE)
@@ -100,9 +93,8 @@ write_bt_run_diagnostics <- function(out, dir, name) {
     }
   }
 
-  # Show a few problematic rows
   bad <- res %>%
-    mutate(.missing_winner = is.na(better_id) | better_id == "") %>%
+    mutate(.missing_winner = ("better_id" %in% names(res)) && (is.na(better_id) | better_id == "")) %>%
     filter(.missing_winner) %>%
     select(any_of(c("ID1", "ID2", "better_id", "better_sample", "status_code", "error_message", "content"))) %>%
     head(5)
@@ -112,11 +104,15 @@ write_bt_run_diagnostics <- function(out, dir, name) {
     print(bad %>% mutate(content = .short(content, 280)))
   }
 
-  invisible(rep)
+  invisible(list(
+    n_rows = n_rows,
+    n_missing_winner = n_missing_winner,
+    n_missing_id = n_missing_id,
+    n_invalid_winner = n_invalid_winner
+  ))
 }
 
 # ---- Minimal samples ----
-# For repeatability, keep texts short and obviously rankable.
 samples <- tibble(
   ID = sprintf("S%02d", 1:N_CORE),
   text = c(
@@ -150,13 +146,12 @@ judge_openai_live <- function(pairs) {
     prompt_template = tmpl,
     endpoint = "chat.completions",
     temperature = 0,
-    include_raw = TRUE,     # keep raw for debugging
+    include_raw = TRUE,
     status_every = 1L
   )
 
   .dbg("judge_openai_live: elapsed=", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2), "s")
   .print_results_summary(out$results, backend = "openai", label = "openai_live")
-
   out
 }
 
@@ -176,7 +171,6 @@ judge_openai_batch <- function(pairs) {
   .dbg("Submitted batch: ", batch$batch_id %||% "<no batch_id>",
        " | status=", batch$status %||% "<no status>")
 
-  # Poll a little (adjust as needed)
   Sys.sleep(20)
 
   res <- llm_download_batch_results(batch)
@@ -190,12 +184,12 @@ judge_openai_batch <- function(pairs) {
 run_one <- function(judge_fun, label) {
   .dbg("===== Running: ", label, " =====")
 
-  # Single batch containing all sample IDs (smoke-test default)
-  batches <- list(samples$ID)
-
   # Provide explicit core IDs to bypass select_core_set() (and any embeddings requirements).
-  # Use a strict subset so the batch actually introduces "new IDs".
   core_ids <- samples$ID[seq_len(min(5L, nrow(samples)))]
+  new_ids <- setdiff(samples$ID, core_ids)
+
+  # Runner expects batches to be the *new IDs introduced per batch*.
+  batches <- list(new_ids)
 
   out <- tryCatch(
     {
@@ -204,8 +198,7 @@ run_one <- function(judge_fun, label) {
         batches = batches,
         judge_fun = judge_fun,
 
-        core_ids = core_ids,     # ✅ bypass select_core_set()
-        # core_method/core_size omitted on purpose
+        core_ids = core_ids,
 
         engine = "auto",
         fit_verbose = TRUE,
@@ -217,8 +210,8 @@ run_one <- function(judge_fun, label) {
         # Debug-friendly defaults:
         forbid_repeats = TRUE,
         balance_positions = TRUE,
-        k_neighbors = Inf,      # treat as "all" in the updated selection code
-        min_judgments = NULL,   # rely on reliability-based stopping by default
+        k_neighbors = Inf,
+        min_judgments = NULL,
 
         linking = "never",
         seed_pairs = 123,
@@ -243,28 +236,26 @@ run_one <- function(judge_fun, label) {
   )
 
   .dbg("Finished: ", label)
-  .dbg("Results rows: ", nrow(out$results))
+  .dbg("Results rows: ", if (!is.null(out$results)) nrow(out$results) else NA_integer_)
 
-  # Runner outputs differ; safest is to check final_fits
-  if (!is.null(out$final_fits) && length(out$final_fits) > 0L) {
-    last_fit <- out$final_fits[[length(out$final_fits)]]
-    if (!is.null(last_fit$theta)) {
-      .dbg("Final fit theta head:")
-      print(head(last_fit$theta))
-    }
+  if (!is.null(out$metrics) && nrow(out$metrics) > 0L) {
+    last <- tail(out$metrics, 1)
+    mj <- if ("min_judgments" %in% names(last)) last$min_judgments else NA
+    .dbg("Last metrics: batch=", last$batch_index %||% NA,
+         " round=", last$round_index %||% NA,
+         " stop_reason=", out$stop_reason %||% NA,
+         " | min_judgments=", mj)
   }
 
   out
 }
 
 # ---- Execute ----
-# Live (recommended first for debugging)
 out_live <- run_one(judge_openai_live, "adaptive_core_linking + openai_live")
 
-# Persist diagnostics for reproducibility / post-mortems.
-out_dir <- file.path(getwd(), "dev", "smoke_outputs", paste0("smoke_", format(Sys.time(), "%Y%m%d_%H%M%S")))
 write_bt_run_diagnostics(out_live, out_dir, "openai_live")
 message("\nSaved smoke test outputs to: ", out_dir)
 
 # Batch (optional; slower)
 # out_batch <- run_one(judge_openai_batch, "adaptive_core_linking + openai_batch")
+# write_bt_run_diagnostics(out_batch, out_dir, "openai_batch")

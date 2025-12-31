@@ -1184,6 +1184,8 @@ bt_run_adaptive_core_linking <- function(samples,
       m$n_new_new <- sum(pairs_next$pair_type == "new_new")
       m$n_core_core <- sum(pairs_next$pair_type == "core_core")
 
+      m <- .bt_order_metrics(m)
+
       metrics_rows[[length(metrics_rows) + 1L]] <- m
 
       state_rows[[length(state_rows) + 1L]] <- state_row(

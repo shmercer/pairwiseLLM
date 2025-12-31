@@ -32,7 +32,8 @@ If \code{NULL} (default), the function assumes no prior pairs.}
 
 \item{n_pairs}{Integer number of new pairs to return for the next round.}
 
-\item{k_neighbors}{Integer number of adjacent neighbors (in sorted-theta order)
+\item{k_neighbors}{Integer number of adjacent neighbors (in sorted-theta order).
+Use \code{NULL} or \code{Inf} to consider all neighbors.
 to consider for each item when generating candidate pairs. Default is 10.}
 
 \item{min_judgments}{Integer minimum desired number of judgments per item.

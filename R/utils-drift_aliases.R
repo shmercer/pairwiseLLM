@@ -7,6 +7,8 @@
   if (!("core_n" %in% names(m))) m$core_n <- NA_integer_
 
   suffixes <- c(
+    "n",
+    "flip_applied",
     "mean_abs_shift",
     "max_abs_shift",
     "mean_signed_shift",

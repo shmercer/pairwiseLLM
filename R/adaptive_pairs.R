@@ -28,7 +28,8 @@
 #'   }
 #'   If \code{NULL} (default), the function assumes no prior pairs.
 #' @param n_pairs Integer number of new pairs to return for the next round.
-#' @param k_neighbors Integer number of adjacent neighbors (in sorted-theta order)
+#' @param k_neighbors Integer number of adjacent neighbors (in sorted-theta order).
+#'   Use \code{NULL} or \code{Inf} to consider all neighbors.
 #'   to consider for each item when generating candidate pairs. Default is 10.
 #' @param min_judgments Integer minimum desired number of judgments per item.
 #'   Items below this threshold are prioritized. Default is 12.
@@ -107,6 +108,17 @@ select_adaptive_pairs <- function(samples,
   }
   if (!is.numeric(k_neighbors) || length(k_neighbors) != 1L || is.na(k_neighbors)) {
     stop("`k_neighbors` must be a positive integer, or NULL/Inf for all neighbors.", call. = FALSE)
+  }
+  # If finite, require >= 1.
+  if (is.finite(k_neighbors)) {
+    if (k_neighbors < 1) {
+      stop("`k_neighbors` must be positive (>= 1), or NULL/Inf for all neighbors.", call. = FALSE)
+    }
+    # Ensure integer-like.
+    if (abs(k_neighbors - round(k_neighbors)) > 1e-12) {
+      stop("`k_neighbors` must be an integer (or NULL/Inf for all neighbors).", call. = FALSE)
+    }
+    k_neighbors <- as.integer(k_neighbors)
   }
 
   # Allow NULL to disable the minimum-judgments heuristic.

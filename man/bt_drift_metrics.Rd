@@ -5,11 +5,18 @@
 \title{Compute drift metrics between two theta sets}
 \usage{
 bt_drift_metrics(
-  current,
+  current = NULL,
   baseline = NULL,
   previous = NULL,
   ids = NULL,
-  prefix = ""
+  prefix = "",
+  flip_to_match = TRUE,
+  abs_shift_probs = c(0.9, 0.95),
+  methods = c("pearson", "spearman"),
+  theta = NULL,
+  baseline_theta = NULL,
+  core_ids = NULL,
+  ...
 )
 }
 \arguments{

@@ -961,6 +961,11 @@ bt_run_core_linking <- function(samples,
         fit_bounds = fit_bounds
       )
 
+      # Counts used by adaptive runner (kept here so metrics schemas match across runners).
+      metrics$n_pairs_total <- st$n_unique_unordered_pairs_in_ids
+      metrics$n_pairs_new <- st$new_n_unique_unordered_pairs_in_ids
+      metrics$n_missing_better_id <- st$n_missing_better_id
+
       # Add bookkeeping / allocation columns (do NOT pass these into bt_stop_metrics())
       metrics <- dplyr::mutate(
         metrics,
@@ -1014,6 +1019,7 @@ bt_run_core_linking <- function(samples,
       # A3: ensure both naming schemes exist (core_* and linking_*)
       # (Requires .bt_add_drift_aliases() to exist; see helper below.)
       metrics <- .bt_add_drift_aliases(metrics)
+      metrics <- .bt_order_metrics(metrics)
 
       metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 
