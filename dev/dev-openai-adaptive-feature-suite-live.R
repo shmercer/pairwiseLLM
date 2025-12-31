@@ -36,7 +36,15 @@ if (nchar(Sys.getenv("OPENAI_API_KEY")) == 0L) {
 .stamp <- function() format(Sys.time(), "%Y%m%d_%H%M%S")
 .dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
 
-OUT_DIR <- file.path(getwd(), "dev", "feature_suite_outputs", paste0("run_", .stamp()))
+# Where to write feature-suite artifacts. You can override this in two ways:
+#   - options(pairwiseLLM.feature_suite_output_root = "./some/dir")
+#   - env var PAIRWISELLM_FEATURE_SUITE_OUTPUT_ROOT
+# Default is ./dev-output
+OUTPUT_ROOT <- getOption(
+  "pairwiseLLM.feature_suite_output_root",
+  Sys.getenv("PAIRWISELLM_FEATURE_SUITE_OUTPUT_ROOT", unset = file.path(getwd(), "dev-output"))
+)
+OUT_DIR <- file.path(normalizePath(OUTPUT_ROOT, mustWork = FALSE), paste0("run_", .stamp()))
 dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 .dbg("Feature-suite outputs will be written to: ", OUT_DIR)
 
@@ -99,6 +107,12 @@ N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
       )
     }
   )
+
+  # validate_backend_results returns {data, report}. For logging we want the
+  # report object.
+  if (is.list(rep) && !is.null(rep$report)) {
+    rep <- rep$report
+  }
 
   .dbg(label, ": n=", rep$n_rows,
        " | missing_winner=", rep$n_missing_winner,
@@ -377,7 +391,8 @@ scenarios <- list(
     args = list(
       core_ids = NULL,
       core_method = "pam",
-      core_size = CORE_SIZE
+      core_size = CORE_SIZE,
+      embeddings = embeddings_dummy
     )
   ),
   list(

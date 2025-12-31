@@ -49,10 +49,6 @@ an item should have before it is deprioritized. Used as a soft priority rule.}
 \item{existing_pairs}{Optional data.frame of already-judged pairs. Accepted column
 schemas are either \code{ID1}/\code{ID2} or \code{object1}/\code{object2}.}
 
-\item{forbid_keys}{Optional character vector of precomputed unordered pair keys to forbid.
-This is an advanced option intended for callers who already maintain a key set.
-Keys must match the internal format (as produced by \code{pair_key()}).}
-
 \item{forbid_repeats}{Logical; if \code{TRUE} (default) do not repeat unordered pairs.}
 
 \item{balance_positions}{Logical; if \code{TRUE} (default), attempt to balance

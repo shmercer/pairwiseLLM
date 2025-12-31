@@ -943,13 +943,14 @@ bt_run_core_linking <- function(samples,
       current_fit <- compute_fit(results)
       # Link to the baseline core scale (optionally, based on drift).
       current_fit <- apply_linking(current_fit, baseline_fit)
-      current_fit <- tag_fit(current_fit, as.integer(batch_i), as.integer(round_i), "batch_round", nrow(results), nrow(pairs), new_ids)
+      # Backwards-compatible stage label used throughout the package/tests.
+      current_fit <- tag_fit(current_fit, as.integer(batch_i), as.integer(round_i), "round", nrow(results), nrow(pairs), new_ids)
       fits[[length(fits) + 1L]] <- current_fit
 
       st_all <- .bt_round_state(results, ids = ids_all, judge_col = judge)
       st_new <- .bt_round_state(results, ids = new_ids, judge_col = judge, prefix = "new_")
       st <- dplyr::bind_cols(st_all, st_new)
-      st <- dplyr::mutate(st, batch_index = as.integer(batch_i), round_index = as.integer(round_i), stage = "batch_round", stop = FALSE, stop_reason = NA_character_, n_new_ids = as.integer(length(new_ids)))
+      st <- dplyr::mutate(st, batch_index = as.integer(batch_i), round_index = as.integer(round_i), stage = "round", stop = FALSE, stop_reason = NA_character_, n_new_ids = as.integer(length(new_ids)))
       state_hist <- dplyr::bind_rows(state_hist, st)
 
       metrics <- bt_stop_metrics(
@@ -971,7 +972,7 @@ bt_run_core_linking <- function(samples,
         metrics,
         batch_index = batch_i,
         round_index = round_i,
-        stage = "batch_round",
+        stage = "round",
         within_batch_frac = within_batch_frac_this,
         core_audit_frac = core_audit_frac_this,
         n_pairs_proposed = nrow(pairs),
@@ -1034,7 +1035,7 @@ bt_run_core_linking <- function(samples,
 
       if (!isTRUE(stop_dec$stop) && !is.null(allocation_fun)) {
         alloc_state <- list(
-          stage = "batch_round",
+          stage = "round",
           batch_index = as.integer(batch_i),
           round_index = as.integer(round_i),
           within_batch_frac = within_batch_frac_this,

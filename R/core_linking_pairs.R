@@ -42,9 +42,6 @@
 #'   an item should have before it is deprioritized. Used as a soft priority rule.
 #' @param existing_pairs Optional data.frame of already-judged pairs. Accepted column
 #'   schemas are either \code{ID1}/\code{ID2} or \code{object1}/\code{object2}.
-#' @param forbid_keys Optional character vector of precomputed unordered pair keys to forbid.
-#'   This is an advanced option intended for callers who already maintain a key set.
-#'   Keys must match the internal format (as produced by \code{pair_key()}).
 #' @param forbid_repeats Logical; if \code{TRUE} (default) do not repeat unordered pairs.
 #' @param balance_positions Logical; if \code{TRUE} (default), attempt to balance
 #'   first vs second position frequencies.
@@ -172,11 +169,16 @@ select_core_link_pairs <- function(samples,
       existing <- dplyr::filter(existing, .data$ID1 %in% ids, .data$ID2 %in% ids, .data$ID1 != .data$ID2)
 
       existing_keys <- pair_key(existing$ID1, existing$ID2)
-      # Combine with caller-provided forbids.
-      if (is.null(forbid_keys)) forbid_keys <- character(0)
-      if (!is.character(forbid_keys)) forbid_keys <- as.character(forbid_keys)
-      forbid_keys <- forbid_keys[!is.na(forbid_keys)]
-      existing_keys <- unique(c(existing_keys, forbid_keys))
+
+      # Optional caller-provided forbidden keys (same format as `.unordered_pair_key()`).
+      if (!is.null(forbid_keys)) {
+        if (!is.character(forbid_keys)) {
+          stop("`forbid_keys` must be a character vector of unordered pair keys.", call. = FALSE)
+        }
+        fk <- forbid_keys
+        fk <- fk[!is.na(fk) & fk != ""]
+        existing_keys <- unique(c(existing_keys, fk))
+      }
 
       # counts + position balance from existing pairs
       all_seen <- c(existing$ID1, existing$ID2)
@@ -292,9 +294,29 @@ select_core_link_pairs <- function(samples,
       }
 
       # allocate counts
-      n_audit <- as.integer(floor(round_size * core_audit_frac))
+      #
+      # IMPORTANT: use rounding + minimums where appropriate.
+      # With small round sizes (common in smoke tests), using floor() can
+      # silently zero-out allocations (e.g., 10 * 0.05 = 0.5 -> 0). That
+      # removes core re-anchoring and can destabilize drift/linking diagnostics.
+
+      n_audit <- 0L
+      if (core_audit_frac > 0 && length(core_ids) >= 2L) {
+        n_audit <- as.integer(round(round_size * core_audit_frac))
+        n_audit <- max(1L, n_audit)
+      }
+      n_audit <- min(n_audit, round_size)
+
       remain <- round_size - n_audit
-      n_within <- as.integer(floor(remain * within_batch_frac))
+
+      n_within <- 0L
+      if (remain > 0 && within_batch_frac > 0 && length(new_ids) >= 2L) {
+        n_within <- as.integer(round(remain * within_batch_frac))
+        # ensure at least 1 within-batch pair when requested and possible
+        n_within <- max(1L, n_within)
+      }
+      n_within <- min(n_within, remain)
+
       n_link <- remain - n_within
 
       out <- list()

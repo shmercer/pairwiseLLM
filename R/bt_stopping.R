@@ -1,38 +1,37 @@
-#' Compute stopping diagnostics for adaptive BT runs
+#' Compute stopping metrics from a Bradley–Terry model fit
 #'
-#' Computes and/or updates a set of stopping diagnostics (reliability, separation,
-#' SE summaries, optional drift metrics) from a fitted BT model and a per-round
-#' metrics row/tibble.
+#' This helper computes round-level summary metrics used for adaptive sampling and
+#' stopping decisions. It is designed to work with the object returned by
+#' \code{\link{fit_bt_model}} (which includes \code{fit$theta} with columns
+#' \code{ID}, \code{theta}, and \code{se}).
 #'
-#' @param fit A fitted BT object returned by \code{fit_bt_model()} (or a compatible
-#'   object) containing \code{theta} estimates and standard errors.
-#' @param metrics A one-row tibble/data.frame of metrics for the current round.
-#'   Typically the latest row of the runner's \code{out$metrics}. If \code{NULL},
-#'   the function will compute what it can from \code{fit} alone.
+#' The output is a one-row tibble with:
+#' \itemize{
+#'   \item Precision summaries (e.g., SE mean, max, and quantiles),
+#'   \item Scale summaries (SD of \code{theta}),
+#'   \item Scale-free precision metrics (SE divided by SD of \code{theta}),
+#'   \item Optional fit/diagnostic summaries (separation index and misfit proportions),
+#'   \item Optional drift metrics for a core set relative to a prior fit.
+#' }
 #'
-#'   \strong{Backward compatibility:} if the second positional argument is a
-#'   character vector and \code{ids} is not supplied, it is treated as \code{ids}
-#'   (legacy calling convention).
-#' @param ids Optional character vector of IDs to compute per-ID summaries for
-#'   (e.g., core IDs). If supplied, IDs not present in \code{fit$theta$ID} are
-#'   tolerated as long as at least one requested ID is present; if none are
-#'   present, an error is thrown.
-#' @param prev_fit Optional previous fitted BT object used for drift diagnostics.
-#'   Must be supplied together with \code{core_ids} (or neither).
-#' @param core_ids Optional character vector of IDs defining the linking/core set
-#'   for drift diagnostics. Must be supplied together with \code{prev_fit} (or
-#'   neither).
-#' @param se_probs Numeric vector of probabilities in (0, 1) used for SE
-#'   quantiles (e.g., \code{c(0.5, 0.9, 0.95)}).
-#' @param abs_shift_probs Numeric vector of probabilities in (0, 1) used for
-#'   absolute-shift quantiles in drift metrics.
-#' @param drift_methods Character vector of correlation methods for drift metrics.
-#'   Values are passed through to drift computation (e.g., \code{"pearson"},
-#'   \code{"spearman"}).
-#' @param ... Additional arguments reserved for future expansion.
+#' You can compute precision summaries on a subset of IDs (e.g., only newly-added
+#' items) via \code{ids}. Drift metrics are added when both \code{prev_fit} and
+#' \code{core_ids} are provided.
 #'
-#' @return A list containing updated stopping diagnostics, including summaries
-#'   appended to \code{metrics} when provided.
+#' @param fit A list returned by \code{\link{fit_bt_model}} containing a \code{$theta}
+#'   tibble/data frame with columns \code{ID}, \code{theta}, \code{se}.
+#' @param ids Optional character vector of item IDs to compute precision summaries on.
+#'   If \code{NULL}, uses all items in \code{fit$theta}.
+#' @param prev_fit Optional prior fit (same structure as \code{fit}) used for drift metrics.
+#'   Must be provided together with \code{core_ids}.
+#' @param core_ids Optional character vector of core IDs used for drift metrics.
+#'   Must be provided together with \code{prev_fit}.
+#' @param se_probs Numeric vector of probabilities for SE quantiles. Default:
+#'   \code{c(0.5, 0.9, 0.95)}.
+#' @param fit_bounds Numeric length-2 vector giving lower/upper bounds for acceptable
+#'   infit/outfit when diagnostics are available. Default: \code{c(0.7, 1.3)}.
+#'
+#' @return A one-row tibble of stopping metrics.
 #'
 #' @examples
 #' # A minimal, CRAN-safe "mock fit" with the required structure:
@@ -488,6 +487,24 @@ bt_should_stop <- function(metrics,
   require_col("core_max_abs_shift", !is.na(core_max_abs_shift_target))
   require_col("core_p90_abs_shift", !is.na(core_p90_abs_shift_target))
 
+  core_drift_active <- any(!is.na(c(
+    core_theta_cor_target,
+    core_theta_spearman_target,
+    core_max_abs_shift_target,
+    core_p90_abs_shift_target
+  )))
+
+  # If a sign flip was applied during drift computation, treat the drift
+  # guardrails as failing (the axis is not comparable without linking).
+  require_col("core_flip_applied", core_drift_active)
+  if (core_drift_active) {
+    # `bt_stop_metrics()` will add `core_flip_applied` whenever drift metrics are
+    # computed. If a flip was required to align successive rounds, treat the
+    # drift check as failed (i.e., do not allow stopping) because the latent
+    # scale is not sign-identifiable across rounds.
+    require_col("core_flip_applied", TRUE)
+  }
+
   get1 <- function(col) as.numeric(metrics[[col]][[1]])
 
   reliability <- if ("reliability" %in% names(metrics)) get1("reliability") else NA_real_
@@ -500,6 +517,8 @@ bt_should_stop <- function(metrics,
   core_theta_spearman <- if ("core_theta_spearman" %in% names(metrics)) get1("core_theta_spearman") else NA_real_
   core_max_abs_shift <- if ("core_max_abs_shift" %in% names(metrics)) get1("core_max_abs_shift") else NA_real_
   core_p90_abs_shift <- if ("core_p90_abs_shift" %in% names(metrics)) get1("core_p90_abs_shift") else NA_real_
+
+  core_flip_ok <- if (core_drift_active) !isTRUE(metrics$core_flip_applied[[1]]) else TRUE
 
   improve_pct <- NA_real_
   if (!is.null(prev_metrics)) {
@@ -523,10 +542,10 @@ bt_should_stop <- function(metrics,
   pass_item_fit <- if (is.na(max_item_misfit_prop)) TRUE else (is.na(item_misfit_prop) || item_misfit_prop <= max_item_misfit_prop)
   pass_judge_fit <- if (is.na(max_judge_misfit_prop)) TRUE else (is.na(judge_misfit_prop) || judge_misfit_prop <= max_judge_misfit_prop)
 
-  pass_core_theta_cor <- if (is.na(core_theta_cor_target)) TRUE else (is.finite(core_theta_cor) && core_theta_cor >= core_theta_cor_target)
-  pass_core_theta_spearman <- if (is.na(core_theta_spearman_target)) TRUE else (is.finite(core_theta_spearman) && core_theta_spearman >= core_theta_spearman_target)
-  pass_core_max_abs_shift <- if (is.na(core_max_abs_shift_target)) TRUE else (is.finite(core_max_abs_shift) && core_max_abs_shift <= core_max_abs_shift_target)
-  pass_core_p90_abs_shift <- if (is.na(core_p90_abs_shift_target)) TRUE else (is.finite(core_p90_abs_shift) && core_p90_abs_shift <= core_p90_abs_shift_target)
+  pass_core_theta_cor <- if (is.na(core_theta_cor_target)) TRUE else (core_flip_ok && is.finite(core_theta_cor) && core_theta_cor >= core_theta_cor_target)
+  pass_core_theta_spearman <- if (is.na(core_theta_spearman_target)) TRUE else (core_flip_ok && is.finite(core_theta_spearman) && core_theta_spearman >= core_theta_spearman_target)
+  pass_core_max_abs_shift <- if (is.na(core_max_abs_shift_target)) TRUE else (core_flip_ok && is.finite(core_max_abs_shift) && core_max_abs_shift <= core_max_abs_shift_target)
+  pass_core_p90_abs_shift <- if (is.na(core_p90_abs_shift_target)) TRUE else (core_flip_ok && is.finite(core_p90_abs_shift) && core_p90_abs_shift <= core_p90_abs_shift_target)
 
   pass_precision <- if (is.na(rel_se_p90_target)) TRUE else (is.finite(rel_se_p90) && rel_se_p90 <= rel_se_p90_target)
 
