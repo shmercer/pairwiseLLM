@@ -4,7 +4,50 @@
 # to link, and to record diagnostics about drift.
 
 .as_theta_tibble <- function(x, arg_name = "current") {
-  # 1) Fit object (list) with $theta
+  normalize_theta_df <- function(df) {
+    if (!inherits(df, "data.frame")) {
+      return(df)
+    }
+
+    nm <- names(df)
+
+    # Normalize ID column
+    if (!"ID" %in% nm) {
+      id_cands <- c("id", "Id", "iD")
+      hit <- id_cands[id_cands %in% nm][1]
+      if (!is.na(hit) && length(hit) > 0) {
+        df <- dplyr::rename(df, ID = dplyr::all_of(hit))
+        nm <- names(df)
+      }
+    }
+
+    # Normalize theta column
+    if (!"theta" %in% nm) {
+      theta_cands <- grep("^theta($|_)", nm, value = TRUE)
+      if (length(theta_cands) > 0) {
+        pref <- c("theta", "theta_linked", "theta_run", "theta_bt", "theta_rc")
+        chosen <- pref[pref %in% theta_cands][1]
+        if (is.na(chosen) || length(chosen) == 0) chosen <- theta_cands[[1]]
+        df <- dplyr::rename(df, theta = dplyr::all_of(chosen))
+        nm <- names(df)
+      }
+    }
+
+    # Normalize se column (optional)
+    if (!"se" %in% nm) {
+      se_cands <- grep("^se($|_)", nm, value = TRUE)
+      if (length(se_cands) > 0) {
+        pref <- c("se", "se_linked", "se_run", "se_bt", "se_rc")
+        chosen <- pref[pref %in% se_cands][1]
+        if (is.na(chosen) || length(chosen) == 0) chosen <- se_cands[[1]]
+        df <- dplyr::rename(df, se = dplyr::all_of(chosen))
+      }
+    }
+
+    df
+  }
+
+  # 1) Fit object (list) with $theta (or a data.frame itself)
   if (is.list(x) && !inherits(x, "data.frame")) {
     if ("theta" %in% names(x) && is.null(x$theta)) {
       stop(
@@ -19,33 +62,27 @@
     }
   }
 
-  # 2) Named numeric vector
+  # 2) Named numeric vector (ID -> theta)
   if (is.numeric(x) && !is.null(names(x))) {
-    out <- tibble::tibble(ID = names(x), theta = as.numeric(x))
-    return(out)
+    return(tibble::tibble(ID = names(x), theta = as.numeric(x)))
   }
 
-  # 3) data.frame / tibble
+  # 3) Data frame / tibble with (ID, theta)
   if (inherits(x, "data.frame")) {
-    if (!("ID" %in% names(x)) || !("theta" %in% names(x))) {
-      stop(
-        "`", arg_name, "` must have columns ID and theta.",
-        call. = FALSE
-      )
+    x <- normalize_theta_df(x)
+    if (!all(c("ID", "theta") %in% names(x))) {
+      stop("`", arg_name, "` must have columns ID and theta.", call. = FALSE)
     }
-    out <- tibble::as_tibble(x)
-    out <- dplyr::select(out, dplyr::any_of(c("ID", "theta", "se")))
-    out$ID <- as.character(out$ID)
-    out$theta <- as.numeric(out$theta)
-    return(out)
+    x$ID <- as.character(x$ID)
+    return(tibble::as_tibble(x))
   }
 
   stop(
-    "`", arg_name,
-    "` must be a fit (with `$theta`), a tibble with columns ID/theta, or a named numeric vector.",
+    "`", arg_name, "` must be a fit, a named numeric vector, or a tibble with columns ID/theta.",
     call. = FALSE
   )
 }
+
 
 #' Compute drift metrics between two theta sets
 #'

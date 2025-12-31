@@ -53,6 +53,9 @@ bt_run_core_linking(
   rel_se_p90_min_improve = 0.01,
   max_item_misfit_prop = 0.05,
   max_judge_misfit_prop = 0.05,
+  exhaustion_fallback = c("none", "cross_batch_new_new", "targeted_repeats", "both"),
+  exhaustion_min_pairs_frac = 0.5,
+  exhaustion_spectral_gap_threshold = 0,
   core_theta_cor_target = NA_real_,
   core_theta_spearman_target = NA_real_,
   core_max_abs_shift_target = NA_real_,
@@ -199,6 +202,18 @@ and \code{prev_metrics}. It should return NULL (no change) or a list with elemen
 \item{max_item_misfit_prop}{Passed to \code{\link{bt_should_stop}}.}
 
 \item{max_judge_misfit_prop}{Passed to \code{\link{bt_should_stop}}.}
+
+\item{exhaustion_fallback}{Fallback strategy to use when the within-batch pair
+generator becomes exhausted and fewer than
+\code{ceiling(round_size * exhaustion_min_pairs_frac)} admissible pairs are
+available. One of \code{"none"}, \code{"cross_batch_new_new"},
+\code{"targeted_repeats"}, or \code{"both"}.}
+
+\item{exhaustion_min_pairs_frac}{Minimum fraction of \code{round_size} that must
+be available before triggering the fallback. Must be in \code{(0, 1]}.}
+
+\item{exhaustion_spectral_gap_threshold}{Optional spectral-gap threshold that
+can be used to gate exhaustion handling (reserved for future use).}
 
 \item{core_theta_cor_target}{Optional drift guardrail for Pearson correlation
 (default \code{NA} = disabled).}

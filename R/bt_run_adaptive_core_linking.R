@@ -151,6 +151,15 @@
 #' @param reliability_target,sepG_target,rel_se_p90_target,rel_se_p90_min_improve,max_item_misfit_prop,max_judge_misfit_prop
 #' Stopping thresholds passed to \code{\link{bt_should_stop}}.
 #'
+#' @param exhaustion_fallback Fallback strategy to use when the within-batch pair
+#'   generator becomes exhausted and fewer than \code{round_size * exhaustion_min_pairs_frac}
+#'   pairs are available. One of \code{"none"}, \code{"cross_batch_new_new"},
+#'   \code{"targeted_repeats"}, or \code{"both"}.
+#' @param exhaustion_min_pairs_frac Numeric in (0,1]. Minimum fraction of \code{round_size}
+#'   below which the fallback may trigger.
+#' @param exhaustion_spectral_gap_threshold Numeric >= 0. Optional diagnostic threshold for
+#'   triggering the fallback when spectral gap information is available.
+#'
 #' @param core_theta_cor_target,core_theta_spearman_target,core_max_abs_shift_target,core_p90_abs_shift_target
 #' Optional drift guardrails passed to \code{\link{bt_should_stop}}. If any of these are not
 #' \code{NA}, the runner computes core drift metrics per round by comparing the current fit to
@@ -325,6 +334,9 @@ bt_run_adaptive_core_linking <- function(samples,
                                          rel_se_p90_min_improve = 0.01,
                                          max_item_misfit_prop = 0.05,
                                          max_judge_misfit_prop = 0.05,
+                                         exhaustion_fallback = c("none", "cross_batch_new_new", "targeted_repeats", "both"),
+                                         exhaustion_min_pairs_frac = 0.5,
+                                         exhaustion_spectral_gap_threshold = 0,
                                          core_theta_cor_target = NA_real_,
                                          core_theta_spearman_target = NA_real_,
                                          core_max_abs_shift_target = NA_real_,
@@ -363,6 +375,16 @@ bt_run_adaptive_core_linking <- function(samples,
   store_running_estimates <- isTRUE(store_running_estimates)
   final_refit <- isTRUE(final_refit)
   final_bt_bias_reduction <- isTRUE(final_bt_bias_reduction)
+
+  exhaustion_fallback <- match.arg(exhaustion_fallback)
+  if (!is.numeric(exhaustion_min_pairs_frac) || length(exhaustion_min_pairs_frac) != 1L ||
+    is.na(exhaustion_min_pairs_frac) || exhaustion_min_pairs_frac < 0 || exhaustion_min_pairs_frac > 1) {
+    stop("`exhaustion_min_pairs_frac` must be a single number in [0, 1].", call. = FALSE)
+  }
+  if (!is.numeric(exhaustion_spectral_gap_threshold) || length(exhaustion_spectral_gap_threshold) != 1L ||
+    is.na(exhaustion_spectral_gap_threshold) || exhaustion_spectral_gap_threshold < 0) {
+    stop("`exhaustion_spectral_gap_threshold` must be a single non-negative number.", call. = FALSE)
+  }
 
   # Capture and sanitize `...` forwarded to fit_fun. This prevents collisions like
   # `verbose` (often intended for runner logging) being passed twice to fit_fun.
@@ -542,9 +564,9 @@ bt_run_adaptive_core_linking <- function(samples,
     allocation <- match.arg(allocation)
     if (is.null(allocation_fun) && allocation != "fixed") {
       allocation_fun <- switch(allocation,
-                               precision_ramp = allocation_precision_ramp(),
-                               audit_on_drift = allocation_audit_on_drift(),
-                               NULL
+        precision_ramp = allocation_precision_ramp(),
+        audit_on_drift = allocation_audit_on_drift(),
+        NULL
       )
     }
 
@@ -667,8 +689,8 @@ bt_run_adaptive_core_linking <- function(samples,
     }
 
     if (is.null(fit$theta) || is.null(reference_fit$theta) ||
-        !is.data.frame(fit$theta) || !("theta" %in% names(fit$theta)) ||
-        all(is.na(fit$theta$theta))) {
+      !is.data.frame(fit$theta) || !("theta" %in% names(fit$theta)) ||
+      all(is.na(fit$theta$theta))) {
       fit$linking <- list(
         mode = linking,
         reference = "baseline",
@@ -1234,6 +1256,30 @@ bt_run_adaptive_core_linking <- function(samples,
       )
 
       pairs_next <- prop$pairs
+
+      if (exhaustion_fallback != "none") {
+        pairs_next <- .bt_apply_exhaustion_fallback(
+          pairs = pairs_next,
+          samples = samples,
+          core_ids = core_ids,
+          new_ids = new_ids,
+          seen_ids = seen_ids,
+          round_size = round_size,
+          forbidden_keys = .bt_round_state(results)$forbidden_keys,
+          exhaustion_fallback = exhaustion_fallback,
+          exhaustion_min_pairs_frac = exhaustion_min_pairs_frac,
+          exhaustion_spectral_gap_threshold = exhaustion_spectral_gap_threshold,
+          within_batch_frac = within_batch_frac_this,
+          core_audit_frac = core_audit_frac_this,
+          k_neighbors = k_neighbors,
+          min_judgments = min_judgments,
+          existing_pairs = results,
+          forbid_repeats = forbid_repeats,
+          balance_positions = balance_positions,
+          seed = seed_this,
+          include_text = TRUE
+        )
+      }
 
       if (nrow(pairs_next) == 0L) {
         stop_reason <- .bt_resolve_stop_reason(no_pairs = TRUE)

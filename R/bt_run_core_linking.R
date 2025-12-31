@@ -107,6 +107,16 @@
 #' @param max_item_misfit_prop Passed to \code{\link{bt_should_stop}}.
 #' @param max_judge_misfit_prop Passed to \code{\link{bt_should_stop}}.
 #'
+#' @param exhaustion_fallback Fallback strategy to use when the within-batch pair
+#'   generator becomes exhausted and fewer than
+#'   \code{ceiling(round_size * exhaustion_min_pairs_frac)} admissible pairs are
+#'   available. One of \code{"none"}, \code{"cross_batch_new_new"},
+#'   \code{"targeted_repeats"}, or \code{"both"}.
+#' @param exhaustion_min_pairs_frac Minimum fraction of \code{round_size} that must
+#'   be available before triggering the fallback. Must be in \code{(0, 1]}.
+#' @param exhaustion_spectral_gap_threshold Optional spectral-gap threshold that
+#'   can be used to gate exhaustion handling (reserved for future use).
+#'
 #' @param core_theta_cor_target Optional drift guardrail for Pearson correlation
 #'   (default \code{NA} = disabled).
 #' @param core_theta_spearman_target Optional drift guardrail for Spearman correlation
@@ -269,6 +279,9 @@ bt_run_core_linking <- function(samples,
                                 rel_se_p90_min_improve = 0.01,
                                 max_item_misfit_prop = 0.05,
                                 max_judge_misfit_prop = 0.05,
+                                exhaustion_fallback = c("none", "cross_batch_new_new", "targeted_repeats", "both"),
+                                exhaustion_min_pairs_frac = 0.5,
+                                exhaustion_spectral_gap_threshold = 0,
                                 core_theta_cor_target = NA_real_,
                                 core_theta_spearman_target = NA_real_,
                                 core_max_abs_shift_target = NA_real_,
@@ -357,6 +370,16 @@ bt_run_core_linking <- function(samples,
   store_running_estimates <- isTRUE(store_running_estimates)
   final_refit <- isTRUE(final_refit)
   final_bt_bias_reduction <- isTRUE(final_bt_bias_reduction)
+
+  exhaustion_fallback <- match.arg(exhaustion_fallback)
+  if (!is.numeric(exhaustion_min_pairs_frac) || length(exhaustion_min_pairs_frac) != 1L ||
+    is.na(exhaustion_min_pairs_frac) || exhaustion_min_pairs_frac < 0 || exhaustion_min_pairs_frac > 1) {
+    stop("`exhaustion_min_pairs_frac` must be a single numeric value in [0, 1].", call. = FALSE)
+  }
+  if (!is.numeric(exhaustion_spectral_gap_threshold) || length(exhaustion_spectral_gap_threshold) != 1L ||
+    is.na(exhaustion_spectral_gap_threshold) || exhaustion_spectral_gap_threshold < 0) {
+    stop("`exhaustion_spectral_gap_threshold` must be a single numeric value >= 0.", call. = FALSE)
+  }
 
   if (!is.numeric(rc_smoothing) || length(rc_smoothing) != 1L || is.na(rc_smoothing) || rc_smoothing < 0) {
     stop("`rc_smoothing` must be a single numeric value >= 0.", call. = FALSE)
@@ -1128,6 +1151,30 @@ bt_run_core_linking <- function(samples,
       )
 
       pairs <- round_out$pairs
+
+      # If we are running out of admissible within-batch pairs, optionally
+      # expand the candidate pool to keep the batch moving.
+      if (exhaustion_fallback != "none") {
+        pairs <- .bt_apply_exhaustion_fallback(
+          pairs = pairs,
+          samples = samples,
+          core_ids = core_ids,
+          new_ids = new_ids,
+          seen_ids = seen_ids,
+          round_size = round_size,
+          forbidden_keys = round_out$forbidden_keys,
+          exhaustion_fallback = exhaustion_fallback,
+          exhaustion_min_pairs_frac = exhaustion_min_pairs_frac,
+          exhaustion_spectral_gap_threshold = exhaustion_spectral_gap_threshold,
+          within_batch_frac = within_batch_frac_this,
+          core_audit_frac = core_audit_frac_this,
+          k_neighbors = k_neighbors,
+          min_judgments = min_judgments,
+          balance_positions = balance_positions,
+          seed = round_seed(batch_i, round_i)
+        )
+      }
+
       if (nrow(pairs) == 0L) {
         stop_reason <- .bt_resolve_stop_reason(no_pairs = TRUE)
         break

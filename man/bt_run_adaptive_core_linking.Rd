@@ -57,6 +57,9 @@ bt_run_adaptive_core_linking(
   rel_se_p90_min_improve = 0.01,
   max_item_misfit_prop = 0.05,
   max_judge_misfit_prop = 0.05,
+  exhaustion_fallback = c("none", "cross_batch_new_new", "targeted_repeats", "both"),
+  exhaustion_min_pairs_frac = 0.5,
+  exhaustion_spectral_gap_threshold = 0,
   core_theta_cor_target = NA_real_,
   core_theta_spearman_target = NA_real_,
   core_max_abs_shift_target = NA_real_,
@@ -233,6 +236,17 @@ as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored aft
 \code{\link{bt_stop_metrics}}.}
 
 \item{reliability_target, sepG_target, rel_se_p90_target, rel_se_p90_min_improve, max_item_misfit_prop, max_judge_misfit_prop}{Stopping thresholds passed to \code{\link{bt_should_stop}}.}
+
+\item{exhaustion_fallback}{Fallback strategy to use when the within-batch pair
+generator becomes exhausted and fewer than \code{round_size * exhaustion_min_pairs_frac}
+pairs are available. One of \code{"none"}, \code{"cross_batch_new_new"},
+\code{"targeted_repeats"}, or \code{"both"}.}
+
+\item{exhaustion_min_pairs_frac}{Numeric in (0,1]. Minimum fraction of \code{round_size}
+below which the fallback may trigger.}
+
+\item{exhaustion_spectral_gap_threshold}{Numeric >= 0. Optional diagnostic threshold for
+triggering the fallback when spectral gap information is available.}
 
 \item{core_theta_cor_target, core_theta_spearman_target, core_max_abs_shift_target, core_p90_abs_shift_target}{Optional drift guardrails passed to \code{\link{bt_should_stop}}. If any of these are not
 \code{NA}, the runner computes core drift metrics per round by comparing the current fit to
