@@ -582,11 +582,11 @@ bt_run_core_linking <- function(samples,
         core_ids = core_ids,
         batches = batches,
         results = results,
-        bt_data = bt_data,
+    bt_data = bt_data,
         fits = fits,
         final_fits = final_fits,
-        estimates = estimates,
-        final_models = final_models,
+    estimates = estimates,
+    final_models = final_models,
         metrics = metrics_hist,
         state = state_hist,
         batch_summary = batch_summary
@@ -713,6 +713,11 @@ bt_run_core_linking <- function(samples,
   }
 
   make_running_fit <- function(bt_data, fit_bt, fit_engine_running, rc_smoothing, rc_damping) {
+    # Silence R CMD check notes for NSE dplyr column references.
+    ID <- NULL
+    theta <- NULL
+    se <- NULL
+
     rc_fit <- tryCatch(
       fit_rank_centrality(
         bt_data,
@@ -751,7 +756,7 @@ bt_run_core_linking <- function(samples,
     if (!is.null(theta_bt_linked)) {
       theta_run <- dplyr::left_join(
         theta_run,
-        dplyr::rename(theta_bt_linked, theta_bt_linked = .data$theta, se_bt_linked = .data$se),
+        dplyr::rename(theta_bt_linked, theta_bt_linked = theta, se_bt_linked = se),
         by = "ID"
       )
     }
@@ -766,9 +771,9 @@ bt_run_core_linking <- function(samples,
       theta_run$theta_rc <- NA_real_
     }
 
-    theta_run$rank_running <- .rank_from_score(theta_run$theta)
-    theta_run$rank_bt <- if ("theta_bt" %in% names(theta_run)) .rank_from_score(theta_run$theta_bt) else NA_integer_
-    theta_run$rank_rc <- if ("theta_rc" %in% names(theta_run)) .rank_from_score(theta_run$theta_rc) else NA_integer_
+    theta_run$rank_running <- .rank_desc_numeric(theta_run$theta)
+    theta_run$rank_bt <- if ("theta_bt" %in% names(theta_run)) .rank_desc_numeric(theta_run$theta_bt) else NA_integer_
+    theta_run$rank_rc <- if ("theta_rc" %in% names(theta_run)) .rank_desc_numeric(theta_run$theta_rc) else NA_integer_
 
     list(
       engine_running = fit_engine_running,
