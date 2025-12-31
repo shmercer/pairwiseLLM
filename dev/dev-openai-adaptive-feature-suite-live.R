@@ -3,18 +3,16 @@
 # Goal:
 #   Systematically exercise the new runner options with real API calls:
 #     - core selection modes (pam vs embeddings)
-#     - linking modes (never / auto-forced / always)
+#     - linking modes (never / auto / always)
 #     - allocation modes (fixed vs precision_ramp)
-#     - reliability-based stopping rules (easy-stop vs strict)
+#     - reliability-based stopping rules
 #
 # Usage:
 #   source("dev/dev-openai-adaptive-feature-suite-live.R")
 #
 # Notes:
 #   - Keep costs low: uses gpt-4o-mini and small batches.
-#   - Embeddings are generated as a deterministic random matrix by default
-#     to avoid Python/reticulate setup in a smoke test.
-#   - This script writes per-scenario diagnostics to dev/feature_suite_outputs/.
+#   - Embeddings are deterministic random by default to avoid Python/reticulate setup.
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -32,13 +30,13 @@ if (nchar(Sys.getenv("OPENAI_API_KEY")) == 0L) {
 }
 
 # ----------------------------
-# Output directory
+# Output directory (always on)
 # ----------------------------
 .ts <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-.ts_compact <- function() format(Sys.time(), "%Y%m%d_%H%M%S")
+.stamp <- function() format(Sys.time(), "%Y%m%d_%H%M%S")
 .dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
 
-OUT_DIR <- file.path(getwd(), "dev", "feature_suite_outputs", paste0("run_", .ts_compact()))
+OUT_DIR <- file.path(getwd(), "dev", "feature_suite_outputs", paste0("run_", .stamp()))
 dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 .dbg("Feature-suite outputs will be written to: ", OUT_DIR)
 
@@ -51,12 +49,6 @@ write_bt_run_diagnostics <- function(out, dir, name) {
   if (!is.null(out$batch_summary)) write_csv(out$batch_summary, file.path(dir, paste0(name, "_batch_summary.csv")))
   invisible(TRUE)
 }
-
-# Script-level env so judge callbacks can write per-call snapshots
-.FS_ENV <- new.env(parent = emptyenv())
-.FS_ENV$scenario <- NA_character_
-.FS_ENV$judge_call <- 0L
-.FS_ENV$out_dir <- OUT_DIR
 
 # ----------------------------
 # Global knobs (keep it cheap)
@@ -81,7 +73,6 @@ N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
   ifelse(nchar(x) <= n, x, paste0(substr(x, 1, n), "…"))
 }
 
-# Robust summary that doesn't depend on validate_backend_results' internal schema.
 .print_results_summary <- function(res, label = "results") {
   if (is.null(res)) {
     .dbg(label, ": <NULL>")
@@ -89,23 +80,30 @@ N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
   }
   res <- tibble::as_tibble(res)
 
-  n_rows <- nrow(res)
-  n_missing_winner <- if ("better_id" %in% names(res)) sum(is.na(res$better_id) | res$better_id == "", na.rm = TRUE) else NA_integer_
-  n_missing_id <- 0L
-  if (all(c("ID1", "ID2") %in% names(res))) {
-    n_missing_id <- sum(is.na(res$ID1) | res$ID1 == "" | is.na(res$ID2) | res$ID2 == "", na.rm = TRUE)
-  } else {
-    n_missing_id <- NA_integer_
-  }
-  n_invalid_winner <- NA_integer_
-  if (all(c("ID1", "ID2", "better_id") %in% names(res))) {
-    n_invalid_winner <- sum(!(res$better_id %in% c(res$ID1, res$ID2)) & !(is.na(res$better_id) | res$better_id == ""), na.rm = TRUE)
-  }
+  # Validation summary can fail if caller provided unusual columns; don't let it crash the run.
+  rep <- tryCatch(
+    validate_backend_results(
+      res,
+      backend = "openai",
+      normalize_winner = TRUE,
+      strict = FALSE,
+      return_report = TRUE
+    ),
+    error = function(e) {
+      .dbg(label, ": validate_backend_results() error: ", conditionMessage(e))
+      list(
+        n_rows = nrow(res),
+        n_missing_winner = NA_integer_,
+        n_missing_id = NA_integer_,
+        n_invalid_winner = NA_integer_
+      )
+    }
+  )
 
-  .dbg(label, ": n=", n_rows,
-       " | missing_winner=", n_missing_winner,
-       " | missing_id=", n_missing_id,
-       " | invalid_winner=", n_invalid_winner)
+  .dbg(label, ": n=", rep$n_rows,
+       " | missing_winner=", rep$n_missing_winner,
+       " | missing_id=", rep$n_missing_id,
+       " | invalid_winner=", rep$n_invalid_winner)
 
   if ("status_code" %in% names(res)) {
     sc <- sort(table(res$status_code), decreasing = TRUE)
@@ -120,50 +118,26 @@ N_BATCHES <- ceiling((N_TOTAL - CORE_SIZE) / BATCH_SIZE) + 1L
     }
   }
 
+  # Show a few problematic rows (guard against missing columns)
+  has_better <- "better_id" %in% names(res)
   bad <- res %>%
-    mutate(.missing_winner = ("better_id" %in% names(res)) && (is.na(better_id) | better_id == "")) %>%
+    mutate(.missing_winner = if (has_better) (is.na(.data$better_id) | .data$better_id == "") else TRUE) %>%
     filter(.missing_winner) %>%
     select(any_of(c("ID1", "ID2", "better_id", "better_sample", "status_code", "error_message", "content"))) %>%
     head(3)
+
   if (nrow(bad) > 0) {
     .dbg(label, ": example rows with missing winner:")
     print(bad %>% mutate(content = .short(content, 240)))
   }
 
-  invisible(list(
-    n_rows = n_rows,
-    n_missing_winner = n_missing_winner,
-    n_missing_id = n_missing_id,
-    n_invalid_winner = n_invalid_winner
-  ))
-}
-
-.write_judge_snapshot <- function(out, pairs, label = "judge") {
-  scn <- .FS_ENV$scenario %||% "unknown"
-  .FS_ENV$judge_call <- .FS_ENV$judge_call + 1L
-  k <- sprintf("%02d", .FS_ENV$judge_call)
-
-  dir <- file.path(.FS_ENV$out_dir, scn, "judge_calls")
-  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-
-  # Save pairs proposed and results returned for this judge call.
-  if (!is.null(pairs)) {
-    try(write_csv(as_tibble(pairs), file.path(dir, paste0(label, "_", k, "_pairs.csv"))), silent = TRUE)
-  }
-  if (!is.null(out$results)) {
-    try(write_csv(as_tibble(out$results), file.path(dir, paste0(label, "_", k, "_results.csv"))), silent = TRUE)
-  }
-  # Raw output (if present) can be large; save as RDS for post-mortem.
-  try(saveRDS(out, file.path(dir, paste0(label, "_", k, "_raw.rds"))), silent = TRUE)
-
-  invisible(TRUE)
+  invisible(rep)
 }
 
 # ----------------------------
 # Data + batches
 # ----------------------------
 
-# Simple, obviously rankable texts.
 qualities <- c(
   "Excellent: precise, well-structured, and well-supported.",
   "Very good: clear structure and strong reasoning.",
@@ -185,31 +159,26 @@ make_samples <- function(n_total) {
 
 samples <- make_samples(N_TOTAL)
 
-# Batches:
-# `bt_run_adaptive_core_linking()` expects each element to be the *new IDs introduced in that batch*.
-# The runner always has access to `core_ids` separately, so we do NOT include core IDs in batch 1.
+# Batches: first batch contains core IDs, then add new IDs in chunks.
 core_ids_default <- samples$ID[seq_len(CORE_SIZE)]
 rest_ids <- setdiff(samples$ID, core_ids_default)
 batch_ids <- split(rest_ids, ceiling(seq_along(rest_ids) / BATCH_SIZE))
-batches_default <- unname(batch_ids)
+batches_default <- c(list(core_ids_default), unname(batch_ids))
 
 # ----------------------------
 # Embeddings (deterministic)
 # ----------------------------
-
 make_dummy_embeddings <- function(ids, d = 48, seed = 1234) {
   set.seed(seed)
   m <- matrix(rnorm(length(ids) * d), nrow = length(ids), ncol = d)
   rownames(m) <- ids
   m
 }
-
 embeddings_dummy <- make_dummy_embeddings(samples$ID, d = 48)
 
 # ----------------------------
 # LLM judge
 # ----------------------------
-
 td <- trait_description("overall_quality")
 tmpl <- get_prompt_template("default")
 
@@ -224,8 +193,13 @@ ensure_pair_text <- function(pairs, samples_tbl) {
     left_join(rename(s, ID2 = ID, text2 = text), by = "ID2")
 }
 
+# Scenario-aware judge so we can persist raw results per call.
+.current_scenario <- NULL
+.current_call_idx <- 0L
+
 judge_openai_live <- function(pairs) {
   t0 <- Sys.time()
+  .current_call_idx <<- .current_call_idx + 1L
 
   pairs <- ensure_pair_text(pairs, samples)
 
@@ -245,7 +219,16 @@ judge_openai_live <- function(pairs) {
 
   .dbg("judge_openai_live: elapsed=", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2), "s")
   .print_results_summary(out$results, label = "openai_live")
-  .write_judge_snapshot(out, pairs, label = "openai_live")
+
+  # Persist judge results per call (helps post-mortems when runner errors)
+  if (!is.null(.current_scenario)) {
+    d <- file.path(OUT_DIR, .current_scenario, "judge_calls")
+    dir.create(d, recursive = TRUE, showWarnings = FALSE)
+    saveRDS(out, file.path(d, sprintf("call_%03d_out.rds", .current_call_idx)))
+    if (!is.null(out$results)) {
+      readr::write_csv(out$results, file.path(d, sprintf("call_%03d_results.csv", .current_call_idx)))
+    }
+  }
 
   out
 }
@@ -253,7 +236,6 @@ judge_openai_live <- function(pairs) {
 # ----------------------------
 # Scenario runner
 # ----------------------------
-
 summarize_run <- function(out, scenario) {
   res_n <- if (!is.null(out$results)) nrow(out$results) else NA_integer_
   stop_reason <- out$stop_reason %||% NA_character_
@@ -278,8 +260,9 @@ summarize_run <- function(out, scenario) {
 run_scenario <- function(scn) {
   .dbg("===== Scenario: ", scn$name, " =====")
 
-  .FS_ENV$scenario <- scn$name
-  .FS_ENV$judge_call <- 0L
+  # Reset per-scenario judge call index and label (for per-call persistence)
+  .current_scenario <<- scn$name
+  .current_call_idx <<- 0L
 
   # Merge defaults with scenario overrides
   args <- modifyList(
@@ -311,7 +294,7 @@ run_scenario <- function(scn) {
       # Stopping defaults
       stopping_tier = "strong",
 
-      # Selection defaults for a smoke test:
+      # Smoke-friendly defaults
       forbid_repeats = TRUE,
       balance_positions = TRUE,
       k_neighbors = Inf,
@@ -320,25 +303,25 @@ run_scenario <- function(scn) {
     scn$args
   )
 
+  # Scenario directory + args snapshot
+  scn_dir <- file.path(OUT_DIR, scn$name)
+  dir.create(scn_dir, recursive = TRUE, showWarnings = FALSE)
+  saveRDS(args, file.path(scn_dir, "scenario_args.rds"))
+
   out <- tryCatch(
     {
       do.call(bt_run_adaptive_core_linking, args)
     },
     error = function(e) {
       .dbg("ERROR in ", scn$name, ": ", conditionMessage(e))
-      # Best-effort traceback
-      if (requireNamespace("rlang", quietly = TRUE)) {
-        tr <- try(rlang::last_trace(drop = FALSE), silent = TRUE)
-        if (!inherits(tr, "try-error")) print(tr) else traceback()
-      } else {
-        traceback()
-      }
+      # Persist what we can.
+      saveRDS(list(error = conditionMessage(e), scenario = scn), file.path(scn_dir, "ERROR.rds"))
       stop(e)
     }
   )
 
-  # Persist scenario outputs
-  write_bt_run_diagnostics(out, file.path(OUT_DIR, scn$name), scn$name)
+  # Persist full scenario outputs
+  write_bt_run_diagnostics(out, scn_dir, scn$name)
 
   # Print a compact end summary
   .dbg("Finished: ", scn$name,
@@ -353,8 +336,7 @@ run_scenario <- function(scn) {
       "reliability", "sepG", "rel_se_p90",
       "item_misfit_prop", "judge_misfit_prop",
       "linking_applied", "linking_reason",
-      "core_n", "n_pairs_proposed", "n_pairs_total", "n_pairs_new",
-      "n_missing_better_id"
+      "core_n", "n_pairs_proposed"
     ))))
   }
 
@@ -364,7 +346,6 @@ run_scenario <- function(scn) {
 # ----------------------------
 # Scenario matrix
 # ----------------------------
-
 scenarios <- list(
   list(
     name = "A_baseline_fixed_core_no_linking",
@@ -438,9 +419,14 @@ scenarios <- list(
 # ----------------------------
 # Execute
 # ----------------------------
-
 outs <- list()
 rows <- list()
+
+# Always persist the final RDS even if we error mid-run.
+.on_exit_save <- function() {
+  saveRDS(outs, file.path(OUT_DIR, "outs_partial_or_full.rds"))
+}
+on.exit(.on_exit_save(), add = TRUE)
 
 for (i in seq_along(scenarios)) {
   scn <- scenarios[[i]]
@@ -455,8 +441,8 @@ summary_tbl <- bind_rows(rows) %>%
 .dbg("\n===== Feature-suite summary =====")
 print(summary_tbl)
 
-# Save overall summary as well.
-try(write_csv(summary_tbl, file.path(OUT_DIR, "feature_suite_summary.csv")), silent = TRUE)
-try(saveRDS(list(summary = summary_tbl, outs = outs), file.path(OUT_DIR, "feature_suite_full_outs.rds")), silent = TRUE)
+# Persist summary + outs
+write_csv(summary_tbl, file.path(OUT_DIR, "feature_suite_summary.csv"))
+saveRDS(list(summary = summary_tbl, outs = outs), file.path(OUT_DIR, "feature_suite_all.rds"))
 
-invisible(list(summary = summary_tbl, outs = outs))
+invisible(list(summary = summary_tbl, outs = outs, out_dir = OUT_DIR))
