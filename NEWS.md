@@ -1,3 +1,64 @@
+# pairwiseLLM 1.3.1
+
+## Major improvements to adaptive core linking and stability
+
+### Adaptive and core linking robustness
+* **Stabilized baseline reference fits** used for linking and drift detection.
+  Initial core-only Bradley–Terry fits are now:
+  - deterministically oriented using observed win frequencies, and
+  - robustly centered and scaled before being used as a reference.
+  This prevents extreme theta magnitudes caused by near-separation in early rounds
+  from destabilizing later linking and drift diagnostics.
+
+* **Deterministic orientation of theta estimates**.
+  All Bradley–Terry fits are now oriented so that higher theta corresponds to
+  empirically stronger items (based on win counts). This eliminates arbitrary
+  sign flips across rounds and batches and improves interpretability of diagnostics.
+
+* **Robust linking methods added**.
+  `bt_link_thetas()` now supports:
+  - `"median_iqr"` (median/IQR-based scaling),
+  - `"median_mad"` (median/MAD-based scaling), and
+  - `"mean_sd"` (legacy behavior).
+  Robust methods are recommended for practical use and are now preferred
+  in adaptive linking workflows.
+
+* **Clamping of extreme linking scale factors**.
+  Linking transformations now guard against pathological scale inflation
+  (e.g., caused by separation in the reference fit), preventing runaway
+  `theta_linked` values and misleading drift metrics.
+
+### Adaptive run behavior and diagnostics
+* **Improved handling of early-round separation**.
+  Early fits with quasi-deterministic outcomes no longer corrupt downstream
+  linking and stopping logic due to exploding theta scales.
+
+* **Consistent storage of flipped/oriented fits**.
+  When a fit is re-oriented, the stored fit object now reflects the oriented
+  version, ensuring internal consistency between diagnostics, stored thetas,
+  and downstream linking.
+
+* **Expanded configuration options** for adaptive and core linking runs:
+  - `reference_scale_method` to control how the baseline reference is normalized
+    (e.g., `"median_iqr"`, `"median_mad"`, `"mean_sd"`).
+  - `reference_max_abs` to cap the absolute magnitude of reference thetas.
+
+### Pair allocation and stopping behavior
+* Improved allocation logic prevents audit or within-batch quotas from starving
+  core–new linking in small rounds.
+* Adaptive runs are less likely to terminate prematurely due to unstable
+  reference scales or exhausted allocation pools.
+
+### Tests and coverage
+* Added unit tests covering:
+  - deterministic theta orientation,
+  - robust reference scaling,
+  - robust linking transformations, and
+  - protection against pathological scale inflation.
+* Updated existing tests to explicitly pin legacy linking behavior where required,
+  maintaining backward compatibility while improving default behavior.
+* Overall test coverage remains above 95%.
+
 # pairwiseLLM 1.3.0
 
 ## New features

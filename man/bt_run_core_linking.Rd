@@ -12,11 +12,13 @@ bt_run_core_linking(
   core_size = 30,
   embeddings = NULL,
   linking = c("auto", "always", "never"),
-  linking_method = c("mean_sd"),
+  linking_method = c("median_iqr", "median_mad", "mean_sd"),
   linking_cor_target = 0.98,
   linking_p90_abs_shift_target = 0.15,
   linking_max_abs_shift_target = 0.3,
   linking_min_n = 3L,
+  reference_scale_method = c("median_iqr", "median_mad", "mean_sd"),
+  reference_max_abs = 6,
   judge_fun,
   initial_results = NULL,
   judge = NULL,
@@ -83,9 +85,9 @@ on a stable scale defined by the baseline core fit. One of
 \code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
 linking is applied only when core drift exceeds the thresholds below.}
 
-\item{linking_method}{Linking method. Currently only \code{"mean_sd"} is supported,
-which applies an affine transform to match the mean and standard deviation of
-core thetas to the baseline core fit.}
+\item{linking_method}{Linking method passed to \code{\link[=bt_link_thetas]{bt_link_thetas()}}.
+Robust methods (\code{"median_iqr"}, \code{"median_mad"}) are recommended when
+rounds are close to deterministic (separation).}
 
 \item{linking_cor_target}{In \code{linking = "auto"}, apply linking when the core
 Pearson correlation between baseline and current raw thetas is below this value.}
@@ -99,6 +101,15 @@ maximum absolute core-theta shift (baseline vs current raw) exceeds this value.}
 
 \item{linking_min_n}{Minimum number of core IDs required to estimate the linking
 transform. If fewer are available, linking is skipped.}
+
+\item{reference_scale_method}{Method used to stabilize the \emph{reference} (baseline)
+theta scale before it is used for linking decisions. Defaults to a robust
+median/IQR-based scale. This reduces pathological behavior when the early core
+fit is close to deterministic (separation).}
+
+\item{reference_max_abs}{Maximum absolute value allowed for reference thetas after
+stabilization (clamping). This is applied only to the reference fit used for
+linking/drift diagnostics.}
 
 \item{judge_fun}{Function that accepts a tibble of pairs with columns \code{ID1},
 \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns

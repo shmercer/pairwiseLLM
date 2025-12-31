@@ -109,6 +109,8 @@ testthat::test_that("allocation_fun takes precedence over allocation preset", {
     core_audit_frac = 0.10,
     allocation = "precision_ramp", # should be ignored because allocation_fun is set
     allocation_fun = alloc,
+    linking_method = "mean_sd",
+    reference_scale_method = "mean_sd",
     reliability_target = NA_real_,
     sepG_target = NA_real_,
     rel_se_p90_target = 0,

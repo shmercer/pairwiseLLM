@@ -25,7 +25,14 @@
 #' @param ids Optional character vector of IDs used to estimate the linking
 #'   transform (typically a core linking set). If \code{NULL}, uses the
 #'   intersection of IDs present in both inputs.
-#' @param method Linking method. Currently only \code{"mean_sd"} is supported.
+#' @param method Linking method.
+#'   \itemize{
+#'     \item \code{"mean_sd"}: match mean and SD on the core set.
+#'     \item \code{"median_iqr"}: match median and a robust SD estimate based on IQR.
+#'     \item \code{"median_mad"}: match median and a robust SD estimate based on MAD.
+#'   }
+#'   Robust methods are recommended when early rounds are close to deterministic
+#'   (separation), which can otherwise yield very large scale factors.
 #' @param min_n Minimum number of core IDs required to compute the transform.
 #'   If fewer are available, the transform defaults to \code{a=0, b=1}.
 #'
@@ -52,7 +59,7 @@
 bt_link_thetas <- function(current,
                            reference,
                            ids = NULL,
-                           method = c("mean_sd"),
+                           method = c("mean_sd", "median_iqr", "median_mad"),
                            min_n = 3L) {
   method <- match.arg(method)
 
@@ -118,13 +125,31 @@ bt_link_thetas <- function(current,
 
   a <- 0
   b <- 1
-  if (method == "mean_sd" && n_core >= min_n) {
-    mu_cur <- mean(joined$theta_cur, na.rm = TRUE)
-    mu_ref <- mean(joined$theta_ref, na.rm = TRUE)
-    sd_cur <- stats::sd(joined$theta_cur, na.rm = TRUE)
-    sd_ref <- stats::sd(joined$theta_ref, na.rm = TRUE)
+  if (n_core >= min_n) {
+    # Center and scale on the overlap.
+    center_fun <- if (method %in% c("median_iqr", "median_mad")) stats::median else mean
+    scale_fun <- function(x) {
+      x <- as.numeric(x)
+      x <- x[is.finite(x)]
+      if (length(x) < 2L) {
+        return(NA_real_)
+      }
+      if (method == "median_iqr") {
+        s <- stats::IQR(x, na.rm = TRUE, type = 7) / 1.349
+      } else if (method == "median_mad") {
+        s <- stats::mad(x, constant = 1, na.rm = TRUE) / 0.6745
+      } else {
+        s <- stats::sd(x, na.rm = TRUE)
+      }
+      as.numeric(s)
+    }
 
-    if (is.finite(sd_cur) && sd_cur > 1e-8 && is.finite(sd_ref)) {
+    mu_cur <- center_fun(joined$theta_cur, na.rm = TRUE)
+    mu_ref <- center_fun(joined$theta_ref, na.rm = TRUE)
+    sd_cur <- scale_fun(joined$theta_cur)
+    sd_ref <- scale_fun(joined$theta_ref)
+
+    if (is.finite(sd_cur) && sd_cur > 1e-8 && is.finite(sd_ref) && sd_ref > 1e-8) {
       b <- sd_ref / sd_cur
     } else {
       b <- 1
@@ -134,6 +159,14 @@ bt_link_thetas <- function(current,
     } else {
       a <- 0
     }
+
+    # Guard against separation-driven explosions: if b is extreme, clamp.
+    # This prevents reference blow-ups from cascading into theta_linked.
+    if (!is.finite(b)) b <- 1
+    b_max <- if (method == "mean_sd") 5 else 3
+    b_min <- 1 / b_max
+    if (abs(b) > b_max) b <- sign(b) * b_max
+    if (abs(b) < b_min) b <- sign(b) * b_min
   }
 
 

@@ -31,9 +31,9 @@
 #'   on a stable scale defined by the baseline core fit. One of
 #'   \code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
 #'   linking is applied only when core drift exceeds the thresholds below.
-#' @param linking_method Linking method. Currently only \code{"mean_sd"} is supported,
-#'   which applies an affine transform to match the mean and standard deviation of
-#'   core thetas to the baseline core fit.
+#' @param linking_method Linking method passed to [bt_link_thetas()].
+#'   Robust methods (\code{"median_iqr"}, \code{"median_mad"}) are recommended when
+#'   rounds are close to deterministic (separation).
 #' @param linking_cor_target In \code{linking = "auto"}, apply linking when the core
 #'   Pearson correlation between baseline and current raw thetas is below this value.
 #' @param linking_p90_abs_shift_target In \code{linking = "auto"}, apply linking when the
@@ -43,6 +43,13 @@
 #'   maximum absolute core-theta shift (baseline vs current raw) exceeds this value.
 #' @param linking_min_n Minimum number of core IDs required to estimate the linking
 #'   transform. If fewer are available, linking is skipped.
+#' @param reference_scale_method Method used to stabilize the *reference* (baseline)
+#'   theta scale before it is used for linking decisions. Defaults to a robust
+#'   median/IQR-based scale. This reduces pathological behavior when the early core
+#'   fit is close to deterministic (separation).
+#' @param reference_max_abs Maximum absolute value allowed for reference thetas after
+#'   stabilization (clamping). This is applied only to the reference fit used for
+#'   linking/drift diagnostics.
 #' @param judge_fun Function that accepts a tibble of pairs with columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
 #'   \code{ID1}, \code{ID2}, \code{better_id}. If \code{judge} is provided, the output
@@ -209,11 +216,13 @@ bt_run_core_linking <- function(samples,
                                 core_size = 30,
                                 embeddings = NULL,
                                 linking = c("auto", "always", "never"),
-                                linking_method = c("mean_sd"),
+                                linking_method = c("median_iqr", "median_mad", "mean_sd"),
                                 linking_cor_target = 0.98,
                                 linking_p90_abs_shift_target = 0.15,
                                 linking_max_abs_shift_target = 0.30,
                                 linking_min_n = 3L,
+                                reference_scale_method = c("median_iqr", "median_mad", "mean_sd"),
+                                reference_max_abs = 6,
                                 judge_fun,
                                 initial_results = NULL,
                                 judge = NULL,
@@ -297,6 +306,10 @@ bt_run_core_linking <- function(samples,
 
   linking <- match.arg(linking)
   linking_method <- match.arg(linking_method)
+  reference_scale_method <- match.arg(reference_scale_method)
+  if (!is.numeric(reference_max_abs) || length(reference_max_abs) != 1L || is.na(reference_max_abs) || !is.finite(reference_max_abs) || reference_max_abs <= 0) {
+    stop("`reference_max_abs` must be a single finite number > 0.", call. = FALSE)
+  }
   if (!is.numeric(linking_cor_target) || length(linking_cor_target) != 1L) {
     stop("`linking_cor_target` must be a single numeric value.", call. = FALSE)
   }
@@ -559,6 +572,16 @@ bt_run_core_linking <- function(samples,
         call. = FALSE
       )
     }
+
+    # Attach bt_data for downstream diagnostics/debugging (and for reference
+    # stabilization in core-linking workflows).
+    out$bt_data <- bt_data
+
+    # Orient the scale deterministically using observed win scores.
+    orient <- .bt_orient_theta_by_wins(out$theta, bt_data)
+    out$theta <- orient$theta
+    out$orientation <- list(by = "wins", wins_cor = orient$cor, flipped = isTRUE(orient$flipped))
+
     out
   }
 
@@ -677,6 +700,13 @@ bt_run_core_linking <- function(samples,
       n_base <- min(n_base, nrow(results))
       if (n_base > 0L) {
         baseline_fit <- compute_fit(results[seq_len(n_base), , drop = FALSE])
+        baseline_fit <- .bt_prepare_reference_fit(
+          fit = baseline_fit,
+          bt_data = baseline_fit$bt_data,
+          core_ids = core_ids,
+          scale_method = reference_scale_method,
+          max_abs = reference_max_abs
+        )
       }
     }
     if (is.null(current_fit) && nrow(results) > 0L) {
@@ -705,7 +735,13 @@ bt_run_core_linking <- function(samples,
 
     if (nrow(results) > 0L) {
       current_fit <- compute_fit(results)
-      baseline_fit <- current_fit
+      baseline_fit <- .bt_prepare_reference_fit(
+        fit = current_fit,
+        bt_data = current_fit$bt_data,
+        core_ids = core_ids,
+        scale_method = reference_scale_method,
+        max_abs = reference_max_abs
+      )
       baseline_results_n <- nrow(results)
       current_fit <- apply_linking(current_fit, baseline_fit)
       current_fit <- tag_fit(current_fit, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
@@ -751,7 +787,13 @@ bt_run_core_linking <- function(samples,
 
       results <- dplyr::bind_rows(results, boot_res)
       current_fit <- compute_fit(results)
-      baseline_fit <- current_fit
+      baseline_fit <- .bt_prepare_reference_fit(
+        fit = current_fit,
+        bt_data = current_fit$bt_data,
+        core_ids = core_ids,
+        scale_method = reference_scale_method,
+        max_abs = reference_max_abs
+      )
       baseline_results_n <- nrow(results)
       current_fit <- apply_linking(current_fit, baseline_fit)
       current_fit <- tag_fit(current_fit, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))

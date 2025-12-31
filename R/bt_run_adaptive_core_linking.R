@@ -52,9 +52,14 @@
 #'   on a stable scale defined by the baseline core fit. One of
 #'   \code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
 #'   linking is applied only when core drift exceeds the thresholds below.
-#' @param linking_method Linking method. Currently only \code{"mean_sd"} is supported,
-#'   which applies an affine transform to match the mean and standard deviation of
-#'   core thetas to the baseline core fit.
+#' @param linking_method Linking method passed to [bt_link_thetas()].
+#'   \itemize{
+#'     \item \code{"mean_sd"}: match mean and SD on the core set.
+#'     \item \code{"median_iqr"}: match median and a robust SD estimate based on IQR.
+#'     \item \code{"median_mad"}: match median and a robust SD estimate based on MAD.
+#'   }
+#'   Robust methods are strongly recommended for real-world adaptive runs because
+#'   early rounds can be close to deterministic (separation).
 #' @param linking_cor_target In \code{linking = "auto"}, apply linking when the core
 #'   Pearson correlation between baseline and current raw thetas is below this value.
 #' @param linking_p90_abs_shift_target In \code{linking = "auto"}, apply linking when the
@@ -64,6 +69,14 @@
 #'   maximum absolute core-theta shift (baseline vs current raw) exceeds this value.
 #' @param linking_min_n Minimum number of core IDs required to estimate the linking
 #'   transform. If fewer are available, linking is skipped.
+#' @param reference_scale_method Method used to stabilize the *reference* (baseline)
+#'   theta scale before it is used for linking decisions. Defaults to a robust
+#'   median/IQR-based scale. This reduces pathological behavior when the early core
+#'   fit is close to deterministic (separation), which can otherwise cause linking
+#'   scale factors to explode.
+#' @param reference_max_abs Maximum absolute value allowed for reference thetas after
+#'   stabilization (clamping). This is applied only to the reference fit used for
+#'   linking/drift diagnostics.
 #' @param seed_core Optional integer seed for reproducible core selection.
 #'
 #' @param initial_results Optional tibble/data.frame of already-scored pairs with columns
@@ -251,11 +264,13 @@ bt_run_adaptive_core_linking <- function(samples,
                                          embeddings = NULL,
                                          embeddings_metric = c("cosine", "euclidean"),
                                          linking = c("auto", "always", "never"),
-                                         linking_method = c("mean_sd"),
+                                         linking_method = c("median_iqr", "median_mad", "mean_sd"),
                                          linking_cor_target = 0.98,
                                          linking_p90_abs_shift_target = 0.15,
                                          linking_max_abs_shift_target = 0.30,
                                          linking_min_n = 3L,
+                                         reference_scale_method = c("median_iqr", "median_mad", "mean_sd"),
+                                         reference_max_abs = 6,
                                          seed_core = NULL,
                                          initial_results = NULL,
                                          judge = NULL,
@@ -410,6 +425,10 @@ bt_run_adaptive_core_linking <- function(samples,
 
   linking <- match.arg(linking)
   linking_method <- match.arg(linking_method)
+  reference_scale_method <- match.arg(reference_scale_method)
+  if (!is.numeric(reference_max_abs) || length(reference_max_abs) != 1L || is.na(reference_max_abs) || !is.finite(reference_max_abs) || reference_max_abs <= 0) {
+    stop("`reference_max_abs` must be a single finite number > 0.", call. = FALSE)
+  }
   if (!is.numeric(linking_cor_target) || length(linking_cor_target) != 1L) {
     stop("`linking_cor_target` must be a single numeric value.", call. = FALSE)
   }
@@ -548,6 +567,13 @@ bt_run_adaptive_core_linking <- function(samples,
         fit$theta$se <- NA_real_
       }
     }
+
+    # Orient the scale deterministically using observed win scores.
+    # This avoids arbitrary sign flips across rounds, which can otherwise
+    # corrupt linking/drift decisions and make diagnostics hard to interpret.
+    orient <- .bt_orient_theta_by_wins(fit$theta, bt_data)
+    fit$theta <- orient$theta
+    fit$orientation <- list(by = "wins", wins_cor = orient$cor, flipped = isTRUE(orient$flipped))
 
     list(bt_data = bt_data, fit = fit)
   }
@@ -879,7 +905,13 @@ bt_run_adaptive_core_linking <- function(samples,
       n_base <- min(n_base, nrow(results))
       if (n_base > 0L) {
         fr_base <- fit_from_results(results[seq_len(n_base), , drop = FALSE])
-        baseline_fit <- fr_base$fit
+        baseline_fit <- .bt_prepare_reference_fit(
+          fit = fr_base$fit,
+          bt_data = fr_base$bt_data,
+          core_ids = core_ids,
+          scale_method = reference_scale_method,
+          max_abs = reference_max_abs
+        )
         bootstrap_fit <- baseline_fit
       }
     }
@@ -931,8 +963,16 @@ bt_run_adaptive_core_linking <- function(samples,
       fr <- fit_from_results(results)
       if (!is.null(fr$fit)) {
         current_fit <- fr$fit
-        bootstrap_fit <- fr$fit
-        baseline_fit <- fr$fit
+
+        # Stabilize the baseline reference used for linking/drift...
+        baseline_fit <- .bt_prepare_reference_fit(
+          fit = fr$fit,
+          bt_data = fr$bt_data,
+          core_ids = core_ids,
+          scale_method = reference_scale_method,
+          max_abs = reference_max_abs
+        )
+        bootstrap_fit <- baseline_fit
         baseline_results_n <- nrow(results)
         current_fit <- apply_linking(current_fit, baseline_fit)
         attr(current_fit, "bt_run_adaptive_core_linking") <- list(stage = "bootstrap", batch_index = 0L, round_index = 0L)
@@ -952,7 +992,15 @@ bt_run_adaptive_core_linking <- function(samples,
     } else {
       fr <- fit_from_results(results)
       current_fit <- fr$fit
-      baseline_fit <- current_fit
+      baseline_fit <- .bt_prepare_reference_fit(
+        fit = current_fit,
+        bt_data = fr$bt_data,
+        core_ids = core_ids,
+        scale_method = reference_scale_method,
+        max_abs = reference_max_abs
+      )
+      bootstrap_fit <- baseline_fit
+      baseline_results_n <- nrow(results)
       current_fit <- apply_linking(current_fit, baseline_fit)
     }
 

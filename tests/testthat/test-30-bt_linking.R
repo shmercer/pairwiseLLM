@@ -77,6 +77,8 @@ testthat::test_that("bt_run_core_linking adds theta_linked when linking is enabl
     max_judge_misfit_prop = NA_real_,
     rel_se_p90_target = 0.0001,
     linking = "always",
+    linking_method = "mean_sd",
+    reference_scale_method = "mean_sd",
     verbose = FALSE
   )
 
@@ -84,9 +86,12 @@ testthat::test_that("bt_run_core_linking adds theta_linked when linking is enabl
   testthat::expect_true("theta_linked" %in% names(ff$theta))
   testthat::expect_true("se_linked" %in% names(ff$theta))
 
-  # Linked core thetas should match the baseline thetas (0,1,2)
+  # With deterministic orientation-by-wins + centering/scaling, the baseline is
+  # flipped so that higher theta corresponds to more wins. In this mock setup:
+  # A beats B and C, and B beats C, so A > B > C and the normalized core baseline
+  # becomes c(1, 0, -1).
   core_tbl <- ff$theta[match(c("A", "B", "C"), ff$theta$ID), ]
-  testthat::expect_equal(core_tbl$theta_linked, c(0, 1, 2))
+  testthat::expect_equal(core_tbl$theta_linked, c(1, 0, -1))
 })
 
 
@@ -139,6 +144,8 @@ testthat::test_that("linking=auto only applies when drift triggers", {
     max_judge_misfit_prop = NA_real_,
     rel_se_p90_target = 0.0001,
     linking = "auto",
+    linking_method = "mean_sd",
+    reference_scale_method = "mean_sd",
     # require a strong trigger so this small drift does not apply
     linking_cor_target = 0.50,
     linking_p90_abs_shift_target = 100,
