@@ -142,7 +142,7 @@ fit_rank_centrality <- function(
   n <- length(ids)
   if (n < 2L) stop("Need at least 2 unique IDs to fit Rank Centrality.", call. = FALSE)
 
-  idx <- setNames(seq_len(n), ids)
+  idx <- stats::setNames(seq_len(n), ids)
 
   # Build win/loss counts per unordered pair
   # We'll store wins for directed i -> j in a sparse-like map via matrices for simplicity (n is small here).
@@ -302,7 +302,7 @@ fit_rank_centrality <- function(
     degree_p90 = as.numeric(stats::quantile(degree, probs = 0.90, names = FALSE)),
     n_components = as.integer(n_components),
     largest_component_frac = as.numeric(largest_component_frac),
-    component_id = setNames(as.integer(component_id), ids),
+    component_id = stats::setNames(as.integer(component_id), ids),
     damping = damping,
     smoothing = smoothing,
     power_iter = as.integer(it),
