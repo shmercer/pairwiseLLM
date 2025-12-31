@@ -92,6 +92,13 @@ bt_stop_metrics <- function(fit,
     metrics <- NULL
   }
 
+  # Treat an empty `ids` vector as if it were not provided. This can happen
+  # during runs when `new_ids` is empty, and callers pass `ids=character(0)`.
+  # In that case we should compute metrics on all items rather than error.
+  if (!is.null(ids) && length(ids) == 0L) {
+    ids <- NULL
+  }
+
   theta_tbl <- tibble::as_tibble(fit$theta)
   theta_tbl_all <- theta_tbl
   n_total_items <- nrow(theta_tbl_all)

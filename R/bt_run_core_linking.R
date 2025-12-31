@@ -582,11 +582,11 @@ bt_run_core_linking <- function(samples,
         core_ids = core_ids,
         batches = batches,
         results = results,
-    bt_data = bt_data,
+        bt_data = bt_data,
         fits = fits,
         final_fits = final_fits,
-    estimates = estimates,
-    final_models = final_models,
+        estimates = estimates,
+        final_models = final_models,
         metrics = metrics_hist,
         state = state_hist,
         batch_summary = batch_summary
@@ -712,7 +712,7 @@ bt_run_core_linking <- function(samples,
     fit
   }
 
-  make_running_fit <- function(bt_data, fit_bt, fit_engine_running, rc_smoothing, rc_damping) {
+  make_running_fit <- function(bt_data, fit_bt, fit_engine_running, rc_smoothing, rc_damping, linking_mode) {
     # Silence R CMD check notes for NSE dplyr column references.
     ID <- NULL
     theta <- NULL
@@ -782,6 +782,7 @@ bt_run_core_linking <- function(samples,
       reliability = fit_bt$reliability %||% NA_real_,
       theta = theta_run,
       diagnostics = fit_bt$diagnostics %||% list(),
+      linking = fit_bt$linking %||% list(mode = linking_mode, reason = if (identical(linking_mode, "never")) "never" else NA_character_),
       bt_fit = fit_bt,
       rc_fit = rc_fit
     )
@@ -847,7 +848,8 @@ bt_run_core_linking <- function(samples,
           fit_bt = current_fit,
           fit_engine_running = fit_engine_running,
           rc_smoothing = rc_smoothing,
-          rc_damping = rc_damping
+          rc_damping = rc_damping,
+          linking_mode = linking
         )
         current_fit_running <- tag_fit(
           current_fit_running, batch_start - 1L, round_start - 1L, "resume_recompute",
@@ -887,7 +889,8 @@ bt_run_core_linking <- function(samples,
         fit_bt = current_fit,
         fit_engine_running = fit_engine_running,
         rc_smoothing = rc_smoothing,
-        rc_damping = rc_damping
+        rc_damping = rc_damping,
+        linking_mode = linking
       )
       current_fit_running <- tag_fit(current_fit_running, 0L, 0L, "warm_start", nrow(results), 0L, character(0))
 
@@ -949,7 +952,8 @@ bt_run_core_linking <- function(samples,
         fit_bt = current_fit,
         fit_engine_running = fit_engine_running,
         rc_smoothing = rc_smoothing,
-        rc_damping = rc_damping
+        rc_damping = rc_damping,
+        linking_mode = linking
       )
       current_fit_running <- tag_fit(current_fit_running, 0L, 1L, "bootstrap", nrow(results), nrow(boot$pairs), character(0))
 
@@ -1160,7 +1164,8 @@ bt_run_core_linking <- function(samples,
         fit_bt = current_fit,
         fit_engine_running = fit_engine_running,
         rc_smoothing = rc_smoothing,
-        rc_damping = rc_damping
+        rc_damping = rc_damping,
+        linking_mode = linking
       )
       current_fit_running <- tag_fit(current_fit_running, as.integer(batch_i), as.integer(round_i), "round", nrow(results), nrow(pairs), new_ids)
 
@@ -1172,9 +1177,13 @@ bt_run_core_linking <- function(samples,
       st <- dplyr::mutate(st, batch_index = as.integer(batch_i), round_index = as.integer(round_i), stage = "round", stop = FALSE, stop_reason = NA_character_, n_new_ids = as.integer(length(new_ids)))
       state_hist <- dplyr::bind_rows(state_hist, st)
 
+      ids_for_metrics <- intersect(new_ids, current_fit$theta$ID)
+      if (length(ids_for_metrics) == 0L) {
+        ids_for_metrics <- NULL
+      }
       metrics <- bt_stop_metrics(
         fit = current_fit,
-        ids = new_ids,
+        ids = ids_for_metrics,
         prev_fit = prev_fit_for_drift,
         core_ids = core_ids,
         se_probs = se_probs,
