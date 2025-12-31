@@ -12,13 +12,17 @@ test_that("exhaustion fallback can unlock cross-batch new-new pairs", {
   }
 
   # Minimal fit: theta from win counts; drift metrics not used in this test.
-  fit_fun <- function(results, samples, ...) {
-    ids <- sort(unique(c(results$ID1, results$ID2)))
-    wins <- setNames(rep(0, length(ids)), ids)
-    for (i in seq_len(nrow(results))) {
-      wins[results$better_id[[i]]] <- wins[results$better_id[[i]]] + 1
-    }
-    theta <- tibble::tibble(ID = names(wins), theta = wins - stats::median(wins), se = 1)
+  fit_fun <- function(bt_data, ...) {
+    winners <- dplyr::if_else(bt_data$result == 1, bt_data$object1, bt_data$object2)
+    ids <- sort(unique(c(bt_data$object1, bt_data$object2)))
+    wins <- purrr::map_dbl(ids, ~ sum(winners == .x))
+
+    theta <- tibble::tibble(
+      ID = ids,
+      theta = wins - stats::median(wins),
+      se = 1
+    )
+
     list(theta = theta, reliability = 0.90, diagnostics = list(sepG = 3))
   }
 
