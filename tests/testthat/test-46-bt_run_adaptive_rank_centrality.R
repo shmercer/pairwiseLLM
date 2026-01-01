@@ -125,7 +125,12 @@ test_that("bt_run_adaptive can optionally compute final combined estimates", {
   )
 
   expect_true(is.data.frame(out$estimates))
-  expect_true(all(c("ID", "theta_bt", "se_bt", "rank_bt", "theta_rc", "pi_rc", "rank_rc") %in% names(out$estimates)))
+  expect_true(all(
+    c("ID",
+      "theta_bt_firth", "se_bt_firth", "rank_bt_firth",
+      "pi_rc", "theta_rc", "rank_rc"
+    ) %in% names(out$estimates)
+  ))
   expect_true(is.list(out$final_models))
   expect_true(all(c("bt_fit", "rc_fit", "diagnostics") %in% names(out$final_models)))
 })
