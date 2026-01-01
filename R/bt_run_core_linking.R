@@ -641,7 +641,7 @@ bt_run_core_linking <- function(samples,
     #
     # We accept missing `se` and fill it with NA, but `ID` and `theta` must be
     # present (or inferable) for non-empty tables.
-    out$theta <- pairwiseLLM:::.as_theta_tibble(out$theta, arg_name = "fit_fun()$theta")
+    out$theta <- .as_theta_tibble(out$theta, arg_name = "fit_fun()$theta")
     if (!("se" %in% names(out$theta))) {
       out$theta$se <- NA_real_
     }
