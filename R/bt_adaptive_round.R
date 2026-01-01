@@ -50,6 +50,13 @@
 #'   Passed to \code{\link{select_adaptive_pairs}}.
 #' @param forbid_repeats Logical; passed to \code{\link{select_adaptive_pairs}}.
 #' @param balance_positions Logical; passed to \code{\link{select_adaptive_pairs}}.
+#' @param embedding_neighbors Optional embedding-based neighbor lists used to
+#'   augment candidate generation. This should be a named list mapping each ID to
+#'   a character vector of neighbor IDs (or a matrix/data.frame with rownames = IDs
+#'   and neighbor IDs in columns). Passed to \code{\link{select_adaptive_pairs}}.
+#' @param embed_far_k Integer; number of additional "far" candidates to sample
+#'   per item when \code{embedding_neighbors} is provided. Passed to
+#'   \code{\link{select_adaptive_pairs}}.
 #' @param seed Optional integer seed for reproducibility; passed to \code{\link{select_adaptive_pairs}}.
 #'
 #' @return A list with:
@@ -100,6 +107,8 @@ bt_adaptive_round <- function(samples,
                               min_judgments = 12,
                               forbid_repeats = TRUE,
                               balance_positions = TRUE,
+                              embedding_neighbors = NULL,
+                              embed_far_k = 0,
                               seed = NULL) {
   samples <- tibble::as_tibble(samples)
   req_s <- c("ID", "text")
@@ -158,11 +167,13 @@ bt_adaptive_round <- function(samples,
     samples = samples,
     theta = fit$theta,
     existing_pairs = existing_pairs,
+    embedding_neighbors = embedding_neighbors,
     n_pairs = round_size,
     k_neighbors = k_neighbors,
     min_judgments = min_judgments,
     forbid_repeats = forbid_repeats,
     balance_positions = balance_positions,
+    embed_far_k = embed_far_k,
     seed = seed
   )
 

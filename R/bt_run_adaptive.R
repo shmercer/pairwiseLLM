@@ -114,6 +114,16 @@
 #' @param balance_positions Logical. If \code{TRUE}, attempt to balance how often each item appears
 #' in the first vs second position (\code{ID1} vs \code{ID2}) to mitigate positional bias.
 #' Passed to \code{\link{bt_adaptive_round}} / \code{\link{select_adaptive_pairs}}.
+#' @param embeddings Optional numeric embeddings matrix with one row per item.
+#' If provided, adaptive candidate generation is augmented with embedding-based
+#' neighbor candidates (in addition to theta-neighbors). Use
+#' \code{\link{validate_embeddings}} to align/reorder rows.
+#' @param embed_k Integer. Number of nearest neighbors (by cosine similarity) to
+#' precompute per item from \code{embeddings}. Only used when \code{embeddings}
+#' is provided.
+#' @param embed_far_k Integer. Number of additional "far" candidates to sample
+#' per item (uniformly at random) to preserve global mixing. Only used when
+#' \code{embeddings} is provided.
 #'
 #' @param seed_pairs Optional integer seed used for bootstrap pair generation as
 #' \code{seed_pairs}, and for adaptive rounds as \code{seed_pairs + round}.
@@ -285,6 +295,9 @@ bt_run_adaptive <- function(samples,
                             min_judgments = 12,
                             forbid_repeats = TRUE,
                             balance_positions = TRUE,
+                            embeddings = NULL,
+                            embed_k = 30,
+                            embed_far_k = 0,
                             seed_pairs = NULL,
                             reverse_audit = FALSE,
                             reverse_pct = 0.10,
@@ -333,6 +346,20 @@ bt_run_adaptive <- function(samples,
   if (length(ids) < 2L) stop("`samples` must contain at least 2 rows.", call. = FALSE)
   if (anyNA(ids) || any(ids == "")) stop("`samples$ID` must be non-missing and non-empty.", call. = FALSE)
   if (any(duplicated(ids))) stop("`samples$ID` must be unique.", call. = FALSE)
+
+  # Optional: embedding-augmented candidate generation.
+  embedding_neighbors <- NULL
+  if (!is.null(embeddings)) {
+    if (!is.numeric(embed_k) || length(embed_k) != 1L || is.na(embed_k) || embed_k < 0) {
+      stop("`embed_k` must be a single non-negative integer.", call. = FALSE)
+    }
+    embed_k <- as.integer(embed_k)
+    if (!is.numeric(embed_far_k) || length(embed_far_k) != 1L || is.na(embed_far_k) || embed_far_k < 0) {
+      stop("`embed_far_k` must be a single non-negative integer.", call. = FALSE)
+    }
+    embed_far_k <- as.integer(embed_far_k)
+    embedding_neighbors <- .compute_embedding_neighbors(embeddings, ids = ids, k = embed_k)
+  }
 
   if (!is.function(judge_fun)) stop("`judge_fun` must be a function.", call. = FALSE)
 
@@ -717,6 +744,8 @@ bt_run_adaptive <- function(samples,
       min_judgments = min_judgments,
       forbid_repeats = forbid_repeats,
       balance_positions = balance_positions,
+      embedding_neighbors = embedding_neighbors,
+      embed_far_k = embed_far_k,
       seed = if (is.null(seed_pairs)) NULL else (as.integer(seed_pairs) + as.integer(r))
     )
 

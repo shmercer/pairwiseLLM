@@ -34,6 +34,9 @@ bt_run_adaptive(
   min_judgments = 12,
   forbid_repeats = TRUE,
   balance_positions = TRUE,
+  embeddings = NULL,
+  embed_k = 30,
+  embed_far_k = 0,
   seed_pairs = NULL,
   reverse_audit = FALSE,
   reverse_pct = 0.1,
@@ -159,6 +162,19 @@ rounds. Passed to \code{\link{bt_adaptive_round}} / \code{\link{select_adaptive_
 \item{balance_positions}{Logical. If \code{TRUE}, attempt to balance how often each item appears
 in the first vs second position (\code{ID1} vs \code{ID2}) to mitigate positional bias.
 Passed to \code{\link{bt_adaptive_round}} / \code{\link{select_adaptive_pairs}}.}
+
+\item{embeddings}{Optional numeric embeddings matrix with one row per item.
+If provided, adaptive candidate generation is augmented with embedding-based
+neighbor candidates (in addition to theta-neighbors). Use
+\code{\link{validate_embeddings}} to align/reorder rows.}
+
+\item{embed_k}{Integer. Number of nearest neighbors (by cosine similarity) to
+precompute per item from \code{embeddings}. Only used when \code{embeddings}
+is provided.}
+
+\item{embed_far_k}{Integer. Number of additional "far" candidates to sample
+per item (uniformly at random) to preserve global mixing. Only used when
+\code{embeddings} is provided.}
 
 \item{seed_pairs}{Optional integer seed used for bootstrap pair generation as
 \code{seed_pairs}, and for adaptive rounds as \code{seed_pairs + round}.
