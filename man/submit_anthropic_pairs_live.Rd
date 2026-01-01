@@ -15,7 +15,7 @@ submit_anthropic_pairs_live(
   reasoning = c("none", "enabled"),
   verbose = TRUE,
   status_every = 1,
-  progress = TRUE,
+  progress = interactive(),
   include_raw = FALSE,
   validate = FALSE,
   validate_strict = FALSE,
