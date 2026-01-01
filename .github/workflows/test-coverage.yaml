@@ -45,6 +45,20 @@ jobs:
           covr::to_cobertura(cov)
 
           # ------------------------------------------------------------
+          # HTML coverage report (artifact)
+          # ------------------------------------------------------------
+          pct <- covr::percent_coverage(cov)
+          cat(sprintf("Coverage: %.2f%%\n", pct))
+          covr::report(cov, file = "covr.html", browse = FALSE)
+
+          # Optional: write to GitHub Actions summary
+          summ <- Sys.getenv("GITHUB_STEP_SUMMARY")
+          if (nzchar(summ)) {
+            cat(sprintf("\n## Coverage\n\n- Total: **%.2f%%**\n", pct), file = summ, append = TRUE)
+            cat("- HTML report uploaded as artifact: `covr-report`\n", file = summ, append = TRUE)
+          }
+
+          # ------------------------------------------------------------
           # Uncovered line reporting (structured CSV + readable MD)
           # ------------------------------------------------------------
           z_all <- covr::zero_coverage(cov)
@@ -105,6 +119,15 @@ jobs:
           plugins: noop
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload covr HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: covr-report
+          path: |
+            covr.html
+            covr_files/
 
       - name: Upload uncovered lines report
         if: always()
