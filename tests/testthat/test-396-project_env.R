@@ -28,3 +28,16 @@ test_that("project .Renviron helpers print instructions (no file writing)", {
   expect_identical(entry3, "PAIRWISELLM_EMBEDDINGS_CACHE_DIR=\"./.cache/pairwiseLLM\"")
   expect_false(file.exists(f))
 })
+
+test_that("project_env validates keys/values and handles missing file", {
+  expect_error(pairwiseLLM:::.project_env_entry("", "x"), "key")
+  expect_error(pairwiseLLM:::.project_env_entry("OK", ""), "value")
+  # Newlines in values are not rejected by design (users may paste paths/notes).
+  testthat::expect_identical(pairwiseLLM:::.project_env_entry("OK", "a\nb"), "OK=\"a\nb\"")
+
+  # If file is not supplied, we print the entry and return without writing
+  expect_message(
+    set_project_reticulate_python("/tmp/python", file = NA_character_),
+    "add the following line"
+  )
+})

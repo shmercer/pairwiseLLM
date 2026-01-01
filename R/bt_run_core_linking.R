@@ -501,39 +501,6 @@ bt_run_core_linking <- function(samples,
     return(.as_pairwise_run(out, run_type = "core_linking"))
   }
 
-  # If the caller explicitly requests no new sampling and provides no initial
-  # results, stop immediately with a consistent stop reason (rather than
-  # failing the initial fit with 0 results).
-  if (is.null(resume_from) && nrow(results) == 0L && round_size == 0L) {
-    out <- list(
-      core_ids = core_ids,
-      batches = batches,
-      results = results,
-      fits = list(),
-      final_fits = list(),
-      metrics = .bt_align_metrics(tibble::tibble(), se_probs = se_probs),
-      state = .bt_align_state(tibble::tibble()),
-      batch_summary = tibble::tibble(),
-      stop_reason = .bt_resolve_stop_reason(round_size_zero = TRUE),
-      stop_round = 0L
-    )
-
-    if (!is.null(checkpoint_dir) && nzchar(checkpoint_dir)) {
-      payload <- list(
-        run_type = "core_linking",
-        ids = ids_all,
-        core_ids = core_ids,
-        batches = batches,
-        timestamp = Sys.time(),
-        completed = TRUE,
-        out = out
-      )
-      .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
-    }
-
-    return(.as_pairwise_run(out, run_type = "core_linking"))
-  }
-
   # ---- resume / checkpoint state ----
   checkpoint_payload_last <- NULL
   batch_start <- 1L

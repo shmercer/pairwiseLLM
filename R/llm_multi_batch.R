@@ -298,8 +298,6 @@ llm_submit_pairs_multi_batch <- function(
           seg, batch_id, input_path
         ))
       }
-    } else {
-      stop("Unsupported backend: ", backend, call. = FALSE)
     }
 
     jobs[[seg]] <- list(
