@@ -54,6 +54,23 @@
 #' @param include_residuals Logical; passed to \code{fit_fun}. If \code{TRUE}, request
 #' residual/probability outputs when supported (may increase compute/memory). Default \code{FALSE}.
 #'
+#' @param fit_engine_running Character. Estimator used for the \emph{running} ability
+#'   vector that drives adaptive pair selection. \code{"bt"} uses the BT fit returned
+#'   by \code{fit_fun}. \code{"rank_centrality"} computes Rank Centrality scores from
+#'   the current comparison graph (often more stable early on sparse graphs) while
+#'   still using BT standard errors as an uncertainty heuristic when available.
+#'   Default \code{"bt"}.
+#' @param rc_smoothing,rc_damping Numeric. Parameters forwarded to
+#'   \code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"}
+#'   (and also stored in per-round fits). See \code{\link{fit_rank_centrality}} for
+#'   details.
+#' @param final_refit Logical. If \code{TRUE}, compute a final combined estimates table
+#'   (BT + Rank Centrality) at the end of the run via \code{\link{compute_final_estimates}}.
+#'   This requires suggested packages (e.g., \pkg{BradleyTerry2}) to be installed.
+#'   Default \code{FALSE} to preserve lightweight dependency behavior.
+#' @param final_bt_bias_reduction Logical. Passed to \code{\link{compute_final_estimates}}
+#'   as \code{bt_bias_reduction}. Default \code{TRUE}.
+#'
 #' @param round_size Integer. Number of new pairs to propose and score in each adaptive round.
 #' If \code{0}, the runner will fit once (if possible) and then stop without proposing new pairs.
 #' @param init_round_size Integer. Number of bootstrap (random) pairs to score before the first
@@ -166,6 +183,10 @@
 #' tagged with per-round metadata in the \code{attr(fit, "bt_run_adaptive")} attribute.}
 #' \item{final_fit}{The final fit object (the last element of \code{fits}), or \code{NULL}
 #' if no fit was run.}
+#' \item{estimates}{NULL unless \code{final_refit=TRUE}; then a final combined estimates
+#' tibble produced by \code{\link{compute_final_estimates}} (BT + Rank Centrality).}
+#' \item{final_models}{NULL unless \code{final_refit=TRUE}; then a list containing
+#' the fitted model objects (\code{bt_fit}, \code{rc_fit}) and a summary \code{diagnostics} list.}
 #' \item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
 #' \code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
 #' or \code{"no_results"}).}
@@ -243,6 +264,11 @@ bt_run_adaptive <- function(samples,
                             fit_verbose = FALSE,
                             return_diagnostics = TRUE,
                             include_residuals = FALSE,
+                            fit_engine_running = c("bt", "rank_centrality"),
+                            rc_smoothing = 0.5,
+                            rc_damping = 0.0,
+                            final_refit = FALSE,
+                            final_bt_bias_reduction = TRUE,
                             round_size = 50,
                             init_round_size = round_size,
                             max_rounds = 50,
@@ -332,6 +358,68 @@ bt_run_adaptive <- function(samples,
 
   if (!is.null(resume_from) && (is.null(checkpoint_dir) || !nzchar(checkpoint_dir))) {
     checkpoint_dir <- resume_from
+  }
+
+  fit_engine_running <- match.arg(fit_engine_running)
+  if (!is.numeric(rc_smoothing) || length(rc_smoothing) != 1L || is.na(rc_smoothing) || rc_smoothing < 0) {
+    stop("`rc_smoothing` must be a single non-negative number.", call. = FALSE)
+  }
+  if (!is.numeric(rc_damping) || length(rc_damping) != 1L || is.na(rc_damping) || rc_damping < 0 || rc_damping >= 1) {
+    stop("`rc_damping` must be a single number in [0, 1).", call. = FALSE)
+  }
+  final_refit <- isTRUE(final_refit)
+  final_bt_bias_reduction <- isTRUE(final_bt_bias_reduction)
+
+  make_running_fit <- function(bt_data, fit_bt) {
+    bt_tbl <- .as_theta_tibble(fit_bt$theta, arg_name = "fit_fun()$theta")
+    bt_tbl <- tibble::as_tibble(bt_tbl)
+    bt_tbl$ID <- as.character(bt_tbl$ID)
+
+    # Ensure every ID in `samples` is present (for consistent downstream joins)
+    bt_tbl <- dplyr::right_join(bt_tbl, tibble::tibble(ID = as.character(ids)), by = "ID")
+
+    theta_bt <- bt_tbl$theta
+    se_bt <- bt_tbl$se
+
+    theta_rc <- rep(NA_real_, length(ids))
+    pi_rc <- rep(NA_real_, length(ids))
+    rc_fit <- NULL
+
+    if (fit_engine_running == "rank_centrality") {
+      rc_fit <- fit_rank_centrality(
+        bt_data,
+        ids = ids,
+        smoothing = rc_smoothing,
+        damping = rc_damping
+      )
+      rc_tbl <- tibble::as_tibble(rc_fit$theta)
+      rc_tbl$ID <- as.character(rc_tbl$ID)
+      rc_tbl <- dplyr::right_join(rc_tbl, tibble::tibble(ID = as.character(ids)), by = "ID")
+      theta_rc <- rc_tbl$theta
+      pi_rc <- rc_tbl$pi
+    }
+
+    theta_running <- if (fit_engine_running == "rank_centrality") theta_rc else theta_bt
+
+    theta_out <- tibble::tibble(
+      ID = as.character(ids),
+      theta = theta_running,
+      se = se_bt,
+      theta_bt = theta_bt,
+      se_bt = se_bt,
+      theta_rc = theta_rc,
+      pi_rc = pi_rc
+    )
+
+    list(
+      engine = fit_bt$engine,
+      engine_running = fit_engine_running,
+      reliability = fit_bt$reliability,
+      theta = theta_out,
+      diagnostics = fit_bt$diagnostics,
+      bt_fit = fit_bt,
+      rc_fit = rc_fit
+    )
   }
 
   # helper: random bootstrap pairs (unique unordered, optional position balancing)
@@ -470,6 +558,8 @@ bt_run_adaptive <- function(samples,
         bt_data = if (nrow(results) == 0L) tibble::tibble(object1 = character(), object2 = character(), result = numeric()) else build_bt_fun(results, judge = judge),
         fits = fits,
         final_fit = final_fit,
+        estimates = NULL,
+        final_models = NULL,
         stop_reason = stop_reason,
         stop_round = stop_round,
         rounds = rounds_tbl_prev,
@@ -582,7 +672,7 @@ bt_run_adaptive <- function(samples,
       build_bt_fun(results, judge = judge)
     }
 
-    fit <- do.call(
+    fit_bt <- do.call(
       fit_fun,
       c(
         list(
@@ -596,6 +686,7 @@ bt_run_adaptive <- function(samples,
       )
     )
 
+    fit <- make_running_fit(bt_data, fit_bt)
     fit <- tag_fit(
       fit,
       round_index = r,
@@ -792,7 +883,9 @@ bt_run_adaptive <- function(samples,
     rounds_tbl$stop_reason <- vapply(
       rounds_tbl$stop_reason,
       function(x) {
-        if (is.null(x)) return(NA_character_)
+        if (is.null(x)) {
+          return(NA_character_)
+        }
         as.character(x)[1]
       },
       character(1)
@@ -808,7 +901,9 @@ bt_run_adaptive <- function(samples,
     rounds_tbl$stop <- vapply(
       rounds_tbl$stop,
       function(x) {
-        if (is.null(x)) return(FALSE)
+        if (is.null(x)) {
+          return(FALSE)
+        }
         isTRUE(x)
       },
       logical(1)
@@ -826,6 +921,36 @@ bt_run_adaptive <- function(samples,
     build_bt_fun(results, judge = NULL)
   } else {
     build_bt_fun(results, judge = judge)
+  }
+
+  # Optional final refit / combined estimates table.
+  estimates <- NULL
+  final_models <- NULL
+  if (isTRUE(final_refit) && nrow(results) > 0L) {
+    tmp <- tryCatch(
+      compute_final_estimates(
+        results = results,
+        ids = ids,
+        bt_bias_reduction = final_bt_bias_reduction,
+        rc_smoothing = rc_smoothing,
+        rc_damping = rc_damping
+      ),
+      error = function(e) e
+    )
+    if (inherits(tmp, "error")) {
+      warning(
+        "`final_refit = TRUE` requested but final estimates could not be computed: ",
+        conditionMessage(tmp),
+        call. = FALSE
+      )
+    } else {
+      estimates <- tmp$estimates
+      final_models <- list(
+        bt_fit = tmp$bt_fit,
+        rc_fit = tmp$rc_fit,
+        diagnostics = tmp$diagnostics
+      )
+    }
   }
 
   # optional post-stop reverse audit (unchanged)
@@ -909,6 +1034,8 @@ bt_run_adaptive <- function(samples,
     bt_data = bt_data_final,
     fits = fits,
     final_fit = final_fit,
+    estimates = estimates,
+    final_models = final_models,
     stop_reason = stop_reason,
     stop_round = stop_round,
     rounds = rounds_tbl,

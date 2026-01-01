@@ -13,6 +13,11 @@ bt_run_adaptive(
   fit_verbose = FALSE,
   return_diagnostics = TRUE,
   include_residuals = FALSE,
+  fit_engine_running = c("bt", "rank_centrality"),
+  rc_smoothing = 0.5,
+  rc_damping = 0,
+  final_refit = FALSE,
+  final_bt_bias_reduction = TRUE,
   round_size = 50,
   init_round_size = round_size,
   max_rounds = 50,
@@ -78,6 +83,26 @@ return engine-specific diagnostics (e.g., item fit, separation/reliability). Def
 
 \item{include_residuals}{Logical; passed to \code{fit_fun}. If \code{TRUE}, request
 residual/probability outputs when supported (may increase compute/memory). Default \code{FALSE}.}
+
+\item{fit_engine_running}{Character. Estimator used for the \emph{running} ability
+vector that drives adaptive pair selection. \code{"bt"} uses the BT fit returned
+by \code{fit_fun}. \code{"rank_centrality"} computes Rank Centrality scores from
+the current comparison graph (often more stable early on sparse graphs) while
+still using BT standard errors as an uncertainty heuristic when available.
+Default \code{"bt"}.}
+
+\item{rc_smoothing, rc_damping}{Numeric. Parameters forwarded to
+\code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"}
+(and also stored in per-round fits). See \code{\link{fit_rank_centrality}} for
+details.}
+
+\item{final_refit}{Logical. If \code{TRUE}, compute a final combined estimates table
+(BT + Rank Centrality) at the end of the run via \code{\link{compute_final_estimates}}.
+This requires suggested packages (e.g., \pkg{BradleyTerry2}) to be installed.
+Default \code{FALSE} to preserve lightweight dependency behavior.}
+
+\item{final_bt_bias_reduction}{Logical. Passed to \code{\link{compute_final_estimates}}
+as \code{bt_bias_reduction}. Default \code{TRUE}.}
 
 \item{round_size}{Integer. Number of new pairs to propose and score in each adaptive round.
 If \code{0}, the runner will fit once (if possible) and then stop without proposing new pairs.}
@@ -199,6 +224,10 @@ A list with elements:
 tagged with per-round metadata in the \code{attr(fit, "bt_run_adaptive")} attribute.}
 \item{final_fit}{The final fit object (the last element of \code{fits}), or \code{NULL}
 if no fit was run.}
+\item{estimates}{NULL unless \code{final_refit=TRUE}; then a final combined estimates
+tibble produced by \code{\link{compute_final_estimates}} (BT + Rank Centrality).}
+\item{final_models}{NULL unless \code{final_refit=TRUE}; then a list containing
+the fitted model objects (\code{bt_fit}, \code{rc_fit}) and a summary \code{diagnostics} list.}
 \item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
 \code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
 or \code{"no_results"}).}
