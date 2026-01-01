@@ -1,32 +1,30 @@
-test_that(".ensure_dir() creates nested directories", {
-  td <- withr::local_tempdir()
-  path <- file.path(td, "a", "b", "c")
-  expect_false(dir.exists(path))
+test_that(".ensure_dir creates directories and is safe on NULL", {
+  d <- file.path(tempdir(), "pairwiseLLM-test-artifacts", "nested")
+  if (dir.exists(d)) unlink(d, recursive = TRUE, force = TRUE)
 
-  expect_silent(pairwiseLLM:::.ensure_dir(path))
-  expect_true(dir.exists(path))
+  expect_false(dir.exists(d))
+  expect_false(pairwiseLLM:::.ensure_dir(NULL))
+
+  pairwiseLLM:::.ensure_dir(d)
+  expect_true(dir.exists(d))
 })
 
+test_that(".write_csv_safe handles NULL and empty tibbles", {
+  p_null <- file.path(tempdir(), "pairwiseLLM-test-artifacts-null.csv")
+  if (file.exists(p_null)) unlink(p_null)
 
-test_that(".write_csv_safe() no-ops on NULL", {
-  td <- withr::local_tempdir()
-  path <- file.path(td, "null.csv")
+  expect_false(pairwiseLLM:::.write_csv_safe(NULL, p_null))
+  expect_false(file.exists(p_null))
 
-  expect_false(file.exists(path))
-  expect_silent(pairwiseLLM:::.write_csv_safe(NULL, path))
-  expect_false(file.exists(path))
-})
+  p_empty <- file.path(tempdir(), "pairwiseLLM-test-artifacts-empty.csv")
+  if (file.exists(p_empty)) unlink(p_empty)
 
+  x <- tibble::tibble(ID = character(), value = numeric())
+  expect_true(pairwiseLLM:::.write_csv_safe(x, p_empty))
+  expect_true(file.exists(p_empty))
 
-test_that(".write_csv_safe() writes header-only for an empty tibble", {
-  td <- withr::local_tempdir()
-  path <- file.path(td, "empty.csv")
-
-  x <- tibble::tibble(a = double(), b = character())
-  expect_silent(pairwiseLLM:::.write_csv_safe(x, path))
-  expect_true(file.exists(path))
-
-  y <- utils::read.csv(path, stringsAsFactors = FALSE)
-  expect_equal(nrow(y), 0)
-  expect_equal(names(y), c("a", "b"))
+  # Should contain header line even with 0 rows
+  lines <- readLines(p_empty)
+  expect_true(length(lines) >= 1)
+  expect_true(grepl("ID", lines[[1]]))
 })

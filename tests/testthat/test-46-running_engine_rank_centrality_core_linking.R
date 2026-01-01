@@ -34,5 +34,5 @@ test_that("bt_run_core_linking supports Rank Centrality as a running engine", {
   expect_true(all(c("theta_rc", "pi_rc") %in% names(out$fits[[1]]$theta)))
 
   expect_true(is.data.frame(out$estimates))
-  expect_true(all(c("theta_bt", "se_bt", "theta_rc", "pi_rc") %in% names(out$estimates)))
+  expect_true(all(c("theta_bt_firth", "se_bt_firth", "theta_rc", "pi_rc") %in% names(out$estimates)))
 })

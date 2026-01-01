@@ -17,7 +17,7 @@ test_that("compute_final_estimates returns both BT and Rank Centrality outputs",
   expect_s3_class(est, "tbl_df")
   expect_true(all(c(
     "ID",
-    "theta_bt", "se_bt", "rank_bt",
+    "theta_bt_firth", "se_bt_firth", "rank_bt_firth",
     "pi_rc", "theta_rc", "rank_rc",
     "wins", "losses", "ties",
     "n_appear", "n_pos1", "n_pos2",
@@ -28,14 +28,14 @@ test_that("compute_final_estimates returns both BT and Rank Centrality outputs",
   expect_setequal(est$ID, c("A", "B", "C"))
 
   # Ranks should reflect transitive ordering A > B > C
-  est2 <- dplyr::arrange(est, rank_bt)
+  est2 <- dplyr::arrange(est, rank_bt_firth)
   expect_equal(est2$ID, c("A", "B", "C"))
 
   est3 <- dplyr::arrange(est, rank_rc)
   expect_equal(est3$ID, c("A", "B", "C"))
 
   # Outputs should be finite
-  expect_true(all(is.finite(est$theta_bt)))
+  expect_true(all(is.finite(est$theta_bt_firth)))
   expect_true(all(is.finite(est$theta_rc)))
   expect_true(all(est$pi_rc > 0))
 })

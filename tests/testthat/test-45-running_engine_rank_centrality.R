@@ -70,5 +70,5 @@ test_that("bt_run_adaptive_core_linking can use Rank Centrality as running engin
 
   # Final estimates should include both BT and Rank Centrality columns.
   expect_true(nrow(out$estimates) >= 3)
-  expect_true(all(c("theta_bt", "se_bt", "rank_bt", "theta_rc", "pi_rc", "rank_rc") %in% names(out$estimates)))
+  expect_true(all(c("theta_bt_firth", "se_bt_firth", "rank_bt_firth", "theta_rc", "pi_rc", "rank_rc") %in% names(out$estimates)))
 })
