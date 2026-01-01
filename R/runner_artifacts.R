@@ -1,51 +1,37 @@
-# ---- runner artifacts (internal) ----
+# Internal helpers for writing runner artifacts safely.
+#
+# These are intentionally unexported and undocumented in the public help index.
 
-#' Internal: ensure a directory exists
-#'
-#' Creates `path` (recursively) if it does not exist. If `path` is `NULL`, `NA`,
-#' or empty, this function is a no-op.
-#'
-#' @param path Directory path.
-#'
-#' @return Invisibly, `path` (as character) if created/exists, otherwise `NULL`.
-#' @keywords internal
+#' @noRd
 .ensure_dir <- function(path) {
   if (is.null(path) || is.na(path) || !nzchar(path)) {
-    return(invisible(NULL))
+    return(invisible(FALSE))
   }
-  path <- as.character(path)
+  if (dir.exists(path)) {
+    return(invisible(TRUE))
+  }
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
-  invisible(path)
+  invisible(dir.exists(path))
 }
 
-
-#' Internal: write a CSV safely
-#'
-#' Writes a data frame/tibble to `path` without erroring when `x` is `NULL` or
-#' empty.
-#'
-#' - If `x` is `NULL`, this is a no-op (returns invisibly).
-#' - If `x` is a 0-row data frame/tibble, a header-only CSV is written.
-#'
-#' @param x A data frame or tibble (or `NULL`).
-#' @param path File path.
-#'
-#' @return Invisibly, the path written to (or `NULL` if `x` is `NULL`).
-#' @keywords internal
+#' @noRd
 .write_csv_safe <- function(x, path) {
   if (is.null(x)) {
-    return(invisible(NULL))
+    return(invisible(FALSE))
   }
   if (is.null(path) || is.na(path) || !nzchar(path)) {
-    stop("`path` must be a non-empty file path.", call. = FALSE)
+    stop("`path` must be a non-empty string.", call. = FALSE)
   }
-  path <- as.character(path)
+
+  # Create parent directory
   .ensure_dir(dirname(path))
 
-  if (!is.data.frame(x)) {
+  # Coerce to data.frame (tibble is fine)
+  if (!inherits(x, "data.frame")) {
     x <- as.data.frame(x)
   }
 
+  # Write header-only CSV for 0-row frames (keeps schema visible).
   utils::write.csv(x, file = path, row.names = FALSE)
-  invisible(path)
+  invisible(TRUE)
 }

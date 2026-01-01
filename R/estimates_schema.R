@@ -1,11 +1,6 @@
-# ---- estimates schema (internal) ----
+# Internal helpers to standardize the final estimates table schema.
 
-#' Internal: rank a numeric vector (descending)
-#'
-#' @param x Numeric vector.
-#'
-#' @return Integer ranks, with `NA` where `x` is `NA`.
-#' @keywords internal
+#' @noRd
 .rank_desc <- function(x) {
   if (is.null(x)) {
     return(NULL)
@@ -14,31 +9,10 @@
   if (all(is.na(x))) {
     return(rep(NA_integer_, length(x)))
   }
-  r <- rank(-x, ties.method = "min", na.last = "keep")
-  as.integer(r)
+  as.integer(rank(-x, ties.method = "min", na.last = "keep"))
 }
 
-
-#' Internal: standardize the final estimates table schema
-#'
-#' Creates a tibble with a stable set of estimate columns across engines.
-#'
-#' Required columns:
-#' - `ID`
-#' - `theta_bt_firth`, `se_bt_firth`, `rank_bt_firth`
-#' - `pi_rc`, `theta_rc`, `rank_rc`
-#'
-#' Additional per-ID columns can be supplied via `...` as named vectors.
-#'
-#' @param ids Character vector of IDs (length n).
-#' @param theta_bt_firth Numeric vector (length n) or `NULL`.
-#' @param se_bt_firth Numeric vector (length n) or `NULL`.
-#' @param theta_rc Numeric vector (length n) or `NULL`.
-#' @param pi_rc Numeric vector (length n) or `NULL`.
-#' @param ... Named vectors (length n) to add as extra columns.
-#'
-#' @return A tibble.
-#' @keywords internal
+#' @noRd
 .make_estimates_tbl <- function(ids,
                                 theta_bt_firth = NULL,
                                 se_bt_firth = NULL,
@@ -72,14 +46,19 @@
     }
   }
 
-  tibble::tibble(
+  out <- tibble::tibble(
     ID = ids,
     theta_bt_firth = theta_bt_firth,
     se_bt_firth = se_bt_firth,
     rank_bt_firth = .rank_desc(theta_bt_firth),
     pi_rc = pi_rc,
     theta_rc = theta_rc,
-    rank_rc = .rank_desc(theta_rc),
-    !!!extra
+    rank_rc = .rank_desc(theta_rc)
   )
+
+  if (length(extra)) {
+    for (nm in names(extra)) out[[nm]] <- extra[[nm]]
+  }
+
+  out
 }

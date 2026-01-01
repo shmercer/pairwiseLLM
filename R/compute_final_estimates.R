@@ -39,9 +39,9 @@
 #' \describe{
 #'   \item{estimates}{A tibble with one row per \code{ID}, including:
 #'     \itemize{
-#'       \item \code{theta_bt}: Bradley--Terry ability estimate (centered)
-#'       \item \code{se_bt}: standard error for \code{theta_bt}
-#'       \item \code{rank_bt}: rank of \code{theta_bt} (1 = highest)
+#'       \item \code{theta_bt_firth}: Bradley--Terry ability estimate (centered)
+#'       \item \code{se_bt_firth}: standard error for \code{theta_bt_firth}
+#'       \item \code{rank_bt_firth}: rank of \code{theta_bt_firth} (1 = highest)
 #'       \item \code{pi_rc}: Rank Centrality stationary probability
 #'       \item \code{theta_rc}: centered \code{log(pi_rc)}
 #'       \item \code{rank_rc}: rank of \code{theta_rc} (1 = highest)
@@ -106,15 +106,12 @@ compute_final_estimates <- function(
     bias_reduction = isTRUE(bt_bias_reduction),
     verbose = isTRUE(bt_verbose)
   )
-  bt_theta <- tibble::as_tibble(bt_fit$theta)
-  bt_theta <- dplyr::mutate(
-    bt_theta,
-    theta_bt = .data$theta,
-    se_bt = .data$se
-  )
-  bt_theta <- dplyr::transmute(bt_theta, ID = .data$ID, theta_bt = .data$theta_bt, se_bt = .data$se_bt)
-  bt_theta <- dplyr::mutate(bt_theta, theta_bt = .data$theta_bt - mean(.data$theta_bt, na.rm = TRUE))
-  bt_theta <- dplyr::mutate(bt_theta, rank_bt = .rank_desc_numeric(.data$theta_bt))
+
+  bt_theta_tbl <- tibble::as_tibble(bt_fit$theta)
+  idx_bt <- match(ids, bt_theta_tbl$ID)
+  theta_bt_firth <- bt_theta_tbl$theta[idx_bt]
+  se_bt_firth <- bt_theta_tbl$se[idx_bt]
+  theta_bt_firth <- theta_bt_firth - mean(theta_bt_firth, na.rm = TRUE)
 
   # ---- Rank Centrality ----
   rc_fit <- fit_rank_centrality(
@@ -125,34 +122,34 @@ compute_final_estimates <- function(
     verbose = FALSE,
     ...
   )
-  rc_theta <- tibble::as_tibble(rc_fit$theta)
-  rc_theta <- dplyr::transmute(
-    rc_theta,
-    ID = .data$ID,
-    pi_rc = .data$pi,
-    theta_rc = .data$theta
-  )
-  rc_theta <- dplyr::mutate(rc_theta, rank_rc = .rank_desc_numeric(.data$theta_rc))
 
-  # Attach component IDs (if present)
-  comp_tbl <- NULL
-  if (!is.null(rc_fit$diagnostics$component_id)) {
-    comp_tbl <- tibble::tibble(
-      ID = names(rc_fit$diagnostics$component_id),
-      component_id = unname(rc_fit$diagnostics$component_id)
-    )
-  } else {
-    comp_tbl <- tibble::tibble(ID = ids, component_id = NA_integer_)
+  rc_theta_tbl <- tibble::as_tibble(rc_fit$theta)
+  idx_rc <- match(ids, rc_theta_tbl$ID)
+  pi_rc <- rc_theta_tbl$pi[idx_rc]
+  theta_rc <- rc_theta_tbl$theta[idx_rc]
+
+  component_id <- rep(NA_integer_, length(ids))
+  cid <- rc_fit$diagnostics$component_id
+  if (!is.null(cid)) {
+    component_id <- as.integer(unname(cid[ids]))
   }
 
-  # ---- Merge outputs ----
-  est <- tibble::tibble(ID = ids) %>%
-    dplyr::left_join(bt_theta, by = "ID") %>%
-    dplyr::left_join(rc_theta, by = "ID") %>%
-    dplyr::left_join(wlt, by = "ID") %>%
-    dplyr::left_join(deg, by = "ID") %>%
-    dplyr::left_join(comp_tbl, by = "ID") %>%
-    dplyr::arrange(dplyr::desc(.data$theta_bt))
+  # ---- Assemble estimates (stable schema) ----
+  est <- .make_estimates_tbl(
+    ids = ids,
+    theta_bt_firth = theta_bt_firth,
+    se_bt_firth = se_bt_firth,
+    theta_rc = theta_rc,
+    pi_rc = pi_rc,
+    wins = wlt$wins,
+    losses = wlt$losses,
+    ties = wlt$ties,
+    n_appear = deg$n_appear,
+    n_pos1 = deg$n_pos1,
+    n_pos2 = deg$n_pos2,
+    component_id = component_id
+  )
+  est <- dplyr::arrange(est, dplyr::desc(.data$theta_bt_firth))
 
   diagnostics <- list(
     bt_engine = "BradleyTerry2",
