@@ -378,21 +378,9 @@ gemini_compare_pair_live <- function(
   # Parse <BETTER_SAMPLE> tag from content
   # ---------------------------------------------------------------------------
 
-  better_sample <- NA_character_
-  tag_prefix <- "<BETTER_SAMPLE>"
-  tag_suffix <- "</BETTER_SAMPLE>"
-
-  if (!is.na(content)) {
-    if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content,
-      fixed = TRUE
-    )) {
-      better_sample <- "SAMPLE_1"
-    } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content,
-      fixed = TRUE
-    )) {
-      better_sample <- "SAMPLE_2"
-    }
-  }
+  # Gemini compare does not currently expose tag_prefix/tag_suffix args.
+  # Use the shared helper defaults (<BETTER_SAMPLE>...</BETTER_SAMPLE>).
+  better_sample <- .extract_better_sample(content)
 
   better_id <- NA_character_
   if (!is.na(better_sample)) {
@@ -554,7 +542,7 @@ submit_gemini_pairs_live <- function(
   api_version = "v1beta",
   verbose = TRUE,
   status_every = 1L,
-  progress = TRUE,
+  progress = interactive(),
   include_raw = FALSE,
   validate = FALSE,
   validate_strict = FALSE,

@@ -33,7 +33,7 @@ testthat::test_that("allocation preset 'precision_ramp' updates within_batch_fra
 
   out <- bt_run_core_linking(
     samples = samples,
-    batches = list(c("C", "D")),     # <- 2 new IDs ensures >=3 unique rounds possible
+    batches = list(c("C", "D")), # <- 2 new IDs ensures >=3 unique rounds possible
     judge_fun = judge_fun,
     core_ids = c("A", "B"),
     fit_fun = fit_fun,
@@ -50,7 +50,8 @@ testthat::test_that("allocation preset 'precision_ramp' updates within_batch_fra
     sepG_target = NA_real_,
     rel_se_p90_min_improve = NA_real_,
     max_item_misfit_prop = NA_real_,
-    max_judge_misfit_prop = NA_real_
+    max_judge_misfit_prop = NA_real_,
+    verbose = FALSE
   )
 
   m <- dplyr::as_tibble(out$metrics) |>
@@ -109,12 +110,15 @@ testthat::test_that("allocation_fun takes precedence over allocation preset", {
     core_audit_frac = 0.10,
     allocation = "precision_ramp", # should be ignored because allocation_fun is set
     allocation_fun = alloc,
+    linking_method = "mean_sd",
+    reference_scale_method = "mean_sd",
     reliability_target = NA_real_,
     sepG_target = NA_real_,
     rel_se_p90_target = 0,
     rel_se_p90_min_improve = NA_real_,
     max_item_misfit_prop = NA_real_,
-    max_judge_misfit_prop = NA_real_
+    max_judge_misfit_prop = NA_real_,
+    verbose = FALSE
   )
 
   m <- dplyr::filter(out$metrics, batch_index == 1L, stage == "round")

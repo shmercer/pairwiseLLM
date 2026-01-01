@@ -8,11 +8,13 @@ select_adaptive_pairs(
   samples,
   theta,
   existing_pairs = NULL,
+  embedding_neighbors = NULL,
   n_pairs,
   k_neighbors = 10,
   min_judgments = 12,
   forbid_repeats = TRUE,
   balance_positions = TRUE,
+  embed_far_k = 0,
   seed = NULL
 )
 }
@@ -30,9 +32,20 @@ Supported formats:
 }
 If \code{NULL} (default), the function assumes no prior pairs.}
 
+\item{embedding_neighbors}{Optional embedding-based neighbor lists used to
+augment candidate generation. This can be either:
+\itemize{
+\item a named list mapping each ID to a character vector of neighbor IDs, or
+\item a matrix/data.frame with \code{rownames} equal to IDs and neighbor IDs
+stored in columns.
+}
+When provided, these candidates are added on top of the theta-neighborhood
+candidates controlled by \code{k_neighbors}.}
+
 \item{n_pairs}{Integer number of new pairs to return for the next round.}
 
-\item{k_neighbors}{Integer number of adjacent neighbors (in sorted-theta order)
+\item{k_neighbors}{Integer number of adjacent neighbors (in sorted-theta order).
+Use \code{NULL} or \code{Inf} to consider all neighbors.
 to consider for each item when generating candidate pairs. Default is 10.}
 
 \item{min_judgments}{Integer minimum desired number of judgments per item.
@@ -44,6 +57,9 @@ that have already appeared in \code{existing_pairs} (unordered).}
 \item{balance_positions}{Logical; if \code{TRUE} (default), orient each selected
 pair so that items with more historical appearances in position 1 (ID1) are
 more likely to be placed in position 2 (ID2), and vice versa.}
+
+\item{embed_far_k}{Integer; number of additional "far" candidates to sample
+per item (uniformly at random) in addition to theta/embedding neighbors.}
 
 \item{seed}{Optional integer seed for reproducibility. If \code{NULL} (default),
 the current RNG state is used and not modified.}

@@ -13,7 +13,7 @@ submit_ollama_pairs_live(
   host = getOption("pairwiseLLM.ollama_host", "http://127.0.0.1:11434"),
   verbose = TRUE,
   status_every = 1,
-  progress = TRUE,
+  progress = interactive(),
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,

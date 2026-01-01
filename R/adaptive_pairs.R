@@ -28,7 +28,8 @@
 #'   }
 #'   If \code{NULL} (default), the function assumes no prior pairs.
 #' @param n_pairs Integer number of new pairs to return for the next round.
-#' @param k_neighbors Integer number of adjacent neighbors (in sorted-theta order)
+#' @param k_neighbors Integer number of adjacent neighbors (in sorted-theta order).
+#'   Use \code{NULL} or \code{Inf} to consider all neighbors.
 #'   to consider for each item when generating candidate pairs. Default is 10.
 #' @param min_judgments Integer minimum desired number of judgments per item.
 #'   Items below this threshold are prioritized. Default is 12.
@@ -37,6 +38,17 @@
 #' @param balance_positions Logical; if \code{TRUE} (default), orient each selected
 #'   pair so that items with more historical appearances in position 1 (ID1) are
 #'   more likely to be placed in position 2 (ID2), and vice versa.
+#' @param embedding_neighbors Optional embedding-based neighbor lists used to
+#'   augment candidate generation. This can be either:
+#'   \itemize{
+#'     \item a named list mapping each ID to a character vector of neighbor IDs, or
+#'     \item a matrix/data.frame with \code{rownames} equal to IDs and neighbor IDs
+#'       stored in columns.
+#'   }
+#'   When provided, these candidates are added on top of the theta-neighborhood
+#'   candidates controlled by \code{k_neighbors}.
+#' @param embed_far_k Integer; number of additional "far" candidates to sample
+#'   per item (uniformly at random) in addition to theta/embedding neighbors.
 #' @param seed Optional integer seed for reproducibility. If \code{NULL} (default),
 #'   the current RNG state is used and not modified.
 #'
@@ -67,11 +79,13 @@
 select_adaptive_pairs <- function(samples,
                                   theta,
                                   existing_pairs = NULL,
+                                  embedding_neighbors = NULL,
                                   n_pairs,
                                   k_neighbors = 10,
                                   min_judgments = 12,
                                   forbid_repeats = TRUE,
                                   balance_positions = TRUE,
+                                  embed_far_k = 0,
                                   seed = NULL) {
   samples <- tibble::as_tibble(samples)
 
@@ -101,14 +115,30 @@ select_adaptive_pairs <- function(samples,
     stop("`n_pairs` must be a non-negative integer.", call. = FALSE)
   }
 
-  k_neighbors <- as.integer(k_neighbors)
-  if (is.na(k_neighbors) || k_neighbors < 1L) {
-    stop("`k_neighbors` must be a positive integer.", call. = FALSE)
+  # Allow NULL / Inf as a convenience for "all neighbors".
+  if (is.null(k_neighbors) || isTRUE(is.infinite(k_neighbors))) {
+    k_neighbors <- Inf
+  }
+  if (!is.numeric(k_neighbors) || length(k_neighbors) != 1L || is.na(k_neighbors)) {
+    stop("`k_neighbors` must be a positive integer, or NULL/Inf for all neighbors.", call. = FALSE)
+  }
+  # If finite, require >= 1.
+  if (is.finite(k_neighbors)) {
+    if (k_neighbors < 1) {
+      stop("`k_neighbors` must be positive (>= 1), or NULL/Inf for all neighbors.", call. = FALSE)
+    }
+    # Ensure integer-like.
+    if (abs(k_neighbors - round(k_neighbors)) > 1e-12) {
+      stop("`k_neighbors` must be an integer (or NULL/Inf for all neighbors).", call. = FALSE)
+    }
+    k_neighbors <- as.integer(k_neighbors)
   }
 
+  # Allow NULL to disable the minimum-judgments heuristic.
+  if (is.null(min_judgments)) min_judgments <- 0L
   min_judgments <- as.integer(min_judgments)
   if (is.na(min_judgments) || min_judgments < 0L) {
-    stop("`min_judgments` must be a non-negative integer.", call. = FALSE)
+    stop("`min_judgments` must be NULL or a non-negative integer.", call. = FALSE)
   }
 
   # Normalize IDs to character
@@ -188,7 +218,8 @@ select_adaptive_pairs <- function(samples,
       }
 
       # ------------------------------------------------------------------
-      # Candidate generation: k-nearest neighbors in theta-sorted order
+      # Candidate generation: neighbors in theta-sorted order, optionally
+      # augmented by embedding-based neighbor lists.
       # ------------------------------------------------------------------
       ord <- order(joined$theta, joined$ID, na.last = TRUE)
       joined <- joined[ord, , drop = FALSE]
@@ -205,16 +236,79 @@ select_adaptive_pairs <- function(samples,
       n <- length(id_vec)
       k_neighbors2 <- min(k_neighbors, max(n - 1L, 1L))
 
+      # Normalize embedding neighbor input to a named list(ID -> character vector)
+      embed_nbrs <- NULL
+      if (!is.null(embedding_neighbors)) {
+        if (is.list(embedding_neighbors) && !is.null(names(embedding_neighbors))) {
+          embed_nbrs <- embedding_neighbors
+        } else if (is.matrix(embedding_neighbors) || is.data.frame(embedding_neighbors)) {
+          emb_mat <- as.matrix(embedding_neighbors)
+          rn <- rownames(emb_mat)
+          if (is.null(rn) || length(rn) == 0L) {
+            stop("`embedding_neighbors` must be a named list or a matrix with rownames = IDs.", call. = FALSE)
+          }
+          embed_nbrs <- lapply(seq_len(nrow(emb_mat)), function(ii) as.character(emb_mat[ii, ]))
+          names(embed_nbrs) <- rn
+        } else {
+          stop("`embedding_neighbors` must be NULL, a named list, or a matrix/data.frame.", call. = FALSE)
+        }
+
+        missing_ids <- setdiff(ids, names(embed_nbrs))
+        if (length(missing_ids) > 0L) {
+          stop("`embedding_neighbors` is missing IDs: ", paste(utils::head(missing_ids, 10), collapse = ", "), call. = FALSE)
+        }
+      }
+
+      if (!is.numeric(embed_far_k) || length(embed_far_k) != 1L || is.na(embed_far_k) || embed_far_k < 0) {
+        stop("`embed_far_k` must be a single non-negative integer.", call. = FALSE)
+      }
+      embed_far_k <- as.integer(embed_far_k)
+
       cand_i <- integer()
       cand_j <- integer()
       cand_score <- double()
 
       for (i in seq_len(n)) {
+        # 1) theta-neighborhood candidates
+        js <- integer()
         hi <- min(n, i + k_neighbors2)
-        if (hi <= i) next
-        js <- (i + 1L):hi
+        if (hi > i) {
+          js <- c(js, (i + 1L):hi)
+        }
+
+        # 2) embedding-neighborhood candidates (mapped to current theta-sorted indices)
+        if (!is.null(embed_nbrs)) {
+          this_id <- id_vec[[i]]
+          nbr_ids <- embed_nbrs[[this_id]]
+          if (!is.null(nbr_ids) && length(nbr_ids) > 0L) {
+            nbr_ids <- nbr_ids[!is.na(nbr_ids) & nzchar(nbr_ids)]
+            if (length(nbr_ids) > 0L) {
+              nbr_idx <- match(nbr_ids, id_vec)
+              nbr_idx <- nbr_idx[!is.na(nbr_idx) & nbr_idx != i]
+              if (length(nbr_idx) > 0L) {
+                js <- c(js, nbr_idx)
+              }
+            }
+          }
+        }
+
+        # 3) optional far candidates to preserve global mixing
+        if (embed_far_k > 0L) {
+          # Sample from indices strictly after i so we score each unordered pair once.
+          base_pool <- if (i < n) (i + 1L):n else integer(0)
+          pool <- setdiff(base_pool, js)
+          if (length(pool) > 0L) {
+            js <- c(js, sample(pool, size = min(embed_far_k, length(pool)), replace = FALSE))
+          }
+        }
+
+        js <- unique(js)
+        js <- js[js != i]
+        if (length(js) == 0L) next
 
         for (j in js) {
+          # Only score each unordered pair once; keep upper triangle by index.
+          if (j <= i) next
           if (isTRUE(forbid_repeats) && length(existing_key) > 0L) {
             kkey <- .unordered_pair_key(id_vec[[i]], id_vec[[j]])
             if (kkey %in% existing_key) next
@@ -309,4 +403,51 @@ select_adaptive_pairs <- function(samples,
   )
 
   out
+}
+
+# Compute a simple cosine-similarity neighbor list from an embeddings matrix.
+#
+# This is intentionally lightweight (no ANN dependency) and intended for
+# moderate n (e.g., up to a few thousand) where a single dense similarity
+# computation is acceptable.
+#
+# @keywords internal
+.compute_embedding_neighbors <- function(embeddings, ids, k = 30L, normalize = TRUE) {
+  if (is.null(embeddings)) stop("`embeddings` must not be NULL.", call. = FALSE)
+  ids <- as.character(ids)
+  if (!is.character(ids) || anyNA(ids) || any(ids == "") || length(ids) < 2L) {
+    stop("`ids` must be a non-missing character vector with length >= 2.", call. = FALSE)
+  }
+  if (!is.numeric(k) || length(k) != 1L || is.na(k) || k < 0) {
+    stop("`k` must be a single non-negative integer.", call. = FALSE)
+  }
+  k <- as.integer(k)
+  if (k == 0L) {
+    out <- rep(list(character()), length(ids))
+    names(out) <- ids
+    return(out)
+  }
+
+  emb <- validate_embeddings(embeddings, ids = ids, arg_name = "embeddings")
+  emb <- as.matrix(emb)
+  storage.mode(emb) <- "double"
+
+  if (isTRUE(normalize)) {
+    norms <- sqrt(rowSums(emb^2))
+    norms[norms == 0] <- 1
+    emb <- emb / norms
+  }
+
+  # Cosine similarity matrix.
+  sim <- emb %*% t(emb)
+  diag(sim) <- -Inf
+
+  kk <- min(k, length(ids) - 1L)
+  nbrs <- vector("list", length(ids))
+  names(nbrs) <- ids
+  for (i in seq_along(ids)) {
+    o <- order(sim[i, ], decreasing = TRUE)
+    nbrs[[i]] <- ids[o[seq_len(kk)]]
+  }
+  nbrs
 }

@@ -23,6 +23,8 @@ bt_adaptive_round(
   min_judgments = 12,
   forbid_repeats = TRUE,
   balance_positions = TRUE,
+  embedding_neighbors = NULL,
+  embed_far_k = 0,
   seed = NULL
 )
 }
@@ -79,6 +81,15 @@ Passed to \code{\link{select_adaptive_pairs}}.}
 \item{forbid_repeats}{Logical; passed to \code{\link{select_adaptive_pairs}}.}
 
 \item{balance_positions}{Logical; passed to \code{\link{select_adaptive_pairs}}.}
+
+\item{embedding_neighbors}{Optional embedding-based neighbor lists used to
+augment candidate generation. This should be a named list mapping each ID to
+a character vector of neighbor IDs (or a matrix/data.frame with rownames = IDs
+and neighbor IDs in columns). Passed to \code{\link{select_adaptive_pairs}}.}
+
+\item{embed_far_k}{Integer; number of additional "far" candidates to sample
+per item when \code{embedding_neighbors} is provided. Passed to
+\code{\link{select_adaptive_pairs}}.}
 
 \item{seed}{Optional integer seed for reproducibility; passed to \code{\link{select_adaptive_pairs}}.}
 }

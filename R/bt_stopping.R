@@ -20,6 +20,7 @@
 #'
 #' @param fit A list returned by \code{\link{fit_bt_model}} containing a \code{$theta}
 #'   tibble/data frame with columns \code{ID}, \code{theta}, \code{se}.
+#' @param metrics Deprecated. Retained for backward compatibility with older calls that passed `metrics` as the second positional argument. Use `ids=` and `fit_bounds=` instead.
 #' @param ids Optional character vector of item IDs to compute precision summaries on.
 #'   If \code{NULL}, uses all items in \code{fit$theta}.
 #' @param prev_fit Optional prior fit (same structure as \code{fit}) used for drift metrics.
@@ -67,6 +68,7 @@
 #'
 #' @export
 bt_stop_metrics <- function(fit,
+                            metrics = NULL,
                             ids = NULL,
                             prev_fit = NULL,
                             core_ids = NULL,
@@ -79,6 +81,24 @@ bt_stop_metrics <- function(fit,
     )
   }
 
+  # Compatibility shim: older callers sometimes used
+  #   bt_stop_metrics(fit, ids)
+  # while newer code may use
+  #   bt_stop_metrics(fit, metrics, ids = ...)
+  # If the 2nd positional argument looks like an ids vector and `ids` is not
+  # explicitly provided, treat it as `ids`.
+  if (!is.null(metrics) && is.null(ids) && is.character(metrics)) {
+    ids <- metrics
+    metrics <- NULL
+  }
+
+  # Treat an empty `ids` vector as if it were not provided. This can happen
+  # during runs when `new_ids` is empty, and callers pass `ids=character(0)`.
+  # In that case we should compute metrics on all items rather than error.
+  if (!is.null(ids) && length(ids) == 0L) {
+    ids <- NULL
+  }
+
   theta_tbl <- tibble::as_tibble(fit$theta)
   theta_tbl_all <- theta_tbl
   n_total_items <- nrow(theta_tbl_all)
@@ -89,16 +109,31 @@ bt_stop_metrics <- function(fit,
   }
 
   # Optional: compute precision summaries on a subset of IDs
+  # Optional: compute precision summaries on a subset of IDs.
+  #
+  # IMPORTANT: During adaptive runs, it's normal for newly introduced IDs to not yet
+  # appear in `fit$theta` until they've been judged at least once. In that case we
+  # keep those IDs as explicit NA rows so downstream summary code yields NA/partial
+  # metrics instead of aborting the whole run.
   if (!is.null(ids)) {
     if (!is.character(ids)) {
       stop("`ids` must be a character vector when provided.", call. = FALSE)
     }
     ids_u <- unique(ids)
-    missing_ids <- setdiff(ids_u, as.character(theta_tbl_all$ID))
-    if (length(missing_ids) > 0L) {
+    idx <- match(ids_u, as.character(theta_tbl_all$ID))
+
+    # If *none* of the requested ids are present, fail fast (tests expect this).
+    # If *some* are present, keep missing ones as explicit NA rows so summaries
+    # can still be computed for the overlapping subset.
+    if (all(is.na(idx))) {
       stop("All `ids` must be present in `fit$theta$ID`.", call. = FALSE)
     }
-    theta_tbl <- theta_tbl_all[match(ids_u, as.character(theta_tbl_all$ID)), , drop = FALSE]
+
+    theta_tbl <- theta_tbl_all[idx, , drop = FALSE]
+    # Fill IDs for rows created by NA match so downstream checks can refer to them.
+    if (anyNA(idx)) {
+      theta_tbl$ID[is.na(theta_tbl$ID)] <- ids_u[is.na(idx)]
+    }
   }
 
   required_cols <- c("ID", "theta", "se")
@@ -460,6 +495,44 @@ bt_should_stop <- function(metrics,
   require_col("core_max_abs_shift", !is.na(core_max_abs_shift_target))
   require_col("core_p90_abs_shift", !is.na(core_p90_abs_shift_target))
 
+  core_cor_active <- !is.na(core_theta_cor_target)
+  core_spearman_active <- !is.na(core_theta_spearman_target)
+  core_max_active <- !is.na(core_max_abs_shift_target)
+  core_p90_active <- !is.na(core_p90_abs_shift_target)
+
+  core_drift_active <- any(c(core_cor_active, core_spearman_active, core_max_active, core_p90_active))
+
+  reliability_active <- !is.na(reliability_target)
+  sepG_active <- !is.na(sepG_target)
+  item_fit_active <- !is.na(max_item_misfit_prop)
+  judge_fit_active <- !is.na(max_judge_misfit_prop)
+  precision_active <- !is.na(rel_se_p90_target)
+  stability_active <- (!is.null(prev_metrics) && !is.na(rel_se_p90_min_improve))
+
+  any_active <- any(c(
+    reliability_active,
+    sepG_active,
+    item_fit_active,
+    judge_fit_active,
+    core_drift_active,
+    precision_active,
+    stability_active
+  ))
+
+  # If a sign flip was applied during drift computation, treat the drift
+  # guardrails as failing (the axis is not comparable without linking).
+  if (core_drift_active) {
+    # `bt_stop_metrics()` adds `core_flip_applied` when drift metrics are computed.
+    # When users supply drift metrics manually (e.g., in examples/tests), default to
+    # `FALSE` (no flip) if the flag is absent.
+    if (!("core_flip_applied" %in% names(metrics))) {
+      metrics$core_flip_applied <- FALSE
+    }
+    if (is.na(metrics$core_flip_applied[[1]])) {
+      metrics$core_flip_applied[[1]] <- FALSE
+    }
+  }
+
   get1 <- function(col) as.numeric(metrics[[col]][[1]])
 
   reliability <- if ("reliability" %in% names(metrics)) get1("reliability") else NA_real_
@@ -472,6 +545,8 @@ bt_should_stop <- function(metrics,
   core_theta_spearman <- if ("core_theta_spearman" %in% names(metrics)) get1("core_theta_spearman") else NA_real_
   core_max_abs_shift <- if ("core_max_abs_shift" %in% names(metrics)) get1("core_max_abs_shift") else NA_real_
   core_p90_abs_shift <- if ("core_p90_abs_shift" %in% names(metrics)) get1("core_p90_abs_shift") else NA_real_
+
+  core_flip_ok <- if (core_drift_active) !isTRUE(metrics$core_flip_applied[[1]]) else TRUE
 
   improve_pct <- NA_real_
   if (!is.null(prev_metrics)) {
@@ -495,10 +570,10 @@ bt_should_stop <- function(metrics,
   pass_item_fit <- if (is.na(max_item_misfit_prop)) TRUE else (is.na(item_misfit_prop) || item_misfit_prop <= max_item_misfit_prop)
   pass_judge_fit <- if (is.na(max_judge_misfit_prop)) TRUE else (is.na(judge_misfit_prop) || judge_misfit_prop <= max_judge_misfit_prop)
 
-  pass_core_theta_cor <- if (is.na(core_theta_cor_target)) TRUE else (is.finite(core_theta_cor) && core_theta_cor >= core_theta_cor_target)
-  pass_core_theta_spearman <- if (is.na(core_theta_spearman_target)) TRUE else (is.finite(core_theta_spearman) && core_theta_spearman >= core_theta_spearman_target)
-  pass_core_max_abs_shift <- if (is.na(core_max_abs_shift_target)) TRUE else (is.finite(core_max_abs_shift) && core_max_abs_shift <= core_max_abs_shift_target)
-  pass_core_p90_abs_shift <- if (is.na(core_p90_abs_shift_target)) TRUE else (is.finite(core_p90_abs_shift) && core_p90_abs_shift <= core_p90_abs_shift_target)
+  pass_core_theta_cor <- if (is.na(core_theta_cor_target)) TRUE else (core_flip_ok && is.finite(core_theta_cor) && core_theta_cor >= core_theta_cor_target)
+  pass_core_theta_spearman <- if (is.na(core_theta_spearman_target)) TRUE else (core_flip_ok && is.finite(core_theta_spearman) && core_theta_spearman >= core_theta_spearman_target)
+  pass_core_max_abs_shift <- if (is.na(core_max_abs_shift_target)) TRUE else (core_flip_ok && is.finite(core_max_abs_shift) && core_max_abs_shift <= core_max_abs_shift_target)
+  pass_core_p90_abs_shift <- if (is.na(core_p90_abs_shift_target)) TRUE else (core_flip_ok && is.finite(core_p90_abs_shift) && core_p90_abs_shift <= core_p90_abs_shift_target)
 
   pass_precision <- if (is.na(rel_se_p90_target)) TRUE else (is.finite(rel_se_p90) && rel_se_p90 <= rel_se_p90_target)
 
@@ -507,15 +582,25 @@ bt_should_stop <- function(metrics,
     pass_stability <- improve_pct <= rel_se_p90_min_improve
   }
 
-  stop_now <- isTRUE(pass_reliability) &&
-    isTRUE(pass_sepG) &&
-    isTRUE(pass_item_fit) &&
-    isTRUE(pass_judge_fit) &&
-    isTRUE(pass_core_theta_cor) &&
-    isTRUE(pass_core_theta_spearman) &&
-    isTRUE(pass_core_max_abs_shift) &&
-    isTRUE(pass_core_p90_abs_shift) &&
-    (isTRUE(pass_precision) || isTRUE(pass_stability))
+  pass_precision_or_stability <- if (!(precision_active || stability_active)) {
+    TRUE
+  } else {
+    (precision_active && isTRUE(pass_precision)) || (stability_active && isTRUE(pass_stability))
+  }
+
+  stop_now <- if (!any_active) {
+    FALSE
+  } else {
+    (!reliability_active || isTRUE(pass_reliability)) &&
+      (!sepG_active || isTRUE(pass_sepG)) &&
+      (!item_fit_active || isTRUE(pass_item_fit)) &&
+      (!judge_fit_active || isTRUE(pass_judge_fit)) &&
+      (!core_cor_active || isTRUE(pass_core_theta_cor)) &&
+      (!core_spearman_active || isTRUE(pass_core_theta_spearman)) &&
+      (!core_max_active || isTRUE(pass_core_max_abs_shift)) &&
+      (!core_p90_active || isTRUE(pass_core_p90_abs_shift)) &&
+      pass_precision_or_stability
+  }
 
   details <- tibble::tibble(
     criterion = c(

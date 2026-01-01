@@ -77,6 +77,8 @@ testthat::test_that("bt_run_core_linking adds theta_linked when linking is enabl
     max_judge_misfit_prop = NA_real_,
     rel_se_p90_target = 0.0001,
     linking = "always",
+    linking_method = "mean_sd",
+    reference_scale_method = "mean_sd",
     verbose = FALSE
   )
 
@@ -84,9 +86,12 @@ testthat::test_that("bt_run_core_linking adds theta_linked when linking is enabl
   testthat::expect_true("theta_linked" %in% names(ff$theta))
   testthat::expect_true("se_linked" %in% names(ff$theta))
 
-  # Linked core thetas should match the baseline thetas (0,1,2)
+  # With deterministic orientation-by-wins + centering/scaling, the baseline is
+  # flipped so that higher theta corresponds to more wins. In this mock setup:
+  # A beats B and C, and B beats C, so A > B > C and the normalized core baseline
+  # becomes c(1, 0, -1).
   core_tbl <- ff$theta[match(c("A", "B", "C"), ff$theta$ID), ]
-  testthat::expect_equal(core_tbl$theta_linked, c(0, 1, 2))
+  testthat::expect_equal(core_tbl$theta_linked, c(1, 0, -1))
 })
 
 
@@ -139,6 +144,8 @@ testthat::test_that("linking=auto only applies when drift triggers", {
     max_judge_misfit_prop = NA_real_,
     rel_se_p90_target = 0.0001,
     linking = "auto",
+    linking_method = "mean_sd",
+    reference_scale_method = "mean_sd",
     # require a strong trigger so this small drift does not apply
     linking_cor_target = 0.50,
     linking_p90_abs_shift_target = 100,
@@ -149,4 +156,34 @@ testthat::test_that("linking=auto only applies when drift triggers", {
   ff <- out$final_fits[["batch_1"]]
   # auto should not have applied (no linked columns when not applied)
   testthat::expect_false("theta_linked" %in% names(ff$theta))
+})
+
+testthat::test_that("bt_link_thetas covers error paths and median_mad + clamping", {
+  ref <- tibble::tibble(ID = c("A", "B", "C"), theta = c(0, 1, 2), se = 0.1)
+
+  testthat::expect_error(
+    pairwiseLLM::bt_link_thetas(current = list(theta = NULL), reference = ref),
+    "must be a fit"
+  )
+
+  testthat::expect_error(
+    pairwiseLLM::bt_link_thetas(current = tibble::tibble(ID = c("A")), reference = ref),
+    "columns ID and theta"
+  )
+
+  # median_mad triggers scale_fun branch; clamping engages when sd_cur is tiny
+  cur <- tibble::tibble(ID = c("A", "B", "C"), theta = c(0, 0, 1e-12), se = 0.2)
+  lk <- pairwiseLLM::bt_link_thetas(cur, ref, method = "median_mad", min_n = 3)
+  testthat::expect_true(is.list(lk))
+  testthat::expect_true(is.finite(lk$b))
+  testthat::expect_true(all(c("theta_linked", "se_linked") %in% names(lk$theta)))
+})
+
+testthat::test_that(".bt_should_apply_linking supports legacy args and schema variants", {
+  drift <- tibble::tibble(core_cor = 0.9, core_p90_abs_shift = 0.2, core_max_abs_shift = 0.4)
+  # legacy names trigger_p90 / trigger_max should override
+  testthat::expect_true(pairwiseLLM:::.bt_should_apply_linking(drift, trigger_p90 = 0.1, trigger_max = 0.2))
+
+  drift2 <- tibble::tibble(core_pearson_cor = 0.9, core_p90_abs_shift = NA_real_, core_max_abs_shift = NA_real_)
+  testthat::expect_true(pairwiseLLM:::.bt_should_apply_linking(drift2, trigger_cor = 0.98))
 })

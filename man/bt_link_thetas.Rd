@@ -8,7 +8,7 @@ bt_link_thetas(
   current,
   reference,
   ids = NULL,
-  method = c("mean_sd"),
+  method = c("mean_sd", "median_iqr", "median_mad"),
   min_n = 3L
 )
 }
@@ -21,7 +21,14 @@ bt_link_thetas(
 transform (typically a core linking set). If \code{NULL}, uses the
 intersection of IDs present in both inputs.}
 
-\item{method}{Linking method. Currently only \code{"mean_sd"} is supported.}
+\item{method}{Linking method.
+\itemize{
+\item \code{"mean_sd"}: match mean and SD on the core set.
+\item \code{"median_iqr"}: match median and a robust SD estimate based on IQR.
+\item \code{"median_mad"}: match median and a robust SD estimate based on MAD.
+}
+Robust methods are recommended when early rounds are close to deterministic
+(separation), which can otherwise yield very large scale factors.}
 
 \item{min_n}{Minimum number of core IDs required to compute the transform.
 If fewer are available, the transform defaults to \code{a=0, b=1}.}

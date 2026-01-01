@@ -22,10 +22,21 @@ prefix groups tests by the corresponding `R/` module(s).
 - Seed / reproducibility safeguards.
 
 ### Supplemental / branch-coverage tests
-Occasionally we add focused tests that exercise hard-to-hit branches without
-reorganizing the primary sequence. These use 3-digit numbers within a group
-(e.g., `245-...`, `315-...`, `465-...`) so they remain near the relevant section
-and avoid renumbering existing files.
+
+All test file numeric prefixes must be **unique**.
+
+When a section would otherwise have multiple tests sharing a 2-digit prefix
+(`24-...`, `31-...`, etc.), we use a **3-digit supplemental strategy** within
+that section:
+
+- Keep the section anchored (e.g., `24x`, `31x`, `46x`).
+- Use the next available numbers (e.g., `240-...`, `241-...`; `310-...`, `311-...`).
+- This keeps related tests adjacent while ensuring `devtools::test(filter = "<num>")`
+  can target a single file by its unique numeric id.
+
+We also use the same idea for focused branch-coverage files that we'd like to
+keep near their section without renumbering everything (e.g., `245-...`,
+`315-...`, `465-...`).
 
 Notes:
 - File names are stable and map closely to the `R/*.R` sources.

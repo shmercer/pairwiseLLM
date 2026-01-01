@@ -12,11 +12,13 @@ bt_run_core_linking(
   core_size = 30,
   embeddings = NULL,
   linking = c("auto", "always", "never"),
-  linking_method = c("mean_sd"),
+  linking_method = c("median_iqr", "median_mad", "mean_sd"),
   linking_cor_target = 0.98,
   linking_p90_abs_shift_target = 0.15,
   linking_max_abs_shift_target = 0.3,
   linking_min_n = 3L,
+  reference_scale_method = c("median_iqr", "median_mad", "mean_sd"),
+  reference_max_abs = 6,
   judge_fun,
   initial_results = NULL,
   judge = NULL,
@@ -26,6 +28,12 @@ bt_run_core_linking(
   fit_verbose = FALSE,
   return_diagnostics = TRUE,
   include_residuals = FALSE,
+  fit_engine_running = c("bt", "rank_centrality"),
+  store_running_estimates = TRUE,
+  rc_smoothing = 0.5,
+  rc_damping = 0,
+  final_refit = TRUE,
+  final_bt_bias_reduction = TRUE,
   round_size = 50,
   max_rounds_per_batch = 50,
   within_batch_frac = 0.25,
@@ -45,6 +53,9 @@ bt_run_core_linking(
   rel_se_p90_min_improve = 0.01,
   max_item_misfit_prop = 0.05,
   max_judge_misfit_prop = 0.05,
+  exhaustion_fallback = c("none", "cross_batch_new_new", "targeted_repeats", "both"),
+  exhaustion_min_pairs_frac = 0.5,
+  exhaustion_spectral_gap_threshold = 0,
   core_theta_cor_target = NA_real_,
   core_theta_spearman_target = NA_real_,
   core_max_abs_shift_target = NA_real_,
@@ -83,9 +94,9 @@ on a stable scale defined by the baseline core fit. One of
 \code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
 linking is applied only when core drift exceeds the thresholds below.}
 
-\item{linking_method}{Linking method. Currently only \code{"mean_sd"} is supported,
-which applies an affine transform to match the mean and standard deviation of
-core thetas to the baseline core fit.}
+\item{linking_method}{Linking method passed to \code{\link[=bt_link_thetas]{bt_link_thetas()}}.
+Robust methods (\code{"median_iqr"}, \code{"median_mad"}) are recommended when
+rounds are close to deterministic (separation).}
 
 \item{linking_cor_target}{In \code{linking = "auto"}, apply linking when the core
 Pearson correlation between baseline and current raw thetas is below this value.}
@@ -99,6 +110,15 @@ maximum absolute core-theta shift (baseline vs current raw) exceeds this value.}
 
 \item{linking_min_n}{Minimum number of core IDs required to estimate the linking
 transform. If fewer are available, linking is skipped.}
+
+\item{reference_scale_method}{Method used to stabilize the \emph{reference} (baseline)
+theta scale before it is used for linking decisions. Defaults to a robust
+median/IQR-based scale. This reduces pathological behavior when the early core
+fit is close to deterministic (separation).}
+
+\item{reference_max_abs}{Maximum absolute value allowed for reference thetas after
+stabilization (clamping). This is applied only to the reference fit used for
+linking/drift diagnostics.}
 
 \item{judge_fun}{Function that accepts a tibble of pairs with columns \code{ID1},
 \code{text1}, \code{ID2}, \code{text2} and returns a tibble with columns
@@ -121,6 +141,22 @@ output of \code{judge_fun}). Used as a warm start.}
 \item{return_diagnostics}{Passed to \code{fit_fun} when \code{fit_fun = fit_bt_model}.}
 
 \item{include_residuals}{Passed to \code{fit_fun} when \code{fit_fun = fit_bt_model}.}
+
+\item{fit_engine_running}{Running fitting engine used to propose the \emph{next} round
+of pairs. One of \code{"bt"} (default; uses the linked BT thetas when available)
+or \code{"rank_centrality"} (Rank Centrality via \code{\link{fit_rank_centrality}}).}
+
+\item{store_running_estimates}{Logical; if TRUE (default) store the per-round
+\emph{running} fits in \code{$fits}. When FALSE, store the raw BT fits.}
+
+\item{rc_smoothing, rc_damping}{Passed to \code{\link{fit_rank_centrality}} when
+\code{fit_engine_running = "rank_centrality"}.}
+
+\item{final_refit}{Logical; if TRUE (default), compute a final combined estimates
+table via \code{\link{compute_final_estimates}} on all accumulated results.}
+
+\item{final_bt_bias_reduction}{Logical; if TRUE (default), attempt bias-reduced
+Bradley--Terry (Firth) at the final refit when \code{final_refit = TRUE}.}
 
 \item{round_size}{Target number of pairs proposed per round (per batch).}
 
@@ -166,6 +202,18 @@ and \code{prev_metrics}. It should return NULL (no change) or a list with elemen
 \item{max_item_misfit_prop}{Passed to \code{\link{bt_should_stop}}.}
 
 \item{max_judge_misfit_prop}{Passed to \code{\link{bt_should_stop}}.}
+
+\item{exhaustion_fallback}{Fallback strategy to use when the within-batch pair
+generator becomes exhausted and fewer than
+\code{ceiling(round_size * exhaustion_min_pairs_frac)} admissible pairs are
+available. One of \code{"none"}, \code{"cross_batch_new_new"},
+\code{"targeted_repeats"}, or \code{"both"}.}
+
+\item{exhaustion_min_pairs_frac}{Minimum fraction of \code{round_size} that must
+be available before triggering the fallback. Must be in \code{(0, 1]}.}
+
+\item{exhaustion_spectral_gap_threshold}{Optional spectral-gap threshold that
+can be used to gate exhaustion handling (reserved for future use).}
 
 \item{core_theta_cor_target}{Optional drift guardrail for Pearson correlation
 (default \code{NA} = disabled).}

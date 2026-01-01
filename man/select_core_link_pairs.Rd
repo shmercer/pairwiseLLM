@@ -15,6 +15,7 @@ select_core_link_pairs(
   k_neighbors = 10,
   min_judgments = 12,
   existing_pairs = NULL,
+  forbid_keys = character(0),
   forbid_repeats = TRUE,
   balance_positions = TRUE,
   seed = NULL
@@ -34,19 +35,27 @@ If \code{NULL}, uses \code{setdiff(samples$ID, core_ids)}.}
 
 \item{round_size}{Integer number of pairs to select. Can be \code{0}.}
 
-\item{within_batch_frac}{Fraction (0..1) of non-audit pairs allocated to new↔new.}
+\item{within_batch_frac}{Fraction in \eqn{[0,1]} of non-audit pairs allocated to
+new (within-batch) comparisons.}
 
-\item{core_audit_frac}{Fraction (0..1) of pairs allocated to core↔core.}
+\item{core_audit_frac}{Fraction in \eqn{[0,1]} of pairs allocated to core
+"audit" comparisons to monitor drift within the core.}
 
-\item{k_neighbors}{Integer controlling how strongly pairing is localized by
-current \code{theta}: when both sides have non-missing \code{theta}, the
-opponent is chosen from among the \code{k_neighbors} closest candidates.}
+\item{k_neighbors}{Integer controlling how strongly pairing is localized by the
+current \code{theta}. When both sides have non-missing \code{theta}, the
+opponent is chosen from among the \code{k_neighbors} closest candidates.
+Use \code{Inf} (or \code{NULL}) to allow all candidates.}
 
 \item{min_judgments}{Minimum number of total appearances (across both positions)
 an item should have before it is deprioritized. Used as a soft priority rule.}
 
 \item{existing_pairs}{Optional data.frame of already-judged pairs. Accepted column
 schemas are either \code{ID1}/\code{ID2} or \code{object1}/\code{object2}.}
+
+\item{forbid_keys}{Character vector of unordered pair keys (as produced by the
+internal helper \code{.unordered_pair_key()}) that
+should never be proposed (in addition to any keys implied by
+\code{existing_pairs} when \code{forbid_repeats = TRUE}).}
 
 \item{forbid_repeats}{Logical; if \code{TRUE} (default) do not repeat unordered pairs.}
 

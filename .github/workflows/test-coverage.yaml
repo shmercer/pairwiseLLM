@@ -24,7 +24,13 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::covr, any::xml2, any::jsonlite, any::rstudioapi
+          extra-packages: |
+            any::covr
+            any::xml2
+            any::jsonlite
+            any::rstudioapi
+            any::DT
+            any::htmltools
           needs: coverage
 
       - name: Test coverage
@@ -45,6 +51,20 @@ jobs:
           covr::to_cobertura(cov)
 
           # ------------------------------------------------------------
+          # HTML coverage report (artifact)
+          # ------------------------------------------------------------
+          pct <- covr::percent_coverage(cov)
+          cat(sprintf("Coverage: %.2f%%\n", pct))
+          covr::report(cov, file = "covr.html", browse = FALSE)
+
+          # Optional: write to GitHub Actions summary
+          summ <- Sys.getenv("GITHUB_STEP_SUMMARY")
+          if (nzchar(summ)) {
+            cat(sprintf("\n## Coverage\n\n- Total: **%.2f%%**\n", pct), file = summ, append = TRUE)
+            cat("- HTML report uploaded as artifact: `covr-report`\n", file = summ, append = TRUE)
+          }
+
+          # ------------------------------------------------------------
           # Uncovered line reporting (structured CSV + readable MD)
           # ------------------------------------------------------------
           z_all <- covr::zero_coverage(cov)
@@ -53,16 +73,13 @@ jobs:
           z_r <- z_all[grepl("^R/.*\\.R$", z_all$filename), , drop = FALSE]
 
           # Write a tidy CSV: one row per uncovered line
-          # (Most covr versions provide: filename, functions, line, value)
           cols <- intersect(c("filename", "functions", "line", "value"), names(z_r))
           if (length(cols) < 2) {
-            # Fallback: write whatever covr gave us
             utils::write.csv(z_r, "uncovered_lines.csv", row.names = FALSE)
           } else {
             utils::write.csv(z_r[, cols, drop = FALSE], "uncovered_lines.csv", row.names = FALSE)
           }
 
-          # Helper to collapse integer lines to ranges (e.g., 1-3, 8, 10-12)
           collapse_ranges <- function(x) {
             x <- sort(unique(as.integer(x)))
             if (length(x) == 0) return(character())
@@ -89,7 +106,6 @@ jobs:
 
           writeLines(md, "uncovered_lines.md")
 
-          # Add a short pointer to GitHub Actions Summary
           summ <- Sys.getenv("GITHUB_STEP_SUMMARY")
           if (nzchar(summ)) {
             cat("## Coverage: uncovered lines\n\n", file = summ, append = TRUE)
@@ -105,6 +121,16 @@ jobs:
           plugins: noop
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload covr HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: covr-report
+          path: |
+            covr.html
+            covr_files/
+          if-no-files-found: warn
 
       - name: Upload uncovered lines report
         if: always()

@@ -342,22 +342,12 @@ together_compare_pair_live <- function(
     }
   }
 
-  better_sample <- NA_character_
-  if (!is.na(content)) {
-    if (grepl(
-      paste0(tag_prefix, "SAMPLE_1", tag_suffix),
-      content,
-      fixed = TRUE
-    )) {
-      better_sample <- "SAMPLE_1"
-    } else if (grepl(
-      paste0(tag_prefix, "SAMPLE_2", tag_suffix),
-      content,
-      fixed = TRUE
-    )) {
-      better_sample <- "SAMPLE_2"
-    }
-  }
+  # Only try to extract a winner if we have content
+  better_sample <- .extract_better_sample(
+    content,
+    tag_prefix = tag_prefix,
+    tag_suffix = tag_suffix
+  )
 
   better_id <- NA_character_
   if (!is.na(better_sample)) {
@@ -366,8 +356,7 @@ together_compare_pair_live <- function(
 
   usage <- body$usage %||% list()
   prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
-  completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||%
-    NA_real_
+  completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||% NA_real_
   total_tokens <- usage$total_tokens %||% NA_real_
 
   res <- tibble::tibble(
@@ -518,7 +507,7 @@ submit_together_pairs_live <- function(
   api_key = NULL,
   verbose = TRUE,
   status_every = 1,
-  progress = TRUE,
+  progress = interactive(),
   include_raw = FALSE,
   validate = FALSE,
   validate_strict = FALSE,

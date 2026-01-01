@@ -298,22 +298,7 @@ ollama_compare_pair_live <- function(
   content <- body$response %||% NA_character_
 
   # Extract better_sample and better_id from tag in content
-  better_sample <- NA_character_
-  if (!is.na(content)) {
-    if (grepl(
-      paste0(tag_prefix, "SAMPLE_1", tag_suffix),
-      content,
-      fixed = TRUE
-    )) {
-      better_sample <- "SAMPLE_1"
-    } else if (grepl(
-      paste0(tag_prefix, "SAMPLE_2", tag_suffix),
-      content,
-      fixed = TRUE
-    )) {
-      better_sample <- "SAMPLE_2"
-    }
-  }
+  better_sample <- .extract_better_sample(content, tag_prefix = tag_prefix, tag_suffix = tag_suffix)
 
   better_id <- NA_character_
   if (!is.na(better_sample)) {
@@ -495,7 +480,7 @@ submit_ollama_pairs_live <- function(
   host = getOption("pairwiseLLM.ollama_host", "http://127.0.0.1:11434"),
   verbose = TRUE,
   status_every = 1,
-  progress = TRUE,
+  progress = interactive(),
   think = FALSE,
   num_ctx = 8192L,
   include_raw = FALSE,

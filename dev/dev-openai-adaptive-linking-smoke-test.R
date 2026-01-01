@@ -1,162 +1,245 @@
-# Live + Batch smoke-test for adaptive + linking workflows using OpenAI (gpt-4o-mini)
-# Uses built-in example_writing_samples (real text) from pairwiseLLM.
+# Live + Batch smoke-test for adaptive + linking workflows using OpenAI backends.
 #
-# Prereqs:
-#   Sys.setenv(OPENAI_API_KEY = "sk-...")  # required
-# Optional:
-#   install.packages("sirt") or install.packages("BradleyTerry2")  # for real BT fitting via fit_bt_model(engine="auto")
+# Purpose:
+#   - Exercise end-to-end "adaptive + core-linking" runner with REAL API calls.
+#   - Emit compact, actionable diagnostics when something fails early.
+#
+# Notes:
+#   - The runners forward `...` to `fit_fun`. Do NOT pass `verbose=`; use `fit_verbose=`.
+#   - This file is meant to be run interactively (not as part of tests).
 
 suppressPackageStartupMessages({
-  library(pairwiseLLM)
-  library(tibble)
   library(dplyr)
+  library(tibble)
+  library(stringr)
+  library(purrr)
+  library(glue)
+  library(readr)
+  library(devtools)
 })
 
-stopifnot(nzchar(Sys.getenv("OPENAI_API_KEY")))
+devtools::load_all()
 
-# -------------------------------------------------------------------------
-# Built-in examples
-# -------------------------------------------------------------------------
-data("example_writing_samples", package = "pairwiseLLM")
-
-# Expect columns like ID + text (adjust if your dataset uses different names)
-samples <- example_writing_samples
-if (!all(c("ID", "text") %in% names(samples))) {
-  stop("example_writing_samples must have columns: ID, text")
+if (nchar(Sys.getenv("OPENAI_API_KEY")) == 0L) {
+  stop("OPENAI_API_KEY env var is not set.", call. = FALSE)
 }
 
-# Two small batches + a small core set
-ids <- samples$ID
-batches <- list(ids[1:10], ids[11:20])
-core_ids <- ids[1:5]
+# Keep the test small so you can iterate quickly.
+N_CORE <- 10
+BOOTSTRAP_N <- 12
+ROUND_SIZE <- 8
+MAX_ROUNDS <- 3
 
-trait <- trait_description("overall_quality")
-prompt_template <- set_prompt_template()
+`%||%` <- function(x, y) if (is.null(x)) y else x
+.ts <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+.dbg <- function(...) message("[", .ts(), "] ", paste0(..., collapse = ""))
 
-# -------------------------------------------------------------------------
-# LIVE judge (calls OpenAI chat completions directly)
-# -------------------------------------------------------------------------
+write_bt_run_diagnostics <- function(out, dir, name) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  saveRDS(out, file.path(dir, paste0(name, "_out.rds")))
+  if (!is.null(out$metrics)) write_csv(out$metrics, file.path(dir, paste0(name, "_metrics.csv")))
+  if (!is.null(out$state)) write_csv(out$state, file.path(dir, paste0(name, "_state.csv")))
+  if (!is.null(out$results)) write_csv(out$results, file.path(dir, paste0(name, "_results.csv")))
+  if (!is.null(out$batch_summary)) write_csv(out$batch_summary, file.path(dir, paste0(name, "_batch_summary.csv")))
+  invisible(TRUE)
+}
+
+.short <- function(x, n = 240) {
+  x <- ifelse(is.na(x), NA_character_, as.character(x))
+  ifelse(nchar(x) <= n, x, paste0(substr(x, 1, n), "…"))
+}
+
+.print_results_summary <- function(res, backend = "openai", label = "results") {
+  if (is.null(res)) {
+    .dbg(label, ": <NULL>")
+    return(invisible(NULL))
+  }
+  res <- tibble::as_tibble(res)
+
+  rep <- tryCatch(
+    validate_backend_results(
+      res,
+      backend = backend,
+      normalize_winner = TRUE,
+      strict = FALSE,
+      return_report = TRUE
+    ),
+    error = function(e) {
+      .dbg(label, ": validate_backend_results() error: ", conditionMessage(e))
+      list(
+        n_rows = nrow(res),
+        n_missing_winner = NA_integer_,
+        n_missing_id = NA_integer_,
+        n_invalid_winner = NA_integer_
+      )
+    }
+  )
+
+  .dbg(label, ": n=", rep$n_rows,
+       " | missing_winner=", rep$n_missing_winner,
+       " | missing_id=", rep$n_missing_id,
+       " | invalid_winner=", rep$n_invalid_winner)
+
+  if ("status_code" %in% names(res)) {
+    sc <- sort(table(res$status_code), decreasing = TRUE)
+    .dbg(label, ": status_code=", paste(names(sc), sc, sep = ":", collapse = ", "))
+  }
+
+  if ("error_message" %in% names(res)) {
+    em <- res %>%
+      filter(!is.na(error_message), error_message != "") %>%
+      count(error_message, sort = TRUE)
+    if (nrow(em) > 0) {
+      .dbg(label, ": top error_message=",
+           paste0(head(em$error_message, 3), collapse = " | "))
+    }
+  }
+
+  has_better <- "better_id" %in% names(res)
+  bad <- res %>%
+    mutate(.missing_winner = if (has_better) (is.na(.data$better_id) | .data$better_id == "") else TRUE) %>%
+    filter(.missing_winner) %>%
+    select(any_of(c("ID1", "ID2", "better_id", "better_sample", "status_code", "error_message", "content"))) %>%
+    head(5)
+
+  if (nrow(bad) > 0) {
+    .dbg(label, ": example rows with missing winner:")
+    print(bad %>% mutate(content = .short(content, 280)))
+  }
+
+  invisible(rep)
+}
+
+# ---- Minimal samples ----
+samples <- tibble(
+  ID = sprintf("S%02d", 1:N_CORE),
+  text = c(
+    "A clear, well-structured answer with evidence and a conclusion.",
+    "A decent answer with some structure and minor issues.",
+    "An answer that is okay but vague and repetitive.",
+    "A weak answer: unclear point and several grammar mistakes.",
+    "Excellent: precise claims, good organization, strong reasoning.",
+    "Poor: off-topic and hard to follow.",
+    "Great: concise and accurate with strong support.",
+    "Mediocre: some relevant points but lacks clarity.",
+    "Bad: incoherent and incomplete.",
+    "Very good: organized, relevant, and mostly polished."
+  )
+)
+
+td <- trait_description("overall_quality")
+tmpl <- get_prompt_template("default")
+
 judge_openai_live <- function(pairs) {
+  t0 <- Sys.time()
+
   out <- submit_llm_pairs(
     pairs = pairs,
     backend = "openai",
     model = "gpt-4o-mini",
-    api_key = Sys.getenv("OPENAI_API_KEY"),
-    trait_name = trait$name,
-    trait_description = trait$description,
-    prompt_template = prompt_template,
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    endpoint = "chat.completions",
+    temperature = 0,
+    include_raw = TRUE,
+    status_every = 1L
+  )
+
+  .dbg("judge_openai_live: elapsed=", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2), "s")
+  .print_results_summary(out$results, backend = "openai", label = "openai_live")
+
+  out
+}
+
+judge_openai_batch <- function(pairs) {
+  t0 <- Sys.time()
+
+  batch <- llm_submit_pairs_batch(
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-4o-mini",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
     temperature = 0
   )
 
-  # submit_llm_pairs() returns a list; bt_run_* expects the results tibble.
-  if (is.list(out) && "results" %in% names(out)) {
-    if ("failed_pairs" %in% names(out) && nrow(out$failed_pairs) > 0) {
-      message("NOTE: ", nrow(out$failed_pairs), " failed pairs returned by provider.")
+  .dbg("Submitted batch: ", batch$batch_id %||% "<no batch_id>",
+       " | status=", batch$status %||% "<no status>")
+
+  Sys.sleep(20)
+
+  res <- llm_download_batch_results(batch)
+  .dbg("judge_openai_batch: elapsed=", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2), "s")
+  .print_results_summary(res, backend = "openai", label = "openai_batch")
+
+  res
+}
+
+run_one <- function(judge_fun, label) {
+  .dbg("===== Running: ", label, " =====")
+
+  batches <- list(samples$ID)
+  core_ids <- samples$ID[seq_len(min(5L, nrow(samples)))]
+
+  out <- tryCatch(
+    {
+      bt_run_adaptive_core_linking(
+        samples = samples,
+        batches = batches,
+        judge_fun = judge_fun,
+
+        core_ids = core_ids,
+
+        engine = "auto",
+        fit_verbose = TRUE,
+
+        round_size = ROUND_SIZE,
+        init_round_size = BOOTSTRAP_N,
+        max_rounds_per_batch = MAX_ROUNDS,
+
+        forbid_repeats = TRUE,
+        balance_positions = TRUE,
+        k_neighbors = Inf,
+        min_judgments = NULL,
+
+        linking = "never",
+        seed_pairs = 123,
+        return_diagnostics = TRUE
+      )
+    },
+    error = function(e) {
+      .dbg("ERROR in ", label, ": ", conditionMessage(e))
+      .dbg("Backtrace (best-effort):")
+      if (requireNamespace("rlang", quietly = TRUE)) {
+        tr <- try(rlang::last_trace(drop = FALSE), silent = TRUE)
+        if (inherits(tr, "try-error")) traceback() else print(tr)
+      } else {
+        traceback()
+      }
+      stop(e)
     }
-    return(out$results)
+  )
+
+  .dbg("Finished: ", label)
+  .dbg("Results rows: ", nrow(out$results))
+
+  if (!is.null(out$final_fits) && length(out$final_fits) > 0L) {
+    last_fit <- out$final_fits[[length(out$final_fits)]]
+    if (!is.null(last_fit$theta)) {
+      .dbg("Final fit theta head:")
+      print(head(last_fit$theta))
+    }
   }
 
   out
 }
 
-# -------------------------------------------------------------------------
-# BATCH judge (submits a Batch job to OpenAI, then returns results)
-#   Note: this is still synchronous from R's perspective; it just exercises
-#   the OpenAI Batch API under the hood.
-# -------------------------------------------------------------------------
-judge_openai_batch <- function(pairs) {
-  batch <- llm_submit_pairs_batch(
-    pairs = pairs,
-    backend = "openai",
-    model = "gpt-4o-mini",
-    api_key = Sys.getenv("OPENAI_API_KEY"),
-    trait_name = trait$name,
-    trait_description = trait$description,
-    prompt_template = prompt_template,
-    temperature = 0
-  )
+out_live <- run_one(judge_openai_live, "adaptive_core_linking + openai_live")
 
-  out <- llm_download_batch_results(batch)
+out_dir <- file.path(getwd(), "dev", "smoke_outputs", paste0("smoke_", format(Sys.time(), "%Y%m%d_%H%M%S")))
+write_bt_run_diagnostics(out_live, out_dir, "openai_live")
+message("\nSaved smoke test outputs to: ", out_dir)
 
-  # Be robust if batch path also returns list(results=..., failed_pairs=...)
-  if (is.list(out) && "results" %in% names(out)) return(out$results)
-  out
-}
-
-# -------------------------------------------------------------------------
-# 1) LIVE: bt_run_adaptive_core_linking (small, cheap run)
-# -------------------------------------------------------------------------
-out_live <- bt_run_adaptive_core_linking(
-  samples = samples,
-  batches = batches,
-  core_ids = core_ids,
-  linking = "always",          # force linking path
-  linking_min_n = length(core_ids),
-  linking_cor_target = 0.99,
-  linking_p90_abs_shift_target = 0.10,
-
-  judge_fun = judge_openai_live,
-  fit_fun = fit_bt_model,      # real fit if available; otherwise you'll see an informative error
-  engine = "auto",
-
-  round_size = 6,
-  max_rounds_per_batch = 1,
-  within_batch_frac = 0.6,
-  core_audit_frac = 0.4,
-  reliability_target = Inf,
-
-  seed_pairs = 1,
-  verbose = TRUE,
-  show_progress = TRUE
-)
-
-print(out_live$batch_summary)
-if (!is.null(out_live$metrics)) print(tail(out_live$metrics, 5))
-print(head(out_live$results, 10))
-
-# -------------------------------------------------------------------------
-# 2) BATCH: bt_run_adaptive_core_linking (same run, but judge via Batch API)
-# -------------------------------------------------------------------------
-out_batch <- bt_run_adaptive_core_linking(
-  samples = samples,
-  batches = batches,
-  core_ids = core_ids,
-  linking = "always",
-  linking_min_n = length(core_ids),
-  linking_cor_target = 0.99,
-  linking_p90_abs_shift_target = 0.10,
-
-  judge_fun = judge_openai_batch,
-  fit_fun = fit_bt_model,
-  engine = "auto",
-
-  round_size = 6,
-  max_rounds_per_batch = 1,
-  within_batch_frac = 0.6,
-  core_audit_frac = 0.4,
-  reliability_target = Inf,
-
-  seed_pairs = 1,
-  verbose = TRUE,
-  show_progress = TRUE
-)
-
-print(out_batch$batch_summary)
-if (!is.null(out_batch$metrics)) print(tail(out_batch$metrics, 5))
-print(head(out_batch$results, 10))
-
-# -------------------------------------------------------------------------
-# 3) Minimal “just the provider” checks (optional): submit a few pairs directly
-# -------------------------------------------------------------------------
-pairs_small <- tibble(
-  ID1 = ids[1:3],
-  text1 = samples$text[match(ids[1:3], ids)],
-  ID2 = ids[4:6],
-  text2 = samples$text[match(ids[4:6], ids)]
-)
-
-res_live_pairs <- judge_openai_live(pairs_small)
-res_batch_pairs <- judge_openai_batch(pairs_small)
-
-print(res_live_pairs)
-print(res_batch_pairs)
+# out_batch <- run_one(judge_openai_batch, "adaptive_core_linking + openai_batch")

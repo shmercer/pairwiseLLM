@@ -33,11 +33,18 @@
 #' @param new_ids Optional character vector of IDs designating the "new batch".
 #'   If \code{NULL}, uses \code{setdiff(samples$ID, core_ids)}.
 #' @param round_size Integer number of pairs to select. Can be \code{0}.
-#' @param within_batch_frac Fraction (0..1) of non-audit pairs allocated to new↔new.
-#' @param core_audit_frac Fraction (0..1) of pairs allocated to core↔core.
-#' @param k_neighbors Integer controlling how strongly pairing is localized by
-#'   current \code{theta}: when both sides have non-missing \code{theta}, the
+#' @param within_batch_frac Fraction in \eqn{[0,1]} of non-audit pairs allocated to
+#'   new (within-batch) comparisons.
+#' @param core_audit_frac Fraction in \eqn{[0,1]} of pairs allocated to core
+#'   "audit" comparisons to monitor drift within the core.
+#' @param k_neighbors Integer controlling how strongly pairing is localized by the
+#'   current \code{theta}. When both sides have non-missing \code{theta}, the
 #'   opponent is chosen from among the \code{k_neighbors} closest candidates.
+#'   Use \code{Inf} (or \code{NULL}) to allow all candidates.
+#' @param forbid_keys Character vector of unordered pair keys (as produced by the
+#'   internal helper \code{.unordered_pair_key()}) that
+#'   should never be proposed (in addition to any keys implied by
+#'   \code{existing_pairs} when \code{forbid_repeats = TRUE}).
 #' @param min_judgments Minimum number of total appearances (across both positions)
 #'   an item should have before it is deprioritized. Used as a soft priority rule.
 #' @param existing_pairs Optional data.frame of already-judged pairs. Accepted column
@@ -88,6 +95,7 @@ select_core_link_pairs <- function(samples,
                                    k_neighbors = 10,
                                    min_judgments = 12,
                                    existing_pairs = NULL,
+                                   forbid_keys = character(0),
                                    forbid_repeats = TRUE,
                                    balance_positions = TRUE,
                                    seed = NULL) {
@@ -139,9 +147,15 @@ select_core_link_pairs <- function(samples,
     stop("`within_batch_frac + core_audit_frac` must be <= 1.", call. = FALSE)
   }
 
-  k_neighbors <- as.integer(k_neighbors)
-  if (is.na(k_neighbors) || k_neighbors < 1L) stop("`k_neighbors` must be an integer >= 1.", call. = FALSE)
+  # Allow NULL / Inf as a convenience for "all neighbors".
+  if (is.null(k_neighbors) || isTRUE(is.infinite(k_neighbors))) k_neighbors <- Inf
+  if (!is.numeric(k_neighbors) || length(k_neighbors) != 1L || is.na(k_neighbors) || k_neighbors < 1) {
+    stop("`k_neighbors` must be a single numeric/integer >= 1 (or NULL/Inf for all).", call. = FALSE)
+  }
+  # We'll clamp to (n_ids - 1) later once we know the full candidate ID set.
 
+  # Allow NULL to disable the minimum-judgments heuristic.
+  if (is.null(min_judgments)) min_judgments <- 0L
   min_judgments <- as.integer(min_judgments)
   if (is.na(min_judgments) || min_judgments < 0L) stop("`min_judgments` must be an integer >= 0.", call. = FALSE)
 
@@ -161,7 +175,17 @@ select_core_link_pairs <- function(samples,
       existing <- dplyr::filter(existing, !is.na(.data$ID1), !is.na(.data$ID2), .data$ID1 != "", .data$ID2 != "")
       existing <- dplyr::filter(existing, .data$ID1 %in% ids, .data$ID2 %in% ids, .data$ID1 != .data$ID2)
 
-      existing_keys <- pair_key(existing$ID1, existing$ID2)
+      existing_keys <- .unordered_pair_key(existing$ID1, existing$ID2)
+
+      # Optional caller-provided forbidden keys (same format as `.unordered_pair_key()`).
+      if (!is.null(forbid_keys)) {
+        if (!is.character(forbid_keys)) {
+          stop("`forbid_keys` must be a character vector of unordered pair keys.", call. = FALSE)
+        }
+        fk <- forbid_keys
+        fk <- fk[!is.na(fk) & fk != ""]
+        existing_keys <- unique(c(existing_keys, fk))
+      }
 
       # counts + position balance from existing pairs
       all_seen <- c(existing$ID1, existing$ID2)
@@ -232,7 +256,7 @@ select_core_link_pairs <- function(samples,
 
         # try candidates in order
         for (opp in cand) {
-          key <- pair_key(focus_id, opp)
+          key <- .unordered_pair_key(focus_id, opp)
           if (isTRUE(forbid_repeats) && key %in% forbid_keys) next
           return(opp)
         }
@@ -277,9 +301,41 @@ select_core_link_pairs <- function(samples,
       }
 
       # allocate counts
-      n_audit <- as.integer(floor(round_size * core_audit_frac))
+      #
+      # IMPORTANT: use rounding + minimums where appropriate.
+      # With small round sizes (common in smoke tests), using floor() can
+      # silently zero-out allocations (e.g., 10 * 0.05 = 0.5 -> 0). That
+      # removes core re-anchoring and can destabilize drift/linking diagnostics.
+
+      n_audit <- 0L
+      if (core_audit_frac > 0 && length(core_ids) >= 2L) {
+        n_audit <- as.integer(round(round_size * core_audit_frac))
+
+        # IMPORTANT: do not force an audit minimum that would crowd out all
+        # non-audit pairs. With very small rounds (e.g., round_size == 1),
+        # forcing n_audit >= 1 can leave zero capacity for core\u2194new linking
+        # pairs, which breaks anchoring of new IDs and can produce empty per-round
+        # metrics.
+        if (round_size >= 2L && n_audit < 1L) {
+          n_audit <- 1L
+        }
+      }
+      n_audit <- min(n_audit, round_size)
+
       remain <- round_size - n_audit
-      n_within <- as.integer(floor(remain * within_batch_frac))
+
+      n_within <- 0L
+      if (remain > 0 && within_batch_frac > 0 && length(new_ids) >= 2L) {
+        n_within <- as.integer(round(remain * within_batch_frac))
+
+        # Similarly, do not force a within-batch minimum that eliminates all
+        # core\u2194new anchoring when the remaining budget is tiny.
+        if (remain >= 2L && n_within < 1L) {
+          n_within <- 1L
+        }
+      }
+      n_within <- min(n_within, remain)
+
       n_link <- remain - n_within
 
       out <- list()
@@ -292,7 +348,7 @@ select_core_link_pairs <- function(samples,
           if (is.na(focus)) break
           row <- add_pair(focus, setdiff(core_ids, focus), "core_core", forbid_keys)
           if (is.null(row)) break
-          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          forbid_keys <- c(forbid_keys, .unordered_pair_key(row$ID1, row$ID2))
           out[[length(out) + 1L]] <- row
         }
       }
@@ -304,7 +360,7 @@ select_core_link_pairs <- function(samples,
           if (is.na(focus)) break
           row <- add_pair(focus, setdiff(new_ids, focus), "new_new", forbid_keys)
           if (is.null(row)) break
-          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          forbid_keys <- c(forbid_keys, .unordered_pair_key(row$ID1, row$ID2))
           out[[length(out) + 1L]] <- row
         }
       }
@@ -316,7 +372,7 @@ select_core_link_pairs <- function(samples,
           if (is.na(focus)) break
           row <- add_pair(focus, core_ids, "core_new", forbid_keys)
           if (is.null(row)) break
-          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          forbid_keys <- c(forbid_keys, .unordered_pair_key(row$ID1, row$ID2))
           out[[length(out) + 1L]] <- row
         }
       }
@@ -367,7 +423,44 @@ bt_core_link_round <- function(samples, fit, core_ids, include_text = FALSE, ...
   if (!is.list(fit) || is.null(fit$theta)) {
     stop("`fit` must be a list (from `fit_bt_model()`) containing `$theta`.", call. = FALSE)
   }
-  pairs <- select_core_link_pairs(samples = samples, theta = fit$theta, core_ids = core_ids, ...)
+  dots <- rlang::list2(...)
+  pairs <- do.call(
+    select_core_link_pairs,
+    c(list(samples = samples, theta = fit$theta, core_ids = core_ids), dots)
+  )
+
+  # Fallbacks for "no_pairs": try to relax the most common causes of premature
+  # exhaustion while preserving forbid_repeats. In small smoke tests it is easy
+  # to run out of pairs when kNN restrictions or strict position-balancing leave
+  # no feasible edges.
+  if (nrow(pairs) == 0L) {
+    n_ids <- nrow(fit$theta)
+
+    # 1) Expand the neighbor set to "all" if k_neighbors was limiting.
+    k_in <- dots$k_neighbors
+    if (is.null(k_in) || isTRUE(is.infinite(k_in)) || isTRUE(k_in >= (n_ids - 1L))) {
+      # already "all"
+    } else {
+      dots2 <- dots
+      dots2$k_neighbors <- n_ids - 1L
+      pairs2 <- do.call(select_core_link_pairs, c(list(samples = samples, theta = fit$theta, core_ids = core_ids), dots2))
+      if (nrow(pairs2) > 0L) {
+        pairs <- pairs2
+        attr(pairs, "fallback") <- "expanded_k_neighbors"
+      }
+    }
+
+    # 2) If still empty, relax position balancing.
+    if (nrow(pairs) == 0L && isTRUE(dots$balance_positions)) {
+      dots2 <- dots
+      dots2$balance_positions <- FALSE
+      pairs2 <- do.call(select_core_link_pairs, c(list(samples = samples, theta = fit$theta, core_ids = core_ids), dots2))
+      if (nrow(pairs2) > 0L) {
+        pairs <- pairs2
+        attr(pairs, "fallback") <- "disabled_balance_positions"
+      }
+    }
+  }
   if (isTRUE(include_text) && nrow(pairs) > 0L) {
     pairs <- add_pair_texts(pairs, samples = samples)
   }

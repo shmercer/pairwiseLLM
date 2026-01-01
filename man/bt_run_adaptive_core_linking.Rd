@@ -15,11 +15,13 @@ bt_run_adaptive_core_linking(
   embeddings = NULL,
   embeddings_metric = c("cosine", "euclidean"),
   linking = c("auto", "always", "never"),
-  linking_method = c("mean_sd"),
+  linking_method = c("median_iqr", "median_mad", "mean_sd"),
   linking_cor_target = 0.98,
   linking_p90_abs_shift_target = 0.15,
   linking_max_abs_shift_target = 0.3,
   linking_min_n = 3L,
+  reference_scale_method = c("median_iqr", "median_mad", "mean_sd"),
+  reference_max_abs = 6,
   seed_core = NULL,
   initial_results = NULL,
   judge = NULL,
@@ -27,6 +29,12 @@ bt_run_adaptive_core_linking(
   fit_verbose = FALSE,
   return_diagnostics = TRUE,
   include_residuals = FALSE,
+  fit_engine_running = c("bt", "rank_centrality"),
+  store_running_estimates = TRUE,
+  rc_smoothing = 0.5,
+  rc_damping = 0,
+  final_refit = TRUE,
+  final_bt_bias_reduction = TRUE,
   round_size = 50,
   init_round_size = round_size,
   max_rounds_per_batch = 50,
@@ -49,6 +57,9 @@ bt_run_adaptive_core_linking(
   rel_se_p90_min_improve = 0.01,
   max_item_misfit_prop = 0.05,
   max_judge_misfit_prop = 0.05,
+  exhaustion_fallback = c("none", "cross_batch_new_new", "targeted_repeats", "both"),
+  exhaustion_min_pairs_frac = 0.5,
+  exhaustion_spectral_gap_threshold = 0,
   core_theta_cor_target = NA_real_,
   core_theta_spearman_target = NA_real_,
   core_max_abs_shift_target = NA_real_,
@@ -103,9 +114,14 @@ on a stable scale defined by the baseline core fit. One of
 \code{"auto"}, \code{"always"}, or \code{"never"}. In \code{"auto"},
 linking is applied only when core drift exceeds the thresholds below.}
 
-\item{linking_method}{Linking method. Currently only \code{"mean_sd"} is supported,
-which applies an affine transform to match the mean and standard deviation of
-core thetas to the baseline core fit.}
+\item{linking_method}{Linking method passed to \code{\link[=bt_link_thetas]{bt_link_thetas()}}.
+\itemize{
+\item \code{"mean_sd"}: match mean and SD on the core set.
+\item \code{"median_iqr"}: match median and a robust SD estimate based on IQR.
+\item \code{"median_mad"}: match median and a robust SD estimate based on MAD.
+}
+Robust methods are strongly recommended for real-world adaptive runs because
+early rounds can be close to deterministic (separation).}
 
 \item{linking_cor_target}{In \code{linking = "auto"}, apply linking when the core
 Pearson correlation between baseline and current raw thetas is below this value.}
@@ -119,6 +135,16 @@ maximum absolute core-theta shift (baseline vs current raw) exceeds this value.}
 
 \item{linking_min_n}{Minimum number of core IDs required to estimate the linking
 transform. If fewer are available, linking is skipped.}
+
+\item{reference_scale_method}{Method used to stabilize the \emph{reference} (baseline)
+theta scale before it is used for linking decisions. Defaults to a robust
+median/IQR-based scale. This reduces pathological behavior when the early core
+fit is close to deterministic (separation), which can otherwise cause linking
+scale factors to explode.}
+
+\item{reference_max_abs}{Maximum absolute value allowed for reference thetas after
+stabilization (clamping). This is applied only to the reference fit used for
+linking/drift diagnostics.}
 
 \item{seed_core}{Optional integer seed for reproducible core selection.}
 
@@ -137,6 +163,29 @@ Default \code{"sirt"}.}
 \item{return_diagnostics}{Logical; passed to \code{fit_fun}. Default \code{TRUE}.}
 
 \item{include_residuals}{Logical; passed to \code{fit_fun}. Default \code{FALSE}.}
+
+\item{fit_engine_running}{Running fitting engine used to propose the \emph{next} round
+of pairs. One of \code{"bt"} (use BT thetas; default) or \code{"rank_centrality"}
+(use Rank Centrality scores as the running theta while retaining BT standard
+errors for uncertainty-driven sampling).}
+
+\item{store_running_estimates}{Logical; if TRUE, store the running-fit object
+in \code{out$fits}. If FALSE, store the BT fit.}
+
+\item{rc_smoothing}{Numeric smoothing parameter forwarded to
+\code{\link{fit_rank_centrality}} when \code{fit_engine_running="rank_centrality"}
+or when final refit computes Rank Centrality. Default \code{0.5}.}
+
+\item{rc_damping}{Numeric damping/teleport parameter in \code{[0,1)} forwarded to
+\code{\link{fit_rank_centrality}}. Use \code{>0} for unique stationary
+distributions on disconnected graphs. Default \code{0}.}
+
+\item{final_refit}{Logical; if TRUE (default), compute final BT and Rank Centrality
+estimates on the full result set via \code{\link{compute_final_estimates}} and
+return them as \code{out$estimates}.}
+
+\item{final_bt_bias_reduction}{Logical; if TRUE (default), attempt bias-reduced
+BT fitting (Firth / br=TRUE) in the final refit (falls back to MLE if unavailable).}
 
 \item{round_size}{Integer. Number of new pairs to propose and score per round within each
 batch.}
@@ -187,6 +236,17 @@ as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored aft
 \code{\link{bt_stop_metrics}}.}
 
 \item{reliability_target, sepG_target, rel_se_p90_target, rel_se_p90_min_improve, max_item_misfit_prop, max_judge_misfit_prop}{Stopping thresholds passed to \code{\link{bt_should_stop}}.}
+
+\item{exhaustion_fallback}{Fallback strategy to use when the within-batch pair
+generator becomes exhausted and fewer than \code{round_size * exhaustion_min_pairs_frac}
+pairs are available. One of \code{"none"}, \code{"cross_batch_new_new"},
+\code{"targeted_repeats"}, or \code{"both"}.}
+
+\item{exhaustion_min_pairs_frac}{Numeric in (0,1]. Minimum fraction of \code{round_size}
+below which the fallback may trigger.}
+
+\item{exhaustion_spectral_gap_threshold}{Numeric >= 0. Optional diagnostic threshold for
+triggering the fallback when spectral gap information is available.}
 
 \item{core_theta_cor_target, core_theta_spearman_target, core_max_abs_shift_target, core_p90_abs_shift_target}{Optional drift guardrails passed to \code{\link{bt_should_stop}}. If any of these are not
 \code{NA}, the runner computes core drift metrics per round by comparing the current fit to
