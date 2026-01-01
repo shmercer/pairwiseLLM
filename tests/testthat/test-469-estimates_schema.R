@@ -44,7 +44,12 @@ test_that(".make_estimates_tbl() validates column lengths", {
   )
 
   expect_error(
-    pairwiseLLM:::.make_estimates_tbl(ids, theta_bt_firth = c(0.1, 0.2, 0.3), extra = 1:2),
-    "All `\\.\\.\\.` columns must match length\(ids\)"
+    pairwiseLLM:::.make_estimates_tbl(
+      ids,
+      theta_bt_firth = c(0.1, 0.2, 0.3),
+      extra = 1:2
+    ),
+    "All `...` columns must match length(ids)",
+    fixed = TRUE
   )
 })
