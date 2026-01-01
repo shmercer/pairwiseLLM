@@ -144,103 +144,112 @@ fit_rank_centrality <- function(
 
   idx <- stats::setNames(seq_len(n), ids)
 
-  # Build win/loss counts per unordered pair
-  # We'll store wins for directed i -> j in a sparse-like map via matrices for simplicity (n is small here).
-  W <- matrix(0, n, n, dimnames = list(ids, ids))
-  N <- matrix(0, n, n, dimnames = list(ids, ids))
-
+  # Build unordered edge counts (sparse-friendly):
+  # For each unordered pair (a, b) with a < b, record total comparisons n_ab
+  # and wins by a over b (w_ab).
   o1 <- bt_data$object1
   o2 <- bt_data$object2
-  r <- bt_data$result
+  r  <- bt_data$result
 
-  for (k in seq_along(r)) {
-    i <- idx[[o1[k]]]
-    j <- idx[[o2[k]]]
-    if (is.na(i) || is.na(j) || i == j) next
+  i_idx <- unname(idx[o1])
+  j_idx <- unname(idx[o2])
+  ok <- is.finite(i_idx) & is.finite(j_idx) & (i_idx != j_idx)
+  if (!any(ok)) stop("No valid comparisons found after filtering.", call. = FALSE)
+  i_idx <- as.integer(i_idx[ok])
+  j_idx <- as.integer(j_idx[ok])
+  r <- as.integer(r[ok])
 
-    # n_ij counts both directions (unordered)
-    N[i, j] <- N[i, j] + 1
-    N[j, i] <- N[j, i] + 1
+  # Determine unordered endpoints a<b, and whether a won.
+  a <- pmin(i_idx, j_idx)
+  b <- pmax(i_idx, j_idx)
+  # winner index per row
+  winner <- ifelse(r == 1L, i_idx, j_idx)
+  win_a <- as.integer(winner == a)
 
-    if (r[k] == 1) {
-      # object1 wins
-      W[i, j] <- W[i, j] + 1
-    } else {
-      # object2 wins
-      W[j, i] <- W[j, i] + 1
+  edges <- tibble::tibble(a = a, b = b, win_a = win_a)
+  edges <- dplyr::group_by(edges, .data$a, .data$b)
+  edges <- dplyr::summarise(
+    edges,
+    n_ab = dplyr::n(),
+    w_ab = sum(.data$win_a),
+    .groups = "drop"
+  )
+
+  if (nrow(edges) == 0L) stop("No valid comparisons found after aggregation.", call. = FALSE)
+
+  n_edges <- nrow(edges)
+
+  # Degree from undirected edges
+  degree <- tabulate(edges$a, nbins = n) + tabulate(edges$b, nbins = n)
+
+  # Connected components via union-find (no dense adjacency)
+  parent <- seq_len(n)
+  .find <- function(x) {
+    while (parent[[x]] != x) {
+      parent[[x]] <<- parent[[ parent[[x]] ]]
+      x <- parent[[x]]
     }
+    x
   }
-
-  # Adjacency (undirected) where at least one comparison exists
-  adj <- (N > 0)
-  diag(adj) <- FALSE
-
-  degree <- rowSums(adj)
-  n_edges <- sum(adj[upper.tri(adj)]) # undirected count
-
-  # Connected components on the undirected graph
-  .components_bfs <- function(adj_mat) {
-    n0 <- nrow(adj_mat)
-    comp <- rep(NA_integer_, n0)
-    cid <- 0L
-    for (i in seq_len(n0)) {
-      if (!is.na(comp[i])) next
-      cid <- cid + 1L
-      queue <- i
-      comp[i] <- cid
-      while (length(queue) > 0) {
-        v <- queue[[1]]
-        queue <- queue[-1]
-        nbrs <- which(adj_mat[v, ])
-        for (u in nbrs) {
-          if (is.na(comp[u])) {
-            comp[u] <- cid
-            queue <- c(queue, u)
-          }
-        }
-      }
-    }
-    comp
+  .union <- function(x, y) {
+    rx <- .find(x)
+    ry <- .find(y)
+    if (rx != ry) parent[[ry]] <<- rx
+    invisible(NULL)
   }
-
-  component_id <- .components_bfs(adj)
+  for (k in seq_len(n_edges)) {
+    .union(edges$a[[k]], edges$b[[k]])
+  }
+  roots <- vapply(seq_len(n), .find, integer(1))
+  root_levels <- sort(unique(roots))
+  component_id <- match(roots, root_levels)
   tab_comp <- table(component_id)
   n_components <- length(tab_comp)
   largest_component_frac <- if (n > 0) max(tab_comp) / n else NA_real_
 
-  # Construct transition matrix P
-  P <- matrix(0, n, n, dimnames = list(ids, ids))
+  # Construct sparse transition matrix P (row-stochastic)
+  # For edge (a,b): p_ab = P(a beats b)
+  p_ab <- (edges$w_ab + smoothing) / (edges$n_ab + 2 * smoothing)
+  p_ba <- 1 - p_ab
 
-  for (i in seq_len(n)) {
-    nbrs <- which(adj[i, ])
-    di <- length(nbrs)
-    if (di == 0L) {
-      P[i, i] <- 1
-      next
-    }
+  from <- c(edges$a, edges$b)
+  to   <- c(edges$b, edges$a)
+  val  <- c(p_ba / pmax(degree[edges$a], 1), p_ab / pmax(degree[edges$b], 1))
 
-    for (j in nbrs) {
-      nij <- N[i, j]
-      # wins by i over j
-      wij <- W[i, j]
-      # Smoothed win probability for i beating j
-      p_ij <- (wij + smoothing) / (nij + 2 * smoothing)
-      # Transition i -> j proportional to prob j beats i
-      P[i, j] <- (1 / di) * (1 - p_ij)
-    }
-    P[i, i] <- 1 - sum(P[i, -i])
-    # Numerical guard
-    if (P[i, i] < 0) {
-      P[i, i] <- 0
-      s <- sum(P[i, ])
-      if (s > 0) P[i, ] <- P[i, ] / s else P[i, i] <- 1
+  # Row sums of off-diagonal mass
+  row_sum_off <- numeric(n)
+  tmp <- tapply(val, from, sum)
+  row_sum_off[as.integer(names(tmp))] <- as.numeric(tmp)
+
+  diag_val <- 1 - row_sum_off
+  diag_val[degree == 0] <- 1
+
+  # Numerical guard: if any diagonal goes negative, renormalize that row.
+  bad <- which(diag_val < -1e-12)
+  if (length(bad) > 0) {
+    for (i in bad) {
+      sel <- which(from == i)
+      s_off <- sum(val[sel])
+      if (s_off > 0) {
+        val[sel] <- val[sel] / s_off
+      }
+      diag_val[[i]] <- 0
     }
   }
+  diag_val <- pmax(diag_val, 0)
 
-  if (damping > 0) {
-    U <- matrix(1 / n, n, n)
-    P <- (1 - damping) * P + damping * U
-  }
+  I <- c(from, seq_len(n))
+  J <- c(to,   seq_len(n))
+  X <- c(val,  diag_val)
+
+  P <- Matrix::sparseMatrix(
+    i = I,
+    j = J,
+    x = X,
+    dims = c(n, n),
+    dimnames = list(ids, ids),
+    giveCsparse = TRUE
+  )
 
   # Power method for stationary distribution of a row-stochastic matrix:
   # pi^T = pi^T P, equivalently pi = t(P) %*% pi.
@@ -249,7 +258,10 @@ fit_rank_centrality <- function(
   it <- 0L
 
   for (it0 in seq_len(max_iter)) {
-    pi_next <- as.numeric(crossprod(P, pi)) # t(P) %*% pi
+    pi_next <- as.numeric(Matrix::crossprod(P, pi)) # t(P) %*% pi
+    if (damping > 0) {
+      pi_next <- (1 - damping) * pi_next + damping * rep.int(1 / n, n)
+    }
     s <- sum(pi_next)
     if (!is.finite(s) || s <= 0) {
       stop("Rank Centrality failed: non-finite stationary mass.", call. = FALSE)
@@ -282,9 +294,21 @@ fit_rank_centrality <- function(
   spectral_gap <- NA_real_
   lambda2 <- NA_real_
   if (n <= 200) {
-    ev <- tryCatch(eigen(P, only.values = TRUE)$values, error = function(e) NULL)
+    ev <- tryCatch(eigen(as.matrix(P), only.values = TRUE)$values, error = function(e) NULL)
     if (!is.null(ev)) {
       # Largest eigenvalue should be 1; take second largest by modulus
+      ord <- order(Mod(ev), decreasing = TRUE)
+      if (length(ord) >= 2) {
+        lambda2 <- Mod(ev[[ord[[2]]]])
+        spectral_gap <- 1 - lambda2
+      }
+    }
+  } else if (n <= 2000 && requireNamespace("RSpectra", quietly = TRUE)) {
+    ev <- tryCatch(
+      RSpectra::eigs(Matrix::t(P), k = 2, which = "LM")$values,
+      error = function(e) NULL
+    )
+    if (!is.null(ev)) {
       ord <- order(Mod(ev), decreasing = TRUE)
       if (length(ord) >= 2) {
         lambda2 <- Mod(ev[[ord[[2]]]])
