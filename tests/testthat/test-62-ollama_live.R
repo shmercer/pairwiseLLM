@@ -834,7 +834,7 @@ testthat::test_that(
         stop("simulated failure from ollama ps")
       },
       {
-        res <- ensure_only_ollama_model_loaded("mistral-small3.2:24b", verbose = TRUE)
+        res <- quietly(ensure_only_ollama_model_loaded("mistral-small3.2:24b", verbose = TRUE))
 
         # Should return an empty character vector, invisibly
         testthat::expect_type(res, "character")
@@ -1390,7 +1390,9 @@ testthat::test_that("submit_ollama_pairs_live errors if readr missing when save_
         submit_ollama_pairs_live(
           tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b"),
           "model", "t", "d",
-          save_path = "out.csv"
+          save_path = "out.csv",
+          verbose = FALSE,
+          progress = FALSE
         ),
         "package is required for incremental saving"
       )
@@ -1466,7 +1468,9 @@ testthat::test_that("submit_ollama_pairs_live errors if parallel packages missin
         submit_ollama_pairs_live(
           tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b"),
           "m", "t", "d",
-          parallel = TRUE, workers = 2
+          parallel = TRUE, workers = 2,
+          verbose = FALSE,
+          progress = FALSE
         ),
         "Packages 'future' and 'future.apply' are required"
       )

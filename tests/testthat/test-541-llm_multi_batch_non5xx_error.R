@@ -9,8 +9,10 @@ testthat::test_that("llm_submit_pairs_multi_batch propagates non-5xx OpenAI erro
   boom <- function(...) stop("boom")
   mockery::stub(pairwiseLLM::llm_submit_pairs_multi_batch, "run_openai_batch_pipeline", boom)
 
-  testthat::expect_error(
-    pairwiseLLM::llm_submit_pairs_multi_batch(
+  testthat::capture_output(
+    testthat::capture_messages({
+      testthat::expect_error(
+        pairwiseLLM::llm_submit_pairs_multi_batch(
       pairs = pairs,
       model = "gpt-4o-mini",
       trait_name = "Task",
@@ -19,7 +21,9 @@ testthat::test_that("llm_submit_pairs_multi_batch propagates non-5xx OpenAI erro
       batch_size = 2,
       verbose = TRUE,
       openai_max_retries = 1
-    ),
-    "boom"
+        ),
+        "boom"
+      )
+    })
   )
 })

@@ -25,7 +25,7 @@ testthat::test_that("state output schema is identical between core and adaptive 
     )
   }
 
-  out_core <- bt_run_core_linking(
+  out_core <- quietly(bt_run_core_linking(
     samples = samples,
     batches = list(c("C", "D")),
     judge_fun = judge_fun,
@@ -40,10 +40,11 @@ testthat::test_that("state output schema is identical between core and adaptive 
     sepG_target = NA_real_,
     rel_se_p90_min_improve = NA_real_,
     max_item_misfit_prop = NA_real_,
-    max_judge_misfit_prop = NA_real_
-  )
+    max_judge_misfit_prop = NA_real_,
+    verbose = FALSE
+  ))
 
-  out_adapt <- bt_run_adaptive_core_linking(
+  out_adapt <- quietly(bt_run_adaptive_core_linking(
     samples = samples,
     batches = list(c("C", "D")),
     judge_fun = judge_fun,
@@ -58,8 +59,9 @@ testthat::test_that("state output schema is identical between core and adaptive 
     sepG_target = NA_real_,
     rel_se_p90_min_improve = NA_real_,
     max_item_misfit_prop = NA_real_,
-    max_judge_misfit_prop = NA_real_
-  )
+    max_judge_misfit_prop = NA_real_,
+    verbose = FALSE
+  ))
 
   testthat::expect_true(is.data.frame(out_core$state))
   testthat::expect_true(is.data.frame(out_adapt$state))

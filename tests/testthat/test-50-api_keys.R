@@ -292,24 +292,16 @@ testthat::test_that(".get_api_key treats empty string api_key like missing and u
 
 testthat::test_that("check_llm_api_keys provides verbose guidance when keys missing", {
   # Unset all keys
-  withr::with_envvar(
+  msgs_none <- withr::with_envvar(
     c("OPENAI_API_KEY" = "", "ANTHROPIC_API_KEY" = "", "GEMINI_API_KEY" = "", "TOGETHER_API_KEY" = ""),
-    {
-      testthat::expect_message(
-        check_llm_api_keys(verbose = TRUE),
-        "No LLM API keys are currently set"
-      )
-    }
+    testthat::capture_messages(check_llm_api_keys(verbose = TRUE))
   )
+  testthat::expect_true(any(grepl("No LLM API keys are currently set", msgs_none)))
 
   # Set one key
-  withr::with_envvar(
+  msgs_some <- withr::with_envvar(
     c("OPENAI_API_KEY" = "TEST", "ANTHROPIC_API_KEY" = ""),
-    {
-      testthat::expect_message(
-        check_llm_api_keys(verbose = TRUE),
-        "Some LLM API keys are not set"
-      )
-    }
+    testthat::capture_messages(check_llm_api_keys(verbose = TRUE))
   )
+  testthat::expect_true(any(grepl("Some LLM API keys are not set", msgs_some)))
 })

@@ -122,7 +122,8 @@ test_that("judge_misfit_judges returns misfit judge IDs and handles missing diag
     )
   )
 
-  print(pairwiseLLM::judge_fit_summary(fit, fit_bounds = c(0.7, 1.3), top_n = Inf)$details)
+  summary <- pairwiseLLM::judge_fit_summary(fit, fit_bounds = c(0.7, 1.3), top_n = Inf)
+  expect_s3_class(summary$details, "tbl_df")
 
   ids <- pairwiseLLM::judge_misfit_judges(fit, fit_bounds = c(0.7, 1.3))
   expect_equal(ids, c("mB", "mC"))

@@ -939,7 +939,7 @@ test_that(".retry_httr2_request retries on transient statuses and returns succes
 
   httr2::local_mocked_responses(mock_callback)
 
-  out <- pairwiseLLM:::.retry_httr2_request(dummy_req, max_attempts = 3L, base_delay = 0)
+  out <- quietly(pairwiseLLM:::.retry_httr2_request(dummy_req, max_attempts = 3L, base_delay = 0))
 
   expect_equal(attempt_env$count, 2L)
   expect_s3_class(out, "httr2_response")
@@ -1002,7 +1002,7 @@ test_that(".retry_httr2_request retries on httr2_http transient errors and event
 
   httr2::local_mocked_responses(mock_callback)
 
-  out <- pairwiseLLM:::.retry_httr2_request(dummy_req, max_attempts = 3L, base_delay = 0)
+  out <- quietly(pairwiseLLM:::.retry_httr2_request(dummy_req, max_attempts = 3L, base_delay = 0))
 
   expect_equal(attempt_env$count, 3L)
   expect_s3_class(out, "httr2_response")

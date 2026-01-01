@@ -904,14 +904,17 @@ test_that("anthropic_poll_batch_until_complete logs status when verbose and warn
     .package = "pairwiseLLM"
   )
 
-  msgs <- testthat::capture_messages({
-    out <- pairwiseLLM::anthropic_poll_batch_until_complete(
-      batch_id = "msgbatch_123",
-      interval_seconds = 0,
-      timeout_seconds = Inf,
-      verbose = TRUE
-    )
-    expect_equal(out$processing_status, "ended")
+  msgs <- NULL
+  testthat::capture_output({
+    msgs <- testthat::capture_messages({
+      out <- pairwiseLLM::anthropic_poll_batch_until_complete(
+        batch_id = "msgbatch_123",
+        interval_seconds = 0,
+        timeout_seconds = Inf,
+        verbose = TRUE
+      )
+      expect_equal(out$processing_status, "ended")
+    })
   })
   expect_true(any(grepl("status:", msgs, fixed = TRUE)))
 
@@ -929,15 +932,17 @@ test_that("anthropic_poll_batch_until_complete logs status when verbose and warn
     .package = "pairwiseLLM"
   )
 
-  testthat::expect_warning(
-    pairwiseLLM::anthropic_poll_batch_until_complete(
-      batch_id = "msgbatch_123",
-      interval_seconds = 0,
-      timeout_seconds = 0,
-      verbose = TRUE
-    ),
-    "Timeout reached"
-  )
+  testthat::capture_output({
+    testthat::expect_warning(
+      pairwiseLLM::anthropic_poll_batch_until_complete(
+        batch_id = "msgbatch_123",
+        interval_seconds = 0,
+        timeout_seconds = 0,
+        verbose = TRUE
+      ),
+      "Timeout reached"
+    )
+  })
 })
 
 test_that("anthropic_download_batch_results errors without results_url and writes jsonl when present", {

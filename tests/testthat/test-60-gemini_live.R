@@ -476,7 +476,9 @@ testthat::test_that("submit_gemini_pairs_live returns list structure for zero ro
     model = "gemini-3-pro-preview",
     trait_name = td$name,
     trait_description = td$description,
-    prompt_template = tmpl
+    prompt_template = tmpl,
+    verbose = FALSE,
+    progress = FALSE
   )
 
   testthat::expect_type(res, "list")
@@ -493,7 +495,9 @@ testthat::test_that("submit_gemini_pairs_live returns list structure for zero ro
     trait_name = td$name,
     trait_description = td$description,
     prompt_template = tmpl,
-    include_raw = TRUE
+    include_raw = TRUE,
+    verbose = FALSE,
+    progress = FALSE
   )
   testthat::expect_true("raw_response" %in% names(res_raw$results))
 })
@@ -637,7 +641,10 @@ testthat::test_that("submit_gemini_pairs_live validates inputs", {
   # 1. Missing columns
   bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
   testthat::expect_error(
-    submit_gemini_pairs_live(bad_pairs, "gemini", td$name, td$description),
+
+    submit_gemini_pairs_live(bad_pairs, "gemini", td$name, td$description,
+                             verbose = FALSE,
+                             progress = FALSE),
     "must contain columns"
   )
 
@@ -646,7 +653,9 @@ testthat::test_that("submit_gemini_pairs_live validates inputs", {
   testthat::expect_error(
     submit_gemini_pairs_live(
       good_pairs, "gemini", td$name, td$description,
-      status_every = 0
+      status_every = 0,
+      verbose = FALSE,
+      progress = FALSE
     ),
     "positive integer"
   )

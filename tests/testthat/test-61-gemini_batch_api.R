@@ -216,13 +216,15 @@ testthat::test_that("gemini_poll_batch_until_complete handles validation and tim
   testthat::with_mocked_bindings(
     gemini_get_batch = function(...) list(name = "b", metadata = list(state = "RUNNING")),
     {
-      testthat::expect_warning(
-        res <- gemini_poll_batch_until_complete(
-          "b",
-          interval_seconds = 0, timeout_seconds = 0, verbose = TRUE # Verbose must be TRUE for warning
-        ),
-        "Timeout reached"
-      )
+      testthat::capture_output({
+        testthat::expect_warning(
+          res <- gemini_poll_batch_until_complete(
+            "b",
+            interval_seconds = 0, timeout_seconds = 0, verbose = TRUE # Verbose must be TRUE for warning
+          ),
+          "Timeout reached"
+        )
+      })
       testthat::expect_equal(res$metadata$state, "RUNNING")
     }
   )

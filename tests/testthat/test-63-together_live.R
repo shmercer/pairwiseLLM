@@ -519,7 +519,9 @@ testthat::test_that("submit_together_pairs_live returns list structure for zero 
     model = "deepseek-ai/DeepSeek-R1",
     trait_name = td$name,
     trait_description = td$description,
-    prompt_template = tmpl
+    prompt_template = tmpl,
+    verbose = FALSE,
+    progress = FALSE
   )
 
   # Expect a list with two tibbles
@@ -537,7 +539,9 @@ testthat::test_that("submit_together_pairs_live returns list structure for zero 
     trait_name = td$name,
     trait_description = td$description,
     prompt_template = tmpl,
-    include_raw = TRUE
+    include_raw = TRUE,
+    verbose = FALSE,
+    progress = FALSE
   )
   testthat::expect_true("raw_response" %in% names(res_raw$results))
 })
@@ -689,7 +693,9 @@ testthat::test_that("submit_together_pairs_live validates inputs", {
   # 1. Missing columns
   bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
   testthat::expect_error(
-    submit_together_pairs_live(bad_pairs, "mod", td$name, td$description),
+    submit_together_pairs_live(bad_pairs, "mod", td$name, td$description,
+                               verbose = FALSE,
+                               progress = FALSE),
     "must contain columns"
   )
 
@@ -698,7 +704,9 @@ testthat::test_that("submit_together_pairs_live validates inputs", {
   testthat::expect_error(
     submit_together_pairs_live(
       good_pairs, "mod", td$name, td$description,
-      status_every = 0
+      status_every = 0,
+      verbose = FALSE,
+      progress = FALSE
     ),
     "positive integer"
   )

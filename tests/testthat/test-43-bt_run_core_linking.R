@@ -518,8 +518,7 @@ test_that("bt_run_core_linking emits progress messages when verbose = TRUE", {
     )
   }
 
-  # Cover the "Batch ..." message line
-  expect_message(
+  msgs <- testthat::capture_messages(
     bt_run_core_linking(
       samples = samples,
       batches = batches,
@@ -536,31 +535,11 @@ test_that("bt_run_core_linking emits progress messages when verbose = TRUE", {
       max_judge_misfit_prop = NA_real_,
       rel_se_p90_target = 999,
       verbose = TRUE
-    ),
-    "Batch 1:"
+    )
   )
 
-  # Cover the "Round ..." message line
-  expect_message(
-    bt_run_core_linking(
-      samples = samples,
-      batches = batches,
-      core_ids = core_ids,
-      judge_fun = judge_fun,
-      fit_fun = mock_fit,
-      engine = "mock",
-      round_size = 10,
-      max_rounds_per_batch = 1,
-      forbid_repeats = FALSE,
-      reliability_target = NA_real_,
-      sepG_target = NA_real_,
-      max_item_misfit_prop = NA_real_,
-      max_judge_misfit_prop = NA_real_,
-      rel_se_p90_target = 999,
-      verbose = TRUE
-    ),
-    "Round 1:"
-  )
+  expect_true(any(grepl("Batch 1:", msgs, fixed = TRUE)))
+  expect_true(any(grepl("Round 1:", msgs, fixed = TRUE)))
 })
 
 test_that("bt_run_core_linking returns state snapshots including new_ prefixed fields", {
