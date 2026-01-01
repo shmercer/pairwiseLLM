@@ -29,3 +29,5 @@ and avoid renumbering existing files.
 
 Notes:
 - File names are stable and map closely to the `R/*.R` sources.
+- Each test file must have a **unique** numeric prefix so commands like `devtools::test(filter = "24")` match exactly one file.
+- Use the 3-digit supplemental pattern within the group (e.g., `241-...`, `313-...`, `462-...`) whenever you need a sibling test without renumbering.
