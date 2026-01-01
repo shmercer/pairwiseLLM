@@ -42,9 +42,9 @@ A list with elements:
 \describe{
 \item{estimates}{A tibble with one row per \code{ID}, including:
 \itemize{
-\item \code{theta_bt}: Bradley--Terry ability estimate (centered)
-\item \code{se_bt}: standard error for \code{theta_bt}
-\item \code{rank_bt}: rank of \code{theta_bt} (1 = highest)
+\item \code{theta_bt_firth}: Bradley--Terry ability estimate (centered)
+\item \code{se_bt_firth}: standard error for \code{theta_bt_firth}
+\item \code{rank_bt_firth}: rank of \code{theta_bt_firth} (1 = highest)
 \item \code{pi_rc}: Rank Centrality stationary probability
 \item \code{theta_rc}: centered \code{log(pi_rc)}
 \item \code{rank_rc}: rank of \code{theta_rc} (1 = highest)
