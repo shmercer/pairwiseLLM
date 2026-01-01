@@ -426,7 +426,7 @@ submit_openai_pairs_live <- function(
   api_key = NULL,
   verbose = TRUE,
   status_every = 1,
-  progress = TRUE,
+  progress = interactive(),
   include_raw = FALSE,
   validate = FALSE,
   validate_strict = FALSE,

@@ -542,7 +542,7 @@ submit_gemini_pairs_live <- function(
   api_version = "v1beta",
   verbose = TRUE,
   status_every = 1L,
-  progress = TRUE,
+  progress = interactive(),
   include_raw = FALSE,
   validate = FALSE,
   validate_strict = FALSE,
