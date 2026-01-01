@@ -23,7 +23,7 @@ test_that("exhaustion fallback can unlock cross-batch new-new pairs", {
   }
 
   set.seed(1)
-  out_none <- quietly(bt_run_core_linking(
+  out_none <- bt_run_core_linking(
     samples = samples,
     batches = batches,
     judge_fun = judge_fun,
@@ -40,14 +40,13 @@ test_that("exhaustion fallback can unlock cross-batch new-new pairs", {
     rel_se_p90_min_improve = NA_real_,
     max_item_misfit_prop = NA_real_,
     max_judge_misfit_prop = NA_real_,
-    exhaustion_fallback = "none",
-    verbose = FALSE
-  ))
+    exhaustion_fallback = "none"
+  )
 
   expect_equal(out_none$batch_summary$stop_reason[[2]], "no_pairs")
 
   set.seed(1)
-  out_fb <- quietly(bt_run_core_linking(
+  out_fb <- bt_run_core_linking(
     samples = samples,
     batches = batches,
     judge_fun = judge_fun,
@@ -64,9 +63,8 @@ test_that("exhaustion fallback can unlock cross-batch new-new pairs", {
     rel_se_p90_min_improve = NA_real_,
     max_item_misfit_prop = NA_real_,
     max_judge_misfit_prop = NA_real_,
-    exhaustion_fallback = "cross_batch_new_new",
-    verbose = FALSE
-  ))
+    exhaustion_fallback = "cross_batch_new_new"
+  )
 
   expect_equal(out_fb$batch_summary$stop_reason[[2]], "max_rounds")
 

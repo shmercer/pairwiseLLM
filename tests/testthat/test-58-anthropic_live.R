@@ -756,9 +756,7 @@ testthat::test_that("submit_anthropic_pairs_live returns list structure for zero
     model = "claude-sonnet-4-5",
     trait_name = td$name,
     trait_description = td$description,
-    prompt_template = tmpl,
-    verbose = FALSE,
-    progress = FALSE
+    prompt_template = tmpl
   )
 
   # Check list structure
@@ -776,9 +774,7 @@ testthat::test_that("submit_anthropic_pairs_live returns list structure for zero
     trait_name = td$name,
     trait_description = td$description,
     prompt_template = tmpl,
-    include_raw = TRUE,
-    verbose = FALSE,
-    progress = FALSE
+    include_raw = TRUE
   )
   testthat::expect_true("raw_response" %in% names(res_raw$results))
 })
@@ -930,11 +926,7 @@ testthat::test_that("submit_anthropic_pairs_live validates inputs", {
   # 1. Missing columns
   bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
   testthat::expect_error(
-    submit_anthropic_pairs_live(
-      bad_pairs, "claude", td$name, td$description,
-      verbose = FALSE,
-      progress = FALSE
-    ),
+    submit_anthropic_pairs_live(bad_pairs, "claude", td$name, td$description),
     "must contain columns"
   )
 
@@ -943,9 +935,7 @@ testthat::test_that("submit_anthropic_pairs_live validates inputs", {
   testthat::expect_error(
     submit_anthropic_pairs_live(
       good_pairs, "claude", td$name, td$description,
-      status_every = 0,
-      verbose = FALSE,
-      progress = FALSE
+      status_every = 0
     ),
     "positive integer"
   )
@@ -1002,7 +992,7 @@ testthat::test_that("submit_anthropic_pairs_live: Directory creation & Raw respo
         {
           res <- submit_anthropic_pairs_live(
             pairs, "model", td$name, td$description,
-            save_path = tmp_file, verbose = TRUE, progress = FALSE, include_raw = TRUE
+            save_path = tmp_file, verbose = TRUE, include_raw = TRUE
           )
         },
         type = "message"
@@ -1049,7 +1039,7 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel execution & Parallel 
     {
       res_par <- submit_anthropic_pairs_live(
         pairs_par, "model", td$name, td$description,
-        parallel = TRUE, workers = 2, verbose = TRUE, progress = FALSE,
+        parallel = TRUE, workers = 2, verbose = TRUE,
         api_key = "fake_key", # Ensure failure
         save_path = tmp_par
       )

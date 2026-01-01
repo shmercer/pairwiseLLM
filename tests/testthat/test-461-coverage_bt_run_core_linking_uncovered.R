@@ -259,7 +259,7 @@ testthat::test_that("bt_run_core_linking validates provided core_ids and can sho
   )
 
   # linking='never' branch (no linking applied, but linking metadata recorded)
-  out <- quietly(bt_run_core_linking(
+  out <- bt_run_core_linking(
     samples = samples,
     batches = list("C"),
     judge_fun = judge_fun,
@@ -276,9 +276,8 @@ testthat::test_that("bt_run_core_linking validates provided core_ids and can sho
     sepG_target = NA_real_,
     rel_se_p90_min_improve = NA_real_,
     max_item_misfit_prop = NA_real_,
-    max_judge_misfit_prop = NA_real_,
-    verbose = FALSE
-  ))
+    max_judge_misfit_prop = NA_real_
+  )
 
   testthat::expect_true(length(out$fits) >= 1)
   testthat::expect_identical(out$fits[[1]]$linking$reason, "never")

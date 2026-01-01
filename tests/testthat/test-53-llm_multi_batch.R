@@ -27,7 +27,7 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes regist
     run_anthropic_batch_pipeline = fake_pipeline_openai,
     run_gemini_batch_pipeline = fake_pipeline_openai,
     {
-      res <- quietly(llm_submit_pairs_multi_batch(
+      res <- llm_submit_pairs_multi_batch(
         pairs             = pairs,
         model             = "fake-model",
         trait_name        = td$name,
@@ -38,7 +38,7 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes regist
         output_dir        = out_dir,
         write_registry    = TRUE,
         verbose           = TRUE
-      ))
+      )
       # Expect two segments of two pairs each
       expect_equal(length(res$jobs), 2L)
       # Registry file should exist
@@ -164,14 +164,14 @@ test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON fil
       )
     },
     {
-      res <- quietly(llm_resume_multi_batches(
+      res <- llm_resume_multi_batches(
         jobs              = jobs,
         interval_seconds  = 0,
         per_job_delay     = 0,
         write_results_csv = FALSE,
         keep_jsonl        = FALSE,
         verbose           = TRUE
-      ))
+      )
       # Expect the job to be marked done
       expect_true(res$jobs[[1]]$done)
       # Combined results should have one row

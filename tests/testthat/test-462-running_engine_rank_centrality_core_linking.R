@@ -25,8 +25,7 @@ test_that("bt_run_core_linking supports Rank Centrality as a running engine", {
     round_size = 2,
     forbid_repeats = FALSE,
     balance_positions = FALSE,
-    seed = 123,
-    verbose = FALSE
+    seed = 123
   )
 
   expect_true(is.list(out$fits) && length(out$fits) >= 1L)

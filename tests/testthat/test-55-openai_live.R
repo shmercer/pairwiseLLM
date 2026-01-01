@@ -916,9 +916,7 @@ testthat::test_that("submit_openai_pairs_live returns valid list structure for z
     model = "gpt-4.1",
     trait_name = td$name,
     trait_description = td$description,
-    prompt_template = tmpl,
-    verbose = FALSE,
-    progress = FALSE
+    prompt_template = tmpl
   )
 
   # output must be a list with results and failed_pairs
@@ -958,8 +956,7 @@ testthat::test_that("submit_openai_pairs_live handles row-wise execution and ret
         model = "gpt-4.1",
         trait_name = td$name,
         trait_description = td$description,
-        verbose = FALSE,
-        progress = FALSE
+        verbose = FALSE
       )
 
       # Check structure
@@ -996,8 +993,7 @@ testthat::test_that("submit_openai_pairs_live separates failed pairs", {
       res <- submit_openai_pairs_live(
         pairs = pairs, model = "gpt-4.1",
         trait_name = td$name, trait_description = td$description,
-        verbose = FALSE,
-        progress = FALSE
+        verbose = FALSE
       )
 
       # Should have 2 results total in the main table (one success, one fail row)
@@ -1052,8 +1048,7 @@ testthat::test_that("submit_openai_pairs_live respects save_path (Resume Logic)"
         trait_name = td$name,
         trait_description = td$description,
         save_path = tmp_csv,
-        verbose = FALSE,
-        progress = FALSE
+        verbose = FALSE
       )
 
       # 3. Validation
@@ -1075,23 +1070,18 @@ testthat::test_that("submit_openai_pairs_live validates inputs", {
   # 1. Missing columns
   bad_pairs <- tibble::tibble(ID1 = "A", text1 = "t")
   testthat::expect_error(
-    submit_openai_pairs_live(
-      bad_pairs, "gpt-4", td$name, td$description,
-      verbose = FALSE,
-      progress = FALSE
-    ),
+    submit_openai_pairs_live(bad_pairs, "gpt-4", td$name, td$description),
     "must contain columns"
   )
 
   # 2. Invalid status_every (0 is not positive)
   good_pairs <- tibble::tibble(ID1 = "A", text1 = "t", ID2 = "B", text2 = "t")
 
+  # We expect the error we just added back to the function
   testthat::expect_error(
     submit_openai_pairs_live(
       good_pairs, "gpt-4", td$name, td$description,
-      status_every = 0,
-      verbose = FALSE,
-      progress = FALSE
+      status_every = 0
     ),
     "positive integer"
   )
@@ -1127,8 +1117,7 @@ testthat::test_that("submit_openai_pairs_live: Directory creation & Raw response
         {
           res <- submit_openai_pairs_live(
             pairs, "gpt-4.1", td$name, td$description,
-            save_path = tmp_file, verbose = TRUE, include_raw = TRUE,
-            progress = FALSE
+            save_path = tmp_file, verbose = TRUE, include_raw = TRUE
           )
         },
         type = "message"
@@ -1177,8 +1166,7 @@ testthat::test_that("submit_openai_pairs_live: Resume logic (Read Error Handling
           testthat::expect_warning(
             submit_openai_pairs_live(
               pairs, "gpt-4.1", td$name, td$description,
-              save_path = tmp, verbose = FALSE,
-              progress = FALSE
+              save_path = tmp, verbose = FALSE
             ),
             "Could not read existing save file"
           )
@@ -1213,8 +1201,7 @@ testthat::test_that("submit_openai_pairs_live: Sequential Save Error Handling", 
           testthat::expect_warning(
             submit_openai_pairs_live(
               pairs, "gpt-4.1", td$name, td$description,
-              save_path = tmp_file, verbose = FALSE,
-              progress = FALSE
+              save_path = tmp_file, verbose = FALSE
             ),
             "Failed to save incremental result"
           )
@@ -1256,8 +1243,7 @@ testthat::test_that("submit_openai_pairs_live: Parallel Execution & Save Error",
             trait_description = td$description,
             parallel = TRUE, workers = 2,
             save_path = tmp_file, verbose = TRUE,
-            api_key = "FAKE_KEY",
-            progress = FALSE
+            api_key = "FAKE_KEY"
           ),
           "Failed to save incremental results"
         )
@@ -1285,14 +1271,13 @@ testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response
   # The main process must strip this column before saving (Line 566).
 
   testthat::expect_warning(
-    quietly(submit_openai_pairs_live(
+    submit_openai_pairs_live(
       pairs, "gpt-4.1", td$name, td$description,
       parallel = TRUE, workers = 2,
       save_path = tmp_file, verbose = FALSE,
       include_raw = TRUE,
-      api_key = "FAKE_KEY",
-      progress = FALSE
-    )),
+      api_key = "FAKE_KEY"
+    ),
     regexp = NA # Should NOT warn about save failure
   )
 
@@ -1316,8 +1301,7 @@ testthat::test_that("submit_openai_pairs_live: Sequential Internal Error Handlin
     {
       res <- submit_openai_pairs_live(
         pairs, "gpt-4.1", td$name, td$description,
-        verbose = FALSE,
-        progress = FALSE
+        verbose = FALSE
       )
 
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
@@ -1346,8 +1330,7 @@ testthat::test_that("submit_openai_pairs_live: Resume Verbose Message", {
     {
       res <- submit_openai_pairs_live(
         pairs, "model", td$name, td$description,
-        save_path = tmp, verbose = TRUE,
-        progress = FALSE
+        save_path = tmp, verbose = TRUE
       )
     },
     type = "message"

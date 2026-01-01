@@ -31,7 +31,7 @@ testthat::test_that("allocation preset 'precision_ramp' updates within_batch_fra
     )
   }
 
-  out <- quietly(bt_run_core_linking(
+  out <- bt_run_core_linking(
     samples = samples,
     batches = list(c("C", "D")), # <- 2 new IDs ensures >=3 unique rounds possible
     judge_fun = judge_fun,
@@ -52,7 +52,7 @@ testthat::test_that("allocation preset 'precision_ramp' updates within_batch_fra
     max_item_misfit_prop = NA_real_,
     max_judge_misfit_prop = NA_real_,
     verbose = FALSE
-  ))
+  )
 
   m <- dplyr::as_tibble(out$metrics) |>
     dplyr::arrange(.data$batch_index, .data$round_index) |>
