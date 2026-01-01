@@ -14,9 +14,9 @@
   core_audit_frac,
   k_neighbors,
   balance_positions,
-  include_text,
-  forbid_repeats,
-  verbose
+  include_text = TRUE,
+  forbid_repeats = TRUE,
+  verbose = FALSE
 ) {
   exhaustion_fallback <- match.arg(exhaustion_fallback)
 

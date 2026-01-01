@@ -20,6 +20,17 @@
         nm <- names(df)
       }
     }
+    # If `ID` is still missing, try row names (common for matrices/data.frames).
+    if (!("ID" %in% names(df))) {
+      rn <- rownames(df)
+      if (!is.null(rn) && length(rn) == nrow(df)) {
+        df$ID <- rn
+        rownames(df) <- NULL
+      } else if (nrow(df) == 0L) {
+        df$ID <- character()
+      }
+    }
+
 
     # Normalize theta column
     if (!"theta" %in% nm) {

@@ -642,8 +642,15 @@ bt_run_adaptive <- function(samples,
     )
     # If we are stopping before scoring new pairs, state reflects current results
     st_now <- .bt_round_state(results, ids = ids, judge_col = judge)
-    st_now <- dplyr::mutate(st_now, round = as.integer(r), stop = isTRUE(decision$stop), stop_reason = this_reason)
+    st_now <- dplyr::mutate(
+      st_now,
+      round = as.integer(r),
+      stop = isTRUE(decision$stop),
+      stop_reason = this_reason
+    )
     state_list[[length(state_list) + 1L]] <- st_now
+
+    metrics_round <- dplyr::select(metrics, -dplyr::any_of(c("stop", "stop_reason")))
 
     rounds_list[[length(rounds_list) + 1L]] <- dplyr::bind_cols(
       tibble::tibble(
@@ -653,10 +660,11 @@ bt_run_adaptive <- function(samples,
         stop = isTRUE(decision$stop),
         stop_reason = this_reason
       ),
-      metrics
+      metrics_round,
+      .name_repair = "check_unique"
     )
 
-    prev_metrics <- metrics
+    prev_metrics <- metrics_round
 
     if (!is.na(this_reason)) {
       stop_reason <- this_reason
@@ -775,6 +783,42 @@ bt_run_adaptive <- function(samples,
     state_tbl_prev,
     if (length(state_list) == 0L) tibble::tibble() else dplyr::bind_rows(state_list)
   )
+
+  # ---- Normalize stopping columns (some early-exit paths can yield list-cols) ----
+  if (!"stop_reason" %in% names(rounds_tbl)) {
+    rounds_tbl$stop_reason <- NA_character_
+  }
+  if (is.list(rounds_tbl$stop_reason)) {
+    rounds_tbl$stop_reason <- vapply(
+      rounds_tbl$stop_reason,
+      function(x) {
+        if (is.null(x)) return(NA_character_)
+        as.character(x)[1]
+      },
+      character(1)
+    )
+  } else {
+    rounds_tbl$stop_reason <- as.character(rounds_tbl$stop_reason)
+  }
+
+  if (!"stop" %in% names(rounds_tbl)) {
+    rounds_tbl$stop <- rep(FALSE, nrow(rounds_tbl))
+  }
+  if (is.list(rounds_tbl$stop)) {
+    rounds_tbl$stop <- vapply(
+      rounds_tbl$stop,
+      function(x) {
+        if (is.null(x)) return(FALSE)
+        isTRUE(x)
+      },
+      logical(1)
+    )
+  } else {
+    rounds_tbl$stop <- as.logical(rounds_tbl$stop)
+  }
+  rounds_tbl$stop[is.na(rounds_tbl$stop)] <- FALSE
+  # If a stop_reason is recorded, the run stopped for that round.
+  rounds_tbl$stop <- rounds_tbl$stop | !is.na(rounds_tbl$stop_reason)
 
   bt_data_final <- if (nrow(results) == 0L) {
     tibble::tibble(object1 = character(), object2 = character(), result = numeric())

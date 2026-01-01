@@ -634,6 +634,18 @@ bt_run_core_linking <- function(samples,
       )
     )
 
+    # ---- normalize theta table schema ----
+    # Downstream code (stopping + linking + running-fit bookkeeping) assumes
+    # `ID`, `theta`, and `se` exist, even on edge paths where a fit returns an
+    # empty theta table (e.g., no admissible pairs for a round).
+    #
+    # We accept missing `se` and fill it with NA, but `ID` and `theta` must be
+    # present (or inferable) for non-empty tables.
+    out$theta <- pairwiseLLM:::.as_theta_tibble(out$theta, arg_name = "fit_fun()$theta")
+    if (!("se" %in% names(out$theta))) {
+      out$theta$se <- NA_real_
+    }
+
     # Defensive validation: downstream linking/metrics assume `$theta` exists.
     if (!is.list(out) || !"theta" %in% names(out) || is.null(out$theta)) {
       stop(
@@ -740,41 +752,84 @@ bt_run_core_linking <- function(samples,
     ID <- NULL
     theta <- NULL
     se <- NULL
+    # Normalize BT theta table (may be empty in no-pairs/no-results paths).
+    theta_bt_src <- fit_bt$theta
+    if (is.null(theta_bt_src)) {
+      theta_bt_src <- tibble::tibble(ID = character(), theta = numeric(), se = numeric())
+    }
+    if (!("ID" %in% names(theta_bt_src))) {
+      if (nrow(theta_bt_src) == 0L) {
+        theta_bt_src <- tibble::tibble(ID = character(), theta = numeric(), se = numeric())
+      } else {
+        bt_stop_metrics("`fit_bt$theta` must contain column `ID`.")
+      }
+    }
+    if (!("theta" %in% names(theta_bt_src))) {
+      if (nrow(theta_bt_src) == 0L) {
+        theta_bt_src$theta <- numeric()
+      } else {
+        bt_stop_metrics("`fit_bt$theta` must contain column `theta`.")
+      }
+    }
+    if (!("se" %in% names(theta_bt_src))) theta_bt_src$se <- NA_real_
 
-    rc_fit <- tryCatch(
-      fit_rank_centrality(
-        bt_data,
-        ids = fit_bt$theta$ID,
-        smoothing = rc_smoothing,
-        damping = rc_damping
-      ),
-      error = function(e) NULL
+    theta_bt_linked <- NULL
+    if ("theta_linked" %in% names(theta_bt_src)) {
+      # Preserve ID even when empty.
+      if (!("se_linked" %in% names(theta_bt_src))) theta_bt_src$se_linked <- NA_real_
+      theta_bt_linked <- dplyr::transmute(
+        theta_bt_src,
+        ID = .data$ID,
+        theta = .data$theta_linked,
+        se = .data$se_linked
+      )
+    }
+
+    theta_bt <- dplyr::transmute(
+      theta_bt_src,
+      ID = .data$ID,
+      theta_bt = .data$theta,
+      se_bt = .data$se
     )
 
-    # Prefer linked BT thetas for stability when available.
-    theta_bt_linked <- NULL
-    if (!is.null(fit_bt$theta) && ("theta_linked" %in% names(fit_bt$theta))) {
-      theta_bt_linked <- dplyr::transmute(fit_bt$theta, ID, theta = .data$theta_linked, se = .data$se_linked)
+    # Running theta table is either Rank Centrality or (linked) BT.
+    engine <- match.arg(fit_engine_running, c("bt", "rank_centrality"))
+
+    # Compute Rank Centrality only when requested (it may fail on degenerate/no-data BT tables).
+    rc_fit <- NULL
+    if (engine == "rank_centrality") {
+      rc_fit <- tryCatch(
+        fit_rank_centrality(bt_data, smoothing = rc_smoothing, damping = rc_damping),
+        error = function(e) NULL
+      )
     }
 
-    theta_bt <- dplyr::select(fit_bt$theta, dplyr::all_of(intersect(c("ID", "theta", "se"), names(fit_bt$theta))))
-    names(theta_bt)[names(theta_bt) == "theta"] <- "theta_bt"
-    names(theta_bt)[names(theta_bt) == "se"] <- "se_bt"
-
-    theta_run <- if (identical(fit_engine_running, "rank_centrality") && !is.null(rc_fit) && !is.null(rc_fit$theta)) {
-      dplyr::transmute(rc_fit$theta, ID, theta = .data$theta)
-    } else if (!is.null(theta_bt_linked)) {
-      theta_bt_linked
+    theta_run <- if (engine == "rank_centrality") {
+      tr <- rc_fit$theta %||% tibble::tibble(ID = character(), theta = numeric())
+      tr <- tibble::as_tibble(tr)
+      if (!("ID" %in% names(tr))) {
+        if (nrow(tr) == 0L) tr$ID <- character() else stop("`fit_rank_centrality()` must return a theta table with column `ID`.", call. = FALSE)
+      }
+      if (!("theta" %in% names(tr))) {
+        if (nrow(tr) == 0L) tr$theta <- numeric() else stop("`fit_rank_centrality()` must return a theta table with column `theta`.", call. = FALSE)
+      }
+      dplyr::transmute(tr, ID = as.character(.data$ID), theta = as.numeric(.data$theta), se = NA_real_)
     } else {
-      dplyr::transmute(fit_bt$theta, ID, theta = .data$theta, se = .data$se)
+      src <- if (!is.null(theta_bt_linked)) theta_bt_linked else theta_bt_src
+      src <- tibble::as_tibble(src)
+      if (!("ID" %in% names(src))) {
+        if (nrow(src) == 0L) src$ID <- character() else stop("`fit_bt$theta` must contain column `ID`.", call. = FALSE)
+      }
+      if (!("theta" %in% names(src))) {
+        if (nrow(src) == 0L) src$theta <- numeric() else stop("`fit_bt$theta` must contain column `theta`.", call. = FALSE)
+      }
+      if (!("se" %in% names(src))) src$se <- NA_real_
+      dplyr::transmute(src, ID = as.character(.data$ID), theta = as.numeric(.data$theta), se = as.numeric(.data$se))
     }
 
-    # Ensure `se` exists for the running table (used by pair selection).
-    if (!("se" %in% names(theta_run))) {
-      theta_run <- dplyr::left_join(theta_run, dplyr::select(fit_bt$theta, ID, se = .data$se), by = "ID")
-    }
+    theta_run <- tibble::as_tibble(theta_run)
+    if (!("ID" %in% names(theta_run))) theta_run$ID <- character()
 
-    # Attach both sets of thetas/ranks for transparency.
     theta_run <- dplyr::left_join(theta_run, theta_bt, by = "ID")
     if (!is.null(theta_bt_linked)) {
       theta_run <- dplyr::left_join(
@@ -784,13 +839,15 @@ bt_run_core_linking <- function(samples,
       )
     }
 
-    if (!is.null(rc_fit) && !is.null(rc_fit$pi) && is.numeric(rc_fit$pi)) {
+    if (!is.null(rc_fit) && !is.null(rc_fit$pi) && length(rc_fit$pi) > 0L) {
       theta_run$pi_rc <- as.numeric(rc_fit$pi[match(theta_run$ID, names(rc_fit$pi))])
-      if ("theta" %in% names(rc_fit$theta)) {
-        theta_run$theta_rc <- as.numeric(rc_fit$theta$theta[match(theta_run$ID, rc_fit$theta$ID)])
-      }
     } else {
       theta_run$pi_rc <- NA_real_
+    }
+
+    if (!is.null(rc_fit) && !is.null(rc_fit$theta) && is.data.frame(rc_fit$theta) && ("theta" %in% names(rc_fit$theta))) {
+      theta_run$theta_rc <- as.numeric(rc_fit$theta$theta[match(theta_run$ID, rc_fit$theta$ID)])
+    } else {
       theta_run$theta_rc <- NA_real_
     }
 
@@ -1170,8 +1227,11 @@ bt_run_core_linking <- function(samples,
           core_audit_frac = core_audit_frac_this,
           k_neighbors = k_neighbors,
           min_judgments = min_judgments,
+          include_text = TRUE,
+          forbid_repeats = forbid_repeats,
           balance_positions = balance_positions,
-          seed = round_seed(batch_i, round_i)
+          seed = round_seed(batch_i, round_i),
+          verbose = verbose
         )
       }
 
@@ -1190,7 +1250,14 @@ bt_run_core_linking <- function(samples,
       )
 
       res_round <- dplyr::left_join(res_round, pair_meta, by = c("ID1", "ID2"))
-      res_round <- dplyr::mutate(res_round, batch_index = batch_i, round_index = round_i)
+      res_round <- dplyr::mutate(
+        res_round,
+        # Back-compat: older tests expect `batch_i`/`round_i`.
+        batch_i = batch_i,
+        round_i = round_i,
+        batch_index = batch_i,
+        round_index = round_i
+      )
       results <- dplyr::bind_rows(results, res_round)
 
       prev_fit_for_drift <- NULL
@@ -1296,6 +1363,9 @@ bt_run_core_linking <- function(samples,
       # (Requires .bt_add_drift_aliases() to exist; see helper below.)
       metrics <- .bt_add_drift_aliases(metrics)
       metrics <- .bt_order_metrics(metrics)
+
+      # Ensure a consistent superset schema before stopping logic.
+      metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
 
       metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 

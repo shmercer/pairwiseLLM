@@ -175,7 +175,7 @@ select_core_link_pairs <- function(samples,
       existing <- dplyr::filter(existing, !is.na(.data$ID1), !is.na(.data$ID2), .data$ID1 != "", .data$ID2 != "")
       existing <- dplyr::filter(existing, .data$ID1 %in% ids, .data$ID2 %in% ids, .data$ID1 != .data$ID2)
 
-      existing_keys <- pair_key(existing$ID1, existing$ID2)
+      existing_keys <- .unordered_pair_key(existing$ID1, existing$ID2)
 
       # Optional caller-provided forbidden keys (same format as `.unordered_pair_key()`).
       if (!is.null(forbid_keys)) {
@@ -256,7 +256,7 @@ select_core_link_pairs <- function(samples,
 
         # try candidates in order
         for (opp in cand) {
-          key <- pair_key(focus_id, opp)
+          key <- .unordered_pair_key(focus_id, opp)
           if (isTRUE(forbid_repeats) && key %in% forbid_keys) next
           return(opp)
         }
@@ -348,7 +348,7 @@ select_core_link_pairs <- function(samples,
           if (is.na(focus)) break
           row <- add_pair(focus, setdiff(core_ids, focus), "core_core", forbid_keys)
           if (is.null(row)) break
-          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          forbid_keys <- c(forbid_keys, .unordered_pair_key(row$ID1, row$ID2))
           out[[length(out) + 1L]] <- row
         }
       }
@@ -360,7 +360,7 @@ select_core_link_pairs <- function(samples,
           if (is.na(focus)) break
           row <- add_pair(focus, setdiff(new_ids, focus), "new_new", forbid_keys)
           if (is.null(row)) break
-          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          forbid_keys <- c(forbid_keys, .unordered_pair_key(row$ID1, row$ID2))
           out[[length(out) + 1L]] <- row
         }
       }
@@ -372,7 +372,7 @@ select_core_link_pairs <- function(samples,
           if (is.na(focus)) break
           row <- add_pair(focus, core_ids, "core_new", forbid_keys)
           if (is.null(row)) break
-          forbid_keys <- c(forbid_keys, pair_key(row$ID1, row$ID2))
+          forbid_keys <- c(forbid_keys, .unordered_pair_key(row$ID1, row$ID2))
           out[[length(out) + 1L]] <- row
         }
       }

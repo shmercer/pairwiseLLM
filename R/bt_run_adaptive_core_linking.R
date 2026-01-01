@@ -1385,6 +1385,10 @@ bt_run_adaptive_core_linking <- function(samples,
       m$core_n <- as.integer(length(core_ids))
       m <- .bt_add_drift_aliases(m)
 
+      # Ensure a consistent superset schema before stopping logic (some runners/tests
+      # assume these columns exist even when diagnostics are unavailable).
+      m <- .bt_align_metrics(m, se_probs = se_probs)
+
       prev_metrics_for_state <- prev_metrics
 
       decision <- do.call(

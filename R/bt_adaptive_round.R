@@ -118,6 +118,10 @@ bt_adaptive_round <- function(samples,
 
   metrics <- bt_stop_metrics(fit, se_probs = se_probs, fit_bounds = fit_bounds)
 
+  # Ensure a consistent superset schema before stopping logic. Some thresholds
+  # depend on columns that may be absent when diagnostics are unavailable.
+  metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
+
   stopping_tier <- match.arg(stopping_tier)
   tier_params <- bt_stop_tiers()[[stopping_tier]]
 

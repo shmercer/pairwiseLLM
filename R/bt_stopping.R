@@ -495,12 +495,29 @@ bt_should_stop <- function(metrics,
   require_col("core_max_abs_shift", !is.na(core_max_abs_shift_target))
   require_col("core_p90_abs_shift", !is.na(core_p90_abs_shift_target))
 
-  core_drift_active <- any(!is.na(c(
-    core_theta_cor_target,
-    core_theta_spearman_target,
-    core_max_abs_shift_target,
-    core_p90_abs_shift_target
-  )))
+  core_cor_active <- !is.na(core_theta_cor_target)
+  core_spearman_active <- !is.na(core_theta_spearman_target)
+  core_max_active <- !is.na(core_max_abs_shift_target)
+  core_p90_active <- !is.na(core_p90_abs_shift_target)
+
+  core_drift_active <- any(c(core_cor_active, core_spearman_active, core_max_active, core_p90_active))
+
+  reliability_active <- !is.na(reliability_target)
+  sepG_active <- !is.na(sepG_target)
+  item_fit_active <- !is.na(max_item_misfit_prop)
+  judge_fit_active <- !is.na(max_judge_misfit_prop)
+  precision_active <- !is.na(rel_se_p90_target)
+  stability_active <- (!is.null(prev_metrics) && !is.na(rel_se_p90_min_improve))
+
+  any_active <- any(c(
+    reliability_active,
+    sepG_active,
+    item_fit_active,
+    judge_fit_active,
+    core_drift_active,
+    precision_active,
+    stability_active
+  ))
 
   # If a sign flip was applied during drift computation, treat the drift
   # guardrails as failing (the axis is not comparable without linking).
@@ -565,15 +582,25 @@ bt_should_stop <- function(metrics,
     pass_stability <- improve_pct <= rel_se_p90_min_improve
   }
 
-  stop_now <- isTRUE(pass_reliability) &&
-    isTRUE(pass_sepG) &&
-    isTRUE(pass_item_fit) &&
-    isTRUE(pass_judge_fit) &&
-    isTRUE(pass_core_theta_cor) &&
-    isTRUE(pass_core_theta_spearman) &&
-    isTRUE(pass_core_max_abs_shift) &&
-    isTRUE(pass_core_p90_abs_shift) &&
-    (isTRUE(pass_precision) || isTRUE(pass_stability))
+  pass_precision_or_stability <- if (!(precision_active || stability_active)) {
+    TRUE
+  } else {
+    (precision_active && isTRUE(pass_precision)) || (stability_active && isTRUE(pass_stability))
+  }
+
+  stop_now <- if (!any_active) {
+    FALSE
+  } else {
+    (!reliability_active || isTRUE(pass_reliability)) &&
+      (!sepG_active || isTRUE(pass_sepG)) &&
+      (!item_fit_active || isTRUE(pass_item_fit)) &&
+      (!judge_fit_active || isTRUE(pass_judge_fit)) &&
+      (!core_cor_active || isTRUE(pass_core_theta_cor)) &&
+      (!core_spearman_active || isTRUE(pass_core_theta_spearman)) &&
+      (!core_max_active || isTRUE(pass_core_max_abs_shift)) &&
+      (!core_p90_active || isTRUE(pass_core_p90_abs_shift)) &&
+      pass_precision_or_stability
+  }
 
   details <- tibble::tibble(
     criterion = c(
