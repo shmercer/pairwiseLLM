@@ -9,12 +9,14 @@ test_that("estimates_schema helpers cover NULL, all-NA, and length mismatch bran
   # .make_estimates_tbl length mismatch in a named argument
   expect_error(
     pairwiseLLM:::.make_estimates_tbl(ids = c("A", "B"), theta_rc = c(0, 1, 2)),
-    "match length(ids)"
+    "All estimate vectors must match length(ids).",
+    fixed = TRUE
   )
 
   # .make_estimates_tbl length mismatch in `...`
   expect_error(
     pairwiseLLM:::.make_estimates_tbl(ids = c("A", "B"), theta_rc = c(0, 1), extra_col = 1:3),
-    "All `...` columns must match length(ids)"
+    "All `...` columns must match length(ids).",
+    fixed = TRUE
   )
 })
