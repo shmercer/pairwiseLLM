@@ -46,6 +46,7 @@ Suggests:
     reticulate,
     rmarkdown,
     RSpectra,
+    rstanarm,
     sirt,
     stringr,
     testthat (>= 3.0.0),

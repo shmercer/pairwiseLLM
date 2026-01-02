@@ -62,3 +62,29 @@
 
   out
 }
+
+#' Validate that an estimates table contains the standard schema
+#'
+#' Internal helper used by runners to ensure stable, schema-first outputs.
+#' Returns \code{TRUE} invisibly; otherwise errors with a descriptive message.
+#'
+#' @param x A data.frame or tibble.
+#' @param arg_name Name of the argument for error messages.
+#' @return Invisible \code{TRUE}.
+#' @noRd
+.validate_estimates_tbl <- function(x, arg_name = "estimates") {
+  if (!inherits(x, "data.frame")) {
+    stop(sprintf("`%s` must be a data.frame/tibble.", arg_name), call. = FALSE)
+  }
+  required <- c(
+    "ID",
+    "theta_rc", "rank_rc", "pi_rc",
+    "theta_bt_firth", "se_bt_firth", "rank_bt_firth",
+    "bt_engine_requested", "bt_engine_used", "bt_status", "bt_failure_reason"
+  )
+  missing <- setdiff(required, names(x))
+  if (length(missing)) {
+    stop(sprintf("`%s` is missing required columns: %s", arg_name, paste(missing, collapse = ", ")), call. = FALSE)
+  }
+  invisible(TRUE)
+}

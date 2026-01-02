@@ -61,15 +61,20 @@
 #'   still using BT standard errors as an uncertainty heuristic when available.
 #'   Default \code{"bt"}.
 #' @param rc_smoothing,rc_damping Numeric. Parameters forwarded to
-#'   \code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"}
+#'   \code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"} (default)
 #'   (and also stored in per-round fits). See \code{\link{fit_rank_centrality}} for
 #'   details.
-#' @param final_refit Logical. If \code{TRUE}, compute a final combined estimates table
-#'   (BT + Rank Centrality) at the end of the run via \code{\link{compute_final_estimates}}.
-#'   This requires suggested packages (e.g., \pkg{BradleyTerry2}) to be installed.
-#'   Default \code{FALSE} to preserve lightweight dependency behavior.
+#' @param final_refit Logical. If \code{TRUE} (default), compute a final combined
+#'   estimates table (Rank Centrality plus optional BT variants) at the end of the
+#'   run via \code{\link{compute_final_estimates}}. Suggested dependencies are
+#'   used when available; if unavailable or if a BT fit fails, the function falls
+#'   back to Rank Centrality and records the reason in \code{out$fit_provenance}.
+#' @param fit_engine_final Preferred final BT engine used when \code{final_refit = TRUE}.
+#'   Options are \code{"bt_firth"}, \code{"bt_mle"}, \code{"bt_bayes"}, and \code{"none"}.
+#'   See \code{\link{compute_final_estimates}} for details. Default \code{"bt_firth"}.
 #' @param final_bt_bias_reduction Logical. Passed to \code{\link{compute_final_estimates}}
-#'   as \code{bt_bias_reduction}. Default \code{TRUE}.
+#'   as \code{bt_bias_reduction}. Default \code{TRUE}. Typically leave \code{TRUE}
+#'   when \code{fit_engine_final = "bt_firth"}.
 #'
 #' @param round_size Integer. Number of new pairs to propose and score in each adaptive round.
 #' If \code{0}, the runner will fit once (if possible) and then stop without proposing new pairs.
@@ -193,10 +198,18 @@
 #' tagged with per-round metadata in the \code{attr(fit, "bt_run_adaptive")} attribute.}
 #' \item{final_fit}{The final fit object (the last element of \code{fits}), or \code{NULL}
 #' if no fit was run.}
+#' \item{theta}{A compact tibble with columns \code{ID}, \code{theta}, \code{se}, and
+#' \code{rank}, representing the final ability scale used for most downstream workflows.
+#' When a BT final fit succeeds, this corresponds to the final BT scale; otherwise it
+#' falls back to Rank Centrality.}
+#' \item{theta_engine}{A single string describing which engine produced \code{theta}
+#' (e.g., \code{"bt_firth"}, \code{"bt_mle"}, \code{"bt_bayes"}, \code{"rank_centrality"}).}
 #' \item{estimates}{NULL unless \code{final_refit=TRUE}; then a final combined estimates
 #' tibble produced by \code{\link{compute_final_estimates}} (BT + Rank Centrality).}
 #' \item{final_models}{NULL unless \code{final_refit=TRUE}; then a list containing
 #' the fitted model objects (\code{bt_fit}, \code{rc_fit}) and a summary \code{diagnostics} list.}
+#' \item{fit_provenance}{NULL unless \code{final_refit=TRUE}; then a list describing which
+#' final engines were requested and used, including any fallback reason.}
 #' \item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
 #' \code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
 #' or \code{"no_results"}).}
@@ -274,10 +287,11 @@ bt_run_adaptive <- function(samples,
                             fit_verbose = FALSE,
                             return_diagnostics = TRUE,
                             include_residuals = FALSE,
-                            fit_engine_running = c("bt", "rank_centrality"),
+                            fit_engine_running = c("rank_centrality", "bt"),
                             rc_smoothing = 0.5,
                             rc_damping = 0.0,
-                            final_refit = FALSE,
+                            final_refit = TRUE,
+                            fit_engine_final = c("bt_firth", "bt_mle", "bt_bayes", "none"),
                             final_bt_bias_reduction = TRUE,
                             round_size = 50,
                             init_round_size = round_size,
@@ -311,6 +325,7 @@ bt_run_adaptive <- function(samples,
                             checkpoint_store_fits = TRUE,
                             checkpoint_overwrite = TRUE,
                             ...) {
+  fit_engine_final <- match.arg(fit_engine_final)
   tag_fit <- function(fit,
                       round_index,
                       stage,
@@ -326,6 +341,60 @@ bt_run_adaptive <- function(samples,
     )
     attr(fit, "bt_run_adaptive") <- meta
     fit
+  }
+
+  # ---- PR4.1 helper: extract theta from last available running fit ----
+  .theta_from_last_running_fit <- function(last_fit, ids) {
+    if (is.null(last_fit) || is.null(last_fit$theta)) {
+      return(list(theta = NULL, engine = NA_character_))
+    }
+
+    th <- tibble::as_tibble(last_fit$theta)
+    if (!all(c("ID", "theta") %in% names(th))) {
+      return(list(theta = NULL, engine = NA_character_))
+    }
+
+    th$ID <- as.character(th$ID)
+
+    # Ensure consistent row coverage & ordering on ids
+    th <- dplyr::right_join(th, tibble::tibble(ID = as.character(ids)), by = "ID")
+
+    # Determine SE to expose:
+    # - If running engine is RC, SE is generally not meaningful -> NA
+    # - If running engine is BT, use available se column (if present)
+    engine_running <- NA_character_
+    if (!is.null(last_fit$engine_running) && is.character(last_fit$engine_running) && length(last_fit$engine_running) == 1L) {
+      engine_running <- as.character(last_fit$engine_running)
+    }
+
+    se_out <- rep(NA_real_, nrow(th))
+    if (!is.na(engine_running) && identical(engine_running, "bt")) {
+      if ("se" %in% names(th)) {
+        se_out <- as.double(th$se)
+      } else if ("se_bt" %in% names(th)) {
+        se_out <- as.double(th$se_bt)
+      }
+    } else {
+      # RC running scale: keep SE as NA
+      se_out <- rep(NA_real_, nrow(th))
+    }
+
+    # Rank: higher theta -> smaller rank
+    theta_num <- suppressWarnings(as.double(th$theta))
+    rank_out <- rep(NA_integer_, length(theta_num))
+    ok <- !is.na(theta_num)
+    if (any(ok)) {
+      rank_out[ok] <- as.integer(rank(-theta_num[ok], ties.method = "min"))
+    }
+
+    out_theta <- tibble::tibble(
+      ID = as.character(th$ID),
+      theta = theta_num,
+      se = se_out,
+      rank = rank_out
+    )
+
+    list(theta = out_theta, engine = if (!is.na(engine_running)) engine_running else "rank_centrality")
   }
 
   samples <- tibble::as_tibble(samples)
@@ -388,6 +457,7 @@ bt_run_adaptive <- function(samples,
   }
 
   fit_engine_running <- match.arg(fit_engine_running)
+  fit_engine_final <- match.arg(fit_engine_final)
   if (!is.numeric(rc_smoothing) || length(rc_smoothing) != 1L || is.na(rc_smoothing) || rc_smoothing < 0) {
     stop("`rc_smoothing` must be a single non-negative number.", call. = FALSE)
   }
@@ -955,11 +1025,15 @@ bt_run_adaptive <- function(samples,
   # Optional final refit / combined estimates table.
   estimates <- NULL
   final_models <- NULL
+  theta <- NULL
+  theta_engine <- NA_character_
+  fit_provenance <- NULL
   if (isTRUE(final_refit) && nrow(results) > 0L) {
     tmp <- tryCatch(
       compute_final_estimates(
         results = results,
         ids = ids,
+        fit_engine_final = fit_engine_final,
         bt_bias_reduction = final_bt_bias_reduction,
         rc_smoothing = rc_smoothing,
         rc_damping = rc_damping
@@ -979,6 +1053,43 @@ bt_run_adaptive <- function(samples,
         rc_fit = tmp$rc_fit,
         diagnostics = tmp$diagnostics
       )
+
+      fit_provenance <- tmp$provenance
+
+      # Guarantee a simple top-level theta object for downstream convenience.
+      # If a BT variant succeeded, use that; otherwise fall back to Rank Centrality.
+      if (is.data.frame(estimates) && nrow(estimates) > 0L && identical(unique(estimates$bt_status), "succeeded")) {
+        theta <- tibble::tibble(
+          ID = as.character(estimates$ID),
+          theta = as.double(estimates$theta_bt_firth),
+          se = as.double(estimates$se_bt_firth),
+          rank = as.integer(estimates$rank_bt_firth)
+        )
+        theta_engine <- as.character(unique(estimates$bt_engine_used))[1]
+      } else if (is.data.frame(estimates) && nrow(estimates) > 0L) {
+        theta <- tibble::tibble(
+          ID = as.character(estimates$ID),
+          theta = as.double(estimates$theta_rc),
+          se = NA_real_,
+          rank = as.integer(estimates$rank_rc)
+        )
+        theta_engine <- "rank_centrality"
+      }
+    }
+  }
+
+  # ---- PR4.1 fallback: ensure theta exists whenever we have a running fit ----
+  if (is.null(theta) && length(fits) > 0L) {
+    last_fit <- fits[[length(fits)]]
+    fb <- .theta_from_last_running_fit(last_fit, ids = ids)
+
+    if (!is.null(fb$theta)) {
+      theta <- fb$theta
+      theta_engine <- fb$engine
+
+      if (is.null(fit_provenance)) fit_provenance <- list()
+      fit_provenance$fallback_used <- TRUE
+      fit_provenance$fallback_reason <- "final_refit_unavailable_or_failed"
     }
   }
 
@@ -1063,8 +1174,11 @@ bt_run_adaptive <- function(samples,
     bt_data = bt_data_final,
     fits = fits,
     final_fit = final_fit,
+    theta = theta,
+    theta_engine = theta_engine,
     estimates = estimates,
     final_models = final_models,
+    fit_provenance = fit_provenance,
     stop_reason = stop_reason,
     stop_round = stop_round,
     rounds = rounds_tbl,
@@ -1206,4 +1320,45 @@ simulate_bt_judge <- function(pairs,
   )
 
   out
+}
+
+#' Extract theta from the last available running fit
+#'
+#' Internal helper used by \code{bt_run_adaptive()} to guarantee that
+#' \code{out$theta} exists even when final refitting is disabled or fails.
+#'
+#' This function attempts to extract a compact theta table
+#' (\code{ID, theta, se, rank}) from the last running fit.
+#'
+#' @param final_fit A fit object produced during the adaptive loop
+#'   (typically \code{fits[[length(fits)]]}), or \code{NULL}.
+#' @param id_vec Character vector of item IDs in the model.
+#'
+#' @return A list with elements:
+#' \describe{
+#'   \item{theta}{A tibble with columns \code{ID, theta, se, rank}, or \code{NULL}.}
+#'   \item{engine}{Character string naming the engine used (e.g., \code{"rank_centrality"}).}
+#' }
+#'
+#' @keywords internal
+.theta_from_last_running_fit <- function(final_fit, id_vec) {
+  if (is.null(final_fit)) {
+    return(list(theta = NULL, engine = NA_character_))
+  }
+
+  # Preferred: explicit theta table
+  if (!is.null(final_fit$theta)) {
+    theta_tbl <- final_fit$theta
+
+    if (all(c("ID", "theta", "se", "rank") %in% names(theta_tbl))) {
+      engine <- final_fit$engine_used %||%
+        final_fit$engine_requested %||%
+        "rank_centrality"
+
+      return(list(theta = theta_tbl, engine = engine))
+    }
+  }
+
+  # No usable theta found
+  list(theta = NULL, engine = NA_character_)
 }

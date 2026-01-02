@@ -102,13 +102,13 @@ testthat::test_that("fit BT via BradleyTerry2 covers require-ns and verbose bran
   )
   bt_data <- pairwiseLLM::build_bt_data(res)
 
-  testthat::expect_error(
-    pairwiseLLM:::.fit_bt_bradleyterry2(
-      bt_data,
-      ids = c("A", "B", "C")
-    ),
-    "must be installed"
+  fit_missing <- pairwiseLLM:::.fit_bt_bradleyterry2(
+    bt_data,
+    ids = c("A", "B", "C")
   )
+  testthat::expect_false(isTRUE(fit_missing$available))
+  testthat::expect_true(is.character(fit_missing$reason_unavailable))
+  testthat::expect_true(all(is.na(fit_missing$theta$theta)))
 
   # Real verbose path: only run if BradleyTerry2 is installed.
   testthat::skip_if_not_installed("BradleyTerry2")

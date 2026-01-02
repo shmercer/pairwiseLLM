@@ -4,15 +4,21 @@
 #' set of pairwise comparison results. It is intended for "end of run" use,
 #' where the full set of comparisons is available.
 #'
-#' The function fits:
+#' The function fits (when available):
 #' \itemize{
 #'   \item A Bradley--Terry model via \pkg{BradleyTerry2}. If bias reduction is
 #'   enabled (default), the function attempts a bias-reduced fit (often called
-#'   "Firth" correction). If the bias-reduced fit is unavailable (e.g., missing
-#'   optional dependencies), the function falls back to a standard maximum
-#'   likelihood Bradley--Terry fit.
+#'   "Firth" correction). If the bias-reduced fit is unavailable, the function
+#'   falls back to a standard maximum likelihood Bradley--Terry fit.
+#'   If \pkg{BradleyTerry2} is not installed (it is a suggested dependency), the
+#'   function continues and returns Rank Centrality estimates with BT columns
+#'   filled as \code{NA}.
 #'   \item A Rank Centrality model (spectral / random-walk based) via
 #'   \code{\link{fit_rank_centrality}}.
+#'   \item Optionally, a Bayesian Bradley--Terry approximation when
+#'   \code{fit_engine_final = "bt_bayes"}. This is implemented via
+#'   \pkg{rstanarm} when installed (also suggested). If unavailable, the function
+#'   falls back to Rank Centrality.
 #' }
 #'
 #' In addition to model-based estimates, the returned table includes
@@ -24,9 +30,15 @@
 #'   adaptive run.
 #' @param ids Optional character vector of all item IDs. If \code{NULL}
 #'   (default), IDs are inferred from \code{results}.
+#' @param fit_engine_final Character scalar giving the preferred final BT engine.
+#'   Options are \code{"bt_firth"} (bias-reduced BT if available), \code{"bt_mle"}
+#'   (standard MLE BT), \code{"bt_bayes"} (Bayesian BT approximation via \pkg{rstanarm}
+#'   when installed), or \code{"none"} (skip BT and return Rank Centrality only).
+#'   Default \code{"bt_firth"}.
 #' @param bt_bias_reduction Logical; attempt a bias-reduced Bradley--Terry fit
-#'   via \pkg{BradleyTerry2} when available (default \code{TRUE}). If the
-#'   bias-reduced fit fails, the function falls back to standard MLE.
+#'   via \pkg{BradleyTerry2} when available (default \code{TRUE}). When
+#'   \code{fit_engine_final = "bt_firth"}, this should typically be left as
+#'   \code{TRUE}.
 #' @param bt_verbose Logical; if \code{TRUE}, allow model-fitting warnings to be
 #'   printed. If \code{FALSE} (default), suppress common fitting warnings.
 #' @param rc_smoothing Numeric scalar \code{>= 0}. Passed to
@@ -48,12 +60,18 @@
 #'       \item \code{wins}, \code{losses}, \code{ties}: counts from \code{results}
 #'       \item \code{n_appear}, \code{n_pos1}, \code{n_pos2}: appearance counts
 #'       \item \code{component_id}: connected-component label from Rank Centrality
+#'       \item \code{bt_engine_requested}: requested final BT engine
+#'       \item \code{bt_engine_used}: BT engine actually used (or \code{"rank_centrality"})
+#'       \item \code{bt_status}: \code{"succeeded"}, \code{"fallback"}, or \code{"skipped"}
+#'       \item \code{bt_failure_reason}: non-empty string when fallback occurred
 #'     }
 #'   }
 #'   \item{bt_fit}{The full Bradley--Terry fit object (list) as returned internally.}
 #'   \item{rc_fit}{The Rank Centrality fit list returned by \code{\link{fit_rank_centrality}}.}
 #'   \item{diagnostics}{A list of run-level diagnostics including whether bias
 #'     reduction was used and basic graph stats.}
+#'   \item{provenance}{A list describing which engines were requested and used,
+#'     and why any fallback occurred.}
 #' }
 #'
 #' @examples
@@ -67,12 +85,14 @@
 compute_final_estimates <- function(
   results,
   ids = NULL,
+  fit_engine_final = c("bt_firth", "bt_mle", "bt_bayes", "none"),
   bt_bias_reduction = TRUE,
   bt_verbose = FALSE,
   rc_smoothing = 0.5,
   rc_damping = 0,
   ...
 ) {
+  fit_engine_final <- match.arg(fit_engine_final)
   results <- tibble::as_tibble(results)
 
   required_cols <- c("ID1", "ID2", "better_id")
@@ -98,22 +118,8 @@ compute_final_estimates <- function(
   wlt <- gl$wlt
   deg <- gl$degree
 
-  # ---- Bradley--Terry fit (bias-reduced if possible) ----
+  # ---- Rank Centrality (always available) ----
   bt_data <- build_bt_data(results)
-  bt_fit <- .fit_bt_bradleyterry2(
-    bt_data,
-    ids = ids,
-    bias_reduction = isTRUE(bt_bias_reduction),
-    verbose = isTRUE(bt_verbose)
-  )
-
-  bt_theta_tbl <- tibble::as_tibble(bt_fit$theta)
-  idx_bt <- match(ids, bt_theta_tbl$ID)
-  theta_bt_firth <- bt_theta_tbl$theta[idx_bt]
-  se_bt_firth <- bt_theta_tbl$se[idx_bt]
-  theta_bt_firth <- theta_bt_firth - mean(theta_bt_firth, na.rm = TRUE)
-
-  # ---- Rank Centrality ----
   rc_fit <- fit_rank_centrality(
     bt_data,
     ids = ids,
@@ -134,6 +140,39 @@ compute_final_estimates <- function(
     component_id <- as.integer(unname(cid[ids]))
   }
 
+  # ---- Bradley--Terry / Bayesian BT (optional; may fallback) ----
+  bt_req <- fit_engine_final
+  bt_fit <- NULL
+  bt_status <- "skipped"
+  bt_used <- "rank_centrality"
+  bt_reason <- NA_character_
+  theta_bt_firth <- rep(NA_real_, length(ids))
+  se_bt_firth <- rep(NA_real_, length(ids))
+
+  if (!identical(bt_req, "none")) {
+    if (identical(bt_req, "bt_bayes")) {
+      bt_fit <- .fit_bt_bayes_rstanarm(bt_data, ids = ids, verbose = isTRUE(bt_verbose))
+    } else {
+      # "bt_firth" or "bt_mle" both go through BradleyTerry2; bias_reduction controls Firth.
+      br <- isTRUE(bt_bias_reduction) && identical(bt_req, "bt_firth")
+      bt_fit <- .fit_bt_bradleyterry2(bt_data, ids = ids, bias_reduction = br, verbose = isTRUE(bt_verbose))
+    }
+
+    if (isTRUE(bt_fit$available)) {
+      bt_status <- "succeeded"
+      bt_used <- bt_fit$engine_used %||% bt_fit$engine %||% bt_req
+      bt_theta_tbl <- tibble::as_tibble(bt_fit$theta)
+      idx_bt <- match(ids, bt_theta_tbl$ID)
+      theta_bt_firth <- bt_theta_tbl$theta[idx_bt]
+      se_bt_firth <- bt_theta_tbl$se[idx_bt]
+      theta_bt_firth <- theta_bt_firth - mean(theta_bt_firth, na.rm = TRUE)
+    } else {
+      bt_status <- "fallback"
+      bt_used <- "rank_centrality"
+      bt_reason <- bt_fit$reason_unavailable %||% "BT engine unavailable"
+    }
+  }
+
   # ---- Assemble estimates (stable schema) ----
   est <- .make_estimates_tbl(
     ids = ids,
@@ -149,11 +188,30 @@ compute_final_estimates <- function(
     n_pos2 = deg$n_pos2,
     component_id = component_id
   )
-  est <- dplyr::arrange(est, dplyr::desc(.data$theta_bt_firth))
 
+  # Add explicit provenance columns (schema-stable but extra fields are allowed)
+  est <- dplyr::mutate(
+    est,
+    bt_engine_requested = bt_req,
+    bt_engine_used = bt_used,
+    bt_status = bt_status,
+    bt_failure_reason = bt_reason
+  )
+
+  # If BT ran, sort by BT; otherwise sort by RC.
+  if (identical(bt_status, "succeeded")) {
+    est <- dplyr::arrange(est, dplyr::desc(.data$theta_bt_firth))
+  } else {
+    est <- dplyr::arrange(est, dplyr::desc(.data$theta_rc))
+  }
+
+  .validate_estimates_tbl(est, arg_name = "out$estimates")
   diagnostics <- list(
-    bt_engine = "BradleyTerry2",
-    bt_bias_reduced = isTRUE(bt_fit$bias_reduced),
+    bt_engine_requested = bt_req,
+    bt_engine_used = bt_used,
+    bt_status = bt_status,
+    bt_failure_reason = bt_reason,
+    bt_bias_reduced = isTRUE(bt_fit$bias_reduced %||% FALSE),
     rc_engine = "rank_centrality",
     n_nodes = rc_fit$diagnostics$n_nodes %||% length(ids),
     n_edges = rc_fit$diagnostics$n_edges %||% NA_integer_,
@@ -162,11 +220,23 @@ compute_final_estimates <- function(
     spectral_gap = rc_fit$diagnostics$spectral_gap %||% NA_real_
   )
 
+  provenance <- list(
+    bt_engine_requested = bt_req,
+    bt_engine_used = bt_used,
+    bt_status = bt_status,
+    bt_failure_reason = bt_reason,
+    suggests = list(
+      BradleyTerry2 = .require_ns("BradleyTerry2", quietly = TRUE),
+      rstanarm = .require_ns("rstanarm", quietly = TRUE)
+    )
+  )
+
   list(
     estimates = est,
     bt_fit = bt_fit,
     rc_fit = rc_fit,
-    diagnostics = diagnostics
+    diagnostics = diagnostics,
+    provenance = provenance
   )
 }
 
@@ -242,11 +312,15 @@ compute_final_estimates <- function(
 
 .fit_bt_bradleyterry2 <- function(bt_data, ids, bias_reduction = TRUE, verbose = FALSE) {
   if (!.require_ns("BradleyTerry2", quietly = TRUE)) {
-    stop(
-      "Package 'BradleyTerry2' must be installed to fit Bradley--Terry models.\n",
-      "Install it with: install.packages('BradleyTerry2')",
-      call. = FALSE
-    )
+    return(list(
+      available = FALSE,
+      engine = "BradleyTerry2",
+      engine_used = NA_character_,
+      theta = tibble::tibble(ID = ids, theta = NA_real_, se = NA_real_),
+      fit = NULL,
+      bias_reduced = FALSE,
+      reason_unavailable = "Package 'BradleyTerry2' is not installed"
+    ))
   }
 
   dat <- as.data.frame(bt_data)
@@ -311,11 +385,140 @@ compute_final_estimates <- function(
   )
 
   list(
+    available = TRUE,
     engine = "BradleyTerry2",
+    engine_used = if (isTRUE(bias_used)) "bt_firth" else "bt_mle",
     fit = fit,
     theta = theta,
     reliability = NA_real_,
     diagnostics = NULL,
-    bias_reduced = bias_used
+    bias_reduced = bias_used,
+    reason_unavailable = NA_character_
   )
+}
+
+
+.fit_bt_bayes_rstanarm <- function(bt_data, ids, verbose = FALSE) {
+  if (!.require_ns("rstanarm", quietly = TRUE)) {
+    return(list(
+      available = FALSE,
+      engine = "rstanarm",
+      engine_used = NA_character_,
+      theta = tibble::tibble(ID = ids, theta = NA_real_, se = NA_real_),
+      fit = NULL,
+      bias_reduced = FALSE,
+      reason_unavailable = "Package 'rstanarm' is not installed"
+    ))
+  }
+
+  dat <- as.data.frame(bt_data)
+  dat <- dat[, 1:3, drop = FALSE]
+  names(dat)[1:3] <- c("object1", "object2", "result")
+  players <- sort(unique(c(dat$object1, dat$object2, ids)))
+
+  # Pairwise logistic regression with item effects: P(object1 wins) = logit^{-1}(a[object1] - a[object2])
+  dat$object1 <- factor(dat$object1, levels = players)
+  dat$object2 <- factor(dat$object2, levels = players)
+  dat$result <- as.integer(dat$result)
+
+  # Construct model matrix with sum-to-zero-like constraint by omitting intercept and one reference.
+  X1 <- stats::model.matrix(~ object1 - 1, dat)
+  X2 <- stats::model.matrix(~ object2 - 1, dat)
+  X <- X1 - X2
+
+  # Drop one column to make parameters identifiable
+  if (ncol(X) > 1L) {
+    X <- X[, -1, drop = FALSE]
+    coef_names <- colnames(X)
+  } else {
+    coef_names <- colnames(X)
+  }
+
+  df <- data.frame(y = dat$result, X)
+  f <- stats::as.formula(paste0("y ~ ", paste(coef_names, collapse = " + "), " - 1"))
+
+  fit <- NULL
+  fit <- tryCatch(
+    {
+      # Weakly-informative normal prior on coefficients
+      .rstanarm_stan_glm(
+        formula = f,
+        data = df,
+        family = stats::binomial(link = "logit"),
+        prior = .rstanarm_normal(location = 0, scale = 2.5, autoscale = TRUE),
+        prior_intercept = NULL,
+        refresh = if (isTRUE(verbose)) 100 else 0,
+        chains = 2,
+        iter = 1000,
+        seed = 123
+      )
+    },
+    error = function(e) e
+  )
+
+  if (inherits(fit, "error")) {
+    return(list(
+      available = FALSE,
+      engine = "rstanarm",
+      engine_used = NA_character_,
+      theta = tibble::tibble(ID = ids, theta = NA_real_, se = NA_real_),
+      fit = NULL,
+      bias_reduced = FALSE,
+      reason_unavailable = paste0("Bayesian BT fit failed: ", conditionMessage(fit))
+    ))
+  }
+
+  # Posterior means and SDs for coefficients; reconstruct full set including reference as 0.
+  post <- as.matrix(fit)
+  mu <- colMeans(post)
+  sd <- apply(post, 2, stats::sd)
+
+  # Start at 0 for all players; fill those estimated.
+  theta <- stats::setNames(rep(0, length(players)), players)
+  se <- stats::setNames(rep(NA_real_, length(players)), players)
+  # Coefficient names like object1A; map back to player level
+  for (j in seq_along(mu)) {
+    nm <- names(mu)[j]
+    # model.matrix uses column names like object1A; keep suffix
+    player <- sub("^object1", "", nm)
+    if (nzchar(player) && player %in% names(theta)) {
+      theta[player] <- unname(mu[j])
+      se[player] <- unname(sd[j])
+    }
+  }
+
+  theta_tbl <- tibble::tibble(
+    ID = ids,
+    theta = unname(theta[ids]),
+    se = unname(se[ids])
+  )
+
+  list(
+    available = TRUE,
+    engine = "rstanarm",
+    engine_used = "bt_bayes",
+    fit = fit,
+    theta = theta_tbl,
+    reliability = NA_real_,
+    diagnostics = NULL,
+    bias_reduced = FALSE,
+    reason_unavailable = NA_character_
+  )
+}
+
+
+# ---- Lightweight wrappers for suggested dependencies ----
+#
+# These wrappers make it easier to unit-test Bayesian BT logic without
+# requiring suggested packages to be installed, by allowing tests to mock
+# the internal wrappers rather than `pkg::fun` calls (which are not mockable).
+
+.rstanarm_stan_glm <- function(...) {
+  fun <- getExportedValue("rstanarm", "stan_glm")
+  fun(...)
+}
+
+.rstanarm_normal <- function(...) {
+  fun <- getExportedValue("rstanarm", "normal")
+  fun(...)
 }
