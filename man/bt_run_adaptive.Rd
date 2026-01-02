@@ -13,7 +13,7 @@ bt_run_adaptive(
   fit_verbose = FALSE,
   return_diagnostics = TRUE,
   include_residuals = FALSE,
-  fit_engine_running = c("bt", "rank_centrality"),
+  fit_engine_running = c("rank_centrality", "bt"),
   rc_smoothing = 0.5,
   rc_damping = 0,
   final_refit = TRUE,
@@ -96,7 +96,7 @@ still using BT standard errors as an uncertainty heuristic when available.
 Default \code{"bt"}.}
 
 \item{rc_smoothing, rc_damping}{Numeric. Parameters forwarded to
-\code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"}
+\code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"} (default)
 (and also stored in per-round fits). See \code{\link{fit_rank_centrality}} for
 details.}
 

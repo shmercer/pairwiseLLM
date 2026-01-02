@@ -188,6 +188,7 @@ compute_final_estimates <- function(
     n_pos2 = deg$n_pos2,
     component_id = component_id
   )
+  .validate_estimates_tbl(est, arg_name = "out$estimates")
 
   # Add explicit provenance columns (schema-stable but extra fields are allowed)
   est <- dplyr::mutate(
