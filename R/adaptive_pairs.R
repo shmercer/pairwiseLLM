@@ -1,3 +1,277 @@
+# -------------------------------------------------------------------------
+# Adaptive pairing pipeline internals
+# -------------------------------------------------------------------------
+
+#' @keywords internal
+.ap_gen_candidates <- function(id_vec,
+                               th_vec,
+                               se_vec,
+                               tot_vec,
+                               k_neighbors2,
+                               embed_nbrs = NULL,
+                               embed_far_k = 0L) {
+  n <- length(id_vec)
+  if (n == 0L) {
+    return(tibble::tibble(
+      i_idx = integer(),
+      j_idx = integer(),
+      source = character()
+    ))
+  }
+
+  embed_far_k <- as.integer(embed_far_k)
+  if (is.na(embed_far_k) || embed_far_k < 0L) {
+    stop("`embed_far_k` must be a single non-negative integer.", call. = FALSE)
+  }
+
+  out_i <- integer()
+  out_j <- integer()
+  out_source <- character()
+
+  for (i in seq_len(n)) {
+    # 1) theta-neighborhood candidates
+    js_theta <- integer()
+    lo <- max(1L, i - k_neighbors2)
+    hi <- min(n, i + k_neighbors2)
+    if (lo <= hi) {
+      js_theta <- seq.int(lo, hi)
+      js_theta <- js_theta[js_theta != i]
+    }
+
+    # 2) embedding neighbor candidates
+    js_embed <- integer()
+    if (!is.null(embed_nbrs)) {
+      nbr_ids <- embed_nbrs[[id_vec[[i]]]]
+      if (!is.null(nbr_ids) && length(nbr_ids) > 0L) {
+        nbr_ids <- nbr_ids[!is.na(nbr_ids) & nzchar(nbr_ids)]
+        if (length(nbr_ids) > 0L) {
+          nbr_idx <- match(nbr_ids, id_vec)
+          nbr_idx <- nbr_idx[!is.na(nbr_idx) & nbr_idx != i]
+          if (length(nbr_idx) > 0L) {
+            js_embed <- nbr_idx
+          }
+        }
+      }
+    }
+
+    # 3) optional far candidates (uses current RNG state; caller controls seed)
+    js_far <- integer()
+    if (embed_far_k > 0L) {
+      base_pool <- if (i < n) (i + 1L):n else integer(0)
+      pool <- setdiff(base_pool, unique(c(js_theta, js_embed)))
+      if (length(pool) > 0L) {
+        js_far <- sample(pool, size = min(embed_far_k, length(pool)), replace = FALSE)
+      }
+    }
+
+    # Preserve prior relative priority order: theta -> embed -> far.
+    js_all <- c(js_theta, js_embed, js_far)
+    if (length(js_all) == 0L) next
+
+    # dedupe by index, keep first occurrence
+    js_unique <- integer()
+    src_unique <- character()
+    seen <- logical(n)
+
+    for (jj in seq_along(js_all)) {
+      j <- js_all[[jj]]
+      if (is.na(j) || j < 1L || j > n) next
+      if (j == i) next
+      if (seen[[j]]) next
+      seen[[j]] <- TRUE
+
+      js_unique <- c(js_unique, j)
+      if (jj <= length(js_theta)) {
+        src_unique <- c(src_unique, "theta")
+      } else if (jj <= (length(js_theta) + length(js_embed))) {
+        src_unique <- c(src_unique, "embed")
+      } else {
+        src_unique <- c(src_unique, "far")
+      }
+    }
+
+    if (length(js_unique) == 0L) next
+
+    # Score each unordered pair once: keep upper triangle by index.
+    keep <- js_unique > i
+    if (!any(keep)) next
+
+    out_i <- c(out_i, rep.int(i, sum(keep)))
+    out_j <- c(out_j, js_unique[keep])
+    out_source <- c(out_source, src_unique[keep])
+  }
+
+  tibble::tibble(
+    i_idx = as.integer(out_i),
+    j_idx = as.integer(out_j),
+    source = as.character(out_source)
+  )
+}
+
+#' @keywords internal
+.ap_score_candidates <- function(cand_tbl,
+                                 th_vec,
+                                 se_vec,
+                                 tot_vec,
+                                 min_judgments) {
+  cand_tbl <- tibble::as_tibble(cand_tbl)
+
+  if (nrow(cand_tbl) == 0L) {
+    cand_tbl$score_info <- numeric(0)
+    cand_tbl$score_need <- numeric(0)
+    cand_tbl$score_total <- numeric(0)
+    return(cand_tbl)
+  }
+
+  i <- cand_tbl$i_idx
+  j <- cand_tbl$j_idx
+
+  d <- th_vec[i] - th_vec[j]
+  p <- 1 / (1 + exp(-d))
+  info <- p * (1 - p)
+
+  need_i <- pmax(0, min_judgments - tot_vec[i])
+  need_j <- pmax(0, min_judgments - tot_vec[j])
+
+  score_total <- info * (se_vec[i] + se_vec[j]) * (1 + need_i + need_j)
+
+  dplyr::mutate(
+    cand_tbl,
+    score_info = as.double(info),
+    score_need = as.double(need_i + need_j),
+    score_total = as.double(score_total)
+  )
+}
+
+#' @keywords internal
+.ap_apply_constraints <- function(cand_tbl,
+                                  id_vec,
+                                  existing_key = character(),
+                                  forbid_repeats = TRUE) {
+  cand_tbl <- tibble::as_tibble(cand_tbl)
+
+  if (nrow(cand_tbl) == 0L) {
+    return(tibble::tibble(
+      i_idx = integer(),
+      j_idx = integer(),
+      source = character(),
+      score_info = numeric(),
+      score_need = numeric(),
+      score_total = numeric()
+    ))
+  }
+
+  n <- length(id_vec)
+
+  # valid indices + no self-pairs
+  cand_tbl <- dplyr::filter(
+    cand_tbl,
+    !is.na(.data$i_idx),
+    !is.na(.data$j_idx),
+    .data$i_idx >= 1L,
+    .data$j_idx >= 1L,
+    .data$i_idx <= n,
+    .data$j_idx <= n,
+    .data$i_idx != .data$j_idx
+  )
+
+  if (nrow(cand_tbl) == 0L) return(cand_tbl)
+
+  # remove repeats (unordered) if requested
+  if (isTRUE(forbid_repeats) && length(existing_key) > 0L) {
+    key <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
+    cand_tbl <- cand_tbl[!(key %in% existing_key), , drop = FALSE]
+  }
+
+  if (nrow(cand_tbl) == 0L) return(tibble::as_tibble(cand_tbl))
+
+  # ensure uniqueness of unordered pairs
+  key2 <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
+  cand_tbl <- cand_tbl[!duplicated(key2), , drop = FALSE]
+
+  tibble::as_tibble(cand_tbl)
+}
+
+#' @keywords internal
+.ap_select_pairs_from_scored <- function(scored_tbl, n_pairs) {
+  n_pairs <- as.integer(n_pairs)
+  scored_tbl <- tibble::as_tibble(scored_tbl)
+
+  if (nrow(scored_tbl) == 0L || is.na(n_pairs) || n_pairs <= 0L) {
+    return(scored_tbl[0, , drop = FALSE])
+  }
+
+  o <- order(scored_tbl$score_total, decreasing = TRUE)
+  scored_tbl <- scored_tbl[o, , drop = FALSE]
+
+  take <- min(n_pairs, nrow(scored_tbl))
+  scored_tbl[seq_len(take), , drop = FALSE]
+}
+
+#' @keywords internal
+.ap_orient_pairs <- function(selected_tbl,
+                             id_vec,
+                             samples,
+                             p1_vec,
+                             p2_vec,
+                             balance_positions = TRUE) {
+  selected_tbl <- tibble::as_tibble(selected_tbl)
+  take <- nrow(selected_tbl)
+  if (take == 0L) {
+    return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
+  }
+
+  out_ID1 <- character(take)
+  out_ID2 <- character(take)
+
+  # mutable counts while building this round
+  p1 <- p1_vec
+  p2 <- p2_vec
+
+  for (k in seq_len(take)) {
+    i <- selected_tbl$i_idx[[k]]
+    j <- selected_tbl$j_idx[[k]]
+
+    a <- id_vec[[i]]
+    b <- id_vec[[j]]
+
+    if (isTRUE(balance_positions)) {
+      imb_a <- p1[[i]] - p2[[i]]
+      imb_b <- p1[[j]] - p2[[j]]
+
+      if (imb_a > imb_b) {
+        out_ID1[[k]] <- b
+        out_ID2[[k]] <- a
+        p1[[j]] <- p1[[j]] + 1L
+        p2[[i]] <- p2[[i]] + 1L
+      } else if (imb_b > imb_a) {
+        out_ID1[[k]] <- a
+        out_ID2[[k]] <- b
+        p1[[i]] <- p1[[i]] + 1L
+        p2[[j]] <- p2[[j]] + 1L
+      } else {
+        if (stats::runif(1) < 0.5) {
+          out_ID1[[k]] <- a
+          out_ID2[[k]] <- b
+          p1[[i]] <- p1[[i]] + 1L
+          p2[[j]] <- p2[[j]] + 1L
+        } else {
+          out_ID1[[k]] <- b
+          out_ID2[[k]] <- a
+          p1[[j]] <- p1[[j]] + 1L
+          p2[[i]] <- p2[[i]] + 1L
+        }
+      }
+    } else {
+      out_ID1[[k]] <- a
+      out_ID2[[k]] <- b
+    }
+  }
+
+  out_tbl <- tibble::tibble(ID1 = out_ID1, ID2 = out_ID2)
+  .add_pair_texts(out_tbl, samples = samples)
+}
+
 #' Select adaptive pairs for the next round of comparisons
 #'
 #' This helper proposes a new set of pairs for a round-based adaptive workflow.
@@ -27,17 +301,6 @@
 #'     \item \code{object1}, \code{object2} (e.g., BT data)
 #'   }
 #'   If \code{NULL} (default), the function assumes no prior pairs.
-#' @param n_pairs Integer number of new pairs to return for the next round.
-#' @param k_neighbors Integer number of adjacent neighbors (in sorted-theta order).
-#'   Use \code{NULL} or \code{Inf} to consider all neighbors.
-#'   to consider for each item when generating candidate pairs. Default is 10.
-#' @param min_judgments Integer minimum desired number of judgments per item.
-#'   Items below this threshold are prioritized. Default is 12.
-#' @param forbid_repeats Logical; if \code{TRUE} (default), do not return pairs
-#'   that have already appeared in \code{existing_pairs} (unordered).
-#' @param balance_positions Logical; if \code{TRUE} (default), orient each selected
-#'   pair so that items with more historical appearances in position 1 (ID1) are
-#'   more likely to be placed in position 2 (ID2), and vice versa.
 #' @param embedding_neighbors Optional embedding-based neighbor lists used to
 #'   augment candidate generation. This can be either:
 #'   \itemize{
@@ -47,6 +310,16 @@
 #'   }
 #'   When provided, these candidates are added on top of the theta-neighborhood
 #'   candidates controlled by \code{k_neighbors}.
+#' @param n_pairs Integer number of new pairs to return for the next round.
+#' @param k_neighbors Integer number of adjacent neighbors (in sorted-theta order).
+#'   Use \code{NULL} or \code{Inf} to consider all neighbors. Default is 10.
+#' @param min_judgments Integer minimum desired number of judgments per item.
+#'   Items below this threshold are prioritized. Default is 12.
+#' @param forbid_repeats Logical; if \code{TRUE} (default), do not return pairs
+#'   that have already appeared in \code{existing_pairs} (unordered).
+#' @param balance_positions Logical; if \code{TRUE} (default), orient each selected
+#'   pair so that items with more historical appearances in position 1 (ID1) are
+#'   more likely to be placed in position 2 (ID2), and vice versa.
 #' @param embed_far_k Integer; number of additional "far" candidates to sample
 #'   per item (uniformly at random) in addition to theta/embedding neighbors.
 #' @param seed Optional integer seed for reproducibility. If \code{NULL} (default),
@@ -122,26 +395,22 @@ select_adaptive_pairs <- function(samples,
   if (!is.numeric(k_neighbors) || length(k_neighbors) != 1L || is.na(k_neighbors)) {
     stop("`k_neighbors` must be a positive integer, or NULL/Inf for all neighbors.", call. = FALSE)
   }
-  # If finite, require >= 1.
   if (is.finite(k_neighbors)) {
     if (k_neighbors < 1) {
       stop("`k_neighbors` must be positive (>= 1), or NULL/Inf for all neighbors.", call. = FALSE)
     }
-    # Ensure integer-like.
     if (abs(k_neighbors - round(k_neighbors)) > 1e-12) {
       stop("`k_neighbors` must be an integer (or NULL/Inf for all neighbors).", call. = FALSE)
     }
     k_neighbors <- as.integer(k_neighbors)
   }
 
-  # Allow NULL to disable the minimum-judgments heuristic.
   if (is.null(min_judgments)) min_judgments <- 0L
   min_judgments <- as.integer(min_judgments)
   if (is.na(min_judgments) || min_judgments < 0L) {
     stop("`min_judgments` must be NULL or a non-negative integer.", call. = FALSE)
   }
 
-  # Normalize IDs to character
   samples <- dplyr::mutate(samples, ID = as.character(.data$ID), text = as.character(.data$text))
   theta <- dplyr::mutate(theta, ID = as.character(.data$ID))
 
@@ -150,16 +419,13 @@ select_adaptive_pairs <- function(samples,
     stop("At least two samples are required to select pairs.", call. = FALSE)
   }
 
-  # Early return: n_pairs == 0
   if (n_pairs == 0L) {
     return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
   }
 
-  # Wrap all stochastic steps so we do not permanently change RNG state
   out <- .with_seed_restore(
     seed,
     f = function() {
-      # Join theta/se onto all samples; fill missing estimates (cold-start/new items)
       joined <- dplyr::left_join(
         dplyr::select(samples, dplyr::all_of(c("ID", "text"))),
         dplyr::select(theta, dplyr::all_of(c("ID", "theta", "se"))),
@@ -179,9 +445,6 @@ select_adaptive_pairs <- function(samples,
         se = dplyr::if_else(is.na(.data$se), se_fill, as.double(.data$se))
       )
 
-      # ------------------------------------------------------------------
-      # Existing pairs: counts + repeat prevention
-      # ------------------------------------------------------------------
       existing_key <- character()
       pos1_counts <- stats::setNames(integer(length(ids)), ids)
       pos2_counts <- stats::setNames(integer(length(ids)), ids)
@@ -196,7 +459,6 @@ select_adaptive_pairs <- function(samples,
         keep1 <- ex1 %in% ids
         keep2 <- ex2 %in% ids
 
-        # position counts only for known ids
         if (any(keep1)) {
           tab1 <- table(ex1[keep1])
           pos1_counts[names(tab1)] <- pos1_counts[names(tab1)] + as.integer(tab1)
@@ -206,21 +468,15 @@ select_adaptive_pairs <- function(samples,
           pos2_counts[names(tab2)] <- pos2_counts[names(tab2)] + as.integer(tab2)
         }
 
-        # total counts (unordered)
         all_ids <- c(ex1[keep1], ex2[keep2])
         if (length(all_ids) > 0L) {
           tab_all <- table(all_ids)
           total_counts[names(tab_all)] <- total_counts[names(tab_all)] + as.integer(tab_all)
         }
 
-        # repeat-prevention key (unordered)
         existing_key <- unique(.unordered_pair_key(ex1, ex2))
       }
 
-      # ------------------------------------------------------------------
-      # Candidate generation: neighbors in theta-sorted order, optionally
-      # augmented by embedding-based neighbor lists.
-      # ------------------------------------------------------------------
       ord <- order(joined$theta, joined$ID, na.last = TRUE)
       joined <- joined[ord, , drop = FALSE]
 
@@ -228,7 +484,6 @@ select_adaptive_pairs <- function(samples,
       th_vec <- as.double(joined$theta)
       se_vec <- as.double(joined$se)
 
-      # map counts into sorted order
       tot_vec <- as.integer(total_counts[id_vec])
       p1_vec <- as.integer(pos1_counts[id_vec])
       p2_vec <- as.integer(pos2_counts[id_vec])
@@ -236,7 +491,6 @@ select_adaptive_pairs <- function(samples,
       n <- length(id_vec)
       k_neighbors2 <- min(k_neighbors, max(n - 1L, 1L))
 
-      # Normalize embedding neighbor input to a named list(ID -> character vector)
       embed_nbrs <- NULL
       if (!is.null(embedding_neighbors)) {
         if (is.list(embedding_neighbors) && !is.null(names(embedding_neighbors))) {
@@ -255,7 +509,11 @@ select_adaptive_pairs <- function(samples,
 
         missing_ids <- setdiff(ids, names(embed_nbrs))
         if (length(missing_ids) > 0L) {
-          stop("`embedding_neighbors` is missing IDs: ", paste(utils::head(missing_ids, 10), collapse = ", "), call. = FALSE)
+          stop(
+            "`embedding_neighbors` is missing IDs: ",
+            paste(utils::head(missing_ids, 10), collapse = ", "),
+            call. = FALSE
+          )
         }
       }
 
@@ -264,139 +522,43 @@ select_adaptive_pairs <- function(samples,
       }
       embed_far_k <- as.integer(embed_far_k)
 
-      cand_i <- integer()
-      cand_j <- integer()
-      cand_score <- double()
+      cand_tbl_raw <- .ap_gen_candidates(
+        id_vec = id_vec,
+        th_vec = th_vec,
+        se_vec = se_vec,
+        tot_vec = tot_vec,
+        k_neighbors2 = k_neighbors2,
+        embed_nbrs = embed_nbrs,
+        embed_far_k = embed_far_k
+      )
 
-      for (i in seq_len(n)) {
-        # 1) theta-neighborhood candidates
-        js <- integer()
-        hi <- min(n, i + k_neighbors2)
-        if (hi > i) {
-          js <- c(js, (i + 1L):hi)
-        }
+      scored_tbl <- .ap_score_candidates(
+        cand_tbl = cand_tbl_raw,
+        th_vec = th_vec,
+        se_vec = se_vec,
+        tot_vec = tot_vec,
+        min_judgments = min_judgments
+      )
 
-        # 2) embedding-neighborhood candidates (mapped to current theta-sorted indices)
-        if (!is.null(embed_nbrs)) {
-          this_id <- id_vec[[i]]
-          nbr_ids <- embed_nbrs[[this_id]]
-          if (!is.null(nbr_ids) && length(nbr_ids) > 0L) {
-            nbr_ids <- nbr_ids[!is.na(nbr_ids) & nzchar(nbr_ids)]
-            if (length(nbr_ids) > 0L) {
-              nbr_idx <- match(nbr_ids, id_vec)
-              nbr_idx <- nbr_idx[!is.na(nbr_idx) & nbr_idx != i]
-              if (length(nbr_idx) > 0L) {
-                js <- c(js, nbr_idx)
-              }
-            }
-          }
-        }
+      constrained_tbl <- .ap_apply_constraints(
+        cand_tbl = scored_tbl,
+        id_vec = id_vec,
+        existing_key = existing_key,
+        forbid_repeats = forbid_repeats
+      )
 
-        # 3) optional far candidates to preserve global mixing
-        if (embed_far_k > 0L) {
-          # Sample from indices strictly after i so we score each unordered pair once.
-          base_pool <- if (i < n) (i + 1L):n else integer(0)
-          pool <- setdiff(base_pool, js)
-          if (length(pool) > 0L) {
-            js <- c(js, sample(pool, size = min(embed_far_k, length(pool)), replace = FALSE))
-          }
-        }
+      selected_tbl <- .ap_select_pairs_from_scored(
+        scored_tbl = constrained_tbl,
+        n_pairs = n_pairs
+      )
 
-        js <- unique(js)
-        js <- js[js != i]
-        if (length(js) == 0L) next
-
-        for (j in js) {
-          # Only score each unordered pair once; keep upper triangle by index.
-          if (j <= i) next
-          if (isTRUE(forbid_repeats) && length(existing_key) > 0L) {
-            kkey <- .unordered_pair_key(id_vec[[i]], id_vec[[j]])
-            if (kkey %in% existing_key) next
-          }
-
-          # predicted probability / information (max at 0.5)
-          d <- th_vec[[i]] - th_vec[[j]]
-          p <- 1 / (1 + exp(-d))
-          info <- p * (1 - p)
-
-          need_i <- max(0, min_judgments - tot_vec[[i]])
-          need_j <- max(0, min_judgments - tot_vec[[j]])
-
-          score <- info * (se_vec[[i]] + se_vec[[j]]) * (1 + need_i + need_j)
-
-          cand_i <- c(cand_i, i)
-          cand_j <- c(cand_j, j)
-          cand_score <- c(cand_score, score)
-        }
-      }
-
-      if (length(cand_score) == 0L) {
-        return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
-      }
-
-      o <- order(cand_score, decreasing = TRUE)
-      cand_i <- cand_i[o]
-      cand_j <- cand_j[o]
-
-      take <- min(n_pairs, length(cand_i))
-      cand_i <- cand_i[seq_len(take)]
-      cand_j <- cand_j[seq_len(take)]
-
-      # ------------------------------------------------------------------
-      # Orient pairs (position balancing) + construct output
-      # ------------------------------------------------------------------
-      out_ID1 <- character(take)
-      out_ID2 <- character(take)
-
-      # mutable counts while building this round
-      p1 <- p1_vec
-      p2 <- p2_vec
-
-      for (k in seq_len(take)) {
-        i <- cand_i[[k]]
-        j <- cand_j[[k]]
-
-        a <- id_vec[[i]]
-        b <- id_vec[[j]]
-
-        if (isTRUE(balance_positions)) {
-          imb_a <- p1[[i]] - p2[[i]]
-          imb_b <- p1[[j]] - p2[[j]]
-
-          if (imb_a > imb_b) {
-            # a has "too many" as ID1; place it as ID2
-            out_ID1[[k]] <- b
-            out_ID2[[k]] <- a
-            p1[[j]] <- p1[[j]] + 1L
-            p2[[i]] <- p2[[i]] + 1L
-          } else if (imb_a < imb_b) {
-            out_ID1[[k]] <- a
-            out_ID2[[k]] <- b
-            p1[[i]] <- p1[[i]] + 1L
-            p2[[j]] <- p2[[j]] + 1L
-          } else {
-            # tie: randomize
-            if (stats::runif(1) < 0.5) {
-              out_ID1[[k]] <- a
-              out_ID2[[k]] <- b
-              p1[[i]] <- p1[[i]] + 1L
-              p2[[j]] <- p2[[j]] + 1L
-            } else {
-              out_ID1[[k]] <- b
-              out_ID2[[k]] <- a
-              p1[[j]] <- p1[[j]] + 1L
-              p2[[i]] <- p2[[i]] + 1L
-            }
-          }
-        } else {
-          out_ID1[[k]] <- a
-          out_ID2[[k]] <- b
-        }
-      }
-
-      .add_pair_texts(
-        tibble::tibble(ID1 = out_ID1, ID2 = out_ID2),
-        samples = samples
+      .ap_orient_pairs(
+        selected_tbl = selected_tbl,
+        id_vec = id_vec,
+        samples = samples,
+        p1_vec = p1_vec,
+        p2_vec = p2_vec,
+        balance_positions = balance_positions
       )
     },
     arg_name = "seed"
@@ -405,13 +567,13 @@ select_adaptive_pairs <- function(samples,
   out
 }
 
-# Compute a simple cosine-similarity neighbor list from an embeddings matrix.
-#
-# This is intentionally lightweight (no ANN dependency) and intended for
-# moderate n (e.g., up to a few thousand) where a single dense similarity
-# computation is acceptable.
-#
-# @keywords internal
+#' Compute a simple cosine-similarity neighbor list from an embeddings matrix.
+#'
+#' This is intentionally lightweight (no ANN dependency) and intended for
+#' moderate n (e.g., up to a few thousand) where a single dense similarity
+#' computation is acceptable.
+#'
+#' @keywords internal
 .compute_embedding_neighbors <- function(embeddings, ids, k = 30L, normalize = TRUE) {
   if (is.null(embeddings)) stop("`embeddings` must not be NULL.", call. = FALSE)
   ids <- as.character(ids)
@@ -438,7 +600,6 @@ select_adaptive_pairs <- function(samples,
     emb <- emb / norms
   }
 
-  # Cosine similarity matrix.
   sim <- emb %*% t(emb)
   diag(sim) <- -Inf
 
