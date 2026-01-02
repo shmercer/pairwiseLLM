@@ -1028,7 +1028,16 @@ bt_run_adaptive <- function(samples,
   theta <- NULL
   theta_engine <- NA_character_
   fit_provenance <- NULL
+
+  final_refit_attempted <- FALSE
+  final_refit_failed <- FALSE
+  final_refit_disabled <- FALSE
+
+  if (!isTRUE(final_refit) && nrow(results) > 0L) {
+    final_refit_disabled <- TRUE
+  }
   if (isTRUE(final_refit) && nrow(results) > 0L) {
+    final_refit_attempted <- TRUE
     tmp <- tryCatch(
       compute_final_estimates(
         results = results,
@@ -1041,6 +1050,7 @@ bt_run_adaptive <- function(samples,
       error = function(e) e
     )
     if (inherits(tmp, "error")) {
+      final_refit_failed <- TRUE
       warning(
         "`final_refit = TRUE` requested but final estimates could not be computed: ",
         conditionMessage(tmp),
@@ -1089,7 +1099,14 @@ bt_run_adaptive <- function(samples,
 
       if (is.null(fit_provenance)) fit_provenance <- list()
       fit_provenance$fallback_used <- TRUE
-      fit_provenance$fallback_reason <- "final_refit_unavailable_or_failed"
+      fit_provenance$fallback_source <- "last_running_fit"
+
+      fit_provenance$fallback_reason <- dplyr::case_when(
+        final_refit_disabled ~ "final_refit_disabled",
+        final_refit_failed ~ "final_refit_failed",
+        final_refit_attempted ~ "final_refit_unavailable",
+        TRUE ~ "final_refit_unavailable"
+      )
     }
   }
 
