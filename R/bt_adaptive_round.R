@@ -55,8 +55,19 @@
 #'   a character vector of neighbor IDs (or a matrix/data.frame with rownames = IDs
 #'   and neighbor IDs in columns). Passed to \code{\link{select_adaptive_pairs}}.
 #' @param embed_far_k Integer; number of additional "far" candidates to sample
-#'   per item when \code{embedding_neighbors} is provided. Passed to
-#'   \code{\link{select_adaptive_pairs}}.
+#'   per item when embedding_neighbors is provided. Passed to
+#'   select_adaptive_pairs().
+#' @param embed_quota_frac Numeric in \code{[0, 1]}. Minimum fraction of selected pairs
+#'   that should come from embedding-neighbor candidates. Passed to
+#'   select_adaptive_pairs().
+#' @param candidate_pool_cap Global cap on candidate pairs (after constraints and
+#'   optional per-anchor capping). Passed to select_adaptive_pairs().
+#' @param per_anchor_cap Optional cap on candidate pairs retained per anchor
+#'   item (after scoring). Passed to select_adaptive_pairs().
+#' @param w_embed Non-negative numeric weight for embedding-neighbor candidates
+#'   in scoring. Passed to select_adaptive_pairs().
+#' @param embed_score_mode Character; how to compute the embedding score when
+#'   w_embed > 0. Passed to select_adaptive_pairs().
 #' @param seed Optional integer seed for reproducibility; passed to \code{\link{select_adaptive_pairs}}.
 #'
 #' @return A list with:
@@ -109,6 +120,11 @@ bt_adaptive_round <- function(samples,
                               balance_positions = TRUE,
                               embedding_neighbors = NULL,
                               embed_far_k = 0,
+                              embed_quota_frac = 0.25,
+                              candidate_pool_cap = Inf,
+                              per_anchor_cap = Inf,
+                              w_embed = 1,
+                              embed_score_mode = "rank_decay",
                               seed = NULL) {
   samples <- tibble::as_tibble(samples)
   req_s <- c("ID", "text")
@@ -174,6 +190,11 @@ bt_adaptive_round <- function(samples,
     forbid_repeats = forbid_repeats,
     balance_positions = balance_positions,
     embed_far_k = embed_far_k,
+    embed_quota_frac = embed_quota_frac,
+    candidate_pool_cap = candidate_pool_cap,
+    per_anchor_cap = per_anchor_cap,
+    w_embed = w_embed,
+    embed_score_mode = embed_score_mode,
     seed = seed
   )
 

@@ -15,6 +15,12 @@ select_adaptive_pairs(
   forbid_repeats = TRUE,
   balance_positions = TRUE,
   embed_far_k = 0,
+  embed_quota_frac = 0.25,
+  candidate_pool_cap = Inf,
+  per_anchor_cap = Inf,
+  w_embed = 1,
+  embed_score_mode = "rank_decay",
+  return_internal = FALSE,
   seed = NULL
 )
 }
@@ -59,6 +65,29 @@ more likely to be placed in position 2 (ID2), and vice versa.}
 
 \item{embed_far_k}{Integer; number of additional "far" candidates to sample
 per item (uniformly at random) in addition to theta/embedding neighbors.}
+
+\item{embed_quota_frac}{Numeric in \code{[0, 1]}. Minimum fraction of selected pairs
+that should come from embedding-neighbor candidates when
+\code{embedding_neighbors} is provided. Set to 0 to disable the quota.
+Default is 0.25.}
+
+\item{candidate_pool_cap}{Optional cap on the candidate pool size after
+scoring/constraints. Use \code{Inf} (default) for no cap.}
+
+\item{per_anchor_cap}{Optional cap on the number of candidates retained per
+anchor item (in theta-sorted order) after scoring/constraints. Use
+\code{Inf} (default) for no cap.}
+
+\item{w_embed}{Numeric weight for an embedding-neighbor bonus term in the
+scoring function. Default is 1 (embeddings influence both candidate
+generation and scoring when available).}
+
+\item{embed_score_mode}{Character; how to compute the embedding bonus when
+\code{w_embed != 0}. Options are \code{"binary_neighbor"} and
+\code{"rank_decay"}.}
+
+\item{return_internal}{Logical; if \code{TRUE}, return a list with
+\code{$pairs}, \code{$diagnostics}, and intermediate candidate tables.}
 
 \item{seed}{Optional integer seed for reproducibility. If \code{NULL} (default),
 the current RNG state is used and not modified.}

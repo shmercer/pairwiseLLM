@@ -27,6 +27,8 @@
   out_i <- integer()
   out_j <- integer()
   out_source <- character()
+  out_anchor <- integer()
+  out_embed_rank <- integer()
 
   for (i in seq_len(n)) {
     # 1) theta-neighborhood candidates
@@ -71,6 +73,7 @@
     # dedupe by index, keep first occurrence
     js_unique <- integer()
     src_unique <- character()
+    embed_rank_unique <- integer()
     seen <- logical(n)
 
     for (jj in seq_along(js_all)) {
@@ -83,10 +86,13 @@
       js_unique <- c(js_unique, j)
       if (jj <= length(js_theta)) {
         src_unique <- c(src_unique, "theta")
+        embed_rank_unique <- c(embed_rank_unique, NA_integer_)
       } else if (jj <= (length(js_theta) + length(js_embed))) {
         src_unique <- c(src_unique, "embed")
+        embed_rank_unique <- c(embed_rank_unique, match(j, js_embed))
       } else {
         src_unique <- c(src_unique, "far")
+        embed_rank_unique <- c(embed_rank_unique, NA_integer_)
       }
     }
 
@@ -99,12 +105,21 @@
     out_i <- c(out_i, rep.int(i, sum(keep)))
     out_j <- c(out_j, js_unique[keep])
     out_source <- c(out_source, src_unique[keep])
+    out_anchor <- c(out_anchor, rep.int(i, sum(keep)))
+    out_embed_rank <- c(out_embed_rank, embed_rank_unique[keep])
   }
+
+  key <- .unordered_pair_key(id_vec[out_i], id_vec[out_j])
+  embed_hit <- out_source == "embed"
 
   tibble::tibble(
     i_idx = as.integer(out_i),
     j_idx = as.integer(out_j),
-    source = as.character(out_source)
+    anchor_idx = as.integer(out_anchor),
+    pair_key = as.character(key),
+    source = as.character(out_source),
+    embed_hit = as.logical(embed_hit),
+    embed_rank = as.integer(out_embed_rank)
   )
 }
 
@@ -113,12 +128,22 @@
                                  th_vec,
                                  se_vec,
                                  tot_vec,
-                                 min_judgments) {
+                                 min_judgments,
+                                 w_embed = 1,
+                                 embed_score_mode = "rank_decay") {
   cand_tbl <- tibble::as_tibble(cand_tbl)
+
+  w_embed <- as.double(w_embed)
+  if (!is.finite(w_embed) || length(w_embed) != 1L) {
+    stop("`w_embed` must be a single finite numeric value.", call. = FALSE)
+  }
+
+  embed_score_mode <- match.arg(embed_score_mode, choices = c("rank_decay", "binary_neighbor"))
 
   if (nrow(cand_tbl) == 0L) {
     cand_tbl$score_info <- numeric(0)
     cand_tbl$score_need <- numeric(0)
+    cand_tbl$score_embed <- numeric(0)
     cand_tbl$score_total <- numeric(0)
     return(cand_tbl)
   }
@@ -135,10 +160,31 @@
 
   score_total <- info * (se_vec[i] + se_vec[j]) * (1 + need_i + need_j)
 
+  score_embed <- numeric(length(score_total))
+  if (w_embed != 0) {
+    if (embed_score_mode == "binary_neighbor") {
+      score_embed <- ifelse(cand_tbl$source == "embed", 1, 0)
+    } else {
+      # rank_decay
+      embed_rank <- cand_tbl$embed_rank
+      if (is.null(embed_rank)) {
+        embed_rank <- rep(NA_integer_, nrow(cand_tbl))
+      }
+      score_embed <- ifelse(
+        cand_tbl$source == "embed" & !is.na(embed_rank),
+        1 / (1 + as.double(embed_rank)),
+        0
+      )
+    }
+  }
+
+  score_total <- score_total + w_embed * score_embed
+
   dplyr::mutate(
     cand_tbl,
     score_info = as.double(info),
     score_need = as.double(need_i + need_j),
+    score_embed = as.double(score_embed),
     score_total = as.double(score_total)
   )
 }
@@ -154,9 +200,14 @@
     return(tibble::tibble(
       i_idx = integer(),
       j_idx = integer(),
+      anchor_idx = integer(),
+      pair_key = character(),
       source = character(),
+      embed_hit = logical(),
+      embed_rank = integer(),
       score_info = numeric(),
       score_need = numeric(),
+      score_embed = numeric(),
       score_total = numeric()
     ))
   }
@@ -179,21 +230,28 @@
 
   # remove repeats (unordered) if requested
   if (isTRUE(forbid_repeats) && length(existing_key) > 0L) {
-    key <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
-    cand_tbl <- cand_tbl[!(key %in% existing_key), , drop = FALSE]
+    if (!"pair_key" %in% names(cand_tbl)) {
+      cand_tbl$pair_key <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
+    }
+    cand_tbl <- cand_tbl[!(cand_tbl$pair_key %in% existing_key), , drop = FALSE]
   }
 
   if (nrow(cand_tbl) == 0L) return(tibble::as_tibble(cand_tbl))
 
   # ensure uniqueness of unordered pairs
-  key2 <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
-  cand_tbl <- cand_tbl[!duplicated(key2), , drop = FALSE]
+  if (!"pair_key" %in% names(cand_tbl)) {
+    cand_tbl$pair_key <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
+  }
+  cand_tbl <- cand_tbl[!duplicated(cand_tbl$pair_key), , drop = FALSE]
 
   tibble::as_tibble(cand_tbl)
 }
 
 #' @keywords internal
-.ap_select_pairs_from_scored <- function(scored_tbl, n_pairs) {
+.ap_select_pairs_from_scored <- function(scored_tbl,
+                                        n_pairs,
+                                        embed_quota_frac = 0.25,
+                                        embed_sources = "embed") {
   n_pairs <- as.integer(n_pairs)
   scored_tbl <- tibble::as_tibble(scored_tbl)
 
@@ -201,11 +259,41 @@
     return(scored_tbl[0, , drop = FALSE])
   }
 
-  o <- order(scored_tbl$score_total, decreasing = TRUE)
-  scored_tbl <- scored_tbl[o, , drop = FALSE]
+  embed_quota_frac <- as.double(embed_quota_frac)
+  if (!is.finite(embed_quota_frac) || embed_quota_frac < 0 || embed_quota_frac > 1) {
+    stop("`embed_quota_frac` must be a single number in [0, 1].", call. = FALSE)
+  }
 
-  take <- min(n_pairs, nrow(scored_tbl))
-  scored_tbl[seq_len(take), , drop = FALSE]
+  if (!"pair_key" %in% names(scored_tbl)) {
+    stop("`scored_tbl` must contain a `pair_key` column.", call. = FALSE)
+  }
+
+  scored_tbl <- dplyr::arrange(scored_tbl, dplyr::desc(.data$score_total), .data$i_idx, .data$j_idx)
+
+  n_embed_min <- ceiling(embed_quota_frac * n_pairs)
+  n_embed_min <- as.integer(min(n_embed_min, n_pairs))
+
+  take_keys <- character()
+  if (n_embed_min > 0L) {
+    embed_tbl <- dplyr::filter(scored_tbl, .data$source %in% embed_sources)
+    if (nrow(embed_tbl) > 0L) {
+      take_embed <- min(n_embed_min, nrow(embed_tbl))
+      take_keys <- embed_tbl$pair_key[seq_len(take_embed)]
+    }
+  }
+
+  remaining <- n_pairs - length(take_keys)
+  if (remaining > 0L) {
+    rest_tbl <- scored_tbl[!(scored_tbl$pair_key %in% take_keys), , drop = FALSE]
+    take_rest <- min(remaining, nrow(rest_tbl))
+    if (take_rest > 0L) {
+      take_keys <- c(take_keys, rest_tbl$pair_key[seq_len(take_rest)])
+    }
+  }
+
+  idx <- match(take_keys, scored_tbl$pair_key)
+  idx <- idx[!is.na(idx)]
+  scored_tbl[idx, , drop = FALSE]
 }
 
 #' @keywords internal
@@ -322,6 +410,23 @@
 #'   more likely to be placed in position 2 (ID2), and vice versa.
 #' @param embed_far_k Integer; number of additional "far" candidates to sample
 #'   per item (uniformly at random) in addition to theta/embedding neighbors.
+#' @param embed_quota_frac Numeric in \code{[0, 1]}. Minimum fraction of selected pairs
+#'   that should come from embedding-neighbor candidates when
+#'   \code{embedding_neighbors} is provided. Set to 0 to disable the quota.
+#'   Default is 0.25.
+#' @param candidate_pool_cap Optional cap on the candidate pool size after
+#'   scoring/constraints. Use \code{Inf} (default) for no cap.
+#' @param per_anchor_cap Optional cap on the number of candidates retained per
+#'   anchor item (in theta-sorted order) after scoring/constraints. Use
+#'   \code{Inf} (default) for no cap.
+#' @param w_embed Numeric weight for an embedding-neighbor bonus term in the
+#'   scoring function. Default is 1 (embeddings influence both candidate
+#'   generation and scoring when available).
+#' @param embed_score_mode Character; how to compute the embedding bonus when
+#'   \code{w_embed != 0}. Options are \code{"binary_neighbor"} and
+#'   \code{"rank_decay"}.
+#' @param return_internal Logical; if \code{TRUE}, return a list with
+#'   \code{$pairs}, \code{$diagnostics}, and intermediate candidate tables.
 #' @param seed Optional integer seed for reproducibility. If \code{NULL} (default),
 #'   the current RNG state is used and not modified.
 #'
@@ -359,6 +464,12 @@ select_adaptive_pairs <- function(samples,
                                   forbid_repeats = TRUE,
                                   balance_positions = TRUE,
                                   embed_far_k = 0,
+                                  embed_quota_frac = 0.25,
+                                  candidate_pool_cap = Inf,
+                                  per_anchor_cap = Inf,
+                                  w_embed = 1,
+                                  embed_score_mode = "rank_decay",
+                                  return_internal = FALSE,
                                   seed = NULL) {
   samples <- tibble::as_tibble(samples)
 
@@ -411,6 +522,32 @@ select_adaptive_pairs <- function(samples,
     stop("`min_judgments` must be NULL or a non-negative integer.", call. = FALSE)
   }
 
+  embed_quota_frac <- as.double(embed_quota_frac)
+  if (!is.finite(embed_quota_frac) || length(embed_quota_frac) != 1L || embed_quota_frac < 0 || embed_quota_frac > 1) {
+    stop("`embed_quota_frac` must be a single number in [0, 1].", call. = FALSE)
+  }
+
+  .validate_cap <- function(x, arg_name) {
+    if (isTRUE(is.infinite(x))) return(Inf)
+    x <- as.double(x)
+    if (!is.finite(x) || length(x) != 1L || x < 0) {
+      stop("`", arg_name, "` must be a single non-negative integer (or Inf).", call. = FALSE)
+    }
+    if (abs(x - round(x)) > 1e-12) {
+      stop("`", arg_name, "` must be an integer (or Inf).", call. = FALSE)
+    }
+    as.integer(x)
+  }
+
+  candidate_pool_cap <- .validate_cap(candidate_pool_cap, "candidate_pool_cap")
+  per_anchor_cap <- .validate_cap(per_anchor_cap, "per_anchor_cap")
+
+  embed_score_mode <- match.arg(embed_score_mode, choices = c("rank_decay", "binary_neighbor"))
+
+  if (!is.logical(return_internal) || length(return_internal) != 1L || is.na(return_internal)) {
+    stop("`return_internal` must be TRUE or FALSE.", call. = FALSE)
+  }
+
   samples <- dplyr::mutate(samples, ID = as.character(.data$ID), text = as.character(.data$text))
   theta <- dplyr::mutate(theta, ID = as.character(.data$ID))
 
@@ -423,7 +560,7 @@ select_adaptive_pairs <- function(samples,
     return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
   }
 
-  out <- .with_seed_restore(
+  res <- .with_seed_restore(
     seed,
     f = function() {
       joined <- dplyr::left_join(
@@ -537,7 +674,9 @@ select_adaptive_pairs <- function(samples,
         th_vec = th_vec,
         se_vec = se_vec,
         tot_vec = tot_vec,
-        min_judgments = min_judgments
+        min_judgments = min_judgments,
+        w_embed = w_embed,
+        embed_score_mode = embed_score_mode
       )
 
       constrained_tbl <- .ap_apply_constraints(
@@ -547,12 +686,26 @@ select_adaptive_pairs <- function(samples,
         forbid_repeats = forbid_repeats
       )
 
+      capped_tbl <- constrained_tbl
+      if (is.finite(per_anchor_cap)) {
+        capped_tbl <- dplyr::arrange(capped_tbl, dplyr::desc(.data$score_total), .data$i_idx, .data$j_idx)
+        capped_tbl <- dplyr::group_by(capped_tbl, .data$anchor_idx)
+        capped_tbl <- dplyr::slice_head(capped_tbl, n = per_anchor_cap)
+        capped_tbl <- dplyr::ungroup(capped_tbl)
+      }
+      if (is.finite(candidate_pool_cap)) {
+        capped_tbl <- dplyr::arrange(capped_tbl, dplyr::desc(.data$score_total), .data$i_idx, .data$j_idx)
+        capped_tbl <- dplyr::slice_head(capped_tbl, n = candidate_pool_cap)
+      }
+
       selected_tbl <- .ap_select_pairs_from_scored(
-        scored_tbl = constrained_tbl,
-        n_pairs = n_pairs
+        scored_tbl = capped_tbl,
+        n_pairs = n_pairs,
+        embed_quota_frac = embed_quota_frac,
+        embed_sources = "embed"
       )
 
-      .ap_orient_pairs(
+      pairs_tbl <- .ap_orient_pairs(
         selected_tbl = selected_tbl,
         id_vec = id_vec,
         samples = samples,
@@ -560,10 +713,58 @@ select_adaptive_pairs <- function(samples,
         p2_vec = p2_vec,
         balance_positions = balance_positions
       )
+
+      embed_hit_rate <- NA_real_
+      if (!is.null(embed_nbrs) && nrow(pairs_tbl) > 0L) {
+        hits <- mapply(
+          function(a, b) {
+            (b %in% embed_nbrs[[a]]) || (a %in% embed_nbrs[[b]])
+          },
+          pairs_tbl$ID1,
+          pairs_tbl$ID2
+        )
+        embed_hit_rate <- mean(as.logical(hits))
+      }
+
+      diagnostics <- tibble::tibble(
+        n_candidates_raw = nrow(cand_tbl_raw),
+        n_candidates_scored = nrow(scored_tbl),
+        n_candidates_after_constraints = nrow(constrained_tbl),
+        n_candidates_after_caps = nrow(capped_tbl),
+        n_selected = nrow(selected_tbl),
+        n_selected_theta = sum(selected_tbl$source == "theta"),
+        n_selected_embed = sum(selected_tbl$source == "embed"),
+        n_selected_far = sum(selected_tbl$source == "far"),
+        embed_neighbor_hit_rate = embed_hit_rate,
+        embed_quota_frac = embed_quota_frac,
+        candidate_pool_cap = candidate_pool_cap,
+        per_anchor_cap = per_anchor_cap,
+        w_embed = w_embed,
+        embed_score_mode = embed_score_mode
+      )
+
+      internals <- NULL
+      if (isTRUE(return_internal)) {
+        internals <- list(
+          raw = cand_tbl_raw,
+          scored = scored_tbl,
+          constrained = constrained_tbl,
+          capped = capped_tbl,
+          selected = selected_tbl
+        )
+      }
+
+      list(pairs = pairs_tbl, diagnostics = diagnostics, candidates = internals)
     },
     arg_name = "seed"
   )
 
+  if (isTRUE(return_internal)) {
+    return(res)
+  }
+
+  out <- res$pairs
+  attr(out, "pairing_diagnostics") <- res$diagnostics
   out
 }
 

@@ -50,6 +50,11 @@ bt_run_adaptive(
   checkpoint_every = 1L,
   checkpoint_store_fits = TRUE,
   checkpoint_overwrite = TRUE,
+  embed_quota_frac = 0.25,
+  candidate_pool_cap = Inf,
+  per_anchor_cap = Inf,
+  w_embed = 1,
+  embed_score_mode = "rank_decay",
   ...
 )
 }
@@ -235,6 +240,20 @@ case, model fits will be recomputed as needed after resuming.}
 \item{checkpoint_overwrite}{Logical indicating whether to overwrite an existing
 \code{run_state.rds} file in \code{checkpoint_dir}. If \code{FALSE} and a
 checkpoint file already exists, the function should error rather than overwrite.}
+
+\item{embed_quota_frac}{Numeric in \code{[0, 1]}. Minimum fraction of selected pairs
+that should come from embedding-neighbor candidates when embeddings are used.}
+
+\item{candidate_pool_cap}{Non-negative integer or Inf. Global cap on the size
+of the candidate pool considered during pair selection.}
+
+\item{per_anchor_cap}{Non-negative integer or Inf. Per-item cap on the number
+of candidates retained (after scoring) for each anchor item.}
+
+\item{w_embed}{Non-negative numeric. Optional weight on an embedding-source bonus
+term used in candidate scoring.}
+
+\item{embed_score_mode}{Character. How to compute the embedding-source bonus.}
 
 \item{...}{Additional arguments passed through to \code{fit_fun}.}
 }
