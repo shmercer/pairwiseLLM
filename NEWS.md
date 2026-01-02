@@ -1,4 +1,29 @@
-# pairwiseLLM 1.3.1
+# pairwiseLLM 1.3.0
+
+## Adaptive runner parity and final-output contract
+
+* **Adaptive-only runner now computes final estimates by default.**
+  `bt_run_adaptive()` now defaults to `final_refit = TRUE` and `fit_engine_running = "rank_centrality"`
+  for fast, stable running estimates. Final estimation prefers BT when available and
+  falls back to Rank Centrality when optional dependencies are missing, recording why.
+
+* **New final-engine selector.**
+  `bt_run_adaptive()` gains `fit_engine_final = c("bt_firth","bt_mle","bt_bayes","none")`.
+  Suggested dependencies are used when available; otherwise the run falls back to
+  Rank Centrality and records why.
+
+* **Back-compat preserved via explicit `out$theta`.**
+  `out$theta` remains a compact final-scale view used for downstream workflows;
+  when BT succeeds it uses the final BT scale, otherwise it falls back to Rank Centrality.
+  `out$theta_engine` and `out$fit_provenance` make the choice explicit.
+
+* **`compute_final_estimates()` now supports explicit final-engine selection and graceful fallback.**
+  When `BradleyTerry2` (or `rstanarm` for `bt_bayes`) is not installed, the function
+  continues and returns Rank Centrality with BT columns as `NA`, plus provenance.
+
+* **Estimates schema checks strengthened.**
+  Internal validation (via `.validate_estimates_tbl()`) ensures runner-produced estimates
+  contain the full schema columns, improving stability for downstream table joins.
 
 ## Major improvements to adaptive core linking and stability
 
@@ -58,8 +83,6 @@
 * Updated existing tests to explicitly pin legacy linking behavior where required,
   maintaining backward compatibility while improving default behavior.
 * Overall test coverage remains above 95%.
-
-# pairwiseLLM 1.3.0
 
 ## New features
 * Resumable orchestration runners: `bt_run_adaptive()`, `bt_run_core_linking()`, and
