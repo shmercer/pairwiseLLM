@@ -7,6 +7,7 @@
 compute_final_estimates(
   results,
   ids = NULL,
+  fit_engine_final = c("bt_firth", "bt_mle", "bt_bayes", "none"),
   bt_bias_reduction = TRUE,
   bt_verbose = FALSE,
   rc_smoothing = 0.5,
@@ -22,9 +23,16 @@ adaptive run.}
 \item{ids}{Optional character vector of all item IDs. If \code{NULL}
 (default), IDs are inferred from \code{results}.}
 
+\item{fit_engine_final}{Character scalar giving the preferred final BT engine.
+Options are \code{"bt_firth"} (bias-reduced BT if available), \code{"bt_mle"}
+(standard MLE BT), \code{"bt_bayes"} (Bayesian BT approximation via \pkg{rstanarm}
+when installed), or \code{"none"} (skip BT and return Rank Centrality only).
+Default \code{"bt_firth"}.}
+
 \item{bt_bias_reduction}{Logical; attempt a bias-reduced Bradley--Terry fit
-via \pkg{BradleyTerry2} when available (default \code{TRUE}). If the
-bias-reduced fit fails, the function falls back to standard MLE.}
+via \pkg{BradleyTerry2} when available (default \code{TRUE}). When
+\code{fit_engine_final = "bt_firth"}, this should typically be left as
+\code{TRUE}.}
 
 \item{bt_verbose}{Logical; if \code{TRUE}, allow model-fitting warnings to be
 printed. If \code{FALSE} (default), suppress common fitting warnings.}
@@ -51,12 +59,18 @@ A list with elements:
 \item \code{wins}, \code{losses}, \code{ties}: counts from \code{results}
 \item \code{n_appear}, \code{n_pos1}, \code{n_pos2}: appearance counts
 \item \code{component_id}: connected-component label from Rank Centrality
+\item \code{bt_engine_requested}: requested final BT engine
+\item \code{bt_engine_used}: BT engine actually used (or \code{"rank_centrality"})
+\item \code{bt_status}: \code{"succeeded"}, \code{"fallback"}, or \code{"skipped"}
+\item \code{bt_failure_reason}: non-empty string when fallback occurred
 }
 }
 \item{bt_fit}{The full Bradley--Terry fit object (list) as returned internally.}
 \item{rc_fit}{The Rank Centrality fit list returned by \code{\link{fit_rank_centrality}}.}
 \item{diagnostics}{A list of run-level diagnostics including whether bias
 reduction was used and basic graph stats.}
+\item{provenance}{A list describing which engines were requested and used,
+and why any fallback occurred.}
 }
 }
 \description{
@@ -65,15 +79,21 @@ set of pairwise comparison results. It is intended for "end of run" use,
 where the full set of comparisons is available.
 }
 \details{
-The function fits:
+The function fits (when available):
 \itemize{
 \item A Bradley--Terry model via \pkg{BradleyTerry2}. If bias reduction is
 enabled (default), the function attempts a bias-reduced fit (often called
-"Firth" correction). If the bias-reduced fit is unavailable (e.g., missing
-optional dependencies), the function falls back to a standard maximum
-likelihood Bradley--Terry fit.
+"Firth" correction). If the bias-reduced fit is unavailable, the function
+falls back to a standard maximum likelihood Bradley--Terry fit.
+If \pkg{BradleyTerry2} is not installed (it is a suggested dependency), the
+function continues and returns Rank Centrality estimates with BT columns
+filled as \code{NA}.
 \item A Rank Centrality model (spectral / random-walk based) via
 \code{\link{fit_rank_centrality}}.
+\item Optionally, a Bayesian Bradley--Terry approximation when
+\code{fit_engine_final = "bt_bayes"}. This is implemented via
+\pkg{rstanarm} when installed (also suggested). If unavailable, the function
+falls back to Rank Centrality.
 }
 
 In addition to model-based estimates, the returned table includes
