@@ -441,11 +441,11 @@ compute_final_estimates <- function(
   fit <- tryCatch(
     {
       # Weakly-informative normal prior on coefficients
-      rstanarm::stan_glm(
+      .rstanarm_stan_glm(
         formula = f,
         data = df,
         family = stats::binomial(link = "logit"),
-        prior = rstanarm::normal(location = 0, scale = 2.5, autoscale = TRUE),
+        prior = .rstanarm_normal(location = 0, scale = 2.5, autoscale = TRUE),
         prior_intercept = NULL,
         refresh = if (isTRUE(verbose)) 100 else 0,
         chains = 2,
@@ -504,4 +504,21 @@ compute_final_estimates <- function(
     bias_reduced = FALSE,
     reason_unavailable = NA_character_
   )
+}
+
+
+# ---- Lightweight wrappers for suggested dependencies ----
+#
+# These wrappers make it easier to unit-test Bayesian BT logic without
+# requiring suggested packages to be installed, by allowing tests to mock
+# the internal wrappers rather than `pkg::fun` calls (which are not mockable).
+
+.rstanarm_stan_glm <- function(...) {
+  fun <- getExportedValue("rstanarm", "stan_glm")
+  fun(...)
+}
+
+.rstanarm_normal <- function(...) {
+  fun <- getExportedValue("rstanarm", "normal")
+  fun(...)
 }
