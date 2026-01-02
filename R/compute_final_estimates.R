@@ -188,7 +188,6 @@ compute_final_estimates <- function(
     n_pos2 = deg$n_pos2,
     component_id = component_id
   )
-  .validate_estimates_tbl(est, arg_name = "out$estimates")
 
   # Add explicit provenance columns (schema-stable but extra fields are allowed)
   est <- dplyr::mutate(
@@ -206,6 +205,7 @@ compute_final_estimates <- function(
     est <- dplyr::arrange(est, dplyr::desc(.data$theta_rc))
   }
 
+  .validate_estimates_tbl(est, arg_name = "out$estimates")
   diagnostics <- list(
     bt_engine_requested = bt_req,
     bt_engine_used = bt_used,

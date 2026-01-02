@@ -78,9 +78,8 @@
   }
   required <- c(
     "ID",
-    "theta_rc", "se_rc", "rank_rc", "pi_rc",
+    "theta_rc", "rank_rc", "pi_rc",
     "theta_bt_firth", "se_bt_firth", "rank_bt_firth",
-    "theta_bt_mle", "se_bt_mle", "rank_bt_mle",
     "bt_engine_requested", "bt_engine_used", "bt_status", "bt_failure_reason"
   )
   missing <- setdiff(required, names(x))
