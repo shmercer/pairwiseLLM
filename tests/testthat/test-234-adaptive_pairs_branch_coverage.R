@@ -89,14 +89,17 @@ test_that(".ap_score_candidates supports binary_neighbor and rank_decay embed sc
 
   # If embed_rank column is absent, rank_decay treats ranks as NA and gives 0 bonus.
   cand_no_rank <- tibble::tibble(i_idx = 1L, j_idx = 2L, source = "embed")
-  out_decay <- pairwiseLLM:::.ap_score_candidates(
-    cand_tbl = cand_no_rank,
-    th_vec = c(0, 0),
-    se_vec = c(1, 1),
-    tot_vec = c(0L, 0L),
-    min_judgments = 0L,
-    w_embed = 1,
-    embed_score_mode = "rank_decay"
+  testthat::expect_warning(
+    out_decay <- pairwiseLLM:::.ap_score_candidates(
+      cand_tbl = cand_no_rank,
+      th_vec = c(0, 0),
+      se_vec = c(1, 1),
+      tot_vec = c(0L, 0L),
+      min_judgments = 0L,
+      w_embed = 1,
+      embed_score_mode = "rank_decay"
+    ),
+    "Unknown or uninitialised column: `embed_rank`\\.?"
   )
 
   expect_equal(out_decay$score_embed, 0)
