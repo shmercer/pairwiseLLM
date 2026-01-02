@@ -129,6 +129,15 @@
 #' @param embed_far_k Integer. Number of additional "far" candidates to sample
 #' per item (uniformly at random) to preserve global mixing. Only used when
 #' \code{embeddings} is provided.
+#' @param embed_quota_frac Numeric in \code{[0, 1]}. Minimum fraction of selected pairs
+#'   that should come from embedding-neighbor candidates when embeddings are used.
+#' @param candidate_pool_cap Non-negative integer or Inf. Global cap on the size
+#'   of the candidate pool considered during pair selection.
+#' @param per_anchor_cap Non-negative integer or Inf. Per-item cap on the number
+#'   of candidates retained (after scoring) for each anchor item.
+#' @param w_embed Non-negative numeric. Optional weight on an embedding-source bonus
+#'   term used in candidate scoring.
+#' @param embed_score_mode Character. How to compute the embedding-source bonus.
 #'
 #' @param seed_pairs Optional integer seed used for bootstrap pair generation as
 #' \code{seed_pairs}, and for adaptive rounds as \code{seed_pairs + round}.
@@ -324,6 +333,11 @@ bt_run_adaptive <- function(samples,
                             checkpoint_every = 1L,
                             checkpoint_store_fits = TRUE,
                             checkpoint_overwrite = TRUE,
+                            embed_quota_frac = 0.25,
+                            candidate_pool_cap = Inf,
+                            per_anchor_cap = Inf,
+                            w_embed = 1,
+                            embed_score_mode = "rank_decay",
                             ...) {
   fit_engine_final <- match.arg(fit_engine_final)
   tag_fit <- function(fit,
@@ -708,6 +722,7 @@ bt_run_adaptive <- function(samples,
 
   rounds_list <- list()
   state_list <- list()
+  pairing_diag_list <- list()
 
   .make_checkpoint_payload <- function(next_round, completed = FALSE, out = NULL) {
     rounds_now <- dplyr::bind_rows(rounds_tbl_prev, if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list))
@@ -816,12 +831,25 @@ bt_run_adaptive <- function(samples,
       balance_positions = balance_positions,
       embedding_neighbors = embedding_neighbors,
       embed_far_k = embed_far_k,
+      embed_quota_frac = embed_quota_frac,
+      candidate_pool_cap = candidate_pool_cap,
+      per_anchor_cap = per_anchor_cap,
+      w_embed = w_embed,
+      embed_score_mode = embed_score_mode,
       seed = if (is.null(seed_pairs)) NULL else (as.integer(seed_pairs) + as.integer(r))
     )
 
     metrics <- round_out$metrics
     decision <- round_out$decision
     pairs_next <- round_out$pairs_next
+
+    diag_pairs <- attr(pairs_next, "pairing_diagnostics")
+    if (!is.null(diag_pairs)) {
+      pairing_diag_list[[length(pairing_diag_list) + 1L]] <- dplyr::mutate(
+        diag_pairs,
+        round = as.integer(r)
+      )
+    }
 
     this_reason <- .bt_resolve_stop_reason(
       stopped = isTRUE(decision$stop),
@@ -1028,7 +1056,16 @@ bt_run_adaptive <- function(samples,
   theta <- NULL
   theta_engine <- NA_character_
   fit_provenance <- NULL
+
+  final_refit_attempted <- FALSE
+  final_refit_failed <- FALSE
+  final_refit_disabled <- FALSE
+
+  if (!isTRUE(final_refit) && nrow(results) > 0L) {
+    final_refit_disabled <- TRUE
+  }
   if (isTRUE(final_refit) && nrow(results) > 0L) {
+    final_refit_attempted <- TRUE
     tmp <- tryCatch(
       compute_final_estimates(
         results = results,
@@ -1041,6 +1078,7 @@ bt_run_adaptive <- function(samples,
       error = function(e) e
     )
     if (inherits(tmp, "error")) {
+      final_refit_failed <- TRUE
       warning(
         "`final_refit = TRUE` requested but final estimates could not be computed: ",
         conditionMessage(tmp),
@@ -1089,7 +1127,14 @@ bt_run_adaptive <- function(samples,
 
       if (is.null(fit_provenance)) fit_provenance <- list()
       fit_provenance$fallback_used <- TRUE
-      fit_provenance$fallback_reason <- "final_refit_unavailable_or_failed"
+      fit_provenance$fallback_source <- "last_running_fit"
+
+      fit_provenance$fallback_reason <- dplyr::case_when(
+        final_refit_disabled ~ "final_refit_disabled",
+        final_refit_failed ~ "final_refit_failed",
+        final_refit_attempted ~ "final_refit_unavailable",
+        TRUE ~ "final_refit_unavailable"
+      )
     }
   }
 
@@ -1169,6 +1214,12 @@ bt_run_adaptive <- function(samples,
     )
   }
 
+  pairing_diagnostics <- if (length(pairing_diag_list) == 0L) {
+    NULL
+  } else {
+    dplyr::bind_rows(pairing_diag_list)
+  }
+
   out <- list(
     results = results,
     bt_data = bt_data_final,
@@ -1183,6 +1234,7 @@ bt_run_adaptive <- function(samples,
     stop_round = stop_round,
     rounds = rounds_tbl,
     state = state_tbl,
+    pairing_diagnostics = pairing_diagnostics,
     pairs_bootstrap = pairs_bootstrap,
     reverse_audit = reverse_out
   )
