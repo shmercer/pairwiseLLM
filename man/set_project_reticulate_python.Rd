@@ -15,6 +15,14 @@ directory.}
 
 \item{overwrite}{Logical. Ignored (kept for backward compatibility).}
 }
+\value{
+Invisibly returns the environment variable assignment line that can be
+added to a project \code{.Renviron}.
+}
 \description{
 Prints a \code{RETICULATE_PYTHON="..."} line you can add to a project \code{.Renviron}.
+}
+\examples{
+# Prints instructions to the console (no files are written)
+set_project_reticulate_python("/usr/bin/python")
 }

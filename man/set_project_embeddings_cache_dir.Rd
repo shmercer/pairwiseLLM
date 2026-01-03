@@ -19,8 +19,16 @@ directory.}
 
 \item{overwrite}{Logical. Ignored (kept for backward compatibility).}
 }
+\value{
+Invisibly returns the environment variable assignment line that can be
+added to a project \code{.Renviron}.
+}
 \description{
 Prints a \code{PAIRWISELLM_EMBEDDINGS_CACHE_DIR="..."} line you can add to a
 project \code{.Renviron}. When set, \code{\link[=compute_text_embeddings]{compute_text_embeddings()}} uses this value as
 the default cache directory when \code{cache_dir = NULL}.
+}
+\examples{
+# Prints instructions to the console (no files are written)
+set_project_embeddings_cache_dir("./.cache/pairwiseLLM")
 }

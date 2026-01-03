@@ -1,12 +1,28 @@
 # Internal helpers for pair handling
 
 #' @keywords internal
-.unordered_pair_key <- function(id1, id2, sep = "\r") {
+#
+# NOTE: The separator is part of the public-facing schema in several
+# runners/tests (e.g., diagnostics tables). Use a simple, stable delimiter.
+.unordered_pair_key <- function(id1, id2, sep = "-") {
   id1 <- as.character(id1)
   id2 <- as.character(id2)
   lo <- pmin(id1, id2)
   hi <- pmax(id1, id2)
   paste0(lo, sep, hi)
+}
+
+#' Deterministic direction label relative to the unordered key
+#'
+#' Returns "forward" when (id1,id2) are in the same order as
+#' \code{.unordered_pair_key(id1,id2)} (i.e., id1 <= id2 lexicographically),
+#' otherwise "reverse".
+#'
+#' @keywords internal
+.pair_direction <- function(id1, id2) {
+  id1 <- as.character(id1)
+  id2 <- as.character(id2)
+  dplyr::if_else(id1 <= id2, "forward", "reverse")
 }
 
 #' Normalize a prior-pairs data frame to ID1/ID2 schema
@@ -33,7 +49,7 @@
 #' Keep first occurrence of each unordered pair
 #'
 #' @keywords internal
-.distinct_unordered_pairs <- function(pairs, id1_col = "ID1", id2_col = "ID2", sep = "\r") {
+.distinct_unordered_pairs <- function(pairs, id1_col = "ID1", id2_col = "ID2", sep = "-") {
   pairs <- tibble::as_tibble(pairs)
   if (!all(c(id1_col, id2_col) %in% names(pairs))) {
     stop("`pairs` must contain columns: `", id1_col, "` and `", id2_col, "`.", call. = FALSE)

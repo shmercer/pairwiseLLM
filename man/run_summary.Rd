@@ -23,3 +23,19 @@ The runner functions in pairwiseLLM return a rich list of artifacts (results, fi
 per-round metrics, and state snapshots). \code{run_summary()} produces a compact,
 human-readable summary and (when available) includes per-judge diagnostics.
 }
+\examples{
+# A minimal run-like object
+run <- list(
+  results = tibble::tibble(
+    ID1 = c("A", "B"),
+    ID2 = c("B", "A"),
+    better_id = c("A", "B")
+  ),
+  metrics = tibble::tibble(round = 1, reliability = 0.9),
+  state = tibble::tibble(round = 1)
+)
+class(run) <- "pairwiseLLM_run"
+
+run_summary(run)
+
+}

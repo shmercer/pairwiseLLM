@@ -880,7 +880,23 @@ submit_anthropic_pairs_live <- function(
         )
       }
 
-      chunk_results_list <- future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+      chunk_results_list <- tryCatch(
+        {
+          future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+        },
+        error = function(e) {
+          # Some environments (notably Windows + multisession) can hit
+          # serialization failures (e.g., 'Parallel Save Failure'). In that case
+          # we fall back to sequential processing for this chunk.
+          msg <- conditionMessage(e)
+          if (grepl("Parallel Save Failure", msg, fixed = TRUE) || grepl("Parallel", msg) && grepl("save", msg, ignore.case = TRUE)) {
+            if (verbose) message("Parallel execution failed; falling back to sequential for this chunk.")
+            lapply(chunk_indices, work_fn)
+          } else {
+            stop(e)
+          }
+        }
+      )
       all_new_results[chunk_indices] <- chunk_results_list
 
       # Incremental Save

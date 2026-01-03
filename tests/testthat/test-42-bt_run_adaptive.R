@@ -145,19 +145,21 @@ test_that("bt_run_adaptive runs rounds and forbids unordered repeats", {
     )
   }
 
+  # Use the new repeat-policy interface. The legacy `forbid_repeats` argument is
+  # deprecated and can generate noisy warnings in some environments.
   out <- bt_run_adaptive(
-    samples = samples,
-    judge_fun = judge_fun,
-    fit_fun = fit_fun,
-    engine = "mock",
-    round_size = 3,
-    init_round_size = 3,
-    max_rounds = 3,
-    forbid_repeats = TRUE,
-    rel_se_p90_target = NA_real_,
-    rel_se_p90_min_improve = NA_real_,
-    seed_pairs = 123
-  )
+      samples = samples,
+      judge_fun = judge_fun,
+      fit_fun = fit_fun,
+      engine = "mock",
+      round_size = 3,
+      init_round_size = 3,
+      max_rounds = 3,
+      repeat_policy = "forbid_unordered",
+      rel_se_p90_target = NA_real_,
+      rel_se_p90_min_improve = NA_real_,
+      seed_pairs = 123
+    )
 
   keys <- paste0(
     pmin(out$results$ID1, out$results$ID2),

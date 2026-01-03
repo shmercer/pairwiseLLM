@@ -101,13 +101,22 @@ select_core_set <- function(samples,
   if (any(duplicated(ids))) stop("`samples$ID` must be unique.", call. = FALSE)
 
   method <- match.arg(method)
-  # Backward-compatible alias: "embeddings" behaves like "auto".
+  explicit_embeddings <- identical(method, "embeddings")
+
+  # Backward-compatible alias: "embeddings" behaves like "auto" for clustering choice,
+  # but remains strict (must supply valid embeddings).
   method_cluster <- method
-  if (identical(method_cluster, "embeddings")) method_cluster <- "auto"
+  if (explicit_embeddings) method_cluster <- "auto"
   distance <- match.arg(distance)
 
-  # Back-compat: previous versions used method = "embeddings".
-  if (identical(method, "embeddings")) method <- "auto"
+  if (explicit_embeddings) method <- "auto"
+
+  # Optional convenience: allow auto to fall back when embeddings are missing,
+  # but NEVER allow an explicit "embeddings" request to fall back.
+  if (!explicit_embeddings && identical(method, "auto") && is.null(embeddings)) {
+    method <- "token_stratified"
+    method_cluster <- "token_stratified"
+  }
 
   if (!is.numeric(clara_threshold) || length(clara_threshold) != 1L || is.na(clara_threshold) || clara_threshold < 2) {
     stop("`clara_threshold` must be a single integer >= 2.", call. = FALSE)

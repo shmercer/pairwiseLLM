@@ -21,7 +21,13 @@ bt_adaptive_round(
   max_judge_misfit_prop = 0.05,
   k_neighbors = 10,
   min_judgments = 12,
-  forbid_repeats = TRUE,
+  repeat_policy = "reverse_only",
+  repeat_cap = 1L,
+  repeat_frac = 0.05,
+  repeat_n = NULL,
+  repeat_guard_min_degree = 1L,
+  repeat_guard_largest_component_frac = 0.9,
+  forbid_repeats = NULL,
   balance_positions = TRUE,
   embedding_neighbors = NULL,
   embed_far_k = 0,
@@ -54,10 +60,11 @@ by \code{\link{bt_stop_metrics}}), used for stability-based stopping.}
 \item{se_probs}{Numeric vector of probabilities for SE quantiles passed to
 \code{\link{bt_stop_metrics}}. Default: \code{c(0.5, 0.9, 0.95)}.}
 
-\item{fit_bounds}{Numeric length-2 vector giving lower/upper acceptable}
-
-\item{stopping_tier}{Preset stopping thresholds to use (good/strong/very_strong).
+\item{fit_bounds}{Numeric length-2 vector giving lower/upper acceptable
 infit/outfit bounds. Default: \code{c(0.7, 1.3)}.}
+
+\item{stopping_tier}{Preset stopping thresholds to use
+(good/strong/very_strong).}
 
 \item{reliability_target}{Optional numeric. If not \code{NA}, require
 \code{metrics$reliability >= reliability_target}.}
@@ -82,6 +89,31 @@ in candidate generation. Passed to \code{\link{select_adaptive_pairs}}.}
 
 \item{min_judgments}{Integer minimum desired number of judgments per item.
 Passed to \code{\link{select_adaptive_pairs}}.}
+
+\item{repeat_policy}{Character repeat planning policy passed to
+\code{\link{select_adaptive_pairs}}. \code{"none"} disables planning repeat
+pairs. \code{"reverse_only"} plans a subset of opposite-direction repeats for
+eligible unordered pairs.}
+
+\item{repeat_cap}{Non-negative integer cap on the number of planned repeat
+pairs per unordered pair key. For \code{repeat_policy = "reverse_only"},
+each unordered pair is eligible for at most \code{repeat_cap} planned reverse
+repeats.}
+
+\item{repeat_frac}{Numeric in \code{[0, 1]}. Target fraction of the planned
+\code{round_size} pairs that should be reserved for repeat checks (when
+eligible repeat pairs exist).}
+
+\item{repeat_n}{Optional non-negative integer. If provided, overrides
+\code{repeat_frac} and targets this many planned repeat pairs for the round.}
+
+\item{repeat_guard_min_degree}{Integer. Guard for enabling repeat planning:
+do not plan repeats until the minimum graph degree across IDs is at least
+this value.}
+
+\item{repeat_guard_largest_component_frac}{Numeric in \code{[0, 1]}. Guard for
+enabling repeat planning: do not plan repeats until the largest connected
+component contains at least this fraction of IDs.}
 
 \item{forbid_repeats}{Logical; passed to \code{\link{select_adaptive_pairs}}.}
 

@@ -99,3 +99,22 @@ At present, the following backends are implemented:
 \item \code{"ollama"}    → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
 }
 }
+\examples{
+\dontrun{
+pairs <- tibble::tibble(
+  ID1 = c("A", "B"),
+  text1 = c("Response A...", "Response B..."),
+  ID2 = c("B", "A"),
+  text2 = c("Response B...", "Response A...")
+)
+
+out <- submit_llm_pairs(
+  pairs = pairs,
+  model = "gpt-4o-mini",
+  trait_name = "Overall quality",
+  trait_description = "Which response is better overall?",
+  backend = "openai"
+)
+}
+
+}

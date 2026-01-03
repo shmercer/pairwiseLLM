@@ -115,7 +115,7 @@ test_that(".ap_apply_constraints returns well-typed empty output and removes inv
   expect_identical(
     names(out0),
     c(
-      "i_idx", "j_idx", "anchor_idx", "pair_key", "source", "embed_hit", "embed_rank",
+      "i_idx", "j_idx", "anchor_idx", "pair_key", "source", "embed_hit", "embed_rank", "directed",
       "score_info", "score_need", "score_embed", "score_total"
     )
   )

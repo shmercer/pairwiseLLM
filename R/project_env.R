@@ -69,8 +69,13 @@ NULL
 #'
 #' @inheritParams project_env_helpers
 #' @param python Path to a Python executable.
+#' @return Invisibly returns the environment variable assignment line that can be
+#'   added to a project \code{.Renviron}.
 #'
 #' @export
+#' @examples
+#' # Prints instructions to the console (no files are written)
+#' set_project_reticulate_python("/usr/bin/python")
 set_project_reticulate_python <- function(python, file = ".Renviron", overwrite = FALSE) {
   if (!missing(overwrite) && isTRUE(overwrite)) {
     # kept for backward compatibility; no file writing is performed
@@ -87,8 +92,13 @@ set_project_reticulate_python <- function(python, file = ".Renviron", overwrite 
 #'
 #' @inheritParams project_env_helpers
 #' @param cache_dir Directory path.
+#' @return Invisibly returns the environment variable assignment line that can be
+#'   added to a project \code{.Renviron}.
 #'
 #' @export
+#' @examples
+#' # Prints instructions to the console (no files are written)
+#' set_project_embeddings_cache_dir("./.cache/pairwiseLLM")
 set_project_embeddings_cache_dir <- function(cache_dir, file = ".Renviron", overwrite = FALSE) {
   if (!missing(overwrite) && isTRUE(overwrite)) {
     # kept for backward compatibility; no file writing is performed

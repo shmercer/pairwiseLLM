@@ -60,10 +60,14 @@
 #'   the current comparison graph (often more stable early on sparse graphs) while
 #'   still using BT standard errors as an uncertainty heuristic when available.
 #'   Default \code{"bt"}.
-#' @param rc_smoothing,rc_damping Numeric. Parameters forwarded to
-#'   \code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"} (default)
-#'   (and also stored in per-round fits). See \code{\link{fit_rank_centrality}} for
-#'   details.
+#' @param rc_smoothing Numeric. Smoothing parameter forwarded to
+#'   \code{\link{fit_rank_centrality}} when
+#'   \code{fit_engine_running = "rank_centrality"} (and stored in per-round fits).
+#'   See \code{\link{fit_rank_centrality}}.
+#' @param rc_damping Numeric. Damping parameter forwarded to
+#'   \code{\link{fit_rank_centrality}} when
+#'   \code{fit_engine_running = "rank_centrality"} (and stored in per-round fits).
+#'   See \code{\link{fit_rank_centrality}}.
 #' @param final_refit Logical. If \code{TRUE} (default), compute a final combined
 #'   estimates table (Rank Centrality plus optional BT variants) at the end of the
 #'   run via \code{\link{compute_final_estimates}}. Suggested dependencies are
@@ -86,9 +90,11 @@
 #' @param se_probs Numeric vector of probabilities in (0, 1) used when summarizing the
 #' distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 #' Passed to \code{\link{bt_adaptive_round}}.
-#' @param fit_bounds Numeric length-2 vector giving acceptable infit/outfit (or analogous) bounds
-#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
-#' when available. Passed to \code{\link{bt_adaptive_round}}.
+#' @param fit_bounds Numeric length-2 vector giving lower/upper acceptable
+#'   infit/outfit bounds when available. Passed to \code{\link{bt_adaptive_round}}.
+#' @param stopping_tier Preset stopping thresholds to use
+#'   (good/strong/very_strong) when available. Passed to
+#'   \code{\link{bt_adaptive_round}}.
 #'
 #' @param reliability_target Numeric. Target reliability/separation-based criterion used by
 #' \code{\link{bt_adaptive_round}} for stopping decisions.
@@ -114,6 +120,30 @@
 #' \code{\link{select_adaptive_pairs}}.
 #' @param min_judgments Integer. Minimum number of total judgments per item to prioritize before
 #' focusing on adaptive informativeness/uncertainty. Passed to \code{\link{bt_adaptive_round}}.
+#' @param repeat_policy Character repeat planning policy. Options:
+#'   \itemize{
+#'     \item \code{"none"}: do not plan repeat checks.
+#'     \item \code{"reverse_only"}: plan a subset of opposite-direction repeats for
+#'       eligible unordered pairs (A,B).
+#'     \item \code{"forbid_unordered"}: convenience alias that behaves like the
+#'       legacy \code{forbid_repeats = TRUE} (no planned repeats and forbids
+#'       selecting unordered repeats from the candidate pool).
+#'   }
+#' @param repeat_cap Non-negative integer cap on the number of planned repeat
+#'   pairs per unordered pair key. For \code{repeat_policy = "reverse_only"}, each
+#'   unordered pair is eligible for at most \code{repeat_cap} planned reverse
+#'   repeats.
+#' @param repeat_frac Numeric in \code{[0, 1]}. Target fraction of the requested
+#'   per-round \code{round_size} pairs that should be reserved for repeat checks
+#'   (when eligible repeat pairs exist).
+#' @param repeat_n Optional non-negative integer. If provided, overrides
+#'   \code{repeat_frac} and targets this many planned repeat pairs per round.
+#' @param repeat_guard_min_degree Integer. Guard for enabling repeat planning:
+#'   do not plan repeats until the minimum graph degree across IDs is at least
+#'   this value.
+#' @param repeat_guard_largest_component_frac Numeric in \code{[0, 1]}. Guard for
+#'   enabling repeat planning: do not plan repeats until the largest connected
+#'   component contains at least this fraction of IDs.
 #' @param forbid_repeats Logical. If \code{TRUE}, unordered pairs (A,B) are not repeated across
 #' rounds. Passed to \code{\link{bt_adaptive_round}} / \code{\link{select_adaptive_pairs}}.
 #' @param balance_positions Logical. If \code{TRUE}, attempt to balance how often each item appears
@@ -316,7 +346,13 @@ bt_run_adaptive <- function(samples,
                             max_judge_misfit_prop = 0.05,
                             k_neighbors = 10,
                             min_judgments = 12,
-                            forbid_repeats = TRUE,
+                           repeat_policy = "reverse_only",
+                           repeat_cap = 1L,
+                            repeat_frac = 0.05,
+                            repeat_n = NULL,
+                           repeat_guard_min_degree = 1L,
+                            repeat_guard_largest_component_frac = 0.90,
+                            forbid_repeats = NULL,
                             balance_positions = TRUE,
                             embeddings = NULL,
                             embed_k = 30,
@@ -339,7 +375,6 @@ bt_run_adaptive <- function(samples,
                             w_embed = 1,
                             embed_score_mode = "rank_decay",
                             ...) {
-  fit_engine_final <- match.arg(fit_engine_final)
   tag_fit <- function(fit,
                       round_index,
                       stage,
@@ -472,6 +507,17 @@ bt_run_adaptive <- function(samples,
 
   fit_engine_running <- match.arg(fit_engine_running)
   fit_engine_final <- match.arg(fit_engine_final)
+
+  # --- repeat policy (PR6) ---
+  if (!is.null(forbid_repeats)) {
+    warning("`forbid_repeats` is deprecated; use `repeat_policy`.", call. = FALSE)
+    if (isTRUE(forbid_repeats)) {
+      repeat_policy <- "none"
+    } else {
+      repeat_policy <- "reverse_only"
+    }
+  }
+  repeat_policy <- match.arg(repeat_policy, c("none", "reverse_only", "forbid_unordered"))
   if (!is.numeric(rc_smoothing) || length(rc_smoothing) != 1L || is.na(rc_smoothing) || rc_smoothing < 0) {
     stop("`rc_smoothing` must be a single non-negative number.", call. = FALSE)
   }
@@ -531,6 +577,20 @@ bt_run_adaptive <- function(samples,
       bt_fit = fit_bt,
       rc_fit = rc_fit
     )
+  }
+
+  .add_pair_key_direction <- function(df) {
+    df <- tibble::as_tibble(df)
+    if (!all(c("ID1", "ID2") %in% names(df))) {
+      return(df)
+    }
+    if (!"pair_key" %in% names(df)) {
+      df <- dplyr::mutate(df, pair_key = .unordered_pair_key(.data$ID1, .data$ID2))
+    }
+    if (!"direction" %in% names(df)) {
+      df <- dplyr::mutate(df, direction = .pair_direction(.data$ID1, .data$ID2))
+    }
+    df
   }
 
   # helper: random bootstrap pairs (unique unordered, optional position balancing)
@@ -690,6 +750,7 @@ bt_run_adaptive <- function(samples,
     } else {
       results <- .validate_judge_results(initial_results, ids = ids, judge_col = judge)
       results <- tibble::as_tibble(results)
+      results <- .add_pair_key_direction(results)
     }
   }
 
@@ -708,7 +769,9 @@ bt_run_adaptive <- function(samples,
     if (nrow(pairs_bootstrap) > 0L) {
       res0 <- .coerce_judge_output(judge_fun(pairs_bootstrap))
       res0 <- .validate_judge_results(res0, ids = ids, judge_col = judge)
+      res0 <- .add_pair_key_direction(res0)
       results <- dplyr::bind_rows(results, res0)
+      results <- .add_pair_key_direction(results)
     }
   }
 
@@ -827,6 +890,12 @@ bt_run_adaptive <- function(samples,
       max_judge_misfit_prop = max_judge_misfit_prop,
       k_neighbors = k_neighbors,
       min_judgments = min_judgments,
+      repeat_policy = repeat_policy,
+      repeat_cap = repeat_cap,
+      repeat_frac = repeat_frac,
+      repeat_n = repeat_n,
+      repeat_guard_min_degree = repeat_guard_min_degree,
+      repeat_guard_largest_component_frac = repeat_guard_largest_component_frac,
       forbid_repeats = forbid_repeats,
       balance_positions = balance_positions,
       embedding_neighbors = embedding_neighbors,
@@ -843,12 +912,11 @@ bt_run_adaptive <- function(samples,
     decision <- round_out$decision
     pairs_next <- round_out$pairs_next
 
+    diag_pairs_round <- NULL
+    planned_repeat_pairs <- attr(pairs_next, "planned_repeat_pairs")
     diag_pairs <- attr(pairs_next, "pairing_diagnostics")
     if (!is.null(diag_pairs)) {
-      pairing_diag_list[[length(pairing_diag_list) + 1L]] <- dplyr::mutate(
-        diag_pairs,
-        round = as.integer(r)
-      )
+      diag_pairs_round <- dplyr::mutate(diag_pairs, round = as.integer(r))
     }
 
     this_reason <- .bt_resolve_stop_reason(
@@ -905,12 +973,78 @@ bt_run_adaptive <- function(samples,
 
     res_next <- .coerce_judge_output(judge_fun(pairs_next))
     res_next <- .validate_judge_results(res_next, ids = ids, judge_col = judge)
+    res_next <- .add_pair_key_direction(res_next)
 
     n_added <- nrow(res_next)
     if (n_added > 0L) {
       results <- dplyr::bind_rows(results, res_next)
+      results <- .add_pair_key_direction(results)
       rounds_list[[length(rounds_list)]][["n_new_pairs_scored"]] <- as.integer(n_added)
       rounds_list[[length(rounds_list)]][["n_total_results"]] <- as.integer(nrow(results))
+
+      # Finalize pairing diagnostics (repeat completion + consistency).
+      if (!is.null(diag_pairs_round)) {
+        planned_keys <- character()
+        if (!is.null(planned_repeat_pairs) && is.data.frame(planned_repeat_pairs) && nrow(planned_repeat_pairs) > 0L) {
+          planned_repeat_pairs <- tibble::as_tibble(planned_repeat_pairs)
+          if ("pair_key" %in% names(planned_repeat_pairs)) {
+            planned_keys <- as.character(planned_repeat_pairs$pair_key)
+          } else if (all(c("ID1", "ID2") %in% names(planned_repeat_pairs))) {
+            planned_keys <- .unordered_pair_key(planned_repeat_pairs$ID1, planned_repeat_pairs$ID2)
+          }
+          planned_keys <- unique(planned_keys)
+        }
+
+        n_repeat_completed <- 0L
+        # Deterministic: use 0 when no repeats were completed in the round.
+        repeat_consistency_round <- 0
+        if (length(planned_keys) > 0L) {
+          res_next_pk <- dplyr::mutate(res_next, pair_key = .unordered_pair_key(.data$ID1, .data$ID2))
+          res_next_pk <- dplyr::filter(res_next_pk, .data$pair_key %in% planned_keys)
+          res_next_pk <- dplyr::filter(res_next_pk, !is.na(.data$better_id) & nzchar(.data$better_id))
+
+          n_repeat_completed <- nrow(res_next_pk)
+
+          prior <- dplyr::filter(results, .data$pair_key %in% planned_keys)
+          prior <- dplyr::filter(prior, !is.na(.data$better_id) & nzchar(.data$better_id))
+          prior <- dplyr::group_by(prior, .data$pair_key)
+          prior <- dplyr::slice_head(prior, n = 1L)
+          prior <- dplyr::ungroup(prior)
+          prior <- dplyr::select(prior, "pair_key", prior_better_id = "better_id")
+
+          joined <- dplyr::inner_join(
+            prior,
+            dplyr::select(res_next_pk, "pair_key", new_better_id = "better_id"),
+            by = "pair_key"
+          )
+          if (nrow(joined) > 0L) {
+            repeat_consistency_round <- mean(joined$prior_better_id == joined$new_better_id)
+          }
+        }
+
+        # Cumulative consistency among unordered pairs with exactly two completed judgments.
+        # Deterministic: use 0 when no pairs have two completed judgments.
+        repeat_consistency_cum <- 0
+        by_key <- dplyr::filter(results, !is.na(.data$better_id) & nzchar(.data$better_id))
+        by_key <- dplyr::group_by(by_key, .data$pair_key)
+        by_key <- dplyr::summarise(by_key,
+          n_done = dplyr::n(),
+          n_unique_winner = dplyr::n_distinct(.data$better_id),
+          .groups = "drop"
+        )
+        two_done <- dplyr::filter(by_key, .data$n_done == 2L)
+        if (nrow(two_done) > 0L) {
+          repeat_consistency_cum <- mean(two_done$n_unique_winner == 1L)
+        }
+
+        diag_pairs_round <- dplyr::mutate(
+          diag_pairs_round,
+          n_repeat_completed = as.integer(n_repeat_completed),
+          repeat_consistency_rate_round = repeat_consistency_round,
+          repeat_consistency_rate_cumulative = repeat_consistency_cum
+        )
+        pairing_diag_list[[length(pairing_diag_list) + 1L]] <- diag_pairs_round
+      }
 
       # update the most recent state row to reflect post-append counts
       state_list[[length(state_list)]] <- dplyr::mutate(
@@ -1184,6 +1318,7 @@ bt_run_adaptive <- function(samples,
     if (nrow(rev_pairs) > 0L) {
       rev_results <- .coerce_judge_output(judge_fun(rev_pairs))
       rev_results <- .validate_judge_results(rev_results, ids = ids, judge_col = judge)
+      rev_results <- .add_pair_key_direction(rev_results)
 
       add_key <- function(df) {
         df |>
@@ -1215,7 +1350,38 @@ bt_run_adaptive <- function(samples,
   }
 
   pairing_diagnostics <- if (length(pairing_diag_list) == 0L) {
-    NULL
+    tibble::tibble(
+      round = integer(),
+      n_candidates_raw = integer(),
+      n_candidates_scored = integer(),
+      n_candidates_after_constraints = integer(),
+      n_candidates_after_caps = integer(),
+      n_selected = integer(),
+      n_repeat_eligible = integer(),
+      n_repeat_planned = integer(),
+      n_repeat_completed = integer(),
+      repeat_consistency_rate_round = double(),
+      repeat_consistency_rate_cumulative = double(),
+      repeat_policy = character(),
+      repeat_cap = integer(),
+      repeat_frac = double(),
+      repeat_n = integer(),
+      repeat_quota_n = integer(),
+      repeat_guard_passed = logical(),
+      repeat_guard_min_degree = integer(),
+      repeat_guard_largest_component_frac = double(),
+      graph_degree_min = double(),
+      graph_largest_component_frac = double(),
+      n_selected_theta = integer(),
+      n_selected_embed = integer(),
+      n_selected_far = integer(),
+      embed_neighbor_hit_rate = double(),
+      embed_quota_frac = double(),
+      candidate_pool_cap = integer(),
+      per_anchor_cap = integer(),
+      w_embed = double(),
+      embed_score_mode = character()
+    )
   } else {
     dplyr::bind_rows(pairing_diag_list)
   }
