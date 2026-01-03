@@ -11,7 +11,10 @@ bt_stop_metrics(
   prev_fit = NULL,
   core_ids = NULL,
   se_probs = c(0.5, 0.9, 0.95),
-  fit_bounds = c(0.7, 1.3)
+  fit_bounds = c(0.7, 1.3),
+  stability_topk = 50L,
+  stability_topk_ties = c("id", "random"),
+  stability_seed = NULL
 )
 }
 \arguments{
@@ -34,6 +37,14 @@ Must be provided together with \code{prev_fit}.}
 
 \item{fit_bounds}{Numeric length-2 vector giving lower/upper bounds for acceptable
 infit/outfit when diagnostics are available. Default: \code{c(0.7, 1.3)}.}
+
+\item{stability_topk}{Integer. K used for top-K overlap stability when \code{prev_fit} is
+provided. Default: 50.}
+
+\item{stability_topk_ties}{Character. Tie-breaking rule for Top-K stability.
+Default: "id" (deterministic). Use "random" for randomized tie-breaking.}
+
+\item{stability_seed}{Optional integer seed used only when \code{stability_topk_ties = "random"}.}
 }
 \value{
 A one-row tibble of stopping metrics.

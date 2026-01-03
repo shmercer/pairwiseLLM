@@ -45,10 +45,15 @@ bt_run_adaptive(
   embed_k = 30,
   embed_far_k = 0,
   seed_pairs = NULL,
-  reverse_audit = FALSE,
-  reverse_pct = 0.1,
-  n_reverse = NULL,
-  reverse_seed = NULL,
+  min_rounds = 2L,
+  stop_stability_rms = 0.01,
+  stop_topk = 50L,
+  stop_topk_overlap = 0.95,
+  stop_min_largest_component_frac = 0.9,
+  stop_min_degree = 1L,
+  stop_reason_priority = NULL,
+  stop_stability_consecutive = 2L,
+  stop_topk_ties = c("id", "random"),
   fit_fun = fit_bt_model,
   build_bt_fun = build_bt_data,
   checkpoint_dir = NULL,
@@ -235,20 +240,8 @@ per item (uniformly at random) to preserve global mixing. Only used when
 \code{seed_pairs}, and for adaptive rounds as \code{seed_pairs + round}.
 The RNG state is restored to its prior value (or returned to "uninitialized" if it was missing).
 Note: this controls pair selection reproducibility; it does not control randomness inside
-\code{judge_fun} unless your \code{judge_fun} uses it explicitly.}
+\code{judge_fun} unless your \code{judge_fun} uses it explicitly.
 
-\item{reverse_audit}{Logical. If \code{TRUE}, run a post-stop reverse-order audit by selecting
-a subset of forward-scored pairs, reversing their order, and re-scoring them. This does not
-affect adaptive sampling decisions (it is post-hoc).}
-
-\item{reverse_pct}{Numeric between 0 and 1 (inclusive). Proportion of eligible unique forward pairs to reverse
-for the audit. Eligible pairs are unique unordered forward pairs with non-missing
-\code{better_id}. Ignored if \code{n_reverse} is provided.}
-
-\item{n_reverse}{Optional integer. Number of eligible unique forward pairs to reverse for the
-audit. If provided, overrides \code{reverse_pct}.}
-
-\item{reverse_seed}{Optional integer seed used only for selecting which pairs to reverse
 (RNG state is restored afterward).}
 
 \item{fit_fun}{Function used to fit the BT model. Default \code{\link{fit_bt_model}}.
@@ -321,9 +314,9 @@ tibble produced by \code{\link{compute_final_estimates}} (BT + Rank Centrality).
 the fitted model objects (\code{bt_fit}, \code{rc_fit}) and a summary \code{diagnostics} list.}
 \item{fit_provenance}{NULL unless \code{final_refit=TRUE}; then a list describing which
 final engines were requested and used, including any fallback reason.}
-\item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
-\code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
-or \code{"no_results"}).}
+\item{stop_reason}{A single string describing why the loop ended.
+Standard reasons include: \code{"stability_reached"}, \code{"precision_reached"},
+\code{"no_new_pairs"}, \code{"pair_budget_exhausted"}, and \code{"max_rounds_reached"}.}
 \item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
 \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag + stop_reason).}
 \item{state}{A tibble with one row per adaptive round containing bookkeeping summaries
@@ -331,8 +324,6 @@ of the accumulated results at that round (e.g., \code{n_unique_unordered_pairs},
 appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
 \code{n_missing_better_id}), plus \code{round}, \code{stop}, and \code{stop_reason}.}
 \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
-\item{reverse_audit}{NULL unless \code{reverse_audit=TRUE}; then contains audit
-pairs, reverse results, and consistency outputs (post-hoc; does not affect stopping).}
 }
 }
 \description{

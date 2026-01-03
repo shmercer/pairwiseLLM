@@ -40,3 +40,8 @@ keep near their section without renumbering everything (e.g., `245-...`,
 
 Notes:
 - File names are stable and map closely to the `R/*.R` sources.
+
+
+## 4-digit test IDs
+
+For dense PR blocks, 4-digit IDs are allowed (e.g., `test-5300-...`) to keep related tests adjacent.

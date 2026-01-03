@@ -315,6 +315,16 @@ bt_run_adaptive_core_linking <- function(samples,
                                          round_size = 50,
                                          init_round_size = round_size,
                                          max_rounds_per_batch = 50,
+                                         # PR7: stopping controls
+                                         min_rounds = 2L,
+                                         stop_stability_rms = 0.01,
+                                         stop_topk = 50L,
+                                         stop_topk_overlap = 0.95,
+                                         stop_min_largest_component_frac = 0.9,
+                                         stop_min_degree = 1L,
+                                         stop_reason_priority = NULL,
+                                         stop_stability_consecutive = 2L,
+                                         stop_topk_ties = c("id", "random"),
                                          within_batch_frac = 0.25,
                                          core_audit_frac = 0.05,
                                          allocation = c("fixed", "precision_ramp", "audit_on_drift"),
@@ -369,6 +379,7 @@ bt_run_adaptive_core_linking <- function(samples,
   }
 
   stopping_tier <- match.arg(stopping_tier)
+  stop_topk_ties <- match.arg(stop_topk_ties)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
 
   fit_engine_running <- match.arg(fit_engine_running)
@@ -1213,6 +1224,8 @@ bt_run_adaptive_core_linking <- function(samples,
     }
 
     prev_metrics <- NULL
+    prev_fit_for_stability <- NULL
+    stability_streak <- 0L
     stop_reason <- NA_character_
     rounds_used <- 0L
 
@@ -1349,7 +1362,10 @@ bt_run_adaptive_core_linking <- function(samples,
         prev_fit = prev_fit_for_drift,
         core_ids = if (drift_active) core_ids else NULL,
         se_probs = se_probs,
-        fit_bounds = fit_bounds
+        fit_bounds = fit_bounds,
+        stability_topk = stop_topk,
+        stability_topk_ties = stop_topk_ties,
+        stability_seed = if (is.null(seed)) NULL else (as.integer(seed) + as.integer(b) * 1000L + as.integer(r))
       )
 
       if (!is.null(current_fit$linking) && is.list(current_fit$linking)) {
@@ -1389,6 +1405,27 @@ bt_run_adaptive_core_linking <- function(samples,
       # assume these columns exist even when diagnostics are unavailable).
       m <- .bt_align_metrics(m, se_probs = se_probs)
 
+
+      # ---- PR7: graph health + stability (gated) ----
+      gs <- .graph_state_from_pairs(results, ids = ids_all)
+      gm <- gs$metrics
+      degree_min <- as.double(gm$degree_min)
+      largest_component_frac <- as.double(gm$largest_component_frac)
+
+      graph_healthy <- isTRUE(degree_min >= as.double(stop_min_degree)) &&
+        isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+
+      stability_pass <- FALSE
+      if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+        stability_pass <- is.finite(m$rms_theta_delta) &&
+          m$rms_theta_delta <= as.double(stop_stability_rms) &&
+          is.finite(m$topk_overlap) &&
+          m$topk_overlap >= as.double(stop_topk_overlap)
+      }
+
+      if (isTRUE(stability_pass)) stability_streak <- as.integer(stability_streak) + 1L else stability_streak <- 0L
+      stability_reached <- isTRUE(stability_streak >= as.integer(stop_stability_consecutive))
+
       prev_metrics_for_state <- prev_metrics
 
       decision <- do.call(
@@ -1396,13 +1433,31 @@ bt_run_adaptive_core_linking <- function(samples,
         c(list(metrics = m, prev_metrics = prev_metrics), stop_params)
       )
 
-      stop_now <- isTRUE(decision$stop)
-      stop_reason <- .bt_resolve_stop_reason(stopped = stop_now)
+      stop_chk <- .stop_decision(
+        round = r,
+        min_rounds = min_rounds,
+        no_new_pairs = (nrow(pairs_next) == 0L),
+        budget_exhausted = (as.integer(round_size) == 0L),
+        max_rounds_reached = (as.integer(r) >= as.integer(max_rounds_per_batch)),
+        graph_healthy = graph_healthy,
+        stability_reached = stability_reached,
+        precision_reached = isTRUE(decision$stop),
+        stop_reason_priority = stop_reason_priority
+      )
+      .validate_stop_decision(stop_chk)
+
+      stop_now <- isTRUE(stop_chk$stop)
+      stop_reason <- stop_chk$reason %||% NA_character_
 
       m$batch_index <- as.integer(b)
       m$round_index <- as.integer(r)
       m$within_batch_frac <- within_batch_frac_this
       m$core_audit_frac <- core_audit_frac_this
+      m$degree_min <- as.double(degree_min)
+      m$largest_component_frac <- as.double(largest_component_frac)
+      m$stability_streak <- as.integer(stability_streak)
+      m$graph_healthy <- isTRUE(graph_healthy)
+      m$stability_pass <- isTRUE(stability_pass)
       m$stage <- "round"
       m$stop <- stop_now
       m$stop_reason <- stop_reason
@@ -1476,6 +1531,7 @@ bt_run_adaptive_core_linking <- function(samples,
       }
 
       prev_metrics <- m
+      prev_fit_for_stability <- current_fit
       if (r == max_rounds_per_batch) {
         stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
       }
