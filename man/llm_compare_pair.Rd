@@ -107,3 +107,18 @@ backend helper may compute a compact diagnostic report (for example, invalid
 winner tokens) without interrupting pipelines. If \code{validate_strict = TRUE},
 validation is enforced and invalid winners may error.
 }
+\examples{
+\dontrun{
+llm_compare_pair(
+  ID1 = "A",
+  text1 = "Response A...",
+  ID2 = "B",
+  text2 = "Response B...",
+  model = "gpt-4o-mini",
+  trait_name = "Overall quality",
+  trait_description = "Which response is better overall?",
+  backend = "openai"
+)
+}
+
+}

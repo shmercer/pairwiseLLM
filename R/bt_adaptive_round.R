@@ -28,8 +28,9 @@
 #' @param se_probs Numeric vector of probabilities for SE quantiles passed to
 #'   \code{\link{bt_stop_metrics}}. Default: \code{c(0.5, 0.9, 0.95)}.
 #' @param fit_bounds Numeric length-2 vector giving lower/upper acceptable
-#' @param stopping_tier Preset stopping thresholds to use (good/strong/very_strong).
 #'   infit/outfit bounds. Default: \code{c(0.7, 1.3)}.
+#' @param stopping_tier Preset stopping thresholds to use
+#'   (good/strong/very_strong).
 #'
 #' @param reliability_target Optional numeric. If not \code{NA}, require
 #'   \code{metrics$reliability >= reliability_target}.
@@ -48,6 +49,25 @@
 #'   in candidate generation. Passed to \code{\link{select_adaptive_pairs}}.
 #' @param min_judgments Integer minimum desired number of judgments per item.
 #'   Passed to \code{\link{select_adaptive_pairs}}.
+#' @param repeat_policy Character repeat planning policy passed to
+#'   \code{\link{select_adaptive_pairs}}. \code{"none"} disables planning repeat
+#'   pairs. \code{"reverse_only"} plans a subset of opposite-direction repeats for
+#'   eligible unordered pairs.
+#' @param repeat_cap Non-negative integer cap on the number of planned repeat
+#'   pairs per unordered pair key. For \code{repeat_policy = "reverse_only"},
+#'   each unordered pair is eligible for at most \code{repeat_cap} planned reverse
+#'   repeats.
+#' @param repeat_frac Numeric in \code{[0, 1]}. Target fraction of the planned
+#'   \code{round_size} pairs that should be reserved for repeat checks (when
+#'   eligible repeat pairs exist).
+#' @param repeat_n Optional non-negative integer. If provided, overrides
+#'   \code{repeat_frac} and targets this many planned repeat pairs for the round.
+#' @param repeat_guard_min_degree Integer. Guard for enabling repeat planning:
+#'   do not plan repeats until the minimum graph degree across IDs is at least
+#'   this value.
+#' @param repeat_guard_largest_component_frac Numeric in \code{[0, 1]}. Guard for
+#'   enabling repeat planning: do not plan repeats until the largest connected
+#'   component contains at least this fraction of IDs.
 #' @param forbid_repeats Logical; passed to \code{\link{select_adaptive_pairs}}.
 #' @param balance_positions Logical; passed to \code{\link{select_adaptive_pairs}}.
 #' @param embedding_neighbors Optional embedding-based neighbor lists used to

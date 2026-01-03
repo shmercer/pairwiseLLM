@@ -12,6 +12,21 @@
 #'
 #' @return A list with class \code{"pairwiseLLM_run_summary"}.
 #'
+#' @examples
+#' # A minimal run-like object
+#' run <- list(
+#'   results = tibble::tibble(
+#'     ID1 = c("A", "B"),
+#'     ID2 = c("B", "A"),
+#'     better_id = c("A", "B")
+#'   ),
+#'   metrics = tibble::tibble(round = 1, reliability = 0.9),
+#'   state = tibble::tibble(round = 1)
+#' )
+#' class(run) <- "pairwiseLLM_run"
+#'
+#' run_summary(run)
+#'
 #' @export
 run_summary <- function(x, fit_bounds = c(0.7, 1.3), top_n = 5L) {
   .run_summary_impl(x, fit_bounds = fit_bounds, top_n = top_n)

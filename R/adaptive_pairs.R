@@ -657,6 +657,30 @@
 #'   Use \code{NULL} or \code{Inf} to consider all neighbors. Default is 10.
 #' @param min_judgments Integer minimum desired number of judgments per item.
 #'   Items below this threshold are prioritized. Default is 12.
+#' @param repeat_policy Character repeat planning policy. Options:
+#'   \itemize{
+#'     \item \code{"none"}: do not plan repeat checks.
+#'     \item \code{"reverse_only"}: plan a subset of opposite-direction repeats for
+#'       eligible unordered pairs (A,B).
+#'     \item \code{"forbid_unordered"}: convenience alias that behaves like the
+#'       legacy \code{forbid_repeats = TRUE} (no planned repeats and forbids
+#'       selecting unordered repeats from the candidate pool).
+#'   }
+#' @param repeat_cap Non-negative integer cap on the number of planned repeat
+#'   pairs per unordered pair key. For \code{repeat_policy = "reverse_only"}, each
+#'   unordered pair is eligible for at most \code{repeat_cap} planned reverse
+#'   repeats.
+#' @param repeat_frac Numeric in \code{[0, 1]}. Target fraction of the requested
+#'   \code{n_pairs} that should be reserved for repeat checks (when eligible
+#'   repeat pairs exist).
+#' @param repeat_n Optional non-negative integer. If provided, overrides
+#'   \code{repeat_frac} and targets this many planned repeat pairs.
+#' @param repeat_guard_min_degree Integer. Guard for enabling repeat planning:
+#'   do not plan repeats until the minimum graph degree across IDs is at least
+#'   this value.
+#' @param repeat_guard_largest_component_frac Numeric in \code{[0, 1]}. Guard for
+#'   enabling repeat planning: do not plan repeats until the largest connected
+#'   component contains at least this fraction of IDs.
 #' @param forbid_repeats Logical; if \code{TRUE} (default), do not return pairs
 #'   that have already appeared in \code{existing_pairs} (unordered).
 #' @param balance_positions Logical; if \code{TRUE} (default), orient each selected
@@ -687,6 +711,14 @@
 #' @return A tibble with columns \code{ID1}, \code{text1}, \code{ID2}, \code{text2}.
 #'   Extra columns are not returned, to keep the output directly compatible with
 #'   \code{\link{submit_llm_pairs}}.
+#'
+#'   The returned tibble may include attributes used for diagnostics:
+#'   \itemize{
+#'     \item \code{attr(out, "planned_repeat_pairs")}: a tibble of repeat pairs
+#'       planned under \code{repeat_policy} (may be empty).
+#'     \item \code{attr(out, "pairing_diagnostics")}: a one-row tibble of pairing
+#'       counts/caps/guard outcomes.
+#'   }
 #'
 #' @examples
 #' samples <- tibble::tibble(

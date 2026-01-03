@@ -67,6 +67,20 @@
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper.
 #'
+#' @examples
+#' \dontrun{
+#' llm_compare_pair(
+#'   ID1 = "A",
+#'   text1 = "Response A...",
+#'   ID2 = "B",
+#'   text2 = "Response B...",
+#'   model = "gpt-4o-mini",
+#'   trait_name = "Overall quality",
+#'   trait_description = "Which response is better overall?",
+#'   backend = "openai"
+#' )
+#' }
+#'
 #' @export
 llm_compare_pair <- function(
   ID1,
@@ -255,6 +269,24 @@ llm_compare_pair <- function(
 #'   \item{results}{A tibble with one row per successfully processed pair.}
 #'   \item{failed_pairs}{A tibble of pairs that failed to process when supported.}
 #'   \item{validation_report}{Present when `validate = TRUE`.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' pairs <- tibble::tibble(
+#'   ID1 = c("A", "B"),
+#'   text1 = c("Response A...", "Response B..."),
+#'   ID2 = c("B", "A"),
+#'   text2 = c("Response B...", "Response A...")
+#' )
+#'
+#' out <- submit_llm_pairs(
+#'   pairs = pairs,
+#'   model = "gpt-4o-mini",
+#'   trait_name = "Overall quality",
+#'   trait_description = "Which response is better overall?",
+#'   backend = "openai"
+#' )
 #' }
 #'
 #' @export

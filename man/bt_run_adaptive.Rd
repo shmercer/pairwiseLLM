@@ -106,10 +106,15 @@ the current comparison graph (often more stable early on sparse graphs) while
 still using BT standard errors as an uncertainty heuristic when available.
 Default \code{"bt"}.}
 
-\item{rc_smoothing, rc_damping}{Numeric. Parameters forwarded to
-\code{\link{fit_rank_centrality}} when \code{fit_engine_running = "rank_centrality"} (default)
-(and also stored in per-round fits). See \code{\link{fit_rank_centrality}} for
-details.}
+\item{rc_smoothing}{Numeric. Smoothing parameter forwarded to
+\code{\link{fit_rank_centrality}} when
+\code{fit_engine_running = "rank_centrality"} (and stored in per-round fits).
+See \code{\link{fit_rank_centrality}}.}
+
+\item{rc_damping}{Numeric. Damping parameter forwarded to
+\code{\link{fit_rank_centrality}} when
+\code{fit_engine_running = "rank_centrality"} (and stored in per-round fits).
+See \code{\link{fit_rank_centrality}}.}
 
 \item{final_refit}{Logical. If \code{TRUE} (default), compute a final combined
 estimates table (Rank Centrality plus optional BT variants) at the end of the
@@ -138,10 +143,12 @@ scoring step). Default \code{50}.}
 distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 Passed to \code{\link{bt_adaptive_round}}.}
 
-\item{fit_bounds}{Numeric length-2 vector giving acceptable infit/outfit (or analogous) bounds}
+\item{fit_bounds}{Numeric length-2 vector giving lower/upper acceptable
+infit/outfit bounds when available. Passed to \code{\link{bt_adaptive_round}}.}
 
-\item{stopping_tier}{Preset stopping thresholds to use (good/strong/very_strong).
-when available. Passed to \code{\link{bt_adaptive_round}}.}
+\item{stopping_tier}{Preset stopping thresholds to use
+(good/strong/very_strong) when available. Passed to
+\code{\link{bt_adaptive_round}}.}
 
 \item{reliability_target}{Numeric. Target reliability/separation-based criterion used by
 \code{\link{bt_adaptive_round}} for stopping decisions.}
@@ -173,6 +180,36 @@ selection falls back to non-theta heuristics. Passed to \code{\link{bt_adaptive_
 
 \item{min_judgments}{Integer. Minimum number of total judgments per item to prioritize before
 focusing on adaptive informativeness/uncertainty. Passed to \code{\link{bt_adaptive_round}}.}
+
+\item{repeat_policy}{Character repeat planning policy. Options:
+\itemize{
+\item \code{"none"}: do not plan repeat checks.
+\item \code{"reverse_only"}: plan a subset of opposite-direction repeats for
+eligible unordered pairs (A,B).
+\item \code{"forbid_unordered"}: convenience alias that behaves like the
+legacy \code{forbid_repeats = TRUE} (no planned repeats and forbids
+selecting unordered repeats from the candidate pool).
+}}
+
+\item{repeat_cap}{Non-negative integer cap on the number of planned repeat
+pairs per unordered pair key. For \code{repeat_policy = "reverse_only"}, each
+unordered pair is eligible for at most \code{repeat_cap} planned reverse
+repeats.}
+
+\item{repeat_frac}{Numeric in \code{[0, 1]}. Target fraction of the requested
+per-round \code{round_size} pairs that should be reserved for repeat checks
+(when eligible repeat pairs exist).}
+
+\item{repeat_n}{Optional non-negative integer. If provided, overrides
+\code{repeat_frac} and targets this many planned repeat pairs per round.}
+
+\item{repeat_guard_min_degree}{Integer. Guard for enabling repeat planning:
+do not plan repeats until the minimum graph degree across IDs is at least
+this value.}
+
+\item{repeat_guard_largest_component_frac}{Numeric in \code{[0, 1]}. Guard for
+enabling repeat planning: do not plan repeats until the largest connected
+component contains at least this fraction of IDs.}
 
 \item{forbid_repeats}{Logical. If \code{TRUE}, unordered pairs (A,B) are not repeated across
 rounds. Passed to \code{\link{bt_adaptive_round}} / \code{\link{select_adaptive_pairs}}.}
