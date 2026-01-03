@@ -149,7 +149,7 @@ fit_rank_centrality <- function(
   # and wins by a over b (w_ab).
   o1 <- bt_data$object1
   o2 <- bt_data$object2
-  r  <- bt_data$result
+  r <- bt_data$result
 
   i_idx <- unname(idx[o1])
   j_idx <- unname(idx[o2])
@@ -181,31 +181,14 @@ fit_rank_centrality <- function(
 
   # Degree from undirected edges
   degree <- tabulate(edges$a, nbins = n) + tabulate(edges$b, nbins = n)
-
-  # Connected components via union-find (no dense adjacency)
-  parent <- seq_len(n)
-  .find <- function(x) {
-    while (parent[[x]] != x) {
-      parent[[x]] <<- parent[[ parent[[x]] ]]
-      x <- parent[[x]]
-    }
-    x
-  }
-  .union <- function(x, y) {
-    rx <- .find(x)
-    ry <- .find(y)
-    if (rx != ry) parent[[ry]] <<- rx
-    invisible(NULL)
-  }
-  for (k in seq_len(n_edges)) {
-    .union(edges$a[[k]], edges$b[[k]])
-  }
-  roots <- vapply(seq_len(n), .find, integer(1))
-  root_levels <- sort(unique(roots))
-  component_id <- match(roots, root_levels)
-  tab_comp <- table(component_id)
-  n_components <- length(tab_comp)
-  largest_component_frac <- if (n > 0) max(tab_comp) / n else NA_real_
+  # Connected components (shared helper)
+  gs <- .graph_state_from_pairs(
+    pairs = tibble::tibble(ID1 = ids[edges$a], ID2 = ids[edges$b]),
+    ids = ids
+  )
+  component_id <- as.integer(gs$component_id[ids])
+  n_components <- as.integer(gs$metrics$n_components[[1]])
+  largest_component_frac <- as.double(gs$metrics$largest_component_frac[[1]])
 
   # Construct sparse transition matrix P (row-stochastic)
   # For edge (a,b): p_ab = P(a beats b)
@@ -213,8 +196,8 @@ fit_rank_centrality <- function(
   p_ba <- 1 - p_ab
 
   from <- c(edges$a, edges$b)
-  to   <- c(edges$b, edges$a)
-  val  <- c(p_ba / pmax(degree[edges$a], 1), p_ab / pmax(degree[edges$b], 1))
+  to <- c(edges$b, edges$a)
+  val <- c(p_ba / pmax(degree[edges$a], 1), p_ab / pmax(degree[edges$b], 1))
 
   # Row sums of off-diagonal mass
   row_sum_off <- numeric(n)
@@ -239,8 +222,8 @@ fit_rank_centrality <- function(
   diag_val <- pmax(diag_val, 0)
 
   I <- c(from, seq_len(n))
-  J <- c(to,   seq_len(n))
-  X <- c(val,  diag_val)
+  J <- c(to, seq_len(n))
+  X <- c(val, diag_val)
 
   P <- Matrix::sparseMatrix(
     i = I,

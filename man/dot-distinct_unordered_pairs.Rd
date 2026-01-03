@@ -4,7 +4,7 @@
 \alias{.distinct_unordered_pairs}
 \title{Keep first occurrence of each unordered pair}
 \usage{
-.distinct_unordered_pairs(pairs, id1_col = "ID1", id2_col = "ID2", sep = "\\r")
+.distinct_unordered_pairs(pairs, id1_col = "ID1", id2_col = "ID2", sep = "-")
 }
 \description{
 Keep first occurrence of each unordered pair

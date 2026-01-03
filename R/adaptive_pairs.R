@@ -119,7 +119,117 @@
     pair_key = as.character(key),
     source = as.character(out_source),
     embed_hit = as.logical(embed_hit),
-    embed_rank = as.integer(out_embed_rank)
+    embed_rank = as.integer(out_embed_rank),
+    directed = FALSE
+  )
+}
+
+#' @keywords internal
+.ap_gen_repeat_reverse <- function(existing_completed,
+                                   id_vec,
+                                   repeat_cap = 1L) {
+  existing_completed <- tibble::as_tibble(existing_completed)
+
+  if (nrow(existing_completed) == 0L) {
+    return(tibble::tibble(
+      i_idx = integer(),
+      j_idx = integer(),
+      anchor_idx = integer(),
+      pair_key = character(),
+      source = character(),
+      embed_hit = logical(),
+      embed_rank = integer(),
+      directed = logical(),
+      score_info = numeric(),
+      score_need = numeric(),
+      score_embed = numeric(),
+      score_total = numeric()
+    ))
+  }
+
+  if (!all(c("ID1", "ID2") %in% names(existing_completed))) {
+    stop("`existing_completed` must contain columns ID1 and ID2.", call. = FALSE)
+  }
+
+  repeat_cap <- as.integer(repeat_cap)
+  if (is.na(repeat_cap) || repeat_cap < 0L) {
+    stop("`repeat_cap` must be a non-negative integer.", call. = FALSE)
+  }
+
+  # For this PR, we only schedule one reverse repeat per unordered pair,
+  # so eligibility is pairs with exactly one completed judgment.
+  ex <- dplyr::mutate(
+    existing_completed,
+    ID1 = as.character(.data$ID1),
+    ID2 = as.character(.data$ID2),
+    pair_key = .unordered_pair_key(.data$ID1, .data$ID2),
+    direction = .pair_direction(.data$ID1, .data$ID2)
+  )
+
+  key_n <- dplyr::count(ex, .data$pair_key, name = "n_completed")
+  eligible_keys <- dplyr::filter(key_n, .data$n_completed == 1L)
+
+  if (nrow(eligible_keys) == 0L || repeat_cap == 0L) {
+    return(tibble::tibble(
+      i_idx = integer(),
+      j_idx = integer(),
+      anchor_idx = integer(),
+      pair_key = character(),
+      source = character(),
+      embed_hit = logical(),
+      embed_rank = integer(),
+      directed = logical(),
+      score_info = numeric(),
+      score_need = numeric(),
+      score_embed = numeric(),
+      score_total = numeric()
+    ))
+  }
+
+  ex1 <- dplyr::semi_join(ex, eligible_keys, by = "pair_key")
+  ex1 <- dplyr::group_by(ex1, .data$pair_key)
+  ex1 <- dplyr::slice_head(ex1, n = 1L)
+  ex1 <- dplyr::ungroup(ex1)
+
+  # Reverse orientation of the single completed judgment by swapping positions.
+  id1_rev <- as.character(ex1$ID2)
+  id2_rev <- as.character(ex1$ID1)
+
+  i_idx <- match(id1_rev, id_vec)
+  j_idx <- match(id2_rev, id_vec)
+
+  ok <- !is.na(i_idx) & !is.na(j_idx) & i_idx != j_idx
+
+  if (!any(ok)) {
+    return(tibble::tibble(
+      i_idx = integer(),
+      j_idx = integer(),
+      anchor_idx = integer(),
+      pair_key = character(),
+      source = character(),
+      embed_hit = logical(),
+      embed_rank = integer(),
+      directed = logical(),
+      score_info = numeric(),
+      score_need = numeric(),
+      score_embed = numeric(),
+      score_total = numeric()
+    ))
+  }
+
+  tibble::tibble(
+    i_idx = as.integer(i_idx[ok]),
+    j_idx = as.integer(j_idx[ok]),
+    anchor_idx = as.integer(i_idx[ok]),
+    pair_key = as.character(ex1$pair_key[ok]),
+    source = "repeat_reverse",
+    embed_hit = FALSE,
+    embed_rank = NA_integer_,
+    directed = TRUE,
+    score_info = NA_real_,
+    score_need = NA_real_,
+    score_embed = 0,
+    score_total = Inf
   )
 }
 
@@ -192,9 +302,54 @@
 #' @keywords internal
 .ap_apply_constraints <- function(cand_tbl,
                                   id_vec,
-                                  existing_key = character(),
-                                  forbid_repeats = TRUE) {
+                                  existing_counts = integer(),
+                                  existing_dir = character(),
+                                  existing_counts_all = integer(),
+                                  forbid_unordered = TRUE,
+                                  repeat_policy = "none",
+                                  repeat_cap = 1L,
+                                  # legacy/internal (pre-PR6) args kept for backwards compatibility
+                                  existing_key = NULL,
+                                  forbid_repeats = NULL) {
   cand_tbl <- tibble::as_tibble(cand_tbl)
+
+  # If legacy `forbid_repeats` is provided, it also controls whether we forbid
+  # selecting unordered repeats from the non-repeat candidate pool.
+  if (!is.null(forbid_repeats)) {
+    forbid_unordered <- isTRUE(forbid_repeats)
+  }
+
+  # Legacy/internal args (pre-PR6): map forbid_repeats -> repeat_policy, and existing_key -> existing_counts.
+  if (!is.null(forbid_repeats)) {
+    if (!is.logical(forbid_repeats) || length(forbid_repeats) != 1L || is.na(forbid_repeats)) {
+      stop("`forbid_repeats` must be TRUE/FALSE (or NULL).", call. = FALSE)
+    }
+    repeat_policy <- if (isTRUE(forbid_repeats)) "none" else "reverse_only"
+  }
+
+  if (!is.null(existing_key) && length(existing_counts) == 0L) {
+    existing_key <- unique(as.character(existing_key))
+    existing_key <- existing_key[!is.na(existing_key) & nzchar(existing_key)]
+    if (length(existing_key) > 0L) {
+      existing_counts <- stats::setNames(rep.int(1L, length(existing_key)), existing_key)
+      if (length(existing_dir) == 0L) {
+        existing_dir <- stats::setNames(rep(NA_character_, length(existing_key)), existing_key)
+      }
+    }
+  }
+
+  # Accept a convenience alias used by other entrypoints/tests.
+  # `forbid_unordered` means: do not plan repeats *and* forbid selecting
+  # unordered repeats from the non-repeat candidate pool.
+  repeat_policy <- match.arg(repeat_policy, c("none", "reverse_only", "forbid_unordered"))
+  if (identical(repeat_policy, "forbid_unordered")) {
+    forbid_unordered <- TRUE
+    repeat_policy <- "none"
+  }
+  repeat_cap <- as.integer(repeat_cap)
+  if (is.na(repeat_cap) || repeat_cap < 0L) {
+    stop("`repeat_cap` must be a non-negative integer.", call. = FALSE)
+  }
 
   if (nrow(cand_tbl) == 0L) {
     return(tibble::tibble(
@@ -205,6 +360,7 @@
       source = character(),
       embed_hit = logical(),
       embed_rank = integer(),
+      directed = logical(),
       score_info = numeric(),
       score_need = numeric(),
       score_embed = numeric(),
@@ -226,22 +382,75 @@
     .data$i_idx != .data$j_idx
   )
 
-  if (nrow(cand_tbl) == 0L) return(cand_tbl)
-
-  # remove repeats (unordered) if requested
-  if (isTRUE(forbid_repeats) && length(existing_key) > 0L) {
-    if (!"pair_key" %in% names(cand_tbl)) {
-      cand_tbl$pair_key <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
-    }
-    cand_tbl <- cand_tbl[!(cand_tbl$pair_key %in% existing_key), , drop = FALSE]
+  if (nrow(cand_tbl) == 0L) {
+    return(cand_tbl)
   }
 
-  if (nrow(cand_tbl) == 0L) return(tibble::as_tibble(cand_tbl))
-
-  # ensure uniqueness of unordered pairs
   if (!"pair_key" %in% names(cand_tbl)) {
     cand_tbl$pair_key <- .unordered_pair_key(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
   }
+
+
+  # Apply repeat policy.
+  # - `existing_counts_all` encodes whether an unordered pair has *ever* appeared
+  #   in `existing_pairs` (presence-only).
+  # - `existing_counts` encodes the number of *completed* judgments (rows with a
+  #   non-missing winner), used to implement `repeat_policy = 'reverse_only'`.
+
+  # Presence-only counts: fall back to completed counts if the caller did not
+  # provide `existing_counts_all`.
+  existing_any <- existing_counts_all
+  if (length(existing_any) == 0L && length(existing_counts) > 0L) {
+    existing_any <- existing_counts
+  }
+
+  if (repeat_policy == "none") {
+    # Forbid selecting any unordered pair that has ever appeared.
+    if (length(existing_any) > 0L) {
+      n_any <- existing_any[cand_tbl$pair_key]
+      n_any[is.na(n_any)] <- 0L
+      cand_tbl <- cand_tbl[n_any == 0L, , drop = FALSE]
+    }
+  } else {
+    # reverse_only
+
+    # By default, we forbid selecting unordered repeats from the non-repeat
+    # candidate pool. (Repeats are only planned via the explicit repeat bucket.)
+    if (isTRUE(forbid_unordered) && length(existing_any) > 0L) {
+      n_any <- existing_any[cand_tbl$pair_key]
+      n_any[is.na(n_any)] <- 0L
+      is_repeat_source_any <- cand_tbl$source == "repeat_reverse"
+      cand_tbl <- cand_tbl[(n_any == 0L) | is_repeat_source_any, , drop = FALSE]
+    }
+
+    if (nrow(cand_tbl) > 0L) {
+      max_done <- as.integer(repeat_cap + 1L)
+      n_done <- if (length(existing_counts) > 0L) existing_counts[cand_tbl$pair_key] else integer(nrow(cand_tbl))
+      n_done[is.na(n_done)] <- 0L
+
+      # For pairs with exactly one completed judgment, we allow a single reverse repeat
+      # from the explicit repeat bucket (source == 'repeat_reverse').
+      cand_dir <- .pair_direction(id_vec[cand_tbl$i_idx], id_vec[cand_tbl$j_idx])
+      base_dir <- existing_dir[cand_tbl$pair_key]
+      want_dir <- ifelse(base_dir == "forward", "reverse",
+        ifelse(base_dir == "reverse", "forward", NA_character_)
+      )
+
+      is_repeat_source <- cand_tbl$source == "repeat_reverse"
+
+      keep_new <- n_done == 0L
+      keep_repeat <- (n_done == 1L) & is_repeat_source & !is.na(want_dir) & (cand_dir == want_dir)
+
+      keep <- (keep_new | keep_repeat) & (n_done < max_done)
+      cand_tbl <- cand_tbl[keep, , drop = FALSE]
+    }
+  }
+
+  if (nrow(cand_tbl) == 0L) {
+    return(tibble::as_tibble(cand_tbl))
+  }
+
+  # ensure uniqueness of unordered pairs
   cand_tbl <- cand_tbl[!duplicated(cand_tbl$pair_key), , drop = FALSE]
 
   tibble::as_tibble(cand_tbl)
@@ -249,9 +458,11 @@
 
 #' @keywords internal
 .ap_select_pairs_from_scored <- function(scored_tbl,
-                                        n_pairs,
-                                        embed_quota_frac = 0.25,
-                                        embed_sources = "embed") {
+                                         n_pairs,
+                                         embed_quota_frac = 0.25,
+                                         embed_sources = "embed",
+                                         repeat_quota_n = 0L,
+                                         repeat_sources = "repeat_reverse") {
   n_pairs <- as.integer(n_pairs)
   scored_tbl <- tibble::as_tibble(scored_tbl)
 
@@ -264,34 +475,63 @@
     stop("`embed_quota_frac` must be a single number in [0, 1].", call. = FALSE)
   }
 
+  repeat_quota_n <- as.integer(repeat_quota_n)
+  if (is.na(repeat_quota_n) || repeat_quota_n < 0L) {
+    stop("`repeat_quota_n` must be a non-negative integer.", call. = FALSE)
+  }
+
   if (!"pair_key" %in% names(scored_tbl)) {
     stop("`scored_tbl` must contain a `pair_key` column.", call. = FALSE)
   }
 
+  # Base ordering for non-repeat candidates.
   scored_tbl <- dplyr::arrange(scored_tbl, dplyr::desc(.data$score_total), .data$i_idx, .data$j_idx)
+
+  take_keys <- character()
+  scored_tbl_nonrep <- dplyr::filter(scored_tbl, !(.data$source %in% repeat_sources))
+
+  # --- 1) Repeat bucket (deterministic) ---
+  if (repeat_quota_n > 0L) {
+    rep_tbl <- dplyr::filter(scored_tbl, .data$source %in% repeat_sources)
+    if (nrow(rep_tbl) > 0L) {
+      rep_tbl <- dplyr::arrange(rep_tbl, .data$pair_key, .data$i_idx, .data$j_idx)
+      take_rep <- min(repeat_quota_n, nrow(rep_tbl))
+      take_keys <- c(take_keys, rep_tbl$pair_key[seq_len(take_rep)])
+    }
+  }
+
+  # --- 2) Embedding quota (minimum share) ---
+  remaining_after_repeat <- n_pairs - length(take_keys)
+  if (remaining_after_repeat <= 0L) {
+    idx <- match(take_keys, scored_tbl$pair_key)
+    idx <- idx[!is.na(idx)]
+    return(scored_tbl[idx, , drop = FALSE])
+  }
 
   n_embed_min <- ceiling(embed_quota_frac * n_pairs)
   n_embed_min <- as.integer(min(n_embed_min, n_pairs))
 
-  take_keys <- character()
+  take_keys2 <- take_keys
   if (n_embed_min > 0L) {
-    embed_tbl <- dplyr::filter(scored_tbl, .data$source %in% embed_sources)
+    embed_tbl <- dplyr::filter(scored_tbl_nonrep, .data$source %in% embed_sources)
+    embed_tbl <- embed_tbl[!(embed_tbl$pair_key %in% take_keys2), , drop = FALSE]
     if (nrow(embed_tbl) > 0L) {
       take_embed <- min(n_embed_min, nrow(embed_tbl))
-      take_keys <- embed_tbl$pair_key[seq_len(take_embed)]
+      take_keys2 <- c(take_keys2, embed_tbl$pair_key[seq_len(take_embed)])
     }
   }
 
-  remaining <- n_pairs - length(take_keys)
+  # --- 3) Fill remainder by score ---
+  remaining <- n_pairs - length(take_keys2)
   if (remaining > 0L) {
-    rest_tbl <- scored_tbl[!(scored_tbl$pair_key %in% take_keys), , drop = FALSE]
+    rest_tbl <- scored_tbl_nonrep[!(scored_tbl_nonrep$pair_key %in% take_keys2), , drop = FALSE]
     take_rest <- min(remaining, nrow(rest_tbl))
     if (take_rest > 0L) {
-      take_keys <- c(take_keys, rest_tbl$pair_key[seq_len(take_rest)])
+      take_keys2 <- c(take_keys2, rest_tbl$pair_key[seq_len(take_rest)])
     }
   }
 
-  idx <- match(take_keys, scored_tbl$pair_key)
+  idx <- match(take_keys2, scored_tbl$pair_key)
   idx <- idx[!is.na(idx)]
   scored_tbl[idx, , drop = FALSE]
 }
@@ -322,6 +562,20 @@
 
     a <- id_vec[[i]]
     b <- id_vec[[j]]
+
+    is_directed <- FALSE
+    if ("directed" %in% names(selected_tbl)) {
+      is_directed <- isTRUE(selected_tbl$directed[[k]])
+    }
+
+    if (isTRUE(is_directed)) {
+      # Honor requested orientation (used for reverse-only repeats).
+      out_ID1[[k]] <- a
+      out_ID2[[k]] <- b
+      p1[[i]] <- p1[[i]] + 1L
+      p2[[j]] <- p2[[j]] + 1L
+      next
+    }
 
     if (isTRUE(balance_positions)) {
       imb_a <- p1[[i]] - p2[[i]]
@@ -461,7 +715,13 @@ select_adaptive_pairs <- function(samples,
                                   n_pairs,
                                   k_neighbors = 10,
                                   min_judgments = 12,
-                                  forbid_repeats = TRUE,
+                                  repeat_policy = "reverse_only",
+                                  repeat_cap = 1L,
+                                  repeat_frac = 0.05,
+                                  repeat_n = NULL,
+                                  repeat_guard_min_degree = 1L,
+                                  repeat_guard_largest_component_frac = 0.90,
+                                  forbid_repeats = NULL,
                                   balance_positions = TRUE,
                                   embed_far_k = 0,
                                   embed_quota_frac = 0.25,
@@ -522,13 +782,70 @@ select_adaptive_pairs <- function(samples,
     stop("`min_judgments` must be NULL or a non-negative integer.", call. = FALSE)
   }
 
+  # --- repeat policy (PR6) ---
+  # `forbid_repeats` is a soft-deprecated alias: TRUE => repeat_policy='none'
+  # FALSE => repeat_policy='reverse_only'.
+  if (!is.null(forbid_repeats)) {
+    if (!is.logical(forbid_repeats) || length(forbid_repeats) != 1L || is.na(forbid_repeats)) {
+      stop("`forbid_repeats` must be TRUE/FALSE (or NULL).", call. = FALSE)
+    }
+    if (isTRUE(forbid_repeats)) {
+      repeat_policy <- "none"
+    } else {
+      repeat_policy <- "reverse_only"
+    }
+  }
+
+  # Accept a convenience alias used by other entrypoints/tests.
+  # "forbid_unordered" means: do not plan repeats *and* forbid selecting
+  # unordered repeats from the candidate pool.
+  repeat_policy <- match.arg(repeat_policy, c("none", "reverse_only", "forbid_unordered"))
+
+  if (repeat_policy == "forbid_unordered") {
+    # Reuse legacy/internal guard for forbidding unordered repeats.
+    # We intentionally avoid warning here because callers explicitly requested
+    # the forbidding behavior via repeat_policy.
+    forbid_repeats <- TRUE
+    repeat_policy <- "none"
+  }
+
+  repeat_cap <- as.integer(repeat_cap)
+  if (is.na(repeat_cap) || repeat_cap < 0L) {
+    stop("`repeat_cap` must be a non-negative integer.", call. = FALSE)
+  }
+
+  repeat_frac <- as.double(repeat_frac)
+  if (!is.finite(repeat_frac) || length(repeat_frac) != 1L || repeat_frac < 0 || repeat_frac > 1) {
+    stop("`repeat_frac` must be a single number in [0, 1].", call. = FALSE)
+  }
+
+  if (!is.null(repeat_n)) {
+    if (!is.numeric(repeat_n) || length(repeat_n) != 1L || is.na(repeat_n) || repeat_n < 0) {
+      stop("`repeat_n` must be NULL or a single non-negative integer.", call. = FALSE)
+    }
+    repeat_n <- as.integer(repeat_n)
+  }
+
+  repeat_guard_min_degree <- as.integer(repeat_guard_min_degree)
+  if (is.na(repeat_guard_min_degree) || repeat_guard_min_degree < 0L) {
+    stop("`repeat_guard_min_degree` must be a non-negative integer.", call. = FALSE)
+  }
+
+  repeat_guard_largest_component_frac <- as.double(repeat_guard_largest_component_frac)
+  if (!is.finite(repeat_guard_largest_component_frac) || length(repeat_guard_largest_component_frac) != 1L ||
+    repeat_guard_largest_component_frac < 0 || repeat_guard_largest_component_frac > 1) {
+    stop("`repeat_guard_largest_component_frac` must be a single number in [0, 1].", call. = FALSE)
+  }
+
   embed_quota_frac <- as.double(embed_quota_frac)
   if (!is.finite(embed_quota_frac) || length(embed_quota_frac) != 1L || embed_quota_frac < 0 || embed_quota_frac > 1) {
     stop("`embed_quota_frac` must be a single number in [0, 1].", call. = FALSE)
   }
 
   .validate_cap <- function(x, arg_name) {
-    if (isTRUE(is.infinite(x))) return(Inf)
+    if (isTRUE(is.infinite(x))) {
+      return(Inf)
+    }
     x <- as.double(x)
     if (!is.finite(x) || length(x) != 1L || x < 0) {
       stop("`", arg_name, "` must be a single non-negative integer (or Inf).", call. = FALSE)
@@ -614,10 +931,100 @@ select_adaptive_pairs <- function(samples,
         existing_key <- unique(.unordered_pair_key(ex1, ex2))
       }
 
+      # Existing-pair bookkeeping
+      # - For repeat_policy == "none", we forbid any unordered pair that appears in `existing_pairs`,
+      #   regardless of whether a winner column exists.
+      # - For repeat_policy == "reverse_only", we only count completed judgments (rows with non-missing
+      #   `better_id` when present) and track the direction of the first completed judgment.
+      existing_counts_all <- integer()
+      existing_counts <- integer()
+      existing_dir <- character()
+      existing_completed <- tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
+
+      if (!is.null(existing_pairs)) {
+        ex_full <- tibble::as_tibble(existing_pairs)
+        if (all(c("object1", "object2") %in% names(ex_full)) && !all(c("ID1", "ID2") %in% names(ex_full))) {
+          ex_full <- dplyr::rename(ex_full, ID1 = "object1", ID2 = "object2")
+        }
+
+        if (all(c("ID1", "ID2") %in% names(ex_full))) {
+          ex_full <- dplyr::mutate(ex_full,
+            ID1 = as.character(.data$ID1),
+            ID2 = as.character(.data$ID2)
+          )
+          ex_full <- dplyr::filter(ex_full, .data$ID1 %in% ids, .data$ID2 %in% ids)
+
+          if (nrow(ex_full) > 0L) {
+            key_all <- unique(.unordered_pair_key(ex_full$ID1, ex_full$ID2))
+            existing_counts_all <- stats::setNames(rep.int(1L, length(key_all)), key_all)
+          }
+
+          has_winner <- "better_id" %in% names(ex_full)
+          existing_completed <- dplyr::transmute(
+            ex_full,
+            ID1 = .data$ID1,
+            ID2 = .data$ID2,
+            better_id = if (has_winner) as.character(.data$better_id) else NA_character_
+          )
+          if (has_winner) {
+            existing_completed <- dplyr::filter(existing_completed, !is.na(.data$better_id), nzchar(.data$better_id))
+          } else {
+            existing_completed <- existing_completed[0, , drop = FALSE]
+          }
+
+          if (nrow(existing_completed) > 0L) {
+            tmp <- dplyr::mutate(existing_completed,
+              pair_key = .unordered_pair_key(.data$ID1, .data$ID2),
+              direction = .pair_direction(.data$ID1, .data$ID2)
+            )
+            key_n <- dplyr::count(tmp, .data$pair_key, name = "n_completed")
+            existing_counts <- stats::setNames(as.integer(key_n$n_completed), key_n$pair_key)
+
+            one_key <- dplyr::filter(key_n, .data$n_completed == 1L)$pair_key
+            if (length(one_key) > 0L) {
+              dir_tbl <- dplyr::filter(tmp, .data$pair_key %in% one_key)
+              dir_tbl <- dplyr::group_by(dir_tbl, .data$pair_key)
+              dir_tbl <- dplyr::slice_head(dir_tbl, n = 1)
+              dir_tbl <- dplyr::ungroup(dir_tbl)
+              existing_dir <- stats::setNames(as.character(dir_tbl$direction), dir_tbl$pair_key)
+            }
+          }
+        }
+      }
+
+      # Repeat guard (graph health)
+      graph_state <- .graph_state_from_pairs(ex, ids = ids)
+      repeat_guard_passed <- (graph_state$metrics$degree_min[[1]] >= repeat_guard_min_degree) &&
+        (graph_state$metrics$largest_component_frac[[1]] >= repeat_guard_largest_component_frac)
+
+      # Compute repeat quota for this round (deterministic)
+      repeat_quota_n <- 0L
+      if (repeat_policy == "reverse_only") {
+        if (is.null(repeat_n)) {
+          repeat_quota_n <- as.integer(floor(repeat_frac * n_pairs))
+        } else {
+          repeat_quota_n <- as.integer(repeat_n)
+        }
+        repeat_quota_n <- max(repeat_quota_n, 0L)
+        repeat_quota_n <- min(repeat_quota_n, n_pairs)
+        if (!isTRUE(repeat_guard_passed)) {
+          repeat_quota_n <- 0L
+        }
+      }
+
       ord <- order(joined$theta, joined$ID, na.last = TRUE)
       joined <- joined[ord, , drop = FALSE]
 
       id_vec <- joined$ID
+
+      # Repeat candidate bucket.
+      #
+      # We always compute eligibility for diagnostics, but only *add* repeat
+      # candidates to the scoring pool when the repeat guard passes and the
+      # quota is non-zero.
+      repeat_cand_tbl <- .ap_gen_repeat_reverse(existing_completed, id_vec = id_vec, repeat_cap = repeat_cap)
+      n_repeat_eligible <- nrow(repeat_cand_tbl)
+
       th_vec <- as.double(joined$theta)
       se_vec <- as.double(joined$se)
 
@@ -679,11 +1086,32 @@ select_adaptive_pairs <- function(samples,
         embed_score_mode = embed_score_mode
       )
 
+      include_repeats <- repeat_policy == "reverse_only" &&
+        isTRUE(repeat_guard_passed) &&
+        repeat_quota_n > 0L &&
+        n_repeat_eligible > 0L
+
+      scored_tbl_all <- if (isTRUE(include_repeats)) {
+        dplyr::bind_rows(scored_tbl, repeat_cand_tbl)
+      } else {
+        scored_tbl
+      }
+
       constrained_tbl <- .ap_apply_constraints(
-        cand_tbl = scored_tbl,
+        cand_tbl = scored_tbl_all,
         id_vec = id_vec,
-        existing_key = existing_key,
-        forbid_repeats = forbid_repeats
+        # PR6: constraint logic depends on the repeat policy.
+        # - repeat_policy == 'none' forbids any unordered pair that has ever appeared
+        #   in existing_pairs (presence-only).
+        # - repeat_policy == 'reverse_only' uses counts of completed judgments
+        #   (and direction of the first completed judgment) to allow exactly one
+        #   reverse repeat when n_completed == 1.
+        existing_counts = existing_counts,
+        existing_dir = existing_dir,
+        existing_counts_all = existing_counts_all,
+        forbid_unordered = if (is.null(forbid_repeats)) TRUE else isTRUE(forbid_repeats),
+        repeat_policy = repeat_policy,
+        repeat_cap = repeat_cap
       )
 
       capped_tbl <- constrained_tbl
@@ -702,7 +1130,9 @@ select_adaptive_pairs <- function(samples,
         scored_tbl = capped_tbl,
         n_pairs = n_pairs,
         embed_quota_frac = embed_quota_frac,
-        embed_sources = "embed"
+        embed_sources = "embed",
+        repeat_quota_n = repeat_quota_n,
+        repeat_sources = "repeat_reverse"
       )
 
       pairs_tbl <- .ap_orient_pairs(
@@ -713,6 +1143,31 @@ select_adaptive_pairs <- function(samples,
         p2_vec = p2_vec,
         balance_positions = balance_positions
       )
+
+      # Track planned reverse-repeat pairs for downstream runner diagnostics.
+      #
+      # Planned repeats are the subset of selected pairs that came from the explicit
+      # repeat candidate bucket. We mark them using the unordered pair key so that any
+      # downstream re-ordering (e.g., positional balancing) is handled robustly.
+      planned_repeat <- tibble::tibble(ID1 = character(), ID2 = character(), pair_key = character())
+      if (repeat_policy == "reverse_only" && nrow(pairs_tbl) > 0L) {
+        repeat_keys <- character(0)
+        if (nrow(selected_tbl) > 0L) {
+          repeat_rows <- dplyr::filter(selected_tbl, .data$source == "repeat_reverse")
+          if (nrow(repeat_rows) > 0L) {
+            repeat_keys <- unique(as.character(repeat_rows$pair_key))
+          }
+        }
+        if (length(repeat_keys) > 0L) {
+          planned_repeat <- dplyr::mutate(
+            pairs_tbl,
+            pair_key = .unordered_pair_key(.data$ID1, .data$ID2)
+          )
+          planned_repeat <- dplyr::filter(planned_repeat, .data$pair_key %in% repeat_keys)
+          planned_repeat <- dplyr::select(planned_repeat, "ID1", "ID2", "pair_key")
+        }
+      }
+      attr(pairs_tbl, "planned_repeat_pairs") <- planned_repeat
 
       embed_hit_rate <- NA_real_
       if (!is.null(embed_nbrs) && nrow(pairs_tbl) > 0L) {
@@ -732,6 +1187,18 @@ select_adaptive_pairs <- function(samples,
         n_candidates_after_constraints = nrow(constrained_tbl),
         n_candidates_after_caps = nrow(capped_tbl),
         n_selected = nrow(selected_tbl),
+        n_repeat_eligible = as.integer(n_repeat_eligible),
+        n_repeat_planned = nrow(planned_repeat),
+        repeat_policy = as.character(repeat_policy),
+        repeat_cap = as.integer(repeat_cap),
+        repeat_frac = as.double(repeat_frac),
+        repeat_n = ifelse(is.null(repeat_n), NA_integer_, as.integer(repeat_n)),
+        repeat_quota_n = as.integer(repeat_quota_n),
+        repeat_guard_passed = as.logical(repeat_guard_passed),
+        repeat_guard_min_degree = as.integer(repeat_guard_min_degree),
+        repeat_guard_largest_component_frac = as.double(repeat_guard_largest_component_frac),
+        graph_degree_min = as.double(graph_state$metrics$degree_min[[1]]),
+        graph_largest_component_frac = as.double(graph_state$metrics$largest_component_frac[[1]]),
         n_selected_theta = sum(selected_tbl$source == "theta"),
         n_selected_embed = sum(selected_tbl$source == "embed"),
         n_selected_far = sum(selected_tbl$source == "far"),
@@ -765,6 +1232,11 @@ select_adaptive_pairs <- function(samples,
 
   out <- res$pairs
   attr(out, "pairing_diagnostics") <- res$diagnostics
+  if (!is.null(attr(out, "planned_repeat_pairs"))) {
+    # keep
+  } else if ("planned_repeat_pairs" %in% names(res$diagnostics)) {
+    attr(out, "planned_repeat_pairs") <- res$diagnostics$planned_repeat_pairs[[1]]
+  }
   out
 }
 
