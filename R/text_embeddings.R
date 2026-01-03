@@ -306,17 +306,46 @@ compute_text_embeddings <- function(x,
   NULL
 }
 
-.write_embeddings_cache <- function(path, embeddings, meta = NULL) {
+.write_embeddings_cache <- function(path = NULL,
+                                    embeddings,
+                                    meta = NULL,
+                                    cache_path = NULL,
+                                    row_key = NULL,
+                                    ...) {
+  # Back-compat for older arg name:
+  if (is.null(path) && !is.null(cache_path)) path <- cache_path
+  if (is.null(path) || !nzchar(path)) {
+    stop("`path` must be provided.", call. = FALSE)
+  }
+
   dir <- dirname(path)
-  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-  tryCatch(
-    saveRDS(list(embeddings = embeddings, meta = meta), path, version = 2),
+
+  # If the "dir" exists as a file, bail out (prevents gzfile warnings on Windows)
+  if (file.exists(dir) && !dir.exists(dir)) {
+    warning("Failed to write embeddings cache: cache directory exists as a file: ", dir, call. = FALSE)
+    return(invisible(FALSE))
+  }
+
+  if (!dir.exists(dir)) {
+    ok <- dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+    if (!ok) {
+      warning("Failed to write embeddings cache: could not create directory: ", dir, call. = FALSE)
+      return(invisible(FALSE))
+    }
+  }
+
+  ok <- tryCatch(
+    {
+      suppressWarnings(saveRDS(list(embeddings = embeddings, meta = meta), path, version = 2))
+      TRUE
+    },
     error = function(e) {
       warning("Failed to write embeddings cache: ", conditionMessage(e), call. = FALSE)
-      invisible(FALSE)
+      FALSE
     }
   )
-  invisible(TRUE)
+
+  invisible(ok)
 }
 
 .has_reticulate <- function() {

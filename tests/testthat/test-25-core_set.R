@@ -60,7 +60,7 @@ testthat::test_that("select_core_set embeddings aligns rownames and selects medo
 })
 
 testthat::test_that("select_core_set errors if embeddings missing", {
-  samples <- tibble::tibble(ID = c("A", "B"), text = c("x", "y"))
+  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("x", "y", "z"))
   testthat::expect_error(
     select_core_set(samples, core_size = 2, method = "embeddings", embeddings = NULL),
     "must be provided"
