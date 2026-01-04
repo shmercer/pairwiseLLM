@@ -40,7 +40,7 @@
 
 
   if (isTRUE(no_new_results) || isTRUE(no_results)) {
-    return("no_results")
+    return("no_new_pairs")
   }
 
   NA_character_

@@ -52,14 +52,15 @@ Priority (first match wins):
 \item no_new_pairs -> stop ("no_new_pairs")
 \item budget_exhausted -> stop ("pair_budget_exhausted")
 \item max_rounds_reached -> stop ("max_rounds_reached")
+\item graph_unhealthy -> continue/repair (do not stop by default)
 \item stability_reached AND graph_healthy -> stop ("stability_reached")
 \item precision_reached AND graph_healthy -> stop ("precision_reached")
 }
 
 Notes:
 \itemize{
-\item When \code{graph_healthy} is FALSE, stability/precision stops are blocked rather
-than triggered; the blocked causes are recorded in \code{details}.
+\item When \code{graph_healthy} is FALSE, stability/precision stopping is blocked rather
+than triggered; blocked causes are recorded in \code{details}.
 }
 }
 \keyword{internal}
