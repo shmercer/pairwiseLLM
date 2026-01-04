@@ -11,13 +11,13 @@
 #'  1) round < min_rounds -> continue (except exhaustion / hard-stop reasons)
 #'  2) no_new_pairs -> stop ("no_new_pairs")
 #'  3) budget_exhausted -> stop ("pair_budget_exhausted")
-#'  4) max_rounds_reached -> stop ("max_rounds_reached")
-#'  5) stability_reached AND graph_healthy -> stop ("stability_reached")
-#'  6) precision_reached AND graph_healthy -> stop ("precision_reached")
+#'  4) stability_reached AND graph_healthy -> stop ("stability_reached")
+#'  5) precision_reached -> stop ("precision_reached")
+#'  6) max_rounds_reached -> stop ("max_rounds_reached")
 #'
 #' Notes:
-#'  - When `graph_healthy` is FALSE, stability/precision stops are blocked rather
-#'    than triggered; the blocked causes are recorded in `details`.
+#'  - When `graph_healthy` is FALSE, stability-based stopping is blocked rather
+#'    than triggered; blocked causes are recorded in `details`.
 #'
 #' @param round Integer round index (1-based).
 #' @param min_rounds Integer minimum rounds before any stopping other than exhaustion reasons.
@@ -60,22 +60,22 @@
     precision_eligible <- FALSE
   }
 
-  # If the graph is unhealthy, record which stop causes would have fired.
+  # If the graph is unhealthy, record which graph-gated stop causes would
+  # have fired (even if another reason ends the run). We only graph-gate
+  # stability-based stopping (precision can stop even on an unhealthy graph).
   blocked_candidates <- character()
-  if (!isTRUE(graph_healthy)) {
-    if (isTRUE(stability_eligible)) blocked_candidates <- c(blocked_candidates, "stability_reached")
-    if (isTRUE(precision_eligible)) blocked_candidates <- c(blocked_candidates, "precision_reached")
+  if (!isTRUE(graph_healthy) && isTRUE(stability_eligible)) {
+    blocked_candidates <- c(blocked_candidates, "stability_reached")
   }
 
-  stop_blocked_by <- if (length(blocked_candidates) > 0L) "graph_unhealthy" else NA_character_
-  stop_blocked_candidates <- if (length(blocked_candidates) > 0L) paste(blocked_candidates, collapse = "|") else NA_character_
-
+  # Default priority: prefer "positive" stop reasons (stability/precision)
+  # over the max-rounds cap when they occur on the same round.
   candidates <- c(
     no_new_pairs = isTRUE(no_new_pairs),
     pair_budget_exhausted = isTRUE(budget_exhausted),
-    max_rounds_reached = isTRUE(max_rounds_reached),
     stability_reached = isTRUE(stability_eligible && graph_healthy),
-    precision_reached = isTRUE(precision_eligible && graph_healthy)
+    precision_reached = isTRUE(precision_eligible),
+    max_rounds_reached = isTRUE(max_rounds_reached)
   )
 
   # Priority order: user-supplied (validated) or default.
@@ -102,6 +102,15 @@
       reason <- nm
       break
     }
+  }
+
+  # Only treat "blocked" as relevant when we *didn't* stop and the only thing
+  # preventing a stop was the graph-gate.
+  stop_blocked_by <- NA_character_
+  stop_blocked_candidates <- NA_character_
+  if (!isTRUE(stop) && length(blocked_candidates) > 0L) {
+    stop_blocked_by <- "graph_unhealthy"
+    stop_blocked_candidates <- paste(blocked_candidates, collapse = "|")
   }
 
   details <- list(
