@@ -244,6 +244,33 @@ Note: this controls pair selection reproducibility; it does not control randomne
 
 (RNG state is restored afterward).}
 
+\item{min_rounds}{Integer. Minimum number of adaptive rounds to run before allowing
+stability- or precision-based stopping. Hard stops (no new pairs, budget exhausted,
+max rounds) can still terminate earlier. Default \code{2}.}
+
+\item{stop_stability_rms}{Numeric. Threshold on RMS change in \code{theta} between consecutive
+fits; lower values indicate greater stability. Default \code{0.01}.}
+
+\item{stop_topk}{Integer. Size \code{k} for the top-\code{k} overlap stability check. Default \code{50}.}
+
+\item{stop_topk_overlap}{Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
+sets required to consider rankings stable. Default \code{0.95}.}
+
+\item{stop_min_largest_component_frac}{Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
+largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.}
+
+\item{stop_min_degree}{Integer. Minimum node degree required for the comparison graph to be considered
+healthy. Default \code{1}.}
+
+\item{stop_reason_priority}{Optional character vector specifying a priority order for stop reasons when
+multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.}
+
+\item{stop_stability_consecutive}{Integer. Number of consecutive rounds the stability criteria
+must hold before stopping. Default \code{2}.}
+
+\item{stop_topk_ties}{Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
+overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.}
+
 \item{fit_fun}{Function used to fit the BT model. Default \code{\link{fit_bt_model}}.
 Primarily intended as a test hook; most users should keep the default.}
 

@@ -382,7 +382,7 @@ test_that("bt_run_adaptive bootstrap works with repeats allowed and no position 
     init_round_size = 10,
     round_size = 0,
     max_rounds = 0,
-    forbid_repeats = FALSE,
+    repeat_policy = "allow",
     balance_positions = FALSE,
     seed_pairs = 123
   )
@@ -571,7 +571,7 @@ test_that("bt_run_adaptive breaks when no new pairs available (2 items, forbid r
     init_round_size = 1,
     round_size = 1,
     max_rounds = 5,
-    forbid_repeats = TRUE,
+    repeat_policy = "forbid_unordered",
     reliability_target = 0.99,
     sepG_target = 10,
     rel_se_p90_target = 0.0001,
@@ -714,7 +714,7 @@ test_that("bt_run_adaptive returns stop metadata and tags fits", {
     round_size = 0,
     max_rounds = 10
   )
-  expect_identical(out00$stop_reason, "round_size_zero")
+  expect_identical(out00$stop_reason, "pair_budget_exhausted")
   expect_identical(out00$stop_round, 0L)
   expect_true(is.null(out00$final_fit))
   expect_equal(length(out00$fits), 0L)
@@ -736,10 +736,10 @@ test_that("bt_run_adaptive returns stop metadata and tags fits", {
     rel_se_p90_target = 0,
     rel_se_p90_min_improve = NA_real_
   )
-  expect_identical(out1$stop_reason, "round_size_zero")
+  expect_identical(out1$stop_reason, "pair_budget_exhausted")
   expect_identical(out1$stop_round, 1L)
   expect_true(is.list(attr(out1$fits[[1]], "bt_run_adaptive")))
-  expect_identical(attr(out1$fits[[1]], "bt_run_adaptive")$stop_reason, "round_size_zero")
+  expect_identical(attr(out1$fits[[1]], "bt_run_adaptive")$stop_reason, "pair_budget_exhausted")
   expect_identical(out1$final_fit, out1$fits[[length(out1$fits)]])
 })
 
@@ -761,11 +761,11 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     round_size = 1,
     rel_se_p90_target = 0,
     rel_se_p90_min_improve = NA_real_,
-    forbid_repeats = TRUE,
+    repeat_policy = "forbid_unordered",
     balance_positions = FALSE
   )
-  expect_identical(out_np$stop_reason, "no_pairs")
-  expect_identical(out_np$rounds$stop_reason[[1]], "no_pairs")
+  expect_identical(out_np$stop_reason, "no_new_pairs")
+  expect_identical(out_np$rounds$stop_reason[[1]], "no_new_pairs")
 
   # no_new_results when judge returns 0 new results.
   judge_empty <- function(pairs) tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
@@ -802,13 +802,14 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     judge_fun = function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1),
     init_round_size = 2,
     max_rounds = 5,
+    min_rounds = 1L,
     round_size = 2,
     fit_fun = fit_stop,
     engine = "mock"
   )
-  expect_identical(out_stop$stop_reason, "stopped")
+  expect_identical(out_stop$stop_reason, "precision_reached")
   expect_true(isTRUE(out_stop$rounds$stop[[1]]))
-  expect_identical(attr(out_stop$final_fit, "bt_run_adaptive")$stop_reason, "stopped")
+  expect_identical(attr(out_stop$final_fit, "bt_run_adaptive")$stop_reason, "precision_reached")
 
   # max_rounds when stop criteria are never met and rounds exhaust.
   fit_never <- function(bt_data, ...) {
@@ -828,9 +829,9 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     rel_se_p90_target = 0,
     rel_se_p90_min_improve = NA_real_
   )
-  expect_identical(out_max$stop_reason, "max_rounds")
-  expect_identical(out_max$rounds$stop_reason[[nrow(out_max$rounds)]], "max_rounds")
-  expect_identical(attr(out_max$final_fit, "bt_run_adaptive")$stop_reason, "max_rounds")
+  expect_identical(out_max$stop_reason, "max_rounds_reached")
+  expect_identical(out_max$rounds$stop_reason[[nrow(out_max$rounds)]], "max_rounds_reached")
+  expect_identical(attr(out_max$final_fit, "bt_run_adaptive")$stop_reason, "max_rounds_reached")
 })
 
 test_that("bt_run_adaptive returns state snapshots per round", {

@@ -67,9 +67,13 @@ test_that("bt_stop_metrics covers drift input validation, ids validation, and al
   )
 
   # Provide only prev_fit (or only core_ids) -> error (line ~88)
+  # `prev_fit` can be used without `core_ids` to compute stability metrics.
+  expect_no_error(bt_stop_metrics(fit, prev_fit = fit, core_ids = NULL))
+
+  # Providing `core_ids` without `prev_fit` is still invalid (drift metrics require both).
   expect_error(
-    bt_stop_metrics(fit, prev_fit = fit, core_ids = NULL),
-    "Provide both `prev_fit` and `core_ids`"
+    bt_stop_metrics(fit, prev_fit = NULL, core_ids = c("A")),
+    "requires `prev_fit`"
   )
 
   # ids must be character (line ~94)

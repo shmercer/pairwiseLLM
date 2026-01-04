@@ -51,10 +51,9 @@ Priority (first match wins):
 \item round < min_rounds -> continue
 \item no_new_pairs -> stop ("no_new_pairs")
 \item budget_exhausted -> stop ("pair_budget_exhausted")
+\item precision_reached -> stop ("precision_reached")
+\item stability_reached AND graph_healthy -> stop ("stability_reached")
 \item max_rounds_reached -> stop ("max_rounds_reached")
-\item graph unhealthy -> continue (details record; optionally stop if unrecoverable)
-\item stability reached AND graph healthy -> stop ("stability_reached")
-\item precision reached -> stop ("precision_reached")
 }
 }
 \keyword{internal}

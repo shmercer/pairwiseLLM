@@ -95,6 +95,25 @@
 #' @param min_judgments Passed to \code{\link{select_core_link_pairs}}.
 #' @param forbid_repeats Forbid repeat unordered pairs across the entire run.
 #' @param balance_positions Balance positions (ID1 vs ID2) when proposing pairs.
+#' @param min_rounds Integer. Minimum number of adaptive rounds to run before allowing
+#'   stability- or precision-based stopping. Hard stops (no new pairs, budget exhausted,
+#'   max rounds) can still terminate earlier. Default \code{2}.
+#' @param stop_stability_rms Numeric. Threshold on RMS change in \code{theta} between consecutive
+#'   fits; lower values indicate greater stability. Default \code{0.01}.
+#' @param stop_stability_consecutive Integer. Number of consecutive rounds the stability criteria
+#'   must hold before stopping. Default \code{2}.
+#' @param stop_topk Integer. Size \code{k} for the top-\code{k} overlap stability check. Default \code{50}.
+#' @param stop_topk_overlap Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
+#'   sets required to consider rankings stable. Default \code{0.95}.
+#' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
+#'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
+#' @param stop_min_largest_component_frac Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
+#'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
+#' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
+#'   healthy. Default \code{1}.
+#' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
+#'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
+#'
 #'
 #' @param se_probs Passed to \code{\link{bt_stop_metrics}}.
 #' @param fit_bounds Passed to \code{\link{bt_stop_metrics}} when diagnostics are available.
@@ -1347,13 +1366,6 @@ bt_run_core_linking <- function(samples,
       # A3: ensure both naming schemes exist (core_* and linking_*)
       # (Requires .bt_add_drift_aliases() to exist; see helper below.)
       metrics <- .bt_add_drift_aliases(metrics)
-      metrics <- .bt_order_metrics(metrics)
-
-      # Ensure a consistent superset schema before stopping logic.
-      metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
-
-      metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
-
       prev_metrics_for_state <- prev_metrics
 
 
@@ -1382,6 +1394,13 @@ bt_run_core_linking <- function(samples,
       metrics$stability_streak <- as.integer(stability_streak)
       metrics$graph_healthy <- isTRUE(graph_healthy)
       metrics$stability_pass <- isTRUE(stability_pass)
+      metrics <- .bt_order_metrics(metrics)
+
+      # Ensure a consistent superset schema before stopping logic.
+      metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
+
+      metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
+
 
       stop_dec <- do.call(
         bt_should_stop,

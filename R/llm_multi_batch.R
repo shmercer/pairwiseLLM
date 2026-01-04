@@ -523,7 +523,7 @@ llm_resume_multi_batches <- function(
     round_i <- round_i + 1L
     if (is.finite(max_rounds_internal) && round_i > max_rounds_internal) {
       stop(
-        "Polling exceeded max_rounds (", max_rounds_internal, ") without completing all jobs. ",
+        "max_rounds_reached: Polling exceeded max_rounds (", max_rounds_internal, ") without completing all jobs. ",
         "This usually indicates a job that never reaches a terminal status in the mocked API or provider response.",
         call. = FALSE
       )

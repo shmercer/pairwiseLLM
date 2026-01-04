@@ -109,6 +109,28 @@ bt_stop_metrics <- function(fit,
   }
 
   theta_tbl <- tibble::as_tibble(fit$theta)
+
+  # Allow lightweight / mock engines that store SEs separately (e.g., in `fit$se`).
+  # However, if SEs are not available anywhere, error (tests expect this).
+  if (!("se" %in% names(theta_tbl))) {
+    if (!is.null(fit$se)) {
+      se_tbl <- fit$se
+      if (is.numeric(se_tbl) && !is.null(names(se_tbl))) {
+        se_tbl <- tibble::tibble(ID = names(se_tbl), se = as.numeric(se_tbl))
+      }
+      se_tbl <- tibble::as_tibble(se_tbl)
+      if (!all(c("ID", "se") %in% names(se_tbl))) {
+        stop("`fit$se` must contain columns 'ID' and 'se'.", call. = FALSE)
+      }
+      theta_tbl <- dplyr::left_join(
+        theta_tbl,
+        dplyr::distinct(se_tbl[, c("ID", "se")]),
+        by = "ID"
+      )
+    } else {
+      stop("`fit$theta` must contain columns 'ID', 'theta', and 'se' (or provide standard errors via `fit$se`).", call. = FALSE)
+    }
+  }
   theta_tbl_all <- theta_tbl
   n_total_items <- nrow(theta_tbl_all)
 

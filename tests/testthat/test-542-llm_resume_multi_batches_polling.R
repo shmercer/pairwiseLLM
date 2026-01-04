@@ -23,6 +23,6 @@ testthat::test_that("llm_resume_multi_batches stops after max_rounds when jobs c
       max_rounds = 1,
       verbose = TRUE
     ),
-    "max_rounds"
+    "max_rounds_reached"
   )
 })

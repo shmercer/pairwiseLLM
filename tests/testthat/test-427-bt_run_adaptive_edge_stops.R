@@ -12,7 +12,7 @@ testthat::test_that("bt_run_adaptive stops cleanly when round_size is zero", {
     judge_fun = function(pairs) dplyr::mutate(pairs, better_id = .data$ID1)
   )
 
-  testthat::expect_equal(out$stop_reason, "round_size_zero")
+  testthat::expect_equal(out$stop_reason, "pair_budget_exhausted")
   testthat::expect_true(is.data.frame(out$pairing_diagnostics))
 })
 
@@ -58,6 +58,6 @@ testthat::test_that("bt_run_adaptive uses max_rounds when no stop targets are se
     final_refit = FALSE
   )
 
-  testthat::expect_equal(out$stop_reason, "max_rounds")
+  testthat::expect_equal(out$stop_reason, "max_rounds_reached")
 })
 

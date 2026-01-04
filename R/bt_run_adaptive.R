@@ -86,6 +86,25 @@
 #' model fit when \code{initial_results} is \code{NULL} or empty. Default: \code{round_size}.
 #' @param max_rounds Integer. Maximum number of adaptive rounds to run (excluding the bootstrap
 #' scoring step). Default \code{50}.
+#' @param min_rounds Integer. Minimum number of adaptive rounds to run before allowing
+#'   stability- or precision-based stopping. Hard stops (no new pairs, budget exhausted,
+#'   max rounds) can still terminate earlier. Default \code{2}.
+#' @param stop_stability_rms Numeric. Threshold on RMS change in \code{theta} between consecutive
+#'   fits; lower values indicate greater stability. Default \code{0.01}.
+#' @param stop_stability_consecutive Integer. Number of consecutive rounds the stability criteria
+#'   must hold before stopping. Default \code{2}.
+#' @param stop_topk Integer. Size \code{k} for the top-\code{k} overlap stability check. Default \code{50}.
+#' @param stop_topk_overlap Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
+#'   sets required to consider rankings stable. Default \code{0.95}.
+#' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
+#'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
+#' @param stop_min_largest_component_frac Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
+#'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
+#' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
+#'   healthy. Default \code{1}.
+#' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
+#'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
+#'
 #'
 #' @param se_probs Numeric vector of probabilities in (0, 1) used when summarizing the
 #' distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
@@ -512,7 +531,8 @@ bt_run_adaptive <- function(samples,
       repeat_policy <- "reverse_only"
     }
   }
-  repeat_policy <- match.arg(repeat_policy, c("none", "reverse_only", "forbid_unordered"))
+  repeat_policy <- match.arg(repeat_policy, c("allow", "none", "reverse_only", "forbid_unordered"))
+  if (identical(repeat_policy, "allow")) repeat_policy <- "none"
   if (!is.numeric(rc_smoothing) || length(rc_smoothing) != 1L || is.na(rc_smoothing) || rc_smoothing < 0) {
     stop("`rc_smoothing` must be a single non-negative number.", call. = FALSE)
   }
@@ -784,6 +804,7 @@ bt_run_adaptive <- function(samples,
   rounds_list <- list()
   state_list <- list()
   pairing_diag_list <- list()
+  metrics_hist <- tibble::tibble()
 
   .make_checkpoint_payload <- function(next_round, completed = FALSE, out = NULL) {
     rounds_now <- dplyr::bind_rows(rounds_tbl_prev, if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list))
@@ -801,6 +822,7 @@ bt_run_adaptive <- function(samples,
       fits = if (isTRUE(checkpoint_store_fits)) fits else NULL,
       final_fit = if (isTRUE(checkpoint_store_fits)) final_fit else NULL,
       prev_metrics = prev_metrics,
+      metrics = metrics_hist,
       stop_reason = stop_reason,
       stop_round = stop_round,
       rounds = rounds_now,
@@ -886,6 +908,8 @@ bt_run_adaptive <- function(samples,
     # Ensure a consistent superset schema before stopping logic.
     metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
 
+    # Keep a per-round history of bt_stop_metrics output (schema-aligned).
+
     stopping_tier <- match.arg(stopping_tier)
     tier_params <- bt_stop_tiers()[[stopping_tier]]
     tier_params <- utils::modifyList(
@@ -912,8 +936,14 @@ bt_run_adaptive <- function(samples,
     degree_min <- as.double(gm$degree_min)
     largest_component_frac <- as.double(gm$largest_component_frac)
 
-    graph_healthy <- isTRUE(degree_min >= as.double(stop_min_degree)) &&
-      isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+    # If no graph-health thresholds are set, treat the graph as healthy (no gating).
+    graph_healthy <- TRUE
+    if (is.finite(as.double(stop_min_degree))) {
+      graph_healthy <- isTRUE(graph_healthy) && isTRUE(degree_min >= as.double(stop_min_degree))
+    }
+    if (is.finite(as.double(stop_min_largest_component_frac))) {
+      graph_healthy <- isTRUE(graph_healthy) && isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+    }
 
     # ---- PR7: stability criterion (gated by graph health) ----
     stability_pass <- FALSE
@@ -964,7 +994,7 @@ bt_run_adaptive <- function(samples,
     }
 
     no_new_pairs <- (!isTRUE(budget_exhausted) && nrow(pairs_next) == 0L)
-    max_rounds_reached <- (as.integer(r) >= as.integer(max_rounds))
+    max_rounds_reached <- ((as.integer(r) - 1L) >= as.integer(max_rounds))
 
     stop_chk <- .stop_decision(
       round = r,
@@ -978,6 +1008,18 @@ bt_run_adaptive <- function(samples,
       stop_reason_priority = stop_reason_priority
     )
     .validate_stop_decision(stop_chk)
+
+    # Record graph/stability diagnostics into the per-round metrics (these columns exist in the schema template).
+    metrics <- metrics %>%
+      dplyr::mutate(
+        degree_min = as.double(degree_min),
+        largest_component_frac = as.double(largest_component_frac),
+        graph_healthy = as.logical(graph_healthy),
+        stability_streak = as.integer(stability_streak),
+        stability_pass = as.logical(stability_pass)
+      )
+
+    metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 
     this_reason <- stop_chk$reason %||% NA_character_
 
@@ -998,6 +1040,8 @@ bt_run_adaptive <- function(samples,
     )
     state_list[[length(state_list) + 1L]] <- st_now
 
+    metrics_clean <- dplyr::select(metrics, -dplyr::any_of(c("stop", "stop_reason")))
+
     rounds_list[[length(rounds_list) + 1L]] <- dplyr::bind_cols(
       tibble::tibble(
         round = as.integer(r),
@@ -1005,14 +1049,9 @@ bt_run_adaptive <- function(samples,
         n_total_results = as.integer(nrow(results)),
         stop = isTRUE(stop_chk$stop),
         stop_reason = this_reason,
-        degree_min = as.double(degree_min),
-        largest_component_frac = as.double(largest_component_frac),
-        stability_streak = as.integer(stability_streak),
-        graph_healthy = isTRUE(graph_healthy),
-        stability_pass = isTRUE(stability_pass),
         precision_reached = isTRUE(precision_reached)
       ),
-      metrics,
+      metrics_clean,
       .name_repair = "check_unique"
     )
 
@@ -1184,7 +1223,7 @@ bt_run_adaptive <- function(samples,
           stage = "round_fit",
           n_results = nrow(results),
           n_pairs_this_round = NA_integer_,
-          stop_reason = "max_rounds"
+          stop_reason = "max_rounds_reached"
         )
         final_fit <- fits[[length(fits)]]
       }
@@ -1192,7 +1231,7 @@ bt_run_adaptive <- function(samples,
         state_list[[length(state_list)]] <- dplyr::mutate(
           state_list[[length(state_list)]],
           stop = TRUE,
-          stop_reason = "max_rounds"
+          stop_reason = "max_rounds_reached"
         )
       }
     }
@@ -1382,6 +1421,7 @@ bt_run_adaptive <- function(samples,
 
   out <- list(
     results = results,
+    metrics = metrics_hist,
     bt_data = bt_data_final,
     fits = fits,
     final_fit = final_fit,

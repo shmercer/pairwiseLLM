@@ -91,7 +91,7 @@ test_that("bt_run_adaptive_core_linking returns round_size_zero when no sampling
     seed_pairs = 1
   )
 
-  expect_identical(out$stop_reason, "round_size_zero")
+  expect_identical(out$stop_reason, "pair_budget_exhausted")
   expect_identical(out$stop_round, 0L)
   expect_equal(nrow(out$results), 0L)
 })
@@ -163,7 +163,7 @@ test_that("bt_run_adaptive_core_linking drift gating can prevent stopping (hits 
     core_max_abs_shift_target = 1e-6
   )
 
-  expect_equal(out$batch_summary$stop_reason[[1]], "max_rounds")
+  expect_equal(out$batch_summary$stop_reason[[1]], "max_rounds_reached")
   expect_true(any(out$metrics$stop == FALSE))
 })
 
@@ -499,7 +499,7 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
     max_item_misfit_prop = NA_real_,
     max_judge_misfit_prop = NA_real_
   )
-  expect_equal(out_no_pairs$batch_summary$stop_reason[[1]], "no_pairs")
+  expect_equal(out_no_pairs$batch_summary$stop_reason[[1]], "no_new_pairs")
   expect_true(nrow(out_no_pairs$metrics) == 0L)
 
   # ---- no_results path (force fit_from_results to return NULL after judging a round) ----
@@ -575,8 +575,8 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
     max_item_misfit_prop = NA_real_,
     max_judge_misfit_prop = NA_real_
   )
-  expect_equal(out_stopped$batch_summary$stop_reason[[1]], "stopped")
-  expect_equal(out_stopped$stop_reason, "stopped")
+  expect_equal(out_stopped$batch_summary$stop_reason[[1]], "precision_reached")
+  expect_equal(out_stopped$stop_reason, "precision_reached")
   expect_true(is.integer(out_stopped$stop_round) || is.na(out_stopped$stop_round))
   expect_true(nrow(out_stopped$metrics) >= 1L)
 
@@ -598,8 +598,8 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
     max_item_misfit_prop = NA_real_,
     max_judge_misfit_prop = NA_real_
   )
-  expect_equal(out_max0$batch_summary$stop_reason[[1]], "max_rounds")
-  expect_equal(out_max0$stop_reason, "max_rounds")
+  expect_equal(out_max0$batch_summary$stop_reason[[1]], "max_rounds_reached")
+  expect_equal(out_max0$stop_reason, "max_rounds_reached")
   expect_true(is.integer(out_max0$stop_round) || is.na(out_max0$stop_round))
   expect_true(nrow(out_max0$metrics) == 0L)
 })

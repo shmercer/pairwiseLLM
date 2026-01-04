@@ -110,7 +110,7 @@
     } else {
       df <- dplyr::arrange(df, dplyr::desc(.data$theta), .data$ID)
     }
-    head(df$ID, K)
+    utils::head(df$ID, K)
   }
 
   prev_top <- top_ids(joined, "theta_prev")
