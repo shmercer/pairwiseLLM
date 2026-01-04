@@ -75,6 +75,10 @@ summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
     theta_num <- as.double(unname(theta_num))
   }
 
+  # Ensure the output `theta` column is numeric as well (useful for downstream
+  # metrics and plotting).
+  theta$theta <- theta_num
+
   # Order and rank (quietly if verbose = FALSE)
   ord <- if (isTRUE(verbose)) {
     order(theta_num, decreasing = decreasing, na.last = "keep")

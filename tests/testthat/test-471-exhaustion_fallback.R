@@ -43,7 +43,7 @@ test_that("exhaustion fallback can unlock cross-batch new-new pairs", {
     exhaustion_fallback = "none"
   )
 
-  expect_equal(out_none$batch_summary$stop_reason[[2]], "no_pairs")
+  expect_equal(out_none$batch_summary$stop_reason[[2]], "no_new_pairs")
 
   set.seed(1)
   out_fb <- bt_run_core_linking(
@@ -66,7 +66,7 @@ test_that("exhaustion fallback can unlock cross-batch new-new pairs", {
     exhaustion_fallback = "cross_batch_new_new"
   )
 
-  expect_equal(out_fb$batch_summary$stop_reason[[2]], "max_rounds")
+  expect_equal(out_fb$batch_summary$stop_reason[[2]], "max_rounds_reached")
 
   # The fallback should introduce cross-batch comparisons involving A1/A2.
   batch2 <- dplyr::filter(out_fb$results, batch_i == 2)

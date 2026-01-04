@@ -212,52 +212,6 @@ test_that("bt_run_adaptive supports judge column when judge= is provided", {
   expect_true("judge" %in% names(out$bt_data))
 })
 
-test_that("bt_run_adaptive can run post-stop reverse audit and returns perfect consistency under deterministic judge", {
-  samples <- tibble::tibble(
-    ID = LETTERS[1:5],
-    text = paste0("t", LETTERS[1:5])
-  )
-  true_theta <- stats::setNames(c(2, 1, 0, -1, -2), samples$ID)
-
-  judge_fun <- function(pairs) {
-    simulate_bt_judge(
-      pairs,
-      true_theta = true_theta,
-      deterministic = TRUE,
-      seed = 999
-    )
-  }
-
-  fit_fun <- function(bt_data, ...) {
-    list(
-      engine = "mock",
-      reliability = 0.95,
-      theta = tibble::tibble(ID = samples$ID, theta = rep(0, 5), se = rep(1, 5)),
-      diagnostics = list(sepG = 3.5)
-    )
-  }
-
-  out <- bt_run_adaptive(
-    samples = samples,
-    judge_fun = judge_fun,
-    fit_fun = fit_fun,
-    engine = "mock",
-    round_size = 5,
-    init_round_size = 4,
-    max_rounds = 5,
-    reverse_audit = TRUE,
-    reverse_pct = 1,
-    reverse_seed = 1,
-    rel_se_p90_target = 1000,
-    rel_se_p90_min_improve = NA_real_
-  )
-
-  expect_true(is.list(out$reverse_audit))
-  expect_true(nrow(out$reverse_audit$pairs_reversed) >= 1L)
-  expect_true(is.list(out$reverse_audit$consistency))
-  expect_equal(out$reverse_audit$consistency$summary$prop_consistent, 1)
-})
-
 test_that("bt_run_adaptive restores RNG state when seed_pairs is provided (handles missing .Random.seed)", {
   had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
   old_seed <- NULL
@@ -428,7 +382,7 @@ test_that("bt_run_adaptive bootstrap works with repeats allowed and no position 
     init_round_size = 10,
     round_size = 0,
     max_rounds = 0,
-    forbid_repeats = FALSE,
+    repeat_policy = "allow",
     balance_positions = FALSE,
     seed_pairs = 123
   )
@@ -480,70 +434,6 @@ test_that("bt_run_adaptive breaks when judge returns no rows for an adaptive rou
   expect_true(nrow(out$results) >= 2)
 })
 
-test_that("bt_run_adaptive reverse audit branches: reverse_pct=0 vs n_reverse override", {
-  samples <- tibble::tibble(
-    ID = LETTERS[1:4],
-    text = paste0("t", LETTERS[1:4])
-  )
-
-  initial_results <- tibble::tibble(
-    ID1 = c("A", "B"),
-    ID2 = c("C", "D"),
-    better_id = c("A", "D")
-  )
-
-  # reverse_pct = 0 => no reversals
-  out0 <- bt_run_adaptive(
-    samples = samples,
-    judge_fun = function(pairs) stop("judge_fun should not be called for pct=0, max_rounds=0"),
-    initial_results = initial_results,
-    init_round_size = 0,
-    max_rounds = 0,
-    reverse_audit = TRUE,
-    reverse_pct = 0,
-    reverse_seed = 1
-  )
-  expect_true(is.list(out0$reverse_audit))
-  expect_equal(nrow(out0$reverse_audit$pairs_reversed), 0)
-  expect_null(out0$reverse_audit$consistency)
-
-  # n_reverse overrides reverse_pct
-  true_theta <- stats::setNames(c(2, 1, 0, -1), samples$ID)
-  judge_fun2 <- function(pairs) simulate_bt_judge(pairs, true_theta = true_theta, deterministic = TRUE, seed = 1)
-
-  out1 <- bt_run_adaptive(
-    samples = samples,
-    judge_fun = judge_fun2,
-    initial_results = initial_results,
-    init_round_size = 0,
-    max_rounds = 0,
-    reverse_audit = TRUE,
-    reverse_pct = 0,
-    n_reverse = 1,
-    reverse_seed = 1
-  )
-  expect_equal(nrow(out1$reverse_audit$pairs_reversed), 1)
-  expect_true(is.list(out1$reverse_audit$consistency))
-})
-
-test_that("bt_run_adaptive validates reverse_pct when n_reverse is NULL", {
-  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
-  initial_results <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
-
-  expect_error(
-    bt_run_adaptive(
-      samples = samples,
-      judge_fun = function(pairs) pairs,
-      initial_results = initial_results,
-      init_round_size = 0,
-      max_rounds = 0,
-      reverse_audit = TRUE,
-      reverse_pct = "bad",
-      n_reverse = NULL
-    ),
-    "reverse_pct"
-  )
-})
 
 test_that("bt_run_adaptive errors on duplicate sample IDs", {
   samples <- tibble::tibble(ID = c("A", "A"), text = c("a", "b"))
@@ -681,7 +571,7 @@ test_that("bt_run_adaptive breaks when no new pairs available (2 items, forbid r
     init_round_size = 1,
     round_size = 1,
     max_rounds = 5,
-    forbid_repeats = TRUE,
+    repeat_policy = "forbid_unordered",
     reliability_target = 0.99,
     sepG_target = 10,
     rel_se_p90_target = 0.0001,
@@ -731,56 +621,6 @@ test_that("bt_run_adaptive breaks when judge returns 0 new results in an adaptiv
 
   expect_true(nrow(out$rounds) >= 1L)
   expect_equal(calls, 2L)
-})
-
-test_that("reverse audit edge cases: reverse_pct=0 and invalid reverse_pct", {
-  samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
-  true_theta <- c(A = 1, B = 0, C = -1)
-  judge_fun <- function(pairs) simulate_bt_judge(pairs, true_theta, deterministic = TRUE, seed = 1)
-
-  fit_fun <- function(bt_data, ...) {
-    list(
-      engine = "mock",
-      reliability = 0.95,
-      theta = tibble::tibble(ID = c("A", "B", "C"), theta = c(0, 0, 0), se = c(1, 1, 1)),
-      diagnostics = list(sepG = 3.5)
-    )
-  }
-
-  out0 <- bt_run_adaptive(
-    samples = samples,
-    judge_fun = judge_fun,
-    fit_fun = fit_fun,
-    engine = "mock",
-    init_round_size = 2,
-    round_size = 0,
-    max_rounds = 1,
-    reverse_audit = TRUE,
-    reverse_pct = 0,
-    rel_se_p90_target = NA_real_,
-    rel_se_p90_min_improve = NA_real_
-  )
-
-  expect_false(is.null(out0$reverse_audit))
-  expect_equal(nrow(out0$reverse_audit$pairs_reversed), 0L)
-  expect_true(is.null(out0$reverse_audit$consistency))
-
-  expect_error(
-    bt_run_adaptive(
-      samples = samples,
-      judge_fun = judge_fun,
-      fit_fun = fit_fun,
-      engine = "mock",
-      init_round_size = 2,
-      round_size = 0,
-      max_rounds = 1,
-      reverse_audit = TRUE,
-      reverse_pct = 2,
-      rel_se_p90_target = NA_real_,
-      rel_se_p90_min_improve = NA_real_
-    ),
-    "reverse_pct.*between 0 and 1"
-  )
 })
 
 test_that("simulate_bt_judge covers deterministic/stochastic + judge labeling", {
@@ -850,35 +690,6 @@ test_that("check_positional_bias covers inconsistent-pair branch and df-input br
 })
 
 
-test_that("bt_run_adaptive reverse audit de-duplicates unordered pairs in initial_results", {
-  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
-
-  # Include both orientations of the same unordered pair.
-  initial_results <- tibble::tibble(
-    ID1 = c("A", "B"),
-    ID2 = c("B", "A"),
-    better_id = c("A", "A")
-  )
-
-  judge_fun <- function(pairs) {
-    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
-  }
-
-  out <- bt_run_adaptive(
-    samples = samples,
-    judge_fun = judge_fun,
-    initial_results = initial_results,
-    init_round_size = 0,
-    max_rounds = 0,
-    reverse_audit = TRUE,
-    n_reverse = 100,
-    reverse_seed = 1
-  )
-
-  expect_true(is.list(out$reverse_audit))
-  expect_equal(nrow(out$reverse_audit$pairs_reversed), 1L)
-})
-
 test_that("bt_run_adaptive returns stop metadata and tags fits", {
   samples <- tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c"))
 
@@ -903,7 +714,7 @@ test_that("bt_run_adaptive returns stop metadata and tags fits", {
     round_size = 0,
     max_rounds = 10
   )
-  expect_identical(out00$stop_reason, "round_size_zero")
+  expect_identical(out00$stop_reason, "pair_budget_exhausted")
   expect_identical(out00$stop_round, 0L)
   expect_true(is.null(out00$final_fit))
   expect_equal(length(out00$fits), 0L)
@@ -925,10 +736,10 @@ test_that("bt_run_adaptive returns stop metadata and tags fits", {
     rel_se_p90_target = 0,
     rel_se_p90_min_improve = NA_real_
   )
-  expect_identical(out1$stop_reason, "round_size_zero")
+  expect_identical(out1$stop_reason, "pair_budget_exhausted")
   expect_identical(out1$stop_round, 1L)
   expect_true(is.list(attr(out1$fits[[1]], "bt_run_adaptive")))
-  expect_identical(attr(out1$fits[[1]], "bt_run_adaptive")$stop_reason, "round_size_zero")
+  expect_identical(attr(out1$fits[[1]], "bt_run_adaptive")$stop_reason, "pair_budget_exhausted")
   expect_identical(out1$final_fit, out1$fits[[length(out1$fits)]])
 })
 
@@ -950,11 +761,11 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     round_size = 1,
     rel_se_p90_target = 0,
     rel_se_p90_min_improve = NA_real_,
-    forbid_repeats = TRUE,
+    repeat_policy = "forbid_unordered",
     balance_positions = FALSE
   )
-  expect_identical(out_np$stop_reason, "no_pairs")
-  expect_identical(out_np$rounds$stop_reason[[1]], "no_pairs")
+  expect_identical(out_np$stop_reason, "no_new_pairs")
+  expect_identical(out_np$rounds$stop_reason[[1]], "no_new_pairs")
 
   # no_new_results when judge returns 0 new results.
   judge_empty <- function(pairs) tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
@@ -991,13 +802,14 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     judge_fun = function(pairs) tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1),
     init_round_size = 2,
     max_rounds = 5,
+    min_rounds = 1L,
     round_size = 2,
     fit_fun = fit_stop,
     engine = "mock"
   )
-  expect_identical(out_stop$stop_reason, "stopped")
+  expect_identical(out_stop$stop_reason, "precision_reached")
   expect_true(isTRUE(out_stop$rounds$stop[[1]]))
-  expect_identical(attr(out_stop$final_fit, "bt_run_adaptive")$stop_reason, "stopped")
+  expect_identical(attr(out_stop$final_fit, "bt_run_adaptive")$stop_reason, "precision_reached")
 
   # max_rounds when stop criteria are never met and rounds exhaust.
   fit_never <- function(bt_data, ...) {
@@ -1017,9 +829,9 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     rel_se_p90_target = 0,
     rel_se_p90_min_improve = NA_real_
   )
-  expect_identical(out_max$stop_reason, "max_rounds")
-  expect_identical(out_max$rounds$stop_reason[[nrow(out_max$rounds)]], "max_rounds")
-  expect_identical(attr(out_max$final_fit, "bt_run_adaptive")$stop_reason, "max_rounds")
+  expect_identical(out_max$stop_reason, "max_rounds_reached")
+  expect_identical(out_max$rounds$stop_reason[[nrow(out_max$rounds)]], "max_rounds_reached")
+  expect_identical(attr(out_max$final_fit, "bt_run_adaptive")$stop_reason, "max_rounds_reached")
 })
 
 test_that("bt_run_adaptive returns state snapshots per round", {

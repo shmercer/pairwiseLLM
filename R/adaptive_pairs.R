@@ -341,7 +341,8 @@
   # Accept a convenience alias used by other entrypoints/tests.
   # `forbid_unordered` means: do not plan repeats *and* forbid selecting
   # unordered repeats from the non-repeat candidate pool.
-  repeat_policy <- match.arg(repeat_policy, c("none", "reverse_only", "forbid_unordered"))
+  repeat_policy <- match.arg(repeat_policy, c("allow", "none", "reverse_only", "forbid_unordered"))
+  if (identical(repeat_policy, "allow")) repeat_policy <- "none"
   if (identical(repeat_policy, "forbid_unordered")) {
     forbid_unordered <- TRUE
     repeat_policy <- "none"
@@ -831,7 +832,8 @@ select_adaptive_pairs <- function(samples,
   # Accept a convenience alias used by other entrypoints/tests.
   # "forbid_unordered" means: do not plan repeats *and* forbid selecting
   # unordered repeats from the candidate pool.
-  repeat_policy <- match.arg(repeat_policy, c("none", "reverse_only", "forbid_unordered"))
+  repeat_policy <- match.arg(repeat_policy, c("allow", "none", "reverse_only", "forbid_unordered"))
+  if (identical(repeat_policy, "allow")) repeat_policy <- "none"
 
   if (repeat_policy == "forbid_unordered") {
     # Reuse legacy/internal guard for forbidding unordered repeats.

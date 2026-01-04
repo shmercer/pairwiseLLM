@@ -32,6 +32,12 @@
 #' @param fit_bounds Numeric length-2 vector giving lower/upper bounds for acceptable
 #'   infit/outfit when diagnostics are available. Default: \code{c(0.7, 1.3)}.
 #'
+#' @param stability_topk Integer. K used for top-K overlap stability when `prev_fit` is
+#'   provided. Default: 50.
+#' @param stability_topk_ties Character. Tie-breaking rule for Top-K stability.
+#'   Default: "id" (deterministic). Use "random" for randomized tie-breaking.
+#' @param stability_seed Optional integer seed used only when `stability_topk_ties = "random"`.
+#'
 #' @return A one-row tibble of stopping metrics.
 #'
 #' @examples
@@ -73,7 +79,10 @@ bt_stop_metrics <- function(fit,
                             prev_fit = NULL,
                             core_ids = NULL,
                             se_probs = c(0.5, 0.9, 0.95),
-                            fit_bounds = c(0.7, 1.3)) {
+                            fit_bounds = c(0.7, 1.3),
+                            stability_topk = 50L,
+                            stability_topk_ties = c("id", "random"),
+                            stability_seed = NULL) {
   if (!is.list(fit) || is.null(fit$theta)) {
     stop(
       "`fit` must be a list returned by `fit_bt_model()` and contain a `$theta` tibble.",
@@ -100,14 +109,41 @@ bt_stop_metrics <- function(fit,
   }
 
   theta_tbl <- tibble::as_tibble(fit$theta)
+
+  # Allow lightweight / mock engines that store SEs separately (e.g., in `fit$se`).
+  # However, if SEs are not available anywhere, error (tests expect this).
+  if (!("se" %in% names(theta_tbl))) {
+    if (!is.null(fit$se)) {
+      se_tbl <- fit$se
+      if (is.numeric(se_tbl) && !is.null(names(se_tbl))) {
+        se_tbl <- tibble::tibble(ID = names(se_tbl), se = as.numeric(se_tbl))
+      }
+      se_tbl <- tibble::as_tibble(se_tbl)
+      if (!all(c("ID", "se") %in% names(se_tbl))) {
+        stop("`fit$se` must contain columns 'ID' and 'se'.", call. = FALSE)
+      }
+      theta_tbl <- dplyr::left_join(
+        theta_tbl,
+        dplyr::distinct(se_tbl[, c("ID", "se")]),
+        by = "ID"
+      )
+    } else {
+      stop("`fit$theta` must contain columns 'ID', 'theta', and 'se' (or provide standard errors via `fit$se`).", call. = FALSE)
+    }
+  }
   theta_tbl_all <- theta_tbl
   n_total_items <- nrow(theta_tbl_all)
 
   # Validate drift inputs
-  if (is.null(prev_fit) != is.null(core_ids)) {
-    stop("Provide both `prev_fit` and `core_ids`, or neither.", call. = FALSE)
+  if (!is.null(core_ids) && is.null(prev_fit)) {
+    stop("`core_ids` requires `prev_fit`. Provide both, or omit `core_ids`.", call. = FALSE)
   }
 
+  stability_topk <- as.integer(stability_topk)
+  if (is.na(stability_topk) || stability_topk < 1L) {
+    stop("`stability_topk` must be a positive integer.", call. = FALSE)
+  }
+  stability_topk_ties <- match.arg(stability_topk_ties)
   # Optional: compute precision summaries on a subset of IDs
   # Optional: compute precision summaries on a subset of IDs.
   #
@@ -242,6 +278,24 @@ bt_stop_metrics <- function(fit,
 
   for (nm in names(qmap)) {
     out[[nm]] <- as.double(qmap[[nm]])
+  }
+
+  if (!is.null(prev_fit)) {
+    stab <- .stability_metrics(
+      prev_theta_tbl = prev_fit$theta,
+      curr_theta_tbl = fit$theta,
+      topk = stability_topk,
+      topk_ties = stability_topk_ties,
+      seed = stability_seed
+    )
+    out <- dplyr::bind_cols(out, stab)
+  } else {
+    out <- dplyr::bind_cols(out, tibble::tibble(
+      n_matched = 0L,
+      rms_theta_delta = NA_real_,
+      topk_overlap = NA_real_,
+      rank_corr = NA_real_
+    ))
   }
 
   if (!is.null(prev_fit) && !is.null(core_ids)) {

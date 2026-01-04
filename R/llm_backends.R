@@ -1,3 +1,10 @@
+.normalize_backend_arg <- function(backend) {
+  match.arg(
+    backend,
+    choices = c("openai", "anthropic", "gemini", "together", "ollama")
+  )
+}
+
 #' Backend-agnostic live comparison for a single pair of samples
 #'
 #' `llm_compare_pair()` is a thin wrapper around backend-specific comparison
@@ -99,7 +106,15 @@ llm_compare_pair <- function(
   validate_strict = FALSE,
   ...
 ) {
-  backend <- match.arg(backend)
+  backend <- .normalize_backend_arg(backend)
+
+  # This branch is effectively unreachable under normal usage because
+  # `.normalize_backend_arg()` uses `match.arg()`; we keep it as a defensive
+  # guard and for targeted unit tests.
+  allowed_backends <- c("openai", "anthropic", "gemini", "together", "ollama")
+  if (!backend %in% allowed_backends) {
+    stop("Backend `", backend, "` is not implemented yet.")
+  }
 
   # Normalize empty-string keys to NULL
   if (!is.null(api_key) && identical(api_key, "")) {
@@ -310,7 +325,13 @@ submit_llm_pairs <- function(
   workers = 1,
   ...
 ) {
-  backend <- match.arg(backend)
+  backend <- .normalize_backend_arg(backend)
+
+  # Defensive guard (normally unreachable; see comment in `llm_compare_pair()`)
+  allowed_backends <- c("openai", "anthropic", "gemini", "together", "ollama")
+  if (!backend %in% allowed_backends) {
+    stop("Backend `", backend, "` is not implemented yet.")
+  }
 
   # Normalize empty-string keys to NULL
   if (!is.null(api_key) && identical(api_key, "")) {
