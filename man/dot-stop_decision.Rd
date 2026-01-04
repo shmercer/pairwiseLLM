@@ -29,9 +29,9 @@
 
 \item{graph_healthy}{Logical; TRUE when graph thresholds pass.}
 
-\item{stability_reached}{Logical; TRUE when stability thresholds pass.}
+\item{stability_reached}{Logical; TRUE when stability thresholds pass (ignoring graph health).}
 
-\item{precision_reached}{Logical; TRUE when precision tier / thresholds pass.}
+\item{precision_reached}{Logical; TRUE when precision tier / thresholds pass (ignoring graph health).}
 
 \item{stop_reason_priority}{Optional character vector of reason priority. When supplied,
 it overrides the default priority among the stop-causes that are eligible after
@@ -48,12 +48,18 @@ Designed to be called once per round after metrics are computed.
 \details{
 Priority (first match wins):
 \enumerate{
-\item round < min_rounds -> continue
+\item round < min_rounds -> continue (except exhaustion / hard-stop reasons)
 \item no_new_pairs -> stop ("no_new_pairs")
 \item budget_exhausted -> stop ("pair_budget_exhausted")
-\item precision_reached -> stop ("precision_reached")
-\item stability_reached AND graph_healthy -> stop ("stability_reached")
 \item max_rounds_reached -> stop ("max_rounds_reached")
+\item stability_reached AND graph_healthy -> stop ("stability_reached")
+\item precision_reached AND graph_healthy -> stop ("precision_reached")
+}
+
+Notes:
+\itemize{
+\item When \code{graph_healthy} is FALSE, stability/precision stops are blocked rather
+than triggered; the blocked causes are recorded in \code{details}.
 }
 }
 \keyword{internal}

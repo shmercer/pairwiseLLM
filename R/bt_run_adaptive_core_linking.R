@@ -1421,7 +1421,7 @@ bt_run_adaptive_core_linking <- function(samples,
       m <- .bt_align_metrics(m, se_probs = se_probs)
 
 
-      # ---- PR7: graph health + stability (gated) ----
+      # ---- PR7/PR8.0: graph health + stability (stopping is gated by graph health) ----
       gs <- .graph_state_from_pairs(results, ids = ids_all)
       gm <- gs$metrics
       degree_min <- as.double(gm$degree_min)
@@ -1431,7 +1431,7 @@ bt_run_adaptive_core_linking <- function(samples,
         isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
 
       stability_pass <- FALSE
-      if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+      if (!is.null(prev_fit_for_stability)) {
         stability_pass <- is.finite(m$rms_theta_delta) &&
           m$rms_theta_delta <= as.double(stop_stability_rms) &&
           is.finite(m$topk_overlap) &&

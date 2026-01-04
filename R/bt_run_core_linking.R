@@ -107,7 +107,7 @@
 #'   sets required to consider rankings stable. Default \code{0.95}.
 #' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
 #'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
-#' @param stop_min_largest_component_frac Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
+#' @param stop_min_largest_component_frac Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
 #'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
 #' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
 #'   healthy. Default \code{1}.
@@ -1369,7 +1369,7 @@ bt_run_core_linking <- function(samples,
       prev_metrics_for_state <- prev_metrics
 
 
-      # ---- PR7: graph health + stability (gated) ----
+      # ---- PR7/PR8.0: graph health + stability (stopping is gated by graph health) ----
       gs <- .graph_state_from_pairs(results, ids = ids_all)
       gm <- gs$metrics
       degree_min <- as.double(gm$degree_min)
@@ -1379,7 +1379,7 @@ bt_run_core_linking <- function(samples,
         isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
 
       stability_pass <- FALSE
-      if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+      if (!is.null(prev_fit_for_stability)) {
         stability_pass <- is.finite(metrics$rms_theta_delta) &&
           metrics$rms_theta_delta <= as.double(stop_stability_rms) &&
           is.finite(metrics$topk_overlap) &&

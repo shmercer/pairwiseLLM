@@ -8,12 +8,16 @@
 #' Designed to be called once per round after metrics are computed.
 #'
 #' Priority (first match wins):
-#'  1) round < min_rounds -> continue
+#'  1) round < min_rounds -> continue (except exhaustion / hard-stop reasons)
 #'  2) no_new_pairs -> stop ("no_new_pairs")
 #'  3) budget_exhausted -> stop ("pair_budget_exhausted")
-#'  4) precision_reached -> stop ("precision_reached")
+#'  4) max_rounds_reached -> stop ("max_rounds_reached")
 #'  5) stability_reached AND graph_healthy -> stop ("stability_reached")
-#'  6) max_rounds_reached -> stop ("max_rounds_reached")
+#'  6) precision_reached AND graph_healthy -> stop ("precision_reached")
+#'
+#' Notes:
+#'  - When `graph_healthy` is FALSE, stability/precision stops are blocked rather
+#'    than triggered; the blocked causes are recorded in `details`.
 #'
 #' @param round Integer round index (1-based).
 #' @param min_rounds Integer minimum rounds before any stopping other than exhaustion reasons.
@@ -21,8 +25,8 @@
 #' @param budget_exhausted Logical; TRUE when a user-specified pair budget is exhausted.
 #' @param max_rounds_reached Logical; TRUE when `round >= max_rounds`.
 #' @param graph_healthy Logical; TRUE when graph thresholds pass.
-#' @param stability_reached Logical; TRUE when stability thresholds pass.
-#' @param precision_reached Logical; TRUE when precision tier / thresholds pass.
+#' @param stability_reached Logical; TRUE when stability thresholds pass (ignoring graph health).
+#' @param precision_reached Logical; TRUE when precision tier / thresholds pass (ignoring graph health).
 #' @param stop_reason_priority Optional character vector of reason priority. When supplied,
 #'   it overrides the default priority among the stop-causes that are eligible after
 #'   the min_rounds gate.
@@ -48,19 +52,31 @@
   stability_reached <- isTRUE(stability_reached)
   precision_reached <- isTRUE(precision_reached)
 
+  # Gate stability/precision by min_rounds (but allow hard stops).
+  stability_eligible <- stability_reached
+  precision_eligible <- precision_reached
+  if (isTRUE(round < min_rounds)) {
+    stability_eligible <- FALSE
+    precision_eligible <- FALSE
+  }
+
+  # If the graph is unhealthy, record which stop causes would have fired.
+  blocked_candidates <- character()
+  if (!isTRUE(graph_healthy)) {
+    if (isTRUE(stability_eligible)) blocked_candidates <- c(blocked_candidates, "stability_reached")
+    if (isTRUE(precision_eligible)) blocked_candidates <- c(blocked_candidates, "precision_reached")
+  }
+
+  stop_blocked_by <- if (length(blocked_candidates) > 0L) "graph_unhealthy" else NA_character_
+  stop_blocked_candidates <- if (length(blocked_candidates) > 0L) paste(blocked_candidates, collapse = "|") else NA_character_
+
   candidates <- c(
     no_new_pairs = isTRUE(no_new_pairs),
     pair_budget_exhausted = isTRUE(budget_exhausted),
-    precision_reached = precision_reached,
-    stability_reached = stability_reached && graph_healthy,
-    max_rounds_reached = isTRUE(max_rounds_reached)
+    max_rounds_reached = isTRUE(max_rounds_reached),
+    stability_reached = isTRUE(stability_eligible && graph_healthy),
+    precision_reached = isTRUE(precision_eligible && graph_healthy)
   )
-
-  # Gate stability/precision by min_rounds (but allow hard stops).
-  if (isTRUE(round < min_rounds)) {
-    candidates["stability_reached"] <- FALSE
-    candidates["precision_reached"] <- FALSE
-  }
 
   # Priority order: user-supplied (validated) or default.
   default_priority <- names(candidates)
@@ -95,7 +111,9 @@
     candidates = candidates,
     graph_healthy = graph_healthy,
     stability_reached = stability_reached,
-    precision_reached = precision_reached
+    precision_reached = precision_reached,
+    stop_blocked_by = stop_blocked_by,
+    stop_blocked_candidates = stop_blocked_candidates
   )
 
   list(stop = stop, reason = reason, details = details)

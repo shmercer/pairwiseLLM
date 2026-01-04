@@ -183,7 +183,7 @@ fits; lower values indicate greater stability. Default \code{0.01}.}
 \item{stop_topk_overlap}{Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
 sets required to consider rankings stable. Default \code{0.95}.}
 
-\item{stop_min_largest_component_frac}{Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
+\item{stop_min_largest_component_frac}{Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
 largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.}
 
 \item{stop_min_degree}{Integer. Minimum node degree required for the comparison graph to be considered

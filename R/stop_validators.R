@@ -58,6 +58,7 @@
   req <- c(
     "round", "n_new_pairs_scored", "n_total_results",
     "stop", "stop_reason",
+    "stop_blocked_by", "stop_blocked_candidates",
     "degree_min", "largest_component_frac",
     "rms_theta_delta", "topk_overlap"
   )
@@ -67,6 +68,12 @@
   }
   if (is.list(rounds_tbl$stop_reason)) {
     stop("rounds `stop_reason` must not be a list column.", call. = FALSE)
+  }
+  if ("stop_blocked_by" %in% names(rounds_tbl) && is.list(rounds_tbl$stop_blocked_by)) {
+    stop("rounds `stop_blocked_by` must not be a list column.", call. = FALSE)
+  }
+  if ("stop_blocked_candidates" %in% names(rounds_tbl) && is.list(rounds_tbl$stop_blocked_candidates)) {
+    stop("rounds `stop_blocked_candidates` must not be a list column.", call. = FALSE)
   }
   invisible(TRUE)
 }

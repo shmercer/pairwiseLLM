@@ -25,6 +25,8 @@ test_that("stop payload validators enforce stable schemas", {
     n_total_results = 0L,
     stop = FALSE,
     stop_reason = NA_character_,
+    stop_blocked_by = NA_character_,
+    stop_blocked_candidates = NA_character_,
     degree_min = 1,
     largest_component_frac = 1,
     rms_theta_delta = 0.01,
