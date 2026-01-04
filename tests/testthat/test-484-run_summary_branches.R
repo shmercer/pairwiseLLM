@@ -84,7 +84,7 @@ test_that("print methods for pairwiseLLM_run and pairwiseLLM_run_summary do not 
       results = tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A"),
       metrics = tibble::tibble(round = 1, rel_se_p90 = 0.5),
       state = tibble::tibble(round = 1, n_results = 1),
-      stop_reason = "max_rounds",
+      stop_reason = "max_rounds_reached",
       stop_round = 1
     ),
     class = c("pairwiseLLM_run", "list")

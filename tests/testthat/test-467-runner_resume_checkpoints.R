@@ -84,7 +84,7 @@ test_that("bt_run_adaptive writes checkpoints and can resume without duplicating
       engine = "mock",
       round_size = 10,
       init_round_size = 10,
-      max_rounds = 2,
+      max_rounds = 3,
       seed_pairs = 1,
       forbid_repeats = TRUE,
       balance_positions = TRUE,
@@ -120,7 +120,7 @@ test_that("bt_run_adaptive writes checkpoints and can resume without duplicating
     fit_fun = .mock_fit_all,
     engine = "mock",
     round_size = 10,
-    max_rounds = 2,
+    max_rounds = 3,
     seed_pairs = 1,
     forbid_repeats = TRUE,
     balance_positions = TRUE,
@@ -141,9 +141,9 @@ test_that("bt_run_adaptive writes checkpoints and can resume without duplicating
   chk2 <- readRDS(file.path(tmp, "run_state.rds"))
   .expect_checkpoint_payload(chk2, run_type = "adaptive")
   expect_true(isTRUE(chk2$completed))
-  expect_equal(chk2$stop_reason, "max_rounds")
-  expect_equal(chk2$stop_round, 2L)
-  expect_equal(chk2$next_round, 3L)
+  expect_equal(chk2$stop_reason, "max_rounds_reached")
+  expect_equal(chk2$stop_round, 3L)
+  expect_equal(chk2$next_round, 4L)
 
   # No unordered duplicates in accumulated results
   keys <- .unordered_key(chk2$results)

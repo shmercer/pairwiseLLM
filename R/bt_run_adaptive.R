@@ -86,8 +86,27 @@
 #' model fit when \code{initial_results} is \code{NULL} or empty. Default: \code{round_size}.
 #' @param max_rounds Integer. Maximum number of adaptive rounds to run (excluding the bootstrap
 #' scoring step). Default \code{50}.
+#' @param min_rounds Integer. Minimum number of adaptive rounds to run before allowing
+#'   stability- or precision-based stopping. Hard stops (no new pairs, budget exhausted,
+#'   max rounds) can still terminate earlier. Default \code{2}.
+#' @param stop_stability_rms Numeric. Threshold on RMS change in \code{theta} between consecutive
+#'   fits; lower values indicate greater stability. Default \code{0.01}.
+#' @param stop_stability_consecutive Integer. Number of consecutive rounds the stability criteria
+#'   must hold before stopping. Default \code{2}.
+#' @param stop_topk Integer. Size \code{k} for the top-\code{k} overlap stability check. Default \code{50}.
+#' @param stop_topk_overlap Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
+#'   sets required to consider rankings stable. Default \code{0.95}.
+#' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
+#'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
+#' @param stop_min_largest_component_frac Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
+#'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
+#' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
+#'   healthy. Default \code{1}.
+#' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
+#'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
 #'
-#' @param se_probs Numeric vector of probabilities in (0, 1) used when summarizing the
+#'
+#' @param se_probs Numeric vector of probabilities in \code{[0, 1)\]} used when summarizing the
 #' distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 #' Passed to \code{\link{bt_adaptive_round}}.
 #' @param fit_bounds Numeric length-2 vector giving lower/upper acceptable
@@ -175,15 +194,6 @@
 #' Note: this controls pair selection reproducibility; it does not control randomness inside
 #' \code{judge_fun} unless your \code{judge_fun} uses it explicitly.
 #'
-#' @param reverse_audit Logical. If \code{TRUE}, run a post-stop reverse-order audit by selecting
-#' a subset of forward-scored pairs, reversing their order, and re-scoring them. This does not
-#' affect adaptive sampling decisions (it is post-hoc).
-#' @param reverse_pct Numeric between 0 and 1 (inclusive). Proportion of eligible unique forward pairs to reverse
-#' for the audit. Eligible pairs are unique unordered forward pairs with non-missing
-#' \code{better_id}. Ignored if \code{n_reverse} is provided.
-#' @param n_reverse Optional integer. Number of eligible unique forward pairs to reverse for the
-#' audit. If provided, overrides \code{reverse_pct}.
-#' @param reverse_seed Optional integer seed used only for selecting which pairs to reverse
 #' (RNG state is restored afterward).
 #'
 #' @param fit_fun Function used to fit the BT model. Default \code{\link{fit_bt_model}}.
@@ -249,9 +259,9 @@
 #' the fitted model objects (\code{bt_fit}, \code{rc_fit}) and a summary \code{diagnostics} list.}
 #' \item{fit_provenance}{NULL unless \code{final_refit=TRUE}; then a list describing which
 #' final engines were requested and used, including any fallback reason.}
-#' \item{stop_reason}{A single string describing why the loop ended (e.g., \code{"stopped"},
-#' \code{"max_rounds"}, \code{"no_pairs"}, \code{"round_size_zero"}, \code{"no_new_results"},
-#' or \code{"no_results"}).}
+#' \item{stop_reason}{A single string describing why the loop ended.
+#' Standard reasons include: \code{"stability_reached"}, \code{"precision_reached"},
+#' \code{"no_new_pairs"}, \code{"pair_budget_exhausted"}, and \code{"max_rounds_reached"}.}
 #' \item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
 #' \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag + stop_reason).}
 #' \item{state}{A tibble with one row per adaptive round containing bookkeeping summaries
@@ -259,8 +269,6 @@
 #'   appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
 #'   \code{n_missing_better_id}), plus \code{round}, \code{stop}, and \code{stop_reason}.}
 #' \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
-#' \item{reverse_audit}{NULL unless \code{reverse_audit=TRUE}; then contains audit
-#' pairs, reverse results, and consistency outputs (post-hoc; does not affect stopping).}
 #' }
 #'
 #' @examples
@@ -307,9 +315,12 @@
 #'   judge_fun = judge_fun,
 #'   fit_fun = fit_fun,
 #'   engine = "mock",
-#'   round_size = 2,
-#'   init_round_size = 2,
-#'   max_rounds = 2,
+#'   fit_engine_running = "bt",
+#'   round_size = 1,
+#'   init_round_size = 1,
+#'   max_rounds = 1,
+#'   final_refit = FALSE,
+#'   return_diagnostics = FALSE,
 #'   rel_se_p90_target = NA_real_,
 #'   rel_se_p90_min_improve = NA_real_
 #' )
@@ -346,11 +357,11 @@ bt_run_adaptive <- function(samples,
                             max_judge_misfit_prop = 0.05,
                             k_neighbors = 10,
                             min_judgments = 12,
-                           repeat_policy = "reverse_only",
-                           repeat_cap = 1L,
+                            repeat_policy = "reverse_only",
+                            repeat_cap = 1L,
                             repeat_frac = 0.05,
                             repeat_n = NULL,
-                           repeat_guard_min_degree = 1L,
+                            repeat_guard_min_degree = 1L,
                             repeat_guard_largest_component_frac = 0.90,
                             forbid_repeats = NULL,
                             balance_positions = TRUE,
@@ -358,10 +369,16 @@ bt_run_adaptive <- function(samples,
                             embed_k = 30,
                             embed_far_k = 0,
                             seed_pairs = NULL,
-                            reverse_audit = FALSE,
-                            reverse_pct = 0.10,
-                            n_reverse = NULL,
-                            reverse_seed = NULL,
+                            # PR7: stopping controls
+                            min_rounds = 2L,
+                            stop_stability_rms = 0.01,
+                            stop_topk = 50L,
+                            stop_topk_overlap = 0.95,
+                            stop_min_largest_component_frac = 0.9,
+                            stop_min_degree = 1L,
+                            stop_reason_priority = NULL,
+                            stop_stability_consecutive = 2L,
+                            stop_topk_ties = c("id", "random"),
                             fit_fun = fit_bt_model,
                             build_bt_fun = build_bt_data,
                             checkpoint_dir = NULL,
@@ -517,7 +534,8 @@ bt_run_adaptive <- function(samples,
       repeat_policy <- "reverse_only"
     }
   }
-  repeat_policy <- match.arg(repeat_policy, c("none", "reverse_only", "forbid_unordered"))
+  repeat_policy <- match.arg(repeat_policy, c("allow", "none", "reverse_only", "forbid_unordered"))
+  if (identical(repeat_policy, "allow")) repeat_policy <- "none"
   if (!is.numeric(rc_smoothing) || length(rc_smoothing) != 1L || is.na(rc_smoothing) || rc_smoothing < 0) {
     stop("`rc_smoothing` must be a single non-negative number.", call. = FALSE)
   }
@@ -712,6 +730,8 @@ bt_run_adaptive <- function(samples,
     fits <- chk$fits %||% list()
     final_fit <- chk$final_fit %||% NULL
     prev_metrics <- chk$prev_metrics %||% NULL
+    prev_fit_for_stability <- if (length(fits) > 0L) fits[[length(fits)]] else NULL
+    stability_streak <- 0L
 
     stop_reason <- chk$stop_reason %||% NA_character_
     stop_round <- chk$stop_round %||% NA_integer_
@@ -735,8 +755,7 @@ bt_run_adaptive <- function(samples,
         stop_round = stop_round,
         rounds = rounds_tbl_prev,
         state = state_tbl_prev,
-        pairs_bootstrap = pairs_bootstrap,
-        reverse_audit = NULL
+        pairs_bootstrap = pairs_bootstrap
       )
       return(.as_pairwise_run(out, run_type = "adaptive"))
     }
@@ -779,6 +798,8 @@ bt_run_adaptive <- function(samples,
     fits <- list()
     final_fit <- NULL
     prev_metrics <- NULL
+    prev_fit_for_stability <- NULL
+    stability_streak <- 0L
     stop_reason <- NA_character_
     stop_round <- NA_integer_
   }
@@ -786,6 +807,7 @@ bt_run_adaptive <- function(samples,
   rounds_list <- list()
   state_list <- list()
   pairing_diag_list <- list()
+  metrics_hist <- tibble::tibble()
 
   .make_checkpoint_payload <- function(next_round, completed = FALSE, out = NULL) {
     rounds_now <- dplyr::bind_rows(rounds_tbl_prev, if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list))
@@ -803,6 +825,7 @@ bt_run_adaptive <- function(samples,
       fits = if (isTRUE(checkpoint_store_fits)) fits else NULL,
       final_fit = if (isTRUE(checkpoint_store_fits)) final_fit else NULL,
       prev_metrics = prev_metrics,
+      metrics = metrics_hist,
       stop_reason = stop_reason,
       stop_round = stop_round,
       rounds = rounds_now,
@@ -873,44 +896,135 @@ bt_run_adaptive <- function(samples,
     fits[[length(fits) + 1L]] <- fit
     final_fit <- fit
 
-    round_out <- bt_adaptive_round(
-      samples = samples,
-      fit = fit,
-      existing_pairs = results,
-      prev_metrics = prev_metrics,
-      round_size = round_size,
+
+    # ---- PR7: compute stop metrics (precision + stability) ----
+    metrics <- bt_stop_metrics(
+      fit,
       se_probs = se_probs,
       fit_bounds = fit_bounds,
-      stopping_tier = stopping_tier,
-      reliability_target = reliability_target,
-      sepG_target = sepG_target,
-      rel_se_p90_target = rel_se_p90_target,
-      rel_se_p90_min_improve = rel_se_p90_min_improve,
-      max_item_misfit_prop = max_item_misfit_prop,
-      max_judge_misfit_prop = max_judge_misfit_prop,
-      k_neighbors = k_neighbors,
-      min_judgments = min_judgments,
-      repeat_policy = repeat_policy,
-      repeat_cap = repeat_cap,
-      repeat_frac = repeat_frac,
-      repeat_n = repeat_n,
-      repeat_guard_min_degree = repeat_guard_min_degree,
-      repeat_guard_largest_component_frac = repeat_guard_largest_component_frac,
-      forbid_repeats = forbid_repeats,
-      balance_positions = balance_positions,
-      embedding_neighbors = embedding_neighbors,
-      embed_far_k = embed_far_k,
-      embed_quota_frac = embed_quota_frac,
-      candidate_pool_cap = candidate_pool_cap,
-      per_anchor_cap = per_anchor_cap,
-      w_embed = w_embed,
-      embed_score_mode = embed_score_mode,
-      seed = if (is.null(seed_pairs)) NULL else (as.integer(seed_pairs) + as.integer(r))
+      prev_fit = prev_fit_for_stability,
+      stability_topk = stop_topk,
+      stability_topk_ties = stop_topk_ties,
+      stability_seed = if (is.null(seed_pairs)) NULL else (as.integer(seed_pairs) + as.integer(r))
     )
 
-    metrics <- round_out$metrics
-    decision <- round_out$decision
-    pairs_next <- round_out$pairs_next
+    # Ensure a consistent superset schema before stopping logic.
+    metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
+
+    # Keep a per-round history of bt_stop_metrics output (schema-aligned).
+
+    stopping_tier <- match.arg(stopping_tier)
+    tier_params <- bt_stop_tiers()[[stopping_tier]]
+    tier_params <- utils::modifyList(
+      tier_params,
+      list(
+        reliability_target = reliability_target,
+        sepG_target = sepG_target,
+        rel_se_p90_target = rel_se_p90_target,
+        rel_se_p90_min_improve = rel_se_p90_min_improve,
+        max_item_misfit_prop = max_item_misfit_prop,
+        max_judge_misfit_prop = max_judge_misfit_prop
+      )
+    )
+
+    precision_decision <- do.call(
+      bt_should_stop,
+      c(list(metrics = metrics, prev_metrics = prev_metrics), tier_params)
+    )
+    precision_reached <- isTRUE(precision_decision$stop)
+
+    # ---- PR7: graph health gating ----
+    gs <- .graph_state_from_pairs(results, ids = ids)
+    gm <- gs$metrics
+    degree_min <- as.double(gm$degree_min)
+    largest_component_frac <- as.double(gm$largest_component_frac)
+
+    # If no graph-health thresholds are set, treat the graph as healthy (no gating).
+    graph_healthy <- TRUE
+    if (is.finite(as.double(stop_min_degree))) {
+      graph_healthy <- isTRUE(graph_healthy) && isTRUE(degree_min >= as.double(stop_min_degree))
+    }
+    if (is.finite(as.double(stop_min_largest_component_frac))) {
+      graph_healthy <- isTRUE(graph_healthy) && isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+    }
+
+    # ---- PR7: stability criterion (gated by graph health) ----
+    stability_pass <- FALSE
+    if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+      stability_pass <- is.finite(metrics$rms_theta_delta) &&
+        metrics$rms_theta_delta <= as.double(stop_stability_rms) &&
+        is.finite(metrics$topk_overlap) &&
+        metrics$topk_overlap >= as.double(stop_topk_overlap)
+    }
+
+    if (isTRUE(stability_pass)) {
+      stability_streak <- as.integer(stability_streak) + 1L
+    } else {
+      stability_streak <- 0L
+    }
+
+    stability_reached <- isTRUE(stability_streak >= as.integer(stop_stability_consecutive))
+
+    # ---- PR7: propose next pairs (unless budget exhausted) ----
+    budget_exhausted <- (as.integer(round_size) == 0L)
+
+    pairs_next <- tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character())
+    if (!isTRUE(budget_exhausted)) {
+      pairs_next <- select_adaptive_pairs(
+        samples = samples,
+        theta = fit$theta,
+        existing_pairs = results,
+        embedding_neighbors = embedding_neighbors,
+        n_pairs = round_size,
+        k_neighbors = k_neighbors,
+        min_judgments = min_judgments,
+        repeat_policy = repeat_policy,
+        repeat_cap = repeat_cap,
+        repeat_frac = repeat_frac,
+        repeat_n = repeat_n,
+        repeat_guard_min_degree = repeat_guard_min_degree,
+        repeat_guard_largest_component_frac = repeat_guard_largest_component_frac,
+        forbid_repeats = forbid_repeats,
+        balance_positions = balance_positions,
+        embed_far_k = embed_far_k,
+        embed_quota_frac = embed_quota_frac,
+        candidate_pool_cap = candidate_pool_cap,
+        per_anchor_cap = per_anchor_cap,
+        w_embed = w_embed,
+        embed_score_mode = embed_score_mode,
+        seed = if (is.null(seed_pairs)) NULL else (as.integer(seed_pairs) + as.integer(r))
+      )
+    }
+
+    no_new_pairs <- (!isTRUE(budget_exhausted) && nrow(pairs_next) == 0L)
+    max_rounds_reached <- ((as.integer(r) - 1L) >= as.integer(max_rounds))
+
+    stop_chk <- .stop_decision(
+      round = r,
+      min_rounds = min_rounds,
+      no_new_pairs = no_new_pairs,
+      budget_exhausted = budget_exhausted,
+      max_rounds_reached = max_rounds_reached,
+      graph_healthy = graph_healthy,
+      stability_reached = stability_reached,
+      precision_reached = precision_reached,
+      stop_reason_priority = stop_reason_priority
+    )
+    .validate_stop_decision(stop_chk)
+
+    # Record graph/stability diagnostics into the per-round metrics (these columns exist in the schema template).
+    metrics <- metrics %>%
+      dplyr::mutate(
+        degree_min = as.double(degree_min),
+        largest_component_frac = as.double(largest_component_frac),
+        graph_healthy = as.logical(graph_healthy),
+        stability_streak = as.integer(stability_streak),
+        stability_pass = as.logical(stability_pass)
+      )
+
+    metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
+
+    this_reason <- stop_chk$reason %||% NA_character_
 
     diag_pairs_round <- NULL
     planned_repeat_pairs <- attr(pairs_next, "planned_repeat_pairs")
@@ -919,40 +1033,39 @@ bt_run_adaptive <- function(samples,
       diag_pairs_round <- dplyr::mutate(diag_pairs, round = as.integer(r))
     }
 
-    this_reason <- .bt_resolve_stop_reason(
-      stopped = isTRUE(decision$stop),
-      reached_max_rounds = FALSE,
-      max_rounds_is_zero = FALSE,
-      round_size_zero = (round_size == 0L),
-      no_pairs = (nrow(pairs_next) == 0L)
-    )
     # If we are stopping before scoring new pairs, state reflects current results
     st_now <- .bt_round_state(results, ids = ids, judge_col = judge)
     st_now <- dplyr::mutate(
       st_now,
       round = as.integer(r),
-      stop = isTRUE(decision$stop),
+      stop = isTRUE(stop_chk$stop),
       stop_reason = this_reason
     )
     state_list[[length(state_list) + 1L]] <- st_now
 
-    metrics_round <- dplyr::select(metrics, -dplyr::any_of(c("stop", "stop_reason")))
+    metrics_clean <- dplyr::select(metrics, -dplyr::any_of(c("stop", "stop_reason")))
 
     rounds_list[[length(rounds_list) + 1L]] <- dplyr::bind_cols(
       tibble::tibble(
         round = as.integer(r),
         n_new_pairs_scored = 0L,
         n_total_results = as.integer(nrow(results)),
-        stop = isTRUE(decision$stop),
-        stop_reason = this_reason
+        stop = isTRUE(stop_chk$stop),
+        stop_reason = this_reason,
+        precision_reached = isTRUE(precision_reached)
       ),
-      metrics_round,
+      metrics_clean,
       .name_repair = "check_unique"
     )
 
-    prev_metrics <- metrics_round
+    prev_metrics <- metrics
+    prev_fit_for_stability <- fit
 
-    if (!is.na(this_reason)) {
+    # Guardrail validators
+    .validate_stop_metrics_tbl(dplyr::slice(metrics, 1L))
+    .validate_rounds_schema(dplyr::bind_rows(rounds_list))
+
+    if (isTRUE(stop_chk$stop)) {
       stop_reason <- this_reason
       stop_round <- as.integer(r)
 
@@ -1113,7 +1226,7 @@ bt_run_adaptive <- function(samples,
           stage = "round_fit",
           n_results = nrow(results),
           n_pairs_this_round = NA_integer_,
-          stop_reason = "max_rounds"
+          stop_reason = "max_rounds_reached"
         )
         final_fit <- fits[[length(fits)]]
       }
@@ -1121,7 +1234,7 @@ bt_run_adaptive <- function(samples,
         state_list[[length(state_list)]] <- dplyr::mutate(
           state_list[[length(state_list)]],
           stop = TRUE,
-          stop_reason = "max_rounds"
+          stop_reason = "max_rounds_reached"
         )
       }
     }
@@ -1272,83 +1385,6 @@ bt_run_adaptive <- function(samples,
     }
   }
 
-  # optional post-stop reverse audit (unchanged)
-  reverse_out <- NULL
-  if (isTRUE(reverse_audit) && nrow(results) > 0L) {
-    uniq_pairs <- results |>
-      dplyr::filter(!is.na(.data$better_id)) |>
-      dplyr::transmute(ID1 = as.character(.data$ID1), ID2 = as.character(.data$ID2))
-
-    uniq_pairs <- .distinct_unordered_pairs(uniq_pairs, id1_col = "ID1", id2_col = "ID2")
-    uniq_pairs_txt <- .add_pair_texts(uniq_pairs, samples = samples)
-
-    n_all <- nrow(uniq_pairs_txt)
-    k <- NULL
-    if (!is.null(n_reverse)) {
-      k <- as.integer(n_reverse)
-      if (is.na(k) || k < 0L) stop("`n_reverse` must be a non-negative integer.", call. = FALSE)
-      k <- min(k, n_all)
-    } else {
-      if (!is.numeric(reverse_pct) || length(reverse_pct) != 1L || is.na(reverse_pct)) {
-        stop("`reverse_pct` must be a single numeric value when `n_reverse` is NULL.", call. = FALSE)
-      }
-      if (reverse_pct < 0 || reverse_pct > 1) {
-        stop("`reverse_pct` must be between 0 and 1 (inclusive) when `n_reverse` is NULL.", call. = FALSE)
-      }
-      if (reverse_pct <= 0) k <- 0L else if (reverse_pct >= 1) k <- n_all else k <- as.integer(round(n_all * reverse_pct))
-      k <- min(max(k, 0L), n_all)
-    }
-
-    rev_pairs <- uniq_pairs_txt[0, , drop = FALSE]
-    if (k > 0L && n_all > 0L) {
-      idx <- .with_seed_restore(reverse_seed, function() sample.int(n_all, size = k, replace = FALSE), arg_name = "reverse_seed")
-      sel <- uniq_pairs_txt[idx, , drop = FALSE]
-      rev_pairs <- tibble::tibble(
-        ID1 = sel$ID2,
-        text1 = sel$text2,
-        ID2 = sel$ID1,
-        text2 = sel$text1
-      )
-    }
-
-    rev_results <- tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
-    if (!is.null(judge)) rev_results[[judge]] <- character()
-    consistency <- NULL
-
-    if (nrow(rev_pairs) > 0L) {
-      rev_results <- .coerce_judge_output(judge_fun(rev_pairs))
-      rev_results <- .validate_judge_results(rev_results, ids = ids, judge_col = judge)
-      rev_results <- .add_pair_key_direction(rev_results)
-
-      add_key <- function(df) {
-        df |>
-          dplyr::mutate(key = .unordered_pair_key(.data$ID1, .data$ID2))
-      }
-
-      main_audit <- add_key(results) |>
-        dplyr::filter(!is.na(.data$better_id))
-
-      rev_audit <- add_key(rev_results)
-
-      main_audit <- dplyr::semi_join(
-        main_audit,
-        dplyr::select(rev_audit, "key"),
-        by = "key"
-      ) |>
-        dplyr::select(-"key")
-
-      rev_audit <- dplyr::select(rev_audit, -"key")
-
-      consistency <- compute_reverse_consistency(main_audit, rev_audit)
-    }
-
-    reverse_out <- list(
-      pairs_reversed = rev_pairs,
-      reverse_results = rev_results,
-      consistency = consistency
-    )
-  }
-
   pairing_diagnostics <- if (length(pairing_diag_list) == 0L) {
     tibble::tibble(
       round = integer(),
@@ -1388,6 +1424,7 @@ bt_run_adaptive <- function(samples,
 
   out <- list(
     results = results,
+    metrics = metrics_hist,
     bt_data = bt_data_final,
     fits = fits,
     final_fit = final_fit,
@@ -1401,8 +1438,7 @@ bt_run_adaptive <- function(samples,
     rounds = rounds_tbl,
     state = state_tbl,
     pairing_diagnostics = pairing_diagnostics,
-    pairs_bootstrap = pairs_bootstrap,
-    reverse_audit = reverse_out
+    pairs_bootstrap = pairs_bootstrap
   )
 
   # write a final checkpoint including the returned object

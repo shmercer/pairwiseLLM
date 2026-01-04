@@ -38,6 +38,15 @@ bt_run_adaptive_core_linking(
   round_size = 50,
   init_round_size = round_size,
   max_rounds_per_batch = 50,
+  min_rounds = 2L,
+  stop_stability_rms = 0.01,
+  stop_topk = 50L,
+  stop_topk_overlap = 0.95,
+  stop_min_largest_component_frac = 0.9,
+  stop_min_degree = 1L,
+  stop_reason_priority = NULL,
+  stop_stability_consecutive = 2L,
+  stop_topk_ties = c("id", "random"),
   within_batch_frac = 0.25,
   core_audit_frac = 0.05,
   allocation = c("fixed", "precision_ramp", "audit_on_drift"),
@@ -195,6 +204,33 @@ processing batches, when no \code{initial_results} are supplied. Default \code{r
 
 \item{max_rounds_per_batch}{Integer. Maximum number of rounds per batch. Default \code{50}.}
 
+\item{min_rounds}{Integer. Minimum number of adaptive rounds to run before allowing
+stability- or precision-based stopping. Hard stops (no new pairs, budget exhausted,
+max rounds) can still terminate earlier. Default \code{2}.}
+
+\item{stop_stability_rms}{Numeric. Threshold on RMS change in \code{theta} between consecutive
+fits; lower values indicate greater stability. Default \code{0.01}.}
+
+\item{stop_topk}{Integer. Size \code{k} for the top-\code{k} overlap stability check. Default \code{50}.}
+
+\item{stop_topk_overlap}{Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
+sets required to consider rankings stable. Default \code{0.95}.}
+
+\item{stop_min_largest_component_frac}{Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
+largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.}
+
+\item{stop_min_degree}{Integer. Minimum node degree required for the comparison graph to be considered
+healthy. Default \code{1}.}
+
+\item{stop_reason_priority}{Optional character vector specifying a priority order for stop reasons when
+multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.}
+
+\item{stop_stability_consecutive}{Integer. Number of consecutive rounds the stability criteria
+must hold before stopping. Default \code{2}.}
+
+\item{stop_topk_ties}{Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
+overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.}
+
 \item{within_batch_frac}{Numeric in \code{[0,1]}. Fraction of non-audit pairs allocated to new\eqn{\leftrightarrow}new
 within-batch comparisons (passed to \code{\link{select_core_link_pairs}}).}
 
@@ -225,7 +261,7 @@ Prefer \code{seed_pairs} going forward.}
 \item{seed_pairs}{Optional integer seed used for bootstrap pair sampling and for each round
 as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored afterward.}
 
-\item{se_probs}{Numeric vector of probabilities in (0,1) for SE quantiles (passed to
+\item{se_probs}{Numeric vector of probabilities in \code{[0,1]} for SE quantiles (passed to
 \code{\link{bt_stop_metrics}}).}
 
 \item{fit_bounds}{Numeric length-2 vector giving acceptable infit/outfit bounds
@@ -242,7 +278,7 @@ generator becomes exhausted and fewer than \code{round_size * exhaustion_min_pai
 pairs are available. One of \code{"none"}, \code{"cross_batch_new_new"},
 \code{"targeted_repeats"}, or \code{"both"}.}
 
-\item{exhaustion_min_pairs_frac}{Numeric in (0,1]. Minimum fraction of \code{round_size}
+\item{exhaustion_min_pairs_frac}{Numeric in \code{[0,1]}. Minimum fraction of \code{round_size}
 below which the fallback may trigger.}
 
 \item{exhaustion_spectral_gap_threshold}{Numeric >= 0. Optional diagnostic threshold for
@@ -338,10 +374,10 @@ calling again with \code{resume_from = checkpoint_dir}.
 \examples{
 # Simple simulated judge: higher true theta wins
 samples <- tibble::tibble(
-  ID = LETTERS[1:8],
-  text = paste0("t", LETTERS[1:8])
+  ID = LETTERS[1:6],
+  text = paste0("t", LETTERS[1:6])
 )
-true_theta <- stats::setNames(seq(2, -1.5, length.out = 8), samples$ID)
+true_theta <- stats::setNames(seq(1.5, -1, length.out = 6), samples$ID)
 
 judge_fun <- function(pairs) {
   b <- ifelse(true_theta[pairs$ID1] >= true_theta[pairs$ID2], pairs$ID1, pairs$ID2)
@@ -376,20 +412,16 @@ fit_fun <- function(bt_data, ...) {
 
 out <- bt_run_adaptive_core_linking(
   samples = samples,
-  batches = list(c("G", "H")),
+  batches = list(c("E", "F")),
   judge_fun = judge_fun,
   core_ids = c("A", "B", "C"),
   fit_fun = fit_fun,
   engine = "mock",
-  round_size = 6,
-  init_round_size = 6,
-  max_rounds_per_batch = 2,
-  rel_se_p90_target = 0.7,
-  reliability_target = NA_real_,
-  sepG_target = NA_real_,
-  rel_se_p90_min_improve = NA_real_,
-  max_item_misfit_prop = NA_real_,
-  max_judge_misfit_prop = NA_real_
+  round_size = 3,
+  init_round_size = 3,
+  max_rounds_per_batch = 1,
+  rel_se_p90_target = NA_real_,
+  rel_se_p90_min_improve = NA_real_
 )
 out$batch_summary
 

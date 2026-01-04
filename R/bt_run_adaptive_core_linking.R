@@ -116,6 +116,25 @@
 #' @param init_round_size Integer. Number of bootstrap pairs to score on the core set before
 #' processing batches, when no \code{initial_results} are supplied. Default \code{round_size}.
 #' @param max_rounds_per_batch Integer. Maximum number of rounds per batch. Default \code{50}.
+#' @param min_rounds Integer. Minimum number of adaptive rounds to run before allowing
+#'   stability- or precision-based stopping. Hard stops (no new pairs, budget exhausted,
+#'   max rounds) can still terminate earlier. Default \code{2}.
+#' @param stop_stability_rms Numeric. Threshold on RMS change in \code{theta} between consecutive
+#'   fits; lower values indicate greater stability. Default \code{0.01}.
+#' @param stop_stability_consecutive Integer. Number of consecutive rounds the stability criteria
+#'   must hold before stopping. Default \code{2}.
+#' @param stop_topk Integer. Size \code{k} for the top-\code{k} overlap stability check. Default \code{50}.
+#' @param stop_topk_overlap Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
+#'   sets required to consider rankings stable. Default \code{0.95}.
+#' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
+#'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
+#' @param stop_min_largest_component_frac Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
+#'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
+#' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
+#'   healthy. Default \code{1}.
+#' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
+#'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
+#'
 #'
 #' @param within_batch_frac Numeric in \code{[0,1]}. Fraction of non-audit pairs allocated to new\eqn{\leftrightarrow}new
 #' within-batch comparisons (passed to \code{\link{select_core_link_pairs}}).
@@ -140,7 +159,7 @@
 #' @param seed_pairs Optional integer seed used for bootstrap pair sampling and for each round
 #' as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored afterward.
 #'
-#' @param se_probs Numeric vector of probabilities in (0,1) for SE quantiles (passed to
+#' @param se_probs Numeric vector of probabilities in \code{[0,1]} for SE quantiles (passed to
 #' \code{\link{bt_stop_metrics}}).
 #' @param fit_bounds Numeric length-2 vector giving acceptable infit/outfit bounds
 #'   (infit/outfit) passed to \code{\link{bt_stop_metrics}}.
@@ -155,7 +174,7 @@
 #'   generator becomes exhausted and fewer than \code{round_size * exhaustion_min_pairs_frac}
 #'   pairs are available. One of \code{"none"}, \code{"cross_batch_new_new"},
 #'   \code{"targeted_repeats"}, or \code{"both"}.
-#' @param exhaustion_min_pairs_frac Numeric in (0,1]. Minimum fraction of \code{round_size}
+#' @param exhaustion_min_pairs_frac Numeric in \code{[0,1]}. Minimum fraction of \code{round_size}
 #'   below which the fallback may trigger.
 #' @param exhaustion_spectral_gap_threshold Numeric >= 0. Optional diagnostic threshold for
 #'   triggering the fallback when spectral gap information is available.
@@ -226,10 +245,10 @@
 #' @examples
 #' # Simple simulated judge: higher true theta wins
 #' samples <- tibble::tibble(
-#'   ID = LETTERS[1:8],
-#'   text = paste0("t", LETTERS[1:8])
+#'   ID = LETTERS[1:6],
+#'   text = paste0("t", LETTERS[1:6])
 #' )
-#' true_theta <- stats::setNames(seq(2, -1.5, length.out = 8), samples$ID)
+#' true_theta <- stats::setNames(seq(1.5, -1, length.out = 6), samples$ID)
 #'
 #' judge_fun <- function(pairs) {
 #'   b <- ifelse(true_theta[pairs$ID1] >= true_theta[pairs$ID2], pairs$ID1, pairs$ID2)
@@ -264,20 +283,16 @@
 #'
 #' out <- bt_run_adaptive_core_linking(
 #'   samples = samples,
-#'   batches = list(c("G", "H")),
+#'   batches = list(c("E", "F")),
 #'   judge_fun = judge_fun,
 #'   core_ids = c("A", "B", "C"),
 #'   fit_fun = fit_fun,
 #'   engine = "mock",
-#'   round_size = 6,
-#'   init_round_size = 6,
-#'   max_rounds_per_batch = 2,
-#'   rel_se_p90_target = 0.7,
-#'   reliability_target = NA_real_,
-#'   sepG_target = NA_real_,
-#'   rel_se_p90_min_improve = NA_real_,
-#'   max_item_misfit_prop = NA_real_,
-#'   max_judge_misfit_prop = NA_real_
+#'   round_size = 3,
+#'   init_round_size = 3,
+#'   max_rounds_per_batch = 1,
+#'   rel_se_p90_target = NA_real_,
+#'   rel_se_p90_min_improve = NA_real_
 #' )
 #' out$batch_summary
 #'
@@ -315,6 +330,16 @@ bt_run_adaptive_core_linking <- function(samples,
                                          round_size = 50,
                                          init_round_size = round_size,
                                          max_rounds_per_batch = 50,
+                                         # PR7: stopping controls
+                                         min_rounds = 2L,
+                                         stop_stability_rms = 0.01,
+                                         stop_topk = 50L,
+                                         stop_topk_overlap = 0.95,
+                                         stop_min_largest_component_frac = 0.9,
+                                         stop_min_degree = 1L,
+                                         stop_reason_priority = NULL,
+                                         stop_stability_consecutive = 2L,
+                                         stop_topk_ties = c("id", "random"),
                                          within_batch_frac = 0.25,
                                          core_audit_frac = 0.05,
                                          allocation = c("fixed", "precision_ramp", "audit_on_drift"),
@@ -369,6 +394,7 @@ bt_run_adaptive_core_linking <- function(samples,
   }
 
   stopping_tier <- match.arg(stopping_tier)
+  stop_topk_ties <- match.arg(stop_topk_ties)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
 
   fit_engine_running <- match.arg(fit_engine_running)
@@ -1213,6 +1239,8 @@ bt_run_adaptive_core_linking <- function(samples,
     }
 
     prev_metrics <- NULL
+    prev_fit_for_stability <- NULL
+    stability_streak <- 0L
     stop_reason <- NA_character_
     rounds_used <- 0L
 
@@ -1349,7 +1377,10 @@ bt_run_adaptive_core_linking <- function(samples,
         prev_fit = prev_fit_for_drift,
         core_ids = if (drift_active) core_ids else NULL,
         se_probs = se_probs,
-        fit_bounds = fit_bounds
+        fit_bounds = fit_bounds,
+        stability_topk = stop_topk,
+        stability_topk_ties = stop_topk_ties,
+        stability_seed = if (is.null(seed)) NULL else (as.integer(seed) + as.integer(b) * 1000L + as.integer(r))
       )
 
       if (!is.null(current_fit$linking) && is.list(current_fit$linking)) {
@@ -1389,6 +1420,27 @@ bt_run_adaptive_core_linking <- function(samples,
       # assume these columns exist even when diagnostics are unavailable).
       m <- .bt_align_metrics(m, se_probs = se_probs)
 
+
+      # ---- PR7: graph health + stability (gated) ----
+      gs <- .graph_state_from_pairs(results, ids = ids_all)
+      gm <- gs$metrics
+      degree_min <- as.double(gm$degree_min)
+      largest_component_frac <- as.double(gm$largest_component_frac)
+
+      graph_healthy <- isTRUE(degree_min >= as.double(stop_min_degree)) &&
+        isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+
+      stability_pass <- FALSE
+      if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+        stability_pass <- is.finite(m$rms_theta_delta) &&
+          m$rms_theta_delta <= as.double(stop_stability_rms) &&
+          is.finite(m$topk_overlap) &&
+          m$topk_overlap >= as.double(stop_topk_overlap)
+      }
+
+      if (isTRUE(stability_pass)) stability_streak <- as.integer(stability_streak) + 1L else stability_streak <- 0L
+      stability_reached <- isTRUE(stability_streak >= as.integer(stop_stability_consecutive))
+
       prev_metrics_for_state <- prev_metrics
 
       decision <- do.call(
@@ -1396,13 +1448,31 @@ bt_run_adaptive_core_linking <- function(samples,
         c(list(metrics = m, prev_metrics = prev_metrics), stop_params)
       )
 
-      stop_now <- isTRUE(decision$stop)
-      stop_reason <- .bt_resolve_stop_reason(stopped = stop_now)
+      stop_chk <- .stop_decision(
+        round = r,
+        min_rounds = min_rounds,
+        no_new_pairs = (nrow(pairs_next) == 0L),
+        budget_exhausted = (as.integer(round_size) == 0L),
+        max_rounds_reached = (as.integer(r) >= as.integer(max_rounds_per_batch)),
+        graph_healthy = graph_healthy,
+        stability_reached = stability_reached,
+        precision_reached = isTRUE(decision$stop),
+        stop_reason_priority = stop_reason_priority
+      )
+      .validate_stop_decision(stop_chk)
+
+      stop_now <- isTRUE(stop_chk$stop)
+      stop_reason <- stop_chk$reason %||% NA_character_
 
       m$batch_index <- as.integer(b)
       m$round_index <- as.integer(r)
       m$within_batch_frac <- within_batch_frac_this
       m$core_audit_frac <- core_audit_frac_this
+      m$degree_min <- as.double(degree_min)
+      m$largest_component_frac <- as.double(largest_component_frac)
+      m$stability_streak <- as.integer(stability_streak)
+      m$graph_healthy <- isTRUE(graph_healthy)
+      m$stability_pass <- isTRUE(stability_pass)
       m$stage <- "round"
       m$stop <- stop_now
       m$stop_reason <- stop_reason
@@ -1476,6 +1546,7 @@ bt_run_adaptive_core_linking <- function(samples,
       }
 
       prev_metrics <- m
+      prev_fit_for_stability <- current_fit
       if (r == max_rounds_per_batch) {
         stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
       }

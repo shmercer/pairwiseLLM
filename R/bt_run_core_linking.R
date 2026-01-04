@@ -95,6 +95,25 @@
 #' @param min_judgments Passed to \code{\link{select_core_link_pairs}}.
 #' @param forbid_repeats Forbid repeat unordered pairs across the entire run.
 #' @param balance_positions Balance positions (ID1 vs ID2) when proposing pairs.
+#' @param min_rounds Integer. Minimum number of adaptive rounds to run before allowing
+#'   stability- or precision-based stopping. Hard stops (no new pairs, budget exhausted,
+#'   max rounds) can still terminate earlier. Default \code{2}.
+#' @param stop_stability_rms Numeric. Threshold on RMS change in \code{theta} between consecutive
+#'   fits; lower values indicate greater stability. Default \code{0.01}.
+#' @param stop_stability_consecutive Integer. Number of consecutive rounds the stability criteria
+#'   must hold before stopping. Default \code{2}.
+#' @param stop_topk Integer. Size \code{k} for the top-\code{k} overlap stability check. Default \code{50}.
+#' @param stop_topk_overlap Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
+#'   sets required to consider rankings stable. Default \code{0.95}.
+#' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
+#'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
+#' @param stop_min_largest_component_frac Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
+#'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
+#' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
+#'   healthy. Default \code{1}.
+#' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
+#'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
+#'
 #'
 #' @param se_probs Passed to \code{\link{bt_stop_metrics}}.
 #' @param fit_bounds Passed to \code{\link{bt_stop_metrics}} when diagnostics are available.
@@ -262,6 +281,16 @@ bt_run_core_linking <- function(samples,
                                 final_bt_bias_reduction = TRUE,
                                 round_size = 50,
                                 max_rounds_per_batch = 50,
+                                # PR7: stopping controls
+                                min_rounds = 2L,
+                                stop_stability_rms = 0.01,
+                                stop_topk = 50L,
+                                stop_topk_overlap = 0.95,
+                                stop_min_largest_component_frac = 0.9,
+                                stop_min_degree = 1L,
+                                stop_reason_priority = NULL,
+                                stop_stability_consecutive = 2L,
+                                stop_topk_ties = c("id", "random"),
                                 within_batch_frac = 0.25,
                                 core_audit_frac = 0.10,
                                 allocation = c("fixed", "precision_ramp", "audit_on_drift"),
@@ -356,6 +385,7 @@ bt_run_core_linking <- function(samples,
   }
 
   stopping_tier <- match.arg(stopping_tier)
+  stop_topk_ties <- match.arg(stop_topk_ties)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
 
   # Capture and sanitize `...` forwarded to fit_fun. This prevents collisions like
@@ -1097,6 +1127,10 @@ bt_run_core_linking <- function(samples,
     stop_reason <- NA_character_
     rounds_used <- 0L
     prev_metrics <- NULL
+    prev_fit_for_stability <- NULL
+    stability_streak <- 0L
+    prev_fit_for_stability <- NULL
+    stability_streak <- 0L
 
     resuming_this_batch <- isTRUE(resume_in_batch) && batch_i == batch_start
     if (resuming_this_batch) {
@@ -1268,7 +1302,10 @@ bt_run_core_linking <- function(samples,
         prev_fit = prev_fit_for_drift,
         core_ids = core_ids,
         se_probs = se_probs,
-        fit_bounds = fit_bounds
+        fit_bounds = fit_bounds,
+        stability_topk = stop_topk,
+        stability_topk_ties = stop_topk_ties,
+        stability_seed = if (is.null(seed)) NULL else (as.integer(seed) + as.integer(batch_i) * 1000L + as.integer(round_i))
       )
 
       # Counts used by adaptive runner (kept here so metrics schemas match across runners).
@@ -1329,6 +1366,34 @@ bt_run_core_linking <- function(samples,
       # A3: ensure both naming schemes exist (core_* and linking_*)
       # (Requires .bt_add_drift_aliases() to exist; see helper below.)
       metrics <- .bt_add_drift_aliases(metrics)
+      prev_metrics_for_state <- prev_metrics
+
+
+      # ---- PR7: graph health + stability (gated) ----
+      gs <- .graph_state_from_pairs(results, ids = ids_all)
+      gm <- gs$metrics
+      degree_min <- as.double(gm$degree_min)
+      largest_component_frac <- as.double(gm$largest_component_frac)
+
+      graph_healthy <- isTRUE(degree_min >= as.double(stop_min_degree)) &&
+        isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+
+      stability_pass <- FALSE
+      if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+        stability_pass <- is.finite(metrics$rms_theta_delta) &&
+          metrics$rms_theta_delta <= as.double(stop_stability_rms) &&
+          is.finite(metrics$topk_overlap) &&
+          metrics$topk_overlap >= as.double(stop_topk_overlap)
+      }
+
+      if (isTRUE(stability_pass)) stability_streak <- as.integer(stability_streak) + 1L else stability_streak <- 0L
+      stability_reached <- isTRUE(stability_streak >= as.integer(stop_stability_consecutive))
+
+      metrics$degree_min <- as.double(degree_min)
+      metrics$largest_component_frac <- as.double(largest_component_frac)
+      metrics$stability_streak <- as.integer(stability_streak)
+      metrics$graph_healthy <- isTRUE(graph_healthy)
+      metrics$stability_pass <- isTRUE(stability_pass)
       metrics <- .bt_order_metrics(metrics)
 
       # Ensure a consistent superset schema before stopping logic.
@@ -1336,7 +1401,6 @@ bt_run_core_linking <- function(samples,
 
       metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
 
-      prev_metrics_for_state <- prev_metrics
 
       stop_dec <- do.call(
         bt_should_stop,
@@ -1344,6 +1408,7 @@ bt_run_core_linking <- function(samples,
       )
 
       prev_metrics <- metrics
+      prev_fit_for_stability <- current_fit
 
       if (!isTRUE(stop_dec$stop) && !is.null(allocation_fun)) {
         alloc_state <- list(
@@ -1393,9 +1458,22 @@ bt_run_core_linking <- function(samples,
       if ((as.integer(round_i) %% checkpoint_every) == 0L) {
         .write_checkpoint_now(checkpoint_payload_last, batch_i = batch_i, round_i = round_i)
       }
+      # ---- PR7: deterministic stop decision + explicit reasons ----
+      stop_chk <- .stop_decision(
+        round = round_i,
+        min_rounds = min_rounds,
+        no_new_pairs = (nrow(pairs) == 0L),
+        budget_exhausted = (as.integer(round_size) == 0L),
+        max_rounds_reached = (as.integer(round_i) >= as.integer(max_rounds_per_batch)),
+        graph_healthy = graph_healthy,
+        stability_reached = stability_reached,
+        precision_reached = isTRUE(stop_dec$stop),
+        stop_reason_priority = stop_reason_priority
+      )
+      .validate_stop_decision(stop_chk)
 
-      if (isTRUE(stop_dec$stop)) {
-        stop_reason <- .bt_resolve_stop_reason(stopped = TRUE)
+      if (isTRUE(stop_chk$stop)) {
+        stop_reason <- stop_chk$reason
         state_hist[nrow(state_hist), "stop_reason"] <- stop_reason
         break
       }

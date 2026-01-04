@@ -89,6 +89,22 @@
     linking_post_mean_signed_shift = numeric(),
     linking_post_theta_cor = numeric(),
     linking_post_theta_spearman = numeric(),
+    # PR7: Per-round pairing / graph diagnostics and stability metrics
+    n_pairs_new = integer(),
+    n_pairs_total = integer(),
+    n_missing_better_id = integer(),
+    degree_min = numeric(),
+    largest_component_frac = numeric(),
+    graph_healthy = logical(),
+    rms_theta_delta = numeric(),
+    topk_overlap = numeric(),
+    rank_corr = numeric(),
+    n_matched = integer(),
+    stability_streak = integer(),
+    stability_pass = logical(),
+    core_flip_applied = logical(),
+    linking_flip_applied = logical(),
+    linking_post_flip_applied = logical()
   )
 
   for (nm in se_cols) {

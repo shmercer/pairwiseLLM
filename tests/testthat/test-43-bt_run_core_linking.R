@@ -41,7 +41,7 @@ test_that("bt_run_core_linking returns round_size_zero when no sampling is reque
     seed_pairs = 1
   )
 
-  expect_identical(out$stop_reason, "round_size_zero")
+  expect_identical(out$stop_reason, "pair_budget_exhausted")
   expect_identical(out$stop_round, 0L)
   expect_equal(nrow(out$results), 0L)
 })
@@ -188,7 +188,7 @@ test_that("bt_run_core_linking can gate stopping on core drift (prevents stop un
   )
 
   expect_equal(nrow(out$batch_summary), 1L)
-  expect_equal(out$batch_summary$stop_reason[[1]], "max_rounds")
+  expect_equal(out$batch_summary$stop_reason[[1]], "max_rounds_reached")
 })
 
 test_that("bt_run_core_linking populates per-round fits and per-batch final_fits (bootstrap path)", {
