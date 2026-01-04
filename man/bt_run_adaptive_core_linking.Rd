@@ -216,7 +216,7 @@ fits; lower values indicate greater stability. Default \code{0.01}.}
 \item{stop_topk_overlap}{Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
 sets required to consider rankings stable. Default \code{0.95}.}
 
-\item{stop_min_largest_component_frac}{Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
+\item{stop_min_largest_component_frac}{Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
 largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.}
 
 \item{stop_min_degree}{Integer. Minimum node degree required for the comparison graph to be considered
@@ -261,7 +261,7 @@ Prefer \code{seed_pairs} going forward.}
 \item{seed_pairs}{Optional integer seed used for bootstrap pair sampling and for each round
 as \code{seed_pairs + batch_index*1000 + round_index}. RNG state is restored afterward.}
 
-\item{se_probs}{Numeric vector of probabilities in (0,1) for SE quantiles (passed to
+\item{se_probs}{Numeric vector of probabilities in \code{[0,1]} for SE quantiles (passed to
 \code{\link{bt_stop_metrics}}).}
 
 \item{fit_bounds}{Numeric length-2 vector giving acceptable infit/outfit bounds
@@ -278,7 +278,7 @@ generator becomes exhausted and fewer than \code{round_size * exhaustion_min_pai
 pairs are available. One of \code{"none"}, \code{"cross_batch_new_new"},
 \code{"targeted_repeats"}, or \code{"both"}.}
 
-\item{exhaustion_min_pairs_frac}{Numeric in (0,1]. Minimum fraction of \code{round_size}
+\item{exhaustion_min_pairs_frac}{Numeric in \code{[0,1]}. Minimum fraction of \code{round_size}
 below which the fallback may trigger.}
 
 \item{exhaustion_spectral_gap_threshold}{Numeric >= 0. Optional diagnostic threshold for
@@ -374,10 +374,10 @@ calling again with \code{resume_from = checkpoint_dir}.
 \examples{
 # Simple simulated judge: higher true theta wins
 samples <- tibble::tibble(
-  ID = LETTERS[1:8],
-  text = paste0("t", LETTERS[1:8])
+  ID = LETTERS[1:6],
+  text = paste0("t", LETTERS[1:6])
 )
-true_theta <- stats::setNames(seq(2, -1.5, length.out = 8), samples$ID)
+true_theta <- stats::setNames(seq(1.5, -1, length.out = 6), samples$ID)
 
 judge_fun <- function(pairs) {
   b <- ifelse(true_theta[pairs$ID1] >= true_theta[pairs$ID2], pairs$ID1, pairs$ID2)
@@ -412,20 +412,16 @@ fit_fun <- function(bt_data, ...) {
 
 out <- bt_run_adaptive_core_linking(
   samples = samples,
-  batches = list(c("G", "H")),
+  batches = list(c("E", "F")),
   judge_fun = judge_fun,
   core_ids = c("A", "B", "C"),
   fit_fun = fit_fun,
   engine = "mock",
-  round_size = 6,
-  init_round_size = 6,
-  max_rounds_per_batch = 2,
-  rel_se_p90_target = 0.7,
-  reliability_target = NA_real_,
-  sepG_target = NA_real_,
-  rel_se_p90_min_improve = NA_real_,
-  max_item_misfit_prop = NA_real_,
-  max_judge_misfit_prop = NA_real_
+  round_size = 3,
+  init_round_size = 3,
+  max_rounds_per_batch = 1,
+  rel_se_p90_target = NA_real_,
+  rel_se_p90_min_improve = NA_real_
 )
 out$batch_summary
 
