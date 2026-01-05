@@ -1400,7 +1400,15 @@ bt_run_core_linking <- function(samples,
 
 
       # ---- PR7/PR8.0: graph health + stability (stopping is gated by graph health) ----
-      gs <- .graph_state_from_pairs(results, ids = ids_all)
+      # Use active IDs only so that unintroduced/future sample IDs do not create
+      # isolated nodes that block soft stopping.
+      ids_graph <- .active_ids_for_graph(
+        core_ids = core_ids,
+        batches = batches,
+        batch_i = batch_i,
+        results_so_far = results
+      )
+      gs <- .graph_state_from_pairs(results, ids = ids_graph)
       gm <- gs$metrics
       degree_min <- as.double(gm$degree_min)
       largest_component_frac <- as.double(gm$largest_component_frac)
