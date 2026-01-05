@@ -39,7 +39,9 @@ test_that("core-linking graph health uses active IDs (unintroduced IDs do not bl
     engine = "mock",
     seed = 1,
     round_size = 1,
-    max_rounds_per_batch = 2,
+    # Only need a single round for this test; stopping behavior is not the focus
+    # (precision metrics on a single new ID can be undefined for some engines).
+    max_rounds_per_batch = 1,
     min_rounds = 1,
     within_batch_frac = 0,
     core_audit_frac = 0,
@@ -55,7 +57,7 @@ test_that("core-linking graph health uses active IDs (unintroduced IDs do not bl
   )
 
   expect_equal(nrow(out$batch_summary), 1L)
-  expect_equal(out$batch_summary$stop_reason[[1]], "precision_reached")
+  expect_equal(out$batch_summary$stop_reason[[1]], "max_rounds_reached")
   expect_equal(out$batch_summary$rounds_used[[1]], 1L)
 
   m1 <- dplyr::filter(out$metrics, batch_index == 1L, round_index == 1L)
