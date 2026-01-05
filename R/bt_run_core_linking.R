@@ -1502,7 +1502,8 @@ bt_run_core_linking <- function(samples,
         min_rounds = min_rounds,
         no_new_pairs = (nrow(pairs) == 0L),
         budget_exhausted = (as.integer(round_size) == 0L),
-        max_rounds_reached = (as.integer(round_i) >= as.integer(max_rounds_per_batch)),
+        max_rounds_reached = (as.integer(round_i) > as.integer(max_rounds_per_batch)), # PR8.2.2: max-round is a post-loop fallback label
+
         graph_healthy = graph_healthy,
         stability_reached = stability_reached,
         precision_reached = isTRUE(stop_dec$stop),
@@ -1517,11 +1518,14 @@ bt_run_core_linking <- function(samples,
       }
     }
 
-    if (is.na(stop_reason)) stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
-    if (stop_reason == "max_rounds" && nrow(state_hist) > 0L) {
-      # mark last state row of this batch as max_rounds
-      idx <- which(state_hist$batch_index == batch_i)
-      if (length(idx) > 0L) state_hist[idx[length(idx)], "stop_reason"] <- "max_rounds"
+    # PR8.2.2: Treat max-round as a post-loop fallback label so stability/precision
+    # can win on the final allowed round.
+    if (is.na(stop_reason)) {
+      stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
+      if (nrow(state_hist) > 0L) {
+        idx <- which(state_hist$batch_index == batch_i)
+        if (length(idx) > 0L) state_hist[idx[length(idx)], "stop_reason"] <- stop_reason
+      }
     }
 
     seen_ids <- unique(c(seen_ids, new_ids))
