@@ -1445,6 +1445,30 @@ bt_run_core_linking <- function(samples,
         c(list(metrics = metrics, prev_metrics = prev_metrics), stop_params)
       )
 
+      # ---- PR8.2.3: drift guardrails must block stability soft-stops ----
+      # bt_should_stop() already gates its own precision/stability soft stop
+      # decisions on drift, but core-linking also has an independent stability
+      # detector (rms/topk) used for batched stopping. When drift guardrails are
+      # active and failing, we must not stop on that stability signal.
+      drift_blocking <- FALSE
+      if (!is.null(stop_dec$details) && is.data.frame(stop_dec$details)) {
+        det <- tibble::as_tibble(stop_dec$details)
+        if (all(c("criterion", "threshold", "pass") %in% names(det))) {
+          drift_criteria <- c(
+            "core_theta_cor",
+            "core_theta_spearman",
+            "core_max_abs_shift",
+            "core_p90_abs_shift"
+          )
+          det_drift <- det[det$criterion %in% drift_criteria & !is.na(det$threshold), , drop = FALSE]
+          if (nrow(det_drift) > 0L) {
+            pass_vec <- as.logical(det_drift$pass)
+            pass_vec[is.na(pass_vec)] <- FALSE
+            drift_blocking <- any(!pass_vec)
+          }
+        }
+      }
+
       prev_metrics <- metrics
       prev_fit_for_stability <- current_fit
 
@@ -1497,6 +1521,8 @@ bt_run_core_linking <- function(samples,
         .write_checkpoint_now(checkpoint_payload_last, batch_i = batch_i, round_i = round_i)
       }
       # ---- PR7: deterministic stop decision + explicit reasons ----
+      stability_reached_gated <- isTRUE(stability_reached) && !isTRUE(drift_blocking)
+      precision_reached_gated <- isTRUE(stop_dec$stop) && !isTRUE(drift_blocking)
       stop_chk <- .stop_decision(
         round = round_i,
         min_rounds = min_rounds,
@@ -1505,11 +1531,104 @@ bt_run_core_linking <- function(samples,
         max_rounds_reached = (as.integer(round_i) > as.integer(max_rounds_per_batch)), # PR8.2.2: max-round is a post-loop fallback label
 
         graph_healthy = graph_healthy,
-        stability_reached = stability_reached,
-        precision_reached = isTRUE(stop_dec$stop),
+        stability_reached = stability_reached_gated,
+        precision_reached = precision_reached_gated,
         stop_reason_priority = stop_reason_priority
       )
       .validate_stop_decision(stop_chk)
+
+      # Optional explainability: record when drift guardrails block soft stops.
+      # These fields are NOT stop reasons; they are diagnostics only.
+      blocked_by <- character(0)
+      blocked_candidates <- character(0)
+
+      # Graph gating can already mark stop_blocked_* in stop_chk$details.
+      if (!is.null(stop_chk$details) && is.list(stop_chk$details)) {
+        if (!is.null(stop_chk$details$stop_blocked_by) && !is.na(stop_chk$details$stop_blocked_by)) {
+          blocked_by <- c(blocked_by, as.character(stop_chk$details$stop_blocked_by))
+        }
+        if (!is.null(stop_chk$details$stop_blocked_candidates) && !is.na(stop_chk$details$stop_blocked_candidates)) {
+          bc <- strsplit(as.character(stop_chk$details$stop_blocked_candidates), "\\|", fixed = FALSE)[[1]]
+          bc <- bc[nzchar(bc)]
+          blocked_candidates <- c(blocked_candidates, bc)
+        }
+      }
+
+      if (isTRUE(drift_blocking) && as.integer(round_i) >= as.integer(min_rounds)) {
+        drift_candidates <- character(0)
+
+        # Drift blocking always blocks the runner-level stability signal.
+        if (isTRUE(stability_reached) && isTRUE(graph_healthy)) {
+          drift_candidates <- c(drift_candidates, "stability_reached")
+        }
+
+        # If bt_should_stop() would have stopped except for drift, mark precision.
+        # We approximate this by requiring all non-drift active criteria to pass,
+        # and at least one of the precision/stability SE criteria (if active) to pass.
+        would_stop_except_drift <- FALSE
+        if (!is.null(stop_dec$details) && is.data.frame(stop_dec$details)) {
+          det <- tibble::as_tibble(stop_dec$details)
+          if (all(c("criterion", "threshold", "pass") %in% names(det))) {
+            drift_criteria <- c(
+              "core_theta_cor",
+              "core_theta_spearman",
+              "core_max_abs_shift",
+              "core_p90_abs_shift"
+            )
+            prec_crit <- c("rel_se_p90_precision", "rel_se_p90_stability")
+            det_non_drift <- det[!(det$criterion %in% c(drift_criteria, prec_crit)), , drop = FALSE]
+            if (nrow(det_non_drift) == 0L) {
+              non_drift_active_fail <- FALSE
+            } else {
+              pass_vec <- as.logical(det_non_drift$pass)
+              pass_vec[is.na(pass_vec)] <- FALSE
+              non_drift_active_fail <- any(!is.na(det_non_drift$threshold) & !pass_vec)
+            }
+
+            det_prec <- det[det$criterion == "rel_se_p90_precision", , drop = FALSE]
+            det_stab <- det[det$criterion == "rel_se_p90_stability", , drop = FALSE]
+
+            precision_active <- nrow(det_prec) > 0L && !is.na(det_prec$threshold[[1]])
+            stability_active <- nrow(det_stab) > 0L && !is.na(det_stab$threshold[[1]])
+            precision_pass <- nrow(det_prec) > 0L && isTRUE(as.logical(det_prec$pass[[1]]))
+            stability_pass_stop <- nrow(det_stab) > 0L && isTRUE(as.logical(det_stab$pass[[1]]))
+
+            pass_precision_or_stability <-
+              (!precision_active && !stability_active) ||
+                (precision_active && precision_pass) ||
+                (stability_active && stability_pass_stop)
+
+            would_stop_except_drift <- isTRUE(pass_precision_or_stability) && !isTRUE(non_drift_active_fail)
+          }
+        }
+        if (isTRUE(would_stop_except_drift) && isTRUE(graph_healthy)) {
+          drift_candidates <- c(drift_candidates, "precision_reached")
+        }
+
+        if (length(drift_candidates) > 0L) {
+          blocked_by <- c(blocked_by, "drift_guardrails")
+          blocked_candidates <- c(blocked_candidates, drift_candidates)
+        }
+      }
+
+      if (!("stop_blocked_by" %in% names(state_hist))) {
+        state_hist$stop_blocked_by <- NA_character_
+      }
+      if (!("stop_blocked_candidates" %in% names(state_hist))) {
+        state_hist$stop_blocked_candidates <- NA_character_
+      }
+
+      if (length(blocked_by) > 0L) {
+        blocked_by <- blocked_by[!is.na(blocked_by) & nzchar(blocked_by)]
+        # preserve order while de-duplicating
+        blocked_by <- blocked_by[!duplicated(blocked_by)]
+        state_hist[nrow(state_hist), "stop_blocked_by"] <- paste(blocked_by, collapse = "|")
+      }
+      if (length(blocked_candidates) > 0L) {
+        blocked_candidates <- blocked_candidates[!is.na(blocked_candidates) & nzchar(blocked_candidates)]
+        blocked_candidates <- blocked_candidates[!duplicated(blocked_candidates)]
+        state_hist[nrow(state_hist), "stop_blocked_candidates"] <- paste(blocked_candidates, collapse = "|")
+      }
 
       if (isTRUE(stop_chk$stop)) {
         stop_reason <- stop_chk$reason
