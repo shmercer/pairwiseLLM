@@ -10,17 +10,17 @@ test_that("simulate_bt_judge validates inputs", {
 
   expect_error(
     pairwiseLLM::simulate_bt_judge(pairs, c(1, 0)),
-    "true_theta must be a named numeric"
+    "named numeric vector"
   )
 
   expect_error(
     pairwiseLLM::simulate_bt_judge(pairs, true_theta, judge_col = 1),
-    "judge_col must be a single character"
+    "`judge_col` must be a non-empty character scalar"
   )
 
   expect_error(
     pairwiseLLM::simulate_bt_judge(pairs, true_theta, judges = c("", "j2")),
-    "judges must be a character vector of non-empty strings"
+    "at least one non-missing, non-empty label"
   )
 })
 
