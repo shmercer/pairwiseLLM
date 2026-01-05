@@ -701,12 +701,12 @@ test_that("bt_run_adaptive returns stop metadata and tags fits", {
     init_round_size = 0,
     max_rounds = 3
   )
-  expect_identical(out0$stop_reason, "no_results")
+  expect_identical(out0$stop_reason, "no_new_pairs")
   expect_true(is.null(out0$final_fit))
   expect_equal(length(out0$fits), 0L)
 
   # If both init_round_size and round_size are 0, stop_reason should be
-  # round_size_zero (not no_results).
+  # round_size_zero (not no_new_pairs).
   out00 <- bt_run_adaptive(
     samples = samples,
     judge_fun = judge_never,
@@ -767,7 +767,7 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
   expect_identical(out_np$stop_reason, "no_new_pairs")
   expect_identical(out_np$rounds$stop_reason[[1]], "no_new_pairs")
 
-  # no_new_results when judge returns 0 new results.
+  # no_new_pairs when judge returns 0 new results.
   judge_empty <- function(pairs) tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
   out_nr <- bt_run_adaptive(
     samples = tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c")),
@@ -784,8 +784,8 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     forbid_repeats = FALSE,
     balance_positions = FALSE
   )
-  expect_identical(out_nr$stop_reason, "no_new_results")
-  expect_identical(out_nr$rounds$stop_reason[[1]], "no_new_results")
+  expect_identical(out_nr$stop_reason, "no_new_pairs")
+  expect_identical(out_nr$rounds$stop_reason[[1]], "no_new_pairs")
 
   # stopped when stop criteria are satisfied.
   fit_stop <- function(bt_data, ...) {

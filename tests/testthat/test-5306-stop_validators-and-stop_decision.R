@@ -80,6 +80,8 @@ test_that("5306-06 validate_rounds_schema rejects list stop_reason", {
     n_total_results = 0L,
     stop = FALSE,
     stop_reason = list("oops"),
+    stop_blocked_by = NA_character_,
+    stop_blocked_candidates = NA_character_,
     degree_min = 0,
     largest_component_frac = 1,
     rms_theta_delta = NA_real_,

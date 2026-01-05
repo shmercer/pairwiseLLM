@@ -38,12 +38,9 @@
     return("precision_reached")
   }
 
-  if (isTRUE(no_results)) {
-    return("no_results")
-  }
 
-  if (isTRUE(no_new_results)) {
-    return("no_new_results")
+  if (isTRUE(no_new_results) || isTRUE(no_results)) {
+    return("no_new_pairs")
   }
 
   NA_character_

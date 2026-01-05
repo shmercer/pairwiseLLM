@@ -106,7 +106,7 @@
 #'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
 #'
 #'
-#' @param se_probs Numeric vector of probabilities in \code{[0, 1)\]} used when summarizing the
+#' @param se_probs Numeric vector of probabilities in \code{[0, 1]} used when summarizing the
 #' distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 #' Passed to \code{\link{bt_adaptive_round}}.
 #' @param fit_bounds Numeric length-2 vector giving lower/upper acceptable
@@ -374,8 +374,8 @@ bt_run_adaptive <- function(samples,
                             stop_stability_rms = 0.01,
                             stop_topk = 50L,
                             stop_topk_overlap = 0.95,
-                            stop_min_largest_component_frac = 0.9,
-                            stop_min_degree = 1L,
+                            stop_min_largest_component_frac = NA_real_,
+                            stop_min_degree = NA_integer_,
                             stop_reason_priority = NULL,
                             stop_stability_consecutive = 2L,
                             stop_topk_ties = c("id", "random"),
@@ -948,9 +948,9 @@ bt_run_adaptive <- function(samples,
       graph_healthy <- isTRUE(graph_healthy) && isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
     }
 
-    # ---- PR7: stability criterion (gated by graph health) ----
+    # ---- PR7/PR8.0: stability criterion (computed regardless; stopping is gated by graph health) ----
     stability_pass <- FALSE
-    if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+    if (!is.null(prev_fit_for_stability)) {
       stability_pass <- is.finite(metrics$rms_theta_delta) &&
         metrics$rms_theta_delta <= as.double(stop_stability_rms) &&
         is.finite(metrics$topk_overlap) &&
@@ -1026,6 +1026,9 @@ bt_run_adaptive <- function(samples,
 
     this_reason <- stop_chk$reason %||% NA_character_
 
+    this_blocked_by <- stop_chk$details$stop_blocked_by %||% NA_character_
+    this_blocked_candidates <- stop_chk$details$stop_blocked_candidates %||% NA_character_
+
     diag_pairs_round <- NULL
     planned_repeat_pairs <- attr(pairs_next, "planned_repeat_pairs")
     diag_pairs <- attr(pairs_next, "pairing_diagnostics")
@@ -1039,7 +1042,9 @@ bt_run_adaptive <- function(samples,
       st_now,
       round = as.integer(r),
       stop = isTRUE(stop_chk$stop),
-      stop_reason = this_reason
+      stop_reason = this_reason,
+      stop_blocked_by = this_blocked_by,
+      stop_blocked_candidates = this_blocked_candidates
     )
     state_list[[length(state_list) + 1L]] <- st_now
 
@@ -1052,6 +1057,8 @@ bt_run_adaptive <- function(samples,
         n_total_results = as.integer(nrow(results)),
         stop = isTRUE(stop_chk$stop),
         stop_reason = this_reason,
+        stop_blocked_by = this_blocked_by,
+        stop_blocked_candidates = this_blocked_candidates,
         precision_reached = isTRUE(precision_reached)
       ),
       metrics_clean,
@@ -1180,7 +1187,7 @@ bt_run_adaptive <- function(samples,
         stage = "round_fit",
         n_results = nrow(results),
         n_pairs_this_round = NA_integer_,
-        stop_reason = "no_new_results"
+        stop_reason = this_reason
       )
       final_fit <- fits[[length(fits)]]
 
@@ -1188,7 +1195,7 @@ bt_run_adaptive <- function(samples,
       state_list[[length(state_list)]] <- dplyr::mutate(
         state_list[[length(state_list)]],
         stop = TRUE,
-        stop_reason = "no_new_results"
+        stop_reason = this_reason
       )
 
       checkpoint_payload_last <- .make_checkpoint_payload(next_round = r + 1L, completed = TRUE)
@@ -1268,6 +1275,43 @@ bt_run_adaptive <- function(samples,
     rounds_tbl$stop_reason <- as.character(rounds_tbl$stop_reason)
   }
 
+  if (!"stop_blocked_by" %in% names(rounds_tbl)) {
+    rounds_tbl$stop_blocked_by <- NA_character_
+  }
+  if (is.list(rounds_tbl$stop_blocked_by)) {
+    rounds_tbl$stop_blocked_by <- vapply(
+      rounds_tbl$stop_blocked_by,
+      function(x) {
+        if (is.null(x)) {
+          return(NA_character_)
+        }
+        as.character(x)[1]
+      },
+      character(1)
+    )
+  } else {
+    rounds_tbl$stop_blocked_by <- as.character(rounds_tbl$stop_blocked_by)
+  }
+
+  if (!"stop_blocked_candidates" %in% names(rounds_tbl)) {
+    rounds_tbl$stop_blocked_candidates <- NA_character_
+  }
+  if (is.list(rounds_tbl$stop_blocked_candidates)) {
+    rounds_tbl$stop_blocked_candidates <- vapply(
+      rounds_tbl$stop_blocked_candidates,
+      function(x) {
+        if (is.null(x)) {
+          return(NA_character_)
+        }
+        as.character(x)[1]
+      },
+      character(1)
+    )
+  } else {
+    rounds_tbl$stop_blocked_candidates <- as.character(rounds_tbl$stop_blocked_candidates)
+  }
+
+
   if (!"stop" %in% names(rounds_tbl)) {
     rounds_tbl$stop <- rep(FALSE, nrow(rounds_tbl))
   }
@@ -1302,7 +1346,7 @@ bt_run_adaptive <- function(samples,
   final_models <- NULL
   theta <- NULL
   theta_engine <- NA_character_
-  fit_provenance <- NULL
+  fit_provenance <- list()
 
   final_refit_attempted <- FALSE
   final_refit_failed <- FALSE
@@ -1422,6 +1466,50 @@ bt_run_adaptive <- function(samples,
     dplyr::bind_rows(pairing_diag_list)
   }
 
+  # Pairing diagnostics contract: add stable per-round fields derived from `rounds_tbl`.
+  # (Forward-compatible: extra columns are retained.)
+  if (!is.null(pairing_diagnostics) && nrow(pairing_diagnostics) > 0L &&
+    !is.null(rounds_tbl) && nrow(rounds_tbl) > 0L) {
+    rounds_contract <- rounds_tbl %>%
+      dplyr::transmute(
+        round = .data$round,
+        n_pairs_completed = as.integer(.data$n_new_pairs_scored),
+        degree_min = as.double(.data$degree_min),
+        largest_component_frac = as.double(.data$largest_component_frac),
+        rms_theta_delta = as.double(.data$rms_theta_delta),
+        topk_overlap = as.double(.data$topk_overlap),
+        stop = as.logical(.data$stop),
+        stop_reason = as.character(.data$stop_reason),
+        stop_blocked_by = as.character(.data$stop_blocked_by),
+        stop_blocked_candidates = as.character(.data$stop_blocked_candidates)
+      )
+
+    pairing_diagnostics <- pairing_diagnostics %>%
+      dplyr::left_join(rounds_contract, by = "round")
+
+    if ("n_selected" %in% names(pairing_diagnostics)) {
+      pairing_diagnostics$n_pairs_planned <- as.integer(pairing_diagnostics$n_selected)
+    } else {
+      pairing_diagnostics$n_pairs_planned <- as.integer(NA_integer_)
+    }
+  }
+
+  if (!is.null(pairing_diagnostics) && nrow(pairing_diagnostics) == 0L) {
+    # Ensure stable columns exist even when no rounds were executed.
+    pairing_diagnostics$n_pairs_planned <- integer()
+    pairing_diagnostics$n_pairs_completed <- integer()
+    pairing_diagnostics$degree_min <- double()
+    pairing_diagnostics$largest_component_frac <- double()
+    pairing_diagnostics$rms_theta_delta <- double()
+    pairing_diagnostics$topk_overlap <- double()
+    pairing_diagnostics$stop <- logical()
+    pairing_diagnostics$stop_reason <- character()
+    pairing_diagnostics$stop_blocked_by <- character()
+    pairing_diagnostics$stop_blocked_candidates <- character()
+  }
+  # PR8 contract: fit_provenance must always be a list (possibly empty).
+  if (is.null(fit_provenance)) fit_provenance <- list()
+
   out <- list(
     results = results,
     metrics = metrics_hist,
@@ -1448,6 +1536,7 @@ bt_run_adaptive <- function(samples,
     .write_checkpoint_now(checkpoint_payload_last, round_index = stop_round)
   }
 
+  validate_pairwise_run_output(out)
   .as_pairwise_run(out, run_type = "adaptive")
 }
 

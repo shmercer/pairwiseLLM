@@ -107,7 +107,7 @@
 #'   sets required to consider rankings stable. Default \code{0.95}.
 #' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
 #'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
-#' @param stop_min_largest_component_frac Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
+#' @param stop_min_largest_component_frac Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
 #'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
 #' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
 #'   healthy. Default \code{1}.
@@ -506,6 +506,11 @@ bt_run_core_linking <- function(samples,
       core_ids = core_ids,
       batches = batches,
       results = results,
+      estimates = NULL,
+      theta = NULL,
+      theta_engine = NA_character_,
+      fit_provenance = list(),
+      pairing_diagnostics = NULL,
       fits = list(),
       final_fits = list(),
       metrics = .bt_align_metrics(tibble::tibble(), se_probs = se_probs),
@@ -528,6 +533,7 @@ bt_run_core_linking <- function(samples,
       .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
     }
 
+    validate_pairwise_run_output(out)
     return(.as_pairwise_run(out, run_type = "core_linking"))
   }
 
@@ -598,19 +604,43 @@ bt_run_core_linking <- function(samples,
     resume_prev_metrics <- chk$prev_metrics_current %||% NULL
 
     if (isTRUE(chk$completed)) {
-      out <- chk$out %||% list(
+      # Completed checkpoints from older versions (or tests) may store a minimal `out`.
+      # Upgrade it to the PR8 run-output contract by filling missing required fields.
+      out_skel <- list(
         core_ids = core_ids,
         batches = batches,
         results = results,
-        bt_data = bt_data,
+        estimates = NULL,
+        theta = NULL,
+        theta_engine = NA_character_,
+        fit_provenance = list(),
+        stop_reason = chk$stop_reason %||% NA_character_,
+        stop_round = chk$stop_round %||% NA_integer_,
+        pairing_diagnostics = NULL,
+        bt_data = chk$bt_data %||% NULL,
         fits = fits,
         final_fits = final_fits,
-        estimates = estimates,
-        final_models = final_models,
+        final_models = chk$final_models %||% list(),
         metrics = metrics_hist,
         state = state_hist,
         batch_summary = batch_summary
       )
+
+      out <- out_skel
+      if (is.list(chk$out)) {
+        out <- utils::modifyList(out_skel, chk$out, keep.null = TRUE)
+      }
+
+      # Defensive: ensure required fields exist even if a legacy checkpoint stored a minimal list.
+      if (is.null(out$fit_provenance)) out$fit_provenance <- list()
+      if (is.null(out$theta_engine)) out$theta_engine <- NA_character_
+      if (!("estimates" %in% names(out))) out["estimates"] <- list(NULL)
+      if (!("theta" %in% names(out))) out["theta"] <- list(NULL)
+      if (!("pairing_diagnostics" %in% names(out))) out["pairing_diagnostics"] <- list(NULL)
+      if (is.null(out$stop_round)) out$stop_round <- chk$stop_round %||% NA_integer_
+      if (is.null(out$stop_reason)) out$stop_reason <- chk$stop_reason %||% NA_character_
+
+      validate_pairwise_run_output(out)
       return(.as_pairwise_run(out, run_type = "core_linking"))
     }
   }
@@ -1369,7 +1399,7 @@ bt_run_core_linking <- function(samples,
       prev_metrics_for_state <- prev_metrics
 
 
-      # ---- PR7: graph health + stability (gated) ----
+      # ---- PR7/PR8.0: graph health + stability (stopping is gated by graph health) ----
       gs <- .graph_state_from_pairs(results, ids = ids_all)
       gm <- gs$metrics
       degree_min <- as.double(gm$degree_min)
@@ -1379,7 +1409,7 @@ bt_run_core_linking <- function(samples,
         isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
 
       stability_pass <- FALSE
-      if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+      if (!is.null(prev_fit_for_stability)) {
         stability_pass <- is.finite(metrics$rms_theta_delta) &&
           metrics$rms_theta_delta <= as.double(stop_stability_rms) &&
           is.finite(metrics$topk_overlap) &&
@@ -1572,6 +1602,12 @@ bt_run_core_linking <- function(samples,
   bt_data <- NULL
   estimates <- NULL
   final_models <- NULL
+
+  # PR8 contract fields: ensure these always exist
+  theta <- NULL
+  theta_engine <- NA_character_
+  fit_provenance <- list()
+
   if (nrow(results) > 0L) {
     bt_data <- build_bt_fun(results, judge)
   }
@@ -1589,7 +1625,59 @@ bt_run_core_linking <- function(samples,
       rc = final_out$rc_fit,
       diagnostics = final_out$diagnostics
     )
+    theta <- NULL
+    theta_engine <- NA_character_
+    fit_provenance <- list()
+
+    if (!is.null(final_out$estimates) && nrow(final_out$estimates) > 0L) {
+      bt_ok <- identical(final_out$diagnostics$bt_status, "succeeded")
+
+      theta_col <- if (bt_ok) "theta_bt_firth" else "theta_rc"
+      se_col <- if (bt_ok) "se_bt_firth" else NA_character_
+
+      theta <- final_out$estimates %>%
+        dplyr::transmute(
+          ID = as.character(.data$ID),
+          theta = as.double(.data[[theta_col]]),
+          se = if (is.na(se_col)) as.double(NA_real_) else as.double(.data[[se_col]]),
+          rank = .rank_desc(.data[[theta_col]])
+        )
+
+      theta_engine <- if (bt_ok) as.character(final_out$diagnostics$bt_engine_used) else "rank_centrality"
+
+      fit_provenance <- final_out$provenance
+      if (is.null(fit_provenance)) fit_provenance <- list()
+    }
   }
+
+  # If no final estimates were produced, expose the last running fit as `theta`
+  # to satisfy the PR8 output contract (theta exists whenever meaningful fits exist).
+  if (is.null(theta) && length(final_fits) > 0L) {
+    last_fit <- final_fits[[length(final_fits)]]
+    if (is.list(last_fit) && !is.null(last_fit$theta) && is.data.frame(last_fit$theta)) {
+      th <- tibble::as_tibble(last_fit$theta)
+      if (!("ID" %in% names(th))) th$ID <- character()
+      if (!("theta" %in% names(th))) th$theta <- numeric()
+      if (!("se" %in% names(th))) th$se <- NA_real_
+      rank_src <- if ("rank_running" %in% names(th)) th$rank_running else .rank_desc(th$theta)
+
+      theta <- tibble::tibble(
+        ID = as.character(th$ID),
+        theta = as.numeric(th$theta),
+        se = as.numeric(th$se),
+        rank = as.integer(rank_src)
+      )
+
+      theta_engine <- if (!is.null(last_fit$engine_running) && identical(last_fit$engine_running, "rank_centrality")) {
+        "rank_centrality"
+      } else {
+        as.character(last_fit$engine_bt %||% engine)
+      }
+    }
+  }
+
+  # PR8 contract: fit_provenance must always be a list (possibly empty).
+  if (is.null(fit_provenance)) fit_provenance <- list()
 
   out <- list(
     core_ids = core_ids,
@@ -1599,6 +1687,10 @@ bt_run_core_linking <- function(samples,
     fits = fits,
     final_fits = final_fits,
     estimates = estimates,
+    theta = theta,
+    theta_engine = theta_engine,
+    fit_provenance = fit_provenance,
+    pairing_diagnostics = NULL,
     final_models = final_models,
     metrics = metrics_hist,
     state = state_hist,
@@ -1623,6 +1715,7 @@ bt_run_core_linking <- function(samples,
     .write_checkpoint_now(checkpoint_payload_last)
   }
 
+  validate_pairwise_run_output(out)
   .as_pairwise_run(out, run_type = "core_linking")
 }
 

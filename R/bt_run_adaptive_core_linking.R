@@ -436,7 +436,15 @@ bt_run_adaptive_core_linking <- function(samples,
       if (!identical(seed_pairs_i, seed)) {
         stop("Do not supply both `seed` and `seed_pairs` (they must be identical).", call. = FALSE)
       }
+      # Normalize to a single integer value.
+      seed_pairs <- seed_pairs_i
     }
+  } else if (!is.null(seed_pairs)) {
+    seed_pairs_i <- as.integer(seed_pairs)
+    if (length(seed_pairs_i) != 1L || is.na(seed_pairs_i)) {
+      stop("`seed_pairs` must be a single integer (or NULL).", call. = FALSE)
+    }
+    seed_pairs <- seed_pairs_i
   }
 
   round_size <- as.integer(round_size)
@@ -637,6 +645,11 @@ bt_run_adaptive_core_linking <- function(samples,
       core_ids = core_ids,
       batches = batches,
       results = results,
+      estimates = NULL,
+      theta = NULL,
+      theta_engine = NA_character_,
+      fit_provenance = list(),
+      pairing_diagnostics = NULL,
       bt_data = bt_data,
       fits = list(),
       final_fits = list(),
@@ -662,6 +675,7 @@ bt_run_adaptive_core_linking <- function(samples,
       .bt_write_checkpoint(checkpoint_dir, payload, basename = "run_state", overwrite = checkpoint_overwrite)
     }
 
+    validate_pairwise_run_output(out)
     return(.as_pairwise_run(out, run_type = "adaptive_core_linking"))
   }
 
@@ -1421,8 +1435,13 @@ bt_run_adaptive_core_linking <- function(samples,
       m <- .bt_align_metrics(m, se_probs = se_probs)
 
 
-      # ---- PR7: graph health + stability (gated) ----
-      gs <- .graph_state_from_pairs(results, ids = ids_all)
+      # ---- PR7/PR8.0: graph health + stability (stopping is gated by graph health) ----
+      ids_graph <- sort(unique(c(
+        core_ids,
+        unlist(batches[seq_len(b)]),
+        unique(c(results$ID1, results$ID2))
+      )))
+      gs <- .graph_state_from_pairs(results, ids = ids_graph)
       gm <- gs$metrics
       degree_min <- as.double(gm$degree_min)
       largest_component_frac <- as.double(gm$largest_component_frac)
@@ -1431,7 +1450,7 @@ bt_run_adaptive_core_linking <- function(samples,
         isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
 
       stability_pass <- FALSE
-      if (!is.null(prev_fit_for_stability) && isTRUE(graph_healthy)) {
+      if (!is.null(prev_fit_for_stability)) {
         stability_pass <- is.finite(m$rms_theta_delta) &&
           m$rms_theta_delta <= as.double(stop_stability_rms) &&
           is.finite(m$topk_overlap) &&
@@ -1448,15 +1467,36 @@ bt_run_adaptive_core_linking <- function(samples,
         c(list(metrics = m, prev_metrics = prev_metrics), stop_params)
       )
 
+      # ---- Drift guardrails should gate *all* soft stopping (stability/precision) ----
+      # When drift guardrails are active and failing, we continue sampling until a
+      # hard stop (e.g., max rounds) rather than allowing stability-based stopping.
+      drift_blocking <- FALSE
+      if (isTRUE(drift_active) && !is.null(decision$details)) {
+        det <- tibble::as_tibble(decision$details)
+        drift_crit <- det$criterion %in% c(
+          "core_theta_cor",
+          "core_theta_spearman",
+          "core_max_abs_shift",
+          "core_p90_abs_shift"
+        )
+        if (any(drift_crit)) {
+          thr <- det$threshold[drift_crit]
+          ps <- det$pass[drift_crit]
+          active <- !is.na(thr)
+          # `pass` entries are scalar logicals; be defensive about NA.
+          drift_blocking <- any(active & (is.na(ps) | !ps))
+        }
+      }
+
       stop_chk <- .stop_decision(
         round = r,
         min_rounds = min_rounds,
         no_new_pairs = (nrow(pairs_next) == 0L),
         budget_exhausted = (as.integer(round_size) == 0L),
-        max_rounds_reached = (as.integer(r) >= as.integer(max_rounds_per_batch)),
+        max_rounds_reached = ((as.integer(r) - 1L) >= as.integer(max_rounds_per_batch)),
         graph_healthy = graph_healthy,
-        stability_reached = stability_reached,
-        precision_reached = isTRUE(decision$stop),
+        stability_reached = isTRUE(stability_reached) && !isTRUE(drift_blocking),
+        precision_reached = isTRUE(decision$stop) && !isTRUE(drift_blocking),
         stop_reason_priority = stop_reason_priority
       )
       .validate_stop_decision(stop_chk)
@@ -1547,7 +1587,7 @@ bt_run_adaptive_core_linking <- function(samples,
 
       prev_metrics <- m
       prev_fit_for_stability <- current_fit
-      if (r == max_rounds_per_batch) {
+      if (r == max_rounds_per_batch && is.na(stop_reason)) {
         stop_reason <- .bt_resolve_stop_reason(reached_max_rounds = TRUE)
       }
     }
@@ -1635,6 +1675,59 @@ bt_run_adaptive_core_linking <- function(samples,
       rc_damping = rc_damping
     )
   }
+  theta <- NULL
+  theta_engine <- NA_character_
+  fit_provenance <- list()
+  pairing_diagnostics <- NULL
+
+  if (!is.null(final_est) && !is.null(final_est$estimates) && nrow(final_est$estimates) > 0L) {
+    bt_ok <- identical(final_est$diagnostics$bt_status, "succeeded")
+
+    theta_col <- if (bt_ok) "theta_bt_firth" else "theta_rc"
+    se_col <- if (bt_ok) "se_bt_firth" else NA_character_
+
+    theta <- final_est$estimates %>%
+      dplyr::transmute(
+        ID = as.character(.data$ID),
+        theta = as.double(.data[[theta_col]]),
+        se = if (is.na(se_col)) as.double(NA_real_) else as.double(.data[[se_col]]),
+        rank = .rank_desc(.data[[theta_col]])
+      )
+
+    theta_engine <- if (bt_ok) as.character(final_est$diagnostics$bt_engine_used) else "rank_centrality"
+
+    fit_provenance <- final_est$provenance
+    if (is.null(fit_provenance)) fit_provenance <- list()
+  }
+
+
+# If no final estimates were produced, expose the last running fit as `theta`
+# to satisfy the PR8 output contract (theta exists whenever meaningful fits exist).
+if (is.null(theta) && length(final_fits) > 0L) {
+  last_fit <- final_fits[[length(final_fits)]]
+  if (is.list(last_fit) && !is.null(last_fit$theta) && is.data.frame(last_fit$theta)) {
+    th <- tibble::as_tibble(last_fit$theta)
+    if (!("ID" %in% names(th))) th$ID <- character()
+    if (!("theta" %in% names(th))) th$theta <- numeric()
+    if (!("se" %in% names(th))) th$se <- NA_real_
+
+    theta <- tibble::tibble(
+      ID = as.character(th$ID),
+      theta = as.numeric(th$theta),
+      se = as.numeric(th$se),
+      rank = .rank_desc(th$theta)
+    )
+
+    theta_engine <- if (!is.null(last_fit$engine_running) && identical(last_fit$engine_running, "rank_centrality")) {
+      "rank_centrality"
+    } else {
+      as.character(last_fit$engine %||% engine)
+    }
+  }
+}
+
+# PR8 contract: fit_provenance must always be a list (possibly empty).
+if (is.null(fit_provenance)) fit_provenance <- list()
 
   out <- list(
     core_ids = core_ids,
@@ -1643,7 +1736,11 @@ bt_run_adaptive_core_linking <- function(samples,
     bt_data = bt_data,
     fits = fits,
     final_fits = final_fits,
-    estimates = if (is.null(final_est)) tibble::tibble() else final_est$estimates,
+    estimates = if (is.null(final_est)) NULL else final_est$estimates,
+    theta = theta,
+    theta_engine = theta_engine,
+    fit_provenance = fit_provenance,
+    pairing_diagnostics = pairing_diagnostics,
     final_models = if (is.null(final_est)) list() else list(bt = final_est$bt_fit, rc = final_est$rc_fit, diagnostics = final_est$diagnostics),
     metrics = metrics,
     batch_summary = batch_summary,
@@ -1665,5 +1762,6 @@ bt_run_adaptive_core_linking <- function(samples,
     .write_checkpoint_now(checkpoint_payload_last, batch_i = length(batches), round_i = NA_integer_)
   }
 
+  validate_pairwise_run_output(out)
   .as_pairwise_run(out, run_type = "adaptive_core_linking")
 }

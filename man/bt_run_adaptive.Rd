@@ -49,8 +49,8 @@ bt_run_adaptive(
   stop_stability_rms = 0.01,
   stop_topk = 50L,
   stop_topk_overlap = 0.95,
-  stop_min_largest_component_frac = 0.9,
-  stop_min_degree = 1L,
+  stop_min_largest_component_frac = NA_real_,
+  stop_min_degree = NA_integer_,
   stop_reason_priority = NULL,
   stop_stability_consecutive = 2L,
   stop_topk_ties = c("id", "random"),
@@ -144,7 +144,7 @@ model fit when \code{initial_results} is \code{NULL} or empty. Default: \code{ro
 \item{max_rounds}{Integer. Maximum number of adaptive rounds to run (excluding the bootstrap
 scoring step). Default \code{50}.}
 
-\item{se_probs}{Numeric vector of probabilities in \code{[0, 1)\]} used when summarizing the
+\item{se_probs}{Numeric vector of probabilities in \code{[0, 1]} used when summarizing the
 distribution of standard errors for stopping diagnostics (e.g., median, 90th percentile).
 Passed to \code{\link{bt_adaptive_round}}.}
 

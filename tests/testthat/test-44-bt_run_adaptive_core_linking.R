@@ -395,7 +395,7 @@ test_that("bt_run_adaptive_core_linking bootstrap init_round_size validation and
   )
 })
 
-test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results, stopped, and max_rounds paths", {
+test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_new_pairs, stopped, and max_rounds paths", {
   # Shared samples
   samples <- tibble::tibble(
     ID = LETTERS[1:6],
@@ -502,10 +502,10 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
   expect_equal(out_no_pairs$batch_summary$stop_reason[[1]], "no_new_pairs")
   expect_true(nrow(out_no_pairs$metrics) == 0L)
 
-  # ---- no_results path (force fit_from_results to return NULL after judging a round) ----
+  # ---- no_new_pairs path (force fit_from_results to return NULL after judging a round) ----
   # Must still produce a warm-start fit from initial_results, so:
   # - First build returns normal BT rows
-  # - Subsequent builds return empty BT rows -> fit becomes NULL -> stop_reason "no_results"
+  # - Subsequent builds return empty BT rows -> fit becomes NULL -> stop_reason "no_new_pairs"
   build_bt_drop_after_first <- local({
     first <- TRUE
     function(res, judge = NULL) {
@@ -518,7 +518,7 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
     }
   })
 
-  out_no_results <- bt_run_adaptive_core_linking(
+  out_no_new_pairs <- bt_run_adaptive_core_linking(
     samples = samples,
     batches = list(c("D")),
     judge_fun = judge_fun,
@@ -537,7 +537,7 @@ test_that("bt_run_adaptive_core_linking covers no_new_ids, no_pairs, no_results,
     max_item_misfit_prop = NA_real_,
     max_judge_misfit_prop = NA_real_
   )
-  expect_equal(out_no_results$batch_summary$stop_reason[[1]], "no_results")
+  expect_equal(out_no_new_pairs$batch_summary$stop_reason[[1]], "no_new_pairs")
 
   # ---- stopped path (use 2 new IDs so rel_se_p90 is computable; force stop) ----
   # Dedicated fitter for this subcase: distinct theta ensures theta_sd > 0 for new IDs.
