@@ -38,19 +38,19 @@ validate_pairwise_run_output <- function(x, strict = FALSE) {
 
   assert_tibble_or_null <- function(z, name) {
     if (!is.null(z) && !inherits(z, "tbl_df")) {
-      rlang::abort("`{name}` must be a tibble or NULL.")
+      rlang::abort(sprintf("`%s` must be a tibble or NULL.", name))
     }
   }
 
   assert_scalar_chr_na <- function(z, name) {
     if (!is_scalar_chr(z)) {
-      rlang::abort("`{name}` must be a scalar character (or NA_character_).")
+      rlang::abort(sprintf("`%s` must be a scalar character (or NA_character_).", name))
     }
   }
 
   assert_scalar_int_na <- function(z, name) {
     if (!is_scalar_int(z)) {
-      rlang::abort("`{name}` must be a scalar integer (or NA_integer_).")
+      rlang::abort(sprintf("`%s` must be a scalar integer (or NA_integer_).", name))
     }
   }
 

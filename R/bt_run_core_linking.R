@@ -628,17 +628,17 @@ bt_run_core_linking <- function(samples,
 
       out <- out_skel
       if (is.list(chk$out)) {
-        out <- utils::modifyList(out_skel, chk$out)
+        out <- utils::modifyList(out_skel, chk$out, keep.null = TRUE)
       }
 
       # Defensive: ensure required fields exist even if a legacy checkpoint stored a minimal list.
       if (is.null(out$fit_provenance)) out$fit_provenance <- list()
-      if (!("theta_engine" %in% names(out))) out$theta_engine <- NA_character_
-      if (!("estimates" %in% names(out))) out$estimates <- NULL
-      if (!("theta" %in% names(out))) out$theta <- NULL
-      if (!("pairing_diagnostics" %in% names(out))) out$pairing_diagnostics <- NULL
-      if (!("stop_round" %in% names(out))) out$stop_round <- chk$stop_round %||% NA_integer_
-      if (!("stop_reason" %in% names(out))) out$stop_reason <- chk$stop_reason %||% NA_character_
+      if (is.null(out$theta_engine)) out$theta_engine <- NA_character_
+      if (!("estimates" %in% names(out))) out["estimates"] <- list(NULL)
+      if (!("theta" %in% names(out))) out["theta"] <- list(NULL)
+      if (!("pairing_diagnostics" %in% names(out))) out["pairing_diagnostics"] <- list(NULL)
+      if (is.null(out$stop_round)) out$stop_round <- chk$stop_round %||% NA_integer_
+      if (is.null(out$stop_reason)) out$stop_reason <- chk$stop_reason %||% NA_character_
 
       validate_pairwise_run_output(out)
       return(.as_pairwise_run(out, run_type = "core_linking"))

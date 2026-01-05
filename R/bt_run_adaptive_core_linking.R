@@ -436,7 +436,15 @@ bt_run_adaptive_core_linking <- function(samples,
       if (!identical(seed_pairs_i, seed)) {
         stop("Do not supply both `seed` and `seed_pairs` (they must be identical).", call. = FALSE)
       }
+      # Normalize to a single integer value.
+      seed_pairs <- seed_pairs_i
     }
+  } else if (!is.null(seed_pairs)) {
+    seed_pairs_i <- as.integer(seed_pairs)
+    if (length(seed_pairs_i) != 1L || is.na(seed_pairs_i)) {
+      stop("`seed_pairs` must be a single integer (or NULL).", call. = FALSE)
+    }
+    seed_pairs <- seed_pairs_i
   }
 
   round_size <- as.integer(round_size)
@@ -1693,33 +1701,33 @@ bt_run_adaptive_core_linking <- function(samples,
   }
 
 
-  # If no final estimates were produced, expose the last running fit as `theta`
-  # to satisfy the PR8 output contract (theta exists whenever meaningful fits exist).
-  if (is.null(theta) && length(final_fits) > 0L) {
-    last_fit <- final_fits[[length(final_fits)]]
-    if (is.list(last_fit) && !is.null(last_fit$theta) && is.data.frame(last_fit$theta)) {
-      th <- tibble::as_tibble(last_fit$theta)
-      if (!("ID" %in% names(th))) th$ID <- character()
-      if (!("theta" %in% names(th))) th$theta <- numeric()
-      if (!("se" %in% names(th))) th$se <- NA_real_
+# If no final estimates were produced, expose the last running fit as `theta`
+# to satisfy the PR8 output contract (theta exists whenever meaningful fits exist).
+if (is.null(theta) && length(final_fits) > 0L) {
+  last_fit <- final_fits[[length(final_fits)]]
+  if (is.list(last_fit) && !is.null(last_fit$theta) && is.data.frame(last_fit$theta)) {
+    th <- tibble::as_tibble(last_fit$theta)
+    if (!("ID" %in% names(th))) th$ID <- character()
+    if (!("theta" %in% names(th))) th$theta <- numeric()
+    if (!("se" %in% names(th))) th$se <- NA_real_
 
-      theta <- tibble::tibble(
-        ID = as.character(th$ID),
-        theta = as.numeric(th$theta),
-        se = as.numeric(th$se),
-        rank = .rank_desc(th$theta)
-      )
+    theta <- tibble::tibble(
+      ID = as.character(th$ID),
+      theta = as.numeric(th$theta),
+      se = as.numeric(th$se),
+      rank = .rank_desc(th$theta)
+    )
 
-      theta_engine <- if (!is.null(last_fit$engine_running) && identical(last_fit$engine_running, "rank_centrality")) {
-        "rank_centrality"
-      } else {
-        as.character(last_fit$engine %||% engine)
-      }
+    theta_engine <- if (!is.null(last_fit$engine_running) && identical(last_fit$engine_running, "rank_centrality")) {
+      "rank_centrality"
+    } else {
+      as.character(last_fit$engine %||% engine)
     }
   }
+}
 
-  # PR8 contract: fit_provenance must always be a list (possibly empty).
-  if (is.null(fit_provenance)) fit_provenance <- list()
+# PR8 contract: fit_provenance must always be a list (possibly empty).
+if (is.null(fit_provenance)) fit_provenance <- list()
 
   out <- list(
     core_ids = core_ids,
