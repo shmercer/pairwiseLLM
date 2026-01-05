@@ -2,6 +2,49 @@
 # Graph state helpers (shared across diagnostics / guards)
 # -------------------------------------------------------------------------
 
+#' Determine the active ID set for graph-health calculations
+#'
+#' Batched runners may have access to a larger universe of sample IDs than are
+#' currently "in play" for a given batch/round. Graph-health gating should only
+#' consider IDs that are active:
+#'  - core IDs
+#'  - IDs introduced by the batches up to and including the current batch
+#'  - IDs that appear in the accumulated results so far
+#'
+#' @param core_ids Character vector of core IDs.
+#' @param batches List of character vectors (batch ID requests).
+#' @param batch_i Integer index of the current batch (1-based).
+#' @param results_so_far Results data.frame/tibble with columns ID1/ID2.
+#'
+#' @return Sorted unique character vector of active IDs.
+#'
+#' @keywords internal
+.active_ids_for_graph <- function(core_ids, batches, batch_i, results_so_far) {
+  core_ids <- as.character(core_ids %||% character(0))
+  core_ids <- core_ids[!is.na(core_ids) & nzchar(core_ids)]
+
+  ids_batches <- character(0)
+  if (is.list(batches) && length(batches) > 0L && !is.null(batch_i)) {
+    bi <- as.integer(batch_i)
+    if (!is.na(bi) && bi >= 1L) {
+      idx <- seq_len(min(length(batches), bi))
+      ids_batches <- unlist(batches[idx], use.names = FALSE)
+      ids_batches <- as.character(ids_batches)
+      ids_batches <- ids_batches[!is.na(ids_batches) & nzchar(ids_batches)]
+    }
+  }
+
+  ids_results <- character(0)
+  if (!is.null(results_so_far) && is.data.frame(results_so_far) && nrow(results_so_far) > 0L) {
+    if (all(c("ID1", "ID2") %in% names(results_so_far))) {
+      ids_results <- c(as.character(results_so_far$ID1), as.character(results_so_far$ID2))
+      ids_results <- ids_results[!is.na(ids_results) & nzchar(ids_results)]
+    }
+  }
+
+  sort(unique(c(core_ids, ids_batches, ids_results)))
+}
+
 #' Summarize comparison-graph state from a pairs table
 #'
 #' This helper summarizes the undirected comparison graph induced by a set of
