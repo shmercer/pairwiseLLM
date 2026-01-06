@@ -40,9 +40,9 @@ test_that("487-02 bt_run_core_linking can resume from a completed checkpoint", {
   payload <- list(
     run_type = "core_linking",
     completed = TRUE,
-    stop_reason = "max_rounds",
+    stop_reason = "max_rounds_reached",
     current_batch = 1L,
-    out = list(stop_reason = "max_rounds", results = tibble::tibble()),
+    out = list(stop_reason = "max_rounds_reached", results = tibble::tibble()),
     results = tibble::tibble(),
     fits = list(),
     rounds = tibble::tibble(
@@ -72,6 +72,6 @@ test_that("487-02 bt_run_core_linking can resume from a completed checkpoint", {
     verbose = FALSE
   )
 
-  expect_equal(out$stop_reason, "max_rounds")
+  expect_equal(out$stop_reason, "max_rounds_reached")
   expect_s3_class(out, "pairwiseLLM_run")
 })
