@@ -37,26 +37,6 @@ summary.pairwiseLLM_run <- function(object, ...) {
   run_summary(object, ...)
 }
 
-#' @export
-print.pairwiseLLM_run <- function(x, ...) {
-  s <- .run_summary_impl(x, fit_bounds = c(0.7, 1.3), top_n = 3L)
-
-  cat("<pairwiseLLM run>\n")
-  cat("  type:        ", s$run_type, "\n", sep = "")
-  cat("  results:     ", s$counts$n_results, " rows\n", sep = "")
-  cat("  unique IDs:  ", s$counts$n_unique_ids, "\n", sep = "")
-  if (!is.null(s$counts$n_unique_unordered_pairs)) {
-    cat("  unique pairs:", s$counts$n_unique_unordered_pairs, " (unordered)\n", sep = " ")
-  }
-  if (!is.null(s$rounds$n_rounds)) {
-    cat("  rounds:      ", s$rounds$n_rounds, "\n", sep = "")
-  }
-  if (!is.null(s$stopping$stop_reason)) {
-    cat("  stop:        ", s$stopping$stop_reason, " (round ", s$stopping$stop_round, ")\n", sep = "")
-  }
-  invisible(x)
-}
-
 # Internal: add class to runner outputs without breaking list-ness
 .as_pairwise_run <- function(x, run_type = NULL) {
   if (is.null(run_type)) run_type <- NA_character_
