@@ -923,6 +923,8 @@ bt_run_adaptive_core_linking <- function(samples,
   final_fits <- list()
   metrics_rows <- list()
   state_rows <- list()
+  blocked_rows <- list()
+
   batch_summary <- tibble::tibble()
   current_fit <- NULL
   current_fit_running <- NULL
@@ -1504,6 +1506,11 @@ bt_run_adaptive_core_linking <- function(samples,
       stop_now <- isTRUE(stop_chk$stop)
       stop_reason <- stop_chk$reason %||% NA_character_
 
+      # Explainability for graph-gated stopping: when the graph is unhealthy,
+      # stability/precision stopping is blocked rather than triggered.
+      this_blocked_by <- stop_chk$details$stop_blocked_by %||% NA_character_
+      this_blocked_candidates <- stop_chk$details$stop_blocked_candidates %||% NA_character_
+
       m$batch_index <- as.integer(b)
       m$round_index <- as.integer(r)
       m$within_batch_frac <- within_batch_frac_this
@@ -1516,7 +1523,13 @@ bt_run_adaptive_core_linking <- function(samples,
       m$stage <- "round"
       m$stop <- stop_now
       m$stop_reason <- stop_reason
-      m$n_pairs_proposed <- nrow(pairs_next)
+      blocked_rows[[length(blocked_rows) + 1L]] <- tibble::tibble(
+        batch_index = as.integer(b),
+        round_index = as.integer(r),
+        stop_blocked_by = as.character(this_blocked_by),
+        stop_blocked_candidates = as.character(this_blocked_candidates)
+      )
+m$n_pairs_proposed <- nrow(pairs_next)
       m$n_results_total <- nrow(results)
       m$n_pairs_total <- nrow(results)
       m$n_pairs_new <- nrow(judged)
@@ -1665,6 +1678,44 @@ bt_run_adaptive_core_linking <- function(samples,
   metrics <- .bt_align_metrics(metrics, se_probs = se_probs)
   state <- .bt_align_state(state)
 
+  # ---------------------------------------------------------------------
+  # Pairing diagnostics contract (PR8): stable per-round diagnostics table
+  # ---------------------------------------------------------------------
+  # Unlike pure core-linking, adaptive core-linking has per-round graph and
+  # stability metrics already computed in `metrics`. Expose a compact, stable
+  # table with schema compatible with `validate_pairwise_run_output()` and the
+  # exported accessor/stop-summary helpers.
+  blocked_tbl <- if (length(blocked_rows) == 0L) {
+    tibble::tibble(
+      batch_index = integer(),
+      round_index = integer(),
+      stop_blocked_by = character(),
+      stop_blocked_candidates = character()
+    )
+  } else {
+    dplyr::bind_rows(blocked_rows)
+  }
+
+pairing_diagnostics <- metrics %>%
+    dplyr::filter(.data$stage == "round") %>%
+    dplyr::arrange(.data$batch_index, .data$round_index) %>%
+    dplyr::left_join(blocked_tbl, by = c("batch_index", "round_index")) %>%
+    dplyr::mutate(round = as.integer(dplyr::row_number())) %>%
+    dplyr::transmute(
+      round = as.integer(.data$round),
+      n_pairs_planned = as.integer(.data$n_pairs_proposed),
+      n_pairs_completed = as.integer(.data$n_pairs_new),
+      degree_min = as.double(.data$degree_min),
+      largest_component_frac = as.double(.data$largest_component_frac),
+      rms_theta_delta = as.double(.data$rms_theta_delta),
+      topk_overlap = as.double(.data$topk_overlap),
+      stop = as.logical(.data$stop),
+      stop_reason = as.character(.data$stop_reason),
+      stop_blocked_by = as.character(.data$stop_blocked_by),
+      stop_blocked_candidates = as.character(.data$stop_blocked_candidates)
+    )
+
+
   final_est <- NULL
   if (isTRUE(final_refit) && nrow(results) > 0L) {
     final_est <- compute_final_estimates(
@@ -1678,7 +1729,6 @@ bt_run_adaptive_core_linking <- function(samples,
   theta <- NULL
   theta_engine <- NA_character_
   fit_provenance <- list()
-  pairing_diagnostics <- NULL
 
   if (!is.null(final_est) && !is.null(final_est$estimates) && nrow(final_est$estimates) > 0L) {
     bt_ok <- identical(final_est$diagnostics$bt_status, "succeeded")
