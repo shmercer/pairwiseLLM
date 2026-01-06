@@ -37,26 +37,6 @@ summary.pairwiseLLM_run <- function(object, ...) {
   run_summary(object, ...)
 }
 
-#' @export
-print.pairwiseLLM_run <- function(x, ...) {
-  s <- .run_summary_impl(x, fit_bounds = c(0.7, 1.3), top_n = 3L)
-
-  cat("<pairwiseLLM run>\n")
-  cat("  type:        ", s$run_type, "\n", sep = "")
-  cat("  results:     ", s$counts$n_results, " rows\n", sep = "")
-  cat("  unique IDs:  ", s$counts$n_unique_ids, "\n", sep = "")
-  if (!is.null(s$counts$n_unique_unordered_pairs)) {
-    cat("  unique pairs:", s$counts$n_unique_unordered_pairs, " (unordered)\n", sep = " ")
-  }
-  if (!is.null(s$rounds$n_rounds)) {
-    cat("  rounds:      ", s$rounds$n_rounds, "\n", sep = "")
-  }
-  if (!is.null(s$stopping$stop_reason)) {
-    cat("  stop:        ", s$stopping$stop_reason, " (round ", s$stopping$stop_round, ")\n", sep = "")
-  }
-  invisible(x)
-}
-
 # Internal: add class to runner outputs without breaking list-ness
 .as_pairwise_run <- function(x, run_type = NULL) {
   if (is.null(run_type)) run_type <- NA_character_
@@ -137,32 +117,65 @@ print.pairwiseLLM_run <- function(x, ...) {
 
   if (!is.null(results) && ("judge" %in% names(results))) {
     judge$has_judges <- TRUE
-    # Avoid hard failure if judge_summary isn't available for some reason
-    if (exists("judge_summary", mode = "function")) {
-      judge$per_judge <- judge_summary(results, judge_col = "judge", compute_reverse = TRUE)
-    }
+    judge$per_judge <- tryCatch(
+      judge_summary(results, judge_col = "judge", compute_reverse = TRUE),
+      error = function(e) NULL
+    )
   }
 
   # Judge fit diagnostics if present
   final_fit <- NULL
-  if (is.list(x) && !is.null(x$final_fit)) {
-    final_fit <- x$final_fit
-  } else if (is.list(x) && !is.null(x$final_fits) && length(x$final_fits) > 0L) {
-    # use last batch fit
-    final_fit <- x$final_fits[[length(x$final_fits)]]
+  # Use exact list indexing to avoid partial matching between final_fit and final_fits.
+  if (is.list(x) && !is.null(x[["final_fit"]])) {
+    final_fit <- x[["final_fit"]]
+  } else if (is.list(x) && !is.null(x[["final_fits"]]) && length(x[["final_fits"]]) > 0L) {
+    # Use last batch fit
+    ff <- x[["final_fits"]]
+    final_fit <- ff[[length(ff)]]
   }
 
-  if (!is.null(final_fit) && exists("judge_fit_summary", mode = "function")) {
-    # Try to extract judge fit from typical structures
-    jf <- NULL
-    if (is.list(final_fit) && !is.null(final_fit$diagnostics) && !is.null(final_fit$diagnostics$judge_fit)) {
-      jf <- final_fit$diagnostics$judge_fit
-    } else if (is.list(final_fit) && !is.null(final_fit$fit) && !is.null(final_fit$fit$fit_judges)) {
-      jf <- final_fit$fit$fit_judges
+
+  extract_judge_fit_tbl <- function(obj) {
+    if (is.null(obj) || !is.list(obj)) {
+      return(NULL)
     }
-    if (!is.null(jf)) {
-      judge$fit <- judge_fit_summary(jf, fit_bounds = fit_bounds, top_n = top_n)
+
+    if (!is.null(obj$diagnostics) && is.list(obj$diagnostics) && !is.null(obj$diagnostics$judge_fit)) {
+      return(obj$diagnostics$judge_fit)
     }
+    # fit_bt_model() wrapper structure
+    if (!is.null(obj$fit) && is.list(obj$fit) && !is.null(obj$fit$fit_judges)) {
+      return(obj$fit$fit_judges)
+    }
+    # raw sirt::btm output style
+    if (!is.null(obj$fit_judges)) {
+      return(obj$fit_judges)
+    }
+    NULL
+  }
+
+  jf <- extract_judge_fit_tbl(final_fit)
+  if (!is.null(jf)) {
+    fit_obj <- tryCatch(
+      judge_fit_summary(jf, fit_bounds = fit_bounds, top_n = top_n),
+      error = function(e) NULL
+    )
+
+    # Some callers nest judge fit in different structures; try a second shape.
+    if (is.null(fit_obj)) {
+      fit_obj <- tryCatch(
+        judge_fit_summary(list(fit_judges = jf), fit_bounds = fit_bounds, top_n = top_n),
+        error = function(e) NULL
+      )
+    }
+
+    if (is.null(fit_obj)) {
+      # Last resort: keep something non-NULL for interactive printing.
+      details <- tryCatch(tibble::as_tibble(jf), error = function(e) jf)
+      fit_obj <- list(summary = tibble::tibble(has_judge_fit = TRUE), details = details)
+    }
+
+    judge$fit <- fit_obj
   }
 
   out <- list(
@@ -183,15 +196,31 @@ print.pairwiseLLM_run_summary <- function(x, ...) {
   cat("<pairwiseLLM run summary>\n")
   cat("  type:        ", x$run_type, "\n", sep = "")
   cat("  results:     ", x$counts$n_results, " rows\n", sep = "")
-  if (!is.na(x$counts$n_unique_ids)) cat("  unique IDs:  ", x$counts$n_unique_ids, "\n", sep = "")
-  if (!is.na(x$counts$n_unique_unordered_pairs)) cat("  unique pairs:", x$counts$n_unique_unordered_pairs, " (unordered)\n", sep = " ")
-  if (!is.null(x$rounds$n_rounds)) cat("  rounds:      ", x$rounds$n_rounds, "\n", sep = "")
+  if (!is.na(x$counts$n_unique_ids)) {
+    cat("  unique IDs:  ", x$counts$n_unique_ids, "\n", sep = "")
+  }
+  if (!is.na(x$counts$n_unique_unordered_pairs)) {
+    cat("  unique pairs:", x$counts$n_unique_unordered_pairs, " (unordered)\n", sep = " ")
+  }
+  if (!is.null(x$rounds$n_rounds)) {
+    cat("  rounds:      ", x$rounds$n_rounds, "\n", sep = "")
+  }
   if (!is.null(x$stopping$stop_reason)) {
-    cat("  stop:        ", x$stopping$stop_reason, " (round ", x$stopping$stop_round, ")\n", sep = "")
+    cat(
+      "  stop:        ",
+      x$stopping$stop_reason,
+      " (round ",
+      x$stopping$stop_round,
+      ")\n",
+      sep = ""
+    )
   }
 
-  if (isTRUE(x$judge$has_judges) && !is.null(x$judge$per_judge)) {
-    cat("  judges:      ", nrow(x$judge$per_judge), "\n", sep = "")
+  if (isTRUE(x$judge$has_judges) &&
+    is.list(x$judge$per_judge) &&
+    is.data.frame(x$judge$per_judge$by_judge)) {
+    cat("  judges:      ", nrow(x$judge$per_judge$by_judge), "\n", sep = "")
   }
+
   invisible(x)
 }
