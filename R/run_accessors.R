@@ -110,6 +110,91 @@ bt_get_pairing_diagnostics <- function(run) {
   .bt_get_run_tbl(run, "pairing_diagnostics")
 }
 
+
+#' Stable 1-row stop summary for a run
+#'
+#' `bt_stop_summary()` returns a schema-stable, 1-row tibble describing why/when a
+#' run stopped and the last-round diagnostics when available.
+#'
+#' The output always contains the same columns (NAs allowed):
+#'
+#' * `stop_reason`, `stop_round`, `theta_engine`
+#' * `degree_min`, `largest_component_frac`, `rms_theta_delta`, `topk_overlap`
+#' * `stop_blocked_by`, `stop_blocked_candidates`
+#'
+#' @param run A run object returned by [bt_run_adaptive()],
+#'   [bt_run_core_linking()], or [bt_run_adaptive_core_linking()] (or a
+#'   similarly-structured list).
+#'
+#' @return A 1-row tibble with stable columns (NAs allowed).
+#'
+#' @seealso [bt_run_adaptive()], [bt_run_core_linking()],
+#'   [bt_run_adaptive_core_linking()].
+#'
+#' @examples
+#' # Minimal run object (no diagnostics recorded) -> last-round metrics are NA
+#' run <- list(
+#'   results = NULL,
+#'   estimates = NULL,
+#'   theta = NULL,
+#'   theta_engine = "mock",
+#'   fit_provenance = list(),
+#'   stop_reason = "max_rounds",
+#'   stop_round = 3L,
+#'   pairing_diagnostics = NULL
+#' )
+#' class(run) <- "pairwiseLLM_run"
+#'
+#' bt_stop_summary(run)
+#'
+#' # With pairing diagnostics -> last row is used
+#' run$pairing_diagnostics <- tibble::tibble(
+#'   round = c(1L, 2L),
+#'   degree_min = c(1, 2),
+#'   largest_component_frac = c(1, 1),
+#'   rms_theta_delta = c(NA_real_, 0.01),
+#'   topk_overlap = c(NA_real_, 0.9),
+#'   stop_blocked_by = c(NA_character_, "budget"),
+#'   stop_blocked_candidates = c(NA_character_, "A,B,C")
+#' )
+#'
+#' bt_stop_summary(run)
+#'
+#' @export
+bt_stop_summary <- function(run) {
+  .bt_assert_run_like(run)
+
+  stop_reason <- if (!is.null(run$stop_reason)) as.character(run$stop_reason) else NA_character_
+  stop_round <- if (!is.null(run$stop_round)) as.integer(run$stop_round) else NA_integer_
+  theta_engine <- if (!is.null(run$theta_engine)) as.character(run$theta_engine) else NA_character_
+
+  diag_last <- NULL
+  diag <- .bt_get_run_tbl(run, "pairing_diagnostics")
+  if (!is.null(diag) && nrow(diag) > 0L) {
+    diag_last <- diag[nrow(diag), , drop = FALSE]
+  }
+
+  get_last <- function(col, default) {
+    if (is.null(diag_last) || !(col %in% names(diag_last))) {
+      return(default)
+    }
+    diag_last[[col]][[1]]
+  }
+
+  tibble::tibble(
+    stop_reason = stop_reason,
+    stop_round = stop_round,
+    theta_engine = theta_engine,
+    degree_min = as.double(get_last("degree_min", NA_real_)),
+    largest_component_frac = as.double(get_last("largest_component_frac", NA_real_)),
+    rms_theta_delta = as.double(get_last("rms_theta_delta", NA_real_)),
+    topk_overlap = as.double(get_last("topk_overlap", NA_real_)),
+    stop_blocked_by = as.character(get_last("stop_blocked_by", NA_character_)),
+    stop_blocked_candidates = as.character(get_last("stop_blocked_candidates", NA_character_))
+  )
+}
+
+
 # ---- internal helpers ------------------------------------------------------
 
 .bt_assert_run_like <- function(run) {
