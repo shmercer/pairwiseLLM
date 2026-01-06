@@ -5,12 +5,12 @@ test_that("486-01 bt_run_adaptive can resume from a completed checkpoint", {
   payload <- list(
     run_type = "adaptive",
     completed = TRUE,
-    stop_reason = "max_rounds",
+    stop_reason = "max_rounds_reached",
     random_seed = 123L,
     results = tibble::tibble(),
     fits = list(),
     rounds = tibble::tibble(),
-    metrics = tibble::tibble(round = 1L, n_results = 0L, stopped = TRUE, stop_reason = "max_rounds")
+    metrics = tibble::tibble(round = 1L, n_results = 0L, stopped = TRUE, stop_reason = "max_rounds_reached")
   )
 
   pairwiseLLM:::.bt_write_checkpoint(checkpoint_dir = chk_dir, payload = payload)
@@ -23,7 +23,7 @@ test_that("486-01 bt_run_adaptive can resume from a completed checkpoint", {
     resume_from = chk_dir
   )
 
-  expect_equal(out$stop_reason, "max_rounds")
+  expect_equal(out$stop_reason, "max_rounds_reached")
 })
 
 test_that("486-02 bt_run_adaptive falls back to the last running estimate when final_refit = FALSE", {

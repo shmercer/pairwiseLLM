@@ -152,6 +152,7 @@ validate_pairwise_run_output <- function(x, strict = FALSE) {
     "pair_budget_exhausted",
     "max_rounds_reached",
     "no_new_pairs",
+    "no_new_ids",
     "round_size_zero"
   )
 

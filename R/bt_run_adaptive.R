@@ -409,59 +409,7 @@ bt_run_adaptive <- function(samples,
     fit
   }
 
-  # ---- PR4.1 helper: extract theta from last available running fit ----
-  .theta_from_last_running_fit <- function(last_fit, ids) {
-    if (is.null(last_fit) || is.null(last_fit$theta)) {
-      return(list(theta = NULL, engine = NA_character_))
-    }
-
-    th <- tibble::as_tibble(last_fit$theta)
-    if (!all(c("ID", "theta") %in% names(th))) {
-      return(list(theta = NULL, engine = NA_character_))
-    }
-
-    th$ID <- as.character(th$ID)
-
-    # Ensure consistent row coverage & ordering on ids
-    th <- dplyr::right_join(th, tibble::tibble(ID = as.character(ids)), by = "ID")
-
-    # Determine SE to expose:
-    # - If running engine is RC, SE is generally not meaningful -> NA
-    # - If running engine is BT, use available se column (if present)
-    engine_running <- NA_character_
-    if (!is.null(last_fit$engine_running) && is.character(last_fit$engine_running) && length(last_fit$engine_running) == 1L) {
-      engine_running <- as.character(last_fit$engine_running)
-    }
-
-    se_out <- rep(NA_real_, nrow(th))
-    if (!is.na(engine_running) && identical(engine_running, "bt")) {
-      if ("se" %in% names(th)) {
-        se_out <- as.double(th$se)
-      } else if ("se_bt" %in% names(th)) {
-        se_out <- as.double(th$se_bt)
-      }
-    } else {
-      # RC running scale: keep SE as NA
-      se_out <- rep(NA_real_, nrow(th))
-    }
-
-    # Rank: higher theta -> smaller rank
-    theta_num <- suppressWarnings(as.double(th$theta))
-    rank_out <- rep(NA_integer_, length(theta_num))
-    ok <- !is.na(theta_num)
-    if (any(ok)) {
-      rank_out[ok] <- as.integer(rank(-theta_num[ok], ties.method = "min"))
-    }
-
-    out_theta <- tibble::tibble(
-      ID = as.character(th$ID),
-      theta = theta_num,
-      se = se_out,
-      rank = rank_out
-    )
-
-    list(theta = out_theta, engine = if (!is.na(engine_running)) engine_running else "rank_centrality")
-  }
+  # PR4.1/PR8.2.4: theta fallback helper is centralized in R/bt_helpers.R
 
   samples <- tibble::as_tibble(samples)
   if (!all(c("ID", "text") %in% names(samples))) {
@@ -1013,13 +961,21 @@ bt_run_adaptive <- function(samples,
     .validate_stop_decision(stop_chk)
 
     # Record graph/stability diagnostics into the per-round metrics (these columns exist in the schema template).
+    # Use runner-local scalar values (renamed) to avoid accidentally reading
+    # the mostly-NA placeholder columns from the metrics template.
+    degree_min_val <- as.double(degree_min)
+    largest_component_frac_val <- as.double(largest_component_frac)
+    graph_healthy_val <- as.logical(graph_healthy)
+    stability_streak_val <- as.integer(stability_streak)
+    stability_pass_val <- as.logical(stability_pass)
+
     metrics <- metrics %>%
       dplyr::mutate(
-        degree_min = as.double(degree_min),
-        largest_component_frac = as.double(largest_component_frac),
-        graph_healthy = as.logical(graph_healthy),
-        stability_streak = as.integer(stability_streak),
-        stability_pass = as.logical(stability_pass)
+        degree_min = degree_min_val,
+        largest_component_frac = largest_component_frac_val,
+        graph_healthy = graph_healthy_val,
+        stability_streak = stability_streak_val,
+        stability_pass = stability_pass_val
       )
 
     metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
@@ -1410,7 +1366,7 @@ bt_run_adaptive <- function(samples,
   # ---- PR4.1 fallback: ensure theta exists whenever we have a running fit ----
   if (is.null(theta) && length(fits) > 0L) {
     last_fit <- fits[[length(fits)]]
-    fb <- .theta_from_last_running_fit(last_fit, ids = ids)
+    fb <- .theta_from_last_running_fit(last_fit, id_vec = ids)
 
     if (!is.null(fb$theta)) {
       theta <- fb$theta
@@ -1663,45 +1619,4 @@ simulate_bt_judge <- function(pairs,
   )
 
   out
-}
-
-#' Extract theta from the last available running fit
-#'
-#' Internal helper used by \code{bt_run_adaptive()} to guarantee that
-#' \code{out$theta} exists even when final refitting is disabled or fails.
-#'
-#' This function attempts to extract a compact theta table
-#' (\code{ID, theta, se, rank}) from the last running fit.
-#'
-#' @param final_fit A fit object produced during the adaptive loop
-#'   (typically \code{fits[[length(fits)]]}), or \code{NULL}.
-#' @param id_vec Character vector of item IDs in the model.
-#'
-#' @return A list with elements:
-#' \describe{
-#'   \item{theta}{A tibble with columns \code{ID, theta, se, rank}, or \code{NULL}.}
-#'   \item{engine}{Character string naming the engine used (e.g., \code{"rank_centrality"}).}
-#' }
-#'
-#' @keywords internal
-.theta_from_last_running_fit <- function(final_fit, id_vec) {
-  if (is.null(final_fit)) {
-    return(list(theta = NULL, engine = NA_character_))
-  }
-
-  # Preferred: explicit theta table
-  if (!is.null(final_fit$theta)) {
-    theta_tbl <- final_fit$theta
-
-    if (all(c("ID", "theta", "se", "rank") %in% names(theta_tbl))) {
-      engine <- final_fit$engine_used %||%
-        final_fit$engine_requested %||%
-        "rank_centrality"
-
-      return(list(theta = theta_tbl, engine = engine))
-    }
-  }
-
-  # No usable theta found
-  list(theta = NULL, engine = NA_character_)
 }

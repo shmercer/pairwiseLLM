@@ -103,3 +103,87 @@ summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
 
   theta
 }
+# -------------------------------------------------------------------------
+# Internal helpers (shared across runners)
+# -------------------------------------------------------------------------
+
+#' Extract theta from the last available running fit
+#'
+#' Internal helper used by runners to guarantee that a compact theta table
+#' exists even when final refitting is disabled or unavailable.
+#'
+#' This function attempts to extract a standardized theta table
+#' (ID, theta, se, rank) from the last running fit and align it to `id_vec`.
+#'
+#' @param final_fit A fit object produced during a run (or `NULL`).
+#' @param id_vec Character vector of item IDs to include/order.
+#'
+#' @return A list with elements:
+#' - `theta`: tibble with columns `ID`, `theta`, `se`, `rank`, or `NULL`.
+#' - `engine`: character string naming the running engine, or `NA_character_`.
+#'
+#' @keywords internal
+.theta_from_last_running_fit <- function(final_fit, id_vec) {
+  if (is.null(final_fit) || is.null(final_fit$theta)) {
+    return(list(theta = NULL, engine = NA_character_))
+  }
+
+  th <- tibble::as_tibble(final_fit$theta)
+  if (!all(c("ID", "theta") %in% names(th))) {
+    return(list(theta = NULL, engine = NA_character_))
+  }
+
+  # Align coverage and ordering on id_vec (and keep IDs as character)
+  id_vec <- as.character(id_vec %||% character(0))
+  th$ID <- as.character(th$ID)
+  th <- dplyr::right_join(th, tibble::tibble(ID = id_vec), by = "ID")
+
+  theta_num <- suppressWarnings(as.double(th$theta))
+
+  # Determine running engine label.
+  engine_running <- NA_character_
+  if (!is.null(final_fit$engine_running) && is.character(final_fit$engine_running) && length(final_fit$engine_running) == 1L) {
+    engine_running <- as.character(final_fit$engine_running)
+  } else if (!is.null(final_fit$engine_used) && is.character(final_fit$engine_used) && length(final_fit$engine_used) == 1L) {
+    engine_running <- as.character(final_fit$engine_used)
+  } else if (!is.null(final_fit$engine_requested) && is.character(final_fit$engine_requested) && length(final_fit$engine_requested) == 1L) {
+    engine_running <- as.character(final_fit$engine_requested)
+  } else if (!is.null(final_fit$engine) && is.character(final_fit$engine) && length(final_fit$engine) == 1L) {
+    engine_running <- as.character(final_fit$engine)
+  }
+  if (is.na(engine_running) || !nzchar(engine_running)) engine_running <- "rank_centrality"
+
+  # SE handling: for BT-family engines, retain SE if available; for RC (and
+  # unknown), expose NA. (BT-family includes bt_firth, bt_mle, etc.)
+  se_out <- rep(NA_real_, nrow(th))
+  is_bt_engine <- isTRUE(grepl("^bt", engine_running))
+  if (is_bt_engine) {
+    if ("se_bt" %in% names(th)) {
+      se_out <- suppressWarnings(as.double(th$se_bt))
+    } else if ("se_bt_firth" %in% names(th)) {
+      se_out <- suppressWarnings(as.double(th$se_bt_firth))
+    } else if ("se" %in% names(th)) {
+      se_out <- suppressWarnings(as.double(th$se))
+    }
+  }
+
+  # Rank: prefer an existing rank column if present, otherwise compute.
+  rank_out <- NULL
+  if ("rank_running" %in% names(th)) {
+    rank_out <- suppressWarnings(as.integer(th$rank_running))
+  } else if ("rank" %in% names(th)) {
+    rank_out <- suppressWarnings(as.integer(th$rank))
+  }
+  if (is.null(rank_out)) {
+    rank_out <- .rank_desc(theta_num)
+  }
+
+  out_theta <- tibble::tibble(
+    ID = as.character(th$ID),
+    theta = as.double(theta_num),
+    se = as.double(se_out),
+    rank = as.integer(rank_out)
+  )
+
+  list(theta = out_theta, engine = engine_running)
+}
