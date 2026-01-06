@@ -125,27 +125,57 @@ summary.pairwiseLLM_run <- function(object, ...) {
 
   # Judge fit diagnostics if present
   final_fit <- NULL
-  if (is.list(x) && !is.null(x$final_fit)) {
-    final_fit <- x$final_fit
-  } else if (is.list(x) && !is.null(x$final_fits) && length(x$final_fits) > 0L) {
-    # use last batch fit
-    final_fit <- x$final_fits[[length(x$final_fits)]]
+  # Use exact list indexing to avoid partial matching between final_fit and final_fits.
+  if (is.list(x) && !is.null(x[["final_fit"]])) {
+    final_fit <- x[["final_fit"]]
+  } else if (is.list(x) && !is.null(x[["final_fits"]]) && length(x[["final_fits"]]) > 0L) {
+    # Use last batch fit
+    ff <- x[["final_fits"]]
+    final_fit <- ff[[length(ff)]]
   }
 
-  if (!is.null(final_fit)) {
-    # Try to extract judge fit from typical structures
-    jf <- NULL
-    if (is.list(final_fit) && !is.null(final_fit$diagnostics) && !is.null(final_fit$diagnostics$judge_fit)) {
-      jf <- final_fit$diagnostics$judge_fit
-    } else if (is.list(final_fit) && !is.null(final_fit$fit) && !is.null(final_fit$fit$fit_judges)) {
-      jf <- final_fit$fit$fit_judges
+
+  extract_judge_fit_tbl <- function(obj) {
+    if (is.null(obj) || !is.list(obj)) {
+      return(NULL)
     }
-    if (!is.null(jf)) {
-      judge$fit <- tryCatch(
-        judge_fit_summary(jf, fit_bounds = fit_bounds, top_n = top_n),
+
+    if (!is.null(obj$diagnostics) && is.list(obj$diagnostics) && !is.null(obj$diagnostics$judge_fit)) {
+      return(obj$diagnostics$judge_fit)
+    }
+    # fit_bt_model() wrapper structure
+    if (!is.null(obj$fit) && is.list(obj$fit) && !is.null(obj$fit$fit_judges)) {
+      return(obj$fit$fit_judges)
+    }
+    # raw sirt::btm output style
+    if (!is.null(obj$fit_judges)) {
+      return(obj$fit_judges)
+    }
+    NULL
+  }
+
+  jf <- extract_judge_fit_tbl(final_fit)
+  if (!is.null(jf)) {
+    fit_obj <- tryCatch(
+      judge_fit_summary(jf, fit_bounds = fit_bounds, top_n = top_n),
+      error = function(e) NULL
+    )
+
+    # Some callers nest judge fit in different structures; try a second shape.
+    if (is.null(fit_obj)) {
+      fit_obj <- tryCatch(
+        judge_fit_summary(list(fit_judges = jf), fit_bounds = fit_bounds, top_n = top_n),
         error = function(e) NULL
       )
     }
+
+    if (is.null(fit_obj)) {
+      # Last resort: keep something non-NULL for interactive printing.
+      details <- tryCatch(tibble::as_tibble(jf), error = function(e) jf)
+      fit_obj <- list(summary = tibble::tibble(has_judge_fit = TRUE), details = details)
+    }
+
+    judge$fit <- fit_obj
   }
 
   out <- list(
