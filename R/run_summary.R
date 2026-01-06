@@ -117,10 +117,10 @@ summary.pairwiseLLM_run <- function(object, ...) {
 
   if (!is.null(results) && ("judge" %in% names(results))) {
     judge$has_judges <- TRUE
-    # Avoid hard failure if judge_summary isn't available for some reason
-    if (exists("judge_summary", mode = "function")) {
-      judge$per_judge <- judge_summary(results, judge_col = "judge", compute_reverse = TRUE)
-    }
+    judge$per_judge <- tryCatch(
+      judge_summary(results, judge_col = "judge", compute_reverse = TRUE),
+      error = function(e) NULL
+    )
   }
 
   # Judge fit diagnostics if present
@@ -132,7 +132,7 @@ summary.pairwiseLLM_run <- function(object, ...) {
     final_fit <- x$final_fits[[length(x$final_fits)]]
   }
 
-  if (!is.null(final_fit) && exists("judge_fit_summary", mode = "function")) {
+  if (!is.null(final_fit)) {
     # Try to extract judge fit from typical structures
     jf <- NULL
     if (is.list(final_fit) && !is.null(final_fit$diagnostics) && !is.null(final_fit$diagnostics$judge_fit)) {
@@ -141,7 +141,10 @@ summary.pairwiseLLM_run <- function(object, ...) {
       jf <- final_fit$fit$fit_judges
     }
     if (!is.null(jf)) {
-      judge$fit <- judge_fit_summary(jf, fit_bounds = fit_bounds, top_n = top_n)
+      judge$fit <- tryCatch(
+        judge_fit_summary(jf, fit_bounds = fit_bounds, top_n = top_n),
+        error = function(e) NULL
+      )
     }
   }
 
@@ -163,15 +166,31 @@ print.pairwiseLLM_run_summary <- function(x, ...) {
   cat("<pairwiseLLM run summary>\n")
   cat("  type:        ", x$run_type, "\n", sep = "")
   cat("  results:     ", x$counts$n_results, " rows\n", sep = "")
-  if (!is.na(x$counts$n_unique_ids)) cat("  unique IDs:  ", x$counts$n_unique_ids, "\n", sep = "")
-  if (!is.na(x$counts$n_unique_unordered_pairs)) cat("  unique pairs:", x$counts$n_unique_unordered_pairs, " (unordered)\n", sep = " ")
-  if (!is.null(x$rounds$n_rounds)) cat("  rounds:      ", x$rounds$n_rounds, "\n", sep = "")
+  if (!is.na(x$counts$n_unique_ids)) {
+    cat("  unique IDs:  ", x$counts$n_unique_ids, "\n", sep = "")
+  }
+  if (!is.na(x$counts$n_unique_unordered_pairs)) {
+    cat("  unique pairs:", x$counts$n_unique_unordered_pairs, " (unordered)\n", sep = " ")
+  }
+  if (!is.null(x$rounds$n_rounds)) {
+    cat("  rounds:      ", x$rounds$n_rounds, "\n", sep = "")
+  }
   if (!is.null(x$stopping$stop_reason)) {
-    cat("  stop:        ", x$stopping$stop_reason, " (round ", x$stopping$stop_round, ")\n", sep = "")
+    cat(
+      "  stop:        ",
+      x$stopping$stop_reason,
+      " (round ",
+      x$stopping$stop_round,
+      ")\n",
+      sep = ""
+    )
   }
 
-  if (isTRUE(x$judge$has_judges) && !is.null(x$judge$per_judge)) {
-    cat("  judges:      ", nrow(x$judge$per_judge), "\n", sep = "")
+  if (isTRUE(x$judge$has_judges) &&
+    is.list(x$judge$per_judge) &&
+    is.data.frame(x$judge$per_judge$by_judge)) {
+    cat("  judges:      ", nrow(x$judge$per_judge$by_judge), "\n", sep = "")
   }
+
   invisible(x)
 }
