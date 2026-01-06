@@ -153,15 +153,17 @@ summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
   }
   if (is.na(engine_running) || !nzchar(engine_running)) engine_running <- "rank_centrality"
 
-  # SE handling: for BT, retain se if available; for RC (and unknown), expose NA.
+  # SE handling: for BT-family engines, retain SE if available; for RC (and
+  # unknown), expose NA. (BT-family includes bt_firth, bt_mle, etc.)
   se_out <- rep(NA_real_, nrow(th))
-  if (identical(engine_running, "bt")) {
-    if ("se" %in% names(th)) {
-      se_out <- suppressWarnings(as.double(th$se))
-    } else if ("se_bt" %in% names(th)) {
+  is_bt_engine <- isTRUE(grepl("^bt", engine_running))
+  if (is_bt_engine) {
+    if ("se_bt" %in% names(th)) {
       se_out <- suppressWarnings(as.double(th$se_bt))
     } else if ("se_bt_firth" %in% names(th)) {
       se_out <- suppressWarnings(as.double(th$se_bt_firth))
+    } else if ("se" %in% names(th)) {
+      se_out <- suppressWarnings(as.double(th$se))
     }
   }
 

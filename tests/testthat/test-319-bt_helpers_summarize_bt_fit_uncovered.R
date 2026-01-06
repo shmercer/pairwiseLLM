@@ -12,6 +12,6 @@ test_that("319-01 summarize_bt_fit coerces non-numeric theta", {
 
   out <- pairwiseLLM::summarize_bt_fit(fit, verbose = FALSE)
 
-  expect_true(is.numeric(out$theta))
+  expect_true(is.double(out$theta))
   expect_equal(out$theta, c(1.25, -0.50))
 })

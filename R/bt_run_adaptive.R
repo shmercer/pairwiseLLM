@@ -963,11 +963,14 @@ bt_run_adaptive <- function(samples,
     # Record graph/stability diagnostics into the per-round metrics (these columns exist in the schema template).
     metrics <- metrics %>%
       dplyr::mutate(
-        degree_min = as.double(degree_min),
-        largest_component_frac = as.double(largest_component_frac),
-        graph_healthy = as.logical(graph_healthy),
-        stability_streak = as.integer(stability_streak),
-        stability_pass = as.logical(stability_pass)
+        # NOTE: these are scalar values computed in the runner; use `.env` to
+        # avoid accidentally reading (mostly-NA) placeholder columns from the
+        # metrics template.
+        degree_min = as.double(.env$degree_min),
+        largest_component_frac = as.double(.env$largest_component_frac),
+        graph_healthy = as.logical(.env$graph_healthy),
+        stability_streak = as.integer(.env$stability_streak),
+        stability_pass = as.logical(.env$stability_pass)
       )
 
     metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
@@ -1612,3 +1615,5 @@ simulate_bt_judge <- function(pairs,
 
   out
 }
+
+
