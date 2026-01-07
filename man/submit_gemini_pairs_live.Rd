@@ -11,7 +11,7 @@ submit_gemini_pairs_live(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -44,7 +44,12 @@ submit_gemini_pairs_live(
 
 \item{api_key}{Optional Gemini API key.}
 
-\item{thinking_level}{Default \code{"low"}; see \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}.}
+\item{thinking_level}{One of \code{"minimal"}, \code{"low"}, \code{"medium"}, or \code{"high"}.
+Controls the maximum depth of internal reasoning for Gemini models. If not
+supplied, defaults to \code{"minimal"} for \code{model = "gemini-3-flash-preview"} and
+\code{"low"} otherwise. Currently, the Gemini REST API only supports \code{"Minimal"},
+\code{"Low"}, and \code{"High"} values; \code{"medium"} is mapped internally to \code{"High"}
+with a warning.}
 
 \item{temperature}{Optional numeric temperature; forwarded to
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. See Gemini docs; if \code{NULL} (default), the

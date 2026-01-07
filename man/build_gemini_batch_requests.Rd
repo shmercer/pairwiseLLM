@@ -10,7 +10,7 @@ build_gemini_batch_requests(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   custom_id_prefix = "GEM",
   temperature = NULL,
   top_p = NULL,
@@ -39,10 +39,13 @@ backends and potential validation.}
 \code{\link{set_prompt_template}}. The template should embed your full
 instructions, rubric text, and \verb{<BETTER_SAMPLE>} tagging convention.}
 
-\item{thinking_level}{One of \code{"low"}, \code{"medium"}, or \code{"high"}.
-This is mapped to Gemini's \code{thinkingConfig.thinkingLevel}, where
-\code{"low"} maps to "Low" and both \code{"medium"} and \code{"high"} map
-to "High". "Medium" currently behaves like "High".}
+\item{thinking_level}{One of \code{"minimal"}, \code{"low"}, \code{"medium"},
+or \code{"high"}. This is mapped to Gemini's
+\code{thinkingConfig.thinkingLevel}. If not supplied, defaults to
+\code{"minimal"} for \code{model = "gemini-3-flash-preview"} and
+\code{"low"} otherwise. The Gemini REST API currently supports
+\code{"Minimal"}, \code{"Low"}, and \code{"High"}; \code{"medium"} is
+mapped internally to \code{"High"} with a warning.}
 
 \item{custom_id_prefix}{Prefix for the \code{custom_id} field. Defaults to
 \code{"GEM"} so that IDs take the form \code{"GEM_<ID1>_vs_<ID2>"}.}
