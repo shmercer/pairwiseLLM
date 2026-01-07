@@ -1032,7 +1032,9 @@
 #'       planned under \code{repeat_policy} (may be empty).
 #'     \item \code{attr(out, "pairing_diagnostics")}: a one-row tibble of pairing
 #'       counts/caps/guard outcomes, including fallback state
-#'       (\code{fallback_path}, \code{fallback_trigger}) and selected-pair counts by source.
+#'       (\code{fallback_path}, \code{fallback_trigger}), selected-pair counts by source, and
+#'       graph-health metrics before/after planning
+#'       (\code{degree_min_before/after}, \code{largest_component_frac_before/after}).
 #'   }
 #'
 #' @examples
@@ -1688,6 +1690,21 @@ select_adaptive_pairs <- function(samples,
       }
 
 
+      # PR9.4: graph metrics before/after planning (existing vs existing + planned pairs)
+      graph_after_state <- graph_state
+      if (nrow(pairs_tbl) > 0L) {
+        after_pairs <- dplyr::bind_rows(
+          dplyr::select(ex, "ID1", "ID2"),
+          dplyr::select(pairs_tbl, "ID1", "ID2")
+        )
+        graph_after_state <- .graph_state_from_pairs(after_pairs, ids = ids)
+      }
+
+      degree_min_before <- as.double(graph_state$metrics$degree_min[[1]])
+      largest_component_frac_before <- as.double(graph_state$metrics$largest_component_frac[[1]])
+      degree_min_after <- as.double(graph_after_state$metrics$degree_min[[1]])
+      largest_component_frac_after <- as.double(graph_after_state$metrics$largest_component_frac[[1]])
+
       fallback_path <- if (n_pairs == 0L) {
         "normal"
       } else if (length(id_vec) < 2L) {
@@ -1764,6 +1781,10 @@ select_adaptive_pairs <- function(samples,
         repeat_guard_passed = as.logical(repeat_guard_passed),
         repeat_guard_min_degree = as.integer(repeat_guard_min_degree),
         repeat_guard_largest_component_frac = as.double(repeat_guard_largest_component_frac),
+        degree_min_before = as.double(degree_min_before),
+        largest_component_frac_before = as.double(largest_component_frac_before),
+        degree_min_after = as.double(degree_min_after),
+        largest_component_frac_after = as.double(largest_component_frac_after),
         graph_degree_min = as.double(graph_state$metrics$degree_min[[1]]),
         graph_largest_component_frac = as.double(graph_state$metrics$largest_component_frac[[1]]),
         fallback_path = as.character(fallback_path),
@@ -1884,6 +1905,11 @@ select_adaptive_pairs <- function(samples,
   diag <- ensure_col(diag, "n_pairs_source_repeat_reverse", rep(0L, n))
   diag <- ensure_col(diag, "n_pairs_source_random", rep(0L, n))
 
+  diag <- ensure_col(diag, "degree_min_before", rep(NA_real_, n))
+  diag <- ensure_col(diag, "largest_component_frac_before", rep(NA_real_, n))
+  diag <- ensure_col(diag, "degree_min_after", rep(NA_real_, n))
+  diag <- ensure_col(diag, "largest_component_frac_after", rep(NA_real_, n))
+
   # Coerce to atomic, schema-stable types.
   diag$fallback_path <- as.character(diag$fallback_path)
   diag$fallback_trigger <- as.character(diag$fallback_trigger)
@@ -1891,6 +1917,11 @@ select_adaptive_pairs <- function(samples,
   diag$n_pairs_source_bridge <- as.integer(diag$n_pairs_source_bridge)
   diag$n_pairs_source_repeat_reverse <- as.integer(diag$n_pairs_source_repeat_reverse)
   diag$n_pairs_source_random <- as.integer(diag$n_pairs_source_random)
+
+  diag$degree_min_before <- as.double(diag$degree_min_before)
+  diag$largest_component_frac_before <- as.double(diag$largest_component_frac_before)
+  diag$degree_min_after <- as.double(diag$degree_min_after)
+  diag$largest_component_frac_after <- as.double(diag$largest_component_frac_after)
 
   # If fallback fields are missing/NA, infer a reasonable PR9.1 state from
   # existing diagnostics. This keeps tests and downstream bind_rows stable.
