@@ -718,7 +718,8 @@
 #'     \item \code{attr(out, "planned_repeat_pairs")}: a tibble of repeat pairs
 #'       planned under \code{repeat_policy} (may be empty).
 #'     \item \code{attr(out, "pairing_diagnostics")}: a one-row tibble of pairing
-#'       counts/caps/guard outcomes.
+#'       counts/caps/guard outcomes, including fallback state
+#'       (\code{fallback_path}, \code{fallback_trigger}) and selected-pair counts by source.
 #'   }
 #'
 #' @examples
@@ -1215,6 +1216,41 @@ select_adaptive_pairs <- function(samples,
         embed_hit_rate <- mean(as.logical(hits))
       }
 
+
+      fallback_path <- if (n_pairs == 0L) {
+        "normal"
+      } else if (length(id_vec) < 2L) {
+        "exhausted_no_pairs"
+      } else if (nrow(selected_tbl) > 0L) {
+        "normal"
+      } else {
+        "bridge_repair"
+      }
+
+      fallback_trigger <- if (fallback_path == "bridge_repair") {
+        "normal_empty"
+      } else if (fallback_path == "exhausted_no_pairs") {
+        "insufficient_ids"
+      } else {
+        NA_character_
+      }
+
+      n_pairs_source_normal <- as.integer(sum(selected_tbl$source %in% c("theta", "embed", "far")))
+      n_pairs_source_bridge <- as.integer(sum(selected_tbl$source == "bridge"))
+      n_pairs_source_repeat_reverse <- as.integer(sum(selected_tbl$source == "repeat_reverse"))
+      n_pairs_source_random <- as.integer(sum(selected_tbl$source == "random"))
+
+      diag_candidate_pool_cap <- if (is.finite(candidate_pool_cap)) {
+        as.integer(candidate_pool_cap)
+      } else {
+        NA_integer_
+      }
+      diag_per_anchor_cap <- if (is.finite(per_anchor_cap)) {
+        as.integer(per_anchor_cap)
+      } else {
+        NA_integer_
+      }
+
       diagnostics <- tibble::tibble(
         n_candidates_raw = nrow(cand_tbl_raw),
         n_candidates_scored = nrow(scored_tbl),
@@ -1222,7 +1258,7 @@ select_adaptive_pairs <- function(samples,
         n_candidates_after_caps = nrow(capped_tbl),
         n_selected = nrow(selected_tbl),
         n_repeat_eligible = as.integer(n_repeat_eligible),
-        n_repeat_planned = nrow(planned_repeat),
+        n_repeat_planned = as.integer(nrow(planned_repeat)),
         repeat_policy = as.character(repeat_policy),
         repeat_cap = as.integer(repeat_cap),
         repeat_frac = as.double(repeat_frac),
@@ -1233,16 +1269,24 @@ select_adaptive_pairs <- function(samples,
         repeat_guard_largest_component_frac = as.double(repeat_guard_largest_component_frac),
         graph_degree_min = as.double(graph_state$metrics$degree_min[[1]]),
         graph_largest_component_frac = as.double(graph_state$metrics$largest_component_frac[[1]]),
-        n_selected_theta = sum(selected_tbl$source == "theta"),
-        n_selected_embed = sum(selected_tbl$source == "embed"),
-        n_selected_far = sum(selected_tbl$source == "far"),
+        fallback_path = as.character(fallback_path),
+        fallback_trigger = as.character(fallback_trigger),
+        n_pairs_source_normal = as.integer(n_pairs_source_normal),
+        n_pairs_source_bridge = as.integer(n_pairs_source_bridge),
+        n_pairs_source_repeat_reverse = as.integer(n_pairs_source_repeat_reverse),
+        n_pairs_source_random = as.integer(n_pairs_source_random),
+        n_selected_theta = as.integer(sum(selected_tbl$source == "theta")),
+        n_selected_embed = as.integer(sum(selected_tbl$source == "embed")),
+        n_selected_far = as.integer(sum(selected_tbl$source == "far")),
         embed_neighbor_hit_rate = embed_hit_rate,
         embed_quota_frac = embed_quota_frac,
-        candidate_pool_cap = candidate_pool_cap,
-        per_anchor_cap = per_anchor_cap,
+        candidate_pool_cap = diag_candidate_pool_cap,
+        per_anchor_cap = diag_per_anchor_cap,
         w_embed = w_embed,
         embed_score_mode = embed_score_mode
       )
+
+      diagnostics <- .ap_pairing_diagnostics_contract(diagnostics)
 
       internals <- NULL
       if (isTRUE(return_internal)) {
@@ -1265,7 +1309,7 @@ select_adaptive_pairs <- function(samples,
   }
 
   out <- res$pairs
-  attr(out, "pairing_diagnostics") <- res$diagnostics
+  attr(out, "pairing_diagnostics") <- .ap_pairing_diagnostics_contract(res$diagnostics)
   if (!is.null(attr(out, "planned_repeat_pairs"))) {
     # keep
   } else if ("planned_repeat_pairs" %in% names(res$diagnostics)) {
@@ -1318,4 +1362,57 @@ select_adaptive_pairs <- function(samples,
     nbrs[[i]] <- ids[o[seq_len(kk)]]
   }
   nbrs
+}
+
+# Internal: ensure PR9 pairing diagnostics columns exist with stable, atomic types.
+#
+# Defensive plumbing for PR9.1: diagnostics should never silently drop fallback
+# fields, and downstream `bind_rows()` should not create list-cols.
+.ap_pairing_diagnostics_contract <- function(diag) {
+  diag <- tibble::as_tibble(diag)
+
+  ensure_col <- function(.tbl, .name, .value) {
+    if (!(.name %in% names(.tbl))) {
+      .tbl[[.name]] <- .value
+    }
+    .tbl
+  }
+
+  n <- nrow(diag)
+
+  diag <- ensure_col(diag, "fallback_path", rep(NA_character_, n))
+  diag <- ensure_col(diag, "fallback_trigger", rep(NA_character_, n))
+  diag <- ensure_col(diag, "n_pairs_source_normal", rep(0L, n))
+  diag <- ensure_col(diag, "n_pairs_source_bridge", rep(0L, n))
+  diag <- ensure_col(diag, "n_pairs_source_repeat_reverse", rep(0L, n))
+  diag <- ensure_col(diag, "n_pairs_source_random", rep(0L, n))
+
+  # Coerce to atomic, schema-stable types.
+  diag$fallback_path <- as.character(diag$fallback_path)
+  diag$fallback_trigger <- as.character(diag$fallback_trigger)
+  diag$n_pairs_source_normal <- as.integer(diag$n_pairs_source_normal)
+  diag$n_pairs_source_bridge <- as.integer(diag$n_pairs_source_bridge)
+  diag$n_pairs_source_repeat_reverse <- as.integer(diag$n_pairs_source_repeat_reverse)
+  diag$n_pairs_source_random <- as.integer(diag$n_pairs_source_random)
+
+  # If fallback fields are missing/NA, infer a reasonable PR9.1 state from
+  # existing diagnostics. This keeps tests and downstream bind_rows stable.
+  if (n > 0L) {
+    needs_infer <- is.na(diag$fallback_path) | !nzchar(diag$fallback_path)
+    if (any(needs_infer)) {
+      n_selected <- if ("n_selected" %in% names(diag)) {
+        suppressWarnings(as.integer(diag$n_selected))
+      } else {
+        rep(NA_integer_, n)
+      }
+
+      inferred_path <- dplyr::if_else(!is.na(n_selected) & n_selected > 0L, "normal", "bridge_repair")
+      inferred_trigger <- dplyr::if_else(inferred_path == "bridge_repair", "normal_empty", NA_character_)
+
+      diag$fallback_path[needs_infer] <- inferred_path[needs_infer]
+      diag$fallback_trigger[needs_infer] <- inferred_trigger[needs_infer]
+    }
+  }
+
+  diag
 }

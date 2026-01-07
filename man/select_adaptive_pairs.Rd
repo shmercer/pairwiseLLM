@@ -138,7 +138,8 @@ The returned tibble may include attributes used for diagnostics:
 \item \code{attr(out, "planned_repeat_pairs")}: a tibble of repeat pairs
 planned under \code{repeat_policy} (may be empty).
 \item \code{attr(out, "pairing_diagnostics")}: a one-row tibble of pairing
-counts/caps/guard outcomes.
+counts/caps/guard outcomes, including fallback state
+(\code{fallback_path}, \code{fallback_trigger}) and selected-pair counts by source.
 }
 }
 \description{
