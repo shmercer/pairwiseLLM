@@ -187,3 +187,96 @@ summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
 
   list(theta = out_theta, engine = engine_running)
 }
+
+# -------------------------------------------------------------------------
+# Stable hash helpers (PR9.3)
+# -------------------------------------------------------------------------
+
+# We need deterministic pseudo-random ordering that does not depend on R's RNG
+# implementation (which can change across versions). The helpers below implement
+# a simple, stable 32-bit modular hash in pure R.
+
+#' Stable 32-bit unsigned hash (pure R, deterministic)
+#'
+#' The implementation uses a modest multiplier to keep intermediate values below
+#' 2^53 (so numeric arithmetic remains exact) and reduces modulo 2^32.
+#'
+#' @param x Character vector.
+#'
+#' @return Numeric vector of unsigned 32-bit hash values in [0, 2^32).
+#'
+#' @keywords internal
+.stable_hash_u32 <- function(x) {
+  x <- as.character(x)
+  x[is.na(x)] <- "NA"
+
+  mod <- 2^32
+  mult <- 65599
+
+  out <- numeric(length(x))
+  for (i in seq_along(x)) {
+    codes <- utf8ToInt(enc2utf8(x[[i]]))
+    h <- 0
+    if (length(codes) > 0L) {
+      for (cc in codes) {
+        h <- (h * mult + as.double(cc)) %% mod
+      }
+    }
+    out[[i]] <- h
+  }
+  out
+}
+
+#' Stable 32-bit unsigned hash key for a pair + round + salt
+#'
+#' @param id1,id2 Character vectors.
+#' @param round Integer scalar (recycled).
+#' @param salt Character scalar (recycled).
+#'
+#' @return Numeric vector of unsigned 32-bit hash values.
+#'
+#' @keywords internal
+.hash_key_u32 <- function(id1, id2, round = 0L, salt = "pairwiseLLM") {
+  id1 <- as.character(id1)
+  id2 <- as.character(id2)
+  round <- as.character(round)
+  salt <- as.character(salt)
+
+  sep <- "\u001F"
+  key <- paste(id1, id2, round, salt, sep = sep)
+  .stable_hash_u32(key)
+}
+
+#' Deterministic pseudo-random shuffle for pairs
+#'
+#' Orders rows by a stable 32-bit hash of (ID1, ID2, round, salt).
+#'
+#' @param pairs A data frame with ID columns.
+#' @param id1_col,id2_col Names of the ID columns in `pairs`.
+#' @param round Integer scalar (recycled).
+#' @param salt Character scalar (recycled).
+#'
+#' @return `pairs` reordered deterministically.
+#'
+#' @keywords internal
+.hash_shuffle_pairs <- function(pairs,
+                                id1_col = "ID1",
+                                id2_col = "ID2",
+                                round = 0L,
+                                salt = "pairwiseLLM") {
+  pairs <- tibble::as_tibble(pairs)
+  if (nrow(pairs) == 0L) {
+    return(pairs)
+  }
+
+  if (!all(c(id1_col, id2_col) %in% names(pairs))) {
+    stop("`pairs` must contain columns `", id1_col, "` and `", id2_col, "`. ", call. = FALSE)
+  }
+
+  id1 <- as.character(pairs[[id1_col]])
+  id2 <- as.character(pairs[[id2_col]])
+  h <- .hash_key_u32(id1, id2, round = round, salt = salt)
+
+  ord <- order(h, id1, id2, na.last = TRUE)
+  pairs[ord, , drop = FALSE]
+}

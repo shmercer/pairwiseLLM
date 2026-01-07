@@ -1,4 +1,4 @@
-test_that("5500 normal-empty triggers bridge fallback state in diagnostics", {
+test_that("5500 normal-empty leads to exhausted when no pairs remain", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "beta", "gamma")
@@ -29,7 +29,7 @@ test_that("5500 normal-empty triggers bridge fallback state in diagnostics", {
   expect_s3_class(diag, "tbl_df")
   expect_equal(nrow(diag), 1L)
 
-  expect_identical(diag$fallback_path[[1]], "bridge_repair")
+  expect_identical(diag$fallback_path[[1]], "exhausted_no_pairs")
   expect_identical(diag$fallback_trigger[[1]], "normal_empty")
 
   expect_true(is.integer(diag$n_pairs_source_normal))

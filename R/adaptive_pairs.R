@@ -9,7 +9,9 @@
                                tot_vec,
                                k_neighbors2,
                                embed_nbrs = NULL,
-                               embed_far_k = 0L) {
+                               embed_far_k = 0L,
+                               hash_round = 0L,
+                               hash_salt = "pairwiseLLM") {
   n <- length(id_vec)
   if (n == 0L) {
     return(tibble::tibble(
@@ -56,13 +58,22 @@
       }
     }
 
-    # 3) optional far candidates (uses current RNG state; caller controls seed)
+    # 3) optional far candidates (deterministic; does not depend on R RNG)
     js_far <- integer()
     if (embed_far_k > 0L) {
       base_pool <- if (i < n) (i + 1L):n else integer(0)
       pool <- setdiff(base_pool, unique(c(js_theta, js_embed)))
       if (length(pool) > 0L) {
-        js_far <- sample(pool, size = min(embed_far_k, length(pool)), replace = FALSE)
+        pool_ids <- id_vec[pool]
+        h <- .hash_key_u32(
+          id1 = rep.int(id_vec[[i]], length(pool_ids)),
+          id2 = pool_ids,
+          round = hash_round,
+          salt = paste0(hash_salt, "|far|", i)
+        )
+        ord_far <- order(h, pool_ids, na.last = TRUE)
+        take_far <- min(embed_far_k, length(pool))
+        js_far <- pool[ord_far[seq_len(take_far)]]
       }
     }
 
@@ -385,6 +396,113 @@
     "embed_hit",
     "embed_rank",
     "directed"
+  )
+}
+
+#' Generate deterministic controlled-random candidates
+#'
+#' This last-resort generator produces a broad set of candidate pairs when
+#' normal candidate generation (theta neighborhood / embedding neighbors) yields
+#' nothing, but eligible pairs may still exist. It does not use R's RNG.
+#'
+#' Strategy:
+#' - deterministically permute IDs via a stable hash
+#' - generate within-window pairs along the permuted ordering
+#'
+#' @param id_vec Character vector of IDs.
+#' @param n_pairs Target number of pairs to select.
+#' @param round_key Integer-ish scalar used to vary ordering across rounds.
+#' @param salt Character scalar used to vary ordering (e.g., derived from `seed`).
+#'
+#' @return Tibble with the standard candidate columns.
+#'
+#' @keywords internal
+.ap_gen_controlled_random_candidates <- function(id_vec,
+                                                 n_pairs,
+                                                 round_key = 0L,
+                                                 salt = "pairwiseLLM") {
+  id_vec <- as.character(id_vec)
+  n <- length(id_vec)
+  n_pairs <- as.integer(n_pairs)
+
+  if (n < 2L || is.na(n_pairs) || n_pairs <= 0L) {
+    return(tibble::tibble(
+      i_idx = integer(),
+      j_idx = integer(),
+      anchor_idx = integer(),
+      pair_key = character(),
+      source = character(),
+      embed_hit = logical(),
+      embed_rank = integer(),
+      directed = logical(),
+      score_info = numeric(),
+      score_need = numeric(),
+      score_embed = numeric(),
+      score_total = numeric()
+    ))
+  }
+
+  round_key <- as.integer(round_key)
+  if (is.na(round_key)) round_key <- 0L
+  salt <- as.character(salt)
+  if (is.na(salt) || !nzchar(salt)) salt <- "pairwiseLLM"
+
+  # Heuristic: create a reasonably broad candidate pool without generating all
+  # O(n^2) pairs.
+  window <- ceiling((10 * n_pairs) / n)
+  window <- max(window, 10L)
+  window <- min(window, n - 1L)
+
+  id_hash <- .stable_hash_u32(paste(id_vec, round_key, salt, sep = "\u001F"))
+  perm <- order(id_hash, id_vec, na.last = TRUE)
+
+  # Generate window pairs along permuted order.
+  out_i <- integer(0)
+  out_j <- integer(0)
+  out_anchor <- integer(0)
+
+  for (p in seq_len(n - 1L)) {
+    i_idx <- perm[[p]]
+    max_off <- min(window, n - p)
+    if (max_off < 1L) next
+    js <- perm[(p + 1L):(p + max_off)]
+    out_i <- c(out_i, rep.int(i_idx, length(js)))
+    out_j <- c(out_j, js)
+    out_anchor <- c(out_anchor, rep.int(i_idx, length(js)))
+  }
+
+  if (length(out_i) == 0L) {
+    return(tibble::tibble(
+      i_idx = integer(),
+      j_idx = integer(),
+      anchor_idx = integer(),
+      pair_key = character(),
+      source = character(),
+      embed_hit = logical(),
+      embed_rank = integer(),
+      directed = logical(),
+      score_info = numeric(),
+      score_need = numeric(),
+      score_embed = numeric(),
+      score_total = numeric()
+    ))
+  }
+
+  pk <- .unordered_pair_key(id_vec[out_i], id_vec[out_j])
+
+  tibble::tibble(
+    i_idx = as.integer(out_i),
+    j_idx = as.integer(out_j),
+    anchor_idx = as.integer(out_anchor),
+    pair_key = as.character(pk),
+    source = "random",
+    embed_hit = FALSE,
+    embed_rank = NA_integer_,
+    directed = FALSE,
+    score_info = 0,
+    score_need = 0,
+    score_embed = 0,
+    score_total = 0
   )
 }
 
@@ -733,7 +851,9 @@
                              samples,
                              p1_vec,
                              p2_vec,
-                             balance_positions = TRUE) {
+                             balance_positions = TRUE,
+                             hash_round = 0L,
+                             hash_salt = "pairwiseLLM") {
   selected_tbl <- tibble::as_tibble(selected_tbl)
   take <- nrow(selected_tbl)
   if (take == 0L) {
@@ -783,7 +903,10 @@
         p1[[i]] <- p1[[i]] + 1L
         p2[[j]] <- p2[[j]] + 1L
       } else {
-        if (stats::runif(1) < 0.5) {
+        # PR9.3: deterministic tie-breaker (no RNG dependence).
+        pk <- .unordered_pair_key(a, b)
+        coin <- .stable_hash_u32(paste(pk, hash_round, hash_salt, k, sep = "\u001F"))
+        if ((coin %% 2) < 1) {
           out_ID1[[k]] <- a
           out_ID2[[k]] <- b
           p1[[i]] <- p1[[i]] + 1L
@@ -1244,6 +1367,16 @@ select_adaptive_pairs <- function(samples,
 
       id_vec <- joined$ID
 
+      # PR9.3: stable deterministic pseudo-random salt/round identifiers for
+      # any controlled-random ordering. This avoids reliance on R's RNG
+      # implementation for determinism across R versions.
+      hash_round <- as.integer(nrow(ex))
+      if (is.na(hash_round)) hash_round <- 0L
+      hash_salt <- "pairwiseLLM"
+      if (!is.null(seed) && length(seed) == 1L && !is.na(seed)) {
+        hash_salt <- paste0(hash_salt, "|", as.character(seed))
+      }
+
       # Repeat candidate bucket.
       #
       # We always compute eligibility for diagnostics, but only *add* repeat
@@ -1300,7 +1433,9 @@ select_adaptive_pairs <- function(samples,
         tot_vec = tot_vec,
         k_neighbors2 = k_neighbors2,
         embed_nbrs = embed_nbrs,
-        embed_far_k = embed_far_k
+        embed_far_k = embed_far_k,
+        hash_round = hash_round,
+        hash_salt = hash_salt
       )
 
       scored_tbl <- .ap_score_candidates(
@@ -1453,13 +1588,66 @@ select_adaptive_pairs <- function(samples,
         selected_tbl_normal
       }
 
+      # --- PR9.3: Controlled random (deterministic) ---
+      # If normal selection (and optional bridge/repair) yields zero pairs, we
+      # fall back to a deterministic pseudo-random ordering of a broader
+      # candidate pool generated without enumerating all O(n^2) pairs.
+      used_random <- FALSE
+      random_trigger <- NA_character_
+
+      if (n_pairs > 0L && nrow(selected_tbl) == 0L && length(id_vec) >= 2L) {
+        random_trigger <- if (isTRUE(should_try_bridge)) "bridge_empty" else "normal_empty"
+
+        random_raw <- .ap_gen_controlled_random_candidates(
+          id_vec = id_vec,
+          n_pairs = as.integer(n_pairs),
+          round_key = hash_round,
+          salt = hash_salt
+        )
+
+        random_constrained <- .ap_apply_constraints(
+          cand_tbl = random_raw,
+          id_vec = id_vec,
+          existing_counts = existing_counts,
+          existing_dir = existing_dir,
+          existing_counts_all = existing_counts_all,
+          forbid_unordered = if (is.null(forbid_repeats)) TRUE else isTRUE(forbid_repeats),
+          repeat_policy = repeat_policy,
+          repeat_cap = repeat_cap
+        )
+
+        if (nrow(random_constrained) > 0L) {
+          mode <- getOption("pairwiseLLM.controlled_random_mode", "hash")
+
+          if (identical(mode, "rng")) {
+            ord_rng <- sample.int(nrow(random_constrained))
+            random_constrained <- random_constrained[ord_rng, , drop = FALSE]
+          } else {
+            h <- .hash_key_u32(
+              id1 = id_vec[random_constrained$i_idx],
+              id2 = id_vec[random_constrained$j_idx],
+              round = hash_round,
+              salt = paste0(hash_salt, "|controlled_random")
+            )
+
+            ord_h <- order(h, random_constrained$pair_key, random_constrained$i_idx, random_constrained$j_idx, na.last = TRUE)
+            random_constrained <- random_constrained[ord_h, , drop = FALSE]
+          }
+
+          selected_tbl <- dplyr::slice_head(random_constrained, n = as.integer(n_pairs))
+          used_random <- nrow(selected_tbl) > 0L
+        }
+      }
+
       pairs_tbl <- .ap_orient_pairs(
         selected_tbl = selected_tbl,
         id_vec = id_vec,
         samples = samples,
         p1_vec = p1_vec,
         p2_vec = p2_vec,
-        balance_positions = balance_positions
+        balance_positions = balance_positions,
+        hash_round = hash_round,
+        hash_salt = hash_salt
       )
 
       # Track planned reverse-repeat pairs for downstream runner diagnostics.
@@ -1506,10 +1694,12 @@ select_adaptive_pairs <- function(samples,
         "exhausted_no_pairs"
       } else if (used_bridge) {
         "bridge_repair"
+      } else if (isTRUE(used_random)) {
+        "controlled_random"
       } else if (nrow(selected_tbl) > 0L) {
         "normal"
       } else {
-        "bridge_repair"
+        "exhausted_no_pairs"
       }
 
       fallback_trigger <- if (fallback_path == "bridge_repair") {
@@ -1520,8 +1710,24 @@ select_adaptive_pairs <- function(samples,
         } else {
           "graph_unhealthy"
         }
+      } else if (fallback_path == "controlled_random") {
+        if (!is.na(random_trigger) && nzchar(random_trigger)) {
+          random_trigger
+        } else if (normal_empty) {
+          "normal_empty"
+        } else {
+          "bridge_empty"
+        }
       } else if (fallback_path == "exhausted_no_pairs") {
-        "insufficient_ids"
+        if (length(id_vec) < 2L) {
+          "insufficient_ids"
+        } else if (isTRUE(normal_empty)) {
+          "normal_empty"
+        } else if (isTRUE(graph_unhealthy)) {
+          "graph_unhealthy"
+        } else {
+          "no_pairs_found"
+        }
       } else {
         NA_character_
       }
@@ -1697,8 +1903,18 @@ select_adaptive_pairs <- function(samples,
         rep(NA_integer_, n)
       }
 
-      inferred_path <- dplyr::if_else(!is.na(n_selected) & n_selected > 0L, "normal", "bridge_repair")
-      inferred_trigger <- dplyr::if_else(inferred_path == "bridge_repair", "normal_empty", NA_character_)
+      inferred_path <- dplyr::case_when(
+        diag$n_pairs_source_random > 0L ~ "controlled_random",
+        diag$n_pairs_source_bridge > 0L ~ "bridge_repair",
+        !is.na(n_selected) & n_selected > 0L ~ "normal",
+        TRUE ~ "exhausted_no_pairs"
+      )
+
+      inferred_trigger <- dplyr::case_when(
+        inferred_path %in% c("bridge_repair", "controlled_random") ~ "normal_empty",
+        inferred_path == "exhausted_no_pairs" ~ "no_pairs_found",
+        TRUE ~ NA_character_
+      )
 
       diag$fallback_path[needs_infer] <- inferred_path[needs_infer]
       diag$fallback_trigger[needs_infer] <- inferred_trigger[needs_infer]
