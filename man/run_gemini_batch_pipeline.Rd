@@ -10,7 +10,7 @@ run_gemini_batch_pipeline(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   batch_input_path = tempfile(pattern = "gemini-batch-input-", fileext = ".json"),
   batch_output_path = tempfile(pattern = "gemini-batch-output-", fileext = ".jsonl"),
   poll = TRUE,
@@ -34,7 +34,12 @@ run_gemini_batch_pipeline(
 
 \item{prompt_template}{Prompt template string.}
 
-\item{thinking_level}{One of \code{"low"}, \code{"medium"}, or \code{"high"}.}
+\item{thinking_level}{One of \code{"minimal"}, \code{"low"}, \code{"medium"},
+or \code{"high"}. If not supplied, defaults to \code{"minimal"} for
+\code{model = "gemini-3-flash-preview"} and \code{"low"} otherwise.
+The Gemini REST API currently supports \code{"Minimal"}, \code{"Low"}, and
+\code{"High"}; \code{"medium"} is mapped internally to \code{"High"} with
+a warning.}
 
 \item{batch_input_path}{Path where the batch input JSON should be written.}
 

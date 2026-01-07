@@ -327,10 +327,13 @@
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}. The template should embed your full
 #'   instructions, rubric text, and \verb{<BETTER_SAMPLE>} tagging convention.
-#' @param thinking_level One of \code{"low"}, \code{"medium"}, or \code{"high"}.
-#'   This is mapped to Gemini's \code{thinkingConfig.thinkingLevel}, where
-#'   \code{"low"} maps to "Low" and both \code{"medium"} and \code{"high"} map
-#'   to "High". "Medium" currently behaves like "High".
+#' @param thinking_level One of \code{"minimal"}, \code{"low"}, \code{"medium"},
+#'   or \code{"high"}. This is mapped to Gemini's
+#'   \code{thinkingConfig.thinkingLevel}. If not supplied, defaults to
+#'   \code{"minimal"} for \code{model = "gemini-3-flash-preview"} and
+#'   \code{"low"} otherwise. The Gemini REST API currently supports
+#'   \code{"Minimal"}, \code{"Low"}, and \code{"High"}; \code{"medium"} is
+#'   mapped internally to \code{"High"} with a warning.
 #' @param custom_id_prefix Prefix for the \code{custom_id} field. Defaults to
 #'   \code{"GEM"} so that IDs take the form \code{"GEM_<ID1>_vs_<ID2>"}.
 #' @param temperature Optional numeric temperature. If \code{NULL}, it is
@@ -382,7 +385,7 @@ build_gemini_batch_requests <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   custom_id_prefix = "GEM",
   temperature = NULL,
   top_p = NULL,
@@ -391,8 +394,11 @@ build_gemini_batch_requests <- function(
   include_thoughts = FALSE,
   ...
 ) {
-  thinking_level <- match.arg(thinking_level)
-
+  # Default: flash -> "minimal", otherwise -> "low"
+  if (missing(thinking_level)) {
+    thinking_level <- if (identical(model, "gemini-3-flash-preview")) "minimal" else "low"
+  }
+  thinking_level <- match.arg(thinking_level, choices = c("minimal", "low", "medium", "high"))
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
   missing_cols <- setdiff(required_cols, names(pairs))
@@ -419,7 +425,7 @@ build_gemini_batch_requests <- function(
   }
 
   # Map R-level thinking_level to Gemini values
-  tl_map <- c(low = "Low", medium = "High", high = "High")
+  tl_map <- c(minimal = "Minimal", low = "Low", medium = "High", high = "High")
   if (identical(thinking_level, "medium")) {
     warning(
       "`thinking_level = \"medium\"` is not yet officially
@@ -1172,7 +1178,12 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' @param trait_name Trait name.
 #' @param trait_description Trait description.
 #' @param prompt_template Prompt template string.
-#' @param thinking_level One of \code{"low"}, \code{"medium"}, or \code{"high"}.
+#' @param thinking_level One of \code{"minimal"}, \code{"low"}, \code{"medium"},
+#'   or \code{"high"}. If not supplied, defaults to \code{"minimal"} for
+#'   \code{model = "gemini-3-flash-preview"} and \code{"low"} otherwise.
+#'   The Gemini REST API currently supports \code{"Minimal"}, \code{"Low"}, and
+#'   \code{"High"}; \code{"medium"} is mapped internally to \code{"High"} with
+#'   a warning.
 #' @param batch_input_path Path where the batch input JSON should be written.
 #' @param batch_output_path Path where the batch output JSONL should be written
 #'   (only used if \code{poll = TRUE}).
@@ -1252,7 +1263,7 @@ run_gemini_batch_pipeline <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   batch_input_path = tempfile(
     pattern = "gemini-batch-input-",
     fileext = ".json"
@@ -1270,8 +1281,11 @@ run_gemini_batch_pipeline <- function(
   include_thoughts = FALSE,
   ...
 ) {
-  thinking_level <- match.arg(thinking_level)
-
+  # Default: flash -> "minimal", otherwise -> "low"
+  if (missing(thinking_level)) {
+    thinking_level <- if (identical(model, "gemini-3-flash-preview")) "minimal" else "low"
+  }
+  thinking_level <- match.arg(thinking_level, choices = c("minimal", "low", "medium", "high"))
   req_tbl <- build_gemini_batch_requests(
     pairs             = pairs,
     model             = model,

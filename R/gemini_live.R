@@ -78,11 +78,12 @@
 #'   [set_prompt_template()]. The template should embed `<BETTER_SAMPLE>` tags.
 #' @param api_key Optional Gemini API key (defaults to
 #'   `Sys.getenv("GEMINI_API_KEY")`).
-#' @param thinking_level One of `"low"`, `"medium"`, or `"high"`. This controls
-#'   the maximum depth of internal reasoning for Gemini 3 Pro. For pairwise
-#'   scoring, `"low"` is used by default to reduce latency and cost. Currently,
-#'   the Gemini REST API only supports `"Low"` and `"High"` values; `"medium"`
-#'   is mapped internally to `"High"` with a warning.
+#' @param thinking_level One of `"minimal"`, `"low"`, `"medium"`, or `"high"`.
+#'   Controls the maximum depth of internal reasoning for Gemini models. If not
+#'   supplied, defaults to `"minimal"` for `model = "gemini-3-flash-preview"` and
+#'   `"low"` otherwise. Currently, the Gemini REST API only supports `"Minimal"`,
+#'   `"Low"`, and `"High"` values; `"medium"` is mapped internally to `"High"`
+#'   with a warning.
 #' @param temperature Optional numeric temperature. If `NULL` (default), the
 #'   parameter is omitted and Gemini uses its own default (currently 1.0).
 #' @param top_p Optional nucleus sampling parameter. If `NULL`, omitted.
@@ -162,7 +163,7 @@ gemini_compare_pair_live <- function(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -178,9 +179,11 @@ gemini_compare_pair_live <- function(
   if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
     stop("`model` must be a non-empty character scalar.", call. = FALSE)
   }
-
-  thinking_level <- match.arg(thinking_level)
-
+  # Default: flash -> "minimal", otherwise -> "low"
+  if (missing(thinking_level)) {
+    thinking_level <- if (identical(model, "gemini-3-flash-preview")) "minimal" else "low"
+  }
+  thinking_level <- match.arg(thinking_level, choices = c("minimal", "low", "medium", "high"))
   dots <- list(...)
   if (!is.null(dots$thinking_budget)) {
     warning(
@@ -223,11 +226,11 @@ gemini_compare_pair_live <- function(
     generation_config$maxOutputTokens <- max_output_tokens
   }
 
-  # Map R-level thinking_level ("low", "medium", "high") to Gemini JSON values.
+  # Map R-level thinking_level ("minimal", "low", "medium", "high") to Gemini JSON values.
   # Gemini 3 currently supports "Low" and "High". "Medium" is not yet supported,
   # so we map it to "High" with a warning.
   if (!is.null(thinking_level)) {
-    tl_map <- c(low = "Low", medium = "High", high = "High")
+    tl_map <- c(minimal = "Minimal", low = "Low", medium = "High", high = "High")
 
     if (identical(thinking_level, "medium")) {
       warning(
@@ -440,7 +443,12 @@ gemini_compare_pair_live <- function(
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param api_key Optional Gemini API key.
-#' @param thinking_level Default `"low"`; see [gemini_compare_pair_live()].
+#' @param thinking_level One of `"minimal"`, `"low"`, `"medium"`, or `"high"`.
+#'   Controls the maximum depth of internal reasoning for Gemini models. If not
+#'   supplied, defaults to `"minimal"` for `model = "gemini-3-flash-preview"` and
+#'   `"low"` otherwise. Currently, the Gemini REST API only supports `"Minimal"`,
+#'   `"Low"`, and `"High"` values; `"medium"` is mapped internally to `"High"`
+#'   with a warning.
 #' @param temperature Optional numeric temperature; forwarded to
 #'   [gemini_compare_pair_live()]. See Gemini docs; if `NULL` (default), the
 #'   model uses its own default.
@@ -534,7 +542,7 @@ submit_gemini_pairs_live <- function(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -627,7 +635,11 @@ submit_gemini_pairs_live <- function(
     stop("`status_every` must be a single positive integer.", call. = FALSE)
   }
   status_every <- as.integer(status_every)
-  thinking_level <- match.arg(thinking_level)
+  # Default: flash -> "minimal", otherwise -> "low"
+  if (missing(thinking_level)) {
+    thinking_level <- if (identical(model, "gemini-3-flash-preview")) "minimal" else "low"
+  }
+  thinking_level <- match.arg(thinking_level, choices = c("minimal", "low", "medium", "high"))
   fmt_secs <- function(x) sprintf("%.1fs", x)
   all_new_results <- vector("list", n)
 

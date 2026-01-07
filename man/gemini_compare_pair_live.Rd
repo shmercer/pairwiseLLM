@@ -14,7 +14,7 @@ gemini_compare_pair_live(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("low", "medium", "high", "minimal"),
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -50,11 +50,12 @@ The value is interpolated into the path
 \item{api_key}{Optional Gemini API key (defaults to
 \code{Sys.getenv("GEMINI_API_KEY")}).}
 
-\item{thinking_level}{One of \code{"low"}, \code{"medium"}, or \code{"high"}. This controls
-the maximum depth of internal reasoning for Gemini 3 Pro. For pairwise
-scoring, \code{"low"} is used by default to reduce latency and cost. Currently,
-the Gemini REST API only supports \code{"Low"} and \code{"High"} values; \code{"medium"}
-is mapped internally to \code{"High"} with a warning.}
+\item{thinking_level}{One of \code{"minimal"}, \code{"low"}, \code{"medium"}, or \code{"high"}.
+Controls the maximum depth of internal reasoning for Gemini models. If not
+supplied, defaults to \code{"minimal"} for \code{model = "gemini-3-flash-preview"} and
+\code{"low"} otherwise. Currently, the Gemini REST API only supports \code{"Minimal"},
+\code{"Low"}, and \code{"High"} values; \code{"medium"} is mapped internally to \code{"High"}
+with a warning.}
 
 \item{temperature}{Optional numeric temperature. If \code{NULL} (default), the
 parameter is omitted and Gemini uses its own default (currently 1.0).}
