@@ -475,7 +475,7 @@ submit_openai_pairs_live <- function(
     if (verbose) message(sprintf("Found existing file at '%s'. Checking for resumable pairs...", save_path))
     tryCatch(
       {
-        existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
+        existing_results <- .read_existing_live_results(save_path, verbose = verbose)
 
         # We assume custom_id is constructed as LIVE_<ID1>_vs_<ID2>
         existing_ids <- existing_results$custom_id
@@ -649,7 +649,10 @@ submit_openai_pairs_live <- function(
   }
 
   # Merge existing (resume) results with new results
+  new_results_df <- .coerce_live_submit_types(new_results_df)
+
   final_results <- if (!is.null(existing_results)) {
+    existing_results <- .coerce_live_submit_types(existing_results)
     dplyr::bind_rows(existing_results, new_results_df)
   } else {
     new_results_df

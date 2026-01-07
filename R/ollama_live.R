@@ -531,7 +531,7 @@ submit_ollama_pairs_live <- function(
     if (verbose) message(sprintf("Found existing file at '%s'. Checking for resumable pairs...", save_path))
     tryCatch(
       {
-        existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
+        existing_results <- .read_existing_live_results(save_path, verbose = verbose)
         if ("custom_id" %in% names(existing_results)) {
           existing_ids <- existing_results$custom_id
           current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
@@ -801,7 +801,10 @@ submit_ollama_pairs_live <- function(
 
   new_results_df <- dplyr::bind_rows(all_new_results)
 
+  new_results_df <- .coerce_live_submit_types(new_results_df)
+
   final_results <- if (!is.null(existing_results)) {
+    existing_results <- .coerce_live_submit_types(existing_results)
     dplyr::bind_rows(existing_results, new_results_df)
   } else {
     new_results_df
