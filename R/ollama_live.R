@@ -621,6 +621,7 @@ submit_ollama_pairs_live <- function(
       work_fn <- function(i) {
         id1_i <- as.character(pairs$ID1[i])
         id2_i <- as.character(pairs$ID2[i])
+        cid <- as.character(pairs$custom_id[i])
         tryCatch(
           {
             res <- ollama_compare_pair_live(
@@ -644,7 +645,7 @@ submit_ollama_pairs_live <- function(
           error = function(e) {
             # Return error row
             tibble::tibble(
-              custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+              custom_id = cid,
               ID1 = id1_i,
               ID2 = id2_i,
               model = model,

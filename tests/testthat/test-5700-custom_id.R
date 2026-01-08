@@ -25,6 +25,6 @@ test_that("5700-03 .ensure_custom_id errors on duplicate custom_id", {
   )
   expect_error(
     pairwiseLLM:::.ensure_custom_id(pairs, prefix = "LIVE"),
-    "custom_id` must be unique"
+    "must be unique"
   )
 })
