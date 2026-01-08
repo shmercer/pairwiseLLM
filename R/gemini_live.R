@@ -573,6 +573,8 @@ submit_gemini_pairs_live <- function(
     stop("`pairs` must contain columns: ", paste(required_cols, collapse = ", "), call. = FALSE)
   }
 
+  pairs <- .ensure_custom_id(pairs, prefix = "LIVE")
+
   # --- Pre-flight Checks ---
   if (!is.null(save_path)) {
     if (!requireNamespace("readr", quietly = TRUE)) {
@@ -603,7 +605,7 @@ submit_gemini_pairs_live <- function(
       {
         existing_results <- .read_existing_live_results(save_path, verbose = verbose)
         existing_ids <- existing_results$custom_id
-        current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+        current_ids <- pairs$custom_id
         to_process_idx <- !current_ids %in% existing_ids
         if (sum(!to_process_idx) > 0) {
           if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
@@ -672,9 +674,10 @@ submit_gemini_pairs_live <- function(
       work_fn <- function(i) {
         id1 <- as.character(pairs$ID1[i])
         id2 <- as.character(pairs$ID2[i])
+        cid <- as.character(pairs$custom_id[i])
         tryCatch(
           {
-            gemini_compare_pair_live(
+            res <- gemini_compare_pair_live(
               ID1 = id1, text1 = as.character(pairs$text1[i]),
               ID2 = id2, text2 = as.character(pairs$text2[i]),
               model = model, trait_name = trait_name, trait_description = trait_description,
@@ -684,10 +687,12 @@ submit_gemini_pairs_live <- function(
               api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
               ...
             )
+            res$custom_id <- cid
+            res
           },
           error = function(e) {
             tibble::tibble(
-              custom_id = sprintf("LIVE_%s_vs_%s", id1, id2),
+              custom_id = cid,
               ID1 = id1, ID2 = id2, model = model,
               object_type = NA_character_, status_code = NA_integer_,
               error_message = paste0("Error: ", conditionMessage(e)),
@@ -747,7 +752,7 @@ submit_gemini_pairs_live <- function(
 
       res <- tryCatch(
         {
-          gemini_compare_pair_live(
+          res <- gemini_compare_pair_live(
             ID1 = id1_i, text1 = as.character(pairs$text1[i]),
             ID2 = id2_i, text2 = as.character(pairs$text2[i]),
             model = model, trait_name = trait_name, trait_description = trait_description,
@@ -757,6 +762,8 @@ submit_gemini_pairs_live <- function(
             api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
             ...
           )
+          res$custom_id <- as.character(pairs$custom_id[i])
+          res
         },
         error = function(e) {
           tibble::tibble(

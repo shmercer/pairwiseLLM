@@ -66,3 +66,38 @@
 .add_pair_texts <- function(pairs, samples, id1_col = "ID1", id2_col = "ID2") {
   add_pair_texts(pairs = pairs, samples = samples, id1_col = id1_col, id2_col = id2_col)
 }
+
+
+#' Ensure `custom_id` exists and is unique
+#'
+#' If `pairs$custom_id` is missing or empty, it is synthesized as
+#' `<prefix>_<ID1>_vs_<ID2>`. If user-supplied `custom_id` values are present,
+#' they are preserved.
+#'
+#' @keywords internal
+.ensure_custom_id <- function(pairs, prefix = "LIVE") {
+  pairs <- tibble::as_tibble(pairs)
+  if (!all(c("ID1", "ID2") %in% names(pairs))) {
+    stop("`pairs` must contain columns: ID1, ID2.", call. = FALSE)
+  }
+
+  if (!"custom_id" %in% names(pairs)) {
+    pairs$custom_id <- NA_character_
+  }
+
+  missing <- is.na(pairs$custom_id) | !nzchar(pairs$custom_id)
+  if (any(missing)) {
+    pairs$custom_id[missing] <- sprintf(
+      "%s_%s_vs_%s",
+      prefix,
+      as.character(pairs$ID1[missing]),
+      as.character(pairs$ID2[missing])
+    )
+  }
+
+  if (anyDuplicated(pairs$custom_id)) {
+    stop("pairs$custom_id must be unique per request.", call. = FALSE)
+  }
+
+  pairs
+}

@@ -509,6 +509,8 @@ submit_ollama_pairs_live <- function(
     )
   }
 
+  pairs <- .ensure_custom_id(pairs, prefix = "LIVE")
+
   # --- Pre-flight Checks (Save Path) ---
   if (!is.null(save_path)) {
     if (!requireNamespace("readr", quietly = TRUE)) {
@@ -540,7 +542,7 @@ submit_ollama_pairs_live <- function(
         existing_results <- .read_existing_live_results(save_path, verbose = verbose)
         if ("custom_id" %in% names(existing_results)) {
           existing_ids <- existing_results$custom_id
-          current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+          current_ids <- pairs$custom_id
           to_process_idx <- !current_ids %in% existing_ids
           if (sum(!to_process_idx) > 0) {
             if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
@@ -621,7 +623,7 @@ submit_ollama_pairs_live <- function(
         id2_i <- as.character(pairs$ID2[i])
         tryCatch(
           {
-            ollama_compare_pair_live(
+            res <- ollama_compare_pair_live(
               ID1               = id1_i,
               text1             = as.character(pairs$text1[i]),
               ID2               = id2_i,
@@ -636,6 +638,8 @@ submit_ollama_pairs_live <- function(
               include_raw       = include_raw,
               ...
             )
+            res$custom_id <- cid
+            res
           },
           error = function(e) {
             # Return error row
