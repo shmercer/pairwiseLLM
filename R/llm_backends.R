@@ -107,7 +107,6 @@ llm_compare_pair <- function(
   ...
 ) {
   backend <- .normalize_backend_arg(backend)
-  return_mode <- match.arg(return_mode)
 
   # This branch is effectively unreachable under normal usage because
   # `.normalize_backend_arg()` uses `match.arg()`; we keep it as a defensive
