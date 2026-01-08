@@ -89,7 +89,8 @@
       largest_component_frac = if (n > 0) 1 / n else NA_real_,
       degree_min = 0,
       degree_median = 0,
-      degree_max = 0
+      degree_max = 0,
+      pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
     )
 
     return(list(metrics = metrics, degree = degree, component_id = component_id))
@@ -130,7 +131,8 @@
       largest_component_frac = if (n > 0) 1 / n else NA_real_,
       degree_min = 0,
       degree_median = 0,
-      degree_max = 0
+      degree_max = 0,
+      pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
     )
 
     return(list(metrics = metrics, degree = degree, component_id = component_id))
@@ -191,7 +193,8 @@
     largest_component_frac = as.double(largest_component_frac),
     degree_min = as.double(min(degree)),
     degree_median = as.double(stats::median(degree)),
-    degree_max = as.double(max(degree))
+    degree_max = as.double(max(degree)),
+    pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
   )
 
   degree <- as.double(degree)

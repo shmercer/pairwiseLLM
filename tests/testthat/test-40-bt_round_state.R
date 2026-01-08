@@ -17,6 +17,20 @@ test_that(".bt_round_state returns zeros for empty results and applies prefix", 
   expect_equal(out$new_n_ids[[1]], 2L)
   expect_equal(out$new_n_ids_seen[[1]], 0L)
   expect_true(is.na(out$new_n_unique_unordered_pairs_in_ids[[1]]))
+
+  expect_true(all(c(
+    "new_n_components",
+    "new_largest_component_frac",
+    "new_degree_min",
+    "new_degree_median",
+    "new_pct_nodes_with_degree_gt0"
+  ) %in% names(out)))
+
+  expect_equal(out$new_n_components[[1]], 2L)
+  expect_equal(out$new_largest_component_frac[[1]], 1 / 2)
+  expect_equal(out$new_degree_min[[1]], 0)
+  expect_equal(out$new_degree_median[[1]], 0)
+  expect_equal(out$new_pct_nodes_with_degree_gt0[[1]], 0)
 })
 
 test_that(".bt_round_state errors when results lacks ID1/ID2", {

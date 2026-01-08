@@ -22,6 +22,7 @@ testthat::test_that(".graph_state_from_pairs handles empty / invalid pairs", {
   testthat::expect_equal(out_null$metrics$n_components, 3L)
   testthat::expect_equal(out_null$metrics$largest_component_frac, 1 / 3)
   testthat::expect_equal(out_null$metrics$degree_max, 0)
+  testthat::expect_equal(out_null$metrics$pct_nodes_with_degree_gt0, 0)
 
   # degree/component_id are named vectors with one entry per id
   testthat::expect_named(out_null$degree, ids)
@@ -37,6 +38,7 @@ testthat::test_that(".graph_state_from_pairs handles empty / invalid pairs", {
   testthat::expect_equal(out_invalid$metrics$n_components, 3L)
   testthat::expect_equal(out_invalid$metrics$degree_min, 0)
   testthat::expect_equal(out_invalid$metrics$degree_median, 0)
+  testthat::expect_equal(out_invalid$metrics$pct_nodes_with_degree_gt0, 0)
 })
 
 testthat::test_that(".graph_state_from_pairs deduplicates edges and computes components", {
@@ -55,6 +57,7 @@ testthat::test_that(".graph_state_from_pairs deduplicates edges and computes com
   testthat::expect_equal(out$metrics$degree_min, 1)
   testthat::expect_equal(out$metrics$degree_median, 1.5)
   testthat::expect_equal(out$metrics$degree_max, 2)
+  testthat::expect_equal(out$metrics$pct_nodes_with_degree_gt0, 1)
 
   # degree + component_id are complete and named
   testthat::expect_named(out$degree, ids)

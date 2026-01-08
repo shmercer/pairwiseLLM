@@ -3,6 +3,35 @@
 .bt_round_state <- function(results, ids = NULL, judge_col = NULL, prefix = "") {
   results <- tibble::as_tibble(results)
 
+  ids_for_graph <- NULL
+  if (!is.null(ids)) {
+    ids_for_graph <- as.character(ids)
+    ids_for_graph <- ids_for_graph[!is.na(ids_for_graph) & nzchar(ids_for_graph)]
+    ids_for_graph <- unique(ids_for_graph)
+    if (length(ids_for_graph) == 0L) {
+      ids_for_graph <- NULL
+    }
+  }
+
+  graph_vals <- list(
+    n_components = NA_integer_,
+    largest_component_frac = NA_real_,
+    degree_min = NA_real_,
+    degree_median = NA_real_,
+    pct_nodes_with_degree_gt0 = NA_real_
+  )
+
+  if (!is.null(ids_for_graph)) {
+    gm <- .graph_state_from_pairs(results, ids = ids_for_graph)$metrics
+    graph_vals <- list(
+      n_components = gm$n_components[[1]],
+      largest_component_frac = gm$largest_component_frac[[1]],
+      degree_min = gm$degree_min[[1]],
+      degree_median = gm$degree_median[[1]],
+      pct_nodes_with_degree_gt0 = gm$pct_nodes_with_degree_gt0[[1]]
+    )
+  }
+
   if (nrow(results) == 0L) {
     out <- tibble::tibble(
       n_results = 0L,
@@ -10,6 +39,11 @@
       n_unique_unordered_pairs_in_ids = NA_integer_,
       n_ids = if (is.null(ids)) NA_integer_ else as.integer(length(ids)),
       n_ids_seen = 0L,
+      n_components = graph_vals$n_components,
+      largest_component_frac = graph_vals$largest_component_frac,
+      degree_min = graph_vals$degree_min,
+      degree_median = graph_vals$degree_median,
+      pct_nodes_with_degree_gt0 = graph_vals$pct_nodes_with_degree_gt0,
       min_appearances = 0L,
       p10_appearances = 0L,
       median_appearances = 0L,
@@ -111,6 +145,11 @@
     n_unique_unordered_pairs_in_ids = n_unique_in_ids,
     n_ids = n_ids,
     n_ids_seen = n_ids_seen,
+    n_components = graph_vals$n_components,
+    largest_component_frac = graph_vals$largest_component_frac,
+    degree_min = graph_vals$degree_min,
+    degree_median = graph_vals$degree_median,
+    pct_nodes_with_degree_gt0 = graph_vals$pct_nodes_with_degree_gt0,
     min_appearances = min_app,
     p10_appearances = p10_app,
     median_appearances = med_app,
