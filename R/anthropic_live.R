@@ -637,6 +637,10 @@ anthropic_compare_pair_live <- function(
 #'   to save results incrementally. If the file exists, the function reads it
 #'   to identify and skip pairs that have already been processed (resume mode).
 #'   Requires the \code{readr} package.
+#' @param return_mode Character string; controls what is returned when
+#'   `save_path` is used. `"all"` (default) returns the full accumulated
+#'   checkpoint plus new results; `"new"` returns only results created during
+#'   the current call (recommended for adaptive workflows).
 #' @param parallel Logical; if \code{TRUE}, enables parallel processing using
 #'   \code{future.apply}. Requires the \code{future} and \code{future.apply}
 #'   packages.
@@ -723,11 +727,13 @@ submit_anthropic_pairs_live <- function(
   validate_strict = FALSE,
   include_thoughts = NULL,
   save_path = NULL,
+  return_mode = c("all", "new"),
   parallel = FALSE,
   workers = 1,
   ...
 ) {
   reasoning <- match.arg(reasoning)
+  return_mode <- match.arg(return_mode)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
@@ -815,7 +821,13 @@ submit_anthropic_pairs_live <- function(
 
   if (n == 0L) {
     if (verbose) message("No new pairs to process.")
-    final_res <- if (!is.null(existing_results)) existing_results else empty_res()
+    final_res <- if (return_mode == "new") {
+      empty_res()
+    } else if (!is.null(existing_results)) {
+      existing_results
+    } else {
+      empty_res()
+    }
     return(list(results = final_res, failed_pairs = pairs[0, ]))
   }
 
@@ -986,9 +998,10 @@ submit_anthropic_pairs_live <- function(
 
   new_results_df <- .coerce_live_submit_types(new_results_df)
 
-  final_results <- if (!is.null(existing_results)) {
-    existing_results <- .coerce_live_submit_types(existing_results)
-    dplyr::bind_rows(existing_results, new_results_df)
+  final_results <- if (return_mode == "new") {
+    new_results_df
+  } else if (!is.null(existing_results)) {
+    dplyr::bind_rows(.coerce_live_submit_types(existing_results), new_results_df)
   } else {
     new_results_df
   }
