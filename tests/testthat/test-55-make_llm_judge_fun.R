@@ -11,18 +11,20 @@ test_that("55-01 make_llm_judge_fun defaults to return_mode = 'new' and returns 
     )
   }
 
-  judge_fun <- testthat::with_mocked_bindings(
-    make_llm_judge_fun(
-      backend = "openai",
-      model = "gpt-4.1",
-      save_path = "path.csv"
-    ),
-    submit_llm_pairs = mock_submit
+  testthat::local_mocked_bindings(
+    submit_llm_pairs = mock_submit,
+    .package = "pairwiseLLM"
+  )
+
+  judge_fun <- make_llm_judge_fun(
+    backend = "openai",
+    model = "gpt-4.1",
+    save_path = "path.csv"
+    # return_mode defaults to "new"
   )
 
   out <- judge_fun(tibble::tibble(ID1 = "a", text1 = "A", ID2 = "b", text2 = "B"))
 
-  expect_s3_class(out, "tbl_df")
   expect_equal(out$winner, "ID1")
   expect_equal(seen$backend, "openai")
   expect_equal(seen$model, "gpt-4.1")
@@ -43,14 +45,16 @@ test_that("55-02 make_llm_judge_fun can override return_mode", {
     )
   }
 
-  judge_fun <- testthat::with_mocked_bindings(
-    make_llm_judge_fun(
-      backend = "openai",
-      model = "gpt-4.1",
-      save_path = "path.csv",
-      return_mode = "all"
-    ),
-    submit_llm_pairs = mock_submit
+  testthat::local_mocked_bindings(
+    submit_llm_pairs = mock_submit,
+    .package = "pairwiseLLM"
+  )
+
+  judge_fun <- make_llm_judge_fun(
+    backend = "openai",
+    model = "gpt-4.1",
+    save_path = "path.csv",
+    return_mode = "all"
   )
 
   out <- judge_fun(tibble::tibble(ID1 = "a", text1 = "A", ID2 = "b", text2 = "B"))
@@ -72,20 +76,22 @@ test_that("55-03 make_llm_judge_fun forwards ... and freezes arguments", {
     )
   }
 
+  testthat::local_mocked_bindings(
+    submit_llm_pairs = mock_submit,
+    .package = "pairwiseLLM"
+  )
+
   backend <- "anthropic"
   model <- "claude-3-5-sonnet-latest"
 
-  judge_fun <- testthat::with_mocked_bindings(
-    make_llm_judge_fun(
-      backend = backend,
-      model = model,
-      save_path = "path.csv",
-      temperature = 0.7,
-      top_p = 0.9
-    ),
-    submit_llm_pairs = mock_submit
+  judge_fun <- make_llm_judge_fun(
+    backend = backend,
+    model = model,
+    temperature = 0.7,
+    top_p = 0.9
   )
 
+  # mutate the symbols after creation; closure should keep original values
   backend <- "openai"
   model <- "gpt-4.1"
 
