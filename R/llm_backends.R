@@ -107,6 +107,7 @@ llm_compare_pair <- function(
   ...
 ) {
   backend <- .normalize_backend_arg(backend)
+  return_mode <- match.arg(return_mode)
 
   # This branch is effectively unreachable under normal usage because
   # `.normalize_backend_arg()` uses `match.arg()`; we keep it as a defensive
@@ -275,6 +276,11 @@ llm_compare_pair <- function(
 #'   enforce validity (error on invalid winners); if `FALSE`, validation is report-only.
 #' @param save_path Optional path to save results incrementally. If the file exists,
 #'   the function will resume by skipping already processed pairs when supported.
+#' @param return_mode Character string; controls what the function returns when
+#'   `save_path` is used for resumable workflows. Use `"all"` (default) to return
+#'   cumulative results (historical + newly created in this call). Use `"new"`
+#'   to return only rows generated in the current call (recommended for adaptive
+#'   pairing and other iterative workflows).
 #' @param parallel Logical; if `TRUE`, enable parallel processing (requires \pkg{future}).
 #' @param workers Integer; number of parallel workers when `parallel = TRUE`.
 #' @param ... Additional backend-specific parameters forwarded to the selected backend helper.
@@ -321,6 +327,7 @@ submit_llm_pairs <- function(
   validate = FALSE,
   validate_strict = FALSE,
   save_path = NULL,
+  return_mode = c("all", "new"),
   parallel = FALSE,
   workers = 1,
   ...
@@ -357,6 +364,7 @@ submit_llm_pairs <- function(
         validate          = validate,
         validate_strict   = validate_strict,
         save_path         = save_path,
+        return_mode      = return_mode,
         parallel          = parallel,
         workers           = workers,
         ...
@@ -380,6 +388,7 @@ submit_llm_pairs <- function(
         validate          = validate,
         validate_strict   = validate_strict,
         save_path         = save_path,
+        return_mode      = return_mode,
         parallel          = parallel,
         workers           = workers,
         ...
@@ -403,6 +412,7 @@ submit_llm_pairs <- function(
         validate          = validate,
         validate_strict   = validate_strict,
         save_path         = save_path,
+        return_mode      = return_mode,
         parallel          = parallel,
         workers           = workers,
         ...
@@ -426,6 +436,7 @@ submit_llm_pairs <- function(
         validate          = validate,
         validate_strict   = validate_strict,
         save_path         = save_path,
+        return_mode      = return_mode,
         parallel          = parallel,
         workers           = workers,
         ...
@@ -448,6 +459,7 @@ submit_llm_pairs <- function(
         validate          = validate,
         validate_strict   = validate_strict,
         save_path         = save_path,
+        return_mode      = return_mode,
         parallel          = parallel,
         workers           = workers,
         ...
