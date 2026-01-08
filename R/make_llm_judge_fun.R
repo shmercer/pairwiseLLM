@@ -52,19 +52,31 @@ make_llm_judge_fun <- function(
 ) {
   return_mode <- match.arg(return_mode)
 
+  # Freeze all `...` values at construction time.
+  # Without this, values passed via symbols (e.g., temperature = temp) remain
+  # lazy promises and can change across adaptive rounds if the caller mutates
+  # those symbols.
+  dots <- rlang::list2(...)
+  if (length(dots) > 0L) {
+    for (i in seq_along(dots)) {
+      force(dots[[i]])
+    }
+  }
+
   force(backend)
   force(model)
   force(save_path)
   force(return_mode)
 
   function(pairs) {
-    out <- submit_llm_pairs(
+    out <- rlang::exec(
+      submit_llm_pairs,
       pairs = pairs,
       backend = backend,
       model = model,
       save_path = save_path,
       return_mode = return_mode,
-      ...
+      !!!dots
     )
 
     out$results

@@ -83,17 +83,21 @@ test_that("55-03 make_llm_judge_fun forwards ... and freezes arguments", {
 
   backend <- "anthropic"
   model <- "claude-3-5-sonnet-latest"
+  temp <- 0.7
+  top_p <- 0.9
 
   judge_fun <- make_llm_judge_fun(
     backend = backend,
     model = model,
-    temperature = 0.7,
-    top_p = 0.9
+    temperature = temp,
+    top_p = top_p
   )
 
   # mutate the symbols after creation; closure should keep original values
   backend <- "openai"
   model <- "gpt-4.1"
+  temp <- 0.1
+  top_p <- 0.2
 
   judge_fun(tibble::tibble(ID1 = "a", text1 = "A", ID2 = "b", text2 = "B"))
 
