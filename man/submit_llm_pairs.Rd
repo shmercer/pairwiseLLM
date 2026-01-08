@@ -20,6 +20,7 @@ submit_llm_pairs(
   validate = FALSE,
   validate_strict = FALSE,
   save_path = NULL,
+  return_mode = c("all", "new"),
   parallel = FALSE,
   workers = 1,
   ...
@@ -66,6 +67,12 @@ enforce validity (error on invalid winners); if \code{FALSE}, validation is repo
 
 \item{save_path}{Optional path to save results incrementally. If the file exists,
 the function will resume by skipping already processed pairs when supported.}
+
+\item{return_mode}{Character string; controls what the function returns when
+\code{save_path} is used for resumable workflows. Use \code{"all"} (default) to return
+cumulative results (historical + newly created in this call). Use \code{"new"}
+to return only rows generated in the current call (recommended for adaptive
+pairing and other iterative workflows).}
 
 \item{parallel}{Logical; if \code{TRUE}, enable parallel processing (requires \pkg{future}).}
 

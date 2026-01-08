@@ -1110,6 +1110,7 @@ bt_run_adaptive_core_linking <- function(samples,
         core_pairs <- sample_pairs(core_pairs, n_pairs = min(init_round_size, nrow(core_pairs)), seed = seed_pairs)
 
         judged0 <- .coerce_judge_output(judge_fun(core_pairs))
+        judged0 <- .filter_judge_results_to_request(judged0, core_pairs)
         judged0 <- .validate_judge_results(judged0, ids = ids_all, judge_col = judge)
         judged0$stage <- "bootstrap"
         judged0$batch_index <- 0L
@@ -1340,6 +1341,7 @@ bt_run_adaptive_core_linking <- function(samples,
       }
 
       judged <- .coerce_judge_output(judge_fun(pairs_next))
+      judged <- .filter_judge_results_to_request(judged, pairs_next)
       judged <- .validate_judge_results(judged, ids = ids_all, judge_col = judge)
 
       judged <- dplyr::left_join(
@@ -1529,7 +1531,7 @@ bt_run_adaptive_core_linking <- function(samples,
         stop_blocked_by = as.character(this_blocked_by),
         stop_blocked_candidates = as.character(this_blocked_candidates)
       )
-m$n_pairs_proposed <- nrow(pairs_next)
+      m$n_pairs_proposed <- nrow(pairs_next)
       m$n_results_total <- nrow(results)
       m$n_pairs_total <- nrow(results)
       m$n_pairs_new <- nrow(judged)
@@ -1696,7 +1698,7 @@ m$n_pairs_proposed <- nrow(pairs_next)
     dplyr::bind_rows(blocked_rows)
   }
 
-pairing_diagnostics <- metrics %>%
+  pairing_diagnostics <- metrics %>%
     dplyr::filter(.data$stage == "round") %>%
     dplyr::arrange(.data$batch_index, .data$round_index) %>%
     dplyr::left_join(blocked_tbl, by = c("batch_index", "round_index")) %>%

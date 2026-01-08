@@ -471,6 +471,10 @@ gemini_compare_pair_live <- function(
 #'   to save results incrementally. If the file exists, the function reads it
 #'   to identify and skip pairs that have already been processed (resume mode).
 #'   Requires the \code{readr} package.
+#' @param return_mode Character string; controls what is returned when
+#'   `save_path` is used. `"all"` (default) returns the full accumulated
+#'   checkpoint plus new results; `"new"` returns only results created during
+#'   the current call (recommended for adaptive workflows).
 #' @param parallel Logical; if `TRUE`, enables parallel processing using
 #'   \code{future.apply}. Requires the \code{future} and \code{future.apply}
 #'   packages.
@@ -556,16 +560,20 @@ submit_gemini_pairs_live <- function(
   validate_strict = FALSE,
   include_thoughts = FALSE,
   save_path = NULL,
+  return_mode = c("all", "new"),
   parallel = FALSE,
   workers = 1,
   ...
 ) {
+  return_mode <- match.arg(return_mode)
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
 
   if (!all(required_cols %in% names(pairs))) {
     stop("`pairs` must contain columns: ", paste(required_cols, collapse = ", "), call. = FALSE)
   }
+
+  pairs <- .ensure_custom_id(pairs, prefix = "LIVE")
 
   # --- Pre-flight Checks ---
   if (!is.null(save_path)) {
@@ -597,7 +605,7 @@ submit_gemini_pairs_live <- function(
       {
         existing_results <- .read_existing_live_results(save_path, verbose = verbose)
         existing_ids <- existing_results$custom_id
-        current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+        current_ids <- pairs$custom_id
         to_process_idx <- !current_ids %in% existing_ids
         if (sum(!to_process_idx) > 0) {
           if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
@@ -627,7 +635,13 @@ submit_gemini_pairs_live <- function(
 
   if (n == 0L) {
     if (verbose) message("No new pairs to process.")
-    final_res <- if (!is.null(existing_results)) existing_results else empty_res()
+    final_res <- if (return_mode == "new") {
+      empty_res()
+    } else if (!is.null(existing_results)) {
+      existing_results
+    } else {
+      empty_res()
+    }
     return(list(results = final_res, failed_pairs = pairs[0, ]))
   }
 
@@ -660,9 +674,10 @@ submit_gemini_pairs_live <- function(
       work_fn <- function(i) {
         id1 <- as.character(pairs$ID1[i])
         id2 <- as.character(pairs$ID2[i])
+        cid <- as.character(pairs$custom_id[i])
         tryCatch(
           {
-            gemini_compare_pair_live(
+            res <- gemini_compare_pair_live(
               ID1 = id1, text1 = as.character(pairs$text1[i]),
               ID2 = id2, text2 = as.character(pairs$text2[i]),
               model = model, trait_name = trait_name, trait_description = trait_description,
@@ -672,10 +687,12 @@ submit_gemini_pairs_live <- function(
               api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
               ...
             )
+            res$custom_id <- cid
+            res
           },
           error = function(e) {
             tibble::tibble(
-              custom_id = sprintf("LIVE_%s_vs_%s", id1, id2),
+              custom_id = cid,
               ID1 = id1, ID2 = id2, model = model,
               object_type = NA_character_, status_code = NA_integer_,
               error_message = paste0("Error: ", conditionMessage(e)),
@@ -735,7 +752,7 @@ submit_gemini_pairs_live <- function(
 
       res <- tryCatch(
         {
-          gemini_compare_pair_live(
+          res <- gemini_compare_pair_live(
             ID1 = id1_i, text1 = as.character(pairs$text1[i]),
             ID2 = id2_i, text2 = as.character(pairs$text2[i]),
             model = model, trait_name = trait_name, trait_description = trait_description,
@@ -745,6 +762,8 @@ submit_gemini_pairs_live <- function(
             api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
             ...
           )
+          res$custom_id <- as.character(pairs$custom_id[i])
+          res
         },
         error = function(e) {
           tibble::tibble(
@@ -800,9 +819,10 @@ submit_gemini_pairs_live <- function(
 
   new_results_df <- .coerce_live_submit_types(new_results_df)
 
-  final_results <- if (!is.null(existing_results)) {
-    existing_results <- .coerce_live_submit_types(existing_results)
-    dplyr::bind_rows(existing_results, new_results_df)
+  final_results <- if (return_mode == "new") {
+    new_results_df
+  } else if (!is.null(existing_results)) {
+    dplyr::bind_rows(.coerce_live_submit_types(existing_results), new_results_df)
   } else {
     new_results_df
   }

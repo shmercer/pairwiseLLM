@@ -94,6 +94,71 @@
 #' Validate judge output tibble
 #'
 #' @keywords internal
+
+# Drop any historical rows a judge function may have echoed back.
+# This is a defensive safety-net for adaptive loops: the judge should return only
+# results for the current request, but older runners / user-provided judges may
+# accidentally include cumulative history.
+#
+# @keywords internal
+.filter_judge_results_to_request <- function(res, requested_pairs) {
+  res <- tibble::as_tibble(res)
+  requested_pairs <- tibble::as_tibble(requested_pairs)
+
+  use_custom_id <- "custom_id" %in% names(requested_pairs) && "custom_id" %in% names(res)
+  if (use_custom_id) {
+    req_key <- requested_pairs$custom_id
+    got_key <- res$custom_id
+    key_name <- "custom_id"
+  } else if (all(c("ID1", "ID2") %in% names(requested_pairs)) && all(c("ID1", "ID2") %in% names(res))) {
+    req_key <- paste(requested_pairs$ID1, requested_pairs$ID2, sep = "\r")
+    got_key <- paste(res$ID1, res$ID2, sep = "\r")
+    key_name <- "ID1,ID2"
+  } else {
+    return(res)
+  }
+
+  req_key <- unique(stats::na.omit(req_key))
+  got_key <- unique(stats::na.omit(got_key))
+
+  extra <- setdiff(got_key, req_key)
+  if (length(extra) > 0L) {
+    warning(
+      "judge_fun returned rows not in current request; dropping extras. ",
+      "This can happen if a runner returns cumulative results. (key: ",
+      key_name,
+      ")",
+      call. = FALSE
+    )
+    if (use_custom_id) {
+      res <- dplyr::filter(res, .data$custom_id %in% req_key)
+    } else {
+      res <- dplyr::filter(res, paste(.data$ID1, .data$ID2, sep = "\r") %in% req_key)
+    }
+  }
+
+  if (use_custom_id) {
+    if (anyDuplicated(res$custom_id)) {
+      warning(
+        "judge_fun returned duplicate keys within this round; keeping first occurrence. (key: custom_id)",
+        call. = FALSE
+      )
+      res <- dplyr::distinct(res, .data$custom_id, .keep_all = TRUE)
+    }
+  } else {
+    key_vec <- paste(res$ID1, res$ID2, sep = "\r")
+    if (anyDuplicated(key_vec)) {
+      warning(
+        "judge_fun returned duplicate keys within this round; keeping first occurrence. (key: ID1,ID2)",
+        call. = FALSE
+      )
+      res <- dplyr::distinct(res, .data$ID1, .data$ID2, .keep_all = TRUE)
+    }
+  }
+
+  res
+}
+
 .validate_judge_results <- function(res, ids, judge_col = NULL) {
   res <- tibble::as_tibble(res)
 

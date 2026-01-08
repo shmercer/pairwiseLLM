@@ -18,6 +18,7 @@ submit_together_pairs_live(
   validate = FALSE,
   validate_strict = FALSE,
   save_path = NULL,
+  return_mode = c("all", "new"),
   parallel = FALSE,
   workers = 1,
   ...
@@ -64,6 +65,11 @@ Together.ai. Note: Raw responses are not saved to the incremental CSV file.}
 to save results incrementally. If the file exists, the function reads it
 to identify and skip pairs that have already been processed (resume mode).
 Requires the \code{readr} package.}
+
+\item{return_mode}{Character string; controls what is returned when
+\code{save_path} is used. \code{"all"} (default) returns the full accumulated
+checkpoint plus new results; \code{"new"} returns only results created during
+the current call (recommended for adaptive workflows).}
 
 \item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
 \code{future.apply}. Requires the \code{future} and \code{future.apply}
