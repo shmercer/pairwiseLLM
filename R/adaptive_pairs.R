@@ -1015,6 +1015,8 @@
 #'   scoring function. Default is 1 (embeddings influence both candidate
 #'   generation and scoring when available).
 #' @param embed_score_mode Character; how to compute the embedding bonus when
+#' @param explore_frac Fraction of pairs to reserve for exploration (e.g., bridge/low-degree) before exploitation.
+#' @param graph_state Optional graph state from `.graph_state_from_pairs()` to avoid recomputation.
 #'   \code{w_embed != 0}. Options are \code{"binary_neighbor"} and
 #'   \code{"rank_decay"}.
 #' @param return_internal Logical; if \code{TRUE}, return a list with
@@ -1078,7 +1080,9 @@ select_adaptive_pairs <- function(samples,
                                   per_anchor_cap = Inf,
                                   w_embed = 1,
                                   embed_score_mode = "rank_decay",
-                                  return_internal = FALSE,
+                                  explore_frac = 0,
+  graph_state = NULL,
+  return_internal = FALSE,
                                   seed = NULL) {
   samples <- tibble::as_tibble(samples)
 
@@ -1342,8 +1346,7 @@ select_adaptive_pairs <- function(samples,
         }
       }
 
-      # Repeat guard (graph health)
-      graph_state <- .graph_state_from_pairs(ex, ids = ids)
+      # Repeat guard (graph health)      graph_state <- if (!is.null(graph_state)) graph_state else .graph_state_from_pairs(ex, ids = ids)
       graph_unhealthy <- (graph_state$metrics$degree_min[[1]] < repeat_guard_min_degree) ||
         (graph_state$metrics$largest_component_frac[[1]] < repeat_guard_largest_component_frac)
       repeat_guard_passed <- (graph_state$metrics$degree_min[[1]] >= repeat_guard_min_degree) &&
@@ -1490,7 +1493,52 @@ select_adaptive_pairs <- function(samples,
         capped_tbl <- dplyr::slice_head(capped_tbl, n = candidate_pool_cap)
       }
 
-      selected_tbl_normal <- .ap_select_pairs_from_scored(
+    
+  explore_frac <- as.double(explore_frac)
+  if (is.na(explore_frac) || explore_frac < 0 || explore_frac > 1) {
+    stop("`explore_frac` must be between 0 and 1.", call. = FALSE)
+  }
+
+  n_explore_target <- as.integer(floor(n_pairs * explore_frac))
+  explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
+
+  if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
+    deg <- graph_state$degree
+    deg1 <- as.numeric(deg[match(capped_tbl$ID1, names(deg))])
+    deg2 <- as.numeric(deg[match(capped_tbl$ID2, names(deg))])
+    deg_sum <- deg1 + deg2
+
+    if (!is.null(graph_state$component_id)) {
+      comp <- graph_state$component_id
+      comp1 <- as.integer(comp[match(capped_tbl$ID1, names(comp))])
+      comp2 <- as.integer(comp[match(capped_tbl$ID2, names(comp))])
+    } else {
+      comp1 <- rep.int(1L, nrow(capped_tbl))
+      comp2 <- rep.int(1L, nrow(capped_tbl))
+    }
+
+    if (isTRUE(graph_state$metrics$n_components > 1L)) {
+      explore_pool <- capped_tbl[comp1 != comp2, , drop = FALSE]
+      deg_sum_pool <- deg_sum[comp1 != comp2]
+    } else {
+      explore_pool <- capped_tbl
+      deg_sum_pool <- deg_sum
+    }
+
+    if (nrow(explore_pool) > 0L) {
+      ord <- order(deg_sum_pool, explore_pool$i_idx, explore_pool$j_idx)
+      explore_pool <- explore_pool[ord, , drop = FALSE]
+      explore_selected_tbl <- utils::head(explore_pool, n_explore_target)
+
+      if (nrow(explore_selected_tbl) > 0L) {
+        capped_tbl <- dplyr::filter(capped_tbl, !.data$pair_key %in% explore_selected_tbl$pair_key)
+      }
+    }
+  }
+
+  n_pairs_exploit <- as.integer(n_pairs - nrow(explore_selected_tbl))
+
+  selected_tbl_normal <- .ap_select_pairs_from_scored(
         scored_tbl = capped_tbl,
         n_pairs = n_pairs,
         embed_quota_frac = embed_quota_frac,

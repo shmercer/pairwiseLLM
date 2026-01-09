@@ -94,6 +94,9 @@
 #' @param stage1_min_spearman Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 #'   Spearman correlation between consecutive RC rank vectors to count as stable.
 #' @param stage1_max_rounds Integer. For \code{fit_engine_running = "hybrid"}, maximum
+#' @param stage1_explore_frac Fraction of each round reserved for exploration while in stage1 (hybrid only).
+#' @param stage2_explore_frac Fraction of each round reserved for exploration while in stage2 (hybrid only).
+#' @param stage2_min_rounds Minimum number of BT rounds to run after switching to stage2 before allowing precision/stability stops.
 #'   number of Stage 1 rounds to attempt before giving up on switching (the runner will
 #'   continue using RC as the running engine).
 #' @param final_refit Logical. If \code{TRUE} (default), compute a final combined
@@ -376,6 +379,9 @@ bt_run_adaptive <- function(samples,
                             stage1_min_degree_min = 1,
                             stage1_min_spearman = 0.97,
                             stage1_max_rounds = 10L,
+                            stage1_explore_frac = 0.25,
+                            stage2_explore_frac = 0.10,
+                            stage2_min_rounds = 3L,
                             final_refit = TRUE,
                             fit_engine_final = c("bt_firth", "bt_mle", "bt_bayes", "none"),
                             final_bt_bias_reduction = TRUE,
@@ -1077,7 +1083,7 @@ bt_run_adaptive <- function(samples,
 
     pairs_next <- tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character())
     if (!isTRUE(budget_exhausted)) {
-      theta_for_pairs <- fit$theta
+      if (is.null(theta_for_pairs)) theta_for_pairs <- fit$theta
       if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage2_bt")) {
         theta_for_pairs <- dplyr::mutate(theta_for_pairs, theta = .data$theta_bt, se = .data$se_bt)
       }
@@ -1089,10 +1095,12 @@ bt_run_adaptive <- function(samples,
         n_pairs = round_size,
         k_neighbors = k_neighbors,
         min_judgments = min_judgments,
-        repeat_policy = repeat_policy,
-        repeat_cap = repeat_cap,
-        repeat_frac = repeat_frac,
-        repeat_n = repeat_n,
+        repeat_policy = repeat_policy_now,
+        repeat_cap = repeat_cap_now,
+        repeat_frac = repeat_frac_now,
+        repeat_n = repeat_n_now,
+        explore_frac = explore_frac_now,
+        graph_state = gs,
         repeat_guard_min_degree = repeat_guard_min_degree,
         repeat_guard_largest_component_frac = repeat_guard_largest_component_frac,
         forbid_repeats = forbid_repeats,

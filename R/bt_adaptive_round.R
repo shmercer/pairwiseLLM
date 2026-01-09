@@ -87,6 +87,9 @@
 #' @param w_embed Non-negative numeric weight for embedding-neighbor candidates
 #'   in scoring. Passed to select_adaptive_pairs().
 #' @param embed_score_mode Character; how to compute the embedding score when
+#' @param theta_for_pairs Optional theta tibble used for pairing (must have ID, theta, se). Defaults to fitted theta.
+#' @param explore_frac Fraction of pairs to reserve for exploration.
+#' @param graph_state Optional graph state from `.graph_state_from_pairs()`.
 #'   w_embed > 0. Passed to select_adaptive_pairs().
 #' @param seed Optional integer seed for reproducibility; passed to \code{\link{select_adaptive_pairs}}.
 #'
@@ -151,7 +154,10 @@ bt_adaptive_round <- function(samples,
                               per_anchor_cap = Inf,
                               w_embed = 1,
                               embed_score_mode = "rank_decay",
-                              seed = NULL) {
+                              theta_for_pairs = NULL,
+                               explore_frac = 0,
+                               graph_state = NULL,
+                               seed = NULL) {
   samples <- tibble::as_tibble(samples)
   req_s <- c("ID", "text")
   if (!all(req_s %in% names(samples))) {
@@ -205,9 +211,11 @@ bt_adaptive_round <- function(samples,
     return(list(metrics = metrics, decision = decision, pairs_next = pairs_next))
   }
 
+  theta_used <- if (!is.null(theta_for_pairs)) theta_for_pairs else fit$theta
+
   pairs_next <- select_adaptive_pairs(
     samples = samples,
-    theta = fit$theta,
+    theta = theta_used,
     existing_pairs = existing_pairs,
     embedding_neighbors = embedding_neighbors,
     n_pairs = round_size,
@@ -227,6 +235,8 @@ bt_adaptive_round <- function(samples,
     per_anchor_cap = per_anchor_cap,
     w_embed = w_embed,
     embed_score_mode = embed_score_mode,
+    explore_frac = explore_frac,
+    graph_state = graph_state,
     seed = seed
   )
 
