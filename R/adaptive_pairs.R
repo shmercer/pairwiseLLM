@@ -1531,36 +1531,66 @@ select_adaptive_pairs <- function(samples,
       explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
 
       if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
-        deg <- graph_state$degree
-        deg1 <- as.numeric(deg[match(capped_tbl$ID1, names(deg))])
-        deg2 <- as.numeric(deg[match(capped_tbl$ID2, names(deg))])
-        deg_sum <- deg1 + deg2
+        # Candidate tables are index-based (i_idx/j_idx). Some paths omit ID1/ID2;
+        # add them here so component/degree lookups and ordering are robust.
+        if (!all(c("ID1", "ID2") %in% names(capped_tbl)) &&
+          all(c("i_idx", "j_idx") %in% names(capped_tbl))) {
+          id_vec <- graph_state$ids
+          if (is.null(id_vec)) id_vec <- names(graph_state$degree)
 
-        if (!is.null(graph_state$component_id)) {
-          comp <- graph_state$component_id
-          comp1 <- as.integer(comp[match(capped_tbl$ID1, names(comp))])
-          comp2 <- as.integer(comp[match(capped_tbl$ID2, names(comp))])
-        } else {
-          comp1 <- rep.int(1L, nrow(capped_tbl))
-          comp2 <- rep.int(1L, nrow(capped_tbl))
+          if (!is.null(id_vec) && length(id_vec) > 0L) {
+            capped_tbl$ID1 <- as.character(id_vec[capped_tbl$i_idx])
+            capped_tbl$ID2 <- as.character(id_vec[capped_tbl$j_idx])
+          }
         }
 
-        if (isTRUE(graph_state$metrics$n_components > 1L)) {
-          explore_pool <- capped_tbl[comp1 != comp2, , drop = FALSE]
-          deg_sum_pool <- deg_sum[comp1 != comp2]
+        # Prefer low-degree endpoints (exploration), stable tie-break.
+        degree <- graph_state$degree
+        deg1 <- degree[match(capped_tbl$ID1, names(degree))]
+        deg2 <- degree[match(capped_tbl$ID2, names(degree))]
+        deg_sum <- deg1 + deg2
+
+        # This flag MUST come from locals if present; never assume a symbol exists.
+        explore_across_components_flag <- FALSE
+        if (exists("explore_across_components_now", inherits = FALSE)) {
+          explore_across_components_flag <- isTRUE(explore_across_components_now)
+        } else if (exists("explore_across_components", inherits = FALSE)) {
+          explore_across_components_flag <- isTRUE(explore_across_components)
+        }
+
+        if (explore_across_components_flag) {
+          comp <- graph_state$component_id
+          comp1 <- comp[match(capped_tbl$ID1, names(comp))]
+          comp2 <- comp[match(capped_tbl$ID2, names(comp))]
+
+          # If lookup failed, avoid length-0 logical subscripts; treat as same-component.
+          if (length(comp1) != nrow(capped_tbl) || length(comp2) != nrow(capped_tbl)) {
+            comp1 <- rep.int(1L, nrow(capped_tbl))
+            comp2 <- rep.int(1L, nrow(capped_tbl))
+          }
+
+          keep <- (comp1 != comp2)
+          if (length(keep) != nrow(capped_tbl)) keep <- rep.int(FALSE, nrow(capped_tbl))
+
+          explore_pool <- capped_tbl[keep, , drop = FALSE]
+          deg_sum_pool <- deg_sum[keep]
         } else {
           explore_pool <- capped_tbl
           deg_sum_pool <- deg_sum
         }
 
         if (nrow(explore_pool) > 0L) {
-          ord <- order(deg_sum_pool, explore_pool$i_idx, explore_pool$j_idx)
+          # Stable tie-break if indices exist; otherwise rely on deg_sum_pool only.
+          if (all(c("i_idx", "j_idx") %in% names(explore_pool)) &&
+            length(deg_sum_pool) == nrow(explore_pool)) {
+            ord <- order(deg_sum_pool, explore_pool$i_idx, explore_pool$j_idx)
+          } else {
+            ord <- order(deg_sum_pool)
+          }
           explore_pool <- explore_pool[ord, , drop = FALSE]
           explore_selected_tbl <- utils::head(explore_pool, n_explore_target)
-
-          if (nrow(explore_selected_tbl) > 0L) {
-            capped_tbl <- dplyr::filter(capped_tbl, !.data$pair_key %in% explore_selected_tbl$pair_key)
-          }
+        } else {
+          explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
         }
       }
 

@@ -1249,9 +1249,22 @@ bt_run_adaptive <- function(samples,
     res_next <- .add_pair_key_direction(res_next)
 
     n_added <- nrow(res_next)
+
     if (n_added > 0L) {
       results <- dplyr::bind_rows(results, res_next)
       results <- .add_pair_key_direction(results)
+
+      # If unordered repeats are forbidden, enforce uniqueness of unordered pairs
+      # after appending new results (important for resume-from-checkpoint paths).
+      if (repeat_policy %in% c("none", "forbid_unordered")) {
+        key_unordered <- .unordered_pair_key(results$ID1, results$ID2)
+        keep <- !duplicated(key_unordered)
+        if (length(keep) == nrow(results)) {
+          results <- results[keep, , drop = FALSE]
+          results <- .add_pair_key_direction(results)
+        }
+      }
+
       rounds_list[[length(rounds_list)]][["n_new_pairs_scored"]] <- as.integer(n_added)
       rounds_list[[length(rounds_list)]][["n_total_results"]] <- as.integer(nrow(results))
 
