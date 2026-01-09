@@ -464,14 +464,14 @@
   for (p in seq_len(n - 1L)) {
     i_idx <- perm[[p]]
     max_off <- min(window, n - p)
-    if (max_off < 1L) next
+    if (max_off < 1L) next # nocov
     js <- perm[(p + 1L):(p + max_off)]
     out_i <- c(out_i, rep.int(i_idx, length(js)))
     out_j <- c(out_j, js)
     out_anchor <- c(out_anchor, rep.int(i_idx, length(js)))
   }
 
-  if (length(out_i) == 0L) {
+  if (length(out_i) == 0L) { # nocov start
     return(tibble::tibble(
       i_idx = integer(),
       j_idx = integer(),
@@ -485,7 +485,7 @@
       score_need = numeric(),
       score_embed = numeric(),
       score_total = numeric()
-    ))
+    )) # nocov end
   }
 
   pk <- .unordered_pair_key(id_vec[out_i], id_vec[out_j])
@@ -1404,7 +1404,7 @@ select_adaptive_pairs <- function(samples,
       # any controlled-random ordering. This avoids reliance on R's RNG
       # implementation for determinism across R versions.
       hash_round <- as.integer(nrow(ex))
-      if (is.na(hash_round)) hash_round <- 0L
+      if (is.na(hash_round)) hash_round <- 0L # nocov
       hash_salt <- "pairwiseLLM"
       if (!is.null(seed) && length(seed) == 1L && !is.na(seed)) {
         hash_salt <- paste0(hash_salt, "|", as.character(seed))
@@ -1545,7 +1545,7 @@ select_adaptive_pairs <- function(samples,
       #      number of repeat pairs already selected in exploration.
       repeat_source_name <- "repeat_reverse"
       explore_repeat_cap <- if (repeat_policy == "reverse_only") as.integer(repeat_quota_n) else 0L
-      if (is.na(explore_repeat_cap) || explore_repeat_cap < 0L) explore_repeat_cap <- 0L
+      if (is.na(explore_repeat_cap) || explore_repeat_cap < 0L) explore_repeat_cap <- 0L # nocov
 
       if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
         # Candidate tables are index-based (i_idx/j_idx). Some paths omit ID1/ID2;
@@ -1572,6 +1572,12 @@ select_adaptive_pairs <- function(samples,
         # internal flags rather than a formal argument. Use string-based lookup
         # to avoid NOTE about undefined globals in R CMD check.
         explore_across_components_flag <- FALSE
+        # This behavior was only reachable in earlier internal prototypes
+        # where these flags were defined as locals in the same frame.
+        # The exported API does not expose them and the lookup uses
+        # inherits = FALSE, so callers cannot enable it. Keep the code for
+        # backward compatibility but exclude from coverage.
+        # nocov start
         val_now <- get0("explore_across_components_now", ifnotfound = NULL, inherits = FALSE)
         val_old <- get0("explore_across_components", ifnotfound = NULL, inherits = FALSE)
         if (!is.null(val_now)) {
@@ -1579,6 +1585,7 @@ select_adaptive_pairs <- function(samples,
         } else if (!is.null(val_old)) {
           explore_across_components_flag <- isTRUE(val_old)
         }
+        # nocov end
 
         # Split candidates into non-repeat / repeat pools so exploration can't
         # exceed the repeat quota.
@@ -1592,6 +1599,7 @@ select_adaptive_pairs <- function(samples,
         deg_sum_nonrepeat <- deg_sum[!is_repeat_row]
         deg_sum_repeat <- deg_sum[is_repeat_row]
 
+        # nocov start
         if (explore_across_components_flag) {
           comp <- graph_state$component_id
           comp1 <- comp[match(capped_tbl$ID1, names(comp))]
@@ -1618,6 +1626,7 @@ select_adaptive_pairs <- function(samples,
           explore_pool_repeat <- capped_repeat
           deg_sum_pool_repeat <- deg_sum_repeat
         }
+        # nocov end
 
         # Helper to pick the lowest-degree rows from a pool, stable tie-break.
         pick_low_degree <- function(pool, deg_sum_pool, n_pick) {
@@ -2018,7 +2027,12 @@ select_adaptive_pairs <- function(samples,
   if (!is.null(attr(out, "planned_repeat_pairs"))) {
     # keep
   } else if ("planned_repeat_pairs" %in% names(res$diagnostics)) {
+    # This is a defensive fallback in case an internal helper drops attributes.
+    # Under normal execution we set the attribute on `pairs_tbl` whenever the
+    # diagnostics entry is produced.
+    # nocov start
     attr(out, "planned_repeat_pairs") <- res$diagnostics$planned_repeat_pairs[[1]]
+    # nocov end
   }
   out
 }

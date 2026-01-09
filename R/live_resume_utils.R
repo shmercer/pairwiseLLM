@@ -27,9 +27,13 @@
 }
 
 .read_existing_live_results <- function(save_path, verbose = TRUE) {
-  if (!requireNamespace("readr", quietly = TRUE)) {
+  if (!.require_pkg("readr")) {
     stop("The 'readr' package is required for incremental saving. Please install it.", call. = FALSE)
   }
   out <- readr::read_csv(save_path, show_col_types = FALSE)
   .coerce_live_submit_types(out)
+}
+
+.require_pkg <- function(pkg) {
+  requireNamespace(pkg, quietly = TRUE)
 }
