@@ -529,6 +529,11 @@ bt_run_adaptive <- function(samples,
   if (is.na(stage1_max_rounds) || stage1_max_rounds < 1L) {
     stop("`stage1_max_rounds` must be an integer >= 1.", call. = FALSE)
   }
+
+  stage2_min_rounds <- as.integer(stage2_min_rounds)
+  if (is.na(stage2_min_rounds) || stage2_min_rounds < 0L) {
+    stop("`stage2_min_rounds` must be a non-negative integer.", call. = FALSE)
+  }
   if (!is.numeric(stage1_min_spearman) || length(stage1_min_spearman) != 1L || is.na(stage1_min_spearman)) {
     stop("`stage1_min_spearman` must be a single numeric value.", call. = FALSE)
   }
@@ -1081,6 +1086,15 @@ bt_run_adaptive <- function(samples,
     }
 
     stability_reached <- isTRUE(stability_streak >= as.integer(stop_stability_consecutive))
+
+    # Enforce a minimum number of stage-2 (BT) rounds before allowing
+    # precision/stability-based stopping. Hard stops (no new pairs, budget,
+    # max rounds) can still terminate earlier.
+    if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage2_bt") &&
+      isTRUE(stage2_rounds < stage2_min_rounds)) {
+      precision_reached <- FALSE
+      stability_reached <- FALSE
+    }
 
     # ---- PR7: propose next pairs (unless budget exhausted) ----
     budget_exhausted <- (as.integer(round_size) == 0L)

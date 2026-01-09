@@ -1596,14 +1596,30 @@ select_adaptive_pairs <- function(samples,
 
       n_pairs_exploit <- as.integer(n_pairs - nrow(explore_selected_tbl))
 
+      # Apply explore_frac quota: reserve the explore-selected pairs and only
+      # request the remaining quota from the normal (exploitative) selector.
+      # Exclude exploration keys from the exploit pool to avoid duplicates.
+      exploit_pool <- capped_tbl
+      if (nrow(explore_selected_tbl) > 0L && "pair_key" %in% names(explore_selected_tbl)) {
+        exploit_pool <- dplyr::filter(exploit_pool, !(.data$pair_key %in% explore_selected_tbl$pair_key))
+      }
+
       selected_tbl_normal <- .ap_select_pairs_from_scored(
-        scored_tbl = capped_tbl,
-        n_pairs = n_pairs,
+        scored_tbl = exploit_pool,
+        n_pairs = n_pairs_exploit,
         embed_quota_frac = embed_quota_frac,
         embed_sources = "embed",
         repeat_quota_n = repeat_quota_n,
         repeat_sources = "repeat_reverse"
       )
+
+      if (nrow(explore_selected_tbl) > 0L) {
+        selected_tbl_normal <- dplyr::bind_rows(explore_selected_tbl, selected_tbl_normal)
+        # Hard cap to the caller's request.
+        if (nrow(selected_tbl_normal) > n_pairs) {
+          selected_tbl_normal <- dplyr::slice_head(selected_tbl_normal, n = as.integer(n_pairs))
+        }
+      }
 
       # ---- PR9.2 bridge/repair fallback (embedding-based, deterministic) ----
       bridge_trigger <- NA_character_
