@@ -1213,7 +1213,8 @@ testthat::test_that("submit_ollama_pairs_live resumes from existing file", {
               )
 
               # Should only process C vs D (A vs B skipped)
-              testthat::expect_equal(processed, list("C_D"))
+              # Use base::identical to avoid waldo/diffobj dependency for diffs
+              testthat::expect_true(identical(processed, list("C_D")))
 
               # Result should contain both (existing + new)
               testthat::expect_equal(nrow(res$results), 2L)
