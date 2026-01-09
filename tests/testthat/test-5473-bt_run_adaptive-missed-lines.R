@@ -220,16 +220,26 @@ test_that("bt_run_adaptive bootstrap can skip duplicates when forbid_repeats is 
 
   # With 2 IDs there is only one unordered pair; requesting 2 bootstrap pairs forces
   # a duplicate attempt, which is skipped when forbid_repeats is TRUE.
-  out <- bt_run_adaptive(
-    samples,
-    judge_fun = judge_fun,
-    fit_fun = fit_fun,
-    build_bt_fun = build_bt_data,
-    forbid_repeats = TRUE,
-    init_round_size = 2,
-    max_rounds = 0,
-    seed_pairs = 1,
-    seed = 1
+  # We keep forbid_repeats here to cover the deprecation shim, but we assert/suppress
+  # the expected deprecation warning and disable final_refit to avoid unrelated warnings.
+  out <- NULL
+  expect_warning(
+    out <- bt_run_adaptive(
+      samples,
+      judge_fun = judge_fun,
+      fit_fun = fit_fun,
+      build_bt_fun = build_bt_data,
+      forbid_repeats = TRUE,
+      init_round_size = 2,
+      # Run a single adaptive round so theta is populated via the running fit fallback.
+      max_rounds = 1,
+      min_rounds = 1,
+      final_refit = FALSE,
+      seed_pairs = 1,
+      seed = 1
+    ),
+    "forbid_repeats` is deprecated",
+    fixed = FALSE
   )
 
   expect_true(is.list(out))
@@ -313,12 +323,20 @@ test_that("bt_run_adaptive can switch to stage2 immediately and increments stage
     stage1_min_degree_min = 0,
     stage1_min_spearman = -1,
     init_round_size = 3,
-    max_rounds = 1,
+    # Ensure we actually run enough rounds in stage1_rc to compute a Spearman
+    # correlation (needs a previous RC rank vector) and trigger a stage switch.
+    min_rounds = 2,
+    stage1_max_rounds = 10L,
+    max_rounds = 2,
     seed_pairs = 1,
     seed = 1
   )
 
-  expect_true(any(out$rounds$stage %in% c("stage1_rc", "stage2_bt")))
+  expect_true(is.data.frame(out$rounds))
+  # The rounds table uses `pairing_stage` for the stage label.
+  expect_true("pairing_stage" %in% names(out$rounds))
+  expect_true(any(out$rounds$pairing_stage %in% c("stage1_rc", "stage2_bt")))
   expect_true("stage2_rounds" %in% names(out$rounds))
-  expect_true(any(is.finite(out$rounds$stage2_rounds)))
+  # On the round where the switch happens, stage2_rounds is incremented.
+  expect_true(max(out$rounds$stage2_rounds, na.rm = TRUE) >= 1L)
 })

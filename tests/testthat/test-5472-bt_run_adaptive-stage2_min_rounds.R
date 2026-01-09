@@ -35,13 +35,15 @@ test_that("bt_run_adaptive enforces stage2_min_rounds before allowing precision/
     stage1_min_degree_median = 0,
     stage1_min_degree_min = 0,
     stage1_min_spearman = -1,
-    stage1_max_rounds = 10L,
+    # Force a stage1->stage2 switch after the first round.
+    stage1_max_rounds = 1L,
     # Enforce at least 2 BT rounds in stage2.
     stage2_min_rounds = 2L,
     round_size = 2,
     init_round_size = 2,
     max_rounds = 5,
-    min_rounds = 0L,
+    # Prevent early stopping inside stage1; we want to test the stage2 gate.
+    min_rounds = 2L,
     # Make stability easy so that (absent the stage2 gate) we'd stop as soon as
     # we enter stage2.
     stop_stability_consecutive = 1L,
@@ -55,9 +57,8 @@ test_that("bt_run_adaptive enforces stage2_min_rounds before allowing precision/
     seed_pairs = 1
   )
 
-  # With stage1 requiring at least 2 rounds to compute Spearman stability,
-  # the earliest stage2 round is round 2. The stop must be blocked until at
-  # least stage2_rounds >= 2, so earliest possible stop is round 3.
+  # Stage2 begins at round 2 (since stage1_max_rounds=1). With stage2_min_rounds=2,
+  # the stop must be blocked until stage2_rounds >= 2, so earliest possible stop is round 3.
   expect_true(is.finite(out$stop_round))
   expect_gte(out$stop_round, 3L)
 

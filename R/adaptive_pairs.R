@@ -1551,11 +1551,16 @@ select_adaptive_pairs <- function(samples,
         deg_sum <- deg1 + deg2
 
         # This flag MUST come from locals if present; never assume a symbol exists.
+        # Backward-compat: earlier prototypes controlled this behavior via
+        # internal flags rather than a formal argument. Use string-based lookup
+        # to avoid NOTE about undefined globals in R CMD check.
         explore_across_components_flag <- FALSE
-        if (exists("explore_across_components_now", inherits = FALSE)) {
-          explore_across_components_flag <- isTRUE(explore_across_components_now)
-        } else if (exists("explore_across_components", inherits = FALSE)) {
-          explore_across_components_flag <- isTRUE(explore_across_components)
+        val_now <- get0("explore_across_components_now", ifnotfound = NULL, inherits = FALSE)
+        val_old <- get0("explore_across_components", ifnotfound = NULL, inherits = FALSE)
+        if (!is.null(val_now)) {
+          explore_across_components_flag <- isTRUE(val_now)
+        } else if (!is.null(val_old)) {
+          explore_across_components_flag <- isTRUE(val_old)
         }
 
         if (explore_across_components_flag) {
