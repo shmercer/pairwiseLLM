@@ -101,3 +101,43 @@ test_that("repeat_cap prevents a third judgment", {
   expect_equal(diag$n_repeat_eligible, 0)
   expect_equal(diag$n_repeat_planned, 0)
 })
+
+test_that("explore_frac does not let repeats bypass repeat_quota_n", {
+  # Construct a setting where a reverse-repeat candidate is attractive for
+  # exploration (low degree endpoints), and the exploit selector is also able
+  # to choose repeats up to the quota. Total repeats should not exceed quota.
+  ids <- c("A", "B", "C", "D")
+  samples <- .make_samples(ids)
+  theta <- .make_theta(ids)
+
+  # Existing pairs: create one eligible reverse repeat (A,B) and inflate degrees
+  # for C/D so that A/B are the low-degree endpoints.
+  existing <- tibble::tibble(
+    ID1 = c("A", "C", "C", "D", "D"),
+    ID2 = c("B", "D", "B", "C", "B"),
+    better_id = c("A", "C", "C", "D", "D")
+  )
+
+  gs <- pairwiseLLM:::.graph_state_from_pairs(existing, ids = samples$ID)
+
+  out <- select_adaptive_pairs(
+    samples = samples,
+    theta = theta,
+    existing_pairs = existing,
+    graph_state = gs,
+    n_pairs = 3,
+    k_neighbors = Inf,
+    min_judgments = 0,
+    repeat_policy = "reverse_only",
+    repeat_n = 1,
+    repeat_guard_min_degree = 1,
+    repeat_guard_largest_component_frac = 0.5,
+    explore_frac = 1 / 3,
+    return_internal = TRUE,
+    seed = 1
+  )
+
+  diag <- out$diagnostics
+  # Enforce the quota across exploration+exploitation.
+  expect_lte(diag$n_pairs_source_repeat_reverse, 1L)
+})

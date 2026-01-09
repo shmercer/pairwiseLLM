@@ -1530,6 +1530,23 @@ select_adaptive_pairs <- function(samples,
       n_explore_target <- as.integer(floor(n_pairs * explore_frac))
       explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
 
+      # IMPORTANT: If repeat candidates are present (repeat_policy == 'reverse_only'),
+      # exploration selection must not bypass the repeat quota. Repeat candidates
+      # are injected into the scoring/candidate pool (source == 'repeat_reverse')
+      # and would otherwise be eligible for exploration (low-degree preference),
+      # even though repeat_quota_n is only enforced inside .ap_select_pairs_from_scored.
+      #
+      # Strategy:
+      #   1) Prefer non-repeat candidates for exploration.
+      #   2) If there is remaining exploration quota and remaining repeat quota,
+      #      allow repeat candidates into exploration, but cap them to the
+      #      remaining repeat quota.
+      #   3) Decrement repeat_quota_n passed to the exploit selector by the
+      #      number of repeat pairs already selected in exploration.
+      repeat_source_name <- "repeat_reverse"
+      explore_repeat_cap <- if (repeat_policy == "reverse_only") as.integer(repeat_quota_n) else 0L
+      if (is.na(explore_repeat_cap) || explore_repeat_cap < 0L) explore_repeat_cap <- 0L
+
       if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
         # Candidate tables are index-based (i_idx/j_idx). Some paths omit ID1/ID2;
         # add them here so component/degree lookups and ordering are robust.
@@ -1563,6 +1580,18 @@ select_adaptive_pairs <- function(samples,
           explore_across_components_flag <- isTRUE(val_old)
         }
 
+        # Split candidates into non-repeat / repeat pools so exploration can't
+        # exceed the repeat quota.
+        is_repeat_row <- FALSE
+        if ("source" %in% names(capped_tbl)) {
+          is_repeat_row <- capped_tbl$source == repeat_source_name
+          is_repeat_row[is.na(is_repeat_row)] <- FALSE
+        }
+        capped_nonrepeat <- capped_tbl[!is_repeat_row, , drop = FALSE]
+        capped_repeat <- capped_tbl[is_repeat_row, , drop = FALSE]
+        deg_sum_nonrepeat <- deg_sum[!is_repeat_row]
+        deg_sum_repeat <- deg_sum[is_repeat_row]
+
         if (explore_across_components_flag) {
           comp <- graph_state$component_id
           comp1 <- comp[match(capped_tbl$ID1, names(comp))]
@@ -1577,26 +1606,57 @@ select_adaptive_pairs <- function(samples,
           keep <- (comp1 != comp2)
           if (length(keep) != nrow(capped_tbl)) keep <- rep.int(FALSE, nrow(capped_tbl))
 
-          explore_pool <- capped_tbl[keep, , drop = FALSE]
-          deg_sum_pool <- deg_sum[keep]
+          keep_nonrepeat <- keep[!is_repeat_row]
+          keep_repeat <- keep[is_repeat_row]
+          explore_pool_nonrepeat <- capped_nonrepeat[keep_nonrepeat, , drop = FALSE]
+          deg_sum_pool_nonrepeat <- deg_sum_nonrepeat[keep_nonrepeat]
+          explore_pool_repeat <- capped_repeat[keep_repeat, , drop = FALSE]
+          deg_sum_pool_repeat <- deg_sum_repeat[keep_repeat]
         } else {
-          explore_pool <- capped_tbl
-          deg_sum_pool <- deg_sum
+          explore_pool_nonrepeat <- capped_nonrepeat
+          deg_sum_pool_nonrepeat <- deg_sum_nonrepeat
+          explore_pool_repeat <- capped_repeat
+          deg_sum_pool_repeat <- deg_sum_repeat
         }
 
-        if (nrow(explore_pool) > 0L) {
-          # Stable tie-break if indices exist; otherwise rely on deg_sum_pool only.
-          if (all(c("i_idx", "j_idx") %in% names(explore_pool)) &&
-            length(deg_sum_pool) == nrow(explore_pool)) {
-            ord <- order(deg_sum_pool, explore_pool$i_idx, explore_pool$j_idx)
+        # Helper to pick the lowest-degree rows from a pool, stable tie-break.
+        pick_low_degree <- function(pool, deg_sum_pool, n_pick) {
+          if (n_pick <= 0L || nrow(pool) == 0L) {
+            return(pool[0, , drop = FALSE])
+          }
+          if (all(c("i_idx", "j_idx") %in% names(pool)) &&
+            length(deg_sum_pool) == nrow(pool)) {
+            ord <- order(deg_sum_pool, pool$i_idx, pool$j_idx)
           } else {
             ord <- order(deg_sum_pool)
           }
-          explore_pool <- explore_pool[ord, , drop = FALSE]
-          explore_selected_tbl <- utils::head(explore_pool, n_explore_target)
-        } else {
-          explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
+          pool <- pool[ord, , drop = FALSE]
+          utils::head(pool, n_pick)
         }
+
+        explore_selected_tbl <- pick_low_degree(explore_pool_nonrepeat, deg_sum_pool_nonrepeat, n_explore_target)
+
+        # If exploration quota isn't filled, allow repeats into exploration but
+        # cap by remaining repeat quota.
+        n_explore_remaining <- as.integer(n_explore_target - nrow(explore_selected_tbl))
+        if (n_explore_remaining > 0L && explore_repeat_cap > 0L && nrow(explore_pool_repeat) > 0L) {
+          n_repeat_for_explore <- as.integer(min(n_explore_remaining, explore_repeat_cap))
+          explore_repeat_selected <- pick_low_degree(explore_pool_repeat, deg_sum_pool_repeat, n_repeat_for_explore)
+          if (nrow(explore_repeat_selected) > 0L) {
+            explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_repeat_selected)
+          }
+        }
+      }
+
+      # Decrement repeat quota by repeats already selected during exploration.
+      n_repeat_explore <- 0L
+      if ("source" %in% names(explore_selected_tbl)) {
+        n_repeat_explore <- as.integer(sum(explore_selected_tbl$source == repeat_source_name, na.rm = TRUE))
+      }
+
+      repeat_quota_remaining <- repeat_quota_n
+      if (repeat_policy == "reverse_only") {
+        repeat_quota_remaining <- as.integer(max(0L, repeat_quota_n - n_repeat_explore))
       }
 
       n_pairs_exploit <- as.integer(n_pairs - nrow(explore_selected_tbl))
@@ -1614,7 +1674,7 @@ select_adaptive_pairs <- function(samples,
         n_pairs = n_pairs_exploit,
         embed_quota_frac = embed_quota_frac,
         embed_sources = "embed",
-        repeat_quota_n = repeat_quota_n,
+        repeat_quota_n = repeat_quota_remaining,
         repeat_sources = "repeat_reverse"
       )
 
