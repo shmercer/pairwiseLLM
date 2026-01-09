@@ -24,6 +24,9 @@ bt_run_adaptive(
   stage1_min_degree_min = 1,
   stage1_min_spearman = 0.97,
   stage1_max_rounds = 10L,
+  stage1_explore_frac = 0.25,
+  stage2_explore_frac = 0.1,
+  stage2_min_rounds = 3L,
   final_refit = TRUE,
   fit_engine_final = c("bt_firth", "bt_mle", "bt_bayes", "none"),
   final_bt_bias_reduction = TRUE,
@@ -160,7 +163,13 @@ minimum node degree for the connectivity gate.}
 \item{stage1_min_spearman}{Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 Spearman correlation between consecutive RC rank vectors to count as stable.}
 
-\item{stage1_max_rounds}{Integer. For \code{fit_engine_running = "hybrid"}, maximum
+\item{stage1_max_rounds}{Integer. For \code{fit_engine_running = "hybrid"}, maximum}
+
+\item{stage1_explore_frac}{Fraction of each round reserved for exploration while in stage1 (hybrid only).}
+
+\item{stage2_explore_frac}{Fraction of each round reserved for exploration while in stage2 (hybrid only).}
+
+\item{stage2_min_rounds}{Minimum number of BT rounds to run after switching to stage2 before allowing precision/stability stops.
 number of Stage 1 rounds to attempt before giving up on switching (the runner will
 continue using RC as the running engine).}
 

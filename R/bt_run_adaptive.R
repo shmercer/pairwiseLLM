@@ -920,6 +920,10 @@ bt_run_adaptive <- function(samples,
     }
   }
 
+  # Theta used for pairing heuristics (may differ from final refit theta).
+  # Initialize so examples/tests that start from empty state don't error.
+  theta_for_pairs <- NULL
+
   round_seq <- if (start_round <= max_rounds) seq.int(from = start_round, to = max_rounds) else integer(0)
   for (r in round_seq) {
     if (nrow(results) == 0L) break
@@ -1087,6 +1091,20 @@ bt_run_adaptive <- function(samples,
       if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage2_bt")) {
         theta_for_pairs <- dplyr::mutate(theta_for_pairs, theta = .data$theta_bt, se = .data$se_bt)
       }
+      # stage-dependent knobs (used by adaptive pairing + diagnostics)
+      repeat_policy_now <- repeat_policy
+      repeat_cap_now <- repeat_cap
+      repeat_frac_now <- repeat_frac
+      repeat_n_now <- repeat_n
+      explore_frac_now <- if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc")) {
+        stage1_explore_frac
+      } else {
+        stage2_explore_frac
+      }
+      if (identical(stage, "stage1_rc") && is.finite(stage1_explore_frac)) {
+        explore_frac_now <- stage1_explore_frac
+      }
+
       pairs_next <- select_adaptive_pairs(
         samples = samples,
         theta = theta_for_pairs,

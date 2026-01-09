@@ -1081,8 +1081,8 @@ select_adaptive_pairs <- function(samples,
                                   w_embed = 1,
                                   embed_score_mode = "rank_decay",
                                   explore_frac = 0,
-  graph_state = NULL,
-  return_internal = FALSE,
+                                  graph_state = NULL,
+                                  return_internal = FALSE,
                                   seed = NULL) {
   samples <- tibble::as_tibble(samples)
 
@@ -1346,14 +1346,42 @@ select_adaptive_pairs <- function(samples,
         }
       }
 
-      # Repeat guard (graph health)      graph_state <- if (!is.null(graph_state)) graph_state else .graph_state_from_pairs(ex, ids = ids)
-      graph_unhealthy <- (graph_state$metrics$degree_min[[1]] < repeat_guard_min_degree) ||
-        (graph_state$metrics$largest_component_frac[[1]] < repeat_guard_largest_component_frac)
-      repeat_guard_passed <- (graph_state$metrics$degree_min[[1]] >= repeat_guard_min_degree) &&
-        (graph_state$metrics$largest_component_frac[[1]] >= repeat_guard_largest_component_frac)
+      # ---- diagnostics defaults -------------------------------------------
+      # Keep diagnostics scalar so we always return a 1-row tibble.
+      fallback_path <- NA_character_
+      fallback_trigger <- NA_character_
+      n_pairs_source_random <- 0L
+      embed_neighbor_hit_rate <- NA_real_
+      repeat_guard_passed <- NA
+      repeat_guard_reason <- NA_character_
+      repeat_quota_n <- 0L
+      n_repeat_eligible <- 0L
+      n_repeat_planned <- 0L
+
+      # Repeat guard (graph health)
+      graph_state <- if (!is.null(graph_state)) graph_state else .graph_state_from_pairs(ex, ids = ids)
+
+      # Defensive normalization: some callers (e.g., checkpoint resume) may
+      # provide a graph_state whose vectors are present but unnamed. Downstream
+      # logic matches by names for component_id / degree.
+      if (!is.null(graph_state$component_id) && is.null(names(graph_state$component_id))) {
+        if (!is.null(graph_state$ids) && length(graph_state$component_id) == length(graph_state$ids)) {
+          names(graph_state$component_id) <- graph_state$ids
+        } else if (!is.null(graph_state$degree) && !is.null(names(graph_state$degree)) &&
+          length(graph_state$component_id) == length(graph_state$degree)) {
+          names(graph_state$component_id) <- names(graph_state$degree)
+        }
+      }
+      if (!is.null(graph_state$degree) && is.null(names(graph_state$degree)) &&
+        !is.null(graph_state$ids) && length(graph_state$degree) == length(graph_state$ids)) {
+        names(graph_state$degree) <- graph_state$ids
+      }
+      deg_min <- if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L) graph_state$metrics$degree_min[[1]] else 0
+      lcf <- if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L) graph_state$metrics$largest_component_frac[[1]] else 0
+      graph_unhealthy <- (deg_min < repeat_guard_min_degree) || (lcf < repeat_guard_largest_component_frac)
+      repeat_guard_passed <- isTRUE((deg_min >= repeat_guard_min_degree) && (lcf >= repeat_guard_largest_component_frac))
 
       # Compute repeat quota for this round (deterministic)
-      repeat_quota_n <- 0L
       if (repeat_policy == "reverse_only") {
         if (is.null(repeat_n)) {
           repeat_quota_n <- as.integer(floor(repeat_frac * n_pairs))
@@ -1493,52 +1521,52 @@ select_adaptive_pairs <- function(samples,
         capped_tbl <- dplyr::slice_head(capped_tbl, n = candidate_pool_cap)
       }
 
-    
-  explore_frac <- as.double(explore_frac)
-  if (is.na(explore_frac) || explore_frac < 0 || explore_frac > 1) {
-    stop("`explore_frac` must be between 0 and 1.", call. = FALSE)
-  }
 
-  n_explore_target <- as.integer(floor(n_pairs * explore_frac))
-  explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
-
-  if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
-    deg <- graph_state$degree
-    deg1 <- as.numeric(deg[match(capped_tbl$ID1, names(deg))])
-    deg2 <- as.numeric(deg[match(capped_tbl$ID2, names(deg))])
-    deg_sum <- deg1 + deg2
-
-    if (!is.null(graph_state$component_id)) {
-      comp <- graph_state$component_id
-      comp1 <- as.integer(comp[match(capped_tbl$ID1, names(comp))])
-      comp2 <- as.integer(comp[match(capped_tbl$ID2, names(comp))])
-    } else {
-      comp1 <- rep.int(1L, nrow(capped_tbl))
-      comp2 <- rep.int(1L, nrow(capped_tbl))
-    }
-
-    if (isTRUE(graph_state$metrics$n_components > 1L)) {
-      explore_pool <- capped_tbl[comp1 != comp2, , drop = FALSE]
-      deg_sum_pool <- deg_sum[comp1 != comp2]
-    } else {
-      explore_pool <- capped_tbl
-      deg_sum_pool <- deg_sum
-    }
-
-    if (nrow(explore_pool) > 0L) {
-      ord <- order(deg_sum_pool, explore_pool$i_idx, explore_pool$j_idx)
-      explore_pool <- explore_pool[ord, , drop = FALSE]
-      explore_selected_tbl <- utils::head(explore_pool, n_explore_target)
-
-      if (nrow(explore_selected_tbl) > 0L) {
-        capped_tbl <- dplyr::filter(capped_tbl, !.data$pair_key %in% explore_selected_tbl$pair_key)
+      explore_frac <- as.double(explore_frac)
+      if (is.na(explore_frac) || explore_frac < 0 || explore_frac > 1) {
+        stop("`explore_frac` must be between 0 and 1.", call. = FALSE)
       }
-    }
-  }
 
-  n_pairs_exploit <- as.integer(n_pairs - nrow(explore_selected_tbl))
+      n_explore_target <- as.integer(floor(n_pairs * explore_frac))
+      explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
 
-  selected_tbl_normal <- .ap_select_pairs_from_scored(
+      if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
+        deg <- graph_state$degree
+        deg1 <- as.numeric(deg[match(capped_tbl$ID1, names(deg))])
+        deg2 <- as.numeric(deg[match(capped_tbl$ID2, names(deg))])
+        deg_sum <- deg1 + deg2
+
+        if (!is.null(graph_state$component_id)) {
+          comp <- graph_state$component_id
+          comp1 <- as.integer(comp[match(capped_tbl$ID1, names(comp))])
+          comp2 <- as.integer(comp[match(capped_tbl$ID2, names(comp))])
+        } else {
+          comp1 <- rep.int(1L, nrow(capped_tbl))
+          comp2 <- rep.int(1L, nrow(capped_tbl))
+        }
+
+        if (isTRUE(graph_state$metrics$n_components > 1L)) {
+          explore_pool <- capped_tbl[comp1 != comp2, , drop = FALSE]
+          deg_sum_pool <- deg_sum[comp1 != comp2]
+        } else {
+          explore_pool <- capped_tbl
+          deg_sum_pool <- deg_sum
+        }
+
+        if (nrow(explore_pool) > 0L) {
+          ord <- order(deg_sum_pool, explore_pool$i_idx, explore_pool$j_idx)
+          explore_pool <- explore_pool[ord, , drop = FALSE]
+          explore_selected_tbl <- utils::head(explore_pool, n_explore_target)
+
+          if (nrow(explore_selected_tbl) > 0L) {
+            capped_tbl <- dplyr::filter(capped_tbl, !.data$pair_key %in% explore_selected_tbl$pair_key)
+          }
+        }
+      }
+
+      n_pairs_exploit <- as.integer(n_pairs - nrow(explore_selected_tbl))
+
+      selected_tbl_normal <- .ap_select_pairs_from_scored(
         scored_tbl = capped_tbl,
         n_pairs = n_pairs,
         embed_quota_frac = embed_quota_frac,

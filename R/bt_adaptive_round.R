@@ -155,9 +155,9 @@ bt_adaptive_round <- function(samples,
                               w_embed = 1,
                               embed_score_mode = "rank_decay",
                               theta_for_pairs = NULL,
-                               explore_frac = 0,
-                               graph_state = NULL,
-                               seed = NULL) {
+                              explore_frac = 0,
+                              graph_state = NULL,
+                              seed = NULL) {
   samples <- tibble::as_tibble(samples)
   req_s <- c("ID", "text")
   if (!all(req_s %in% names(samples))) {
