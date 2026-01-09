@@ -77,6 +77,6 @@ test_that("bt_run_adaptive hybrid switches from RC to BT after gates", {
   )
 
   expect_true(is.data.frame(out$rounds))
-  expect_true("stage" %in% names(out$rounds))
-  expect_true(any(out$rounds$stage == "stage2_bt"))
+  expect_true("pairing_stage" %in% names(out$rounds))
+  expect_true(any(out$rounds$pairing_stage == "stage2_bt"))
 })

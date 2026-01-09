@@ -1011,7 +1011,7 @@ bt_run_adaptive <- function(samples,
 
       rc_vals <- fit$theta$theta_rc
       if (!is.null(rc_vals) && any(is.finite(rc_vals))) {
-        rc_rank <- stats::rank(rc_vals, ties.method = "average", na.last = "keep")
+        rc_rank <- base::rank(rc_vals, ties.method = "average", na.last = "keep")
         if (!is.null(prev_rc_rank)) {
           rho_spearman_rc <- suppressWarnings(stats::cor(
             rc_rank,
@@ -1174,7 +1174,7 @@ bt_run_adaptive <- function(samples,
         round = as.integer(r),
         n_new_pairs_scored = 0L,
         n_total_results = as.integer(nrow(results)),
-        stage = as.character(stage),
+        pairing_stage = as.character(stage),
         rho_spearman_rc = as.double(rho_spearman_rc),
         conn_ok = conn_ok,
         stab_ok = stab_ok,
