@@ -846,6 +846,61 @@
 }
 
 #' @keywords internal
+.ap_map_idx_to_ids <- function(cand_tbl,
+                               id_vec,
+                               err_ctx = "select_adaptive_pairs") {
+  cand_tbl <- tibble::as_tibble(cand_tbl)
+  id_vec <- as.character(id_vec)
+
+  if (is.null(id_vec) || length(id_vec) == 0L) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): `id_vec` is NULL/empty.",
+      call. = FALSE
+    )
+  }
+
+  if (!all(c("i_idx", "j_idx") %in% names(cand_tbl))) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): candidate table must include i_idx and j_idx.",
+      call. = FALSE
+    )
+  }
+
+  i_idx <- suppressWarnings(as.integer(cand_tbl$i_idx))
+  j_idx <- suppressWarnings(as.integer(cand_tbl$j_idx))
+  n <- length(id_vec)
+
+  bad <- which(
+    is.na(i_idx) | is.na(j_idx) |
+      i_idx < 1L | j_idx < 1L |
+      i_idx > n | j_idx > n
+  )
+  if (length(bad) > 0L) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): i_idx/j_idx exceed length(id_vec) ",
+      "(possible ID order corruption).",
+      call. = FALSE
+    )
+  }
+
+  id1 <- id_vec[i_idx]
+  id2 <- id_vec[j_idx]
+
+  if (anyNA(id1) || anyNA(id2)) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): NA after mapping indices to IDs.",
+      call. = FALSE
+    )
+  }
+
+  dplyr::mutate(
+    cand_tbl,
+    ID1 = as.character(id1),
+    ID2 = as.character(id2)
+  )
+}
+
+#' @keywords internal
 .ap_orient_pairs <- function(selected_tbl,
                              id_vec,
                              samples,
@@ -1552,13 +1607,21 @@ select_adaptive_pairs <- function(samples,
         # add them here so component/degree lookups and ordering are robust.
         if (!all(c("ID1", "ID2") %in% names(capped_tbl)) &&
           all(c("i_idx", "j_idx") %in% names(capped_tbl))) {
-          id_vec <- graph_state$ids
-          if (is.null(id_vec)) id_vec <- names(graph_state$degree)
-
-          if (!is.null(id_vec) && length(id_vec) > 0L) {
-            capped_tbl$ID1 <- as.character(id_vec[capped_tbl$i_idx])
-            capped_tbl$ID2 <- as.character(id_vec[capped_tbl$j_idx])
+          # IMPORTANT (Workstream G): never overwrite the theta-ordered `id_vec`.
+          # Candidate indices were created against that ordering, and downstream
+          # orientation uses it as well.
+          id_map_vec <- id_vec
+          if (is.null(id_map_vec) || length(id_map_vec) == 0L) {
+            # Defensive fallback: should be unreachable under normal execution.
+            id_map_vec <- graph_state$ids
+            if (is.null(id_map_vec)) id_map_vec <- names(graph_state$degree)
           }
+
+          capped_tbl <- .ap_map_idx_to_ids(
+            cand_tbl = capped_tbl,
+            id_vec = id_map_vec,
+            err_ctx = "select_adaptive_pairs exploration"
+          )
         }
 
         # Prefer low-degree endpoints (exploration), stable tie-break.
