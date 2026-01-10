@@ -91,7 +91,9 @@
       degree_min_lcc = 0,
       degree_median = 0,
       degree_max = 0,
-      pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
+      pct_nodes_with_degree_gt0 = as.double(mean(degree > 0)),
+      bridge_edge_count = as.integer(0),
+      bridge_edge_frac = as.double(0)
     )
 
     return(list(metrics = metrics, degree = degree, component_id = component_id))
@@ -134,7 +136,9 @@
       degree_min_lcc = 0,
       degree_median = 0,
       degree_max = 0,
-      pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
+      pct_nodes_with_degree_gt0 = as.double(mean(degree > 0)),
+      bridge_edge_count = as.integer(0),
+      bridge_edge_frac = as.double(0)
     )
 
     return(list(metrics = metrics, degree = degree, component_id = component_id))
@@ -208,10 +212,215 @@
     pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
   )
 
+  # Cheap bottleneck proxy: fraction of edges that are graph-theoretic bridges.
+  bottleneck_metrics <- .graph_bottleneck_metrics_from_pairs(
+    pairs = tibble::tibble(ID1 = ids[a], ID2 = ids[b]),
+    ids = ids,
+    id1_col = "ID1",
+    id2_col = "ID2"
+  )
+  metrics <- dplyr::bind_cols(metrics, bottleneck_metrics)
+
   degree <- as.double(degree)
   component_id <- as.integer(component_id)
   names(degree) <- ids
   names(component_id) <- ids
 
   list(metrics = metrics, degree = degree, component_id = component_id)
+}
+
+# -------------------------------------------------------------------------
+# Graph bottleneck proxy: bridge-edge fraction
+# -------------------------------------------------------------------------
+
+#' Identify graph-theoretic bridges from a pairs table
+#'
+#' Implements a deterministic Tarjan-style DFS (low-link) bridge finder on the
+#' undirected, simple graph induced by `pairs` restricted to `ids`.
+#'
+#' No igraph dependency.
+#'
+#' @param pairs A data frame with columns giving pair endpoints.
+#' @param ids Character vector of all node IDs to include.
+#' @param id1_col,id2_col Column names in `pairs` containing endpoints.
+#'
+#' @return A schema-stable tibble with columns:
+#'   - ID1, ID2 (character; unordered endpoints in `ids` order)
+#'   - is_bridge (logical)
+#'
+#' @keywords internal
+#' @noRd
+.bridge_edges_from_pairs <- function(pairs,
+                                     ids,
+                                     id1_col = "ID1",
+                                     id2_col = "ID2") {
+  ids <- as.character(ids)
+  ids <- ids[!is.na(ids) & nzchar(ids)]
+  ids <- unique(ids)
+
+  if (length(ids) == 0L) {
+    stop("`ids` must contain at least one non-missing ID.", call. = FALSE)
+  }
+
+  empty_out <- tibble::tibble(
+    ID1 = character(0),
+    ID2 = character(0),
+    is_bridge = logical(0)
+  )
+
+  if (is.null(pairs) || (is.data.frame(pairs) && nrow(pairs) == 0L)) {
+    return(empty_out)
+  }
+
+  pairs <- tibble::as_tibble(pairs)
+  if (!all(c(id1_col, id2_col) %in% names(pairs))) {
+    stop("`pairs` must contain columns: `", id1_col, "` and `", id2_col, "`.", call. = FALSE)
+  }
+
+  id1 <- as.character(pairs[[id1_col]])
+  id2 <- as.character(pairs[[id2_col]])
+
+  ok <- !is.na(id1) & nzchar(id1) & !is.na(id2) & nzchar(id2) & id1 != id2
+  if (any(ok)) {
+    id1 <- id1[ok]
+    id2 <- id2[ok]
+  } else {
+    id1 <- character(0)
+    id2 <- character(0)
+  }
+
+  keep <- (id1 %in% ids) & (id2 %in% ids)
+  id1 <- id1[keep]
+  id2 <- id2[keep]
+
+  if (length(id1) == 0L) {
+    return(empty_out)
+  }
+
+  # Deduplicate to unique unordered edges
+  key <- .unordered_pair_key(id1, id2)
+  keep_edge <- !duplicated(key)
+  id1 <- id1[keep_edge]
+  id2 <- id2[keep_edge]
+
+  # Map to indices and construct unordered endpoints (in `ids` order)
+  i <- match(id1, ids)
+  j <- match(id2, ids)
+
+  a <- pmin(i, j)
+  b <- pmax(i, j)
+
+  ord <- order(a, b)
+  a <- as.integer(a[ord])
+  b <- as.integer(b[ord])
+
+  n <- length(ids)
+  n_edges <- length(a)
+  if (n_edges == 0L) {
+    return(empty_out)
+  }
+
+  # Build deterministic adjacency (sorted by from, then to)
+  from <- c(a, b)
+  to <- c(b, a)
+  eid <- rep.int(seq_len(n_edges), 2)
+
+  o <- order(from, to, eid)
+  from <- from[o]
+  to <- to[o]
+  eid <- eid[o]
+
+  idx_by_from <- split(seq_along(from), from)
+  adj_to <- vector("list", n)
+  adj_eid <- vector("list", n)
+
+  for (k in seq_along(idx_by_from)) {
+    node <- as.integer(names(idx_by_from)[[k]])
+    idx <- idx_by_from[[k]]
+    adj_to[[node]] <- as.integer(to[idx])
+    adj_eid[[node]] <- as.integer(eid[idx])
+  }
+
+  disc <- integer(n)
+  low <- integer(n)
+  parent_node <- integer(n)
+  parent_eid <- integer(n)
+  time <- 0L
+  is_bridge <- rep(FALSE, n_edges)
+
+  dfs <- function(u) {
+    time <<- time + 1L
+    disc[[u]] <<- time
+    low[[u]] <<- time
+
+    nbrs <- adj_to[[u]] %||% integer(0)
+    eids <- adj_eid[[u]] %||% integer(0)
+    if (length(nbrs) == 0L) {
+      return(invisible(NULL))
+    }
+
+    for (k in seq_along(nbrs)) {
+      v <- nbrs[[k]]
+      e <- eids[[k]]
+
+      if (disc[[v]] == 0L) {
+        parent_node[[v]] <<- u
+        parent_eid[[v]] <<- e
+        dfs(v)
+        low[[u]] <<- min(low[[u]], low[[v]])
+        if (low[[v]] > disc[[u]]) {
+          is_bridge[[e]] <<- TRUE
+        }
+      } else if (e != parent_eid[[u]]) {
+        low[[u]] <<- min(low[[u]], disc[[v]])
+      }
+    }
+
+    invisible(NULL)
+  }
+
+  for (u in seq_len(n)) {
+    if (disc[[u]] == 0L) {
+      dfs(u)
+    }
+  }
+
+  tibble::tibble(
+    ID1 = ids[a],
+    ID2 = ids[b],
+    is_bridge = as.logical(is_bridge)
+  )
+}
+
+#' Compute bridge-edge bottleneck metrics from a pairs table
+#'
+#' @param pairs A data frame with columns giving pair endpoints.
+#' @param ids Character vector of all node IDs to include.
+#' @param id1_col,id2_col Column names in `pairs` containing endpoints.
+#'
+#' @return A one-row tibble with columns:
+#'   - bridge_edge_count (integer)
+#'   - bridge_edge_frac (double; 0 when n_edges == 0)
+#'
+#' @keywords internal
+#' @noRd
+.graph_bottleneck_metrics_from_pairs <- function(pairs,
+                                                 ids,
+                                                 id1_col = "ID1",
+                                                 id2_col = "ID2") {
+  edges <- .bridge_edges_from_pairs(
+    pairs = pairs,
+    ids = ids,
+    id1_col = id1_col,
+    id2_col = id2_col
+  )
+
+  n_edges <- nrow(edges)
+  bridge_edge_count <- sum(edges$is_bridge)
+  bridge_edge_frac <- if (n_edges > 0L) bridge_edge_count / n_edges else 0
+
+  tibble::tibble(
+    bridge_edge_count = as.integer(bridge_edge_count),
+    bridge_edge_frac = as.double(bridge_edge_frac)
+  )
 }
