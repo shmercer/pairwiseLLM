@@ -9,7 +9,6 @@ test_that(".bt_apply_exhaustion_fallback early-returns when fallback is none", {
     new_ids = "B",
     seen_ids = c("A", "B"),
     round_size = 10,
-    forbidden_keys = character(),
     exhaustion_fallback = "none",
     exhaustion_min_pairs_frac = 0.9,
     exhaustion_spectral_gap_threshold = 0,
@@ -35,7 +34,6 @@ test_that(".bt_apply_exhaustion_fallback returns pairs when cross-batch has no e
     new_ids = "B",
     seen_ids = c("A", "B"), # => extra_ids becomes length 0
     round_size = 10,
-    forbidden_keys = character(),
     exhaustion_fallback = "cross_batch_new_new",
     exhaustion_min_pairs_frac = 0.9,
     exhaustion_spectral_gap_threshold = 0,
@@ -61,7 +59,6 @@ test_that(".bt_apply_exhaustion_fallback returns pairs when targeted repeats are
     new_ids = c("B", "C"),
     seen_ids = c("A", "B", "C"),
     round_size = 10,
-    forbidden_keys = character(),
     exhaustion_fallback = "targeted_repeats",
     exhaustion_min_pairs_frac = 0.9,
     exhaustion_spectral_gap_threshold = 0,
@@ -87,7 +84,6 @@ test_that(".bt_apply_exhaustion_fallback returns pairs when new_ids has length <
     new_ids = "B", # length < 2 => NULL from targeted repeats helper
     seen_ids = c("A", "B"),
     round_size = 10,
-    forbidden_keys = character(),
     exhaustion_fallback = "targeted_repeats",
     exhaustion_min_pairs_frac = 0.9,
     exhaustion_spectral_gap_threshold = 0,

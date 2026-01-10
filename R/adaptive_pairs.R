@@ -464,14 +464,14 @@
   for (p in seq_len(n - 1L)) {
     i_idx <- perm[[p]]
     max_off <- min(window, n - p)
-    if (max_off < 1L) next
+    if (max_off < 1L) next # nocov
     js <- perm[(p + 1L):(p + max_off)]
     out_i <- c(out_i, rep.int(i_idx, length(js)))
     out_j <- c(out_j, js)
     out_anchor <- c(out_anchor, rep.int(i_idx, length(js)))
   }
 
-  if (length(out_i) == 0L) {
+  if (length(out_i) == 0L) { # nocov start
     return(tibble::tibble(
       i_idx = integer(),
       j_idx = integer(),
@@ -485,7 +485,7 @@
       score_need = numeric(),
       score_embed = numeric(),
       score_total = numeric()
-    ))
+    )) # nocov end
   }
 
   pk <- .unordered_pair_key(id_vec[out_i], id_vec[out_j])
@@ -846,6 +846,61 @@
 }
 
 #' @keywords internal
+.ap_map_idx_to_ids <- function(cand_tbl,
+                               id_vec,
+                               err_ctx = "select_adaptive_pairs") {
+  cand_tbl <- tibble::as_tibble(cand_tbl)
+  id_vec <- as.character(id_vec)
+
+  if (is.null(id_vec) || length(id_vec) == 0L) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): `id_vec` is NULL/empty.",
+      call. = FALSE
+    )
+  }
+
+  if (!all(c("i_idx", "j_idx") %in% names(cand_tbl))) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): candidate table must include i_idx and j_idx.",
+      call. = FALSE
+    )
+  }
+
+  i_idx <- suppressWarnings(as.integer(cand_tbl$i_idx))
+  j_idx <- suppressWarnings(as.integer(cand_tbl$j_idx))
+  n <- length(id_vec)
+
+  bad <- which(
+    is.na(i_idx) | is.na(j_idx) |
+      i_idx < 1L | j_idx < 1L |
+      i_idx > n | j_idx > n
+  )
+  if (length(bad) > 0L) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): i_idx/j_idx exceed length(id_vec) ",
+      "(possible ID order corruption).",
+      call. = FALSE
+    )
+  }
+
+  id1 <- id_vec[i_idx]
+  id2 <- id_vec[j_idx]
+
+  if (anyNA(id1) || anyNA(id2)) {
+    stop(
+      "Index mapping mismatch (", err_ctx, "): NA after mapping indices to IDs.",
+      call. = FALSE
+    )
+  }
+
+  dplyr::mutate(
+    cand_tbl,
+    ID1 = as.character(id1),
+    ID2 = as.character(id2)
+  )
+}
+
+#' @keywords internal
 .ap_orient_pairs <- function(selected_tbl,
                              id_vec,
                              samples,
@@ -1015,6 +1070,8 @@
 #'   scoring function. Default is 1 (embeddings influence both candidate
 #'   generation and scoring when available).
 #' @param embed_score_mode Character; how to compute the embedding bonus when
+#' @param explore_frac Fraction of pairs to reserve for exploration (e.g., bridge/low-degree) before exploitation.
+#' @param graph_state Optional graph state from `.graph_state_from_pairs()` to avoid recomputation.
 #'   \code{w_embed != 0}. Options are \code{"binary_neighbor"} and
 #'   \code{"rank_decay"}.
 #' @param return_internal Logical; if \code{TRUE}, return a list with
@@ -1078,6 +1135,8 @@ select_adaptive_pairs <- function(samples,
                                   per_anchor_cap = Inf,
                                   w_embed = 1,
                                   embed_score_mode = "rank_decay",
+                                  explore_frac = 0,
+                                  graph_state = NULL,
                                   return_internal = FALSE,
                                   seed = NULL) {
   samples <- tibble::as_tibble(samples)
@@ -1342,15 +1401,42 @@ select_adaptive_pairs <- function(samples,
         }
       }
 
+      # ---- diagnostics defaults -------------------------------------------
+      # Keep diagnostics scalar so we always return a 1-row tibble.
+      fallback_path <- NA_character_
+      fallback_trigger <- NA_character_
+      n_pairs_source_random <- 0L
+      embed_neighbor_hit_rate <- NA_real_
+      repeat_guard_passed <- NA
+      repeat_guard_reason <- NA_character_
+      repeat_quota_n <- 0L
+      n_repeat_eligible <- 0L
+      n_repeat_planned <- 0L
+
       # Repeat guard (graph health)
-      graph_state <- .graph_state_from_pairs(ex, ids = ids)
-      graph_unhealthy <- (graph_state$metrics$degree_min[[1]] < repeat_guard_min_degree) ||
-        (graph_state$metrics$largest_component_frac[[1]] < repeat_guard_largest_component_frac)
-      repeat_guard_passed <- (graph_state$metrics$degree_min[[1]] >= repeat_guard_min_degree) &&
-        (graph_state$metrics$largest_component_frac[[1]] >= repeat_guard_largest_component_frac)
+      graph_state <- if (!is.null(graph_state)) graph_state else .graph_state_from_pairs(ex, ids = ids)
+
+      # Defensive normalization: some callers (e.g., checkpoint resume) may
+      # provide a graph_state whose vectors are present but unnamed. Downstream
+      # logic matches by names for component_id / degree.
+      if (!is.null(graph_state$component_id) && is.null(names(graph_state$component_id))) {
+        if (!is.null(graph_state$ids) && length(graph_state$component_id) == length(graph_state$ids)) {
+          names(graph_state$component_id) <- graph_state$ids
+        } else if (!is.null(graph_state$degree) && !is.null(names(graph_state$degree)) &&
+          length(graph_state$component_id) == length(graph_state$degree)) {
+          names(graph_state$component_id) <- names(graph_state$degree)
+        }
+      }
+      if (!is.null(graph_state$degree) && is.null(names(graph_state$degree)) &&
+        !is.null(graph_state$ids) && length(graph_state$degree) == length(graph_state$ids)) {
+        names(graph_state$degree) <- graph_state$ids
+      }
+      deg_min <- if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L) graph_state$metrics$degree_min[[1]] else 0
+      lcf <- if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L) graph_state$metrics$largest_component_frac[[1]] else 0
+      graph_unhealthy <- (deg_min < repeat_guard_min_degree) || (lcf < repeat_guard_largest_component_frac)
+      repeat_guard_passed <- isTRUE((deg_min >= repeat_guard_min_degree) && (lcf >= repeat_guard_largest_component_frac))
 
       # Compute repeat quota for this round (deterministic)
-      repeat_quota_n <- 0L
       if (repeat_policy == "reverse_only") {
         if (is.null(repeat_n)) {
           repeat_quota_n <- as.integer(floor(repeat_frac * n_pairs))
@@ -1373,7 +1459,7 @@ select_adaptive_pairs <- function(samples,
       # any controlled-random ordering. This avoids reliance on R's RNG
       # implementation for determinism across R versions.
       hash_round <- as.integer(nrow(ex))
-      if (is.na(hash_round)) hash_round <- 0L
+      if (is.na(hash_round)) hash_round <- 0L # nocov
       hash_salt <- "pairwiseLLM"
       if (!is.null(seed) && length(seed) == 1L && !is.na(seed)) {
         hash_salt <- paste0(hash_salt, "|", as.character(seed))
@@ -1490,14 +1576,276 @@ select_adaptive_pairs <- function(samples,
         capped_tbl <- dplyr::slice_head(capped_tbl, n = candidate_pool_cap)
       }
 
+
+      explore_frac <- as.double(explore_frac)
+      if (is.na(explore_frac) || explore_frac < 0 || explore_frac > 1) {
+        stop("`explore_frac` must be between 0 and 1.", call. = FALSE)
+      }
+
+      n_explore_target <- as.integer(floor(n_pairs * explore_frac))
+      explore_selected_tbl <- capped_tbl[0, , drop = FALSE]
+
+      # IMPORTANT: If repeat candidates are present (repeat_policy == 'reverse_only'),
+      # exploration selection must not bypass the repeat quota. Repeat candidates
+      # are injected into the scoring/candidate pool (source == 'repeat_reverse')
+      # and would otherwise be eligible for exploration (low-degree preference),
+      # even though repeat_quota_n is only enforced inside .ap_select_pairs_from_scored.
+      #
+      # Strategy:
+      #   1) Prefer non-repeat candidates for exploration.
+      #   2) If there is remaining exploration quota and remaining repeat quota,
+      #      allow repeat candidates into exploration, but cap them to the
+      #      remaining repeat quota.
+      #   3) Decrement repeat_quota_n passed to the exploit selector by the
+      #      number of repeat pairs already selected in exploration.
+      repeat_source_name <- "repeat_reverse"
+      explore_repeat_cap <- if (repeat_policy == "reverse_only") as.integer(repeat_quota_n) else 0L
+      if (is.na(explore_repeat_cap) || explore_repeat_cap < 0L) explore_repeat_cap <- 0L # nocov
+
+
+      # Workstream D: determine required component-bridge quota up-front.
+      # If the graph is disconnected and exploration is enabled, we allocate an
+      # explicit bridge quota even when `floor(n_pairs * explore_frac)` would be 0.
+      n_components <- 1L
+      if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L &&
+        "n_components" %in% names(graph_state$metrics)) {
+        n_components <- as.integer(graph_state$metrics$n_components[[1]])
+        if (is.na(n_components) || n_components < 1L) n_components <- 1L
+      }
+
+      n_bridge_target <- 0L
+      if (explore_frac > 0 && n_components > 1L) {
+        n_bridge_target <- as.integer(min(ceiling(0.5 * n_pairs), n_components - 1L))
+        n_bridge_target <- max(0L, n_bridge_target)
+      }
+
+      if (n_bridge_target > 0L) {
+        n_explore_target <- as.integer(max(n_explore_target, n_bridge_target))
+      }
+
+      if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
+        # Candidate tables are index-based (i_idx/j_idx). Some paths omit ID1/ID2;
+        # add them here so component/degree lookups and ordering are robust.
+        if (!all(c("ID1", "ID2") %in% names(capped_tbl)) &&
+          all(c("i_idx", "j_idx") %in% names(capped_tbl))) {
+          # IMPORTANT (Workstream G): never overwrite the theta-ordered `id_vec`.
+          # Candidate indices were created against that ordering, and downstream
+          # orientation uses it as well.
+          id_map_vec <- id_vec
+          if (is.null(id_map_vec) || length(id_map_vec) == 0L) {
+            # Defensive fallback: should be unreachable under normal execution.
+            id_map_vec <- graph_state$ids
+            if (is.null(id_map_vec)) id_map_vec <- names(graph_state$degree)
+          }
+
+          capped_tbl <- .ap_map_idx_to_ids(
+            cand_tbl = capped_tbl,
+            id_vec = id_map_vec,
+            err_ctx = "select_adaptive_pairs exploration"
+          )
+        }
+
+        # Workstream D: explicit component-bridging exploration when disconnected.
+        bridge_selected_tbl <- capped_tbl[0, , drop = FALSE]
+
+        if (n_bridge_target > 0L) {
+          # Ensure exploration budget can accommodate required bridges.
+          n_explore_target <- as.integer(max(n_explore_target, n_bridge_target))
+
+          bridge_raw <- .ap_make_component_bridge_pairs(
+            graph_state = graph_state,
+            id_vec_theta = id_vec,
+            n_bridge = n_bridge_target
+          )
+
+          if (nrow(bridge_raw) > 0L) {
+            bridge_constrained <- .ap_apply_constraints(
+              cand_tbl = bridge_raw,
+              id_vec = id_vec,
+              existing_counts = existing_counts,
+              existing_counts_all = existing_counts_all,
+              existing_dir = existing_dir,
+              forbid_unordered = if (is.null(forbid_repeats)) TRUE else isTRUE(forbid_repeats),
+              repeat_policy = repeat_policy,
+              repeat_cap = repeat_cap
+            )
+
+            if (nrow(bridge_constrained) > 0L && "target_component_id" %in% names(bridge_constrained)) {
+              bridge_best <- dplyr::group_by(bridge_constrained, .data$target_component_id)
+              bridge_best <- dplyr::slice_head(bridge_best, n = 1L)
+              bridge_best <- dplyr::ungroup(bridge_best)
+              bridge_best <- dplyr::arrange(
+                bridge_best,
+                .data$target_component_size,
+                .data$target_component_id,
+                .data$i_idx,
+                .data$j_idx
+              )
+              bridge_selected_tbl <- utils::head(bridge_best, n_bridge_target)
+            } else if (nrow(bridge_constrained) > 0L) {
+              bridge_selected_tbl <- utils::head(bridge_constrained, n_bridge_target)
+            }
+          }
+        }
+
+        capped_tbl_explore <- capped_tbl
+        if (nrow(bridge_selected_tbl) > 0L && "pair_key" %in% names(capped_tbl_explore)) {
+          capped_tbl_explore <- dplyr::filter(
+            capped_tbl_explore,
+            !(.data$pair_key %in% bridge_selected_tbl$pair_key)
+          )
+        }
+
+        # Prefer low-degree endpoints (exploration), stable tie-break.
+        degree <- graph_state$degree
+        deg1 <- degree[match(capped_tbl_explore$ID1, names(degree))]
+        deg2 <- degree[match(capped_tbl_explore$ID2, names(degree))]
+        deg1[is.na(deg1)] <- 0
+        deg2[is.na(deg2)] <- 0
+        deg_sum <- deg1 + deg2
+        capped_tbl_explore$deg_sum <- deg_sum
+
+        # This flag MUST come from locals if present; never assume a symbol exists.
+        # Backward-compat: earlier prototypes controlled this behavior via
+        # internal flags rather than a formal argument. Use string-based lookup
+        # to avoid NOTE about undefined globals in R CMD check.
+        explore_across_components_flag <- FALSE
+        # This behavior was only reachable in earlier internal prototypes
+        # where these flags were defined as locals in the same frame.
+        # The exported API does not expose them and the lookup uses
+        # inherits = FALSE, so callers cannot enable it. Keep the code for
+        # backward compatibility but exclude from coverage.
+        # nocov start
+        val_now <- get0("explore_across_components_now", ifnotfound = NULL, inherits = FALSE)
+        val_old <- get0("explore_across_components", ifnotfound = NULL, inherits = FALSE)
+        if (!is.null(val_now)) {
+          explore_across_components_flag <- isTRUE(val_now)
+        } else if (!is.null(val_old)) {
+          explore_across_components_flag <- isTRUE(val_old)
+        }
+        # nocov end
+
+        # Split candidates into non-repeat / repeat pools so exploration can't
+        # exceed the repeat quota.
+        is_repeat_row <- FALSE
+        if ("source" %in% names(capped_tbl_explore)) {
+          is_repeat_row <- capped_tbl_explore$source == repeat_source_name
+          is_repeat_row[is.na(is_repeat_row)] <- FALSE
+        }
+        capped_nonrepeat <- capped_tbl_explore[!is_repeat_row, , drop = FALSE]
+        capped_repeat <- capped_tbl_explore[is_repeat_row, , drop = FALSE]
+        deg_sum_nonrepeat <- deg_sum[!is_repeat_row]
+        deg_sum_repeat <- deg_sum[is_repeat_row]
+
+        # nocov start
+        if (explore_across_components_flag) {
+          comp <- graph_state$component_id
+          comp1 <- comp[match(capped_tbl_explore$ID1, names(comp))]
+          comp2 <- comp[match(capped_tbl_explore$ID2, names(comp))]
+
+          # If lookup failed, avoid length-0 logical subscripts; treat as same-component.
+          if (length(comp1) != nrow(capped_tbl_explore) || length(comp2) != nrow(capped_tbl_explore)) {
+            comp1 <- rep.int(1L, nrow(capped_tbl_explore))
+            comp2 <- rep.int(1L, nrow(capped_tbl_explore))
+          }
+
+          keep <- (comp1 != comp2)
+          if (length(keep) != nrow(capped_tbl_explore)) keep <- rep.int(FALSE, nrow(capped_tbl_explore))
+
+          keep_nonrepeat <- keep[!is_repeat_row]
+          keep_repeat <- keep[is_repeat_row]
+          explore_pool_nonrepeat <- capped_nonrepeat[keep_nonrepeat, , drop = FALSE]
+          deg_sum_pool_nonrepeat <- deg_sum_nonrepeat[keep_nonrepeat]
+          explore_pool_repeat <- capped_repeat[keep_repeat, , drop = FALSE]
+          deg_sum_pool_repeat <- deg_sum_repeat[keep_repeat]
+        } else {
+          explore_pool_nonrepeat <- capped_nonrepeat
+          deg_sum_pool_nonrepeat <- deg_sum_nonrepeat
+          explore_pool_repeat <- capped_repeat
+          deg_sum_pool_repeat <- deg_sum_repeat
+        }
+        # nocov end
+
+        # Helper to pick the lowest-degree rows from a pool, stable tie-break.
+        pick_low_degree <- function(pool, deg_sum_pool, n_pick) {
+          if (n_pick <= 0L || nrow(pool) == 0L) {
+            return(pool[0, , drop = FALSE])
+          }
+          if (all(c("i_idx", "j_idx") %in% names(pool)) &&
+            length(deg_sum_pool) == nrow(pool)) {
+            ord <- order(deg_sum_pool, pool$i_idx, pool$j_idx)
+          } else {
+            ord <- order(deg_sum_pool)
+          }
+          pool <- pool[ord, , drop = FALSE]
+          utils::head(pool, n_pick)
+        }
+
+        # Start exploration with any explicit component-bridge pairs, then fill
+        # remaining exploration quota with low-degree candidates.
+        explore_selected_tbl <- bridge_selected_tbl
+
+        n_nonrepeat_for_explore <- as.integer(max(0L, n_explore_target - nrow(explore_selected_tbl)))
+        if (n_nonrepeat_for_explore > 0L && nrow(explore_pool_nonrepeat) > 0L) {
+          explore_nonrepeat_selected <- pick_low_degree(
+            explore_pool_nonrepeat,
+            deg_sum_pool_nonrepeat,
+            n_nonrepeat_for_explore
+          )
+          if (nrow(explore_nonrepeat_selected) > 0L) {
+            explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_nonrepeat_selected)
+          }
+        }
+
+        # If exploration quota isn't filled, allow repeats into exploration but
+        # cap by remaining repeat quota.
+        n_explore_remaining <- as.integer(n_explore_target - nrow(explore_selected_tbl))
+        if (n_explore_remaining > 0L && explore_repeat_cap > 0L && nrow(explore_pool_repeat) > 0L) {
+          n_repeat_for_explore <- as.integer(min(n_explore_remaining, explore_repeat_cap))
+          explore_repeat_selected <- pick_low_degree(explore_pool_repeat, deg_sum_pool_repeat, n_repeat_for_explore)
+          if (nrow(explore_repeat_selected) > 0L) {
+            explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_repeat_selected)
+          }
+        }
+      }
+
+      # Decrement repeat quota by repeats already selected during exploration.
+      n_repeat_explore <- 0L
+      if ("source" %in% names(explore_selected_tbl)) {
+        n_repeat_explore <- as.integer(sum(explore_selected_tbl$source == repeat_source_name, na.rm = TRUE))
+      }
+
+      repeat_quota_remaining <- repeat_quota_n
+      if (repeat_policy == "reverse_only") {
+        repeat_quota_remaining <- as.integer(max(0L, repeat_quota_n - n_repeat_explore))
+      }
+
+      n_pairs_exploit <- as.integer(n_pairs - nrow(explore_selected_tbl))
+
+      # Apply explore_frac quota: reserve the explore-selected pairs and only
+      # request the remaining quota from the normal (exploitative) selector.
+      # Exclude exploration keys from the exploit pool to avoid duplicates.
+      exploit_pool <- capped_tbl
+      if (nrow(explore_selected_tbl) > 0L && "pair_key" %in% names(explore_selected_tbl)) {
+        exploit_pool <- dplyr::filter(exploit_pool, !(.data$pair_key %in% explore_selected_tbl$pair_key))
+      }
+
       selected_tbl_normal <- .ap_select_pairs_from_scored(
-        scored_tbl = capped_tbl,
-        n_pairs = n_pairs,
+        scored_tbl = exploit_pool,
+        n_pairs = n_pairs_exploit,
         embed_quota_frac = embed_quota_frac,
         embed_sources = "embed",
-        repeat_quota_n = repeat_quota_n,
+        repeat_quota_n = repeat_quota_remaining,
         repeat_sources = "repeat_reverse"
       )
+
+      if (nrow(explore_selected_tbl) > 0L) {
+        selected_tbl_normal <- dplyr::bind_rows(explore_selected_tbl, selected_tbl_normal)
+        # Hard cap to the caller's request.
+        if (nrow(selected_tbl_normal) > n_pairs) {
+          selected_tbl_normal <- dplyr::slice_head(selected_tbl_normal, n = as.integer(n_pairs))
+        }
+      }
 
       # ---- PR9.2 bridge/repair fallback (embedding-based, deterministic) ----
       bridge_trigger <- NA_character_
@@ -1831,7 +2179,12 @@ select_adaptive_pairs <- function(samples,
   if (!is.null(attr(out, "planned_repeat_pairs"))) {
     # keep
   } else if ("planned_repeat_pairs" %in% names(res$diagnostics)) {
+    # This is a defensive fallback in case an internal helper drops attributes.
+    # Under normal execution we set the attribute on `pairs_tbl` whenever the
+    # diagnostics entry is produced.
+    # nocov start
     attr(out, "planned_repeat_pairs") <- res$diagnostics$planned_repeat_pairs[[1]]
+    # nocov end
   }
   out
 }

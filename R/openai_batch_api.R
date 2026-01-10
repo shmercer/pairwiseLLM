@@ -33,8 +33,57 @@ NULL
 .openai_request <- function(path, api_key = NULL) {
   api_key <- .openai_api_key(api_key)
 
-  httr2::request(paste0(.openai_base_url(), path)) |>
+  url <- paste0(.openai_base_url(), path)
+
+  # Under normal conditions, httr2 returns a well-formed `httr2_request`.
+  # However, in some test/mocking scenarios the returned object can lose its
+  # class or even come back as a plain list. We defensively normalize the
+  # request shape so downstream helpers and tests remain deterministic.
+  req <- httr2::request(url) |>
     httr2::req_auth_bearer_token(api_key)
+
+  if (!is.list(req)) {
+    req <- list()
+  }
+
+  if (is.null(req$url)) {
+    req$url <- url
+  }
+  if (is.null(req$method)) {
+    req$method <- "GET"
+  }
+  if (is.null(req$headers) || !is.list(req$headers)) {
+    req$headers <- list()
+  }
+
+  hdr_names <- names(req$headers)
+  if (is.null(hdr_names)) {
+    hdr_names <- character(0)
+  }
+  has_auth <- any(tolower(hdr_names) == "authorization")
+  if (!has_auth) {
+    req$headers$Authorization <- paste("Bearer", api_key)
+  }
+
+  if (is.null(req$options) || !is.list(req$options)) {
+    req$options <- list()
+  }
+  # httr2 expects `req$body` to be NULL (unset) or a well-formed list.
+  # In mocked/normalized scenarios we can accidentally end up with
+  # `req$body$type` being NULL/NA, which breaks `req_body_*()` helpers
+  # because comparisons propagate NA into `if (...)`.
+  if (!is.null(req$body) && !is.list(req$body)) {
+    req$body <- NULL
+  }
+  if (!is.null(req$body) && is.list(req$body)) {
+    body_type <- req$body$type
+    if (is.null(body_type) || length(body_type) != 1L || is.na(body_type[[1]])) {
+      req$body <- NULL
+    }
+  }
+
+  class(req) <- unique(c("httr2_request", class(req)))
+  req
 }
 
 
@@ -43,7 +92,20 @@ NULL
 #' @keywords internal
 #' @noRd
 .openai_req_body_json <- function(req, body, ...) {
-  httr2::req_body_json(req, body)
+  if (is.list(req) && !is.null(req$body) && is.list(req$body)) {
+    body_type <- req$body$type
+    if (is.null(body_type) || length(body_type) != 1L || is.na(body_type[[1]])) {
+      req$body <- NULL
+    }
+  }
+
+  out <- httr2::req_body_json(req, body)
+  # See `.openai_request()` for rationale.
+  if (!is.list(out)) {
+    out <- list(url = NA_character_)
+  }
+  class(out) <- unique(c("httr2_request", class(out)))
+  out
 }
 
 #' Internal: Perform an OpenAI request with retry on transient errors

@@ -1,6 +1,140 @@
 #' @importFrom httr2 resp_status
 NULL
 
+# -------------------------------------------------------------------------
+# Internal: parse OpenAI live responses
+# -------------------------------------------------------------------------
+
+#' Internal: extract thoughts + visible content from a parsed OpenAI response
+#'
+#' @param body Parsed JSON response body.
+#'
+#' @keywords internal
+.openai_live_extract_thoughts_content <- function(body) {
+  object_type <- body$object %||% NA_character_
+
+  thoughts <- NA_character_
+  content <- NA_character_
+
+  if (identical(object_type, "chat.completion")) {
+    choices <- body$choices %||% list()
+    if (length(choices) > 0L) {
+      msg <- choices[[1]]$message %||% list()
+      content <- msg$content %||% NA_character_
+    }
+  }
+
+  if (identical(object_type, "response")) {
+    # --- Reasoning summary (best-effort, tolerant to multiple payload shapes)
+    # Legacy-ish location used by several tests: body$reasoning$summary$text
+    if (is.list(body$reasoning) && is.list(body$reasoning$summary)) {
+      legacy_text <- body$reasoning$summary$text %||% NA_character_
+      if (is.character(legacy_text) && length(legacy_text) >= 1L &&
+        !is.na(legacy_text[[1]]) && nzchar(legacy_text[[1]])) {
+        thoughts <- legacy_text[[1]]
+      }
+    }
+
+    # Some payloads include a top-level reasoning_summary (list or data.frame)
+    if (is.na(thoughts)) {
+      thoughts_raw <- body$reasoning_summary %||% NULL
+      if (is.data.frame(thoughts_raw)) {
+        if ("text" %in% names(thoughts_raw) && nrow(thoughts_raw) >= 1L) {
+          thoughts <- as.character(thoughts_raw$text[[1]])
+        } else if ("summary" %in% names(thoughts_raw) && nrow(thoughts_raw) >= 1L) {
+          thoughts <- as.character(thoughts_raw$summary[[1]])
+        }
+      } else if (is.list(thoughts_raw)) {
+        thoughts <- thoughts_raw$text %||% thoughts_raw$summary %||% NA_character_
+      }
+    }
+
+    # Reasoning items inside output: output[[i]]$type == "reasoning"
+    if (is.na(thoughts) && is.list(body$output)) {
+      out_items <- body$output
+      reasoning_items <- purrr::keep(out_items, ~ identical(.x$type %||% NA_character_, "reasoning"))
+
+      summary_text <- purrr::map_chr(reasoning_items, function(x) {
+        summ <- x$summary %||% NULL
+        if (is.data.frame(summ)) {
+          if ("text" %in% names(summ) && nrow(summ) >= 1L) {
+            return(as.character(summ$text[[1]]))
+          }
+          return(NA_character_)
+        }
+
+        if (is.list(summ) && length(summ) > 0L) {
+          # Common shape: list(list(type="summary_text", text="..."), ...)
+          txt <- purrr::map_chr(summ, ~ .x$text %||% NA_character_)
+          txt <- txt[!is.na(txt) & nzchar(txt)]
+          if (length(txt) == 0L) {
+            return(NA_character_)
+          }
+          return(paste(txt, collapse = " "))
+        }
+
+        # Common shape: list(text="...")
+        if (is.list(summ) && !is.null(summ$text)) {
+          return(as.character(summ$text))
+        }
+
+        NA_character_
+      })
+
+      summary_text <- summary_text[!is.na(summary_text) & nzchar(summary_text)]
+      if (length(summary_text) > 0L) {
+        thoughts <- paste(summary_text, collapse = " ")
+      }
+    }
+
+    # --- Visible assistant content (Responses endpoint)
+    parts <- character(0)
+    if (is.list(body$output)) {
+      out_items <- body$output
+      message_items <- purrr::keep(out_items, function(x) {
+        # Some payloads omit `type`; treat items with `content` output_text as messages.
+        type <- x$type %||% NA_character_
+        if (!is.na(type) && !identical(type, "message")) {
+          return(FALSE)
+        }
+
+        content_list <- x$content %||% list()
+        if (!is.list(content_list) || length(content_list) == 0L) {
+          return(FALSE)
+        }
+        any(vapply(content_list, function(y) {
+          identical(y$type %||% NA_character_, "output_text")
+        }, logical(1)))
+      })
+
+      parts <- purrr::map_chr(message_items, function(x) {
+        content_list <- x$content %||% list()
+        text_parts <- purrr::map_chr(content_list, function(y) {
+          if (!identical(y$type %||% NA_character_, "output_text")) {
+            return(NA_character_)
+          }
+          y$text %||% NA_character_
+        })
+        text_parts <- text_parts[!is.na(text_parts)]
+        if (length(text_parts) == 0L) {
+          return(NA_character_)
+        }
+        paste0(text_parts, collapse = "")
+      })
+      parts <- parts[!is.na(parts)]
+    }
+
+    content <- if (length(parts) > 0L) {
+      paste(parts, collapse = "\n\n")
+    } else {
+      # Backwards-compat: some Responses payloads include `output_text`.
+      body$output_text %||% NA_character_
+    }
+  }
+
+  list(thoughts = thoughts, content = content)
+}
+
 #' Live OpenAI comparison for a single pair of samples
 #'
 #' This function sends a single pairwise comparison prompt to the OpenAI API
@@ -228,50 +362,9 @@ openai_compare_pair_live <- function(
     error_message <- paste0("HTTP ", status_code)
   }
 
-  thoughts <- NA_character_
-  content <- NA_character_
-
-  if (identical(object_type, "chat.completion")) {
-    choices <- body$choices %||% list()
-    if (length(choices) >= 1L && !is.null(choices[[1]]$message$content)) {
-      content <- as.character(choices[[1]]$message$content)
-    }
-  } else if (identical(object_type, "response")) {
-    reasoning_chunks <- character(0)
-    message_chunks <- character(0)
-    output <- body$output %||% list()
-
-    if (length(output) > 0L) {
-      for (out_el in output) {
-        if (identical(out_el$type, "reasoning")) {
-          rs <- out_el$summary
-
-          # Priority 1: Data frame (check first because is.list(df) is TRUE)
-          if (is.data.frame(rs) && "text" %in% names(rs)) {
-            reasoning_chunks <- c(reasoning_chunks, as.character(rs$text))
-          }
-          # Priority 2: Generic list
-          else if (is.list(rs)) {
-            for (s in rs) if (!is.null(s$text)) reasoning_chunks <- c(reasoning_chunks, s$text)
-          }
-        }
-        if (length(out_el$content) > 0L) {
-          for (b in out_el$content) if (!is.null(b$text)) message_chunks <- c(message_chunks, b$text)
-        }
-      }
-    }
-
-    # Backwards compatibility check
-    if (!length(reasoning_chunks) &&
-      !is.null(body$reasoning) && is.list(body$reasoning) &&
-      !is.null(body$reasoning$summary) && is.list(body$reasoning$summary) &&
-      !is.null(body$reasoning$summary$text)) {
-      reasoning_chunks <- c(reasoning_chunks, body$reasoning$summary$text)
-    }
-
-    if (length(reasoning_chunks)) thoughts <- paste(reasoning_chunks, collapse = " ")
-    if (length(message_chunks)) content <- paste(message_chunks, collapse = "")
-  }
+  parsed <- .openai_live_extract_thoughts_content(body)
+  thoughts <- parsed$thoughts
+  content <- parsed$content
 
   better_sample <- .extract_better_sample(
     content,
@@ -472,9 +565,30 @@ submit_openai_pairs_live <- function(
 
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
 
-    # Set the plan and capture the OLD plan to restore it on exit
-    old_plan <- future::plan("multisession", workers = workers)
+    # Set the plan and capture the OLD plan to restore it on exit.
+    old_plan <- future::plan()
     on.exit(future::plan(old_plan), add = TRUE)
+
+    # `parallelly` can error early in restricted environments (e.g., few free
+    # connections) due to conservative validation. Retry once with validation
+    # disabled, which is safe for short-lived, internal worker clusters.
+    tryCatch(
+      {
+        future::plan("multisession", workers = workers)
+      },
+      error = function(e) {
+        if (verbose) {
+          message(
+            "Parallel plan setup failed with validation enabled; retrying with ",
+            "options(parallelly.makeNodePSOCK.validate = FALSE). Error: ",
+            conditionMessage(e)
+          )
+        }
+        old_opts <- options(parallelly.makeNodePSOCK.validate = FALSE)
+        on.exit(options(old_opts), add = TRUE)
+        future::plan("multisession", workers = workers)
+      }
+    )
   }
 
   # --- Resume Logic ---

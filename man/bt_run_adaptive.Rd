@@ -13,9 +13,24 @@ bt_run_adaptive(
   fit_verbose = FALSE,
   return_diagnostics = TRUE,
   include_residuals = FALSE,
-  fit_engine_running = c("rank_centrality", "bt"),
+  fit_engine_running = c("rank_centrality", "bt", "hybrid"),
   rc_smoothing = 0.5,
   rc_damping = 0,
+  stage1_k_conn = 2L,
+  stage1_k_stab = 3L,
+  stage1_min_pct_nodes_with_degree_gt0 = 0.95,
+  stage1_min_largest_component_frac = 0.95,
+  stage1_min_degree_median = 2,
+  stage1_min_degree_min_lcc = 1,
+  stage1_min_degree_min = 0,
+  stage1_min_spearman = 0.97,
+  stage1_max_rounds = 10L,
+  stage1_escalated_explore_frac = 0.5,
+  stage1_escalated_k_neighbors = Inf,
+  stage1_escalate_allow_unordered_repeats = FALSE,
+  stage1_explore_frac = 0.25,
+  stage2_explore_frac = 0.1,
+  stage2_min_rounds = 3L,
   final_refit = TRUE,
   fit_engine_final = c("bt_firth", "bt_mle", "bt_bayes", "none"),
   final_bt_bias_reduction = TRUE,
@@ -105,10 +120,16 @@ return engine-specific diagnostics (e.g., item fit, separation/reliability). Def
 residual/probability outputs when supported (may increase compute/memory). Default \code{FALSE}.}
 
 \item{fit_engine_running}{Character. Estimator used for the \emph{running} ability
-vector that drives adaptive pair selection. \code{"bt"} uses the BT fit returned
-by \code{fit_fun}. \code{"rank_centrality"} computes Rank Centrality scores from
-the current comparison graph (often more stable early on sparse graphs) while
-still using BT standard errors as an uncertainty heuristic when available.
+vector that drives adaptive pair selection.
+
+\describe{\item{\code{"bt"}}{Use the BT fit returned by \code{fit_fun}.}}
+\describe{\item{\code{"rank_centrality"}}{Compute Rank Centrality scores from the
+current comparison graph (often more stable early on sparse graphs) while still
+using BT standard errors as an uncertainty heuristic when available.}}
+\describe{\item{\code{"hybrid"}}{Start with Rank Centrality as the running ability
+estimate, then switch to BT once the graph is sufficiently connected and Rank
+Centrality ranks are stable. See \code{stage1_*} controls.}}
+
 Default \code{"bt"}.}
 
 \item{rc_smoothing}{Numeric. Smoothing parameter forwarded to
@@ -120,6 +141,59 @@ See \code{\link{fit_rank_centrality}}.}
 \code{\link{fit_rank_centrality}} when
 \code{fit_engine_running = "rank_centrality"} (and stored in per-round fits).
 See \code{\link{fit_rank_centrality}}.}
+
+\item{stage1_k_conn}{Integer. For \code{fit_engine_running = "hybrid"}, require the
+connectivity gate to hold for this many consecutive rounds before allowing a stage
+switch.}
+
+\item{stage1_k_stab}{Integer. For \code{fit_engine_running = "hybrid"}, require the
+Rank Centrality stability gate (Spearman correlation of RC ranks) to hold for this
+many consecutive rounds before allowing a stage switch.}
+
+\item{stage1_min_pct_nodes_with_degree_gt0}{Numeric in \code{[0, 1]}. For
+\code{fit_engine_running = "hybrid"}, minimum fraction of nodes that have appeared in
+at least one comparison (degree > 0) for the connectivity gate.}
+
+\item{stage1_min_largest_component_frac}{Numeric in \code{[0, 1]}. For
+\code{fit_engine_running = "hybrid"}, minimum fraction of nodes in the largest
+connected component for the connectivity gate.}
+
+\item{stage1_min_degree_median}{Numeric. For \code{fit_engine_running = "hybrid"},
+minimum median node degree for the connectivity gate.}
+
+\item{stage1_min_degree_min_lcc}{Numeric. For \code{fit_engine_running = "hybrid"},
+minimum node degree within the largest connected component (LCC) for the
+connectivity gate.}
+
+\item{stage1_min_degree_min}{Numeric. (Deprecated) For
+\code{fit_engine_running = "hybrid"}, minimum node degree over \emph{all} nodes
+for the connectivity gate. This can effectively force 100\% coverage when any node
+is still unseen (degree 0). Prefer \code{stage1_min_degree_min_lcc}.}
+
+\item{stage1_min_spearman}{Numeric. For \code{fit_engine_running = "hybrid"}, minimum
+Spearman correlation between consecutive RC rank vectors to count as stable.}
+
+\item{stage1_max_rounds}{Integer. For \code{fit_engine_running = "hybrid"}, maximum
+number of Stage 1 rounds to attempt before triggering stage-1 fail-safe escalation.}
+
+\item{stage1_escalated_explore_frac}{Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
+when Stage 1 reaches \code{stage1_max_rounds} without meeting the connectivity gate,
+increase exploration to at least this fraction. Default \code{0.5}.}
+
+\item{stage1_escalated_k_neighbors}{Integer (or \code{NULL}/\code{Inf}). For \code{fit_engine_running = "hybrid"},
+when Stage 1 reaches \code{stage1_max_rounds} without meeting the connectivity gate,
+expand neighbor windows by setting \code{k_neighbors} to at least this value.
+Use \code{Inf} for "all neighbors". Default \code{Inf}.}
+
+\item{stage1_escalate_allow_unordered_repeats}{Logical. For \code{fit_engine_running = "hybrid"},
+when Stage 1 is escalated, optionally allow unordered repeats to avoid a hard
+\code{"no_new_pairs"} stop when constraints are too restrictive. Default \code{FALSE}.}
+
+\item{stage1_explore_frac}{Fraction of each round reserved for exploration while in stage1 (hybrid only).}
+
+\item{stage2_explore_frac}{Fraction of each round reserved for exploration while in stage2 (hybrid only).}
+
+\item{stage2_min_rounds}{Minimum number of BT rounds to run after switching to stage2 before allowing precision/stability stops.}
 
 \item{final_refit}{Logical. If \code{TRUE} (default), compute a final combined
 estimates table (Rank Centrality plus optional BT variants) at the end of the

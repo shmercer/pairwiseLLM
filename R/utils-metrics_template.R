@@ -94,6 +94,7 @@
     n_pairs_total = integer(),
     n_missing_better_id = integer(),
     degree_min = numeric(),
+    degree_min_lcc = numeric(),
     largest_component_frac = numeric(),
     graph_healthy = logical(),
     rms_theta_delta = numeric(),
@@ -102,6 +103,8 @@
     n_matched = integer(),
     stability_streak = integer(),
     stability_pass = logical(),
+    stage1_escalated = logical(),
+    stage1_escalation_round = integer(),
     core_flip_applied = logical(),
     linking_flip_applied = logical(),
     linking_post_flip_applied = logical()

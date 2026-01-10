@@ -17,54 +17,40 @@ testthat::test_that("Internal helpers work", {
   # .openai_base_url
   testthat::expect_equal(.openai_base_url(), "https://api.openai.com/v1")
 
-  # .openai_request construction
-  # Note: The source uses httr2::request, so we mock in "httr2"
-  testthat::with_mocked_bindings(
-    request = function(base_url) paste0("REQ:", base_url),
-    req_auth_bearer_token = function(req, token) paste0(req, "|AUTH:", token),
-    {
-      res <- .openai_request("/test", api_key = "ABC")
-      testthat::expect_equal(res, "REQ:https://api.openai.com/v1/test|AUTH:ABC")
-    },
-    .package = "httr2"
-  )
+  # .openai_request construction: deterministic (no network)
+  req <- .openai_request("/test", api_key = "ABC")
+  testthat::expect_s3_class(req, "httr2_request")
+  testthat::expect_equal(httr2::req_get_url(req), "https://api.openai.com/v1/test")
+
+  hdrs <- httr2::req_get_headers(req, redacted = "reveal")
+  auth <- hdrs[["Authorization"]]
+  if (is.null(auth)) {
+    auth <- hdrs[["authorization"]]
+  }
+  testthat::expect_equal(auth, "Bearer ABC")
 
   # .openai_req_body_json wrapper
-  testthat::with_mocked_bindings(
-    req_body_json = function(req, body, ...) list(req = req, body = body),
-    {
-      res <- .openai_req_body_json("REQ", list(a = 1))
-      testthat::expect_equal(res, list(req = "REQ", body = list(a = 1)))
-    },
-    .package = "httr2"
-  )
+  req2 <- .openai_req_body_json(req, list(a = 1))
+  testthat::expect_s3_class(req2, "httr2_request")
+  testthat::expect_equal(httr2::req_get_body_type(req2), "json")
 
   # .openai_req_perform wrapper (calls .retry_httr2_request)
-  # We mock the internal retry function (local to package)
-  testthat::with_mocked_bindings(
-    .retry_httr2_request = function(req) "RESP",
-    {
-      testthat::expect_equal(.openai_req_perform("REQ"), "RESP")
-    }
-  )
-
-  # .openai_resp_body_json wrapper
-  testthat::with_mocked_bindings(
-    resp_body_json = function(resp, ...) "PARSED",
-    {
-      testthat::expect_equal(.openai_resp_body_json("RESP"), "PARSED")
+  pll_ns <- asNamespace("pairwiseLLM")
+  seen_req <- NULL
+  testthat::local_mocked_bindings(
+    .retry_httr2_request = function(req) {
+      seen_req <<- req
+      httr2::response_json(body = list(ok = TRUE), status = 200)
     },
-    .package = "httr2"
+    .env = pll_ns
   )
+  resp <- .openai_req_perform("REQ")
+  testthat::expect_s3_class(resp, "httr2_response")
+  testthat::expect_identical(seen_req, "REQ")
 
-  # .openai_resp_status wrapper
-  testthat::with_mocked_bindings(
-    resp_status = function(resp) 200,
-    {
-      testthat::expect_equal(.openai_resp_status("RESP"), 200)
-    },
-    .package = "httr2"
-  )
+  # .openai_resp_body_json / .openai_resp_status wrappers
+  testthat::expect_equal(.openai_resp_status(resp), 200)
+  testthat::expect_equal(.openai_resp_body_json(resp)$ok, TRUE)
 })
 
 # ---------------------------------------------------------------------

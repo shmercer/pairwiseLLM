@@ -36,6 +36,9 @@ bt_adaptive_round(
   per_anchor_cap = Inf,
   w_embed = 1,
   embed_score_mode = "rank_decay",
+  theta_for_pairs = NULL,
+  explore_frac = 0,
+  graph_state = NULL,
   seed = NULL
 )
 }
@@ -141,7 +144,13 @@ item (after scoring). Passed to select_adaptive_pairs().}
 \item{w_embed}{Non-negative numeric weight for embedding-neighbor candidates
 in scoring. Passed to select_adaptive_pairs().}
 
-\item{embed_score_mode}{Character; how to compute the embedding score when
+\item{embed_score_mode}{Character; how to compute the embedding score when}
+
+\item{theta_for_pairs}{Optional theta tibble used for pairing (must have ID, theta, se). Defaults to fitted theta.}
+
+\item{explore_frac}{Fraction of pairs to reserve for exploration.}
+
+\item{graph_state}{Optional graph state from \code{.graph_state_from_pairs()}.
 w_embed > 0. Passed to select_adaptive_pairs().}
 
 \item{seed}{Optional integer seed for reproducibility; passed to \code{\link{select_adaptive_pairs}}.}

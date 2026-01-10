@@ -10,7 +10,6 @@ testthat::test_that("core linking exhaustion fallback covers all modes", {
   core_ids <- c("A", "B")
   new_ids <- c("C", "D")
   seen_ids <- c(core_ids, new_ids, "E")
-  forbidden_keys <- character(0)
 
   base_pairs <- tibble::tibble(ID1 = "A", ID2 = "B", pair_type = "base")
 
@@ -22,7 +21,6 @@ testthat::test_that("core linking exhaustion fallback covers all modes", {
     new_ids = new_ids,
     seen_ids = seen_ids,
     round_size = 10,
-    forbidden_keys = forbidden_keys,
     exhaustion_fallback = "none",
     exhaustion_min_pairs_frac = 0.5,
     within_batch_frac = 0.5,
@@ -43,7 +41,6 @@ testthat::test_that("core linking exhaustion fallback covers all modes", {
     new_ids = new_ids,
     seen_ids = seen_ids,
     round_size = 10,
-    forbidden_keys = forbidden_keys,
     exhaustion_fallback = "cross_batch_new_new",
     exhaustion_min_pairs_frac = 0.5,
     within_batch_frac = 0.5,
@@ -67,7 +64,6 @@ testthat::test_that("core linking exhaustion fallback covers all modes", {
     new_ids = new_ids,
     seen_ids = seen_ids,
     round_size = 10,
-    forbidden_keys = forbidden_keys,
     exhaustion_fallback = "targeted_repeats",
     exhaustion_min_pairs_frac = 0.5,
     within_batch_frac = 0.5,
@@ -88,7 +84,6 @@ testthat::test_that("core linking exhaustion fallback covers all modes", {
     new_ids = new_ids,
     seen_ids = seen_ids,
     round_size = 10,
-    forbidden_keys = forbidden_keys,
     exhaustion_fallback = "targeted_repeats",
     exhaustion_min_pairs_frac = 0.5,
     within_batch_frac = 0.5,

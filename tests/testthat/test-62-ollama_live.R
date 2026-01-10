@@ -1212,8 +1212,15 @@ testthat::test_that("submit_ollama_pairs_live resumes from existing file", {
                 save_path = "saved.csv", verbose = FALSE
               )
 
-              # Should only process C vs D (A vs B skipped)
-              testthat::expect_equal(processed, list("C_D"))
+              # Should only process C vs D (A vs B skipped).
+              # Avoid waldo/diffobj entirely: fail with a simple message if not identical.
+              if (!identical(processed, list("C_D"))) {
+                stop(
+                  "Unexpected processed pairs: ",
+                  paste(processed, collapse = ","),
+                  call. = FALSE
+                )
+              }
 
               # Result should contain both (existing + new)
               testthat::expect_equal(nrow(res$results), 2L)

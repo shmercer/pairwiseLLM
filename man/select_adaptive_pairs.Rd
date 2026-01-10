@@ -26,6 +26,8 @@ select_adaptive_pairs(
   per_anchor_cap = Inf,
   w_embed = 1,
   embed_score_mode = "rank_decay",
+  explore_frac = 0,
+  graph_state = NULL,
   return_internal = FALSE,
   seed = NULL
 )
@@ -118,7 +120,11 @@ anchor item (in theta-sorted order) after scoring/constraints. Use
 scoring function. Default is 1 (embeddings influence both candidate
 generation and scoring when available).}
 
-\item{embed_score_mode}{Character; how to compute the embedding bonus when
+\item{embed_score_mode}{Character; how to compute the embedding bonus when}
+
+\item{explore_frac}{Fraction of pairs to reserve for exploration (e.g., bridge/low-degree) before exploitation.}
+
+\item{graph_state}{Optional graph state from \code{.graph_state_from_pairs()} to avoid recomputation.
 \code{w_embed != 0}. Options are \code{"binary_neighbor"} and
 \code{"rank_decay"}.}
 

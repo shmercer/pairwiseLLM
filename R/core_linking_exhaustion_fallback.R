@@ -5,7 +5,6 @@
   new_ids,
   seen_ids,
   round_size,
-  forbidden_keys,
   exhaustion_fallback = c("none", "cross_batch_new_new", "targeted_repeats", "both"),
   exhaustion_min_pairs_frac = 0.5,
   exhaustion_spectral_gap_threshold = 0,
@@ -43,8 +42,6 @@
     return(pairs)
   }
 
-  # Helper to create unordered pair keys compatible with `forbidden_keys`.
-
   make_cross_batch_new_new <- function() {
     extra_ids <- setdiff(unique(seen_ids), c(core_ids, new_ids))
     if (length(extra_ids) == 0) {
@@ -53,15 +50,6 @@
 
     cand <- tidyr::expand_grid(ID1 = new_ids, ID2 = extra_ids)
     cand <- dplyr::filter(cand, .data$ID1 != .data$ID2)
-    if (nrow(cand) == 0) {
-      return(NULL)
-    }
-
-    cand$key <- .unordered_pair_key(cand$ID1, cand$ID2)
-    if (length(forbidden_keys) > 0) {
-      cand <- dplyr::filter(cand, !(.data$key %in% forbidden_keys))
-    }
-    cand$key <- NULL
     if (nrow(cand) == 0) {
       return(NULL)
     }

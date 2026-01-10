@@ -1250,7 +1250,6 @@ bt_run_core_linking <- function(samples,
           new_ids = new_ids,
           seen_ids = seen_ids,
           round_size = round_size,
-          forbidden_keys = round_out$forbidden_keys,
           exhaustion_fallback = exhaustion_fallback,
           exhaustion_min_pairs_frac = exhaustion_min_pairs_frac,
           exhaustion_spectral_gap_threshold = exhaustion_spectral_gap_threshold,
@@ -1338,10 +1337,12 @@ bt_run_core_linking <- function(samples,
         stability_seed = if (is.null(seed)) NULL else (as.integer(seed) + as.integer(batch_i) * 1000L + as.integer(round_i))
       )
 
-      # Counts used by adaptive runner (kept here so metrics schemas match across runners).
-      metrics$n_pairs_total <- st$n_unique_unordered_pairs_in_ids
-      metrics$n_pairs_new <- st$new_n_unique_unordered_pairs_in_ids
+      # Workstream F: consistent pair-count metrics across runners.
+      pair_counts <- bt_count_unique_pairs(results = results, ids = ids_all, new_ids = new_ids)
+      metrics$n_pairs_total <- pair_counts$n_pairs_total[[1]]
+      metrics$n_pairs_new <- pair_counts$n_pairs_new[[1]]
       metrics$n_missing_better_id <- st$n_missing_better_id
+
 
       # Add bookkeeping / allocation columns (do NOT pass these into bt_stop_metrics())
       metrics <- dplyr::mutate(

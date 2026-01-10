@@ -27,9 +27,18 @@
 }
 
 .read_existing_live_results <- function(save_path, verbose = TRUE) {
-  if (!requireNamespace("readr", quietly = TRUE)) {
+  if (!.require_pkg("readr")) {
     stop("The 'readr' package is required for incremental saving. Please install it.", call. = FALSE)
   }
-  out <- readr::read_csv(save_path, show_col_types = FALSE)
+  # `show_col_types` is not available in older readr versions; keep compatibility.
+  if ("show_col_types" %in% names(formals(readr::read_csv))) {
+    out <- readr::read_csv(save_path, show_col_types = FALSE)
+  } else {
+    out <- readr::read_csv(save_path)
+  }
   .coerce_live_submit_types(out)
+}
+
+.require_pkg <- function(pkg) {
+  requireNamespace(pkg, quietly = TRUE)
 }

@@ -1310,7 +1310,6 @@ bt_run_adaptive_core_linking <- function(samples,
           new_ids = new_ids,
           seen_ids = seen_ids,
           round_size = round_size,
-          forbidden_keys = .bt_round_state(results)$forbidden_keys,
           exhaustion_fallback = exhaustion_fallback,
           exhaustion_min_pairs_frac = exhaustion_min_pairs_frac,
           exhaustion_spectral_gap_threshold = exhaustion_spectral_gap_threshold,
@@ -1533,8 +1532,10 @@ bt_run_adaptive_core_linking <- function(samples,
       )
       m$n_pairs_proposed <- nrow(pairs_next)
       m$n_results_total <- nrow(results)
-      m$n_pairs_total <- nrow(results)
-      m$n_pairs_new <- nrow(judged)
+      pair_counts <- bt_count_unique_pairs(results = results, ids = ids_all, new_ids = new_ids)
+      m$n_pairs_total <- pair_counts$n_pairs_total[[1]]
+      m$n_pairs_new <- pair_counts$n_pairs_new[[1]]
+
       m$n_missing_better_id <- sum(is.na(results$better_id))
       m$n_core_new <- sum(pairs_next$pair_type == "core_new")
       m$n_new_new <- sum(pairs_next$pair_type == "new_new")
