@@ -1052,6 +1052,25 @@ bt_run_adaptive <- function(samples,
             method = "spearman",
             use = "pairwise.complete.obs"
           ))
+
+          # If ranks are constant (or otherwise yield NA correlation), but are
+          # identical to the previous ranks, treat as perfectly stable.
+          if (is.na(rho_spearman_rc)) {
+            ok_rank <- !is.na(rc_rank) & !is.na(prev_rc_rank)
+            # If we have too little overlap (e.g., new nodes became seen this round),
+            # treat stability as reached rather than blocking switching.
+            if (sum(ok_rank) < 2L) {
+              rho_spearman_rc <- 1
+            } else {
+              uniq_now <- length(unique(rc_rank[ok_rank]))
+              uniq_prev <- length(unique(prev_rc_rank[ok_rank]))
+              if (uniq_now < 2L || uniq_prev < 2L) {
+                rho_spearman_rc <- 1
+              } else if (isTRUE(all(rc_rank[ok_rank] == prev_rc_rank[ok_rank]))) {
+                rho_spearman_rc <- 1
+              }
+            }
+          }
         }
         prev_rc_rank <- rc_rank
       }
@@ -1105,6 +1124,14 @@ bt_run_adaptive <- function(samples,
     }
 
     stability_reached <- isTRUE(stability_streak >= as.integer(stop_stability_consecutive))
+
+    # In hybrid Stage 1, treat precision/stability as switch diagnostics, not stop rules.
+    # Hard stops (no new pairs, budget, max rounds) can still terminate earlier.
+    if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc")) {
+      precision_reached <- FALSE
+      stability_reached <- FALSE
+    }
+
 
     # Enforce a minimum number of stage-2 (BT) rounds before allowing
     # precision/stability-based stopping. Hard stops (no new pairs, budget,

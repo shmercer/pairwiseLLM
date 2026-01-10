@@ -472,9 +472,30 @@ submit_openai_pairs_live <- function(
 
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
 
-    # Set the plan and capture the OLD plan to restore it on exit
-    old_plan <- future::plan("multisession", workers = workers)
+    # Set the plan and capture the OLD plan to restore it on exit.
+    old_plan <- future::plan()
     on.exit(future::plan(old_plan), add = TRUE)
+
+    # `parallelly` can error early in restricted environments (e.g., few free
+    # connections) due to conservative validation. Retry once with validation
+    # disabled, which is safe for short-lived, internal worker clusters.
+    tryCatch(
+      {
+        future::plan("multisession", workers = workers)
+      },
+      error = function(e) {
+        if (verbose) {
+          message(
+            "Parallel plan setup failed with validation enabled; retrying with ",
+            "options(parallelly.makeNodePSOCK.validate = FALSE). Error: ",
+            conditionMessage(e)
+          )
+        }
+        old_opts <- options(parallelly.makeNodePSOCK.validate = FALSE)
+        on.exit(options(old_opts), add = TRUE)
+        future::plan("multisession", workers = workers)
+      }
+    )
   }
 
   # --- Resume Logic ---
