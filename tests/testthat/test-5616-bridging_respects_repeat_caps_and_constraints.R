@@ -26,7 +26,7 @@ test_that("component bridging respects forbidden pairs and falls back determinis
 
   res <- pairwiseLLM:::select_adaptive_pairs(
     samples = samples,
-    theta_tbl = theta_tbl,
+    theta = theta_tbl,
     existing_pairs = existing_pairs,
     graph_state = graph_state,
     n_pairs = 1L,

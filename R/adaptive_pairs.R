@@ -1602,6 +1602,27 @@ select_adaptive_pairs <- function(samples,
       explore_repeat_cap <- if (repeat_policy == "reverse_only") as.integer(repeat_quota_n) else 0L
       if (is.na(explore_repeat_cap) || explore_repeat_cap < 0L) explore_repeat_cap <- 0L # nocov
 
+
+      # Workstream D: determine required component-bridge quota up-front.
+      # If the graph is disconnected and exploration is enabled, we allocate an
+      # explicit bridge quota even when `floor(n_pairs * explore_frac)` would be 0.
+      n_components <- 1L
+      if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L &&
+        "n_components" %in% names(graph_state$metrics)) {
+        n_components <- as.integer(graph_state$metrics$n_components[[1]])
+        if (is.na(n_components) || n_components < 1L) n_components <- 1L
+      }
+
+      n_bridge_target <- 0L
+      if (explore_frac > 0 && n_components > 1L) {
+        n_bridge_target <- as.integer(min(ceiling(0.5 * n_pairs), n_components - 1L))
+        n_bridge_target <- max(0L, n_bridge_target)
+      }
+
+      if (n_bridge_target > 0L) {
+        n_explore_target <- as.integer(max(n_explore_target, n_bridge_target))
+      }
+
       if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
         # Candidate tables are index-based (i_idx/j_idx). Some paths omit ID1/ID2;
         # add them here so component/degree lookups and ordering are robust.
@@ -1627,19 +1648,6 @@ select_adaptive_pairs <- function(samples,
         # Workstream D: explicit component-bridging exploration when disconnected.
         bridge_selected_tbl <- capped_tbl[0, , drop = FALSE]
 
-        n_components <- 1L
-        if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L &&
-          "n_components" %in% names(graph_state$metrics)) {
-          n_components <- as.integer(graph_state$metrics$n_components[[1]])
-          if (is.na(n_components) || n_components < 1L) n_components <- 1L
-        }
-
-        n_bridge_target <- 0L
-        if (n_components > 1L) {
-          n_bridge_target <- as.integer(min(ceiling(0.5 * n_pairs), n_components - 1L))
-          n_bridge_target <- max(0L, n_bridge_target)
-        }
-
         if (n_bridge_target > 0L) {
           # Ensure exploration budget can accommodate required bridges.
           n_explore_target <- as.integer(max(n_explore_target, n_bridge_target))
@@ -1657,10 +1665,9 @@ select_adaptive_pairs <- function(samples,
               existing_counts = existing_counts,
               existing_counts_all = existing_counts_all,
               existing_dir = existing_dir,
-              forbid_unordered = forbid_unordered,
+              forbid_unordered = if (is.null(forbid_repeats)) TRUE else isTRUE(forbid_repeats),
               repeat_policy = repeat_policy,
-              repeat_cap = repeat_cap,
-              stop_on_internal_error = stop_on_internal_error
+              repeat_cap = repeat_cap
             )
 
             if (nrow(bridge_constrained) > 0L && "target_component_id" %in% names(bridge_constrained)) {

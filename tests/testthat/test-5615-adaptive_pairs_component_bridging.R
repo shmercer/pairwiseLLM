@@ -18,7 +18,7 @@ test_that("disconnected graphs allocate explicit component-bridge pairs", {
 
   res <- pairwiseLLM:::select_adaptive_pairs(
     samples = samples,
-    theta_tbl = theta_tbl,
+    theta = theta_tbl,
     existing_pairs = existing_pairs,
     n_pairs = 2L,
     explore_frac = 0.1,

@@ -54,12 +54,18 @@ test_that("select_adaptive_pairs applies explore_frac quota (exploration + explo
 
   keys_explore <- key(out_explore$pairs$ID1, out_explore$pairs$ID2)
   keys_exploit <- key(out_exploit$pairs$ID1, out_exploit$pairs$ID2)
-  target_cd <- key("C", "D")
+  has_component_bridge <- function(out) {
+    sel <- out$candidates$selected
+    if (!is.list(out$candidates) || is.null(sel) || !is.data.frame(sel)) return(FALSE)
+    if (!("pair_type" %in% names(sel))) return(FALSE)
+    any(sel$pair_type == "component_bridge", na.rm = TRUE)
+  }
 
-  # Exploration should force inclusion of a low-degree pair (C,D).
-  expect_true(target_cd %in% keys_explore)
-  # Under pure exploitation, (C,D) should not be selected in this setup.
-  expect_false(target_cd %in% keys_exploit)
+  # With exploration enabled on a disconnected graph, component-bridge pairs
+  # should be allocated before other exploration candidates.
+  expect_true(has_component_bridge(out_explore))
+  # With explore_frac = 0, no explicit component-bridge pairs should appear.
+  expect_false(has_component_bridge(out_exploit))
 
   # The exploration+exploitation merge should still respect the requested count.
   expect_equal(nrow(out_explore$pairs), 4L)
