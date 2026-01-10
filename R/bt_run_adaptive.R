@@ -548,6 +548,9 @@ bt_run_adaptive <- function(samples,
     stop("`stage1_max_rounds` must be an integer >= 1.", call. = FALSE)
   }
 
+  # In very short runs, cap the stage-1 horizon so escalation/switch logic can still activate.
+  stage1_max_rounds_eff <- min(stage1_max_rounds, max(1L, max_rounds - 1L))
+
   if (!is.numeric(stage1_escalated_explore_frac) || length(stage1_escalated_explore_frac) != 1L ||
     is.na(stage1_escalated_explore_frac) || stage1_escalated_explore_frac < 0 ||
     stage1_escalated_explore_frac > 1) {
@@ -1141,10 +1144,10 @@ bt_run_adaptive <- function(samples,
       # ---- Workstream E: Stage 1 max-rounds fail-safe escalation ----
       # If Stage 1 cannot meet the connectivity gate within `stage1_max_rounds`,
       # escalate exploration + broaden candidate construction rather than stopping.
-      if (isTRUE(stage1_rounds >= stage1_max_rounds) && identical(stage_after, "stage1_rc")) {
+      if (isTRUE(stage1_rounds >= stage1_max_rounds_eff) && identical(stage_after, "stage1_rc")) {
         if (!isTRUE(stage1_escalated)) {
           stage1_escalated <- TRUE
-          stage1_escalation_round <- as.integer(r)
+          stage1_escalation_round <- as.integer(r + 1L)
         }
       }
     } else if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage2_bt")) {
@@ -1244,7 +1247,12 @@ bt_run_adaptive <- function(samples,
 
       # Workstream E: if Stage 1 failed to switch by `stage1_max_rounds`,
       # increase exploration and broaden candidate windows.
-      if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc") && isTRUE(stage1_escalated)) {
+      stage1_escalation_round_i <- suppressWarnings(as.integer(stage1_escalation_round))
+      stage1_escalated_active <- isTRUE(stage1_escalated) &&
+        !is.na(stage1_escalation_round_i) &&
+        as.integer(r) >= stage1_escalation_round_i
+
+      if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc") && isTRUE(stage1_escalated_active)) {
         explore_frac_now <- max(as.double(explore_frac_now), as.double(stage1_escalated_explore_frac))
 
         if (isTRUE(is.infinite(stage1_escalated_k_neighbors))) {
@@ -1313,8 +1321,10 @@ bt_run_adaptive <- function(samples,
     graph_healthy_val <- as.logical(graph_healthy)
     stability_streak_val <- as.integer(stability_streak)
     stability_pass_val <- as.logical(stability_pass)
-    stage1_escalated_val <- isTRUE(stage1_escalated)
     stage1_escalation_round_val <- suppressWarnings(as.integer(stage1_escalation_round))
+    stage1_escalated_val <- isTRUE(stage1_escalated) &&
+      !is.na(stage1_escalation_round_val) &&
+      as.integer(r) >= stage1_escalation_round_val
 
     metrics <- metrics %>%
       dplyr::mutate(
@@ -1355,32 +1365,36 @@ bt_run_adaptive <- function(samples,
     state_list[[length(state_list) + 1L]] <- st_now
 
     metrics_clean <- dplyr::select(metrics, -dplyr::any_of(c("stop", "stop_reason")))
+    round_meta <- tibble::tibble(
+      round = as.integer(r),
+      n_new_pairs_scored = 0L,
+      n_total_results = as.integer(nrow(results)),
+      pairing_stage = as.character(stage),
+      rho_spearman_rc = as.double(rho_spearman_rc),
+      conn_ok = conn_ok,
+      stab_ok = stab_ok,
+      conn_streak = as.integer(conn_streak),
+      stab_streak = as.integer(stab_streak),
+      stage1_rounds = as.integer(stage1_rounds),
+      stage2_rounds = as.integer(stage2_rounds),
+      stop = isTRUE(stop_chk$stop),
+      stop_reason = this_reason,
+      stop_blocked_by = this_blocked_by,
+      stop_blocked_candidates = this_blocked_candidates,
+      precision_reached = isTRUE(precision_reached)
+    )
+
+    # Guard against future schema drift: ensure we never cbind duplicate names.
+    metrics_clean <- dplyr::select(
+      metrics_clean,
+      -dplyr::any_of(intersect(names(metrics_clean), names(round_meta)))
+    )
 
     rounds_list[[length(rounds_list) + 1L]] <- dplyr::bind_cols(
-      tibble::tibble(
-        round = as.integer(r),
-        n_new_pairs_scored = 0L,
-        n_total_results = as.integer(nrow(results)),
-        pairing_stage = as.character(stage),
-        rho_spearman_rc = as.double(rho_spearman_rc),
-        conn_ok = conn_ok,
-        stab_ok = stab_ok,
-        conn_streak = as.integer(conn_streak),
-        stab_streak = as.integer(stab_streak),
-        stage1_rounds = as.integer(stage1_rounds),
-        stage2_rounds = as.integer(stage2_rounds),
-        stage1_escalated = isTRUE(stage1_escalated),
-        stage1_escalation_round = suppressWarnings(as.integer(stage1_escalation_round)),
-        stop = isTRUE(stop_chk$stop),
-        stop_reason = this_reason,
-        stop_blocked_by = this_blocked_by,
-        stop_blocked_candidates = this_blocked_candidates,
-        precision_reached = isTRUE(precision_reached)
-      ),
+      round_meta,
       metrics_clean,
       .name_repair = "check_unique"
     )
-
     prev_metrics <- metrics
     prev_fit_for_stability <- fit
 
