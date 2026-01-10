@@ -1604,8 +1604,8 @@ select_adaptive_pairs <- function(samples,
 
 
       # Workstream D: determine required component-bridge quota up-front.
-      # If the graph is disconnected and exploration is enabled, we allocate an
-      # explicit bridge quota even when `floor(n_pairs * explore_frac)` would be 0.
+      # If the graph is disconnected, we allocate an explicit bridge quota even
+      # when `explore_frac == 0` (bridging is non-negotiable for graph health).
       n_components <- 1L
       if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L &&
         "n_components" %in% names(graph_state$metrics)) {
@@ -1614,7 +1614,7 @@ select_adaptive_pairs <- function(samples,
       }
 
       n_bridge_target <- 0L
-      if (explore_frac > 0 && n_components > 1L) {
+      if (n_components > 1L) {
         n_bridge_target <- as.integer(min(ceiling(0.5 * n_pairs), n_components - 1L))
         n_bridge_target <- max(0L, n_bridge_target)
       }
@@ -1623,7 +1623,7 @@ select_adaptive_pairs <- function(samples,
         n_explore_target <- as.integer(max(n_explore_target, n_bridge_target))
       }
 
-      if (n_explore_target > 0L && nrow(capped_tbl) > 0L) {
+      if (n_explore_target > 0L) {
         # Candidate tables are index-based (i_idx/j_idx). Some paths omit ID1/ID2;
         # add them here so component/degree lookups and ordering are robust.
         if (!all(c("ID1", "ID2") %in% names(capped_tbl)) &&
@@ -1785,26 +1785,29 @@ select_adaptive_pairs <- function(samples,
         # remaining exploration quota with low-degree candidates.
         explore_selected_tbl <- bridge_selected_tbl
 
-        n_nonrepeat_for_explore <- as.integer(max(0L, n_explore_target - nrow(explore_selected_tbl)))
-        if (n_nonrepeat_for_explore > 0L && nrow(explore_pool_nonrepeat) > 0L) {
-          explore_nonrepeat_selected <- pick_low_degree(
-            explore_pool_nonrepeat,
-            deg_sum_pool_nonrepeat,
-            n_nonrepeat_for_explore
-          )
-          if (nrow(explore_nonrepeat_selected) > 0L) {
-            explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_nonrepeat_selected)
+        # If explore_frac == 0, we bridge only (no additional exploration beyond bridging).
+        if (explore_frac > 0) {
+          n_nonrepeat_for_explore <- as.integer(max(0L, n_explore_target - nrow(explore_selected_tbl)))
+          if (n_nonrepeat_for_explore > 0L && nrow(explore_pool_nonrepeat) > 0L) {
+            explore_nonrepeat_selected <- pick_low_degree(
+              explore_pool_nonrepeat,
+              deg_sum_pool_nonrepeat,
+              n_nonrepeat_for_explore
+            )
+            if (nrow(explore_nonrepeat_selected) > 0L) {
+              explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_nonrepeat_selected)
+            }
           }
-        }
 
-        # If exploration quota isn't filled, allow repeats into exploration but
-        # cap by remaining repeat quota.
-        n_explore_remaining <- as.integer(n_explore_target - nrow(explore_selected_tbl))
-        if (n_explore_remaining > 0L && explore_repeat_cap > 0L && nrow(explore_pool_repeat) > 0L) {
-          n_repeat_for_explore <- as.integer(min(n_explore_remaining, explore_repeat_cap))
-          explore_repeat_selected <- pick_low_degree(explore_pool_repeat, deg_sum_pool_repeat, n_repeat_for_explore)
-          if (nrow(explore_repeat_selected) > 0L) {
-            explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_repeat_selected)
+          # If exploration quota isn't filled, allow repeats into exploration but
+          # cap by remaining repeat quota.
+          n_explore_remaining <- as.integer(n_explore_target - nrow(explore_selected_tbl))
+          if (n_explore_remaining > 0L && explore_repeat_cap > 0L && nrow(explore_pool_repeat) > 0L) {
+            n_repeat_for_explore <- as.integer(min(n_explore_remaining, explore_repeat_cap))
+            explore_repeat_selected <- pick_low_degree(explore_pool_repeat, deg_sum_pool_repeat, n_repeat_for_explore)
+            if (nrow(explore_repeat_selected) > 0L) {
+              explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_repeat_selected)
+            }
           }
         }
       }

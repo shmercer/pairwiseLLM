@@ -64,8 +64,14 @@ test_that("select_adaptive_pairs applies explore_frac quota (exploration + explo
   # With exploration enabled on a disconnected graph, component-bridge pairs
   # should be allocated before other exploration candidates.
   expect_true(has_component_bridge(out_explore))
-  # With explore_frac = 0, no explicit component-bridge pairs should appear.
-  expect_false(has_component_bridge(out_exploit))
+  # With explore_frac = 0, explicit component-bridge pairs should still appear when disconnected.
+  expect_true(has_component_bridge(out_exploit))
+  sel_exploit <- out_exploit$candidates$selected
+  n_bridge <- 0L
+  if (is.data.frame(sel_exploit) && "pair_type" %in% names(sel_exploit)) {
+    n_bridge <- sum(sel_exploit$pair_type == "component_bridge", na.rm = TRUE)
+  }
+  expect_equal(n_bridge, 2L)
 
   # The exploration+exploitation merge should still respect the requested count.
   expect_equal(nrow(out_explore$pairs), 4L)
