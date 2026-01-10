@@ -7,6 +7,7 @@ testthat::test_that("select_adaptive_pairs fills missing se with fallback", {
     theta = theta,
     n_pairs = 3,
     balance_positions = TRUE,
+    forbid_repeats = TRUE,
     seed = 1
   )
 

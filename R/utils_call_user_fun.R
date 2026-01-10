@@ -9,8 +9,22 @@
   }
 
   fmls <- tryCatch(formals(fun), error = function(e) NULL)
+  # Some non-primitive functions can still yield NULL formals (e.g., certain
+  # wrapped/compiled functions). For closures we treat NULL formals as
+  # "no arguments" to preserve the helper's intent of being permissive when
+  # callers pass extra args.
   if (is.null(fmls)) {
+    if (identical(typeof(fun), "closure")) {
+      return(do.call(fun, list()))
+    }
     return(do.call(fun, args))
+  }
+
+  # `formals()` can return an empty pairlist() for zero-argument functions.
+  # In that case, drop all supplied args (named or unnamed) to avoid
+  # unintended "unused argument" errors.
+  if (length(fmls) == 0L) {
+    return(do.call(fun, list()))
   }
 
   fml_names <- names(fmls)
