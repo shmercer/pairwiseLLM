@@ -25,6 +25,9 @@ bt_run_adaptive(
   stage1_min_degree_min = 0,
   stage1_min_spearman = 0.97,
   stage1_max_rounds = 10L,
+  stage1_escalated_explore_frac = 0.5,
+  stage1_escalated_k_neighbors = Inf,
+  stage1_escalate_allow_unordered_repeats = FALSE,
   stage1_explore_frac = 0.25,
   stage2_explore_frac = 0.1,
   stage2_min_rounds = 3L,
@@ -170,15 +173,27 @@ is still unseen (degree 0). Prefer \code{stage1_min_degree_min_lcc}.}
 \item{stage1_min_spearman}{Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 Spearman correlation between consecutive RC rank vectors to count as stable.}
 
-\item{stage1_max_rounds}{Integer. For \code{fit_engine_running = "hybrid"}, maximum}
+\item{stage1_max_rounds}{Integer. For \code{fit_engine_running = "hybrid"}, maximum
+number of Stage 1 rounds to attempt before triggering stage-1 fail-safe escalation.}
+
+\item{stage1_escalated_explore_frac}{Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
+when Stage 1 reaches \code{stage1_max_rounds} without meeting the connectivity gate,
+increase exploration to at least this fraction. Default \code{0.5}.}
+
+\item{stage1_escalated_k_neighbors}{Integer (or \code{NULL}/\code{Inf}). For \code{fit_engine_running = "hybrid"},
+when Stage 1 reaches \code{stage1_max_rounds} without meeting the connectivity gate,
+expand neighbor windows by setting \code{k_neighbors} to at least this value.
+Use \code{Inf} for "all neighbors". Default \code{Inf}.}
+
+\item{stage1_escalate_allow_unordered_repeats}{Logical. For \code{fit_engine_running = "hybrid"},
+when Stage 1 is escalated, optionally allow unordered repeats to avoid a hard
+\code{"no_new_pairs"} stop when constraints are too restrictive. Default \code{FALSE}.}
 
 \item{stage1_explore_frac}{Fraction of each round reserved for exploration while in stage1 (hybrid only).}
 
 \item{stage2_explore_frac}{Fraction of each round reserved for exploration while in stage2 (hybrid only).}
 
-\item{stage2_min_rounds}{Minimum number of BT rounds to run after switching to stage2 before allowing precision/stability stops.
-number of Stage 1 rounds to attempt before giving up on switching (the runner will
-continue using RC as the running engine).}
+\item{stage2_min_rounds}{Minimum number of BT rounds to run after switching to stage2 before allowing precision/stability stops.}
 
 \item{final_refit}{Logical. If \code{TRUE} (default), compute a final combined
 estimates table (Rank Centrality plus optional BT variants) at the end of the

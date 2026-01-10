@@ -99,11 +99,20 @@
 #' @param stage1_min_spearman Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 #'   Spearman correlation between consecutive RC rank vectors to count as stable.
 #' @param stage1_max_rounds Integer. For \code{fit_engine_running = "hybrid"}, maximum
+#'   number of Stage 1 rounds to attempt before triggering stage-1 fail-safe escalation.
+#' @param stage1_escalated_explore_frac Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
+#'   when Stage 1 reaches \code{stage1_max_rounds} without meeting the connectivity gate,
+#'   increase exploration to at least this fraction. Default \code{0.5}.
+#' @param stage1_escalated_k_neighbors Integer (or \code{NULL}/\code{Inf}). For \code{fit_engine_running = "hybrid"},
+#'   when Stage 1 reaches \code{stage1_max_rounds} without meeting the connectivity gate,
+#'   expand neighbor windows by setting \code{k_neighbors} to at least this value.
+#'   Use \code{Inf} for "all neighbors". Default \code{Inf}.
+#' @param stage1_escalate_allow_unordered_repeats Logical. For \code{fit_engine_running = "hybrid"},
+#'   when Stage 1 is escalated, optionally allow unordered repeats to avoid a hard
+#'   \code{"no_new_pairs"} stop when constraints are too restrictive. Default \code{FALSE}.
 #' @param stage1_explore_frac Fraction of each round reserved for exploration while in stage1 (hybrid only).
 #' @param stage2_explore_frac Fraction of each round reserved for exploration while in stage2 (hybrid only).
 #' @param stage2_min_rounds Minimum number of BT rounds to run after switching to stage2 before allowing precision/stability stops.
-#'   number of Stage 1 rounds to attempt before giving up on switching (the runner will
-#'   continue using RC as the running engine).
 #' @param final_refit Logical. If \code{TRUE} (default), compute a final combined
 #'   estimates table (Rank Centrality plus optional BT variants) at the end of the
 #'   run via \code{\link{compute_final_estimates}}. Suggested dependencies are
@@ -385,6 +394,9 @@ bt_run_adaptive <- function(samples,
                             stage1_min_degree_min = 0,
                             stage1_min_spearman = 0.97,
                             stage1_max_rounds = 10L,
+                            stage1_escalated_explore_frac = 0.5,
+                            stage1_escalated_k_neighbors = Inf,
+                            stage1_escalate_allow_unordered_repeats = FALSE,
                             stage1_explore_frac = 0.25,
                             stage2_explore_frac = 0.10,
                             stage2_min_rounds = 3L,
@@ -535,6 +547,32 @@ bt_run_adaptive <- function(samples,
   if (is.na(stage1_max_rounds) || stage1_max_rounds < 1L) {
     stop("`stage1_max_rounds` must be an integer >= 1.", call. = FALSE)
   }
+
+  if (!is.numeric(stage1_escalated_explore_frac) || length(stage1_escalated_explore_frac) != 1L ||
+    is.na(stage1_escalated_explore_frac) || stage1_escalated_explore_frac < 0 ||
+    stage1_escalated_explore_frac > 1) {
+    stop("`stage1_escalated_explore_frac` must be a single number in [0, 1].", call. = FALSE)
+  }
+
+  # Allow NULL / Inf as a convenience for "all neighbors".
+  if (is.null(stage1_escalated_k_neighbors) || isTRUE(is.infinite(stage1_escalated_k_neighbors))) {
+    stage1_escalated_k_neighbors <- Inf
+  }
+  if (!is.numeric(stage1_escalated_k_neighbors) || length(stage1_escalated_k_neighbors) != 1L ||
+    is.na(stage1_escalated_k_neighbors)) {
+    stop("`stage1_escalated_k_neighbors` must be a positive integer, or NULL/Inf for all neighbors.", call. = FALSE)
+  }
+  if (is.finite(stage1_escalated_k_neighbors)) {
+    if (stage1_escalated_k_neighbors < 1) {
+      stop("`stage1_escalated_k_neighbors` must be positive (>= 1), or NULL/Inf for all neighbors.", call. = FALSE)
+    }
+    if (abs(stage1_escalated_k_neighbors - round(stage1_escalated_k_neighbors)) > 1e-12) {
+      stop("`stage1_escalated_k_neighbors` must be an integer (or NULL/Inf for all neighbors).", call. = FALSE)
+    }
+    stage1_escalated_k_neighbors <- as.integer(stage1_escalated_k_neighbors)
+  }
+
+  stage1_escalate_allow_unordered_repeats <- isTRUE(stage1_escalate_allow_unordered_repeats)
 
   stage2_min_rounds <- as.integer(stage2_min_rounds)
   if (is.na(stage2_min_rounds) || stage2_min_rounds < 0L) {
@@ -913,6 +951,8 @@ bt_run_adaptive <- function(samples,
   stage1_rounds <- 0L
   stage2_rounds <- 0L
   prev_rc_rank <- NULL
+  stage1_escalated <- FALSE
+  stage1_escalation_round <- NA_integer_
 
   if (identical(fit_engine_running_requested, "hybrid")) {
     stage <- "stage1_rc"
@@ -938,6 +978,14 @@ bt_run_adaptive <- function(samples,
       if ("stage2_rounds" %in% names(rounds_tbl_prev)) {
         stage2_rounds <- as.integer(rounds_tbl_prev$stage2_rounds[[nrow(rounds_tbl_prev)]])
         if (is.na(stage2_rounds)) stage2_rounds <- 0L
+      }
+
+      if ("stage1_escalated" %in% names(rounds_tbl_prev)) {
+        stage1_escalated <- isTRUE(rounds_tbl_prev$stage1_escalated[[nrow(rounds_tbl_prev)]])
+      }
+      if ("stage1_escalation_round" %in% names(rounds_tbl_prev)) {
+        stage1_escalation_round <- as.integer(rounds_tbl_prev$stage1_escalation_round[[nrow(rounds_tbl_prev)]])
+        if (is.na(stage1_escalation_round)) stage1_escalation_round <- NA_integer_
       }
     }
   }
@@ -1090,8 +1138,14 @@ bt_run_adaptive <- function(samples,
         stage2_rounds <- as.integer(stage2_rounds) + 1L
       }
 
+      # ---- Workstream E: Stage 1 max-rounds fail-safe escalation ----
+      # If Stage 1 cannot meet the connectivity gate within `stage1_max_rounds`,
+      # escalate exploration + broaden candidate construction rather than stopping.
       if (isTRUE(stage1_rounds >= stage1_max_rounds) && identical(stage_after, "stage1_rc")) {
-        # Fail-safe: do not force a switch, but record current streak state.
+        if (!isTRUE(stage1_escalated)) {
+          stage1_escalated <- TRUE
+          stage1_escalation_round <- as.integer(r)
+        }
       }
     } else if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage2_bt")) {
       stage2_rounds <- as.integer(stage2_rounds) + 1L
@@ -1177,6 +1231,8 @@ bt_run_adaptive <- function(samples,
       repeat_cap_now <- repeat_cap
       repeat_frac_now <- repeat_frac
       repeat_n_now <- repeat_n
+      k_neighbors_now <- k_neighbors
+      forbid_repeats_now <- forbid_repeats
       explore_frac_now <- if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc")) {
         stage1_explore_frac
       } else {
@@ -1186,13 +1242,31 @@ bt_run_adaptive <- function(samples,
         explore_frac_now <- stage1_explore_frac
       }
 
+      # Workstream E: if Stage 1 failed to switch by `stage1_max_rounds`,
+      # increase exploration and broaden candidate windows.
+      if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc") && isTRUE(stage1_escalated)) {
+        explore_frac_now <- max(as.double(explore_frac_now), as.double(stage1_escalated_explore_frac))
+
+        if (isTRUE(is.infinite(stage1_escalated_k_neighbors))) {
+          k_neighbors_now <- Inf
+        } else {
+          # Keep existing k_neighbors if already wider.
+          k_neighbors_now <- max(as.integer(k_neighbors_now), as.integer(stage1_escalated_k_neighbors))
+        }
+
+        if (isTRUE(stage1_escalate_allow_unordered_repeats)) {
+          # Allow unordered repeats (opt-in) by disabling the forbid_unordered gate.
+          forbid_repeats_now <- FALSE
+        }
+      }
+
       pairs_next <- select_adaptive_pairs(
         samples = samples,
         theta = theta_for_pairs,
         existing_pairs = results,
         embedding_neighbors = embedding_neighbors,
         n_pairs = round_size,
-        k_neighbors = k_neighbors,
+        k_neighbors = k_neighbors_now,
         min_judgments = min_judgments,
         repeat_policy = repeat_policy_now,
         repeat_cap = repeat_cap_now,
@@ -1202,7 +1276,7 @@ bt_run_adaptive <- function(samples,
         graph_state = gs,
         repeat_guard_min_degree = repeat_guard_min_degree,
         repeat_guard_largest_component_frac = repeat_guard_largest_component_frac,
-        forbid_repeats = forbid_repeats,
+        forbid_repeats = forbid_repeats_now,
         balance_positions = balance_positions,
         embed_far_k = embed_far_k,
         embed_quota_frac = embed_quota_frac,
@@ -1239,6 +1313,8 @@ bt_run_adaptive <- function(samples,
     graph_healthy_val <- as.logical(graph_healthy)
     stability_streak_val <- as.integer(stability_streak)
     stability_pass_val <- as.logical(stability_pass)
+    stage1_escalated_val <- isTRUE(stage1_escalated)
+    stage1_escalation_round_val <- suppressWarnings(as.integer(stage1_escalation_round))
 
     metrics <- metrics %>%
       dplyr::mutate(
@@ -1247,7 +1323,9 @@ bt_run_adaptive <- function(samples,
         largest_component_frac = largest_component_frac_val,
         graph_healthy = graph_healthy_val,
         stability_streak = stability_streak_val,
-        stability_pass = stability_pass_val
+        stability_pass = stability_pass_val,
+        stage1_escalated = stage1_escalated_val,
+        stage1_escalation_round = stage1_escalation_round_val
       )
 
     metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
@@ -1291,6 +1369,8 @@ bt_run_adaptive <- function(samples,
         stab_streak = as.integer(stab_streak),
         stage1_rounds = as.integer(stage1_rounds),
         stage2_rounds = as.integer(stage2_rounds),
+        stage1_escalated = isTRUE(stage1_escalated),
+        stage1_escalation_round = suppressWarnings(as.integer(stage1_escalation_round)),
         stop = isTRUE(stop_chk$stop),
         stop_reason = this_reason,
         stop_blocked_by = this_blocked_by,
@@ -1588,6 +1668,18 @@ bt_run_adaptive <- function(samples,
   }
   rounds_tbl$stage2_rounds <- as.integer(rounds_tbl$stage2_rounds)
   rounds_tbl$stage2_rounds[is.na(rounds_tbl$stage2_rounds)] <- 0L
+
+  # ---- Workstream E: schema-stable Stage 1 escalation logging ----
+  if (!"stage1_escalated" %in% names(rounds_tbl)) {
+    rounds_tbl$stage1_escalated <- rep(FALSE, nrow(rounds_tbl))
+  }
+  rounds_tbl$stage1_escalated <- as.logical(rounds_tbl$stage1_escalated)
+  rounds_tbl$stage1_escalated[is.na(rounds_tbl$stage1_escalated)] <- FALSE
+
+  if (!"stage1_escalation_round" %in% names(rounds_tbl)) {
+    rounds_tbl$stage1_escalation_round <- rep(NA_integer_, nrow(rounds_tbl))
+  }
+  rounds_tbl$stage1_escalation_round <- suppressWarnings(as.integer(rounds_tbl$stage1_escalation_round))
 
   if (!"precision_reached" %in% names(rounds_tbl)) {
     rounds_tbl$precision_reached <- logical(nrow(rounds_tbl))

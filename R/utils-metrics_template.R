@@ -103,6 +103,8 @@
     n_matched = integer(),
     stability_streak = integer(),
     stability_pass = logical(),
+    stage1_escalated = logical(),
+    stage1_escalation_round = integer(),
     core_flip_applied = logical(),
     linking_flip_applied = logical(),
     linking_post_flip_applied = logical()
