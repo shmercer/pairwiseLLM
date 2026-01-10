@@ -961,19 +961,17 @@ bt_run_adaptive <- function(samples,
       build_bt_fun(results, judge = judge)
     }
 
-    fit_bt <- do.call(
-      fit_fun,
-      c(
-        list(
-          bt_data,
-          engine = engine,
-          verbose = fit_verbose,
-          return_diagnostics = return_diagnostics,
-          include_residuals = include_residuals
-        ),
-        .fit_dots
-      )
+    fit_args <- c(
+      list(bt_data),
+      list(
+        engine = engine,
+        verbose = fit_verbose,
+        return_diagnostics = return_diagnostics,
+        include_residuals = include_residuals
+      ),
+      .fit_dots
     )
+    fit_bt <- .call_user_fun(fit_fun, fit_args)
 
     fit <- make_running_fit(bt_data, fit_bt, engine_running = engine_running_now)
     fit <- tag_fit(
@@ -1538,6 +1536,41 @@ bt_run_adaptive <- function(samples,
   } else {
     rounds_tbl$stop_blocked_candidates <- as.character(rounds_tbl$stop_blocked_candidates)
   }
+
+  # ---- Workstream B: schema-stable stage bookkeeping (rounds table) ----
+  if (!"pairing_stage" %in% names(rounds_tbl)) {
+    rounds_tbl$pairing_stage <- character(nrow(rounds_tbl))
+  }
+  rounds_tbl$pairing_stage <- as.character(rounds_tbl$pairing_stage)
+
+  if (!"stage" %in% names(rounds_tbl)) {
+    rounds_tbl$stage <- rounds_tbl$pairing_stage
+  }
+  rounds_tbl$stage <- as.character(rounds_tbl$stage)
+  if (nrow(rounds_tbl) > 0L) {
+    stage_missing <- is.na(rounds_tbl$stage) | rounds_tbl$stage == ""
+    if (any(stage_missing)) {
+      rounds_tbl$stage[stage_missing] <- rounds_tbl$pairing_stage[stage_missing]
+    }
+  }
+
+  if (!"stage1_rounds" %in% names(rounds_tbl)) {
+    rounds_tbl$stage1_rounds <- integer(nrow(rounds_tbl))
+  }
+  rounds_tbl$stage1_rounds <- as.integer(rounds_tbl$stage1_rounds)
+  rounds_tbl$stage1_rounds[is.na(rounds_tbl$stage1_rounds)] <- 0L
+
+  if (!"stage2_rounds" %in% names(rounds_tbl)) {
+    rounds_tbl$stage2_rounds <- integer(nrow(rounds_tbl))
+  }
+  rounds_tbl$stage2_rounds <- as.integer(rounds_tbl$stage2_rounds)
+  rounds_tbl$stage2_rounds[is.na(rounds_tbl$stage2_rounds)] <- 0L
+
+  if (!"precision_reached" %in% names(rounds_tbl)) {
+    rounds_tbl$precision_reached <- logical(nrow(rounds_tbl))
+  }
+  rounds_tbl$precision_reached <- as.logical(rounds_tbl$precision_reached)
+  rounds_tbl$precision_reached[is.na(rounds_tbl$precision_reached)] <- FALSE
 
 
   if (!"stop" %in% names(rounds_tbl)) {

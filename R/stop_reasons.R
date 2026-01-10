@@ -45,3 +45,19 @@
 
   NA_character_
 }
+
+# Internal: stable list of all stop_reason values that bt_run_adaptive may emit.
+# Useful for tests and schema validation.
+known_stop_reasons <- function() {
+  c(
+    "precision_reached",
+    "stability_reached",
+    "no_new_pairs",
+    "pair_budget_exhausted",
+    "max_rounds_reached",
+    "no_new_ids",
+    "graph_unhealthy",
+    "blocked_by_graph_health",
+    "precision_blocked_by_graph_health"
+  )
+}
