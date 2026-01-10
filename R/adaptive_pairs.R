@@ -1624,11 +1624,79 @@ select_adaptive_pairs <- function(samples,
           )
         }
 
+        # Workstream D: explicit component-bridging exploration when disconnected.
+        bridge_selected_tbl <- capped_tbl[0, , drop = FALSE]
+
+        n_components <- 1L
+        if (!is.null(graph_state$metrics) && nrow(graph_state$metrics) > 0L &&
+          "n_components" %in% names(graph_state$metrics)) {
+          n_components <- as.integer(graph_state$metrics$n_components[[1]])
+          if (is.na(n_components) || n_components < 1L) n_components <- 1L
+        }
+
+        n_bridge_target <- 0L
+        if (n_components > 1L) {
+          n_bridge_target <- as.integer(min(ceiling(0.5 * n_pairs), n_components - 1L))
+          n_bridge_target <- max(0L, n_bridge_target)
+        }
+
+        if (n_bridge_target > 0L) {
+          # Ensure exploration budget can accommodate required bridges.
+          n_explore_target <- as.integer(max(n_explore_target, n_bridge_target))
+
+          bridge_raw <- .ap_make_component_bridge_pairs(
+            graph_state = graph_state,
+            id_vec_theta = id_vec,
+            n_bridge = n_bridge_target
+          )
+
+          if (nrow(bridge_raw) > 0L) {
+            bridge_constrained <- .ap_apply_constraints(
+              cand_tbl = bridge_raw,
+              id_vec = id_vec,
+              existing_counts = existing_counts,
+              existing_counts_all = existing_counts_all,
+              existing_dir = existing_dir,
+              forbid_unordered = forbid_unordered,
+              repeat_policy = repeat_policy,
+              repeat_cap = repeat_cap,
+              stop_on_internal_error = stop_on_internal_error
+            )
+
+            if (nrow(bridge_constrained) > 0L && "target_component_id" %in% names(bridge_constrained)) {
+              bridge_best <- dplyr::group_by(bridge_constrained, .data$target_component_id)
+              bridge_best <- dplyr::slice_head(bridge_best, n = 1L)
+              bridge_best <- dplyr::ungroup(bridge_best)
+              bridge_best <- dplyr::arrange(
+                bridge_best,
+                .data$target_component_size,
+                .data$target_component_id,
+                .data$i_idx,
+                .data$j_idx
+              )
+              bridge_selected_tbl <- utils::head(bridge_best, n_bridge_target)
+            } else if (nrow(bridge_constrained) > 0L) {
+              bridge_selected_tbl <- utils::head(bridge_constrained, n_bridge_target)
+            }
+          }
+        }
+
+        capped_tbl_explore <- capped_tbl
+        if (nrow(bridge_selected_tbl) > 0L && "pair_key" %in% names(capped_tbl_explore)) {
+          capped_tbl_explore <- dplyr::filter(
+            capped_tbl_explore,
+            !(.data$pair_key %in% bridge_selected_tbl$pair_key)
+          )
+        }
+
         # Prefer low-degree endpoints (exploration), stable tie-break.
         degree <- graph_state$degree
-        deg1 <- degree[match(capped_tbl$ID1, names(degree))]
-        deg2 <- degree[match(capped_tbl$ID2, names(degree))]
+        deg1 <- degree[match(capped_tbl_explore$ID1, names(degree))]
+        deg2 <- degree[match(capped_tbl_explore$ID2, names(degree))]
+        deg1[is.na(deg1)] <- 0
+        deg2[is.na(deg2)] <- 0
         deg_sum <- deg1 + deg2
+        capped_tbl_explore$deg_sum <- deg_sum
 
         # This flag MUST come from locals if present; never assume a symbol exists.
         # Backward-compat: earlier prototypes controlled this behavior via
@@ -1653,29 +1721,29 @@ select_adaptive_pairs <- function(samples,
         # Split candidates into non-repeat / repeat pools so exploration can't
         # exceed the repeat quota.
         is_repeat_row <- FALSE
-        if ("source" %in% names(capped_tbl)) {
-          is_repeat_row <- capped_tbl$source == repeat_source_name
+        if ("source" %in% names(capped_tbl_explore)) {
+          is_repeat_row <- capped_tbl_explore$source == repeat_source_name
           is_repeat_row[is.na(is_repeat_row)] <- FALSE
         }
-        capped_nonrepeat <- capped_tbl[!is_repeat_row, , drop = FALSE]
-        capped_repeat <- capped_tbl[is_repeat_row, , drop = FALSE]
+        capped_nonrepeat <- capped_tbl_explore[!is_repeat_row, , drop = FALSE]
+        capped_repeat <- capped_tbl_explore[is_repeat_row, , drop = FALSE]
         deg_sum_nonrepeat <- deg_sum[!is_repeat_row]
         deg_sum_repeat <- deg_sum[is_repeat_row]
 
         # nocov start
         if (explore_across_components_flag) {
           comp <- graph_state$component_id
-          comp1 <- comp[match(capped_tbl$ID1, names(comp))]
-          comp2 <- comp[match(capped_tbl$ID2, names(comp))]
+          comp1 <- comp[match(capped_tbl_explore$ID1, names(comp))]
+          comp2 <- comp[match(capped_tbl_explore$ID2, names(comp))]
 
           # If lookup failed, avoid length-0 logical subscripts; treat as same-component.
-          if (length(comp1) != nrow(capped_tbl) || length(comp2) != nrow(capped_tbl)) {
-            comp1 <- rep.int(1L, nrow(capped_tbl))
-            comp2 <- rep.int(1L, nrow(capped_tbl))
+          if (length(comp1) != nrow(capped_tbl_explore) || length(comp2) != nrow(capped_tbl_explore)) {
+            comp1 <- rep.int(1L, nrow(capped_tbl_explore))
+            comp2 <- rep.int(1L, nrow(capped_tbl_explore))
           }
 
           keep <- (comp1 != comp2)
-          if (length(keep) != nrow(capped_tbl)) keep <- rep.int(FALSE, nrow(capped_tbl))
+          if (length(keep) != nrow(capped_tbl_explore)) keep <- rep.int(FALSE, nrow(capped_tbl_explore))
 
           keep_nonrepeat <- keep[!is_repeat_row]
           keep_repeat <- keep[is_repeat_row]
@@ -1706,7 +1774,21 @@ select_adaptive_pairs <- function(samples,
           utils::head(pool, n_pick)
         }
 
-        explore_selected_tbl <- pick_low_degree(explore_pool_nonrepeat, deg_sum_pool_nonrepeat, n_explore_target)
+        # Start exploration with any explicit component-bridge pairs, then fill
+        # remaining exploration quota with low-degree candidates.
+        explore_selected_tbl <- bridge_selected_tbl
+
+        n_nonrepeat_for_explore <- as.integer(max(0L, n_explore_target - nrow(explore_selected_tbl)))
+        if (n_nonrepeat_for_explore > 0L && nrow(explore_pool_nonrepeat) > 0L) {
+          explore_nonrepeat_selected <- pick_low_degree(
+            explore_pool_nonrepeat,
+            deg_sum_pool_nonrepeat,
+            n_nonrepeat_for_explore
+          )
+          if (nrow(explore_nonrepeat_selected) > 0L) {
+            explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_nonrepeat_selected)
+          }
+        }
 
         # If exploration quota isn't filled, allow repeats into exploration but
         # cap by remaining repeat quota.
