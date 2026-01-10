@@ -68,15 +68,18 @@ NULL
   if (is.null(req$options) || !is.list(req$options)) {
     req$options <- list()
   }
-  if (is.null(req$body) || !is.list(req$body)) {
-    req$body <- list()
+  # httr2 expects `req$body` to be NULL (unset) or a well-formed list.
+  # In mocked/normalized scenarios we can accidentally end up with
+  # `req$body$type` being NULL/NA, which breaks `req_body_*()` helpers
+  # because comparisons propagate NA into `if (...)`.
+  if (!is.null(req$body) && !is.list(req$body)) {
+    req$body <- NULL
   }
-
-  # httr2 expects `req$body$type` to be NULL or a scalar string.
-  # Some mocked/normalized request shapes can end up with `NA`, which
-  # breaks `req_body_*()` helpers (NA propagates into `if (...)`).
-  if (!is.null(req$body$type) && length(req$body$type) == 1L && is.na(req$body$type)) {
-    req$body$type <- NULL
+  if (!is.null(req$body) && is.list(req$body)) {
+    body_type <- req$body$type
+    if (is.null(body_type) || length(body_type) != 1L || is.na(body_type[[1]])) {
+      req$body <- NULL
+    }
   }
 
   class(req) <- unique(c("httr2_request", class(req)))
@@ -89,9 +92,11 @@ NULL
 #' @keywords internal
 #' @noRd
 .openai_req_body_json <- function(req, body, ...) {
-  if (is.list(req) && !is.null(req$body) && is.list(req$body) &&
-    !is.null(req$body$type) && length(req$body$type) == 1L && is.na(req$body$type)) {
-    req$body$type <- NULL
+  if (is.list(req) && !is.null(req$body) && is.list(req$body)) {
+    body_type <- req$body$type
+    if (is.null(body_type) || length(body_type) != 1L || is.na(body_type[[1]])) {
+      req$body <- NULL
+    }
   }
 
   out <- httr2::req_body_json(req, body)
