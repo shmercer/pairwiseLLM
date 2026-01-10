@@ -1145,9 +1145,32 @@ bt_run_adaptive <- function(samples,
 
     pairs_next <- tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character())
     if (!isTRUE(budget_exhausted)) {
-      if (is.null(theta_for_pairs)) theta_for_pairs <- fit$theta
+      # Theta used for pairing heuristics (may differ from final refit theta).
+      # Use the *current* fit each round so the adaptive selector sees updated
+      # ordering and uncertainty.
+      theta_for_pairs <- fit$theta
+
       if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage2_bt")) {
+        # Stage 2: BT-based theta + BT standard errors.
         theta_for_pairs <- dplyr::mutate(theta_for_pairs, theta = .data$theta_bt, se = .data$se_bt)
+      } else if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc")) {
+        # Stage 1 (Workstream C): Rank-Centrality theta, but use a degree-based
+        # uncertainty proxy instead of BT SE.
+        #   u_i = 1 / sqrt(max(degree_i, 1))
+        deg_vec <- gs$degree
+        if (!is.null(deg_vec) && length(deg_vec) > 0L && is.null(names(deg_vec)) && !is.null(gs$ids)) {
+          if (length(gs$ids) == length(deg_vec)) names(deg_vec) <- gs$ids
+        }
+
+        deg_i <- rep(0L, nrow(theta_for_pairs))
+        if (!is.null(deg_vec) && length(deg_vec) > 0L && !is.null(names(deg_vec))) {
+          deg_i <- deg_vec[match(theta_for_pairs$ID, names(deg_vec))]
+        }
+        deg_i <- suppressWarnings(as.integer(deg_i))
+        deg_i[is.na(deg_i) | deg_i < 0L] <- 0L
+
+        se_proxy <- 1 / sqrt(pmax(deg_i, 1L))
+        theta_for_pairs <- dplyr::mutate(theta_for_pairs, theta = .data$theta_rc, se = as.double(se_proxy))
       }
       # stage-dependent knobs (used by adaptive pairing + diagnostics)
       repeat_policy_now <- repeat_policy
