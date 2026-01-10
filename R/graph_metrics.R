@@ -88,6 +88,7 @@
       n_components = as.integer(n),
       largest_component_frac = if (n > 0) 1 / n else NA_real_,
       degree_min = 0,
+      degree_min_lcc = 0,
       degree_median = 0,
       degree_max = 0,
       pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
@@ -130,6 +131,7 @@
       n_components = as.integer(n),
       largest_component_frac = if (n > 0) 1 / n else NA_real_,
       degree_min = 0,
+      degree_min_lcc = 0,
       degree_median = 0,
       degree_max = 0,
       pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))
@@ -186,12 +188,21 @@
   n_components <- length(tab_comp)
   largest_component_frac <- if (n > 0) max(tab_comp) / n else NA_real_
 
+  # Min degree within the largest connected component (LCC).
+  # Note: `degree_min` is computed over *all* nodes and may be 0 when some IDs
+  # are unseen/isolated. `degree_min_lcc` is intended for hybrid stage-switch
+  # gating where small unseen fractions are allowed.
+  lcc_id <- as.integer(names(tab_comp)[[which.max(tab_comp)]])
+  in_lcc <- component_id == lcc_id
+  degree_min_lcc <- if (any(in_lcc)) as.double(min(degree[in_lcc])) else NA_real_
+
   metrics <- tibble::tibble(
     n_nodes = as.integer(n),
     n_edges = as.integer(n_edges),
     n_components = as.integer(n_components),
     largest_component_frac = as.double(largest_component_frac),
     degree_min = as.double(min(degree)),
+    degree_min_lcc = as.double(degree_min_lcc),
     degree_median = as.double(stats::median(degree)),
     degree_max = as.double(max(degree)),
     pct_nodes_with_degree_gt0 = as.double(mean(degree > 0))

@@ -94,6 +94,7 @@
     n_pairs_total = integer(),
     n_missing_better_id = integer(),
     degree_min = numeric(),
+    degree_min_lcc = numeric(),
     largest_component_frac = numeric(),
     graph_healthy = logical(),
     rms_theta_delta = numeric(),

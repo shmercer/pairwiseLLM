@@ -1,9 +1,22 @@
-test_that("bt_run_adaptive hybrid switches from RC to BT after gates", {
-  # Deterministic toy setup: 4 items, seeded selection, deterministic judge.
+test_that("degree_min_lcc ignores unseen nodes for hybrid switching", {
+  # 20 items, with one unseen item (degree 0). The other 19 items form a cycle.
   samples <- tibble::tibble(
-    ID = c("A", "B", "C", "D"),
-    text = c("a", "b", "c", "d")
+    ID = sprintf("I%02d", 1:20),
+    text = sprintf("text_%02d", 1:20)
   )
+
+  seen_ids <- samples$ID[1:19]
+  cycle_edges <- tibble::tibble(
+    ID1 = seen_ids,
+    ID2 = c(seen_ids[-1], seen_ids[1]),
+    better_id = seen_ids
+  )
+
+  gs <- pairwiseLLM:::.graph_state_from_pairs(cycle_edges, ids = samples$ID)
+  gm <- gs$metrics
+
+  expect_identical(as.double(gm$degree_min), 0)
+  expect_true(as.double(gm$degree_min_lcc) >= 1)
 
   judge_fun <- function(pairs) {
     pairs <- tibble::as_tibble(pairs)
@@ -45,17 +58,10 @@ test_that("bt_run_adaptive hybrid switches from RC to BT after gates", {
     )
   }
 
-  # Seeded initial results to avoid bootstrap randomness.
-  initial_results <- tibble::tibble(
-    ID1 = c("A", "B"),
-    ID2 = c("C", "D"),
-    better_id = c("A", "B")
-  )
-
   out <- bt_run_adaptive(
     samples = samples,
     judge_fun = judge_fun,
-    initial_results = initial_results,
+    initial_results = cycle_edges,
     fit_fun = fit_fun,
     build_bt_fun = build_bt_data,
     fit_engine_running = "hybrid",
@@ -67,17 +73,10 @@ test_that("bt_run_adaptive hybrid switches from RC to BT after gates", {
     stop_min_largest_component_frac = 0,
     stage1_k_conn = 1L,
     stage1_k_stab = 1L,
-    stage1_min_pct_nodes_with_degree_gt0 = 0,
-    stage1_min_largest_component_frac = 0,
-    stage1_min_degree_median = 0,
-    stage1_min_degree_min_lcc = 0,
-    stage1_min_degree_min = 0,
     stage1_min_spearman = -1,
-    stage1_max_rounds = 10L,
     seed = 123
   )
 
-  expect_true(is.data.frame(out$rounds))
-  expect_true("pairing_stage" %in% names(out$rounds))
+  expect_true("degree_min_lcc" %in% names(out$metrics))
   expect_true(any(out$rounds$pairing_stage == "stage2_bt"))
 })

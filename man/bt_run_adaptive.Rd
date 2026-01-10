@@ -19,9 +19,10 @@ bt_run_adaptive(
   stage1_k_conn = 2L,
   stage1_k_stab = 3L,
   stage1_min_pct_nodes_with_degree_gt0 = 0.95,
-  stage1_min_largest_component_frac = 0.98,
+  stage1_min_largest_component_frac = 0.95,
   stage1_min_degree_median = 2,
-  stage1_min_degree_min = 1,
+  stage1_min_degree_min_lcc = 1,
+  stage1_min_degree_min = 0,
   stage1_min_spearman = 0.97,
   stage1_max_rounds = 10L,
   stage1_explore_frac = 0.25,
@@ -157,8 +158,14 @@ connected component for the connectivity gate.}
 \item{stage1_min_degree_median}{Numeric. For \code{fit_engine_running = "hybrid"},
 minimum median node degree for the connectivity gate.}
 
-\item{stage1_min_degree_min}{Numeric. For \code{fit_engine_running = "hybrid"},
-minimum node degree for the connectivity gate.}
+\item{stage1_min_degree_min_lcc}{Numeric. For \code{fit_engine_running = "hybrid"},
+minimum node degree within the largest connected component (LCC) for the
+connectivity gate.}
+
+\item{stage1_min_degree_min}{Numeric. (Deprecated) For
+\code{fit_engine_running = "hybrid"}, minimum node degree over \emph{all} nodes
+for the connectivity gate. This can effectively force 100\% coverage when any node
+is still unseen (degree 0). Prefer \code{stage1_min_degree_min_lcc}.}
 
 \item{stage1_min_spearman}{Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 Spearman correlation between consecutive RC rank vectors to count as stable.}

@@ -89,8 +89,13 @@
 #'   connected component for the connectivity gate.
 #' @param stage1_min_degree_median Numeric. For \code{fit_engine_running = "hybrid"},
 #'   minimum median node degree for the connectivity gate.
-#' @param stage1_min_degree_min Numeric. For \code{fit_engine_running = "hybrid"},
-#'   minimum node degree for the connectivity gate.
+#' @param stage1_min_degree_min_lcc Numeric. For \code{fit_engine_running = "hybrid"},
+#'   minimum node degree within the largest connected component (LCC) for the
+#'   connectivity gate.
+#' @param stage1_min_degree_min Numeric. (Deprecated) For
+#'   \code{fit_engine_running = "hybrid"}, minimum node degree over \emph{all} nodes
+#'   for the connectivity gate. This can effectively force 100% coverage when any node
+#'   is still unseen (degree 0). Prefer \code{stage1_min_degree_min_lcc}.
 #' @param stage1_min_spearman Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 #'   Spearman correlation between consecutive RC rank vectors to count as stable.
 #' @param stage1_max_rounds Integer. For \code{fit_engine_running = "hybrid"}, maximum
@@ -374,9 +379,10 @@ bt_run_adaptive <- function(samples,
                             stage1_k_conn = 2L,
                             stage1_k_stab = 3L,
                             stage1_min_pct_nodes_with_degree_gt0 = 0.95,
-                            stage1_min_largest_component_frac = 0.98,
+                            stage1_min_largest_component_frac = 0.95,
                             stage1_min_degree_median = 2,
-                            stage1_min_degree_min = 1,
+                            stage1_min_degree_min_lcc = 1,
+                            stage1_min_degree_min = 0,
                             stage1_min_spearman = 0.97,
                             stage1_max_rounds = 10L,
                             stage1_explore_frac = 0.25,
@@ -550,8 +556,19 @@ bt_run_adaptive <- function(samples,
   if (!is.numeric(stage1_min_degree_median) || length(stage1_min_degree_median) != 1L || is.na(stage1_min_degree_median)) {
     stop("`stage1_min_degree_median` must be a single numeric value.", call. = FALSE)
   }
+  if (!is.numeric(stage1_min_degree_min_lcc) || length(stage1_min_degree_min_lcc) != 1L || is.na(stage1_min_degree_min_lcc)) {
+    stop("`stage1_min_degree_min_lcc` must be a single numeric value.", call. = FALSE)
+  }
   if (!is.numeric(stage1_min_degree_min) || length(stage1_min_degree_min) != 1L || is.na(stage1_min_degree_min)) {
     stop("`stage1_min_degree_min` must be a single numeric value.", call. = FALSE)
+  }
+
+  if (isTRUE(stage1_min_degree_min > 0)) {
+    warning(
+      "`stage1_min_degree_min` is deprecated and can block hybrid stage switching when some nodes are unseen. ",
+      "Prefer `stage1_min_degree_min_lcc` for enforcing minimum degree within the LCC.",
+      call. = FALSE
+    )
   }
 
   # --- repeat policy (PR6) ---
@@ -1011,6 +1028,7 @@ bt_run_adaptive <- function(samples,
     gs <- .graph_state_from_pairs(results, ids = ids)
     gm <- gs$metrics
     degree_min <- as.double(gm$degree_min)
+    degree_min_lcc <- as.double(gm$degree_min_lcc)
     degree_median <- as.double(gm$degree_median)
     largest_component_frac <- as.double(gm$largest_component_frac)
     pct_nodes_with_degree_gt0 <- as.double(gm$pct_nodes_with_degree_gt0)
@@ -1041,6 +1059,7 @@ bt_run_adaptive <- function(samples,
       conn_ok <- isTRUE(pct_nodes_with_degree_gt0 >= stage1_min_pct_nodes_with_degree_gt0) &&
         isTRUE(largest_component_frac >= stage1_min_largest_component_frac) &&
         isTRUE(degree_median >= stage1_min_degree_median) &&
+        isTRUE(degree_min_lcc >= stage1_min_degree_min_lcc) &&
         isTRUE(degree_min >= stage1_min_degree_min)
 
       conn_streak <- if (isTRUE(conn_ok)) as.integer(conn_streak) + 1L else 0L
@@ -1167,6 +1186,7 @@ bt_run_adaptive <- function(samples,
     # Use runner-local scalar values (renamed) to avoid accidentally reading
     # the mostly-NA placeholder columns from the metrics template.
     degree_min_val <- as.double(degree_min)
+    degree_min_lcc_val <- as.double(degree_min_lcc)
     largest_component_frac_val <- as.double(largest_component_frac)
     graph_healthy_val <- as.logical(graph_healthy)
     stability_streak_val <- as.integer(stability_streak)
@@ -1175,6 +1195,7 @@ bt_run_adaptive <- function(samples,
     metrics <- metrics %>%
       dplyr::mutate(
         degree_min = degree_min_val,
+        degree_min_lcc = degree_min_lcc_val,
         largest_component_frac = largest_component_frac_val,
         graph_healthy = graph_healthy_val,
         stability_streak = stability_streak_val,
