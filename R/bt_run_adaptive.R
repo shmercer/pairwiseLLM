@@ -111,6 +111,14 @@
 #' @param stage1_allow_degenerate_stability Logical. If \code{FALSE} (default), degenerate
 #'   RC ranks (e.g., constant/undefined Spearman) do not count as stable in stage1.
 #'   If \code{TRUE}, degenerate stability is treated as perfectly stable (legacy behavior).
+#' @param stage1_max_bridge_edge_frac Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
+#'   additional mixing-guard threshold on the bridge-edge fraction proxy (computed only on scheduled
+#'   checks). Stage1 can switch to BT only when \code{bridge_edge_frac <= stage1_max_bridge_edge_frac}
+#'   for \code{stage1_k_mix} consecutive checks. Default \code{0.02}.
+#' @param stage1_k_mix Integer. For \code{fit_engine_running = "hybrid"}, number of consecutive
+#'   mixing checks that must pass before switching stage1\eqn{\to}stage2. Default \code{2}.
+#' @param stage1_check_mix_every Integer. For \code{fit_engine_running = "hybrid"}, compute the bridge-edge
+#'   fraction proxy every \code{stage1_check_mix_every} rounds (to reduce runtime). Default \code{2}.
 #' @param stage1_max_rounds Integer. For \code{fit_engine_running = "hybrid"}, maximum
 #'   number of Stage 1 rounds to attempt before triggering stage-1 fail-safe escalation.
 #' @param stage1_escalated_explore_frac Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
@@ -162,6 +170,28 @@
 #'   healthy. Default \code{1}.
 #' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
 #'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
+#' @param stop_max_bridge_edge_frac Numeric in \code{[0, 1]}. Additional mixing guard for stopping: when the
+#'   comparison graph is otherwise healthy, stopping is only allowed once the bridge-edge fraction proxy
+#'   is at most this value for \code{stop_k_mix} consecutive checks. Set to \code{NA} to disable. Default \code{0.02}.
+#' @param stop_k_mix Integer. Number of consecutive mixing checks that must pass before allowing stopping.
+#'   Default \code{2}.
+#' @param stop_check_mix_every Integer. Compute the bridge-edge fraction proxy every
+#'   \code{stop_check_mix_every} rounds (to reduce runtime). Default \code{2}.
+#' @param spectral_gap_check Character. Optional end-of-run (and optionally pre-stop/pre-switch) spectral
+#'   gap check on a lazy random walk over the comparison graph. Values:
+#'   \itemize{
+#'     \item \code{"never"}: do not compute.
+#'     \item \code{"final"}: compute once at the end.
+#'     \item \code{"pre_stop"}: compute immediately before stopping (when a stop would occur) and at the end.
+#'     \item \code{"pre_switch_and_final"}: compute immediately before switching stage1\eqn{\to}stage2 and at the end.
+#'   }
+#'   This check is non-blocking by default; it is recorded in \code{out$spectral_gap_checks}.
+#' @param spectral_gap_weights Character. Edge weighting scheme for the spectral-gap estimator:
+#'   \code{"count"} (use edge multiplicity) or \code{"binary"} (unweighted). Default \code{"count"}.
+#' @param spectral_gap_max_iter Integer. Maximum iterations for the spectral-gap estimator. Default \code{200}.
+#' @param spectral_gap_tol Numeric. Convergence tolerance for the spectral-gap estimator. Default \code{1e-6}.
+#' @param spectral_gap_warn_below Numeric in \code{[0, 1]}. Threshold below which \code{spectral_gap_warn = TRUE}
+#'   is recorded in \code{out$spectral_gap_checks}. Default \code{0.01}.
 #'
 #'
 #' @param se_probs Numeric vector of probabilities in \code{[0, 1]} used when summarizing the
@@ -327,6 +357,10 @@
 #'   appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
 #'   \code{n_missing_better_id}), plus \code{round}, \code{stop}, and \code{stop_reason}.}
 #' \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
+#' \item{run_summary}{One row tibble summarizing the run.}
+#' \item{metrics}{One row per round of schema-stable diagnostic metrics.}
+#' \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round.}
+#' \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 #' }
 #'
 #' @examples
@@ -411,6 +445,9 @@ bt_run_adaptive <- function(samples,
                             stage1_topk_overlap = 0.85,
                             stage1_allow_degenerate_stability = FALSE,
                             stage1_max_rounds = 10L,
+                            stage1_max_bridge_edge_frac = 0.02,
+                            stage1_k_mix = 2L,
+                            stage1_check_mix_every = 2L,
                             stage1_escalated_explore_frac = 0.5,
                             stage1_escalated_k_neighbors = Inf,
                             stage1_escalate_allow_unordered_repeats = FALSE,
@@ -455,6 +492,14 @@ bt_run_adaptive <- function(samples,
                             stop_min_degree = NA_integer_,
                             stop_reason_priority = NULL,
                             stop_stability_consecutive = 2L,
+                            stop_max_bridge_edge_frac = 0.02,
+                            stop_k_mix = NULL,
+                            stop_check_mix_every = 2L,
+                            spectral_gap_check = c("never", "final", "pre_stop", "pre_switch_and_final"),
+                            spectral_gap_weights = c("count", "binary"),
+                            spectral_gap_max_iter = 200L,
+                            spectral_gap_tol = 1e-6,
+                            spectral_gap_warn_below = 0.01,
                             stop_topk_ties = c("id", "random"),
                             fit_fun = fit_bt_model,
                             build_bt_fun = build_bt_data,
@@ -565,6 +610,30 @@ bt_run_adaptive <- function(samples,
     stop("`stage1_max_rounds` must be an integer >= 1.", call. = FALSE)
   }
 
+  stage1_max_bridge_edge_frac <- as.double(stage1_max_bridge_edge_frac)
+  if (length(stage1_max_bridge_edge_frac) != 1L || isTRUE(is.nan(stage1_max_bridge_edge_frac)) ||
+    (!is.na(stage1_max_bridge_edge_frac) && stage1_max_bridge_edge_frac < 0)) {
+    stop("`stage1_max_bridge_edge_frac` must be NA or a single non-negative number.", call. = FALSE)
+  }
+
+  # Mixing-guard defaults are tuned for N ~= 200--2000. For very small toy runs
+  # (common in tests/examples), the bridge-edge fraction tends to be large even
+  # for "healthy" graphs. To avoid blocking hybrid switching by default on small
+  # graphs, treat the default threshold as disabled when N < 200.
+  stage1_max_bridge_edge_frac_eff <- stage1_max_bridge_edge_frac
+  if (length(ids) < 200L && missing(stage1_max_bridge_edge_frac) && is.finite(stage1_max_bridge_edge_frac_eff) &&
+    isTRUE(abs(stage1_max_bridge_edge_frac_eff - 0.02) < 1e-12)) {
+    stage1_max_bridge_edge_frac_eff <- NA_real_
+  }
+  stage1_k_mix <- as.integer(stage1_k_mix)
+  if (is.na(stage1_k_mix) || stage1_k_mix < 0L) {
+    stop("`stage1_k_mix` must be an integer >= 0.", call. = FALSE)
+  }
+  stage1_check_mix_every <- as.integer(stage1_check_mix_every)
+  if (is.na(stage1_check_mix_every) || stage1_check_mix_every < 1L) {
+    stop("`stage1_check_mix_every` must be an integer >= 1.", call. = FALSE)
+  }
+
   # In very short runs, cap the stage-1 horizon so escalation/switch logic can still activate.
   stage1_max_rounds_eff <- min(stage1_max_rounds, max(1L, max_rounds - 1L))
 
@@ -667,6 +736,56 @@ bt_run_adaptive <- function(samples,
   }
   final_refit <- isTRUE(final_refit)
   final_bt_bias_reduction <- isTRUE(final_bt_bias_reduction)
+
+
+  # --- stop mixing guard (bridge-edge fraction) ---
+  stop_max_bridge_edge_frac <- as.double(stop_max_bridge_edge_frac)
+  if (!is.na(stop_max_bridge_edge_frac) && stop_max_bridge_edge_frac < 0) {
+    stop("`stop_max_bridge_edge_frac` must be NA or a non-negative number.", call. = FALSE)
+  }
+
+  # Mixing-guard defaults are tuned for N ~= 200--2000. Disable the default
+  # bridge threshold on very small toy runs so stopping isn't blocked by
+  # bridge-heavy graphs that are otherwise fine for small-N.
+  stop_max_bridge_edge_frac_eff <- stop_max_bridge_edge_frac
+  if (length(ids) < 200L && missing(stop_max_bridge_edge_frac) && is.finite(stop_max_bridge_edge_frac_eff) &&
+    isTRUE(abs(stop_max_bridge_edge_frac_eff - 0.02) < 1e-12)) {
+    stop_max_bridge_edge_frac_eff <- NA_real_
+  }
+
+  if (is.null(stop_k_mix)) {
+    stop_k_mix_eff <- as.integer(stop_stability_consecutive)
+  } else {
+    stop_k_mix_eff <- as.integer(stop_k_mix)
+    if (is.na(stop_k_mix_eff) || stop_k_mix_eff < 0L) {
+      stop("`stop_k_mix` must be NULL or a non-negative integer.", call. = FALSE)
+    }
+  }
+  stop_check_mix_every <- as.integer(stop_check_mix_every)
+  if (is.na(stop_check_mix_every) || stop_check_mix_every < 1L) {
+    stop("`stop_check_mix_every` must be an integer >= 1.", call. = FALSE)
+  }
+
+  # Track whether the stop-stage mixing guard is configured (used for stop metadata).
+  stop_mix_guard_active <- !is.na(stop_max_bridge_edge_frac_eff) &&
+    is.finite(stop_max_bridge_edge_frac_eff) &&
+    isTRUE(stop_k_mix_eff > 0L)
+
+  # --- spectral gap check (optional; end-of-run by default) ---
+  spectral_gap_check <- match.arg(spectral_gap_check, c("never", "final", "pre_stop", "pre_switch_and_final"))
+  spectral_gap_weights <- match.arg(spectral_gap_weights, c("count", "binary"))
+  spectral_gap_max_iter <- as.integer(spectral_gap_max_iter)
+  if (is.na(spectral_gap_max_iter) || spectral_gap_max_iter < 1L) {
+    stop("`spectral_gap_max_iter` must be an integer >= 1.", call. = FALSE)
+  }
+  spectral_gap_tol <- as.double(spectral_gap_tol)
+  if (is.na(spectral_gap_tol) || spectral_gap_tol <= 0) {
+    stop("`spectral_gap_tol` must be a single number > 0.", call. = FALSE)
+  }
+  spectral_gap_warn_below <- as.double(spectral_gap_warn_below)
+  if (is.na(spectral_gap_warn_below) || spectral_gap_warn_below < 0) {
+    stop("`spectral_gap_warn_below` must be a single non-negative number.", call. = FALSE)
+  }
 
   make_running_fit <- function(bt_data, fit_bt, engine_running) {
     bt_tbl <- .as_theta_tibble(fit_bt$theta, arg_name = "fit_fun()$theta")
@@ -931,6 +1050,7 @@ bt_run_adaptive <- function(samples,
   state_list <- list()
   pairing_diag_list <- list()
   metrics_hist <- tibble::tibble()
+  spectral_gap_checks <- .spectral_gap_checks_template()
 
   .make_checkpoint_payload <- function(next_round, completed = FALSE, out = NULL) {
     rounds_now <- dplyr::bind_rows(rounds_tbl_prev, if (length(rounds_list) == 0L) tibble::tibble() else dplyr::bind_rows(rounds_list))
@@ -987,6 +1107,7 @@ bt_run_adaptive <- function(samples,
   stage <- as.character(fit_engine_running_requested)
   conn_streak <- 0L
   stab_streak <- 0L
+  mix_streak <- 0L
   stage1_rounds <- 0L
   stage2_rounds <- 0L
   prev_rc_rank <- NULL
@@ -1010,6 +1131,10 @@ bt_run_adaptive <- function(samples,
       if ("stab_streak" %in% names(rounds_tbl_prev)) {
         stab_streak <- as.integer(rounds_tbl_prev$stab_streak[[nrow(rounds_tbl_prev)]])
         if (is.na(stab_streak)) stab_streak <- 0L
+      }
+      if ("mix_streak" %in% names(rounds_tbl_prev)) {
+        mix_streak <- as.integer(rounds_tbl_prev$mix_streak[[nrow(rounds_tbl_prev)]])
+        if (is.na(mix_streak)) mix_streak <- 0L
       }
       if ("stage1_rounds" %in% names(rounds_tbl_prev)) {
         stage1_rounds <- as.integer(rounds_tbl_prev$stage1_rounds[[nrow(rounds_tbl_prev)]])
@@ -1118,6 +1243,21 @@ bt_run_adaptive <- function(samples,
     degree_median <- as.double(gm$degree_median)
     largest_component_frac <- as.double(gm$largest_component_frac)
     pct_nodes_with_degree_gt0 <- as.double(gm$pct_nodes_with_degree_gt0)
+    bridge_edge_count <- if ("bridge_edge_count" %in% names(gm)) as.integer(gm$bridge_edge_count) else NA_integer_
+    bridge_edge_frac <- if ("bridge_edge_frac" %in% names(gm)) as.double(gm$bridge_edge_frac) else NA_real_
+    n_components <- as.integer(gm$n_components)
+
+    mix_ok <- NA
+
+    # Spectral gap checks (lazy random walk)
+    sg_cached <- NULL
+    spectral_gap_est_val <- NA_real_
+    lambda2_est_val <- NA_real_
+    spectral_gap_iters_val <- NA_integer_
+    spectral_gap_converged_val <- NA
+    spectral_gap_warn_val <- NA
+    spectral_gap_when_val <- NA_character_
+
 
     # ---- PR3: hybrid stage switching diagnostics (Rank Centrality stability + connectivity) ----
     rho_spearman_rc <- NA_real_
@@ -1213,7 +1353,58 @@ bt_run_adaptive <- function(samples,
       }
       stab_streak <- if (isTRUE(stab_ok)) as.integer(stab_streak) + 1L else 0L
 
-      if (isTRUE(conn_streak >= stage1_k_conn) && isTRUE(stab_streak >= stage1_k_stab)) {
+      # ---- mixing gate (bridge-edge fraction proxy) ----
+      mix_req_met <- TRUE
+      if (!is.na(stage1_max_bridge_edge_frac_eff) && isTRUE(stage1_k_mix > 0L)) {
+        do_mix_check <- (as.integer(stage1_rounds) %% as.integer(stage1_check_mix_every) == 0L)
+        if (isTRUE(do_mix_check) &&
+          isTRUE(n_components == 1L) &&
+          isTRUE(largest_component_frac >= stage1_min_largest_component_frac)) {
+          if (is.finite(bridge_edge_frac)) {
+            mix_ok <- isTRUE(bridge_edge_frac <= stage1_max_bridge_edge_frac_eff)
+          } else {
+            mix_ok <- FALSE
+          }
+          mix_streak <- if (isTRUE(mix_ok)) as.integer(mix_streak) + 1L else 0L
+        } else {
+          mix_ok <- NA
+        }
+        mix_req_met <- isTRUE(mix_streak >= stage1_k_mix)
+      }
+
+      if (isTRUE(conn_streak >= stage1_k_conn) &&
+        isTRUE(stab_streak >= stage1_k_stab) &&
+        isTRUE(mix_req_met)) {
+        # Optional spectral gap check before switching to stage2
+        if (identical(spectral_gap_check, "pre_switch_and_final")) {
+          if (is.null(sg_cached)) {
+            sg_cached <- .estimate_spectral_gap_lazy_rw(
+              pairs = results,
+              ids = ids,
+              weights = spectral_gap_weights,
+              max_iter = spectral_gap_max_iter,
+              tol = spectral_gap_tol
+            )
+          }
+          sg_warn <- isTRUE(is.finite(sg_cached$spectral_gap_est[[1]]) &&
+            (sg_cached$spectral_gap_est[[1]] < spectral_gap_warn_below))
+          spectral_gap_checks <- dplyr::bind_rows(
+            spectral_gap_checks,
+            dplyr::mutate(
+              sg_cached,
+              when = "pre_switch",
+              round = as.integer(r),
+              spectral_gap_warn = sg_warn
+            )
+          )
+          spectral_gap_est_val <- sg_cached$spectral_gap_est[[1]]
+          lambda2_est_val <- sg_cached$lambda2_est[[1]]
+          spectral_gap_iters_val <- sg_cached$iters[[1]]
+          spectral_gap_converged_val <- sg_cached$converged[[1]]
+          spectral_gap_warn_val <- sg_warn
+          spectral_gap_when_val <- "pre_switch"
+        }
+
         stage_after <- "stage2_bt"
         stage <- stage_after
         stage2_rounds <- as.integer(stage2_rounds) + 1L
@@ -1240,6 +1431,27 @@ bt_run_adaptive <- function(samples,
     if (is.finite(as.double(stop_min_largest_component_frac))) {
       graph_healthy <- isTRUE(graph_healthy) && isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
     }
+
+    graph_healthy_base <- graph_healthy
+    # ---- PR5/PR7: optional mixing guard for stopping (bridge-edge fraction proxy) ----
+    mix_req_met_for_stop <- TRUE
+    if (!is.na(stop_max_bridge_edge_frac_eff) &&
+      isTRUE(stop_k_mix_eff > 0L) &&
+      !(identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc"))) {
+      do_mix_check <- (as.integer(r) %% as.integer(stop_check_mix_every) == 0L)
+      if (isTRUE(do_mix_check)) {
+        if (isTRUE(n_components == 1L) && is.finite(bridge_edge_frac)) {
+          mix_ok <- isTRUE(bridge_edge_frac <= stop_max_bridge_edge_frac_eff)
+        } else {
+          mix_ok <- FALSE
+        }
+        mix_streak <- if (isTRUE(mix_ok)) as.integer(mix_streak) + 1L else 0L
+      } else {
+        mix_ok <- NA
+      }
+      mix_req_met_for_stop <- isTRUE(mix_streak >= stop_k_mix_eff)
+    }
+    graph_healthy <- isTRUE(graph_healthy) && isTRUE(mix_req_met_for_stop)
 
     # ---- PR7/PR8.0: stability criterion (computed regardless; stopping is gated by graph health) ----
     stability_pass <- FALSE
@@ -1348,6 +1560,17 @@ bt_run_adaptive <- function(samples,
         !is.na(stage1_escalation_round_i) &&
         as.integer(r) >= stage1_escalation_round_i
 
+      # Hybrid stage1: disable repeats by default (connectivity > repeats).
+      # NOTE: Escalation may relax `forbid_repeats_now` (opt-in) to allow
+      # unordered repeats, but stage1 still does not *plan* repeats.
+      if (identical(stage, "stage1_rc")) {
+        repeat_policy_now <- "none"
+        repeat_cap_now <- 0
+        repeat_frac_now <- 0
+        repeat_n_now <- 0
+        forbid_repeats_now <- TRUE
+      }
+
       if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc") && isTRUE(stage1_escalated_active)) {
         explore_frac_now <- max(as.double(explore_frac_now), as.double(stage1_escalated_explore_frac))
 
@@ -1408,12 +1631,51 @@ bt_run_adaptive <- function(samples,
     )
     .validate_stop_decision(stop_chk)
 
+    # If the only thing preventing stopping is the mix guard, label it explicitly
+    if (isTRUE(stop_mix_guard_active) &&
+      identical(stop_chk$details$stop_blocked_by, "graph_unhealthy") &&
+      isTRUE(graph_healthy_base) && !isTRUE(mix_req_met_for_stop)) {
+      stop_chk$details$stop_blocked_by <- "mix_guard"
+    }
+
+    # Optional spectral gap check before stopping
+    if (isTRUE(stop_chk$stop) && identical(spectral_gap_check, "pre_stop")) {
+      if (is.null(sg_cached)) {
+        sg_cached <- .estimate_spectral_gap_lazy_rw(
+          pairs = results,
+          ids = ids,
+          weights = spectral_gap_weights,
+          max_iter = spectral_gap_max_iter,
+          tol = spectral_gap_tol
+        )
+      }
+      sg_warn <- is.finite(sg_cached$spectral_gap_est[[1]]) &&
+        (sg_cached$spectral_gap_est[[1]] < spectral_gap_warn_below)
+      spectral_gap_checks <- dplyr::bind_rows(
+        spectral_gap_checks,
+        dplyr::mutate(
+          sg_cached,
+          when = "pre_stop",
+          round = as.integer(r),
+          spectral_gap_warn = sg_warn
+        )
+      )
+      spectral_gap_est_val <- sg_cached$spectral_gap_est[[1]]
+      lambda2_est_val <- sg_cached$lambda2_est[[1]]
+      spectral_gap_iters_val <- sg_cached$iters[[1]]
+      spectral_gap_converged_val <- sg_cached$converged[[1]]
+      spectral_gap_warn_val <- sg_warn
+      spectral_gap_when_val <- "pre_stop"
+    }
+
     # Record graph/stability diagnostics into the per-round metrics (these columns exist in the schema template).
     # Use runner-local scalar values (renamed) to avoid accidentally reading
     # the mostly-NA placeholder columns from the metrics template.
     degree_min_val <- as.double(degree_min)
     degree_min_lcc_val <- as.double(degree_min_lcc)
     largest_component_frac_val <- as.double(largest_component_frac)
+    bridge_edge_count_val <- as.integer(bridge_edge_count[[1]])
+    bridge_edge_frac_val <- as.double(bridge_edge_frac[[1]])
     graph_healthy_val <- as.logical(graph_healthy)
     stability_streak_val <- as.integer(stability_streak)
     stability_pass_val <- as.logical(stability_pass)
@@ -1421,6 +1683,9 @@ bt_run_adaptive <- function(samples,
     stage1_escalated_val <- isTRUE(stage1_escalated) &&
       !is.na(stage1_escalation_round_val) &&
       as.integer(r) >= stage1_escalation_round_val
+
+    mix_ok_val <- if (is.na(mix_ok)) NA else as.logical(mix_ok)
+    mix_streak_val <- as.integer(mix_streak)
 
     # Pair-plan bridging progress metrics (planned pairs for this round)
     n_component_bridge_pairs_planned_val <- 0L
@@ -1443,9 +1708,19 @@ bt_run_adaptive <- function(samples,
         degree_min = degree_min_val,
         degree_min_lcc = degree_min_lcc_val,
         largest_component_frac = largest_component_frac_val,
+        bridge_edge_count = bridge_edge_count_val,
+        bridge_edge_frac = bridge_edge_frac_val,
         graph_healthy = graph_healthy_val,
         stability_streak = stability_streak_val,
         stability_pass = stability_pass_val,
+        mix_ok = mix_ok_val,
+        mix_streak = mix_streak_val,
+        spectral_gap_est = spectral_gap_est_val,
+        lambda2_est = lambda2_est_val,
+        spectral_gap_iters = spectral_gap_iters_val,
+        spectral_gap_converged = spectral_gap_converged_val,
+        spectral_gap_warn = spectral_gap_warn_val,
+        spectral_gap_when = spectral_gap_when_val,
         stage1_escalated = stage1_escalated_val,
         stage1_escalation_round = stage1_escalation_round_val,
         n_component_bridge_pairs_planned = as.integer(n_component_bridge_pairs_planned_val),
@@ -1840,6 +2115,32 @@ bt_run_adaptive <- function(samples,
   # If a stop_reason is recorded, the run stopped for that round.
   rounds_tbl$stop <- rounds_tbl$stop | !is.na(rounds_tbl$stop_reason)
 
+  # ---- Spectral gap check: final (optional) ----
+  if (!identical(spectral_gap_check, "never") &&
+    nrow(results) > 0L &&
+    (identical(spectral_gap_check, "final") ||
+      identical(spectral_gap_check, "pre_stop") ||
+      identical(spectral_gap_check, "pre_switch_and_final"))) {
+    final_round <- if (nrow(rounds_tbl) > 0L) as.integer(max(rounds_tbl$round, na.rm = TRUE)) else NA_integer_
+    sg_final <- .estimate_spectral_gap_lazy_rw(
+      pairs = results,
+      ids = ids,
+      weights = spectral_gap_weights,
+      max_iter = spectral_gap_max_iter,
+      tol = spectral_gap_tol
+    )
+    sg_warn <- isTRUE(is.finite(sg_final$spectral_gap_est[[1]]) && (sg_final$spectral_gap_est[[1]] < spectral_gap_warn_below))
+    spectral_gap_checks <- dplyr::bind_rows(
+      spectral_gap_checks,
+      dplyr::mutate(sg_final,
+        when = "final",
+        round = final_round,
+        spectral_gap_warn = sg_warn
+      )
+    )
+  }
+
+
   bt_data_final <- if (nrow(results) == 0L) {
     tibble::tibble(object1 = character(), object2 = character(), result = numeric())
   } else if (is.null(judge)) {
@@ -2041,6 +2342,7 @@ bt_run_adaptive <- function(samples,
     stop_reason = stop_reason,
     stop_round = stop_round,
     rounds = rounds_tbl,
+    spectral_gap_checks = spectral_gap_checks,
     state = state_tbl,
     pairing_diagnostics = pairing_diagnostics,
     pairs_bootstrap = pairs_bootstrap

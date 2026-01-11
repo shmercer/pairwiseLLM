@@ -18,7 +18,9 @@
     largest_component_frac = NA_real_,
     degree_min = NA_real_,
     degree_median = NA_real_,
-    pct_nodes_with_degree_gt0 = NA_real_
+    pct_nodes_with_degree_gt0 = NA_real_,
+    bridge_edge_count = NA_integer_,
+    bridge_edge_frac = NA_real_
   )
 
   if (!is.null(ids_for_graph)) {
@@ -28,7 +30,9 @@
       largest_component_frac = gm$largest_component_frac[[1]],
       degree_min = gm$degree_min[[1]],
       degree_median = gm$degree_median[[1]],
-      pct_nodes_with_degree_gt0 = gm$pct_nodes_with_degree_gt0[[1]]
+      pct_nodes_with_degree_gt0 = gm$pct_nodes_with_degree_gt0[[1]],
+      bridge_edge_count = gm$bridge_edge_count[[1]],
+      bridge_edge_frac = gm$bridge_edge_frac[[1]]
     )
   }
 
@@ -44,6 +48,8 @@
       degree_min = graph_vals$degree_min,
       degree_median = graph_vals$degree_median,
       pct_nodes_with_degree_gt0 = graph_vals$pct_nodes_with_degree_gt0,
+      bridge_edge_count = graph_vals$bridge_edge_count,
+      bridge_edge_frac = graph_vals$bridge_edge_frac,
       min_appearances = 0L,
       p10_appearances = 0L,
       median_appearances = 0L,

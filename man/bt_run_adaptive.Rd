@@ -29,6 +29,9 @@ bt_run_adaptive(
   stage1_topk_overlap = 0.85,
   stage1_allow_degenerate_stability = FALSE,
   stage1_max_rounds = 10L,
+  stage1_max_bridge_edge_frac = 0.02,
+  stage1_k_mix = 2L,
+  stage1_check_mix_every = 2L,
   stage1_escalated_explore_frac = 0.5,
   stage1_escalated_k_neighbors = Inf,
   stage1_escalate_allow_unordered_repeats = FALSE,
@@ -72,6 +75,14 @@ bt_run_adaptive(
   stop_min_degree = NA_integer_,
   stop_reason_priority = NULL,
   stop_stability_consecutive = 2L,
+  stop_max_bridge_edge_frac = 0.02,
+  stop_k_mix = NULL,
+  stop_check_mix_every = 2L,
+  spectral_gap_check = c("never", "final", "pre_stop", "pre_switch_and_final"),
+  spectral_gap_weights = c("count", "binary"),
+  spectral_gap_max_iter = 200L,
+  spectral_gap_tol = 1e-06,
+  spectral_gap_warn_below = 0.01,
   stop_topk_ties = c("id", "random"),
   fit_fun = fit_bt_model,
   build_bt_fun = build_bt_data,
@@ -196,6 +207,17 @@ If \code{TRUE}, degenerate stability is treated as perfectly stable (legacy beha
 
 \item{stage1_max_rounds}{Integer. For \code{fit_engine_running = "hybrid"}, maximum
 number of Stage 1 rounds to attempt before triggering stage-1 fail-safe escalation.}
+
+\item{stage1_max_bridge_edge_frac}{Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
+additional mixing-guard threshold on the bridge-edge fraction proxy (computed only on scheduled
+checks). Stage1 can switch to BT only when \code{bridge_edge_frac <= stage1_max_bridge_edge_frac}
+for \code{stage1_k_mix} consecutive checks. Default \code{0.02}.}
+
+\item{stage1_k_mix}{Integer. For \code{fit_engine_running = "hybrid"}, number of consecutive
+mixing checks that must pass before switching stage1\eqn{\to}stage2. Default \code{2}.}
+
+\item{stage1_check_mix_every}{Integer. For \code{fit_engine_running = "hybrid"}, compute the bridge-edge
+fraction proxy every \code{stage1_check_mix_every} rounds (to reduce runtime). Default \code{2}.}
 
 \item{stage1_escalated_explore_frac}{Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
 when Stage 1 reaches \code{stage1_max_rounds} without meeting the connectivity gate,
@@ -363,6 +385,36 @@ multiple stopping criteria are met on the same round. If \code{NULL}, a default 
 \item{stop_stability_consecutive}{Integer. Number of consecutive rounds the stability criteria
 must hold before stopping. Default \code{2}.}
 
+\item{stop_max_bridge_edge_frac}{Numeric in \code{[0, 1]}. Additional mixing guard for stopping: when the
+comparison graph is otherwise healthy, stopping is only allowed once the bridge-edge fraction proxy
+is at most this value for \code{stop_k_mix} consecutive checks. Set to \code{NA} to disable. Default \code{0.02}.}
+
+\item{stop_k_mix}{Integer. Number of consecutive mixing checks that must pass before allowing stopping.
+Default \code{2}.}
+
+\item{stop_check_mix_every}{Integer. Compute the bridge-edge fraction proxy every
+\code{stop_check_mix_every} rounds (to reduce runtime). Default \code{2}.}
+
+\item{spectral_gap_check}{Character. Optional end-of-run (and optionally pre-stop/pre-switch) spectral
+gap check on a lazy random walk over the comparison graph. Values:
+\itemize{
+\item \code{"never"}: do not compute.
+\item \code{"final"}: compute once at the end.
+\item \code{"pre_stop"}: compute immediately before stopping (when a stop would occur) and at the end.
+\item \code{"pre_switch_and_final"}: compute immediately before switching stage1\eqn{\to}stage2 and at the end.
+}
+This check is non-blocking by default; it is recorded in \code{out$spectral_gap_checks}.}
+
+\item{spectral_gap_weights}{Character. Edge weighting scheme for the spectral-gap estimator:
+\code{"count"} (use edge multiplicity) or \code{"binary"} (unweighted). Default \code{"count"}.}
+
+\item{spectral_gap_max_iter}{Integer. Maximum iterations for the spectral-gap estimator. Default \code{200}.}
+
+\item{spectral_gap_tol}{Numeric. Convergence tolerance for the spectral-gap estimator. Default \code{1e-6}.}
+
+\item{spectral_gap_warn_below}{Numeric in \code{[0, 1]}. Threshold below which \code{spectral_gap_warn = TRUE}
+is recorded in \code{out$spectral_gap_checks}. Default \code{0.01}.}
+
 \item{stop_topk_ties}{Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
 overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.}
 
@@ -446,6 +498,10 @@ of the accumulated results at that round (e.g., \code{n_unique_unordered_pairs},
 appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
 \code{n_missing_better_id}), plus \code{round}, \code{stop}, and \code{stop_reason}.}
 \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
+\item{run_summary}{One row tibble summarizing the run.}
+\item{metrics}{One row per round of schema-stable diagnostic metrics.}
+\item{pairing_diagnostics}{Planned and derived pairing diagnostics per round.}
+\item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 }
 }
 \description{

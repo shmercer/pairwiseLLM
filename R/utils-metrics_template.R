@@ -97,6 +97,22 @@
     degree_min_lcc = numeric(),
     largest_component_frac = numeric(),
     graph_healthy = logical(),
+
+    # Graph bottleneck (cheap mixing proxy)
+    bridge_edge_count = integer(),
+    bridge_edge_frac = double(),
+    n_component_bridge_pairs_planned = integer(),
+    n_component_bridge_pairs_valid = integer(),
+
+    # Mixing guards / optional spectral diagnostics
+    mix_ok = logical(),
+    mix_streak = integer(),
+    spectral_gap_est = double(),
+    lambda2_est = double(),
+    spectral_gap_iters = integer(),
+    spectral_gap_converged = logical(),
+    spectral_gap_warn = logical(),
+    spectral_gap_when = character(),
     rms_theta_delta = numeric(),
     topk_overlap = numeric(),
     rank_corr = numeric(),

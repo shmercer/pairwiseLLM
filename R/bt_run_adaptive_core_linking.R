@@ -134,6 +134,21 @@
 #'   healthy. Default \code{1}.
 #' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
 #'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
+#' @param spectral_gap_check Character. Optional end-of-run (and optionally pre-stop) spectral
+#'   gap check on a lazy random walk over the comparison graph. Values:
+#'   \itemize{
+#'     \item \code{"never"}: do not compute.
+#'     \item \code{"final"}: compute once at the end.
+#'     \item \code{"pre_stop"}: compute immediately before stopping (when a stop would occur) and at the end.
+#'     \item \code{"pre_switch_and_final"}: accepted for API compatibility; treated like \code{"final"} in this runner.
+#'   }
+#'   This check is non-blocking; results are recorded in \code{out$spectral_gap_checks}.
+#' @param spectral_gap_weights Character. Edge weighting scheme for the spectral-gap estimator:
+#'   \code{"count"} (use edge multiplicity) or \code{"binary"} (unweighted). Default \code{"count"}.
+#' @param spectral_gap_max_iter Integer. Maximum iterations for the spectral-gap estimator. Default \code{200}.
+#' @param spectral_gap_tol Numeric. Convergence tolerance for the spectral-gap estimator. Default \code{1e-6}.
+#' @param spectral_gap_warn_below Numeric in \code{[0, 1]}. Threshold below which \code{spectral_gap_warn = TRUE}
+#'   is recorded in \code{out$spectral_gap_checks}. Default \code{0.01}.
 #'
 #'
 #' @param within_batch_frac Numeric in \code{[0,1]}. Fraction of non-audit pairs allocated to new\eqn{\leftrightarrow}new
@@ -235,6 +250,9 @@
 #'   \item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"} when
 #'     applicable).}
 #'   \item{metrics}{Tibble of stop metrics per round (computed on each batch's new IDs).}
+#'   \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round.}
+#'   \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
+#'   \item{run_summary}{One row tibble summarizing the run.}
 #'   \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 #'   \item{state}{A tibble with one row per scoring round containing bookkeeping summaries of
 #'     accumulated results (overall and for the current batch's new IDs). New-ID fields are
@@ -340,6 +358,12 @@ bt_run_adaptive_core_linking <- function(samples,
                                          stop_reason_priority = NULL,
                                          stop_stability_consecutive = 2L,
                                          stop_topk_ties = c("id", "random"),
+                                         # Optional spectral-gap diagnostics (non-blocking)
+                                         spectral_gap_check = c("never", "final", "pre_stop", "pre_switch_and_final"),
+                                         spectral_gap_weights = c("count", "binary"),
+                                         spectral_gap_max_iter = 200L,
+                                         spectral_gap_tol = 1e-6,
+                                         spectral_gap_warn_below = 0.01,
                                          within_batch_frac = 0.25,
                                          core_audit_frac = 0.05,
                                          allocation = c("fixed", "precision_ramp", "audit_on_drift"),
@@ -396,6 +420,21 @@ bt_run_adaptive_core_linking <- function(samples,
   stopping_tier <- match.arg(stopping_tier)
   stop_topk_ties <- match.arg(stop_topk_ties)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
+
+  spectral_gap_check <- match.arg(spectral_gap_check)
+  spectral_gap_weights <- match.arg(spectral_gap_weights)
+  spectral_gap_max_iter <- as.integer(spectral_gap_max_iter)
+  if (is.na(spectral_gap_max_iter) || spectral_gap_max_iter < 5L) {
+    stop("`spectral_gap_max_iter` must be an integer >= 5.", call. = FALSE)
+  }
+  spectral_gap_tol <- as.double(spectral_gap_tol)
+  if (is.na(spectral_gap_tol) || spectral_gap_tol <= 0) {
+    stop("`spectral_gap_tol` must be a single positive number.", call. = FALSE)
+  }
+  spectral_gap_warn_below <- as.double(spectral_gap_warn_below)
+  if (is.na(spectral_gap_warn_below) || spectral_gap_warn_below < 0) {
+    stop("`spectral_gap_warn_below` must be a single non-negative number.", call. = FALSE)
+  }
 
   fit_engine_running <- match.arg(fit_engine_running)
   store_running_estimates <- isTRUE(store_running_estimates)
@@ -924,6 +963,7 @@ bt_run_adaptive_core_linking <- function(samples,
   metrics_rows <- list()
   state_rows <- list()
   blocked_rows <- list()
+  spectral_gap_checks <- .spectral_gap_checks_template()
 
   batch_summary <- tibble::tibble()
   current_fit <- NULL
@@ -967,6 +1007,7 @@ bt_run_adaptive_core_linking <- function(samples,
     final_fits <- chk$final_fits %||% list()
     metrics_rows <- chk$metrics_rows %||% list()
     state_rows <- chk$state_rows %||% list()
+    spectral_gap_checks <- chk$spectral_gap_checks %||% spectral_gap_checks
     batch_summary <- chk$batch_summary %||% tibble::tibble()
     current_fit <- chk$current_fit %||% NULL
     bootstrap_fit <- chk$bootstrap_fit %||% NULL
@@ -1012,6 +1053,7 @@ bt_run_adaptive_core_linking <- function(samples,
       final_fits = if (isTRUE(checkpoint_store_fits)) final_fits else NULL,
       metrics_rows = metrics_rows,
       state_rows = state_rows,
+      spectral_gap_checks = spectral_gap_checks,
       batch_summary = batch_summary,
       current_fit = current_fit,
       bootstrap_fit = bootstrap_fit,
@@ -1555,6 +1597,31 @@ bt_run_adaptive_core_linking <- function(samples,
         stop_reason = stop_reason
       )
 
+      # Optional pre-stop spectral-gap check (non-blocking)
+      if (!identical(spectral_gap_check, "never") &&
+        identical(spectral_gap_check, "pre_stop") &&
+        isTRUE(stop_now) &&
+        nrow(results) > 0L) {
+        ids_active <- sort(unique(c(core_ids, new_ids)))
+        gap_row <- .estimate_spectral_gap_lazy_rw(
+          pairs = results,
+          ids = ids_active,
+          weights = spectral_gap_weights,
+          max_iter = spectral_gap_max_iter,
+          tol = spectral_gap_tol
+        )
+        gap_warn <- isTRUE(!is.na(gap_row$spectral_gap_est) && gap_row$spectral_gap_est < spectral_gap_warn_below)
+        spectral_gap_checks <- dplyr::bind_rows(
+          spectral_gap_checks,
+          dplyr::mutate(
+            gap_row,
+            when = "pre_stop",
+            round = as.integer(length(metrics_rows)),
+            spectral_gap_warn = gap_warn
+          )
+        )
+      }
+
       if (!is.null(allocation_fun)) {
         alloc_state <- list(
           stage = "round",
@@ -1718,6 +1785,29 @@ bt_run_adaptive_core_linking <- function(samples,
       stop_blocked_candidates = as.character(.data$stop_blocked_candidates)
     )
 
+  # Optional end-of-run spectral-gap check (non-blocking)
+  if (!identical(spectral_gap_check, "never") &&
+    nrow(results) > 0L &&
+    spectral_gap_check %in% c("final", "pre_stop", "pre_switch_and_final")) {
+    gap_row <- .estimate_spectral_gap_lazy_rw(
+      pairs = results,
+      ids = ids_all,
+      weights = spectral_gap_weights,
+      max_iter = spectral_gap_max_iter,
+      tol = spectral_gap_tol
+    )
+    gap_warn <- isTRUE(!is.na(gap_row$spectral_gap_est) && gap_row$spectral_gap_est < spectral_gap_warn_below)
+    spectral_gap_checks <- dplyr::bind_rows(
+      spectral_gap_checks,
+      dplyr::mutate(
+        gap_row,
+        when = "final",
+        round = as.integer(if (length(metrics_rows) == 0L) 0L else length(metrics_rows)),
+        spectral_gap_warn = gap_warn
+      )
+    )
+  }
+
 
   final_est <- NULL
   if (isTRUE(final_refit) && nrow(results) > 0L) {
@@ -1785,6 +1875,7 @@ bt_run_adaptive_core_linking <- function(samples,
     theta_engine = theta_engine,
     fit_provenance = fit_provenance,
     pairing_diagnostics = pairing_diagnostics,
+    spectral_gap_checks = spectral_gap_checks,
     final_models = if (is.null(final_est)) list() else list(bt = final_est$bt_fit, rc = final_est$rc_fit, diagnostics = final_est$diagnostics),
     metrics = metrics,
     batch_summary = batch_summary,

@@ -47,6 +47,11 @@ bt_run_adaptive_core_linking(
   stop_reason_priority = NULL,
   stop_stability_consecutive = 2L,
   stop_topk_ties = c("id", "random"),
+  spectral_gap_check = c("never", "final", "pre_stop", "pre_switch_and_final"),
+  spectral_gap_weights = c("count", "binary"),
+  spectral_gap_max_iter = 200L,
+  spectral_gap_tol = 1e-06,
+  spectral_gap_warn_below = 0.01,
   within_batch_frac = 0.25,
   core_audit_frac = 0.05,
   allocation = c("fixed", "precision_ramp", "audit_on_drift"),
@@ -231,6 +236,26 @@ must hold before stopping. Default \code{2}.}
 \item{stop_topk_ties}{Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
 overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.}
 
+\item{spectral_gap_check}{Character. Optional end-of-run (and optionally pre-stop) spectral
+gap check on a lazy random walk over the comparison graph. Values:
+\itemize{
+\item \code{"never"}: do not compute.
+\item \code{"final"}: compute once at the end.
+\item \code{"pre_stop"}: compute immediately before stopping (when a stop would occur) and at the end.
+\item \code{"pre_switch_and_final"}: accepted for API compatibility; treated like \code{"final"} in this runner.
+}
+This check is non-blocking; results are recorded in \code{out$spectral_gap_checks}.}
+
+\item{spectral_gap_weights}{Character. Edge weighting scheme for the spectral-gap estimator:
+\code{"count"} (use edge multiplicity) or \code{"binary"} (unweighted). Default \code{"count"}.}
+
+\item{spectral_gap_max_iter}{Integer. Maximum iterations for the spectral-gap estimator. Default \code{200}.}
+
+\item{spectral_gap_tol}{Numeric. Convergence tolerance for the spectral-gap estimator. Default \code{1e-6}.}
+
+\item{spectral_gap_warn_below}{Numeric in \code{[0, 1]}. Threshold below which \code{spectral_gap_warn = TRUE}
+is recorded in \code{out$spectral_gap_checks}. Default \code{0.01}.}
+
 \item{within_batch_frac}{Numeric in \code{[0,1]}. Fraction of non-audit pairs allocated to new\eqn{\leftrightarrow}new
 within-batch comparisons (passed to \code{\link{select_core_link_pairs}}).}
 
@@ -334,6 +359,9 @@ fit is tagged with per-round metadata in the
 \item{final_fits}{Named list of final fit per batch (plus \code{"bootstrap"} when
 applicable).}
 \item{metrics}{Tibble of stop metrics per round (computed on each batch's new IDs).}
+\item{pairing_diagnostics}{Planned and derived pairing diagnostics per round.}
+\item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
+\item{run_summary}{One row tibble summarizing the run.}
 \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
 \item{state}{A tibble with one row per scoring round containing bookkeeping summaries of
 accumulated results (overall and for the current batch's new IDs). New-ID fields are
