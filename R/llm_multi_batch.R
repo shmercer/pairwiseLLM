@@ -176,13 +176,26 @@ llm_submit_pairs_multi_batch <- function(
   # Build segment index vector
   indices <- rep(seq_along(sizes), times = sizes)
   # List of jobs; tibble of registry rows
-  jobs <- vector("list", length(sizes))
-  job_rows <- vector("list", length(sizes))
+  jobs <- list()
+  job_rows <- list()
 
   # Loop over each segment and submit a batch
   for (seg in seq_along(sizes)) {
     seg_indices <- which(indices == seg)
     pairs_seg <- pairs[seg_indices, , drop = FALSE]
+
+    # When n_segments exceeds n_pairs (or pairs is empty), `sizes` can include
+    # zeros. In that case, `pairs_seg` will have 0 rows and attempting to
+    # submit an empty batch (empty JSONL) can cause provider errors.
+    if (nrow(pairs_seg) == 0L) {
+      if (isTRUE(verbose)) {
+        message(sprintf(
+          "[llm_submit_pairs_multi_batch] Skipping empty segment %d of %d.",
+          seg, length(sizes)
+        ))
+      }
+      next
+    }
 
     # Construct file paths
     input_path <- file.path(output_dir, sprintf("batch_%02d_input.jsonl", seg))
@@ -300,7 +313,7 @@ llm_submit_pairs_multi_batch <- function(
       }
     }
 
-    jobs[[seg]] <- list(
+    jobs[[length(jobs) + 1L]] <- list(
       segment_index     = seg,
       provider          = backend,
       model             = model,
@@ -312,7 +325,7 @@ llm_submit_pairs_multi_batch <- function(
       results           = NULL
     )
 
-    job_rows[[seg]] <- tibble::tibble(
+    job_rows[[length(job_rows) + 1L]] <- tibble::tibble(
       segment_index     = seg,
       provider          = backend,
       model             = model,
@@ -324,8 +337,24 @@ llm_submit_pairs_multi_batch <- function(
     )
   }
 
-  # Combine registry rows into a tibble
-  registry_tbl <- dplyr::bind_rows(job_rows)
+  # Combine registry rows into a tibble (schema-stable, even if empty)
+  registry_tbl <- dplyr::bind_rows(
+    c(
+      list(
+        tibble::tibble(
+          segment_index     = integer(),
+          provider          = character(),
+          model             = character(),
+          batch_id          = character(),
+          batch_input_path  = character(),
+          batch_output_path = character(),
+          csv_path          = character(),
+          done              = logical()
+        )
+      ),
+      job_rows
+    )
+  )
 
   # Optionally write registry to disk
   if (isTRUE(write_registry)) {

@@ -39,8 +39,8 @@ NULL
   # However, in some test/mocking scenarios the returned object can lose its
   # class or even come back as a plain list. We defensively normalize the
   # request shape so downstream helpers and tests remain deterministic.
-  req <- httr2::request(url) |>
-    httr2::req_auth_bearer_token(api_key)
+  req <- request(url) |>
+    req_auth_bearer_token(api_key)
 
   if (!is.list(req)) {
     req <- list()
@@ -99,7 +99,7 @@ NULL
     }
   }
 
-  out <- httr2::req_body_json(req, body)
+  out <- req_body_json(req, body)
   # See `.openai_request()` for rationale.
   if (!is.list(out)) {
     out <- list(url = NA_character_)
