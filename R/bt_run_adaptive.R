@@ -1140,6 +1140,7 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
   conn_streak <- 0L
   stab_streak <- 0L
   mix_streak <- 0L
+  mix_checked_this_round <- NA
   stage1_rounds <- 0L
   stage2_rounds <- 0L
   prev_rc_rank <- NULL
@@ -1193,7 +1194,13 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
 
   round_seq <- if (start_round <= max_rounds) seq.int(from = start_round, to = max_rounds) else integer(0)
   for (r in round_seq) {
+    stage_switched_this_round <- FALSE
+
     if (nrow(results) == 0L) break
+
+    # Mixing checks are computed on a schedule; record whether we actually
+    # evaluated the mixing proxy on this round for transparency.
+    mix_checked_this_round <- NA
 
     engine_running_now <- as.character(fit_engine_running_requested)
     if (identical(fit_engine_running_requested, "hybrid")) {
@@ -1392,6 +1399,7 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
         if (isTRUE(do_mix_check) &&
           isTRUE(n_components == 1L) &&
           isTRUE(largest_component_frac >= stage1_min_largest_component_frac)) {
+          mix_checked_this_round <- TRUE
           if (is.finite(bridge_edge_frac)) {
             mix_ok <- isTRUE(bridge_edge_frac <= stage1_max_bridge_edge_frac_eff)
           } else {
@@ -1399,6 +1407,7 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
           }
           mix_streak <- if (isTRUE(mix_ok)) as.integer(mix_streak) + 1L else 0L
         } else {
+          mix_checked_this_round <- FALSE
           mix_ok <- NA
         }
         mix_req_met <- isTRUE(mix_streak >= stage1_k_mix)
@@ -1440,6 +1449,12 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
         stage_after <- "stage2_bt"
         stage <- stage_after
         stage2_rounds <- as.integer(stage2_rounds) + 1L
+
+        # Do not allow mixing streak state from stage1 to carry into stop gating
+        # in stage2. Stage1 mixing checks are about whether it is safe to switch;
+        # stop mixing checks should require their own consecutive passes.
+        mix_streak <- 0L
+        stage_switched_this_round <- TRUE
       }
 
       # ---- Workstream E: Stage 1 max-rounds fail-safe escalation ----
@@ -1471,7 +1486,8 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
       isTRUE(stop_k_mix_eff > 0L) &&
       !(identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc"))) {
       do_mix_check <- (as.integer(r) %% as.integer(stop_check_mix_every) == 0L)
-      if (isTRUE(do_mix_check)) {
+      if (isTRUE(do_mix_check) && !isTRUE(stage_switched_this_round)) {
+        mix_checked_this_round <- TRUE
         if (isTRUE(n_components == 1L) && is.finite(bridge_edge_frac)) {
           mix_ok <- isTRUE(bridge_edge_frac <= stop_max_bridge_edge_frac_eff)
         } else {
@@ -1479,6 +1495,7 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
         }
         mix_streak <- if (isTRUE(mix_ok)) as.integer(mix_streak) + 1L else 0L
       } else {
+        mix_checked_this_round <- FALSE
         mix_ok <- NA
       }
       mix_req_met_for_stop <- isTRUE(mix_streak >= stop_k_mix_eff)
@@ -1720,6 +1737,7 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
       as.integer(r) >= stage1_escalation_round_val
 
     mix_ok_val <- if (is.na(mix_ok)) NA else as.logical(mix_ok)
+    mix_checked_this_round_val <- if (is.na(mix_checked_this_round)) NA else as.logical(mix_checked_this_round)
     mix_streak_val <- as.integer(mix_streak)
 
     # Pair-plan bridging progress metrics (planned pairs for this round)
@@ -1752,6 +1770,7 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
         stability_streak = stability_streak_val,
         stability_pass = stability_pass_val,
         mix_ok = mix_ok_val,
+        mix_checked_this_round = mix_checked_this_round_val,
         mix_streak = mix_streak_val,
         spectral_gap_est = spectral_gap_est_val,
         lambda2_est = lambda2_est_val,

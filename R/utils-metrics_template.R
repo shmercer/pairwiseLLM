@@ -111,6 +111,7 @@
 
     # Mixing guards / optional spectral diagnostics
     mix_ok = logical(),
+    mix_checked_this_round = logical(),
     mix_streak = integer(),
     spectral_gap_est = double(),
     lambda2_est = double(),
