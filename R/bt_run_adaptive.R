@@ -610,6 +610,7 @@ bt_run_adaptive <- function(samples,
     stop("`stage1_max_rounds` must be an integer >= 1.", call. = FALSE)
   }
 
+  stage1_max_bridge_edge_frac_was_missing <- missing(stage1_max_bridge_edge_frac)
   stage1_max_bridge_edge_frac <- as.double(stage1_max_bridge_edge_frac)
   if (length(stage1_max_bridge_edge_frac) != 1L || isTRUE(is.nan(stage1_max_bridge_edge_frac)) ||
     (!is.na(stage1_max_bridge_edge_frac) && stage1_max_bridge_edge_frac < 0)) {
@@ -621,7 +622,7 @@ bt_run_adaptive <- function(samples,
   # for "healthy" graphs. To avoid blocking hybrid switching by default on small
   # graphs, treat the default threshold as disabled when N < 200.
   stage1_max_bridge_edge_frac_eff <- stage1_max_bridge_edge_frac
-  if (length(ids) < 200L && missing(stage1_max_bridge_edge_frac) && is.finite(stage1_max_bridge_edge_frac_eff) &&
+  if (length(ids) < 200L && isTRUE(stage1_max_bridge_edge_frac_was_missing) && is.finite(stage1_max_bridge_edge_frac_eff) &&
     isTRUE(abs(stage1_max_bridge_edge_frac_eff - 0.02) < 1e-12)) {
     stage1_max_bridge_edge_frac_eff <- NA_real_
   }
@@ -739,6 +740,7 @@ bt_run_adaptive <- function(samples,
 
 
   # --- stop mixing guard (bridge-edge fraction) ---
+  stop_max_bridge_edge_frac_was_missing <- missing(stop_max_bridge_edge_frac)
   stop_max_bridge_edge_frac <- as.double(stop_max_bridge_edge_frac)
   if (!is.na(stop_max_bridge_edge_frac) && stop_max_bridge_edge_frac < 0) {
     stop("`stop_max_bridge_edge_frac` must be NA or a non-negative number.", call. = FALSE)
@@ -748,7 +750,7 @@ bt_run_adaptive <- function(samples,
   # bridge threshold on very small toy runs so stopping isn't blocked by
   # bridge-heavy graphs that are otherwise fine for small-N.
   stop_max_bridge_edge_frac_eff <- stop_max_bridge_edge_frac
-  if (length(ids) < 200L && missing(stop_max_bridge_edge_frac) && is.finite(stop_max_bridge_edge_frac_eff) &&
+  if (length(ids) < 200L && isTRUE(stop_max_bridge_edge_frac_was_missing) && is.finite(stop_max_bridge_edge_frac_eff) &&
     isTRUE(abs(stop_max_bridge_edge_frac_eff - 0.02) < 1e-12)) {
     stop_max_bridge_edge_frac_eff <- NA_real_
   }

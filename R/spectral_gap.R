@@ -132,7 +132,8 @@
     return(out)
   }
 
-  id_to_index <- setNames(seq_len(n), ids)
+  # setNames() lives in the stats namespace; qualify explicitly for R CMD check.
+  id_to_index <- stats::setNames(seq_len(n), ids)
   i <- as.integer(id_to_index[e1])
   j <- as.integer(id_to_index[e2])
 
