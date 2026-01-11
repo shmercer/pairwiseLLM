@@ -165,9 +165,9 @@
 #' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
 #'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
 #' @param stop_min_largest_component_frac Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
-#'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
+#'   largest connected component for the comparison graph to be considered healthy. The formal argument default is \code{NA}, but when left \code{NA} the runner applies an internal effective default of \code{0.98} (unless overridden). Set explicitly (e.g., \code{0}) to disable this gating.
 #' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
-#'   healthy. Default \code{1}.
+#'   healthy. The formal argument default is \code{NA}, but when left \code{NA} the runner applies an internal effective default of \code{1} (unless overridden). Set explicitly (e.g., \code{0L}) to disable this gating.
 #' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
 #'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
 #' @param stop_max_bridge_edge_frac Numeric in \code{[0, 1]}. Additional mixing guard for stopping: when the
@@ -773,7 +773,37 @@ bt_run_adaptive <- function(samples,
     is.finite(stop_max_bridge_edge_frac_eff) &&
     isTRUE(stop_k_mix_eff > 0L)
 
-  # --- spectral gap check (optional; end-of-run by default) ---
+  
+
+# --- stop graph-health gating (effective defaults) ---
+# For backwards compatibility, the formal argument defaults remain NA. When left as NA,
+# apply internal effective defaults so that stability/precision stops are not allowed
+# on partially observed or disconnected graphs.
+stop_min_largest_component_frac <- as.double(stop_min_largest_component_frac)
+if (length(stop_min_largest_component_frac) != 1L || isTRUE(is.nan(stop_min_largest_component_frac)) ||
+  (!is.na(stop_min_largest_component_frac) && (stop_min_largest_component_frac < 0 || stop_min_largest_component_frac > 1))) {
+  stop("`stop_min_largest_component_frac` must be NA or a single number in [0, 1].", call. = FALSE)
+}
+
+stop_min_degree <- if (is.na(stop_min_degree)) NA_integer_ else as.integer(stop_min_degree)
+if (!is.na(stop_min_degree) && stop_min_degree < 0L) {
+  stop("`stop_min_degree` must be NA or a non-negative integer.", call. = FALSE)
+}
+
+stop_min_largest_component_frac_eff <- if (!is.na(stop_min_largest_component_frac)) {
+  stop_min_largest_component_frac
+} else {
+  0.98
+}
+stop_min_degree_eff <- if (!is.na(stop_min_degree)) {
+  as.integer(stop_min_degree)
+} else {
+  1L
+}
+stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
+  is.finite(as.double(stop_min_largest_component_frac_eff)))
+
+# --- spectral gap check (optional; end-of-run by default) ---
   spectral_gap_check <- match.arg(spectral_gap_check, c("never", "final", "pre_stop", "pre_switch_and_final"))
   spectral_gap_weights <- match.arg(spectral_gap_weights, c("count", "binary"))
   spectral_gap_max_iter <- as.integer(spectral_gap_max_iter)
@@ -1427,11 +1457,11 @@ bt_run_adaptive <- function(samples,
 
     # If no graph-health thresholds are set, treat the graph as healthy (no gating).
     graph_healthy <- TRUE
-    if (is.finite(as.double(stop_min_degree))) {
-      graph_healthy <- isTRUE(graph_healthy) && isTRUE(degree_min >= as.double(stop_min_degree))
+    if (is.finite(as.double(stop_min_degree_eff))) {
+      graph_healthy <- isTRUE(graph_healthy) && isTRUE(degree_min >= as.double(stop_min_degree_eff))
     }
-    if (is.finite(as.double(stop_min_largest_component_frac))) {
-      graph_healthy <- isTRUE(graph_healthy) && isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+    if (is.finite(as.double(stop_min_largest_component_frac_eff))) {
+      graph_healthy <- isTRUE(graph_healthy) && isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac_eff))
     }
 
     graph_healthy_base <- graph_healthy
@@ -1679,6 +1709,9 @@ bt_run_adaptive <- function(samples,
     bridge_edge_count_val <- as.integer(bridge_edge_count[[1]])
     bridge_edge_frac_val <- as.double(bridge_edge_frac[[1]])
     graph_healthy_val <- as.logical(graph_healthy)
+    stop_min_degree_eff_val <- as.integer(stop_min_degree_eff)
+    stop_min_largest_component_frac_eff_val <- as.double(stop_min_largest_component_frac_eff)
+    stop_gating_active_val <- as.logical(stop_gating_active)
     stability_streak_val <- as.integer(stability_streak)
     stability_pass_val <- as.logical(stability_pass)
     stage1_escalation_round_val <- suppressWarnings(as.integer(stage1_escalation_round))
@@ -1713,6 +1746,9 @@ bt_run_adaptive <- function(samples,
         bridge_edge_count = bridge_edge_count_val,
         bridge_edge_frac = bridge_edge_frac_val,
         graph_healthy = graph_healthy_val,
+        stop_min_degree_eff = stop_min_degree_eff_val,
+        stop_min_largest_component_frac_eff = stop_min_largest_component_frac_eff_val,
+        stop_gating_active = stop_gating_active_val,
         stability_streak = stability_streak_val,
         stability_pass = stability_pass_val,
         mix_ok = mix_ok_val,

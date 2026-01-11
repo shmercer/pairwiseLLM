@@ -98,6 +98,11 @@
     largest_component_frac = numeric(),
     graph_healthy = logical(),
 
+    # Effective stop gating thresholds (arguments may be NA; these reflect internal effective defaults)
+    stop_min_degree_eff = integer(),
+    stop_min_largest_component_frac_eff = double(),
+    stop_gating_active = logical(),
+
     # Graph bottleneck (cheap mixing proxy)
     bridge_edge_count = integer(),
     bridge_edge_frac = double(),

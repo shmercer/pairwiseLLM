@@ -374,10 +374,10 @@ fits; lower values indicate greater stability. Default \code{0.01}.}
 sets required to consider rankings stable. Default \code{0.95}.}
 
 \item{stop_min_largest_component_frac}{Numeric in \code{[0, 1]}. Minimum fraction of nodes that must lie in the
-largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.}
+largest connected component for the comparison graph to be considered healthy. The formal argument default is \code{NA}, but when left \code{NA} the runner applies an internal effective default of \code{0.98} (unless overridden). Set explicitly (e.g., \code{0}) to disable this gating.}
 
 \item{stop_min_degree}{Integer. Minimum node degree required for the comparison graph to be considered
-healthy. Default \code{1}.}
+healthy. The formal argument default is \code{NA}, but when left \code{NA} the runner applies an internal effective default of \code{1} (unless overridden). Set explicitly (e.g., \code{0L}) to disable this gating.}
 
 \item{stop_reason_priority}{Optional character vector specifying a priority order for stop reasons when
 multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.}

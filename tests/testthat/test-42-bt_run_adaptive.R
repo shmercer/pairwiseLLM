@@ -805,7 +805,12 @@ test_that("bt_run_adaptive stop_reason reflects common termination paths", {
     min_rounds = 1L,
     round_size = 2,
     fit_fun = fit_stop,
-    engine = "mock"
+    engine = "mock",
+    # When stop_min_* are left as NA, bt_run_adaptive applies internal graph-health
+    # gating defaults (see work package B). Disable gating here so this test focuses
+    # on the precision termination path.
+    stop_min_degree = 0L,
+    stop_min_largest_component_frac = 0
   )
   expect_identical(out_stop$stop_reason, "precision_reached")
   expect_true(isTRUE(out_stop$rounds$stop[[1]]))
