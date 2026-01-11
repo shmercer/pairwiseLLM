@@ -128,10 +128,12 @@
 #'   sets required to consider rankings stable. Default \code{0.95}.
 #' @param stop_topk_ties Character. How to handle ties at the \code{k}-th boundary for the top-\code{k}
 #'   overlap check. One of \code{"id"} (deterministic) or \code{"random"}. Default \code{"id"}.
-#' @param stop_min_largest_component_frac Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
-#'   largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.
-#' @param stop_min_degree Integer. Minimum node degree required for the comparison graph to be considered
-#'   healthy. Default \code{1}.
+#' @param stop_min_largest_component_frac Numeric in \code{[0, 1]} or \code{NA}. Minimum fraction of nodes that must lie in the
+#'   largest connected component for the comparison graph to be considered healthy.
+#'   If \code{NA} (the formal default), an internal effective default of \code{0.98} is used.
+#' @param stop_min_degree Integer or \code{NA}. Minimum node degree required for the comparison graph to be considered
+#'   healthy.
+#'   If \code{NA} (the formal default), an internal effective default of \code{1} is used.
 #' @param stop_reason_priority Optional character vector specifying a priority order for stop reasons when
 #'   multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.
 #' @param spectral_gap_check Character. Optional end-of-run (and optionally pre-stop) spectral
@@ -353,8 +355,8 @@ bt_run_adaptive_core_linking <- function(samples,
                                          stop_stability_rms = 0.01,
                                          stop_topk = 50L,
                                          stop_topk_overlap = 0.95,
-                                         stop_min_largest_component_frac = 0.9,
-                                         stop_min_degree = 1L,
+                                         stop_min_largest_component_frac = NA_real_,
+                                         stop_min_degree = NA_integer_,
                                          stop_reason_priority = NULL,
                                          stop_stability_consecutive = 2L,
                                          stop_topk_ties = c("id", "random"),
@@ -420,6 +422,32 @@ bt_run_adaptive_core_linking <- function(samples,
   stopping_tier <- match.arg(stopping_tier)
   stop_topk_ties <- match.arg(stop_topk_ties)
   stop_params <- bt_stop_tiers()[[stopping_tier]]
+
+  # --- stop graph-health gating (effective defaults) ---
+  # For consistency with `bt_run_adaptive()`, the formal argument defaults may be left as NA.
+  # When left as NA, we apply internal effective defaults so that soft stopping (stability/precision)
+  # is not allowed on partially observed or disconnected graphs.
+  stop_min_largest_component_frac <- as.double(stop_min_largest_component_frac)
+  if (length(stop_min_largest_component_frac) != 1L || isTRUE(is.nan(stop_min_largest_component_frac)) ||
+    (!is.na(stop_min_largest_component_frac) && (stop_min_largest_component_frac < 0 || stop_min_largest_component_frac > 1))) {
+    stop("`stop_min_largest_component_frac` must be NA or a single number in [0, 1].", call. = FALSE)
+  }
+
+  stop_min_degree <- if (is.na(stop_min_degree)) NA_integer_ else as.integer(stop_min_degree)
+  if (!is.na(stop_min_degree) && stop_min_degree < 0L) {
+    stop("`stop_min_degree` must be NA or a non-negative integer.", call. = FALSE)
+  }
+
+  stop_min_largest_component_frac_eff <- if (!is.na(stop_min_largest_component_frac)) {
+    stop_min_largest_component_frac
+  } else {
+    0.98
+  }
+  stop_min_degree_eff <- if (!is.na(stop_min_degree)) {
+    as.integer(stop_min_degree)
+  } else {
+    1L
+  }
 
   spectral_gap_check <- match.arg(spectral_gap_check)
   spectral_gap_weights <- match.arg(spectral_gap_weights)
@@ -1491,8 +1519,13 @@ bt_run_adaptive_core_linking <- function(samples,
       degree_min <- as.double(gm$degree_min)
       largest_component_frac <- as.double(gm$largest_component_frac)
 
-      graph_healthy <- isTRUE(degree_min >= as.double(stop_min_degree)) &&
-        isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac))
+      graph_healthy <- TRUE
+      if (is.finite(as.double(stop_min_degree_eff))) {
+        graph_healthy <- isTRUE(graph_healthy) && isTRUE(degree_min >= as.double(stop_min_degree_eff))
+      }
+      if (is.finite(as.double(stop_min_largest_component_frac_eff))) {
+        graph_healthy <- isTRUE(graph_healthy) && isTRUE(largest_component_frac >= as.double(stop_min_largest_component_frac_eff))
+      }
 
       stability_pass <- FALSE
       if (!is.null(prev_fit_for_stability)) {

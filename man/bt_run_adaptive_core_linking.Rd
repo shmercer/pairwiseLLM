@@ -42,8 +42,8 @@ bt_run_adaptive_core_linking(
   stop_stability_rms = 0.01,
   stop_topk = 50L,
   stop_topk_overlap = 0.95,
-  stop_min_largest_component_frac = 0.9,
-  stop_min_degree = 1L,
+  stop_min_largest_component_frac = NA_real_,
+  stop_min_degree = NA_integer_,
   stop_reason_priority = NULL,
   stop_stability_consecutive = 2L,
   stop_topk_ties = c("id", "random"),
@@ -221,11 +221,13 @@ fits; lower values indicate greater stability. Default \code{0.01}.}
 \item{stop_topk_overlap}{Numeric in \code{[0, 1]}. Minimum overlap fraction between consecutive top-\code{k}
 sets required to consider rankings stable. Default \code{0.95}.}
 
-\item{stop_min_largest_component_frac}{Numeric in (0, 1]. Minimum fraction of nodes that must lie in the
-largest connected component for the comparison graph to be considered healthy. Default \code{0.9}.}
+\item{stop_min_largest_component_frac}{Numeric in \code{[0, 1]} or \code{NA}. Minimum fraction of nodes that must lie in the
+largest connected component for the comparison graph to be considered healthy.
+If \code{NA} (the formal default), an internal effective default of \code{0.98} is used.}
 
-\item{stop_min_degree}{Integer. Minimum node degree required for the comparison graph to be considered
-healthy. Default \code{1}.}
+\item{stop_min_degree}{Integer or \code{NA}. Minimum node degree required for the comparison graph to be considered
+healthy.
+If \code{NA} (the formal default), an internal effective default of \code{1} is used.}
 
 \item{stop_reason_priority}{Optional character vector specifying a priority order for stop reasons when
 multiple stopping criteria are met on the same round. If \code{NULL}, a default priority is used.}
