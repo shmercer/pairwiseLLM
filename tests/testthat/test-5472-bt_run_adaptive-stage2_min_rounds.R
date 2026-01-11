@@ -27,6 +27,11 @@ test_that("bt_run_adaptive enforces stage2_min_rounds before allowing precision/
     fit_fun = fit_fun,
     engine = "mock",
     fit_engine_running = "hybrid",
+    # This test focuses on the stage2_min_rounds gate. Make stage1 stability
+    # permissive and deterministic (Spearman legacy handling) so we reliably
+    # enter stage2 quickly.
+    stage1_stability_metric = "spearman",
+    stage1_allow_degenerate_stability = TRUE,
     # Switch to stage2 as soon as possible.
     stage1_k_conn = 1L,
     stage1_k_stab = 1L,

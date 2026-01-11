@@ -9,7 +9,8 @@ test_that("degree_min_lcc ignores unseen nodes for hybrid switching", {
   cycle_edges <- tibble::tibble(
     ID1 = seen_ids,
     ID2 = c(seen_ids[-1], seen_ids[1]),
-    better_id = seen_ids
+    # Break perfect cycle symmetry so Rank Centrality isn't degenerate.
+    better_id = ifelse(seen_ids == seen_ids[1], c(seen_ids[-1], seen_ids[1])[1], seen_ids)
   )
 
   gs <- pairwiseLLM:::.graph_state_from_pairs(cycle_edges, ids = samples$ID)
@@ -65,6 +66,7 @@ test_that("degree_min_lcc ignores unseen nodes for hybrid switching", {
     fit_fun = fit_fun,
     build_bt_fun = build_bt_data,
     fit_engine_running = "hybrid",
+    stage1_stability_metric = "spearman",
     init_round_size = 0,
     round_size = 1,
     max_rounds = 2,

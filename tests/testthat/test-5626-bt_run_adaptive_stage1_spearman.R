@@ -89,6 +89,8 @@ testthat::test_that("hybrid stage1 handles NA spearman and can relax forbid_repe
       init_round_size = 1L,
       round_size = 1L,
       fit_engine_running = "hybrid",
+      stage1_stability_metric = "spearman",
+      stage1_allow_degenerate_stability = TRUE,
       stage1_max_rounds = 1L,
       stage1_k_conn = 99L,
       stage1_k_stab = 99L,

@@ -24,6 +24,10 @@ bt_run_adaptive(
   stage1_min_degree_min_lcc = 1,
   stage1_min_degree_min = 0,
   stage1_min_spearman = 0.97,
+  stage1_stability_metric = c("topk_jaccard", "spearman"),
+  stage1_topk = NULL,
+  stage1_topk_overlap = 0.85,
+  stage1_allow_degenerate_stability = FALSE,
   stage1_max_rounds = 10L,
   stage1_escalated_explore_frac = 0.5,
   stage1_escalated_k_neighbors = Inf,
@@ -147,7 +151,7 @@ connectivity gate to hold for this many consecutive rounds before allowing a sta
 switch.}
 
 \item{stage1_k_stab}{Integer. For \code{fit_engine_running = "hybrid"}, require the
-Rank Centrality stability gate (Spearman correlation of RC ranks) to hold for this
+stage-1 stability gate (as defined by \code{stage1_stability_metric}) to hold for this
 many consecutive rounds before allowing a stage switch.}
 
 \item{stage1_min_pct_nodes_with_degree_gt0}{Numeric in \code{[0, 1]}. For
@@ -172,6 +176,23 @@ is still unseen (degree 0). Prefer \code{stage1_min_degree_min_lcc}.}
 
 \item{stage1_min_spearman}{Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 Spearman correlation between consecutive RC rank vectors to count as stable.}
+
+\item{stage1_stability_metric}{Character. For \code{fit_engine_running = "hybrid"},
+which stability metric to use in stage1 when deciding whether to switch to BT.
+One of \code{"topk_jaccard"} (top-\code{k} overlap on RC ranks) or \code{"spearman"}
+(Spearman correlation of RC ranks). Default \code{"topk_jaccard"}.}
+
+\item{stage1_topk}{Integer or \code{NULL}. For \code{stage1_stability_metric = "topk_jaccard"},
+the \code{k} used for the top-\code{k} overlap check. If \code{NULL} (default),
+uses \code{max(10, ceiling(0.1 * N))} where \code{N = nrow(samples)}.}
+
+\item{stage1_topk_overlap}{Numeric in \code{[0, 1]}. For
+\code{stage1_stability_metric = "topk_jaccard"}, minimum top-\code{k} overlap fraction
+between consecutive RC rounds required to count as stable. Default \code{0.85}.}
+
+\item{stage1_allow_degenerate_stability}{Logical. If \code{FALSE} (default), degenerate
+RC ranks (e.g., constant/undefined Spearman) do not count as stable in stage1.
+If \code{TRUE}, degenerate stability is treated as perfectly stable (legacy behavior).}
 
 \item{stage1_max_rounds}{Integer. For \code{fit_engine_running = "hybrid"}, maximum
 number of Stage 1 rounds to attempt before triggering stage-1 fail-safe escalation.}

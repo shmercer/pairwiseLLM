@@ -59,6 +59,7 @@ test_that("bt_run_adaptive hybrid switches from RC to BT after gates", {
     fit_fun = fit_fun,
     build_bt_fun = build_bt_data,
     fit_engine_running = "hybrid",
+    stage1_stability_metric = "spearman",
     init_round_size = 0,
     round_size = 1,
     max_rounds = 2,

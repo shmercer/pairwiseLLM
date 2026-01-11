@@ -79,7 +79,7 @@
 #'   connectivity gate to hold for this many consecutive rounds before allowing a stage
 #'   switch.
 #' @param stage1_k_stab Integer. For \code{fit_engine_running = "hybrid"}, require the
-#'   Rank Centrality stability gate (Spearman correlation of RC ranks) to hold for this
+#'   stage-1 stability gate (as defined by \code{stage1_stability_metric}) to hold for this
 #'   many consecutive rounds before allowing a stage switch.
 #' @param stage1_min_pct_nodes_with_degree_gt0 Numeric in \code{[0, 1]}. For
 #'   \code{fit_engine_running = "hybrid"}, minimum fraction of nodes that have appeared in
@@ -98,6 +98,19 @@
 #'   is still unseen (degree 0). Prefer \code{stage1_min_degree_min_lcc}.
 #' @param stage1_min_spearman Numeric. For \code{fit_engine_running = "hybrid"}, minimum
 #'   Spearman correlation between consecutive RC rank vectors to count as stable.
+#' @param stage1_stability_metric Character. For \code{fit_engine_running = "hybrid"},
+#'   which stability metric to use in stage1 when deciding whether to switch to BT.
+#'   One of \code{"topk_jaccard"} (top-\code{k} overlap on RC ranks) or \code{"spearman"}
+#'   (Spearman correlation of RC ranks). Default \code{"topk_jaccard"}.
+#' @param stage1_topk Integer or \code{NULL}. For \code{stage1_stability_metric = "topk_jaccard"},
+#'   the \code{k} used for the top-\code{k} overlap check. If \code{NULL} (default),
+#'   uses \code{max(10, ceiling(0.1 * N))} where \code{N = nrow(samples)}.
+#' @param stage1_topk_overlap Numeric in \code{[0, 1]}. For
+#'   \code{stage1_stability_metric = "topk_jaccard"}, minimum top-\code{k} overlap fraction
+#'   between consecutive RC rounds required to count as stable. Default \code{0.85}.
+#' @param stage1_allow_degenerate_stability Logical. If \code{FALSE} (default), degenerate
+#'   RC ranks (e.g., constant/undefined Spearman) do not count as stable in stage1.
+#'   If \code{TRUE}, degenerate stability is treated as perfectly stable (legacy behavior).
 #' @param stage1_max_rounds Integer. For \code{fit_engine_running = "hybrid"}, maximum
 #'   number of Stage 1 rounds to attempt before triggering stage-1 fail-safe escalation.
 #' @param stage1_escalated_explore_frac Numeric in \code{[0, 1]}. For \code{fit_engine_running = "hybrid"},
@@ -393,6 +406,10 @@ bt_run_adaptive <- function(samples,
                             stage1_min_degree_min_lcc = 1,
                             stage1_min_degree_min = 0,
                             stage1_min_spearman = 0.97,
+                            stage1_stability_metric = c("topk_jaccard", "spearman"),
+                            stage1_topk = NULL,
+                            stage1_topk_overlap = 0.85,
+                            stage1_allow_degenerate_stability = FALSE,
                             stage1_max_rounds = 10L,
                             stage1_escalated_explore_frac = 0.5,
                             stage1_escalated_k_neighbors = Inf,
@@ -584,6 +601,25 @@ bt_run_adaptive <- function(samples,
   if (!is.numeric(stage1_min_spearman) || length(stage1_min_spearman) != 1L || is.na(stage1_min_spearman)) {
     stop("`stage1_min_spearman` must be a single numeric value.", call. = FALSE)
   }
+  stage1_stability_metric <- match.arg(stage1_stability_metric, c("topk_jaccard", "spearman"))
+  stage1_allow_degenerate_stability <- isTRUE(stage1_allow_degenerate_stability)
+
+  if (!is.null(stage1_topk)) {
+    if (!is.numeric(stage1_topk) || length(stage1_topk) != 1L || is.na(stage1_topk) || stage1_topk < 1) {
+      stop("`stage1_topk` must be NULL or a single positive integer.", call. = FALSE)
+    }
+  }
+  if (!is.numeric(stage1_topk_overlap) || length(stage1_topk_overlap) != 1L ||
+    is.na(stage1_topk_overlap) || stage1_topk_overlap < 0 || stage1_topk_overlap > 1) {
+    stop("`stage1_topk_overlap` must be a single number in [0, 1].", call. = FALSE)
+  }
+
+  stage1_topk_eff <- if (is.null(stage1_topk)) {
+    max(10L, as.integer(ceiling(0.1 * length(ids))))
+  } else {
+    as.integer(stage1_topk)
+  }
+  stage1_topk_eff <- max(1L, min(as.integer(stage1_topk_eff), as.integer(length(ids))))
   if (!is.numeric(stage1_min_pct_nodes_with_degree_gt0) || length(stage1_min_pct_nodes_with_degree_gt0) != 1L ||
     is.na(stage1_min_pct_nodes_with_degree_gt0) || stage1_min_pct_nodes_with_degree_gt0 < 0 ||
     stage1_min_pct_nodes_with_degree_gt0 > 1) {
@@ -954,6 +990,7 @@ bt_run_adaptive <- function(samples,
   stage1_rounds <- 0L
   stage2_rounds <- 0L
   prev_rc_rank <- NULL
+  prev_rc_top_ids <- NULL
   stage1_escalated <- FALSE
   stage1_escalation_round <- NA_integer_
 
@@ -1084,6 +1121,7 @@ bt_run_adaptive <- function(samples,
 
     # ---- PR3: hybrid stage switching diagnostics (Rank Centrality stability + connectivity) ----
     rho_spearman_rc <- NA_real_
+    topk_overlap_rc <- NA_real_
     conn_ok <- NA
     stab_ok <- NA
     stage_after <- stage
@@ -1091,39 +1129,74 @@ bt_run_adaptive <- function(samples,
     if (identical(fit_engine_running_requested, "hybrid") && identical(stage, "stage1_rc")) {
       stage1_rounds <- as.integer(stage1_rounds) + 1L
 
+      # ---- Stage 1 stability (RC) ----
       rc_vals <- fit$theta$theta_rc
       if (!is.null(rc_vals) && any(is.finite(rc_vals))) {
         rc_rank <- base::rank(rc_vals, ties.method = "average", na.last = "keep")
-        if (!is.null(prev_rc_rank)) {
-          rho_spearman_rc <- suppressWarnings(stats::cor(
-            rc_rank,
-            prev_rc_rank,
-            method = "spearman",
-            use = "pairwise.complete.obs"
-          ))
 
-          # If ranks are constant (or otherwise yield NA correlation), but are
-          # identical to the previous ranks, treat as perfectly stable.
-          if (is.na(rho_spearman_rc)) {
-            ok_rank <- !is.na(rc_rank) & !is.na(prev_rc_rank)
-            # If we have too little overlap (e.g., new nodes became seen this round),
-            # treat stability as reached rather than blocking switching.
-            if (sum(ok_rank) < 2L) {
+        # Deterministic ordering for top-k overlap (break ties by ID)
+        rc_tbl <- tibble::tibble(ID = as.character(ids), theta = as.double(rc_vals))
+        rc_tbl <- dplyr::filter(rc_tbl, is.finite(.data$theta))
+        rc_tbl <- dplyr::arrange(rc_tbl, dplyr::desc(.data$theta), .data$ID)
+        rc_top_ids <- rc_tbl$ID
+
+        if (!is.null(prev_rc_rank)) {
+          ok_rank <- !is.na(rc_rank) & !is.na(prev_rc_rank)
+          n_ok <- sum(ok_rank)
+
+          uniq_now <- if (n_ok > 0L) length(unique(rc_rank[ok_rank])) else 0L
+          uniq_prev <- if (n_ok > 0L) length(unique(prev_rc_rank[ok_rank])) else 0L
+
+          # Spearman stability on RC ranks
+          if (isTRUE(n_ok >= 2L) && isTRUE(uniq_now >= 2L) && isTRUE(uniq_prev >= 2L)) {
+            rho_spearman_rc <- suppressWarnings(stats::cor(
+              rc_rank,
+              prev_rc_rank,
+              method = "spearman",
+              use = "pairwise.complete.obs"
+            ))
+          } else {
+            rho_spearman_rc <- NA_real_
+          }
+
+          if (is.na(rho_spearman_rc) && isTRUE(stage1_allow_degenerate_stability)) {
+            # Legacy behavior: treat degenerate/undefined rank correlations as perfectly stable.
+            if (isTRUE(n_ok < 2L) || isTRUE(uniq_now < 2L) || isTRUE(uniq_prev < 2L) ||
+              isTRUE(all(rc_rank[ok_rank] == prev_rc_rank[ok_rank]))) {
               rho_spearman_rc <- 1
+            }
+          }
+
+          # Top-k overlap stability (on RC ranks)
+          if (!is.null(prev_rc_top_ids)) {
+            k_eff <- min(as.integer(stage1_topk_eff), length(prev_rc_top_ids), length(rc_top_ids))
+            if (isTRUE(k_eff >= 1L)) {
+              prev_top <- utils::head(prev_rc_top_ids, k_eff)
+              curr_top <- utils::head(rc_top_ids, k_eff)
+              topk_overlap_rc <- length(intersect(prev_top, curr_top)) / as.double(k_eff)
             } else {
-              uniq_now <- length(unique(rc_rank[ok_rank]))
-              uniq_prev <- length(unique(prev_rc_rank[ok_rank]))
-              if (uniq_now < 2L || uniq_prev < 2L) {
-                rho_spearman_rc <- 1
-              } else if (isTRUE(all(rc_rank[ok_rank] == prev_rc_rank[ok_rank]))) {
-                rho_spearman_rc <- 1
+              topk_overlap_rc <- NA_real_
+            }
+
+            if (!isTRUE(stage1_allow_degenerate_stability)) {
+              # If ranks are degenerate/undefined, do not count as stable.
+              if (isTRUE(n_ok < 2L) || isTRUE(uniq_now < 2L) || isTRUE(uniq_prev < 2L)) {
+                topk_overlap_rc <- NA_real_
+              }
+            } else if (is.na(topk_overlap_rc)) {
+              # Legacy: if overlap isn't defined, treat as stable.
+              if (isTRUE(n_ok < 2L) || isTRUE(uniq_now < 2L) || isTRUE(uniq_prev < 2L)) {
+                topk_overlap_rc <- 1
               }
             }
           }
         }
+
         prev_rc_rank <- rc_rank
+        prev_rc_top_ids <- rc_top_ids
       }
 
+      # ---- connectivity gate ----
       conn_ok <- isTRUE(pct_nodes_with_degree_gt0 >= stage1_min_pct_nodes_with_degree_gt0) &&
         isTRUE(largest_component_frac >= stage1_min_largest_component_frac) &&
         isTRUE(degree_median >= stage1_min_degree_median) &&
@@ -1132,7 +1205,12 @@ bt_run_adaptive <- function(samples,
 
       conn_streak <- if (isTRUE(conn_ok)) as.integer(conn_streak) + 1L else 0L
 
-      stab_ok <- is.finite(rho_spearman_rc) && isTRUE(rho_spearman_rc >= stage1_min_spearman)
+      # ---- stability gate ----
+      if (identical(stage1_stability_metric, "spearman")) {
+        stab_ok <- is.finite(rho_spearman_rc) && isTRUE(rho_spearman_rc >= stage1_min_spearman)
+      } else {
+        stab_ok <- is.finite(topk_overlap_rc) && isTRUE(topk_overlap_rc >= stage1_topk_overlap)
+      }
       stab_streak <- if (isTRUE(stab_ok)) as.integer(stab_streak) + 1L else 0L
 
       if (isTRUE(conn_streak >= stage1_k_conn) && isTRUE(stab_streak >= stage1_k_stab)) {
@@ -1326,6 +1404,22 @@ bt_run_adaptive <- function(samples,
       !is.na(stage1_escalation_round_val) &&
       as.integer(r) >= stage1_escalation_round_val
 
+    # Pair-plan bridging progress metrics (planned pairs for this round)
+    n_component_bridge_pairs_planned_val <- 0L
+    n_component_bridge_pairs_valid_val <- 0L
+    if (!is.null(pairs_next) && nrow(pairs_next) > 0L && "pair_type" %in% names(pairs_next)) {
+      is_component_bridge <- pairs_next$pair_type == "component_bridge"
+      n_component_bridge_pairs_planned_val <- as.integer(sum(is_component_bridge, na.rm = TRUE))
+
+      if (all(c("component_id_1", "component_id_2") %in% names(pairs_next))) {
+        valid_bridge <- is_component_bridge &
+          !is.na(pairs_next$component_id_1) &
+          !is.na(pairs_next$component_id_2) &
+          (pairs_next$component_id_1 != pairs_next$component_id_2)
+        n_component_bridge_pairs_valid_val <- as.integer(sum(valid_bridge, na.rm = TRUE))
+      }
+    }
+
     metrics <- metrics %>%
       dplyr::mutate(
         degree_min = degree_min_val,
@@ -1335,7 +1429,9 @@ bt_run_adaptive <- function(samples,
         stability_streak = stability_streak_val,
         stability_pass = stability_pass_val,
         stage1_escalated = stage1_escalated_val,
-        stage1_escalation_round = stage1_escalation_round_val
+        stage1_escalation_round = stage1_escalation_round_val,
+        n_component_bridge_pairs_planned = as.integer(n_component_bridge_pairs_planned_val),
+        n_component_bridge_pairs_valid = as.integer(n_component_bridge_pairs_valid_val)
       )
 
     metrics_hist <- dplyr::bind_rows(metrics_hist, metrics)
@@ -1371,6 +1467,9 @@ bt_run_adaptive <- function(samples,
       n_total_results = as.integer(nrow(results)),
       pairing_stage = as.character(stage),
       rho_spearman_rc = as.double(rho_spearman_rc),
+      topk_overlap_rc = as.double(topk_overlap_rc),
+      stage1_stability_metric = as.character(stage1_stability_metric),
+      stage1_topk = as.integer(stage1_topk_eff),
       conn_ok = conn_ok,
       stab_ok = stab_ok,
       conn_streak = as.integer(conn_streak),
