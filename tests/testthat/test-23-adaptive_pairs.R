@@ -108,10 +108,12 @@ test_that("select_adaptive_pairs prioritizes low-judgment items via min_judgment
     se = c(1, 1, 1, 1)
   )
 
-  # Make C/D "already judged" many times; A/B not judged
+  # Make C/D "already judged" many times; A/B not judged.
+  # Keep the graph connected so this test isolates min_judgments behavior
+  # (bridging is tested separately).
   existing <- tibble::tibble(
-    ID1 = rep("C", 20),
-    ID2 = rep("D", 20)
+    ID1 = c(rep("C", 20), "A", "B"),
+    ID2 = c(rep("D", 20), "C", "C")
   )
 
   out <- select_adaptive_pairs(

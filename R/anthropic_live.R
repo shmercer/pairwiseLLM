@@ -761,6 +761,11 @@ submit_anthropic_pairs_live <- function(
   }
 
   # --- Handle Parallel Plan Internally ---
+  # NOTE: `future::plan("multisession")` can fail in constrained CI environments
+  # (e.g., limited available connections). In that case, we fall back to
+  # sequential processing so callers still get results and (if enabled)
+  # incremental saving.
+  plan_ready <- FALSE
   if (parallel && workers > 1) {
     if (!requireNamespace("future", quietly = TRUE) || !requireNamespace("future.apply", quietly = TRUE)) {
       stop("Packages 'future' and 'future.apply' are required for parallel processing.", call. = FALSE)
@@ -768,9 +773,28 @@ submit_anthropic_pairs_live <- function(
 
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
 
-    # Set the plan and capture the OLD plan to restore it on exit
-    old_plan <- future::plan("multisession", workers = workers)
-    on.exit(future::plan(old_plan), add = TRUE)
+    # Capture the current plan so we can restore it.
+    old_plan <- future::plan()
+
+    plan_ready <- tryCatch(
+      {
+        future::plan("multisession", workers = workers)
+        TRUE
+      },
+      error = function(e) {
+        if (verbose) {
+          message(
+            "Parallel plan setup failed; falling back to sequential. Error: ",
+            conditionMessage(e)
+          )
+        }
+        FALSE
+      }
+    )
+
+    if (isTRUE(plan_ready)) {
+      on.exit(future::plan(old_plan), add = TRUE)
+    }
   }
 
   # --- Resume Logic ---
@@ -841,7 +865,7 @@ submit_anthropic_pairs_live <- function(
   all_new_results <- vector("list", n)
 
   # Determine if we really can use parallel
-  use_parallel <- parallel && workers > 1 && requireNamespace("future.apply", quietly = TRUE)
+  use_parallel <- parallel && workers > 1 && isTRUE(plan_ready) && requireNamespace("future.apply", quietly = TRUE)
 
   # --- Execution ---
   if (use_parallel) {
@@ -985,7 +1009,7 @@ submit_anthropic_pairs_live <- function(
           {
             readr::write_csv(write_df, save_path, append = !col_names, col_names = col_names)
           },
-          error = function(e) warning("Failed to save incremental result: ", e$message, call. = FALSE)
+          error = function(e) warning("Failed to save incremental results: ", e$message, call. = FALSE)
         )
       }
       if (!is.null(pb)) utils::setTxtProgressBar(pb, i)

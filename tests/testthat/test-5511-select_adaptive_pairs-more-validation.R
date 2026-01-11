@@ -94,7 +94,12 @@ test_that("repeat_n is coerced to integer and can override repeat quota", {
   samples <- .make_samples_5511(ids)
   theta <- .make_theta_5511(ids)
 
-  existing <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+  # Keep the graph connected so this test isolates repeat_n behavior.
+  existing <- tibble::tibble(
+    ID1 = c("A", "B"),
+    ID2 = c("B", "C"),
+    better_id = c("A", "B")
+  )
 
   res <- select_adaptive_pairs(
     samples = samples,

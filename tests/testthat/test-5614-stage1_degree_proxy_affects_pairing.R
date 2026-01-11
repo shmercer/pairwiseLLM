@@ -13,10 +13,20 @@ test_that("hybrid Stage 1 uses degree-based uncertainty proxy for adaptive pairi
   # - A and C each have degree 1
   # - D is unseen (degree 0)
   # Use symmetric wins so Rank Centrality doesn't strongly separate items.
-  initial_results <- tibble::tibble(
-    ID1 = c("A", "B", "B", "C"),
-    ID2 = c("B", "A", "C", "B"),
-    better_id = c("A", "B", "B", "C")
+  # Keep the graph connected so this test isolates the degree-based uncertainty
+  # proxy behavior (bridging is tested separately).
+  initial_results <- dplyr::bind_rows(
+    tibble::tibble(
+      ID1 = c("A", "B", "B", "C"),
+      ID2 = c("B", "A", "C", "B"),
+      better_id = c("A", "B", "B", "C")
+    ),
+    # Add symmetric judgments connecting D via B while keeping RC ranks degenerate.
+    tibble::tibble(
+      ID1 = c(rep("B", 10), rep("D", 10)),
+      ID2 = c(rep("D", 10), rep("B", 10)),
+      better_id = c(rep("B", 10), rep("D", 10))
+    )
   )
 
   captured <- new.env(parent = emptyenv())
