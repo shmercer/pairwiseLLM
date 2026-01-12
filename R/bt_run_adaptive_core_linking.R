@@ -1569,15 +1569,24 @@ bt_run_adaptive_core_linking <- function(samples,
         }
       }
 
+      precision_reached_flag <- isTRUE(decision$stop) && !isTRUE(drift_blocking)
+      stability_reached_flag <- isTRUE(stability_reached) && !isTRUE(drift_blocking)
+
       stop_chk <- .stop_decision(
         round = r,
         min_rounds = min_rounds,
         no_new_pairs = (nrow(pairs_next) == 0L),
         budget_exhausted = (as.integer(round_size) == 0L),
-        max_rounds_reached = ((as.integer(r) - 1L) >= as.integer(max_rounds_per_batch)),
+        # `max_rounds_per_batch` is an inclusive cap on the number of rounds we
+        # will run for a given batch. Only treat the cap as the *stop reason*
+        # when no other (soft) stop criteria are met; this keeps stop reasons
+        # interpretable (e.g., precision can still be the stop reason on the
+        # final allowed round) while ensuring pre-stop diagnostics fire.
+        max_rounds_reached = (as.integer(r) >= as.integer(max_rounds_per_batch)) &&
+          !isTRUE(precision_reached_flag) && !isTRUE(stability_reached_flag),
         graph_healthy = graph_healthy,
-        stability_reached = isTRUE(stability_reached) && !isTRUE(drift_blocking),
-        precision_reached = isTRUE(decision$stop) && !isTRUE(drift_blocking),
+        stability_reached = stability_reached_flag,
+        precision_reached = precision_reached_flag,
         stop_reason_priority = stop_reason_priority
       )
       .validate_stop_decision(stop_chk)
@@ -1634,9 +1643,12 @@ bt_run_adaptive_core_linking <- function(samples,
       )
 
       # Optional pre-stop spectral-gap check (non-blocking)
+      # Run on the terminal round as well (e.g., max_rounds exit) so the
+      # diagnostic is auditable even if `stop_now` is FALSE.
+      terminal_round <- isTRUE(as.integer(r) >= as.integer(max_rounds_per_batch))
       if (!identical(spectral_gap_check, "never") &&
         identical(spectral_gap_check, "pre_stop") &&
-        isTRUE(stop_now) &&
+        (isTRUE(stop_now) || isTRUE(terminal_round)) &&
         nrow(results) > 0L) {
         ids_active <- sort(unique(c(core_ids, new_ids)))
         gap_row <- .estimate_spectral_gap_lazy_rw(
