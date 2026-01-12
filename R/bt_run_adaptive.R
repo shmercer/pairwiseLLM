@@ -359,7 +359,9 @@
 #' \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
 #' \item{run_summary}{One row tibble summarizing the run.}
 #' \item{metrics}{One row per round of schema-stable diagnostic metrics.}
-#' \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round.}
+#' \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round, including
+#'   whether selection fell back to controlled-random pairing (\code{used_fallback_random}),
+#'   an auditable \code{fallback_reason}, and compact \code{candidate_counts}.}
 #' \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 #' }
 #'
@@ -2323,6 +2325,9 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
       largest_component_frac_after = double(),
       fallback_path = character(),
       fallback_trigger = character(),
+      used_fallback_random = logical(),
+      fallback_reason = character(),
+      candidate_counts = list(),
       n_pairs_source_normal = integer(),
       n_pairs_source_bridge = integer(),
       n_pairs_source_repeat_reverse = integer(),
@@ -2381,6 +2386,9 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
     pairing_diagnostics$stop_reason <- character()
     pairing_diagnostics$stop_blocked_by <- character()
     pairing_diagnostics$stop_blocked_candidates <- character()
+    pairing_diagnostics$used_fallback_random <- logical()
+    pairing_diagnostics$fallback_reason <- character()
+    pairing_diagnostics$candidate_counts <- list()
   }
   # PR8 contract: fit_provenance must always be a list (possibly empty).
   if (is.null(fit_provenance)) fit_provenance <- list()
@@ -2401,6 +2409,11 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
     rounds = rounds_tbl,
     spectral_gap_checks = spectral_gap_checks,
     state = state_tbl,
+    n_fallback_random_rounds = if (!is.null(pairing_diagnostics) && "used_fallback_random" %in% names(pairing_diagnostics)) {
+      as.integer(sum(pairing_diagnostics$used_fallback_random, na.rm = TRUE))
+    } else {
+      0L
+    },
     pairing_diagnostics = pairing_diagnostics,
     pairs_bootstrap = pairs_bootstrap
   )

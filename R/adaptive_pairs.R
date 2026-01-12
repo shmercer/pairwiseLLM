@@ -2116,6 +2116,39 @@ select_adaptive_pairs <- function(samples,
       n_pairs_source_repeat_reverse <- as.integer(sum(selected_tbl$source == "repeat_reverse"))
       n_pairs_source_random <- as.integer(sum(selected_tbl$source == "random"))
 
+      used_fallback_random <- isTRUE(used_random)
+
+      # Provide a schema-stable, auditable reason when we fall back to
+      # controlled-random selection. This helps users distinguish between
+      # "no candidates" vs "candidates filtered out" vs caps/quotas leaving
+      # nothing selectable.
+      fallback_reason <- NA_character_
+      if (isTRUE(used_fallback_random)) {
+        if (exists("random_raw", inherits = FALSE) && nrow(random_raw) == 0L) {
+          fallback_reason <- "empty_candidate_set"
+        } else if (exists("random_constrained", inherits = FALSE) && nrow(random_constrained) == 0L) {
+          fallback_reason <- "all_filtered_by_constraints"
+        } else if (isTRUE(nrow(capped_tbl) == 0L)) {
+          fallback_reason <- "all_filtered_by_caps"
+        } else {
+          fallback_reason <- "unknown"
+        }
+      }
+
+      # Candidate counts by stage and source (schema-stable list-column tibble).
+      # Keep compact but informative: normal pool, optional bridge pool, and
+      # controlled-random pool (when invoked).
+      bridge_raw_n <- if (exists("bridge_raw", inherits = FALSE) && is.data.frame(bridge_raw)) nrow(bridge_raw) else 0L
+      bridge_after_n <- if (exists("bridge_constrained", inherits = FALSE) && is.data.frame(bridge_constrained)) nrow(bridge_constrained) else 0L
+      random_raw_n <- if (exists("random_raw", inherits = FALSE) && is.data.frame(random_raw)) nrow(random_raw) else 0L
+      random_after_n <- if (exists("random_constrained", inherits = FALSE) && is.data.frame(random_constrained)) nrow(random_constrained) else 0L
+
+      candidate_counts <- tibble::tibble(
+        source = c("normal", "bridge_repair", "controlled_random"),
+        n_candidates = as.integer(c(nrow(cand_tbl_raw), bridge_raw_n, random_raw_n)),
+        n_after_filters = as.integer(c(nrow(constrained_tbl), bridge_after_n, random_after_n))
+      )
+
       diag_candidate_pool_cap <- if (is.finite(candidate_pool_cap)) {
         as.integer(candidate_pool_cap)
       } else {
@@ -2151,6 +2184,9 @@ select_adaptive_pairs <- function(samples,
         graph_largest_component_frac = as.double(graph_state$metrics$largest_component_frac[[1]]),
         fallback_path = as.character(fallback_path),
         fallback_trigger = as.character(fallback_trigger),
+        used_fallback_random = as.logical(used_fallback_random),
+        fallback_reason = as.character(fallback_reason),
+        candidate_counts = list(candidate_counts),
         n_pairs_source_normal = as.integer(n_pairs_source_normal),
         n_pairs_source_bridge = as.integer(n_pairs_source_bridge),
         n_pairs_source_repeat_reverse = as.integer(n_pairs_source_repeat_reverse),
@@ -2272,6 +2308,11 @@ select_adaptive_pairs <- function(samples,
   diag <- ensure_col(diag, "n_pairs_source_repeat_reverse", rep(0L, n))
   diag <- ensure_col(diag, "n_pairs_source_random", rep(0L, n))
 
+  diag <- ensure_col(diag, "used_fallback_random", rep(FALSE, n))
+  diag <- ensure_col(diag, "fallback_reason", rep(NA_character_, n))
+  empty_counts <- tibble::tibble(source = character(), n_candidates = integer(), n_after_filters = integer())
+  diag <- ensure_col(diag, "candidate_counts", rep(list(empty_counts), n))
+
   diag <- ensure_col(diag, "degree_min_before", rep(NA_real_, n))
   diag <- ensure_col(diag, "largest_component_frac_before", rep(NA_real_, n))
   diag <- ensure_col(diag, "degree_min_after", rep(NA_real_, n))
@@ -2284,6 +2325,26 @@ select_adaptive_pairs <- function(samples,
   diag$n_pairs_source_bridge <- as.integer(diag$n_pairs_source_bridge)
   diag$n_pairs_source_repeat_reverse <- as.integer(diag$n_pairs_source_repeat_reverse)
   diag$n_pairs_source_random <- as.integer(diag$n_pairs_source_random)
+
+
+  diag$used_fallback_random <- as.logical(diag$used_fallback_random)
+  diag$fallback_reason <- as.character(diag$fallback_reason)
+  if ("candidate_counts" %in% names(diag)) {
+    diag$candidate_counts <- lapply(diag$candidate_counts, function(x) {
+      if (is.null(x)) {
+        return(tibble::tibble(source = character(), n_candidates = integer(), n_after_filters = integer()))
+      }
+      x <- tibble::as_tibble(x)
+      if (!all(c("source", "n_candidates", "n_after_filters") %in% names(x))) {
+        return(tibble::tibble(source = character(), n_candidates = integer(), n_after_filters = integer()))
+      }
+      tibble::tibble(
+        source = as.character(x$source),
+        n_candidates = as.integer(x$n_candidates),
+        n_after_filters = as.integer(x$n_after_filters)
+      )
+    })
+  }
 
   diag$degree_min_before <- as.double(diag$degree_min_before)
   diag$largest_component_frac_before <- as.double(diag$largest_component_frac_before)

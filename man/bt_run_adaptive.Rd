@@ -500,7 +500,9 @@ appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
 \item{pairs_bootstrap}{Pairs used in the bootstrap scoring step (may be empty).}
 \item{run_summary}{One row tibble summarizing the run.}
 \item{metrics}{One row per round of schema-stable diagnostic metrics.}
-\item{pairing_diagnostics}{Planned and derived pairing diagnostics per round.}
+\item{pairing_diagnostics}{Planned and derived pairing diagnostics per round, including
+whether selection fell back to controlled-random pairing (\code{used_fallback_random}),
+an auditable \code{fallback_reason}, and compact \code{candidate_counts}.}
 \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 }
 }
