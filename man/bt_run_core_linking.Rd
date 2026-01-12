@@ -339,6 +339,11 @@ counts restricted to the current batch's new IDs.
 function writes a checkpoint representing the last completed safe point (after a
 round completes, and at batch boundaries). If the run is interrupted, resume by
 calling again with \code{resume_from = checkpoint_dir}.
+
+\strong{Linking diagnostics:} When linking is applied, the fit's theta table
+includes \code{theta_linked} and \code{se_linked} columns. The
+\code{linking$drift_post} diagnostics are computed on the linked scale when
+these columns are available.
 }
 \examples{
 # CRAN-safe example (no APIs, no sirt): deterministic simulated judging + mock fit.

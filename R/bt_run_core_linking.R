@@ -184,6 +184,11 @@
 #' round completes, and at batch boundaries). If the run is interrupted, resume by
 #' calling again with \code{resume_from = checkpoint_dir}.
 #'
+#' \strong{Linking diagnostics:} When linking is applied, the fit's theta table
+#' includes \code{theta_linked} and \code{se_linked} columns. The
+#' \code{linking$drift_post} diagnostics are computed on the linked scale when
+#' these columns are available.
+#'
 #' @return A list with:
 #' \describe{
 #'   \item{core_ids}{Core linking IDs used.}
@@ -766,7 +771,14 @@ bt_run_core_linking <- function(samples,
     fit$linking$n_core <- lk$n_core
 
     # Drift after linking (diagnostic only)
-    drift_post <- bt_drift_metrics(fit, reference_fit, ids = core_ids, prefix = "linking_post_")
+    drift_post <- .compute_drift_on_theta(
+      fit,
+      reference_fit,
+      ids = core_ids,
+      prefix = "linking_post_",
+      theta_col = "theta_linked",
+      se_col = "se_linked"
+    )
     fit$linking$drift_post <- drift_post
 
     fit
@@ -1840,6 +1852,45 @@ bt_run_core_linking <- function(samples,
 }
 
 # ---- internal ----
+
+.compute_drift_on_theta <- function(
+  fit,
+  reference_fit,
+  ids,
+  prefix,
+  theta_col = "theta",
+  se_col = "se"
+) {
+  # Drift metrics should be computed on the requested theta scale without
+  # mutating the input fit object in place.
+  fit_post <- fit
+
+  theta_tbl <- fit_post$theta
+  if (is.null(theta_tbl)) {
+    theta_tbl <- tibble::tibble(ID = character(), theta = numeric(), se = numeric())
+  }
+  theta_tbl <- tibble::as_tibble(theta_tbl)
+
+  # Ensure required columns exist even in empty/no-data paths.
+  if (!("ID" %in% names(theta_tbl))) theta_tbl$ID <- character()
+  if (!("theta" %in% names(theta_tbl))) theta_tbl$theta <- NA_real_
+  if (!("se" %in% names(theta_tbl))) theta_tbl$se <- NA_real_
+
+  if (is.character(theta_col) && length(theta_col) == 1L && theta_col %in% names(theta_tbl)) {
+    theta_new <- as.numeric(theta_tbl[[theta_col]])
+    ok <- is.finite(theta_new)
+    theta_tbl$theta[ok] <- theta_new[ok]
+  }
+
+  if (is.character(se_col) && length(se_col) == 1L && se_col %in% names(theta_tbl)) {
+    se_new <- as.numeric(theta_tbl[[se_col]])
+    ok <- is.finite(se_new)
+    theta_tbl$se[ok] <- se_new[ok]
+  }
+
+  fit_post$theta <- theta_tbl
+  bt_drift_metrics(fit_post, reference_fit, ids = ids, prefix = prefix)
+}
 
 .normalize_batches_list <- function(batches, ids_all) {
   if (!is.list(batches) || length(batches) < 1L) {
