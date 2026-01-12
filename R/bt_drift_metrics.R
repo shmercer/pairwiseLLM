@@ -200,7 +200,8 @@ bt_drift_metrics <- function(current = NULL,
   flip_applied <- FALSE
   # Flip decision uses the first requested method (defaults to pearson)
   cor_raw <- safe_cor(cur$theta, base$theta, method = methods[[1]])
-  if (is.finite(cor_raw) && cor_raw < 0) {
+  # Optional: allow callers to disable sign flipping (e.g., for diagnostics).
+  if (isTRUE(flip_to_match) && is.finite(cor_raw) && cor_raw < 0) {
     base$theta <- -base$theta
     flip_applied <- TRUE
   }
