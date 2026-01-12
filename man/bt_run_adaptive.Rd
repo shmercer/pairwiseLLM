@@ -501,8 +501,9 @@ appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
 \item{run_summary}{One row tibble summarizing the run.}
 \item{metrics}{One row per round of schema-stable diagnostic metrics.}
 \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round, including
-whether selection fell back to controlled-random pairing (\code{used_fallback_random}),
-an auditable \code{fallback_reason}, and compact \code{candidate_counts}.}
+whether selection fell back to controlled-random pairing (via
+\code{fallback_path == "controlled_random"}) and its trigger
+(\code{fallback_trigger}).}
 \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 }
 }

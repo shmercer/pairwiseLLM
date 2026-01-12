@@ -360,8 +360,9 @@
 #' \item{run_summary}{One row tibble summarizing the run.}
 #' \item{metrics}{One row per round of schema-stable diagnostic metrics.}
 #' \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round, including
-#'   whether selection fell back to controlled-random pairing (\code{used_fallback_random}),
-#'   an auditable \code{fallback_reason}, and compact \code{candidate_counts}.}
+#'   whether selection fell back to controlled-random pairing (via
+#'   \code{fallback_path == "controlled_random"}) and its trigger
+#'   (\code{fallback_trigger}).}
 #' \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 #' }
 #'
@@ -775,37 +776,36 @@ bt_run_adaptive <- function(samples,
     is.finite(stop_max_bridge_edge_frac_eff) &&
     isTRUE(stop_k_mix_eff > 0L)
 
-  
 
-# --- stop graph-health gating (effective defaults) ---
-# For backwards compatibility, the formal argument defaults remain NA. When left as NA,
-# apply internal effective defaults so that stability/precision stops are not allowed
-# on partially observed or disconnected graphs.
-stop_min_largest_component_frac <- as.double(stop_min_largest_component_frac)
-if (length(stop_min_largest_component_frac) != 1L || isTRUE(is.nan(stop_min_largest_component_frac)) ||
-  (!is.na(stop_min_largest_component_frac) && (stop_min_largest_component_frac < 0 || stop_min_largest_component_frac > 1))) {
-  stop("`stop_min_largest_component_frac` must be NA or a single number in [0, 1].", call. = FALSE)
-}
+  # --- stop graph-health gating (effective defaults) ---
+  # For backwards compatibility, the formal argument defaults remain NA. When left as NA,
+  # apply internal effective defaults so that stability/precision stops are not allowed
+  # on partially observed or disconnected graphs.
+  stop_min_largest_component_frac <- as.double(stop_min_largest_component_frac)
+  if (length(stop_min_largest_component_frac) != 1L || isTRUE(is.nan(stop_min_largest_component_frac)) ||
+    (!is.na(stop_min_largest_component_frac) && (stop_min_largest_component_frac < 0 || stop_min_largest_component_frac > 1))) {
+    stop("`stop_min_largest_component_frac` must be NA or a single number in [0, 1].", call. = FALSE)
+  }
 
-stop_min_degree <- if (is.na(stop_min_degree)) NA_integer_ else as.integer(stop_min_degree)
-if (!is.na(stop_min_degree) && stop_min_degree < 0L) {
-  stop("`stop_min_degree` must be NA or a non-negative integer.", call. = FALSE)
-}
+  stop_min_degree <- if (is.na(stop_min_degree)) NA_integer_ else as.integer(stop_min_degree)
+  if (!is.na(stop_min_degree) && stop_min_degree < 0L) {
+    stop("`stop_min_degree` must be NA or a non-negative integer.", call. = FALSE)
+  }
 
-stop_min_largest_component_frac_eff <- if (!is.na(stop_min_largest_component_frac)) {
-  stop_min_largest_component_frac
-} else {
-  0.98
-}
-stop_min_degree_eff <- if (!is.na(stop_min_degree)) {
-  as.integer(stop_min_degree)
-} else {
-  1L
-}
-stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
-  is.finite(as.double(stop_min_largest_component_frac_eff)))
+  stop_min_largest_component_frac_eff <- if (!is.na(stop_min_largest_component_frac)) {
+    stop_min_largest_component_frac
+  } else {
+    0.98
+  }
+  stop_min_degree_eff <- if (!is.na(stop_min_degree)) {
+    as.integer(stop_min_degree)
+  } else {
+    1L
+  }
+  stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
+    is.finite(as.double(stop_min_largest_component_frac_eff)))
 
-# --- spectral gap check (optional; end-of-run by default) ---
+  # --- spectral gap check (optional; end-of-run by default) ---
   spectral_gap_check <- match.arg(spectral_gap_check, c("never", "final", "pre_stop", "pre_switch_and_final"))
   spectral_gap_weights <- match.arg(spectral_gap_weights, c("count", "binary"))
   spectral_gap_max_iter <- as.integer(spectral_gap_max_iter)
@@ -2325,9 +2325,6 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
       largest_component_frac_after = double(),
       fallback_path = character(),
       fallback_trigger = character(),
-      used_fallback_random = logical(),
-      fallback_reason = character(),
-      candidate_counts = list(),
       n_pairs_source_normal = integer(),
       n_pairs_source_bridge = integer(),
       n_pairs_source_repeat_reverse = integer(),
@@ -2386,9 +2383,6 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
     pairing_diagnostics$stop_reason <- character()
     pairing_diagnostics$stop_blocked_by <- character()
     pairing_diagnostics$stop_blocked_candidates <- character()
-    pairing_diagnostics$used_fallback_random <- logical()
-    pairing_diagnostics$fallback_reason <- character()
-    pairing_diagnostics$candidate_counts <- list()
   }
   # PR8 contract: fit_provenance must always be a list (possibly empty).
   if (is.null(fit_provenance)) fit_provenance <- list()
@@ -2409,8 +2403,8 @@ stop_gating_active <- isTRUE(is.finite(as.double(stop_min_degree_eff)) ||
     rounds = rounds_tbl,
     spectral_gap_checks = spectral_gap_checks,
     state = state_tbl,
-    n_fallback_random_rounds = if (!is.null(pairing_diagnostics) && "used_fallback_random" %in% names(pairing_diagnostics)) {
-      as.integer(sum(pairing_diagnostics$used_fallback_random, na.rm = TRUE))
+    n_fallback_random_rounds = if (!is.null(pairing_diagnostics) && "fallback_path" %in% names(pairing_diagnostics)) {
+      as.integer(sum(pairing_diagnostics$fallback_path == "controlled_random", na.rm = TRUE))
     } else {
       0L
     },

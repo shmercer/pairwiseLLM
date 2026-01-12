@@ -254,8 +254,9 @@
 #'     applicable).}
 #'   \item{metrics}{Tibble of stop metrics per round (computed on each batch's new IDs).}
 #'   \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round, including
-#'     whether selection fell back to controlled-random pairing (\code{used_fallback_random})
-#'     and the corresponding \code{fallback_reason}.}
+#'     whether selection fell back to controlled-random pairing (via
+#'     \code{fallback_path == "controlled_random"}) and its trigger
+#'     (\code{fallback_trigger}).}
 #'   \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 #'   \item{run_summary}{One row tibble summarizing the run.}
 #'   \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
@@ -996,6 +997,7 @@ bt_run_adaptive_core_linking <- function(samples,
   metrics_rows <- list()
   state_rows <- list()
   blocked_rows <- list()
+  pairplan_rows <- list()
   spectral_gap_checks <- .spectral_gap_checks_template()
 
   batch_summary <- tibble::tibble()
@@ -1379,22 +1381,35 @@ bt_run_adaptive_core_linking <- function(samples,
 
       diag_pairs <- attr(pairs_next, "pairing_diagnostics")
       if (is.null(diag_pairs) || nrow(tibble::as_tibble(diag_pairs)) == 0L) {
-        empty_counts <- tibble::tibble(source = character(), n_candidates = integer(), n_after_filters = integer())
         diag_pairs <- tibble::tibble(
-          used_fallback_random = FALSE,
-          fallback_reason = NA_character_,
-          candidate_counts = list(empty_counts)
+          fallback_path = NA_character_,
+          fallback_trigger = NA_character_,
+          n_pairs_source_normal = 0L,
+          n_pairs_source_bridge = 0L,
+          n_pairs_source_repeat_reverse = 0L,
+          n_pairs_source_random = 0L
         )
       } else {
         diag_pairs <- tibble::as_tibble(diag_pairs)
-        if (!("used_fallback_random" %in% names(diag_pairs))) diag_pairs$used_fallback_random <- FALSE
-        if (!("fallback_reason" %in% names(diag_pairs))) diag_pairs$fallback_reason <- NA_character_
-        if (!("candidate_counts" %in% names(diag_pairs))) {
-          empty_counts <- tibble::tibble(source = character(), n_candidates = integer(), n_after_filters = integer())
-          diag_pairs$candidate_counts <- list(empty_counts)
-        }
+        if (!("fallback_path" %in% names(diag_pairs))) diag_pairs$fallback_path <- NA_character_
+        if (!("fallback_trigger" %in% names(diag_pairs))) diag_pairs$fallback_trigger <- NA_character_
+        if (!("n_pairs_source_normal" %in% names(diag_pairs))) diag_pairs$n_pairs_source_normal <- 0L
+        if (!("n_pairs_source_bridge" %in% names(diag_pairs))) diag_pairs$n_pairs_source_bridge <- 0L
+        if (!("n_pairs_source_repeat_reverse" %in% names(diag_pairs))) diag_pairs$n_pairs_source_repeat_reverse <- 0L
+        if (!("n_pairs_source_random" %in% names(diag_pairs))) diag_pairs$n_pairs_source_random <- 0L
         diag_pairs <- dplyr::slice_head(diag_pairs, n = 1)
       }
+
+      pairplan_rows[[length(pairplan_rows) + 1L]] <- tibble::tibble(
+        batch_index = as.integer(b),
+        round_index = as.integer(r),
+        fallback_path = as.character(diag_pairs$fallback_path[[1]]),
+        fallback_trigger = as.character(diag_pairs$fallback_trigger[[1]]),
+        n_pairs_source_normal = as.integer(diag_pairs$n_pairs_source_normal[[1]]),
+        n_pairs_source_bridge = as.integer(diag_pairs$n_pairs_source_bridge[[1]]),
+        n_pairs_source_repeat_reverse = as.integer(diag_pairs$n_pairs_source_repeat_reverse[[1]]),
+        n_pairs_source_random = as.integer(diag_pairs$n_pairs_source_random[[1]])
+      )
 
       if (exhaustion_fallback != "none") {
         pairs_next <- .bt_apply_exhaustion_fallback(
@@ -1649,10 +1664,6 @@ bt_run_adaptive_core_linking <- function(samples,
       m$n_new_new <- sum(pairs_next$pair_type == "new_new")
       m$n_core_core <- sum(pairs_next$pair_type == "core_core")
 
-      m$used_fallback_random <- as.logical(diag_pairs$used_fallback_random[[1]])
-      m$fallback_reason <- as.character(diag_pairs$fallback_reason[[1]])
-      m$candidate_counts <- list(diag_pairs$candidate_counts[[1]])
-
       m <- .bt_order_metrics(m)
 
       metrics_rows[[length(metrics_rows) + 1L]] <- m
@@ -1822,19 +1833,6 @@ bt_run_adaptive_core_linking <- function(samples,
   state <- .bt_align_state(state)
 
 
-  # PRD contract: ensure fallback audit columns exist (schema-stable), even when
-  # no rounds were executed or when pair selection does not provide diagnostics.
-  if (!("used_fallback_random" %in% names(metrics))) {
-    metrics$used_fallback_random <- rep(FALSE, nrow(metrics))
-  }
-  if (!("fallback_reason" %in% names(metrics))) {
-    metrics$fallback_reason <- rep(NA_character_, nrow(metrics))
-  }
-  if (!("candidate_counts" %in% names(metrics))) {
-    empty_counts <- tibble::tibble(source = character(), n_candidates = integer(), n_after_filters = integer())
-    metrics$candidate_counts <- rep(list(empty_counts), nrow(metrics))
-  }
-
   # ---------------------------------------------------------------------
   # Pairing diagnostics contract (PR8): stable per-round diagnostics table
   # ---------------------------------------------------------------------
@@ -1853,10 +1851,26 @@ bt_run_adaptive_core_linking <- function(samples,
     dplyr::bind_rows(blocked_rows)
   }
 
+  pairplan_tbl <- if (length(pairplan_rows) == 0L) {
+    tibble::tibble(
+      batch_index = integer(),
+      round_index = integer(),
+      fallback_path = character(),
+      fallback_trigger = character(),
+      n_pairs_source_normal = integer(),
+      n_pairs_source_bridge = integer(),
+      n_pairs_source_repeat_reverse = integer(),
+      n_pairs_source_random = integer()
+    )
+  } else {
+    dplyr::bind_rows(pairplan_rows)
+  }
+
   pairing_diagnostics <- metrics %>%
     dplyr::filter(.data$stage == "round") %>%
     dplyr::arrange(.data$batch_index, .data$round_index) %>%
     dplyr::left_join(blocked_tbl, by = c("batch_index", "round_index")) %>%
+    dplyr::left_join(pairplan_tbl, by = c("batch_index", "round_index")) %>%
     dplyr::mutate(round = as.integer(dplyr::row_number())) %>%
     dplyr::transmute(
       round = as.integer(.data$round),
@@ -1870,9 +1884,12 @@ bt_run_adaptive_core_linking <- function(samples,
       stop_reason = as.character(.data$stop_reason),
       stop_blocked_by = as.character(.data$stop_blocked_by),
       stop_blocked_candidates = as.character(.data$stop_blocked_candidates),
-      used_fallback_random = as.logical(.data$used_fallback_random),
-      fallback_reason = as.character(.data$fallback_reason),
-      candidate_counts = .data$candidate_counts
+      fallback_path = as.character(.data$fallback_path),
+      fallback_trigger = as.character(.data$fallback_trigger),
+      n_pairs_source_normal = as.integer(.data$n_pairs_source_normal),
+      n_pairs_source_bridge = as.integer(.data$n_pairs_source_bridge),
+      n_pairs_source_repeat_reverse = as.integer(.data$n_pairs_source_repeat_reverse),
+      n_pairs_source_random = as.integer(.data$n_pairs_source_random)
     )
 
   # Optional end-of-run spectral-gap check (non-blocking)
@@ -1964,7 +1981,11 @@ bt_run_adaptive_core_linking <- function(samples,
     theta = theta,
     theta_engine = theta_engine,
     fit_provenance = fit_provenance,
-    n_fallback_random_rounds = if (!is.null(pairing_diagnostics) && "used_fallback_random" %in% names(pairing_diagnostics)) as.integer(sum(pairing_diagnostics$used_fallback_random, na.rm = TRUE)) else 0L,
+    n_fallback_random_rounds = if (!is.null(pairing_diagnostics) && "fallback_path" %in% names(pairing_diagnostics)) {
+      as.integer(sum(pairing_diagnostics$fallback_path == "controlled_random", na.rm = TRUE))
+    } else {
+      0L
+    },
     pairing_diagnostics = pairing_diagnostics,
     spectral_gap_checks = spectral_gap_checks,
     final_models = if (is.null(final_est)) list() else list(bt = final_est$bt_fit, rc = final_est$rc_fit, diagnostics = final_est$diagnostics),

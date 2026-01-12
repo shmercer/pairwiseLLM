@@ -363,8 +363,9 @@ fit is tagged with per-round metadata in the
 applicable).}
 \item{metrics}{Tibble of stop metrics per round (computed on each batch's new IDs).}
 \item{pairing_diagnostics}{Planned and derived pairing diagnostics per round, including
-whether selection fell back to controlled-random pairing (\code{used_fallback_random})
-and the corresponding \code{fallback_reason}.}
+whether selection fell back to controlled-random pairing (via
+\code{fallback_path == "controlled_random"}) and its trigger
+(\code{fallback_trigger}).}
 \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 \item{run_summary}{One row tibble summarizing the run.}
 \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
