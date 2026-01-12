@@ -26,7 +26,20 @@ testthat::test_that("fit_rank_centrality covers validation + error branches", {
 
   # force non-finite pi_next to cover defensive stop
   mock_xprod <- function(...) rep(NaN, 2)
-  mockery::stub(pairwiseLLM::fit_rank_centrality, "Matrix::crossprod", mock_xprod)
+  
+# mockery::stub mutates the function object in-place. Ensure we restore the
+# original to avoid leakage into later tests.
+ns <- asNamespace("pairwiseLLM")
+fit_rank_centrality_orig <- get("fit_rank_centrality", envir = ns)
+
+on.exit({
+  # The namespace binding is locked; temporarily unlock to restore.
+  unlockBinding("fit_rank_centrality", ns)
+  assign("fit_rank_centrality", fit_rank_centrality_orig, envir = ns)
+  lockBinding("fit_rank_centrality", ns)
+}, add = TRUE)
+
+mockery::stub(pairwiseLLM::fit_rank_centrality, "Matrix::crossprod", mock_xprod)
   testthat::expect_error(
     pairwiseLLM::fit_rank_centrality(bt_data, ids = c("A", "B"), max_iter = 2),
     "non-finite"
