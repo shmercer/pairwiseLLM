@@ -405,6 +405,23 @@ function writes a checkpoint at the last completed safe point (typically after a
 round completes within a batch, and at batch boundaries). If an error occurs
 mid-round, the checkpoint reflects the most recently completed round. Resume by
 calling again with \code{resume_from = checkpoint_dir}.
+
+\strong{Recommended knobs (starting points):}
+\itemize{
+\item \emph{Exploration vs exploitation:} \code{explore_frac} and \code{k_neighbors}.
+\item \emph{Repeat policy:} \code{repeat_policy} and caps (to prevent repeat constraints from forcing fallback).
+\item \emph{Stopping tier:} \code{stop_tier} plus minimum rounds (\code{min_rounds_per_batch}).
+\item \emph{Graph health gates:} \code{graph_min_degree} / \code{graph_min_largest_component_frac}.
+\item \emph{Linking:} \code{linking = "auto"} with \code{linking_min_n} and drift triggers (cor / p90 / max shift).
+}
+
+\strong{Where to look in the output:}
+\itemize{
+\item Per-round planned pairing and fallback flags: \code{pairing_diagnostics}.
+\item Per-round stop decision + gating: \code{stop_audit} (and the summary \code{metrics} table).
+\item Linking diagnostics: in each fit's \code{$theta} table (\code{theta_linked}/\code{se_linked}) and \code{fit$linking$drift_pre}/\code{fit$linking$drift_post}.
+\item Batch-level stopping + bookkeeping: \code{batch_summary} and \code{state}.
+}
 }
 \examples{
 # Simple simulated judge: higher true theta wins

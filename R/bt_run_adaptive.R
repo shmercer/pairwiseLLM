@@ -327,6 +327,22 @@
 #' \code{resume_from = checkpoint_dir} (and typically the same key settings such as
 #' \code{round_size}, repeat controls, and selection strategy).
 #'
+#' \strong{Recommended knobs (starting points):}
+#' \itemize{
+#'   \item \emph{Exploration vs exploitation:} \code{explore_frac} (more exploration early) and \code{k_neighbors} (how local comparisons are).
+#'   \item \emph{Repeat policy:} \code{repeat_policy} plus caps (e.g., \code{repeat_cap}, \code{repeat_frac}) to control reverse-order checks and repeat pressure.
+#'   \item \emph{Stopping tier:} choose \code{stop_tier} and require a minimum number of rounds via \code{min_rounds} (or tier-specific min-round controls).
+#'   \item \emph{Graph health gates:} \code{graph_min_degree} / \code{graph_min_largest_component_frac} (and mixing-guard settings when using hybrid running fits).
+#'   \item \emph{Embeddings:} if using embedding-assisted pairing, set \code{embed_quota_frac} and related neighbor-window parameters to cap embedding-driven pairs.
+#' }
+#'
+#' \strong{Where to look in the output:}
+#' \itemize{
+#'   \item Per-round planned pairing and fallback flags: \code{pairing_diagnostics}.
+#'   \item Per-round stop decision + gating: \code{stop_audit} (and the summary \code{rounds} table).
+#'   \item Final ability scale used downstream: \code{theta} (and \code{theta_engine}).
+#'   \item Full fit objects and linked per-round metadata: \code{fits} (see \code{attr(fit, "bt_run_adaptive")}).
+#' }
 #' @return A list with elements:
 #' \describe{
 #' \item{results}{All accumulated forward-direction results (ID1, ID2, better_id, ...).}

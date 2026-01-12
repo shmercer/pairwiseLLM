@@ -345,6 +345,21 @@ calling again with \code{resume_from = checkpoint_dir}.
 includes \code{theta_linked} and \code{se_linked} columns. The
 \code{linking$drift_post} diagnostics are computed on the linked scale when
 these columns are available.
+
+\strong{Recommended knobs (starting points):}
+\itemize{
+\item \emph{Batch sizing:} \code{round_size} (pairs per round) and \code{max_rounds_per_batch}.
+\item \emph{Stopping tier:} reliability/separation targets (e.g., \code{rel_se_p90_target}) plus \code{min_rounds_per_batch}.
+\item \emph{Linking:} \code{linking = "auto"} with \code{linking_min_n} and drift triggers (\code{linking_cor_target}, \code{linking_p90_abs_shift_target}, \code{linking_max_abs_shift_target}).
+\item \emph{Linking method:} \code{linking_method} (e.g., location/scale) when applying \code{bt_link_thetas()}.
+}
+
+\strong{Where to look in the output:}
+\itemize{
+\item Per-round fits: \code{fits}; per-batch final fits: \code{final_fits}.
+\item Batch-level stopping + bookkeeping: \code{batch_summary} and \code{state}.
+\item Linking diagnostics: in each fit's \code{$theta} table (\code{theta_linked}/\code{se_linked}) and \code{fit$linking$drift_pre}/\code{fit$linking$drift_post}.
+}
 }
 \examples{
 # CRAN-safe example (no APIs, no sirt): deterministic simulated judging + mock fit.
