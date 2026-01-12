@@ -1,3 +1,7 @@
+.get_exported_value <- function(ns, name) {
+  getExportedValue(ns, name)
+}
+
 #' Compute final ranking estimates from pairwise results
 #'
 #' This helper computes a comprehensive set of final ranking outputs from a
@@ -514,11 +518,11 @@ compute_final_estimates <- function(
 # the internal wrappers rather than `pkg::fun` calls (which are not mockable).
 
 .rstanarm_stan_glm <- function(...) {
-  fun <- getExportedValue("rstanarm", "stan_glm")
+  fun <- .get_exported_value("rstanarm", "stan_glm")
   fun(...)
 }
 
 .rstanarm_normal <- function(...) {
-  fun <- getExportedValue("rstanarm", "normal")
+  fun <- .get_exported_value("rstanarm", "normal")
   fun(...)
 }

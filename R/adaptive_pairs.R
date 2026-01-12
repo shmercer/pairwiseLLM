@@ -900,6 +900,55 @@
   )
 }
 
+#' Internal: choose an ID mapping vector (defensive helper)
+#'
+#' @keywords internal
+.ap_choose_id_map_vec <- function(id_vec, graph_state) {
+  id_vec <- as.character(id_vec %||% character(0))
+  if (length(id_vec) > 0L) {
+    return(id_vec)
+  }
+
+  gs_ids <- graph_state$ids %||% character(0)
+  gs_ids <- as.character(gs_ids)
+  if (length(gs_ids) > 0L) {
+    return(gs_ids)
+  }
+
+  character(0)
+}
+
+#' Internal: pick lowest-degree pairs from a candidate pool
+#'
+#' @keywords internal
+.ap_pick_low_degree <- function(pool, deg_sum, n_pick) {
+  pool <- tibble::as_tibble(pool)
+  n_pick <- as.integer(n_pick)
+  if (n_pick <= 0L || nrow(pool) == 0L) {
+    return(pool[0, , drop = FALSE])
+  }
+
+  # If we don't have indices, fall back to deterministic slice_head.
+  if (!all(c("i_idx", "j_idx") %in% names(pool))) {
+    return(dplyr::slice_head(pool, n = n_pick))
+  }
+
+  deg_sum <- as.double(deg_sum)
+  deg_sum_pool <- deg_sum[pool$i_idx] + deg_sum[pool$j_idx]
+  if (length(deg_sum_pool) != nrow(pool)) {
+    return(dplyr::slice_head(pool, n = n_pick))
+  }
+
+  # Prefer low degree, break ties by high score_total, then indices.
+  if ("score_total" %in% names(pool)) {
+    ord <- order(deg_sum_pool, dplyr::desc(pool$score_total), pool$i_idx, pool$j_idx, na.last = TRUE)
+  } else {
+    ord <- order(deg_sum_pool, pool$i_idx, pool$j_idx, na.last = TRUE)
+  }
+
+  dplyr::slice_head(pool[ord, , drop = FALSE], n = n_pick)
+}
+
 #' @keywords internal
 .ap_orient_pairs <- function(selected_tbl,
                              id_vec,
@@ -1631,12 +1680,7 @@ select_adaptive_pairs <- function(samples,
           # IMPORTANT (Workstream G): never overwrite the theta-ordered `id_vec`.
           # Candidate indices were created against that ordering, and downstream
           # orientation uses it as well.
-          id_map_vec <- id_vec
-          if (is.null(id_map_vec) || length(id_map_vec) == 0L) {
-            # Defensive fallback: should be unreachable under normal execution.
-            id_map_vec <- graph_state$ids
-            if (is.null(id_map_vec)) id_map_vec <- names(graph_state$degree)
-          }
+          id_map_vec <- .ap_choose_id_map_vec(id_vec, graph_state)
 
           capped_tbl <- .ap_map_idx_to_ids(
             cand_tbl = capped_tbl,
@@ -1766,19 +1810,8 @@ select_adaptive_pairs <- function(samples,
         }
         # nocov end
 
-        # Helper to pick the lowest-degree rows from a pool, stable tie-break.
-        pick_low_degree <- function(pool, deg_sum_pool, n_pick) {
-          if (n_pick <= 0L || nrow(pool) == 0L) {
-            return(pool[0, , drop = FALSE])
-          }
-          if (all(c("i_idx", "j_idx") %in% names(pool)) &&
-            length(deg_sum_pool) == nrow(pool)) {
-            ord <- order(deg_sum_pool, pool$i_idx, pool$j_idx)
-          } else {
-            ord <- order(deg_sum_pool)
-          }
-          pool <- pool[ord, , drop = FALSE]
-          utils::head(pool, n_pick)
+        pick_low_degree <- function(pool, n_pick) {
+          .ap_pick_low_degree(pool = pool, deg_sum = deg_sum, n_pick = n_pick)
         }
 
         # Start exploration with any explicit component-bridge pairs, then fill
@@ -1789,11 +1822,7 @@ select_adaptive_pairs <- function(samples,
         if (explore_frac > 0) {
           n_nonrepeat_for_explore <- as.integer(max(0L, n_explore_target - nrow(explore_selected_tbl)))
           if (n_nonrepeat_for_explore > 0L && nrow(explore_pool_nonrepeat) > 0L) {
-            explore_nonrepeat_selected <- pick_low_degree(
-              explore_pool_nonrepeat,
-              deg_sum_pool_nonrepeat,
-              n_nonrepeat_for_explore
-            )
+            explore_nonrepeat_selected <- pick_low_degree(explore_pool_nonrepeat, n_nonrepeat_for_explore)
             if (nrow(explore_nonrepeat_selected) > 0L) {
               explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_nonrepeat_selected)
             }
@@ -1804,7 +1833,7 @@ select_adaptive_pairs <- function(samples,
           n_explore_remaining <- as.integer(n_explore_target - nrow(explore_selected_tbl))
           if (n_explore_remaining > 0L && explore_repeat_cap > 0L && nrow(explore_pool_repeat) > 0L) {
             n_repeat_for_explore <- as.integer(min(n_explore_remaining, explore_repeat_cap))
-            explore_repeat_selected <- pick_low_degree(explore_pool_repeat, deg_sum_pool_repeat, n_repeat_for_explore)
+            explore_repeat_selected <- pick_low_degree(explore_pool_repeat, n_repeat_for_explore)
             if (nrow(explore_repeat_selected) > 0L) {
               explore_selected_tbl <- dplyr::bind_rows(explore_selected_tbl, explore_repeat_selected)
             }
@@ -2056,11 +2085,7 @@ select_adaptive_pairs <- function(samples,
       degree_min_after <- as.double(graph_after_state$metrics$degree_min[[1]])
       largest_component_frac_after <- as.double(graph_after_state$metrics$largest_component_frac[[1]])
 
-      fallback_path <- if (n_pairs == 0L) {
-        "normal"
-      } else if (length(id_vec) < 2L) {
-        "exhausted_no_pairs"
-      } else if (used_bridge) {
+      fallback_path <- if (used_bridge) {
         "bridge_repair"
       } else if (isTRUE(used_random)) {
         "controlled_random"
@@ -2071,25 +2096,11 @@ select_adaptive_pairs <- function(samples,
       }
 
       fallback_trigger <- if (fallback_path == "bridge_repair") {
-        if (!is.na(bridge_trigger) && nzchar(bridge_trigger)) {
-          bridge_trigger
-        } else if (normal_empty) {
-          "normal_empty"
-        } else {
-          "graph_unhealthy"
-        }
+        bridge_trigger
       } else if (fallback_path == "controlled_random") {
-        if (!is.na(random_trigger) && nzchar(random_trigger)) {
-          random_trigger
-        } else if (normal_empty) {
-          "normal_empty"
-        } else {
-          "bridge_empty"
-        }
+        random_trigger
       } else if (fallback_path == "exhausted_no_pairs") {
-        if (length(id_vec) < 2L) {
-          "insufficient_ids"
-        } else if (isTRUE(normal_empty)) {
+        if (isTRUE(normal_empty)) {
           "normal_empty"
         } else if (isTRUE(graph_unhealthy)) {
           "graph_unhealthy"

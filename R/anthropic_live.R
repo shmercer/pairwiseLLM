@@ -774,11 +774,11 @@ submit_anthropic_pairs_live <- function(
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
 
     # Capture the current plan so we can restore it.
-    old_plan <- future::plan()
+    old_plan <- .future_plan()
 
     plan_ready <- tryCatch(
       {
-        future::plan("multisession", workers = workers)
+        .future_plan("multisession", workers = workers)
         TRUE
       },
       error = function(e) {
@@ -793,7 +793,7 @@ submit_anthropic_pairs_live <- function(
     )
 
     if (isTRUE(plan_ready)) {
-      on.exit(future::plan(old_plan), add = TRUE)
+      on.exit(.future_plan(old_plan), add = TRUE)
     }
   }
 
@@ -923,7 +923,7 @@ submit_anthropic_pairs_live <- function(
 
       chunk_results_list <- tryCatch(
         {
-          future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+          .future_lapply(chunk_indices, work_fn, future.seed = TRUE)
         },
         error = function(e) {
           # Some environments (notably Windows + multisession) can hit

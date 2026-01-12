@@ -2,6 +2,29 @@
 NULL
 
 # -------------------------------------------------------------------------
+# Internal wrappers (mockable in tests)
+# -------------------------------------------------------------------------
+
+#' @keywords internal
+.future_plan <- function(strategy, ...) {
+  # `future::plan()` uses NSE on its first argument; if we wrap it with `...`
+  # then symbols can be evaluated in the wrapper environment (breaking
+  # patterns like `old_plan <- plan(); on.exit(plan(old_plan))`). Use an
+  # explicit first argument so `strategy` is evaluated before reaching
+  # `future::plan()`.
+  if (missing(strategy)) {
+    return(future::plan())
+  }
+
+  future::plan(strategy, ...)
+}
+
+#' @keywords internal
+.future_lapply <- function(...) {
+  future.apply::future_lapply(...)
+}
+
+# -------------------------------------------------------------------------
 # Internal: parse OpenAI live responses
 # -------------------------------------------------------------------------
 
@@ -566,15 +589,15 @@ submit_openai_pairs_live <- function(
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
 
     # Set the plan and capture the OLD plan to restore it on exit.
-    old_plan <- future::plan()
-    on.exit(future::plan(old_plan), add = TRUE)
+    old_plan <- .future_plan()
+    on.exit(.future_plan(old_plan), add = TRUE)
 
     # `parallelly` can error early in restricted environments (e.g., few free
     # connections) due to conservative validation. Retry once with validation
     # disabled, which is safe for short-lived, internal worker clusters.
     tryCatch(
       {
-        future::plan("multisession", workers = workers)
+        .future_plan("multisession", workers = workers)
       },
       error = function(e) {
         if (verbose) {
@@ -586,7 +609,7 @@ submit_openai_pairs_live <- function(
         }
         old_opts <- options(parallelly.makeNodePSOCK.validate = FALSE)
         on.exit(options(old_opts), add = TRUE)
-        future::plan("multisession", workers = workers)
+        .future_plan("multisession", workers = workers)
       }
     )
   }
@@ -700,7 +723,7 @@ submit_openai_pairs_live <- function(
       }
 
       # Execute chunk
-      chunk_results_list <- future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+      chunk_results_list <- .future_lapply(chunk_indices, work_fn, future.seed = TRUE)
       all_new_results[chunk_indices] <- chunk_results_list
 
       # Incremental Save

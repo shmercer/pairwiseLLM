@@ -84,7 +84,8 @@
                                            max_iter = 200L,
                                            tol = 1e-6,
                                            id1_col = "ID1",
-                                           id2_col = "ID2") {
+                                           id2_col = "ID2",
+                                           init_vec = NULL) {
   weights <- match.arg(weights)
   max_iter <- as.integer(max_iter)
   tol <- as.double(tol)
@@ -173,7 +174,11 @@
   u <- u / sqrt(sum(u^2))
 
   # Deterministic initialization, orthogonalized to u.
-  v <- as.double(seq_len(n))
+  v <- if (is.null(init_vec)) {
+    as.double(seq_len(n))
+  } else {
+    as.double(init_vec)
+  }
   v <- v - u * sum(u * v)
   v_norm <- sqrt(sum(v^2))
 

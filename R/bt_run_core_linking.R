@@ -740,8 +740,6 @@ bt_run_core_linking <- function(samples,
       }
     } else if (isTRUE(linking == "always")) {
       fit$linking$reason <- "always"
-    } else {
-      stop("Invalid `linking`. Expected one of: 'never', 'auto', 'always'.", call. = FALSE)
     }
 
     # Apply linking: attach theta_linked/se_linked to preserve the original
