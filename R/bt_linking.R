@@ -238,3 +238,48 @@ bt_link_thetas <- function(current,
 
   isTRUE(cor_trig || p90_trig || max_trig)
 }
+
+
+.bt_auto_linking_decision <- function(drift_tbl,
+                                      min_n,
+                                      trigger_cor = 0.98,
+                                      trigger_p90_abs_shift = 0.15,
+                                      trigger_max_abs_shift = 0.30) {
+  # Schema-stable 1-row tibble describing the auto-linking decision.
+  drift_tbl <- if (is.null(drift_tbl)) tibble::tibble() else tibble::as_tibble(drift_tbl)
+
+  n_overlap <- 0L
+  if (nrow(drift_tbl) == 1L) {
+    if ("core_n" %in% names(drift_tbl) && is.finite(drift_tbl$core_n[[1]])) {
+      n_overlap <- as.integer(drift_tbl$core_n[[1]])
+    } else if ("n" %in% names(drift_tbl) && is.finite(drift_tbl$n[[1]])) {
+      n_overlap <- as.integer(drift_tbl$n[[1]])
+    }
+  }
+
+  if (!is.numeric(min_n) || length(min_n) != 1L || is.na(min_n)) {
+    min_n <- 3L
+  }
+  min_n <- as.integer(min_n)
+
+  if (n_overlap < min_n) {
+    return(tibble::tibble(
+      apply = FALSE,
+      reason = "insufficient_overlap",
+      n_overlap = n_overlap
+    ))
+  }
+
+  apply <- .bt_should_apply_linking(
+    drift_tbl = drift_tbl,
+    trigger_cor = trigger_cor,
+    trigger_p90_abs_shift = trigger_p90_abs_shift,
+    trigger_max_abs_shift = trigger_max_abs_shift
+  )
+
+  tibble::tibble(
+    apply = isTRUE(apply),
+    reason = if (isTRUE(apply)) "auto_trigger" else "auto_no_trigger",
+    n_overlap = n_overlap
+  )
+}

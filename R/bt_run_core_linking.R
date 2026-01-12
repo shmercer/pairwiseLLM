@@ -41,8 +41,9 @@
 #'   this value.
 #' @param linking_max_abs_shift_target In \code{linking = "auto"}, apply linking when the
 #'   maximum absolute core-theta shift (baseline vs current raw) exceeds this value.
-#' @param linking_min_n Minimum number of core IDs required to estimate the linking
-#'   transform. If fewer are available, linking is skipped.
+#' @param linking_min_n Minimum number of overlapping core IDs required to estimate and
+#'   apply the linking transform. For `linking = "auto"`, when overlap is below this
+#'   threshold, linking is skipped and `linking$reason` is set to `"insufficient_overlap"`.
 #' @param reference_scale_method Method used to stabilize the *reference* (baseline)
 #'   theta scale before it is used for linking decisions. Defaults to a robust
 #'   median/IQR-based scale. This reduces pathological behavior when the early core
@@ -726,21 +727,23 @@ bt_run_core_linking <- function(samples,
       return(fit)
     }
 
-    # Overlap on requested core IDs (informational only). Linking can still
-    # proceed (and will fall back to an identity transform when overlap is
-    # small).
+    # Overlap on requested core IDs.
+    # For `linking = "auto"`, we require at least `linking_min_n` overlapping
+    # core IDs before evaluating drift triggers; otherwise we do not link.
     n_overlap <- drift_core$core_n
     fit$linking$n_overlap <- n_overlap
 
     if (isTRUE(linking == "auto")) {
-      apply <- .bt_should_apply_linking(
+      dec <- .bt_auto_linking_decision(
         drift_tbl = drift_core,
+        min_n = linking_min_n,
         trigger_cor = linking_cor_target,
         trigger_p90_abs_shift = linking_p90_abs_shift_target,
         trigger_max_abs_shift = linking_max_abs_shift_target
       )
-      fit$linking$reason <- if (isTRUE(apply)) "auto_trigger" else "auto_no_trigger"
-      if (!isTRUE(apply)) {
+      fit$linking$reason <- dec$reason[[1]]
+      fit$linking$n_overlap <- dec$n_overlap[[1]]
+      if (!isTRUE(dec$apply[[1]])) {
         return(fit)
       }
     } else if (isTRUE(linking == "always")) {

@@ -67,8 +67,9 @@
 #'   this value.
 #' @param linking_max_abs_shift_target In \code{linking = "auto"}, apply linking when the
 #'   maximum absolute core-theta shift (baseline vs current raw) exceeds this value.
-#' @param linking_min_n Minimum number of core IDs required to estimate the linking
-#'   transform. If fewer are available, linking is skipped.
+#' @param linking_min_n Minimum number of overlapping core IDs required to estimate and
+#'   apply the linking transform. For `linking = "auto"`, when overlap is below this
+#'   threshold, linking is skipped and `linking$reason` is set to `"insufficient_overlap"`.
 #' @param reference_scale_method Method used to stabilize the *reference* (baseline)
 #'   theta scale before it is used for linking decisions. Defaults to a robust
 #'   median/IQR-based scale. This reduces pathological behavior when the early core
@@ -838,14 +839,16 @@ bt_run_adaptive_core_linking <- function(samples,
 
     do_apply <- FALSE
     if (isTRUE(linking == "auto")) {
-      apply <- .bt_should_apply_linking(
+      dec <- .bt_auto_linking_decision(
         drift_tbl = drift_core,
+        min_n = linking_min_n,
         trigger_cor = linking_cor_target,
         trigger_p90_abs_shift = linking_p90_abs_shift_target,
         trigger_max_abs_shift = linking_max_abs_shift_target
       )
-      do_apply <- isTRUE(apply)
-      fit$linking$reason <- if (isTRUE(do_apply)) "auto_trigger" else "auto_no_trigger"
+      do_apply <- isTRUE(dec$apply[[1]])
+      fit$linking$reason <- dec$reason[[1]]
+      fit$linking$n_overlap <- dec$n_overlap[[1]]
     } else if (isTRUE(linking == "always")) {
       do_apply <- TRUE
       fit$linking$reason <- "always"

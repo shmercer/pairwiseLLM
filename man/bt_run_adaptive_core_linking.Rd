@@ -147,8 +147,9 @@ this value.}
 \item{linking_max_abs_shift_target}{In \code{linking = "auto"}, apply linking when the
 maximum absolute core-theta shift (baseline vs current raw) exceeds this value.}
 
-\item{linking_min_n}{Minimum number of core IDs required to estimate the linking
-transform. If fewer are available, linking is skipped.}
+\item{linking_min_n}{Minimum number of overlapping core IDs required to estimate and
+apply the linking transform. For \code{linking = "auto"}, when overlap is below this
+threshold, linking is skipped and \code{linking$reason} is set to \code{"insufficient_overlap"}.}
 
 \item{reference_scale_method}{Method used to stabilize the \emph{reference} (baseline)
 theta scale before it is used for linking decisions. Defaults to a robust
