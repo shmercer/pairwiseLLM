@@ -352,6 +352,7 @@
 #' \code{"no_new_pairs"}, \code{"pair_budget_exhausted"}, and \code{"max_rounds_reached"}.}
 #' \item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
 #' \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag + stop_reason).}
+#' \item{stop_audit}{A one-row-per-round stop audit table making stop gating explicit (precision/stability vs hard stops, graph health, min rounds, mixing guard, budgets).}
 #' \item{state}{A tibble with one row per adaptive round containing bookkeeping summaries
 #'   of the accumulated results at that round (e.g., \code{n_unique_unordered_pairs},
 #'   appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},
@@ -1083,6 +1084,7 @@ bt_run_adaptive <- function(samples,
   rounds_list <- list()
   state_list <- list()
   pairing_diag_list <- list()
+  stop_audit_list <- list()
   metrics_hist <- tibble::tibble()
   spectral_gap_checks <- .spectral_gap_checks_template()
 
@@ -1688,6 +1690,23 @@ bt_run_adaptive <- function(samples,
       isTRUE(graph_healthy_base) && !isTRUE(mix_req_met_for_stop)) {
       stop_chk$details$stop_blocked_by <- "mix_guard"
     }
+
+    mixing_guard_pass <- if (isTRUE(stop_mix_guard_active)) isTRUE(mix_req_met_for_stop) else NA
+
+
+    stop_audit_row <- .stop_decision_record(
+      round_index = r,
+      stop_chk = stop_chk,
+      precision_reached = precision_reached,
+      stability_reached = stability_reached,
+      graph_healthy = graph_healthy,
+      min_rounds_satisfied = isTRUE(as.integer(r) >= as.integer(min_rounds)),
+      mixing_guard_pass = if (isTRUE(stop_mix_guard_active)) isTRUE(mix_req_met_for_stop) else NA,
+      no_new_pairs = no_new_pairs,
+      max_rounds_hit = max_rounds_reached,
+      pair_budget_exhausted = budget_exhausted
+    )
+    stop_audit_list[[length(stop_audit_list) + 1L]] <- stop_audit_row
 
     # Optional spectral gap check before stopping
     if (isTRUE(stop_chk$stop) && identical(spectral_gap_check, "pre_stop")) {
@@ -2296,6 +2315,24 @@ bt_run_adaptive <- function(samples,
     }
   }
 
+  stop_audit <- if (length(stop_audit_list) == 0L) {
+    tibble::tibble(
+      round_index = integer(),
+      stop_decision = logical(),
+      stop_reason = character(),
+      precision_reached = logical(),
+      stability_reached = logical(),
+      graph_healthy = logical(),
+      min_rounds_satisfied = logical(),
+      mixing_guard_pass = logical(),
+      no_new_pairs = logical(),
+      max_rounds_hit = logical(),
+      pair_budget_exhausted = logical()
+    )
+  } else {
+    dplyr::bind_rows(stop_audit_list)
+  }
+
   pairing_diagnostics <- if (length(pairing_diag_list) == 0L) {
     tibble::tibble(
       round = integer(),
@@ -2401,6 +2438,7 @@ bt_run_adaptive <- function(samples,
     stop_reason = stop_reason,
     stop_round = stop_round,
     rounds = rounds_tbl,
+    stop_audit = stop_audit,
     spectral_gap_checks = spectral_gap_checks,
     state = state_tbl,
     n_fallback_random_rounds = if (!is.null(pairing_diagnostics) && "fallback_path" %in% names(pairing_diagnostics)) {

@@ -493,6 +493,7 @@ Standard reasons include: \code{"stability_reached"}, \code{"precision_reached"}
 \code{"no_new_pairs"}, \code{"pair_budget_exhausted"}, and \code{"max_rounds_reached"}.}
 \item{stop_round}{Integer round index at which the loop ended (\code{NA} if no rounds were run).}
 \item{rounds}{A tibble summarizing each adaptive round (metrics + stop flag + stop_reason).}
+\item{stop_audit}{A one-row-per-round stop audit table making stop gating explicit (precision/stability vs hard stops, graph health, min rounds, mixing guard, budgets).}
 \item{state}{A tibble with one row per adaptive round containing bookkeeping summaries
 of the accumulated results at that round (e.g., \code{n_unique_unordered_pairs},
 appearance quantiles, \code{pos_imbalance_max}, \code{n_self_pairs},

@@ -366,6 +366,7 @@ applicable).}
 whether selection fell back to controlled-random pairing (via
 \code{fallback_path == "controlled_random"}) and its trigger
 (\code{fallback_trigger}).}
+\item{stop_audit}{A one-row-per-round stop audit table making stop gating explicit (precision/stability vs hard stops, graph health, min rounds, etc.).}
 \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 \item{run_summary}{One row tibble summarizing the run.}
 \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}

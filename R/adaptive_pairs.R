@@ -2155,6 +2155,8 @@ select_adaptive_pairs <- function(samples,
         graph_largest_component_frac = as.double(graph_state$metrics$largest_component_frac[[1]]),
         fallback_path = as.character(fallback_path),
         fallback_trigger = as.character(fallback_trigger),
+        used_fallback_random = as.logical(fallback_path == "controlled_random"),
+        fallback_reason = as.character(fallback_trigger),
         n_pairs_source_normal = as.integer(n_pairs_source_normal),
         n_pairs_source_bridge = as.integer(n_pairs_source_bridge),
         n_pairs_source_repeat_reverse = as.integer(n_pairs_source_repeat_reverse),
@@ -2271,6 +2273,8 @@ select_adaptive_pairs <- function(samples,
 
   diag <- ensure_col(diag, "fallback_path", rep(NA_character_, n))
   diag <- ensure_col(diag, "fallback_trigger", rep(NA_character_, n))
+  diag <- ensure_col(diag, "used_fallback_random", rep(FALSE, n))
+  diag <- ensure_col(diag, "fallback_reason", rep(NA_character_, n))
   diag <- ensure_col(diag, "n_pairs_source_normal", rep(0L, n))
   diag <- ensure_col(diag, "n_pairs_source_bridge", rep(0L, n))
   diag <- ensure_col(diag, "n_pairs_source_repeat_reverse", rep(0L, n))
@@ -2284,6 +2288,8 @@ select_adaptive_pairs <- function(samples,
   # Coerce to atomic, schema-stable types.
   diag$fallback_path <- as.character(diag$fallback_path)
   diag$fallback_trigger <- as.character(diag$fallback_trigger)
+  diag$used_fallback_random <- as.logical(diag$used_fallback_random)
+  diag$fallback_reason <- as.character(diag$fallback_reason)
   diag$n_pairs_source_normal <- as.integer(diag$n_pairs_source_normal)
   diag$n_pairs_source_bridge <- as.integer(diag$n_pairs_source_bridge)
   diag$n_pairs_source_repeat_reverse <- as.integer(diag$n_pairs_source_repeat_reverse)
@@ -2320,6 +2326,12 @@ select_adaptive_pairs <- function(samples,
 
       diag$fallback_path[needs_infer] <- inferred_path[needs_infer]
       diag$fallback_trigger[needs_infer] <- inferred_trigger[needs_infer]
+      if ("used_fallback_random" %in% names(diag)) {
+        diag$used_fallback_random[needs_infer] <- inferred_path[needs_infer] == "controlled_random"
+      }
+      if ("fallback_reason" %in% names(diag)) {
+        diag$fallback_reason[needs_infer] <- diag$fallback_trigger[needs_infer]
+      }
     }
   }
 

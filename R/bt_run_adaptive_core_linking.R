@@ -257,6 +257,7 @@
 #'     whether selection fell back to controlled-random pairing (via
 #'     \code{fallback_path == "controlled_random"}) and its trigger
 #'     (\code{fallback_trigger}).}
+#'   \item{stop_audit}{A one-row-per-round stop audit table making stop gating explicit (precision/stability vs hard stops, graph health, min rounds, etc.).}
 #'   \item{spectral_gap_checks}{Optional spectral-gap check results (computed at the end and/or on demand).}
 #'   \item{run_summary}{One row tibble summarizing the run.}
 #'   \item{batch_summary}{One row per batch: rounds used, stop reason, counts.}
@@ -422,6 +423,12 @@ bt_run_adaptive_core_linking <- function(samples,
   if (!is.null(allocation_fun) && !is.function(allocation_fun)) {
     stop("`allocation_fun` must be a function or NULL.", call. = FALSE)
   }
+
+  # ---- stop-audit state ----
+  # This runner does not currently implement an additional mixing-guard gate
+  # for stopping (unlike `bt_run_adaptive()`), but we still expose the
+  # `mixing_guard_pass` audit field for schema stability.
+  stop_audit_list <- list()
 
   stopping_tier <- match.arg(stopping_tier)
   stop_topk_ties <- match.arg(stop_topk_ties)
@@ -782,9 +789,23 @@ bt_run_adaptive_core_linking <- function(samples,
         se = rep(NA_real_, length(bt_ids))
       )
     } else {
-      if (!"se" %in% names(fit$theta)) {
-        fit$theta$se <- NA_real_
+      theta_tbl <- tibble::as_tibble(fit$theta)
+      bt_ids <- sort(unique(c(as.character(bt_data$object1), as.character(bt_data$object2))))
+
+      # Be resilient to malformed fit output: ensure schema-stable theta with ID/theta/se.
+      # If the fit returns a theta table without required columns, fall back to an NA table
+      # on the current BT ids.
+      if (!all(c("ID", "theta") %in% names(theta_tbl))) {
+        theta_tbl <- tibble::tibble(
+          ID = bt_ids,
+          theta = rep(NA_real_, length(bt_ids)),
+          se = rep(NA_real_, length(bt_ids))
+        )
+      } else if (!"se" %in% names(theta_tbl)) {
+        theta_tbl$se <- NA_real_
       }
+
+      fit$theta <- theta_tbl
     }
 
     orient <- .bt_orient_theta_by_wins(fit$theta, bt_data)
@@ -1608,24 +1629,44 @@ bt_run_adaptive_core_linking <- function(samples,
       precision_reached_flag <- isTRUE(decision$stop) && !isTRUE(drift_blocking)
       stability_reached_flag <- isTRUE(stability_reached) && !isTRUE(drift_blocking)
 
+      no_new_pairs <- (nrow(pairs_next) == 0L)
+      budget_exhausted <- (as.integer(round_size) == 0L)
+      max_rounds_reached <- (as.integer(r) >= as.integer(max_rounds_per_batch)) &&
+        !isTRUE(precision_reached_flag) && !isTRUE(stability_reached_flag)
+
       stop_chk <- .stop_decision(
         round = r,
         min_rounds = min_rounds,
-        no_new_pairs = (nrow(pairs_next) == 0L),
-        budget_exhausted = (as.integer(round_size) == 0L),
+        no_new_pairs = no_new_pairs,
+        budget_exhausted = budget_exhausted,
         # `max_rounds_per_batch` is an inclusive cap on the number of rounds we
         # will run for a given batch. Only treat the cap as the *stop reason*
         # when no other (soft) stop criteria are met; this keeps stop reasons
         # interpretable (e.g., precision can still be the stop reason on the
         # final allowed round) while ensuring pre-stop diagnostics fire.
-        max_rounds_reached = (as.integer(r) >= as.integer(max_rounds_per_batch)) &&
-          !isTRUE(precision_reached_flag) && !isTRUE(stability_reached_flag),
+        max_rounds_reached = max_rounds_reached,
         graph_healthy = graph_healthy,
         stability_reached = stability_reached_flag,
         precision_reached = precision_reached_flag,
         stop_reason_priority = stop_reason_priority
       )
       .validate_stop_decision(stop_chk)
+
+      # This runner does not implement a separate mixing-guard for stopping.
+      # Keep the audit field for schema parity with `bt_run_adaptive()`.
+      mixing_guard_pass <- NA
+      stop_audit_list[[length(stop_audit_list) + 1L]] <- .stop_decision_record(
+        round_index = r,
+        stop_chk = stop_chk,
+        precision_reached = precision_reached_flag,
+        stability_reached = stability_reached_flag,
+        graph_healthy = graph_healthy,
+        min_rounds_satisfied = (as.integer(r) >= as.integer(min_rounds)),
+        mixing_guard_pass = mixing_guard_pass,
+        no_new_pairs = no_new_pairs,
+        max_rounds_hit = max_rounds_reached,
+        pair_budget_exhausted = budget_exhausted
+      )
 
       stop_now <- isTRUE(stop_chk$stop)
       stop_reason <- stop_chk$reason %||% NA_character_
@@ -1970,6 +2011,24 @@ bt_run_adaptive_core_linking <- function(samples,
   # PR8 contract: fit_provenance must always be a list (possibly empty).
   if (is.null(fit_provenance)) fit_provenance <- list()
 
+  stop_audit <- if (length(stop_audit_list) == 0L) {
+    tibble::tibble(
+      round_index = integer(),
+      stop_decision = logical(),
+      stop_reason = character(),
+      precision_reached = logical(),
+      stability_reached = logical(),
+      graph_healthy = logical(),
+      min_rounds_satisfied = logical(),
+      mixing_guard_pass = logical(),
+      no_new_pairs = logical(),
+      max_rounds_hit = logical(),
+      pair_budget_exhausted = logical()
+    )
+  } else {
+    dplyr::bind_rows(stop_audit_list)
+  }
+
   out <- list(
     core_ids = core_ids,
     batches = batches,
@@ -1987,6 +2046,7 @@ bt_run_adaptive_core_linking <- function(samples,
       0L
     },
     pairing_diagnostics = pairing_diagnostics,
+    stop_audit = stop_audit,
     spectral_gap_checks = spectral_gap_checks,
     final_models = if (is.null(final_est)) list() else list(bt = final_est$bt_fit, rc = final_est$rc_fit, diagnostics = final_est$diagnostics),
     metrics = metrics,

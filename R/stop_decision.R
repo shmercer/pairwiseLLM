@@ -122,6 +122,20 @@
     stop_blocked_candidates <- paste(blocked_candidates, collapse = "|")
   }
 
+  blocked_reasons <- tibble::tibble(reason = character(), blocked_by = character())
+  if (isTRUE(round < min_rounds) && isTRUE(stability_reached)) {
+    blocked_reasons <- dplyr::bind_rows(blocked_reasons, tibble::tibble(reason = "stability_reached", blocked_by = "min_rounds"))
+  }
+  if (isTRUE(round < min_rounds) && isTRUE(precision_reached)) {
+    blocked_reasons <- dplyr::bind_rows(blocked_reasons, tibble::tibble(reason = "precision_reached", blocked_by = "min_rounds"))
+  }
+  if (!isTRUE(graph_healthy) && isTRUE(stability_eligible)) {
+    blocked_reasons <- dplyr::bind_rows(blocked_reasons, tibble::tibble(reason = "stability_reached", blocked_by = "graph_unhealthy"))
+  }
+  if (!isTRUE(graph_healthy) && isTRUE(precision_eligible)) {
+    blocked_reasons <- dplyr::bind_rows(blocked_reasons, tibble::tibble(reason = "precision_reached", blocked_by = "graph_unhealthy"))
+  }
+
   details <- list(
     round = round,
     min_rounds = min_rounds,
@@ -134,5 +148,38 @@
     stop_blocked_candidates = stop_blocked_candidates
   )
 
-  list(stop = stop, reason = reason, details = details)
+  list(stop = stop, reason = reason, details = details, blocked_reasons = blocked_reasons)
+}
+
+#' Internal: schema-stable stop audit record (1 row)
+#'
+#' Produces a fixed-column tibble describing stop gating and the final stop
+#' decision for a round. Runners store these rows to make stopping behavior
+#' traceable and debuggable.
+#'
+#' @keywords internal
+.stop_decision_record <- function(round_index,
+                                  stop_chk,
+                                  precision_reached = FALSE,
+                                  stability_reached = FALSE,
+                                  graph_healthy = TRUE,
+                                  min_rounds_satisfied = TRUE,
+                                  mixing_guard_pass = NA,
+                                  no_new_pairs = FALSE,
+                                  max_rounds_hit = FALSE,
+                                  pair_budget_exhausted = FALSE) {
+  reason <- stop_chk$reason %||% NA_character_
+  tibble::tibble(
+    round_index = as.integer(round_index),
+    stop_decision = as.logical(stop_chk$stop),
+    stop_reason = as.character(reason),
+    precision_reached = as.logical(precision_reached),
+    stability_reached = as.logical(stability_reached),
+    graph_healthy = as.logical(graph_healthy),
+    min_rounds_satisfied = as.logical(min_rounds_satisfied),
+    mixing_guard_pass = if (length(mixing_guard_pass) == 1L) as.logical(mixing_guard_pass) else NA,
+    no_new_pairs = as.logical(no_new_pairs),
+    max_rounds_hit = as.logical(max_rounds_hit),
+    pair_budget_exhausted = as.logical(pair_budget_exhausted)
+  )
 }
