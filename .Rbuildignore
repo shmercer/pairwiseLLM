@@ -14,4 +14,3 @@
 ^cran-comments\.md$
 ^CRAN-SUBMISSION$
 ^codemeta\.json$
-^tests/testthat/bad.csv$
