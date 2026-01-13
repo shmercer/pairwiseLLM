@@ -144,14 +144,14 @@ pairs
 #> # A tibble: 10 × 3
 #>    ID1   ID2   pair_type
 #>    <chr> <chr> <chr>    
-#>  1 S7    S12   new_new  
-#>  2 S12   S10   new_new  
-#>  3 S2    S9    core_new 
-#>  4 S11   S1    core_new 
-#>  5 S5    S3    core_new 
-#>  6 S1    S8    core_new 
-#>  7 S6    S2    core_new 
-#>  8 S1    S7    core_new 
-#>  9 S10   S1    core_new 
-#> 10 S9    S1    core_new 
+#>  1 S9    S6    new_new  
+#>  2 S7    S12   new_new  
+#>  3 S11   S4    core_new 
+#>  4 S10   S2    core_new 
+#>  5 S3    S8    core_new 
+#>  6 S2    S5    core_new 
+#>  7 S9    S3    core_new 
+#>  8 S12   S1    core_new 
+#>  9 S3    S11   core_new 
+#> 10 S7    S3    core_new 
 ```
