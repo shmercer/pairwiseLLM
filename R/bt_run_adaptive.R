@@ -239,34 +239,201 @@ bt_run_adaptive <- function(samples,
   max_rounds <- as.integer(max_rounds)
   if (is.na(max_rounds) || max_rounds < 0L) stop("`max_rounds` must be a non-negative integer.", call. = FALSE)
 
-  # helper: random bootstrap pairs (unique unordered, optional position balancing)
-  .bootstrap_pairs <- function(n_pairs, existing_pairs, seed = NULL) {
-    n_pairs <- as.integer(n_pairs)
-    if (is.na(n_pairs) || n_pairs < 0L) {
-      stop("`n_pairs` must be a non-negative integer.", call. = FALSE)
+  # CRAN-safe seed wrapper (restore old RNG state, or remove if uninitialized)
+  .with_seed_restore <- function(seed, f) {
+    if (is.null(seed)) {
+      return(f())
+    }
+    seed <- as.integer(seed)
+    if (length(seed) != 1L || is.na(seed)) stop("`seed_pairs`/`reverse_seed` must be a single integer.", call. = FALSE)
+
+    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    old_seed <- NULL
+    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+
+    on.exit(
+      {
+        if (had_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
+        }
+      },
+      add = TRUE
+    )
+    set.seed(seed)
+    f()
+  }
+
+  # helper: validate judge results (and normalize positional/winner labels)
+  .validate_results <- function(res, judge_col = NULL) {
+    res <- tibble::as_tibble(res)
+
+    required <- c("ID1", "ID2", "better_id")
+    missing <- setdiff(required, names(res))
+    if (length(missing) > 0L) {
+      stop("`judge_fun` must return columns: ", paste(required, collapse = ", "), call. = FALSE)
     }
 
-    if (n_pairs == 0L) {
+    if (!is.null(judge_col)) {
+      if (!is.character(judge_col) || length(judge_col) != 1L || !nzchar(judge_col)) {
+        stop("`judge` must be a non-empty character scalar.", call. = FALSE)
+      }
+      if (!judge_col %in% names(res)) {
+        stop("`judge_fun` must include a `", judge_col, "` column when `judge` is provided.", call. = FALSE)
+      }
+    }
+
+    # Coerce to character + trim IDs
+    res$ID1 <- trimws(as.character(res$ID1))
+    res$ID2 <- trimws(as.character(res$ID2))
+    res$better_id <- as.character(res$better_id)
+
+    if (any(is.na(res$ID1)) || any(is.na(res$ID2)) || any(res$ID1 == "") || any(res$ID2 == "")) {
+      stop("`ID1` and `ID2` must be non-missing and non-empty in results.", call. = FALSE)
+    }
+    if (any(res$ID1 == res$ID2)) {
+      stop("`judge_fun` returned pairs with ID1 == ID2.", call. = FALSE)
+    }
+    if (any(!(res$ID1 %in% ids)) || any(!(res$ID2 %in% ids))) {
+      stop("`judge_fun` returned IDs not present in `samples$ID`.", call. = FALSE)
+    }
+
+    if (!is.null(judge_col)) {
+      # allow character/integer labels, but not missing
+      if (any(is.na(res[[judge_col]]))) {
+        stop("`judge_fun` output has missing values in judge column: ", judge_col, call. = FALSE)
+      }
+      res[[judge_col]] <- as.character(res[[judge_col]])
+    }
+
+    .escape_regex <- function(x) {
+      gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x)
+    }
+
+    .normalize_better_id <- function(better_id, ID1, ID2) {
+      n <- length(better_id)
+
+      # Make sure we have character and trim
+      b <- trimws(as.character(better_id))
+      # Strip surrounding quotes
+      b <- gsub('^["\']+|["\']+$', "", b)
+
+      # Treat NA-like tokens as NA
+      tok_upper <- toupper(b)
+      tok_compact <- gsub("[^A-Z0-9]+", "", tok_upper)
+      missing_tokens <- c("", "NA", "NAN", "NULL", "NONE", "N/A", "<NA>", "TIE", "EQUAL", "MISSING")
+      miss_compact <- gsub("[^A-Z0-9]+", "", missing_tokens)
+      is_missing <- is.na(b) | tok_compact %in% miss_compact
+      out <- rep(NA_character_, n)
+      out[!is_missing] <- b[!is_missing]
+
+      # Exact match to ID1/ID2
+      exact1 <- !is_missing & (out == ID1)
+      exact2 <- !is_missing & (out == ID2)
+      out[exact1] <- ID1[exact1]
+      out[exact2] <- ID2[exact2]
+
+      # Remaining need mapping
+      remaining <- !is_missing & !(out == ID1 | out == ID2)
+      if (!any(remaining)) return(out)
+
+      idx <- which(remaining)
+      tok_full <- toupper(trimws(out[idx]))
+      tok_full2 <- gsub("[^A-Z0-9]+", "", tok_full)
+
+      # Positional label detection (exact or substring)
+      pos1 <- tok_full2 %in% c("SAMPLE1", "ID1", "POS1", "LEFT", "L", "1", "A", "FIRST", "TRUE") |
+        grepl("SAMPLE1", tok_full2, fixed = TRUE) |
+        grepl("ID1", tok_full2, fixed = TRUE) |
+        grepl("POS1", tok_full2, fixed = TRUE)
+
+      pos2 <- tok_full2 %in% c("SAMPLE2", "ID2", "POS2", "RIGHT", "R", "2", "0", "B", "SECOND", "FALSE") |
+        grepl("SAMPLE2", tok_full2, fixed = TRUE) |
+        grepl("ID2", tok_full2, fixed = TRUE) |
+        grepl("POS2", tok_full2, fixed = TRUE)
+
+      only1 <- pos1 & !pos2
+      only2 <- pos2 & !pos1
+
+      out[idx[only1]] <- ID1[idx[only1]]
+      out[idx[only2]] <- ID2[idx[only2]]
+
+      # If still unresolved, try detecting mention of exactly one ID in free text ("Winner: A")
+      unresolved <- idx[!(only1 | only2)]
+      if (length(unresolved) > 0L) {
+        for (i in unresolved) {
+          s <- as.character(out[i])
+          id1 <- ID1[i]
+          id2 <- ID2[i]
+
+          m1 <- grepl(paste0("\\b", .escape_regex(id1), "\\b"), s, ignore.case = TRUE)
+          m2 <- grepl(paste0("\\b", .escape_regex(id2), "\\b"), s, ignore.case = TRUE)
+
+          if (m1 && !m2) out[i] <- id1
+          if (m2 && !m1) out[i] <- id2
+        }
+      }
+
+      out
+    }
+
+    res$better_id <- .normalize_better_id(res$better_id, res$ID1, res$ID2)
+
+    bad <- !is.na(res$better_id) & !(res$better_id == res$ID1 | res$better_id == res$ID2)
+    if (any(bad)) {
+      # Show a few original entries for debugging
+      bad_idx <- which(bad)
+      examples <- unique(as.character(res$better_id[bad_idx]))
+      examples <- examples[!is.na(examples)]
+      examples <- head(examples, 3)
+      stop(
+        "`judge_fun` returned `better_id` values that are not equal to ID1 or ID2.",
+        if (length(examples) > 0L) paste0(" Examples: ", paste(examples, collapse = ", ")) else "",
+        call. = FALSE
+      )
+    }
+
+    res
+  }
+
+  # helper: map texts for ID1/ID2
+  text_map <- stats::setNames(as.character(samples$text), as.character(samples$ID))
+
+  .add_texts <- function(pairs_id) {
+    pairs_id <- tibble::as_tibble(pairs_id)
+    tibble::tibble(
+      ID1 = as.character(pairs_id$ID1),
+      text1 = unname(text_map[as.character(pairs_id$ID1)]),
+      ID2 = as.character(pairs_id$ID2),
+      text2 = unname(text_map[as.character(pairs_id$ID2)])
+    )
+  }
+
+  # helper: random bootstrap pairs (unique unordered, optional position balancing)
+  .bootstrap_pairs <- function(n_pairs, existing_pairs, seed) {
+    n_pairs <- as.integer(n_pairs)
+    if (n_pairs <= 0L) {
       return(tibble::tibble(ID1 = character(), text1 = character(), ID2 = character(), text2 = character()))
     }
 
     existing_pairs <- tibble::as_tibble(existing_pairs)
 
-    # Position counts from existing results
-    pos1_counts <- integer(length(ids))
-    pos2_counts <- integer(length(ids))
-
+    pos1_counts <- stats::setNames(integer(length(ids)), ids)
+    pos2_counts <- stats::setNames(integer(length(ids)), ids)
     if (nrow(existing_pairs) > 0L) {
-      tab1 <- table(factor(existing_pairs$ID1, levels = ids))
-      tab2 <- table(factor(existing_pairs$ID2, levels = ids))
-      pos1_counts <- as.integer(tab1)
-      pos2_counts <- as.integer(tab2)
+      tab1 <- table(existing_pairs$ID1[existing_pairs$ID1 %in% ids])
+      tab2 <- table(existing_pairs$ID2[existing_pairs$ID2 %in% ids])
+      pos1_counts[names(tab1)] <- as.integer(tab1)
+      pos2_counts[names(tab2)] <- as.integer(tab2)
     }
 
     imbalance <- pos1_counts - pos2_counts
 
     key_fun <- function(a, b) {
-      .unordered_pair_key(a, b)
+      lo <- ifelse(a <= b, a, b)
+      hi <- ifelse(a <= b, b, a)
+      paste0(lo, "\r", hi)
     }
 
     existing_key <- character()
@@ -274,65 +441,72 @@ bt_run_adaptive <- function(samples,
       existing_key <- unique(key_fun(existing_pairs$ID1, existing_pairs$ID2))
     }
 
-    pairs_id <- .with_seed_restore(
-      seed,
-      f = function() {
-        out_ID1 <- character()
-        out_ID2 <- character()
-        out_key <- character()
+    out_ID1 <- character()
+    out_ID2 <- character()
+    out_key <- character()
 
-        max_tries <- max(200L, n_pairs * 50L)
-        tries <- 0L
+    # CRAN-safe seed handling; run loop in this scope
+    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    old_seed <- NULL
+    if (!is.null(seed)) {
+      seed <- as.integer(seed)
+      if (length(seed) != 1L || is.na(seed)) stop("`seed` must be a single integer.", call. = FALSE)
+      if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
 
-        while (length(out_ID1) < n_pairs && tries < max_tries) {
-          tries <- tries + 1L
-          pair <- sample(ids, size = 2L, replace = FALSE)
-          a <- pair[[1]]
-          b <- pair[[2]]
-          k <- key_fun(a, b)
-
-          if (isTRUE(forbid_repeats) && (k %in% c(existing_key, out_key))) {
-            next
+      on.exit(
+        {
+          if (had_seed) {
+            assign(".Random.seed", old_seed, envir = .GlobalEnv)
+          } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+            rm(".Random.seed", envir = .GlobalEnv)
           }
+        },
+        add = TRUE
+      )
+      set.seed(seed)
+    }
 
-          if (isTRUE(balance_positions)) {
-            ia <- match(a, ids)
-            ib <- match(b, ids)
+    max_tries <- max(200L, n_pairs * 50L)
+    tries <- 0L
+    while (length(out_ID1) < n_pairs && tries < max_tries) {
+      tries <- tries + 1L
+      pair <- sample(ids, size = 2L, replace = FALSE)
+      a <- pair[[1]]
+      b <- pair[[2]]
+      k <- key_fun(a, b)
+      if (isTRUE(forbid_repeats) && (k %in% c(existing_key, out_key))) next
 
-            if (imbalance[ia] > imbalance[ib]) {
-              id1 <- b
-              id2 <- a
-            } else if (imbalance[ib] > imbalance[ia]) {
-              id1 <- a
-              id2 <- b
-            } else {
-              if (stats::runif(1) < 0.5) {
-                id1 <- a
-                id2 <- b
-              } else {
-                id1 <- b
-                id2 <- a
-              }
-            }
-
-            imbalance[match(id1, ids)] <- imbalance[match(id1, ids)] + 1L
-            imbalance[match(id2, ids)] <- imbalance[match(id2, ids)] - 1L
-          } else {
+      if (isTRUE(balance_positions)) {
+        ia <- match(a, ids)
+        ib <- match(b, ids)
+        if (imbalance[ia] > imbalance[ib]) {
+          id1 <- b
+          id2 <- a
+        } else if (imbalance[ib] > imbalance[ia]) {
+          id1 <- a
+          id2 <- b
+        } else {
+          if (stats::runif(1) < 0.5) {
             id1 <- a
             id2 <- b
+          } else {
+            id1 <- b
+            id2 <- a
           }
-
-          out_ID1 <- c(out_ID1, id1)
-          out_ID2 <- c(out_ID2, id2)
-          out_key <- c(out_key, k)
         }
+        imbalance[match(id1, ids)] <- imbalance[match(id1, ids)] + 1L
+        imbalance[match(id2, ids)] <- imbalance[match(id2, ids)] - 1L
+      } else {
+        id1 <- a
+        id2 <- b
+      }
 
-        tibble::tibble(ID1 = out_ID1, ID2 = out_ID2)
-      },
-      arg_name = "seed_pairs"
-    )
+      out_ID1 <- c(out_ID1, id1)
+      out_ID2 <- c(out_ID2, id2)
+      out_key <- c(out_key, k)
+    }
 
-    .add_pair_texts(pairs_id, samples = samples)
+    .add_texts(tibble::tibble(ID1 = out_ID1, ID2 = out_ID2))
   }
 
   # normalize initial results (NULL or 0-row => empty start)
@@ -340,7 +514,7 @@ bt_run_adaptive <- function(samples,
     results <- tibble::tibble(ID1 = character(), ID2 = character(), better_id = character())
     if (!is.null(judge)) results[[judge]] <- character()
   } else {
-    results <- .validate_judge_results(initial_results, ids = ids, judge_col = judge)
+    results <- .validate_results(initial_results, judge_col = judge)
     results <- tibble::as_tibble(results)
   }
 
@@ -355,7 +529,7 @@ bt_run_adaptive <- function(samples,
 
     if (nrow(pairs_bootstrap) > 0L) {
       res0 <- judge_fun(pairs_bootstrap)
-      res0 <- .validate_judge_results(res0, ids = ids, judge_col = judge)
+      res0 <- .validate_results(res0, judge_col = judge)
       results <- dplyr::bind_rows(results, res0)
     }
   }
@@ -427,7 +601,7 @@ bt_run_adaptive <- function(samples,
     if (nrow(pairs_next) == 0L) break
 
     res_next <- judge_fun(pairs_next)
-    res_next <- .validate_judge_results(res_next, ids = ids, judge_col = judge)
+    res_next <- .validate_results(res_next, judge_col = judge)
 
     n_added <- nrow(res_next)
     if (n_added > 0L) {
@@ -454,11 +628,10 @@ bt_run_adaptive <- function(samples,
   if (isTRUE(reverse_audit) && nrow(results) > 0L) {
     uniq_pairs <- results |>
       dplyr::filter(!is.na(.data$better_id)) |>
-      dplyr::transmute(ID1 = as.character(.data$ID1), ID2 = as.character(.data$ID2))
+      dplyr::transmute(ID1 = as.character(.data$ID1), ID2 = as.character(.data$ID2)) |>
+      dplyr::distinct()
 
-    uniq_pairs <- .distinct_unordered_pairs(uniq_pairs, id1_col = "ID1", id2_col = "ID2")
-
-    uniq_pairs_txt <- .add_pair_texts(uniq_pairs, samples = samples)
+    uniq_pairs_txt <- .add_texts(uniq_pairs)
 
     n_all <- nrow(uniq_pairs_txt)
     k <- NULL
@@ -479,7 +652,7 @@ bt_run_adaptive <- function(samples,
 
     rev_pairs <- uniq_pairs_txt[0, , drop = FALSE]
     if (k > 0L && n_all > 0L) {
-      idx <- .with_seed_restore(reverse_seed, function() sample.int(n_all, size = k, replace = FALSE), arg_name = "reverse_seed")
+      idx <- .with_seed_restore(reverse_seed, function() sample.int(n_all, size = k, replace = FALSE))
       sel <- uniq_pairs_txt[idx, , drop = FALSE]
       rev_pairs <- tibble::tibble(
         ID1 = sel$ID2,
@@ -495,13 +668,17 @@ bt_run_adaptive <- function(samples,
 
     if (nrow(rev_pairs) > 0L) {
       rev_results <- judge_fun(rev_pairs)
-      rev_results <- .validate_judge_results(rev_results, ids = ids, judge_col = judge)
+      rev_results <- .validate_results(rev_results, judge_col = judge)
 
       # Ensure we compute consistency only on audited unordered keys (avoids n_pairs==0)
       add_key <- function(df) {
         df |>
           dplyr::mutate(
-            key = .unordered_pair_key(.data$ID1, .data$ID2)
+            key = paste(
+              pmin(as.character(.data$ID1), as.character(.data$ID2)),
+              pmax(as.character(.data$ID1), as.character(.data$ID2)),
+              sep = "||"
+            )
           )
       }
 
@@ -617,49 +794,62 @@ simulate_bt_judge <- function(pairs,
   th1[is.na(th1)] <- 0
   th2[is.na(th2)] <- 0
 
-  out <- .with_seed_restore(
-    seed,
-    f = function() {
-      better <- character(n)
+  # CRAN-safe seed handling (restore previous RNG state)
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  old_seed <- NULL
+  if (!is.null(seed)) {
+    seed <- as.integer(seed)
+    if (length(seed) != 1L || is.na(seed)) stop("`seed` must be a single integer.", call. = FALSE)
+    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
 
-      if (isTRUE(deterministic)) {
-        for (i in seq_len(n)) {
-          if (th1[i] > th2[i]) {
-            better[i] <- id1[i]
-          } else if (th2[i] > th1[i]) {
-            better[i] <- id2[i]
-          } else {
-            better[i] <- if (stats::runif(1) < 0.5) id1[i] else id2[i]
-          }
+    on.exit(
+      {
+        if (had_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
         }
+      },
+      add = TRUE
+    )
+    set.seed(seed)
+  }
+
+  better <- character(n)
+
+  if (isTRUE(deterministic)) {
+    for (i in seq_len(n)) {
+      if (th1[i] > th2[i]) {
+        better[i] <- id1[i]
+      } else if (th2[i] > th1[i]) {
+        better[i] <- id2[i]
       } else {
-        for (i in seq_len(n)) {
-          d <- th1[i] - th2[i]
-          p <- 1 / (1 + exp(-d))
-          better[i] <- if (stats::runif(1) < p) id1[i] else id2[i]
-        }
+        better[i] <- if (stats::runif(1) < 0.5) id1[i] else id2[i]
       }
+    }
+  } else {
+    for (i in seq_len(n)) {
+      d <- th1[i] - th2[i]
+      p <- 1 / (1 + exp(-d))
+      better[i] <- if (stats::runif(1) < p) id1[i] else id2[i]
+    }
+  }
 
-      out <- tibble::tibble(
-        ID1 = id1,
-        ID2 = id2,
-        better_id = better
-      )
-
-      if (!is.null(judge_col)) {
-        if (length(judges) == 1L) {
-          out[[judge_col]] <- rep(judges[[1]], n)
-        } else if (isTRUE(round_robin)) {
-          out[[judge_col]] <- judges[((seq_len(n) - 1L) %% length(judges)) + 1L]
-        } else {
-          out[[judge_col]] <- judges[sample.int(length(judges), size = n, replace = TRUE)]
-        }
-      }
-
-      out
-    },
-    arg_name = "seed"
+  out <- tibble::tibble(
+    ID1 = id1,
+    ID2 = id2,
+    better_id = better
   )
+
+  if (!is.null(judge_col)) {
+    if (length(judges) == 1L) {
+      out[[judge_col]] <- rep(judges[[1]], n)
+    } else if (isTRUE(round_robin)) {
+      out[[judge_col]] <- judges[((seq_len(n) - 1L) %% length(judges)) + 1L]
+    } else {
+      out[[judge_col]] <- judges[sample.int(length(judges), size = n, replace = TRUE)]
+    }
+  }
 
   out
 }

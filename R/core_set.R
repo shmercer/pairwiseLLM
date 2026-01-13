@@ -94,139 +94,151 @@ select_core_set <- function(samples,
   if (is.na(k) || k < 2L) stop("`core_size` must be an integer >= 2.", call. = FALSE)
   if (k > n) stop("`core_size` cannot exceed nrow(samples).", call. = FALSE)
 
-  out <- .with_seed_restore(
-    seed,
-    f = function() {
-      if (identical(method, "random")) {
-        sel <- sample.int(n, size = k, replace = FALSE)
-        out_ids <- ids[sel]
+  if (!is.null(seed)) {
+    seed <- as.integer(seed)
+    if (length(seed) != 1L || is.na(seed)) stop("`seed` must be a single integer.", call. = FALSE)
 
-        return(tibble::tibble(
-          ID = out_ids,
-          method = method,
-          core_rank = seq_along(out_ids),
-          word_count = NA_integer_,
-          cluster = NA_integer_,
-          centroid_dist = NA_real_
-        ))
-      }
+    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    old_seed <- NULL
+    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
 
-      if (identical(method, "token_stratified")) {
-        wc <- .count_words(samples$text)
-        ord <- order(wc, ids)
-
-        pos <- unique(as.integer(round(seq.int(1L, n, length.out = k))))
-        pos <- pos[pos >= 1L & pos <= n]
-
-        # nocov start
-        if (length(pos) < k) {
-          remaining <- setdiff(seq_len(n), pos)
-          need <- k - length(pos)
-          if (need > 0L && length(remaining) > 0L) {
-            pos <- c(pos, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
-          }
+    on.exit(
+      {
+        if (had_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
         }
-        # nocov end
+      },
+      add = TRUE
+    )
+    set.seed(seed)
+  }
 
-        pos <- pos[seq_len(min(k, length(pos)))]
-        sel <- ord[pos]
+  if (identical(method, "random")) {
+    sel <- sample.int(n, size = k, replace = FALSE)
+    out_ids <- ids[sel]
 
-        # nocov start
-        if (length(sel) < k) {
-          # top up deterministically from the middle-out if something weird happened
-          remaining <- setdiff(seq_len(n), sel)
-          topup <- remaining[seq_len(min(k - length(sel), length(remaining)))]
-          sel <- c(sel, topup)
-        }
-        # nocov end
+    return(tibble::tibble(
+      ID = out_ids,
+      method = method,
+      core_rank = seq_along(out_ids),
+      word_count = NA_integer_,
+      cluster = NA_integer_,
+      centroid_dist = NA_real_
+    ))
+  }
 
-        out_ids <- ids[sel]
-        out_wc <- wc[sel]
+  if (identical(method, "token_stratified")) {
+    wc <- .count_words(samples$text)
+    ord <- order(wc, ids)
 
-        return(tibble::tibble(
-          ID = out_ids,
-          method = method,
-          core_rank = seq_along(out_ids),
-          word_count = as.integer(out_wc),
-          cluster = NA_integer_,
-          centroid_dist = NA_real_
-        ))
+    pos <- unique(as.integer(round(seq.int(1L, n, length.out = k))))
+    pos <- pos[pos >= 1L & pos <= n]
+
+    # nocov start
+    if (length(pos) < k) {
+      remaining <- setdiff(seq_len(n), pos)
+      need <- k - length(pos)
+      if (need > 0L && length(remaining) > 0L) {
+        pos <- c(pos, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
       }
+    }
+    # nocov end
 
-      # embeddings
-      if (is.null(embeddings)) {
-        stop("`embeddings` must be provided when `method = 'embeddings'`.", call. = FALSE)
-      }
-      emb <- .align_embeddings(embeddings, ids)
+    pos <- pos[seq_len(min(k, length(pos)))]
+    sel <- ord[pos]
 
-      if (identical(distance, "cosine")) {
-        emb <- .l2_normalize_rows(emb)
-      }
+    # nocov start
+    if (length(sel) < k) {
+      # top up deterministically from the middle-out if something weird happened
+      remaining <- setdiff(seq_len(n), sel)
+      topup <- remaining[seq_len(min(k - length(sel), length(remaining)))]
+      sel <- c(sel, topup)
+    }
+    # nocov end
 
-      km <- tryCatch(
-        stats::kmeans(emb, centers = k, nstart = 10, iter.max = 50),
-        error = function(e) {
-          stop("k-means failed while selecting core items: ", conditionMessage(e), call. = FALSE)
-        }
-      )
+    out_ids <- ids[sel]
+    out_wc <- wc[sel]
 
-      centers <- km$centers
-      cl <- as.integer(km$cluster)
+    return(tibble::tibble(
+      ID = out_ids,
+      method = method,
+      core_rank = seq_along(out_ids),
+      word_count = as.integer(out_wc),
+      cluster = NA_integer_,
+      centroid_dist = NA_real_
+    ))
+  }
 
-      chosen <- integer(0)
-      chosen_cluster <- integer(0)
-      chosen_dist <- numeric(0)
+  # embeddings
+  if (is.null(embeddings)) {
+    stop("`embeddings` must be provided when `method = \"embeddings\"`.", call. = FALSE)
+  }
+  emb <- .align_embeddings(embeddings, ids)
 
-      for (j in seq_len(k)) {
-        idx <- which(cl == j)
-        # nocov start
-        if (length(idx) == 0L) next
-        # nocov end
+  if (identical(distance, "cosine")) {
+    emb <- .l2_normalize_rows(emb)
+  }
 
-        diffs <- emb[idx, , drop = FALSE] - matrix(centers[j, ], nrow = length(idx), ncol = ncol(emb), byrow = TRUE)
-        d2 <- rowSums(diffs * diffs)
-
-        w <- which.min(d2)
-        chosen <- c(chosen, idx[w])
-        chosen_cluster <- c(chosen_cluster, j)
-        chosen_dist <- c(chosen_dist, d2[w])
-      }
-
-      # Defensive: if any cluster was empty (rare), top up from remaining points
-      # nocov start
-      if (length(chosen) < k) {
-        remaining <- setdiff(seq_len(n), chosen)
-        need <- k - length(chosen)
-        if (need > 0L && length(remaining) > 0L) {
-          top <- remaining[seq_len(min(need, length(remaining)))]
-          chosen <- c(chosen, top)
-          chosen_cluster <- c(chosen_cluster, rep(NA_integer_, length(top)))
-          chosen_dist <- c(chosen_dist, rep(NA_real_, length(top)))
-        }
-      }
-      # nocov end
-
-      chosen <- chosen[seq_len(k)]
-      chosen_cluster <- chosen_cluster[seq_len(k)]
-      chosen_dist <- chosen_dist[seq_len(k)]
-
-      out_ids <- ids[chosen]
-
-      tibble::tibble(
-        ID = out_ids,
-        method = method,
-        core_rank = seq_along(out_ids),
-        word_count = NA_integer_,
-        cluster = chosen_cluster,
-        centroid_dist = as.numeric(chosen_dist)
-      )
-    },
-    arg_name = "seed"
+  km <- tryCatch(
+    stats::kmeans(emb, centers = k, nstart = 10, iter.max = 50),
+    error = function(e) {
+      stop("k-means failed while selecting core items: ", conditionMessage(e), call. = FALSE)
+    }
   )
 
-  out
-}
+  centers <- km$centers
+  cl <- as.integer(km$cluster)
 
+  chosen <- integer(0)
+  chosen_cluster <- integer(0)
+  chosen_dist <- numeric(0)
+
+  for (j in seq_len(k)) {
+    idx <- which(cl == j)
+    # nocov start
+    if (length(idx) == 0L) next
+    # nocov end
+
+    diffs <- emb[idx, , drop = FALSE] - matrix(centers[j, ], nrow = length(idx), ncol = ncol(emb), byrow = TRUE)
+    d2 <- rowSums(diffs * diffs)
+
+    w <- which.min(d2)
+    chosen <- c(chosen, idx[w])
+    chosen_cluster <- c(chosen_cluster, j)
+    chosen_dist <- c(chosen_dist, d2[w])
+  }
+
+  # Defensive: if any cluster was empty (rare), top up from remaining points
+  # nocov start
+  if (length(chosen) < k) {
+    remaining <- setdiff(seq_len(n), chosen)
+    need <- k - length(chosen)
+    if (need > 0L && length(remaining) > 0L) {
+      top <- remaining[seq_len(min(need, length(remaining)))]
+      chosen <- c(chosen, top)
+      chosen_cluster <- c(chosen_cluster, rep(NA_integer_, length(top)))
+      chosen_dist <- c(chosen_dist, rep(NA_real_, length(top)))
+    }
+  }
+  # nocov end
+
+  chosen <- chosen[seq_len(k)]
+  chosen_cluster <- chosen_cluster[seq_len(k)]
+  chosen_dist <- chosen_dist[seq_len(k)]
+
+  out_ids <- ids[chosen]
+
+  tibble::tibble(
+    ID = out_ids,
+    method = method,
+    core_rank = seq_along(out_ids),
+    word_count = NA_integer_,
+    cluster = chosen_cluster,
+    centroid_dist = as.numeric(chosen_dist)
+  )
+}
 
 .count_words <- function(x) {
   x <- as.character(x)

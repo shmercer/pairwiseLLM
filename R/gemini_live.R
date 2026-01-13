@@ -531,27 +531,27 @@ gemini_compare_pair_live <- function(
 #'
 #' @export
 submit_gemini_pairs_live <- function(
-  pairs,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
-  temperature = NULL,
-  top_p = NULL,
-  top_k = NULL,
-  max_output_tokens = NULL,
-  api_version = "v1beta",
-  verbose = TRUE,
-  status_every = 1L,
-  progress = TRUE,
-  include_raw = FALSE,
-  include_thoughts = FALSE,
-  save_path = NULL,
-  parallel = FALSE,
-  workers = 1,
-  ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    api_key = NULL,
+    thinking_level = c("low", "medium", "high"),
+    temperature = NULL,
+    top_p = NULL,
+    top_k = NULL,
+    max_output_tokens = NULL,
+    api_version = "v1beta",
+    verbose = TRUE,
+    status_every = 1L,
+    progress = TRUE,
+    include_raw = FALSE,
+    include_thoughts = FALSE,
+    save_path = NULL,
+    parallel = FALSE,
+    workers = 1,
+    ...
 ) {
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")

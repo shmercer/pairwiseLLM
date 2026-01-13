@@ -690,22 +690,22 @@ submit_llm_pairs <- function(
 #'
 #' @export
 submit_llm_pairs <- function(
-  pairs,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
-  api_key = NULL,
-  verbose = TRUE,
-  status_every = 1,
-  progress = TRUE,
-  include_raw = FALSE,
-  save_path = NULL,
-  parallel = FALSE,
-  workers = 1,
-  ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+    endpoint = c("chat.completions", "responses"),
+    api_key = NULL,
+    verbose = TRUE,
+    status_every = 1,
+    progress = TRUE,
+    include_raw = FALSE,
+    save_path = NULL,
+    parallel = FALSE,
+    workers = 1,
+    ...
 ) {
   backend <- match.arg(backend)
 

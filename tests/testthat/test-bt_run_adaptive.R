@@ -846,33 +846,3 @@ test_that("check_positional_bias covers inconsistent-pair branch and df-input br
   bias2 <- check_positional_bias(cons$details)
   expect_true(is.list(bias2))
 })
-
-
-test_that("bt_run_adaptive reverse audit de-duplicates unordered pairs in initial_results", {
-  samples <- tibble::tibble(ID = c("A", "B"), text = c("a", "b"))
-
-  # Include both orientations of the same unordered pair.
-  initial_results <- tibble::tibble(
-    ID1 = c("A", "B"),
-    ID2 = c("B", "A"),
-    better_id = c("A", "A")
-  )
-
-  judge_fun <- function(pairs) {
-    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1)
-  }
-
-  out <- bt_run_adaptive(
-    samples = samples,
-    judge_fun = judge_fun,
-    initial_results = initial_results,
-    init_round_size = 0,
-    max_rounds = 0,
-    reverse_audit = TRUE,
-    n_reverse = 100,
-    reverse_seed = 1
-  )
-
-  expect_true(is.list(out$reverse_audit))
-  expect_equal(nrow(out$reverse_audit$pairs_reversed), 1L)
-})

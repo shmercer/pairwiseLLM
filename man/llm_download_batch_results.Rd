@@ -28,17 +28,17 @@ forward-compatible with future, more asynchronous batch workflows.
 # Requires running a provider batch job first (API key + internet + cost).
 
 batch <- llm_submit_pairs_batch(
-  pairs = tibble::tibble(
+  pairs             = tibble::tibble(
     ID1   = "S01",
     text1 = "Text 1",
     ID2   = "S02",
     text2 = "Text 2"
   ),
-  backend = "openai",
-  model = "gpt-4.1",
-  trait_name = trait_description("overall_quality")$name,
+  backend           = "openai",
+  model             = "gpt-4.1",
+  trait_name        = trait_description("overall_quality")$name,
   trait_description = trait_description("overall_quality")$description,
-  prompt_template = set_prompt_template()
+  prompt_template   = set_prompt_template()
 )
 
 res <- llm_download_batch_results(batch)

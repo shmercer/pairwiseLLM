@@ -47,8 +47,8 @@
       )
 
       if (!is.na(status) &&
-        status %in% transient_status &&
-        attempt < max_attempts) {
+          status %in% transient_status &&
+          attempt < max_attempts) {
         delay <- base_delay * (2^(attempt - 1L))
         message(sprintf(
           "Transient HTTP %d from API (attempt %d of %d); retrying in %.1f seconds...",

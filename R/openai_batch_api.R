@@ -288,12 +288,12 @@ openai_download_batch_output <- function(
 #'
 #' @export
 openai_poll_batch_until_complete <- function(
-  batch_id,
-  interval_seconds = 5,
-  timeout_seconds = 600,
-  max_attempts = Inf,
-  api_key = NULL,
-  verbose = TRUE
+    batch_id,
+    interval_seconds = 5,
+    timeout_seconds = 600,
+    max_attempts = Inf,
+    api_key = NULL,
+    verbose = TRUE
 ) {
   start_time <- Sys.time()
   attempts <- 0L
@@ -449,23 +449,23 @@ openai_poll_batch_until_complete <- function(
 #'
 #' @export
 run_openai_batch_pipeline <- function(
-  pairs,
-  model,
-  trait_name,
-  trait_description,
-  prompt_template = set_prompt_template(),
-  include_thoughts = FALSE,
-  include_raw = FALSE,
-  endpoint = NULL,
-  batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
-  batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
-  poll = TRUE,
-  interval_seconds = 5,
-  timeout_seconds = 600,
-  max_attempts = Inf,
-  metadata = NULL,
-  api_key = NULL,
-  ...
+    pairs,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = set_prompt_template(),
+    include_thoughts = FALSE,
+    include_raw = FALSE,
+    endpoint = NULL,
+    batch_input_path = tempfile("openai_batch_input_", fileext = ".jsonl"),
+    batch_output_path = tempfile("openai_batch_output_", fileext = ".jsonl"),
+    poll = TRUE,
+    interval_seconds = 5,
+    timeout_seconds = 600,
+    max_attempts = Inf,
+    metadata = NULL,
+    api_key = NULL,
+    ...
 ) {
   # If endpoint not supplied, choose automatically based on include_thoughts
   if (is.null(endpoint)) {
@@ -475,8 +475,8 @@ run_openai_batch_pipeline <- function(
 
   # Endpoint for the Batch API expects the full path
   batch_api_endpoint <- switch(endpoint,
-    "chat.completions" = "/v1/chat/completions",
-    "responses"        = "/v1/responses"
+                               "chat.completions" = "/v1/chat/completions",
+                               "responses"        = "/v1/responses"
   )
 
   # 1) Build batch requests tibble
@@ -1075,8 +1075,8 @@ parse_openai_batch_output <- function(path,
       # that shape. If summary is a character scalar (e.g. "auto"/"detailed"),
       # treat it as configuration and ignore it for thoughts.
       if (!length(reasoning_chunks) &&
-        !is.null(body$reasoning) &&
-        !is.null(body$reasoning$summary)) {
+          !is.null(body$reasoning) &&
+          !is.null(body$reasoning$summary)) {
         rs <- body$reasoning$summary
 
         if (is.list(rs) && !is.null(rs$text)) {
@@ -1103,11 +1103,11 @@ parse_openai_batch_output <- function(path,
     better_sample <- NA_character_
     if (!is.na(content)) {
       if (grepl(paste0(tag_prefix, "SAMPLE_1", tag_suffix), content,
-        fixed = TRUE
+                fixed = TRUE
       )) {
         better_sample <- "SAMPLE_1"
       } else if (grepl(paste0(tag_prefix, "SAMPLE_2", tag_suffix), content,
-        fixed = TRUE
+                       fixed = TRUE
       )) {
         better_sample <- "SAMPLE_2"
       }

@@ -198,68 +198,83 @@ estimate_llm_pairs_cost <- function(
     text2      = as.character(pairs$text2)
   )
 
-
   # ------------------------------------------------------------------
   # Select pilot indices
   # ------------------------------------------------------------------
-  test_idx <- if (n_test == 0L) {
-    integer(0)
-  } else if (test_strategy == "first") {
-    seq_len(n_test)
-  } else {
-    .with_seed_restore(
-      seed,
-      f = function() {
-        if (test_strategy == "random") {
-          sort(sample.int(n_total, size = n_test, replace = FALSE))
-        } else {
-          # stratified_prompt_bytes
-          if (n_total == 1L) {
-            1L
-          } else {
-            probs <- seq(0, 1, length.out = 6L)
-            qs <- stats::quantile(prompt_bytes_all, probs = probs, na.rm = TRUE, type = 7)
-            # Make breaks strictly increasing (defensive)
-            brks <- unique(as.numeric(qs))
-            if (length(brks) < 2L) {
-              sort(sample.int(n_total, size = n_test, replace = FALSE))
-            } else {
-              # Ensure the last break captures max
-              brks[length(brks)] <- max(prompt_bytes_all, na.rm = TRUE) + 1
-              strata <- cut(prompt_bytes_all, breaks = brks, include.lowest = TRUE, right = FALSE)
-              by_stratum <- split(seq_len(n_total), strata)
+  if (!is.null(seed) && test_strategy != "first") {
+    seed <- as.integer(seed)
+    if (length(seed) != 1L || is.na(seed)) {
+      stop("`seed` must be a single integer.", call. = FALSE)
+    }
 
-              # Allocate approximately evenly across strata
-              k <- length(by_stratum)
-              base <- n_test %/% k
-              rem <- n_test %% k
-              alloc <- rep(base, k)
-              if (rem > 0) alloc[seq_len(rem)] <- alloc[seq_len(rem)] + 1L
+    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    old_seed <- NULL
+    if (had_seed) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
 
-              idx <- integer(0)
-              for (j in seq_along(by_stratum)) {
-                pool <- by_stratum[[j]]
-                if (length(pool) == 0L || alloc[j] == 0L) next
-                take <- min(length(pool), alloc[j])
-                idx <- c(idx, sample(pool, size = take, replace = FALSE))
-              }
-
-              # If we didn't get enough (tiny strata), top up randomly from remaining
-              idx <- unique(idx)
-              if (length(idx) < n_test) {
-                remaining <- setdiff(seq_len(n_total), idx)
-                need <- n_test - length(idx)
-                if (need > 0 && length(remaining) > 0) {
-                  idx <- c(idx, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
-                }
-              }
-              sort(idx)
-            }
-          }
+    on.exit(
+      {
+        if (had_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
         }
       },
-      arg_name = "seed"
+      add = TRUE
     )
+
+    set.seed(seed)
+  }
+
+  if (n_test == 0L) {
+    test_idx <- integer(0)
+  } else if (test_strategy == "first") {
+    test_idx <- seq_len(n_test)
+  } else if (test_strategy == "random") {
+    test_idx <- sort(sample.int(n_total, size = n_test, replace = FALSE))
+  } else {
+    # stratified_prompt_bytes
+    if (n_total == 1L) {
+      test_idx <- 1L
+    } else {
+      probs <- seq(0, 1, length.out = 6L)
+      qs <- stats::quantile(prompt_bytes_all, probs = probs, na.rm = TRUE, type = 7)
+      # Make breaks strictly increasing (defensive)
+      brks <- unique(as.numeric(qs))
+      if (length(brks) < 2L) {
+        test_idx <- sort(sample.int(n_total, size = n_test, replace = FALSE))
+      } else {
+        # Ensure the last break captures max
+        brks[length(brks)] <- max(prompt_bytes_all, na.rm = TRUE) + 1
+        strata <- cut(prompt_bytes_all, breaks = brks, include.lowest = TRUE, right = FALSE)
+        by_stratum <- split(seq_len(n_total), strata)
+
+        # Allocate approximately evenly across strata
+        k <- length(by_stratum)
+        base <- n_test %/% k
+        rem <- n_test %% k
+        alloc <- rep(base, k)
+        if (rem > 0) alloc[seq_len(rem)] <- alloc[seq_len(rem)] + 1L
+
+        idx <- integer(0)
+        for (j in seq_along(by_stratum)) {
+          pool <- by_stratum[[j]]
+          if (length(pool) == 0L || alloc[j] == 0L) next
+          take <- min(length(pool), alloc[j])
+          idx <- c(idx, sample(pool, size = take, replace = FALSE))
+        }
+
+        # If we didn't get enough (tiny strata), top up randomly from remaining
+        idx <- unique(idx)
+        if (length(idx) < n_test) {
+          remaining <- setdiff(seq_len(n_total), idx)
+          need <- n_test - length(idx)
+          if (need > 0 && length(remaining) > 0) {
+            idx <- c(idx, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
+          }
+        }
+        test_idx <- sort(idx)
+      }
+    }
   }
 
   test_pairs <- pairs[test_idx, , drop = FALSE]

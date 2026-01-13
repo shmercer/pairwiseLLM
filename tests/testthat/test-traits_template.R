@@ -423,8 +423,8 @@ test_that("build_prompt validation errors", {
   valid_tmpl <- "N: {TRAIT_NAME} D: {TRAIT_DESCRIPTION} S1: {SAMPLE_1} S2: {SAMPLE_2}"
   valid_name <- "Trait"
   valid_desc <- "Desc"
-  valid_t1 <- "Text1"
-  valid_t2 <- "Text2"
+  valid_t1   <- "Text1"
+  valid_t2   <- "Text2"
 
   # template: must be single character string
   expect_error(

@@ -366,18 +366,15 @@ check_positional_bias <- function(consistency,
   prop_consistent <- mean(details$is_consistent)
 
   # Bootstrap CI
-  boot_props <- .with_seed_restore(
-    seed,
-    f = function() {
-      boot_props <- numeric(n_boot)
-      for (b in seq_len(n_boot)) {
-        idx <- sample.int(n_pairs, size = n_pairs, replace = TRUE)
-        boot_props[b] <- mean(details$is_consistent[idx])
-      }
-      boot_props
-    },
-    arg_name = "seed"
-  )
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+
+  boot_props <- numeric(n_boot)
+  for (b in seq_len(n_boot)) {
+    idx <- sample.int(n_pairs, size = n_pairs, replace = TRUE)
+    boot_props[b] <- mean(details$is_consistent[idx])
+  }
 
   alpha <- 1 - conf_level
   boot_lwr <- stats::quantile(boot_props, probs = alpha / 2)
