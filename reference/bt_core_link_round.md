@@ -8,7 +8,7 @@ that uses `fit$theta` from a model fitted by
 ## Usage
 
 ``` r
-bt_core_link_round(samples, fit, core_ids, include_text = FALSE, ...)
+bt_core_link_round(samples, fit, core_ids, ...)
 ```
 
 ## Arguments
@@ -27,14 +27,10 @@ bt_core_link_round(samples, fit, core_ids, include_text = FALSE, ...)
 
   Character vector of core IDs.
 
-- include_text:
-
-  If TRUE, attach `text1`/`text2` columns by joining against `samples`.
-
 - ...:
 
   Passed through to
-  [`select_core_link_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/select_core_link_pairs.md)
+  [`select_core_link_pairs`](https://shmercer.github.io/pairwiseLLM/reference/select_core_link_pairs.md)
   (e.g., `existing_pairs`, `round_size`, `seed`, etc.).
 
 ## Value
@@ -43,8 +39,7 @@ A list with:
 
 - pairs:
 
-  Tibble of proposed pairs (ID1, ID2, pair_type; plus text columns if
-  requested).
+  Tibble of proposed pairs (ID1, ID2, pair_type).
 
 - plan:
 
@@ -66,10 +61,10 @@ head(out$pairs)
 #> # A tibble: 6 × 3
 #>   ID1   ID2   pair_type
 #>   <chr> <chr> <chr>    
-#> 1 S4    S6    new_new  
-#> 2 S2    S7    core_new 
-#> 3 S8    S2    core_new 
-#> 4 S5    S2    core_new 
-#> 5 S3    S4    core_new 
-#> 6 S7    S1    core_new 
+#> 1 S6    S8    new_new  
+#> 2 S1    S5    core_new 
+#> 3 S4    S1    core_new 
+#> 4 S7    S1    core_new 
+#> 5 S3    S6    core_new 
+#> 6 S5    S2    core_new 
 ```

@@ -70,14 +70,13 @@ differences in quality:
 ``` r
 data("example_writing_samples", package = "pairwiseLLM")
 dplyr::slice_head(example_writing_samples, n = 3)
+#> # A tibble: 3 × 3
+#>   ID    text                                                       quality_score
+#>   <chr> <chr>                                                              <int>
+#> 1 S01   "Writing assessment is hard. People write different thing…             1
+#> 2 S02   "It is hard to grade writing. Some are long and some are …             2
+#> 3 S03   "Assessing writing is difficult because everyone writes d…             3
 ```
-
-    ## # A tibble: 3 × 3
-    ##   ID    text                                                       quality_score
-    ##   <chr> <chr>                                                              <int>
-    ## 1 S01   "Writing assessment is hard. People write different thing…             1
-    ## 2 S02   "It is hard to grade writing. Some are long and some are …             2
-    ## 3 S03   "Assessing writing is difficult because everyone writes d…             3
 
 Each sample has:
 
@@ -95,16 +94,15 @@ pairs <- example_writing_samples |>
   make_pairs()
 
 dplyr::slice_head(pairs, n = 5)
+#> # A tibble: 5 × 4
+#>   ID1   text1                                                        ID2   text2
+#>   <chr> <chr>                                                        <chr> <chr>
+#> 1 S01   "Writing assessment is hard. People write different things.… S02   "It …
+#> 2 S01   "Writing assessment is hard. People write different things.… S03   "Ass…
+#> 3 S01   "Writing assessment is hard. People write different things.… S04   "Gra…
+#> 4 S01   "Writing assessment is hard. People write different things.… S05   "Wri…
+#> 5 S01   "Writing assessment is hard. People write different things.… S06   "It …
 ```
-
-    ## # A tibble: 5 × 4
-    ##   ID1   text1                                                        ID2   text2
-    ##   <chr> <chr>                                                        <chr> <chr>
-    ## 1 S01   "Writing assessment is hard. People write different things.… S02   "It …
-    ## 2 S01   "Writing assessment is hard. People write different things.… S03   "Ass…
-    ## 3 S01   "Writing assessment is hard. People write different things.… S04   "Gra…
-    ## 4 S01   "Writing assessment is hard. People write different things.… S05   "Wri…
-    ## 5 S01   "Writing assessment is hard. People write different things.… S06   "It …
 
 Sample a subset of pairs:
 
@@ -127,13 +125,12 @@ pairs_small <- randomize_pair_order(pairs_small, seed = 99)
 ``` r
 td <- trait_description("overall_quality")
 td
+#> $name
+#> [1] "Overall Quality"
+#> 
+#> $description
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
 ```
-
-    ## $name
-    ## [1] "Overall Quality"
-    ## 
-    ## $description
-    ## [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
 
 Or define your own:
 
@@ -151,24 +148,23 @@ Load default prompt:
 ``` r
 tmpl <- set_prompt_template()
 cat(substr(tmpl, 1, 300))
+#> You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
+#> 
+#> TRAIT: {TRAIT_NAME}
+#> DEFINITION: {TRAIT_DESCRIPTION}
+#> 
+#> SAMPLES:
+#> 
+#> === SAMPLE_1 ===
+#> {SAMPLE_1}
+#> 
+#> === SAMPLE_2 ===
+#> {SAMPLE_2}
+#> 
+#> EVALUATION PROCESS (Mental Simulation):
+#> 
+#> 1.  **Ad
 ```
-
-    ## You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
-    ## 
-    ## TRAIT: {TRAIT_NAME}
-    ## DEFINITION: {TRAIT_DESCRIPTION}
-    ## 
-    ## SAMPLES:
-    ## 
-    ## === SAMPLE_1 ===
-    ## {SAMPLE_1}
-    ## 
-    ## === SAMPLE_2 ===
-    ## {SAMPLE_2}
-    ## 
-    ## EVALUATION PROCESS (Mental Simulation):
-    ## 
-    ## 1.  **Ad
 
 Placeholders required in custom prompt templates:
 
@@ -197,9 +193,18 @@ and `$failed_pairs` (errors).
 
 ``` r
 # Example using parallel processing and incremental saving
-
-
-# also "anthropic", "gemini", "together"
+res_list <- submit_llm_pairs(
+  pairs             = pairs_small,
+  backend           = "openai", # also "anthropic", "gemini", "together"
+  model             = "gpt-4o",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  # New features:
+  parallel          = TRUE,
+  workers           = 4,
+  save_path         = "live_results.csv"
+)
 ```
 
 Preview results:
@@ -319,11 +324,13 @@ pairs_small <- example_writing_samples |>
   sample_pairs(n_pairs = 10, seed = 4321) |>
   randomize_pair_order(seed = 8765)
 
-td <- trait_description("overall_quality")
+td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 # Split into two batches and include reasoning/chain-of-thought
 multi_job <- llm_submit_pairs_multi_batch(
+  pairs             = pairs_small,
+  backend           = "openai",
   model             = "gpt-5.1",
   trait_name        = td$name,
   trait_description = td$description,
@@ -370,21 +377,21 @@ pairs_big <- example_writing_samples |>
   sample_pairs(n_pairs = 200, seed = 123) |>
   randomize_pair_order(seed = 456)
 
-td <- trait_description("overall_quality")
+td   <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
 est <- estimate_llm_pairs_cost(
   pairs = pairs_big,
-  backend = "anthropic", # "openai", "anthropic", "gemini", "together"
+  backend = "anthropic",                # "openai", "anthropic", "gemini", "together"
   model = "claude-sonnet-4-5",
   trait_name = td$name,
   trait_description = td$description,
   prompt_template = tmpl,
   mode = "batch",
-  batch_discount = 0.5, # set to 1 for no discount
-  n_test = 10, # paid pilot calls (live)
-  budget_quantile = 0.9, # p90 output tokens
-  cost_per_million_input = 3.0, # fill in your provider pricing
+  batch_discount = 0.5,                 # set to 1 for no discount
+  n_test = 10,                          # paid pilot calls (live)
+  budget_quantile = 0.9,                # p90 output tokens
+  cost_per_million_input = 3.0,         # fill in your provider pricing
   cost_per_million_output = 15.0
 )
 
@@ -403,13 +410,12 @@ remaining_pairs <- est$remaining_pairs
 # Example: submit only the remaining pairs as a batch
 
 batch <- llm_submit_pairs_batch(
-  backend = "anthropic",
-  model = "claude-sonnet-4-5",
-  pairs = remaining_pairs,
-  trait_name = td$name,
-  trait_description = td$description,
-  prompt_template = tmpl
-)
+          backend = "anthropic",
+          model = "claude-sonnet-4-5",
+          pairs = remaining_pairs,
+          trait_name = td$name,
+          trait_description = td$description,
+          prompt_template = tmpl)
 
 results <- llm_download_batch_results(batch)
 ```
@@ -467,27 +473,25 @@ Most users use the unified interface, but backend helpers are available.
 
 ``` r
 check_llm_api_keys()
+#> No LLM API keys are currently set for known backends:
+#>   - OpenAI:         OPENAI_API_KEY
+#>   - Anthropic:      ANTHROPIC_API_KEY
+#>   - Google Gemini:  GEMINI_API_KEY
+#>   - Together.ai:    TOGETHER_API_KEY
+#> 
+#> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
+#>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
+#>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
+#>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
+#>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
+#> # A tibble: 4 × 4
+#>   backend   service       env_var           has_key
+#>   <chr>     <chr>         <chr>             <lgl>  
+#> 1 openai    OpenAI        OPENAI_API_KEY    FALSE  
+#> 2 anthropic Anthropic     ANTHROPIC_API_KEY FALSE  
+#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE  
+#> 4 together  Together.ai   TOGETHER_API_KEY  FALSE
 ```
-
-    ## No LLM API keys are currently set for known backends:
-    ##   - OpenAI:         OPENAI_API_KEY
-    ##   - Anthropic:      ANTHROPIC_API_KEY
-    ##   - Google Gemini:  GEMINI_API_KEY
-    ##   - Together.ai:    TOGETHER_API_KEY
-    ## 
-    ## Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
-    ##   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
-    ##   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
-    ##   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
-    ##   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
-
-    ## # A tibble: 4 × 4
-    ##   backend   service       env_var           has_key
-    ##   <chr>     <chr>         <chr>             <lgl>  
-    ## 1 openai    OpenAI        OPENAI_API_KEY    FALSE  
-    ## 2 anthropic Anthropic     ANTHROPIC_API_KEY FALSE  
-    ## 3 gemini    Google Gemini GEMINI_API_KEY    FALSE  
-    ## 4 together  Together.ai   TOGETHER_API_KEY  FALSE
 
 #### Timeouts
 
