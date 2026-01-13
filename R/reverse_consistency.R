@@ -46,7 +46,7 @@
 #' main <- tibble::tibble(
 #'   ID1       = c("A", "A", "X"),
 #'   ID2       = c("B", "B", "Y"),
-#'   better_id = c("A", "B", "X") # duplicate A-B with disagreement
+#'   better_id = c("A", "B", "X")  # duplicate A-B with disagreement
 #' )
 #' rev <- tibble::tibble(
 #'   ID1       = c("B"),
@@ -62,25 +62,6 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
   ID2 <- NULL
   better_id <- NULL
   key <- NULL
-  .tmp <- NULL
-
-  ID1_main <- NULL
-  ID2_main <- NULL
-  better_id_main <- NULL
-  n_main_votes <- NULL
-  n_main_A <- NULL
-  n_main_B <- NULL
-  is_main_tie <- NULL
-
-  ID1_rev <- NULL
-  ID2_rev <- NULL
-  better_id_rev <- NULL
-  n_rev_votes <- NULL
-  n_rev_A <- NULL
-  n_rev_B <- NULL
-  is_rev_tie <- NULL
-
-  is_consistent <- NULL
 
   main_results <- tibble::as_tibble(main_results)
   reverse_results <- tibble::as_tibble(reverse_results)
@@ -106,15 +87,11 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
   majority_vote <- function(x) {
     x <- as.character(x)
     x <- x[!is.na(x)]
-    if (length(x) == 0L) {
-      return(NA_character_)
-    }
+    if (length(x) == 0L) return(NA_character_)
     tab <- table(x)
     mx <- max(tab)
     winners <- names(tab)[tab == mx]
-    if (length(winners) != 1L) {
-      return(NA_character_)
-    }
+    if (length(winners) != 1L) return(NA_character_)
     winners[[1]]
   }
 
