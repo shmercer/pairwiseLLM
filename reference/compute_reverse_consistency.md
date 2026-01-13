@@ -63,7 +63,7 @@ which keeps it compatible with
 main <- tibble::tibble(
   ID1       = c("A", "A", "X"),
   ID2       = c("B", "B", "Y"),
-  better_id = c("A", "B", "X") # duplicate A-B with disagreement
+  better_id = c("A", "B", "X")  # duplicate A-B with disagreement
 )
 rev <- tibble::tibble(
   ID1       = c("B"),

@@ -21,7 +21,7 @@ estimate_llm_pairs_cost(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "together"),
   endpoint = c("chat.completions", "responses"),
   mode = c("live", "batch"),
   n_test = 25,
@@ -68,8 +68,7 @@ estimate_llm_pairs_cost(
 - backend:
 
   Backend for the pilot run; one of `"openai"`, `"anthropic"`,
-  `"gemini"`, or `"together"`. `"ollama"` can be specified, but is not
-  supported for cost estimation.
+  `"gemini"`, or `"together"`.
 
 - endpoint:
 

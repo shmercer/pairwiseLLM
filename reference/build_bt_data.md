@@ -8,7 +8,7 @@ result (1 for a win of the first object, 0 for a win of the second).
 ## Usage
 
 ``` r
-build_bt_data(results, judge = NULL)
+build_bt_data(results)
 ```
 
 ## Arguments
@@ -17,16 +17,9 @@ build_bt_data(results, judge = NULL)
 
   A data frame or tibble with columns `ID1`, `ID2`, and `better_id`.
 
-- judge:
-
-  Optional character scalar. The name of a column in `results`
-  identifying the judge (e.g., `"model"` or `"backend"`). If supplied,
-  the returned tibble includes a `judge` column and drops rows where
-  `judge` is missing.
-
 ## Value
 
-A tibble with:
+A tibble with three columns:
 
 - `object1`: ID from `ID1`
 
@@ -35,10 +28,7 @@ A tibble with:
 - `result`: numeric value, 1 if `better_id == ID1`, 0 if
   `better_id == ID2`
 
-- `judge`: (optional) judge identifier when `judge` is supplied
-
-Rows with invalid or missing `better_id` are dropped. If `judge` is
-supplied, rows with missing `judge` are also dropped.
+Rows with invalid or missing `better_id` are dropped.
 
 ## Details
 
@@ -46,10 +36,6 @@ It assumes that the input contains columns `ID1`, `ID2`, and
 `better_id`, where `better_id` is the ID of the better sample. Rows
 where `better_id` does not match either `ID1` or `ID2` (including `NA`)
 are excluded.
-
-Optionally, you can include a “judge” identifier (e.g., model/backend)
-by supplying `judge`. When provided, the output includes a 4th column
-named `judge` (character). Rows with missing `judge` are excluded.
 
 ## Examples
 
@@ -68,17 +54,6 @@ bt_data
 #> 1 S1      S2           1
 #> 2 S1      S3           0
 #> 3 S2      S3           1
-
-# Include judge/model information
-results_j <- dplyr::mutate(results, model = c("mA", "mB", "mA"))
-bt_j <- build_bt_data(results_j, judge = "model")
-bt_j
-#> # A tibble: 3 × 4
-#>   object1 object2 result judge
-#>   <chr>   <chr>    <dbl> <chr>
-#> 1 S1      S2           1 mA   
-#> 2 S1      S3           0 mB   
-#> 3 S2      S3           1 mA   
 
 # Using the example writing pairs
 data("example_writing_pairs")
