@@ -1326,15 +1326,12 @@ testthat::test_that("submit_openai_pairs_live: Resume Verbose Message", {
 
   # Run with verbose = TRUE to trigger the messages
   # We do not mock the API here because the function should skip the pair before calling the API
-  out <- capture.output(
-    {
-      res <- submit_openai_pairs_live(
-        pairs, "model", td$name, td$description,
-        save_path = tmp, verbose = TRUE
-      )
-    },
-    type = "message"
-  )
+  out <- capture.output({
+    res <- submit_openai_pairs_live(
+      pairs, "model", td$name, td$description,
+      save_path = tmp, verbose = TRUE
+    )
+  }, type = "message")
 
   testthat::expect_true(any(grepl("Found existing file", out)))
   testthat::expect_true(any(grepl("Skipping 1 pairs already present", out)))
