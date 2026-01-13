@@ -348,7 +348,7 @@ openai_compare_pair_live <- function(
     path <- "/responses"
   }
 
-  # ✅ Resolve key only at the last responsible moment (right before HTTP)
+  # Resolve key only at the last responsible moment (right before HTTP)
   api_key <- .openai_api_key(api_key)
 
   req <- .openai_request(path, api_key)

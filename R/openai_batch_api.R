@@ -99,11 +99,12 @@ NULL
     }
   }
 
-  out <- req_body_json(req, body)
-  # See `.openai_request()` for rationale.
-  if (!is.list(out)) {
-    out <- list(url = NA_character_)
-  }
+  out <- httr2::req_body_json(req, body)
+
+  # IMPORTANT: guarantee this is a POST, even if req_body_json doesn't flip it
+  out <- httr2::req_method(out, "POST")
+
+  if (!is.list(out)) out <- list(url = NA_character_)
   class(out) <- unique(c("httr2_request", class(out)))
   out
 }
