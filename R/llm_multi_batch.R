@@ -523,6 +523,18 @@ llm_resume_multi_batches <- function(
         )
       }
 
+      coerce_pairs_tbl <- function(x) {
+        x <- tibble::as_tibble(x)
+        if (!all(c("ID1", "ID2") %in% names(x))) {
+          if (all(c("A_id", "B_id") %in% names(x))) {
+            x <- dplyr::rename(x, ID1 = A_id, ID2 = B_id)
+          } else if (all(c("A", "B") %in% names(x))) {
+            x <- dplyr::rename(x, ID1 = A, ID2 = B)
+          }
+        }
+        x
+      }
+
       # Optional progress message before polling a job
       if (isTRUE(verbose)) {
         message(sprintf(
@@ -597,7 +609,7 @@ llm_resume_multi_batches <- function(
               }
               if (success) {
                 res <- parse_openai_batch_output(job$batch_output_path)
-                pairs_tbl <- resolve_pairs(job)
+                pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
                 normalized <- .normalize_llm_results(
                   raw = res,
                   pairs = pairs_tbl,
@@ -649,7 +661,7 @@ llm_resume_multi_batches <- function(
               tag_prefix  = tag_prefix,
               tag_suffix  = tag_suffix
             )
-            pairs_tbl <- resolve_pairs(job)
+            pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
             normalized <- .normalize_llm_results(
               raw = res,
               pairs = pairs_tbl,
@@ -739,7 +751,7 @@ llm_resume_multi_batches <- function(
                 results_path = job$batch_output_path,
                 requests_tbl = req_tbl
               )
-              pairs_tbl <- resolve_pairs(job)
+              pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
               normalized <- .normalize_llm_results(
                 raw = res,
                 pairs = pairs_tbl,
