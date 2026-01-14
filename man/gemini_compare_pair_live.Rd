@@ -22,6 +22,7 @@ gemini_compare_pair_live(
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
+  pair_uid = NULL,
   ...
 )
 }
@@ -83,7 +84,7 @@ first text part as \code{thoughts}, with subsequent parts collapsed into
 \value{
 A tibble with one row and columns:
 \itemize{
-\item \code{custom_id} - \code{"LIVE_<ID1>_vs_<ID2>"}.
+\item \code{custom_id} - stable ID for the pair (\code{pair_uid} if supplied).
 \item \code{ID1}, \code{ID2} - provided sample IDs.
 \item \code{model} - model name returned by the API (or the requested model).
 \item \code{object_type} - \code{"generateContent"} on success, otherwise \code{NA}.
