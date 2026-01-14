@@ -474,7 +474,7 @@ submit_openai_pairs_live <- function(
 
         # We assume custom_id is constructed as LIVE_<ID1>_vs_<ID2>
         existing_ids <- existing_results$custom_id
-        current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+        current_ids <- .pairwiseLLM_make_custom_id(pairs$ID1, pairs$ID2, if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL)
 
         # Identify new pairs
         to_process_idx <- !current_ids %in% existing_ids
