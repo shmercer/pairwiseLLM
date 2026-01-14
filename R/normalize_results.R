@@ -208,11 +208,23 @@
       extra_attempts_tbl <- dups |>
         dplyr::transmute(
           custom_id = .data$custom_id,
-          ordered_key = .data$ordered_key,
-          ordered_occurrence_index = .data$ordered_occurrence_index,
+          ordered_key = if (all(c("ID1", "ID2") %in% names(dups))) {
+            paste(.data$ID1, .data$ID2, sep = ":")
+          } else {
+            NA_character_
+          },
+          ordered_occurrence_index = if ("ordered_occurrence_index" %in% names(dups)) {
+            as.integer(.data$ordered_occurrence_index)
+          } else {
+            NA_integer_
+          },
           error_code = "http_error",
           error_detail = "Duplicate result row for custom_id; treated as non-observed attempt",
-          attempted_at = timestamp,
+          attempted_at = if ("attempted_at" %in% names(dups)) {
+            .as_posixct_safe(.data$attempted_at)
+          } else {
+            timestamp
+          },
           status_code = if ("status_code" %in% names(dups)) as.integer(.data$status_code) else NA_integer_,
           error_message = if ("error_message" %in% names(dups)) as.character(.data$error_message) else NA_character_,
           prompt_tokens = if ("prompt_tokens" %in% names(dups)) as.numeric(.data$prompt_tokens) else NA_real_,
@@ -272,7 +284,11 @@
           ordered_occurrence_index = .data$ordered_occurrence_index,
           error_code = "http_error",
           error_detail = "Duplicate result row for ordered pair; treated as non-observed attempt",
-          attempted_at = timestamp,
+          attempted_at = if ("attempted_at" %in% names(dups)) {
+            .as_posixct_safe(.data$attempted_at)
+          } else {
+            timestamp
+          },
           status_code = if ("status_code" %in% names(dups)) as.integer(.data$status_code) else NA_integer_,
           error_message = if ("error_message" %in% names(dups)) as.character(.data$error_message) else NA_character_,
           prompt_tokens = if ("prompt_tokens" %in% names(dups)) as.numeric(.data$prompt_tokens) else NA_real_,
