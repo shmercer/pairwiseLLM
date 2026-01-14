@@ -780,7 +780,13 @@ submit_anthropic_pairs_live <- function(
       {
         existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
 
-        existing_ids <- existing_results$custom_id
+        existing_ids <- if ("custom_id" %in% names(existing_results)) {
+          existing_results$custom_id
+        } else if ("pair_uid" %in% names(existing_results)) {
+          existing_results$pair_uid
+        } else {
+          character(0)
+        }
         current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
 
         to_process_idx <- !current_ids %in% existing_ids

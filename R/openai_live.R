@@ -473,7 +473,13 @@ submit_openai_pairs_live <- function(
         existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
 
         # We assume custom_id is constructed as LIVE_<ID1>_vs_<ID2>
-        existing_ids <- existing_results$custom_id
+        existing_ids <- if ("custom_id" %in% names(existing_results)) {
+          existing_results$custom_id
+        } else if ("pair_uid" %in% names(existing_results)) {
+          existing_results$pair_uid
+        } else {
+          character(0)
+        }
         current_ids <- .pairwiseLLM_make_custom_id(pairs$ID1, pairs$ID2, if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL)
 
         # Identify new pairs
