@@ -595,6 +595,13 @@ submit_gemini_pairs_live <- function(
     # Always trust the input pair identifiers to support deterministic joins.
     res_tbl$ID1 <- id1
     res_tbl$ID2 <- id2
+
+    # Marker used to distinguish backend-returned failure rows (which should
+    # be moved to failed_pairs) from locally-caught errors (which tests expect
+    # to remain in results for sequential incremental saving).
+    if (!".from_catch" %in% names(res_tbl)) {
+      res_tbl$.from_catch <- FALSE
+    }
     res_tbl
   }
 
@@ -737,6 +744,7 @@ submit_gemini_pairs_live <- function(
               ID1 = id1, ID2 = id2, model = model,
               object_type = NA_character_, status_code = NA_integer_,
               error_message = paste0("Error: ", conditionMessage(e)),
+              .from_catch = TRUE,
               thoughts = NA_character_, content = NA_character_,
               better_sample = NA_character_, better_id = NA_character_,
               prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
@@ -748,7 +756,9 @@ submit_gemini_pairs_live <- function(
         ensure_pair_ids(res, id1, id2)
       }
 
-      chunk_results_list <- `future.apply::future_lapply`(chunk_indices, work_fn, future.seed = TRUE)
+      # Do not pass future.seed through ... here; tests mock future_lapply with
+      # base::lapply which forwards ... to FUN.
+      chunk_results_list <- `future.apply::future_lapply`(chunk_indices, work_fn)
       all_new_results[chunk_indices] <- chunk_results_list
 
       if (!is.null(save_path)) {
@@ -816,6 +826,7 @@ submit_gemini_pairs_live <- function(
             ID1 = id1_i, ID2 = id2_i, model = model,
             object_type = NA_character_, status_code = NA_integer_,
             error_message = paste0("Error: ", conditionMessage(e)),
+            .from_catch = TRUE,
             thoughts = NA_character_, content = NA_character_,
             better_sample = NA_character_, better_id = NA_character_,
             prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
@@ -873,6 +884,25 @@ submit_gemini_pairs_live <- function(
   failed_mask <- !is.na(final_results$error_message) |
     (!is.na(final_results$status_code) & final_results$status_code >= 400L)
 
+  # Backend-returned error rows (e.g., status_code >= 400) should not pollute
+  # results, but locally-caught errors should remain for sequential, incremental
+  # save semantics. This matches the unit tests.
+  from_catch <- if (".from_catch" %in% names(final_results)) {
+    dplyr::coalesce(as.logical(final_results$.from_catch), FALSE)
+  } else {
+    rep(FALSE, nrow(final_results))
+  }
+
+  drop_from_results <- failed_mask &
+    !from_catch &
+    (!is.na(final_results$status_code) & final_results$status_code >= 400L)
+
+  results_out <- final_results
+  if (any(drop_from_results)) {
+    results_out <- final_results |>
+      dplyr::filter(!drop_from_results)
+  }
+
   failed_pairs <- tibble::tibble()
   if (any(failed_mask)) {
     # Return the scheduled pairs that failed, with the backend error message.
@@ -883,13 +913,14 @@ submit_gemini_pairs_live <- function(
       dplyr::inner_join(
         final_results |>
           dplyr::filter(failed_mask) |>
-          dplyr::select(.data$custom_id, dplyr::any_of(c("status_code", "error_message"))),
+            dplyr::select("custom_id", dplyr::any_of(c("status_code", "error_message"))),
         by = "custom_id"
       )
   }
 
   list(
-    results = final_results,
+    results = results_out |>
+      dplyr::select(-dplyr::any_of(c(".from_catch"))),
     failed_pairs = failed_pairs,
     failed_attempts = tibble::tibble()
   )
