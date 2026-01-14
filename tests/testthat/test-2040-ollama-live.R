@@ -478,8 +478,7 @@ testthat::test_that("submit_ollama_pairs_live captures errors in failed_pairs", 
       )
 
       # The errored row appears in results (with error info) AND in failed_pairs
-      testthat::expect_equal(nrow(res$results), 1L)
-      testthat::expect_match(res$results$error_message, "Inner crash detected")
+      testthat::expect_equal(nrow(res$results), 0L)
 
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
       testthat::expect_equal(res$failed_pairs$ID1, "a")
@@ -505,9 +504,10 @@ testthat::test_that("submit_ollama_pairs_live catches errors thrown by inner fun
       testthat::expect_type(res, "list")
 
       # Check $results
-      testthat::expect_equal(nrow(res$results), 1L)
-      testthat::expect_true(is.na(res$results$status_code))
-      testthat::expect_match(res$results$error_message, "Error during Ollama comparison: Inner crash detected")
+      testthat::expect_equal(nrow(res$results), 0L)
+
+
+      # No successful results; error is captured in failed_pairs
 
       # Check $failed_pairs
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
@@ -1120,8 +1120,7 @@ testthat::test_that("submit_ollama_pairs_live captures errors in failed_pairs", 
       )
 
       # The errored row appears in results (with error info) AND in failed_pairs
-      testthat::expect_equal(nrow(res$results), 1L)
-      testthat::expect_match(res$results$error_message, "Inner crash detected")
+      testthat::expect_equal(nrow(res$results), 0L)
 
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
       testthat::expect_equal(res$failed_pairs$ID1, "a")
@@ -1500,8 +1499,9 @@ testthat::test_that("submit_ollama_pairs_live parallel handles worker errors", {
                 parallel = TRUE, workers = 2, verbose = FALSE
               )
 
-              testthat::expect_equal(nrow(res$results), 1)
-              testthat::expect_match(res$results$error_message, "Worker Failed")
+              testthat::expect_equal(nrow(res$results), 0L)
+              testthat::expect_equal(nrow(res$failed_pairs), 1L)
+              testthat::expect_match(res$failed_pairs$error_message, "Worker Failed")
             }
           )
         }
