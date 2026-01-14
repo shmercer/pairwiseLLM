@@ -4,6 +4,16 @@
 
 #' @keywords internal
 #' @noRd
+.pairwiseLLM_req_perform <- function(req) {
+  httr2::req_perform(req)
+}
+
+#' @keywords internal
+#' @noRd
+.pairwiseLLM_resp_status <- function(resp) {
+  httr2::resp_status(resp)
+}
+
 .retry_httr2_request <- function(req,
                                  max_attempts = 3L,
                                  base_delay = 0.5,
@@ -37,13 +47,13 @@
 
   while (TRUE) {
     resp_or_err <- tryCatch(
-      httr2::req_perform(req),
+      .pairwiseLLM_req_perform(req),
       error = function(e) e
     )
 
     # SUCCESS PATH
     if (!inherits(resp_or_err, "error")) {
-      status <- httr2::resp_status(resp_or_err)
+      status <- .pairwiseLLM_resp_status(resp_or_err)
 
       if (!(status %in% transient_status) || attempt >= max_attempts) {
         attr(resp_or_err, "retry_failures") <- dplyr::bind_rows(failures)
@@ -68,7 +78,7 @@
     if (inherits(err, "httr2_http")) {
       resp_err <- err$response
       status <- tryCatch(
-        httr2::resp_status(resp_err),
+        .pairwiseLLM_resp_status(resp_err),
         error = function(...) NA_integer_
       )
 
@@ -104,6 +114,18 @@
     }
 
     # Non-transient or exhausted attempts
+    if (inherits(err, "httr2_http")) {
+      resp_err <- err$response
+      status <- tryCatch(
+        .pairwiseLLM_resp_status(resp_err),
+        error = function(...) NA_integer_
+      )
+      if (!is.na(status) && !(status %in% transient_status)) {
+        # Do not wrap non-transient HTTP errors; preserve original class
+        stop(err)
+      }
+    }
+
     if (inherits(err, "httr2_timeout") || inherits(err, "curl_error_timeout")) {
       record_failure("timeout", conditionMessage(err))
     } else {
