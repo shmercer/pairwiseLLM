@@ -12,16 +12,18 @@
     include_raw = FALSE
 ) {
   pairs <- tibble::as_tibble(pairs)
-  required_cols <- c("ID1", "text1", "ID2", "text2")
-  missing_cols <- setdiff(required_cols, names(pairs))
-  if (length(missing_cols) > 0L) {
+  required_id_cols <- c("ID1", "ID2")
+  missing_id_cols <- setdiff(required_id_cols, names(pairs))
+  if (length(missing_id_cols) > 0L) {
     rlang::abort(paste0(
       "`pairs` must contain columns: ",
-      paste(required_cols, collapse = ", "),
+      paste(required_id_cols, collapse = ", "),
       ". Missing: ",
-      paste(missing_cols, collapse = ", ")
+      paste(missing_id_cols, collapse = ", ")
     ))
   }
+  if (!"text1" %in% names(pairs)) pairs$text1 <- NA_character_
+  if (!"text2" %in% names(pairs)) pairs$text2 <- NA_character_
 
   backend <- as.character(backend)
   model <- as.character(model)
@@ -126,7 +128,8 @@
       dplyr::mutate(custom_id = pair_uid_input)
   } else if (all(c("ID1", "ID2") %in% names(raw_tbl))) {
     join_mode <- "id"
-    if (anyDuplicated(raw_tbl[c("ID1", "ID2")]) > 0L) {
+    dup_key <- paste(raw_tbl$ID1, raw_tbl$ID2, sep = ":")
+    if (anyDuplicated(dup_key) > 0L) {
       rlang::abort("`raw` contains duplicate ID1/ID2 pairs; unable to align results.")
     }
     aligned <- dplyr::left_join(
@@ -169,6 +172,7 @@
   if (!"model" %in% names(aligned)) {
     aligned$model <- NA_character_
   }
+  aligned$model <- as.character(aligned$model)
   aligned$model <- ifelse(is.na(aligned$model), model, aligned$model)
 
   determine_error_code <- function(
@@ -362,18 +366,25 @@
   }
 
   results_tbl <- results_tbl |>
-    dplyr::mutate(
-      unordered_key = unordered_key,
-      ordered_key = ordered_key,
-      pair_uid = pair_uid,
-      A_id = A_id,
-      B_id = B_id,
-      winner_pos = winner_pos
-    ) |>
     dplyr::select(-any_of(c("pair_uid_input", "retry_failures")))
+
+  failed_pairs_tbl <- failed_tbl |>
+    dplyr::mutate(
+      error_code = as.character(error_code),
+      error_detail = as.character(error_detail)
+    ) |>
+    dplyr::select(
+      dplyr::any_of(c(
+        "ID1", "ID2", "A_id", "B_id", "unordered_key", "ordered_key",
+        "backend", "model", "status_code", "error_message",
+        "error_code", "error_detail", "attempted_at"
+      ))
+    ) |>
+    tibble::as_tibble()
 
   list(
     results = tibble::as_tibble(results_tbl),
+    failed_pairs = failed_pairs_tbl,
     failed_attempts = tibble::as_tibble(failed_attempts_tbl),
     alignment = join_mode
   )
