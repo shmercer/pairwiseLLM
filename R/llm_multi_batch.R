@@ -490,11 +490,11 @@ llm_resume_multi_batches <- function(
         if (!is.null(job_entry$pairs_path) && file.exists(job_entry$pairs_path)) {
           return(readRDS(job_entry$pairs_path))
         }
-        rlang::abort(
+        rlang::abort(paste0(
           "Missing pair data for segment ",
           job_entry$segment_index,
           "; unable to normalize results."
-        )
+        ))
       }
 
       coerce_pairs_tbl <- function(x) {
