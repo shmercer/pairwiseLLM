@@ -41,6 +41,21 @@
     pairs$text2 <- pairs$B_text
   }
 
+  # Accept common alternative column names for pair IDs (helps when resuming from saved jobs)
+  if (!all(c("ID1", "ID2") %in% names(pairs))) {
+    if (all(c("A_id", "B_id") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = A_id, ID2 = B_id)
+    } else if (all(c("id1", "id2") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = id1, ID2 = id2)
+    } else if (all(c("ID_1", "ID_2") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = ID_1, ID2 = ID_2)
+    } else if (all(c("left_id", "right_id") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = left_id, ID2 = right_id)
+    } else if (all(c("item1", "item2") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = item1, ID2 = item2)
+    }
+  }
+
   required_id_cols <- c("ID1", "ID2")
   missing_id_cols <- setdiff(required_id_cols, names(pairs))
   if (length(missing_id_cols) > 0L) {
@@ -243,8 +258,43 @@
     rlang::abort("Unable to align `raw` results with `pairs`.")
   }
 
+
+  # Repair column name collisions from joins (e.g., ID1.x/ID1.y, unordered_key.x/unordered_key.y)
+  # Prefer any unsuffixed column; otherwise fall back to .x then .y (or coalesce).
+  prefer_cols <- c(
+    "ID1", "ID2", "custom_id",
+    "unordered_key", "ordered_key",
+    "unordered_occurrence_index", "ordered_occurrence_index",
+    "pair_uid", "pair_uid_input"
+  )
+  for (nm in prefer_cols) {
+    xnm <- paste0(nm, ".x")
+    ynm <- paste0(nm, ".y")
+    if (!nm %in% names(aligned)) {
+      if (xnm %in% names(aligned)) {
+        aligned[[nm]] <- aligned[[xnm]]
+      } else if (ynm %in% names(aligned)) {
+        aligned[[nm]] <- aligned[[ynm]]
+      }
+    } else {
+      if (xnm %in% names(aligned)) aligned[[nm]] <- dplyr::coalesce(aligned[[nm]], aligned[[xnm]])
+      if (ynm %in% names(aligned)) aligned[[nm]] <- dplyr::coalesce(aligned[[nm]], aligned[[ynm]])
+    }
+  }
+  # Drop the suffixed variants to avoid downstream surprises.
+  drop_suffix <- c(".x", ".y")
+  aligned <- aligned |> dplyr::select(!dplyr::any_of(paste0(prefer_cols, drop_suffix[1])),
+                                     !dplyr::any_of(paste0(prefer_cols, drop_suffix[2])))
+
   if (any(is.na(aligned$.matched))) {
-    rlang::abort("`raw` results could not be fully aligned with `pairs`.")
+    missing_idx <- is.na(aligned$.matched)
+    if (!"status" %in% names(aligned)) aligned$status <- "success"
+    aligned$status[missing_idx] <- "missing_result"
+    if (!"error_message" %in% names(aligned)) aligned$error_message <- NA_character_
+    aligned$error_message[missing_idx] <- "missing raw result for pair"
+    if (!"status_code" %in% names(aligned)) aligned$status_code <- NA_integer_
+    if (!"winner" %in% names(aligned)) aligned$winner <- NA_character_
+    if (!"raw_response" %in% names(aligned)) aligned$raw_response <- NA
   }
   aligned$.matched <- NULL
 
