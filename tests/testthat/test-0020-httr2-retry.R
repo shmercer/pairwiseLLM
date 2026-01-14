@@ -49,3 +49,70 @@ test_that("retry helper retries timeouts and surfaces retry failures on abort", 
     }
   )
 })
+
+test_that("retry backoff retries transient errors and returns failures", {
+  call_count <- 0L
+  transient_err <- structure(
+    list(message = "HTTP 500"),
+    class = c("httr2_http_500", "error", "condition")
+  )
+
+  out <- .pairwiseLLM_retry_backoff(
+    fn = function() {
+      call_count <<- call_count + 1L
+      if (call_count < 3L) {
+        stop(transient_err)
+      }
+      "ok"
+    },
+    max_attempts = 3L,
+    base_delay = 0,
+    jitter = 0
+  )
+
+  expect_equal(out$result, "ok")
+  expect_equal(call_count, 3L)
+  expect_equal(nrow(out$retry_failures), 2L)
+})
+
+test_that("retry backoff marks exhausted transient errors", {
+  call_count <- 0L
+  transient_err <- structure(
+    list(message = "HTTP 500"),
+    class = c("httr2_http_500", "error", "condition")
+  )
+
+  err <- tryCatch(
+    .pairwiseLLM_retry_backoff(
+      fn = function() {
+        call_count <<- call_count + 1L
+        stop(transient_err)
+      },
+      max_attempts = 2L,
+      base_delay = 0,
+      jitter = 0
+    ),
+    error = function(e) e
+  )
+
+  expect_true(isTRUE(attr(err, "retry_exhausted")))
+  expect_equal(call_count, 2L)
+  failures <- attr(err, "retry_failures")
+  expect_equal(nrow(failures), 2L)
+})
+
+test_that("retry backoff aborts on non-transient errors", {
+  err <- tryCatch(
+    .pairwiseLLM_retry_backoff(
+      fn = function() stop("no retry"),
+      max_attempts = 3L,
+      base_delay = 0,
+      jitter = 0
+    ),
+    error = function(e) e
+  )
+
+  expect_false(isTRUE(attr(err, "retry_exhausted")))
+  failures <- attr(err, "retry_failures")
+  expect_equal(nrow(failures), 1L)
+})
