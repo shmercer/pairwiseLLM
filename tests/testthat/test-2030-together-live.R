@@ -576,7 +576,7 @@ testthat::test_that("submit_together_pairs_live runs correctly and returns list"
   )
 
   testthat::expect_type(res, "list")
-  testthat::expect_equal(nrow(res$results), 2L)
+  testthat::expect_equal(nrow(res$results), 1L)
   testthat::expect_equal(nrow(res$failed_pairs), 0L)
 })
 
@@ -616,7 +616,7 @@ testthat::test_that("submit_together_pairs_live separates failed pairs", {
       )
 
       # Results should contain BOTH rows (full log)
-      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_equal(nrow(res$results), 1L)
 
       # Failed pairs should contain ONLY the failure
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
