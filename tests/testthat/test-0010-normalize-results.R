@@ -475,7 +475,7 @@ test_that("normalize_llm_results supports alternate ID column names in pairs", {
   }
 })
 
-test_that("normalize_llm_results parses custom_id and defaults better_id on ok status", {
+test_that("normalize_llm_results treats missing better_id as failure", {
   pairs <- tibble::tibble(
     ID1 = "A",
     text1 = "alpha",
@@ -499,7 +499,8 @@ test_that("normalize_llm_results parses custom_id and defaults better_id on ok s
   )
 
   expect_equal(out$alignment, "row_order")
-  expect_equal(out$results$better_id, "A")
+  expect_equal(nrow(out$results), 0L)
+  expect_true(any(out$failed_attempts$error_code == "backend_missing_fields"))
 })
 
 test_that("normalize_llm_results supplies defaults for retry_failures fields", {
