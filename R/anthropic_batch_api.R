@@ -360,7 +360,11 @@ build_anthropic_batch_requests <- function(
     text1 <- as.character(pairs$text1[i])
     text2 <- as.character(pairs$text2[i])
 
-    custom_id <- sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
+    custom_id <- if ("pair_uid" %in% names(pairs)) {
+      as.character(pairs$pair_uid[i])
+    } else {
+      sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
+    }
     params <- get_body_for_pair(ID1, text1, ID2, text2)
 
     out[[i]] <- list(custom_id = custom_id, params = params)
