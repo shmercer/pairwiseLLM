@@ -203,9 +203,9 @@ together_compare_pair_live <- function(
     .together_req_perform(req),
     error = function(e) {
       status_local <- NA_integer_
-      retry_failures <<- attr(e, "retry_failures")
+      retry_failures <- attr(e, "retry_failures")
       if (is.null(retry_failures)) {
-        retry_failures <<- tibble::tibble()
+        retry_failures <- tibble::tibble()
       }
 
       # If this is an httr2 HTTP error (e.g., HTTP 503), try to

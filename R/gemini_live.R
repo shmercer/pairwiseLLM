@@ -285,7 +285,7 @@ gemini_compare_pair_live <- function(
   retry_failures <- tibble::tibble()
 
   # Perform request; capture any HTTP/httr2 error so we can return a row
-  tryCatch(
+  result <- tryCatch(
     {
       resp <- .gemini_req_perform(req)
       status_code <- .gemini_resp_status(resp)
@@ -294,33 +294,49 @@ gemini_compare_pair_live <- function(
       if (is.null(retry_failures)) {
         retry_failures <- tibble::tibble()
       }
+      list(
+        resp = resp,
+        body_parsed = body_parsed,
+        status_code = status_code,
+        error_message = NA_character_,
+        retry_failures = retry_failures
+      )
     },
     error = function(err) {
-      # Default error message
-      error_message <<- conditionMessage(err)
-      retry_failures <<- attr(err, "retry_failures")
+      status_code <- NA_integer_
+      error_message <- conditionMessage(err)
+      retry_failures <- attr(err, "retry_failures")
       if (is.null(retry_failures)) {
         retry_failures <- tibble::tibble()
       }
 
       # If this is an httr2 HTTP error, try to extract status + body
       if (inherits(err, "httr2_http") && !is.null(err$resp)) {
-        # Status code from the error's response
-        status_code <<- httr2::resp_status(err$resp)
-
-        # Try to pull the raw body text - often contains a JSON error
+        status_code <- httr2::resp_status(err$resp)
         body_raw <- tryCatch(
           httr2::resp_body_string(err$resp),
           error = function(e) NA_character_
         )
-
         if (!is.na(body_raw) && nzchar(body_raw)) {
-          # Append the raw body to the error_message so it is in the tibble
-          error_message <<- paste0(error_message, " | body: ", body_raw)
+          error_message <- paste0(error_message, " | body: ", body_raw)
         }
       }
+
+      list(
+        resp = NULL,
+        body_parsed = NULL,
+        status_code = status_code,
+        error_message = error_message,
+        retry_failures = retry_failures
+      )
     }
   )
+
+  resp <- result$resp
+  body_parsed <- result$body_parsed
+  status_code <- result$status_code
+  error_message <- result$error_message
+  retry_failures <- result$retry_failures
 
   custom_id <- .pairwiseLLM_make_custom_id(ID1, ID2, pair_uid)
 
