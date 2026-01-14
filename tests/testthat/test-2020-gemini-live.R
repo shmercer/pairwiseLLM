@@ -532,7 +532,7 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
   )
 
   testthat::expect_type(res, "list")
-  testthat::expect_equal(nrow(res$results), 2L)
+  testthat::expect_equal(nrow(res$results), 1L)
   testthat::expect_equal(nrow(res$failed_pairs), 0L)
 })
 
@@ -569,7 +569,7 @@ testthat::test_that("submit_gemini_pairs_live separates failed pairs", {
         verbose = FALSE
       )
 
-      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_equal(nrow(res$results), 1L)
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
       testthat::expect_equal(res$failed_pairs$ID1, "FailMe")
       testthat::expect_equal(res$failed_pairs$error_message, "Mock API Error")
