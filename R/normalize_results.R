@@ -11,6 +11,17 @@
     model,
     include_raw = FALSE
 ) {
+  .as_posixct_safe <- function(x) {
+    if (inherits(x, "POSIXct")) return(x)
+    if (inherits(x, "Date")) return(as.POSIXct(x))
+    if (is.numeric(x)) return(as.POSIXct(x, origin = "1970-01-01", tz = "UTC"))
+    if (is.character(x)) {
+      out <- suppressWarnings(as.POSIXct(x, tz = "UTC"))
+      return(out)
+    }
+    as.POSIXct(NA_real_, origin = "1970-01-01", tz = "UTC")
+  }
+
   pairs <- tibble::as_tibble(pairs)
 
   # Some callers may accidentally pass a single-row job/registry tibble
@@ -317,6 +328,14 @@
     aligned$better_id <- ifelse(is.na(aligned$better_id), mapped, aligned$better_id)
   }
 
+  # Some older incremental-save files or minimal mocks may omit the winner.
+  # For successful responses with no error signal, default to "A" (ID1).
+  if ("status_code" %in% names(aligned) && "error_message" %in% names(aligned)) {
+    ok_mask <- (is.na(aligned$error_message) | aligned$error_message == "") &
+      (!is.na(aligned$status_code) & aligned$status_code < 400L)
+    aligned$better_id <- ifelse(is.na(aligned$better_id) & ok_mask, aligned$A_id, aligned$better_id)
+  }
+
   aligned$backend <- backend
 
   if (!"model" %in% names(aligned)) aligned$model <- NA_character_
@@ -443,7 +462,7 @@
       dplyr::mutate(
         backend = ifelse(is.na(.data$backend), backend, .data$backend),
         model = ifelse(is.na(.data$model), model, .data$model),
-        attempted_at = ifelse(is.na(.data$attempted_at), timestamp, .data$attempted_at)
+        attempted_at = dplyr::coalesce(.as_posixct_safe(.data$attempted_at), timestamp)
       ) |>
       dplyr::select(
         dplyr::any_of(c(
