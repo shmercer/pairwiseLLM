@@ -472,28 +472,23 @@ llm_resume_multi_batches <- function(
       )
     }
     tbl <- readr::read_csv(registry_file, show_col_types = FALSE)
-    jobs <- purrr::pmap(
-      tbl,
-      function(segment_index, provider, model, batch_id,
-               batch_input_path, batch_output_path, csv_path, done,
-               pairs_path = NULL, ...) {
-        # Convert segment_index to integer and done to logical (if present)
-        seg_int <- as.integer(segment_index)
-        done_log <- if (is.null(done)) FALSE else as.logical(done)
-        list(
-          segment_index     = seg_int,
-          provider          = provider,
-          model             = model,
-          batch_id          = batch_id,
-          batch_input_path  = batch_input_path,
-          batch_output_path = batch_output_path,
-          csv_path          = csv_path,
-          pairs_path        = pairs_path,
-          done              = done_log,
-          results           = NULL
-        )
-      }
-    )
+    jobs <- vector("list", nrow(tbl))
+    for (i in seq_len(nrow(tbl))) {
+      seg_int <- as.integer(tbl$segment_index[[i]])
+      done_log <- as.logical(tbl$done[[i]])
+      jobs[[i]] <- list(
+        segment_index     = seg_int,
+        provider          = as.character(tbl$provider[[i]]),
+        model             = as.character(tbl$model[[i]]),
+        batch_id          = as.character(tbl$batch_id[[i]]),
+        batch_input_path  = as.character(tbl$batch_input_path[[i]]),
+        batch_output_path = as.character(tbl$batch_output_path[[i]]),
+        csv_path          = as.character(tbl$csv_path[[i]]),
+        pairs_path        = if ("pairs_path" %in% names(tbl)) as.character(tbl$pairs_path[[i]]) else NULL,
+        done              = ifelse(is.na(done_log), FALSE, done_log),
+        results           = NULL
+      )
+    }
   }
   # Infer output_dir from first job if not supplied
   if (is.null(output_dir) && length(jobs) > 0L) {
