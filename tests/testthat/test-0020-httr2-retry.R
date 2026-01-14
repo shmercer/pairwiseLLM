@@ -5,14 +5,14 @@ test_that("retry helper retries transient status codes and records failures", {
   }
 
   with_mocked_bindings(
-    `httr2::req_perform` = function(req) {
+    `.pairwiseLLM_req_perform` = function(req) {
       call_count <<- call_count + 1L
       if (call_count < 3L) {
         return(fake_resp(500L))
       }
       fake_resp(200L)
     },
-    `httr2::resp_status` = function(resp) resp$status,
+    `.pairwiseLLM_resp_status` = function(resp) resp$status,
     {
       res <- .retry_httr2_request(list(), max_attempts = 3L, base_delay = 0, jitter = 0)
       failures <- attr(res, "retry_failures")
@@ -32,7 +32,7 @@ test_that("retry helper retries timeouts and surfaces retry failures on abort", 
   )
 
   with_mocked_bindings(
-    `httr2::req_perform` = function(req) {
+    `.pairwiseLLM_req_perform` = function(req) {
       call_count <<- call_count + 1L
       stop(timeout_err)
     },
