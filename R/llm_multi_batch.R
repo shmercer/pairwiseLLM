@@ -519,12 +519,28 @@ llm_resume_multi_batches <- function(
       }
 
       coerce_pairs_tbl <- function(x) {
+        # Be liberal in what we accept here because registry rows and older
+        # job objects may encode pairs in different ways.
+        if (is.character(x) && length(x) == 1L && file.exists(x)) {
+          x <- readRDS(x)
+        }
         x <- tibble::as_tibble(x)
+
+        # Unwrap common list-column pattern
+        if (!all(c("ID1", "ID2") %in% names(x)) && "pairs" %in% names(x) && nrow(x) == 1L) {
+          if (is.list(x$pairs) && length(x$pairs) == 1L && is.data.frame(x$pairs[[1]])) {
+            x <- tibble::as_tibble(x$pairs[[1]])
+          }
+        }
+
+        # Normalize common ID column names
         if (!all(c("ID1", "ID2") %in% names(x))) {
           if (all(c("A_id", "B_id") %in% names(x))) {
             x <- dplyr::rename(x, ID1 = A_id, ID2 = B_id)
           } else if (all(c("A", "B") %in% names(x))) {
             x <- dplyr::rename(x, ID1 = A, ID2 = B)
+          } else if (all(c("id1", "id2") %in% names(x))) {
+            x <- dplyr::rename(x, ID1 = id1, ID2 = id2)
           }
         }
         x
