@@ -140,10 +140,10 @@ llm_submit_pairs_multi_batch <- function(
 
   # Validate input and splitting options
   if (!is.null(batch_size) && !is.null(n_segments)) {
-    stop("Specify only one of 'batch_size' or 'n_segments'.", call. = FALSE)
+    rlang::abort("Specify only one of 'batch_size' or 'n_segments'.")
   }
   if (is.null(batch_size) && is.null(n_segments)) {
-    stop("Either 'batch_size' or 'n_segments' must be supplied.", call. = FALSE)
+    rlang::abort("Either 'batch_size' or 'n_segments' must be supplied.")
   }
 
   n_pairs <- nrow(pairs)
@@ -197,56 +197,35 @@ llm_submit_pairs_multi_batch <- function(
 
     # Submit the batch without polling
     if (backend == "openai") {
-      # Retry the OpenAI batch submission up to openai_max_retries times
-      oa_success <- FALSE
-      oa_attempt <- 0L
-      pipeline <- NULL
-      while (!oa_success && oa_attempt < openai_max_retries) {
-        oa_attempt <- oa_attempt + 1L
-        pipeline <- tryCatch(
-          {
-            run_openai_batch_pipeline(
-              pairs             = pairs_seg,
-              model             = model,
-              trait_name        = trait_name,
-              trait_description = trait_description,
-              prompt_template   = prompt_template,
-              batch_input_path  = input_path,
-              batch_output_path = output_path,
-              poll              = FALSE,
-              ...
-            )
-          },
-          error = function(e) {
-            # Retry on HTTP 5xx errors; propagate others
-            if (inherits(e, "httr2_http_500") || inherits(e, "httr2_http_502") ||
-              inherits(e, "httr2_http_503") || inherits(e, "httr2_http_504") ||
-              inherits(e, "httr2_http_522") || inherits(e, "httr2_http_524")) {
-              if (isTRUE(verbose)) {
-                message(sprintf(
-                  "[llm_submit_pairs_multi_batch] Error creating OpenAI batch (segment %d, attempt %d/%d): %s",
-                  seg, oa_attempt, openai_max_retries, conditionMessage(e)
-                ))
-              }
-              Sys.sleep(oa_attempt) # simple linear backoff
-              return(NULL)
-            } else {
-              stop(e)
-            }
-          }
-        )
-        if (!is.null(pipeline)) {
-          oa_success <- TRUE
-        }
-      }
-      if (!oa_success) {
-        stop(
-          sprintf(
+      pipeline <- tryCatch(
+        {
+          .pairwiseLLM_retry_backoff(
+            fn = function() {
+              run_openai_batch_pipeline(
+                pairs             = pairs_seg,
+                model             = model,
+                trait_name        = trait_name,
+                trait_description = trait_description,
+                prompt_template   = prompt_template,
+                batch_input_path  = input_path,
+                batch_output_path = output_path,
+                poll              = FALSE,
+                ...
+              )
+            },
+            max_attempts = openai_max_retries
+          )$result
+        },
+        error = function(e) e
+      )
+      if (inherits(pipeline, "error")) {
+        if (isTRUE(attr(pipeline, "retry_exhausted"))) {
+          rlang::abort(sprintf(
             "Failed to create OpenAI batch for segment %d after %d attempts.",
             seg, openai_max_retries
-          ),
-          call. = FALSE
-        )
+          ))
+        }
+        rlang::abort(conditionMessage(pipeline), parent = pipeline)
       }
       batch_id <- pipeline$batch$id
       # When verbose, confirm file uploaded successfully (OpenAI uploads the input file)
@@ -296,7 +275,7 @@ llm_submit_pairs_multi_batch <- function(
         ))
       }
     } else {
-      stop("Unsupported backend: ", backend, call. = FALSE)
+      rlang::abort(paste0("Unsupported backend: ", backend))
     }
 
     jobs[[seg]] <- list(
@@ -459,17 +438,17 @@ llm_resume_multi_batches <- function(
   # Validate inputs; either jobs must be supplied or output_dir must be provided
   if (is.null(jobs)) {
     if (is.null(output_dir)) {
-      stop(
-        "Either 'jobs' must be supplied or 'output_dir' must be provided to load a registry from disk.",
-        call. = FALSE
-      )
+      rlang::abort(paste0(
+        "Either 'jobs' must be supplied or 'output_dir' must be provided to load a registry from disk."
+      ))
     }
     registry_file <- file.path(output_dir, "jobs_registry.csv")
     if (!file.exists(registry_file)) {
-      stop(
-        "No registry file found at ", registry_file, ". Please supply 'jobs' or ensure that 'output_dir' contains a 'jobs_registry.csv' created by llm_submit_pairs_multi_batch().",
-        call. = FALSE
-      )
+      rlang::abort(paste0(
+        "No registry file found at ",
+        registry_file,
+        ". Please supply 'jobs' or ensure that 'output_dir' contains a 'jobs_registry.csv' created by llm_submit_pairs_multi_batch()."
+      ))
     }
     tbl <- readr::read_csv(registry_file, show_col_types = FALSE)
     jobs <- vector("list", nrow(tbl))
@@ -592,45 +571,34 @@ llm_resume_multi_batches <- function(
           # Terminal states as per API: completed, failed, cancelled, expired
           if (status %in% c("completed", "failed", "cancelled", "expired")) {
             if (identical(status, "completed")) {
-              # Download and parse with retry logic on 5xx errors
-              success <- FALSE
-              attempt <- 0L
-              while (!success && attempt < openai_max_retries) {
-                attempt <- attempt + 1L
-                try_res <- tryCatch(
-                  {
-                    openai_download_batch_output(
-                      batch_id = batch_id,
-                      path     = job$batch_output_path
-                    )
-                    TRUE
-                  },
-                  error = function(e) {
-                    # Only retry on HTTP 5xx errors; propagate other errors
-                    cls <- class(e)
-                    if (inherits(e, "httr2_http_500") || inherits(e, "httr2_http_502") ||
-                      inherits(e, "httr2_http_503") || inherits(e, "httr2_http_504") ||
-                      inherits(e, "httr2_http_522") || inherits(e, "httr2_http_524") ||
-                      inherits(e, "httr2_http_error") && grepl("^5", as.character(e$response$status_code))) {
-                      if (isTRUE(verbose)) {
-                        message(sprintf(
-                          "[llm_resume_multi_batches] Error downloading OpenAI batch %s (attempt %d/%d): %s",
-                          batch_id, attempt, openai_max_retries, conditionMessage(e)
-                        ))
-                      }
-                      Sys.sleep(per_job_delay)
-                      return(FALSE)
-                    } else {
-                      # Unexpected error: propagate
-                      stop(e)
-                    }
+              download <- tryCatch(
+                {
+                  .pairwiseLLM_retry_backoff(
+                    fn = function() {
+                      openai_download_batch_output(
+                        batch_id = batch_id,
+                        path     = job$batch_output_path
+                      )
+                      TRUE
+                    },
+                    max_attempts = openai_max_retries,
+                    base_delay = per_job_delay
+                  )
+                },
+                error = function(e) e
+              )
+              if (inherits(download, "error")) {
+                if (isTRUE(attr(download, "retry_exhausted"))) {
+                  if (isTRUE(verbose)) {
+                    message(sprintf(
+                      "[llm_resume_multi_batches] Failed to download OpenAI batch %s after %d attempts; will retry in next round.",
+                      batch_id, openai_max_retries
+                    ))
                   }
-                )
-                if (isTRUE(try_res)) {
-                  success <- TRUE
+                  next
                 }
-              }
-              if (success) {
+                rlang::abort(conditionMessage(download), parent = download)
+              } else {
                 res <- parse_openai_batch_output(job$batch_output_path)
                 pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
                 normalized <- .normalize_llm_results(
@@ -649,15 +617,6 @@ llm_resume_multi_batches <- function(
                   unlink(job$batch_input_path)
                   unlink(job$batch_output_path)
                 }
-              } else {
-                # If retries exhausted, leave job unfinished for next round
-                if (isTRUE(verbose)) {
-                  message(sprintf(
-                    "[llm_resume_multi_batches] Failed to download OpenAI batch %s after %d attempts; will retry in next round.",
-                    batch_id, openai_max_retries
-                  ))
-                }
-                next
               }
             }
             # Mark job as done regardless of completion status
@@ -742,12 +701,11 @@ llm_resume_multi_batches <- function(
               req_data <- jsonlite::read_json(job$batch_input_path, simplifyVector = FALSE)
               req_items <- req_data$requests
               if (is.null(req_items) || length(req_items) == 0L) {
-                stop(
+                rlang::abort(paste0(
                   "Failed to reconstruct Gemini requests for segment ",
                   job$segment_index,
-                  ". Ensure that the input JSON contains a 'requests' list.",
-                  call. = FALSE
-                )
+                  ". Ensure that the input JSON contains a 'requests' list."
+                ))
               }
               # Reconstruct a full requests table.  Include the original
               # request list-column when available so that
@@ -796,7 +754,7 @@ llm_resume_multi_batches <- function(
           }
         }
       } else {
-        stop("Unsupported provider type in jobs list: ", provider, call. = FALSE)
+        rlang::abort(paste0("Unsupported provider type in jobs list: ", provider))
       }
       Sys.sleep(per_job_delay)
     }
