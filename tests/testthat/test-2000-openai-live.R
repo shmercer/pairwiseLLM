@@ -961,7 +961,7 @@ testthat::test_that("submit_openai_pairs_live handles row-wise execution and ret
 
       # Check structure
       testthat::expect_type(res, "list")
-      testthat::expect_equal(nrow(res$results), 1L)
+      testthat::expect_equal(nrow(res$results), 2L)
       testthat::expect_equal(nrow(res$failed_pairs), 0L)
       testthat::expect_equal(res$results$better_id, c("S01", "S03"))
     }
@@ -1016,8 +1016,13 @@ testthat::test_that("submit_openai_pairs_live respects save_path (Resume Logic)"
   # Pair S01 vs S02 is "already done"
   existing_data <- tibble::tibble(
     custom_id = "LIVE_S01_vs_S02",
-    ID1 = "S01", ID2 = "S02",
-    model = "gpt-4.1", status_code = 200L, error_message = NA_character_
+    ID1 = "S01",
+    ID2 = "S02",
+    model = "gpt-4.1",
+    status_code = 200L,
+    error_message = NA_character_,
+    better_sample = "SAMPLE_1",
+    better_id = "S01"
   )
   readr::write_csv(existing_data, tmp_csv)
 
@@ -1030,15 +1035,21 @@ testthat::test_that("submit_openai_pairs_live respects save_path (Resume Logic)"
   )
 
   # We count how many times openai_compare_pair_live is called
-  call_count <- 0
+  counter <- new.env(parent = emptyenv())
+  counter$n <- 0L
 
   testthat::with_mocked_bindings(
     openai_compare_pair_live = function(...) {
-      call_count <<- call_count + 1
+      counter$n <- counter$n + 1L
       tibble::tibble(
         custom_id = "LIVE_S03_vs_S04", # Mock return for the new pair
-        ID1 = "S03", ID2 = "S04",
-        model = "gpt-4.1", status_code = 200L, error_message = NA_character_
+        ID1 = "S03",
+        ID2 = "S04",
+        model = "gpt-4.1",
+        status_code = 200L,
+        error_message = NA_character_,
+        better_sample = "SAMPLE_1",
+        better_id = "S03"
       )
     },
     {
@@ -1053,7 +1064,7 @@ testthat::test_that("submit_openai_pairs_live respects save_path (Resume Logic)"
 
       # 3. Validation
       # Should call API only ONCE (for S03), skipping S01
-      testthat::expect_equal(call_count, 1L)
+      testthat::expect_equal(counter$n, 1L)
 
       # Result should contain BOTH (one from disk, one from new run)
       testthat::expect_equal(nrow(res$results), 2L)
