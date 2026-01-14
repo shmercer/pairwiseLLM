@@ -457,21 +457,6 @@
     failed_attempts_tbl <- dplyr::bind_rows(failed_attempts_tbl, extra_attempts_tbl)
   }
 
-    extra_failed <- tibble::tibble(
-      A_id = extra_joined$A_id,
-      B_id = extra_joined$B_id,
-      unordered_key = extra_joined$unordered_key,
-      ordered_key = extra_joined$ordered_key,
-      backend = backend,
-      model = model,
-      error_code = extra_joined$error_code,
-      error_detail = extra_joined$error_detail,
-      attempted_at = extra_joined$attempted_at
-    )
-
-    failed_attempts_tbl <- dplyr::bind_rows(failed_attempts_tbl, extra_failed)
-  }
-
   # Add backend-provided failed rows, if any.
   if (!is.null(raw_failed)) {
     raw_failed_tbl <- tibble::as_tibble(raw_failed)
