@@ -281,11 +281,11 @@
         dplyr::mutate(ordered_occurrence_index = 1L)
     }
 
-    aligned <- dplyr::left_join(
-      pairs_keyed,
-      raw_dedup,
-      by = c("ordered_key", "ordered_occurrence_index")
-    )
+  aligned <- dplyr::left_join(
+    pairs_keyed,
+    raw_dedup,
+    by = c("ordered_key", "ordered_occurrence_index")
+  )
 
   } else if (nrow(raw_tbl) == nrow(pairs_keyed)) {
     join_mode <- "row_order"
@@ -295,6 +295,22 @@
     aligned <- dplyr::bind_cols(pairs_keyed, raw_trimmed)
   } else {
     rlang::abort("Unable to align `raw` results with `pairs`.")
+  }
+
+  # If ID-based alignment failed completely but row counts match, fall back
+  # to row-order alignment (documented as a supported mode).
+  if (identical(join_mode, "id") &&
+    all(is.na(aligned$.matched)) &&
+    nrow(raw_tbl) == nrow(pairs_keyed)) {
+    join_mode <- "row_order"
+    raw_trimmed <- raw_tbl |>
+      dplyr::rename(raw_ID1 = ID1, raw_ID2 = ID2) |>
+      dplyr::select(-dplyr::any_of(c(
+        "ordered_key", "unordered_key",
+        "ordered_occurrence_index", "unordered_occurrence_index"
+      ))) |>
+      dplyr::mutate(.matched = TRUE)
+    aligned <- dplyr::bind_cols(pairs_keyed, raw_trimmed)
   }
 
 
@@ -350,6 +366,14 @@
       ifelse(aligned$better_sample == "SAMPLE_2", aligned$B_id, NA_character_)
     )
     aligned$better_id <- ifelse(is.na(aligned$better_id), mapped, aligned$better_id)
+  }
+
+  if (all(c("raw_ID1", "raw_ID2") %in% names(aligned))) {
+    aligned$better_id <- ifelse(
+      aligned$better_id == aligned$raw_ID1,
+      aligned$A_id,
+      ifelse(aligned$better_id == aligned$raw_ID2, aligned$B_id, aligned$better_id)
+    )
   }
 
   # Some older incremental-save files or minimal mocks may omit the winner.
@@ -434,7 +458,7 @@
         "ID1", "ID2", "A_id", "B_id", "unordered_key", "ordered_key",
         "pair_uid", "unordered_occurrence_index", "ordered_occurrence_index",
         "custom_id", "backend", "model", "status_code", "error_message",
-        "error_code", "error_detail", "attempted_at"
+        "error_code", "error_detail", "attempted_at", "raw_response"
       ))
     )
 
@@ -476,7 +500,7 @@
       rep(NA_real_, nrow(failed_tbl))
     },
     error_code = failed_tbl$error_code,
-    error_detail = failed_tbl$error_detail,
+    error_detail = as.character(failed_tbl$error_detail),
     attempted_at = failed_tbl$attempted_at
   )
 
