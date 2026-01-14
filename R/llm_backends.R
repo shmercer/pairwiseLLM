@@ -177,7 +177,19 @@ llm_compare_pair <- function(
   include_raw = FALSE,
   ...
 ) {
-  backend <- match.arg(backend)
+  backend <- as.character(backend)
+  valid_backends <- c("openai", "anthropic", "gemini", "together", "ollama")
+  if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
+    rlang::abort("`backend` must be a non-empty character scalar.")
+  }
+  backend <- backend[1L]
+  if (!backend %in% valid_backends) {
+    rlang::abort(paste0(
+      "Backend '", backend, "' is not implemented yet. ",
+      "Currently supported backends are: ",
+      "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\"."
+    ))
+  }
 
   # Normalize empty-string keys to NULL
   if (!is.null(api_key) && identical(api_key, "")) {
@@ -276,11 +288,6 @@ llm_compare_pair <- function(
     )
   }
 
-  rlang::abort(paste0(
-    "Backend '", backend, "' is not implemented yet. ",
-    "Currently supported backends are: ",
-    "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\"."
-  ))
 }
 
 #' Backend-agnostic live comparisons for a tibble of pairs
@@ -438,7 +445,20 @@ submit_llm_pairs <- function(
   workers = 1,
   ...
 ) {
-  backend <- match.arg(backend)
+  backend <- as.character(backend)
+  valid_backends <- c("openai", "anthropic", "gemini", "together", "ollama")
+  if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
+    rlang::abort("`backend` must be a non-empty character scalar.")
+  }
+  backend <- backend[1L]
+  if (!backend %in% valid_backends) {
+    stop(
+      "Backend '", backend, "' is not implemented yet. ",
+      "Currently supported backends are: ",
+      "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
+      call. = FALSE
+    )
+  }
 
   # Normalize empty-string keys to NULL
   if (!is.null(api_key) && identical(api_key, "")) {
@@ -551,12 +571,6 @@ submit_llm_pairs <- function(
     )
   }
 
-  stop(
-    "Backend '", backend, "' is not implemented yet. ",
-    "Currently supported backends are: ",
-    "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
-    call. = FALSE
-  )
 }
 
 #' Backend-agnostic live comparisons for a tibble of pairs
@@ -708,7 +722,20 @@ submit_llm_pairs <- function(
     workers = 1,
     ...
 ) {
-  backend <- match.arg(backend)
+  backend <- as.character(backend)
+  valid_backends <- c("openai", "anthropic", "gemini", "together", "ollama")
+  if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
+    rlang::abort("`backend` must be a non-empty character scalar.")
+  }
+  backend <- backend[1L]
+  if (!backend %in% valid_backends) {
+    stop(
+      "Backend '", backend, "' is not implemented yet. ",
+      "Currently supported backends are: ",
+      "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
+      call. = FALSE
+    )
+  }
 
   # Normalize empty-string keys to NULL
   if (!is.null(api_key) && identical(api_key, "")) {
@@ -822,10 +849,4 @@ submit_llm_pairs <- function(
     )
   }
 
-  stop(
-    "Backend '", backend, "' is not implemented yet. ",
-    "Currently supported backends are: ",
-    "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
-    call. = FALSE
-  )
 }
