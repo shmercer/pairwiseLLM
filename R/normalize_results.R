@@ -55,15 +55,35 @@
   # Accept common alternative column names for pair IDs (helps when resuming from saved jobs)
   if (!all(c("ID1", "ID2") %in% names(pairs))) {
     if (all(c("A_id", "B_id") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = A_id, ID2 = B_id)
+      pairs <- dplyr::rename_with(
+        pairs,
+        ~ c("ID1", "ID2"),
+        .cols = c("A_id", "B_id")
+      )
     } else if (all(c("A", "B") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = A, ID2 = B)
+      pairs <- dplyr::rename_with(
+        pairs,
+        ~ c("ID1", "ID2"),
+        .cols = c("A", "B")
+      )
     } else if (all(c("idA", "idB") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = idA, ID2 = idB)
+      pairs <- dplyr::rename_with(
+        pairs,
+        ~ c("ID1", "ID2"),
+        .cols = c("idA", "idB")
+      )
     } else if (all(c("ID_A", "ID_B") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = ID_A, ID2 = ID_B)
+      pairs <- dplyr::rename_with(
+        pairs,
+        ~ c("ID1", "ID2"),
+        .cols = c("ID_A", "ID_B")
+      )
     } else if (all(c("id1", "id2") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = id1, ID2 = id2)
+      pairs <- dplyr::rename_with(
+        pairs,
+        ~ c("ID1", "ID2"),
+        .cols = c("id1", "id2")
+      )
     }
   }
   required_id_cols <- c("ID1", "ID2")
@@ -304,7 +324,10 @@
     nrow(raw_tbl) == nrow(pairs_keyed)) {
     join_mode <- "row_order"
     raw_trimmed <- raw_tbl |>
-      dplyr::rename(raw_ID1 = ID1, raw_ID2 = ID2) |>
+      dplyr::rename_with(
+        ~ c("raw_ID1", "raw_ID2"),
+        .cols = c("ID1", "ID2")
+      ) |>
       dplyr::select(-dplyr::any_of(c(
         "ordered_key", "unordered_key",
         "ordered_occurrence_index", "unordered_occurrence_index"
