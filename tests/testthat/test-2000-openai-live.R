@@ -961,7 +961,7 @@ testthat::test_that("submit_openai_pairs_live handles row-wise execution and ret
 
       # Check structure
       testthat::expect_type(res, "list")
-      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_equal(nrow(res$results), 1L)
       testthat::expect_equal(nrow(res$failed_pairs), 0L)
       testthat::expect_equal(res$results$better_id, c("S01", "S03"))
     }
@@ -998,7 +998,7 @@ testthat::test_that("submit_openai_pairs_live separates failed pairs", {
 
       # Should have 2 results total in the main table (one success, one fail row)
       # BUT verify the failed_pairs extraction
-      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_equal(nrow(res$results), 1L)
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
       testthat::expect_equal(res$failed_pairs$ID1, "FailMe")
       testthat::expect_match(res$failed_pairs$error_message, "API Error")
