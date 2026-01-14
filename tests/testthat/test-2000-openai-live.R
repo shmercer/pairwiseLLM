@@ -921,7 +921,7 @@ testthat::test_that("submit_openai_pairs_live returns valid list structure for z
 
   # output must be a list with results and failed_pairs
   testthat::expect_type(res, "list")
-  testthat::expect_named(res, c("results", "failed_pairs"))
+  testthat::expect_named(res, c("results", "failed_pairs", "failed_attempts"))
   testthat::expect_s3_class(res$results, "tbl_df")
   testthat::expect_s3_class(res$failed_pairs, "tbl_df")
   testthat::expect_equal(nrow(res$results), 0L)
