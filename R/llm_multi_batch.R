@@ -536,11 +536,23 @@ llm_resume_multi_batches <- function(
         # Normalize common ID column names
         if (!all(c("ID1", "ID2") %in% names(x))) {
           if (all(c("A_id", "B_id") %in% names(x))) {
-            x <- dplyr::rename(x, ID1 = A_id, ID2 = B_id)
+            x <- dplyr::rename_with(
+              x,
+              ~ c("ID1", "ID2"),
+              .cols = c("A_id", "B_id")
+            )
           } else if (all(c("A", "B") %in% names(x))) {
-            x <- dplyr::rename(x, ID1 = A, ID2 = B)
+            x <- dplyr::rename_with(
+              x,
+              ~ c("ID1", "ID2"),
+              .cols = c("A", "B")
+            )
           } else if (all(c("id1", "id2") %in% names(x))) {
-            x <- dplyr::rename(x, ID1 = id1, ID2 = id2)
+            x <- dplyr::rename_with(
+              x,
+              ~ c("ID1", "ID2"),
+              .cols = c("id1", "id2")
+            )
           }
         }
         x
