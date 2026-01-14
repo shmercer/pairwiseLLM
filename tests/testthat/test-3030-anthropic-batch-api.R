@@ -748,3 +748,89 @@ testthat::test_that("internal helper .parse_anthropic_pair_message handles missi
   testthat::expect_true(is.na(res$thoughts))
   testthat::expect_true(is.na(res$better_sample))
 })
+
+testthat::test_that("build_anthropic_batch_requests uses pair_uid for custom_id", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta",
+    pair_uid = "pair-123"
+  )
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  req_tbl <- build_anthropic_batch_requests(
+    pairs = pairs,
+    model = "claude-test",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    reasoning = "none"
+  )
+
+  testthat::expect_equal(req_tbl$custom_id, "pair-123")
+})
+
+testthat::test_that("anthropic_create_batch and get_batch use request helpers", {
+  captured_path <- NULL
+  captured_body <- NULL
+
+  testthat::with_mocked_bindings(
+    .anthropic_request = function(path, api_key, anthropic_version) {
+      captured_path <<- path
+      structure(list(path = path), class = "httr2_request")
+    },
+    .anthropic_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .anthropic_req_perform = function(req) {
+      structure(list(), class = "httr2_response")
+    },
+    .anthropic_resp_body_json = function(resp, simplifyVector = TRUE) {
+      list(id = "msgbatch_1", processing_status = "in_progress")
+    },
+    {
+      res_create <- anthropic_create_batch(requests = list(list(custom_id = "c1", params = list())))
+      testthat::expect_equal(res_create$id, "msgbatch_1")
+      testthat::expect_equal(captured_path, "/v1/messages/batches")
+      testthat::expect_true("requests" %in% names(captured_body))
+
+      res_get <- anthropic_get_batch(batch_id = "msgbatch_1")
+      testthat::expect_equal(res_get$processing_status, "in_progress")
+      testthat::expect_equal(captured_path, "/v1/messages/batches/msgbatch_1")
+    }
+  )
+})
+
+testthat::test_that("anthropic_download_batch_results writes response body", {
+  tmp <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tmp), add = TRUE)
+
+  testthat::with_mocked_bindings(
+    anthropic_get_batch = function(...) list(results_url = "https://example.com/results.jsonl"),
+    .anthropic_req_perform = function(req) {
+      structure(list(), class = "httr2_response")
+    },
+    {
+      testthat::with_mocked_bindings(
+        request = function(url) structure(list(url = url), class = "httr2_request"),
+        req_headers = function(req, ...) req,
+        resp_body_string = function(resp) '{"custom_id":"c1","result":{"type":"succeeded"}}',
+        {
+          out <- anthropic_download_batch_results("batch_1", tmp)
+          testthat::expect_true(file.exists(out))
+          testthat::expect_match(readLines(out, warn = FALSE)[1], "custom_id")
+        },
+        .package = "httr2"
+      )
+    }
+  )
+})
+
+testthat::test_that("internal helpers .anthropic_now and .anthropic_sleep run", {
+  now <- .anthropic_now()
+  testthat::expect_s3_class(now, "POSIXct")
+  testthat::expect_silent(.anthropic_sleep(0))
+})

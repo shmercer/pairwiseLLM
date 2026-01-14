@@ -572,3 +572,83 @@ testthat::test_that("gemini_download_batch_results accepts batch object input di
     }
   )
 })
+
+testthat::test_that("build_gemini_batch_requests uses pair_uid for custom_id", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta",
+    pair_uid = "pair-xyz"
+  )
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  batch <- build_gemini_batch_requests(
+    pairs = pairs,
+    model = "gemini-model",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    thinking_level = "low"
+  )
+
+  testthat::expect_equal(batch$custom_id[1], "pair-xyz")
+})
+
+testthat::test_that("gemini_get_batch returns parsed response", {
+  captured_path <- NULL
+
+  testthat::with_mocked_bindings(
+    .gemini_request = function(path, api_key) {
+      captured_path <<- path
+      structure(list(path = path), class = "httr2_request")
+    },
+    .gemini_req_perform = function(req) structure(list(), class = "httr2_response"),
+    .gemini_resp_body_json = function(resp, simplifyVector = TRUE) list(name = "batches/1"),
+    {
+      res <- gemini_get_batch("batches/1", api_key = "key", api_version = "v1beta")
+      testthat::expect_equal(res$name, "batches/1")
+      testthat::expect_equal(captured_path, "/v1beta/batches/1")
+    }
+  )
+})
+
+testthat::test_that("parse_gemini_batch_output handles non-errored terminal result types", {
+  tmp <- tempfile(fileext = ".jsonl")
+  on.exit(unlink(tmp), add = TRUE)
+
+  line <- list(custom_id = "CID", result = list(type = "expired"))
+  writeLines(jsonlite::toJSON(line, auto_unbox = TRUE), tmp)
+
+  reqs <- tibble::tibble(custom_id = "CID", ID1 = "A", ID2 = "B")
+  res <- parse_gemini_batch_output(tmp, reqs)
+
+  testthat::expect_equal(res$result_type, "expired")
+  testthat::expect_true(is.na(res$error_message))
+})
+
+testthat::test_that("run_gemini_batch_pipeline errors when batch name is missing", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  testthat::with_mocked_bindings(
+    build_gemini_batch_requests = function(...) tibble::tibble(custom_id = "1", ID1 = "A", ID2 = "B", request = list(list())),
+    gemini_create_batch = function(...) list(),
+    {
+      testthat::expect_error(
+        run_gemini_batch_pipeline(
+          pairs = pairs,
+          model = "gemini-model",
+          trait_name = td$name,
+          trait_description = td$description,
+          prompt_template = tmpl,
+          poll = TRUE,
+          verbose = FALSE
+        ),
+        "did not contain a `name` field"
+      )
+    }
+  )
+})

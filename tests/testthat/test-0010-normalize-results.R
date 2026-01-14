@@ -445,3 +445,87 @@ test_that("normalize_llm_results merges backend failed_attempts by custom_id", {
   expect_true(any(out$failed_attempts$error_code == "timeout"))
   expect_true(any(grepl("timeout", out$failed_attempts$error_detail)))
 })
+
+test_that("normalize_llm_results supports alternate ID column names in pairs", {
+  raw <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A"
+  )
+
+  variants <- list(
+    tibble::tibble(A_id = "A", B_id = "B", A_text = "a", B_text = "b"),
+    tibble::tibble(A = "A", B = "B"),
+    tibble::tibble(idA = "A", idB = "B"),
+    tibble::tibble(ID_A = "A", ID_B = "B"),
+    tibble::tibble(id1 = "A", id2 = "B")
+  )
+
+  for (pairs in variants) {
+    out <- .normalize_llm_results(
+      raw = raw,
+      pairs = pairs,
+      backend = "openai",
+      model = "gpt-test",
+      include_raw = FALSE
+    )
+    expect_equal(nrow(out$results), 1L)
+    expect_equal(out$results$A_id, "A")
+    expect_equal(out$results$B_id, "B")
+  }
+})
+
+test_that("normalize_llm_results parses custom_id and defaults better_id on ok status", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    custom_id = "MALFORMED_ID",
+    better_id = NA_character_,
+    status_code = 200L,
+    error_message = NA_character_
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_equal(out$alignment, "row_order")
+  expect_equal(out$results$better_id, "A")
+})
+
+test_that("normalize_llm_results supplies defaults for retry_failures fields", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A",
+    retry_failures = list(tibble::tibble(error_detail = "HTTP 429"))
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(any(out$failed_attempts$error_code == "http_error"))
+  expect_true(any(grepl("HTTP 429", out$failed_attempts$error_detail)))
+  expect_s3_class(out$failed_attempts$attempted_at, "POSIXct")
+})
