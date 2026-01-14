@@ -278,6 +278,7 @@ llm_submit_pairs_batch <- function(
       include_raw = include_raw
     )
     out$results <- normalized$results
+    out$failed_pairs <- normalized$failed_pairs
     out$failed_attempts <- normalized$failed_attempts
   }
 
