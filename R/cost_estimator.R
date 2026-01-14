@@ -287,13 +287,20 @@ estimate_llm_pairs_cost <- function(
       )
     )
 
-    # Normalize: submit_llm_pairs may return a tibble or a list(results=..., failed_pairs=...)
+    raw_input <- pilot
     if (is.list(pilot) && !inherits(pilot, "data.frame") && !is.null(pilot$results)) {
-      pilot_results <- tibble::as_tibble(pilot$results)
-      if (!is.null(pilot$failed_pairs)) pilot_failed_pairs <- tibble::as_tibble(pilot$failed_pairs)
-    } else {
-      pilot_results <- tibble::as_tibble(pilot)
+      raw_input <- pilot
     }
+
+    normalized <- .normalize_llm_results(
+      raw = raw_input,
+      pairs = test_pairs,
+      backend = backend,
+      model = model,
+      include_raw = FALSE
+    )
+    pilot_results <- normalized$results
+    pilot_failed_pairs <- normalized$failed_attempts
   } else {
     pilot_results <- tibble::tibble()
   }
