@@ -568,6 +568,20 @@ submit_gemini_pairs_live <- function(
   pairs_input <- pairs
   required_cols <- c("ID1", "text1", "ID2", "text2")
 
+  ensure_pair_ids <- function(res, id1, id2) {
+    res_tbl <- tibble::as_tibble(res)
+    expected_id <- sprintf("LIVE_%s_vs_%s", id1, id2)
+    # Always use the canonical per-pair custom_id, even if the backend/mocks
+    # return something else (critical for deterministic resume + joins).
+    res_tbl$custom_id <- expected_id
+    res_tbl$ID1 <- if (!"ID1" %in% names(res_tbl)) id1 else as.character(res_tbl$ID1)
+    res_tbl$ID2 <- if (!"ID2" %in% names(res_tbl)) id2 else as.character(res_tbl$ID2)
+    # Always trust the input pair identifiers to support deterministic joins.
+    res_tbl$ID1 <- id1
+    res_tbl$ID2 <- id2
+    res_tbl
+  }
+
   if (!all(required_cols %in% names(pairs))) {
     stop("`pairs` must contain columns: ", paste(required_cols, collapse = ", "), call. = FALSE)
   }
@@ -590,8 +604,12 @@ submit_gemini_pairs_live <- function(
       stop("Packages 'future' and 'future.apply' are required for parallel processing.", call. = FALSE)
     }
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
-    old_plan <- future::plan("multisession", workers = workers)
-    on.exit(future::plan(old_plan), add = TRUE)
+
+    # Allow deterministic testing via local_mocked_bindings() by calling through
+    # bindings with non-syntactic names.
+    `future::plan` <- future::plan
+    old_plan <- `future::plan`("multisession", workers = workers)
+    on.exit(`future::plan`(old_plan), add = TRUE)
   }
 
   # --- Resume Logic ---
@@ -682,7 +700,7 @@ submit_gemini_pairs_live <- function(
       work_fn <- function(i) {
         id1 <- as.character(pairs$ID1[i])
         id2 <- as.character(pairs$ID2[i])
-        tryCatch(
+        res <- tryCatch(
           {
             gemini_compare_pair_live(
               ID1 = id1, text1 = as.character(pairs$text1[i]),
@@ -713,9 +731,11 @@ submit_gemini_pairs_live <- function(
             )
           }
         )
+        ensure_pair_ids(res, id1, id2)
       }
 
-      chunk_results_list <- future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+      `future.apply::future_lapply` <- future.apply::future_lapply
+      chunk_results_list <- `future.apply::future_lapply`(chunk_indices, work_fn, future.seed = TRUE)
       all_new_results[chunk_indices] <- chunk_results_list
 
       if (!is.null(save_path)) {
@@ -791,6 +811,7 @@ submit_gemini_pairs_live <- function(
           )
         }
       )
+      res <- ensure_pair_ids(res, id1_i, id2_i)
       all_new_results[[i]] <- res
 
       if (!is.null(save_path)) {
