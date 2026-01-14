@@ -192,7 +192,15 @@
           ordered_occurrence_index = .data$ordered_occurrence_index,
           error_code = "http_error",
           error_detail = "Duplicate result row for custom_id; treated as non-observed attempt",
-          attempted_at = timestamp
+          attempted_at = timestamp,
+          status_code = if ("status_code" %in% names(dups)) as.integer(.data$status_code) else NA_integer_,
+          error_message = if ("error_message" %in% names(dups)) as.character(.data$error_message) else NA_character_,
+          prompt_tokens = if ("prompt_tokens" %in% names(dups)) as.numeric(.data$prompt_tokens) else NA_real_,
+          completion_tokens = if ("completion_tokens" %in% names(dups)) as.numeric(.data$completion_tokens) else NA_real_,
+          total_tokens = if ("total_tokens" %in% names(dups)) as.numeric(.data$total_tokens) else NA_real_,
+          cost = if ("cost" %in% names(dups)) as.numeric(.data$cost) else NA_real_,
+          backend = backend,
+          model = model
         )
     }
 
@@ -242,9 +250,15 @@
           unordered_key = .data$unordered_key,
           ordered_key = .data$ordered_key,
           ordered_occurrence_index = .data$ordered_occurrence_index,
-          error_code = "parse_error",
+          error_code = "http_error",
           error_detail = "Duplicate result row for ordered pair; treated as non-observed attempt",
           attempted_at = timestamp,
+          status_code = if ("status_code" %in% names(dups)) as.integer(.data$status_code) else NA_integer_,
+          error_message = if ("error_message" %in% names(dups)) as.character(.data$error_message) else NA_character_,
+          prompt_tokens = if ("prompt_tokens" %in% names(dups)) as.numeric(.data$prompt_tokens) else NA_real_,
+          completion_tokens = if ("completion_tokens" %in% names(dups)) as.numeric(.data$completion_tokens) else NA_real_,
+          total_tokens = if ("total_tokens" %in% names(dups)) as.numeric(.data$total_tokens) else NA_real_,
+          cost = if ("cost" %in% names(dups)) as.numeric(.data$cost) else NA_real_,
           backend = backend,
           model = model
         )
