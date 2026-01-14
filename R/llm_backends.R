@@ -276,12 +276,11 @@ llm_compare_pair <- function(
     )
   }
 
-  stop(
+  rlang::abort(paste0(
     "Backend '", backend, "' is not implemented yet. ",
     "Currently supported backends are: ",
-    "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
-    call. = FALSE
-  )
+    "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\"."
+  ))
 }
 
 #' Backend-agnostic live comparisons for a tibble of pairs
