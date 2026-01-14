@@ -314,6 +314,7 @@ anthropic_compare_pair_live <- function(
   }
 
   dots <- list(...)
+  pair_uid <- dots$pair_uid %||% NULL
 
   # ------------------------------------------------------------------
   # Temperature defaults & validation
@@ -436,10 +437,12 @@ anthropic_compare_pair_live <- function(
     error = function(e) NULL
   )
 
+  custom_id <- .pairwiseLLM_make_custom_id(ID1, ID2, pair_uid)
+
   # Handle parse failure
   if (is.null(body_parsed)) {
     res <- tibble::tibble(
-      custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+      custom_id         = custom_id,
       ID1               = ID1,
       ID2               = ID2,
       model             = NA_character_,
@@ -549,7 +552,7 @@ anthropic_compare_pair_live <- function(
   }
 
   res <- tibble::tibble(
-    custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+    custom_id         = custom_id,
     ID1               = ID1,
     ID2               = ID2,
     model             = model_name,
@@ -787,7 +790,11 @@ submit_anthropic_pairs_live <- function(
         } else {
           character(0)
         }
-        current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+        current_ids <- .pairwiseLLM_make_custom_id(
+          pairs$ID1,
+          pairs$ID2,
+          if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL
+        )
 
         to_process_idx <- !current_ids %in% existing_ids
 
@@ -873,6 +880,7 @@ submit_anthropic_pairs_live <- function(
       work_fn <- function(i) {
         id1 <- as.character(pairs$ID1[i])
         id2 <- as.character(pairs$ID2[i])
+        pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
 
         tryCatch(
           {
@@ -890,6 +898,7 @@ submit_anthropic_pairs_live <- function(
               reasoning         = reasoning,
               include_raw       = include_raw,
               include_thoughts  = include_thoughts,
+              pair_uid          = pair_uid,
               ...
             )
           },
@@ -899,7 +908,11 @@ submit_anthropic_pairs_live <- function(
               retry_failures <- tibble::tibble()
             }
             tibble::tibble(
-              custom_id = sprintf("LIVE_%s_vs_%s", id1, id2),
+              custom_id = .pairwiseLLM_make_custom_id(
+                id1,
+                id2,
+                if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
+              ),
               ID1 = id1, ID2 = id2, model = model,
               object_type = NA_character_, status_code = NA_integer_,
               error_message = paste0("Error: ", conditionMessage(e)),
@@ -941,6 +954,7 @@ submit_anthropic_pairs_live <- function(
     pb <- if (progress) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
 
     for (i in seq_len(n)) {
+      pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
       res <- tryCatch(
         {
           anthropic_compare_pair_live(
@@ -957,6 +971,7 @@ submit_anthropic_pairs_live <- function(
             reasoning         = reasoning,
             include_raw       = include_raw,
             include_thoughts  = include_thoughts,
+            pair_uid          = pair_uid,
             ...
           )
         },
@@ -966,7 +981,11 @@ submit_anthropic_pairs_live <- function(
             retry_failures <- tibble::tibble()
           }
           tibble::tibble(
-            custom_id = sprintf("LIVE_%s_vs_%s", pairs$ID1[i], pairs$ID2[i]),
+            custom_id = .pairwiseLLM_make_custom_id(
+              pairs$ID1[i],
+              pairs$ID2[i],
+              if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
+            ),
             ID1 = as.character(pairs$ID1[i]), ID2 = as.character(pairs$ID2[i]),
             model = model, object_type = NA_character_, status_code = NA_integer_,
             error_message = paste0("Error: ", conditionMessage(e)),

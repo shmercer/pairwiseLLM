@@ -206,6 +206,8 @@ ollama_compare_pair_live <- function(
     stop("`num_ctx` must be a single positive number.", call. = FALSE)
   }
 
+  pair_uid <- list(...)$pair_uid %||% NULL
+
   # Temperature rule:
   # - default: 0
   # - Qwen + think = TRUE: 0.6
@@ -253,10 +255,12 @@ ollama_compare_pair_live <- function(
     error = function(e) NULL
   )
 
+  custom_id <- .pairwiseLLM_make_custom_id(ID1, ID2, pair_uid)
+
   # If parsing fails, return a stub row with an error message
   if (is.null(body_parsed)) {
     res <- tibble::tibble(
-      custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+      custom_id         = custom_id,
       ID1               = ID1,
       ID2               = ID2,
       model             = NA_character_,
@@ -340,7 +344,7 @@ ollama_compare_pair_live <- function(
   }
 
   res <- tibble::tibble(
-    custom_id         = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+    custom_id         = custom_id,
     ID1               = ID1,
     ID2               = ID2,
     model             = model_name,
@@ -551,7 +555,11 @@ submit_ollama_pairs_live <- function(
           } else {
             character(0)
           }
-          current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+          current_ids <- .pairwiseLLM_make_custom_id(
+            pairs$ID1,
+            pairs$ID2,
+            if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL
+          )
           to_process_idx <- !current_ids %in% existing_ids
           if (sum(!to_process_idx) > 0) {
             if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
@@ -639,6 +647,7 @@ submit_ollama_pairs_live <- function(
       work_fn <- function(i) {
         id1_i <- as.character(pairs$ID1[i])
         id2_i <- as.character(pairs$ID2[i])
+        pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
         tryCatch(
           {
             ollama_compare_pair_live(
@@ -654,6 +663,7 @@ submit_ollama_pairs_live <- function(
               think             = think,
               num_ctx           = num_ctx,
               include_raw       = include_raw,
+              pair_uid          = pair_uid,
               ...
             )
           },
@@ -664,7 +674,11 @@ submit_ollama_pairs_live <- function(
             }
             # Return error row
             tibble::tibble(
-              custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+              custom_id = .pairwiseLLM_make_custom_id(
+                id1_i,
+                id2_i,
+                if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
+              ),
               ID1 = id1_i,
               ID2 = id2_i,
               model = model,
@@ -718,6 +732,7 @@ submit_ollama_pairs_live <- function(
     pb <- if (progress && n > 0L) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
 
     for (i in seq_len(n)) {
+      pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
       show_status <- verbose && ((i - 1) %% status_every == 0L)
 
       id1_i <- as.character(pairs$ID1[i])
@@ -744,6 +759,7 @@ submit_ollama_pairs_live <- function(
           think             = think,
           num_ctx           = num_ctx,
           include_raw       = include_raw,
+          pair_uid          = pair_uid,
           ...
         ),
         error = function(e) {
@@ -759,7 +775,11 @@ submit_ollama_pairs_live <- function(
           }
 
           out_row <- tibble::tibble(
-            custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+            custom_id = .pairwiseLLM_make_custom_id(
+              id1_i,
+              id2_i,
+              if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
+            ),
             ID1 = id1_i,
             ID2 = id2_i,
             model = model,
