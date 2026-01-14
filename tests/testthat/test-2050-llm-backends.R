@@ -217,9 +217,7 @@ testthat::test_that("llm_compare_pair uses Anthropic env var when
   )
 
   calls <- list()
-  old_env <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
-  on.exit(Sys.setenv(ANTHROPIC_API_KEY = old_env), add = TRUE)
-  Sys.setenv(ANTHROPIC_API_KEY = "ENV_ANTH_KEY")
+  withr::local_envvar(c(ANTHROPIC_API_KEY = "ENV_ANTH_KEY"))
 
   testthat::with_mocked_bindings(
     anthropic_compare_pair_live = function(ID1,
@@ -695,9 +693,7 @@ testthat::test_that("llm_compare_pair passes NULL api_key to Together
   )
 
   calls <- list()
-  old_env <- Sys.getenv("TOGETHER_API_KEY", unset = "")
-  on.exit(Sys.setenv(TOGETHER_API_KEY = old_env), add = TRUE)
-  Sys.setenv(TOGETHER_API_KEY = "ENV_TOGETHER_KEY")
+  withr::local_envvar(c(TOGETHER_API_KEY = "ENV_TOGETHER_KEY"))
 
   testthat::with_mocked_bindings(
     together_compare_pair_live = function(ID1,

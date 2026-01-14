@@ -166,7 +166,7 @@ test_that("sample_pairs returns a subset of example_writing_pairs", {
 
   pairs <- make_pairs(example_writing_samples)
 
-  set.seed(123)
+  withr::local_seed(123)
   sampled <- sample_pairs(pairs, pair_pct = 0.2)
 
   # Every sampled pair should correspond to some pair in example_writing_pairs
@@ -185,7 +185,7 @@ test_that("sample_reverse_pairs produces valid reversed pairs on
   data("example_writing_samples", package = "pairwiseLLM")
   pairs <- make_pairs(example_writing_samples)
 
-  set.seed(999)
+  withr::local_seed(999)
   rev_pairs <- sample_reverse_pairs(pairs, reverse_pct = 0.1)
 
   # Each reversed pair must correspond to an original pair with swapped roles
@@ -279,7 +279,7 @@ test_that("randomize_pair_order preserves unordered ID pairs", {
   pairs_all <- make_pairs(example_writing_samples)
   pairs_small <- pairs_all[1:10, ]
 
-  set.seed(123)
+  withr::local_seed(123)
   pairs_rand <- randomize_pair_order(pairs_small, seed = 123)
 
   # Same number of rows
@@ -311,7 +311,7 @@ test_that("randomize_pair_order flips at least one pair when n > 1", {
   pairs_all <- make_pairs(example_writing_samples)
   pairs_small <- pairs_all[1:20, ]
 
-  set.seed(42)
+  withr::local_seed(42)
   pairs_rand <- randomize_pair_order(pairs_small, seed = 42)
 
   any_flipped <- any(
@@ -337,7 +337,7 @@ test_that("randomize_pair_order keeps text consistent with IDs", {
     id_text$text[match(id, id_text$ID)]
   }
 
-  set.seed(101)
+  withr::local_seed(101)
   pairs_rand <- randomize_pair_order(pairs_small, seed = 101)
 
   # For each row, text1/text2 in the randomized output must match
@@ -418,7 +418,7 @@ test_that("randomize_pair_order handles empty input", {
 
 test_that("randomize_pair_order correctly restores random seed", {
   # This tests the on.exit() block
-  set.seed(12345)
+  withr::local_seed(12345)
   runif(1) # Advance RNG
   state_before <- .Random.seed
 
