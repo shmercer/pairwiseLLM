@@ -947,3 +947,214 @@ test_that("submit_gemini_pairs_live outputs verbose messages", {
   # Check per-pair status message content
   expect_true(any(grepl("Comparing S1 vs S2", msgs)))
 })
+
+test_that("gemini live wrappers call future backends", {
+  skip_if_not_installed("future")
+  skip_if_not_installed("future.apply")
+
+  old_plan <- future::plan()
+  on.exit(future::plan(old_plan), add = TRUE)
+  future::plan("sequential")
+
+  testthat::expect_error(
+    pairwiseLLM:::`future::plan`("sequential"),
+    NA
+  )
+
+  out <- pairwiseLLM:::`future.apply::future_lapply`(list(1, 2), identity)
+  testthat::expect_identical(out, list(1, 2))
+})
+
+test_that("gemini live httr2 wrapper helpers delegate correctly", {
+  skip_if_not_installed("httr2")
+  testthat::expect_true(is.function(pairwiseLLM:::.gemini_req_perform))
+  testthat::expect_true(is.function(pairwiseLLM:::.gemini_resp_body_json))
+  testthat::expect_true(is.function(pairwiseLLM:::.gemini_resp_status))
+})
+
+test_that("submit_gemini_pairs_live errors when readr is missing for save_path", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::with_mocked_bindings(
+    requireNamespace = function(...) FALSE,
+    .package = "base",
+    {
+      testthat::expect_error(
+        submit_gemini_pairs_live(
+          pairs = pairs,
+          model = "m",
+          trait_name = "t",
+          trait_description = "d",
+          save_path = "out.csv"
+        ),
+        "readr"
+      )
+    }
+  )
+})
+
+test_that("submit_gemini_pairs_live creates directory with verbose message", {
+  skip_if_not_installed("readr")
+  ns <- asNamespace("pairwiseLLM")
+  temp_dir <- file.path(tempdir(), "gemini_nested_dir")
+  if (dir.exists(temp_dir)) unlink(temp_dir, recursive = TRUE)
+  on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
+
+  save_path <- file.path(temp_dir, "out.csv")
+  pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B")
+
+  testthat::local_mocked_bindings(
+    gemini_compare_pair_live = function(...) {
+      tibble::tibble(
+        custom_id = "cid",
+        ID1 = "S1",
+        ID2 = "S2",
+        model = "m",
+        status_code = 200L,
+        error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  msgs <- capture_messages(
+    submit_gemini_pairs_live(
+      pairs = pairs,
+      model = "m",
+      trait_name = "t",
+      trait_description = "d",
+      save_path = save_path,
+      verbose = TRUE
+    )
+  )
+
+  testthat::expect_true(any(grepl("Creating output directory", msgs)))
+  testthat::expect_true(dir.exists(temp_dir))
+})
+
+test_that("submit_gemini_pairs_live uses pair_uid for resume logic", {
+  skip_if_not_installed("readr")
+  ns <- asNamespace("pairwiseLLM")
+  save_path <- tempfile(fileext = ".csv")
+  on.exit(unlink(save_path), add = TRUE)
+
+  existing <- tibble::tibble(
+    pair_uid = "pair-1",
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A",
+    status_code = 200L
+  )
+  readr::write_csv(existing, save_path)
+
+  pairs <- tibble::tibble(
+    ID1 = c("A", "C"),
+    text1 = c("a", "c"),
+    ID2 = c("B", "D"),
+    text2 = c("b", "d"),
+    pair_uid = c("pair-1", "pair-2")
+  )
+
+  calls <- 0L
+  testthat::local_mocked_bindings(
+    gemini_compare_pair_live = function(...) {
+      calls <<- calls + 1L
+      tibble::tibble(
+        custom_id = "pair-2",
+        ID1 = "C",
+        ID2 = "D",
+        better_id = "C",
+        model = "m",
+        status_code = 200L,
+        error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  res <- submit_gemini_pairs_live(
+    pairs = pairs,
+    model = "m",
+    trait_name = "t",
+    trait_description = "d",
+    save_path = save_path,
+    verbose = FALSE
+  )
+
+  testthat::expect_equal(calls, 1L)
+  testthat::expect_true(nrow(res$results) >= 1L)
+})
+
+test_that("submit_gemini_pairs_live handles resume files without custom IDs", {
+  skip_if_not_installed("readr")
+  ns <- asNamespace("pairwiseLLM")
+  save_path <- tempfile(fileext = ".csv")
+  on.exit(unlink(save_path), add = TRUE)
+
+  existing <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    status_code = 200L
+  )
+  readr::write_csv(existing, save_path)
+
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  testthat::local_mocked_bindings(
+    gemini_compare_pair_live = function(...) {
+      tibble::tibble(
+        custom_id = "cid",
+        ID1 = "A",
+        ID2 = "B",
+        model = "m",
+        status_code = 200L,
+        error_message = NA_character_
+      )
+    },
+    .env = ns
+  )
+
+  res <- submit_gemini_pairs_live(
+    pairs = pairs,
+    model = "m",
+    trait_name = "t",
+    trait_description = "d",
+    save_path = save_path,
+    verbose = FALSE
+  )
+
+  testthat::expect_equal(nrow(res$results), 1L)
+})
+
+test_that("submit_gemini_pairs_live reports parallel worker errors", {
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"),
+    text1 = "a",
+    ID2 = c("C", "D"),
+    text2 = "b"
+  )
+
+  gemini_env <- environment(submit_gemini_pairs_live)
+
+  testthat::local_mocked_bindings(
+    `future::plan` = function(...) NULL,
+    `future.apply::future_lapply` = function(X, FUN, ...) lapply(X, FUN, ...),
+    gemini_compare_pair_live = function(...) stop("parallel fail"),
+    .env = gemini_env
+  )
+
+  res <- submit_gemini_pairs_live(
+    pairs = pairs,
+    model = "m",
+    trait_name = "t",
+    trait_description = "d",
+    parallel = TRUE,
+    workers = 2,
+    include_raw = TRUE,
+    verbose = FALSE
+  )
+
+  testthat::expect_equal(nrow(res$results), 0L)
+  testthat::expect_equal(nrow(res$failed_pairs), 2L)
+  testthat::expect_true(all(grepl("parallel fail", res$failed_pairs$error_message)))
+})

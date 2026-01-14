@@ -124,6 +124,21 @@ testthat::test_that("ollama_compare_pair_live validates scalar arguments", {
     "`ID1` must be a single character."
   )
 
+  # ID2 must be scalar character
+  expect_error(
+    ollama_compare_pair_live(
+      ID1               = "S01",
+      text1             = "A",
+      ID2               = c("S02", "S03"),
+      text2             = "B",
+      model             = "m",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl
+    ),
+    "`ID2` must be a single character."
+  )
+
   # text1
   expect_error(
     ollama_compare_pair_live(

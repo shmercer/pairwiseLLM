@@ -36,7 +36,7 @@ testthat::test_that("estimate_llm_pairs_cost returns expected and budget cost wi
     )
   }
 
-  est <- estimate_llm_pairs_cost(
+  est <- suppressWarnings(estimate_llm_pairs_cost(
     pairs = pairs,
     backend = "openai",
     model = "gpt-4.1-mini",
@@ -52,7 +52,7 @@ testthat::test_that("estimate_llm_pairs_cost returns expected and budget cost wi
     verbose = FALSE,
     progress = FALSE,
     .submit_fun = fake_submit
-  )
+  ))
 
   testthat::expect_s3_class(est, "pairwiseLLM_cost_estimate")
 

@@ -529,3 +529,230 @@ test_that("normalize_llm_results supplies defaults for retry_failures fields", {
   expect_true(any(grepl("HTTP 429", out$failed_attempts$error_detail)))
   expect_s3_class(out$failed_attempts$attempted_at, "POSIXct")
 })
+
+test_that("normalize_llm_results errors on mismatched raw and pairs sizes", {
+  pairs <- tibble::tibble(
+    ID1 = c("A", "C"),
+    text1 = c("alpha", "charlie"),
+    ID2 = c("B", "D"),
+    text2 = c("beta", "delta")
+  )
+
+  raw <- tibble::tibble(
+    better_id = "A"
+  )
+
+  expect_error(
+    .normalize_llm_results(
+      raw = raw,
+      pairs = pairs,
+      backend = "openai",
+      model = "gpt-test",
+      include_raw = FALSE
+    ),
+    "Unable to align"
+  )
+})
+
+test_that("normalize_llm_results records duplicate custom_id attempts with defaults", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta",
+    pair_uid = "pair-dup"
+  )
+
+  raw <- tibble::tibble(
+    custom_id = c("pair-dup", "pair-dup"),
+    ordered_occurrence_index = c(1L, 2L),
+    better_id = c("A", "A")
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(nrow(out$failed_attempts) >= 1L)
+  expect_true(any(out$failed_attempts$error_code == "http_error"))
+  expect_s3_class(out$failed_attempts$attempted_at, "POSIXct")
+})
+
+test_that("normalize_llm_results handles unsupported attempted_at types", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = c("A", "A"),
+    ID2 = c("B", "B"),
+    better_id = c("A", "A"),
+    attempted_at = list(list("weird"), list("weird"))
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(nrow(out$failed_attempts) >= 1L)
+  expect_s3_class(out$failed_attempts$attempted_at, "POSIXct")
+  expect_true(any(!is.na(out$failed_attempts$attempted_at)))
+})
+
+test_that("normalize_llm_results supplies retry_failures error_detail default", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A",
+    retry_failures = list(tibble::tibble(error_code = "http_error"))
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(any(is.na(out$failed_attempts$error_detail)))
+})
+
+test_that("normalize_llm_results parses custom_id edge cases", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw_na <- tibble::tibble(
+    custom_id = NA_character_,
+    better_id = NA_character_,
+    status_code = 200L
+  )
+
+  out_na <- .normalize_llm_results(
+    raw = raw_na,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+  expect_equal(out_na$alignment, "row_order")
+
+  raw_no_underscore <- tibble::tibble(
+    custom_id = "LIVEA_vs_B",
+    better_id = NA_character_,
+    status_code = 200L
+  )
+
+  out_no <- .normalize_llm_results(
+    raw = raw_no_underscore,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+  expect_equal(out_no$alignment, "row_order")
+})
+
+test_that("normalize_llm_results retains cost for failed attempts", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "C",
+    cost = 0.01
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(any(!is.na(out$failed_attempts$cost)))
+})
+
+test_that("normalize_llm_results merges raw_failed by ID1/ID2", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- list(
+    results = tibble::tibble(
+      ID1 = "A",
+      ID2 = "B",
+      better_id = "A"
+    ),
+    failed_attempts = tibble::tibble(
+      ID1 = "A",
+      ID2 = "B",
+      error_message = "HTTP 500"
+    )
+  )
+
+  out <- suppressWarnings(.normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  ))
+
+  expect_true(any(out$failed_attempts$error_code == "http_error"))
+})
+
+test_that("normalize_llm_results coalesces suffixed columns from row-order alignment", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    better_id = "A",
+    `ID1.x` = "shadow"
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_equal(out$results$ID1, "A")
+})

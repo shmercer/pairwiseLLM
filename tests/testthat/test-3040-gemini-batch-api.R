@@ -1,5 +1,7 @@
 # tests/testthat/test-gemini_batch_api.R
 
+orig_gemini_download_batch_results <- pairwiseLLM::gemini_download_batch_results
+
 # ==============================================================================
 # build_gemini_batch_requests
 # ==============================================================================
@@ -30,10 +32,17 @@ testthat::test_that("build_gemini_batch_requests builds valid requests (Happy Pa
   testthat::expect_true(is.list(r1$contents))
   testthat::expect_true(is.list(r1$generationConfig))
 
-  # Verify prompt content insertion
+  # Verify request text matches the built prompt
   text_block <- r1$contents[[1]]$parts[[1]]$text
-  testthat::expect_true(grepl("SAMPLE_1", text_block, fixed = TRUE))
-  testthat::expect_true(grepl("SAMPLE_2", text_block, fixed = TRUE))
+  testthat::expect_true(nzchar(text_block))
+  expected_prompt <- build_prompt(
+    template   = tmpl,
+    trait_name = td$name,
+    trait_desc = td$description,
+    text1      = pairs$text1[[1]],
+    text2      = pairs$text2[[1]]
+  )
+  testthat::expect_identical(text_block, expected_prompt)
 
   # Verify thinking level mapping (low -> Low)
   testthat::expect_equal(r1$generationConfig$thinkingConfig$thinkingLevel, "Low")
@@ -178,6 +187,45 @@ testthat::test_that(".parse_gemini_pair_response handles explicit thoughts logic
   res_s <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_single, include_thoughts = TRUE)
   testthat::expect_true(is.na(res_s$thoughts))
   testthat::expect_equal(res_s$content, "Just answer")
+})
+
+testthat::test_that(".parse_gemini_pair_response handles empty candidates and character parts", {
+  resp_empty <- list(candidates = data.frame())
+  res_empty <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_empty)
+  testthat::expect_true(is.na(res_empty$content))
+
+  resp_null <- list(candidates = list(list(content = NULL)))
+  res_null <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_null)
+  testthat::expect_true(is.na(res_null$content))
+
+  resp_char <- list(
+    candidates = list(list(content = list(parts = list(
+      "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+      " trailing"
+    )))),
+    usageMetadata = list(promptTokenCount = list(), candidatesTokenCount = 1)
+  )
+  res_char <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_char)
+  testthat::expect_equal(res_char$better_sample, "SAMPLE_1")
+  testthat::expect_true(is.na(res_char$prompt_tokens))
+})
+
+testthat::test_that(".parse_gemini_pair_response handles thought signatures and non-list usage", {
+  parts_df <- data.frame(
+    thoughtSignature = "SIG-001",
+    text = "Thought text",
+    stringsAsFactors = FALSE
+  )
+  resp_sig <- list(
+    candidates = list(list(content = list(parts = parts_df))),
+    usageMetadata = 1,
+    modelVersion = list()
+  )
+
+  res_sig <- pairwiseLLM:::.parse_gemini_pair_response("id", "A", "B", resp_sig)
+  testthat::expect_equal(res_sig$thought_signature, "SIG-001")
+  testthat::expect_true(is.na(res_sig$prompt_tokens))
+  testthat::expect_true(is.na(res_sig$model))
 })
 
 # ==============================================================================
@@ -573,6 +621,66 @@ testthat::test_that("gemini_download_batch_results accepts batch object input di
   )
 })
 
+testthat::test_that("run_gemini_batch_pipeline emits verbose messages", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+
+  tmp_in <- tempfile(fileext = ".json")
+  tmp_out <- tempfile(fileext = ".jsonl")
+
+  testthat::local_mocked_bindings(
+    gemini_create_batch = function(...) list(name = "batch-1"),
+    .env = asNamespace("pairwiseLLM")
+  )
+
+  msgs <- capture_messages(
+    run_gemini_batch_pipeline(
+      pairs = pairs,
+      model = "m",
+      trait_name = "t",
+      trait_description = "d",
+      prompt_template = set_prompt_template(),
+      batch_input_path = tmp_in,
+      batch_output_path = tmp_out,
+      poll = FALSE,
+      verbose = TRUE
+    )
+  )
+  testthat::expect_true(any(grepl("Creating Gemini batch", msgs)))
+
+  testthat::local_mocked_bindings(
+    gemini_create_batch = function(...) list(name = "batch-2"),
+    gemini_poll_batch_until_complete = function(...) list(name = "batch-2"),
+    gemini_download_batch_results = function(batch, requests_tbl, output_path, ...) {
+      line <- jsonlite::toJSON(
+        list(
+          custom_id = requests_tbl$custom_id[1],
+          result = list(type = "succeeded", response = list(candidates = list()))
+        ),
+        auto_unbox = TRUE,
+        null = "null"
+      )
+      writeLines(line, output_path)
+      output_path
+    },
+    .env = asNamespace("pairwiseLLM")
+  )
+
+  msgs <- capture_messages(
+    run_gemini_batch_pipeline(
+      pairs = pairs,
+      model = "m",
+      trait_name = "t",
+      trait_description = "d",
+      prompt_template = set_prompt_template(),
+      batch_input_path = tmp_in,
+      batch_output_path = tmp_out,
+      poll = TRUE,
+      verbose = TRUE
+    )
+  )
+  testthat::expect_true(any(grepl("Polling Gemini batch", msgs)))
+})
+
 testthat::test_that("build_gemini_batch_requests uses pair_uid for custom_id", {
   pairs <- tibble::tibble(
     ID1 = "A",
@@ -648,6 +756,64 @@ testthat::test_that("run_gemini_batch_pipeline errors when batch name is missing
           verbose = FALSE
         ),
         "did not contain a `name` field"
+      )
+    }
+  )
+})
+
+testthat::test_that("gemini_download_batch_results validates requests_tbl", {
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
+
+  batch_obj <- list(response = list(inlinedResponses = data.frame()))
+
+  testthat::with_mocked_bindings(
+    gemini_download_batch_results = orig_gemini_download_batch_results,
+    .env = asNamespace("pairwiseLLM"),
+    {
+      testthat::expect_error(
+        gemini_download_batch_results(batch_obj, list(), tmp),
+        "requests_tbl"
+      )
+    }
+  )
+})
+
+testthat::test_that("gemini_download_batch_results errors on unsupported inlined structure", {
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
+
+  batch_obj <- list(response = list(inlinedResponses = list(foo = 1)))
+  reqs <- tibble::tibble(custom_id = "1")
+
+  testthat::with_mocked_bindings(
+    gemini_download_batch_results = orig_gemini_download_batch_results,
+    .env = asNamespace("pairwiseLLM"),
+    {
+      testthat::expect_error(
+        gemini_download_batch_results(batch_obj, reqs, tmp),
+        "Unsupported structure"
+      )
+    }
+  )
+})
+
+testthat::test_that("gemini_download_batch_results errors when response table is not a data.frame", {
+  tmp <- tempfile()
+  on.exit(unlink(tmp), add = TRUE)
+
+  inlined <- data.frame(id = 1)
+  inlined$response <- I(list(list(foo = "bar")))
+  batch_obj <- list(response = list(inlinedResponses = inlined))
+  reqs <- tibble::tibble(custom_id = "1")
+
+  testthat::with_mocked_bindings(
+    gemini_download_batch_results = orig_gemini_download_batch_results,
+    .env = asNamespace("pairwiseLLM"),
+    {
+      testthat::expect_error(
+        gemini_download_batch_results(batch_obj, reqs, tmp),
+        "Expected a data.frame"
       )
     }
   )
