@@ -617,24 +617,34 @@ testthat::test_that("anthropic_poll_batch_until_complete handles timeout", {
     request_counts = list()
   )
 
+  tick <- 0L
+  base_time <- as.POSIXct("2020-01-01 00:00:00", tz = "UTC")
+  times <- base_time + c(0, 0.2, 0.6, 0.6, 0.6)
+
   testthat::with_mocked_bindings(
     anthropic_get_batch = function(...) mock_batch_progress,
+    .anthropic_now = function() {
+      tick <<- tick + 1L
+      times[pmin(tick, length(times))]
+    },
+    .anthropic_sleep = function(...) NULL,
     {
-      start_t <- Sys.time()
       # Set a very short timeout
-      res <- anthropic_poll_batch_until_complete(
-        batch_id = "batch_123",
-        interval_seconds = 0.1,
-        timeout_seconds = 0.5,
-        verbose = FALSE
+      res <- NULL
+      testthat::expect_warning(
+        {
+          res <- anthropic_poll_batch_until_complete(
+            batch_id = "batch_123",
+            interval_seconds = 0.1,
+            timeout_seconds = 0.5,
+            verbose = TRUE
+          )
+        },
+        "Timeout reached while waiting for Anthropic batch to complete"
       )
-      end_t <- Sys.time()
 
       # It should return the last batch object (which is still in_progress)
       testthat::expect_equal(res$processing_status, "in_progress")
-
-      # It should have taken at least 0.5 seconds
-      testthat::expect_gte(as.numeric(difftime(end_t, start_t, units = "secs")), 0.4)
     }
   )
 })
