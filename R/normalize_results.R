@@ -151,6 +151,8 @@
       pair_uid_input = if ("pair_uid" %in% names(pairs)) as.character(pairs$pair_uid) else NA_character_
     )
 
+  timestamp <- Sys.time()
+
   # Prepare a deduped raw table for alignment, while recording duplicates as attempts.
   extra_attempts_tbl <- tibble::tibble()
 
@@ -179,7 +181,7 @@
           ordered_occurrence_index = .data$ordered_occurrence_index,
           error_code = "http_error",
           error_detail = "Duplicate result row for custom_id; treated as non-observed attempt",
-          attempted_at = Sys.time()
+          attempted_at = timestamp
         )
     }
 
@@ -231,7 +233,7 @@
           ordered_occurrence_index = .data$ordered_occurrence_index,
           error_code = "parse_error",
           error_detail = "Duplicate result row for ordered pair; treated as non-observed attempt",
-          attempted_at = Sys.time(),
+          attempted_at = timestamp,
           backend = backend,
           model = model
         )
@@ -361,8 +363,6 @@
     ifelse(aligned$better_id == aligned$B_id, 2L, NA_integer_)
   )
 
-  timestamp <- Sys.time()
-
   results_tbl <- tibble::as_tibble(aligned[is_valid, , drop = FALSE])
   results_tbl$received_at <- timestamp
 
@@ -402,6 +402,36 @@
     ordered_key = failed_tbl$ordered_key,
     backend = failed_tbl$backend,
     model = failed_tbl$model,
+    status_code = if ("status_code" %in% names(failed_tbl)) {
+      as.integer(failed_tbl$status_code)
+    } else {
+      rep(NA_integer_, nrow(failed_tbl))
+    },
+    error_message = if ("error_message" %in% names(failed_tbl)) {
+      as.character(failed_tbl$error_message)
+    } else {
+      rep(NA_character_, nrow(failed_tbl))
+    },
+    prompt_tokens = if ("prompt_tokens" %in% names(failed_tbl)) {
+      as.numeric(failed_tbl$prompt_tokens)
+    } else {
+      rep(NA_real_, nrow(failed_tbl))
+    },
+    completion_tokens = if ("completion_tokens" %in% names(failed_tbl)) {
+      as.numeric(failed_tbl$completion_tokens)
+    } else {
+      rep(NA_real_, nrow(failed_tbl))
+    },
+    total_tokens = if ("total_tokens" %in% names(failed_tbl)) {
+      as.numeric(failed_tbl$total_tokens)
+    } else {
+      rep(NA_real_, nrow(failed_tbl))
+    },
+    cost = if ("cost" %in% names(failed_tbl)) {
+      as.numeric(failed_tbl$cost)
+    } else {
+      rep(NA_real_, nrow(failed_tbl))
+    },
     error_code = failed_tbl$error_code,
     error_detail = failed_tbl$error_detail,
     attempted_at = failed_tbl$attempted_at
@@ -409,19 +439,23 @@
 
   # Add duplicate-result rows as non-observed attempts.
   if (nrow(extra_attempts_tbl) > 0L) {
-    if ("custom_id" %in% names(extra_attempts_tbl)) {
-      extra_joined <- dplyr::left_join(
-        pairs_keyed,
-        extra_attempts_tbl,
-        by = c("pair_uid_input" = "custom_id")
+    extra_attempts_tbl <- extra_attempts_tbl |>
+      dplyr::mutate(
+        backend = ifelse(is.na(.data$backend), backend, .data$backend),
+        model = ifelse(is.na(.data$model), model, .data$model),
+        attempted_at = ifelse(is.na(.data$attempted_at), timestamp, .data$attempted_at)
+      ) |>
+      dplyr::select(
+        dplyr::any_of(c(
+          "A_id", "B_id", "unordered_key", "ordered_key", "backend", "model",
+          "status_code", "error_message",
+          "prompt_tokens", "completion_tokens", "total_tokens", "cost",
+          "error_code", "error_detail", "attempted_at"
+        ))
       )
-    } else {
-      extra_joined <- dplyr::left_join(
-        pairs_keyed,
-        extra_attempts_tbl,
-        by = c("ordered_key", "ordered_occurrence_index")
-      )
-    }
+
+    failed_attempts_tbl <- dplyr::bind_rows(failed_attempts_tbl, extra_attempts_tbl)
+  }
 
     extra_failed <- tibble::tibble(
       A_id = extra_joined$A_id,
