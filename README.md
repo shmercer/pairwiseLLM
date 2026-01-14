@@ -301,8 +301,9 @@ Key Features:
   command again will automatically skip pairs already present in the
   file.
 - Robust Output: Returns a list containing `$results` (successful
-  comparisons) and `$failed_pairs` (errors), ensuring one bad request
-  doesn’t crash the whole job.
+  comparisons) and `$failed_pairs` (scheduled pairs with no observed outcome)
+  plus `$failed_attempts` (attempt-level failures, including retry/timeout/parse issues),
+  ensuring one bad request doesn’t crash the whole job.
 
 Example:
 
@@ -336,6 +337,11 @@ head(res_list$results)
 # Inspect failures (if any)
 if (nrow(res_list$failed_pairs) > 0) {
   print(res_list$failed_pairs)
+}
+
+# Inspect attempt-level failures (if any)
+if (nrow(res_list$failed_attempts) > 0) {
+  print(res_list$failed_attempts)
 }
 ```
 
