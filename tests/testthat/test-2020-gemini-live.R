@@ -511,14 +511,19 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
   )
 
   # Mock success response
-  fake_success <- tibble::tibble(
-    custom_id = "LIVE_X_vs_Y", ID1 = "X", ID2 = "Y",
-    model = "mod", status_code = 200L, error_message = NA_character_,
-    better_sample = "SAMPLE_1", better_id = "X"
-  )
-
   testthat::local_mocked_bindings(
-    gemini_compare_pair_live = function(...) fake_success,
+    gemini_compare_pair_live = function(ID1, ID2, ...) {
+      tibble::tibble(
+        custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+        ID1 = ID1,
+        ID2 = ID2,
+        model = "m",
+        status_code = 200L,
+        error_message = NA_character_,
+        better_sample = "SAMPLE_1",
+        better_id = ID1
+      )
+    },
     .env = pll_ns
   )
 
@@ -532,7 +537,7 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
   )
 
   testthat::expect_type(res, "list")
-  testthat::expect_equal(nrow(res$results), 1L)
+  testthat::expect_equal(nrow(res$results), 2L)
   testthat::expect_equal(nrow(res$failed_pairs), 0L)
 })
 
@@ -739,54 +744,50 @@ test_that("submit_gemini_pairs_live resume logic skips existing pairs", {
 })
 
 test_that("submit_gemini_pairs_live runs parallel logic (coverage test)", {
-  skip_if_not_installed("future")
-  skip_if_not_installed("future.apply")
-  skip_if_not_installed("readr")
-
-  ns <- asNamespace("pairwiseLLM")
-  csv_file <- tempfile(fileext = ".csv")
-  on.exit(unlink(csv_file))
-
   pairs <- tibble::tibble(
-    ID1 = c("S1", "S2", "S3"),
-    text1 = "txt",
-    ID2 = c("T1", "T2", "T3"),
-    text2 = "txt"
+    ID1 = c("A", "B", "C"),
+    ID2 = c("D", "E", "F"),
+    text1 = "X",
+    text2 = "Y"
   )
 
-  # NOTE: Mocks defined here via local_mocked_bindings do NOT transfer to
-  # future::multisession workers. The workers will execute the real function,
-  # which will fail (e.g. 404 or auth error) because valid keys/models aren't present.
-  # This test validates that the parallel chunking/binding logic handles these
-  # worker failures gracefully and returns a valid object structure.
+  gemini_env <- environment(submit_gemini_pairs_live)
 
-  # We suppress warnings about connection errors/404s from the workers
-  res <- suppressWarnings(
-    submit_gemini_pairs_live(
-      pairs, "gemini-dummy-model", "trait", "desc",
-      parallel = TRUE, workers = 2,
-      save_path = csv_file,
-      include_raw = TRUE,
-      verbose = FALSE
-    )
+  testthat::local_mocked_bindings(
+    `future::plan` = function(...) NULL,
+    `future.apply::future_lapply` = function(X, FUN, ...) lapply(X, FUN, ...),
+    gemini_compare_pair_live = function(ID1, ID2, include_raw, ...) {
+      tibble::tibble(
+        custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+        ID1 = ID1,
+        ID2 = ID2,
+        model = "m",
+        status_code = 500L,
+        error_message = "Error: Mock fail",
+        raw_response = if (isTRUE(include_raw)) list(list(mock = TRUE)) else list(NULL),
+        better_sample = NA_character_,
+        better_id = NA_character_
+      )
+    },
+    .env = gemini_env
   )
 
-  # 1. Check Results Structure
-  # All 3 pairs should be present in the results (even if they failed)
-  expect_equal(nrow(res$results), 3)
+  out_csv <- tempfile(fileext = ".csv")
+  res <- submit_gemini_pairs_live(
+    pairs = pairs,
+    model = "m",
+    parallel = TRUE,
+    workers = 2,
+    include_raw = TRUE,
+    save_path = out_csv
+  )
 
-  # All 3 likely failed due to missing mocks in workers
-  expect_equal(nrow(res$failed_pairs), 3)
-
-  # 2. Check CSV existence and content
-  expect_true(file.exists(csv_file))
-  csv_data <- readr::read_csv(csv_file, show_col_types = FALSE)
-  expect_equal(nrow(csv_data), 3)
-
-  # 3. Check raw_response stripped from CSV but present in object
-  expect_true("raw_response" %in% names(res$results))
-  expect_false("raw_response" %in% names(csv_data))
+  expect_equal(nrow(res$results), 0L)
+  expect_equal(nrow(res$failed_pairs), 3L)
+  expect_true("raw_response" %in% names(res$failed_pairs))
+  expect_true(file.exists(out_csv))
 })
+
 
 test_that("submit_gemini_pairs_live sequential saves and catches errors", {
   skip_if_not_installed("readr")

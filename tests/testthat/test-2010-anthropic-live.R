@@ -792,14 +792,19 @@ testthat::test_that("submit_anthropic_pairs_live runs correctly and returns list
   )
 
   # Mock success response
-  fake_success <- tibble::tibble(
-    custom_id = "LIVE_X_vs_Y", ID1 = "X", ID2 = "Y",
-    model = "mod", status_code = 200L, error_message = NA_character_,
-    better_sample = "SAMPLE_1", better_id = "X"
-  )
-
   testthat::local_mocked_bindings(
-    anthropic_compare_pair_live = function(...) fake_success,
+    anthropic_compare_pair_live = function(ID1, ID2, ...) {
+      tibble::tibble(
+        custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+        ID1 = ID1,
+        ID2 = ID2,
+        model = "mod",
+        status_code = 200L,
+        error_message = NA_character_,
+        better_sample = "SAMPLE_1",
+        better_id = ID1
+      )
+    },
     .env = pll_ns
   )
 
@@ -813,7 +818,7 @@ testthat::test_that("submit_anthropic_pairs_live runs correctly and returns list
   )
 
   testthat::expect_type(res, "list")
-  testthat::expect_equal(nrow(res$results), 1L)
+  testthat::expect_equal(nrow(res$results), 2L)
   testthat::expect_equal(nrow(res$failed_pairs), 0L)
 })
 
