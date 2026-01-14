@@ -122,14 +122,14 @@ estimate_llm_pairs_cost <- function(
     return_remaining_pairs = TRUE,
     ...
 ) {
-  backend <- match.arg(backend)
-  mode <- match.arg(mode)
-  test_strategy <- match.arg(test_strategy)
-
   if (identical(backend, "ollama")) {
     stop("`backend = \"ollama\"` is not supported for cost estimation (local models have no token cost).",
          call. = FALSE)
   }
+
+  backend <- match.arg(backend)
+  mode <- match.arg(mode)
+  test_strategy <- match.arg(test_strategy)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
