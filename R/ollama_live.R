@@ -59,7 +59,8 @@
 #' @param include_raw Logical; if \code{TRUE}, adds a list-column
 #'   \code{raw_response} containing the parsed JSON body returned by Ollama
 #'   (or \code{NULL} on parse failure). This is useful for debugging.
-#' @param ... Reserved for future extensions.
+#' @param ... Reserved for future extensions. When `pair_uid` is supplied via
+#'   `...`, it is used verbatim as `custom_id`.
 #'
 #' @return A tibble with one row and columns:
 #'

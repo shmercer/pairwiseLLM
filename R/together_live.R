@@ -59,6 +59,7 @@
 #'   through to the JSON request body as top-level fields. If `temperature` is
 #'   omitted, the function uses backend defaults (0.6 for
 #'   `"deepseek-ai/DeepSeek-R1"`, 0 for all other models).
+#'   When `pair_uid` is supplied via `...`, it is used verbatim as `custom_id`.
 #'
 #' @return A tibble with one row and columns:
 #' \describe{

@@ -77,6 +77,10 @@ first text part as \code{thoughts}, with subsequent parts collapsed into
 \code{content}. If \code{FALSE} (default), all text parts are collapsed into
 \code{content} and \code{thoughts} is \code{NA}.}
 
+\item{pair_uid}{Optional stable per-pair identifier; when supplied, this
+value is used verbatim as \code{custom_id} (otherwise \code{custom_id} defaults to
+\code{"LIVE_<ID1>_vs_<ID2>"}).}
+
 \item{...}{Reserved for future extensions. Any \code{thinking_budget} entry in
 \code{...} is ignored (and a warning is emitted) because Gemini 3 does not allow
 \code{thinking_budget} and \code{thinking_level} to be used together.}

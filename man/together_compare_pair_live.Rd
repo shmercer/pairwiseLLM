@@ -59,7 +59,8 @@ failure). This is useful for debugging parsing problems.}
 \code{temperature}, \code{top_p}, and provider-specific options. These are passed
 through to the JSON request body as top-level fields. If \code{temperature} is
 omitted, the function uses backend defaults (0.6 for
-\code{"deepseek-ai/DeepSeek-R1"}, 0 for all other models).}
+\code{"deepseek-ai/DeepSeek-R1"}, 0 for all other models).
+When \code{pair_uid} is supplied via \code{...}, it is used verbatim as \code{custom_id}.}
 }
 \value{
 A tibble with one row and columns:

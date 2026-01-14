@@ -65,7 +65,8 @@ The default is \code{8192L}.}
 \code{raw_response} containing the parsed JSON body returned by Ollama
 (or \code{NULL} on parse failure). This is useful for debugging.}
 
-\item{...}{Reserved for future extensions.}
+\item{...}{Reserved for future extensions. When \code{pair_uid} is supplied via
+\code{...}, it is used verbatim as \code{custom_id}.}
 }
 \value{
 A tibble with one row and columns:

@@ -114,6 +114,9 @@
 #'   first text part as `thoughts`, with subsequent parts collapsed into
 #'   `content`. If `FALSE` (default), all text parts are collapsed into
 #'   `content` and `thoughts` is `NA`.
+#' @param pair_uid Optional stable per-pair identifier; when supplied, this
+#'   value is used verbatim as `custom_id` (otherwise `custom_id` defaults to
+#'   `"LIVE_<ID1>_vs_<ID2>"`).
 #' @param ... Reserved for future extensions. Any `thinking_budget` entry in
 #'   `...` is ignored (and a warning is emitted) because Gemini 3 does not allow
 #'   `thinking_budget` and `thinking_level` to be used together.

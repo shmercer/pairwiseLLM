@@ -660,7 +660,8 @@ anthropic_compare_pair_live <- function(
 #'   conservatively (e.g., 2-4 workers) to avoid HTTP 429 errors.
 #' @param ... Additional Anthropic parameters (for example \code{temperature},
 #'   \code{top_p}, \code{max_tokens}) passed on to
-#'   \code{\link{anthropic_compare_pair_live}}.
+#'   \code{\link{anthropic_compare_pair_live}}. When \code{pair_uid} is
+#'   supplied via \code{...}, it is used verbatim as \code{custom_id}.
 #'
 #' @return A list containing three elements:
 #' \describe{

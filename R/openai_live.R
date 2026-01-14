@@ -43,7 +43,9 @@ NULL
 #' @param include_raw Logical; if TRUE, adds a \code{raw_response} column.
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-#'   and (optionally) \code{include_thoughts}. The same validation rules for
+#'   \code{pair_uid}, and (optionally) \code{include_thoughts}. When
+#'   \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
+#'   The same validation rules for
 #'   gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
 #'   When using the Responses endpoint with reasoning models, you can request
 #'   reasoning summaries in the \code{thoughts} column by setting
