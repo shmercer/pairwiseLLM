@@ -588,7 +588,22 @@ submit_ollama_pairs_live <- function(
   if (n == 0L) {
     if (verbose) message("No new pairs to process.")
     final_res <- if (!is.null(existing_results)) existing_results else empty_res()
-    return(list(results = final_res, failed_pairs = pairs[0, ]))
+    empty_failed_attempts <- tibble::tibble(
+      A_id = character(0),
+      B_id = character(0),
+      unordered_key = character(0),
+      ordered_key = character(0),
+      backend = character(0),
+      model = character(0),
+      error_code = character(0),
+      error_detail = character(0),
+      attempted_at = as.POSIXct(character(0))
+    )
+    return(list(
+      results = final_res,
+      failed_pairs = pairs[0, ],
+      failed_attempts = empty_failed_attempts
+    ))
   }
 
   if (!is.numeric(status_every) || length(status_every) != 1L ||
@@ -832,10 +847,7 @@ submit_ollama_pairs_live <- function(
   failed_mask <- !is.na(final_results$error_message)
 
   normalized <- .normalize_llm_results(
-    raw = list(
-      results = final_results,
-      failed_pairs = final_results[failed_mask, ]
-    ),
+    raw = final_results,
     pairs = pairs_input,
     backend = "ollama",
     model = model,
@@ -844,7 +856,7 @@ submit_ollama_pairs_live <- function(
 
   list(
     results = normalized$results,
-    failed_pairs = final_results[failed_mask, ],
+    failed_pairs = normalized$failed_pairs,
     failed_attempts = normalized$failed_attempts
   )
 }
