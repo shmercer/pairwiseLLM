@@ -415,14 +415,6 @@
     )
   }
 
-  # Some older incremental-save files or minimal mocks may omit the winner.
-  # For successful responses with no error signal, default to "A" (ID1).
-  if ("status_code" %in% names(aligned) && "error_message" %in% names(aligned)) {
-    ok_mask <- (is.na(aligned$error_message) | aligned$error_message == "") &
-      (!is.na(aligned$status_code) & aligned$status_code < 400L)
-    aligned$better_id <- ifelse(is.na(aligned$better_id) & ok_mask, aligned$A_id, aligned$better_id)
-  }
-
   aligned$backend <- backend
 
   if (!"model" %in% names(aligned)) aligned$model <- NA_character_
