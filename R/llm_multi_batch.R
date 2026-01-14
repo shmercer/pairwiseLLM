@@ -71,8 +71,8 @@
 #'   (similar to the example in the advanced vignette), and `registry`,
 #'   a tibble summarising all jobs.  The `registry` contains columns
 #'   `segment_index`, `provider`, `model`, `batch_id`, `batch_input_path`,
-#'   `batch_output_path`, `csv_path`, `done`, and `results` (initialized to
-#'   `NULL`).  If `write_registry` is `TRUE`, the tibble is also written
+#'   `batch_output_path`, `csv_path`, `pairs_path`, `done`, and `results`
+#'   (initialized to `NULL`).  If `write_registry` is `TRUE`, the tibble is also written
 #'   to disk as `jobs_registry.csv`.
 #'
 #' @examples
@@ -183,6 +183,9 @@ llm_submit_pairs_multi_batch <- function(
     output_path <- file.path(output_dir, sprintf("batch_%02d_output.jsonl", seg))
     # CSV path for parsed results (used only if writing CSVs later)
     csv_path <- file.path(output_dir, sprintf("batch_%02d_results.csv", seg))
+    pairs_path <- file.path(output_dir, sprintf("batch_%02d_pairs.rds", seg))
+
+    saveRDS(pairs_seg, pairs_path)
 
     # Optional verbose message before submission
     if (isTRUE(verbose)) {
@@ -304,6 +307,8 @@ llm_submit_pairs_multi_batch <- function(
       batch_input_path  = input_path,
       batch_output_path = output_path,
       csv_path          = csv_path,
+      pairs_path        = pairs_path,
+      pairs             = pairs_seg,
       done              = FALSE,
       results           = NULL
     )
@@ -316,6 +321,7 @@ llm_submit_pairs_multi_batch <- function(
       batch_input_path  = input_path,
       batch_output_path = output_path,
       csv_path          = csv_path,
+      pairs_path        = pairs_path,
       done              = FALSE
     )
   }
@@ -402,14 +408,14 @@ llm_submit_pairs_multi_batch <- function(
 #'   and current state on each polling round, as well as summary messages
 #'   when combined results are written to disk.  Defaults to `FALSE`.
 #'
-#' @return A list with two elements: `jobs`, the updated jobs list with each
-#'   element containing parsed results and a `done` flag, and `combined`,
-#'   a tibble obtained by binding all completed results (`NULL` if no batches
-#'   completed).  If `write_results_csv` is `TRUE`, the combined tibble is still
-#'   returned in memory.
-#'   If `write_combined_csv` is `TRUE`, the combined tibble is also written
-#'   to a CSV file on disk (see `combined_csv_path` for details) but is still
-#'   returned in memory.
+#' @return A list with three elements: `jobs`, the updated jobs list with each
+#'   element containing parsed results and a `done` flag; `combined`, a tibble
+#'   obtained by binding all completed results (`NULL` if no batches
+#'   completed); and `failed_attempts`, a tibble of failed attempts captured
+#'   during normalization. If `write_results_csv` is `TRUE`, the combined tibble
+#'   is still returned in memory. If `write_combined_csv` is `TRUE`, the
+#'   combined tibble is also written to a CSV file on disk (see
+#'   `combined_csv_path` for details) but is still returned in memory.
 #'
 #' @examples
 #' # Continuing the example from llm_submit_pairs_multi_batch():
@@ -469,7 +475,8 @@ llm_resume_multi_batches <- function(
     jobs <- purrr::pmap(
       tbl,
       function(segment_index, provider, model, batch_id,
-               batch_input_path, batch_output_path, csv_path, done, ...) {
+               batch_input_path, batch_output_path, csv_path, done,
+               pairs_path = NULL, ...) {
         # Convert segment_index to integer and done to logical (if present)
         seg_int <- as.integer(segment_index)
         done_log <- if (is.null(done)) FALSE else as.logical(done)
@@ -481,6 +488,7 @@ llm_resume_multi_batches <- function(
           batch_input_path  = batch_input_path,
           batch_output_path = batch_output_path,
           csv_path          = csv_path,
+          pairs_path        = pairs_path,
           done              = done_log,
           results           = NULL
         )
@@ -501,6 +509,19 @@ llm_resume_multi_batches <- function(
 
       provider <- job$provider
       batch_id <- job$batch_id
+      resolve_pairs <- function(job_entry) {
+        if (!is.null(job_entry$pairs)) {
+          return(job_entry$pairs)
+        }
+        if (!is.null(job_entry$pairs_path) && file.exists(job_entry$pairs_path)) {
+          return(readRDS(job_entry$pairs_path))
+        }
+        rlang::abort(
+          "Missing pair data for segment ",
+          job_entry$segment_index,
+          "; unable to normalize results."
+        )
+      }
 
       # Optional progress message before polling a job
       if (isTRUE(verbose)) {
@@ -576,9 +597,18 @@ llm_resume_multi_batches <- function(
               }
               if (success) {
                 res <- parse_openai_batch_output(job$batch_output_path)
-                jobs[[j]]$results <- res
+                pairs_tbl <- resolve_pairs(job)
+                normalized <- .normalize_llm_results(
+                  raw = res,
+                  pairs = pairs_tbl,
+                  backend = provider,
+                  model = job$model,
+                  include_raw = FALSE
+                )
+                jobs[[j]]$results <- normalized$results
+                jobs[[j]]$failed_attempts <- normalized$failed_attempts
                 if (isTRUE(write_results_csv)) {
-                  readr::write_csv(res, job$csv_path)
+                  readr::write_csv(normalized$results, job$csv_path)
                 }
                 if (!isTRUE(keep_jsonl)) {
                   unlink(job$batch_input_path)
@@ -619,9 +649,18 @@ llm_resume_multi_batches <- function(
               tag_prefix  = tag_prefix,
               tag_suffix  = tag_suffix
             )
-            jobs[[j]]$results <- res
+            pairs_tbl <- resolve_pairs(job)
+            normalized <- .normalize_llm_results(
+              raw = res,
+              pairs = pairs_tbl,
+              backend = provider,
+              model = job$model,
+              include_raw = FALSE
+            )
+            jobs[[j]]$results <- normalized$results
+            jobs[[j]]$failed_attempts <- normalized$failed_attempts
             if (isTRUE(write_results_csv)) {
-              readr::write_csv(res, job$csv_path)
+              readr::write_csv(normalized$results, job$csv_path)
             }
             if (!isTRUE(keep_jsonl)) {
               unlink(job$batch_input_path)
@@ -700,9 +739,18 @@ llm_resume_multi_batches <- function(
                 results_path = job$batch_output_path,
                 requests_tbl = req_tbl
               )
-              jobs[[j]]$results <- res
+              pairs_tbl <- resolve_pairs(job)
+              normalized <- .normalize_llm_results(
+                raw = res,
+                pairs = pairs_tbl,
+                backend = provider,
+                model = job$model,
+                include_raw = FALSE
+              )
+              jobs[[j]]$results <- normalized$results
+              jobs[[j]]$failed_attempts <- normalized$failed_attempts
               if (isTRUE(write_results_csv)) {
-                readr::write_csv(res, job$csv_path)
+                readr::write_csv(normalized$results, job$csv_path)
               }
               if (!isTRUE(keep_jsonl)) {
                 unlink(job$batch_input_path)
@@ -744,6 +792,11 @@ llm_resume_multi_batches <- function(
       batch_input_path  = vapply(jobs, `[[`, character(1), "batch_input_path"),
       batch_output_path = vapply(jobs, `[[`, character(1), "batch_output_path"),
       csv_path          = vapply(jobs, `[[`, character(1), "csv_path"),
+      pairs_path        = vapply(
+        jobs,
+        function(job) job$pairs_path %||% NA_character_,
+        character(1)
+      ),
       done              = vapply(jobs, `[[`, logical(1), "done")
     )
     readr::write_csv(registry_tbl, registry_file)
@@ -751,10 +804,16 @@ llm_resume_multi_batches <- function(
 
   # Combine results into a single tibble (if any)
   completed_results <- purrr::compact(lapply(jobs, `[[`, "results"))
+  completed_failed <- purrr::compact(lapply(jobs, `[[`, "failed_attempts"))
   combined <- if (length(completed_results) > 0L) {
     dplyr::bind_rows(completed_results)
   } else {
     NULL
+  }
+  combined_failed <- if (length(completed_failed) > 0L) {
+    dplyr::bind_rows(completed_failed)
+  } else {
+    tibble::tibble()
   }
 
   # Optionally write the combined results to CSV
@@ -792,5 +851,5 @@ llm_resume_multi_batches <- function(
     }
   }
 
-  invisible(list(jobs = jobs, combined = combined))
+  invisible(list(jobs = jobs, combined = combined, failed_attempts = combined_failed))
 }
