@@ -268,7 +268,7 @@ estimate_llm_pairs_cost <- function(
   # ------------------------------------------------------------------
   pilot <- NULL
   pilot_results <- NULL
-  pilot_failed_pairs <- NULL
+  pilot_failed_attempts <- NULL
 
   if (nrow(test_pairs) > 0L) {
     pilot <- do.call(
@@ -300,7 +300,7 @@ estimate_llm_pairs_cost <- function(
       include_raw = FALSE
     )
     pilot_results <- normalized$results
-    pilot_failed_pairs <- normalized$failed_attempts
+    pilot_failed_attempts <- normalized$failed_attempts
   } else {
     pilot_results <- tibble::tibble()
   }
@@ -311,6 +311,35 @@ estimate_llm_pairs_cost <- function(
   if (!("prompt_tokens" %in% names(pilot_results))) pilot_results$prompt_tokens <- NA_integer_
   if (!("completion_tokens" %in% names(pilot_results))) pilot_results$completion_tokens <- NA_integer_
   if (!("status_code" %in% names(pilot_results))) pilot_results$status_code <- NA_integer_
+
+  if (is.null(pilot_failed_attempts)) pilot_failed_attempts <- tibble::tibble()
+  pilot_attempts_all <- dplyr::bind_rows(pilot_results, pilot_failed_attempts)
+
+  if (!("prompt_tokens" %in% names(pilot_attempts_all))) pilot_attempts_all$prompt_tokens <- NA_integer_
+  if (!("completion_tokens" %in% names(pilot_attempts_all))) pilot_attempts_all$completion_tokens <- NA_integer_
+  if (!("status_code" %in% names(pilot_attempts_all))) pilot_attempts_all$status_code <- NA_integer_
+
+  usable_in_all <- which(
+    !is.na(pilot_attempts_all$prompt_tokens) &
+      (is.na(pilot_attempts_all$status_code) | pilot_attempts_all$status_code == 200L)
+  )
+
+  usable_out_all <- which(
+    !is.na(pilot_attempts_all$completion_tokens) &
+      (is.na(pilot_attempts_all$status_code) | pilot_attempts_all$status_code == 200L)
+  )
+
+  pilot_prompt_tokens_sum <- if (length(usable_in_all) > 0L) {
+    sum(as.numeric(pilot_attempts_all$prompt_tokens[usable_in_all]), na.rm = TRUE)
+  } else {
+    0
+  }
+
+  pilot_completion_tokens_sum <- if (length(usable_out_all) > 0L) {
+    sum(as.numeric(pilot_attempts_all$completion_tokens[usable_out_all]), na.rm = TRUE)
+  } else {
+    0
+  }
 
   # Align pilot bytes with pilot rows (best-effort):
   # If pilot_results has custom_id/ID columns and order changed, we keep a simple positional match.
@@ -330,9 +359,6 @@ estimate_llm_pairs_cost <- function(
     !is.na(pilot_results$completion_tokens) &
       (is.na(pilot_results$status_code) | pilot_results$status_code == 200L)
   )
-
-  pilot_prompt_tokens_sum <- if (length(usable_in) > 0L) sum(as.numeric(pilot_results$prompt_tokens[usable_in]), na.rm = TRUE) else 0
-  pilot_completion_tokens_sum <- if (length(usable_out) > 0L) sum(as.numeric(pilot_results$completion_tokens[usable_out]), na.rm = TRUE) else 0
 
   # ------------------------------------------------------------------
   # Calibrate prompt_tokens ~ prompt_bytes
