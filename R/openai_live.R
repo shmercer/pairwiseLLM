@@ -51,7 +51,8 @@ NULL
 #'   \code{include_thoughts = TRUE}.
 #' @return A tibble with one row and columns:
 #' \describe{
-#'   \item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
+#'   \item{custom_id}{Stable ID for the pair (\code{pair_uid} if supplied via
+#'     \code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).}
 #'   \item{ID1, ID2}{The sample IDs you supplied.}
 #'   \item{model}{Model name reported by the API.}
 #'   \item{object_type}{OpenAI object type (for example "chat.completion" or
@@ -356,7 +357,7 @@ openai_compare_pair_live <- function(
 #' @param ... Additional OpenAI parameters (temperature, top_p, logprobs,
 #'   reasoning, and so on) passed on to \code{openai_compare_pair_live}.
 #'
-#' @return A list containing two elements:
+#' @return A list containing three elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair and
 #'     columns such as \code{better_id}, \code{better_sample}, \code{thoughts},
@@ -365,6 +366,8 @@ openai_compare_pair_live <- function(
 #'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 #'     failed to process (due to API errors or timeouts), along with an
 #'     \code{error_message} column. These can be easily re-submitted.}
+#'   \item{failed_attempts}{A tibble of attempt-level failures (retries,
+#'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
 #' @examples

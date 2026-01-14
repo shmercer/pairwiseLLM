@@ -62,7 +62,8 @@
 #'
 #' @return A tibble with one row and columns:
 #' \describe{
-#'   \item{custom_id}{ID string of the form `"LIVE_<ID1>_vs_<ID2>"`.}
+#'   \item{custom_id}{Stable ID for the pair (\code{pair_uid} if supplied via
+#'     \code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).}
 #'   \item{ID1, ID2}{The sample IDs you supplied.}
 #'   \item{model}{Model name reported by the API.}
 #'   \item{object_type}{API object type, typically `"chat.completion"`.}
@@ -455,13 +456,15 @@ together_compare_pair_live <- function(
 #'   or other provider-specific options. These are forwarded to
 #'   [together_compare_pair_live()].
 #'
-#' @return A list containing two elements:
+#' @return A list containing three elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair and
 #'     columns such as `better_id`, `better_sample`, `thoughts`, and `content`.}
 #'   \item{failed_pairs}{A tibble containing the rows from `pairs` that failed
 #'     to process (due to API errors or timeouts), along with an
 #'     `error_message` column. These can be easily re-submitted.}
+#'   \item{failed_attempts}{A tibble of attempt-level failures (retries,
+#'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
 #' @examples

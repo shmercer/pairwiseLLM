@@ -144,7 +144,8 @@ NULL
 #'
 #' @return A tibble with one row and columns:
 #' \describe{
-#'   \item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
+#'   \item{custom_id}{Stable ID for the pair (\code{pair_uid} if supplied via
+#'     \code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).}
 #'   \item{ID1, ID2}{The sample IDs you supplied.}
 #'   \item{model}{Model name reported by the API.}
 #'   \item{object_type}{Anthropic object type (for example \code{"message"}).}
@@ -661,12 +662,14 @@ anthropic_compare_pair_live <- function(
 #'   \code{top_p}, \code{max_tokens}) passed on to
 #'   \code{\link{anthropic_compare_pair_live}}.
 #'
-#' @return A list containing two elements:
+#' @return A list containing three elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair.}
 #'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 #'     failed to process (due to API errors or timeouts), along with an
 #'     \code{error_message} column.}
+#'   \item{failed_attempts}{A tibble of attempt-level failures (retries,
+#'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
 #' @examples

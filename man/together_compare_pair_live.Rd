@@ -64,7 +64,8 @@ omitted, the function uses backend defaults (0.6 for
 \value{
 A tibble with one row and columns:
 \describe{
-\item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
+\item{custom_id}{Stable ID for the pair (\code{pair_uid} if supplied via
+\code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).}
 \item{ID1, ID2}{The sample IDs you supplied.}
 \item{model}{Model name reported by the API.}
 \item{object_type}{API object type, typically \code{"chat.completion"}.}

@@ -503,12 +503,14 @@ gemini_compare_pair_live <- function(
 #' @param ... Reserved for future extensions; passed through to
 #'   [gemini_compare_pair_live()] (but `thinking_budget` is ignored there).
 #'
-#' @return A list containing two elements:
+#' @return A list containing three elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair.}
 #'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 #'     failed to process (due to API errors or timeouts), along with an
 #'     \code{error_message} column.}
+#'   \item{failed_attempts}{A tibble of attempt-level failures (retries,
+#'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
 #' @examples

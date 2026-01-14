@@ -71,8 +71,8 @@ The default is \code{8192L}.}
 A tibble with one row and columns:
 
 \itemize{
-\item \code{custom_id} – ID string of the form
-\code{"LIVE_<ID1>_vs_<ID2>"}.
+\item \code{custom_id} – stable ID for the pair (\code{pair_uid} if
+supplied via \code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).
 \item \code{ID1}, \code{ID2} – the sample IDs supplied to the function.
 \item \code{model} – model name reported by the API (or the requested
 model).

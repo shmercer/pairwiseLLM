@@ -64,8 +64,8 @@
 #' @return A tibble with one row and columns:
 #'
 #' \itemize{
-#'   \item \code{custom_id} – ID string of the form
-#'     \code{"LIVE_<ID1>_vs_<ID2>"}.
+#'   \item \code{custom_id} – stable ID for the pair (\code{pair_uid} if
+#'     supplied via \code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).
 #'   \item \code{ID1}, \code{ID2} – the sample IDs supplied to the function.
 #'   \item \code{model} – model name reported by the API (or the requested
 #'     model).
@@ -433,12 +433,14 @@ ollama_compare_pair_live <- function(
 #' @param ... Reserved for future extensions and forwarded to
 #'   [ollama_compare_pair_live()].
 #'
-#' @return A list containing two elements:
+#' @return A list containing three elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair.}
 #'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 #'     failed to process (due to API errors or timeouts), along with an
 #'     \code{error_message} column.}
+#'   \item{failed_attempts}{A tibble of attempt-level failures (retries,
+#'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
 #' @details

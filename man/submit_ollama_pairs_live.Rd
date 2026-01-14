@@ -78,12 +78,14 @@ packages. Defaults to \code{FALSE}.}
 \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}.}
 }
 \value{
-A list containing two elements:
+A list containing three elements:
 \describe{
 \item{results}{A tibble with one row per successfully processed pair.}
 \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 failed to process (due to API errors or timeouts), along with an
 \code{error_message} column.}
+\item{failed_attempts}{A tibble of attempt-level failures (retries,
+timeouts, parse errors, invalid winners), separate from observed outcomes.}
 }
 }
 \description{

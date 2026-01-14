@@ -73,7 +73,7 @@ depending on your usage tier.}
 reasoning, and so on) passed on to \code{openai_compare_pair_live}.}
 }
 \value{
-A list containing two elements:
+A list containing three elements:
 \describe{
 \item{results}{A tibble with one row per successfully processed pair and
 columns such as \code{better_id}, \code{better_sample}, \code{thoughts},
@@ -82,6 +82,8 @@ details.}
 \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 failed to process (due to API errors or timeouts), along with an
 \code{error_message} column. These can be easily re-submitted.}
+\item{failed_attempts}{A tibble of attempt-level failures (retries,
+timeouts, parse errors, invalid winners), separate from observed outcomes.}
 }
 }
 \description{
