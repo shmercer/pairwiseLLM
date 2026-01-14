@@ -45,17 +45,16 @@
   if (!all(c("ID1", "ID2") %in% names(pairs))) {
     if (all(c("A_id", "B_id") %in% names(pairs))) {
       pairs <- dplyr::rename(pairs, ID1 = A_id, ID2 = B_id)
+    } else if (all(c("A", "B") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = A, ID2 = B)
+    } else if (all(c("idA", "idB") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = idA, ID2 = idB)
+    } else if (all(c("ID_A", "ID_B") %in% names(pairs))) {
+      pairs <- dplyr::rename(pairs, ID1 = ID_A, ID2 = ID_B)
     } else if (all(c("id1", "id2") %in% names(pairs))) {
       pairs <- dplyr::rename(pairs, ID1 = id1, ID2 = id2)
-    } else if (all(c("ID_1", "ID_2") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = ID_1, ID2 = ID_2)
-    } else if (all(c("left_id", "right_id") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = left_id, ID2 = right_id)
-    } else if (all(c("item1", "item2") %in% names(pairs))) {
-      pairs <- dplyr::rename(pairs, ID1 = item1, ID2 = item2)
     }
   }
-
   required_id_cols <- c("ID1", "ID2")
   missing_id_cols <- setdiff(required_id_cols, names(pairs))
   if (length(missing_id_cols) > 0L) {
@@ -176,6 +175,8 @@
       extra_attempts_tbl <- dups |>
         dplyr::transmute(
           custom_id = .data$custom_id,
+          ordered_key = .data$ordered_key,
+          ordered_occurrence_index = .data$ordered_occurrence_index,
           error_code = "http_error",
           error_detail = "Duplicate result row for custom_id; treated as non-observed attempt",
           attempted_at = Sys.time()
@@ -227,6 +228,7 @@
           B_id = .data$ID2,
           unordered_key = .data$unordered_key,
           ordered_key = .data$ordered_key,
+          ordered_occurrence_index = .data$ordered_occurrence_index,
           error_code = "parse_error",
           error_detail = "Duplicate result row for ordered pair; treated as non-observed attempt",
           attempted_at = Sys.time(),
