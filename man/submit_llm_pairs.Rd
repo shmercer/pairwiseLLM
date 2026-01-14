@@ -120,6 +120,8 @@ A list containing:
 \item{results}{A tibble with one row per successfully processed pair.}
 \item{failed_pairs}{A tibble containing rows that failed to process (for
 supported backends).}
+\item{failed_attempts}{A tibble containing normalized failure records
+(invalid winners, parse failures, HTTP/timeouts) suitable for debugging.}
 }
 Note: The \code{"ollama"} backend currently returns a single tibble of results
 (failures may throw errors or appear as NA rows depending on implementation).

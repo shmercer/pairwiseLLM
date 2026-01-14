@@ -69,6 +69,8 @@ A list of class \code{"pairwiseLLM_batch"} containing at least:
 \item \code{batch}: provider-specific batch object (e.g., job metadata),
 \item \code{results}: a tibble of parsed comparison results in the standard
 pairwiseLLM schema.
+\item \code{failed_attempts}: a tibble of failed attempts captured during
+normalization (empty when no failures are observed).
 }
 
 Additional fields returned by the backend-specific pipeline functions are
