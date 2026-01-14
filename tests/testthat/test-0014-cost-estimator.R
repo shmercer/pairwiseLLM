@@ -122,14 +122,12 @@ testthat::test_that("estimate_llm_pairs_cost validates inputs", {
   td <- trait_description("overall_quality")
 
   # Backend ollama
-  # Note: match.arg fails before the specific ollama check in the source code,
-  # so we expect the standard match.arg error message.
   testthat::expect_error(
     estimate_llm_pairs_cost(pairs,
       model = "m", trait_name = "t", trait_description = "d",
       backend = "ollama", cost_per_million_input = 1, cost_per_million_output = 1
     ),
-    "should be one of"
+    "backend = \"ollama\""
   )
 
   # Missing columns
@@ -504,6 +502,38 @@ testthat::test_that("estimate_llm_pairs_cost triggers stratified sampling top-up
   testthat::expect_equal(nrow(est$test_pairs), 3)
 })
 
+testthat::test_that("estimate_llm_pairs_cost stratifies skewed prompt bytes and tops up", {
+  pairs <- tibble::tibble(
+    ID1 = letters[1:5],
+    text1 = c("a", "bb", strrep("c", 100), strrep("d", 100), strrep("e", 100)),
+    ID2 = LETTERS[1:5],
+    text2 = "z"
+  )
+  td <- trait_description("overall_quality")
+
+  fake_submit <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200,
+      prompt_tokens = rep(10L, nrow(pairs)),
+      completion_tokens = rep(10L, nrow(pairs))
+    )
+  }
+
+  withr::local_seed(123)
+  est <- suppressWarnings(estimate_llm_pairs_cost(
+    pairs = pairs, model = "m", trait_name = td$name, trait_description = td$description,
+    n_test = 4, test_strategy = "stratified_prompt_bytes",
+    cost_per_million_input = 1, cost_per_million_output = 1,
+    .submit_fun = fake_submit
+  ))
+
+  testthat::expect_equal(est$summary$n_test, 4)
+  testthat::expect_equal(nrow(est$test_pairs), 4)
+})
+
 testthat::test_that("estimate_llm_pairs_cost handles pilot mismatch and first strategy", {
   pairs <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
   td <- trait_description("overall_quality")
@@ -534,6 +564,44 @@ testthat::test_that("estimate_llm_pairs_cost handles pilot mismatch and first st
 
   # Check that mismatch logic summed the tokens correctly (10+20=30)
   testthat::expect_equal(est$summary$pilot_prompt_tokens, 30)
+})
+
+testthat::test_that("estimate_llm_pairs_cost recycles pilot bytes when results are invalid", {
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"),
+    text1 = c("short", "longer"),
+    ID2 = c("C", "D"),
+    text2 = c("x", "y")
+  )
+  td <- trait_description("overall_quality")
+
+  fake_submit_invalid <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = "NOT_A_PAIR_ID",
+      status_code = 200
+    )
+  }
+
+  est <- estimate_llm_pairs_cost(
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-4.1-mini",
+    endpoint = "chat.completions",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = set_prompt_template(),
+    mode = "live",
+    n_test = 1,
+    test_strategy = "first",
+    cost_per_million_input = 1,
+    cost_per_million_output = 1,
+    .submit_fun = fake_submit_invalid
+  )
+
+  testthat::expect_equal(est$summary$n_test, 1)
+  testthat::expect_equal(est$summary$pilot_prompt_tokens, 0)
 })
 
 testthat::test_that("estimate_llm_pairs_cost falls back to default submitter", {

@@ -408,6 +408,34 @@ testthat::test_that("submit_ollama_pairs_live returns list with empty tibbles
   testthat::expect_equal(nrow(res$failed_pairs), 0L)
 })
 
+testthat::test_that("submit_ollama_pairs_live reports no new pairs with include_raw", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  empty_pairs <- tibble::tibble(
+    ID1   = character(0),
+    text1 = character(0),
+    ID2   = character(0),
+    text2 = character(0)
+  )
+
+  msgs <- testthat::capture_messages(
+    res <- submit_ollama_pairs_live(
+      pairs             = empty_pairs,
+      model             = "mistral-small3.2:24b",
+      trait_name        = td$name,
+      trait_description = td$description,
+      prompt_template   = tmpl,
+      verbose           = TRUE,
+      progress          = FALSE,
+      include_raw       = TRUE
+    )
+  )
+
+  testthat::expect_true(any(grepl("No new pairs to process", msgs)))
+  testthat::expect_true("raw_response" %in% names(res$results))
+})
+
 
 # ---------------------------------------------------------------------
 # submit_ollama_pairs_live: row-wise calling of ollama_compare_pair_live
@@ -500,6 +528,36 @@ testthat::test_that("submit_ollama_pairs_live captures errors in failed_pairs", 
       testthat::expect_match(res$failed_pairs$error_message, "Inner crash detected")
     }
   )
+})
+
+testthat::test_that("submit_ollama_pairs_live logs errors and strips raw_response on save", {
+  testthat::skip_if_not_installed("readr")
+  pairs <- tibble::tibble(ID1 = "a", text1 = "a", ID2 = "b", text2 = "b")
+  save_path <- withr::local_tempfile(fileext = ".csv")
+
+  msgs <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      ollama_compare_pair_live = function(...) stop("Inner crash detected"),
+      .package = "pairwiseLLM",
+      {
+        testthat::with_mocked_bindings(
+          write_csv = function(x, ...) {
+            testthat::expect_false("raw_response" %in% names(x))
+          },
+          .package = "readr",
+          {
+            submit_ollama_pairs_live(
+              pairs,
+              model = "m", trait_name = "t", trait_description = "d",
+              include_raw = TRUE, save_path = save_path, verbose = TRUE, progress = FALSE
+            )
+          }
+        )
+      }
+    )
+  )
+
+  testthat::expect_true(any(grepl("ERROR: Ollama comparison failed", msgs)))
 })
 
 testthat::test_that("submit_ollama_pairs_live catches errors thrown by inner function", {
@@ -1019,6 +1077,83 @@ testthat::test_that("ensure_only_ollama_model_loaded handles empty or weird CLI 
   )
 })
 
+testthat::test_that("ensure_only_ollama_model_loaded emits verbose status messages", {
+  msgs_empty <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      .ollama_system2 = function(...) structure(character(0), status = 0L),
+      .package = "pairwiseLLM",
+      {
+        ensure_only_ollama_model_loaded("mistral", verbose = TRUE)
+      }
+    )
+  )
+  testthat::expect_true(any(grepl("failed or returned no output", msgs_empty)))
+
+  msgs_header <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      .ollama_system2 = function(...) structure("NAME ID", status = 0L),
+      .package = "pairwiseLLM",
+      {
+        ensure_only_ollama_model_loaded("mistral", verbose = TRUE)
+      }
+    )
+  )
+  testthat::expect_true(any(grepl("No active Ollama models", msgs_header)))
+
+  msgs_only_target <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      .ollama_system2 = function(...) {
+        structure(c("NAME ID", "mistral abc"), status = 0L)
+      },
+      .package = "pairwiseLLM",
+      {
+        ensure_only_ollama_model_loaded("mistral", verbose = TRUE)
+      }
+    )
+  )
+  testthat::expect_true(any(grepl("Active Ollama models", msgs_only_target)))
+  testthat::expect_true(any(grepl("No models to unload", msgs_only_target)))
+})
+
+testthat::test_that("ensure_only_ollama_model_loaded reports unload messages when verbose", {
+  calls <- list()
+  fake_ps <- structure(c("NAME ID", "keep 1", "drop 2"), status = 0L)
+
+  msgs <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      .ollama_system2 = function(command, args, ...) {
+        if (identical(args, "ps")) return(fake_ps)
+        calls <<- append(calls, list(args))
+        invisible(NULL)
+      },
+      .package = "pairwiseLLM",
+      {
+        res <- ensure_only_ollama_model_loaded("keep", verbose = TRUE)
+        testthat::expect_equal(res, "drop")
+      }
+    )
+  )
+
+  testthat::expect_true(any(grepl("Unloading Ollama model: drop", msgs)))
+  testthat::expect_true(length(calls) == 1L)
+})
+
+testthat::test_that(".ollama_system2 delegates to system2", {
+  rscript <- file.path(R.home("bin"), "Rscript")
+  if (!file.exists(rscript)) {
+    testthat::skip("Rscript is not available on this system.")
+  }
+
+  out <- pairwiseLLM:::.ollama_system2(
+    rscript,
+    args = c("-e", "cat('ok')"),
+    stdout = TRUE,
+    stderr = TRUE
+  )
+
+  testthat::expect_true(any(grepl("ok", out)))
+})
+
 # ---------------------------------------------------------------------
 # submit_ollama_pairs_live: Zero rows (Updated return structure)
 # ---------------------------------------------------------------------
@@ -1240,6 +1375,64 @@ testthat::test_that("submit_ollama_pairs_live resumes from existing file", {
   )
 })
 
+testthat::test_that("submit_ollama_pairs_live emits resume messages when verbose", {
+  testthat::skip_if_not_installed("readr")
+  pairs <- tibble::tibble(
+    ID1 = c("A", "C"), text1 = c("a", "c"),
+    ID2 = c("B", "D"), text2 = c("b", "d")
+  )
+
+  existing <- tibble::tibble(
+    custom_id = "LIVE_A_vs_B",
+    ID1 = "A", ID2 = "B", model = "m",
+    error_message = NA_character_, status_code = 200L
+  )
+
+  msgs <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      file.exists = function(x) x == "saved.csv",
+      .package = "base",
+      {
+        testthat::with_mocked_bindings(
+          read_csv = function(...) existing,
+          write_csv = function(...) NULL,
+          .package = "readr",
+          {
+            testthat::with_mocked_bindings(
+              ollama_compare_pair_live = function(ID1, ID2, ...) {
+                tibble::tibble(
+                  custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+                  ID1 = ID1,
+                  ID2 = ID2,
+                  model = "m",
+                  status_code = 200L,
+                  error_message = NA_character_,
+                  better_sample = "SAMPLE_1",
+                  better_id = ID1,
+                  prompt_tokens = 1,
+                  completion_tokens = 1,
+                  total_tokens = 2
+                )
+              },
+              .package = "pairwiseLLM",
+              {
+                submit_ollama_pairs_live(
+                  pairs,
+                  model = "m", trait_name = "t", trait_description = "d",
+                  save_path = "saved.csv", verbose = TRUE, progress = FALSE
+                )
+              }
+            )
+          }
+        )
+      }
+    )
+  )
+
+  testthat::expect_true(any(grepl("Found existing file", msgs)))
+  testthat::expect_true(any(grepl("Skipping 1 pairs", msgs)))
+})
+
 testthat::test_that("submit_ollama_pairs_live supports parallel processing", {
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
@@ -1285,8 +1478,65 @@ testthat::test_that("submit_ollama_pairs_live supports parallel processing", {
     }
   )
 
-  testthat::expect_true(plan_called)
-  testthat::expect_true(lapply_called)
+testthat::expect_true(plan_called)
+testthat::expect_true(lapply_called)
+})
+
+testthat::test_that("submit_ollama_pairs_live parallel path logs messages and strips raw_response", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  pairs <- tibble::tibble(
+    ID1 = c("A", "C"), text1 = c("a", "c"),
+    ID2 = c("B", "D"), text2 = c("b", "d")
+  )
+
+  save_path <- withr::local_tempfile(fileext = ".csv")
+  write_calls <- list()
+
+  msgs <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      plan = function(...) "old",
+      .package = "future",
+      {
+        testthat::with_mocked_bindings(
+          future_lapply = function(X, FUN, ...) lapply(X, FUN),
+          .package = "future.apply",
+          {
+            testthat::with_mocked_bindings(
+              ollama_compare_pair_live = function(...) {
+                tibble::tibble(custom_id = "id", error_message = NA_character_, raw_response = list(list(ok = TRUE)))
+              },
+              .package = "pairwiseLLM",
+              {
+                testthat::with_mocked_bindings(
+                  write_csv = function(x, ...) {
+                    write_calls <<- append(write_calls, list(names(x)))
+                  },
+                  .package = "readr",
+                  {
+                    submit_ollama_pairs_live(
+                      pairs,
+                      model = "m", trait_name = "t", trait_description = "d",
+                      verbose = TRUE, progress = FALSE,
+                      include_raw = TRUE, save_path = save_path,
+                      parallel = TRUE, workers = 2
+                    )
+                  }
+                )
+              }
+            )
+          }
+        )
+      }
+    )
+  )
+
+  testthat::expect_true(any(grepl("Setting up parallel plan", msgs)))
+  testthat::expect_true(any(grepl("Processing .* PARALLEL", msgs)))
+  testthat::expect_true(length(write_calls) > 0L)
+  testthat::expect_true(all(vapply(write_calls, function(nms) !"raw_response" %in% nms, logical(1))))
 })
 
 # ---------------------------------------------------------------------
@@ -1420,17 +1670,31 @@ testthat::test_that("submit_ollama_pairs_live creates directory for save_path", 
 
   save_path <- file.path(temp_dir, "out.csv")
 
-  fake_row <- tibble::tibble(custom_id = "id", error_message = NA_character_)
+  fake_row <- tibble::tibble(
+    custom_id = "id",
+    ID1 = "A",
+    ID2 = "B",
+    status_code = 200L,
+    error_message = NA_character_,
+    better_sample = "SAMPLE_1",
+    better_id = "A",
+    prompt_tokens = 1,
+    completion_tokens = 1,
+    total_tokens = 2
+  )
 
   testthat::with_mocked_bindings(
     ollama_compare_pair_live = function(...) fake_row,
     .package = "pairwiseLLM",
     {
-      res <- submit_ollama_pairs_live(
-        tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b"),
-        "m", "t", "d",
-        save_path = save_path, verbose = FALSE
+      msgs <- testthat::capture_messages(
+        submit_ollama_pairs_live(
+          tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b"),
+          "m", "t", "d",
+          save_path = save_path, verbose = TRUE, progress = FALSE
+        )
       )
+      testthat::expect_true(any(grepl("Creating output directory", msgs)))
     }
   )
 

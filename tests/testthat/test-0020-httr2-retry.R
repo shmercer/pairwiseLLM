@@ -149,6 +149,31 @@ test_that("retry backoff validates jitter and max_attempts", {
   )
 })
 
+test_that("retry backoff applies jitter when configured", {
+  call_count <- 0L
+  transient_err <- structure(
+    list(message = "HTTP 500"),
+    class = c("httr2_http_500", "error", "condition")
+  )
+
+  withr::local_seed(123)
+  out <- .pairwiseLLM_retry_backoff(
+    fn = function() {
+      call_count <<- call_count + 1L
+      if (call_count < 2L) {
+        stop(transient_err)
+      }
+      "ok"
+    },
+    max_attempts = 2L,
+    base_delay = 0,
+    jitter = 0.001
+  )
+
+  expect_equal(out$result, "ok")
+  expect_equal(call_count, 2L)
+})
+
 test_that("retry request validates jitter and rethrows non-transient http errors", {
   http_err <- structure(list(response = list()), class = c("httr2_http", "error", "condition"))
   fake_req <- structure(list(), class = "httr2_request")
@@ -172,4 +197,38 @@ test_that("retry request validates jitter and rethrows non-transient http errors
       )
     }
   )
+})
+
+test_that("retry request validates max_attempts and retries transient http errors", {
+  expect_error(
+    .retry_httr2_request(list(), max_attempts = 0L),
+    "max_attempts"
+  )
+
+  call_count <- 0L
+  http_err <- structure(
+    list(response = list(status = 503L)),
+    class = c("httr2_http", "error", "condition")
+  )
+  fake_resp <- function(status) {
+    structure(list(status = status), class = "httr2_response")
+  }
+
+  withr::local_seed(123)
+  res <- with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) {
+      call_count <<- call_count + 1L
+      if (call_count == 1L) {
+        stop(http_err)
+      }
+      fake_resp(200L)
+    },
+    `.pairwiseLLM_resp_status` = function(resp) resp$status,
+    {
+      .retry_httr2_request(list(), max_attempts = 2L, base_delay = 0, jitter = 0.001)
+    }
+  )
+
+  expect_equal(call_count, 2L)
+  expect_equal(attr(res, "retry_failures")$error_code, "http_error")
 })

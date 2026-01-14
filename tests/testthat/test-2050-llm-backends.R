@@ -905,7 +905,7 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
           prompt_template = tmpl,
           backend = "invalid"
         ),
-        "should be one of \"openai\", \"anthropic\", \"gemini\", \"together\", \"ollama\""
+        "Backend 'invalid' is not implemented yet"
       )
     }
   )
@@ -1246,4 +1246,22 @@ testthat::test_that("submit_llm_pairs converts empty api_key to NULL", {
   )
 
   testthat::expect_true(is.null(captured))
+})
+
+testthat::test_that("submit_llm_pairs rejects unsupported backend values", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  testthat::expect_error(
+    submit_llm_pairs(
+      pairs = pairs,
+      model = "m",
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl,
+      backend = "unsupported"
+    ),
+    "Backend 'unsupported' is not implemented yet"
+  )
 })

@@ -303,28 +303,15 @@ test_that("summarize_bt_fit handles character theta coercion and verbose=TRUE", 
   expect_equal(res$ID, c("A", "B"))
 })
 
-test_that("summarize_bt_fit coerces non-numeric output from as.double", {
+test_that("summarize_bt_fit coerces character theta quietly when verbose = FALSE", {
   theta_df <- tibble::tibble(
     ID = c("A", "B"),
-    theta = c(1.2, 0.4),
+    theta = c("1.2", "0.4"),
     se = c(0.1, 0.2)
   )
   fit <- list(engine = "mock", reliability = 0.9, theta = theta_df)
 
-  call_count <- 0L
-  res <- testthat::with_mocked_bindings(
-    as.double = function(x) {
-      call_count <<- call_count + 1L
-      if (call_count == 1L) {
-        return("not-numeric")
-      }
-      base::as.double(x)
-    },
-    .package = "base",
-    {
-      summarize_bt_fit(fit, verbose = FALSE)
-    }
-  )
+  expect_no_warning(res <- summarize_bt_fit(fit, verbose = FALSE))
   expect_equal(res$rank, c(1L, 2L))
 })
 
