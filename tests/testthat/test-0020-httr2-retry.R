@@ -116,3 +116,60 @@ test_that("retry backoff aborts on non-transient errors", {
   failures <- attr(err, "retry_failures")
   expect_equal(nrow(failures), 1L)
 })
+
+test_that("retry helper classifies transient and non-transient errors", {
+  timeout_err <- structure(list(message = "timeout"), class = c("httr2_timeout", "error", "condition"))
+  http_429 <- structure(list(), class = c("httr2_http_429", "error", "condition"))
+  http_404 <- structure(list(), class = c("httr2_http_404", "error", "condition"))
+
+  expect_true(.pairwiseLLM_retry_is_transient(timeout_err))
+  expect_true(.pairwiseLLM_retry_is_transient(http_429))
+  expect_false(.pairwiseLLM_retry_is_transient(http_404))
+})
+
+test_that("retry helper uses httr2_http response status when present", {
+  http_err <- structure(list(response = list()), class = c("httr2_http", "error", "condition"))
+
+  with_mocked_bindings(
+    `.pairwiseLLM_resp_status` = function(resp) 408L,
+    {
+      expect_true(.pairwiseLLM_retry_is_transient(http_err))
+    }
+  )
+})
+
+test_that("retry backoff validates jitter and max_attempts", {
+  expect_error(
+    .pairwiseLLM_retry_backoff(function() "ok", max_attempts = 0L),
+    "max_attempts"
+  )
+  expect_error(
+    .pairwiseLLM_retry_backoff(function() "ok", jitter = -1),
+    "jitter"
+  )
+})
+
+test_that("retry request validates jitter and rethrows non-transient http errors", {
+  http_err <- structure(list(response = list()), class = c("httr2_http", "error", "condition"))
+  fake_req <- structure(list(), class = "httr2_request")
+
+  with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) stop(http_err),
+    `.pairwiseLLM_resp_status` = function(resp) 400L,
+    {
+      err <- tryCatch(.retry_httr2_request(fake_req, max_attempts = 1L, jitter = 0), error = function(e) e)
+      expect_s3_class(err, "httr2_http")
+    }
+  )
+
+  with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) structure(list(status = 500L), class = "httr2_response"),
+    `.pairwiseLLM_resp_status` = function(resp) resp$status,
+    {
+      expect_error(
+        .retry_httr2_request(fake_req, max_attempts = 2L, jitter = -0.5, base_delay = 0),
+        "jitter"
+      )
+    }
+  )
+})

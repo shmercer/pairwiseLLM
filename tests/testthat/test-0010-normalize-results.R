@@ -304,3 +304,144 @@ test_that("normalize_llm_results merges backend failed_attempts payloads", {
   expect_true(nrow(out$failed_attempts) >= 1L)
   expect_true("timeout" %in% out$failed_attempts$error_code)
 })
+
+test_that("normalize_llm_results errors when pairs lack required identifiers", {
+  bad_pairs <- tibble::tibble(foo = "A", bar = "B")
+  raw <- tibble::tibble(ID1 = "A", ID2 = "B", better_id = "A")
+
+  expect_error(
+    .normalize_llm_results(
+      raw = raw,
+      pairs = bad_pairs,
+      backend = "openai",
+      model = "gpt-test",
+      include_raw = FALSE
+    ),
+    "must contain columns"
+  )
+})
+
+test_that("normalize_llm_results falls back to row-order alignment with raw IDs", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = "X",
+    ID2 = "Y",
+    better_id = "X",
+    status_code = 200L,
+    error_message = NA_character_
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_equal(out$alignment, "row_order")
+  expect_equal(out$results$A_id, "A")
+  expect_equal(out$results$B_id, "B")
+  expect_equal(out$results$better_id, "A")
+})
+
+test_that("normalize_llm_results classifies timeout/http/result_type errors", {
+  pairs <- tibble::tibble(
+    ID1 = c("A", "C", "E"),
+    text1 = c("alpha", "charlie", "echo"),
+    ID2 = c("B", "D", "F"),
+    text2 = c("beta", "delta", "foxtrot")
+  )
+
+  raw <- tibble::tibble(
+    ID1 = c("A", "C", "E"),
+    ID2 = c("B", "D", "F"),
+    better_id = c(NA_character_, NA_character_, NA_character_),
+    status_code = c(500L, NA_integer_, NA_integer_),
+    error_message = c(NA_character_, "Request timed out", NA_character_),
+    result_type = c(NA_character_, NA_character_, "errored")
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_equal(nrow(out$results), 0L)
+  expect_equal(out$failed_attempts$error_code, c("http_error", "timeout", "http_error"))
+})
+
+test_that("normalize_llm_results appends retry_failures to failed_attempts", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A",
+    retry_failures = list(tibble::tibble(
+      error_code = "http_error",
+      error_detail = "HTTP 429",
+      attempted_at = as.POSIXct("2024-01-01 00:00:00", tz = "UTC")
+    ))
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_equal(nrow(out$results), 1L)
+  expect_true(any(out$failed_attempts$error_code == "http_error"))
+  expect_true(any(grepl("HTTP 429", out$failed_attempts$error_detail)))
+})
+
+test_that("normalize_llm_results merges backend failed_attempts by custom_id", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta",
+    pair_uid = "pair-42"
+  )
+
+  raw <- list(
+    results = tibble::tibble(
+      custom_id = "pair-42",
+      ID1 = "A",
+      ID2 = "B",
+      better_id = "A"
+    ),
+    failed_attempts = tibble::tibble(
+      custom_id = "pair-42",
+      error_message = "timeout waiting"
+    )
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(any(out$failed_attempts$error_code == "timeout"))
+  expect_true(any(grepl("timeout", out$failed_attempts$error_detail)))
+})
