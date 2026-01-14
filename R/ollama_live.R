@@ -240,6 +240,10 @@ ollama_compare_pair_live <- function(
     httr2::req_error(is_error = function(resp) FALSE)
 
   resp <- .retry_httr2_request(req)
+  retry_failures <- attr(resp, "retry_failures")
+  if (is.null(retry_failures)) {
+    retry_failures <- tibble::tibble()
+  }
 
   status_code <- resp_status(resp)
   error_message <- NA_character_
@@ -271,6 +275,7 @@ ollama_compare_pair_live <- function(
     if (include_raw) {
       res$raw_response <- list(NULL)
     }
+    res$retry_failures <- list(retry_failures)
 
     return(res)
   }
@@ -354,6 +359,7 @@ ollama_compare_pair_live <- function(
   if (include_raw) {
     res$raw_response <- list(body)
   }
+  res$retry_failures <- list(retry_failures)
 
   res
 }
@@ -496,6 +502,7 @@ submit_ollama_pairs_live <- function(
   ...
 ) {
   pairs <- tibble::as_tibble(pairs)
+  pairs_input <- pairs
   required_cols <- c("ID1", "text1", "ID2", "text2")
   missing_cols <- setdiff(required_cols, names(pairs))
 
@@ -630,6 +637,10 @@ submit_ollama_pairs_live <- function(
             )
           },
           error = function(e) {
+            retry_failures <- attr(e, "retry_failures")
+            if (is.null(retry_failures)) {
+              retry_failures <- tibble::tibble()
+            }
             # Return error row
             tibble::tibble(
               custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
@@ -646,7 +657,8 @@ submit_ollama_pairs_live <- function(
               prompt_tokens = NA_real_,
               completion_tokens = NA_real_,
               total_tokens = NA_real_,
-              raw_response = if (include_raw) list(NULL) else NULL
+              raw_response = if (include_raw) list(NULL) else NULL,
+              retry_failures = list(retry_failures)
             )
           }
         )
@@ -714,6 +726,10 @@ submit_ollama_pairs_live <- function(
           ...
         ),
         error = function(e) {
+          retry_failures <- attr(e, "retry_failures")
+          if (is.null(retry_failures)) {
+            retry_failures <- tibble::tibble()
+          }
           if (verbose) {
             message(sprintf(
               "    ERROR: Ollama comparison failed for pair %s vs %s: %s",
@@ -744,6 +760,7 @@ submit_ollama_pairs_live <- function(
           if (include_raw) {
             out_row$raw_response <- list(NULL)
           }
+          out_row$retry_failures <- list(retry_failures)
 
           out_row
         }
@@ -814,9 +831,21 @@ submit_ollama_pairs_live <- function(
   # Identify failures
   failed_mask <- !is.na(final_results$error_message)
 
+  normalized <- .normalize_llm_results(
+    raw = list(
+      results = final_results,
+      failed_pairs = final_results[failed_mask, ]
+    ),
+    pairs = pairs_input,
+    backend = "ollama",
+    model = model,
+    include_raw = include_raw
+  )
+
   list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+    results = normalized$results,
+    failed_pairs = final_results[failed_mask, ],
+    failed_attempts = normalized$failed_attempts
   )
 }
 
