@@ -576,6 +576,7 @@ testthat::test_that("submit_gemini_pairs_live separates failed pairs", {
 
       testthat::expect_equal(nrow(res$results), 1L)
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
+      testthat::expect_equal(nrow(res$failed_attempts), 1L)
       testthat::expect_equal(res$failed_pairs$ID1, "FailMe")
       testthat::expect_equal(res$failed_pairs$error_message, "Mock API Error")
     }
@@ -784,6 +785,7 @@ test_that("submit_gemini_pairs_live runs parallel logic (coverage test)", {
 
   expect_equal(nrow(res$results), 0L)
   expect_equal(nrow(res$failed_pairs), 3L)
+  expect_equal(nrow(res$failed_attempts), 3L)
   expect_true("raw_response" %in% names(res$failed_pairs))
   expect_true(file.exists(out_csv))
 })
@@ -820,14 +822,13 @@ test_that("submit_gemini_pairs_live sequential saves and catches errors", {
     parallel = FALSE # Explicit sequential
   )
 
-  # 1. Check Results count
-  expect_equal(nrow(res$results), 2)
-  expect_true(is.na(res$results$error_message[res$results$ID1 == "S1"]))
-  expect_match(res$results$error_message[res$results$ID1 == "S2"], "Seq Error")
+  # 1. Check Results count (observed outcomes only)
+  expect_equal(nrow(res$results), 1)
 
   # $failed_pairs contains only the failure
   expect_equal(nrow(res$failed_pairs), 1)
   expect_match(res$failed_pairs$error_message, "Seq Error")
+  expect_equal(nrow(res$failed_attempts), 1)
 
   # 2. Check CSV
   expect_true(file.exists(csv_file))
