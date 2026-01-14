@@ -593,7 +593,8 @@ testthat::test_that("submit_gemini_pairs_live respects save_path (Resume Logic)"
   existing_data <- tibble::tibble(
     custom_id = "LIVE_S01_vs_S02",
     ID1 = "S01", ID2 = "S02",
-    model = "gemini", status_code = 200L, error_message = NA_character_
+    model = "gemini", status_code = 200L, error_message = NA_character_,
+    better_id = "S01"
   )
   readr::write_csv(existing_data, tmp_csv)
 
@@ -613,7 +614,8 @@ testthat::test_that("submit_gemini_pairs_live respects save_path (Resume Logic)"
       tibble::tibble(
         custom_id = "LIVE_S03_vs_S04",
         ID1 = "S03", ID2 = "S04",
-        model = "gemini", status_code = 200L, error_message = NA_character_
+        model = "gemini", status_code = 200L, error_message = NA_character_,
+        better_id = "S03"
       )
     },
     .env = pll_ns,
@@ -682,7 +684,8 @@ test_that("submit_gemini_pairs_live creates output directory if missing", {
     gemini_compare_pair_live = function(...) {
       tibble::tibble(
         custom_id = "cid", ID1 = "S1", ID2 = "S2", model = "m",
-        status_code = 200L, error_message = NA_character_
+        status_code = 200L, error_message = NA_character_,
+        better_id = "S1"
       )
     },
     .env = ns
@@ -709,7 +712,8 @@ test_that("submit_gemini_pairs_live resume logic skips existing pairs", {
   # Create "existing" results for S1 vs S2
   existing <- tibble::tibble(
     custom_id = "LIVE_S1_vs_S2",
-    ID1 = "S1", ID2 = "S2", model = "m", status_code = 200
+    ID1 = "S1", ID2 = "S2", model = "m", status_code = 200,
+    better_id = "S1"
   )
   readr::write_csv(existing, csv_file)
 
@@ -727,7 +731,8 @@ test_that("submit_gemini_pairs_live resume logic skips existing pairs", {
       tibble::tibble(
         custom_id = sprintf("LIVE_%s_vs_S4", ID1),
         ID1 = ID1, ID2 = "S4", model = "m", status_code = 200L,
-        error_message = NA_character_
+        error_message = NA_character_,
+        better_id = ID1
       )
     },
     .env = ns
@@ -808,6 +813,7 @@ test_that("submit_gemini_pairs_live sequential saves and catches errors", {
       tibble::tibble(
         custom_id = "cid", ID1 = ID1, ID2 = "T", model = "m",
         status_code = 200L, error_message = NA_character_,
+        better_id = ID1,
         raw_response = if (include_raw) list(list(a = 1)) else NULL
       )
     },
@@ -853,7 +859,8 @@ test_that("submit_gemini_pairs_live warns on CSV write failure", {
     gemini_compare_pair_live = function(...) {
       tibble::tibble(
         custom_id = "cid", ID1 = "S1", ID2 = "T1", model = "m",
-        status_code = 200L, error_message = NA_character_
+        status_code = 200L, error_message = NA_character_,
+        better_id = "S1"
       )
     },
     .env = ns
@@ -891,7 +898,8 @@ test_that("submit_gemini_pairs_live handles resume read error and parallel write
     gemini_compare_pair_live = function(...) {
       tibble::tibble(
         custom_id = "id", ID1 = "S1", ID2 = "S2", model = "m",
-        status_code = 200L, error_message = NA_character_
+        status_code = 200L, error_message = NA_character_,
+        better_id = "S1"
       )
     },
     .env = ns
@@ -924,7 +932,8 @@ test_that("submit_gemini_pairs_live outputs verbose messages", {
     gemini_compare_pair_live = function(...) {
       tibble::tibble(
         custom_id = "id", ID1 = "S1", ID2 = "S2", model = "m",
-        status_code = 200L, error_message = NA_character_
+        status_code = 200L, error_message = NA_character_,
+        better_id = "S1"
       )
     },
     .env = ns
@@ -1011,7 +1020,8 @@ test_that("submit_gemini_pairs_live creates directory with verbose message", {
         ID2 = "S2",
         model = "m",
         status_code = 200L,
-        error_message = NA_character_
+        error_message = NA_character_,
+        better_id = "S1"
       )
     },
     .env = ns
@@ -1094,7 +1104,8 @@ test_that("submit_gemini_pairs_live handles resume files without custom IDs", {
   existing <- tibble::tibble(
     ID1 = "A",
     ID2 = "B",
-    status_code = 200L
+    status_code = 200L,
+    better_id = "A"
   )
   readr::write_csv(existing, save_path)
 
@@ -1108,7 +1119,8 @@ test_that("submit_gemini_pairs_live handles resume files without custom IDs", {
         ID2 = "B",
         model = "m",
         status_code = 200L,
-        error_message = NA_character_
+        error_message = NA_character_,
+        better_id = "A"
       )
     },
     .env = ns

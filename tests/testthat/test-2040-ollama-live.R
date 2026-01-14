@@ -1280,10 +1280,18 @@ testthat::test_that("submit_ollama_pairs_live supports incremental saving (seque
   )
 
   write_calls <- list()
-  fake_row <- tibble::tibble(custom_id = "cid", error_message = NA_character_)
-
   testthat::with_mocked_bindings(
-    ollama_compare_pair_live = function(...) fake_row,
+    ollama_compare_pair_live = function(ID1, ID2, ...) {
+      tibble::tibble(
+        custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+        ID1 = ID1,
+        ID2 = ID2,
+        model = "m",
+        status_code = 200L,
+        error_message = NA_character_,
+        better_id = ID1
+      )
+    },
     .package = "pairwiseLLM",
     {
       testthat::with_mocked_bindings(
@@ -1318,7 +1326,8 @@ testthat::test_that("submit_ollama_pairs_live resumes from existing file", {
   existing <- tibble::tibble(
     custom_id = "LIVE_A_vs_B",
     ID1 = "A", ID2 = "B", model = "m",
-    error_message = NA_character_, status_code = 200L
+    error_message = NA_character_, status_code = 200L,
+    better_id = "A"
   )
 
   processed <- list()
@@ -1339,7 +1348,8 @@ testthat::test_that("submit_ollama_pairs_live resumes from existing file", {
               processed <<- append(processed, paste(ID1, ID2, sep = "_"))
               tibble::tibble(
                 custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
-                ID1 = ID1, ID2 = ID2, model = "m", error_message = NA_character_, status_code = 200L
+                ID1 = ID1, ID2 = ID2, model = "m", error_message = NA_character_, status_code = 200L,
+                better_id = ID1
               )
             },
             .package = "pairwiseLLM",
@@ -1374,7 +1384,8 @@ testthat::test_that("submit_ollama_pairs_live emits resume messages when verbose
   existing <- tibble::tibble(
     custom_id = "LIVE_A_vs_B",
     ID1 = "A", ID2 = "B", model = "m",
-    error_message = NA_character_, status_code = 200L
+    error_message = NA_character_, status_code = 200L,
+    better_id = "A"
   )
 
   msgs <- testthat::capture_messages(

@@ -642,7 +642,8 @@ testthat::test_that("submit_together_pairs_live respects save_path (Resume Logic
   existing_data <- tibble::tibble(
     custom_id = "LIVE_S01_vs_S02",
     ID1 = "S01", ID2 = "S02",
-    model = "mod", status_code = 200L, error_message = NA_character_
+    model = "mod", status_code = 200L, error_message = NA_character_,
+    better_id = "S01"
   )
   readr::write_csv(existing_data, tmp_csv)
 
@@ -662,7 +663,8 @@ testthat::test_that("submit_together_pairs_live respects save_path (Resume Logic
       tibble::tibble(
         custom_id = "LIVE_S03_vs_S04",
         ID1 = "S03", ID2 = "S04",
-        model = "mod", status_code = 200L, error_message = NA_character_
+        model = "mod", status_code = 200L, error_message = NA_character_,
+        better_id = "S03"
       )
     },
     .env = pll_ns,
