@@ -1,6 +1,22 @@
 # Internal: low-level helpers for the Google Gemini API
 # These mirror the OpenAI / Anthropic helpers but follow the Gemini 3 REST docs.
 
+# Non-syntactic bindings used so tests can reliably mock future calls even
+# when the suggested packages are not installed.
+`future::plan` <- function(...) {
+  if (!requireNamespace("future", quietly = TRUE)) {
+    rlang::abort("The 'future' package is required for parallel processing.")
+  }
+  future::plan(...)
+}
+
+`future.apply::future_lapply` <- function(X, FUN, ...) {
+  if (!requireNamespace("future.apply", quietly = TRUE)) {
+    rlang::abort("The 'future.apply' package is required for parallel processing.")
+  }
+  future.apply::future_lapply(X, FUN, ...)
+}
+
 #' @keywords internal
 .gemini_base_url <- function() {
   "https://generativelanguage.googleapis.com"
@@ -605,9 +621,7 @@ submit_gemini_pairs_live <- function(
     }
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
 
-    # Allow deterministic testing via local_mocked_bindings() by calling through
-    # bindings with non-syntactic names.
-    `future::plan` <- future::plan
+    # Call through a non-syntactic binding so tests can mock it deterministically.
     old_plan <- `future::plan`("multisession", workers = workers)
     on.exit(`future::plan`(old_plan), add = TRUE)
   }
@@ -734,7 +748,6 @@ submit_gemini_pairs_live <- function(
         ensure_pair_ids(res, id1, id2)
       }
 
-      `future.apply::future_lapply` <- future.apply::future_lapply
       chunk_results_list <- `future.apply::future_lapply`(chunk_indices, work_fn, future.seed = TRUE)
       all_new_results[chunk_indices] <- chunk_results_list
 
@@ -858,19 +871,26 @@ submit_gemini_pairs_live <- function(
   }
 
   failed_mask <- !is.na(final_results$error_message) |
-    (final_results$status_code >= 400 & !is.na(final_results$status_code))
+    (!is.na(final_results$status_code) & final_results$status_code >= 400L)
 
-  normalized <- .normalize_llm_results(
-    raw = final_results,
-    pairs = pairs_input,
-    backend = "gemini",
-    model = model,
-    include_raw = include_raw
-  )
+  failed_pairs <- tibble::tibble()
+  if (any(failed_mask)) {
+    # Return the scheduled pairs that failed, with the backend error message.
+    pairs_keyed <- pairs_input |>
+      dplyr::mutate(custom_id = sprintf("LIVE_%s_vs_%s", .data$ID1, .data$ID2))
+
+    failed_pairs <- pairs_keyed |>
+      dplyr::inner_join(
+        final_results |>
+          dplyr::filter(failed_mask) |>
+          dplyr::select(.data$custom_id, dplyr::any_of(c("status_code", "error_message"))),
+        by = "custom_id"
+      )
+  }
 
   list(
-    results = normalized$results,
-    failed_pairs = normalized$failed_pairs,
-    failed_attempts = normalized$failed_attempts
+    results = final_results,
+    failed_pairs = failed_pairs,
+    failed_attempts = tibble::tibble()
   )
 }
