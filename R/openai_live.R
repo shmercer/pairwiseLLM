@@ -508,8 +508,23 @@ submit_openai_pairs_live <- function(
   if (n == 0L) {
     if (verbose) message("No new pairs to process.")
     final_res <- if (!is.null(existing_results)) existing_results else empty_res()
+    empty_failed_attempts <- tibble::tibble(
+      A_id = character(0),
+      B_id = character(0),
+      unordered_key = character(0),
+      ordered_key = character(0),
+      backend = character(0),
+      model = character(0),
+      error_code = character(0),
+      error_detail = character(0),
+      attempted_at = as.POSIXct(character(0))
+    )
     # If resuming and all are done, failed_pairs is empty relative to the *new* input
-    return(list(results = final_res, failed_pairs = pairs[0, ]))
+    return(list(
+      results = final_res,
+      failed_pairs = pairs[0, ],
+      failed_attempts = empty_failed_attempts
+    ))
   }
 
   if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
@@ -665,10 +680,7 @@ submit_openai_pairs_live <- function(
     (final_results$status_code >= 400 & !is.na(final_results$status_code))
 
   normalized <- .normalize_llm_results(
-    raw = list(
-      results = final_results,
-      failed_pairs = final_results[failed_mask, ]
-    ),
+    raw = final_results,
     pairs = pairs_input,
     backend = "openai",
     model = model,
@@ -677,7 +689,7 @@ submit_openai_pairs_live <- function(
 
   list(
     results = normalized$results,
-    failed_pairs = final_results[failed_mask, ],
+    failed_pairs = normalized$failed_pairs,
     failed_attempts = normalized$failed_attempts
   )
 }
