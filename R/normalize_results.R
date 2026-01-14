@@ -13,6 +13,20 @@
 ) {
   pairs <- tibble::as_tibble(pairs)
 
+  # Some callers may accidentally pass a single-row job/registry tibble
+  # that contains the actual pairs in a list-column (or as a path).
+  if (!all(c("ID1", "ID2") %in% names(pairs)) && "pairs" %in% names(pairs) && nrow(pairs) == 1L) {
+    if (is.list(pairs$pairs) && length(pairs$pairs) == 1L && is.data.frame(pairs$pairs[[1]])) {
+      pairs <- tibble::as_tibble(pairs$pairs[[1]])
+    }
+  }
+  if (!all(c("ID1", "ID2") %in% names(pairs)) && "pairs_path" %in% names(pairs) && nrow(pairs) == 1L) {
+    pth <- pairs$pairs_path[[1]]
+    if (is.character(pth) && length(pth) == 1L && file.exists(pth)) {
+      pairs <- tibble::as_tibble(readRDS(pth))
+    }
+  }
+
   # Backwards/alternate schema support (additive-only): accept A/B naming.
   if (!"ID1" %in% names(pairs) && "A_id" %in% names(pairs)) {
     pairs$ID1 <- as.character(pairs$A_id)
@@ -174,7 +188,8 @@
       dplyr::mutate(
         ID1 = as.character(.data$ID1),
         ID2 = as.character(.data$ID2),
-        ordered_key = paste(.data$ID1, .data$ID2, sep = ":")
+        ordered_key = paste(.data$ID1, .data$ID2, sep = ":"),
+        unordered_key = paste(pmin(.data$ID1, .data$ID2), pmax(.data$ID1, .data$ID2), sep = ":")
       ) |>
       dplyr::group_by(.data$ordered_key) |>
       dplyr::mutate(ordered_occurrence_index = dplyr::row_number(), .raw_n = dplyr::n()) |>
@@ -187,16 +202,21 @@
       # Keep last occurrence per ordered_key for alignment; record earlier as failed attempts.
       extra_attempts_tbl <- dups |>
         dplyr::group_by(.data$ordered_key) |>
-        dplyr::slice_head(n = dplyr::n() - 1L) |>
+        dplyr::mutate(.max_occ = max(.data$ordered_occurrence_index, na.rm = TRUE)) |>
+        dplyr::filter(.data$ordered_occurrence_index < .data$.max_occ) |>
         dplyr::ungroup() |>
         dplyr::transmute(
           ID1 = .data$ID1,
           ID2 = .data$ID2,
+          A_id = .data$ID1,
+          B_id = .data$ID2,
+          unordered_key = .data$unordered_key,
           ordered_key = .data$ordered_key,
-          ordered_occurrence_index = .data$ordered_occurrence_index,
-          error_code = "http_error",
+          error_code = "parse_error",
           error_detail = "Duplicate result row for ordered pair; treated as non-observed attempt",
-          attempted_at = Sys.time()
+          attempted_at = Sys.time(),
+          backend = backend,
+          model = model
         )
     }
 
@@ -385,7 +405,8 @@
           dplyr::mutate(
             ID1 = as.character(.data$ID1),
             ID2 = as.character(.data$ID2),
-            ordered_key = paste(.data$ID1, .data$ID2, sep = ":")
+        ordered_key = paste(.data$ID1, .data$ID2, sep = ":"),
+        unordered_key = paste(pmin(.data$ID1, .data$ID2), pmax(.data$ID1, .data$ID2), sep = ":")
           ) |>
           dplyr::group_by(.data$ordered_key) |>
           dplyr::mutate(ordered_occurrence_index = dplyr::row_number()) |>
