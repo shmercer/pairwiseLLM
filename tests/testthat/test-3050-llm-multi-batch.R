@@ -12,12 +12,15 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes regist
   tmpl <- set_prompt_template()
   out_dir <- tempfile("test_multi_batch_")
   # Stub provider pipelines to avoid network and return predictable IDs
+  counter_env <- new.env(parent = emptyenv())
+  counter_env$value <- 0L
   fake_pipeline_openai <- function(..., poll) {
+    counter_env$value <- counter_env$value + 1L
     list(
       batch_input_path  = list(...)[["batch_input_path"]],
       batch_output_path = list(...)[["batch_output_path"]],
       file              = NULL,
-      batch             = list(id = sprintf("openai-%04d", sample(1:9999, 1))),
+      batch             = list(id = sprintf("openai-%04d", counter_env$value)),
       results           = NULL
     )
   }
@@ -46,7 +49,7 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes regist
       # Registry tibble has expected columns
       expect_true(all(c(
         "segment_index", "provider", "model", "batch_id",
-        "batch_input_path", "batch_output_path", "csv_path", "done"
+        "batch_input_path", "batch_output_path", "csv_path", "pairs_path", "done"
       ) %in% names(res$registry)))
     }
   )
@@ -134,6 +137,12 @@ test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON fil
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   csv_path <- tempfile(fileext = ".csv")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "openai",
@@ -142,6 +151,7 @@ test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON fil
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -159,6 +169,7 @@ test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON fil
         custom_id = "c1",
         ID1 = "A",
         ID2 = "B",
+        better_id = "A",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -189,6 +200,12 @@ test_that("llm_resume_multi_batches processes Anthropic jobs and writes results 
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   csv_path <- tempfile(fileext = ".csv")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "X",
+    text1 = "x-text",
+    ID2 = "Y",
+    text2 = "y-text"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "anthropic",
@@ -197,6 +214,7 @@ test_that("llm_resume_multi_batches processes Anthropic jobs and writes results 
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -213,6 +231,7 @@ test_that("llm_resume_multi_batches processes Anthropic jobs and writes results 
         custom_id = "c1",
         ID1 = "X",
         ID2 = "Y",
+        better_id = "X",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -250,6 +269,12 @@ test_that("llm_resume_multi_batches processes Gemini jobs and reconstructs reque
     )
   )
   jsonlite::write_json(req_payload, path = input_path, auto_unbox = TRUE)
+  pairs_tbl <- tibble::tibble(
+    ID1 = "ID_A",
+    text1 = "a-text",
+    ID2 = "ID_B",
+    text2 = "b-text"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "gemini",
@@ -258,6 +283,7 @@ test_that("llm_resume_multi_batches processes Gemini jobs and reconstructs reque
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -285,6 +311,7 @@ test_that("llm_resume_multi_batches processes Gemini jobs and reconstructs reque
         custom_id     = "c1",
         ID1           = "ID_A",
         ID2           = "ID_B",
+        better_id     = "ID_A",
         result_type   = "succeeded",
         error_message = NA_character_
       )
@@ -311,6 +338,14 @@ test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL",
   # Construct a jobs tibble and write registry
   tmpdir <- tempfile("multi_batch_registry_")
   dir.create(tmpdir, recursive = TRUE)
+  pairs_tbl <- tibble::tibble(
+    ID1 = "A",
+    text1 = "a",
+    ID2 = "B",
+    text2 = "b"
+  )
+  pairs_path <- file.path(tmpdir, "batch_01_pairs.rds")
+  saveRDS(pairs_tbl, pairs_path)
   registry <- tibble::tibble(
     segment_index     = 1L,
     provider          = "openai",
@@ -319,6 +354,7 @@ test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL",
     batch_input_path  = tempfile(fileext = ".jsonl"),
     batch_output_path = tempfile(fileext = ".jsonl"),
     csv_path          = tempfile(fileext = ".csv"),
+    pairs_path        = pairs_path,
     done              = FALSE
   )
   readr::write_csv(registry, file.path(tmpdir, "jobs_registry.csv"))
@@ -333,6 +369,7 @@ test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL",
         custom_id = "c1",
         ID1 = "A",
         ID2 = "B",
+        better_id = "A",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -358,6 +395,12 @@ test_that("llm_resume_multi_batches writes combined results CSV when requested",
   # Prepare a dummy job list with a single OpenAI job that immediately completes
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "openai",
@@ -366,6 +409,7 @@ test_that("llm_resume_multi_batches writes combined results CSV when requested",
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = tempfile(fileext = ".csv"),
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -387,6 +431,7 @@ test_that("llm_resume_multi_batches writes combined results CSV when requested",
         custom_id = "c1",
         ID1 = "A",
         ID2 = "B",
+        better_id = "A",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -509,6 +554,12 @@ test_that("openai download retries on 5xx errors and succeeds", {
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   csv_path <- tempfile(fileext = ".csv")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "openai",
@@ -517,6 +568,7 @@ test_that("openai download retries on 5xx errors and succeeds", {
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -541,6 +593,7 @@ test_that("openai download retries on 5xx errors and succeeds", {
         custom_id = "x",
         ID1 = "A",
         ID2 = "B",
+        better_id = "A",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -571,6 +624,12 @@ test_that("llm_resume_multi_batches writes combined results CSV to absolute path
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   csv_path <- tempfile(fileext = ".csv")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "openai",
@@ -579,6 +638,7 @@ test_that("llm_resume_multi_batches writes combined results CSV to absolute path
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -601,6 +661,7 @@ test_that("llm_resume_multi_batches writes combined results CSV to absolute path
         custom_id = "x",
         ID1 = "A",
         ID2 = "B",
+        better_id = "A",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -675,6 +736,7 @@ test_that("llm_resume_multi_batches updates registry when write_registry=TRUE", 
         custom_id = "z",
         ID1 = "1",
         ID2 = "2",
+        better_id = "1",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -707,6 +769,12 @@ test_that("custom tag_prefix and tag_suffix are forwarded to parse_anthropic_bat
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   csv_path <- tempfile(fileext = ".csv")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "i",
+    text1 = "i-text",
+    ID2 = "j",
+    text2 = "j-text"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "anthropic",
@@ -715,6 +783,7 @@ test_that("custom tag_prefix and tag_suffix are forwarded to parse_anthropic_bat
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -734,6 +803,7 @@ test_that("custom tag_prefix and tag_suffix are forwarded to parse_anthropic_bat
         custom_id = "c",
         ID1 = "i",
         ID2 = "j",
+        better_id = "i",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -787,6 +857,8 @@ test_that("llm_submit_pairs_multi_batch distributes segments with n_segments", {
   tmpl <- set_prompt_template()
   # Vector to capture number of pairs per segment submitted to pipeline
   seg_sizes <- integer(0)
+  counter_env <- new.env(parent = emptyenv())
+  counter_env$value <- 0L
   fake_pipeline <- function(..., poll) {
     args <- list(...)
     # Count number of rows in the pairs passed to the pipeline
@@ -795,11 +867,12 @@ test_that("llm_submit_pairs_multi_batch distributes segments with n_segments", {
     # Write a simple JSON to the input path so the file exists
     input_json <- list(requests = replicate(nrow(seg_pairs), list(), simplify = FALSE))
     jsonlite::write_json(input_json, args$batch_input_path, auto_unbox = TRUE)
+    counter_env$value <- counter_env$value + 1L
     list(
       batch_input_path  = args$batch_input_path,
       batch_output_path = args$batch_output_path,
       file              = NULL,
-      batch             = list(id = paste0("id-", sample(1:999, 1))),
+      batch             = list(id = paste0("id-", counter_env$value)),
       results           = NULL
     )
   }
@@ -844,6 +917,8 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly using batch_size"
   tmpl <- set_prompt_template()
   # Capture sizes of each segment and write dummy JSON to input paths
   seg_sizes <- integer(0)
+  counter_env <- new.env(parent = emptyenv())
+  counter_env$value <- 0L
   fake_pipeline <- function(..., poll) {
     args <- list(...)
     seg_pairs <- args$pairs
@@ -851,11 +926,12 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly using batch_size"
     # Create a simple requests list of the appropriate length
     input_json <- list(requests = replicate(nrow(seg_pairs), list(), simplify = FALSE))
     jsonlite::write_json(input_json, args$batch_input_path, auto_unbox = TRUE)
+    counter_env$value <- counter_env$value + 1L
     list(
       batch_input_path  = args$batch_input_path,
       batch_output_path = args$batch_output_path,
       file              = NULL,
-      batch             = list(id = paste0("id-", sample(1:999, 1))),
+      batch             = list(id = paste0("id-", counter_env$value)),
       results           = NULL
     )
   }
@@ -1062,6 +1138,12 @@ test_that("llm_resume_multi_batches handles Gemini top-level state field", {
   # Write JSON with requests list
   req_payload <- list(requests = list(list(custom_id = "c1", ID1 = "u", ID2 = "v", request = list())))
   jsonlite::write_json(req_payload, path = input_path, auto_unbox = TRUE)
+  pairs_tbl <- tibble::tibble(
+    ID1 = "u",
+    text1 = "u-text",
+    ID2 = "v",
+    text2 = "v-text"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "gemini",
@@ -1070,6 +1152,7 @@ test_that("llm_resume_multi_batches handles Gemini top-level state field", {
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -1089,6 +1172,7 @@ test_that("llm_resume_multi_batches handles Gemini top-level state field", {
         custom_id     = "c1",
         ID1           = "u",
         ID2           = "v",
+        better_id     = "u",
         result_type   = "succeeded",
         error_message = NA_character_
       )
@@ -1114,6 +1198,12 @@ test_that("llm_resume_multi_batches writes combined CSV to nested relative path"
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   csv_path <- tempfile(fileext = ".csv")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "openai",
@@ -1122,6 +1212,7 @@ test_that("llm_resume_multi_batches writes combined CSV to nested relative path"
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -1142,6 +1233,7 @@ test_that("llm_resume_multi_batches writes combined CSV to nested relative path"
         custom_id = "n",
         ID1 = "A",
         ID2 = "B",
+        better_id = "A",
         result_type = "succeeded",
         error_message = NA_character_
       )
@@ -1214,6 +1306,12 @@ test_that("llm_resume_multi_batches writes combined CSV to default path", {
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   csv_path <- tempfile(fileext = ".csv")
+  pairs_tbl <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
   jobs <- list(list(
     segment_index     = 1L,
     provider          = "openai",
@@ -1222,6 +1320,7 @@ test_that("llm_resume_multi_batches writes combined CSV to default path", {
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = pairs_tbl,
     done              = FALSE,
     results           = NULL
   ))
@@ -1239,6 +1338,7 @@ test_that("llm_resume_multi_batches writes combined CSV to default path", {
         custom_id = "def",
         ID1 = "A",
         ID2 = "B",
+        better_id = "A",
         result_type = "succeeded",
         error_message = NA_character_
       )
