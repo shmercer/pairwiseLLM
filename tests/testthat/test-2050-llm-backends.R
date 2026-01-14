@@ -1027,7 +1027,8 @@ testthat::test_that("submit_llm_pairs uses default backend (OpenAI) and returns 
   # Mock return value (LIST structure)
   fake_res <- list(
     results = tibble::tibble(custom_id = "LIVE_S01_vs_S02", status_code = 200L),
-    failed_pairs = tibble::tibble(ID1 = character(0))
+    failed_pairs = tibble::tibble(ID1 = character(0)),
+    failed_attempts = tibble::tibble()
   )
 
   calls <- list()
@@ -1065,7 +1066,7 @@ testthat::test_that("submit_llm_pairs uses default backend (OpenAI) and returns 
 
       # Wrapper returns the list from the backend
       testthat::expect_type(res, "list")
-      testthat::expect_named(res, c("results", "failed_pairs"))
+      testthat::expect_named(res, c("results", "failed_pairs", "failed_attempts"))
     }
   )
 })
@@ -1075,7 +1076,11 @@ testthat::test_that("submit_llm_pairs routes to anthropic backend with new args"
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  fake_res <- list(results = tibble::tibble(model = "claude"), failed_pairs = tibble::tibble())
+  fake_res <- list(
+    results = tibble::tibble(model = "claude"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
   calls <- list()
 
   testthat::with_mocked_bindings(
@@ -1116,7 +1121,11 @@ testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  fake_res <- list(results = tibble::tibble(model = "gemini"), failed_pairs = tibble::tibble())
+  fake_res <- list(
+    results = tibble::tibble(model = "gemini"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
   calls <- list()
 
   testthat::with_mocked_bindings(
@@ -1155,7 +1164,11 @@ testthat::test_that("submit_llm_pairs routes to together backend with new args",
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  fake_res <- list(results = tibble::tibble(model = "together"), failed_pairs = tibble::tibble())
+  fake_res <- list(
+    results = tibble::tibble(model = "together"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
   calls <- list()
 
   testthat::with_mocked_bindings(
@@ -1197,7 +1210,8 @@ testthat::test_that("submit_llm_pairs routes to ollama backend and forwards new 
   # Ollama backend return mock (new list structure)
   fake_res <- list(
     results = tibble::tibble(model = "ollama-model"),
-    failed_pairs = tibble::tibble()
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
   )
 
   captured_args <- NULL
