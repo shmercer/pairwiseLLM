@@ -269,6 +269,8 @@ estimate_llm_pairs_cost <- function(
   pilot <- NULL
   pilot_results <- NULL
   pilot_failed_attempts <- NULL
+  # Backwards-compatible alias used in older tests / callers.
+  pilot_failed_pairs <- NULL
 
   if (nrow(test_pairs) > 0L) {
     pilot <- do.call(
@@ -301,8 +303,10 @@ estimate_llm_pairs_cost <- function(
     )
     pilot_results <- normalized$results
     pilot_failed_attempts <- normalized$failed_attempts
+    pilot_failed_pairs <- pilot_failed_attempts
   } else {
     pilot_results <- tibble::tibble()
+    pilot_failed_pairs <- tibble::tibble()
   }
 
   # ------------------------------------------------------------------
