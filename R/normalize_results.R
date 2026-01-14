@@ -271,6 +271,16 @@
       dplyr::mutate(.matched = TRUE) |>
       dplyr::select(-dplyr::any_of(c(".raw_n")))
 
+    # When callers submit a single occurrence per ordered pair (the PR-A0
+    # default), align the kept (last) raw row to ordered_occurrence_index = 1
+    # so the join succeeds even if raw rows contain duplicates.
+    if ("ordered_occurrence_index" %in% names(pairs_keyed) &&
+      all(is.na(pairs_keyed$ordered_occurrence_index) | pairs_keyed$ordered_occurrence_index == 1L) &&
+      "ordered_occurrence_index" %in% names(raw_dedup)) {
+      raw_dedup <- raw_dedup |>
+        dplyr::mutate(ordered_occurrence_index = 1L)
+    }
+
     aligned <- dplyr::left_join(
       pairs_keyed,
       raw_dedup,
