@@ -913,7 +913,10 @@ submit_gemini_pairs_live <- function(
       dplyr::inner_join(
         final_results |>
           dplyr::filter(failed_mask) |>
-            dplyr::select("custom_id", dplyr::any_of(c("status_code", "error_message"))),
+            dplyr::select(
+              "custom_id",
+              dplyr::any_of(c("status_code", "error_message", "raw_response"))
+            ),
         by = "custom_id"
       )
   }
