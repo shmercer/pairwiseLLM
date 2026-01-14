@@ -131,10 +131,15 @@
     } else {
       record_failure("http_error", conditionMessage(err))
     }
-    rlang::abort(
-      conditionMessage(err),
-      class = "pairwiseLLM_retry_error",
-      retry_failures = dplyr::bind_rows(failures)
-    )
+    {
+      retry_failures_tbl <- dplyr::bind_rows(failures)
+      cnd <- rlang::error_cnd(
+        message = conditionMessage(err),
+        class = "pairwiseLLM_retry_error",
+        retry_failures = retry_failures_tbl
+      )
+      attr(cnd, "retry_failures") <- retry_failures_tbl
+      rlang::cnd_signal(cnd)
+    }
   }
 }
