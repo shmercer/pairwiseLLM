@@ -688,7 +688,11 @@ build_openai_batch_requests <- function(pairs,
       text1 = as.character(pairs$text1[i]),
       text2 = as.character(pairs$text2[i])
     )
-    custom_id <- sprintf("%s_%s_vs_%s", request_id_prefix, id1, id2)
+    custom_id <- if ("pair_uid" %in% names(pairs)) {
+      as.character(pairs$pair_uid[i])
+    } else {
+      sprintf("%s_%s_vs_%s", request_id_prefix, id1, id2)
+    }
 
     if (endpoint == "chat.completions") {
       body <- list(model = model, messages = list(list(role = "user", content = prompt)))
