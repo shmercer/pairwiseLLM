@@ -265,6 +265,7 @@ gemini_compare_pair_live <- function(
   body_parsed <- NULL
   status_code <- NA_integer_
   error_message <- NA_character_
+  retry_failures <- tibble::tibble()
 
   # Perform request; capture any HTTP/httr2 error so we can return a row
   tryCatch(
@@ -272,10 +273,18 @@ gemini_compare_pair_live <- function(
       resp <- .gemini_req_perform(req)
       status_code <- .gemini_resp_status(resp)
       body_parsed <- .gemini_resp_body_json(resp, simplifyVector = FALSE)
+      retry_failures <- attr(resp, "retry_failures")
+      if (is.null(retry_failures)) {
+        retry_failures <- tibble::tibble()
+      }
     },
     error = function(err) {
       # Default error message
       error_message <<- conditionMessage(err)
+      retry_failures <<- attr(err, "retry_failures")
+      if (is.null(retry_failures)) {
+        retry_failures <- tibble::tibble()
+      }
 
       # If this is an httr2 HTTP error, try to extract status + body
       if (inherits(err, "httr2_http") && !is.null(err$resp)) {
@@ -319,6 +328,7 @@ gemini_compare_pair_live <- function(
     if (include_raw) {
       res$raw_response <- list(NULL)
     }
+    res$retry_failures <- list(retry_failures)
     return(res)
   }
 
@@ -417,6 +427,7 @@ gemini_compare_pair_live <- function(
   if (include_raw) {
     res$raw_response <- list(body_parsed)
   }
+  res$retry_failures <- list(retry_failures)
 
   res
 }
@@ -554,6 +565,7 @@ submit_gemini_pairs_live <- function(
     ...
 ) {
   pairs <- tibble::as_tibble(pairs)
+  pairs_input <- pairs
   required_cols <- c("ID1", "text1", "ID2", "text2")
 
   if (!all(required_cols %in% names(pairs))) {
@@ -663,6 +675,10 @@ submit_gemini_pairs_live <- function(
             )
           },
           error = function(e) {
+            retry_failures <- attr(e, "retry_failures")
+            if (is.null(retry_failures)) {
+              retry_failures <- tibble::tibble()
+            }
             tibble::tibble(
               custom_id = sprintf("LIVE_%s_vs_%s", id1, id2),
               ID1 = id1, ID2 = id2, model = model,
@@ -671,7 +687,8 @@ submit_gemini_pairs_live <- function(
               thoughts = NA_character_, content = NA_character_,
               better_sample = NA_character_, better_id = NA_character_,
               prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
-              raw_response = if (include_raw) list(NULL) else NULL
+              raw_response = if (include_raw) list(NULL) else NULL,
+              retry_failures = list(retry_failures)
             )
           }
         )
@@ -736,6 +753,10 @@ submit_gemini_pairs_live <- function(
           )
         },
         error = function(e) {
+          retry_failures <- attr(e, "retry_failures")
+          if (is.null(retry_failures)) {
+            retry_failures <- tibble::tibble()
+          }
           tibble::tibble(
             custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
             ID1 = id1_i, ID2 = id2_i, model = model,
@@ -744,7 +765,8 @@ submit_gemini_pairs_live <- function(
             thoughts = NA_character_, content = NA_character_,
             better_sample = NA_character_, better_id = NA_character_,
             prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
-            raw_response = if (include_raw) list(NULL) else NULL
+            raw_response = if (include_raw) list(NULL) else NULL,
+            retry_failures = list(retry_failures)
           )
         }
       )
@@ -796,8 +818,20 @@ submit_gemini_pairs_live <- function(
   failed_mask <- !is.na(final_results$error_message) |
     (final_results$status_code >= 400 & !is.na(final_results$status_code))
 
+  normalized <- .normalize_llm_results(
+    raw = list(
+      results = final_results,
+      failed_pairs = final_results[failed_mask, ]
+    ),
+    pairs = pairs_input,
+    backend = "gemini",
+    model = model,
+    include_raw = include_raw
+  )
+
   list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+    results = normalized$results,
+    failed_pairs = final_results[failed_mask, ],
+    failed_attempts = normalized$failed_attempts
   )
 }
