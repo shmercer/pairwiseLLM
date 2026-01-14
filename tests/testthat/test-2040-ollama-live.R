@@ -742,8 +742,8 @@ testthat::test_that("submit_ollama_pairs_live emits warning for error rows", {
       )
 
       # Access $results
-      testthat::expect_equal(res$results$error_message, "backend failure")
-      testthat::expect_equal(res$results$status_code, 500L)
+      testthat::expect_equal(res$failed_pairs$error_message, "backend failure")
+      testthat::expect_equal(res$failed_pairs$status_code, 500L)
     }
   )
 })
@@ -1322,8 +1322,8 @@ testthat::test_that("submit_ollama_pairs_live emits warning for error rows", {
         num_ctx           = 8192L
       )
 
-      testthat::expect_equal(res$results$error_message, "backend failure")
-      testthat::expect_equal(res$results$status_code, 500L)
+      testthat::expect_equal(res$failed_pairs$error_message, "backend failure")
+      testthat::expect_equal(res$failed_pairs$status_code, 500L)
     }
   )
 })
