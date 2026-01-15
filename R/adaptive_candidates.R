@@ -4,10 +4,11 @@
 
 #' @keywords internal
 #' @noRd
-compute_ranking_from_theta_mean <- function(theta_mean) {
+compute_ranking_from_theta_mean <- function(theta_mean, state) {
   if (!is.numeric(theta_mean) || length(theta_mean) < 1L) {
     rlang::abort("`theta_mean` must be a non-empty numeric vector.")
   }
+  validate_state(state)
   ids <- names(theta_mean)
   if (is.null(ids) || any(is.na(ids)) || any(ids == "")) {
     rlang::abort("`theta_mean` must be a named numeric vector with non-empty names.")
@@ -17,6 +18,9 @@ compute_ranking_from_theta_mean <- function(theta_mean) {
   }
   if (anyNA(theta_mean)) {
     rlang::abort("`theta_mean` must not contain missing values.")
+  }
+  if (!setequal(ids, state$ids) || length(ids) != length(state$ids)) {
+    rlang::abort("`theta_mean` names must match `state$ids`.")
   }
 
   ord <- order(-theta_mean, ids)
