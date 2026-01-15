@@ -534,6 +534,74 @@ testthat::test_that("estimate_llm_pairs_cost stratifies skewed prompt bytes and 
   testthat::expect_equal(nrow(est$test_pairs), 4)
 })
 
+testthat::test_that("estimate_llm_pairs_cost tops up when stratified pools are small", {
+  pairs <- tibble::tibble(
+    ID1 = letters[1:4],
+    text1 = c("short", "short", "short", strrep("x", 100)),
+    ID2 = LETTERS[1:4],
+    text2 = "z"
+  )
+  td <- trait_description("overall_quality")
+
+  fake_submit <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200,
+      prompt_tokens = rep(10L, nrow(pairs)),
+      completion_tokens = rep(10L, nrow(pairs))
+    )
+  }
+
+  est <- suppressWarnings(estimate_llm_pairs_cost(
+    pairs = pairs, model = "m", trait_name = td$name, trait_description = td$description,
+    n_test = 4, test_strategy = "stratified_prompt_bytes", seed = 123,
+    cost_per_million_input = 1, cost_per_million_output = 1,
+    .submit_fun = fake_submit
+  ))
+
+  testthat::expect_equal(est$summary$n_test, 4)
+  testthat::expect_equal(nrow(est$test_pairs), 4)
+})
+
+testthat::test_that("estimate_llm_pairs_cost fills missing pilot attempt columns", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+
+  fake_submit <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200
+    )
+  }
+
+  testthat::with_mocked_bindings(
+    bind_rows = function(...) tibble::tibble(),
+    .env = asNamespace("dplyr"),
+    {
+      est <- estimate_llm_pairs_cost(
+        pairs = pairs,
+        backend = "openai",
+        model = "gpt-4.1-mini",
+        endpoint = "chat.completions",
+        trait_name = td$name,
+        trait_description = td$description,
+        prompt_template = set_prompt_template(),
+        mode = "live",
+        n_test = 1,
+        test_strategy = "first",
+        cost_per_million_input = 1,
+        cost_per_million_output = 1,
+        .submit_fun = fake_submit
+      )
+      testthat::expect_equal(est$summary$pilot_prompt_tokens, 0)
+    }
+  )
+})
+
 testthat::test_that("estimate_llm_pairs_cost handles pilot mismatch and first strategy", {
   pairs <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
   td <- trait_description("overall_quality")
