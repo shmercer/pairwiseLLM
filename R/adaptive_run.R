@@ -44,6 +44,25 @@
   invisible(backend)
 }
 
+.adaptive_sanitize_submission_options <- function(submission, reserved = character()) {
+  submission <- submission %||% list()
+  if (!is.list(submission)) {
+    rlang::abort("`submission` must be a list.")
+  }
+  if (length(reserved) > 0L) {
+    submission[reserved] <- NULL
+  }
+  submission
+}
+
+.adaptive_merge_submission_options <- function(state, submission, reserved = character()) {
+  stored <- state$config$submission %||% list()
+  stored <- .adaptive_sanitize_submission_options(stored, reserved = reserved)
+  incoming <- .adaptive_sanitize_submission_options(submission, reserved = reserved)
+  state$config$submission <- utils::modifyList(stored, incoming)
+  state
+}
+
 .adaptive_prepare_paths <- function(paths, submission, mode) {
   paths <- paths %||% list()
   if (!is.list(paths)) {
@@ -168,6 +187,73 @@
   state <- .adaptive_results_seen_set(state, new_results$pair_uid)
 
   list(state = state, new_results = new_results)
+}
+
+.adaptive_is_valid_results_tbl <- function(x) {
+  ok <- tryCatch(
+    {
+      validate_results_tbl(tibble::as_tibble(x))
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+  isTRUE(ok)
+}
+
+.adaptive_is_valid_failed_attempts_tbl <- function(x) {
+  ok <- tryCatch(
+    {
+      validate_failed_attempts_tbl(tibble::as_tibble(x))
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+  isTRUE(ok)
+}
+
+.adaptive_normalize_submission_output <- function(raw, pairs_submitted, backend, model, include_raw = FALSE) {
+  empty <- list(
+    results = .adaptive_empty_results_tbl(),
+    failed_attempts = .adaptive_empty_failed_attempts_tbl()
+  )
+  if (is.null(raw)) return(empty)
+
+  # Already-normalized tibble (results_tbl).
+  if (is.data.frame(raw) && .adaptive_is_valid_results_tbl(raw)) {
+    return(list(results = tibble::as_tibble(raw), failed_attempts = .adaptive_empty_failed_attempts_tbl()))
+  }
+
+  if (is.list(raw) && !inherits(raw, "data.frame")) {
+    raw_results <- raw$results %||% NULL
+    raw_failed <- raw$failed_attempts %||% NULL
+    if (!is.null(raw_results) && is.data.frame(raw_results) && .adaptive_is_valid_results_tbl(raw_results)) {
+      failed_attempts <- if (!is.null(raw_failed) &&
+        is.data.frame(raw_failed) &&
+        .adaptive_is_valid_failed_attempts_tbl(raw_failed)) {
+        tibble::as_tibble(raw_failed)
+      } else {
+        .adaptive_empty_failed_attempts_tbl()
+      }
+      return(list(results = tibble::as_tibble(raw_results), failed_attempts = failed_attempts))
+    }
+  }
+
+  if (is.null(pairs_submitted) || nrow(pairs_submitted) == 0L) {
+    rlang::abort("Cannot normalize results without `pairs_submitted`.")
+  }
+
+  submit_tbl <- .adaptive_pairs_to_submit_tbl(pairs_submitted)
+  normalized <- .normalize_llm_results(
+    raw = raw,
+    pairs = submit_tbl,
+    backend = backend,
+    model = model,
+    include_raw = include_raw
+  )
+  list(
+    results = tibble::as_tibble(normalized$results),
+    failed_attempts = tibble::as_tibble(normalized$failed_attempts)
+  )
 }
 
 .adaptive_append_failed_attempts <- function(state, failed_attempts, phase = NULL, iter = NULL) {
@@ -297,12 +383,11 @@
 
 .adaptive_submit_live <- function(pairs, model, trait_name, trait_description,
                                   prompt_template, backend, submission) {
-  submission <- submission %||% list()
   reserved <- c(
     "pairs", "model", "trait_name", "trait_description",
     "prompt_template", "backend"
   )
-  submission[reserved] <- NULL
+  submission <- .adaptive_sanitize_submission_options(submission, reserved = reserved)
   args <- c(list(
     pairs = pairs,
     model = model,
@@ -316,12 +401,11 @@
 
 .adaptive_submit_batch <- function(pairs, model, trait_name, trait_description,
                                    prompt_template, backend, submission, output_dir) {
-  submission <- submission %||% list()
   reserved <- c(
     "pairs", "model", "trait_name", "trait_description",
     "prompt_template", "backend", "output_dir"
   )
-  submission[reserved] <- NULL
+  submission <- .adaptive_sanitize_submission_options(submission, reserved = reserved)
   args <- c(list(
     pairs = pairs,
     model = model,
@@ -370,27 +454,83 @@
   min(missing, max_replacements)
 }
 
+.adaptive_phase_scalar_from_pairs <- function(pairs_tbl) {
+  if (is.null(pairs_tbl) || nrow(pairs_tbl) == 0L) return(NULL)
+  pairs_tbl <- tibble::as_tibble(pairs_tbl)
+  if (!"phase" %in% names(pairs_tbl)) return(NULL)
+  phases <- unique(as.character(pairs_tbl$phase))
+  phases <- phases[!is.na(phases) & phases != ""]
+  if (length(phases) == 0L) return(NULL)
+  if (length(phases) > 1L) {
+    rlang::abort("`pairs_submitted` must contain a single phase value.")
+  }
+  phases[[1L]]
+}
+
+.adaptive_schedule_replacement_pairs <- function(state, target_pairs, adaptive, seed, replacement_phase) {
+  validate_state(state)
+  target_pairs <- as.integer(target_pairs)
+  if (is.na(target_pairs) || target_pairs < 0L) {
+    rlang::abort("`target_pairs` must be a non-negative integer.")
+  }
+  if (target_pairs == 0L) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+
+  budget_remaining <- as.integer(state$budget_max - state$comparisons_scheduled)
+  if (budget_remaining <= 0L) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+  target_pairs <- min(target_pairs, budget_remaining)
+
+  replacement_phase <- as.character(replacement_phase)
+  if (length(replacement_phase) != 1L || is.na(replacement_phase) || !nzchar(replacement_phase)) {
+    rlang::abort("`replacement_phase` must be a non-empty character scalar.")
+  }
+  if (replacement_phase == "phase1") {
+    out <- phase1_generate_pairs(
+      state = state,
+      n_pairs = target_pairs,
+      mix_struct = adaptive$mix_struct,
+      within_adj_split = adaptive$within_adj_split,
+      bins = adaptive$bins,
+      seed = seed
+    )
+    return(out)
+  }
+  .adaptive_schedule_next_pairs(state, target_pairs, adaptive, seed = seed)
+}
+
 .adaptive_run_replacements_live <- function(state, model, trait_name, trait_description,
                                             prompt_template, backend, adaptive, submission,
-                                            missing, seed) {
+                                            missing, seed, replacement_phase,
+                                            base_batch_size) {
   if (missing <= 0L) {
     return(list(state = state, submissions = list()))
   }
 
   submissions <- list()
+  base_batch_size <- as.integer(base_batch_size)
+  if (is.na(base_batch_size) || base_batch_size < 1L) {
+    base_batch_size <- as.integer(missing)
+  }
   refill_rounds <- as.integer(adaptive$max_refill_rounds)
   if (is.na(refill_rounds) || refill_rounds < 1L) {
     refill_rounds <- 1L
   }
+  replacement_phase <- replacement_phase %||% "phase1"
 
   for (round in seq_len(refill_rounds)) {
-    target_info <- .adaptive_schedule_target(state, adaptive)
-    state <- target_info$state
-    batch_size <- target_info$target
-    target <- .adaptive_replacement_target(missing, adaptive, batch_size)
+    target <- .adaptive_replacement_target(missing, adaptive, base_batch_size)
     if (target <= 0L) break
 
-    scheduled <- .adaptive_schedule_next_pairs(state, target, adaptive, seed = seed)
+    scheduled <- .adaptive_schedule_replacement_pairs(
+      state,
+      target,
+      adaptive,
+      seed = seed,
+      replacement_phase = replacement_phase
+    )
     state <- scheduled$state
     pairs <- scheduled$pairs
     if (nrow(pairs) == 0L) break
@@ -405,15 +545,22 @@
       backend = backend,
       submission = submission
     )
-    ingest <- .adaptive_ingest_results_incremental(state, res$results)
+    normalized <- .adaptive_normalize_submission_output(
+      raw = res,
+      pairs_submitted = pairs,
+      backend = backend,
+      model = model,
+      include_raw = isTRUE(submission$include_raw)
+    )
+    ingest <- .adaptive_ingest_results_incremental(state, normalized$results)
     state <- ingest$state
     state <- .adaptive_append_failed_attempts(
       state,
-      res$failed_attempts,
+      normalized$failed_attempts,
       phase = unique(pairs$phase),
       iter = unique(pairs$iter)
     )
-    submissions[[length(submissions) + 1L]] <- list(pairs = pairs, results = res$results)
+    submissions[[length(submissions) + 1L]] <- list(pairs = pairs, results = normalized$results)
 
     observed_now <- sum(pairs$pair_uid %in% .adaptive_results_seen_names(state))
     missing <- missing - observed_now
@@ -544,6 +691,9 @@ adaptive_rank_start <- function(
   state$config$trait_name <- trait_name
   state$config$trait_description <- trait_description
   state$config$prompt_template <- prompt_template
+  state$config$output_dir <- path_info$output_dir
+  state$config$state_path <- path_info$state_path
+  state <- .adaptive_merge_submission_options(state, submission)
   state <- .adaptive_get_batch_sizes(state, adaptive)
   state <- .adaptive_state_sync_results_seen(state)
 
@@ -575,13 +725,20 @@ adaptive_rank_start <- function(
         trait_description = trait_description,
         prompt_template = prompt_template,
         backend = backend,
-        submission = submission
+        submission = state$config$submission
       )
-      ingest <- .adaptive_ingest_results_incremental(state, res$results)
+      normalized <- .adaptive_normalize_submission_output(
+        raw = res,
+        pairs_submitted = pairs,
+        backend = backend,
+        model = model,
+        include_raw = isTRUE(state$config$submission$include_raw)
+      )
+      ingest <- .adaptive_ingest_results_incremental(state, normalized$results)
       state <- ingest$state
       state <- .adaptive_append_failed_attempts(
         state,
-        res$failed_attempts,
+        normalized$failed_attempts,
         phase = unique(pairs$phase),
         iter = unique(pairs$iter)
       )
@@ -596,13 +753,15 @@ adaptive_rank_start <- function(
         prompt_template = prompt_template,
         backend = backend,
         adaptive = adaptive,
-        submission = submission,
+        submission = state$config$submission,
         missing = missing,
-        seed = seed
+        seed = seed,
+        replacement_phase = .adaptive_phase_scalar_from_pairs(pairs),
+        base_batch_size = nrow(pairs)
       )
       state <- refill$state
       submission_info$live_submissions <- c(
-        list(list(pairs = pairs, results = res$results)),
+        list(list(pairs = pairs, results = normalized$results)),
         refill$submissions
       )
     } else {
@@ -613,7 +772,7 @@ adaptive_rank_start <- function(
         trait_description = trait_description,
         prompt_template = prompt_template,
         backend = backend,
-        submission = submission,
+        submission = state$config$submission,
         output_dir = path_info$output_dir
       )
       submission_info$jobs <- batch_out$jobs
@@ -624,6 +783,10 @@ adaptive_rank_start <- function(
         adaptive_state_save(state, path_info$state_path)
       }
     }
+  }
+
+  if (mode == "batch" && !is.null(path_info$state_path)) {
+    adaptive_state_save(state, path_info$state_path)
   }
 
   list(
@@ -694,6 +857,7 @@ adaptive_rank_resume <- function(
 
   adaptive <- .adaptive_merge_config(adaptive)
   state$config$adaptive <- utils::modifyList(state$config$adaptive %||% list(), adaptive)
+  state <- .adaptive_merge_submission_options(state, submission)
   state <- .adaptive_get_batch_sizes(state, adaptive)
   state <- .adaptive_state_sync_results_seen(state)
 
@@ -710,16 +874,17 @@ adaptive_rank_resume <- function(
   if (is.null(submission_info$trait_name) || is.null(submission_info$trait_description)) {
     rlang::abort("`submission_info` must include `trait_name` and `trait_description`.")
   }
+  pairs_submitted <- submission_info$pairs_submitted %||% NULL
   new_results <- .adaptive_empty_results_tbl()
 
   if (mode == "batch") {
     .adaptive_check_backend(backend, mode)
-    output_dir <- submission_info$output_dir %||% submission$output_dir
+    output_dir <- submission_info$output_dir %||% state$config$output_dir %||% NULL
     if (is.null(output_dir)) {
       output_dir <- tempfile("adaptive_rank_")
     }
 
-    resume_args <- submission
+    resume_args <- state$config$submission
     resume_args$jobs <- submission_info$jobs %||% NULL
     resume_args$output_dir <- output_dir
     res <- do.call(llm_resume_multi_batches, resume_args)
@@ -735,30 +900,45 @@ adaptive_rank_resume <- function(
     )
   } else {
     if (!is.null(submission_info$results)) {
-      ingest <- .adaptive_ingest_results_incremental(state, submission_info$results)
+      normalized <- .adaptive_normalize_submission_output(
+        raw = submission_info$results,
+        pairs_submitted = pairs_submitted,
+        backend = backend,
+        model = model,
+        include_raw = isTRUE(state$config$submission$include_raw)
+      )
+      ingest <- .adaptive_ingest_results_incremental(state, normalized$results)
       state <- ingest$state
       new_results <- ingest$new_results
+      state <- .adaptive_append_failed_attempts(state, normalized$failed_attempts)
     }
     if (!is.null(submission_info$failed_attempts)) {
       state <- .adaptive_append_failed_attempts(state, submission_info$failed_attempts)
     }
   }
 
-  pairs_submitted <- submission_info$pairs_submitted
   missing <- 0L
   if (!is.null(pairs_submitted) && nrow(pairs_submitted) > 0L) {
     observed_now <- sum(pairs_submitted$pair_uid %in% .adaptive_results_seen_names(state))
     missing <- nrow(pairs_submitted) - observed_now
   }
 
-  target_info <- .adaptive_schedule_target(state, adaptive)
-  state <- target_info$state
-  target <- target_info$target
   if (missing > 0L) {
-    target <- .adaptive_replacement_target(missing, adaptive, target)
+    replacement_phase <- .adaptive_phase_scalar_from_pairs(pairs_submitted) %||% state$phase
+    target <- .adaptive_replacement_target(missing, adaptive, nrow(pairs_submitted))
+    scheduled <- .adaptive_schedule_replacement_pairs(
+      state,
+      target,
+      adaptive,
+      seed = seed,
+      replacement_phase = replacement_phase
+    )
+  } else {
+    target_info <- .adaptive_schedule_target(state, adaptive)
+    state <- target_info$state
+    target <- target_info$target
+    scheduled <- .adaptive_schedule_next_pairs(state, target, adaptive, seed = seed)
   }
-
-  scheduled <- .adaptive_schedule_next_pairs(state, target, adaptive, seed = seed)
   state <- scheduled$state
   pairs <- scheduled$pairs
 
@@ -772,8 +952,8 @@ adaptive_rank_resume <- function(
     pairs_submitted = pairs
   )
 
-  if (nrow(pairs) > 0L) {
-    submit_tbl <- .adaptive_pairs_to_submit_tbl(pairs)
+    if (nrow(pairs) > 0L) {
+      submit_tbl <- .adaptive_pairs_to_submit_tbl(pairs)
     if (mode == "live") {
       res <- .adaptive_submit_live(
         pairs = submit_tbl,
@@ -782,31 +962,60 @@ adaptive_rank_resume <- function(
         trait_description = submission_info$trait_description,
         prompt_template = submission_info$prompt_template %||% set_prompt_template(),
         backend = backend,
-        submission = submission
+        submission = state$config$submission
       )
-      ingest <- .adaptive_ingest_results_incremental(state, res$results)
+      normalized <- .adaptive_normalize_submission_output(
+        raw = res,
+        pairs_submitted = pairs,
+        backend = backend,
+        model = model,
+        include_raw = isTRUE(state$config$submission$include_raw)
+      )
+      ingest <- .adaptive_ingest_results_incremental(state, normalized$results)
       state <- ingest$state
       state <- .adaptive_append_failed_attempts(
         state,
-        res$failed_attempts,
+        normalized$failed_attempts,
         phase = unique(pairs$phase),
         iter = unique(pairs$iter)
       )
-      submission_out$live_submissions <- list(list(pairs = pairs, results = res$results))
-    } else {
-      output_dir <- submission_info$output_dir %||% submission$output_dir %||% tempfile("adaptive_rank_")
-      batch_out <- .adaptive_submit_batch(
-        pairs = submit_tbl,
+      submission_out$live_submissions <- list(list(pairs = pairs, results = normalized$results))
+
+      observed_now <- sum(pairs$pair_uid %in% .adaptive_results_seen_names(state))
+      missing <- nrow(pairs) - observed_now
+      refill <- .adaptive_run_replacements_live(
+        state = state,
         model = model,
         trait_name = submission_info$trait_name,
         trait_description = submission_info$trait_description,
-        prompt_template = submission_info$prompt_template %||% set_prompt_template(),
+        prompt_template = submission_out$prompt_template %||% set_prompt_template(),
         backend = backend,
-        submission = submission,
-        output_dir = output_dir
+        adaptive = adaptive,
+        submission = state$config$submission,
+        missing = missing,
+        seed = seed,
+        replacement_phase = .adaptive_phase_scalar_from_pairs(pairs),
+        base_batch_size = nrow(pairs)
       )
-      submission_out$jobs <- batch_out$jobs
-      submission_out$registry <- batch_out$registry
+      state <- refill$state
+      submission_out$live_submissions <- c(
+        submission_out$live_submissions,
+        refill$submissions
+      )
+    } else {
+      output_dir <- submission_info$output_dir %||% state$config$output_dir %||% tempfile("adaptive_rank_")
+      batch_out <- .adaptive_submit_batch(
+        pairs = submit_tbl,
+          model = model,
+          trait_name = submission_info$trait_name,
+          trait_description = submission_info$trait_description,
+          prompt_template = submission_info$prompt_template %||% set_prompt_template(),
+          backend = backend,
+          submission = state$config$submission,
+          output_dir = output_dir
+        )
+        submission_out$jobs <- batch_out$jobs
+        submission_out$registry <- batch_out$registry
       submission_out$output_dir <- output_dir
     }
   }
@@ -830,6 +1039,10 @@ adaptive_rank_resume <- function(
 #' \code{adaptive_rank_start()} and \code{adaptive_rank_resume()} in live mode
 #' until the budget is exhausted, no feasible pairs remain, or
 #' \code{max_iterations} is reached.
+#'
+#' Running this function will submit LLM comparisons and will incur API usage
+#' costs for hosted backends. For larger runs, prefer batch mode so you can
+#' checkpoint and control polling.
 #'
 #' @param samples A data frame or tibble with columns \code{ID} and \code{text}.
 #' @param model Model identifier for the selected backend.

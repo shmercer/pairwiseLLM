@@ -59,6 +59,10 @@ Convenience wrapper that repeatedly calls
 \code{adaptive_rank_start()} and \code{adaptive_rank_resume()} in live mode
 until the budget is exhausted, no feasible pairs remain, or
 \code{max_iterations} is reached.
+
+Running this function will submit LLM comparisons and will incur API usage
+costs for hosted backends. For larger runs, prefer batch mode so you can
+checkpoint and control polling.
 }
 \examples{
 \dontrun{
