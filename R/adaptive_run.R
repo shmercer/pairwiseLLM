@@ -570,17 +570,36 @@
   list(state = state, submissions = submissions)
 }
 
-#' Start an adaptive ranking run
+#' Adaptive pairwise ranking with warm start and Bayesian refinement
 #'
-#' Initialize adaptive ranking, schedule Phase 1 pairs, and submit them in live
-#' or batch mode. Live mode submits immediately and ingests observed outcomes.
-#' Batch mode submits jobs, saves state, and returns resume metadata.
+#' Initialize an adaptive ranking run, schedule Phase 1 warm-start pairs, and
+#' submit them in live or batch mode. Live mode submits immediately and ingests
+#' observed outcomes. Batch mode submits jobs, saves state, and returns resume
+#' metadata for later polling. A single call may not complete the full run;
+#' use \code{adaptive_rank_resume()} to continue.
 #'
-#' This is the entry point for adaptive ranking. It creates an
-#' \code{adaptive_state} using the canonical schemas and schedules pairs using
-#' Phase 1 logic until \code{M1_target} is met, then switches to adaptive
-#' batches (Phase 2/3) on subsequent resumes. All results are normalized via
-#' the shared normalization helper to ensure schema consistency.
+#' @details
+#' Adaptive ranking proceeds in three phases: Phase 1 (warm start), Phase 2
+#' (adaptive refinement), and Phase 3 (near-stop polish). \code{adaptive_rank_start()}
+#' creates a fresh \code{adaptive_state}, schedules Phase 1 pairs up to the
+#' Phase 1 target, and submits those comparisons. \code{adaptive_rank_resume()}
+#' ingests newly observed results and schedules subsequent adaptive batches.
+#'
+#' Exposure and observation are distinct. Scheduled comparisons update exposure
+#' counters immediately (pairs, degrees, position counts), while observed
+#' outcomes are ingested only after a backend returns results. Failed attempts
+#' are logged separately and never treated as observations. This separation
+#' prevents retries or missing results from contaminating the ranking signal.
+#'
+#' The adaptive engine uses a confirmation window (CW) based on observed
+#' comparisons, along with a two-check confirmation rule, to decide when to
+#' stop refinement. Fast inference provides selection-grade posterior draws for
+#' adaptive selection and stopping checks. Final uncertainty summaries are
+#' produced only after the full MCMC audit.
+#'
+#' All LLM outputs are normalized into a single canonical results schema,
+#' independent of backend, and all downstream logic operates exclusively on
+#' this canonical form.
 #'
 #' @param samples A data frame or tibble with columns \code{ID} and \code{text}.
 #' @param model Model identifier for the selected backend.
@@ -596,13 +615,17 @@
 #' @param submission A list of arguments passed through to
 #'   \code{submit_llm_pairs()} (live) or \code{llm_submit_pairs_multi_batch()}
 #'   (batch). Common options include \code{endpoint}, \code{include_raw},
-#'   \code{batch_size}, and \code{n_segments}.
+#'   \code{batch_size}, and \code{n_segments}. The list is extensible in future
+#'   versions.
 #' @param adaptive A list of adaptive configuration overrides. Supported keys
-#'   include: \code{d1}, \code{bins}, \code{mix_struct},
-#'   \code{within_adj_split}, \code{exploration_frac}, \code{per_item_cap},
-#'   \code{n_draws_fast}, \code{batch_overrides}, \code{max_refill_rounds},
-#'   \code{max_replacements}, \code{max_iterations}, \code{budget_max}, and
-#'   \code{M1_target}.
+#'   include: \code{d1} (default 8), \code{bins} (8), \code{mix_struct} (0.70),
+#'   \code{within_adj_split} (0.50), \code{exploration_frac} (0.05),
+#'   \code{per_item_cap} (NULL), \code{n_draws_fast} (400),
+#'   \code{batch_overrides} (list), \code{max_refill_rounds} (2),
+#'   \code{max_replacements} (NULL), \code{max_iterations} (50),
+#'   \code{budget_max} (NULL; defaults to 0.40 * choose(N,2)), and
+#'   \code{M1_target} (NULL; defaults to floor(N * d1 / 2)). The list is
+#'   extensible in future versions.
 #' @param paths A list with optional \code{state_path} and \code{output_dir}.
 #'   For batch mode, \code{state_path} defaults to
 #'   \code{file.path(output_dir, "adaptive_state.rds")}.
@@ -617,25 +640,33 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
+#' # Minimal synthetic setup (no submission).
 #' samples <- tibble::tibble(
 #'   ID = c("S1", "S2", "S3", "S4"),
 #'   text = c("alpha", "bravo", "charlie", "delta")
 #' )
-#'
 #' td <- trait_description("overall_quality")
-#' tmpl <- set_prompt_template()
+#' adaptive_cfg <- list(d1 = 8, M1_target = 40)
 #'
+#' \dontrun{
 #' # Live start (submits immediately and ingests observed results)
 #' start_out <- adaptive_rank_start(
 #'   samples = samples,
 #'   model = "gpt-4.1",
 #'   trait_name = td$name,
 #'   trait_description = td$description,
-#'   prompt_template = tmpl,
 #'   backend = "openai",
 #'   mode = "live",
-#'   adaptive = list(d1 = 8, M1_target = 40),
+#'   adaptive = adaptive_cfg,
+#'   seed = 123
+#' )
+#'
+#' # Live resume (continues scheduling; may require multiple calls)
+#' resume_out <- adaptive_rank_resume(
+#'   state = start_out$state,
+#'   mode = "live",
+#'   submission_info = start_out$submission_info,
+#'   adaptive = adaptive_cfg,
 #'   seed = 123
 #' )
 #'
@@ -645,14 +676,30 @@
 #'   model = "gpt-4.1",
 #'   trait_name = td$name,
 #'   trait_description = td$description,
-#'   prompt_template = tmpl,
 #'   backend = "openai",
 #'   mode = "batch",
 #'   submission = list(batch_size = 1000, write_registry = TRUE),
 #'   paths = list(output_dir = "adaptive_runs"),
-#'   adaptive = list(d1 = 8, M1_target = 40),
+#'   adaptive = adaptive_cfg,
 #'   seed = 123
 #' )
+#'
+#' # Batch resume loop (poll until done)
+#' next_action <- batch_out$next_action
+#' state <- batch_out$state
+#' submission_info <- batch_out$submission_info
+#' while (identical(next_action$action, "resume")) {
+#'   res <- adaptive_rank_resume(
+#'     state = state,
+#'     mode = "batch",
+#'     submission_info = submission_info,
+#'     adaptive = adaptive_cfg,
+#'     seed = 123
+#'   )
+#'   state <- res$state
+#'   submission_info <- res$submission_info
+#'   next_action <- res$next_action
+#' }
 #' }
 #'
 #' @export
@@ -801,7 +848,14 @@ adaptive_rank_start <- function(
 #'
 #' Resume from a saved or in-memory \code{adaptive_state}, ingesting only newly
 #' observed outcomes (using \code{pair_uid} to deduplicate) and scheduling the
-#' next batch of pairs. This function supports both live and batch modes.
+#' next batch of pairs. This function supports both live and batch modes and
+#' may need to be called multiple times until the run completes.
+#'
+#' @details
+#' Incremental ingestion is idempotent: results are filtered to previously
+#' unseen \code{pair_uid}s before updating \code{history_results}. This ensures
+#' that cumulative backend returns can be resumed safely without double-counting.
+#' Resume may schedule new comparisons if the budget and constraints allow.
 #'
 #' @param state An \code{adaptive_state} object. If \code{NULL},
 #'   \code{state_path} must be provided.
@@ -826,11 +880,31 @@ adaptive_rank_start <- function(
 #' }
 #'
 #' @examples
+#' # Minimal synthetic setup (no submission).
+#' samples <- tibble::tibble(
+#'   ID = c("S1", "S2", "S3"),
+#'   text = c("alpha", "bravo", "charlie")
+#' )
+#' state <- pairwiseLLM:::adaptive_state_new(
+#'   samples = samples,
+#'   config = list(d1 = 2L, M1_target = 2L, budget_max = 4L)
+#' )
+#'
 #' \dontrun{
+#' # Batch resume (state loaded from disk)
 #' resume_out <- adaptive_rank_resume(
 #'   state_path = "adaptive_runs/adaptive_state.rds",
 #'   mode = "batch",
 #'   submission_info = batch_out$submission_info,
+#'   adaptive = list(per_item_cap = 3),
+#'   seed = 123
+#' )
+#'
+#' # Live resume (state kept in memory)
+#' resume_out <- adaptive_rank_resume(
+#'   state = start_out$state,
+#'   mode = "live",
+#'   submission_info = start_out$submission_info,
 #'   adaptive = list(per_item_cap = 3),
 #'   seed = 123
 #' )
@@ -1070,6 +1144,7 @@ adaptive_rank_resume <- function(
 #'
 #' @examples
 #' \dontrun{
+#' # Full live loop with safety cap
 #' out <- adaptive_rank_run_live(
 #'   samples = samples,
 #'   model = "gpt-4.1",

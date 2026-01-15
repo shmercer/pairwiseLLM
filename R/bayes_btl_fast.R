@@ -112,8 +112,53 @@
   list(theta_raw = theta_raw, se_raw = se_raw, converged = converged)
 }
 
-#' @keywords internal
-#' @noRd
+#' Fast Bayesian BTL approximation for adaptive selection
+#'
+#' Selection-grade approximation used only for adaptive selection and stopping
+#' checks. Results from this function are not final and must not be reported as
+#' uncertainty-quantified rankings.
+#'
+#' @param results Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
+#'   \code{better_id}.
+#' @param ids Character vector of all sample ids (length \code{N}).
+#' @param method Approximation method. Only \code{"laplace_sirt"} is supported.
+#' @param n_draws Number of posterior draws to generate.
+#' @param seed Optional integer seed for determinism.
+#'
+#' @return A list with:
+#' \describe{
+#'   \item{theta_mean}{Named numeric vector of posterior means (names == ids).}
+#'   \item{theta_draws}{Matrix of posterior draws \code{[n_draws, N]} (colnames == ids).}
+#'   \item{fit_meta}{Metadata about the approximation run.}
+#' }
+#'
+#' @examples
+#' results <- tibble::tibble(
+#'   pair_uid = "A:B#1",
+#'   unordered_key = "A:B",
+#'   ordered_key = "A:B",
+#'   A_id = "A",
+#'   B_id = "B",
+#'   better_id = "A",
+#'   winner_pos = 1L,
+#'   phase = "phase2",
+#'   iter = 1L,
+#'   received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+#'   backend = "openai",
+#'   model = "gpt-test"
+#' )
+#' fit <- fit_bayes_btl_fast(results, ids = c("A", "B"), n_draws = 10, seed = 1)
+#'
+#' \dontrun{
+#' # Full workflow shape (after adaptive run has completed):
+#' # 1) Read observed results (results_tbl) and ids from state
+#' # 2) Compute fast draws for selection or stopping checks
+#' results_tbl <- state$history_results
+#' ids <- state$ids
+#' fast_fit <- fit_bayes_btl_fast(results_tbl, ids, n_draws = 400, seed = 123)
+#' }
+#'
+#' @export
 fit_bayes_btl_fast <- function(
     results,
     ids,

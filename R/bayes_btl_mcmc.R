@@ -75,8 +75,53 @@ model {
 "
 }
 
-#' @keywords internal
-#' @noRd
+#' Full Bayesian BTL inference via CmdStanR (audit only)
+#'
+#' Final Bayesian posterior inference for adaptive ranking. This requires
+#' CmdStanR/CmdStan (optional dependency). All reported uncertainty summaries
+#' are derived from these draws only.
+#'
+#' @param results Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
+#'   \code{better_id}.
+#' @param ids Character vector of all sample ids (length \code{N}).
+#' @param cmdstan List of CmdStan settings: \code{chains} (4),
+#'   \code{iter_warmup} (1000), \code{iter_sampling} (1000), \code{seed} (NULL),
+#'   and \code{core_fraction} (0.6). The list is extensible in future versions.
+#'
+#' @return A list with:
+#' \describe{
+#'   \item{theta_draws}{Matrix of posterior draws \code{[S, N]} (colnames == ids).}
+#'   \item{fit_meta}{Sampling diagnostics and convergence metadata.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' results <- tibble::tibble(
+#'   pair_uid = "A:B#1",
+#'   unordered_key = "A:B",
+#'   ordered_key = "A:B",
+#'   A_id = "A",
+#'   B_id = "B",
+#'   better_id = "A",
+#'   winner_pos = 1L,
+#'   phase = "phase2",
+#'   iter = 1L,
+#'   received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+#'   backend = "openai",
+#'   model = "gpt-test"
+#' )
+#' fit <- fit_bayes_btl_mcmc(results, ids = c("A", "B"))
+#'
+#' # Full workflow shape (after stop confirmation):
+#' # 1) Run MCMC
+#' # 2) Summarize with MCMC-only helpers
+#' mcmc_fit <- fit_bayes_btl_mcmc(results, ids = c("A", "B"))
+#' theta_summary <- summarize_theta(mcmc_fit$theta_draws)
+#' rank_summary <- summarize_ranks(mcmc_fit$theta_draws)
+#' }
+#' 
+#'
+#' @export
 fit_bayes_btl_mcmc <- function(
     results,
     ids,
