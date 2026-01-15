@@ -51,6 +51,13 @@
   )
 }
 
+.adaptive_unordered_keys <- function(ids) {
+  ids <- as.character(ids)
+  if (length(ids) < 2L) return(character())
+  combos <- utils::combn(ids, 2)
+  paste(pmin(combos[1L, ], combos[2L, ]), pmax(combos[1L, ], combos[2L, ]), sep = ":")
+}
+
 #' @keywords internal
 #' @noRd
 adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L) {
@@ -75,6 +82,9 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
   if (is.null(M1_target)) M1_target <- floor(N * d1 / 2)
 
   counts <- stats::setNames(rep.int(0L, N), ids)
+  unordered_keys <- .adaptive_unordered_keys(ids)
+  unordered_count <- stats::setNames(rep.int(0L, length(unordered_keys)), unordered_keys)
+  ordered_seen <- stats::setNames(logical(), character())
 
   state <- structure(
     list(
@@ -86,8 +96,8 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       pos1 = counts,
       pos2 = counts,
       imb = counts,
-      unordered_count = integer(),
-      ordered_seen = logical(),
+      unordered_count = unordered_count,
+      ordered_seen = ordered_seen,
       history_pairs = .adaptive_empty_pairs_tbl(),
       history_results = .adaptive_empty_results_tbl(),
       failed_attempts = .adaptive_empty_failed_attempts_tbl(),
