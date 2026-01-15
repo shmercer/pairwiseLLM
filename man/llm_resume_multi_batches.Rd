@@ -90,13 +90,15 @@ for \code{per_job_delay} seconds.  Set to a small positive value (e.g. 3)
 to automatically recover from occasional server errors.  Defaults to 3.}
 }
 \value{
-A list with two elements: \code{jobs}, the updated jobs list with each
-element containing parsed results and a \code{done} flag, and \code{combined},
-a tibble obtained by binding all completed results (\code{NULL} if no batches
-completed).  If \code{write_results_csv} is \code{TRUE}, the combined tibble is still
-returned in memory.
-If \code{write_combined_csv} is \code{TRUE}, the combined tibble is also written
-to a CSV file on disk (see \code{combined_csv_path} for details) but is still
+A list with four elements: \code{jobs}, the updated jobs list with each
+element containing parsed results and a \code{done} flag; \code{combined}, a tibble
+obtained by binding all completed results (\code{NULL} if no batches
+completed); \code{failed_attempts}, a tibble of failed attempts captured
+during normalization; and \code{batch_failures}, a tibble describing batches
+that reached a terminal non-success status. If \code{write_results_csv} is
+\code{TRUE}, the combined tibble is still returned in memory. If
+\code{write_combined_csv} is \code{TRUE}, the combined tibble is also written to a
+CSV file on disk (see \code{combined_csv_path} for details) but is still
 returned in memory.
 }
 \description{

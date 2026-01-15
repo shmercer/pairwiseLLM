@@ -26,6 +26,9 @@ testthat::test_that("estimate_llm_pairs_cost returns expected and budget cost wi
 
     tibble::tibble(
       custom_id = paste0("X", seq_len(nrow(pairs))),
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
       status_code = 200L,
       prompt_tokens = prompt_tokens,
       completion_tokens = completion_tokens,
@@ -33,7 +36,7 @@ testthat::test_that("estimate_llm_pairs_cost returns expected and budget cost wi
     )
   }
 
-  est <- estimate_llm_pairs_cost(
+  est <- suppressWarnings(estimate_llm_pairs_cost(
     pairs = pairs,
     backend = "openai",
     model = "gpt-4.1-mini",
@@ -49,7 +52,7 @@ testthat::test_that("estimate_llm_pairs_cost returns expected and budget cost wi
     verbose = FALSE,
     progress = FALSE,
     .submit_fun = fake_submit
-  )
+  ))
 
   testthat::expect_s3_class(est, "pairwiseLLM_cost_estimate")
 
@@ -77,6 +80,9 @@ testthat::test_that("estimate_llm_pairs_cost handles missing output tokens in pi
 
   fake_submit <- function(pairs, ...) {
     tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
       status_code = 200L,
       prompt_tokens = c(100L, 120L),
       completion_tokens = c(50L, NA_integer_),
@@ -116,14 +122,12 @@ testthat::test_that("estimate_llm_pairs_cost validates inputs", {
   td <- trait_description("overall_quality")
 
   # Backend ollama
-  # Note: match.arg fails before the specific ollama check in the source code,
-  # so we expect the standard match.arg error message.
   testthat::expect_error(
     estimate_llm_pairs_cost(pairs,
       model = "m", trait_name = "t", trait_description = "d",
       backend = "ollama", cost_per_million_input = 1, cost_per_million_output = 1
     ),
-    "should be one of"
+    "backend = \"ollama\""
   )
 
   # Missing columns
@@ -184,8 +188,15 @@ testthat::test_that("estimate_llm_pairs_cost handles 0 pilot pairs (fallback cal
   testthat::expect_equal(est_0$summary$pilot_prompt_tokens, 0)
 
   # Case 2: n_test = 1 -> Single point calibration
-  fake_submit_1 <- function(...) {
-    tibble::tibble(status_code = 200, prompt_tokens = 100, completion_tokens = 10)
+  fake_submit_1 <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200,
+      prompt_tokens = 100,
+      completion_tokens = 10
+    )
   }
 
   est_1 <- estimate_llm_pairs_cost(
@@ -208,7 +219,16 @@ testthat::test_that("estimate_llm_pairs_cost handles stratification edge cases",
 
   # Edge Case: 1 total row (cannot stratify, forces n_test=1)
   pairs_1 <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
-  fake_submit <- function(...) tibble::tibble(status_code = 200, prompt_tokens = 10, completion_tokens = 10)
+  fake_submit <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200,
+      prompt_tokens = 10,
+      completion_tokens = 10
+    )
+  }
 
   est_single <- estimate_llm_pairs_cost(
     pairs = pairs_1, model = "m", trait_name = td$name, trait_description = td$description,
@@ -230,7 +250,14 @@ testthat::test_that("estimate_llm_pairs_cost handles stratification edge cases",
     n_test = 4, test_strategy = "stratified_prompt_bytes",
     cost_per_million_input = 1, cost_per_million_output = 1,
     .submit_fun = function(pairs, ...) {
-      tibble::tibble(status_code = 200, prompt_tokens = 10, completion_tokens = 10)[rep(1, nrow(pairs)), ]
+      tibble::tibble(
+        ID1 = pairs$ID1,
+        ID2 = pairs$ID2,
+        better_id = pairs$ID1,
+        status_code = 200,
+        prompt_tokens = 10,
+        completion_tokens = 10
+      )
     }
   ))
   testthat::expect_equal(est_low_var$summary$n_test, 4)
@@ -250,7 +277,14 @@ testthat::test_that("estimate_llm_pairs_cost handles stratification edge cases",
     n_test = 7, test_strategy = "stratified_prompt_bytes",
     cost_per_million_input = 1, cost_per_million_output = 1,
     .submit_fun = function(pairs, ...) {
-      tibble::tibble(status_code = 200, prompt_tokens = 10, completion_tokens = 10)[rep(1, nrow(pairs)), ]
+      tibble::tibble(
+        ID1 = pairs$ID1,
+        ID2 = pairs$ID2,
+        better_id = pairs$ID1,
+        status_code = 200,
+        prompt_tokens = 10,
+        completion_tokens = 10
+      )
     }
   ))
   testthat::expect_equal(est_strat$summary$n_test, 7)
@@ -262,7 +296,14 @@ testthat::test_that("estimate_llm_pairs_cost handles complex submitter returns (
 
   fake_submit_list <- function(...) {
     list(
-      results = tibble::tibble(status_code = 200, prompt_tokens = 50, completion_tokens = 50),
+      results = tibble::tibble(
+        ID1 = "A",
+        ID2 = "B",
+        better_id = "A",
+        status_code = 200,
+        prompt_tokens = 50,
+        completion_tokens = 50
+      ),
       failed_pairs = tibble::tibble(ID1 = "Fail", error = "Msg")
     )
   }
@@ -438,6 +479,9 @@ testthat::test_that("estimate_llm_pairs_cost triggers stratified sampling top-up
   fake_submit <- function(pairs, ...) {
     # Return dummy results for however many pairs are requested
     tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
       status_code = 200,
       prompt_tokens = rep(10, nrow(pairs)),
       completion_tokens = rep(10, nrow(pairs))
@@ -458,6 +502,106 @@ testthat::test_that("estimate_llm_pairs_cost triggers stratified sampling top-up
   testthat::expect_equal(nrow(est$test_pairs), 3)
 })
 
+testthat::test_that("estimate_llm_pairs_cost stratifies skewed prompt bytes and tops up", {
+  pairs <- tibble::tibble(
+    ID1 = letters[1:5],
+    text1 = c("a", "bb", strrep("c", 100), strrep("d", 100), strrep("e", 100)),
+    ID2 = LETTERS[1:5],
+    text2 = "z"
+  )
+  td <- trait_description("overall_quality")
+
+  fake_submit <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200,
+      prompt_tokens = rep(10L, nrow(pairs)),
+      completion_tokens = rep(10L, nrow(pairs))
+    )
+  }
+
+  withr::local_seed(123)
+  est <- suppressWarnings(estimate_llm_pairs_cost(
+    pairs = pairs, model = "m", trait_name = td$name, trait_description = td$description,
+    n_test = 4, test_strategy = "stratified_prompt_bytes",
+    cost_per_million_input = 1, cost_per_million_output = 1,
+    .submit_fun = fake_submit
+  ))
+
+  testthat::expect_equal(est$summary$n_test, 4)
+  testthat::expect_equal(nrow(est$test_pairs), 4)
+})
+
+testthat::test_that("estimate_llm_pairs_cost tops up when stratified pools are small", {
+  pairs <- tibble::tibble(
+    ID1 = letters[1:4],
+    text1 = c("short", "short", "short", strrep("x", 100)),
+    ID2 = LETTERS[1:4],
+    text2 = "z"
+  )
+  td <- trait_description("overall_quality")
+
+  fake_submit <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200,
+      prompt_tokens = rep(10L, nrow(pairs)),
+      completion_tokens = rep(10L, nrow(pairs))
+    )
+  }
+
+  est <- suppressWarnings(estimate_llm_pairs_cost(
+    pairs = pairs, model = "m", trait_name = td$name, trait_description = td$description,
+    n_test = 4, test_strategy = "stratified_prompt_bytes", seed = 123,
+    cost_per_million_input = 1, cost_per_million_output = 1,
+    .submit_fun = fake_submit
+  ))
+
+  testthat::expect_equal(est$summary$n_test, 4)
+  testthat::expect_equal(nrow(est$test_pairs), 4)
+})
+
+testthat::test_that("estimate_llm_pairs_cost fills missing pilot attempt columns", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+
+  fake_submit <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = pairs$ID1,
+      status_code = 200
+    )
+  }
+
+  testthat::with_mocked_bindings(
+    bind_rows = function(...) tibble::tibble(),
+    .env = asNamespace("dplyr"),
+    {
+      est <- estimate_llm_pairs_cost(
+        pairs = pairs,
+        backend = "openai",
+        model = "gpt-4.1-mini",
+        endpoint = "chat.completions",
+        trait_name = td$name,
+        trait_description = td$description,
+        prompt_template = set_prompt_template(),
+        mode = "live",
+        n_test = 1,
+        test_strategy = "first",
+        cost_per_million_input = 1,
+        cost_per_million_output = 1,
+        .submit_fun = fake_submit
+      )
+      testthat::expect_equal(est$summary$pilot_prompt_tokens, 0)
+    }
+  )
+})
+
 testthat::test_that("estimate_llm_pairs_cost handles pilot mismatch and first strategy", {
   pairs <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
   td <- trait_description("overall_quality")
@@ -467,6 +611,9 @@ testthat::test_that("estimate_llm_pairs_cost handles pilot mismatch and first st
   fake_submit_mismatch <- function(pairs, ...) {
     # Return 2 rows even though 1 pair passed
     tibble::tibble(
+      ID1 = rep(pairs$ID1[1], 2),
+      ID2 = rep(pairs$ID2[1], 2),
+      better_id = rep(pairs$ID1[1], 2),
       status_code = 200,
       prompt_tokens = c(10, 20),
       completion_tokens = c(5, 5)
@@ -485,6 +632,44 @@ testthat::test_that("estimate_llm_pairs_cost handles pilot mismatch and first st
 
   # Check that mismatch logic summed the tokens correctly (10+20=30)
   testthat::expect_equal(est$summary$pilot_prompt_tokens, 30)
+})
+
+testthat::test_that("estimate_llm_pairs_cost recycles pilot bytes when results are invalid", {
+  pairs <- tibble::tibble(
+    ID1 = c("A", "B"),
+    text1 = c("short", "longer"),
+    ID2 = c("C", "D"),
+    text2 = c("x", "y")
+  )
+  td <- trait_description("overall_quality")
+
+  fake_submit_invalid <- function(pairs, ...) {
+    tibble::tibble(
+      ID1 = pairs$ID1,
+      ID2 = pairs$ID2,
+      better_id = "NOT_A_PAIR_ID",
+      status_code = 200
+    )
+  }
+
+  est <- estimate_llm_pairs_cost(
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-4.1-mini",
+    endpoint = "chat.completions",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = set_prompt_template(),
+    mode = "live",
+    n_test = 1,
+    test_strategy = "first",
+    cost_per_million_input = 1,
+    cost_per_million_output = 1,
+    .submit_fun = fake_submit_invalid
+  )
+
+  testthat::expect_equal(est$summary$n_test, 1)
+  testthat::expect_equal(est$summary$pilot_prompt_tokens, 0)
 })
 
 testthat::test_that("estimate_llm_pairs_cost falls back to default submitter", {

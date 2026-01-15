@@ -87,8 +87,8 @@ A list with two elements: \code{jobs}, a list of per‑batch metadata
 (similar to the example in the advanced vignette), and \code{registry},
 a tibble summarising all jobs.  The \code{registry} contains columns
 \code{segment_index}, \code{provider}, \code{model}, \code{batch_id}, \code{batch_input_path},
-\code{batch_output_path}, \code{csv_path}, \code{done}, and \code{results} (initialized to
-\code{NULL}).  If \code{write_registry} is \code{TRUE}, the tibble is also written
+\code{batch_output_path}, \code{csv_path}, \code{pairs_path}, \code{done}, and \code{results}
+(initialized to \code{NULL}).  If \code{write_registry} is \code{TRUE}, the tibble is also written
 to disk as \code{jobs_registry.csv}.
 }
 \description{

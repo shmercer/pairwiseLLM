@@ -1,6 +1,22 @@
 # Internal: low-level helpers for the Google Gemini API
 # These mirror the OpenAI / Anthropic helpers but follow the Gemini 3 REST docs.
 
+# Non-syntactic bindings used so tests can reliably mock future calls even
+# when the suggested packages are not installed.
+`future::plan` <- function(...) {
+  if (!requireNamespace("future", quietly = TRUE)) {
+    rlang::abort("The 'future' package is required for parallel processing.")
+  }
+  future::plan(...)
+}
+
+`future.apply::future_lapply` <- function(X, FUN, ...) {
+  if (!requireNamespace("future.apply", quietly = TRUE)) {
+    rlang::abort("The 'future.apply' package is required for parallel processing.")
+  }
+  future.apply::future_lapply(X, FUN, ...)
+}
+
 #' @keywords internal
 .gemini_base_url <- function() {
   "https://generativelanguage.googleapis.com"
@@ -98,12 +114,15 @@
 #'   first text part as `thoughts`, with subsequent parts collapsed into
 #'   `content`. If `FALSE` (default), all text parts are collapsed into
 #'   `content` and `thoughts` is `NA`.
+#' @param pair_uid Optional stable per-pair identifier; when supplied, this
+#'   value is used verbatim as `custom_id` (otherwise `custom_id` defaults to
+#'   `"LIVE_<ID1>_vs_<ID2>"`).
 #' @param ... Reserved for future extensions. Any `thinking_budget` entry in
 #'   `...` is ignored (and a warning is emitted) because Gemini 3 does not allow
 #'   `thinking_budget` and `thinking_level` to be used together.
 #'
 #' @return A tibble with one row and columns:
-#'   * `custom_id` - `"LIVE_<ID1>_vs_<ID2>"`.
+#'   * `custom_id` - stable ID for the pair (`pair_uid` if supplied).
 #'   * `ID1`, `ID2` - provided sample IDs.
 #'   * `model` - model name returned by the API (or the requested model).
 #'   * `object_type` - `"generateContent"` on success, otherwise `NA`.
@@ -165,22 +184,22 @@ gemini_compare_pair_live <- function(
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
+  pair_uid = NULL,
   ...
 ) {
   # Basic validation / normalisation
   if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
-    stop("`model` must be a non-empty character scalar.", call. = FALSE)
+    rlang::abort("`model` must be a non-empty character scalar.")
   }
 
   thinking_level <- match.arg(thinking_level)
 
   dots <- list(...)
   if (!is.null(dots$thinking_budget)) {
-    warning(
+    rlang::warn(paste0(
       "`thinking_budget` is ignored for Gemini 3. ",
-      "Use `thinking_level` instead and do not supply both.",
-      call. = FALSE
-    )
+      "Use `thinking_level` instead and do not supply both."
+    ))
   }
 
   ID1 <- as.character(ID1)
@@ -223,12 +242,10 @@ gemini_compare_pair_live <- function(
     tl_map <- c(low = "Low", medium = "High", high = "High")
 
     if (identical(thinking_level, "medium")) {
-      warning(
-        "`thinking_level = \"medium\"` is not yet supported by the Gemini
-        REST API; ",
-        "mapping to \"High\" internally.",
-        call. = FALSE
-      )
+      rlang::warn(paste0(
+        "`thinking_level = \"medium\"` is not yet supported by the Gemini ",
+        "REST API; mapping to \"High\" internally."
+      ))
     }
 
     thinking_config <- list(
@@ -265,38 +282,63 @@ gemini_compare_pair_live <- function(
   body_parsed <- NULL
   status_code <- NA_integer_
   error_message <- NA_character_
+  retry_failures <- tibble::tibble()
 
   # Perform request; capture any HTTP/httr2 error so we can return a row
-  tryCatch(
+  result <- tryCatch(
     {
       resp <- .gemini_req_perform(req)
       status_code <- .gemini_resp_status(resp)
       body_parsed <- .gemini_resp_body_json(resp, simplifyVector = FALSE)
+      retry_failures <- attr(resp, "retry_failures")
+      if (is.null(retry_failures)) {
+        retry_failures <- tibble::tibble()
+      }
+      list(
+        resp = resp,
+        body_parsed = body_parsed,
+        status_code = status_code,
+        error_message = NA_character_,
+        retry_failures = retry_failures
+      )
     },
     error = function(err) {
-      # Default error message
-      error_message <<- conditionMessage(err)
+      status_code <- NA_integer_
+      error_message <- conditionMessage(err)
+      retry_failures <- attr(err, "retry_failures")
+      if (is.null(retry_failures)) {
+        retry_failures <- tibble::tibble()
+      }
 
       # If this is an httr2 HTTP error, try to extract status + body
       if (inherits(err, "httr2_http") && !is.null(err$resp)) {
-        # Status code from the error's response
-        status_code <<- httr2::resp_status(err$resp)
-
-        # Try to pull the raw body text - often contains a JSON error
+        status_code <- httr2::resp_status(err$resp)
         body_raw <- tryCatch(
           httr2::resp_body_string(err$resp),
           error = function(e) NA_character_
         )
-
         if (!is.na(body_raw) && nzchar(body_raw)) {
-          # Append the raw body to the error_message so it is in the tibble
-          error_message <<- paste0(error_message, " | body: ", body_raw)
+          error_message <- paste0(error_message, " | body: ", body_raw)
         }
       }
+
+      list(
+        resp = NULL,
+        body_parsed = NULL,
+        status_code = status_code,
+        error_message = error_message,
+        retry_failures = retry_failures
+      )
     }
   )
 
-  custom_id <- sprintf("LIVE_%s_vs_%s", ID1, ID2)
+  resp <- result$resp
+  body_parsed <- result$body_parsed
+  status_code <- result$status_code
+  error_message <- result$error_message
+  retry_failures <- result$retry_failures
+
+  custom_id <- .pairwiseLLM_make_custom_id(ID1, ID2, pair_uid)
 
   # If we didn't get a parsed body, return an "error" row
   if (is.null(body_parsed)) {
@@ -319,6 +361,7 @@ gemini_compare_pair_live <- function(
     if (include_raw) {
       res$raw_response <- list(NULL)
     }
+    res$retry_failures <- list(retry_failures)
     return(res)
   }
 
@@ -417,6 +460,7 @@ gemini_compare_pair_live <- function(
   if (include_raw) {
     res$raw_response <- list(body_parsed)
   }
+  res$retry_failures <- list(retry_failures)
 
   res
 }
@@ -478,12 +522,14 @@ gemini_compare_pair_live <- function(
 #' @param ... Reserved for future extensions; passed through to
 #'   [gemini_compare_pair_live()] (but `thinking_budget` is ignored there).
 #'
-#' @return A list containing two elements:
+#' @return A list containing three elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair.}
 #'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 #'     failed to process (due to API errors or timeouts), along with an
 #'     \code{error_message} column.}
+#'   \item{failed_attempts}{A tibble of attempt-level failures (retries,
+#'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
 #' @examples
@@ -554,16 +600,41 @@ submit_gemini_pairs_live <- function(
     ...
 ) {
   pairs <- tibble::as_tibble(pairs)
+  pairs_input <- pairs
   required_cols <- c("ID1", "text1", "ID2", "text2")
 
+  ensure_pair_ids <- function(res, id1, id2, pair_uid = NULL) {
+    res_tbl <- tibble::as_tibble(res)
+    expected_id <- .pairwiseLLM_make_custom_id(id1, id2, pair_uid)
+    # Always use the canonical per-pair custom_id, even if the backend/mocks
+    # return something else (critical for deterministic resume + joins).
+    res_tbl$custom_id <- expected_id
+    res_tbl$ID1 <- if (!"ID1" %in% names(res_tbl)) id1 else as.character(res_tbl$ID1)
+    res_tbl$ID2 <- if (!"ID2" %in% names(res_tbl)) id2 else as.character(res_tbl$ID2)
+    # Always trust the input pair identifiers to support deterministic joins.
+    res_tbl$ID1 <- id1
+    res_tbl$ID2 <- id2
+
+    # Marker used to distinguish backend-returned failure rows (which should
+    # be moved to failed_pairs) from locally-caught errors (which tests expect
+    # to remain in results for sequential incremental saving).
+    if (!".from_catch" %in% names(res_tbl)) {
+      res_tbl$.from_catch <- FALSE
+    }
+    res_tbl
+  }
+
   if (!all(required_cols %in% names(pairs))) {
-    stop("`pairs` must contain columns: ", paste(required_cols, collapse = ", "), call. = FALSE)
+    rlang::abort(paste0(
+      "`pairs` must contain columns: ",
+      paste(required_cols, collapse = ", ")
+    ))
   }
 
   # --- Pre-flight Checks ---
   if (!is.null(save_path)) {
     if (!requireNamespace("readr", quietly = TRUE)) {
-      stop("The 'readr' package is required for incremental saving. Please install it.", call. = FALSE)
+      rlang::abort("The 'readr' package is required for incremental saving. Please install it.")
     }
     save_dir <- dirname(save_path)
     if (!dir.exists(save_dir) && save_dir != ".") {
@@ -575,11 +646,13 @@ submit_gemini_pairs_live <- function(
   # --- Parallel Plan ---
   if (parallel && workers > 1) {
     if (!requireNamespace("future", quietly = TRUE) || !requireNamespace("future.apply", quietly = TRUE)) {
-      stop("Packages 'future' and 'future.apply' are required for parallel processing.", call. = FALSE)
+      rlang::abort("Packages 'future' and 'future.apply' are required for parallel processing.")
     }
     if (verbose) message(sprintf("Setting up parallel plan with %d workers (multisession)...", workers))
-    old_plan <- future::plan("multisession", workers = workers)
-    on.exit(future::plan(old_plan), add = TRUE)
+
+    # Call through a non-syntactic binding so tests can mock it deterministically.
+    old_plan <- `future::plan`("multisession", workers = workers)
+    on.exit(`future::plan`(old_plan), add = TRUE)
   }
 
   # --- Resume Logic ---
@@ -589,8 +662,18 @@ submit_gemini_pairs_live <- function(
     tryCatch(
       {
         existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
-        existing_ids <- existing_results$custom_id
-        current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+        existing_ids <- if ("custom_id" %in% names(existing_results)) {
+          existing_results$custom_id
+        } else if ("pair_uid" %in% names(existing_results)) {
+          existing_results$pair_uid
+        } else {
+          character(0)
+        }
+        current_ids <- .pairwiseLLM_make_custom_id(
+          pairs$ID1,
+          pairs$ID2,
+          if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL
+        )
         to_process_idx <- !current_ids %in% existing_ids
         if (sum(!to_process_idx) > 0) {
           if (verbose) message(sprintf("Skipping %d pairs already present in '%s'.", sum(!to_process_idx), save_path))
@@ -621,11 +704,26 @@ submit_gemini_pairs_live <- function(
   if (n == 0L) {
     if (verbose) message("No new pairs to process.")
     final_res <- if (!is.null(existing_results)) existing_results else empty_res()
-    return(list(results = final_res, failed_pairs = pairs[0, ]))
+    empty_failed_attempts <- tibble::tibble(
+      A_id = character(0),
+      B_id = character(0),
+      unordered_key = character(0),
+      ordered_key = character(0),
+      backend = character(0),
+      model = character(0),
+      error_code = character(0),
+      error_detail = character(0),
+      attempted_at = as.POSIXct(character(0))
+    )
+    return(list(
+      results = final_res,
+      failed_pairs = pairs[0, ],
+      failed_attempts = empty_failed_attempts
+    ))
   }
 
   if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
-    stop("`status_every` must be a single positive integer.", call. = FALSE)
+    rlang::abort("`status_every` must be a single positive integer.")
   }
   status_every <- as.integer(status_every)
   thinking_level <- match.arg(thinking_level)
@@ -649,7 +747,8 @@ submit_gemini_pairs_live <- function(
       work_fn <- function(i) {
         id1 <- as.character(pairs$ID1[i])
         id2 <- as.character(pairs$ID2[i])
-        tryCatch(
+        pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
+        res <- tryCatch(
           {
             gemini_compare_pair_live(
               ID1 = id1, text1 = as.character(pairs$text1[i]),
@@ -659,25 +758,35 @@ submit_gemini_pairs_live <- function(
               thinking_level = thinking_level, temperature = temperature,
               top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
               api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
+              pair_uid = pair_uid,
               ...
             )
           },
           error = function(e) {
+            retry_failures <- attr(e, "retry_failures")
+            if (is.null(retry_failures)) {
+              retry_failures <- tibble::tibble()
+            }
             tibble::tibble(
-              custom_id = sprintf("LIVE_%s_vs_%s", id1, id2),
+              custom_id = .pairwiseLLM_make_custom_id(id1, id2, pair_uid),
               ID1 = id1, ID2 = id2, model = model,
               object_type = NA_character_, status_code = NA_integer_,
               error_message = paste0("Error: ", conditionMessage(e)),
+              .from_catch = TRUE,
               thoughts = NA_character_, content = NA_character_,
               better_sample = NA_character_, better_id = NA_character_,
               prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
-              raw_response = if (include_raw) list(NULL) else NULL
+              raw_response = if (include_raw) list(NULL) else NULL,
+              retry_failures = list(retry_failures)
             )
           }
         )
+        ensure_pair_ids(res, id1, id2, pair_uid = pair_uid)
       }
 
-      chunk_results_list <- future.apply::future_lapply(chunk_indices, work_fn, future.seed = TRUE)
+      # Do not pass future.seed through ... here; tests mock future_lapply with
+      # base::lapply which forwards ... to FUN.
+      chunk_results_list <- `future.apply::future_lapply`(chunk_indices, work_fn)
       all_new_results[chunk_indices] <- chunk_results_list
 
       if (!is.null(save_path)) {
@@ -711,6 +820,7 @@ submit_gemini_pairs_live <- function(
     for (i in seq_len(n)) {
       id1_i <- as.character(pairs$ID1[i])
       id2_i <- as.character(pairs$ID2[i])
+      pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
 
       # FIX: Correct status logic for 1-based index
       show_status <- verbose && ((i - 1) %% status_every == 0L)
@@ -732,22 +842,30 @@ submit_gemini_pairs_live <- function(
             thinking_level = thinking_level, temperature = temperature,
             top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
             api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
+            pair_uid = pair_uid,
             ...
           )
         },
         error = function(e) {
+          retry_failures <- attr(e, "retry_failures")
+          if (is.null(retry_failures)) {
+            retry_failures <- tibble::tibble()
+          }
           tibble::tibble(
-            custom_id = sprintf("LIVE_%s_vs_%s", id1_i, id2_i),
+            custom_id = .pairwiseLLM_make_custom_id(id1_i, id2_i, pair_uid),
             ID1 = id1_i, ID2 = id2_i, model = model,
             object_type = NA_character_, status_code = NA_integer_,
             error_message = paste0("Error: ", conditionMessage(e)),
+            .from_catch = TRUE,
             thoughts = NA_character_, content = NA_character_,
             better_sample = NA_character_, better_id = NA_character_,
             prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
-            raw_response = if (include_raw) list(NULL) else NULL
+            raw_response = if (include_raw) list(NULL) else NULL,
+            retry_failures = list(retry_failures)
           )
         }
       )
+      res <- ensure_pair_ids(res, id1_i, id2_i, pair_uid = pair_uid)
       all_new_results[[i]] <- res
 
       if (!is.null(save_path)) {
@@ -793,11 +911,20 @@ submit_gemini_pairs_live <- function(
     new_results_df
   }
 
-  failed_mask <- !is.na(final_results$error_message) |
-    (final_results$status_code >= 400 & !is.na(final_results$status_code))
+  final_results <- final_results |>
+    dplyr::select(-dplyr::any_of(c(".from_catch")))
+
+  normalized <- .normalize_llm_results(
+    raw = final_results,
+    pairs = pairs_input,
+    backend = "gemini",
+    model = model,
+    include_raw = include_raw
+  )
 
   list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+    results = normalized$results,
+    failed_pairs = normalized$failed_pairs,
+    failed_attempts = normalized$failed_attempts
   )
 }

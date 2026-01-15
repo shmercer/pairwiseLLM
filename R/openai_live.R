@@ -43,7 +43,9 @@ NULL
 #' @param include_raw Logical; if TRUE, adds a \code{raw_response} column.
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-#'   and (optionally) \code{include_thoughts}. The same validation rules for
+#'   \code{pair_uid}, and (optionally) \code{include_thoughts}. When
+#'   \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
+#'   The same validation rules for
 #'   gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
 #'   When using the Responses endpoint with reasoning models, you can request
 #'   reasoning summaries in the \code{thoughts} column by setting
@@ -51,7 +53,8 @@ NULL
 #'   \code{include_thoughts = TRUE}.
 #' @return A tibble with one row and columns:
 #' \describe{
-#'   \item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
+#'   \item{custom_id}{Stable ID for the pair (\code{pair_uid} if supplied via
+#'     \code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).}
 #'   \item{ID1, ID2}{The sample IDs you supplied.}
 #'   \item{model}{Model name reported by the API.}
 #'   \item{object_type}{OpenAI object type (for example "chat.completion" or
@@ -131,6 +134,7 @@ openai_compare_pair_live <- function(
   logprobs <- dots$logprobs %||% NULL
   reasoning_effort <- dots$reasoning %||% NULL
   include_thoughts <- dots$include_thoughts %||% FALSE
+  pair_uid <- dots$pair_uid %||% NULL
 
   # Determine temperature default
   is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
@@ -191,15 +195,21 @@ openai_compare_pair_live <- function(
   req <- .openai_req_body_json(req, body = body)
   resp <- .openai_req_perform(req)
   status_code <- .openai_resp_status(resp)
+  retry_failures <- attr(resp, "retry_failures")
+  if (is.null(retry_failures)) {
+    retry_failures <- tibble::tibble()
+  }
 
   body_parsed <- tryCatch(
     .openai_resp_body_json(resp, simplifyVector = FALSE),
     error = function(e) NULL
   )
 
+  custom_id <- .pairwiseLLM_make_custom_id(ID1, ID2, pair_uid)
+
   if (is.null(body_parsed)) {
     res <- tibble::tibble(
-      custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+      custom_id = custom_id,
       ID1 = ID1, ID2 = ID2, model = NA_character_, object_type = NA_character_,
       status_code = status_code, error_message = "Failed to parse JSON.",
       thoughts = NA_character_, content = NA_character_,
@@ -207,6 +217,7 @@ openai_compare_pair_live <- function(
       prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_
     )
     if (include_raw) res$raw_response <- list(NULL)
+    res$retry_failures <- list(retry_failures)
     return(res)
   }
 
@@ -280,7 +291,7 @@ openai_compare_pair_live <- function(
   usage <- body$usage %||% list()
 
   res <- tibble::tibble(
-    custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+    custom_id = custom_id,
     ID1 = ID1, ID2 = ID2, model = model_name, object_type = object_type,
     status_code = status_code, error_message = error_message,
     thoughts = thoughts, content = content,
@@ -291,6 +302,7 @@ openai_compare_pair_live <- function(
   )
 
   if (include_raw) res$raw_response <- list(body)
+  res$retry_failures <- list(retry_failures)
   res
 }
 
@@ -347,7 +359,7 @@ openai_compare_pair_live <- function(
 #' @param ... Additional OpenAI parameters (temperature, top_p, logprobs,
 #'   reasoning, and so on) passed on to \code{openai_compare_pair_live}.
 #'
-#' @return A list containing two elements:
+#' @return A list containing three elements:
 #' \describe{
 #'   \item{results}{A tibble with one row per successfully processed pair and
 #'     columns such as \code{better_id}, \code{better_sample}, \code{thoughts},
@@ -356,6 +368,8 @@ openai_compare_pair_live <- function(
 #'   \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 #'     failed to process (due to API errors or timeouts), along with an
 #'     \code{error_message} column. These can be easily re-submitted.}
+#'   \item{failed_attempts}{A tibble of attempt-level failures (retries,
+#'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
 #' @examples
@@ -425,6 +439,7 @@ submit_openai_pairs_live <- function(
 ) {
   endpoint <- match.arg(endpoint)
   pairs <- tibble::as_tibble(pairs)
+  pairs_input <- pairs
   required_cols <- c("ID1", "text1", "ID2", "text2")
 
   if (!all(required_cols %in% names(pairs))) {
@@ -466,8 +481,14 @@ submit_openai_pairs_live <- function(
         existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
 
         # We assume custom_id is constructed as LIVE_<ID1>_vs_<ID2>
-        existing_ids <- existing_results$custom_id
-        current_ids <- sprintf("LIVE_%s_vs_%s", pairs$ID1, pairs$ID2)
+        existing_ids <- if ("custom_id" %in% names(existing_results)) {
+          existing_results$custom_id
+        } else if ("pair_uid" %in% names(existing_results)) {
+          existing_results$pair_uid
+        } else {
+          character(0)
+        }
+        current_ids <- .pairwiseLLM_make_custom_id(pairs$ID1, pairs$ID2, if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL)
 
         # Identify new pairs
         to_process_idx <- !current_ids %in% existing_ids
@@ -501,8 +522,23 @@ submit_openai_pairs_live <- function(
   if (n == 0L) {
     if (verbose) message("No new pairs to process.")
     final_res <- if (!is.null(existing_results)) existing_results else empty_res()
+    empty_failed_attempts <- tibble::tibble(
+      A_id = character(0),
+      B_id = character(0),
+      unordered_key = character(0),
+      ordered_key = character(0),
+      backend = character(0),
+      model = character(0),
+      error_code = character(0),
+      error_detail = character(0),
+      attempted_at = as.POSIXct(character(0))
+    )
     # If resuming and all are done, failed_pairs is empty relative to the *new* input
-    return(list(results = final_res, failed_pairs = pairs[0, ]))
+    return(list(
+      results = final_res,
+      failed_pairs = pairs[0, ],
+      failed_attempts = empty_failed_attempts
+    ))
   }
 
   if (!is.numeric(status_every) || length(status_every) != 1L || status_every < 1) {
@@ -531,6 +567,7 @@ submit_openai_pairs_live <- function(
       work_fn <- function(i) {
         id1 <- as.character(pairs$ID1[i])
         id2 <- as.character(pairs$ID2[i])
+        pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
         tryCatch(
           {
             openai_compare_pair_live(
@@ -538,19 +575,24 @@ submit_openai_pairs_live <- function(
               ID2 = id2, text2 = as.character(pairs$text2[i]),
               model = model, trait_name = trait_name, trait_description = trait_description,
               prompt_template = prompt_template, endpoint = endpoint,
-              api_key = api_key, include_raw = include_raw, ...
+              api_key = api_key, include_raw = include_raw, pair_uid = pair_uid, ...
             )
           },
           error = function(e) {
+            retry_failures <- attr(e, "retry_failures")
+            if (is.null(retry_failures)) {
+              retry_failures <- tibble::tibble()
+            }
             tibble::tibble(
-              custom_id = sprintf("LIVE_%s_vs_%s", id1, id2),
+              custom_id = .pairwiseLLM_make_custom_id(id1, id2, pair_uid),
               ID1 = id1, ID2 = id2, model = model, object_type = NA_character_,
               status_code = NA_integer_,
               error_message = paste0("Error: ", conditionMessage(e)),
               thoughts = NA_character_, content = NA_character_,
               better_sample = NA_character_, better_id = NA_character_,
               prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
-              raw_response = if (include_raw) list(NULL) else NULL
+              raw_response = if (include_raw) list(NULL) else NULL,
+              retry_failures = list(retry_failures)
             )
           }
         )
@@ -585,6 +627,7 @@ submit_openai_pairs_live <- function(
     pb <- if (progress) utils::txtProgressBar(min = 0, max = n, style = 3) else NULL
 
     for (i in seq_len(n)) {
+      pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid[i] else NULL
       res <- tryCatch(
         {
           openai_compare_pair_live(
@@ -592,19 +635,24 @@ submit_openai_pairs_live <- function(
             ID2 = as.character(pairs$ID2[i]), text2 = as.character(pairs$text2[i]),
             model = model, trait_name = trait_name, trait_description = trait_description,
             prompt_template = prompt_template, endpoint = endpoint,
-            api_key = api_key, include_raw = include_raw, ...
+            api_key = api_key, include_raw = include_raw, pair_uid = pair_uid, ...
           )
         },
         error = function(e) {
+          retry_failures <- attr(e, "retry_failures")
+          if (is.null(retry_failures)) {
+            retry_failures <- tibble::tibble()
+          }
           tibble::tibble(
-            custom_id = sprintf("LIVE_%s_vs_%s", pairs$ID1[i], pairs$ID2[i]),
+            custom_id = .pairwiseLLM_make_custom_id(pairs$ID1[i], pairs$ID2[i], pair_uid),
             ID1 = as.character(pairs$ID1[i]), ID2 = as.character(pairs$ID2[i]), model = model,
             object_type = NA_character_, status_code = NA_integer_,
             error_message = paste0("Error: ", conditionMessage(e)),
             thoughts = NA_character_, content = NA_character_,
             better_sample = NA_character_, better_id = NA_character_,
             prompt_tokens = NA_real_, completion_tokens = NA_real_, total_tokens = NA_real_,
-            raw_response = if (include_raw) list(NULL) else NULL
+            raw_response = if (include_raw) list(NULL) else NULL,
+            retry_failures = list(retry_failures)
           )
         }
       )
@@ -647,8 +695,17 @@ submit_openai_pairs_live <- function(
   failed_mask <- !is.na(final_results$error_message) |
     (final_results$status_code >= 400 & !is.na(final_results$status_code))
 
+  normalized <- .normalize_llm_results(
+    raw = final_results,
+    pairs = pairs_input,
+    backend = "openai",
+    model = model,
+    include_raw = include_raw
+  )
+
   list(
-    results = final_results,
-    failed_pairs = final_results[failed_mask, ]
+    results = normalized$results,
+    failed_pairs = normalized$failed_pairs,
+    failed_attempts = normalized$failed_attempts
   )
 }

@@ -8,3 +8,4 @@ dev-output/
 docs
 /doc/
 /Meta/
+tests/testthat/bad.csv

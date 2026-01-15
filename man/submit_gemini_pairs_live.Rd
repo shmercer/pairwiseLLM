@@ -90,12 +90,14 @@ HTTP 429 errors, as Gemini rate limits can be strict depending on your tier.}
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}} (but \code{thinking_budget} is ignored there).}
 }
 \value{
-A list containing two elements:
+A list containing three elements:
 \describe{
 \item{results}{A tibble with one row per successfully processed pair.}
 \item{failed_pairs}{A tibble containing the rows from \code{pairs} that
 failed to process (due to API errors or timeouts), along with an
 \code{error_message} column.}
+\item{failed_attempts}{A tibble of attempt-level failures (retries,
+timeouts, parse errors, invalid winners), separate from observed outcomes.}
 }
 }
 \description{

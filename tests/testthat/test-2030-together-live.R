@@ -524,7 +524,7 @@ testthat::test_that("submit_together_pairs_live returns list structure for zero 
 
   # Expect a list with two tibbles
   testthat::expect_type(res, "list")
-  testthat::expect_named(res, c("results", "failed_pairs"))
+  testthat::expect_named(res, c("results", "failed_pairs", "failed_attempts"))
   testthat::expect_s3_class(res$results, "tbl_df")
   testthat::expect_s3_class(res$failed_pairs, "tbl_df")
   testthat::expect_equal(nrow(res$results), 0L)
@@ -555,14 +555,19 @@ testthat::test_that("submit_together_pairs_live runs correctly and returns list"
   )
 
   # Mock success response
-  fake_success <- tibble::tibble(
-    custom_id = "LIVE_X_vs_Y", ID1 = "X", ID2 = "Y",
-    model = "mod", status_code = 200L, error_message = NA_character_,
-    better_sample = "SAMPLE_1", better_id = "X"
-  )
-
   testthat::local_mocked_bindings(
-    together_compare_pair_live = function(...) fake_success,
+    together_compare_pair_live = function(ID1, ID2, ...) {
+      tibble::tibble(
+        custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
+        ID1 = ID1,
+        ID2 = ID2,
+        model = "m",
+        status_code = 200L,
+        error_message = NA_character_,
+        better_sample = "SAMPLE_1",
+        better_id = ID1
+      )
+    },
     .env = pll_ns
   )
 
@@ -616,7 +621,7 @@ testthat::test_that("submit_together_pairs_live separates failed pairs", {
       )
 
       # Results should contain BOTH rows (full log)
-      testthat::expect_equal(nrow(res$results), 2L)
+      testthat::expect_equal(nrow(res$results), 1L)
 
       # Failed pairs should contain ONLY the failure
       testthat::expect_equal(nrow(res$failed_pairs), 1L)
@@ -637,7 +642,8 @@ testthat::test_that("submit_together_pairs_live respects save_path (Resume Logic
   existing_data <- tibble::tibble(
     custom_id = "LIVE_S01_vs_S02",
     ID1 = "S01", ID2 = "S02",
-    model = "mod", status_code = 200L, error_message = NA_character_
+    model = "mod", status_code = 200L, error_message = NA_character_,
+    better_id = "S01"
   )
   readr::write_csv(existing_data, tmp_csv)
 
@@ -657,7 +663,8 @@ testthat::test_that("submit_together_pairs_live respects save_path (Resume Logic
       tibble::tibble(
         custom_id = "LIVE_S03_vs_S04",
         ID1 = "S03", ID2 = "S04",
-        model = "mod", status_code = 200L, error_message = NA_character_
+        model = "mod", status_code = 200L, error_message = NA_character_,
+        better_id = "S03"
       )
     },
     .env = pll_ns,

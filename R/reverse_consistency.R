@@ -57,12 +57,6 @@
 #'
 #' @export
 compute_reverse_consistency <- function(main_results, reverse_results) {
-  # Define variables (for R CMD check notes)
-  ID1 <- NULL
-  ID2 <- NULL
-  better_id <- NULL
-  key <- NULL
-
   main_results <- tibble::as_tibble(main_results)
   reverse_results <- tibble::as_tibble(reverse_results)
 
@@ -110,53 +104,49 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
   main <- main_results |>
     dplyr::mutate(
       key = paste(
-        pmin(as.character(ID1), as.character(ID2)),
-        pmax(as.character(ID1), as.character(ID2)),
+        pmin(as.character(.data$ID1), as.character(.data$ID2)),
+        pmax(as.character(.data$ID1), as.character(.data$ID2)),
         sep = "||"
       )
     ) |>
-    dplyr::filter(!is.na(better_id))
+    dplyr::filter(!is.na(.data$better_id))
 
   rev <- reverse_results |>
     dplyr::mutate(
       key = paste(
-        pmin(as.character(ID1), as.character(ID2)),
-        pmax(as.character(ID1), as.character(ID2)),
+        pmin(as.character(.data$ID1), as.character(.data$ID2)),
+        pmax(as.character(.data$ID1), as.character(.data$ID2)),
         sep = "||"
       )
     ) |>
-    dplyr::filter(!is.na(better_id))
+    dplyr::filter(!is.na(.data$better_id))
 
   # Summarize each direction to ONE row per key (majority winner + representative ordering)
   main_sum <- main |>
-    dplyr::group_by(key) |>
+    dplyr::group_by(.data$key) |>
     dplyr::summarise(
-      better_id_main = majority_vote(better_id),
-      .tmp = list(most_common_order(ID1, ID2)),
-      ID1_main = .tmp[[1]][1],
-      ID2_main = .tmp[[1]][2],
+      better_id_main = majority_vote(.data$better_id),
+      ID1_main = most_common_order(.data$ID1, .data$ID2)[1],
+      ID2_main = most_common_order(.data$ID1, .data$ID2)[2],
       n_main_votes = dplyr::n(),
-      n_main_A = sum(better_id == ID1_main, na.rm = TRUE),
-      n_main_B = sum(better_id == ID2_main, na.rm = TRUE),
-      is_main_tie = is.na(better_id_main) & n_main_votes > 0,
+      n_main_A = sum(.data$better_id == .data$ID1_main, na.rm = TRUE),
+      n_main_B = sum(.data$better_id == .data$ID2_main, na.rm = TRUE),
+      is_main_tie = is.na(.data$better_id_main) & .data$n_main_votes > 0,
       .groups = "drop"
-    ) |>
-    dplyr::select(-.tmp)
+    )
 
   rev_sum <- rev |>
-    dplyr::group_by(key) |>
+    dplyr::group_by(.data$key) |>
     dplyr::summarise(
-      better_id_rev = majority_vote(better_id),
-      .tmp = list(most_common_order(ID1, ID2)),
-      ID1_rev = .tmp[[1]][1],
-      ID2_rev = .tmp[[1]][2],
+      better_id_rev = majority_vote(.data$better_id),
+      ID1_rev = most_common_order(.data$ID1, .data$ID2)[1],
+      ID2_rev = most_common_order(.data$ID1, .data$ID2)[2],
       n_rev_votes = dplyr::n(),
-      n_rev_A = sum(better_id == ID1_rev, na.rm = TRUE),
-      n_rev_B = sum(better_id == ID2_rev, na.rm = TRUE),
-      is_rev_tie = is.na(better_id_rev) & n_rev_votes > 0,
+      n_rev_A = sum(.data$better_id == .data$ID1_rev, na.rm = TRUE),
+      n_rev_B = sum(.data$better_id == .data$ID2_rev, na.rm = TRUE),
+      is_rev_tie = is.na(.data$better_id_rev) & .data$n_rev_votes > 0,
       .groups = "drop"
-    ) |>
-    dplyr::select(-.tmp)
+    )
 
   # Overlap keys (reverse may be a sample; that's fine)
   joined <- dplyr::inner_join(main_sum, rev_sum, by = "key")

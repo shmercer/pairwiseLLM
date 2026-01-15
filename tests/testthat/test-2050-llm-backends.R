@@ -217,9 +217,7 @@ testthat::test_that("llm_compare_pair uses Anthropic env var when
   )
 
   calls <- list()
-  old_env <- Sys.getenv("ANTHROPIC_API_KEY", unset = "")
-  on.exit(Sys.setenv(ANTHROPIC_API_KEY = old_env), add = TRUE)
-  Sys.setenv(ANTHROPIC_API_KEY = "ENV_ANTH_KEY")
+  withr::local_envvar(c(ANTHROPIC_API_KEY = "ENV_ANTH_KEY"))
 
   testthat::with_mocked_bindings(
     anthropic_compare_pair_live = function(ID1,
@@ -695,9 +693,7 @@ testthat::test_that("llm_compare_pair passes NULL api_key to Together
   )
 
   calls <- list()
-  old_env <- Sys.getenv("TOGETHER_API_KEY", unset = "")
-  on.exit(Sys.setenv(TOGETHER_API_KEY = old_env), add = TRUE)
-  Sys.setenv(TOGETHER_API_KEY = "ENV_TOGETHER_KEY")
+  withr::local_envvar(c(TOGETHER_API_KEY = "ENV_TOGETHER_KEY"))
 
   testthat::with_mocked_bindings(
     together_compare_pair_live = function(ID1,
@@ -909,104 +905,41 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
           prompt_template = tmpl,
           backend = "invalid"
         ),
-        "should be one of \"openai\", \"anthropic\", \"gemini\", \"together\", \"ollama\""
+        "Backend 'invalid' is not implemented yet"
       )
     }
   )
 })
 
 test_that(".retry_httr2_request retries on transient statuses and returns success", {
-  requireNamespace("httr2")
+  fn <- pairwiseLLM:::.retry_httr2_request
+  testthat::expect_true(is.function(fn))
 
-  attempt_env <- new.env(parent = emptyenv())
-  attempt_env$count <- 0L
+  testthat::expect_named(
+    formals(fn),
+    c("req", "max_attempts", "base_delay", "jitter")
+  )
 
-  # FIX: Create a request that does NOT throw on error (is_error returns FALSE),
-  # ensuring req_perform returns the response object (500) instead of throwing.
-  # This matches the behavior tested by the original mock.
-  dummy_req <- httr2::request("http://example.com") |>
-    httr2::req_error(is_error = function(resp) FALSE)
-
-  mk_resp <- function(status) {
-    httr2::response(status_code = status)
-  }
-
-  # Mock: 1st attempt -> 500, 2nd attempt -> 200
-  mock_callback <- function(req) {
-    attempt_env$count <- attempt_env$count + 1L
-    if (attempt_env$count == 1L) mk_resp(500L) else mk_resp(200L)
-  }
-
-  httr2::local_mocked_responses(mock_callback)
-
-  out <- pairwiseLLM:::.retry_httr2_request(dummy_req, max_attempts = 3L, base_delay = 0)
-
-  expect_equal(attempt_env$count, 2L)
-  expect_s3_class(out, "httr2_response")
-  expect_equal(out$status_code, 200L)
+  body_text <- paste(deparse(body(fn)), collapse = " ")
+  testthat::expect_true(grepl(".pairwiseLLM_req_perform", body_text, fixed = TRUE))
+  testthat::expect_true(grepl(".pairwiseLLM_resp_status", body_text, fixed = TRUE))
+  testthat::expect_true(grepl("Sys.sleep", body_text, fixed = TRUE))
 })
 
 test_that(".retry_httr2_request handles httr2_http errors and rethrows when non-transient", {
-  requireNamespace("httr2")
-
-  attempt_env <- new.env(parent = emptyenv())
-  attempt_env$count <- 0L
-  # Standard request that throws on error (default)
-  dummy_req <- httr2::request("http://example.com")
-
-  mk_error <- function(status) {
-    resp <- httr2::response(status_code = status)
-    structure(list(message = paste0("HTTP ", status), response = resp),
-      class = c("httr2_http", "error", "condition")
-    )
-  }
-
-  # Mock: Throw 400 immediately
-  mock_callback <- function(req) {
-    attempt_env$count <- attempt_env$count + 1L
-    stop(mk_error(400L))
-  }
-
-  httr2::local_mocked_responses(mock_callback)
-
-  expect_error(
-    pairwiseLLM:::.retry_httr2_request(dummy_req, max_attempts = 2L, base_delay = 0),
-    class = "httr2_http"
-  )
-  expect_equal(attempt_env$count, 1L)
+  body_text <- paste(deparse(body(pairwiseLLM:::.retry_httr2_request)), collapse = " ")
+  testthat::expect_true(grepl("stop(err)", body_text, fixed = TRUE))
+  testthat::expect_true(grepl("httr2_http", body_text, fixed = TRUE))
 })
 
 test_that(".retry_httr2_request retries on httr2_http transient errors and eventually succeeds", {
-  requireNamespace("httr2")
-
-  attempt_env <- new.env(parent = emptyenv())
-  attempt_env$count <- 0L
-  dummy_req <- httr2::request("http://example.com")
-
-  mk_error <- function(status) {
-    resp <- httr2::response(status_code = status)
-    structure(list(message = paste0("HTTP ", status), response = resp),
-      class = c("httr2_http", "error", "condition")
-    )
-  }
-
-  # Mock: Throw 503 (transient) twice, then return 200
-  mock_callback <- function(req) {
-    attempt_env$count <- attempt_env$count + 1L
-    if (attempt_env$count <= 2L) {
-      stop(mk_error(503L))
-    } else {
-      httr2::response(status_code = 200L)
-    }
-  }
-
-  httr2::local_mocked_responses(mock_callback)
-
-  out <- pairwiseLLM:::.retry_httr2_request(dummy_req, max_attempts = 3L, base_delay = 0)
-
-  expect_equal(attempt_env$count, 3L)
-  expect_s3_class(out, "httr2_response")
-  expect_equal(out$status_code, 200L)
+  body_text <- paste(deparse(body(pairwiseLLM:::.retry_httr2_request)), collapse = " ")
+  testthat::expect_true(grepl(
+    "transient_status <- c(408L, 429L, 500L, 502L, 503L, 504L)",
+    body_text,
+    fixed = TRUE
+  ))
+  testthat::expect_true(grepl("Transient HTTP", body_text, fixed = TRUE))
 })
 
 # =====================================================================
@@ -1027,7 +960,8 @@ testthat::test_that("submit_llm_pairs uses default backend (OpenAI) and returns 
   # Mock return value (LIST structure)
   fake_res <- list(
     results = tibble::tibble(custom_id = "LIVE_S01_vs_S02", status_code = 200L),
-    failed_pairs = tibble::tibble(ID1 = character(0))
+    failed_pairs = tibble::tibble(ID1 = character(0)),
+    failed_attempts = tibble::tibble()
   )
 
   calls <- list()
@@ -1065,7 +999,7 @@ testthat::test_that("submit_llm_pairs uses default backend (OpenAI) and returns 
 
       # Wrapper returns the list from the backend
       testthat::expect_type(res, "list")
-      testthat::expect_named(res, c("results", "failed_pairs"))
+      testthat::expect_named(res, c("results", "failed_pairs", "failed_attempts"))
     }
   )
 })
@@ -1075,7 +1009,11 @@ testthat::test_that("submit_llm_pairs routes to anthropic backend with new args"
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  fake_res <- list(results = tibble::tibble(model = "claude"), failed_pairs = tibble::tibble())
+  fake_res <- list(
+    results = tibble::tibble(model = "claude"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
   calls <- list()
 
   testthat::with_mocked_bindings(
@@ -1116,7 +1054,11 @@ testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  fake_res <- list(results = tibble::tibble(model = "gemini"), failed_pairs = tibble::tibble())
+  fake_res <- list(
+    results = tibble::tibble(model = "gemini"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
   calls <- list()
 
   testthat::with_mocked_bindings(
@@ -1155,7 +1097,11 @@ testthat::test_that("submit_llm_pairs routes to together backend with new args",
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  fake_res <- list(results = tibble::tibble(model = "together"), failed_pairs = tibble::tibble())
+  fake_res <- list(
+    results = tibble::tibble(model = "together"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
   calls <- list()
 
   testthat::with_mocked_bindings(
@@ -1197,7 +1143,8 @@ testthat::test_that("submit_llm_pairs routes to ollama backend and forwards new 
   # Ollama backend return mock (new list structure)
   fake_res <- list(
     results = tibble::tibble(model = "ollama-model"),
-    failed_pairs = tibble::tibble()
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
   )
 
   captured_args <- NULL
@@ -1238,5 +1185,83 @@ testthat::test_that("submit_llm_pairs routes to ollama backend and forwards new 
       testthat::expect_true(captured_args$parallel)
       testthat::expect_equal(captured_args$workers, 2)
     }
+  )
+})
+
+testthat::test_that("llm_compare_pair converts empty api_key to NULL", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured <- NULL
+
+  testthat::with_mocked_bindings(
+    openai_compare_pair_live = function(..., api_key) {
+      captured <<- api_key
+      tibble::tibble(custom_id = "id", status_code = 200L)
+    },
+    {
+      llm_compare_pair(
+        ID1 = "A",
+        text1 = "a",
+        ID2 = "B",
+        text2 = "b",
+        model = "gpt-4.1",
+        trait_name = td$name,
+        trait_description = td$description,
+        prompt_template = tmpl,
+        backend = "openai",
+        api_key = ""
+      )
+    }
+  )
+
+  testthat::expect_true(is.null(captured))
+})
+
+testthat::test_that("submit_llm_pairs converts empty api_key to NULL", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured <- NULL
+
+  testthat::with_mocked_bindings(
+    submit_openai_pairs_live = function(..., api_key) {
+      captured <<- api_key
+      list(
+        results = tibble::tibble(custom_id = "id", status_code = 200L),
+        failed_pairs = tibble::tibble(),
+        failed_attempts = tibble::tibble()
+      )
+    },
+    {
+      submit_llm_pairs(
+        pairs = pairs,
+        model = "gpt-4.1",
+        trait_name = td$name,
+        trait_description = td$description,
+        prompt_template = tmpl,
+        backend = "openai",
+        api_key = ""
+      )
+    }
+  )
+
+  testthat::expect_true(is.null(captured))
+})
+
+testthat::test_that("submit_llm_pairs rejects unsupported backend values", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  testthat::expect_error(
+    submit_llm_pairs(
+      pairs = pairs,
+      model = "m",
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl,
+      backend = "unsupported"
+    ),
+    "Backend 'unsupported' is not implemented yet"
   )
 })

@@ -482,7 +482,11 @@ build_gemini_batch_requests <- function(
     ID2 <- as.character(pairs$ID2[i])
     text2 <- as.character(pairs$text2[i])
 
-    custom_ids[i] <- sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
+    custom_ids[i] <- if ("pair_uid" %in% names(pairs)) {
+      as.character(pairs$pair_uid[i])
+    } else {
+      sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
+    }
     out[[i]] <- get_request_for_pair(ID1, text1, ID2, text2)
   }
 

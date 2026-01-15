@@ -71,8 +71,8 @@
 #'   (similar to the example in the advanced vignette), and `registry`,
 #'   a tibble summarising all jobs.  The `registry` contains columns
 #'   `segment_index`, `provider`, `model`, `batch_id`, `batch_input_path`,
-#'   `batch_output_path`, `csv_path`, `done`, and `results` (initialized to
-#'   `NULL`).  If `write_registry` is `TRUE`, the tibble is also written
+#'   `batch_output_path`, `csv_path`, `pairs_path`, `done`, and `results`
+#'   (initialized to `NULL`).  If `write_registry` is `TRUE`, the tibble is also written
 #'   to disk as `jobs_registry.csv`.
 #'
 #' @examples
@@ -140,10 +140,10 @@ llm_submit_pairs_multi_batch <- function(
 
   # Validate input and splitting options
   if (!is.null(batch_size) && !is.null(n_segments)) {
-    stop("Specify only one of 'batch_size' or 'n_segments'.", call. = FALSE)
+    rlang::abort("Specify only one of 'batch_size' or 'n_segments'.")
   }
   if (is.null(batch_size) && is.null(n_segments)) {
-    stop("Either 'batch_size' or 'n_segments' must be supplied.", call. = FALSE)
+    rlang::abort("Either 'batch_size' or 'n_segments' must be supplied.")
   }
 
   n_pairs <- nrow(pairs)
@@ -183,6 +183,9 @@ llm_submit_pairs_multi_batch <- function(
     output_path <- file.path(output_dir, sprintf("batch_%02d_output.jsonl", seg))
     # CSV path for parsed results (used only if writing CSVs later)
     csv_path <- file.path(output_dir, sprintf("batch_%02d_results.csv", seg))
+    pairs_path <- file.path(output_dir, sprintf("batch_%02d_pairs.rds", seg))
+
+    saveRDS(pairs_seg, pairs_path)
 
     # Optional verbose message before submission
     if (isTRUE(verbose)) {
@@ -194,56 +197,35 @@ llm_submit_pairs_multi_batch <- function(
 
     # Submit the batch without polling
     if (backend == "openai") {
-      # Retry the OpenAI batch submission up to openai_max_retries times
-      oa_success <- FALSE
-      oa_attempt <- 0L
-      pipeline <- NULL
-      while (!oa_success && oa_attempt < openai_max_retries) {
-        oa_attempt <- oa_attempt + 1L
-        pipeline <- tryCatch(
-          {
-            run_openai_batch_pipeline(
-              pairs             = pairs_seg,
-              model             = model,
-              trait_name        = trait_name,
-              trait_description = trait_description,
-              prompt_template   = prompt_template,
-              batch_input_path  = input_path,
-              batch_output_path = output_path,
-              poll              = FALSE,
-              ...
-            )
-          },
-          error = function(e) {
-            # Retry on HTTP 5xx errors; propagate others
-            if (inherits(e, "httr2_http_500") || inherits(e, "httr2_http_502") ||
-              inherits(e, "httr2_http_503") || inherits(e, "httr2_http_504") ||
-              inherits(e, "httr2_http_522") || inherits(e, "httr2_http_524")) {
-              if (isTRUE(verbose)) {
-                message(sprintf(
-                  "[llm_submit_pairs_multi_batch] Error creating OpenAI batch (segment %d, attempt %d/%d): %s",
-                  seg, oa_attempt, openai_max_retries, conditionMessage(e)
-                ))
-              }
-              Sys.sleep(oa_attempt) # simple linear backoff
-              return(NULL)
-            } else {
-              stop(e)
-            }
-          }
-        )
-        if (!is.null(pipeline)) {
-          oa_success <- TRUE
-        }
-      }
-      if (!oa_success) {
-        stop(
-          sprintf(
+      pipeline <- tryCatch(
+        {
+          .pairwiseLLM_retry_backoff(
+            fn = function() {
+              run_openai_batch_pipeline(
+                pairs             = pairs_seg,
+                model             = model,
+                trait_name        = trait_name,
+                trait_description = trait_description,
+                prompt_template   = prompt_template,
+                batch_input_path  = input_path,
+                batch_output_path = output_path,
+                poll              = FALSE,
+                ...
+              )
+            },
+            max_attempts = openai_max_retries
+          )$result
+        },
+        error = function(e) e
+      )
+      if (inherits(pipeline, "error")) {
+        if (isTRUE(attr(pipeline, "retry_exhausted"))) {
+          rlang::abort(sprintf(
             "Failed to create OpenAI batch for segment %d after %d attempts.",
             seg, openai_max_retries
-          ),
-          call. = FALSE
-        )
+          ))
+        }
+        rlang::abort(conditionMessage(pipeline), parent = pipeline)
       }
       batch_id <- pipeline$batch$id
       # When verbose, confirm file uploaded successfully (OpenAI uploads the input file)
@@ -293,7 +275,7 @@ llm_submit_pairs_multi_batch <- function(
         ))
       }
     } else {
-      stop("Unsupported backend: ", backend, call. = FALSE)
+      rlang::abort(paste0("Unsupported backend: ", backend))
     }
 
     jobs[[seg]] <- list(
@@ -304,6 +286,8 @@ llm_submit_pairs_multi_batch <- function(
       batch_input_path  = input_path,
       batch_output_path = output_path,
       csv_path          = csv_path,
+      pairs_path        = pairs_path,
+      pairs             = pairs_seg,
       done              = FALSE,
       results           = NULL
     )
@@ -316,6 +300,7 @@ llm_submit_pairs_multi_batch <- function(
       batch_input_path  = input_path,
       batch_output_path = output_path,
       csv_path          = csv_path,
+      pairs_path        = pairs_path,
       done              = FALSE
     )
   }
@@ -402,13 +387,15 @@ llm_submit_pairs_multi_batch <- function(
 #'   and current state on each polling round, as well as summary messages
 #'   when combined results are written to disk.  Defaults to `FALSE`.
 #'
-#' @return A list with two elements: `jobs`, the updated jobs list with each
-#'   element containing parsed results and a `done` flag, and `combined`,
-#'   a tibble obtained by binding all completed results (`NULL` if no batches
-#'   completed).  If `write_results_csv` is `TRUE`, the combined tibble is still
-#'   returned in memory.
-#'   If `write_combined_csv` is `TRUE`, the combined tibble is also written
-#'   to a CSV file on disk (see `combined_csv_path` for details) but is still
+#' @return A list with four elements: `jobs`, the updated jobs list with each
+#'   element containing parsed results and a `done` flag; `combined`, a tibble
+#'   obtained by binding all completed results (`NULL` if no batches
+#'   completed); `failed_attempts`, a tibble of failed attempts captured
+#'   during normalization; and `batch_failures`, a tibble describing batches
+#'   that reached a terminal non-success status. If `write_results_csv` is
+#'   `TRUE`, the combined tibble is still returned in memory. If
+#'   `write_combined_csv` is `TRUE`, the combined tibble is also written to a
+#'   CSV file on disk (see `combined_csv_path` for details) but is still
 #'   returned in memory.
 #'
 #' @examples
@@ -453,44 +440,43 @@ llm_resume_multi_batches <- function(
   # Validate inputs; either jobs must be supplied or output_dir must be provided
   if (is.null(jobs)) {
     if (is.null(output_dir)) {
-      stop(
-        "Either 'jobs' must be supplied or 'output_dir' must be provided to load a registry from disk.",
-        call. = FALSE
-      )
+      rlang::abort(paste0(
+        "Either 'jobs' must be supplied or 'output_dir' must be provided to load a registry from disk."
+      ))
     }
     registry_file <- file.path(output_dir, "jobs_registry.csv")
     if (!file.exists(registry_file)) {
-      stop(
-        "No registry file found at ", registry_file, ". Please supply 'jobs' or ensure that 'output_dir' contains a 'jobs_registry.csv' created by llm_submit_pairs_multi_batch().",
-        call. = FALSE
-      )
+      rlang::abort(paste0(
+        "No registry file found at ",
+        registry_file,
+        ". Please supply 'jobs' or ensure that 'output_dir' contains a 'jobs_registry.csv' created by llm_submit_pairs_multi_batch()."
+      ))
     }
     tbl <- readr::read_csv(registry_file, show_col_types = FALSE)
-    jobs <- purrr::pmap(
-      tbl,
-      function(segment_index, provider, model, batch_id,
-               batch_input_path, batch_output_path, csv_path, done, ...) {
-        # Convert segment_index to integer and done to logical (if present)
-        seg_int <- as.integer(segment_index)
-        done_log <- if (is.null(done)) FALSE else as.logical(done)
-        list(
-          segment_index     = seg_int,
-          provider          = provider,
-          model             = model,
-          batch_id          = batch_id,
-          batch_input_path  = batch_input_path,
-          batch_output_path = batch_output_path,
-          csv_path          = csv_path,
-          done              = done_log,
-          results           = NULL
-        )
-      }
-    )
+    jobs <- vector("list", nrow(tbl))
+    for (i in seq_len(nrow(tbl))) {
+      seg_int <- as.integer(tbl$segment_index[[i]])
+      done_log <- as.logical(tbl$done[[i]])
+      jobs[[i]] <- list(
+        segment_index     = seg_int,
+        provider          = as.character(tbl$provider[[i]]),
+        model             = as.character(tbl$model[[i]]),
+        batch_id          = as.character(tbl$batch_id[[i]]),
+        batch_input_path  = as.character(tbl$batch_input_path[[i]]),
+        batch_output_path = as.character(tbl$batch_output_path[[i]]),
+        csv_path          = as.character(tbl$csv_path[[i]]),
+        pairs_path        = if ("pairs_path" %in% names(tbl)) as.character(tbl$pairs_path[[i]]) else NULL,
+        done              = ifelse(is.na(done_log), FALSE, done_log),
+        results           = NULL
+      )
+    }
   }
   # Infer output_dir from first job if not supplied
   if (is.null(output_dir) && length(jobs) > 0L) {
     output_dir <- dirname(jobs[[1]]$batch_output_path)
   }
+
+  batch_failure_log <- list()
 
   unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
 
@@ -501,6 +487,59 @@ llm_resume_multi_batches <- function(
 
       provider <- job$provider
       batch_id <- job$batch_id
+      resolve_pairs <- function(job_entry) {
+        if (!is.null(job_entry$pairs)) {
+          return(job_entry$pairs)
+        }
+        if (!is.null(job_entry$pairs_path) && file.exists(job_entry$pairs_path)) {
+          return(readRDS(job_entry$pairs_path))
+        }
+        rlang::abort(paste0(
+          "Missing pair data for segment ",
+          job_entry$segment_index,
+          "; unable to normalize results."
+        ))
+      }
+
+      coerce_pairs_tbl <- function(x) {
+        # Be liberal in what we accept here because registry rows and older
+        # job objects may encode pairs in different ways.
+        if (is.character(x) && length(x) == 1L && file.exists(x)) {
+          x <- readRDS(x)
+        }
+        x <- tibble::as_tibble(x)
+
+        # Unwrap common list-column pattern
+        if (!all(c("ID1", "ID2") %in% names(x)) && "pairs" %in% names(x) && nrow(x) == 1L) {
+          if (is.list(x$pairs) && length(x$pairs) == 1L && is.data.frame(x$pairs[[1]])) {
+            x <- tibble::as_tibble(x$pairs[[1]])
+          }
+        }
+
+        # Normalize common ID column names
+        if (!all(c("ID1", "ID2") %in% names(x))) {
+          if (all(c("A_id", "B_id") %in% names(x))) {
+            x <- dplyr::rename_with(
+              x,
+              ~ c("ID1", "ID2"),
+              .cols = c("A_id", "B_id")
+            )
+          } else if (all(c("A", "B") %in% names(x))) {
+            x <- dplyr::rename_with(
+              x,
+              ~ c("ID1", "ID2"),
+              .cols = c("A", "B")
+            )
+          } else if (all(c("id1", "id2") %in% names(x))) {
+            x <- dplyr::rename_with(
+              x,
+              ~ c("ID1", "ID2"),
+              .cols = c("id1", "id2")
+            )
+          }
+        }
+        x
+      }
 
       # Optional progress message before polling a job
       if (isTRUE(verbose)) {
@@ -536,64 +575,76 @@ llm_resume_multi_batches <- function(
           # Terminal states as per API: completed, failed, cancelled, expired
           if (status %in% c("completed", "failed", "cancelled", "expired")) {
             if (identical(status, "completed")) {
-              # Download and parse with retry logic on 5xx errors
-              success <- FALSE
-              attempt <- 0L
-              while (!success && attempt < openai_max_retries) {
-                attempt <- attempt + 1L
-                try_res <- tryCatch(
-                  {
-                    openai_download_batch_output(
-                      batch_id = batch_id,
-                      path     = job$batch_output_path
-                    )
-                    TRUE
-                  },
-                  error = function(e) {
-                    # Only retry on HTTP 5xx errors; propagate other errors
-                    cls <- class(e)
-                    if (inherits(e, "httr2_http_500") || inherits(e, "httr2_http_502") ||
-                      inherits(e, "httr2_http_503") || inherits(e, "httr2_http_504") ||
-                      inherits(e, "httr2_http_522") || inherits(e, "httr2_http_524") ||
-                      inherits(e, "httr2_http_error") && grepl("^5", as.character(e$response$status_code))) {
-                      if (isTRUE(verbose)) {
-                        message(sprintf(
-                          "[llm_resume_multi_batches] Error downloading OpenAI batch %s (attempt %d/%d): %s",
-                          batch_id, attempt, openai_max_retries, conditionMessage(e)
-                        ))
-                      }
-                      Sys.sleep(per_job_delay)
-                      return(FALSE)
-                    } else {
-                      # Unexpected error: propagate
-                      stop(e)
-                    }
+              download <- tryCatch(
+                {
+                  .pairwiseLLM_retry_backoff(
+                    fn = function() {
+                      openai_download_batch_output(
+                        batch_id = batch_id,
+                        path     = job$batch_output_path
+                      )
+                      TRUE
+                    },
+                    max_attempts = openai_max_retries,
+                    base_delay = per_job_delay
+                  )
+                },
+                error = function(e) e
+              )
+              if (inherits(download, "error")) {
+                if (isTRUE(attr(download, "retry_exhausted"))) {
+                  if (isTRUE(verbose)) {
+                    message(sprintf(
+                      "[llm_resume_multi_batches] Failed to download OpenAI batch %s after %d attempts; will retry in next round.",
+                      batch_id, openai_max_retries
+                    ))
                   }
-                )
-                if (isTRUE(try_res)) {
-                  success <- TRUE
+                  next
                 }
-              }
-              if (success) {
+                rlang::abort(conditionMessage(download), parent = download)
+              } else {
                 res <- parse_openai_batch_output(job$batch_output_path)
-                jobs[[j]]$results <- res
+                pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+                normalized <- .normalize_llm_results(
+                  raw = res,
+                  pairs = pairs_tbl,
+                  backend = provider,
+                  model = job$model,
+                  include_raw = FALSE
+                )
+                jobs[[j]]$results <- normalized$results
+                jobs[[j]]$failed_attempts <- normalized$failed_attempts
                 if (isTRUE(write_results_csv)) {
-                  readr::write_csv(res, job$csv_path)
+                  readr::write_csv(normalized$results, job$csv_path)
                 }
                 if (!isTRUE(keep_jsonl)) {
                   unlink(job$batch_input_path)
                   unlink(job$batch_output_path)
                 }
-              } else {
-                # If retries exhausted, leave job unfinished for next round
-                if (isTRUE(verbose)) {
-                  message(sprintf(
-                    "[llm_resume_multi_batches] Failed to download OpenAI batch %s after %d attempts; will retry in next round.",
-                    batch_id, openai_max_retries
-                  ))
-                }
-                next
               }
+            } else {
+              pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+              attempted_at <- Sys.time()
+              failed_attempts <- .pairwiseLLM_failed_attempts_from_pairs(
+                pairs = pairs_tbl,
+                backend = provider,
+                model = job$model,
+                error_code = "http_error",
+                error_detail = paste0("Batch status: ", status),
+                attempted_at = attempted_at
+              )
+              jobs[[j]]$failed_attempts <- failed_attempts
+              batch_failure <- tibble::tibble(
+                segment_index = job$segment_index,
+                provider = provider,
+                model = job$model,
+                batch_id = batch_id,
+                status = status,
+                error_detail = paste0("Batch status: ", status),
+                failed_at = attempted_at
+              )
+              jobs[[j]]$batch_failure <- batch_failure
+              batch_failure_log <- append(batch_failure_log, list(batch_failure))
             }
             # Mark job as done regardless of completion status
             jobs[[j]]$done <- TRUE
@@ -619,14 +670,46 @@ llm_resume_multi_batches <- function(
               tag_prefix  = tag_prefix,
               tag_suffix  = tag_suffix
             )
-            jobs[[j]]$results <- res
+            pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+            normalized <- .normalize_llm_results(
+              raw = res,
+              pairs = pairs_tbl,
+              backend = provider,
+              model = job$model,
+              include_raw = FALSE
+            )
+            jobs[[j]]$results <- normalized$results
+            jobs[[j]]$failed_attempts <- normalized$failed_attempts
             if (isTRUE(write_results_csv)) {
-              readr::write_csv(res, job$csv_path)
+              readr::write_csv(normalized$results, job$csv_path)
             }
             if (!isTRUE(keep_jsonl)) {
               unlink(job$batch_input_path)
               unlink(job$batch_output_path)
             }
+          } else {
+            pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+            attempted_at <- Sys.time()
+            failed_attempts <- .pairwiseLLM_failed_attempts_from_pairs(
+              pairs = pairs_tbl,
+              backend = provider,
+              model = job$model,
+              error_code = "http_error",
+              error_detail = paste0("Batch status: ", status),
+              attempted_at = attempted_at
+            )
+            jobs[[j]]$failed_attempts <- failed_attempts
+            batch_failure <- tibble::tibble(
+              segment_index = job$segment_index,
+              provider = provider,
+              model = job$model,
+              batch_id = batch_id,
+              status = status,
+              error_detail = paste0("Batch status: ", status),
+              failed_at = attempted_at
+            )
+            jobs[[j]]$batch_failure <- batch_failure
+            batch_failure_log <- append(batch_failure_log, list(batch_failure))
           }
           jobs[[j]]$done <- TRUE
         }
@@ -668,12 +751,11 @@ llm_resume_multi_batches <- function(
               req_data <- jsonlite::read_json(job$batch_input_path, simplifyVector = FALSE)
               req_items <- req_data$requests
               if (is.null(req_items) || length(req_items) == 0L) {
-                stop(
+                rlang::abort(paste0(
                   "Failed to reconstruct Gemini requests for segment ",
                   job$segment_index,
-                  ". Ensure that the input JSON contains a 'requests' list.",
-                  call. = FALSE
-                )
+                  ". Ensure that the input JSON contains a 'requests' list."
+                ))
               }
               # Reconstruct a full requests table.  Include the original
               # request list-column when available so that
@@ -700,20 +782,52 @@ llm_resume_multi_batches <- function(
                 results_path = job$batch_output_path,
                 requests_tbl = req_tbl
               )
-              jobs[[j]]$results <- res
+              pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+              normalized <- .normalize_llm_results(
+                raw = res,
+                pairs = pairs_tbl,
+                backend = provider,
+                model = job$model,
+                include_raw = FALSE
+              )
+              jobs[[j]]$results <- normalized$results
+              jobs[[j]]$failed_attempts <- normalized$failed_attempts
               if (isTRUE(write_results_csv)) {
-                readr::write_csv(res, job$csv_path)
+                readr::write_csv(normalized$results, job$csv_path)
               }
               if (!isTRUE(keep_jsonl)) {
                 unlink(job$batch_input_path)
                 unlink(job$batch_output_path)
               }
+            } else {
+              pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+              attempted_at <- Sys.time()
+              failed_attempts <- .pairwiseLLM_failed_attempts_from_pairs(
+                pairs = pairs_tbl,
+                backend = provider,
+                model = job$model,
+                error_code = "http_error",
+                error_detail = paste0("Batch status: ", state),
+                attempted_at = attempted_at
+              )
+              jobs[[j]]$failed_attempts <- failed_attempts
+              batch_failure <- tibble::tibble(
+                segment_index = job$segment_index,
+                provider = provider,
+                model = job$model,
+                batch_id = batch_id,
+                status = state,
+                error_detail = paste0("Batch status: ", state),
+                failed_at = attempted_at
+              )
+              jobs[[j]]$batch_failure <- batch_failure
+              batch_failure_log <- append(batch_failure_log, list(batch_failure))
             }
             jobs[[j]]$done <- TRUE
           }
         }
       } else {
-        stop("Unsupported provider type in jobs list: ", provider, call. = FALSE)
+        rlang::abort(paste0("Unsupported provider type in jobs list: ", provider))
       }
       Sys.sleep(per_job_delay)
     }
@@ -744,6 +858,11 @@ llm_resume_multi_batches <- function(
       batch_input_path  = vapply(jobs, `[[`, character(1), "batch_input_path"),
       batch_output_path = vapply(jobs, `[[`, character(1), "batch_output_path"),
       csv_path          = vapply(jobs, `[[`, character(1), "csv_path"),
+      pairs_path        = vapply(
+        jobs,
+        function(job) job$pairs_path %||% NA_character_,
+        character(1)
+      ),
       done              = vapply(jobs, `[[`, logical(1), "done")
     )
     readr::write_csv(registry_tbl, registry_file)
@@ -751,10 +870,22 @@ llm_resume_multi_batches <- function(
 
   # Combine results into a single tibble (if any)
   completed_results <- purrr::compact(lapply(jobs, `[[`, "results"))
+  completed_failed <- purrr::compact(lapply(jobs, `[[`, "failed_attempts"))
   combined <- if (length(completed_results) > 0L) {
     dplyr::bind_rows(completed_results)
   } else {
     NULL
+  }
+  combined_failed <- if (length(completed_failed) > 0L) {
+    dplyr::bind_rows(completed_failed)
+  } else {
+    tibble::tibble()
+  }
+
+  batch_failures <- if (length(batch_failure_log) > 0L) {
+    dplyr::bind_rows(batch_failure_log)
+  } else {
+    tibble::tibble()
   }
 
   # Optionally write the combined results to CSV
@@ -792,5 +923,10 @@ llm_resume_multi_batches <- function(
     }
   }
 
-  invisible(list(jobs = jobs, combined = combined))
+  invisible(list(
+    jobs = jobs,
+    combined = combined,
+    failed_attempts = combined_failed,
+    batch_failures = batch_failures
+  ))
 }

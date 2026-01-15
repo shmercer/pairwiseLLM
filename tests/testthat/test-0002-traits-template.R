@@ -542,3 +542,31 @@ test_that("Internal helper .pwllm_get_builtin_template behavior", {
   expect_length(res, 1)
   expect_true(grepl("{TRAIT_NAME}", res, fixed = TRUE))
 })
+
+test_that("set_prompt_template errors when built-in default is missing", {
+  ns <- asNamespace("pairwiseLLM")
+
+  testthat::with_mocked_bindings(
+    .pwllm_get_builtin_template = function(...) NULL,
+    .env = ns,
+    {
+      expect_error(
+        set_prompt_template(),
+        "Built-in default template not found"
+      )
+    }
+  )
+})
+
+test_that("get_prompt_template falls back to set_prompt_template when builtin missing", {
+  ns <- asNamespace("pairwiseLLM")
+
+  testthat::with_mocked_bindings(
+    .pwllm_get_builtin_template = function(...) NULL,
+    set_prompt_template = function(...) "fallback template",
+    .env = ns,
+    {
+      expect_identical(get_prompt_template("default"), "fallback template")
+    }
+  )
+})

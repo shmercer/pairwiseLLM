@@ -92,6 +92,8 @@
 #' - `batch`: provider-specific batch object (e.g., job metadata),
 #' - `results`: a tibble of parsed comparison results in the standard
 #'   pairwiseLLM schema.
+#' - `failed_attempts`: a tibble of failed attempts captured during
+#'   normalization (empty when no failures are observed).
 #'
 #' Additional fields returned by the backend-specific pipeline functions are
 #' preserved.
@@ -266,6 +268,19 @@ llm_submit_pairs_batch <- function(
   }
 
   out$backend <- backend
+
+  if (!is.null(out$results)) {
+    normalized <- .normalize_llm_results(
+      raw = out$results,
+      pairs = pairs,
+      backend = backend,
+      model = model,
+      include_raw = include_raw
+    )
+    out$results <- normalized$results
+    out$failed_pairs <- normalized$failed_pairs
+    out$failed_attempts <- normalized$failed_attempts
+  }
 
   # Ensure batch paths exist when provided
   if (!is.null(out$batch_input_path) && nzchar(out$batch_input_path) &&
