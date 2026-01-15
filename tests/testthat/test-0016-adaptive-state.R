@@ -1,13 +1,15 @@
 test_that("adaptive_state_new creates a valid initial state", {
   samples <- tibble::tibble(
-    ID = c("A", "B"),
-    text = c("alpha", "beta")
+    ID = c("A", "B", "C"),
+    text = c("alpha", "beta", "charlie")
   )
 
   state <- adaptive_state_new(samples, config = list())
 
   expect_silent(validate_state(state))
   expect_s3_class(state, "adaptive_state")
+  expect_equal(length(state$unordered_count), 3L)
+  expect_true(all(state$unordered_count == 0L))
 })
 
 test_that("record_exposure updates counts consistently", {
