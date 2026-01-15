@@ -20,6 +20,14 @@ test_that("compute_ranking_from_theta_mean sorts with stable tie-breaking", {
     pairwiseLLM:::compute_ranking_from_theta_mean(c(A = 1, B = 2, D = 3), state),
     "match `state\\$ids`"
   )
+  expect_error(
+    pairwiseLLM:::compute_ranking_from_theta_mean(c("A", "B"), state),
+    "numeric"
+  )
+  expect_error(
+    pairwiseLLM:::compute_ranking_from_theta_mean(c(A = 1, A = 2), state),
+    "unique"
+  )
 })
 
 test_that("select_window_size follows phase rules", {
@@ -29,6 +37,11 @@ test_that("select_window_size follows phase rules", {
   expect_equal(
     pairwiseLLM:::select_window_size(600, phase = "phase2", near_stop = TRUE),
     50L
+  )
+  expect_error(pairwiseLLM:::select_window_size("bad"), "positive numeric")
+  expect_error(
+    pairwiseLLM:::select_window_size(100, near_stop = "yes"),
+    "TRUE or FALSE"
   )
 })
 
@@ -79,6 +92,50 @@ test_that("build_candidate_pairs exploration is deterministic under seed", {
   expect_equal(length(unique(out1$unordered_key)), nrow(out1))
 })
 
+test_that("build_candidate_pairs validates inputs and exploration floor", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "beta", "gamma")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+
+  expect_error(
+    pairwiseLLM:::build_candidate_pairs("A", W = 1, state = state),
+    "at least two ids"
+  )
+  expect_error(
+    pairwiseLLM:::build_candidate_pairs(c("A", "A", "B"), W = 1, state = state),
+    "duplicates"
+  )
+  expect_error(
+    pairwiseLLM:::build_candidate_pairs(c("A", "B", "D"), W = 1, state = state),
+    "match `state\\$ids`"
+  )
+  expect_error(
+    pairwiseLLM:::build_candidate_pairs(c("A", "B", "C"), W = 0, state = state),
+    "positive integer"
+  )
+  expect_error(
+    pairwiseLLM:::build_candidate_pairs(
+      c("A", "B", "C"),
+      W = 1,
+      state = state,
+      exploration_frac = 1.5
+    ),
+    "between 0 and 1"
+  )
+
+  out <- pairwiseLLM:::build_candidate_pairs(
+    c("A", "B", "C"),
+    W = 1,
+    state = state,
+    exploration_frac = 0.01,
+    seed = 10
+  )
+  expect_equal(nrow(out), 3L)
+  expect_true("A:C" %in% out$unordered_key)
+})
+
 test_that("utility and degree penalty match known values", {
   theta_draws <- matrix(c(0, 1, 1, 0), nrow = 2, byrow = TRUE)
   colnames(theta_draws) <- c("A", "B")
@@ -98,6 +155,64 @@ test_that("utility and degree penalty match known values", {
   penalty <- pairwiseLLM:::apply_degree_penalty(utility, state)
   expected_penalty <- expected / sqrt((3 + 1) * (7 + 1))
   expect_equal(penalty$utility, expected_penalty)
+})
+
+test_that("utility helpers validate inputs", {
+  theta_draws <- matrix(c(0, 1, 1, 0), nrow = 2, byrow = TRUE)
+  colnames(theta_draws) <- c("A", "B")
+
+  expect_error(
+    pairwiseLLM:::compute_pair_utility(list(), tibble::tibble(i_id = "A", j_id = "B")),
+    "numeric matrix"
+  )
+  expect_error(
+    pairwiseLLM:::compute_pair_utility(matrix(1, nrow = 1, ncol = 2), tibble::tibble(i_id = "A", j_id = "B")),
+    "at least two draws"
+  )
+  no_names <- matrix(c(0, 1, 1, 0), nrow = 2, byrow = TRUE)
+  expect_error(
+    pairwiseLLM:::compute_pair_utility(no_names, tibble::tibble(i_id = "A", j_id = "B")),
+    "column names"
+  )
+  expect_error(
+    pairwiseLLM:::compute_pair_utility(theta_draws, list()),
+    "data frame"
+  )
+  expect_error(
+    pairwiseLLM:::compute_pair_utility(theta_draws, tibble::tibble(i_id = NA, j_id = "B")),
+    "non-missing"
+  )
+  expect_error(
+    pairwiseLLM:::compute_pair_utility(theta_draws, tibble::tibble(i_id = "A", j_id = "C")),
+    "present in `theta_draws`"
+  )
+
+  out <- pairwiseLLM:::compute_pair_utility(
+    theta_draws,
+    tibble::tibble(i_id = "A", j_id = "B", unordered_key = "A:B")
+  )
+  expect_equal(out$unordered_key, "A:B")
+
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("alpha", "beta"))
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  expect_error(
+    pairwiseLLM:::apply_degree_penalty(list(), state),
+    "data frame"
+  )
+  expect_error(
+    pairwiseLLM:::apply_degree_penalty(
+      tibble::tibble(i_id = "A", j_id = "B", utility_raw = "x"),
+      state
+    ),
+    "utility_tbl\\$utility_raw"
+  )
+  expect_error(
+    pairwiseLLM:::apply_degree_penalty(
+      tibble::tibble(i_id = "A", j_id = "C", utility_raw = 1),
+      state
+    ),
+    "state\\$ids"
+  )
 })
 
 test_that("select_pairs_from_candidates respects caps and duplicates", {
@@ -131,6 +246,176 @@ test_that("select_pairs_from_candidates respects caps and duplicates", {
   counts <- table(c(out$pairs$A_id, out$pairs$B_id))
   expect_true(all(counts <= 1L))
   expect_false("C:D" %in% out$pairs$unordered_key)
+})
+
+test_that("select_pairs_from_candidates handles validation and empty batches", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "beta", "gamma")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  utilities <- tibble::tibble(
+    i_id = c("A", "A"),
+    j_id = c("B", "C"),
+    unordered_key = c("A:B", "A:C"),
+    utility_raw = c(2, 1),
+    utility = c(2, 1)
+  )
+
+  expect_error(
+    pairwiseLLM:::select_pairs_from_candidates(
+      state,
+      "bad",
+      batch_size = 1,
+      iter = 1L
+    ),
+    "data frame"
+  )
+  expect_error(
+    pairwiseLLM:::select_pairs_from_candidates(
+      state,
+      utilities,
+      batch_size = -1,
+      iter = 1L
+    ),
+    "non-negative"
+  )
+  expect_error(
+    pairwiseLLM:::select_pairs_from_candidates(
+      state,
+      utilities,
+      batch_size = 1,
+      iter = 1.5
+    ),
+    "length-1 integer"
+  )
+  expect_error(
+    pairwiseLLM:::select_pairs_from_candidates(
+      state,
+      utilities,
+      batch_size = 1,
+      per_item_cap = 0,
+      iter = 1L
+    ),
+    "positive integer"
+  )
+  expect_error(
+    pairwiseLLM:::select_pairs_from_candidates(
+      state,
+      tibble::tibble(
+        i_id = "A",
+        j_id = "D",
+        unordered_key = "A:D",
+        utility_raw = 1,
+        utility = 1
+      ),
+      batch_size = 1,
+      iter = 1L
+    ),
+    "state\\$ids"
+  )
+
+  out_empty <- pairwiseLLM:::select_pairs_from_candidates(
+    state,
+    utilities,
+    batch_size = 0,
+    iter = 1L
+  )
+  expect_equal(nrow(out_empty$pairs), 0L)
+
+  out_default_cap <- pairwiseLLM:::select_pairs_from_candidates(
+    state,
+    utilities,
+    batch_size = 1,
+    iter = 1L
+  )
+  expect_equal(nrow(out_default_cap$pairs), 1L)
+})
+
+test_that("select_pairs_from_candidates skips when cap reached", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "beta", "gamma")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  utilities <- tibble::tibble(
+    i_id = c("A", "A"),
+    j_id = c("B", "C"),
+    unordered_key = c("A:B", "A:C"),
+    utility_raw = c(2, 1),
+    utility = c(2, 1)
+  )
+
+  out <- pairwiseLLM:::select_pairs_from_candidates(
+    state,
+    utilities,
+    batch_size = 2,
+    per_item_cap = 1,
+    iter = 1L
+  )
+
+  expect_equal(nrow(out$pairs), 1L)
+  expect_equal(out$pairs$unordered_key, "A:B")
+})
+
+test_that("select_pairs_from_candidates flips to reverse order when allowed", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "beta")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  state$pos1[["B"]] <- 2L
+  state$pos2[["B"]] <- 0L
+  state$deg <- state$pos1 + state$pos2
+  state$imb <- state$pos1 - state$pos2
+  state <- pairwiseLLM:::record_exposure(state, "A", "B")
+
+  utilities <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B",
+    utility_raw = 1,
+    utility = 1
+  )
+
+  out <- pairwiseLLM:::select_pairs_from_candidates(
+    state,
+    utilities,
+    batch_size = 1,
+    per_item_cap = 1,
+    iter = 1L
+  )
+
+  expect_equal(out$pairs$A_id, "B")
+  expect_equal(out$pairs$B_id, "A")
+})
+
+test_that("select_pairs_from_candidates drops pairs when duplicates exhausted", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "beta")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  state$unordered_count[["A:B"]] <- 2L
+  state$ordered_seen <- c("A:B" = TRUE, "B:A" = TRUE)
+
+  utilities <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B",
+    utility_raw = 1,
+    utility = 1
+  )
+
+  out <- pairwiseLLM:::select_pairs_from_candidates(
+    state,
+    utilities,
+    batch_size = 1,
+    per_item_cap = 1,
+    iter = 1L
+  )
+
+  expect_equal(nrow(out$pairs), 0L)
 })
 
 test_that("select_pairs_from_candidates honors position balancing and seed", {
