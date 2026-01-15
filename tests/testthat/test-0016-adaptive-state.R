@@ -75,3 +75,20 @@ test_that("failed_attempts does not affect comparisons_observed", {
   expect_equal(state$comparisons_observed, 0L)
   expect_silent(pairwiseLLM:::validate_state(state))
 })
+
+test_that("validate_state rejects non-adaptive_state and bad results_seen", {
+  expect_error(pairwiseLLM:::validate_state(list()), "adaptive_state")
+
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "beta")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+
+  state$results_seen <- list(TRUE)
+  expect_error(pairwiseLLM:::validate_state(state), "results_seen")
+
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  state$results_seen <- c(TRUE, FALSE)
+  expect_error(pairwiseLLM:::validate_state(state), "named")
+})
