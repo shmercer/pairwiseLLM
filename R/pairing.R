@@ -31,14 +31,14 @@
 make_pairs <- function(samples) {
   samples <- tibble::as_tibble(samples)
   if (!all(c("ID", "text") %in% names(samples))) {
-    stop("`samples` must have columns 'ID' and 'text'.", call. = FALSE)
+    rlang::abort("`samples` must have columns 'ID' and 'text'.")
   }
 
   ids <- as.character(samples$ID)
   n <- length(ids)
 
   if (n < 2) {
-    stop("At least two samples are required to create pairs.", call. = FALSE)
+    rlang::abort("At least two samples are required to create pairs.")
   }
 
   # All unordered combinations of IDs
@@ -116,10 +116,6 @@ sample_pairs <- function(pairs,
     return(pairs)
   }
 
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-
   pair_pct <- max(min(pair_pct, 1), 0) # clamp
 
   n_from_pct <- floor(pair_pct * n)
@@ -134,7 +130,7 @@ sample_pairs <- function(pairs,
     return(pairs)
   }
 
-  idx <- sample.int(n, size = k)
+  idx <- .pairwiseLLM_with_seed(seed, function() sample.int(n, size = k))
   pairs[idx, , drop = FALSE]
 }
 
@@ -175,11 +171,10 @@ sample_reverse_pairs <- function(pairs,
   required_cols <- c("ID1", "text1", "ID2", "text2")
   missing_cols <- setdiff(required_cols, names(pairs))
   if (length(missing_cols) > 0L) {
-    stop(
+    rlang::abort(paste0(
       "`pairs` must contain columns: ",
-      paste(required_cols, collapse = ", "),
-      call. = FALSE
-    )
+      paste(required_cols, collapse = ", ")
+    ))
   }
 
   n <- nrow(pairs)
@@ -188,26 +183,20 @@ sample_reverse_pairs <- function(pairs,
   }
 
   if (is.null(reverse_pct) && is.null(n_reverse)) {
-    stop("Provide at least one of `reverse_pct` or `n_reverse`.",
-      call. = FALSE
-    )
-  }
-
-  if (!is.null(seed)) {
-    set.seed(seed)
+    rlang::abort("Provide at least one of `reverse_pct` or `n_reverse`.")
   }
 
   # If n_reverse is provided, it takes precedence
   if (!is.null(n_reverse)) {
     k <- as.integer(n_reverse)
     if (is.na(k) || k < 0L) {
-      stop("`n_reverse` must be a non-negative integer.", call. = FALSE)
+      rlang::abort("`n_reverse` must be a non-negative integer.")
     }
   } else {
     # Use reverse_pct
     if (!is.numeric(reverse_pct) || length(reverse_pct) != 1L ||
       is.na(reverse_pct)) {
-      stop("`reverse_pct` must be a single numeric value.", call. = FALSE)
+      rlang::abort("`reverse_pct` must be a single numeric value.")
     }
 
     # Edge cases: <= 0 => 0 rows; >= 1 => all rows
@@ -226,7 +215,7 @@ sample_reverse_pairs <- function(pairs,
   }
 
   k <- min(k, n)
-  idx <- sample.int(n, k)
+  idx <- .pairwiseLLM_with_seed(seed, function() sample.int(n, k))
 
   selected <- pairs[idx, required_cols]
 
@@ -289,26 +278,10 @@ randomize_pair_order <- function(pairs, seed = NULL) {
   required <- c("ID1", "text1", "ID2", "text2")
   missing <- setdiff(required, names(pairs))
   if (length(missing) > 0L) {
-    stop(
+    rlang::abort(paste0(
       "`pairs` must contain columns: ",
-      paste(required, collapse = ", "),
-      call. = FALSE
-    )
-  }
-
-  if (!is.null(seed)) {
-    old_seed <- .Random.seed
-    on.exit(
-      {
-        # Restore previous RNG state to avoid surprising callers
-        if (exists("old_seed", inherits = FALSE)) {
-          .Random.seed <<- old_seed
-        }
-      },
-      add = TRUE
-    )
-
-    set.seed(seed)
+      paste(required, collapse = ", ")
+    ))
   }
 
   n <- nrow(pairs)
@@ -316,7 +289,7 @@ randomize_pair_order <- function(pairs, seed = NULL) {
     return(pairs)
   }
 
-  flip <- stats::runif(n) < 0.5
+  flip <- .pairwiseLLM_with_seed(seed, function() stats::runif(n) < 0.5)
 
   out <- pairs
 
@@ -368,11 +341,10 @@ alternate_pair_order <- function(pairs) {
   required <- c("ID1", "text1", "ID2", "text2")
   missing <- setdiff(required, names(pairs))
   if (length(missing) > 0L) {
-    stop(
+    rlang::abort(paste0(
       "`pairs` must contain columns: ",
-      paste(required, collapse = ", "),
-      call. = FALSE
-    )
+      paste(required, collapse = ", ")
+    ))
   }
 
   n <- nrow(pairs)
