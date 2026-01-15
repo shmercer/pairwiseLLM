@@ -101,6 +101,8 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       history_pairs = .adaptive_empty_pairs_tbl(),
       history_results = .adaptive_empty_results_tbl(),
       failed_attempts = .adaptive_empty_failed_attempts_tbl(),
+      results_seen = logical(),
+      fast_fit = NULL,
       budget_max = as.integer(budget_max),
       M1_target = as.integer(M1_target),
       comparisons_scheduled = 0L,
