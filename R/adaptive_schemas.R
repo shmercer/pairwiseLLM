@@ -138,6 +138,10 @@ validate_results_tbl <- function(results) {
   if (any(bad_pos)) {
     rlang::abort("`results$winner_pos` must be 1 or 2.")
   }
+  missing_pos <- is.na(results$winner_pos)
+  if (any(missing_pos)) {
+    rlang::abort("`results$winner_pos` must be 1 or 2.")
+  }
   pos_mismatch <- !is.na(results$winner_pos) &
     !((results$winner_pos == 1L & results$better_id == results$A_id) |
       (results$winner_pos == 2L & results$better_id == results$B_id))
