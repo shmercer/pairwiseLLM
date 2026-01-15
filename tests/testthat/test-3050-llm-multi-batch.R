@@ -1054,6 +1054,7 @@ test_that("llm_resume_multi_batches marks anthropic jobs done on non-ended statu
       batch_input_path  = input_path,
       batch_output_path = output_path,
       csv_path          = csv_path,
+      pairs             = tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b"),
       done              = FALSE,
       results           = NULL
     ))
@@ -1416,6 +1417,7 @@ test_that("llm_resume_multi_batches handles OpenAI non‑terminal statuses", {
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = tempfile(fileext = ".csv"),
+    pairs             = tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b"),
     done              = FALSE,
     results           = NULL
   ))
@@ -1467,6 +1469,7 @@ test_that("llm_resume_multi_batches handles Gemini failure states and cleans up"
     batch_input_path  = input_path,
     batch_output_path = output_path,
     csv_path          = csv_path,
+    pairs             = tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b"),
     done              = FALSE,
     results           = NULL
   ))
@@ -2351,4 +2354,48 @@ test_that("llm_resume_multi_batches logs combined results output when verbose", 
   )
 
   expect_true(any(grepl("Combined results written", msgs)))
+})
+
+test_that("llm_resume_multi_batches records batch failures with per-pair attempts", {
+  input_path <- tempfile(fileext = ".jsonl")
+  output_path <- tempfile(fileext = ".jsonl")
+  writeLines("{}", con = input_path)
+
+  pairs_tbl <- tibble::tibble(
+    ID1 = c("A", "C"),
+    text1 = c("alpha", "charlie"),
+    ID2 = c("B", "D"),
+    text2 = c("beta", "delta")
+  )
+
+  jobs <- list(list(
+    segment_index = 1L,
+    provider = "openai",
+    model = "m",
+    batch_id = "openai-failed",
+    batch_input_path = input_path,
+    batch_output_path = output_path,
+    csv_path = tempfile(fileext = ".csv"),
+    pairs = pairs_tbl,
+    done = FALSE,
+    results = NULL
+  ))
+
+  with_mocked_bindings(
+    openai_get_batch = function(id) list(status = "failed"),
+    {
+      res <- llm_resume_multi_batches(
+        jobs = jobs,
+        interval_seconds = 0,
+        per_job_delay = 0,
+        write_results_csv = FALSE,
+        keep_jsonl = TRUE,
+        verbose = FALSE
+      )
+      expect_true(res$jobs[[1]]$done)
+      expect_equal(nrow(res$failed_attempts), nrow(pairs_tbl))
+      expect_equal(nrow(res$batch_failures), 1L)
+      expect_identical(res$batch_failures$status, "failed")
+    }
+  )
 })
