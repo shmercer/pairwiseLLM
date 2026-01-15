@@ -449,12 +449,11 @@ submit_llm_pairs <- function(
   }
   backend <- backend[1L]
   if (!backend %in% valid_backends) {
-    stop(
+    rlang::abort(paste0(
       "Backend '", backend, "' is not implemented yet. ",
       "Currently supported backends are: ",
-      "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\".",
-      call. = FALSE
-    )
+      "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\"."
+    ))
   }
 
   # Normalize empty-string keys to NULL

@@ -387,14 +387,16 @@ llm_submit_pairs_multi_batch <- function(
 #'   and current state on each polling round, as well as summary messages
 #'   when combined results are written to disk.  Defaults to `FALSE`.
 #'
-#' @return A list with three elements: `jobs`, the updated jobs list with each
+#' @return A list with four elements: `jobs`, the updated jobs list with each
 #'   element containing parsed results and a `done` flag; `combined`, a tibble
 #'   obtained by binding all completed results (`NULL` if no batches
-#'   completed); and `failed_attempts`, a tibble of failed attempts captured
-#'   during normalization. If `write_results_csv` is `TRUE`, the combined tibble
-#'   is still returned in memory. If `write_combined_csv` is `TRUE`, the
-#'   combined tibble is also written to a CSV file on disk (see
-#'   `combined_csv_path` for details) but is still returned in memory.
+#'   completed); `failed_attempts`, a tibble of failed attempts captured
+#'   during normalization; and `batch_failures`, a tibble describing batches
+#'   that reached a terminal non-success status. If `write_results_csv` is
+#'   `TRUE`, the combined tibble is still returned in memory. If
+#'   `write_combined_csv` is `TRUE`, the combined tibble is also written to a
+#'   CSV file on disk (see `combined_csv_path` for details) but is still
+#'   returned in memory.
 #'
 #' @examples
 #' # Continuing the example from llm_submit_pairs_multi_batch():
@@ -473,6 +475,8 @@ llm_resume_multi_batches <- function(
   if (is.null(output_dir) && length(jobs) > 0L) {
     output_dir <- dirname(jobs[[1]]$batch_output_path)
   }
+
+  batch_failure_log <- list()
 
   unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
 
@@ -618,6 +622,29 @@ llm_resume_multi_batches <- function(
                   unlink(job$batch_output_path)
                 }
               }
+            } else {
+              pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+              attempted_at <- Sys.time()
+              failed_attempts <- .pairwiseLLM_failed_attempts_from_pairs(
+                pairs = pairs_tbl,
+                backend = provider,
+                model = job$model,
+                error_code = "http_error",
+                error_detail = paste0("Batch status: ", status),
+                attempted_at = attempted_at
+              )
+              jobs[[j]]$failed_attempts <- failed_attempts
+              batch_failure <- tibble::tibble(
+                segment_index = job$segment_index,
+                provider = provider,
+                model = job$model,
+                batch_id = batch_id,
+                status = status,
+                error_detail = paste0("Batch status: ", status),
+                failed_at = attempted_at
+              )
+              jobs[[j]]$batch_failure <- batch_failure
+              batch_failure_log <- append(batch_failure_log, list(batch_failure))
             }
             # Mark job as done regardless of completion status
             jobs[[j]]$done <- TRUE
@@ -660,6 +687,29 @@ llm_resume_multi_batches <- function(
               unlink(job$batch_input_path)
               unlink(job$batch_output_path)
             }
+          } else {
+            pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+            attempted_at <- Sys.time()
+            failed_attempts <- .pairwiseLLM_failed_attempts_from_pairs(
+              pairs = pairs_tbl,
+              backend = provider,
+              model = job$model,
+              error_code = "http_error",
+              error_detail = paste0("Batch status: ", status),
+              attempted_at = attempted_at
+            )
+            jobs[[j]]$failed_attempts <- failed_attempts
+            batch_failure <- tibble::tibble(
+              segment_index = job$segment_index,
+              provider = provider,
+              model = job$model,
+              batch_id = batch_id,
+              status = status,
+              error_detail = paste0("Batch status: ", status),
+              failed_at = attempted_at
+            )
+            jobs[[j]]$batch_failure <- batch_failure
+            batch_failure_log <- append(batch_failure_log, list(batch_failure))
           }
           jobs[[j]]$done <- TRUE
         }
@@ -749,6 +799,29 @@ llm_resume_multi_batches <- function(
                 unlink(job$batch_input_path)
                 unlink(job$batch_output_path)
               }
+            } else {
+              pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
+              attempted_at <- Sys.time()
+              failed_attempts <- .pairwiseLLM_failed_attempts_from_pairs(
+                pairs = pairs_tbl,
+                backend = provider,
+                model = job$model,
+                error_code = "http_error",
+                error_detail = paste0("Batch status: ", state),
+                attempted_at = attempted_at
+              )
+              jobs[[j]]$failed_attempts <- failed_attempts
+              batch_failure <- tibble::tibble(
+                segment_index = job$segment_index,
+                provider = provider,
+                model = job$model,
+                batch_id = batch_id,
+                status = state,
+                error_detail = paste0("Batch status: ", state),
+                failed_at = attempted_at
+              )
+              jobs[[j]]$batch_failure <- batch_failure
+              batch_failure_log <- append(batch_failure_log, list(batch_failure))
             }
             jobs[[j]]$done <- TRUE
           }
@@ -809,6 +882,12 @@ llm_resume_multi_batches <- function(
     tibble::tibble()
   }
 
+  batch_failures <- if (length(batch_failure_log) > 0L) {
+    dplyr::bind_rows(batch_failure_log)
+  } else {
+    tibble::tibble()
+  }
+
   # Optionally write the combined results to CSV
   if (isTRUE(write_combined_csv) && !is.null(combined)) {
     # Determine the file path: if user provided combined_csv_path, use it;
@@ -844,5 +923,10 @@ llm_resume_multi_batches <- function(
     }
   }
 
-  invisible(list(jobs = jobs, combined = combined, failed_attempts = combined_failed))
+  invisible(list(
+    jobs = jobs,
+    combined = combined,
+    failed_attempts = combined_failed,
+    batch_failures = batch_failures
+  ))
 }

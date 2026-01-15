@@ -123,8 +123,7 @@ estimate_llm_pairs_cost <- function(
     ...
 ) {
   if (identical(backend, "ollama")) {
-    stop("`backend = \"ollama\"` is not supported for cost estimation (local models have no token cost).",
-         call. = FALSE)
+    rlang::abort("`backend = \"ollama\"` is not supported for cost estimation (local models have no token cost).")
   }
 
   backend <- match.arg(backend)
@@ -135,45 +134,44 @@ estimate_llm_pairs_cost <- function(
   required_cols <- c("ID1", "text1", "ID2", "text2")
   missing_cols <- setdiff(required_cols, names(pairs))
   if (length(missing_cols) > 0L) {
-    stop(
+    rlang::abort(paste0(
       "`pairs` must contain columns: ",
-      paste(required_cols, collapse = ", "),
-      call. = FALSE
-    )
+      paste(required_cols, collapse = ", ")
+    ))
   }
 
   if (!is.character(model) || length(model) != 1L) {
-    stop("`model` must be a single character.", call. = FALSE)
+    rlang::abort("`model` must be a single character.")
   }
   if (!is.character(trait_name) || length(trait_name) != 1L) {
-    stop("`trait_name` must be a single character.", call. = FALSE)
+    rlang::abort("`trait_name` must be a single character.")
   }
   if (!is.character(trait_description) || length(trait_description) != 1L) {
-    stop("`trait_description` must be a single character.", call. = FALSE)
+    rlang::abort("`trait_description` must be a single character.")
   }
 
   endpoint <- match.arg(endpoint)
   if (!is.numeric(cost_per_million_input) || length(cost_per_million_input) != 1L || is.na(cost_per_million_input)) {
-    stop("`cost_per_million_input` must be a single numeric value.", call. = FALSE)
+    rlang::abort("`cost_per_million_input` must be a single numeric value.")
   }
   if (!is.numeric(cost_per_million_output) || length(cost_per_million_output) != 1L || is.na(cost_per_million_output)) {
-    stop("`cost_per_million_output` must be a single numeric value.", call. = FALSE)
+    rlang::abort("`cost_per_million_output` must be a single numeric value.")
   }
   if (!is.numeric(batch_discount) || length(batch_discount) != 1L || is.na(batch_discount) || batch_discount <= 0) {
-    stop("`batch_discount` must be a single numeric value > 0.", call. = FALSE)
+    rlang::abort("`batch_discount` must be a single numeric value > 0.")
   }
   if (!is.numeric(budget_quantile) || length(budget_quantile) != 1L ||
       is.na(budget_quantile) || budget_quantile <= 0 || budget_quantile >= 1) {
-    stop("`budget_quantile` must be a single numeric value in (0, 1).", call. = FALSE)
+    rlang::abort("`budget_quantile` must be a single numeric value in (0, 1).")
   }
 
   n_total <- nrow(pairs)
   if (n_total == 0L) {
-    stop("`pairs` has 0 rows.", call. = FALSE)
+    rlang::abort("`pairs` has 0 rows.")
   }
 
   n_test <- as.integer(n_test)
-  if (is.na(n_test) || n_test < 0L) stop("`n_test` must be a non-negative integer.", call. = FALSE)
+  if (is.na(n_test) || n_test < 0L) rlang::abort("`n_test` must be a non-negative integer.")
   if (n_test > n_total) n_test <- n_total
 
   # ------------------------------------------------------------------
@@ -199,64 +197,60 @@ estimate_llm_pairs_cost <- function(
   # ------------------------------------------------------------------
   # Select pilot indices
   # ------------------------------------------------------------------
-  if (!is.null(seed) && test_strategy != "first") {
-    old_seed <- .Random.seed
-    on.exit({
-      if (!is.null(old_seed)) .Random.seed <<- old_seed
-    }, add = TRUE)
-    set.seed(seed)
-  }
-
   if (n_test == 0L) {
     test_idx <- integer(0)
   } else if (test_strategy == "first") {
     test_idx <- seq_len(n_test)
-  } else if (test_strategy == "random") {
-    test_idx <- sort(sample.int(n_total, size = n_test, replace = FALSE))
   } else {
-    # stratified_prompt_bytes
-    if (n_total == 1L) {
-      test_idx <- 1L
-    } else {
+    test_idx <- .pairwiseLLM_with_seed(seed, function() {
+      if (test_strategy == "random") {
+        return(sort(sample.int(n_total, size = n_test, replace = FALSE)))
+      }
+
+      # stratified_prompt_bytes
+      if (n_total == 1L) {
+        return(1L)
+      }
+
       probs <- seq(0, 1, length.out = 6L)
       qs <- stats::quantile(prompt_bytes_all, probs = probs, na.rm = TRUE, type = 7)
       # Make breaks strictly increasing (defensive)
       brks <- unique(as.numeric(qs))
       if (length(brks) < 2L) {
-        test_idx <- sort(sample.int(n_total, size = n_test, replace = FALSE))
-      } else {
-        # Ensure the last break captures max
-        brks[length(brks)] <- max(prompt_bytes_all, na.rm = TRUE) + 1
-        strata <- cut(prompt_bytes_all, breaks = brks, include.lowest = TRUE, right = FALSE)
-        by_stratum <- split(seq_len(n_total), strata)
-
-        # Allocate approximately evenly across strata
-        k <- length(by_stratum)
-        base <- n_test %/% k
-        rem  <- n_test %% k
-        alloc <- rep(base, k)
-        if (rem > 0) alloc[seq_len(rem)] <- alloc[seq_len(rem)] + 1L
-
-        idx <- integer(0)
-        for (j in seq_along(by_stratum)) {
-          pool <- by_stratum[[j]]
-          if (length(pool) == 0L || alloc[j] == 0L) next
-          take <- min(length(pool), alloc[j])
-          idx <- c(idx, sample(pool, size = take, replace = FALSE))
-        }
-
-        # If we didn't get enough (tiny strata), top up randomly from remaining
-        idx <- unique(idx)
-        if (length(idx) < n_test) {
-          remaining <- setdiff(seq_len(n_total), idx)
-          need <- n_test - length(idx)
-          if (need > 0 && length(remaining) > 0) {
-            idx <- c(idx, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
-          }
-        }
-        test_idx <- sort(idx)
+        return(sort(sample.int(n_total, size = n_test, replace = FALSE)))
       }
-    }
+
+      # Ensure the last break captures max
+      brks[length(brks)] <- max(prompt_bytes_all, na.rm = TRUE) + 1
+      strata <- cut(prompt_bytes_all, breaks = brks, include.lowest = TRUE, right = FALSE)
+      by_stratum <- split(seq_len(n_total), strata)
+
+      # Allocate approximately evenly across strata
+      k <- length(by_stratum)
+      base <- n_test %/% k
+      rem  <- n_test %% k
+      alloc <- rep(base, k)
+      if (rem > 0) alloc[seq_len(rem)] <- alloc[seq_len(rem)] + 1L
+
+      idx <- integer(0)
+      for (j in seq_along(by_stratum)) {
+        pool <- by_stratum[[j]]
+        if (length(pool) == 0L || alloc[j] == 0L) next
+        take <- min(length(pool), alloc[j])
+        idx <- c(idx, sample(pool, size = take, replace = FALSE))
+      }
+
+      # If we didn't get enough (tiny strata), top up randomly from remaining
+      idx <- unique(idx)
+      if (length(idx) < n_test) {
+        remaining <- setdiff(seq_len(n_total), idx)
+        need <- n_test - length(idx)
+        if (need > 0 && length(remaining) > 0) {
+          idx <- c(idx, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
+        }
+      }
+      sort(idx)
+    })
   }
 
   test_pairs <- pairs[test_idx, , drop = FALSE]

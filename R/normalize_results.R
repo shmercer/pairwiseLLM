@@ -11,6 +11,46 @@
     model,
     include_raw = FALSE
 ) {
+  .pairwiseLLM_build_pair_keys <- function(pairs_tbl) {
+    pairs_tbl <- tibble::as_tibble(pairs_tbl)
+    pairs_tbl$ID1 <- as.character(pairs_tbl$ID1)
+    pairs_tbl$ID2 <- as.character(pairs_tbl$ID2)
+
+    pair_uid_provided <- if ("pair_uid" %in% names(pairs_tbl)) {
+      as.character(pairs_tbl$pair_uid)
+    } else {
+      NA_character_
+    }
+
+    pairs_keyed <- pairs_tbl |>
+      dplyr::mutate(
+        A_id = as.character(.data$ID1),
+        B_id = as.character(.data$ID2)
+      )
+
+    unordered_key <- vapply(
+      seq_len(nrow(pairs_keyed)),
+      function(i) paste(sort(c(pairs_keyed$A_id[i], pairs_keyed$B_id[i])), collapse = ":"),
+      character(1L)
+    )
+
+    pairs_keyed |>
+      dplyr::mutate(
+        unordered_key = unordered_key,
+        ordered_key = paste(.data$A_id, .data$B_id, sep = ":")
+      ) |>
+      dplyr::group_by(.data$unordered_key) |>
+      dplyr::mutate(unordered_occurrence_index = dplyr::row_number()) |>
+      dplyr::ungroup() |>
+      dplyr::group_by(.data$ordered_key) |>
+      dplyr::mutate(ordered_occurrence_index = dplyr::row_number()) |>
+      dplyr::ungroup() |>
+      dplyr::mutate(
+        pair_uid = paste0(.data$unordered_key, "#", .data$unordered_occurrence_index),
+        pair_uid_provided = pair_uid_provided
+      )
+  }
+
   .as_posixct_safe <- function(x) {
     if (inherits(x, "POSIXct")) return(x)
     if (inherits(x, "Date")) return(as.POSIXct(x))
@@ -118,6 +158,7 @@
   # Strip any canonical columns if an upstream helper already added them.
   canonical_cols <- c(
     "A_id", "B_id", "unordered_key", "ordered_key", "pair_uid",
+    "pair_uid_provided",
     "unordered_occurrence_index", "ordered_occurrence_index",
     "winner_pos", "backend", "received_at"
   )
@@ -154,33 +195,7 @@
     raw_tbl$ID2 <- vapply(parsed_ids, `[[`, character(1L), "ID2")
   }
 
-  pairs_keyed <- pairs |>
-    dplyr::mutate(
-      A_id = as.character(.data$ID1),
-      B_id = as.character(.data$ID2)
-    )
-
-  unordered_key <- vapply(
-    seq_len(nrow(pairs_keyed)),
-    function(i) paste(sort(c(pairs_keyed$A_id[i], pairs_keyed$B_id[i])), collapse = ":"),
-    character(1L)
-  )
-
-  pairs_keyed <- pairs_keyed |>
-    dplyr::mutate(
-      unordered_key = unordered_key,
-      ordered_key = paste(.data$A_id, .data$B_id, sep = ":")
-    ) |>
-    dplyr::group_by(.data$unordered_key) |>
-    dplyr::mutate(unordered_occurrence_index = dplyr::row_number()) |>
-    dplyr::ungroup() |>
-    dplyr::group_by(.data$ordered_key) |>
-    dplyr::mutate(ordered_occurrence_index = dplyr::row_number()) |>
-    dplyr::ungroup() |>
-    dplyr::mutate(
-      pair_uid = paste0(.data$unordered_key, "#", .data$unordered_occurrence_index),
-      pair_uid_input = if ("pair_uid" %in% names(pairs)) as.character(pairs$pair_uid) else NA_character_
-    )
+  pairs_keyed <- .pairwiseLLM_build_pair_keys(pairs)
 
   timestamp <- Sys.time()
 
@@ -246,9 +261,9 @@
     aligned <- dplyr::left_join(
       pairs_keyed,
       raw_dedup,
-      by = c("pair_uid_input" = "custom_id")
+      by = c("pair_uid_provided" = "custom_id")
     ) |>
-      dplyr::mutate(custom_id = .data$pair_uid_input)
+      dplyr::mutate(custom_id = .data$pair_uid_provided)
 
   } else if (all(c("ID1", "ID2") %in% names(raw_tbl))) {
     join_mode <- "id"
@@ -359,7 +374,7 @@
     "ID1", "ID2", "custom_id",
     "unordered_key", "ordered_key",
     "unordered_occurrence_index", "ordered_occurrence_index",
-    "pair_uid", "pair_uid_input"
+    "pair_uid", "pair_uid_provided"
   )
   for (nm in prefer_cols) {
     xnm <- paste0(nm, ".x")
@@ -393,7 +408,7 @@
   aligned$.matched <- NULL
 
   if ("pair_uid" %in% names(pairs)) {
-    aligned$custom_id <- aligned$pair_uid_input
+    aligned$custom_id <- aligned$pair_uid_provided
   }
 
   if (!"better_id" %in% names(aligned)) aligned$better_id <- NA_character_
@@ -487,7 +502,8 @@
     dplyr::select(
       dplyr::any_of(c(
         "ID1", "ID2", "A_id", "B_id", "unordered_key", "ordered_key",
-        "pair_uid", "unordered_occurrence_index", "ordered_occurrence_index",
+        "pair_uid", "pair_uid_provided",
+        "unordered_occurrence_index", "ordered_occurrence_index",
         "custom_id", "backend", "model", "status_code", "error_message",
         "error_code", "error_detail", "attempted_at", "raw_response"
       ))
@@ -498,6 +514,12 @@
     B_id = failed_tbl$B_id,
     unordered_key = failed_tbl$unordered_key,
     ordered_key = failed_tbl$ordered_key,
+    pair_uid = failed_tbl$pair_uid,
+    pair_uid_provided = if ("pair_uid_provided" %in% names(failed_tbl)) {
+      failed_tbl$pair_uid_provided
+    } else {
+      NA_character_
+    },
     backend = failed_tbl$backend,
     model = failed_tbl$model,
     status_code = if ("status_code" %in% names(failed_tbl)) {
@@ -567,7 +589,7 @@
         failed_joined <- dplyr::left_join(
           pairs_keyed,
           raw_failed_tbl,
-          by = c("pair_uid_input" = "custom_id")
+          by = c("pair_uid_provided" = "custom_id")
         )
       } else if (all(c("ID1", "ID2") %in% names(raw_failed_tbl))) {
         raw_failed_tbl <- raw_failed_tbl |>
@@ -657,12 +679,81 @@
   }
 
   results_tbl <- results_tbl |>
-    dplyr::select(-dplyr::any_of(c("pair_uid_input", "retry_failures")))
+    dplyr::select(-dplyr::any_of(c("retry_failures")))
 
   list(
     results = tibble::as_tibble(results_tbl),
     failed_pairs = tibble::as_tibble(failed_pairs_tbl),
     failed_attempts = tibble::as_tibble(failed_attempts_tbl),
     alignment = join_mode
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.pairwiseLLM_failed_attempts_from_pairs <- function(pairs,
+                                                    backend,
+                                                    model,
+                                                    error_code,
+                                                    error_detail,
+                                                    attempted_at = Sys.time()) {
+  pairs_tbl <- tibble::as_tibble(pairs)
+  required_id_cols <- c("ID1", "ID2")
+  missing_id_cols <- setdiff(required_id_cols, names(pairs_tbl))
+  if (length(missing_id_cols) > 0L) {
+    rlang::abort(paste0(
+      "`pairs` must contain columns: ",
+      paste(required_id_cols, collapse = ", "),
+      ". Missing: ",
+      paste(missing_id_cols, collapse = ", ")
+    ))
+  }
+
+  pairs_tbl$ID1 <- as.character(pairs_tbl$ID1)
+  pairs_tbl$ID2 <- as.character(pairs_tbl$ID2)
+
+  pair_uid_provided <- if ("pair_uid" %in% names(pairs_tbl)) {
+    as.character(pairs_tbl$pair_uid)
+  } else {
+    NA_character_
+  }
+
+  pairs_keyed <- pairs_tbl |>
+    dplyr::mutate(
+      A_id = as.character(.data$ID1),
+      B_id = as.character(.data$ID2)
+    )
+
+  unordered_key <- vapply(
+    seq_len(nrow(pairs_keyed)),
+    function(i) paste(sort(c(pairs_keyed$A_id[i], pairs_keyed$B_id[i])), collapse = ":"),
+    character(1L)
+  )
+
+  pairs_keyed <- pairs_keyed |>
+    dplyr::mutate(
+      unordered_key = unordered_key,
+      ordered_key = paste(.data$A_id, .data$B_id, sep = ":")
+    ) |>
+    dplyr::group_by(.data$unordered_key) |>
+    dplyr::mutate(unordered_occurrence_index = dplyr::row_number()) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      pair_uid = paste0(.data$unordered_key, "#", .data$unordered_occurrence_index),
+      pair_uid_provided = pair_uid_provided
+    )
+
+  tibble::tibble(
+    A_id = pairs_keyed$A_id,
+    B_id = pairs_keyed$B_id,
+    unordered_key = pairs_keyed$unordered_key,
+    ordered_key = pairs_keyed$ordered_key,
+    backend = as.character(backend),
+    model = as.character(model),
+    error_code = as.character(error_code),
+    error_detail = as.character(error_detail),
+    attempted_at = attempted_at,
+    pair_uid = pairs_keyed$pair_uid,
+    pair_uid_provided = pairs_keyed$pair_uid_provided
   )
 }
