@@ -2,6 +2,13 @@
 # Fast selection-grade BTL inference.
 # Fast inference is used only for adaptive selection. Final inference and
 # reporting use MCMC (PR-A6).
+#
+# Notes
+# - This is an approximation intended for adaptive selection only.
+# - We enforce identifiability (sum-to-zero) and a fixed SD scale to keep
+#   Var(p_ij) comparable across iterations.
+# - Standard errors are derived from observed comparison counts when
+#   available; otherwise a deterministic fallback is used.
 # -------------------------------------------------------------------------
 
 .btl_fast_validate_ids <- function(ids) {
@@ -142,13 +149,17 @@ fit_bayes_btl_fast <- function(
   edges <- .btl_fast_prepare_edges(results)
   fit <- .btl_fast_fit(edges, ids)
 
-  theta_mean <- fit$theta_raw - mean(fit$theta_raw)
-  scale_sd <- stats::sd(theta_mean)
+  theta_centered <- fit$theta_raw - mean(fit$theta_raw)
+  scale_sd <- stats::sd(theta_centered)
   if (!is.finite(scale_sd) || scale_sd <= 0) {
     scale_sd <- 1
   }
-  theta_mean <- theta_mean / scale_sd
+  theta_mean <- theta_centered / scale_sd
   names(theta_mean) <- ids
+
+  se_scaled <- fit$se_raw / scale_sd
+  se_scaled[!is.finite(se_scaled) | se_scaled <= 0] <- 1
+  names(se_scaled) <- ids
 
   n_draws <- as.integer(n_draws)
   if (is.na(n_draws) || n_draws < 2L) {
@@ -158,8 +169,8 @@ fit_bayes_btl_fast <- function(
   theta_draws <- .pairwiseLLM_with_seed(seed, function() {
     N <- length(ids)
     base <- matrix(stats::rnorm(n_draws * N), nrow = n_draws, ncol = N)
-    scaled <- sweep(base, 2, fit$se_raw, `*`)
-    sweep(scaled, 2, fit$theta_raw, `+`)
+    scaled <- sweep(base, 2, se_scaled, `*`)
+    sweep(scaled, 2, theta_mean, `+`)
   })
 
   theta_draws <- theta_draws - rowMeans(theta_draws)
