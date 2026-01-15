@@ -262,10 +262,26 @@
   }
   failed_attempts <- tibble::as_tibble(failed_attempts)
   if (!"phase" %in% names(failed_attempts)) {
-    failed_attempts$phase <- if (is.null(phase)) NA_character_ else as.character(phase)
+    failed_attempts$phase <- NA_character_
   }
   if (!"iter" %in% names(failed_attempts)) {
-    failed_attempts$iter <- if (is.null(iter)) NA_integer_ else as.integer(iter)
+    failed_attempts$iter <- NA_integer_
+  }
+  if (!is.null(phase)) {
+    failed_attempts$phase <- ifelse(
+      is.na(failed_attempts$phase) | failed_attempts$phase == "",
+      as.character(phase),
+      failed_attempts$phase
+    )
+  }
+  if (!is.null(iter)) {
+    failed_attempts$iter <- ifelse(
+      is.na(failed_attempts$iter),
+      as.integer(iter),
+      as.integer(failed_attempts$iter)
+    )
+  } else {
+    failed_attempts$iter <- as.integer(failed_attempts$iter)
   }
   validate_failed_attempts_tbl(failed_attempts)
   state$failed_attempts <- dplyr::bind_rows(state$failed_attempts, failed_attempts)
@@ -368,6 +384,9 @@
 
   utilities <- compute_pair_utility(fit$theta_draws, candidates)
   utilities <- apply_degree_penalty(utilities, state)
+  if (!is.finite(state$U0)) {
+    state$U0 <- as.double(compute_Umax(utilities))
+  }
   out <- select_pairs_from_candidates(
     state = state,
     utilities_tbl = utilities,
