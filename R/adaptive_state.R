@@ -74,7 +74,7 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
   M1_target <- config$M1_target
   if (is.null(M1_target)) M1_target <- floor(N * d1 / 2)
 
-  counts <- setNames(rep.int(0L, N), ids)
+  counts <- stats::setNames(rep.int(0L, N), ids)
 
   state <- structure(
     list(
