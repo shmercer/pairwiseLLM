@@ -79,6 +79,25 @@ test_that("validate_results_tbl rejects invalid better_id", {
   expect_error(pairwiseLLM:::validate_results_tbl(results), "better_id")
 })
 
+test_that("validate_results_tbl rejects missing winner_pos", {
+  results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = as.integer(NA),
+    phase = "phase1",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC"),
+    backend = "openai",
+    model = "gpt-test"
+  )
+
+  expect_error(pairwiseLLM:::validate_results_tbl(results), "winner_pos")
+})
+
 test_that("validate_failed_attempts_tbl accepts minimal required columns", {
   failed_attempts <- tibble::tibble(
     pair_uid = "A:B#1",
@@ -93,6 +112,26 @@ test_that("validate_failed_attempts_tbl accepts minimal required columns", {
     model = "gpt-test",
     error_code = "timeout",
     error_detail = NA_character_
+  )
+
+  expect_silent(pairwiseLLM:::validate_failed_attempts_tbl(failed_attempts))
+})
+
+test_that("validate_failed_attempts_tbl accepts extra error codes via option", {
+  withr::local_options(pairwiseLLM.allowed_error_codes = "custom_code")
+  failed_attempts <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    phase = "phase1",
+    iter = 1L,
+    attempted_at = as.POSIXct("2026-01-03 00:00:00", tz = "UTC"),
+    backend = "openai",
+    model = "gpt-test",
+    error_code = "custom_code",
+    error_detail = "detail"
   )
 
   expect_silent(pairwiseLLM:::validate_failed_attempts_tbl(failed_attempts))

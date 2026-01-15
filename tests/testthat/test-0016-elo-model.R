@@ -70,11 +70,12 @@ test_that("build_elo_data works on example_writing_pairs", {
 # -------------------------------------------------------------------------
 
 test_that("fit_elo_model errors helpfully when EloChoice is not installed", {
-  # Only run this test when EloChoice is NOT available
-  skip_if(
-    condition = requireNamespace("EloChoice", quietly = TRUE),
-    message   = "EloChoice is installed; cannot test missing-package behaviour."
-  )
+  skip_if_not_installed("mockery")
+  skip_if_not_installed("withr")
+
+  # Force the missing-package branch regardless of local installation.
+  withr::local_package("pairwiseLLM")
+  mockery::stub(fit_elo_model, "requireNamespace", function(...) FALSE)
 
   data("example_writing_pairs", package = "pairwiseLLM")
   elo_data <- build_elo_data(example_writing_pairs)

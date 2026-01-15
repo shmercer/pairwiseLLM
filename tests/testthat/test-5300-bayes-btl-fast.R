@@ -57,6 +57,21 @@ test_that("fit_bayes_btl_fast enforces identifiability and fixed scale", {
   expect_true(all(abs(row_sd - 1) < 1e-6))
 })
 
+test_that("fit_bayes_btl_fast preserves fixed scale across refits", {
+  results <- make_results_tbl()
+  ids <- c("A", "B", "C", "D", "E")
+
+  withr::local_seed(10)
+  fit1 <- pairwiseLLM:::fit_bayes_btl_fast(results[1:3, ], ids, n_draws = 20, seed = 2)
+  withr::local_seed(10)
+  fit2 <- pairwiseLLM:::fit_bayes_btl_fast(results, ids, n_draws = 20, seed = 2)
+
+  expect_equal(stats::sd(fit1$theta_mean), 1, tolerance = 1e-6)
+  expect_equal(stats::sd(fit2$theta_mean), 1, tolerance = 1e-6)
+  expect_true(all(abs(apply(fit1$theta_draws, 1, stats::sd) - 1) < 1e-6))
+  expect_true(all(abs(apply(fit2$theta_draws, 1, stats::sd) - 1) < 1e-6))
+})
+
 test_that("fit_bayes_btl_fast includes missing ids with finite draws", {
   results <- make_results_tbl()
   ids <- c("A", "B", "C", "D", "E")
@@ -94,6 +109,11 @@ test_that("fit_bayes_btl_fast covers missing ids, n_draws validation, and empty 
   fit <- pairwiseLLM:::fit_bayes_btl_fast(empty_results, ids = c("A", "B"), n_draws = 10, seed = 1)
   expect_true(isTRUE(fit$fit_meta$converged))
   expect_match(fit$fit_meta$message, "No comparisons available")
+  expect_true(all(is.finite(fit$theta_mean)))
+  expect_true(all(is.finite(fit$theta_draws)))
+  expect_equal(sum(fit$theta_mean), 0, tolerance = 1e-8)
+  expect_true(all(abs(rowMeans(fit$theta_draws)) < 1e-6))
+  expect_true(all(abs(apply(fit$theta_draws, 1, stats::sd) - 1) < 1e-6))
 })
 
 test_that("internal BTL helpers guard invalid ids and zero-length wins", {
@@ -109,6 +129,44 @@ test_that("internal BTL helpers guard invalid ids and zero-length wins", {
   fit <- pairwiseLLM:::.btl_fast_fit(edges_min, ids = c("A", "B"))
   expect_true(is.numeric(fit$theta_raw))
   expect_true(is.numeric(fit$se_raw))
+})
+
+test_that("fit_bayes_btl_fast draws are built from scaled theta_mean and scaled SE", {
+  results <- make_results_tbl()
+  ids <- c("A", "B", "C", "D", "E")
+  n_draws <- 25L
+  seed <- 42
+
+  withr::local_seed(1)
+  fit <- pairwiseLLM:::fit_bayes_btl_fast(results, ids, n_draws = n_draws, seed = seed)
+
+  edges <- pairwiseLLM:::.btl_fast_prepare_edges(results)
+  raw_fit <- pairwiseLLM:::.btl_fast_fit(edges, ids)
+
+  theta_centered <- raw_fit$theta_raw - mean(raw_fit$theta_raw)
+  scale_sd <- stats::sd(theta_centered)
+  if (!is.finite(scale_sd) || scale_sd <= 0) {
+    scale_sd <- 1
+  }
+  theta_mean <- theta_centered / scale_sd
+  se_scaled <- raw_fit$se_raw / scale_sd
+  se_scaled[!is.finite(se_scaled) | se_scaled <= 0] <- 1
+
+  ref_draws <- pairwiseLLM:::.pairwiseLLM_with_seed(seed, function() {
+    N <- length(ids)
+    base <- matrix(stats::rnorm(n_draws * N), nrow = n_draws, ncol = N)
+    scaled <- sweep(base, 2, se_scaled, `*`)
+    sweep(scaled, 2, theta_mean, `+`)
+  })
+  ref_draws <- ref_draws - rowMeans(ref_draws)
+  row_sd <- apply(ref_draws, 1, stats::sd)
+  row_sd[!is.finite(row_sd) | row_sd <= 0] <- 1
+  ref_draws <- ref_draws / row_sd
+  colnames(ref_draws) <- ids
+  names(theta_mean) <- ids
+
+  expect_equal(fit$theta_mean, theta_mean)
+  expect_equal(fit$theta_draws, ref_draws)
 })
 
 test_that("refit helpers validate arguments", {

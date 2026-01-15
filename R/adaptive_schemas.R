@@ -246,6 +246,16 @@ validate_state <- function(state) {
   validate_pairs_tbl(state$history_pairs)
   validate_results_tbl(state$history_results)
   validate_failed_attempts_tbl(state$failed_attempts)
+  if (!is.null(state$results_seen)) {
+    if (!(is.logical(state$results_seen) || is.environment(state$results_seen))) {
+      rlang::abort("`state$results_seen` must be a named logical vector or environment.")
+    }
+    if (is.logical(state$results_seen) &&
+      length(state$results_seen) > 0L &&
+      is.null(names(state$results_seen))) {
+      rlang::abort("`state$results_seen` must be named when non-empty.")
+    }
+  }
 
   if (!is.integer(state$comparisons_scheduled) || length(state$comparisons_scheduled) != 1L) {
     rlang::abort("`state$comparisons_scheduled` must be a length-1 integer.")
