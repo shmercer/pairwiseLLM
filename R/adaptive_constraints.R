@@ -89,11 +89,16 @@ record_exposure <- function(state, A_id, B_id) {
   state$unordered_count <- counts
 
   seen <- state$ordered_seen
-  if (is.null(names(seen)) || length(seen) == 0L) {
-    seen <- logical()
+  if (is.environment(seen)) {
+    seen[[ordered_key]] <- TRUE
+    state$ordered_seen <- seen
+  } else {
+    if (is.null(names(seen)) || length(seen) == 0L) {
+      seen <- logical()
+    }
+    seen[ordered_key] <- TRUE
+    state$ordered_seen <- seen
   }
-  seen[ordered_key] <- TRUE
-  state$ordered_seen <- seen
 
   state
 }
