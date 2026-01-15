@@ -760,3 +760,32 @@ test_that("normalize_llm_results coalesces suffixed columns from row-order align
 
   expect_equal(out$results$ID1, "A")
 })
+
+test_that("normalize_llm_results outputs satisfy adaptive schema validators", {
+  pairs <- tibble::tibble(
+    ID1 = c("A", "C"),
+    text1 = c("alpha", "charlie"),
+    ID2 = c("B", "D"),
+    text2 = c("beta", "delta"),
+    pair_uid = c("pair-1", "pair-2")
+  )
+
+  raw <- tibble::tibble(
+    custom_id = c("pair-1", "pair-2"),
+    ID1 = c("A", "C"),
+    ID2 = c("B", "D"),
+    better_id = c("A", "E"),
+    error_message = c(NA_character_, "invalid winner")
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_silent(validate_results_tbl(out$results))
+  expect_silent(validate_failed_attempts_tbl(out$failed_attempts))
+})
