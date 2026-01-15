@@ -478,6 +478,12 @@
 
   results_tbl <- tibble::as_tibble(aligned[is_valid, , drop = FALSE])
   results_tbl$received_at <- timestamp
+  if (!"phase" %in% names(results_tbl)) results_tbl$phase <- NA_character_
+  if (!"iter" %in% names(results_tbl)) {
+    results_tbl$iter <- NA_integer_
+  } else {
+    results_tbl$iter <- as.integer(results_tbl$iter)
+  }
 
   # Failed pairs are the scheduled pairs whose outcome is not observed.
   failed_tbl <- aligned[!is_valid, , drop = FALSE]
@@ -678,6 +684,13 @@
     }
   }
 
+  if (!"phase" %in% names(failed_attempts_tbl)) failed_attempts_tbl$phase <- NA_character_
+  if (!"iter" %in% names(failed_attempts_tbl)) {
+    failed_attempts_tbl$iter <- NA_integer_
+  } else {
+    failed_attempts_tbl$iter <- as.integer(failed_attempts_tbl$iter)
+  }
+
   results_tbl <- results_tbl |>
     dplyr::select(-dplyr::any_of(c("retry_failures")))
 
@@ -743,6 +756,17 @@
       pair_uid_provided = pair_uid_provided
     )
 
+  phase <- if ("phase" %in% names(pairs_tbl)) {
+    as.character(pairs_tbl$phase)
+  } else {
+    NA_character_
+  }
+  iter <- if ("iter" %in% names(pairs_tbl)) {
+    as.integer(pairs_tbl$iter)
+  } else {
+    NA_integer_
+  }
+
   tibble::tibble(
     A_id = pairs_keyed$A_id,
     B_id = pairs_keyed$B_id,
@@ -754,6 +778,8 @@
     error_detail = as.character(error_detail),
     attempted_at = attempted_at,
     pair_uid = pairs_keyed$pair_uid,
-    pair_uid_provided = pairs_keyed$pair_uid_provided
+    pair_uid_provided = pairs_keyed$pair_uid_provided,
+    phase = phase,
+    iter = iter
   )
 }
