@@ -1,15 +1,24 @@
 test_that("compute_ranking_from_theta_mean sorts with stable tie-breaking", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "beta", "gamma")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   theta <- c(B = 0.3, C = 0.3, A = 0.2)
-  out <- pairwiseLLM:::compute_ranking_from_theta_mean(theta)
+  out <- pairwiseLLM:::compute_ranking_from_theta_mean(theta, state)
   expect_equal(out, c("B", "C", "A"))
 
   expect_error(
-    pairwiseLLM:::compute_ranking_from_theta_mean(c(1, 2)),
+    pairwiseLLM:::compute_ranking_from_theta_mean(c(1, 2), state),
     "named numeric"
   )
   expect_error(
-    pairwiseLLM:::compute_ranking_from_theta_mean(c(A = 1, B = NA)),
+    pairwiseLLM:::compute_ranking_from_theta_mean(c(A = 1, B = NA), state),
     "missing"
+  )
+  expect_error(
+    pairwiseLLM:::compute_ranking_from_theta_mean(c(A = 1, B = 2, D = 3), state),
+    "match `state\\$ids`"
   )
 })
 
