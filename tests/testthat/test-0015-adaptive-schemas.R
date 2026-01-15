@@ -12,7 +12,7 @@ test_that("validate_pairs_tbl accepts minimal required columns", {
     created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
 
-  expect_silent(validate_pairs_tbl(pairs))
+  expect_silent(pairwiseLLM:::validate_pairs_tbl(pairs))
 })
 
 test_that("validate_pairs_tbl fails on missing required columns", {
@@ -21,7 +21,7 @@ test_that("validate_pairs_tbl fails on missing required columns", {
     A_id = "A"
   )
 
-  expect_error(validate_pairs_tbl(pairs), "missing required columns")
+  expect_error(pairwiseLLM:::validate_pairs_tbl(pairs), "missing required columns")
 })
 
 test_that("validate_pairs_tbl rejects wrong types", {
@@ -38,7 +38,7 @@ test_that("validate_pairs_tbl rejects wrong types", {
     created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
 
-  expect_error(validate_pairs_tbl(pairs), "iter")
+  expect_error(pairwiseLLM:::validate_pairs_tbl(pairs), "iter")
 })
 
 test_that("validate_results_tbl accepts observed-only rows", {
@@ -57,7 +57,7 @@ test_that("validate_results_tbl accepts observed-only rows", {
     model = "gpt-test"
   )
 
-  expect_silent(validate_results_tbl(results))
+  expect_silent(pairwiseLLM:::validate_results_tbl(results))
 })
 
 test_that("validate_results_tbl rejects invalid better_id", {
@@ -76,7 +76,7 @@ test_that("validate_results_tbl rejects invalid better_id", {
     model = "gpt-test"
   )
 
-  expect_error(validate_results_tbl(results), "better_id")
+  expect_error(pairwiseLLM:::validate_results_tbl(results), "better_id")
 })
 
 test_that("validate_failed_attempts_tbl accepts minimal required columns", {
@@ -95,7 +95,7 @@ test_that("validate_failed_attempts_tbl accepts minimal required columns", {
     error_detail = NA_character_
   )
 
-  expect_silent(validate_failed_attempts_tbl(failed_attempts))
+  expect_silent(pairwiseLLM:::validate_failed_attempts_tbl(failed_attempts))
 })
 
 test_that("validate_failed_attempts_tbl rejects unsupported error_code", {
@@ -114,5 +114,5 @@ test_that("validate_failed_attempts_tbl rejects unsupported error_code", {
     error_detail = "oops"
   )
 
-  expect_error(validate_failed_attempts_tbl(failed_attempts), "error_code")
+  expect_error(pairwiseLLM:::validate_failed_attempts_tbl(failed_attempts), "error_code")
 })

@@ -4,9 +4,9 @@ test_that("adaptive_state_new creates a valid initial state", {
     text = c("alpha", "beta", "charlie")
   )
 
-  state <- adaptive_state_new(samples, config = list())
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
 
-  expect_silent(validate_state(state))
+  expect_silent(pairwiseLLM:::validate_state(state))
   expect_s3_class(state, "adaptive_state")
   expect_equal(length(state$unordered_count), 3L)
   expect_true(all(state$unordered_count == 0L))
@@ -17,9 +17,9 @@ test_that("record_exposure updates counts consistently", {
     ID = c("A", "B"),
     text = c("alpha", "beta")
   )
-  state <- adaptive_state_new(samples, config = list())
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
 
-  state2 <- record_exposure(state, "A", "B")
+  state2 <- pairwiseLLM:::record_exposure(state, "A", "B")
 
   expect_equal(state2$pos1[["A"]], 1L)
   expect_equal(state2$pos2[["B"]], 1L)
@@ -34,14 +34,14 @@ test_that("adaptive_state_save/load roundtrip preserves class and fields", {
     ID = c("A", "B"),
     text = c("alpha", "beta")
   )
-  state <- adaptive_state_new(samples, config = list())
-  state <- record_exposure(state, "A", "B")
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  state <- pairwiseLLM:::record_exposure(state, "A", "B")
 
   tmp_dir <- withr::local_tempdir()
   path <- file.path(tmp_dir, "state.rds")
 
-  adaptive_state_save(state, path)
-  loaded <- adaptive_state_load(path)
+  pairwiseLLM:::adaptive_state_save(state, path)
+  loaded <- pairwiseLLM:::adaptive_state_load(path)
 
   expect_s3_class(loaded, "adaptive_state")
   expect_equal(loaded$deg, state$deg)
@@ -53,7 +53,7 @@ test_that("failed_attempts does not affect comparisons_observed", {
     ID = c("A", "B"),
     text = c("alpha", "beta")
   )
-  state <- adaptive_state_new(samples, config = list())
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
 
   failed_attempts <- tibble::tibble(
     pair_uid = "A:B#1",
@@ -73,5 +73,5 @@ test_that("failed_attempts does not affect comparisons_observed", {
   state$failed_attempts <- failed_attempts
 
   expect_equal(state$comparisons_observed, 0L)
-  expect_silent(validate_state(state))
+  expect_silent(pairwiseLLM:::validate_state(state))
 })
