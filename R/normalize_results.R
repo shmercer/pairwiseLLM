@@ -79,12 +79,6 @@
   }
 
   # Backwards/alternate schema support (additive-only): accept A/B naming.
-  if (!"ID1" %in% names(pairs) && "A_id" %in% names(pairs)) {
-    pairs$ID1 <- as.character(pairs$A_id)
-  }
-  if (!"ID2" %in% names(pairs) && "B_id" %in% names(pairs)) {
-    pairs$ID2 <- as.character(pairs$B_id)
-  }
   if (!"text1" %in% names(pairs) && "A_text" %in% names(pairs)) {
     pairs$text1 <- pairs$A_text
   }
@@ -100,6 +94,8 @@
         ~ c("ID1", "ID2"),
         .cols = c("A_id", "B_id")
       )
+      pairs$A_id <- as.character(pairs$ID1)
+      pairs$B_id <- as.character(pairs$ID2)
     } else if (all(c("A", "B") %in% names(pairs))) {
       pairs <- dplyr::rename_with(
         pairs,
