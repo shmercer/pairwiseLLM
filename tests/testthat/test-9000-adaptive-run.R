@@ -96,6 +96,9 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
   expect_equal(out$state$comparisons_observed, 4L)
   expect_equal(out$state$comparisons_scheduled, 5L)
   expect_equal(nrow(out$state$failed_attempts), 1L)
+  expect_equal(length(out$submission_info$live_submissions), 2L)
+  expect_true(all(out$submission_info$live_submissions[[2]]$pairs$phase == "phase1"))
+  expect_true(all(out$submission_info$live_submissions[[2]]$pairs$iter == 0L))
 })
 
 testthat::test_that("adaptive_rank_resume ingests batch results incrementally", {
@@ -217,6 +220,161 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
   )
 
   expect_equal(resume_out2$state$comparisons_observed, 4L)
+})
+
+testthat::test_that("adaptive_rank_start stores submission options in state and reuse on resume", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C", "D"),
+    text = c("alpha", "bravo", "charlie", "delta")
+  )
+
+  adaptive <- list(
+    d1 = 2L,
+    M1_target = 2L,
+    budget_max = 2L,
+    bins = 2L,
+    batch_overrides = list(BATCH1 = 2L)
+  )
+
+  captured_submit <- new.env(parent = emptyenv())
+  mock_submit_batch <- function(pairs, model, trait_name, trait_description,
+                                prompt_template, backend,
+                                batch_size = NULL,
+                                openai_max_retries = 3,
+                                verbose = FALSE,
+                                ...) {
+    captured_submit$batch_size <- batch_size
+    captured_submit$openai_max_retries <- openai_max_retries
+    captured_submit$verbose <- verbose
+    list(
+      jobs = list(list(
+        segment_index = 1L,
+        provider = backend,
+        model = model,
+        batch_id = "batch-1",
+        batch_input_path = "in.jsonl",
+        batch_output_path = "out.jsonl",
+        csv_path = "out.csv",
+        pairs = pairs,
+        done = FALSE
+      )),
+      registry = tibble::tibble(
+        segment_index = 1L,
+        provider = backend,
+        model = model,
+        batch_id = "batch-1",
+        batch_input_path = "in.jsonl",
+        batch_output_path = "out.jsonl",
+        csv_path = "out.csv",
+        done = FALSE
+      )
+    )
+  }
+
+  captured_resume <- new.env(parent = emptyenv())
+  mock_resume_batch <- function(jobs = NULL,
+                                output_dir = NULL,
+                                openai_max_retries = 3,
+                                verbose = FALSE,
+                                ...) {
+    captured_resume$openai_max_retries <- openai_max_retries
+    captured_resume$verbose <- verbose
+    list(
+      jobs = jobs,
+      combined = NULL,
+      failed_attempts = pairwiseLLM:::.adaptive_empty_failed_attempts_tbl(),
+      batch_failures = tibble::tibble()
+    )
+  }
+
+  out_dir <- withr::local_tempdir()
+  withr::local_seed(555)
+  start_out <- testthat::with_mocked_bindings(
+    adaptive_rank_start(
+      samples = samples,
+      model = "gpt-test",
+      trait_name = "quality",
+      trait_description = "Which is better?",
+      backend = "openai",
+      mode = "batch",
+      submission = list(batch_size = 2L, openai_max_retries = 7L, verbose = TRUE),
+      adaptive = adaptive,
+      paths = list(output_dir = out_dir),
+      seed = 555
+    ),
+    llm_submit_pairs_multi_batch = mock_submit_batch
+  )
+
+  expect_equal(captured_submit$batch_size, 2L)
+  expect_equal(captured_submit$openai_max_retries, 7L)
+  expect_true(isTRUE(captured_submit$verbose))
+  expect_true(file.exists(start_out$state_path))
+  expect_equal(start_out$state$config$submission$openai_max_retries, 7L)
+  expect_true(isTRUE(start_out$state$config$submission$verbose))
+
+  loaded_state <- readRDS(start_out$state_path)
+  expect_equal(loaded_state$config$submission$openai_max_retries, 7L)
+  expect_true(isTRUE(loaded_state$config$submission$verbose))
+
+  testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = loaded_state,
+      state_path = start_out$state_path,
+      mode = "batch",
+      submission_info = start_out$submission_info,
+      adaptive = adaptive,
+      seed = 555
+    ),
+    llm_resume_multi_batches = mock_resume_batch
+  )
+
+  expect_equal(captured_resume$openai_max_retries, 7L)
+  expect_true(isTRUE(captured_resume$verbose))
+})
+
+testthat::test_that("adaptive_rank_resume normalizes raw live results before ingesting", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 2L, M1_target = 1L, budget_max = 1L),
+    seed = 777
+  )
+
+  scheduled <- pairwiseLLM:::phase1_generate_pairs(
+    state = state,
+    n_pairs = 1L,
+    bins = 2L,
+    seed = 777
+  )
+  state <- scheduled$state
+  pairs_submitted <- scheduled$pairs
+
+  raw_results <- tibble::tibble(
+    custom_id = pairs_submitted$pair_uid,
+    better_sample = "SAMPLE_1"
+  )
+
+  resume_out <- adaptive_rank_resume(
+    state = state,
+    mode = "live",
+    submission_info = list(
+      backend = "openai",
+      model = "gpt-test",
+      trait_name = "quality",
+      trait_description = "Which is better?",
+      prompt_template = "TEMPLATE",
+      pairs_submitted = pairs_submitted,
+      results = raw_results
+    ),
+    seed = 777
+  )
+
+  expect_equal(resume_out$state$comparisons_observed, 1L)
+  expect_true(all(c("unordered_key", "ordered_key", "winner_pos") %in% names(resume_out$state$history_results)))
 })
 
 testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
