@@ -56,8 +56,8 @@
 data {
   int<lower=1> N;
   int<lower=1> K;
-  int<lower=1,upper=N> winner[K];
-  int<lower=1,upper=N> loser[K];
+  array[K] int<lower=1, upper=N> winner;
+  array[K] int<lower=1, upper=N> loser;
 }
 parameters {
   vector[N] theta_raw;
