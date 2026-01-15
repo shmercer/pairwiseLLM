@@ -78,6 +78,60 @@ test_that("fit_bayes_btl_fast rejects invalid winners", {
   )
 })
 
+test_that("fit_bayes_btl_fast covers missing ids, n_draws validation, and empty results", {
+  results <- make_results_tbl()
+
+  expect_error(
+    pairwiseLLM:::fit_bayes_btl_fast(results, ids = c("A", "B")),
+    "contained in `ids`"
+  )
+  expect_error(
+    pairwiseLLM:::fit_bayes_btl_fast(results, ids = c("A", "B", "C", "D", "E"), n_draws = 1),
+    "n_draws"
+  )
+
+  empty_results <- results[0, ]
+  fit <- pairwiseLLM:::fit_bayes_btl_fast(empty_results, ids = c("A", "B"), n_draws = 10, seed = 1)
+  expect_true(isTRUE(fit$fit_meta$converged))
+  expect_match(fit$fit_meta$message, "No comparisons available")
+})
+
+test_that("internal BTL helpers guard invalid ids and zero-length wins", {
+  expect_error(pairwiseLLM:::.btl_fast_validate_ids(character()), "at least one")
+  expect_error(pairwiseLLM:::.btl_fast_validate_ids(c("A", NA)), "non-missing")
+  expect_error(pairwiseLLM:::.btl_fast_validate_ids(c("A", "A")), "unique")
+
+  results <- make_results_tbl()
+  edges <- pairwiseLLM:::.btl_fast_prepare_edges(results)
+  expect_true(all(c("i_id", "j_id", "win_i", "win_j", "n_ij") %in% names(edges)))
+
+  edges_min <- data.frame(i_id = "A", j_id = "B", n_ij = 1L, stringsAsFactors = FALSE)
+  fit <- pairwiseLLM:::.btl_fast_fit(edges_min, ids = c("A", "B"))
+  expect_true(is.numeric(fit$theta_raw))
+  expect_true(is.numeric(fit$se_raw))
+})
+
+test_that("refit helpers validate arguments", {
+  expect_error(pairwiseLLM:::refit_every_batches(CW = 0, batch_size = 1), "positive integer")
+  expect_error(pairwiseLLM:::refit_every_batches(CW = 1, batch_size = 0), "positive integer")
+  expect_error(
+    pairwiseLLM:::should_refit(-1, last_refit_at = 0, batch_size = 1, CW = 1),
+    "non-negative"
+  )
+  expect_error(
+    pairwiseLLM:::should_refit(1, last_refit_at = -1, batch_size = 1, CW = 1),
+    "non-negative"
+  )
+  expect_error(
+    pairwiseLLM:::should_refit(1, last_refit_at = 0, batch_size = 0, CW = 1),
+    "positive integer"
+  )
+  expect_error(
+    pairwiseLLM:::should_refit(1, last_refit_at = 0, batch_size = 1, CW = 0),
+    "positive integer"
+  )
+})
+
 test_that("refit cadence helpers follow comparison-space policy", {
   expect_equal(pairwiseLLM:::refit_every_batches(CW = 10, batch_size = 4), 3L)
   expect_equal(pairwiseLLM:::refit_every_batches(CW = 1, batch_size = 10), 1L)
