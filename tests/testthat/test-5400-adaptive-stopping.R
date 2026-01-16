@@ -173,9 +173,13 @@ test_that("compute_adjacent_win_probs uses ranking order", {
   expect_equal(out$B_id, c("B", "C"))
 })
 
-test_that("fit_bayes_btl_mcmc aborts cleanly when CmdStanR is unavailable", {
-  if (requireNamespace("cmdstanr", quietly = TRUE)) {
-    testthat::skip("CmdStan sampling is not run in unit tests.")
+test_that("fit_bayes_btl_mcmc runs when CmdStan is available", {
+  if (!requireNamespace("cmdstanr", quietly = TRUE)) {
+    testthat::skip("CmdStanR is not available for MCMC test.")
+  }
+  cmdstan_path <- tryCatch(cmdstanr::cmdstan_path(), error = function(e) "")
+  if (!nzchar(cmdstan_path)) {
+    testthat::skip("CmdStan is not installed for MCMC test.")
   }
 
   results <- tibble::tibble(
@@ -193,8 +197,18 @@ test_that("fit_bayes_btl_mcmc aborts cleanly when CmdStanR is unavailable", {
     model = "gpt-test"
   )
 
-  expect_error(
-    pairwiseLLM:::fit_bayes_btl_mcmc(results, ids = c("A", "B")),
-    "CmdStan"
+  fit <- pairwiseLLM:::fit_bayes_btl_mcmc(
+    results,
+    ids = c("A", "B"),
+    cmdstan = list(
+      chains = 2,
+      iter_warmup = 200,
+      iter_sampling = 200,
+      seed = 123,
+      core_fraction = 0.5
+    )
   )
+  expect_true(is.matrix(fit$theta_draws))
+  expect_equal(colnames(fit$theta_draws), c("A", "B"))
+  expect_true(nrow(fit$theta_draws) > 0L)
 })

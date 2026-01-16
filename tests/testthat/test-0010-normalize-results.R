@@ -30,7 +30,7 @@ test_that("normalize_llm_results returns canonical observed rows with keys", {
   expect_equal(out$results$winner_pos, 1L)
   expect_equal(out$results$unordered_key, "A:B")
   expect_equal(out$results$ordered_key, "A:B")
-  expect_equal(out$results$pair_uid, "A:B#1")
+  expect_equal(out$results$pair_uid, "pair-001")
   expect_equal(out$results$pair_uid_provided, "pair-001")
   expect_equal(out$results$custom_id, "pair-001")
   expect_equal(out$results$backend, "openai")
