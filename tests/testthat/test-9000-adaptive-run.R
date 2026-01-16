@@ -222,6 +222,62 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
   expect_equal(resume_out2$state$comparisons_observed, 4L)
 })
 
+testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 2L, M1_target = 1L, budget_max = 2L),
+    seed = 101
+  )
+
+  pairs_tbl <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase2",
+    iter = 1L,
+    created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+  )
+
+  empty_results <- pairwiseLLM:::.adaptive_empty_results_tbl()
+  empty_failed <- pairwiseLLM:::.adaptive_empty_failed_attempts_tbl()
+
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = state,
+      mode = "live",
+      submission_info = list(
+        backend = "openai",
+        model = "gpt-test",
+        trait_name = "quality",
+        trait_description = "Which is better?",
+        prompt_template = "template"
+      ),
+      seed = 101
+    ),
+    .adaptive_run_stopping_checks = function(state, adaptive, seed) {
+      list(state = state, stop_confirmed = FALSE)
+    },
+    .adaptive_schedule_next_pairs = function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
+      list(state = state, pairs = pairs_tbl)
+    },
+    .adaptive_submit_live = function(...) list(results = tibble::tibble()),
+    .adaptive_normalize_submission_output = function(...) {
+      list(results = empty_results, failed_attempts = empty_failed)
+    }
+  )
+
+  expect_equal(nrow(out$submission_info$pairs_submitted), 1L)
+})
+
 testthat::test_that("adaptive_rank_start stores submission options in state and reuse on resume", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C", "D"),

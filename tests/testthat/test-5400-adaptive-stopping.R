@@ -138,6 +138,85 @@ test_that("compute_Umax warns on empty utilities", {
   expect_equal(suppressWarnings(pairwiseLLM:::compute_Umax(tibble::tibble())), 0)
 })
 
+test_that("compute_adjacent_certainty validates inputs", {
+  expect_error(
+    pairwiseLLM:::compute_adjacent_certainty("bad", "A"),
+    "numeric matrix"
+  )
+
+  one_draw <- matrix(c(1, 2), nrow = 1)
+  colnames(one_draw) <- c("A", "B")
+  expect_error(
+    pairwiseLLM:::compute_adjacent_certainty(one_draw, c("A", "B")),
+    "at least two draws"
+  )
+
+  missing_cols <- matrix(c(1, 2, 3, 4), nrow = 2)
+  expect_error(
+    pairwiseLLM:::compute_adjacent_certainty(missing_cols, c("A", "B")),
+    "non-empty column names"
+  )
+
+  valid_draws <- matrix(c(2, 1, 2, 1), nrow = 2, byrow = TRUE)
+  colnames(valid_draws) <- c("A", "B")
+  expect_error(
+    pairwiseLLM:::compute_adjacent_certainty(valid_draws, "A"),
+    "at least two ids"
+  )
+  expect_error(
+    pairwiseLLM:::compute_adjacent_certainty(valid_draws, c("A", "A")),
+    "must not contain duplicates"
+  )
+  expect_error(
+    pairwiseLLM:::compute_adjacent_certainty(valid_draws, c("A", "C")),
+    "must match"
+  )
+})
+
+test_that("compute_Umax validates utility inputs and all-missing case", {
+  expect_error(
+    pairwiseLLM:::compute_Umax(matrix(1, nrow = 1)),
+    "data frame"
+  )
+  expect_error(
+    pairwiseLLM:::compute_Umax(tibble::tibble(utility_raw = "x")),
+    "must be numeric"
+  )
+
+  utilities <- tibble::tibble(utility_raw = c(NA_real_, NA_real_))
+  expect_warning(pairwiseLLM:::compute_Umax(utilities), "missing")
+  expect_equal(suppressWarnings(pairwiseLLM:::compute_Umax(utilities)), 0)
+})
+
+test_that("stopping_check validates CW and fast_fit inputs", {
+  state <- make_state_for_stopping()
+  state <- populate_state_counts(state, 2L)
+  state$config$CW <- 0L
+
+  expect_error(
+    pairwiseLLM:::stopping_check(
+      state,
+      fast_fit = list(theta_draws = matrix(0, nrow = 2, ncol = 2)),
+      ranking_ids = state$ids,
+      candidates = tibble::tibble(i_id = "A", j_id = "B"),
+      utilities_tbl = tibble::tibble(utility_raw = 0.2)
+    ),
+    "positive integer"
+  )
+
+  state$config$CW <- 1L
+  expect_error(
+    pairwiseLLM:::stopping_check(
+      state,
+      fast_fit = list(),
+      ranking_ids = state$ids,
+      candidates = tibble::tibble(i_id = "A", j_id = "B"),
+      utilities_tbl = tibble::tibble(utility_raw = 0.2)
+    ),
+    "theta_draws"
+  )
+})
+
 test_that("summarize_theta and summarize_ranks return MCMC summaries", {
   theta_draws <- matrix(
     c(1, 2, 3,
