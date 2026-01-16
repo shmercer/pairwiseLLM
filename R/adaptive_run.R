@@ -327,7 +327,7 @@
 
 .adaptive_run_stopping_checks <- function(state, adaptive, seed) {
   validate_state(state)
-  if (state$phase == "phase1") {
+  if (state$comparisons_observed < 1L) {
     return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
   }
 
@@ -346,7 +346,8 @@
 
   ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
   near_stop <- near_stop_from_state(state)
-  W <- select_window_size(state$N, phase = state$phase, near_stop = near_stop)
+  phase_for_window <- if (state$phase %in% c("phase2", "phase3")) state$phase else "phase2"
+  W <- select_window_size(state$N, phase = phase_for_window, near_stop = near_stop)
   candidates <- build_candidate_pairs(
     ranking_ids = ranking,
     W = W,
@@ -360,6 +361,9 @@
 
   utilities <- compute_pair_utility(fit$theta_draws, candidates)
   utilities <- apply_degree_penalty(utilities, state)
+  if (!is.finite(state$U0)) {
+    state$U0 <- as.double(compute_Umax(utilities))
+  }
 
   stop_out <- stopping_check(
     state = state,
@@ -369,8 +373,23 @@
     utilities_tbl = utilities
   )
   state <- stop_out$state
+  if (isTRUE(stop_out$condition_A) && isTRUE(stop_out$condition_B)) {
+    if (is.null(state$config$stop_candidate_at)) {
+      state$config$stop_candidate_at <- as.integer(state$last_check_at)
+      state$checks_passed_in_row <- as.integer(max(state$checks_passed_in_row, 1L))
+    } else if (state$last_check_at > state$config$stop_candidate_at) {
+      state$checks_passed_in_row <- as.integer(max(state$checks_passed_in_row, 2L))
+    }
+  } else {
+    state$config$stop_candidate_at <- NULL
+  }
 
-  if (!isTRUE(state$config$stop_confirmed) && state$checks_passed_in_row >= 2L) {
+  two_checks_passed <- isTRUE(state$checks_passed_in_row >= 2L)
+  if (!two_checks_passed && !is.null(state$config$stop_candidate_at)) {
+    two_checks_passed <- isTRUE(state$last_check_at > state$config$stop_candidate_at)
+  }
+
+  if (!isTRUE(state$config$stop_confirmed) && two_checks_passed) {
     last_attempt_at <- state$config$mcmc_attempted_at %||% -1L
     if (state$last_check_at > last_attempt_at) {
       mcmc_fit <- tryCatch(
@@ -1206,10 +1225,13 @@ adaptive_rank_resume <- function(
           output_dir = output_dir
         )
         submission_out$jobs <- batch_out$jobs
-        submission_out$registry <- batch_out$registry
+      submission_out$registry <- batch_out$registry
       submission_out$output_dir <- output_dir
     }
   }
+
+  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
+  state <- stop_out$state
 
   if (!is.null(state_path) && mode == "batch") {
     adaptive_state_save(state, state_path)

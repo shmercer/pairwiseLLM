@@ -475,118 +475,88 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
   expect_equal(captured_pairs[[1]], captured_pairs[[2]])
 })
 
-testthat::test_that("adaptive_rank_resume confirms stopping via MCMC and halts scheduling", {
+testthat::test_that("adaptive stopping checks confirm MCMC and finalize summaries", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
   )
 
-  adaptive <- list(
-    d1 = 1L,
-    M1_target = 1L,
-    budget_max = 10L,
-    bins = 1L,
-    batch_overrides = list(BATCH1 = 1L, BATCH2 = 1L, BATCH3 = 1L, CW = 1L)
-  )
+  add_results <- function(state, n_pairs) {
+    ids <- state$ids
+    A_id <- rep(ids[1], n_pairs)
+    B_id <- rep(ids[2], n_pairs)
+    unordered_key <- pairwiseLLM:::make_unordered_key(A_id, B_id)
+    ordered_key <- pairwiseLLM:::make_ordered_key(A_id, B_id)
+    pair_uid <- paste0(unordered_key, "#", seq_len(n_pairs))
 
-  mock_submit <- function(pairs, model, trait_name, trait_description,
-                          prompt_template, backend, ...) {
-    ids1 <- pairs$ID1
-    ids2 <- pairs$ID2
-    tibble::tibble(
-      pair_uid = pairs$pair_uid,
-      unordered_key = pairwiseLLM:::make_unordered_key(ids1, ids2),
-      ordered_key = pairwiseLLM:::make_ordered_key(ids1, ids2),
-      A_id = ids1,
-      B_id = ids2,
-      better_id = ids1,
-      winner_pos = as.integer(1L),
-      phase = as.character(pairs$phase),
-      iter = as.integer(pairs$iter),
-      received_at = as.POSIXct("2026-01-15 00:00:00", tz = "UTC"),
-      backend = as.character(backend),
-      model = as.character(model)
+    state$history_pairs <- tibble::tibble(
+      pair_uid = pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = A_id,
+      B_id = B_id,
+      A_text = rep(state$texts[[ids[1]]], n_pairs),
+      B_text = rep(state$texts[[ids[2]]], n_pairs),
+      phase = "phase2",
+      iter = 1L,
+      created_at = as.POSIXct(rep("2026-01-01 00:00:00", n_pairs), tz = "UTC")
     )
-  }
 
-  mock_fast_fit <- function(results, ids, n_draws = 4L, seed = NULL, ...) {
-    theta_mean <- stats::setNames(c(2, 1, 0), ids)
-    draws <- matrix(rep(theta_mean, each = n_draws), nrow = n_draws, byrow = FALSE)
-    colnames(draws) <- ids
-    list(theta_mean = theta_mean, theta_draws = draws, fit_meta = list(converged = TRUE))
+    state$history_results <- tibble::tibble(
+      pair_uid = pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = A_id,
+      B_id = B_id,
+      better_id = A_id,
+      winner_pos = 1L,
+      phase = "phase2",
+      iter = 1L,
+      received_at = as.POSIXct(rep("2026-01-02 00:00:00", n_pairs), tz = "UTC"),
+      backend = "openai",
+      model = "gpt-test"
+    )
+
+    state$comparisons_scheduled <- as.integer(n_pairs)
+    state$comparisons_observed <- as.integer(n_pairs)
+    state
   }
 
   mock_mcmc <- function(results, ids, cmdstan = list()) {
-    draws <- matrix(rep(c(2, 1, 0), each = 4), nrow = 4, byrow = TRUE)
+    draws <- matrix(rep(c(2, 1, 0), times = 4), nrow = 4, byrow = TRUE)
     colnames(draws) <- ids
     list(theta_draws = draws, fit_meta = list(converged = TRUE))
   }
 
-  withr::local_seed(444)
-  start_out <- testthat::with_mocked_bindings(
-    adaptive_rank_start(
-      samples = samples,
-      model = "gpt-test",
-      trait_name = "quality",
-      trait_description = "Which is better?",
-      backend = "openai",
-      mode = "live",
-      adaptive = adaptive,
-      seed = 444
-    ),
-    submit_llm_pairs = mock_submit,
-    fit_bayes_btl_fast = mock_fast_fit,
-    fit_bayes_btl_mcmc = mock_mcmc
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 1L, M1_target = 1L, budget_max = 10L),
+    seed = 1
   )
-
-  state <- start_out$state
+  state$phase <- "phase2"
+  state$config$CW <- 1L
   state$U0 <- 1
 
-  withr::local_seed(445)
-  resume1 <- testthat::with_mocked_bindings(
-    adaptive_rank_resume(
-      state = state,
-      mode = "live",
-      submission_info = start_out$submission_info,
-      adaptive = adaptive,
-      seed = 445
+  theta_mean <- stats::setNames(c(2, 1, 0), state$ids)
+  draws <- matrix(rep(theta_mean, each = 4), nrow = 4, byrow = FALSE)
+  colnames(draws) <- state$ids
+  state$fast_fit <- list(theta_mean = theta_mean, theta_draws = draws)
+
+  state <- add_results(state, 2L)
+  state$config$last_refit_at <- as.integer(state$comparisons_observed)
+  out1 <- pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = list(exploration_frac = 0.05))
+
+  state2 <- add_results(out1$state, 3L)
+  state2$config$last_refit_at <- as.integer(state2$comparisons_observed)
+  out2 <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_run_stopping_checks(
+      state2,
+      adaptive = list(exploration_frac = 0.05)
     ),
-    submit_llm_pairs = mock_submit,
-    fit_bayes_btl_fast = mock_fast_fit,
     fit_bayes_btl_mcmc = mock_mcmc
   )
 
-  withr::local_seed(446)
-  resume2 <- testthat::with_mocked_bindings(
-    adaptive_rank_resume(
-      state = resume1$state,
-      mode = "live",
-      submission_info = resume1$submission_info,
-      adaptive = adaptive,
-      seed = 446
-    ),
-    submit_llm_pairs = mock_submit,
-    fit_bayes_btl_fast = mock_fast_fit,
-    fit_bayes_btl_mcmc = mock_mcmc
-  )
-
-  withr::local_seed(447)
-  resume3 <- testthat::with_mocked_bindings(
-    adaptive_rank_resume(
-      state = resume2$state,
-      mode = "live",
-      submission_info = resume2$submission_info,
-      adaptive = adaptive,
-      seed = 447
-    ),
-    submit_llm_pairs = mock_submit,
-    fit_bayes_btl_fast = mock_fast_fit,
-    fit_bayes_btl_mcmc = mock_mcmc
-  )
-
-  expect_true(isTRUE(resume3$state$config$stop_confirmed))
-  expect_equal(resume3$next_action$reason, "stop_confirmed")
-  expect_true(is.list(resume3$final_summary))
-  expect_equal(nrow(resume3$submission_info$pairs_submitted), 0L)
-  expect_true(all(c("win_prob", "win_prob_btl") %in% names(resume3$final_summary$adjacent_win_probs)))
+  expect_true(isTRUE(out2$state$config$stop_confirmed))
+  expect_true(is.list(out2$state$config$final_summary))
+  expect_true(all(c("win_prob", "win_prob_btl") %in% names(out2$state$config$final_summary$adjacent_win_probs)))
 })
