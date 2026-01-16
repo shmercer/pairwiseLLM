@@ -325,6 +325,82 @@
   list(state = state, fit = state$fast_fit)
 }
 
+.adaptive_run_stopping_checks <- function(state, adaptive, seed) {
+  validate_state(state)
+  if (state$phase == "phase1") {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+
+  CW <- state$config$CW %||% floor(state$N / 2)
+  CW <- as.integer(CW)
+  if (is.na(CW) || CW < 1L) {
+    rlang::abort("`CW` must be a positive integer.")
+  }
+  if ((state$comparisons_observed - state$last_check_at) < CW) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+
+  fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = seed)
+  state <- fit_out$state
+  fit <- fit_out$fit
+
+  ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
+  near_stop <- near_stop_from_state(state)
+  W <- select_window_size(state$N, phase = state$phase, near_stop = near_stop)
+  candidates <- build_candidate_pairs(
+    ranking_ids = ranking,
+    W = W,
+    state = state,
+    exploration_frac = adaptive$exploration_frac,
+    seed = seed
+  )
+  if (nrow(candidates) == 0L) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+
+  utilities <- compute_pair_utility(fit$theta_draws, candidates)
+  utilities <- apply_degree_penalty(utilities, state)
+
+  stop_out <- stopping_check(
+    state = state,
+    fast_fit = fit,
+    ranking_ids = ranking,
+    candidates = candidates,
+    utilities_tbl = utilities
+  )
+  state <- stop_out$state
+
+  if (!isTRUE(state$config$stop_confirmed) && state$checks_passed_in_row >= 2L) {
+    last_attempt_at <- state$config$mcmc_attempted_at %||% -1L
+    if (state$last_check_at > last_attempt_at) {
+      mcmc_fit <- tryCatch(
+        fit_bayes_btl_mcmc(results = state$history_results, ids = state$ids),
+        error = function(e) e
+      )
+      state$config$mcmc_attempted_at <- as.integer(state$last_check_at)
+
+      if (inherits(mcmc_fit, "error")) {
+        state$config$mcmc_error <- conditionMessage(mcmc_fit)
+        rlang::warn(paste0("MCMC confirmation failed: ", conditionMessage(mcmc_fit)))
+      } else {
+        theta_draws <- mcmc_fit$theta_draws
+        ranking_ids <- names(sort(colMeans(theta_draws), decreasing = TRUE))
+        q_vals <- compute_adjacent_certainty(theta_draws, ranking_ids)
+        q_median <- stats::median(q_vals)
+        q_p10 <- as.double(stats::quantile(q_vals, probs = 0.1, names = FALSE))
+
+        if ((q_median > 0.95) && (q_p10 > 0.80)) {
+          state$config$stop_confirmed <- TRUE
+          state$config$final_summary <- finalize_adaptive_ranking(state, mcmc_fit)
+          state$config$mcmc_error <- NULL
+        }
+      }
+    }
+  }
+
+  list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed))
+}
+
 .adaptive_schedule_next_pairs <- function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
   validate_state(state)
   target_pairs <- as.integer(target_pairs)
@@ -332,6 +408,9 @@
     rlang::abort("`target_pairs` must be a non-negative integer.")
   }
   if (target_pairs == 0L) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+  if (isTRUE(state$config$stop_confirmed)) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
@@ -360,6 +439,10 @@
     state$phase <- "phase2"
   }
 
+  near_stop <- isTRUE(near_stop) || near_stop_from_state(state)
+  if (near_stop && state$phase == "phase2") {
+    state$phase <- "phase3"
+  }
   phase <- state$phase
   batch_size <- target_pairs
   iter <- as.integer(state$iter + 1L)
@@ -438,6 +521,9 @@
 }
 
 .adaptive_next_action <- function(state, scheduled_pairs) {
+  if (isTRUE(state$config$stop_confirmed)) {
+    return(list(action = "done", reason = "stop_confirmed"))
+  }
   if (state$comparisons_scheduled >= state$budget_max) {
     return(list(action = "done", reason = "budget_exhausted"))
   }
@@ -452,6 +538,9 @@
   if (is.null(batch_sizes)) {
     state <- .adaptive_get_batch_sizes(state, adaptive)
     batch_sizes <- state$config$batch_sizes
+  }
+  if (state$phase != "phase1" && near_stop_from_state(state)) {
+    state$phase <- "phase3"
   }
   if (state$phase == "phase3") {
     return(list(state = state, target = batch_sizes$BATCH3))
@@ -851,6 +940,9 @@ adaptive_rank_start <- function(
     }
   }
 
+  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
+  state <- stop_out$state
+
   if (mode == "batch" && !is.null(path_info$state_path)) {
     adaptive_state_save(state, path_info$state_path)
   }
@@ -859,7 +951,8 @@ adaptive_rank_start <- function(
     state = state,
     state_path = path_info$state_path,
     submission_info = submission_info,
-    next_action = .adaptive_next_action(state, nrow(pairs))
+    next_action = .adaptive_next_action(state, nrow(pairs)),
+    final_summary = state$config$final_summary %||% NULL
   )
 }
 
@@ -1010,13 +1103,18 @@ adaptive_rank_resume <- function(
     }
   }
 
+  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
+  state <- stop_out$state
+
   missing <- 0L
   if (!is.null(pairs_submitted) && nrow(pairs_submitted) > 0L) {
     observed_now <- sum(pairs_submitted$pair_uid %in% .adaptive_results_seen_names(state))
     missing <- nrow(pairs_submitted) - observed_now
   }
 
-  if (missing > 0L) {
+  if (isTRUE(state$config$stop_confirmed)) {
+    scheduled <- list(state = state, pairs = .adaptive_empty_pairs_tbl())
+  } else if (missing > 0L) {
     replacement_phase <- .adaptive_phase_scalar_from_pairs(pairs_submitted) %||% state$phase
     target <- .adaptive_replacement_target(missing, adaptive, nrow(pairs_submitted))
     scheduled <- .adaptive_schedule_replacement_pairs(
@@ -1122,7 +1220,8 @@ adaptive_rank_resume <- function(
     state_path = state_path,
     submission_info = submission_out,
     next_action = .adaptive_next_action(state, nrow(pairs)),
-    new_results = new_results
+    new_results = new_results,
+    final_summary = state$config$final_summary %||% NULL
   )
 }
 
