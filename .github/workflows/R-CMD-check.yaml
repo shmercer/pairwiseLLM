@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # macOS removed per request (will check via rhub manually)
+          - {os: macOS-latest, r: 'release'}
           - {os: windows-latest, r: 'release'}
           - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest,   r: 'release'}
@@ -41,6 +41,7 @@ jobs:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
+          extra-repositories: "https://stan-dev.r-universe.dev"
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
