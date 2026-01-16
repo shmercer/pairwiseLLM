@@ -26,7 +26,9 @@ summarize_theta <- function(theta_draws) {
     sd = as.double(apply(theta_draws, 2, stats::sd)),
     median = as.double(apply(theta_draws, 2, stats::median)),
     q05 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.05, names = FALSE)),
-    q95 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.95, names = FALSE))
+    q95 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.95, names = FALSE)),
+    q025 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.025, names = FALSE)),
+    q975 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.975, names = FALSE))
   )
 }
 
@@ -40,9 +42,12 @@ summarize_ranks <- function(theta_draws) {
   tibble::tibble(
     ID = ids,
     rank_mean = as.double(colMeans(rank_mat)),
+    rank_sd = as.double(apply(rank_mat, 2, stats::sd)),
     rank_median = as.double(apply(rank_mat, 2, stats::median)),
     rank_q05 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.05, names = FALSE)),
-    rank_q95 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.95, names = FALSE))
+    rank_q95 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.95, names = FALSE)),
+    rank_q025 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.025, names = FALSE)),
+    rank_q975 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.975, names = FALSE))
   )
 }
 
@@ -63,16 +68,19 @@ compute_adjacent_win_probs <- function(theta_draws, ranking_ids) {
 
   idx <- match(ranking_ids, ids)
   win_prob <- numeric(length(idx) - 1L)
+  win_prob_btl <- numeric(length(idx) - 1L)
   for (k in seq_len(length(win_prob))) {
     lhs <- theta_draws[, idx[k], drop = TRUE]
     rhs <- theta_draws[, idx[k + 1L], drop = TRUE]
     win_prob[k] <- mean(lhs > rhs)
+    win_prob_btl[k] <- mean(stats::plogis(lhs - rhs))
   }
 
   tibble::tibble(
     A_id = ranking_ids[-length(ranking_ids)],
     B_id = ranking_ids[-1L],
-    win_prob = as.double(win_prob)
+    win_prob = as.double(win_prob),
+    win_prob_btl = as.double(win_prob_btl)
   )
 }
 
