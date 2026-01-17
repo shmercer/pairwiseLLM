@@ -601,6 +601,7 @@ testthat::test_that("adaptive stopping checks confirm MCMC and finalize summarie
   )
   state$phase <- "phase2"
   state$config$CW <- 1L
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
   state$U0 <- 1
 
   theta_mean <- stats::setNames(c(2, 1, 0), state$ids)
