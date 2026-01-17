@@ -462,29 +462,21 @@ NULL
 
   state$mode <- "repair"
   state$repair_attempts <- as.integer((state$repair_attempts %||% 0L) + 1L)
-  max_cycles <- as.integer(config$repair_max_cycles %||% NA_integer_)
-  if (!is.na(max_cycles) && state$repair_attempts > max_cycles) {
+  max_cycles <- as.integer(config$repair_max_cycles)
+  if (state$repair_attempts > max_cycles) {
     state$mode <- "stopped"
     state$stop_reason <- "diagnostics_failed"
     rlang::warn("Diagnostics gate failed; repair limit exceeded. Stopping adaptive run.")
     return(list(state = state, diagnostics_pass = FALSE))
   }
 
-  if (!is.na(max_cycles)) {
-    rlang::warn(paste0(
-      "Diagnostics gate failed; entering repair mode (attempt ",
-      state$repair_attempts,
-      " of ",
-      max_cycles,
-      ")."
-    ))
-  } else {
-    rlang::warn(paste0(
-      "Diagnostics gate failed; entering repair mode (attempt ",
-      state$repair_attempts,
-      ")."
-    ))
-  }
+  rlang::warn(paste0(
+    "Diagnostics gate failed; entering repair mode (attempt ",
+    state$repair_attempts,
+    " of ",
+    max_cycles,
+    ")."
+  ))
 
   list(state = state, diagnostics_pass = FALSE)
 }
