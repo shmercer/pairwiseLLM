@@ -80,6 +80,11 @@ adaptive_v3_config <- function(N, ...) {
     is.list(overrides[[1L]]) &&
     is.null(names(overrides))) {
     overrides <- overrides[[1L]]
+  } else if (length(overrides) == 1L &&
+    is.null(names(overrides)) &&
+    !is.null(overrides[[1L]]) &&
+    !is.list(overrides[[1L]])) {
+    rlang::abort("`overrides` must be a list.")
   }
   if (is.null(overrides)) {
     overrides <- list()
