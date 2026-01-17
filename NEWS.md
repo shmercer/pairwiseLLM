@@ -1,3 +1,9 @@
+# pairwiseLLM 1.3.0 (unreleased)
+
+## Adaptive
+* Adaptive ranking entrypoints now validate v3 config/state contracts and may
+  error earlier for invalid inputs.
+
 # pairwiseLLM 1.2.0
 
 ## New Features
