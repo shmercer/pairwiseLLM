@@ -162,8 +162,8 @@ select_anchors_v3 <- function(theta_summary, state, config) {
   }
 
   edge_count <- min(floor(total / 2L), nrow(theta_summary))
-  top_ids <- head(top_order$item_id, edge_count)
-  bottom_ids <- head(bottom_order$item_id, edge_count)
+  top_ids <- utils::head(top_order$item_id, edge_count)
+  bottom_ids <- utils::head(bottom_order$item_id, edge_count)
   anchors <- unique(c(top_ids, bottom_ids))
 
   if (length(anchors) < total) {
@@ -176,7 +176,7 @@ select_anchors_v3 <- function(theta_summary, state, config) {
         drop = FALSE
       ]
       need <- total - length(anchors)
-      anchors <- c(anchors, head(remaining_tbl$item_id, need))
+      anchors <- c(anchors, utils::head(remaining_tbl$item_id, need))
     }
   }
 
@@ -188,6 +188,10 @@ select_anchors_v3 <- function(theta_summary, state, config) {
 enumerate_candidates_v3 <- function(anchors, theta_summary, state, config) {
   validate_state_v3(state, config)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
+
+  i <- NULL
+  j <- NULL
+  unordered_key <- NULL
 
   anchors <- unique(as.character(anchors))
   anchors <- anchors[anchors %in% theta_summary$item_id]
@@ -225,9 +229,9 @@ enumerate_candidates_v3 <- function(anchors, theta_summary, state, config) {
   unordered_key <- make_unordered_key(i_id, j_id)
   out <- tibble::tibble(i = i_id, j = j_id, unordered_key = unordered_key)
   out <- out[out$i != out$j, , drop = FALSE]
-  out <- dplyr::distinct(out, unordered_key, .keep_all = TRUE)
-  out <- dplyr::arrange(out, unordered_key)
-  out <- dplyr::select(out, i, j)
+  out <- dplyr::distinct(out, .data$unordered_key, .keep_all = TRUE)
+  out <- dplyr::arrange(out, .data$unordered_key)
+  out <- dplyr::select(out, .data$i, .data$j)
   tibble::as_tibble(out)
 }
 
@@ -239,6 +243,10 @@ generate_candidates_v3 <- function(theta_summary, state, config) {
   anchors <- select_anchors_v3(theta_summary, state, config)
   candidates <- enumerate_candidates_v3(anchors, theta_summary, state, config)
 
+  i <- NULL
+  j <- NULL
+  unordered_key <- NULL
+
   cap <- as.integer(config$C_max)
   if (is.na(cap) || cap < 1L) {
     rlang::abort("`config$C_max` must be a positive integer.")
@@ -248,9 +256,9 @@ generate_candidates_v3 <- function(theta_summary, state, config) {
       candidates,
       unordered_key = make_unordered_key(.data$i, .data$j)
     )
-    candidates <- dplyr::arrange(candidates, unordered_key)
+    candidates <- dplyr::arrange(candidates, .data$unordered_key)
     candidates <- dplyr::slice_head(candidates, n = cap)
-    candidates <- dplyr::select(candidates, i, j)
+    candidates <- dplyr::select(candidates, .data$i, .data$j)
   }
 
   tibble::as_tibble(candidates)

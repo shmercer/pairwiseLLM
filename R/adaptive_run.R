@@ -639,7 +639,6 @@ NULL
     return(.adaptive_schedule_repair_pairs(state, target_pairs, adaptive, seed = seed))
   }
 
-  ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
   config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates_v3(theta_summary, state, config_v3)
