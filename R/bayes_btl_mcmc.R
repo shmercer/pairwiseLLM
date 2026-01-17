@@ -133,12 +133,18 @@ fit_bayes_btl_mcmc <- function(
       core_fraction = 0.6
     )
 ) {
-  .btl_mcmc_require_cmdstanr()
-
   cmdstan <- cmdstan %||% list()
   if (!is.list(cmdstan)) {
     rlang::abort("`cmdstan` must be a list.")
   }
+  output_dir <- cmdstan$output_dir %||% NULL
+  if (!is.null(output_dir)) {
+    if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+      rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
+    }
+  }
+
+  .btl_mcmc_require_cmdstanr()
 
   prep <- .btl_mcmc_prepare_data(results, ids)
   data <- prep$data
@@ -149,7 +155,6 @@ fit_bayes_btl_mcmc <- function(
   iter_sampling <- as.integer(cmdstan$iter_sampling %||% 1000L)
   seed <- cmdstan$seed %||% NULL
   core_fraction <- cmdstan$core_fraction %||% 0.6
-  output_dir <- cmdstan$output_dir %||% NULL
   parallel_chains <- compute_core_budget(core_fraction = core_fraction, min_cores = 1L)
 
   if (any(is.na(c(chains, iter_warmup, iter_sampling))) || chains < 1L ||
