@@ -71,6 +71,11 @@ record_exposure <- function(state, A_id, B_id) {
 
   state$pos1[A_id] <- state$pos1[A_id] + 1L
   state$pos2[B_id] <- state$pos2[B_id] + 1L
+  if (is.null(state$pos_count)) {
+    state$pos_count <- state$pos1
+  } else {
+    state$pos_count[A_id] <- state$pos_count[A_id] + 1L
+  }
   state$deg[A_id] <- state$deg[A_id] + 1L
   state$deg[B_id] <- state$deg[B_id] + 1L
   state$imb <- state$pos1 - state$pos2
@@ -87,6 +92,7 @@ record_exposure <- function(state, A_id, B_id) {
   counts <- as.integer(counts)
   names(counts) <- count_names
   state$unordered_count <- counts
+  state$pair_count <- counts
 
   seen <- state$ordered_seen
   if (is.environment(seen)) {
@@ -99,6 +105,19 @@ record_exposure <- function(state, A_id, B_id) {
     seen[ordered_key] <- TRUE
     state$ordered_seen <- seen
   }
+
+  ordered_counts <- state$pair_ordered_count
+  if (is.null(ordered_counts) || length(ordered_counts) == 0L) {
+    ordered_counts <- integer()
+  }
+  if (is.null(names(ordered_counts)) || !ordered_key %in% names(ordered_counts)) {
+    ordered_counts[ordered_key] <- 0L
+  }
+  ordered_counts[ordered_key] <- ordered_counts[ordered_key] + 1L
+  ordered_names <- names(ordered_counts)
+  ordered_counts <- as.integer(ordered_counts)
+  names(ordered_counts) <- ordered_names
+  state$pair_ordered_count <- ordered_counts
 
   state
 }
