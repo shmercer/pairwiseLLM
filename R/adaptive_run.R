@@ -443,6 +443,97 @@ NULL
   list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed))
 }
 
+.adaptive_apply_diagnostics_gate <- function(state, fit, config, near_stop) {
+  diagnostics <- fit$diagnostics %||% NULL
+  if (is.null(diagnostics)) {
+    return(list(state = state, diagnostics_pass = TRUE))
+  }
+
+  diagnostics_pass <- diagnostics_gate_v3(fit, config, near_stop = near_stop)
+  if (isTRUE(diagnostics_pass)) {
+    if (!is.null(state$repair_attempts) && state$repair_attempts > 0L) {
+      state$repair_attempts <- 0L
+    }
+    if (identical(state$mode, "repair")) {
+      state$mode <- "adaptive"
+    }
+    return(list(state = state, diagnostics_pass = TRUE))
+  }
+
+  state$mode <- "repair"
+  state$repair_attempts <- as.integer((state$repair_attempts %||% 0L) + 1L)
+  max_cycles <- as.integer(config$repair_max_cycles %||% NA_integer_)
+  if (!is.na(max_cycles) && state$repair_attempts > max_cycles) {
+    state$mode <- "stopped"
+    state$stop_reason <- "diagnostics_failed"
+    rlang::warn("Diagnostics gate failed; repair limit exceeded. Stopping adaptive run.")
+    return(list(state = state, diagnostics_pass = FALSE))
+  }
+
+  if (!is.na(max_cycles)) {
+    rlang::warn(paste0(
+      "Diagnostics gate failed; entering repair mode (attempt ",
+      state$repair_attempts,
+      " of ",
+      max_cycles,
+      ")."
+    ))
+  } else {
+    rlang::warn(paste0(
+      "Diagnostics gate failed; entering repair mode (attempt ",
+      state$repair_attempts,
+      ")."
+    ))
+  }
+
+  list(state = state, diagnostics_pass = FALSE)
+}
+
+.adaptive_schedule_repair_pairs <- function(state, target_pairs, adaptive, seed) {
+  target_pairs <- as.integer(target_pairs)
+  if (is.na(target_pairs) || target_pairs < 0L) {
+    rlang::abort("`target_pairs` must be a non-negative integer.")
+  }
+  if (target_pairs == 0L) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+
+  phase <- state$phase
+  iter <- as.integer(state$iter + 1L)
+  seen_before <- state$unordered_count
+
+  out <- phase1_generate_pairs(
+    state = state,
+    n_pairs = target_pairs,
+    mix_struct = adaptive$mix_struct,
+    within_adj_split = adaptive$within_adj_split,
+    bins = adaptive$bins,
+    seed = seed
+  )
+
+  state <- out$state
+  pairs <- out$pairs
+  if (nrow(pairs) > 0L && !is.null(seen_before) && length(seen_before) > 0L) {
+    dup_counts <- seen_before[pairs$unordered_key]
+    dup_mask <- !is.na(dup_counts) & dup_counts > 0L
+    if (any(dup_mask)) {
+      rlang::warn("Repair batch generated duplicate comparisons due to constraints.")
+    }
+  }
+  if (nrow(pairs) > 0L) {
+    pairs$phase <- phase
+    pairs$iter <- iter
+    idx_start <- nrow(state$history_pairs) - nrow(pairs) + 1L
+    idx <- seq.int(idx_start, nrow(state$history_pairs))
+    state$history_pairs$phase[idx] <- phase
+    state$history_pairs$iter[idx] <- iter
+    state$iter <- iter
+  }
+  state$mode <- "repair"
+
+  list(state = state, pairs = pairs)
+}
+
 .adaptive_schedule_next_pairs <- function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
   validate_state(state)
   target_pairs <- as.integer(target_pairs)
@@ -453,6 +544,9 @@ NULL
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
   if (isTRUE(state$config$stop_confirmed)) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+  if (identical(state$mode, "stopped")) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
@@ -493,6 +587,15 @@ NULL
   fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size, seed)
   state <- fit_out$state
   fit <- fit_out$fit
+
+  gate_out <- .adaptive_apply_diagnostics_gate(state, fit, state$config$v3, near_stop = near_stop)
+  state <- gate_out$state
+  if (identical(state$mode, "stopped")) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+  if (!isTRUE(gate_out$diagnostics_pass)) {
+    return(.adaptive_schedule_repair_pairs(state, target_pairs, adaptive, seed = seed))
+  }
 
   ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
   W <- select_window_size(state$N, phase = phase, near_stop = near_stop)
@@ -564,6 +667,14 @@ NULL
 }
 
 .adaptive_next_action <- function(state, scheduled_pairs) {
+  stop_reason <- state$stop_reason %||% NA_character_
+  if (identical(state$mode, "stopped") &&
+    is.character(stop_reason) &&
+    length(stop_reason) == 1L &&
+    !is.na(stop_reason) &&
+    nzchar(stop_reason)) {
+    return(list(action = "done", reason = stop_reason))
+  }
   if (isTRUE(state$config$stop_confirmed)) {
     return(list(action = "done", reason = "stop_confirmed"))
   }
@@ -1088,6 +1199,12 @@ adaptive_rank_resume <- function(
     state <- adaptive_state_load(state_path)
   }
   validate_state(state)
+  if (is.null(state$repair_attempts)) {
+    state$repair_attempts <- 0L
+  }
+  if (is.null(state$stop_reason)) {
+    state$stop_reason <- NA_character_
+  }
 
   adaptive <- .adaptive_merge_config(adaptive)
   v3_overrides <- .adaptive_v3_overrides_from_adaptive(state$N, adaptive)
