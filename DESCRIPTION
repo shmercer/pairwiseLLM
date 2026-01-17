@@ -59,6 +59,7 @@ Collate:
     'adaptive_constraints.R'
     'adaptive_phase1.R'
     'adaptive_refit.R'
+    'bayes_btl_mcmc_v3.R'
     'adaptive_v3_contracts.R'
     'adaptive_run.R'
     'adaptive_schemas.R'

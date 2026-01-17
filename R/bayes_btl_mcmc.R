@@ -133,12 +133,18 @@ fit_bayes_btl_mcmc <- function(
       core_fraction = 0.6
     )
 ) {
-  .btl_mcmc_require_cmdstanr()
-
   cmdstan <- cmdstan %||% list()
   if (!is.list(cmdstan)) {
     rlang::abort("`cmdstan` must be a list.")
   }
+  output_dir <- cmdstan$output_dir %||% NULL
+  if (!is.null(output_dir)) {
+    if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+      rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
+    }
+  }
+
+  .btl_mcmc_require_cmdstanr()
 
   prep <- .btl_mcmc_prepare_data(results, ids)
   data <- prep$data
@@ -169,6 +175,12 @@ fit_bayes_btl_mcmc <- function(
   )
   if (!is.null(seed)) {
     sample_args$seed <- seed
+  }
+  if (!is.null(output_dir)) {
+    if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+      rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
+    }
+    sample_args$output_dir <- output_dir
   }
 
   fit <- do.call(model$sample, sample_args)

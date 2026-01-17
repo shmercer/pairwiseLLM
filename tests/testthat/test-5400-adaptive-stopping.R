@@ -260,6 +260,7 @@ test_that("fit_bayes_btl_mcmc runs when CmdStan is available", {
     testthat::skip("CmdStan is not installed for MCMC test.")
   }
 
+  out_dir <- withr::local_tempdir()
   results <- tibble::tibble(
     pair_uid = "A:B#1",
     unordered_key = "A:B",
@@ -284,7 +285,8 @@ test_that("fit_bayes_btl_mcmc runs when CmdStan is available", {
         iter_warmup = 200,
         iter_sampling = 200,
         seed = 123,
-        core_fraction = 0.5
+        core_fraction = 0.5,
+        output_dir = out_dir
       )
     ),
     error = function(e) {
