@@ -34,6 +34,7 @@ Imports:
     utils
 Suggests:
     BradleyTerry2,
+    cmdstanr,
     EloChoice,
     future,
     future.apply,

@@ -46,7 +46,11 @@
       dplyr::mutate(ordered_occurrence_index = dplyr::row_number()) |>
       dplyr::ungroup() |>
       dplyr::mutate(
-        pair_uid = paste0(.data$unordered_key, "#", .data$unordered_occurrence_index),
+        pair_uid = ifelse(
+          !is.na(pair_uid_provided) & nzchar(pair_uid_provided),
+          pair_uid_provided,
+          paste0(.data$unordered_key, "#", .data$unordered_occurrence_index)
+        ),
         pair_uid_provided = pair_uid_provided
       )
   }
@@ -748,7 +752,11 @@
     dplyr::mutate(unordered_occurrence_index = dplyr::row_number()) |>
     dplyr::ungroup() |>
     dplyr::mutate(
-      pair_uid = paste0(.data$unordered_key, "#", .data$unordered_occurrence_index),
+      pair_uid = ifelse(
+        !is.na(pair_uid_provided) & nzchar(pair_uid_provided),
+        pair_uid_provided,
+        paste0(.data$unordered_key, "#", .data$unordered_occurrence_index)
+      ),
       pair_uid_provided = pair_uid_provided
     )
 

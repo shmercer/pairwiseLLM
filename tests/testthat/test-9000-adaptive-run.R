@@ -222,6 +222,62 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
   expect_equal(resume_out2$state$comparisons_observed, 4L)
 })
 
+testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 2L, M1_target = 1L, budget_max = 2L),
+    seed = 101
+  )
+
+  pairs_tbl <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase2",
+    iter = 1L,
+    created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+  )
+
+  empty_results <- pairwiseLLM:::.adaptive_empty_results_tbl()
+  empty_failed <- pairwiseLLM:::.adaptive_empty_failed_attempts_tbl()
+
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = state,
+      mode = "live",
+      submission_info = list(
+        backend = "openai",
+        model = "gpt-test",
+        trait_name = "quality",
+        trait_description = "Which is better?",
+        prompt_template = "template"
+      ),
+      seed = 101
+    ),
+    .adaptive_run_stopping_checks = function(state, adaptive, seed) {
+      list(state = state, stop_confirmed = FALSE)
+    },
+    .adaptive_schedule_next_pairs = function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
+      list(state = state, pairs = pairs_tbl)
+    },
+    .adaptive_submit_live = function(...) list(results = tibble::tibble()),
+    .adaptive_normalize_submission_output = function(...) {
+      list(results = empty_results, failed_attempts = empty_failed)
+    }
+  )
+
+  expect_equal(nrow(out$submission_info$pairs_submitted), 1L)
+})
+
 testthat::test_that("adaptive_rank_start stores submission options in state and reuse on resume", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C", "D"),
@@ -473,4 +529,90 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
   )
 
   expect_equal(captured_pairs[[1]], captured_pairs[[2]])
+})
+
+testthat::test_that("adaptive stopping checks confirm MCMC and finalize summaries", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+
+  add_results <- function(state, n_pairs) {
+    ids <- state$ids
+    A_id <- rep(ids[1], n_pairs)
+    B_id <- rep(ids[2], n_pairs)
+    unordered_key <- pairwiseLLM:::make_unordered_key(A_id, B_id)
+    ordered_key <- pairwiseLLM:::make_ordered_key(A_id, B_id)
+    pair_uid <- paste0(unordered_key, "#", seq_len(n_pairs))
+
+    state$history_pairs <- tibble::tibble(
+      pair_uid = pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = A_id,
+      B_id = B_id,
+      A_text = rep(state$texts[[ids[1]]], n_pairs),
+      B_text = rep(state$texts[[ids[2]]], n_pairs),
+      phase = "phase2",
+      iter = 1L,
+      created_at = as.POSIXct(rep("2026-01-01 00:00:00", n_pairs), tz = "UTC")
+    )
+
+    state$history_results <- tibble::tibble(
+      pair_uid = pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = A_id,
+      B_id = B_id,
+      better_id = A_id,
+      winner_pos = 1L,
+      phase = "phase2",
+      iter = 1L,
+      received_at = as.POSIXct(rep("2026-01-02 00:00:00", n_pairs), tz = "UTC"),
+      backend = "openai",
+      model = "gpt-test"
+    )
+
+    state$comparisons_scheduled <- as.integer(n_pairs)
+    state$comparisons_observed <- as.integer(n_pairs)
+    state
+  }
+
+  mock_mcmc <- function(results, ids, cmdstan = list()) {
+    draws <- matrix(rep(c(2, 1, 0), times = 4), nrow = 4, byrow = TRUE)
+    colnames(draws) <- ids
+    list(theta_draws = draws, fit_meta = list(converged = TRUE))
+  }
+
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 1L, M1_target = 1L, budget_max = 10L),
+    seed = 1
+  )
+  state$phase <- "phase2"
+  state$config$CW <- 1L
+  state$U0 <- 1
+
+  theta_mean <- stats::setNames(c(2, 1, 0), state$ids)
+  draws <- matrix(rep(theta_mean, each = 4), nrow = 4, byrow = FALSE)
+  colnames(draws) <- state$ids
+  state$fast_fit <- list(theta_mean = theta_mean, theta_draws = draws)
+
+  state <- add_results(state, 2L)
+  state$config$last_refit_at <- as.integer(state$comparisons_observed)
+  out1 <- pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = list(exploration_frac = 0.05))
+
+  state2 <- add_results(out1$state, 3L)
+  state2$config$last_refit_at <- as.integer(state2$comparisons_observed)
+  out2 <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_run_stopping_checks(
+      state2,
+      adaptive = list(exploration_frac = 0.05)
+    ),
+    fit_bayes_btl_mcmc = mock_mcmc
+  )
+
+  expect_true(isTRUE(out2$state$config$stop_confirmed))
+  expect_true(is.list(out2$state$config$final_summary))
+  expect_true(all(c("win_prob", "win_prob_btl") %in% names(out2$state$config$final_summary$adjacent_win_probs)))
 })

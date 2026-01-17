@@ -47,14 +47,41 @@ A list with:
 \description{
 Resume from a saved or in-memory \code{adaptive_state}, ingesting only newly
 observed outcomes (using \code{pair_uid} to deduplicate) and scheduling the
-next batch of pairs. This function supports both live and batch modes.
+next batch of pairs. This function supports both live and batch modes and
+may need to be called multiple times until the run completes.
+}
+\details{
+Incremental ingestion is idempotent: results are filtered to previously
+unseen \code{pair_uid}s before updating \code{history_results}. This ensures
+that cumulative backend returns can be resumed safely without double-counting.
+Resume may schedule new comparisons if the budget and constraints allow.
 }
 \examples{
+# Minimal synthetic setup (no submission).
+samples <- tibble::tibble(
+  ID = c("S1", "S2", "S3"),
+  text = c("alpha", "bravo", "charlie")
+)
+state <- pairwiseLLM:::adaptive_state_new(
+  samples = samples,
+  config = list(d1 = 2L, M1_target = 2L, budget_max = 4L)
+)
+
 \dontrun{
+# Batch resume (state loaded from disk)
 resume_out <- adaptive_rank_resume(
   state_path = "adaptive_runs/adaptive_state.rds",
   mode = "batch",
   submission_info = batch_out$submission_info,
+  adaptive = list(per_item_cap = 3),
+  seed = 123
+)
+
+# Live resume (state kept in memory)
+resume_out <- adaptive_rank_resume(
+  state = start_out$state,
+  mode = "live",
+  submission_info = start_out$submission_info,
   adaptive = list(per_item_cap = 3),
   seed = 123
 )
