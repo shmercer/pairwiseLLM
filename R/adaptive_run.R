@@ -1,4 +1,5 @@
 #' @include adaptive_v3_contracts.R
+#' @include bayes_btl_mcmc_v3.R
 NULL
 
 # -------------------------------------------------------------------------
