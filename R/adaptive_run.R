@@ -409,8 +409,9 @@ NULL
   if (!isTRUE(state$config$stop_confirmed) && two_checks_passed) {
     last_attempt_at <- state$config$mcmc_attempted_at %||% -1L
     if (state$last_check_at > last_attempt_at) {
+      bt_data <- .btl_mcmc_v3_prepare_bt_data(state$history_results, state$ids)
       mcmc_fit <- tryCatch(
-        fit_bayes_btl_mcmc(results = state$history_results, ids = state$ids),
+        fit_bayes_btl_mcmc_v3(bt_data = bt_data, config = state$config$v3, seed = seed),
         error = function(e) e
       )
       state$config$mcmc_attempted_at <- as.integer(state$last_check_at)
@@ -419,7 +420,7 @@ NULL
         state$config$mcmc_error <- conditionMessage(mcmc_fit)
         rlang::warn(paste0("MCMC confirmation failed: ", conditionMessage(mcmc_fit)))
       } else {
-        theta_draws <- mcmc_fit$theta_draws
+        theta_draws <- .btl_mcmc_v3_theta_draws(mcmc_fit$draws, item_id = state$ids)
         ranking_ids <- names(sort(colMeans(theta_draws), decreasing = TRUE))
         q_vals <- compute_adjacent_certainty(theta_draws, ranking_ids)
         q_median <- stats::median(q_vals)
