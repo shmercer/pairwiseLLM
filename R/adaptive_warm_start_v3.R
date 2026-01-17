@@ -1,0 +1,144 @@
+# -------------------------------------------------------------------------
+# Adaptive warm-start v3 helpers
+# -------------------------------------------------------------------------
+
+.warm_start_validate_config <- function(ids, config) {
+  ids <- as.character(ids)
+  n_items <- length(ids)
+  if (n_items < 2L) {
+    rlang::abort("`ids` must contain at least 2 items.")
+  }
+  if (anyDuplicated(ids)) {
+    rlang::abort("`ids` must be unique.")
+  }
+
+  config <- config %||% list()
+  min_degree <- config$min_degree %||% 2L
+  if (!.adaptive_v3_intish(min_degree)) {
+    rlang::abort("`min_degree` must be an integer.")
+  }
+  min_degree <- as.integer(min_degree)
+  if (min_degree < 1L) {
+    rlang::abort("`min_degree` must be >= 1.")
+  }
+  if (n_items >= 3L && min_degree < 2L) {
+    rlang::abort("`min_degree` must be >= 2 for N >= 3.")
+  }
+  if (min_degree > (n_items - 1L)) {
+    rlang::abort("`min_degree` must be <= N - 1.")
+  }
+
+  target_mean_degree <- config$target_mean_degree %||% NULL
+  if (!is.null(target_mean_degree)) {
+    if (!is.numeric(target_mean_degree) || length(target_mean_degree) != 1L ||
+      !is.finite(target_mean_degree)) {
+      rlang::abort("`target_mean_degree` must be a finite numeric scalar.")
+    }
+    if (target_mean_degree <= 0) {
+      rlang::abort("`target_mean_degree` must be > 0.")
+    }
+    if (target_mean_degree > (n_items - 1L)) {
+      rlang::abort("`target_mean_degree` must be <= N - 1.")
+    }
+  }
+
+  list(
+    ids = ids,
+    n_items = n_items,
+    min_degree = min_degree,
+    target_mean_degree = target_mean_degree
+  )
+}
+
+#' @keywords internal
+#' @noRd
+warm_start_v3 <- function(ids, config) {
+  validated <- .warm_start_validate_config(ids, config)
+  ids <- validated$ids
+  n_items <- validated$n_items
+  min_degree <- validated$min_degree
+  target_mean_degree <- validated$target_mean_degree
+
+  deg <- stats::setNames(rep.int(0L, n_items), ids)
+  id_pos <- stats::setNames(seq_len(n_items), ids)
+  pairs_i <- character()
+  pairs_j <- character()
+  pair_keys <- character()
+
+  idx_next <- c(seq_len(n_items - 1L) + 1L, 1L)
+  for (idx in seq_len(n_items)) {
+    i_id <- ids[[idx]]
+    j_id <- ids[[idx_next[[idx]]]]
+    key <- make_unordered_key(i_id, j_id)
+    if (key %in% pair_keys) next
+
+    ordered <- if (id_pos[[i_id]] < id_pos[[j_id]]) {
+      c(i_id, j_id)
+    } else {
+      c(j_id, i_id)
+    }
+    pairs_i <- c(pairs_i, ordered[[1L]])
+    pairs_j <- c(pairs_j, ordered[[2L]])
+    pair_keys <- c(pair_keys, key)
+    deg[[i_id]] <- deg[[i_id]] + 1L
+    deg[[j_id]] <- deg[[j_id]] + 1L
+  }
+
+  if (min_degree > 2L) {
+    combos <- utils::combn(ids, 2L)
+    for (idx in seq_len(ncol(combos))) {
+      i_id <- combos[[1L, idx]]
+      j_id <- combos[[2L, idx]]
+      key <- make_unordered_key(i_id, j_id)
+      if (key %in% pair_keys) next
+      if (deg[[i_id]] < min_degree || deg[[j_id]] < min_degree) {
+        ordered <- if (id_pos[[i_id]] < id_pos[[j_id]]) {
+          c(i_id, j_id)
+        } else {
+          c(j_id, i_id)
+        }
+        pairs_i <- c(pairs_i, ordered[[1L]])
+        pairs_j <- c(pairs_j, ordered[[2L]])
+        pair_keys <- c(pair_keys, key)
+        deg[[i_id]] <- deg[[i_id]] + 1L
+        deg[[j_id]] <- deg[[j_id]] + 1L
+      }
+      if (all(deg >= min_degree)) break
+    }
+  }
+
+  if (any(deg < min_degree)) {
+    rlang::abort("Warm start failed to reach the requested `min_degree`.")
+  }
+
+  if (!is.null(target_mean_degree)) {
+    max_edges <- floor(target_mean_degree * n_items / 2)
+    max_edges <- min(max_edges, choose(n_items, 2L))
+    current_edges <- length(pair_keys)
+
+    if (max_edges > current_edges) {
+      combos <- utils::combn(ids, 2L)
+      for (idx in seq_len(ncol(combos))) {
+        if (current_edges >= max_edges) break
+        i_id <- combos[[1L, idx]]
+        j_id <- combos[[2L, idx]]
+        key <- make_unordered_key(i_id, j_id)
+        if (key %in% pair_keys) next
+        ordered <- if (id_pos[[i_id]] < id_pos[[j_id]]) {
+          c(i_id, j_id)
+        } else {
+          c(j_id, i_id)
+        }
+        pairs_i <- c(pairs_i, ordered[[1L]])
+        pairs_j <- c(pairs_j, ordered[[2L]])
+        pair_keys <- c(pair_keys, key)
+        current_edges <- current_edges + 1L
+      }
+    }
+  }
+
+  tibble::tibble(
+    i = as.character(pairs_i),
+    j = as.character(pairs_j)
+  )
+}
