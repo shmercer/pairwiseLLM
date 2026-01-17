@@ -12,7 +12,12 @@ testthat::test_that("btl mcmc v3 validates bt_data inputs", {
     "N` must be an integer >= 2"
   )
   expect_error(
-    pairwiseLLM:::.btl_mcmc_v3_validate_bt_data(list(A = 1L, B = 1L, Y = 1L, N = 2L)),
+    pairwiseLLM:::.btl_mcmc_v3_validate_bt_data(list(
+      A = integer(),
+      B = integer(),
+      Y = integer(),
+      N = 2L
+    )),
     "at least one comparison"
   )
   expect_error(
