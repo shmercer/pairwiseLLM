@@ -67,6 +67,7 @@ checkpoint and control polling.
 }
 \examples{
 \dontrun{
+# Full live loop with safety cap
 out <- adaptive_rank_run_live(
   samples = samples,
   model = "gpt-4.1",

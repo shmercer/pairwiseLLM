@@ -80,6 +80,42 @@ testthat::test_that("adaptive_run helpers handle seen results and ingestion", {
   expect_equal(nrow(ingest_warn$new_results), 0L)
 })
 
+testthat::test_that("adaptive_run helpers convert pairs and update seen list", {
+  pairs_tbl <- tibble::tibble(
+    A_id = factor("A"),
+    B_id = factor("B"),
+    A_text = "alpha",
+    B_text = "bravo",
+    pair_uid = "A:B#1",
+    phase = "phase1",
+    iter = 0L
+  )
+
+  submit_tbl <- pairwiseLLM:::.adaptive_pairs_to_submit_tbl(pairs_tbl)
+  expect_equal(
+    names(submit_tbl),
+    c("ID1", "text1", "ID2", "text2", "pair_uid", "phase", "iter")
+  )
+  expect_type(submit_tbl$ID1, "character")
+  expect_type(submit_tbl$text1, "character")
+  expect_type(submit_tbl$iter, "integer")
+
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("alpha", "bravo"))
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$results_seen <- list(existing = TRUE)
+  state <- pairwiseLLM:::.adaptive_results_seen_set(state, c("new", NA_character_, ""))
+  expect_true(isTRUE(state$results_seen[["new"]]))
+})
+
+testthat::test_that("adaptive_run results_seen sync returns early when populated", {
+  samples <- tibble::tibble(ID = c("A", "B"), text = c("alpha", "bravo"))
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$results_seen <- list(existing = TRUE)
+
+  out <- pairwiseLLM:::.adaptive_state_sync_results_seen(state)
+  expect_true(isTRUE(out$results_seen[["existing"]]))
+})
+
 testthat::test_that("adaptive_run normalization helper handles already-normalized input", {
   empty_out <- pairwiseLLM:::.adaptive_normalize_submission_output(
     raw = NULL,
@@ -132,6 +168,109 @@ testthat::test_that("adaptive_run normalization helper handles already-normalize
   )
 })
 
+testthat::test_that("adaptive_run stopping checks cover early and validation paths", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$config$stop_confirmed <- TRUE
+
+  out <- pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = list(), seed = 1)
+  expect_true(isTRUE(out$stop_confirmed))
+
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC"),
+    backend = "openai",
+    model = "gpt-test"
+  )
+  state$history_pairs <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase2",
+    iter = 1L,
+    created_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
+  )
+  state$comparisons_observed <- 1L
+  state$comparisons_scheduled <- 1L
+  state$last_check_at <- 0L
+  state$config$CW <- 0L
+
+  expect_error(
+    pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = list(), seed = 1),
+    "positive integer"
+  )
+})
+
+testthat::test_that("adaptive_run stopping checks return when no candidates", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC"),
+    backend = "openai",
+    model = "gpt-test"
+  )
+  state$history_pairs <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase2",
+    iter = 1L,
+    created_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
+  )
+  state$comparisons_observed <- 1L
+  state$comparisons_scheduled <- 1L
+  state$last_check_at <- 0L
+  state$config$CW <- 1L
+
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = list(), seed = 1),
+    .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
+      list(
+        state = state,
+        fit = list(
+          theta_mean = stats::setNames(c(0, 0, 0), state$ids),
+          theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids))
+        )
+      )
+    },
+    compute_ranking_from_theta_mean = function(theta_mean, state) state$ids,
+    select_window_size = function(N, phase, near_stop) 1L,
+    build_candidate_pairs = function(...) tibble::tibble()
+  )
+  expect_false(isTRUE(out$stop_confirmed))
+})
+
 testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
@@ -162,6 +301,24 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
     build_candidate_pairs = function(...) tibble::tibble()
   )
   expect_equal(nrow(no_candidates$pairs), 0L)
+})
+
+testthat::test_that("adaptive_run scheduling helpers cover stop and budget branches", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 2)
+  adaptive <- list(bins = 2L)
+
+  state$config$stop_confirmed <- TRUE
+  stop_out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1)
+  expect_equal(nrow(stop_out$pairs), 0L)
+
+  state$config$stop_confirmed <- FALSE
+  state$comparisons_scheduled <- state$budget_max
+  budget_out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1)
+  expect_equal(nrow(budget_out$pairs), 0L)
 })
 
 testthat::test_that("adaptive_run helpers cover target selection and replacements", {
@@ -221,6 +378,33 @@ testthat::test_that("adaptive_run helpers cover target selection and replacement
     }
   )
   expect_equal(nrow(replacement_non_phase1$pairs), 0L)
+})
+
+testthat::test_that("adaptive_run next_action covers stop confirmed", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 9)
+  state$config$stop_confirmed <- TRUE
+
+  done_stop <- pairwiseLLM:::.adaptive_next_action(state, scheduled_pairs = 1L)
+  expect_equal(done_stop$reason, "stop_confirmed")
+})
+
+testthat::test_that("adaptive_run schedule_target moves to phase3 when near stop", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 10)
+  state$phase <- "phase2"
+  state$stop_candidate <- TRUE
+  state$config$batch_sizes <- list(BATCH1 = 1L, BATCH2 = 2L, BATCH3 = 3L)
+
+  target <- pairwiseLLM:::.adaptive_schedule_target(state, adaptive = list())
+  expect_equal(target$target, 3L)
+  expect_equal(target$state$phase, "phase3")
 })
 
 testthat::test_that("adaptive_run helper error paths cover missing refit state", {
@@ -324,6 +508,36 @@ testthat::test_that("adaptive_run replacement loop handles edge cases", {
     base_batch_size = 1L
   )
   expect_equal(length(out2$submissions), 0L)
+})
+
+testthat::test_that("adaptive_run replacement loop defaults refill rounds", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 11)
+  adaptive <- list(max_refill_rounds = NA_integer_)
+
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_run_replacements_live(
+      state = state,
+      model = "gpt-test",
+      trait_name = "quality",
+      trait_description = "Which is better?",
+      prompt_template = "template",
+      backend = "openai",
+      adaptive = adaptive,
+      submission = list(),
+      missing = 1L,
+      seed = 1,
+      replacement_phase = "phase1",
+      base_batch_size = 1L
+    ),
+    .adaptive_schedule_replacement_pairs = function(...) {
+      list(state = state, pairs = pairwiseLLM:::.adaptive_empty_pairs_tbl())
+    }
+  )
+  expect_equal(length(out$submissions), 0L)
 })
 
 testthat::test_that("adaptive_rank_resume and run_live cover error and branch paths", {

@@ -262,10 +262,26 @@
   }
   failed_attempts <- tibble::as_tibble(failed_attempts)
   if (!"phase" %in% names(failed_attempts)) {
-    failed_attempts$phase <- if (is.null(phase)) NA_character_ else as.character(phase)
+    failed_attempts$phase <- NA_character_
   }
   if (!"iter" %in% names(failed_attempts)) {
-    failed_attempts$iter <- if (is.null(iter)) NA_integer_ else as.integer(iter)
+    failed_attempts$iter <- NA_integer_
+  }
+  if (!is.null(phase)) {
+    failed_attempts$phase <- ifelse(
+      is.na(failed_attempts$phase) | failed_attempts$phase == "",
+      as.character(phase),
+      failed_attempts$phase
+    )
+  }
+  if (!is.null(iter)) {
+    failed_attempts$iter <- ifelse(
+      is.na(failed_attempts$iter),
+      as.integer(iter),
+      as.integer(failed_attempts$iter)
+    )
+  } else {
+    failed_attempts$iter <- as.integer(failed_attempts$iter)
   }
   validate_failed_attempts_tbl(failed_attempts)
   state$failed_attempts <- dplyr::bind_rows(state$failed_attempts, failed_attempts)
@@ -309,6 +325,101 @@
   list(state = state, fit = state$fast_fit)
 }
 
+.adaptive_run_stopping_checks <- function(state, adaptive, seed) {
+  validate_state(state)
+  if (state$comparisons_observed < 1L) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+
+  CW <- state$config$CW %||% floor(state$N / 2)
+  CW <- as.integer(CW)
+  if (is.na(CW) || CW < 1L) {
+    rlang::abort("`CW` must be a positive integer.")
+  }
+  if ((state$comparisons_observed - state$last_check_at) < CW) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+
+  fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = seed)
+  state <- fit_out$state
+  fit <- fit_out$fit
+
+  ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
+  near_stop <- near_stop_from_state(state)
+  phase_for_window <- if (state$phase %in% c("phase2", "phase3")) state$phase else "phase2"
+  W <- select_window_size(state$N, phase = phase_for_window, near_stop = near_stop)
+  candidates <- build_candidate_pairs(
+    ranking_ids = ranking,
+    W = W,
+    state = state,
+    exploration_frac = adaptive$exploration_frac,
+    seed = seed
+  )
+  if (nrow(candidates) == 0L) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+
+  utilities <- compute_pair_utility(fit$theta_draws, candidates)
+  utilities <- apply_degree_penalty(utilities, state)
+  if (!is.finite(state$U0)) {
+    state$U0 <- as.double(compute_Umax(utilities))
+  }
+
+  stop_out <- stopping_check(
+    state = state,
+    fast_fit = fit,
+    ranking_ids = ranking,
+    candidates = candidates,
+    utilities_tbl = utilities
+  )
+  state <- stop_out$state
+  if (isTRUE(stop_out$condition_A) && isTRUE(stop_out$condition_B)) {
+    if (is.null(state$config$stop_candidate_at)) {
+      state$config$stop_candidate_at <- as.integer(state$last_check_at)
+      state$checks_passed_in_row <- as.integer(max(state$checks_passed_in_row, 1L))
+    } else if (state$last_check_at > state$config$stop_candidate_at) {
+      state$checks_passed_in_row <- as.integer(max(state$checks_passed_in_row, 2L))
+    }
+  } else {
+    state$config$stop_candidate_at <- NULL
+  }
+
+  two_checks_passed <- isTRUE(state$checks_passed_in_row >= 2L)
+  if (!two_checks_passed && !is.null(state$config$stop_candidate_at)) {
+    two_checks_passed <- isTRUE(state$last_check_at > state$config$stop_candidate_at)
+  }
+
+  if (!isTRUE(state$config$stop_confirmed) && two_checks_passed) {
+    last_attempt_at <- state$config$mcmc_attempted_at %||% -1L
+    if (state$last_check_at > last_attempt_at) {
+      mcmc_fit <- tryCatch(
+        fit_bayes_btl_mcmc(results = state$history_results, ids = state$ids),
+        error = function(e) e
+      )
+      state$config$mcmc_attempted_at <- as.integer(state$last_check_at)
+
+      if (inherits(mcmc_fit, "error")) {
+        state$config$mcmc_error <- conditionMessage(mcmc_fit)
+        rlang::warn(paste0("MCMC confirmation failed: ", conditionMessage(mcmc_fit)))
+      } else {
+        theta_draws <- mcmc_fit$theta_draws
+        ranking_ids <- names(sort(colMeans(theta_draws), decreasing = TRUE))
+        q_vals <- compute_adjacent_certainty(theta_draws, ranking_ids)
+        q_median <- stats::median(q_vals)
+        q_p10 <- as.double(stats::quantile(q_vals, probs = 0.1, names = FALSE))
+
+        if ((q_median > 0.95) && (q_p10 > 0.80)) {
+          state$config$stop_confirmed <- TRUE
+          state$config$final_summary <- finalize_adaptive_ranking(state, mcmc_fit)
+          state$config$mcmc_error <- NULL
+        }
+      }
+    }
+  }
+
+  list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed))
+}
+
 .adaptive_schedule_next_pairs <- function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
   validate_state(state)
   target_pairs <- as.integer(target_pairs)
@@ -316,6 +427,9 @@
     rlang::abort("`target_pairs` must be a non-negative integer.")
   }
   if (target_pairs == 0L) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+  if (isTRUE(state$config$stop_confirmed)) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
@@ -344,6 +458,10 @@
     state$phase <- "phase2"
   }
 
+  near_stop <- isTRUE(near_stop) || near_stop_from_state(state)
+  if (near_stop && state$phase == "phase2") {
+    state$phase <- "phase3"
+  }
   phase <- state$phase
   batch_size <- target_pairs
   iter <- as.integer(state$iter + 1L)
@@ -368,6 +486,9 @@
 
   utilities <- compute_pair_utility(fit$theta_draws, candidates)
   utilities <- apply_degree_penalty(utilities, state)
+  if (!is.finite(state$U0)) {
+    state$U0 <- as.double(compute_Umax(utilities))
+  }
   out <- select_pairs_from_candidates(
     state = state,
     utilities_tbl = utilities,
@@ -419,6 +540,9 @@
 }
 
 .adaptive_next_action <- function(state, scheduled_pairs) {
+  if (isTRUE(state$config$stop_confirmed)) {
+    return(list(action = "done", reason = "stop_confirmed"))
+  }
   if (state$comparisons_scheduled >= state$budget_max) {
     return(list(action = "done", reason = "budget_exhausted"))
   }
@@ -433,6 +557,9 @@
   if (is.null(batch_sizes)) {
     state <- .adaptive_get_batch_sizes(state, adaptive)
     batch_sizes <- state$config$batch_sizes
+  }
+  if (state$phase != "phase1" && near_stop_from_state(state)) {
+    state$phase <- "phase3"
   }
   if (state$phase == "phase3") {
     return(list(state = state, target = batch_sizes$BATCH3))
@@ -570,17 +697,36 @@
   list(state = state, submissions = submissions)
 }
 
-#' Start an adaptive ranking run
+#' Adaptive pairwise ranking with warm start and Bayesian refinement
 #'
-#' Initialize adaptive ranking, schedule Phase 1 pairs, and submit them in live
-#' or batch mode. Live mode submits immediately and ingests observed outcomes.
-#' Batch mode submits jobs, saves state, and returns resume metadata.
+#' Initialize an adaptive ranking run, schedule Phase 1 warm-start pairs, and
+#' submit them in live or batch mode. Live mode submits immediately and ingests
+#' observed outcomes. Batch mode submits jobs, saves state, and returns resume
+#' metadata for later polling. A single call may not complete the full run;
+#' use \code{adaptive_rank_resume()} to continue.
 #'
-#' This is the entry point for adaptive ranking. It creates an
-#' \code{adaptive_state} using the canonical schemas and schedules pairs using
-#' Phase 1 logic until \code{M1_target} is met, then switches to adaptive
-#' batches (Phase 2/3) on subsequent resumes. All results are normalized via
-#' the shared normalization helper to ensure schema consistency.
+#' @details
+#' Adaptive ranking proceeds in three phases: Phase 1 (warm start), Phase 2
+#' (adaptive refinement), and Phase 3 (near-stop polish). \code{adaptive_rank_start()}
+#' creates a fresh \code{adaptive_state}, schedules Phase 1 pairs up to the
+#' Phase 1 target, and submits those comparisons. \code{adaptive_rank_resume()}
+#' ingests newly observed results and schedules subsequent adaptive batches.
+#'
+#' Exposure and observation are distinct. Scheduled comparisons update exposure
+#' counters immediately (pairs, degrees, position counts), while observed
+#' outcomes are ingested only after a backend returns results. Failed attempts
+#' are logged separately and never treated as observations. This separation
+#' prevents retries or missing results from contaminating the ranking signal.
+#'
+#' The adaptive engine uses a confirmation window (CW) based on observed
+#' comparisons, along with a two-check confirmation rule, to decide when to
+#' stop refinement. Fast inference provides selection-grade posterior draws for
+#' adaptive selection and stopping checks. Final uncertainty summaries are
+#' produced only after the full MCMC audit.
+#'
+#' All LLM outputs are normalized into a single canonical results schema,
+#' independent of backend, and all downstream logic operates exclusively on
+#' this canonical form.
 #'
 #' @param samples A data frame or tibble with columns \code{ID} and \code{text}.
 #' @param model Model identifier for the selected backend.
@@ -596,13 +742,17 @@
 #' @param submission A list of arguments passed through to
 #'   \code{submit_llm_pairs()} (live) or \code{llm_submit_pairs_multi_batch()}
 #'   (batch). Common options include \code{endpoint}, \code{include_raw},
-#'   \code{batch_size}, and \code{n_segments}.
+#'   \code{batch_size}, and \code{n_segments}. The list is extensible in future
+#'   versions.
 #' @param adaptive A list of adaptive configuration overrides. Supported keys
-#'   include: \code{d1}, \code{bins}, \code{mix_struct},
-#'   \code{within_adj_split}, \code{exploration_frac}, \code{per_item_cap},
-#'   \code{n_draws_fast}, \code{batch_overrides}, \code{max_refill_rounds},
-#'   \code{max_replacements}, \code{max_iterations}, \code{budget_max}, and
-#'   \code{M1_target}.
+#'   include: \code{d1} (default 8), \code{bins} (8), \code{mix_struct} (0.70),
+#'   \code{within_adj_split} (0.50), \code{exploration_frac} (0.05),
+#'   \code{per_item_cap} (NULL), \code{n_draws_fast} (400),
+#'   \code{batch_overrides} (list), \code{max_refill_rounds} (2),
+#'   \code{max_replacements} (NULL), \code{max_iterations} (50),
+#'   \code{budget_max} (NULL; defaults to 0.40 * choose(N,2)), and
+#'   \code{M1_target} (NULL; defaults to floor(N * d1 / 2)). The list is
+#'   extensible in future versions.
 #' @param paths A list with optional \code{state_path} and \code{output_dir}.
 #'   For batch mode, \code{state_path} defaults to
 #'   \code{file.path(output_dir, "adaptive_state.rds")}.
@@ -617,25 +767,33 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
+#' # Minimal synthetic setup (no submission).
 #' samples <- tibble::tibble(
 #'   ID = c("S1", "S2", "S3", "S4"),
 #'   text = c("alpha", "bravo", "charlie", "delta")
 #' )
-#'
 #' td <- trait_description("overall_quality")
-#' tmpl <- set_prompt_template()
+#' adaptive_cfg <- list(d1 = 8, M1_target = 40)
 #'
+#' \dontrun{
 #' # Live start (submits immediately and ingests observed results)
 #' start_out <- adaptive_rank_start(
 #'   samples = samples,
 #'   model = "gpt-4.1",
 #'   trait_name = td$name,
 #'   trait_description = td$description,
-#'   prompt_template = tmpl,
 #'   backend = "openai",
 #'   mode = "live",
-#'   adaptive = list(d1 = 8, M1_target = 40),
+#'   adaptive = adaptive_cfg,
+#'   seed = 123
+#' )
+#'
+#' # Live resume (continues scheduling; may require multiple calls)
+#' resume_out <- adaptive_rank_resume(
+#'   state = start_out$state,
+#'   mode = "live",
+#'   submission_info = start_out$submission_info,
+#'   adaptive = adaptive_cfg,
 #'   seed = 123
 #' )
 #'
@@ -645,14 +803,30 @@
 #'   model = "gpt-4.1",
 #'   trait_name = td$name,
 #'   trait_description = td$description,
-#'   prompt_template = tmpl,
 #'   backend = "openai",
 #'   mode = "batch",
 #'   submission = list(batch_size = 1000, write_registry = TRUE),
 #'   paths = list(output_dir = "adaptive_runs"),
-#'   adaptive = list(d1 = 8, M1_target = 40),
+#'   adaptive = adaptive_cfg,
 #'   seed = 123
 #' )
+#'
+#' # Batch resume loop (poll until done)
+#' next_action <- batch_out$next_action
+#' state <- batch_out$state
+#' submission_info <- batch_out$submission_info
+#' while (identical(next_action$action, "resume")) {
+#'   res <- adaptive_rank_resume(
+#'     state = state,
+#'     mode = "batch",
+#'     submission_info = submission_info,
+#'     adaptive = adaptive_cfg,
+#'     seed = 123
+#'   )
+#'   state <- res$state
+#'   submission_info <- res$submission_info
+#'   next_action <- res$next_action
+#' }
 #' }
 #'
 #' @export
@@ -785,6 +959,9 @@ adaptive_rank_start <- function(
     }
   }
 
+  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
+  state <- stop_out$state
+
   if (mode == "batch" && !is.null(path_info$state_path)) {
     adaptive_state_save(state, path_info$state_path)
   }
@@ -793,7 +970,8 @@ adaptive_rank_start <- function(
     state = state,
     state_path = path_info$state_path,
     submission_info = submission_info,
-    next_action = .adaptive_next_action(state, nrow(pairs))
+    next_action = .adaptive_next_action(state, nrow(pairs)),
+    final_summary = state$config$final_summary %||% NULL
   )
 }
 
@@ -801,7 +979,14 @@ adaptive_rank_start <- function(
 #'
 #' Resume from a saved or in-memory \code{adaptive_state}, ingesting only newly
 #' observed outcomes (using \code{pair_uid} to deduplicate) and scheduling the
-#' next batch of pairs. This function supports both live and batch modes.
+#' next batch of pairs. This function supports both live and batch modes and
+#' may need to be called multiple times until the run completes.
+#'
+#' @details
+#' Incremental ingestion is idempotent: results are filtered to previously
+#' unseen \code{pair_uid}s before updating \code{history_results}. This ensures
+#' that cumulative backend returns can be resumed safely without double-counting.
+#' Resume may schedule new comparisons if the budget and constraints allow.
 #'
 #' @param state An \code{adaptive_state} object. If \code{NULL},
 #'   \code{state_path} must be provided.
@@ -826,11 +1011,31 @@ adaptive_rank_start <- function(
 #' }
 #'
 #' @examples
+#' # Minimal synthetic setup (no submission).
+#' samples <- tibble::tibble(
+#'   ID = c("S1", "S2", "S3"),
+#'   text = c("alpha", "bravo", "charlie")
+#' )
+#' state <- pairwiseLLM:::adaptive_state_new(
+#'   samples = samples,
+#'   config = list(d1 = 2L, M1_target = 2L, budget_max = 4L)
+#' )
+#'
 #' \dontrun{
+#' # Batch resume (state loaded from disk)
 #' resume_out <- adaptive_rank_resume(
 #'   state_path = "adaptive_runs/adaptive_state.rds",
 #'   mode = "batch",
 #'   submission_info = batch_out$submission_info,
+#'   adaptive = list(per_item_cap = 3),
+#'   seed = 123
+#' )
+#'
+#' # Live resume (state kept in memory)
+#' resume_out <- adaptive_rank_resume(
+#'   state = start_out$state,
+#'   mode = "live",
+#'   submission_info = start_out$submission_info,
 #'   adaptive = list(per_item_cap = 3),
 #'   seed = 123
 #' )
@@ -917,13 +1122,18 @@ adaptive_rank_resume <- function(
     }
   }
 
+  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
+  state <- stop_out$state
+
   missing <- 0L
   if (!is.null(pairs_submitted) && nrow(pairs_submitted) > 0L) {
     observed_now <- sum(pairs_submitted$pair_uid %in% .adaptive_results_seen_names(state))
     missing <- nrow(pairs_submitted) - observed_now
   }
 
-  if (missing > 0L) {
+  if (isTRUE(state$config$stop_confirmed)) {
+    scheduled <- list(state = state, pairs = .adaptive_empty_pairs_tbl())
+  } else if (missing > 0L) {
     replacement_phase <- .adaptive_phase_scalar_from_pairs(pairs_submitted) %||% state$phase
     target <- .adaptive_replacement_target(missing, adaptive, nrow(pairs_submitted))
     scheduled <- .adaptive_schedule_replacement_pairs(
@@ -1015,10 +1225,13 @@ adaptive_rank_resume <- function(
           output_dir = output_dir
         )
         submission_out$jobs <- batch_out$jobs
-        submission_out$registry <- batch_out$registry
+      submission_out$registry <- batch_out$registry
       submission_out$output_dir <- output_dir
     }
   }
+
+  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
+  state <- stop_out$state
 
   if (!is.null(state_path) && mode == "batch") {
     adaptive_state_save(state, state_path)
@@ -1029,7 +1242,8 @@ adaptive_rank_resume <- function(
     state_path = state_path,
     submission_info = submission_out,
     next_action = .adaptive_next_action(state, nrow(pairs)),
-    new_results = new_results
+    new_results = new_results,
+    final_summary = state$config$final_summary %||% NULL
   )
 }
 
@@ -1070,6 +1284,7 @@ adaptive_rank_resume <- function(
 #'
 #' @examples
 #' \dontrun{
+#' # Full live loop with safety cap
 #' out <- adaptive_rank_run_live(
 #'   samples = samples,
 #'   model = "gpt-4.1",
