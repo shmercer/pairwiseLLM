@@ -57,6 +57,7 @@ VignetteBuilder: knitr
 Collate: 
     'adaptive_candidates.R'
     'adaptive_constraints.R'
+    'adaptive_diagnostics.R'
     'adaptive_phase1.R'
     'adaptive_refit.R'
     'bayes_btl_mcmc_v3.R'

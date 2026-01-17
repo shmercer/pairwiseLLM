@@ -11,27 +11,33 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
   called <- new.env(parent = emptyenv())
   called$repair <- FALSE
 
-  out <- testthat::with_mocked_bindings(
-    pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1),
-    .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
-      list(
-        state = state,
-        fit = list(
-          theta_mean = stats::setNames(c(0, 0, 0), state$ids),
-          theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
-          diagnostics = list(divergences = 1L, max_rhat = 1.5, min_ess_bulk = 10)
-        )
+  out <- NULL
+  testthat::expect_warning(
+    {
+      out <- testthat::with_mocked_bindings(
+        pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1),
+        .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
+          list(
+            state = state,
+            fit = list(
+              theta_mean = stats::setNames(c(0, 0, 0), state$ids),
+              theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
+              diagnostics = list(divergences = 1L, max_rhat = 1.5, min_ess_bulk = 10)
+            )
+          )
+        },
+        diagnostics_gate_v3 = function(...) FALSE,
+        phase1_generate_pairs = function(state, n_pairs, mix_struct, within_adj_split, bins, seed) {
+          called$repair <- TRUE
+          list(state = state, pairs = pairwiseLLM:::.adaptive_empty_pairs_tbl())
+        },
+        compute_ranking_from_theta_mean = function(...) testthat::fail("Unexpected adaptive ranking call."),
+        select_window_size = function(...) testthat::fail("Unexpected adaptive window call."),
+        build_candidate_pairs = function(...) testthat::fail("Unexpected adaptive candidate call."),
+        select_pairs_from_candidates = function(...) testthat::fail("Unexpected adaptive selection call.")
       )
     },
-    diagnostics_gate_v3 = function(...) FALSE,
-    phase1_generate_pairs = function(state, n_pairs, mix_struct, within_adj_split, bins, seed) {
-      called$repair <- TRUE
-      list(state = state, pairs = pairwiseLLM:::.adaptive_empty_pairs_tbl())
-    },
-    compute_ranking_from_theta_mean = function(...) testthat::fail("Unexpected adaptive ranking call."),
-    select_window_size = function(...) testthat::fail("Unexpected adaptive window call."),
-    build_candidate_pairs = function(...) testthat::fail("Unexpected adaptive candidate call."),
-    select_pairs_from_candidates = function(...) testthat::fail("Unexpected adaptive selection call.")
+    "Diagnostics gate failed; entering repair mode"
   )
 
   expect_true(called$repair)
