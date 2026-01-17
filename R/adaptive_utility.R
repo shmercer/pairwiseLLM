@@ -11,23 +11,61 @@ logistic <- function(x) {
 #' @keywords internal
 #' @noRd
 .adaptive_epsilon_mean_from_state <- function(state, fit = NULL) {
+  prior_alpha <- NULL
+  prior_beta <- NULL
+  if (!is.null(state) && is.list(state$config) && is.list(state$config$v3)) {
+    prior_alpha <- state$config$v3$epsilon_prior_alpha %||% NULL
+    prior_beta <- state$config$v3$epsilon_prior_beta %||% NULL
+  }
+  if (is.null(prior_alpha) || is.null(prior_beta)) {
+    prior_alpha <- 2
+    prior_beta <- 20
+  }
+  if (!is.numeric(prior_alpha) || length(prior_alpha) != 1L || !is.finite(prior_alpha)) {
+    rlang::abort("`epsilon_prior_alpha` must be a finite numeric scalar.")
+  }
+  if (!is.numeric(prior_beta) || length(prior_beta) != 1L || !is.finite(prior_beta)) {
+    rlang::abort("`epsilon_prior_beta` must be a finite numeric scalar.")
+  }
+  if (prior_alpha <= 0 || prior_beta <= 0) {
+    rlang::abort("`epsilon_prior_alpha` and `epsilon_prior_beta` must be positive.")
+  }
+
   eps <- NULL
+  fit_requires_epsilon <- is.list(fit) &&
+    (!is.null(fit$epsilon_summary) || (!is.null(fit$draws) && !is.null(fit$diagnostics)))
   if (is.list(fit)) {
     eps_summary <- fit$epsilon_summary %||% NULL
-    if (is.data.frame(eps_summary) && "epsilon_mean" %in% names(eps_summary)) {
+    if (!is.null(eps_summary)) {
+      if (!is.data.frame(eps_summary)) {
+        rlang::abort("`fit$epsilon_summary` must be a tibble with one row.")
+      }
+      if (nrow(eps_summary) != 1L) {
+        rlang::abort("`fit$epsilon_summary` must have exactly one row (PR2 contract).")
+      }
+      if (!"epsilon_mean" %in% names(eps_summary)) {
+        rlang::abort("`fit$epsilon_summary` must include `epsilon_mean` (PR2 contract).")
+      }
       eps <- eps_summary$epsilon_mean[[1L]]
     } else if (!is.null(fit$epsilon_mean)) {
       eps <- fit$epsilon_mean
     }
   }
-  if (is.null(eps) && !is.null(state) && is.list(state$config) && is.list(state$config$v3)) {
-    eps <- state$config$v3$epsilon_mean %||% NULL
-  }
   if (is.null(eps) && !is.null(state) && is.list(state$posterior)) {
     eps <- state$posterior$epsilon_mean %||% NULL
   }
+  if (is.null(eps) && is.list(fit) && !is.null(fit$epsilon_mean)) {
+    eps <- fit$epsilon_mean
+  }
+  if (is.null(eps) && !is.null(state) && is.list(state$config) && is.list(state$config$v3)) {
+    eps <- state$config$v3$epsilon_mean %||% NULL
+  }
   if (is.null(eps)) {
-    eps <- 2 / 22
+    if (isTRUE(fit_requires_epsilon)) {
+      rlang::abort("`epsilon_mean` missing from fit output; check PR2 epsilon_summary contract.")
+    }
+    rlang::warn("Using epsilon prior mean fallback; no posterior epsilon available.")
+    eps <- prior_alpha / (prior_alpha + prior_beta)
   }
   if (!is.numeric(eps) || length(eps) != 1L || !is.finite(eps)) {
     rlang::abort("`epsilon_mean` must be a finite numeric scalar.")
