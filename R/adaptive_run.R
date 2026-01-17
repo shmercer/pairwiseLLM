@@ -362,21 +362,14 @@ NULL
   state <- fit_out$state
   fit <- fit_out$fit
 
-  ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
-  near_stop <- near_stop_from_state(state)
-  phase_for_window <- if (state$phase %in% c("phase2", "phase3")) state$phase else "phase2"
-  W <- select_window_size(state$N, phase = phase_for_window, near_stop = near_stop)
-  candidates <- build_candidate_pairs(
-    ranking_ids = ranking,
-    W = W,
-    state = state,
-    exploration_frac = adaptive$exploration_frac,
-    seed = seed
-  )
+  config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
+  theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+  candidates <- generate_candidates_v3(theta_summary, state, config_v3)
   if (nrow(candidates) == 0L) {
     return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
   }
 
+  candidates <- dplyr::rename(candidates, i_id = .data$i, j_id = .data$j)
   utilities <- compute_pair_utility(fit$theta_draws, candidates)
   utilities <- apply_degree_penalty(utilities, state)
   if (!is.finite(state$U0)) {
@@ -647,19 +640,15 @@ NULL
   }
 
   ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
-  W <- select_window_size(state$N, phase = phase, near_stop = near_stop)
-  candidates <- build_candidate_pairs(
-    ranking_ids = ranking,
-    W = W,
-    state = state,
-    exploration_frac = adaptive$exploration_frac,
-    seed = seed
-  )
+  config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
+  theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+  candidates <- generate_candidates_v3(theta_summary, state, config_v3)
 
   if (nrow(candidates) == 0L) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
+  candidates <- dplyr::rename(candidates, i_id = .data$i, j_id = .data$j)
   utilities <- compute_pair_utility(fit$theta_draws, candidates)
   utilities <- apply_degree_penalty(utilities, state)
   if (!is.finite(state$U0)) {
