@@ -274,6 +274,14 @@ validate_state_v3 <- function(state, config) {
   .adaptive_v3_check(state$mode %in% allowed_modes,
     paste0("`state$mode` must be one of: ", paste(allowed_modes, collapse = ", "), "."))
 
+  .adaptive_v3_check(is.integer(state$repair_attempts) && length(state$repair_attempts) == 1L,
+    "`state$repair_attempts` must be a length-1 integer.")
+  .adaptive_v3_check(state$repair_attempts >= 0L, "`state$repair_attempts` must be non-negative.")
+  if (!is.null(state$stop_reason)) {
+    .adaptive_v3_check(is.character(state$stop_reason) && length(state$stop_reason) == 1L,
+      "`state$stop_reason` must be a length-1 character value or NULL.")
+  }
+
   invisible(state)
 }
 
