@@ -29,6 +29,17 @@
   merged
 }
 
+.adaptive_v3_overrides_from_adaptive <- function(N, adaptive) {
+  adaptive <- adaptive %||% list()
+  defaults <- adaptive_v3_defaults(N)
+  overrides <- adaptive$v3 %||% list()
+  if (length(overrides) == 0L && is.list(adaptive)) {
+    known <- intersect(names(adaptive), names(defaults))
+    overrides <- adaptive[known]
+  }
+  overrides
+}
+
 .adaptive_check_string <- function(x, name) {
   if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) {
     rlang::abort(paste0("`", name, "` must be a non-empty character string."))
@@ -184,6 +195,7 @@
   new_results <- new_results[!duplicated(new_results$pair_uid), , drop = FALSE]
   state$history_results <- dplyr::bind_rows(state$history_results, new_results)
   state$comparisons_observed <- as.integer(nrow(state$history_results))
+  state$new_since_refit <- as.integer((state$new_since_refit %||% 0L) + nrow(new_results))
   state <- .adaptive_results_seen_set(state, new_results$pair_uid)
 
   list(state = state, new_results = new_results)
@@ -316,6 +328,8 @@
     )
     state$fast_fit <- fit
     state$config$last_refit_at <- as.integer(state$comparisons_observed)
+    state$last_refit_at <- as.integer(state$comparisons_observed)
+    state$new_since_refit <- 0L
   }
 
   if (is.null(state$fast_fit)) {
@@ -417,6 +431,10 @@
     }
   }
 
+  if (isTRUE(state$config$stop_confirmed)) {
+    state$mode <- "stopped"
+  }
+
   list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed))
 }
 
@@ -456,6 +474,7 @@
 
   if (state$phase == "phase1") {
     state$phase <- "phase2"
+    state$mode <- "adaptive"
   }
 
   near_stop <- isTRUE(near_stop) || near_stop_from_state(state)
@@ -851,6 +870,9 @@ adaptive_rank_start <- function(
 
   prompt_template <- prompt_template %||% set_prompt_template()
   adaptive <- .adaptive_merge_config(adaptive)
+  n_items <- nrow(tibble::as_tibble(samples))
+  v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
+  config_v3 <- adaptive_v3_config(n_items, v3_overrides)
   path_info <- .adaptive_prepare_paths(paths, submission, mode)
 
   config <- list(
@@ -860,6 +882,7 @@ adaptive_rank_start <- function(
   )
   state <- adaptive_state_new(samples, config = config, seed = seed)
   state$config$adaptive <- adaptive
+  state$config$v3 <- config_v3
   state$config$backend <- backend
   state$config$model <- model
   state$config$trait_name <- trait_name
@@ -870,6 +893,7 @@ adaptive_rank_start <- function(
   state <- .adaptive_merge_submission_options(state, submission)
   state <- .adaptive_get_batch_sizes(state, adaptive)
   state <- .adaptive_state_sync_results_seen(state)
+  validate_state_v3(state, config_v3)
 
   target_info <- .adaptive_schedule_target(state, adaptive)
   state <- target_info$state
@@ -1061,6 +1085,10 @@ adaptive_rank_resume <- function(
   validate_state(state)
 
   adaptive <- .adaptive_merge_config(adaptive)
+  v3_overrides <- .adaptive_v3_overrides_from_adaptive(state$N, adaptive)
+  config_v3 <- adaptive_v3_config(state$N, v3_overrides)
+  state$config$v3 <- config_v3
+  validate_state_v3(state, config_v3)
   state$config$adaptive <- utils::modifyList(state$config$adaptive %||% list(), adaptive)
   state <- .adaptive_merge_submission_options(state, submission)
   state <- .adaptive_get_batch_sizes(state, adaptive)
@@ -1315,6 +1343,9 @@ adaptive_rank_run_live <- function(
   if (!is.null(max_iterations)) {
     adaptive$max_iterations <- max_iterations
   }
+  n_items <- nrow(tibble::as_tibble(samples))
+  v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
+  adaptive_v3_config(n_items, v3_overrides)
   max_iterations <- as.integer(adaptive$max_iterations)
   if (is.na(max_iterations) || max_iterations < 1L) {
     rlang::abort("`max_iterations` must be a positive integer.")
