@@ -14,15 +14,12 @@ testthat::test_that("fit_bayes_btl_mcmc validates cmdstan output_dir", {
     model = "gpt-test"
   )
 
-  testthat::with_mocked_bindings(
-    expect_error(
-      pairwiseLLM:::fit_bayes_btl_mcmc(
-        results,
-        ids = c("A", "B"),
-        cmdstan = list(output_dir = c("a", "b"))
-      ),
-      "length-1 character path"
+  expect_error(
+    pairwiseLLM:::fit_bayes_btl_mcmc(
+      results,
+      ids = c("A", "B"),
+      cmdstan = list(output_dir = c("a", "b"))
     ),
-    .btl_mcmc_require_cmdstanr = function() TRUE
+    "length-1 character path"
   )
 })
