@@ -578,10 +578,20 @@ testthat::test_that("adaptive stopping checks confirm MCMC and finalize summarie
     state
   }
 
-  mock_mcmc <- function(results, ids, cmdstan = list()) {
+  mock_mcmc <- function(bt_data, config, seed = NULL) {
     draws <- matrix(rep(c(2, 1, 0), times = 4), nrow = 4, byrow = TRUE)
-    colnames(draws) <- ids
-    list(theta_draws = draws, fit_meta = list(converged = TRUE))
+    colnames(draws) <- bt_data$item_id
+    list(
+      draws = list(theta = draws, epsilon = rep(0.1, nrow(draws))),
+      theta_summary = tibble::tibble(),
+      epsilon_summary = tibble::tibble(),
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 100,
+        min_ess_tail = 100
+      )
+    )
   }
 
   state <- pairwiseLLM:::adaptive_state_new(
@@ -609,7 +619,7 @@ testthat::test_that("adaptive stopping checks confirm MCMC and finalize summarie
       state2,
       adaptive = list(exploration_frac = 0.05)
     ),
-    fit_bayes_btl_mcmc = mock_mcmc
+    fit_bayes_btl_mcmc_v3 = mock_mcmc
   )
 
   expect_true(isTRUE(out2$state$config$stop_confirmed))
