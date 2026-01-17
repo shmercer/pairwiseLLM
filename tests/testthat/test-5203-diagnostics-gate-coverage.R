@@ -199,7 +199,7 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
     generate_candidates_v3 = function(...) {
       tibble::tibble(i = "A", j = "B")
     },
-    compute_pair_utility = function(...) {
+    compute_pair_utility_v3 = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
