@@ -1,6 +1,8 @@
 test_that("validate_config_v3 rejects invalid fields", {
   cfg <- pairwiseLLM:::adaptive_v3_defaults(6)
 
+  expect_error(pairwiseLLM:::validate_config_v3(1), "config")
+
   bad_W <- cfg
   bad_W$W <- 0L
   expect_error(pairwiseLLM:::validate_config_v3(bad_W), "W")
@@ -12,6 +14,10 @@ test_that("validate_config_v3 rejects invalid fields", {
   bad_cap <- cfg
   bad_cap$hard_cap_frac <- 1.2
   expect_error(pairwiseLLM:::validate_config_v3(bad_cap), "hard_cap_frac")
+
+  bad_output <- cfg
+  bad_output$output_dir <- 123
+  expect_error(pairwiseLLM:::validate_config_v3(bad_output), "output_dir")
 })
 
 test_that("validate_state_v3 rejects inconsistent counters", {
@@ -35,4 +41,21 @@ test_that("validate_state_v3 rejects inconsistent counters", {
   state_bad <- state
   state_bad$mode <- "unknown"
   expect_error(pairwiseLLM:::validate_state_v3(state_bad, cfg), "state\\$mode")
+
+  expect_error(pairwiseLLM:::validate_state_v3(list(), cfg), "adaptive_state")
+  expect_error(pairwiseLLM:::validate_state_v3(state, "bad"), "config")
+})
+
+test_that("adaptive_v3_config normalizes overrides", {
+  cfg <- pairwiseLLM:::adaptive_v3_config(6, NULL)
+  expect_true(is.list(cfg))
+
+  expect_error(pairwiseLLM:::adaptive_v3_config(6, 1), "overrides")
+})
+
+test_that("adaptive_v3 tau function uses N scaling", {
+  cfg <- pairwiseLLM:::adaptive_v3_defaults(10)
+  tau <- cfg$tau_fn(10)
+  expect_true(is.numeric(tau))
+  expect_true(tau >= 0.8 && tau <= 3.0)
 })
