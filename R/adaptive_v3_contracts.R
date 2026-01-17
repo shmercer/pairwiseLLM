@@ -43,6 +43,8 @@ adaptive_v3_defaults <- function(N) {
   K_top <- .adaptive_v3_clamp(20L, 200L, .adaptive_v3_round_int(2 * W))
   U_abs <- .adaptive_v3_clamp(0.0015, 0.006, 0.004 * (30 / N)^0.25)
 
+  min_degree <- if (N < 3L) 1L else 2L
+
   list(
     N = N,
     W = as.integer(W),
@@ -51,6 +53,8 @@ adaptive_v3_defaults <- function(N) {
     refit_B = as.integer(refit_B),
     batch_size = as.integer(batch_size),
     explore_rate = as.double(explore_rate),
+    min_degree = as.integer(min_degree),
+    target_mean_degree = NULL,
     dup_p_margin = 0.10,
     dup_max_count = 6L,
     dup_utility_quantile = 0.90,
@@ -148,6 +152,7 @@ validate_config_v3 <- function(config) {
   required <- c(
     "N", "W", "A_anchors", "C_max",
     "refit_B", "batch_size", "explore_rate",
+    "min_degree", "target_mean_degree",
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
     "S_subset", "tau_fn", "K_top", "U_abs", "checks_passed_target",
@@ -168,6 +173,19 @@ validate_config_v3 <- function(config) {
   .adaptive_v3_check(.adaptive_v3_intish(config$batch_size) && config$batch_size >= 1L, "`batch_size` must be >= 1.")
   .adaptive_v3_check(is.numeric(config$explore_rate) && length(config$explore_rate) == 1L &&
     config$explore_rate >= 0 && config$explore_rate <= 1, "`explore_rate` must be in [0, 1].")
+  .adaptive_v3_check(.adaptive_v3_intish(config$min_degree) && config$min_degree >= 1L,
+    "`min_degree` must be >= 1.")
+  if (config$N >= 3L) {
+    .adaptive_v3_check(config$min_degree >= 2L, "`min_degree` must be >= 2 for N >= 3.")
+  }
+  .adaptive_v3_check(config$min_degree <= (config$N - 1L), "`min_degree` must be <= N - 1.")
+  if (!is.null(config$target_mean_degree)) {
+    .adaptive_v3_check(is.numeric(config$target_mean_degree) && length(config$target_mean_degree) == 1L &&
+      is.finite(config$target_mean_degree),
+    "`target_mean_degree` must be a finite numeric scalar or NULL.")
+    .adaptive_v3_check(config$target_mean_degree > 0, "`target_mean_degree` must be > 0.")
+    .adaptive_v3_check(config$target_mean_degree <= (config$N - 1L), "`target_mean_degree` must be <= N - 1.")
+  }
 
   .adaptive_v3_check(is.numeric(config$dup_p_margin) && length(config$dup_p_margin) == 1L &&
     config$dup_p_margin >= 0 && config$dup_p_margin <= 1, "`dup_p_margin` must be in [0, 1].")

@@ -11,6 +11,14 @@ test_that("validate_config_v3 rejects invalid fields", {
   bad_explore$explore_rate <- 1.2
   expect_error(pairwiseLLM:::validate_config_v3(bad_explore), "explore_rate")
 
+  bad_min_degree <- cfg
+  bad_min_degree$min_degree <- 1L
+  expect_error(pairwiseLLM:::validate_config_v3(bad_min_degree), "min_degree")
+
+  bad_target_degree <- cfg
+  bad_target_degree$target_mean_degree <- cfg$N + 1
+  expect_error(pairwiseLLM:::validate_config_v3(bad_target_degree), "target_mean_degree")
+
   bad_cap <- cfg
   bad_cap$hard_cap_frac <- 1.2
   expect_error(pairwiseLLM:::validate_config_v3(bad_cap), "hard_cap_frac")

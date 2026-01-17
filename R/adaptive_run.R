@@ -526,6 +526,79 @@ NULL
   list(state = state, pairs = pairs)
 }
 
+.adaptive_warm_start_order <- function(state, i_id, j_id, pair_index) {
+  imb_i <- state$imb[[i_id]]
+  imb_j <- state$imb[[j_id]]
+  if (imb_i > imb_j) {
+    return(list(A_id = j_id, B_id = i_id))
+  }
+  if (imb_j > imb_i) {
+    return(list(A_id = i_id, B_id = j_id))
+  }
+  if ((pair_index %% 2L) == 0L) {
+    return(list(A_id = j_id, B_id = i_id))
+  }
+  list(A_id = i_id, B_id = j_id)
+}
+
+.adaptive_schedule_warm_start <- function(state, config) {
+  warm_pairs <- warm_start_v3(state$ids, config)
+  warm_pairs <- tibble::as_tibble(warm_pairs)
+  if (nrow(warm_pairs) == 0L) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
+
+  budget_remaining <- as.integer(state$budget_max - state$comparisons_scheduled)
+  if (nrow(warm_pairs) > budget_remaining) {
+    rlang::abort("`budget_max` is too small for the warm-start schedule.")
+  }
+
+  created_at <- Sys.time()
+  rows <- vector("list", nrow(warm_pairs))
+
+  for (idx in seq_len(nrow(warm_pairs))) {
+    i_id <- as.character(warm_pairs$i[[idx]])
+    j_id <- as.character(warm_pairs$j[[idx]])
+    order <- .adaptive_warm_start_order(state, i_id, j_id, idx)
+    unordered_key <- make_unordered_key(order$A_id, order$B_id)
+    ordered_key <- make_ordered_key(order$A_id, order$B_id)
+    pair_uid <- pair_uid_from_state(state, unordered_key)
+
+    row <- tibble::tibble(
+      pair_uid = pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = order$A_id,
+      B_id = order$B_id,
+      A_text = state$texts[[order$A_id]],
+      B_text = state$texts[[order$B_id]],
+      phase = "phase1",
+      iter = 0L,
+      created_at = created_at
+    )
+
+    state <- record_exposure(state, order$A_id, order$B_id)
+    state$history_pairs <- dplyr::bind_rows(state$history_pairs, row)
+    state$comparisons_scheduled <- as.integer(state$comparisons_scheduled + 1L)
+    rows[[idx]] <- row
+  }
+
+  pairs_tbl <- dplyr::bind_rows(rows)
+  pairs_tbl <- tibble::as_tibble(pairs_tbl)
+  validate_pairs_tbl(pairs_tbl)
+  required <- c(
+    "pair_uid", "unordered_key", "ordered_key",
+    "A_id", "B_id", "A_text", "B_text",
+    "phase", "iter", "created_at"
+  )
+  pairs_tbl <- pairs_tbl[, c(required, setdiff(names(pairs_tbl), required)), drop = FALSE]
+
+  state$phase <- "phase2"
+  state$mode <- "adaptive"
+
+  list(state = state, pairs = pairs_tbl)
+}
+
 .adaptive_schedule_next_pairs <- function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
   validate_state(state)
   target_pairs <- as.integer(target_pairs)
@@ -548,24 +621,8 @@ NULL
   }
   target_pairs <- min(target_pairs, budget_remaining)
 
-  if (state$phase == "phase1" && state$comparisons_scheduled < state$M1_target) {
-    remaining <- as.integer(state$M1_target - state$comparisons_scheduled)
-    n_pairs <- min(target_pairs, remaining)
-    return(
-      phase1_generate_pairs(
-        state = state,
-        n_pairs = n_pairs,
-        mix_struct = adaptive$mix_struct,
-        within_adj_split = adaptive$within_adj_split,
-        bins = adaptive$bins,
-        seed = seed
-      )
-    )
-  }
-
-  if (state$phase == "phase1") {
-    state$phase <- "phase2"
-    state$mode <- "adaptive"
+  if (identical(state$mode, "warm_start") && identical(state$phase, "phase1")) {
+    return(.adaptive_schedule_warm_start(state, state$config$v3))
   }
 
   near_stop <- isTRUE(near_stop) || near_stop_from_state(state)
@@ -740,17 +797,6 @@ NULL
   replacement_phase <- as.character(replacement_phase)
   if (length(replacement_phase) != 1L || is.na(replacement_phase) || !nzchar(replacement_phase)) {
     rlang::abort("`replacement_phase` must be a non-empty character scalar.")
-  }
-  if (replacement_phase == "phase1") {
-    out <- phase1_generate_pairs(
-      state = state,
-      n_pairs = target_pairs,
-      mix_struct = adaptive$mix_struct,
-      within_adj_split = adaptive$within_adj_split,
-      bins = adaptive$bins,
-      seed = seed
-    )
-    return(out)
   }
   .adaptive_schedule_next_pairs(state, target_pairs, adaptive, seed = seed)
 }
