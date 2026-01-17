@@ -71,6 +71,7 @@ Collate:
     'api_keys.R'
     'bayes_btl_fast.R'
     'bayes_btl_mcmc.R'
+    'bayes_btl_mcmc_v3.R'
     'bayes_btl_summarize.R'
     'bt_helpers.R'
     'bt_model.R'
