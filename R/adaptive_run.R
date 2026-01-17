@@ -372,7 +372,8 @@ NULL
 
   names(candidates)[names(candidates) == "i"] <- "i_id"
   names(candidates)[names(candidates) == "j"] <- "j_id"
-  utilities <- compute_pair_utility(fit$theta_draws, candidates)
+  epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
+  utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
   utilities <- apply_degree_penalty(utilities, state)
   if (!is.finite(state$U0)) {
     state$U0 <- as.double(compute_Umax(utilities))
@@ -651,7 +652,8 @@ NULL
 
   names(candidates)[names(candidates) == "i"] <- "i_id"
   names(candidates)[names(candidates) == "j"] <- "j_id"
-  utilities <- compute_pair_utility(fit$theta_draws, candidates)
+  epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
+  utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
   utilities <- apply_degree_penalty(utilities, state)
   if (!is.finite(state$U0)) {
     state$U0 <- as.double(compute_Umax(utilities))

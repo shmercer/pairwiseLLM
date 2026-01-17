@@ -10,6 +10,228 @@ logistic <- function(x) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_epsilon_mean_from_state <- function(state, fit = NULL) {
+  prior_alpha <- NULL
+  prior_beta <- NULL
+  if (!is.null(state) && is.list(state$config) && is.list(state$config$v3)) {
+    prior_alpha <- state$config$v3$epsilon_prior_alpha %||% NULL
+    prior_beta <- state$config$v3$epsilon_prior_beta %||% NULL
+  }
+  if (is.null(prior_alpha) || is.null(prior_beta)) {
+    prior_alpha <- 2
+    prior_beta <- 20
+  }
+  if (!is.numeric(prior_alpha) || length(prior_alpha) != 1L || !is.finite(prior_alpha)) {
+    rlang::abort("`epsilon_prior_alpha` must be a finite numeric scalar.")
+  }
+  if (!is.numeric(prior_beta) || length(prior_beta) != 1L || !is.finite(prior_beta)) {
+    rlang::abort("`epsilon_prior_beta` must be a finite numeric scalar.")
+  }
+  if (prior_alpha <= 0 || prior_beta <= 0) {
+    rlang::abort("`epsilon_prior_alpha` and `epsilon_prior_beta` must be positive.")
+  }
+
+  eps <- NULL
+  fit_requires_epsilon <- is.list(fit) &&
+    (!is.null(fit$epsilon_summary) || (!is.null(fit$draws) && !is.null(fit$diagnostics)))
+  if (is.list(fit)) {
+    eps_summary <- fit$epsilon_summary %||% NULL
+    if (!is.null(eps_summary)) {
+      if (!is.data.frame(eps_summary)) {
+        rlang::abort("`fit$epsilon_summary` must be a tibble with one row.")
+      }
+      if (nrow(eps_summary) != 1L) {
+        rlang::abort("`fit$epsilon_summary` must have exactly one row (PR2 contract).")
+      }
+      if (!"epsilon_mean" %in% names(eps_summary)) {
+        rlang::abort("`fit$epsilon_summary` must include `epsilon_mean` (PR2 contract).")
+      }
+      eps <- eps_summary$epsilon_mean[[1L]]
+    } else if (!is.null(fit$epsilon_mean)) {
+      eps <- fit$epsilon_mean
+    }
+  }
+  if (is.null(eps) && !is.null(state) && is.list(state$posterior)) {
+    eps <- state$posterior$epsilon_mean %||% NULL
+  }
+  if (is.null(eps) && is.list(fit) && !is.null(fit$epsilon_mean)) {
+    eps <- fit$epsilon_mean
+  }
+  if (is.null(eps) && !is.null(state) && is.list(state$config) && is.list(state$config$v3)) {
+    eps <- state$config$v3$epsilon_mean %||% NULL
+  }
+  if (is.null(eps)) {
+    if (isTRUE(fit_requires_epsilon)) {
+      rlang::abort("`epsilon_mean` missing from fit output; check PR2 epsilon_summary contract.")
+    }
+    rlang::warn("Using epsilon prior mean fallback; no posterior epsilon available.")
+    eps <- prior_alpha / (prior_alpha + prior_beta)
+  }
+  if (!is.numeric(eps) || length(eps) != 1L || !is.finite(eps)) {
+    rlang::abort("`epsilon_mean` must be a finite numeric scalar.")
+  }
+  if (eps < 0 || eps > 1) {
+    rlang::abort("`epsilon_mean` must be in [0, 1].")
+  }
+  as.double(eps)
+}
+
+#' @keywords internal
+#' @noRd
+compute_pair_stats_from_draws_v3 <- function(draws, candidates) {
+  if (!is.matrix(draws) || !is.numeric(draws)) {
+    rlang::abort("`draws` must be a numeric matrix.")
+  }
+  if (nrow(draws) < 2L) {
+    rlang::abort("`draws` must have at least two draws.")
+  }
+  if (any(!is.finite(draws))) {
+    rlang::abort("`draws` must contain only finite values.")
+  }
+  ids <- colnames(draws)
+  if (is.null(ids) || any(is.na(ids)) || any(ids == "")) {
+    rlang::abort("`draws` must have non-empty column names.")
+  }
+
+  if (!is.data.frame(candidates)) {
+    rlang::abort("`candidates` must be a data frame or tibble.")
+  }
+  candidates <- tibble::as_tibble(candidates)
+
+  id_cols <- NULL
+  if (all(c("i_id", "j_id") %in% names(candidates))) {
+    id_cols <- c("i_id", "j_id")
+  } else if (all(c("i", "j") %in% names(candidates))) {
+    id_cols <- c("i", "j")
+  }
+  if (is.null(id_cols)) {
+    rlang::abort("`candidates` must include `i_id`/`j_id` or `i`/`j` columns.")
+  }
+
+  if (nrow(candidates) == 0L) {
+    return(tibble::tibble(
+      i = character(),
+      j = character(),
+      mean_d = double(),
+      var_d = double(),
+      p_mean = double()
+    ))
+  }
+
+  i_id <- as.character(candidates[[id_cols[[1L]]]])
+  j_id <- as.character(candidates[[id_cols[[2L]]]])
+  if (anyNA(i_id) || anyNA(j_id) || any(i_id == "") || any(j_id == "")) {
+    rlang::abort("`candidates` ids must be non-missing.")
+  }
+
+  missing_ids <- setdiff(unique(c(i_id, j_id)), ids)
+  if (length(missing_ids) > 0L) {
+    rlang::abort("`candidates` ids must be present in `draws`.")
+  }
+
+  i_idx <- match(i_id, ids)
+  j_idx <- match(j_id, ids)
+
+  diffs <- draws[, i_idx, drop = FALSE] - draws[, j_idx, drop = FALSE]
+  mean_d <- as.double(colMeans(diffs))
+  var_d <- as.double(apply(diffs, 2, stats::var))
+  p_mean <- as.double(colMeans(stats::plogis(diffs)))
+
+  if (any(!is.finite(mean_d)) || any(!is.finite(var_d)) || any(!is.finite(p_mean))) {
+    rlang::abort("Pair statistics must be finite.")
+  }
+
+  tibble::tibble(
+    i = i_id,
+    j = j_id,
+    mean_d = mean_d,
+    var_d = var_d,
+    p_mean = p_mean
+  )
+}
+
+#' @keywords internal
+#' @noRd
+utility_delta_var_p_v3 <- function(mean_d, var_d, epsilon_mean) {
+  if (!is.numeric(mean_d) || !is.numeric(var_d)) {
+    rlang::abort("`mean_d` and `var_d` must be numeric.")
+  }
+  if (length(mean_d) != length(var_d)) {
+    rlang::abort("`mean_d` and `var_d` must be the same length.")
+  }
+  if (length(mean_d) == 0L) {
+    return(double())
+  }
+  if (any(!is.finite(mean_d)) || any(!is.finite(var_d))) {
+    rlang::abort("`mean_d` and `var_d` must be finite.")
+  }
+  if (any(var_d < 0)) {
+    rlang::abort("`var_d` must be non-negative.")
+  }
+  if (!is.numeric(epsilon_mean) || length(epsilon_mean) != 1L || !is.finite(epsilon_mean)) {
+    rlang::abort("`epsilon_mean` must be a finite numeric scalar.")
+  }
+  if (epsilon_mean < 0 || epsilon_mean > 1) {
+    rlang::abort("`epsilon_mean` must be in [0, 1].")
+  }
+
+  p0 <- stats::plogis(mean_d)
+  slope <- (1 - epsilon_mean) * p0 * (1 - p0)
+  utility <- (slope^2) * var_d
+  utility[var_d == 0] <- 0
+
+  if (any(!is.finite(utility))) {
+    rlang::abort("Utility values must be finite.")
+  }
+  utility
+}
+
+#' @keywords internal
+#' @noRd
+compute_pair_utility_v3 <- function(draws, candidates, epsilon_mean) {
+  stats_tbl <- compute_pair_stats_from_draws_v3(draws, candidates)
+  if (nrow(stats_tbl) == 0L) {
+    return(tibble::tibble(
+      unordered_key = character(),
+      i_id = character(),
+      j_id = character(),
+      i = character(),
+      j = character(),
+      mean_d = double(),
+      var_d = double(),
+      p_mean = double(),
+      utility = double(),
+      utility_raw = double()
+    ))
+  }
+
+  utility <- utility_delta_var_p_v3(stats_tbl$mean_d, stats_tbl$var_d, epsilon_mean)
+  if (any(!is.finite(utility)) || any(utility < 0)) {
+    rlang::abort("Utility values must be finite and non-negative.")
+  }
+
+  unordered_key <- if (is.data.frame(candidates) && "unordered_key" %in% names(candidates)) {
+    as.character(candidates$unordered_key)
+  } else {
+    make_unordered_key(stats_tbl$i, stats_tbl$j)
+  }
+
+  tibble::tibble(
+    unordered_key = unordered_key,
+    i_id = stats_tbl$i,
+    j_id = stats_tbl$j,
+    i = stats_tbl$i,
+    j = stats_tbl$j,
+    mean_d = stats_tbl$mean_d,
+    var_d = stats_tbl$var_d,
+    p_mean = stats_tbl$p_mean,
+    utility = as.double(utility),
+    utility_raw = as.double(utility)
+  )
+}
+
+#' @keywords internal
+#' @noRd
 compute_pair_utility <- function(theta_draws, candidates) {
   if (!is.matrix(theta_draws) || !is.numeric(theta_draws)) {
     rlang::abort("`theta_draws` must be a numeric matrix.")
