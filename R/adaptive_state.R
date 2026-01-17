@@ -124,6 +124,8 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       last_refit_at = 0L,
       posterior = list(U_dup_threshold = NA_real_),
       mode = "warm_start",
+      repair_attempts = 0L,
+      stop_reason = NA_character_,
       seed = seed,
       config = config
     ),
