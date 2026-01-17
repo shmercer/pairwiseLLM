@@ -3,6 +3,7 @@ test_that("adaptive_v3_defaults includes required fields", {
   required <- c(
     "N", "W", "A_anchors", "C_max",
     "refit_B", "batch_size", "explore_rate",
+    "min_degree", "target_mean_degree",
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
     "S_subset", "tau_fn", "K_top", "U_abs", "checks_passed_target",

@@ -97,8 +97,8 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
   expect_equal(out$state$comparisons_scheduled, 5L)
   expect_equal(nrow(out$state$failed_attempts), 1L)
   expect_equal(length(out$submission_info$live_submissions), 2L)
-  expect_true(all(out$submission_info$live_submissions[[2]]$pairs$phase == "phase1"))
-  expect_true(all(out$submission_info$live_submissions[[2]]$pairs$iter == 0L))
+  expect_true(all(out$submission_info$live_submissions[[2]]$pairs$phase == "phase2"))
+  expect_true(all(out$submission_info$live_submissions[[2]]$pairs$iter == 1L))
 })
 
 testthat::test_that("adaptive_rank_resume ingests batch results incrementally", {
@@ -287,7 +287,7 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
   adaptive <- list(
     d1 = 2L,
     M1_target = 2L,
-    budget_max = 2L,
+    budget_max = 4L,
     bins = 2L,
     batch_overrides = list(BATCH1 = 2L)
   )
