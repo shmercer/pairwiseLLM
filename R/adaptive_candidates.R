@@ -54,6 +54,208 @@ select_window_size <- function(N, phase = c("phase2", "phase3"), near_stop = FAL
   as.integer(window)
 }
 
+.adaptive_v3_theta_summary <- function(theta_summary, state) {
+  if (!is.data.frame(theta_summary)) {
+    rlang::abort("`theta_summary` must be a data frame or tibble.")
+  }
+  theta_summary <- tibble::as_tibble(theta_summary)
+
+  id_col <- NULL
+  if ("item_id" %in% names(theta_summary)) {
+    id_col <- "item_id"
+  } else if ("ID" %in% names(theta_summary)) {
+    id_col <- "ID"
+  }
+  if (is.null(id_col)) {
+    rlang::abort("`theta_summary` must include an `item_id` column.")
+  }
+
+  required <- c(id_col, "theta_mean", "theta_sd")
+  missing <- setdiff(required, names(theta_summary))
+  if (length(missing) > 0L) {
+    rlang::abort(paste0(
+      "`theta_summary` is missing required columns: ",
+      paste(missing, collapse = ", "),
+      "."
+    ))
+  }
+
+  ids <- as.character(theta_summary[[id_col]])
+  if (anyNA(ids) || any(ids == "")) {
+    rlang::abort("`theta_summary$item_id` must be non-empty.")
+  }
+  if (anyDuplicated(ids)) {
+    rlang::abort("`theta_summary$item_id` must be unique.")
+  }
+  if (!setequal(ids, state$ids) || length(ids) != length(state$ids)) {
+    rlang::abort("`theta_summary$item_id` must match `state$ids`.")
+  }
+
+  theta_mean <- as.double(theta_summary$theta_mean)
+  theta_sd <- as.double(theta_summary$theta_sd)
+  if (length(theta_mean) != length(ids) || length(theta_sd) != length(ids)) {
+    rlang::abort("`theta_summary` columns must align with `item_id` length.")
+  }
+  if (anyNA(theta_mean) || anyNA(theta_sd)) {
+    rlang::abort("`theta_summary` must not include missing values.")
+  }
+
+  tibble::tibble(
+    item_id = ids,
+    theta_mean = theta_mean,
+    theta_sd = theta_sd,
+    deg = as.integer(state$deg[ids])
+  )
+}
+
+.adaptive_theta_summary_from_fit <- function(fit, state) {
+  if (!is.list(fit) || is.null(fit$theta_draws) || is.null(fit$theta_mean)) {
+    rlang::abort("`fit` must include `theta_draws` and `theta_mean`.")
+  }
+  theta_draws <- fit$theta_draws
+  if (!is.matrix(theta_draws) || !is.numeric(theta_draws)) {
+    rlang::abort("`fit$theta_draws` must be a numeric matrix.")
+  }
+  ids <- colnames(theta_draws)
+  if (is.null(ids) || any(is.na(ids)) || any(ids == "")) {
+    rlang::abort("`fit$theta_draws` must have non-empty column names.")
+  }
+  if (!setequal(ids, state$ids) || length(ids) != length(state$ids)) {
+    rlang::abort("`fit$theta_draws` columns must match `state$ids`.")
+  }
+  theta_mean <- fit$theta_mean
+  if (!is.numeric(theta_mean) || length(theta_mean) != length(state$ids)) {
+    rlang::abort("`fit$theta_mean` must be a numeric vector over `state$ids`.")
+  }
+  if (is.null(names(theta_mean))) {
+    names(theta_mean) <- ids
+  }
+  theta_mean <- as.double(theta_mean[state$ids])
+  theta_sd <- as.double(apply(theta_draws[, state$ids, drop = FALSE], 2, stats::sd))
+
+  tibble::tibble(
+    item_id = as.character(state$ids),
+    theta_mean = theta_mean,
+    theta_sd = theta_sd
+  )
+}
+
+#' @keywords internal
+#' @noRd
+select_anchors_v3 <- function(theta_summary, state, config) {
+  validate_state_v3(state, config)
+  theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
+
+  total <- min(as.integer(config$A_anchors), nrow(theta_summary))
+  if (is.na(total) || total < 1L) {
+    rlang::abort("`config$A_anchors` must be a positive integer.")
+  }
+  if (total == 0L) {
+    return(character())
+  }
+
+  top_order <- theta_summary[order(-theta_summary$theta_mean, theta_summary$item_id), , drop = FALSE]
+  bottom_order <- theta_summary[order(theta_summary$theta_mean, theta_summary$item_id), , drop = FALSE]
+
+  if (total == 1L) {
+    return(as.character(top_order$item_id[1L]))
+  }
+
+  edge_count <- min(floor(total / 2L), nrow(theta_summary))
+  top_ids <- head(top_order$item_id, edge_count)
+  bottom_ids <- head(bottom_order$item_id, edge_count)
+  anchors <- unique(c(top_ids, bottom_ids))
+
+  if (length(anchors) < total) {
+    remaining_ids <- setdiff(theta_summary$item_id, anchors)
+    if (length(remaining_ids) > 0L) {
+      remaining_tbl <- theta_summary[theta_summary$item_id %in% remaining_ids, , drop = FALSE]
+      remaining_tbl <- remaining_tbl[
+        order(-remaining_tbl$theta_sd, remaining_tbl$deg, remaining_tbl$item_id),
+        ,
+        drop = FALSE
+      ]
+      need <- total - length(anchors)
+      anchors <- c(anchors, head(remaining_tbl$item_id, need))
+    }
+  }
+
+  as.character(anchors)
+}
+
+#' @keywords internal
+#' @noRd
+enumerate_candidates_v3 <- function(anchors, theta_summary, state, config) {
+  validate_state_v3(state, config)
+  theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
+
+  anchors <- unique(as.character(anchors))
+  anchors <- anchors[anchors %in% theta_summary$item_id]
+  if (length(anchors) == 0L) {
+    return(tibble::tibble(i = character(), j = character()))
+  }
+
+  W <- as.integer(config$W)
+  if (is.na(W) || W < 1L) {
+    rlang::abort("`config$W` must be a positive integer.")
+  }
+
+  ord <- order(-theta_summary$theta_mean, theta_summary$item_id)
+  ranked_ids <- theta_summary$item_id[ord]
+  rank_vals <- seq_along(ranked_ids)
+  rank_map <- stats::setNames(rank_vals, ranked_ids)
+
+  i_vals <- character()
+  j_vals <- character()
+  for (anchor_id in anchors) {
+    anchor_rank <- rank_map[[anchor_id]]
+    window_ids <- names(rank_map)[abs(rank_map - anchor_rank) <= W]
+    window_ids <- window_ids[window_ids != anchor_id]
+    if (length(window_ids) == 0L) next
+    i_vals <- c(i_vals, rep(anchor_id, length(window_ids)))
+    j_vals <- c(j_vals, window_ids)
+  }
+
+  if (length(i_vals) == 0L) {
+    return(tibble::tibble(i = character(), j = character()))
+  }
+
+  i_id <- pmin(i_vals, j_vals)
+  j_id <- pmax(i_vals, j_vals)
+  unordered_key <- make_unordered_key(i_id, j_id)
+  out <- tibble::tibble(i = i_id, j = j_id, unordered_key = unordered_key)
+  out <- out[out$i != out$j, , drop = FALSE]
+  out <- dplyr::distinct(out, unordered_key, .keep_all = TRUE)
+  out <- dplyr::arrange(out, unordered_key)
+  out <- dplyr::select(out, i, j)
+  tibble::as_tibble(out)
+}
+
+#' @keywords internal
+#' @noRd
+generate_candidates_v3 <- function(theta_summary, state, config) {
+  validate_state_v3(state, config)
+  theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
+  anchors <- select_anchors_v3(theta_summary, state, config)
+  candidates <- enumerate_candidates_v3(anchors, theta_summary, state, config)
+
+  cap <- as.integer(config$C_max)
+  if (is.na(cap) || cap < 1L) {
+    rlang::abort("`config$C_max` must be a positive integer.")
+  }
+  if (nrow(candidates) > cap) {
+    candidates <- dplyr::mutate(
+      candidates,
+      unordered_key = make_unordered_key(.data$i, .data$j)
+    )
+    candidates <- dplyr::arrange(candidates, unordered_key)
+    candidates <- dplyr::slice_head(candidates, n = cap)
+    candidates <- dplyr::select(candidates, i, j)
+  }
+
+  tibble::as_tibble(candidates)
+}
+
 .adaptive_unordered_allowed <- function(state, i_id, j_id) {
   duplicate_allowed(state, i_id, j_id) || duplicate_allowed(state, j_id, i_id)
 }
