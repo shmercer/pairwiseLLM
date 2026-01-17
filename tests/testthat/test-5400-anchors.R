@@ -9,8 +9,8 @@ testthat::test_that("select_anchors_v3 prioritizes extremes and uncertainty", {
   state$config$v3 <- config
 
   deg <- c(3L, 2L, 2L, 2L, 4L, 1L, 2L, 2L)
-  state$pos1 <- as.integer(deg)
-  state$pos2 <- as.integer(rep(0L, length(deg)))
+  state$pos1 <- stats::setNames(as.integer(deg), state$ids)
+  state$pos2 <- stats::setNames(as.integer(rep(0L, length(deg))), state$ids)
   state$deg <- state$pos1 + state$pos2
   state$imb <- state$pos1 - state$pos2
 
