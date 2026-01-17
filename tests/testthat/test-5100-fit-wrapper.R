@@ -15,6 +15,7 @@ testthat::test_that("fit_bayes_btl_mcmc_v3 returns required outputs", {
     testthat::skip("CmdStan is not installed for MCMC test.")
   }
 
+  out_dir <- withr::local_tempdir()
   bt_data <- make_bt_data_v3()
   config <- pairwiseLLM:::adaptive_v3_config(
     bt_data$N,
@@ -24,7 +25,8 @@ testthat::test_that("fit_bayes_btl_mcmc_v3 returns required outputs", {
         chains = 2,
         iter_warmup = 50,
         iter_sampling = 50,
-        core_fraction = 0.5
+        core_fraction = 0.5,
+        output_dir = out_dir
       )
     )
   )

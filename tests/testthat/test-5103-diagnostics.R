@@ -5,6 +5,7 @@ testthat::test_that("fit_bayes_btl_mcmc_v3 returns diagnostics with required fie
     testthat::skip("CmdStan is not installed for MCMC test.")
   }
 
+  out_dir <- withr::local_tempdir()
   bt_data <- list(
     A = c(1L, 1L, 2L),
     B = c(2L, 3L, 3L),
@@ -20,7 +21,8 @@ testthat::test_that("fit_bayes_btl_mcmc_v3 returns diagnostics with required fie
         chains = 2,
         iter_warmup = 50,
         iter_sampling = 50,
-        core_fraction = 0.5
+        core_fraction = 0.5,
+        output_dir = out_dir
       )
     )
   )

@@ -274,6 +274,7 @@ fit_bayes_btl_mcmc_v3 <- function(bt_data, config, seed = NULL) {
   iter_warmup <- as.integer(cmdstan$iter_warmup %||% 1000L)
   iter_sampling <- as.integer(cmdstan$iter_sampling %||% 1000L)
   core_fraction <- cmdstan$core_fraction %||% 0.6
+  output_dir <- cmdstan$output_dir %||% NULL
   parallel_chains <- compute_core_budget(core_fraction = core_fraction, min_cores = 1L)
 
   if (any(is.na(c(chains, iter_warmup, iter_sampling))) || chains < 1L ||
@@ -294,6 +295,12 @@ fit_bayes_btl_mcmc_v3 <- function(bt_data, config, seed = NULL) {
   )
   if (!is.null(seed)) {
     sample_args$seed <- as.integer(seed)
+  }
+  if (!is.null(output_dir)) {
+    if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+      rlang::abort("`config$cmdstan$output_dir` must be a length-1 character path.")
+    }
+    sample_args$output_dir <- output_dir
   }
 
   fit <- do.call(model$sample, sample_args)
