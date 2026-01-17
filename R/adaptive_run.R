@@ -362,6 +362,7 @@ NULL
   state <- fit_out$state
   fit <- fit_out$fit
 
+  ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
   config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates_v3(theta_summary, state, config_v3)
@@ -369,7 +370,8 @@ NULL
     return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
   }
 
-  candidates <- dplyr::rename(candidates, i_id = .data$i, j_id = .data$j)
+  names(candidates)[names(candidates) == "i"] <- "i_id"
+  names(candidates)[names(candidates) == "j"] <- "j_id"
   utilities <- compute_pair_utility(fit$theta_draws, candidates)
   utilities <- apply_degree_penalty(utilities, state)
   if (!is.finite(state$U0)) {
@@ -647,7 +649,8 @@ NULL
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
-  candidates <- dplyr::rename(candidates, i_id = .data$i, j_id = .data$j)
+  names(candidates)[names(candidates) == "i"] <- "i_id"
+  names(candidates)[names(candidates) == "j"] <- "j_id"
   utilities <- compute_pair_utility(fit$theta_draws, candidates)
   utilities <- apply_degree_penalty(utilities, state)
   if (!is.finite(state$U0)) {

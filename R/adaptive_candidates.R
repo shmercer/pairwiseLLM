@@ -231,7 +231,7 @@ enumerate_candidates_v3 <- function(anchors, theta_summary, state, config) {
   out <- out[out$i != out$j, , drop = FALSE]
   out <- dplyr::distinct(out, .data$unordered_key, .keep_all = TRUE)
   out <- dplyr::arrange(out, .data$unordered_key)
-  out <- dplyr::select(out, .data$i, .data$j)
+  out <- dplyr::select(out, "i", "j")
   tibble::as_tibble(out)
 }
 
@@ -258,7 +258,7 @@ generate_candidates_v3 <- function(theta_summary, state, config) {
     )
     candidates <- dplyr::arrange(candidates, .data$unordered_key)
     candidates <- dplyr::slice_head(candidates, n = cap)
-    candidates <- dplyr::select(candidates, .data$i, .data$j)
+    candidates <- dplyr::select(candidates, "i", "j")
   }
 
   tibble::as_tibble(candidates)
