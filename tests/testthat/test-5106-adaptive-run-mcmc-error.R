@@ -104,13 +104,12 @@ testthat::test_that("adaptive stopping checks record MCMC error on failure", {
       ),
       fit_bayes_btl_mcmc_v3 = mock_mcmc_error,
       stopping_check = mock_stopping_check,
-      build_candidate_pairs = function(ranking_ids, W, state, exploration_frac, seed) {
-        i_id <- state$ids[1]
-        j_id <- state$ids[2]
+      generate_candidates_v3 = function(theta_summary, state, config) {
+        i_id <- state$ids[1L]
+        j_id <- state$ids[2L]
         tibble::tibble(
-          i_id = i_id,
-          j_id = j_id,
-          unordered_key = pairwiseLLM:::make_unordered_key(i_id, j_id)
+          i = i_id,
+          j = j_id
         )
       }
     ),

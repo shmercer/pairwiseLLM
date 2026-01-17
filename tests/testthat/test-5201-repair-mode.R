@@ -31,9 +31,7 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
           called$repair <- TRUE
           list(state = state, pairs = pairwiseLLM:::.adaptive_empty_pairs_tbl())
         },
-        compute_ranking_from_theta_mean = function(...) testthat::fail("Unexpected adaptive ranking call."),
-        select_window_size = function(...) testthat::fail("Unexpected adaptive window call."),
-        build_candidate_pairs = function(...) testthat::fail("Unexpected adaptive candidate call."),
+        generate_candidates_v3 = function(...) testthat::fail("Unexpected adaptive candidate call."),
         select_pairs_from_candidates = function(...) testthat::fail("Unexpected adaptive selection call.")
       )
     },
@@ -58,12 +56,9 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
       )
     },
     diagnostics_gate_v3 = function(...) TRUE,
-    compute_ranking_from_theta_mean = function(theta_mean, state) state$ids,
-    select_window_size = function(N, phase, near_stop) 1L,
-    build_candidate_pairs = function(...) tibble::tibble(
-      i_id = character(),
-      j_id = character(),
-      unordered_key = character()
+    generate_candidates_v3 = function(...) tibble::tibble(
+      i = character(),
+      j = character()
     ),
     phase1_generate_pairs = function(state, n_pairs, mix_struct, within_adj_split, bins, seed) {
       called$repair <- TRUE

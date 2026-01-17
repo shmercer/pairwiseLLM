@@ -196,10 +196,8 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
         )
       )
     },
-    compute_ranking_from_theta_mean = function(theta_mean, state) state$ids,
-    select_window_size = function(N, phase, near_stop) 1L,
-    build_candidate_pairs = function(...) {
-      tibble::tibble(i_id = "A", j_id = "B", unordered_key = "A:B")
+    generate_candidates_v3 = function(...) {
+      tibble::tibble(i = "A", j = "B")
     },
     compute_pair_utility = function(...) {
       tibble::tibble(

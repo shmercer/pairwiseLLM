@@ -252,6 +252,7 @@ testthat::test_that("adaptive_run stopping checks return when no candidates", {
   state$comparisons_scheduled <- 1L
   state$last_check_at <- 0L
   state$config$CW <- 1L
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
 
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = list(), seed = 1),
@@ -265,8 +266,7 @@ testthat::test_that("adaptive_run stopping checks return when no candidates", {
       )
     },
     compute_ranking_from_theta_mean = function(theta_mean, state) state$ids,
-    select_window_size = function(N, phase, near_stop) 1L,
-    build_candidate_pairs = function(...) tibble::tibble()
+    generate_candidates_v3 = function(...) tibble::tibble(i = character(), j = character())
   )
   expect_false(isTRUE(out$stop_confirmed))
 })
@@ -278,6 +278,7 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 2)
   adaptive <- list(bins = 2L, mix_struct = 0.7, within_adj_split = 0.5, exploration_frac = 0.1)
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
 
   expect_error(pairwiseLLM:::.adaptive_schedule_next_pairs(state, NA, adaptive, seed = 1), "target_pairs")
   empty_out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 0L, adaptive, seed = 1)
@@ -296,9 +297,7 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
         )
       )
     },
-    compute_ranking_from_theta_mean = function(theta_mean, state) state$ids,
-    select_window_size = function(N, phase, near_stop) 1L,
-    build_candidate_pairs = function(...) tibble::tibble()
+    generate_candidates_v3 = function(...) tibble::tibble(i = character(), j = character())
   )
   expect_equal(nrow(no_candidates$pairs), 0L)
 })
@@ -310,6 +309,7 @@ testthat::test_that("adaptive_run scheduling helpers cover stop and budget branc
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 2)
   adaptive <- list(bins = 2L)
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
 
   state$config$stop_confirmed <- TRUE
   stop_out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1)
