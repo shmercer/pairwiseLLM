@@ -1,4 +1,4 @@
-test_that("record_exposure initializes pos_count when missing", {
+test_that("record_judgment_exposure initializes pos_count when missing", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "beta")
@@ -6,7 +6,7 @@ test_that("record_exposure initializes pos_count when missing", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   state$pos_count <- NULL
 
-  updated <- pairwiseLLM:::record_exposure(state, "A", "B")
+  updated <- pairwiseLLM:::record_judgment_exposure(state, "A", "B")
 
   expect_true(is.integer(updated$pos_count))
   expect_equal(updated$pos_count[["A"]], 1L)

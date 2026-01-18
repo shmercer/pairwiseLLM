@@ -12,14 +12,14 @@ test_that("adaptive_state_new creates a valid initial state", {
   expect_true(all(state$unordered_count == 0L))
 })
 
-test_that("record_exposure updates counts consistently", {
+test_that("record_judgment_exposure updates counts consistently", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "beta")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
 
-  state2 <- pairwiseLLM:::record_exposure(state, "A", "B")
+  state2 <- pairwiseLLM:::record_judgment_exposure(state, "A", "B")
 
   expect_equal(state2$pos1[["A"]], 1L)
   expect_equal(state2$pos2[["B"]], 1L)
@@ -35,7 +35,8 @@ test_that("adaptive_state_save/load roundtrip preserves class and fields", {
     text = c("alpha", "beta")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
-  state <- pairwiseLLM:::record_exposure(state, "A", "B")
+  state <- pairwiseLLM:::record_presentation(state, "A", "B")
+  state <- pairwiseLLM:::record_judgment_exposure(state, "A", "B")
 
   tmp_dir <- withr::local_tempdir()
   path <- file.path(tmp_dir, "state.rds")

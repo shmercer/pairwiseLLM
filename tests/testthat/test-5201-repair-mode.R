@@ -9,7 +9,8 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
   adaptive <- list(bins = 2L, mix_struct = 0.7, within_adj_split = 0.5, exploration_frac = 0.1)
 
   called <- new.env(parent = emptyenv())
-  called$repair <- FALSE
+  called$selection <- FALSE
+  called$exploration_only <- FALSE
 
   out <- NULL
   testthat::expect_warning(
@@ -27,22 +28,46 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
           )
         },
         diagnostics_gate_v3 = function(...) FALSE,
-        phase1_generate_pairs = function(state, n_pairs, mix_struct, within_adj_split, bins, seed) {
-          called$repair <- TRUE
-          list(state = state, pairs = pairwiseLLM:::.adaptive_empty_pairs_tbl())
+        generate_candidates_v3 = function(...) {
+          tibble::tibble(i = "A", j = "B")
         },
-        generate_candidates_v3 = function(...) testthat::fail("Unexpected adaptive candidate call."),
-        select_pairs_from_candidates = function(...) testthat::fail("Unexpected adaptive selection call.")
+        compute_pair_utility_v3 = function(...) {
+          tibble::tibble(
+            i_id = "A",
+            j_id = "B",
+            unordered_key = "A:B",
+            p_mean = 0.5,
+            utility = 0.2,
+            utility_raw = 0.2
+          )
+        },
+        apply_degree_penalty = function(utilities, state) utilities,
+        select_batch_v3 = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+          called$selection <- TRUE
+          called$exploration_only <- exploration_only
+          tibble::tibble(
+            i_id = character(),
+            j_id = character(),
+            unordered_key = character(),
+            utility = double(),
+            utility_raw = double(),
+            p_mean = double(),
+            A_id = character(),
+            B_id = character()
+          )
+        }
       )
     },
     "Diagnostics gate failed; entering repair mode"
   )
 
-  expect_true(called$repair)
+  expect_true(called$selection)
+  expect_true(called$exploration_only)
   expect_equal(out$state$mode, "repair")
   expect_equal(out$state$repair_attempts, 1L)
 
-  called$repair <- FALSE
+  called$selection <- FALSE
+  called$exploration_only <- FALSE
   out2 <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_schedule_next_pairs(out$state, 1L, adaptive, seed = 1),
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
@@ -56,17 +81,36 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
       )
     },
     diagnostics_gate_v3 = function(...) TRUE,
-    generate_candidates_v3 = function(...) tibble::tibble(
-      i = character(),
-      j = character()
-    ),
-    phase1_generate_pairs = function(state, n_pairs, mix_struct, within_adj_split, bins, seed) {
-      called$repair <- TRUE
-      list(state = state, pairs = pairwiseLLM:::.adaptive_empty_pairs_tbl())
+    generate_candidates_v3 = function(...) tibble::tibble(i = "A", j = "B"),
+    compute_pair_utility_v3 = function(...) {
+      tibble::tibble(
+        i_id = "A",
+        j_id = "B",
+        unordered_key = "A:B",
+        p_mean = 0.5,
+        utility = 0.2,
+        utility_raw = 0.2
+      )
+    },
+    apply_degree_penalty = function(utilities, state) utilities,
+    select_batch_v3 = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+      called$selection <- TRUE
+      called$exploration_only <- exploration_only
+      tibble::tibble(
+        i_id = character(),
+        j_id = character(),
+        unordered_key = character(),
+        utility = double(),
+        utility_raw = double(),
+        p_mean = double(),
+        A_id = character(),
+        B_id = character()
+      )
     }
   )
 
-  expect_false(called$repair)
+  expect_true(called$selection)
+  expect_false(called$exploration_only)
   expect_equal(out2$state$mode, "adaptive")
   expect_equal(out2$state$repair_attempts, 0L)
 })

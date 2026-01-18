@@ -209,9 +209,18 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
       )
     },
     apply_degree_penalty = function(utilities, state) utilities,
-    select_pairs_from_candidates = function(state, ...) {
+    select_batch_v3 = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
       captured$U0 <- state$U0
-      list(state = state, pairs = pairwiseLLM:::.adaptive_empty_pairs_tbl())
+      tibble::tibble(
+        i_id = character(),
+        j_id = character(),
+        unordered_key = character(),
+        utility = double(),
+        utility_raw = double(),
+        p_mean = double(),
+        A_id = character(),
+        B_id = character()
+      )
     },
     .package = "pairwiseLLM"
   )

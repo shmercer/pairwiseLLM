@@ -293,7 +293,7 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
         state = state,
         fit = list(
           theta_mean = stats::setNames(c(0, 0, 0), c("A", "B", "C")),
-          theta_draws = matrix(0, nrow = 1, ncol = 3, dimnames = list(NULL, c("A", "B", "C")))
+          theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, c("A", "B", "C")))
         )
       )
     },
