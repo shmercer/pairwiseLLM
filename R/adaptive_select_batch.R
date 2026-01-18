@@ -109,7 +109,7 @@ select_pairs_from_candidates <- function(
         imb_B = as.integer(state_local$imb[[order$B_id]])
       )
 
-      state_local <- record_exposure(state_local, order$A_id, order$B_id)
+      state_local <- record_presentation(state_local, order$A_id, order$B_id)
       state_local$history_pairs <- dplyr::bind_rows(state_local$history_pairs, pair_row)
       state_local$comparisons_scheduled <- as.integer(state_local$comparisons_scheduled + 1L)
 
