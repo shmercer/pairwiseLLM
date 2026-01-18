@@ -319,18 +319,21 @@ NULL
   state
 }
 
-.adaptive_get_refit_fit <- function(state, adaptive, batch_size, seed) {
-  last_refit_at <- state$config$last_refit_at %||% 0L
-  CW <- state$config$CW %||% floor(state$N / 2)
-  do_refit <- is.null(state$fast_fit) ||
-    should_refit(
-      comparisons_observed = state$comparisons_observed,
-      last_refit_at = last_refit_at,
-      batch_size = batch_size,
-      CW = CW
-    )
+.adaptive_get_refit_fit <- function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
+  refit_B <- state$config$v3$refit_B %||% adaptive$refit_B %||% 1L
+  refit_B <- as.integer(refit_B)
+  if (is.na(refit_B) || refit_B < 1L) {
+    rlang::abort("`refit_B` must be a positive integer.")
+  }
+  batch_size <- as.integer(batch_size)
+  if (!is.na(batch_size) && batch_size < 0L) {
+    rlang::abort("`batch_size` must be non-negative.")
+  }
 
-  if (do_refit) {
+  needs_init <- is.null(state$fast_fit)
+  do_refit <- isTRUE(allow_refit) && isTRUE(state$new_since_refit >= refit_B)
+
+  if (needs_init || do_refit) {
     fit <- fit_bayes_btl_fast(
       results = state$history_results,
       ids = state$ids,
@@ -338,9 +341,11 @@ NULL
       seed = seed
     )
     state$fast_fit <- fit
-    state$config$last_refit_at <- as.integer(state$comparisons_observed)
-    state$last_refit_at <- as.integer(state$comparisons_observed)
-    state$new_since_refit <- 0L
+    if (do_refit) {
+      state$last_refit_at <- as.integer(state$comparisons_observed)
+      state$config$last_refit_at <- state$last_refit_at
+      state$new_since_refit <- 0L
+    }
   }
 
   if (is.null(state$fast_fit)) {
@@ -350,11 +355,12 @@ NULL
   list(state = state, fit = state$fast_fit)
 }
 
-.adaptive_run_stopping_checks <- function(state, adaptive, seed) {
+.adaptive_run_stopping_checks <- function(state, adaptive, seed, allow_refit = NULL) {
   validate_state(state)
   if (state$comparisons_observed < 1L) {
     return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
   }
+  allow_refit <- allow_refit %||% state$config$allow_refit %||% TRUE
 
   CW <- state$config$CW %||% floor(state$N / 2)
   CW <- as.integer(CW)
@@ -365,9 +371,16 @@ NULL
     return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
   }
 
-  fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = seed)
-  state <- fit_out$state
-  fit <- fit_out$fit
+  if (!isTRUE(allow_refit)) {
+    if (is.null(state$fast_fit)) {
+      return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+    }
+    fit <- state$fast_fit
+  } else {
+    fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = seed)
+    state <- fit_out$state
+    fit <- fit_out$fit
+  }
 
   ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
   config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
@@ -1198,6 +1211,7 @@ adaptive_rank_start <- function(
     }
   }
 
+  state$config$allow_refit <- TRUE
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
@@ -1371,14 +1385,14 @@ adaptive_rank_resume <- function(
     }
   }
 
-  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
-  state <- stop_out$state
-
   missing <- 0L
   if (!is.null(pairs_submitted) && nrow(pairs_submitted) > 0L) {
     observed_now <- sum(pairs_submitted$pair_uid %in% .adaptive_results_seen_names(state))
     missing <- nrow(pairs_submitted) - observed_now
   }
+  state$config$allow_refit <- missing == 0L
+  stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
+  state <- stop_out$state
 
   if (isTRUE(state$config$stop_confirmed)) {
     scheduled <- list(state = state, pairs = .adaptive_empty_pairs_tbl())
@@ -1479,6 +1493,7 @@ adaptive_rank_resume <- function(
     }
   }
 
+  state$config$allow_refit <- TRUE
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
