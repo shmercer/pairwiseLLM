@@ -61,24 +61,13 @@ duplicate_allowed <- function(state, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
-record_exposure <- function(state, A_id, B_id) {
+record_presentation <- function(state, A_id, B_id) {
   if (!A_id %in% state$ids || !B_id %in% state$ids) {
     rlang::abort("`A_id` and `B_id` must exist in `state$ids`.")
   }
 
   ordered_key <- make_ordered_key(A_id, B_id)
   unordered_key <- make_unordered_key(A_id, B_id)
-
-  state$pos1[A_id] <- state$pos1[A_id] + 1L
-  state$pos2[B_id] <- state$pos2[B_id] + 1L
-  if (is.null(state$pos_count)) {
-    state$pos_count <- state$pos1
-  } else {
-    state$pos_count[A_id] <- state$pos_count[A_id] + 1L
-  }
-  state$deg[A_id] <- state$deg[A_id] + 1L
-  state$deg[B_id] <- state$deg[B_id] + 1L
-  state$imb <- state$pos1 - state$pos2
 
   counts <- state$unordered_count
   if (is.null(names(counts)) || length(counts) == 0L) {
@@ -92,7 +81,6 @@ record_exposure <- function(state, A_id, B_id) {
   counts <- as.integer(counts)
   names(counts) <- count_names
   state$unordered_count <- counts
-  state$pair_count <- counts
 
   seen <- state$ordered_seen
   if (is.environment(seen)) {
@@ -120,6 +108,49 @@ record_exposure <- function(state, A_id, B_id) {
   state$pair_ordered_count <- ordered_counts
 
   state
+}
+
+#' @keywords internal
+#' @noRd
+record_judgment_exposure <- function(state, A_id, B_id) {
+  if (!A_id %in% state$ids || !B_id %in% state$ids) {
+    rlang::abort("`A_id` and `B_id` must exist in `state$ids`.")
+  }
+
+  unordered_key <- make_unordered_key(A_id, B_id)
+
+  state$pos1[A_id] <- state$pos1[A_id] + 1L
+  state$pos2[B_id] <- state$pos2[B_id] + 1L
+  if (is.null(state$pos_count)) {
+    state$pos_count <- state$pos1
+  } else {
+    state$pos_count[A_id] <- state$pos_count[A_id] + 1L
+  }
+  state$deg[A_id] <- state$deg[A_id] + 1L
+  state$deg[B_id] <- state$deg[B_id] + 1L
+  state$imb <- state$pos1 - state$pos2
+
+  counts <- state$pair_count
+  if (is.null(names(counts)) || length(counts) == 0L) {
+    counts <- integer()
+  }
+  if (!unordered_key %in% names(counts)) {
+    counts[unordered_key] <- 0L
+  }
+  counts[unordered_key] <- counts[unordered_key] + 1L
+  count_names <- names(counts)
+  counts <- as.integer(counts)
+  names(counts) <- count_names
+  state$pair_count <- counts
+
+  state
+}
+
+#' @keywords internal
+#' @noRd
+record_exposure <- function(state, A_id, B_id) {
+  state <- record_presentation(state, A_id, B_id)
+  record_judgment_exposure(state, A_id, B_id)
 }
 
 .adaptive_with_seed <- function(seed, expr) {
