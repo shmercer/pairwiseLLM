@@ -15,3 +15,5 @@
 ^CRAN-SUBMISSION$
 ^codemeta\.json$
 ^tests/testthat/bad\.csv$
+^agents\.md$
+^dev-checklists$
