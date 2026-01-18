@@ -251,15 +251,13 @@
         ))
       )
     }
-    {
-      retry_failures_tbl <- dplyr::bind_rows(failures)
-      cnd <- rlang::error_cnd(
-        message = conditionMessage(err),
-        class = "pairwiseLLM_retry_error",
-        retry_failures = retry_failures_tbl
-      )
-      attr(cnd, "retry_failures") <- retry_failures_tbl
-      rlang::cnd_signal(cnd)
-    }
+    retry_failures_tbl <- dplyr::bind_rows(failures)
+    cnd <- rlang::error_cnd(
+      message = conditionMessage(err),
+      class = "pairwiseLLM_retry_error",
+      retry_failures = retry_failures_tbl
+    )
+    attr(cnd, "retry_failures") <- retry_failures_tbl
+    rlang::cnd_signal(cnd)
   }
 }

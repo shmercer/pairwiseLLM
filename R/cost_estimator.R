@@ -407,7 +407,17 @@ estimate_llm_pairs_cost <- function(
   # Output tokens per remaining pair: expected (mean) and budget (quantile)
   out_samples <- as.numeric(pilot_results$completion_tokens[usable_out])
   out_mean <- if (length(out_samples) > 0L) mean(out_samples, na.rm = TRUE) else NA_real_
-  out_q <- if (length(out_samples) > 0L) stats::quantile(out_samples, probs = budget_quantile, na.rm = TRUE, names = FALSE, type = 7) else NA_real_
+  out_q <- if (length(out_samples) > 0L) {
+    stats::quantile(
+      out_samples,
+      probs = budget_quantile,
+      na.rm = TRUE,
+      names = FALSE,
+      type = 7
+    )
+  } else {
+    NA_real_
+  }
 
   n_remaining <- length(remaining_idx)
   est_remaining_completion_expected <- if (!is.na(out_mean)) out_mean * n_remaining else NA_real_
@@ -618,7 +628,7 @@ print.pairwiseLLM_cost_estimate <- function(x, ...) {
   if (n == 0L) {
     return(list(
       method = "fallback_bytes_per_token",
-      coefficients = c(intercept = 0, slope = 1/4),
+      coefficients = c(intercept = 0, slope = 1 / 4),
       n_used = 0L,
       rmse = NA_real_,
       r_squared = NA_real_

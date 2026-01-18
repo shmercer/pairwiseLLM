@@ -14,4 +14,3 @@ library(knitr)
 ## -----------------------------------------------------------------------------
 td <- trait_description("overall_quality")
 td
-

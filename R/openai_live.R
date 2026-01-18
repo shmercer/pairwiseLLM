@@ -253,9 +253,8 @@ openai_compare_pair_live <- function(
           # Priority 1: Data frame (check first because is.list(df) is TRUE)
           if (is.data.frame(rs) && "text" %in% names(rs)) {
             reasoning_chunks <- c(reasoning_chunks, as.character(rs$text))
-          }
-          # Priority 2: Generic list
-          else if (is.list(rs)) {
+          } else if (is.list(rs)) {
+            # Priority 2: Generic list
             for (s in rs) if (!is.null(s$text)) reasoning_chunks <- c(reasoning_chunks, s$text)
           }
         }
@@ -488,7 +487,8 @@ submit_openai_pairs_live <- function(
         } else {
           character(0)
         }
-        current_ids <- .pairwiseLLM_make_custom_id(pairs$ID1, pairs$ID2, if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL)
+        pair_uid <- if ("pair_uid" %in% names(pairs)) pairs$pair_uid else NULL
+        current_ids <- .pairwiseLLM_make_custom_id(pairs$ID1, pairs$ID2, pair_uid)
 
         # Identify new pairs
         to_process_idx <- !current_ids %in% existing_ids

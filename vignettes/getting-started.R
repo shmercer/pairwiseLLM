@@ -93,10 +93,10 @@ cat(substr(tmpl, 1, 300))
 #   make_pairs() |>
 #   sample_pairs(n_pairs = 10, seed = 4321) |>
 #   randomize_pair_order(seed = 8765)
-# 
+#
 # td   <- trait_description("overall_quality")
 # tmpl <- set_prompt_template()
-# 
+#
 # # Split into two batches and include reasoning/chain-of-thought
 # multi_job <- llm_submit_pairs_multi_batch(
 #   pairs             = pairs_small,
@@ -110,7 +110,7 @@ cat(substr(tmpl, 1, 300))
 #   write_registry    = TRUE,
 #   include_thoughts  = TRUE
 # )
-# 
+#
 # # Poll and merge results.  Combined results are written to
 # # "myjob/combined_results.csv" by default.
 # res <- llm_resume_multi_batches(
@@ -118,9 +118,8 @@ cat(substr(tmpl, 1, 300))
 #   interval_seconds   = 30,
 #   write_combined_csv = TRUE
 # )
-# 
+#
 # head(res$combined)
 
 ## -----------------------------------------------------------------------------
 check_llm_api_keys()
-

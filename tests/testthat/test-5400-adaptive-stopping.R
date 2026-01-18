@@ -227,11 +227,16 @@ test_that("summarize_theta and summarize_ranks return MCMC summaries", {
   colnames(theta_draws) <- c("A", "B", "C")
 
   theta_sum <- pairwiseLLM:::summarize_theta(theta_draws)
-  expect_true(all(c("ID", "mean", "sd", "median", "q05", "q95", "q025", "q975") %in% names(theta_sum)))
+  expect_true(all(c(
+    "ID", "mean", "sd", "median", "q05", "q95", "q025", "q975"
+  ) %in% names(theta_sum)))
   expect_equal(theta_sum$mean[theta_sum$ID == "A"], 1.5)
 
   rank_sum <- pairwiseLLM:::summarize_ranks(theta_draws)
-  expect_true(all(c("ID", "rank_mean", "rank_median", "rank_sd", "rank_q05", "rank_q95", "rank_q025", "rank_q975") %in% names(rank_sum)))
+  expect_true(all(c(
+    "ID", "rank_mean", "rank_median", "rank_sd",
+    "rank_q05", "rank_q95", "rank_q025", "rank_q975"
+  ) %in% names(rank_sum)))
   expect_equal(rank_sum$rank_mean[rank_sum$ID == "C"], 1)
 })
 

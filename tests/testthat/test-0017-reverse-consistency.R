@@ -111,7 +111,9 @@ test_that("compute_reverse_consistency errors when required columns are
   )
 })
 
-test_that("compute_reverse_consistency uses per-key majority agreement and remains compatible with check_positional_bias", {
+test_that(
+  "compute_reverse_consistency uses per-key majority agreement and remains compatible with check_positional_bias",
+  {
   # Duplicates in main, reverse is a sample (only includes A-B)
   # Also includes mixed ordering to exercise most_common_order() logic.
   main <- tibble::tibble(
@@ -172,7 +174,8 @@ test_that("compute_reverse_consistency uses per-key majority agreement and remai
   expect_s3_class(bias$summary, "tbl_df")
   expect_equal(bias$summary$n_pairs, 1)
   expect_equal(bias$summary$n_inconsistent, 0)
-})
+  }
+)
 
 test_that("compute_reverse_consistency excludes keys with a tie in main majority vote", {
   # Main ties: A-B has one vote each -> no unique majority -> excluded
