@@ -29,7 +29,7 @@ compute_adjacent_certainty <- function(theta_draws, ranking_ids) {
 
   idx <- match(ranking_ids, ids)
   q_vals <- numeric(length(idx) - 1L)
-  for (k in seq_len(length(q_vals))) {
+  for (k in seq_along(q_vals)) {
     lhs <- theta_draws[, idx[k], drop = TRUE]
     rhs <- theta_draws[, idx[k + 1L], drop = TRUE]
     q_vals[k] <- mean(lhs > rhs)

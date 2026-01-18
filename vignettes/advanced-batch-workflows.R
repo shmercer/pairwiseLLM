@@ -117,41 +117,41 @@ templates_tbl
 
 ## ----eval=FALSE---------------------------------------------------------------
 # jobs <- list()
-# 
+#
 # for (t_row in seq_len(nrow(templates_tbl))) {
 #   template_id <- templates_tbl$template_id[t_row]
 #   tmpl_string <- templates_tbl$prompt_template[[t_row]]
-# 
+#
 #   for (i in seq_len(nrow(batch_grid))) {
 #     row <- batch_grid[i, ]
-# 
+#
 #     provider <- row$provider
 #     model <- row$model
 #     thinking <- row$thinking
 #     direction <- row$direction
-# 
+#
 #     message(
 #       "Submitting batch: template=", template_id,
 #       " | ", provider, " / ", model,
 #       " / ", thinking, " / ", direction
 #     )
-# 
+#
 #     pairs_use <- get_pairs_for_direction(direction)
 #     is_thinking <- identical(thinking, "with_thinking")
-# 
+#
 #     prefix <- paste(provider, template_id, model, thinking, direction,
 #       sep = "_"
 #     )
 #     prefix <- gsub("[^A-Za-z0-9_.-]", "-", prefix)
-# 
+#
 #     batch_input_path <- file.path(out_dir, paste0(prefix, "_input.jsonl"))
 #     batch_output_path <- file.path(out_dir, paste0(prefix, "_output.jsonl"))
 #     csv_path <- file.path(out_dir, paste0(prefix, ".csv"))
-# 
+#
 #     if (identical(provider, "openai")) {
 #       # OpenAI: use the helpers from the dev scripts
 #       include_thoughts <- is_thinking && grepl("^gpt-5\\.1", model)
-# 
+#
 #       pipeline <- run_openai_batch_pipeline(
 #         pairs             = pairs_use,
 #         model             = model,
@@ -164,7 +164,7 @@ templates_tbl
 #         batch_output_path = batch_output_path,
 #         poll              = FALSE
 #       )
-# 
+#
 #       jobs[[length(jobs) + 1L]] <- list(
 #         template_id       = template_id,
 #         provider          = provider,
@@ -184,7 +184,7 @@ templates_tbl
 #       # Anthropic: use run_anthropic_batch_pipeline()
 #       reasoning <- if (is_thinking) "enabled" else "none"
 #       temperature_arg <- if (!is_thinking) 0 else NULL
-# 
+#
 #       pipeline <- run_anthropic_batch_pipeline(
 #         pairs             = pairs_use,
 #         model             = model,
@@ -199,7 +199,7 @@ templates_tbl
 #         temperature       = temperature_arg,
 #         include_raw       = TRUE
 #       )
-# 
+#
 #       jobs[[length(jobs) + 1L]] <- list(
 #         template_id       = template_id,
 #         provider          = provider,
@@ -226,19 +226,19 @@ templates_tbl
 #         thinking_level    = "low", # example
 #         include_thoughts  = TRUE
 #       )
-# 
+#
 #       batch <- gemini_create_batch(
 #         requests    = req_tbl$request,
 #         model       = model,
 #         api_key     = Sys.getenv("GEMINI_API_KEY"),
 #         api_version = "v1beta"
 #       )
-# 
+#
 #       batch_name <- batch$name %||% stop(
 #         "Gemini batch did not return a `name` field.",
 #         call. = FALSE
 #       )
-# 
+#
 #       jobs[[length(jobs) + 1L]] <- list(
 #         template_id       = template_id,
 #         provider          = provider,
@@ -273,21 +273,21 @@ templates_tbl
 #   batch_output_path = vapply(jobs, `[[`, character(1), "batch_output_path"),
 #   csv_path = vapply(jobs, `[[`, character(1), "csv_path")
 # )
-# 
+#
 # jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
 # readr::write_csv(jobs_tbl, jobs_index_path)
-# 
+#
 # jobs_index_path
 
 ## ----eval=FALSE---------------------------------------------------------------
 # is_terminal_openai <- function(status) {
 #   status %in% c("completed", "failed", "cancelled", "expired")
 # }
-# 
+#
 # is_terminal_anthropic <- function(status) {
 #   status %in% c("ended", "errored", "canceled", "expired")
 # }
-# 
+#
 # is_terminal_gemini <- function(state) {
 #   state %in% c("SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED")
 # }
@@ -295,11 +295,11 @@ templates_tbl
 ## ----eval=FALSE---------------------------------------------------------------
 # interval_seconds <- 60
 # per_job_delay <- 2 # seconds between polling calls
-# 
+#
 # # Reload batch index
 # jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
 # jobs_tbl <- readr::read_csv(jobs_index_path, show_col_types = FALSE)
-# 
+#
 # # Rebuild jobs list skeleton
 # jobs <- purrr::pmap(
 #   jobs_tbl,
@@ -323,30 +323,30 @@ templates_tbl
 #     )
 #   }
 # )
-# 
+#
 # unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
-# 
+#
 # while (length(unfinished) > 0L) {
 #   message("Polling ", length(unfinished), " unfinished batch(es)...")
-# 
+#
 #   for (j in unfinished) {
 #     job <- jobs[[j]]
 #     if (job$done) next
-# 
+#
 #     batch_type <- job$batch_type
-# 
+#
 #     if (identical(batch_type, "openai")) {
 #       batch <- openai_get_batch(job$batch_id)
 #       status <- batch$status %||% "unknown"
 #       message("  [OpenAI] ", job$prefix, " status: ", status)
-# 
+#
 #       if (is_terminal_openai(status)) {
 #         if (identical(status, "completed")) {
 #           openai_download_batch_output(
 #             batch_id = job$batch_id,
 #             path     = job$batch_output_path
 #           )
-# 
+#
 #           res <- parse_openai_batch_output(job$batch_output_path)
 #           jobs[[j]]$results <- res
 #           readr::write_csv(res, job$csv_path)
@@ -358,20 +358,20 @@ templates_tbl
 #       batch <- anthropic_get_batch(job$batch_id)
 #       status <- batch$processing_status %||% "unknown"
 #       message("  [Anthropic] ", job$prefix, " status: ", status)
-# 
+#
 #       if (is_terminal_anthropic(status)) {
 #         if (identical(status, "ended")) {
 #           output_path <- anthropic_download_batch_results(
 #             batch_id    = job$batch_id,
 #             output_path = job$batch_output_path
 #           )
-# 
+#
 #           res <- parse_anthropic_batch_output(
 #             jsonl_path  = output_path,
 #             tag_prefix  = "<BETTER_SAMPLE>",
 #             tag_suffix  = "</BETTER_SAMPLE>"
 #           )
-# 
+#
 #           jobs[[j]]$results <- res
 #           readr::write_csv(res, job$csv_path)
 #           message("    -> Results written to: ", job$csv_path)
@@ -382,17 +382,17 @@ templates_tbl
 #       batch <- gemini_get_batch(job$batch_id)
 #       state <- batch$state %||% "STATE_UNSPECIFIED"
 #       message("  [Gemini] ", job$prefix, " state: ", state)
-# 
+#
 #       if (is_terminal_gemini(state)) {
 #         if (identical(state, "SUCCEEDED")) {
 #           raw_res <- gemini_download_batch_results(job$batch_id)
-# 
+#
 #           res <- parse_gemini_batch_output(
 #             raw_results = raw_res,
 #             tag_prefix  = "<BETTER_SAMPLE>",
 #             tag_suffix  = "</BETTER_SAMPLE>"
 #           )
-# 
+#
 #           jobs[[j]]$results <- res
 #           readr::write_csv(res, job$csv_path)
 #           message("    -> Results written to: ", job$csv_path)
@@ -400,28 +400,28 @@ templates_tbl
 #         jobs[[j]]$done <- TRUE
 #       }
 #     }
-# 
+#
 #     Sys.sleep(per_job_delay)
 #   }
-# 
+#
 #   unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
-# 
+#
 #   if (length(unfinished) > 0L) {
 #     message("Sleeping ", interval_seconds, " seconds before next poll...")
 #     Sys.sleep(interval_seconds)
 #   }
 # }
-# 
+#
 # message("All batches have reached a terminal state.")
 
 ## ----eval=FALSE---------------------------------------------------------------
 # jobs_index_path <- file.path(out_dir, "batch_jobs_index.csv")
 # jobs_tbl <- readr::read_csv(jobs_index_path, show_col_types = FALSE)
-# 
+#
 # # Rebuild jobs list as before...
 # # Then:
 # unfinished <- which(!vapply(jobs, `[[`, logical(1), "done"))
-# 
+#
 # if (length(unfinished) > 0L) {
 #   message("Resuming polling for ", length(unfinished), " unfinished batch(es).")
 #   # ... re-enter the polling loop ...
@@ -430,7 +430,7 @@ templates_tbl
 # }
 
 ## ----eval=FALSE---------------------------------------------------------------
-# 
+#
 # jobs <- purrr::pmap(batch_grid, function(provider, model, thinking, direction) {
 #   pairs_use <- get_pairs_for_direction(direction)
 #   llm_submit_pairs_multi_batch(
@@ -455,4 +455,3 @@ templates_tbl
 #   write_combined_csv = TRUE
 # )
 # }
-

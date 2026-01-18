@@ -86,10 +86,17 @@ validate_pairs_tbl <- function(pairs) {
   )
   for (nm in names(optional)) {
     if (nm %in% names(pairs)) {
+      type_label <- if (identical(optional[[nm]], is.double)) {
+        "double"
+      } else if (identical(optional[[nm]], is.integer)) {
+        "integer"
+      } else {
+        "character"
+      }
       .adaptive_check_type(
         pairs[[nm]],
         paste0("pairs$", nm),
-        if (identical(optional[[nm]], is.double)) "double" else if (identical(optional[[nm]], is.integer)) "integer" else "character",
+        type_label,
         optional[[nm]]
       )
     }

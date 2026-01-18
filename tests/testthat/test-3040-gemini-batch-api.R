@@ -458,7 +458,13 @@ testthat::test_that("run_gemini_batch_pipeline runs full mocked cycle", {
   fake_req_tbl <- tibble::tibble(custom_id = "1", ID1 = "S1", ID2 = "S2", request = list(list()))
   fake_batch_initial <- list(name = "b1", metadata = list(state = "RUNNING"))
   fake_batch_final <- list(name = "b1", metadata = list(state = "SUCCEEDED"))
-  fake_results <- tibble::tibble(custom_id="1", ID1="S1", ID2="S2", result_type="succeeded", better_id="S1")
+  fake_results <- tibble::tibble(
+    custom_id = "1",
+    ID1 = "S1",
+    ID2 = "S2",
+    result_type = "succeeded",
+    better_id = "S1"
+  )
 
   testthat::with_mocked_bindings(
     build_gemini_batch_requests = function(...) fake_req_tbl,
@@ -490,7 +496,14 @@ testthat::test_that("run_gemini_batch_pipeline respects poll=FALSE", {
   fake_batch <- list(name = "b", metadata = list(state = "RUNNING"))
 
   testthat::with_mocked_bindings(
-    build_gemini_batch_requests = function(...) tibble::tibble(custom_id = "1", ID1 = "A", ID2 = "B", request = list(list())),
+    build_gemini_batch_requests = function(...) {
+      tibble::tibble(
+        custom_id = "1",
+        ID1 = "A",
+        ID2 = "B",
+        request = list(list())
+      )
+    },
     gemini_create_batch = function(...) fake_batch,
     gemini_poll_batch_until_complete = function(...) stop("Should not poll"),
     {
@@ -742,7 +755,14 @@ testthat::test_that("run_gemini_batch_pipeline errors when batch name is missing
   tmpl <- set_prompt_template()
 
   testthat::with_mocked_bindings(
-    build_gemini_batch_requests = function(...) tibble::tibble(custom_id = "1", ID1 = "A", ID2 = "B", request = list(list())),
+    build_gemini_batch_requests = function(...) {
+      tibble::tibble(
+        custom_id = "1",
+        ID1 = "A",
+        ID2 = "B",
+        request = list(list())
+      )
+    },
     gemini_create_batch = function(...) list(),
     {
       testthat::expect_error(

@@ -809,7 +809,10 @@ submit_gemini_pairs_live <- function(
     # Sequential Execution
     if (verbose) {
       message(sprintf(
-        "Submitting %d live pair(s) for comparison (model=%s, backend=gemini, thinking_level=%s, include_thoughts=%s)...",
+        paste0(
+          "Submitting %d live pair(s) for comparison (model=%s, backend=gemini, ",
+          "thinking_level=%s, include_thoughts=%s)..."
+        ),
         n, model, thinking_level, include_thoughts
       ))
     }

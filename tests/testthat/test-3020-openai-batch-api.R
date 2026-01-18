@@ -448,7 +448,10 @@ testthat::test_that("parse_openai_batch_output handles varied reasoning structur
   # 1. Summary as List of objects (Lines 1038-1044)
   # This matches the standard behavior of jsonlite::fromJSON(simplifyVector = FALSE)
   # when the JSON is an array of objects: [{"text": "ListSummary"}]
-  json_list <- '{"custom_id": "1", "response": {"body": {"object": "response", "output": [{"type": "reasoning", "summary": [{"text": "ListSummary"}]}]}}}'
+  json_list <- paste0(
+    '{"custom_id": "1", "response": {"body": {"object": "response", "output": [{"type": "reasoning", ',
+    '"summary": [{"text": "ListSummary"}]}]}}}'
+  )
   writeLines(json_list, tf)
 
   res_list <- parse_openai_batch_output(tf)

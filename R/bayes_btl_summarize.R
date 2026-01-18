@@ -72,7 +72,7 @@ compute_adjacent_win_probs <- function(theta_draws, ranking_ids) {
   idx <- match(ranking_ids, ids)
   win_prob <- numeric(length(idx) - 1L)
   win_prob_btl <- numeric(length(idx) - 1L)
-  for (k in seq_len(length(win_prob))) {
+  for (k in seq_along(win_prob)) {
     lhs <- theta_draws[, idx[k], drop = TRUE]
     rhs <- theta_draws[, idx[k + 1L], drop = TRUE]
     win_prob[k] <- mean(lhs > rhs)

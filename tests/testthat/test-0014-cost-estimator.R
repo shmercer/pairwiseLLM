@@ -470,7 +470,7 @@ testthat::test_that("estimate_llm_pairs_cost triggers stratified sampling top-up
 
   pairs <- tibble::tibble(
     ID1 = c("A", "B", "C"),
-    text1 = c("a", "b", paste(rep("c", 1000), collapse="")), # Distinct lengths
+    text1 = c("a", "b", paste(rep("c", 1000), collapse = "")), # Distinct lengths
     ID2 = c("A", "B", "C"),
     text2 = c("a", "b", "c")
   )

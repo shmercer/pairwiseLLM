@@ -32,7 +32,13 @@
   win_tbl <- dplyr::count(win_tbl, .data$winner, .data$loser, name = "wins")
 
   if (nrow(win_tbl) == 0L) {
-    return(tibble::tibble(i_id = character(), j_id = character(), win_i = integer(), win_j = integer(), n_ij = integer()))
+    return(tibble::tibble(
+      i_id = character(),
+      j_id = character(),
+      win_i = integer(),
+      win_j = integer(),
+      n_ij = integer()
+    ))
   }
 
   win_tbl <- dplyr::mutate(

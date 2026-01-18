@@ -449,7 +449,8 @@ llm_resume_multi_batches <- function(
       rlang::abort(paste0(
         "No registry file found at ",
         registry_file,
-        ". Please supply 'jobs' or ensure that 'output_dir' contains a 'jobs_registry.csv' created by llm_submit_pairs_multi_batch()."
+        ". Please supply 'jobs' or ensure that 'output_dir' contains a ",
+        "'jobs_registry.csv' created by llm_submit_pairs_multi_batch()."
       ))
     }
     tbl <- readr::read_csv(registry_file, show_col_types = FALSE)
@@ -595,7 +596,10 @@ llm_resume_multi_batches <- function(
                 if (isTRUE(attr(download, "retry_exhausted"))) {
                   if (isTRUE(verbose)) {
                     message(sprintf(
-                      "[llm_resume_multi_batches] Failed to download OpenAI batch %s after %d attempts; will retry in next round.",
+                      paste0(
+                        "[llm_resume_multi_batches] Failed to download OpenAI batch %s after ",
+                        "%d attempts; will retry in next round."
+                      ),
                       batch_id, openai_max_retries
                     ))
                   }

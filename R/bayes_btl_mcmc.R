@@ -119,7 +119,7 @@ model {
 #' theta_summary <- summarize_theta(mcmc_fit$theta_draws)
 #' rank_summary <- summarize_ranks(mcmc_fit$theta_draws)
 #' }
-#' 
+#'
 #'
 #' @export
 fit_bayes_btl_mcmc <- function(

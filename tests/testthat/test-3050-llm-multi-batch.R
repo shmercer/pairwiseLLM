@@ -1111,7 +1111,13 @@ test_that("llm_resume_multi_batches errors when Gemini requests cannot be recons
       invisible(NULL)
     },
     parse_gemini_batch_output = function(results_path, requests_tbl) {
-      tibble::tibble(custom_id = character(), ID1 = character(), ID2 = character(), result_type = character(), error_message = character())
+      tibble::tibble(
+        custom_id = character(),
+        ID1 = character(),
+        ID2 = character(),
+        result_type = character(),
+        error_message = character()
+      )
     },
     {
       expect_error(
