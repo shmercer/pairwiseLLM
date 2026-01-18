@@ -9,3 +9,5 @@ docs
 /doc/
 /Meta/
 tests/testthat/bad.csv
+dev-checklists
+agents.md

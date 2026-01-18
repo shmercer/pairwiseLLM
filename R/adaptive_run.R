@@ -197,6 +197,13 @@ NULL
   }
 
   new_results <- new_results[!duplicated(new_results$pair_uid), , drop = FALSE]
+  for (idx in seq_len(nrow(new_results))) {
+    state <- record_judgment_exposure(
+      state,
+      as.character(new_results$A_id[[idx]]),
+      as.character(new_results$B_id[[idx]])
+    )
+  }
   state$history_results <- dplyr::bind_rows(state$history_results, new_results)
   state$comparisons_observed <- as.integer(nrow(state$history_results))
   state$new_since_refit <- as.integer((state$new_since_refit %||% 0L) + nrow(new_results))
@@ -573,7 +580,7 @@ NULL
       created_at = created_at
     )
 
-    state <- record_exposure(state, order$A_id, order$B_id)
+    state <- record_presentation(state, order$A_id, order$B_id)
     state$history_pairs <- dplyr::bind_rows(state$history_pairs, row)
     state$comparisons_scheduled <- as.integer(state$comparisons_scheduled + 1L)
     rows[[idx]] <- row
@@ -638,37 +645,98 @@ NULL
   if (identical(state$mode, "stopped")) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
-  if (!isTRUE(gate_out$diagnostics_pass)) {
-    return(.adaptive_schedule_repair_pairs(state, target_pairs, adaptive, seed = seed))
-  }
 
   config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates_v3(theta_summary, state, config_v3)
 
   if (nrow(candidates) == 0L) {
+    utilities <- tibble::tibble(
+      unordered_key = character(),
+      i_id = character(),
+      j_id = character(),
+      i = character(),
+      j = character(),
+      mean_d = double(),
+      var_d = double(),
+      p_mean = double(),
+      utility = double(),
+      utility_raw = double()
+    )
+  } else {
+    names(candidates)[names(candidates) == "i"] <- "i_id"
+    names(candidates)[names(candidates) == "j"] <- "j_id"
+    epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
+    utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
+    utilities <- apply_degree_penalty(utilities, state)
+    if (!is.finite(state$U0)) {
+      state$U0 <- as.double(compute_Umax(utilities))
+    }
+  }
+  config_select <- config_v3
+  config_select$batch_size <- batch_size
+  exploration_only <- identical(state$mode, "repair")
+
+  selection <- select_batch_v3(
+    state = state,
+    candidates_with_utility = utilities,
+    config = config_select,
+    seed = seed,
+    exploration_only = exploration_only
+  )
+
+  if (nrow(selection) == 0L) {
+    state$iter <- iter
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
-  names(candidates)[names(candidates) == "i"] <- "i_id"
-  names(candidates)[names(candidates) == "j"] <- "j_id"
-  epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
-  utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
-  utilities <- apply_degree_penalty(utilities, state)
-  if (!is.finite(state$U0)) {
-    state$U0 <- as.double(compute_Umax(utilities))
+  created_at <- Sys.time()
+  rows <- vector("list", nrow(selection))
+  state_local <- state
+  for (idx in seq_len(nrow(selection))) {
+    row <- selection[idx, , drop = FALSE]
+    A_id <- as.character(row$A_id)
+    B_id <- as.character(row$B_id)
+    unordered_key <- as.character(row$unordered_key)
+    ordered_key <- make_ordered_key(A_id, B_id)
+    pair_uid <- pair_uid_from_state(state_local, unordered_key)
+
+    pair_row <- tibble::tibble(
+      pair_uid = pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = A_id,
+      B_id = B_id,
+      A_text = state_local$texts[[A_id]],
+      B_text = state_local$texts[[B_id]],
+      phase = phase,
+      iter = iter,
+      created_at = created_at,
+      utility_raw = as.double(row$utility_raw),
+      utility = as.double(row$utility),
+      deg_A = as.integer(state_local$deg[[A_id]]),
+      deg_B = as.integer(state_local$deg[[B_id]]),
+      imb_A = as.integer(state_local$imb[[A_id]]),
+      imb_B = as.integer(state_local$imb[[B_id]])
+    )
+
+    state_local <- record_presentation(state_local, A_id, B_id)
+    state_local$history_pairs <- dplyr::bind_rows(state_local$history_pairs, pair_row)
+    state_local$comparisons_scheduled <- as.integer(state_local$comparisons_scheduled + 1L)
+    rows[[idx]] <- pair_row
   }
-  out <- select_pairs_from_candidates(
-    state = state,
-    utilities_tbl = utilities,
-    batch_size = batch_size,
-    per_item_cap = adaptive$per_item_cap,
-    phase = phase,
-    iter = iter,
-    seed = seed
+
+  pairs_tbl <- dplyr::bind_rows(rows)
+  pairs_tbl <- tibble::as_tibble(pairs_tbl)
+  validate_pairs_tbl(pairs_tbl)
+  required_cols <- c(
+    "pair_uid", "unordered_key", "ordered_key",
+    "A_id", "B_id", "A_text", "B_text",
+    "phase", "iter", "created_at"
   )
-  out$state$iter <- iter
-  out
+  pairs_tbl <- pairs_tbl[, c(required_cols, setdiff(names(pairs_tbl), required_cols)), drop = FALSE]
+  state_local$iter <- iter
+  list(state = state_local, pairs = pairs_tbl)
 }
 
 .adaptive_submit_live <- function(pairs, model, trait_name, trait_description,

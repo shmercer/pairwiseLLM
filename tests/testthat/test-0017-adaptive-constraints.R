@@ -8,11 +8,11 @@ test_that("duplicate policy enforces reverse-only second occurrence", {
   expect_true(pairwiseLLM:::duplicate_allowed(state, "A", "B"))
   expect_true(pairwiseLLM:::duplicate_allowed(state, "B", "A"))
 
-  state1 <- pairwiseLLM:::record_exposure(state, "A", "B")
+  state1 <- pairwiseLLM:::record_presentation(state, "A", "B")
   expect_false(pairwiseLLM:::duplicate_allowed(state1, "A", "B"))
   expect_true(pairwiseLLM:::duplicate_allowed(state1, "B", "A"))
 
-  state2 <- pairwiseLLM:::record_exposure(state1, "B", "A")
+  state2 <- pairwiseLLM:::record_presentation(state1, "B", "A")
   expect_false(pairwiseLLM:::duplicate_allowed(state2, "A", "B"))
   expect_false(pairwiseLLM:::duplicate_allowed(state2, "B", "A"))
 })

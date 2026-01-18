@@ -277,7 +277,7 @@ test_that("select_pairs_from_candidates flips to reverse order when allowed", {
   state$pos2[["B"]] <- 0L
   state$deg <- state$pos1 + state$pos2
   state$imb <- state$pos1 - state$pos2
-  state <- pairwiseLLM:::record_exposure(state, "A", "B")
+  state <- pairwiseLLM:::record_presentation(state, "A", "B")
 
   utilities <- tibble::tibble(
     i_id = "A",

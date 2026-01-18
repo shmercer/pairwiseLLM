@@ -219,7 +219,7 @@ phase1_generate_pairs <- function(
               created_at,
               strategies[stage]
             )
-            state <- record_exposure(state, attempt$A_id, attempt$B_id)
+            state <- record_presentation(state, attempt$A_id, attempt$B_id)
             state$history_pairs <- dplyr::bind_rows(state$history_pairs, row)
             state$comparisons_scheduled <- as.integer(state$comparisons_scheduled + 1L)
             generated <- generated + 1L

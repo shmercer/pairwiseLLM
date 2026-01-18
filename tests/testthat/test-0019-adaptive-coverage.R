@@ -246,12 +246,12 @@ test_that("adaptive constraints cover key helpers, duplicates, and exposure", {
   state_env$ordered_seen[["A:B"]] <- TRUE
   expect_false(pairwiseLLM:::duplicate_allowed(state_env, "A", "B"))
 
-  expect_error(pairwiseLLM:::record_exposure(state, "A", "Z"), "ids")
+  expect_error(pairwiseLLM:::record_presentation(state, "A", "Z"), "ids")
 
   state_env <- state
   state_env$unordered_count <- integer()
   state_env$ordered_seen <- new.env(parent = emptyenv())
-  state_env <- pairwiseLLM:::record_exposure(state_env, "A", "B")
+  state_env <- pairwiseLLM:::record_presentation(state_env, "A", "B")
   expect_equal(state_env$unordered_count[["A:B"]], 1L)
   expect_true(isTRUE(state_env$ordered_seen[["A:B"]]))
 })
