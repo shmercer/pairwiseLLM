@@ -17,3 +17,4 @@
 ^tests/testthat/bad\.csv$
 ^agents\.md$
 ^dev-checklists$
+^\.lintr$
