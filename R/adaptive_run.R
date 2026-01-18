@@ -332,6 +332,7 @@ NULL
 
   needs_init <- is.null(state$fast_fit)
   do_refit <- isTRUE(allow_refit) && isTRUE(state$new_since_refit >= refit_B)
+  refit_performed <- FALSE
 
   if (needs_init || do_refit) {
     fit <- fit_bayes_btl_fast(
@@ -341,6 +342,7 @@ NULL
       seed = seed
     )
     state$fast_fit <- fit
+    refit_performed <- TRUE
     if (do_refit) {
       state$last_refit_at <- as.integer(state$comparisons_observed)
       state$config$last_refit_at <- state$last_refit_at
@@ -352,7 +354,7 @@ NULL
     rlang::abort("Fast inference failed to initialize.")
   }
 
-  list(state = state, fit = state$fast_fit)
+  list(state = state, fit = state$fast_fit, refit_performed = refit_performed)
 }
 
 .adaptive_run_stopping_checks <- function(state, adaptive, seed, allow_refit = NULL) {
@@ -362,92 +364,125 @@ NULL
   }
   allow_refit <- allow_refit %||% state$config$allow_refit %||% TRUE
 
+  if (!isTRUE(allow_refit) && is.null(state$fast_fit)) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+
   CW <- state$config$CW %||% floor(state$N / 2)
   CW <- as.integer(CW)
   if (is.na(CW) || CW < 1L) {
     rlang::abort("`CW` must be a positive integer.")
   }
-  if ((state$comparisons_observed - state$last_check_at) < CW) {
+  if (identical(state$mode, "warm_start") && identical(state$phase, "phase1")) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+  if (identical(state$mode, "adaptive") &&
+    identical(state$phase, "phase2") &&
+    is.integer(state$iter) &&
+    length(state$iter) == 1L &&
+    state$iter == 0L) {
     return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
   }
 
-  if (!isTRUE(allow_refit)) {
-    if (is.null(state$fast_fit)) {
-      return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
-    }
-    fit <- state$fast_fit
-  } else {
+  config_v3 <- state$config$v3 %||% adaptive_v3_config(state$N)
+  refit_performed <- FALSE
+  if (isTRUE(allow_refit)) {
     fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = seed)
     state <- fit_out$state
     fit <- fit_out$fit
+    refit_performed <- isTRUE(fit_out$refit_performed)
+  } else {
+    fit <- state$fast_fit
   }
 
-  ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
-  config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
-  theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
-  candidates <- generate_candidates_v3(theta_summary, state, config_v3)
-  if (nrow(candidates) == 0L) {
+  if (is.null(fit) || is.null(fit$theta_draws)) {
+    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+  }
+  if (!is.matrix(fit$theta_draws) || nrow(fit$theta_draws) < 2L) {
     return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
   }
 
-  names(candidates)[names(candidates) == "i"] <- "i_id"
-  names(candidates)[names(candidates) == "j"] <- "j_id"
-  epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
-  utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
-  utilities <- apply_degree_penalty(utilities, state)
-  if (!is.finite(state$U0)) {
-    state$U0 <- as.double(compute_Umax(utilities))
-  }
-
-  stop_out <- stopping_check(
-    state = state,
-    fast_fit = fit,
-    ranking_ids = ranking,
-    candidates = candidates,
-    utilities_tbl = utilities
-  )
-  state <- stop_out$state
-  if (isTRUE(stop_out$condition_A) && isTRUE(stop_out$condition_B)) {
-    if (is.null(state$config$stop_candidate_at)) {
-      state$config$stop_candidate_at <- as.integer(state$last_check_at)
-      state$checks_passed_in_row <- as.integer(max(state$checks_passed_in_row, 1L))
-    } else if (state$last_check_at > state$config$stop_candidate_at) {
-      state$checks_passed_in_row <- as.integer(max(state$checks_passed_in_row, 2L))
-    }
+  if (is.null(fit$diagnostics)) {
+    state$posterior$diagnostics_pass <- TRUE
   } else {
-    state$config$stop_candidate_at <- NULL
+    state$posterior$diagnostics_pass <- diagnostics_gate_v3(
+      fit,
+      config_v3,
+      near_stop = near_stop_from_state(state)
+    )
   }
 
-  two_checks_passed <- isTRUE(state$checks_passed_in_row >= 2L)
-  if (!two_checks_passed && !is.null(state$config$stop_candidate_at)) {
-    two_checks_passed <- isTRUE(state$last_check_at > state$config$stop_candidate_at)
+  theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+  candidates <- generate_candidates_v3(theta_summary, state, config_v3)
+
+  if (nrow(candidates) == 0L) {
+    utilities <- tibble::tibble(
+      unordered_key = character(),
+      i_id = character(),
+      j_id = character(),
+      i = character(),
+      j = character(),
+      mean_d = double(),
+      var_d = double(),
+      p_mean = double(),
+      utility = double(),
+      utility_raw = double()
+    )
+  } else {
+    names(candidates)[names(candidates) == "i"] <- "i_id"
+    names(candidates)[names(candidates) == "j"] <- "j_id"
+    epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
+    utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
+    utilities <- apply_degree_penalty(utilities, state)
   }
 
-  if (!isTRUE(state$config$stop_confirmed) && two_checks_passed) {
+  legacy_checks_passed <- 0L
+  if (!is.null(fit$theta_mean)) {
+    ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
+    legacy_out <- stopping_check(
+      state = state,
+      fast_fit = fit,
+      ranking_ids = ranking,
+      candidates = candidates,
+      utilities_tbl = utilities
+    )
+    state$last_check_at <- legacy_out$state$last_check_at
+    state$stop_candidate <- legacy_out$state$stop_candidate
+    legacy_checks_passed <- legacy_out$state$checks_passed_in_row
+  }
+
+  metrics <- compute_stop_metrics_v3(
+    state = state,
+    fit = fit,
+    candidates_with_utility = utilities,
+    config = config_v3
+  )
+  metrics$refit_performed <- refit_performed
+  state$posterior$stop_metrics <- metrics
+
+  stop_out <- should_stop_v3(metrics, state, config_v3)
+  state <- stop_out$state
+
+  mcmc_ready <- isTRUE(state$checks_passed_in_row >= 2L) ||
+    isTRUE(legacy_checks_passed >= 2L)
+  if (mcmc_ready && !isTRUE(state$config$stop_confirmed)) {
+    check_at <- as.integer(state$comparisons_observed)
     last_attempt_at <- state$config$mcmc_attempted_at %||% -1L
-    if (state$last_check_at > last_attempt_at) {
+    if (check_at > last_attempt_at) {
       bt_data <- .btl_mcmc_v3_prepare_bt_data(state$history_results, state$ids)
       mcmc_fit <- tryCatch(
         fit_bayes_btl_mcmc_v3(bt_data = bt_data, config = state$config$v3, seed = seed),
         error = function(e) e
       )
-      state$config$mcmc_attempted_at <- as.integer(state$last_check_at)
+      state$config$mcmc_attempted_at <- as.integer(check_at)
 
       if (inherits(mcmc_fit, "error")) {
         state$config$mcmc_error <- conditionMessage(mcmc_fit)
         rlang::warn(paste0("MCMC confirmation failed: ", conditionMessage(mcmc_fit)))
       } else {
-        theta_draws <- .btl_mcmc_v3_theta_draws(mcmc_fit$draws, item_id = state$ids)
-        ranking_ids <- names(sort(colMeans(theta_draws), decreasing = TRUE))
-        q_vals <- compute_adjacent_certainty(theta_draws, ranking_ids)
-        q_median <- stats::median(q_vals)
-        q_p10 <- as.double(stats::quantile(q_vals, probs = 0.1, names = FALSE))
-
-        if ((q_median > 0.95) && (q_p10 > 0.80)) {
-          state$config$stop_confirmed <- TRUE
-          state$config$final_summary <- finalize_adaptive_ranking(state, mcmc_fit)
-          state$config$mcmc_error <- NULL
-        }
+        state$config$stop_confirmed <- TRUE
+        state$config$final_summary <- finalize_adaptive_ranking(state, mcmc_fit)
+        state$config$mcmc_error <- NULL
       }
     }
   }
@@ -462,11 +497,13 @@ NULL
 .adaptive_apply_diagnostics_gate <- function(state, fit, config, near_stop) {
   diagnostics <- fit$diagnostics %||% NULL
   if (is.null(diagnostics)) {
+    state$posterior$diagnostics_pass <- TRUE
     return(list(state = state, diagnostics_pass = TRUE))
   }
 
   diagnostics_pass <- diagnostics_gate_v3(fit, config, near_stop = near_stop)
   if (isTRUE(diagnostics_pass)) {
+    state$posterior$diagnostics_pass <- TRUE
     if (!is.null(state$repair_attempts) && state$repair_attempts > 0L) {
       state$repair_attempts <- 0L
     }
@@ -476,6 +513,7 @@ NULL
     return(list(state = state, diagnostics_pass = TRUE))
   }
 
+  state$posterior$diagnostics_pass <- FALSE
   state$mode <- "repair"
   state$repair_attempts <- as.integer((state$repair_attempts %||% 0L) + 1L)
   max_cycles <- as.integer(config$repair_max_cycles)
@@ -624,9 +662,6 @@ NULL
   if (target_pairs == 0L) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
-  if (isTRUE(state$config$stop_confirmed)) {
-    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
-  }
   if (identical(state$mode, "stopped")) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
@@ -655,9 +690,6 @@ NULL
 
   gate_out <- .adaptive_apply_diagnostics_gate(state, fit, state$config$v3, near_stop = near_stop)
   state <- gate_out$state
-  if (identical(state$mode, "stopped")) {
-    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
-  }
 
   config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
@@ -682,8 +714,23 @@ NULL
     epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
     utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
     utilities <- apply_degree_penalty(utilities, state)
-    if (!is.finite(state$U0)) {
-      state$U0 <- as.double(compute_Umax(utilities))
+  }
+
+  check_stop <- !isTRUE(state$config$skip_stop_checks)
+  if (isTRUE(check_stop)) {
+    stop_metrics <- compute_stop_metrics_v3(
+      state = state,
+      fit = fit,
+      candidates_with_utility = utilities,
+      config = config_v3
+    )
+    stop_metrics$refit_performed <- isTRUE(fit_out$refit_performed)
+    state$posterior$stop_metrics <- stop_metrics
+
+    stop_out <- should_stop_v3(stop_metrics, state, config_v3)
+    state <- stop_out$state
+    if (isTRUE(stop_out$stop_decision) || identical(state$mode, "stopped")) {
+      return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
     }
   }
   config_select <- config_v3
@@ -872,7 +919,10 @@ NULL
   if (length(replacement_phase) != 1L || is.na(replacement_phase) || !nzchar(replacement_phase)) {
     rlang::abort("`replacement_phase` must be a non-empty character scalar.")
   }
-  .adaptive_schedule_next_pairs(state, target_pairs, adaptive, seed = seed)
+  state$config$skip_stop_checks <- TRUE
+  out <- .adaptive_schedule_next_pairs(state, target_pairs, adaptive, seed = seed)
+  out$state$config$skip_stop_checks <- NULL
+  out
 }
 
 .adaptive_run_replacements_live <- function(state, model, trait_name, trait_description,
@@ -1394,7 +1444,7 @@ adaptive_rank_resume <- function(
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
-  if (isTRUE(state$config$stop_confirmed)) {
+  if (isTRUE(state$config$stop_confirmed) || identical(state$mode, "stopped")) {
     scheduled <- list(state = state, pairs = .adaptive_empty_pairs_tbl())
   } else if (missing > 0L) {
     replacement_phase <- .adaptive_phase_scalar_from_pairs(pairs_submitted) %||% state$phase
@@ -1410,9 +1460,12 @@ adaptive_rank_resume <- function(
     target_info <- .adaptive_schedule_target(state, adaptive)
     state <- target_info$state
     target <- target_info$target
+    state$config$skip_stop_checks <- TRUE
     scheduled <- .adaptive_schedule_next_pairs(state, target, adaptive, seed = seed)
   }
   state <- scheduled$state
+  state$config$skip_stop_checks <- NULL
+  scheduled$state <- state
   pairs <- scheduled$pairs
 
   submission_out <- list(
@@ -1487,7 +1540,7 @@ adaptive_rank_resume <- function(
           submission = state$config$submission,
           output_dir = output_dir
         )
-        submission_out$jobs <- batch_out$jobs
+      submission_out$jobs <- batch_out$jobs
       submission_out$registry <- batch_out$registry
       submission_out$output_dir <- output_dir
     }
