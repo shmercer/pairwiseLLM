@@ -84,9 +84,11 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
   counts <- stats::setNames(rep.int(0L, N), ids)
   unordered_keys <- .adaptive_unordered_keys(ids)
   unordered_count <- stats::setNames(rep.int(0L, length(unordered_keys)), unordered_keys)
+  pair_count <- stats::setNames(rep.int(0L, length(unordered_keys)), unordered_keys)
   ordered_seen <- stats::setNames(logical(), character())
   pair_ordered_count <- stats::setNames(integer(), character())
 
+  epsilon_prior_mean <- 2 / 22
   state <- structure(
     list(
       schema_version = as.integer(schema_version),
@@ -100,7 +102,7 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       pos_count = counts,
       unordered_count = unordered_count,
       ordered_seen = ordered_seen,
-      pair_count = unordered_count,
+      pair_count = pair_count,
       pair_ordered_count = pair_ordered_count,
       history_pairs = .adaptive_empty_pairs_tbl(),
       history_results = .adaptive_empty_results_tbl(),
@@ -122,7 +124,10 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       checks_passed_in_row = 0L,
       new_since_refit = 0L,
       last_refit_at = 0L,
-      posterior = list(U_dup_threshold = NA_real_),
+      posterior = list(
+        U_dup_threshold = NA_real_,
+        epsilon_mean = epsilon_prior_mean
+      ),
       mode = "warm_start",
       repair_attempts = 0L,
       stop_reason = NA_character_,
