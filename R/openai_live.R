@@ -153,11 +153,10 @@ openai_compare_pair_live <- function(
   # We do NOT block generic gpt-5 models here, allowing temp=0.
   if (is_reasoning_model && reasoning_active) {
     if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
-      stop(
+      rlang::abort(paste0(
         "For gpt-5.1/5.2 with reasoning effort not equal to 'none', ",
-        "temperature, top_p, and logprobs must be NULL.",
-        call. = FALSE
-      )
+        "temperature, top_p, and logprobs must be NULL."
+      ))
     }
   }
 
