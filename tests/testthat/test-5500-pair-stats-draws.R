@@ -1,5 +1,5 @@
 
-testthat::test_that("compute_pair_stats_from_draws_v3 matches draw-based stats", {
+testthat::test_that("compute_pair_stats_from_draws matches draw-based stats", {
   withr::local_seed(1)
   theta_draws <- matrix(
     c(
@@ -14,7 +14,7 @@ testthat::test_that("compute_pair_stats_from_draws_v3 matches draw-based stats",
   colnames(theta_draws) <- c("A", "B", "C")
   candidates <- tibble::tibble(i_id = c("A", "A"), j_id = c("B", "C"))
 
-  out <- pairwiseLLM:::compute_pair_stats_from_draws_v3(theta_draws, candidates)
+  out <- pairwiseLLM:::compute_pair_stats_from_draws(theta_draws, candidates)
 
   d_ab <- theta_draws[, "A"] - theta_draws[, "B"]
   d_ac <- theta_draws[, "A"] - theta_draws[, "C"]

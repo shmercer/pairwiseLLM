@@ -1,57 +1,55 @@
-test_that("validate_config_v3 rejects invalid fields", {
+test_that("validate_config rejects invalid fields", {
   cfg <- pairwiseLLM:::adaptive_v3_defaults(6)
 
-  expect_error(pairwiseLLM:::validate_config_v3(1), "config")
+  expect_error(pairwiseLLM:::validate_config(1), "config")
 
   bad_W <- cfg
   bad_W$W <- 0L
-  expect_error(pairwiseLLM:::validate_config_v3(bad_W), "W")
+  expect_error(pairwiseLLM:::validate_config(bad_W), "W")
 
   bad_explore <- cfg
   bad_explore$explore_rate <- 1.2
-  expect_error(pairwiseLLM:::validate_config_v3(bad_explore), "explore_rate")
+  expect_error(pairwiseLLM:::validate_config(bad_explore), "explore_rate")
 
   bad_min_degree <- cfg
   bad_min_degree$min_degree <- 1L
-  expect_error(pairwiseLLM:::validate_config_v3(bad_min_degree), "min_degree")
+  expect_error(pairwiseLLM:::validate_config(bad_min_degree), "min_degree")
 
   bad_target_degree <- cfg
   bad_target_degree$target_mean_degree <- cfg$N + 1
-  expect_error(pairwiseLLM:::validate_config_v3(bad_target_degree), "target_mean_degree")
+  expect_error(pairwiseLLM:::validate_config(bad_target_degree), "target_mean_degree")
 
   bad_cap <- cfg
   bad_cap$hard_cap_frac <- 1.2
-  expect_error(pairwiseLLM:::validate_config_v3(bad_cap), "hard_cap_frac")
+  expect_error(pairwiseLLM:::validate_config(bad_cap), "hard_cap_frac")
 
   bad_output <- cfg
   bad_output$output_dir <- 123
-  expect_error(pairwiseLLM:::validate_config_v3(bad_output), "output_dir")
+  expect_error(pairwiseLLM:::validate_config(bad_output), "output_dir")
 })
 
-test_that("validate_state_v3 rejects inconsistent counters", {
+test_that("validate_state rejects inconsistent counters", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "beta", "charlie")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
-  cfg <- pairwiseLLM:::adaptive_v3_defaults(state$N)
 
-  expect_silent(pairwiseLLM:::validate_state_v3(state, cfg))
+  expect_silent(pairwiseLLM:::validate_state(state))
 
   state_bad <- state
   state_bad$deg[["A"]] <- -1L
-  expect_error(pairwiseLLM:::validate_state_v3(state_bad, cfg), "non-negative")
+  expect_error(pairwiseLLM:::validate_state(state_bad), "pos1")
 
   state_bad <- state
   state_bad$pair_count <- stats::setNames(1L, "A:A")
-  expect_error(pairwiseLLM:::validate_state_v3(state_bad, cfg), "self-pairs")
+  expect_error(pairwiseLLM:::validate_state(state_bad), "self-pairs")
 
   state_bad <- state
   state_bad$mode <- "unknown"
-  expect_error(pairwiseLLM:::validate_state_v3(state_bad, cfg), "state\\$mode")
+  expect_error(pairwiseLLM:::validate_state(state_bad), "state\\$mode")
 
-  expect_error(pairwiseLLM:::validate_state_v3(list(), cfg), "adaptive_state")
-  expect_error(pairwiseLLM:::validate_state_v3(state, "bad"), "config")
+  expect_error(pairwiseLLM:::validate_state(list()), "adaptive_state")
 })
 
 test_that("adaptive_v3_config normalizes overrides", {

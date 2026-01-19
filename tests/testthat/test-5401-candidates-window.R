@@ -1,4 +1,4 @@
-testthat::test_that("enumerate_candidates_v3 respects rank windows and uniqueness", {
+testthat::test_that("enumerate_candidates respects rank windows and uniqueness", {
   withr::local_seed(1)
   samples <- tibble::tibble(
     ID = LETTERS[1:6],
@@ -14,7 +14,7 @@ testthat::test_that("enumerate_candidates_v3 respects rank windows and uniquenes
     theta_sd = rep(0.2, 6)
   )
   anchors <- c("C", "E")
-  candidates <- pairwiseLLM:::enumerate_candidates_v3(anchors, theta_summary, state, config)
+  candidates <- pairwiseLLM:::enumerate_candidates(anchors, theta_summary, state, config)
 
   expect_true(all(candidates$i != candidates$j))
   expect_equal(nrow(candidates), nrow(dplyr::distinct(candidates)))

@@ -1,5 +1,5 @@
 testthat::test_that("round log schema matches contract", {
-  schema <- round_log_schema_v3()
+  schema <- round_log_schema()
 
   expected <- c(
     "round_id",
@@ -65,7 +65,7 @@ testthat::test_that("round log builder emits a single typed row", {
   )
   stop_out <- list(stop_decision = FALSE, stop_reason = NA_character_)
 
-  row <- build_round_log_row_v3(
+  row <- build_round_log_row(
     state = state,
     fit = fit,
     metrics = metrics,
@@ -74,7 +74,7 @@ testthat::test_that("round log builder emits a single typed row", {
   )
 
   testthat::expect_equal(nrow(row), 1L)
-  testthat::expect_identical(colnames(row), colnames(round_log_schema_v3()))
+  testthat::expect_identical(colnames(row), colnames(round_log_schema()))
   testthat::expect_true(is.integer(row$round_id))
   testthat::expect_true(is.double(row$reliability_EAP))
 })

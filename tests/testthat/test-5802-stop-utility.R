@@ -29,11 +29,11 @@ testthat::test_that("utility top-K median controls U_pass", {
   )
 
   utilities_pass <- tibble::tibble(utility = c(0.12, 0.1, 0.08, 0.05))
-  metrics_pass <- compute_stop_metrics_v3(state, fit, utilities_pass, config_v3)
+  metrics_pass <- compute_stop_metrics(state, fit, utilities_pass, config_v3)
   testthat::expect_true(metrics_pass$U_pass)
   testthat::expect_equal(metrics_pass$U0, metrics_pass$U_top_median)
 
   utilities_fail <- tibble::tibble(utility = c(0.3, 0.25, 0.2, 0.1))
-  metrics_fail <- compute_stop_metrics_v3(state, fit, utilities_fail, config_v3)
+  metrics_fail <- compute_stop_metrics(state, fit, utilities_fail, config_v3)
   testthat::expect_false(metrics_fail$U_pass)
 })

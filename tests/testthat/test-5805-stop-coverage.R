@@ -59,7 +59,7 @@ testthat::test_that("adaptive_run stopping checks cover fit/dx/empty candidates 
       list(state = state, fit = list(theta_mean = stats::setNames(rep(0, state$N), state$ids)))
     }
   )
-  testthat::expect_false(out_no_draws$stop_confirmed)
+  testthat::expect_false(identical(out_no_draws$state$mode, "stopped"))
 
   fit_with_diagnostics <- list(
     theta_mean = stats::setNames(rep(0, state$N), state$ids),
@@ -67,19 +67,18 @@ testthat::test_that("adaptive_run stopping checks cover fit/dx/empty candidates 
     diagnostics = list(divergences = 0, max_rhat = 1.0, min_ess_bulk = 1000)
   )
 
-  testthat::expect_warning(
+  testthat::expect_silent(
     testthat::with_mocked_bindings(
       .adaptive_run_stopping_checks(state, adaptive = list(), seed = 1),
       .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
         list(state = state, fit = fit_with_diagnostics)
       },
-      generate_candidates_v3 = function(...) tibble::tibble(i = character(), j = character())
-    ),
-    "utilities are empty"
+      generate_candidates = function(...) tibble::tibble(i = character(), j = character())
+    )
   )
 })
 
-testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3 validates metrics", {
+testthat::test_that("compute_stop_metrics validates inputs and should_stop validates metrics", {
   withr::local_seed(123)
 
   samples <- tibble::tibble(
@@ -94,11 +93,11 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
   state$config$v3 <- config_v3
 
   testthat::expect_error(
-    compute_stop_metrics_v3(state, fit = list(), candidates_with_utility = tibble::tibble(), config = config_v3),
+    compute_stop_metrics(state, fit = list(), candidates_with_utility = tibble::tibble(), config = config_v3),
     "theta_draws"
   )
   testthat::expect_error(
-    compute_stop_metrics_v3(
+    compute_stop_metrics(
       state,
       fit = list(theta_draws = "bad"),
       candidates_with_utility = tibble::tibble(),
@@ -109,7 +108,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
 
   one_draw <- matrix(0, nrow = 1, ncol = state$N, dimnames = list(NULL, state$ids))
   testthat::expect_error(
-    compute_stop_metrics_v3(
+    compute_stop_metrics(
       state,
       fit = list(theta_draws = one_draw, theta_mean = stats::setNames(rep(0, state$N), state$ids)),
       candidates_with_utility = tibble::tibble(),
@@ -121,7 +120,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
   config_bad_subset <- config_v3
   config_bad_subset$S_subset <- 0L
   testthat::expect_error(
-    compute_stop_metrics_v3(
+    compute_stop_metrics(
       state,
       fit = list(
         theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
@@ -136,7 +135,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
   config_bad_tau <- config_v3
   config_bad_tau$tau_fn <- function(N) NA_real_
   testthat::expect_error(
-    compute_stop_metrics_v3(
+    compute_stop_metrics(
       state,
       fit = list(
         theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
@@ -149,7 +148,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
   )
 
   testthat::expect_error(
-    compute_stop_metrics_v3(
+    compute_stop_metrics(
       state,
       fit = list(
         theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
@@ -162,7 +161,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
   )
 
   testthat::expect_error(
-    compute_stop_metrics_v3(
+    compute_stop_metrics(
       state,
       fit = list(
         theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
@@ -177,7 +176,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
   config_bad_k <- config_v3
   config_bad_k$K_top <- 0L
   testthat::expect_error(
-    compute_stop_metrics_v3(
+    compute_stop_metrics(
       state,
       fit = list(
         theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
@@ -191,7 +190,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
 
   state$posterior$diagnostics_pass <- "bad"
   testthat::expect_error(
-    suppressWarnings(compute_stop_metrics_v3(
+    suppressWarnings(compute_stop_metrics(
       state,
       fit = list(
         theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
@@ -204,7 +203,7 @@ testthat::test_that("compute_stop_metrics_v3 validates inputs and should_stop_v3
   )
 
   testthat::expect_error(
-    should_stop_v3(metrics = "bad", state = state, config = config_v3),
+    should_stop(metrics = "bad", state = state, config = config_v3),
     "metrics"
   )
 })

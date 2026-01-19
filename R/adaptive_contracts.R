@@ -100,7 +100,7 @@ adaptive_v3_config <- function(N, ...) {
   defaults <- adaptive_v3_defaults(N)
   config <- utils::modifyList(defaults, overrides)
   config$N <- defaults$N
-  validate_config_v3(config)
+  validate_config(config)
   config
 }
 
@@ -144,7 +144,7 @@ adaptive_v3_config <- function(N, ...) {
 
 #' @keywords internal
 #' @noRd
-validate_config_v3 <- function(config) {
+validate_config <- function(config) {
   if (!is.list(config)) {
     rlang::abort("`config` must be a list.")
   }
@@ -237,75 +237,7 @@ validate_config_v3 <- function(config) {
 
 #' @keywords internal
 #' @noRd
-validate_state_v3 <- function(state, config) {
-  if (!inherits(state, "adaptive_state")) {
-    rlang::abort("`state` must be an adaptive_state object.")
-  }
-  if (!is.list(config)) {
-    rlang::abort("`config` must be a list.")
-  }
-
-  .adaptive_v3_check(is.character(state$ids), "`state$ids` must be character.")
-  .adaptive_v3_check(is.integer(state$N) && length(state$N) == 1L, "`state$N` must be integer.")
-  .adaptive_v3_check(state$N == length(state$ids), "`state$N` must equal length of `ids`.")
-  .adaptive_v3_check(isTRUE(state$N == as.integer(config$N)), "`state$N` must match config `N`.")
-
-  .adaptive_v3_check_named_int(state$deg, "state$deg", state$ids)
-  .adaptive_v3_check_named_int(state$pos_count, "state$pos_count", state$ids)
-
-  .adaptive_v3_check(is.integer(state$pair_count), "`state$pair_count` must be integer.")
-  .adaptive_v3_check(!is.null(names(state$pair_count)) || length(state$pair_count) == 0L,
-    "`state$pair_count` must be named when non-empty.")
-  .adaptive_v3_check(all(state$pair_count >= 0L), "`state$pair_count` must be non-negative.")
-
-  .adaptive_v3_check(is.integer(state$pair_ordered_count), "`state$pair_ordered_count` must be integer.")
-  .adaptive_v3_check(!is.null(names(state$pair_ordered_count)) ||
-    length(state$pair_ordered_count) == 0L,
-  "`state$pair_ordered_count` must be named when non-empty.")
-  .adaptive_v3_check(all(state$pair_ordered_count >= 0L), "`state$pair_ordered_count` must be non-negative.")
-
-  .adaptive_v3_validate_pair_keys(names(state$pair_count), state$ids, ordered = FALSE, "state$pair_count")
-  .adaptive_v3_validate_pair_keys(
-    names(state$pair_ordered_count),
-    state$ids,
-    ordered = TRUE,
-    "state$pair_ordered_count"
-  )
-
-  .adaptive_v3_check(is.integer(state$new_since_refit) && length(state$new_since_refit) == 1L,
-    "`state$new_since_refit` must be a length-1 integer.")
-  .adaptive_v3_check(state$new_since_refit >= 0L, "`state$new_since_refit` must be non-negative.")
-  .adaptive_v3_check(is.integer(state$last_refit_at) && length(state$last_refit_at) == 1L,
-    "`state$last_refit_at` must be a length-1 integer.")
-  .adaptive_v3_check(state$last_refit_at >= 0L, "`state$last_refit_at` must be non-negative.")
-
-  .adaptive_v3_check(is.list(state$posterior), "`state$posterior` must be a list.")
-  .adaptive_v3_check(!is.null(state$posterior$U_dup_threshold),
-    "`state$posterior$U_dup_threshold` must be present.")
-  .adaptive_v3_check(is.numeric(state$posterior$U_dup_threshold) &&
-    length(state$posterior$U_dup_threshold) == 1L,
-  "`state$posterior$U_dup_threshold` must be numeric length 1.")
-
-  allowed_modes <- c("warm_start", "adaptive", "repair", "stopped")
-  .adaptive_v3_check(is.character(state$mode) && length(state$mode) == 1L,
-    "`state$mode` must be a length-1 character value.")
-  .adaptive_v3_check(state$mode %in% allowed_modes,
-    paste0("`state$mode` must be one of: ", paste(allowed_modes, collapse = ", "), "."))
-
-  .adaptive_v3_check(is.integer(state$repair_attempts) && length(state$repair_attempts) == 1L,
-    "`state$repair_attempts` must be a length-1 integer.")
-  .adaptive_v3_check(state$repair_attempts >= 0L, "`state$repair_attempts` must be non-negative.")
-  if (!is.null(state$stop_reason)) {
-    .adaptive_v3_check(is.character(state$stop_reason) && length(state$stop_reason) == 1L,
-      "`state$stop_reason` must be a length-1 character value or NULL.")
-  }
-
-  invisible(state)
-}
-
-#' @keywords internal
-#' @noRd
-round_log_schema_v3 <- function() {
+round_log_schema <- function() {
   tibble::tibble(
     round_id = integer(),
     n_items = integer(),
@@ -340,7 +272,7 @@ round_log_schema_v3 <- function() {
 
 #' @keywords internal
 #' @noRd
-item_summary_schema_v3 <- function() {
+item_summary_schema <- function() {
   tibble::tibble(
     ID = character(),
     theta_mean = double(),
@@ -414,7 +346,7 @@ compute_gini_degree <- function(deg) {
 }
 
 .adaptive_round_log_defaults <- function() {
-  schema <- round_log_schema_v3()
+  schema <- round_log_schema()
   defaults <- lapply(schema, function(col) {
     if (is.integer(col)) {
       NA_integer_
@@ -432,7 +364,7 @@ compute_gini_degree <- function(deg) {
 }
 
 .adaptive_item_summary_defaults <- function(n_rows = 0L) {
-  schema <- item_summary_schema_v3()
+  schema <- item_summary_schema()
   if (n_rows < 1L) {
     return(schema)
   }
@@ -441,7 +373,7 @@ compute_gini_degree <- function(deg) {
 
 #' @keywords internal
 #' @noRd
-build_round_log_row_v3 <- function(state,
+build_round_log_row <- function(state,
     fit = NULL,
     metrics = NULL,
     stop_out = NULL,
@@ -537,7 +469,7 @@ build_round_log_row_v3 <- function(state,
 
 #' @keywords internal
 #' @noRd
-build_item_summary_v3 <- function(state, fit = NULL) {
+build_item_summary <- function(state, fit = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state.")
   }

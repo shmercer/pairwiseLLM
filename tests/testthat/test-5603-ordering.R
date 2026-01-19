@@ -20,7 +20,7 @@ testthat::test_that("ordering reverses duplicates and balances positions", {
     j_id = "B",
     unordered_key = pairwiseLLM:::make_unordered_key("A", "B")
   )
-  ordered_new <- pairwiseLLM:::assign_order_v3(new_pairs, state)
+  ordered_new <- pairwiseLLM:::assign_order(new_pairs, state)
   expect_equal(ordered_new$A_id, "B")
   expect_equal(ordered_new$B_id, "A")
 
@@ -38,7 +38,7 @@ testthat::test_that("ordering reverses duplicates and balances positions", {
     j_id = "C",
     unordered_key = pairwiseLLM:::make_unordered_key("C", "D")
   )
-  ordered_tie <- pairwiseLLM:::assign_order_v3(tie_pairs, state)
+  ordered_tie <- pairwiseLLM:::assign_order(tie_pairs, state)
   expect_equal(ordered_tie$A_id, "C")
   expect_equal(ordered_tie$B_id, "D")
 
@@ -61,7 +61,7 @@ testthat::test_that("ordering reverses duplicates and balances positions", {
     j_id = "B",
     unordered_key = "A:B"
   )
-  ordered_dup <- pairwiseLLM:::assign_order_v3(dup_pairs, state)
+  ordered_dup <- pairwiseLLM:::assign_order(dup_pairs, state)
   expect_equal(ordered_dup$A_id, "B")
   expect_equal(ordered_dup$B_id, "A")
 })

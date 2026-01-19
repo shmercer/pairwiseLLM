@@ -32,9 +32,9 @@ testthat::test_that("hard cap stop triggers immediately", {
   )
 
   utilities <- tibble::tibble(utility = c(0.1, 0.05, 0.03))
-  metrics <- compute_stop_metrics_v3(state, fit, utilities, config_v3)
+  metrics <- compute_stop_metrics(state, fit, utilities, config_v3)
   metrics$refit_performed <- TRUE
-  stop_out <- should_stop_v3(metrics, state, config_v3)
+  stop_out <- should_stop(metrics, state, config_v3)
 
   testthat::expect_true(stop_out$stop_decision)
   testthat::expect_identical(stop_out$state$stop_reason, "hard_cap_40pct")

@@ -1,4 +1,4 @@
-testthat::test_that("fit_bayes_btl_mcmc_v3 returns diagnostics with required fields", {
+testthat::test_that(".fit_bayes_btl_mcmc_adaptive returns diagnostics with required fields", {
   testthat::skip_if_not_installed("cmdstanr")
   cmdstan_path <- tryCatch(cmdstanr::cmdstan_path(), error = function(e) "")
   if (!nzchar(cmdstan_path)) {
@@ -29,7 +29,7 @@ testthat::test_that("fit_bayes_btl_mcmc_v3 returns diagnostics with required fie
 
   withr::local_seed(303)
   fit <- tryCatch(
-    pairwiseLLM:::fit_bayes_btl_mcmc_v3(bt_data = bt_data, config = config, seed = 303),
+    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 303),
     error = function(e) {
       testthat::skip(paste("CmdStan not usable for MCMC test:", conditionMessage(e)))
     }

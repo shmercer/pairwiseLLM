@@ -4,7 +4,7 @@
 
 #' @keywords internal
 #' @noRd
-diagnostics_gate_v3 <- function(fit, config, near_stop = FALSE) {
+diagnostics_gate <- function(fit, config, near_stop = FALSE) {
   if (!is.list(fit)) {
     rlang::abort("`fit` must be a list.")
   }
@@ -12,7 +12,7 @@ diagnostics_gate_v3 <- function(fit, config, near_stop = FALSE) {
   if (!is.list(diagnostics)) {
     rlang::abort("`fit$diagnostics` must be a list.")
   }
-  validate_config_v3(config)
+  validate_config(config)
   if (!is.logical(near_stop) || length(near_stop) != 1L || is.na(near_stop)) {
     rlang::abort("`near_stop` must be TRUE or FALSE.")
   }

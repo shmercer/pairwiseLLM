@@ -21,6 +21,7 @@ testthat::test_that("duplicate policy enforces all locked conditions", {
     iter = 1L,
     created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
+  state$comparisons_scheduled <- 1L
 
   allowed <- tibble::tibble(
     i_id = "A",
@@ -30,7 +31,7 @@ testthat::test_that("duplicate policy enforces all locked conditions", {
     utility_raw = 0.8,
     p_mean = 0.51
   )
-  out_ok <- pairwiseLLM:::select_exploitation_pairs_v3(
+  out_ok <- pairwiseLLM:::select_exploitation_pairs(
     candidates_with_utility = allowed,
     state = state,
     n_exploit = 1L,
@@ -40,7 +41,7 @@ testthat::test_that("duplicate policy enforces all locked conditions", {
 
   blocked_count <- allowed
   state$pair_count[[unordered_key]] <- config$dup_max_count
-  out_count <- pairwiseLLM:::select_exploitation_pairs_v3(
+  out_count <- pairwiseLLM:::select_exploitation_pairs(
     candidates_with_utility = blocked_count,
     state = state,
     n_exploit = 1L,
@@ -52,7 +53,7 @@ testthat::test_that("duplicate policy enforces all locked conditions", {
   blocked_util$utility <- 0.1
   blocked_util$utility_raw <- 0.1
   state$pair_count[[unordered_key]] <- 1L
-  out_util <- pairwiseLLM:::select_exploitation_pairs_v3(
+  out_util <- pairwiseLLM:::select_exploitation_pairs(
     candidates_with_utility = blocked_util,
     state = state,
     n_exploit = 1L,

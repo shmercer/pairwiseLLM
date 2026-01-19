@@ -1,4 +1,4 @@
-# round_log_schema_v3 columns are stable
+# round_log_schema columns are stable
 
     c("round_id", "n_items", "total_pairs", "new_pairs", "batch_size", 
     "window_W", "exploration_rate", "mean_degree", "min_degree", 
@@ -8,7 +8,7 @@
     "max_rhat", "diagnostics_pass", "stop_decision", "stop_reason", 
     "mode")
 
-# item_summary_schema_v3 columns are stable
+# item_summary_schema columns are stable
 
     c("ID", "theta_mean", "theta_sd", "theta_ci90_lo", "theta_ci90_hi", 
     "theta_ci95_lo", "theta_ci95_hi", "rank_mean", "rank_sd", "deg", 

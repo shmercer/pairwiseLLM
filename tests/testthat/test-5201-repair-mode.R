@@ -27,11 +27,11 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
             )
           )
         },
-        diagnostics_gate_v3 = function(...) FALSE,
-        generate_candidates_v3 = function(...) {
+        diagnostics_gate = function(...) FALSE,
+        generate_candidates = function(...) {
           tibble::tibble(i = "A", j = "B")
         },
-        compute_pair_utility_v3 = function(...) {
+        compute_pair_utility = function(...) {
           tibble::tibble(
             i_id = "A",
             j_id = "B",
@@ -42,7 +42,7 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
           )
         },
         apply_degree_penalty = function(utilities, state) utilities,
-        select_batch_v3 = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+        select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
           called$selection <- TRUE
           called$exploration_only <- exploration_only
           tibble::tibble(
@@ -80,9 +80,9 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
         )
       )
     },
-    diagnostics_gate_v3 = function(...) TRUE,
-    generate_candidates_v3 = function(...) tibble::tibble(i = "A", j = "B"),
-    compute_pair_utility_v3 = function(...) {
+    diagnostics_gate = function(...) TRUE,
+    generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
+    compute_pair_utility = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -93,7 +93,7 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
       )
     },
     apply_degree_penalty = function(utilities, state) utilities,
-    select_batch_v3 = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+    select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
       called$selection <- TRUE
       called$exploration_only <- exploration_only
       tibble::tibble(

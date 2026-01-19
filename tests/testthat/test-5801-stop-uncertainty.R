@@ -28,7 +28,7 @@ testthat::test_that("theta_sd subset median controls uncertainty pass", {
     theta_mean = stats::setNames(colMeans(pass_draws), state$ids)
   )
   utilities <- tibble::tibble(utility = c(0.1, 0.05, 0.03))
-  pass_metrics <- compute_stop_metrics_v3(state, pass_fit, utilities, config_v3)
+  pass_metrics <- compute_stop_metrics(state, pass_fit, utilities, config_v3)
   testthat::expect_true(pass_metrics$theta_sd_pass)
 
   fail_draws <- matrix(
@@ -42,6 +42,6 @@ testthat::test_that("theta_sd subset median controls uncertainty pass", {
     theta_draws = fail_draws,
     theta_mean = stats::setNames(colMeans(fail_draws), state$ids)
   )
-  fail_metrics <- compute_stop_metrics_v3(state, fail_fit, utilities, config_v3)
+  fail_metrics <- compute_stop_metrics(state, fail_fit, utilities, config_v3)
   testthat::expect_false(fail_metrics$theta_sd_pass)
 })

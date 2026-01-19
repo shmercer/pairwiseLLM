@@ -14,12 +14,12 @@ testthat::test_that("candidate generation is stable to irrelevant rank changes",
     theta_sd = rep(0.3, state$N)
   )
   anchors <- c("C")
-  base <- pairwiseLLM:::enumerate_candidates_v3(anchors, theta_summary, state, config)
+  base <- pairwiseLLM:::enumerate_candidates(anchors, theta_summary, state, config)
 
   perturbed <- theta_summary
   perturbed$theta_mean[6] <- perturbed$theta_mean[6] + 0.01
-  out2 <- pairwiseLLM:::enumerate_candidates_v3(anchors, perturbed, state, config)
+  out2 <- pairwiseLLM:::enumerate_candidates(anchors, perturbed, state, config)
 
   expect_equal(base, out2)
-  expect_equal(base, pairwiseLLM:::enumerate_candidates_v3(anchors, theta_summary, state, config))
+  expect_equal(base, pairwiseLLM:::enumerate_candidates(anchors, theta_summary, state, config))
 })

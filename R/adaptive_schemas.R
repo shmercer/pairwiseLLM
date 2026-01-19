@@ -227,7 +227,7 @@ validate_state <- function(state) {
     rlang::abort("`state$texts` names must match `state$ids`.")
   }
 
-  counts <- c("deg", "pos1", "pos2", "imb")
+  counts <- c("deg", "pos1", "pos2", "imb", "pos_count")
   for (nm in counts) {
     vec <- state[[nm]]
     if (!is.integer(vec) || is.null(names(vec)) || !identical(names(vec), state$ids)) {
@@ -245,6 +245,35 @@ validate_state <- function(state) {
   if (!is.integer(state$unordered_count)) {
     rlang::abort("`state$unordered_count` must be an integer vector.")
   }
+
+  if (!is.integer(state$pair_count)) {
+    rlang::abort("`state$pair_count` must be an integer vector.")
+  }
+  if (!is.null(state$pair_count) && length(state$pair_count) > 0L && is.null(names(state$pair_count))) {
+    rlang::abort("`state$pair_count` must be named when non-empty.")
+  }
+  if (any(state$pair_count < 0L, na.rm = TRUE)) {
+    rlang::abort("`state$pair_count` must be non-negative.")
+  }
+  .adaptive_v3_validate_pair_keys(names(state$pair_count), state$ids, ordered = FALSE, "state$pair_count")
+
+  if (!is.integer(state$pair_ordered_count)) {
+    rlang::abort("`state$pair_ordered_count` must be an integer vector.")
+  }
+  if (!is.null(state$pair_ordered_count) &&
+    length(state$pair_ordered_count) > 0L &&
+    is.null(names(state$pair_ordered_count))) {
+    rlang::abort("`state$pair_ordered_count` must be named when non-empty.")
+  }
+  if (any(state$pair_ordered_count < 0L, na.rm = TRUE)) {
+    rlang::abort("`state$pair_ordered_count` must be non-negative.")
+  }
+  .adaptive_v3_validate_pair_keys(
+    names(state$pair_ordered_count),
+    state$ids,
+    ordered = TRUE,
+    "state$pair_ordered_count"
+  )
 
   if (!(is.logical(state$ordered_seen) || is.environment(state$ordered_seen))) {
     rlang::abort("`state$ordered_seen` must be a named logical vector or environment.")
@@ -305,6 +334,48 @@ validate_state <- function(state) {
   }
   if (!is.integer(state$checks_passed_in_row) || length(state$checks_passed_in_row) != 1L) {
     rlang::abort("`state$checks_passed_in_row` must be a length-1 integer.")
+  }
+  if (!is.integer(state$new_since_refit) || length(state$new_since_refit) != 1L) {
+    rlang::abort("`state$new_since_refit` must be a length-1 integer.")
+  }
+  if (state$new_since_refit < 0L) {
+    rlang::abort("`state$new_since_refit` must be non-negative.")
+  }
+  if (!is.integer(state$last_refit_at) || length(state$last_refit_at) != 1L) {
+    rlang::abort("`state$last_refit_at` must be a length-1 integer.")
+  }
+  if (state$last_refit_at < 0L) {
+    rlang::abort("`state$last_refit_at` must be non-negative.")
+  }
+
+  if (!is.list(state$posterior)) {
+    rlang::abort("`state$posterior` must be a list.")
+  }
+  if (is.null(state$posterior$U_dup_threshold)) {
+    rlang::abort("`state$posterior$U_dup_threshold` must be present.")
+  }
+  if (!is.numeric(state$posterior$U_dup_threshold) ||
+    length(state$posterior$U_dup_threshold) != 1L) {
+    rlang::abort("`state$posterior$U_dup_threshold` must be numeric length 1.")
+  }
+
+  allowed_modes <- c("warm_start", "adaptive", "repair", "stopped")
+  if (!is.character(state$mode) || length(state$mode) != 1L) {
+    rlang::abort("`state$mode` must be a length-1 character value.")
+  }
+  if (!state$mode %in% allowed_modes) {
+    rlang::abort(paste0("`state$mode` must be one of: ", paste(allowed_modes, collapse = ", "), "."))
+  }
+  if (!is.integer(state$repair_attempts) || length(state$repair_attempts) != 1L) {
+    rlang::abort("`state$repair_attempts` must be a length-1 integer.")
+  }
+  if (state$repair_attempts < 0L) {
+    rlang::abort("`state$repair_attempts` must be non-negative.")
+  }
+  if (!is.null(state$stop_reason)) {
+    if (!is.character(state$stop_reason) || length(state$stop_reason) != 1L) {
+      rlang::abort("`state$stop_reason` must be a length-1 character value or NULL.")
+    }
   }
 
   invisible(state)

@@ -1,8 +1,8 @@
-testthat::test_that("diagnostics_gate_v3 validates inputs", {
+testthat::test_that("diagnostics_gate validates inputs", {
   config <- pairwiseLLM:::adaptive_v3_config(3L)
 
-  expect_error(pairwiseLLM:::diagnostics_gate_v3(1, config), "`fit`")
-  expect_error(pairwiseLLM:::diagnostics_gate_v3(list(), config), "fit\\$diagnostics")
+  expect_error(pairwiseLLM:::diagnostics_gate(1, config), "`fit`")
+  expect_error(pairwiseLLM:::diagnostics_gate(list(), config), "fit\\$diagnostics")
 
   fit <- list(
     diagnostics = list(
@@ -12,7 +12,7 @@ testthat::test_that("diagnostics_gate_v3 validates inputs", {
     )
   )
   expect_error(
-    pairwiseLLM:::diagnostics_gate_v3(fit, config, near_stop = NA),
+    pairwiseLLM:::diagnostics_gate(fit, config, near_stop = NA),
     "near_stop"
   )
 })
@@ -118,6 +118,7 @@ testthat::test_that("repair scheduling handles target bounds and duplicates", {
   state$phase <- "phase2"
   state$unordered_count[["A:B"]] <- 1L
   adaptive <- list(bins = 2L, mix_struct = 0.7, within_adj_split = 0.5)
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
 
   expect_error(
     pairwiseLLM:::.adaptive_schedule_repair_pairs(state, -1L, adaptive, seed = 1),
@@ -127,33 +128,46 @@ testthat::test_that("repair scheduling handles target bounds and duplicates", {
   empty_out <- pairwiseLLM:::.adaptive_schedule_repair_pairs(state, 0L, adaptive, seed = 1)
   expect_equal(nrow(empty_out$pairs), 0L)
 
-  pair_row <- tibble::tibble(
-    pair_uid = "A:B#2",
-    unordered_key = "A:B",
-    ordered_key = "A:B",
-    A_id = "A",
-    B_id = "B",
-    A_text = "alpha",
-    B_text = "bravo",
-    phase = "phase1",
-    iter = 0L,
-    created_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
-  )
-
   out <- NULL
-  testthat::expect_warning(
-    {
-      out <- testthat::with_mocked_bindings(
-        pairwiseLLM:::.adaptive_schedule_repair_pairs(state, 1L, adaptive, seed = 1),
-        phase1_generate_pairs = function(state, n_pairs, mix_struct, within_adj_split, bins, seed) {
-          state$history_pairs <- dplyr::bind_rows(state$history_pairs, pair_row)
-          state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
-          list(state = state, pairs = pair_row)
-        },
-        .package = "pairwiseLLM"
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_schedule_repair_pairs(state, 1L, adaptive, seed = 1),
+    .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
+      list(
+        state = state,
+        fit = list(
+          theta_mean = stats::setNames(c(0, 0), state$ids),
+          theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
+          diagnostics = NULL
+        )
       )
     },
-    "duplicate comparisons"
+    generate_candidates = function(...) {
+      tibble::tibble(i = "A", j = "B")
+    },
+    compute_pair_utility = function(...) {
+      tibble::tibble(
+        i_id = "A",
+        j_id = "B",
+        unordered_key = "A:B",
+        utility = 0.2,
+        utility_raw = 0.2,
+        p_mean = 0.5
+      )
+    },
+    apply_degree_penalty = function(utilities, state) utilities,
+    select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+      tibble::tibble(
+        i_id = "A",
+        j_id = "B",
+        unordered_key = "A:B",
+        utility = 0.2,
+        utility_raw = 0.2,
+        p_mean = 0.5,
+        A_id = "A",
+        B_id = "B"
+      )
+    },
+    .package = "pairwiseLLM"
   )
 
   expect_equal(out$state$mode, "repair")
@@ -196,10 +210,10 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
         )
       )
     },
-    generate_candidates_v3 = function(...) {
+    generate_candidates = function(...) {
       tibble::tibble(i = "A", j = "B")
     },
-    compute_pair_utility_v3 = function(...) {
+    compute_pair_utility = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -209,7 +223,7 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
       )
     },
     apply_degree_penalty = function(utilities, state) utilities,
-    select_batch_v3 = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+    select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
       captured$U0 <- state$U0
       tibble::tibble(
         i_id = character(),
@@ -240,8 +254,8 @@ testthat::test_that("next_action respects stop_reason and resume seeds repair fi
   out <- pairwiseLLM:::.adaptive_next_action(state, scheduled_pairs = 1L)
   expect_equal(out$reason, "diagnostics_failed")
 
-  state$repair_attempts <- NULL
-  state$stop_reason <- NULL
+  state$repair_attempts <- 0L
+  state$stop_reason <- NA_character_
   state$config$backend <- "openai"
   state$config$model <- "gpt-test"
   state$config$trait_name <- "quality"
@@ -262,15 +276,16 @@ testthat::test_that("next_action respects stop_reason and resume seeds repair fi
       )
     ),
     .adaptive_run_stopping_checks = function(state, adaptive, seed) {
-      state$config$stop_confirmed <- TRUE
-      list(state = state, stop_confirmed = TRUE)
+      state$mode <- "stopped"
+      state$stop_reason <- "diagnostics_failed"
+      list(state = state)
     },
     .package = "pairwiseLLM"
   )
 
   expect_equal(resume_out$state$repair_attempts, 0L)
-  expect_true(is.na(resume_out$state$stop_reason))
-  expect_equal(resume_out$next_action$reason, "stop_confirmed")
+  expect_equal(resume_out$state$stop_reason, "diagnostics_failed")
+  expect_equal(resume_out$next_action$reason, "diagnostics_failed")
 })
 
 testthat::test_that("replacement loop defaults batch size and phase when missing", {
@@ -306,4 +321,75 @@ testthat::test_that("replacement loop defaults batch size and phase when missing
 
   expect_equal(captured$phase, "phase1")
   expect_equal(length(out$submissions), 0L)
+})
+
+testthat::test_that("repair schedule handles empty utilities and selection", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$phase <- "phase2"
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
+  adaptive <- list()
+
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_schedule_repair_pairs(state, 1L, adaptive, seed = 1),
+    .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
+      list(
+        state = state,
+        fit = list(
+          theta_mean = stats::setNames(c(0, 0), state$ids),
+          theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
+          diagnostics = NULL
+        )
+      )
+    },
+    generate_candidates = function(...) tibble::tibble(),
+    select_batch = function(...) pairwiseLLM:::.adaptive_empty_pairs_tbl(),
+    .package = "pairwiseLLM"
+  )
+
+  expect_equal(nrow(out$pairs), 0L)
+  expect_equal(out$state$mode, "repair")
+  expect_equal(out$state$iter, 1L)
+})
+
+testthat::test_that("adaptive_rank_resume seeds repair defaults when NULL", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$repair_attempts <- NULL
+  state$stop_reason <- NULL
+  state$config$backend <- "openai"
+  state$config$model <- "gpt-test"
+  state$config$trait_name <- "quality"
+  state$config$trait_description <- "Which is better?"
+  state$config$prompt_template <- "template"
+  state$config$submission <- list()
+
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = state,
+      mode = "live",
+      submission_info = list(
+        backend = "openai",
+        model = "gpt-test",
+        trait_name = "quality",
+        trait_description = "Which is better?",
+        prompt_template = "template"
+      )
+    ),
+    validate_state = function(state) invisible(state),
+    .adaptive_run_stopping_checks = function(state, adaptive, seed) {
+      state$mode <- "stopped"
+      list(state = state)
+    },
+    .package = "pairwiseLLM"
+  )
+
+  expect_equal(out$state$repair_attempts, 0L)
+  expect_true(is.na(out$state$stop_reason))
 })

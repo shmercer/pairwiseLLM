@@ -142,8 +142,8 @@ select_window_size <- function(N, phase = c("phase2", "phase3"), near_stop = FAL
 
 #' @keywords internal
 #' @noRd
-select_anchors_v3 <- function(theta_summary, state, config) {
-  validate_state_v3(state, config)
+select_anchors <- function(theta_summary, state, config) {
+  validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
 
   total <- min(as.integer(config$A_anchors), nrow(theta_summary))
@@ -185,8 +185,8 @@ select_anchors_v3 <- function(theta_summary, state, config) {
 
 #' @keywords internal
 #' @noRd
-enumerate_candidates_v3 <- function(anchors, theta_summary, state, config) {
-  validate_state_v3(state, config)
+enumerate_candidates <- function(anchors, theta_summary, state, config) {
+  validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
 
   i <- NULL
@@ -237,11 +237,11 @@ enumerate_candidates_v3 <- function(anchors, theta_summary, state, config) {
 
 #' @keywords internal
 #' @noRd
-generate_candidates_v3 <- function(theta_summary, state, config) {
-  validate_state_v3(state, config)
+generate_candidates <- function(theta_summary, state, config) {
+  validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
-  anchors <- select_anchors_v3(theta_summary, state, config)
-  candidates <- enumerate_candidates_v3(anchors, theta_summary, state, config)
+  anchors <- select_anchors(theta_summary, state, config)
+  candidates <- enumerate_candidates(anchors, theta_summary, state, config)
 
   i <- NULL
   j <- NULL

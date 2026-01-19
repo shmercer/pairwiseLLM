@@ -24,8 +24,8 @@ testthat::test_that("repair mode stops when diagnostics keep failing", {
             )
           )
         },
-        diagnostics_gate_v3 = function(...) FALSE,
-        phase1_generate_pairs = function(...) testthat::fail("Repair batch should not be scheduled.")
+        diagnostics_gate = function(...) FALSE,
+        select_batch = function(...) testthat::fail("Repair batch should not be scheduled.")
       )
     },
     "Diagnostics gate failed; repair limit exceeded"

@@ -1,4 +1,4 @@
-testthat::test_that("fit_bayes_btl_mcmc_v3 is deterministic with fixed seed", {
+testthat::test_that(".fit_bayes_btl_mcmc_adaptive is deterministic with fixed seed", {
   testthat::skip_if_not_installed("cmdstanr")
   cmdstan_path <- tryCatch(cmdstanr::cmdstan_path(), error = function(e) "")
   if (!nzchar(cmdstan_path)) {
@@ -29,7 +29,7 @@ testthat::test_that("fit_bayes_btl_mcmc_v3 is deterministic with fixed seed", {
 
   withr::local_seed(202)
   fit1 <- tryCatch(
-    pairwiseLLM:::fit_bayes_btl_mcmc_v3(bt_data = bt_data, config = config, seed = 99),
+    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
     error = function(e) {
       testthat::skip(paste("CmdStan not usable for MCMC test:", conditionMessage(e)))
     }
@@ -37,7 +37,7 @@ testthat::test_that("fit_bayes_btl_mcmc_v3 is deterministic with fixed seed", {
 
   withr::local_seed(202)
   fit2 <- tryCatch(
-    pairwiseLLM:::fit_bayes_btl_mcmc_v3(bt_data = bt_data, config = config, seed = 99),
+    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
     error = function(e) {
       testthat::skip(paste("CmdStan not usable for MCMC test:", conditionMessage(e)))
     }

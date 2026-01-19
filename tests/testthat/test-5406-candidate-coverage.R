@@ -128,8 +128,8 @@ testthat::test_that("candidate helpers cover invalid config branches", {
 
   anchors <- testthat::with_mocked_bindings(
     testthat::with_mocked_bindings(
-      pairwiseLLM:::select_anchors_v3(theta_summary, state, list(A_anchors = 0L)),
-      validate_state_v3 = function(...) NULL,
+      pairwiseLLM:::select_anchors(theta_summary, state, list(A_anchors = 0L)),
+      validate_state = function(...) NULL,
       .package = "pairwiseLLM"
     ),
     abort = function(...) NULL,
@@ -137,7 +137,7 @@ testthat::test_that("candidate helpers cover invalid config branches", {
   )
   expect_equal(anchors, character())
 
-  empty <- pairwiseLLM:::enumerate_candidates_v3(
+  empty <- pairwiseLLM:::enumerate_candidates(
     anchors = "Z",
     theta_summary = theta_summary,
     state = state,
@@ -147,13 +147,13 @@ testthat::test_that("candidate helpers cover invalid config branches", {
 
   expect_error(
     testthat::with_mocked_bindings(
-      pairwiseLLM:::enumerate_candidates_v3(
+      pairwiseLLM:::enumerate_candidates(
         anchors = "A",
         theta_summary = theta_summary,
         state = state,
         config = list(W = 0L)
       ),
-      validate_state_v3 = function(...) NULL,
+      validate_state = function(...) NULL,
       .package = "pairwiseLLM"
     ),
     "config\\$W"
@@ -161,13 +161,13 @@ testthat::test_that("candidate helpers cover invalid config branches", {
 
   empty_window <- testthat::with_mocked_bindings(
     testthat::with_mocked_bindings(
-      pairwiseLLM:::enumerate_candidates_v3(
+      pairwiseLLM:::enumerate_candidates(
         anchors = "A",
         theta_summary = theta_summary,
         state = state,
         config = list(W = 0L)
       ),
-      validate_state_v3 = function(...) NULL,
+      validate_state = function(...) NULL,
       .package = "pairwiseLLM"
     ),
     abort = function(...) NULL,
@@ -177,12 +177,12 @@ testthat::test_that("candidate helpers cover invalid config branches", {
 
   expect_error(
     testthat::with_mocked_bindings(
-      pairwiseLLM:::generate_candidates_v3(
+      pairwiseLLM:::generate_candidates(
         theta_summary,
         state,
         list(W = 1L, A_anchors = 1L, C_max = 0L)
       ),
-      validate_state_v3 = function(...) NULL,
+      validate_state = function(...) NULL,
       .package = "pairwiseLLM"
     ),
     "config\\$C_max"

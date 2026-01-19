@@ -1,4 +1,4 @@
-testthat::test_that("summarize_draws_v3 returns required columns and ordered CIs", {
+testthat::test_that("summarize_draws returns required columns and ordered CIs", {
   draws <- list(
     theta = matrix(
       c(0, 1, 2,
@@ -11,7 +11,7 @@ testthat::test_that("summarize_draws_v3 returns required columns and ordered CIs
   )
   colnames(draws$theta) <- c("A", "B", "C")
 
-  out <- pairwiseLLM:::summarize_draws_v3(draws)
+  out <- pairwiseLLM:::summarize_draws(draws)
   expect_true(all(c("theta_summary", "epsilon_summary") %in% names(out)))
 
   theta_cols <- c(
@@ -33,4 +33,14 @@ testthat::test_that("summarize_draws_v3 returns required columns and ordered CIs
   expect_true(is.finite(out$epsilon_summary$epsilon_mean))
   expect_true(out$epsilon_summary$epsilon_ci90_low <= out$epsilon_summary$epsilon_ci90_high)
   expect_true(out$epsilon_summary$epsilon_ci95_low <= out$epsilon_summary$epsilon_ci95_high)
+})
+
+testthat::test_that("summarize_draws assigns item_id when theta colnames missing", {
+  draws <- list(
+    theta = matrix(c(0, 1, 2, 3), nrow = 2, byrow = TRUE),
+    epsilon = c(0.05, 0.10)
+  )
+
+  out <- pairwiseLLM:::summarize_draws(draws)
+  expect_equal(out$theta_summary$item_id, c("1", "2"))
 })
