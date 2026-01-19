@@ -99,8 +99,8 @@ sample_exploration_pairs <- function(state, candidates, n_explore, config) {
       count <- 0L
     }
     if (!is.na(count) && count >= 1L) {
+      if (!unordered_key %in% names(key_idx)) next
       idx <- key_idx[[unordered_key]]
-      if (is.null(idx)) next
       utility <- lookup$utility[[idx]]
       p_mean <- lookup$p_mean[[idx]]
       if (!.adaptive_duplicate_allowed(state, unordered_key, p_mean, utility, config)) {
