@@ -157,22 +157,7 @@ record_exposure <- function(state, A_id, B_id) {
   if (is.null(seed)) {
     return(eval.parent(substitute(expr)))
   }
-  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-    get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-  } else {
-    NULL
-  }
-  on.exit({
-    if (is.null(old_seed)) {
-      if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
-      }
-    } else {
-      assign(".Random.seed", old_seed, envir = .GlobalEnv)
-    }
-  }, add = TRUE)
-  set.seed(seed)
-  eval.parent(substitute(expr))
+  withr::with_seed(seed, eval.parent(substitute(expr)))
 }
 
 #' @keywords internal
