@@ -168,7 +168,7 @@
     err <- resp_or_err
 
     if (inherits(err, "httr2_http")) {
-      resp_err <- err$response
+      resp_err <- err$response %||% err$resp
       status <- tryCatch(
         .pairwiseLLM_resp_status(resp_err),
         error = function(...) NA_integer_
@@ -221,13 +221,14 @@
 
     # Non-transient or exhausted attempts
     if (inherits(err, "httr2_http")) {
-      resp_err <- err$response
+      resp_err <- err$response %||% err$resp
       status <- tryCatch(
         .pairwiseLLM_resp_status(resp_err),
         error = function(...) NA_integer_
       )
       if (!is.na(status) && !(status %in% transient_status)) {
         # Do not wrap non-transient HTTP errors; preserve original class
+        attr(err, "retry_failures") <- dplyr::bind_rows(failures)
         stop(err)
       }
     }

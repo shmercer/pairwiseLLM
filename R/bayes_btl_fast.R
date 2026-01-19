@@ -88,6 +88,8 @@
   w <- rep.int(1, N)
   converged <- FALSE
 
+  w_floor <- 1e-6
+  w_ceiling <- 1e6
   for (iter in seq_len(max_iter)) {
     denom <- edges$n_ij / (w[i_idx] + w[j_idx])
     denom_sum <- sum_by_index(denom, i_idx, N) +
@@ -97,6 +99,7 @@
     w_new <- w
     update_mask <- denom_sum > 0 & is.finite(wins_adj)
     w_new[update_mask] <- w[update_mask] * (wins_adj[update_mask] / denom_sum[update_mask])
+    w_new <- pmin(pmax(w_new, w_floor), w_ceiling)
     bad_w <- !is.finite(w_new)
     if (any(bad_w)) {
       w_new[bad_w] <- w[bad_w]
@@ -111,6 +114,7 @@
     w <- w_new
   }
 
+  w <- pmin(pmax(w, w_floor), w_ceiling)
   theta_raw <- log(w)
   se_raw <- ifelse(total_comp > 0, 1 / sqrt(total_comp), 1)
   se_raw <- stats::setNames(as.double(se_raw), ids)
@@ -200,12 +204,24 @@ fit_bayes_btl_fast <- function(
   edges <- .btl_fast_prepare_edges(results)
   fit <- .btl_fast_fit(edges, ids)
 
-  theta_centered <- fit$theta_raw - mean(fit$theta_raw)
+  theta_raw <- fit$theta_raw
+  if (any(!is.finite(theta_raw))) {
+    finite_vals <- theta_raw[is.finite(theta_raw)]
+    replacement <- if (length(finite_vals) > 0L) stats::median(finite_vals) else 0
+    theta_raw[!is.finite(theta_raw)] <- replacement
+    rlang::warn("Non-finite theta estimates in fast BTL fit; using median fallback.")
+  }
+
+  theta_centered <- theta_raw - mean(theta_raw)
   scale_sd <- stats::sd(theta_centered)
   if (!is.finite(scale_sd) || scale_sd <= 0) {
     scale_sd <- 1
   }
   theta_mean <- theta_centered / scale_sd
+  if (any(!is.finite(theta_mean))) {
+    theta_mean[!is.finite(theta_mean)] <- 0
+    rlang::warn("Non-finite theta means in fast BTL fit; using zero fallback.")
+  }
   names(theta_mean) <- ids
 
   se_scaled <- fit$se_raw / scale_sd
@@ -229,6 +245,7 @@ fit_bayes_btl_fast <- function(
   row_sd[!is.finite(row_sd) | row_sd <= 0] <- 1
   theta_draws <- theta_draws / row_sd
   colnames(theta_draws) <- ids
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
 
   end_time <- proc.time()[["elapsed"]]
   fit_time <- as.double(end_time - start_time)

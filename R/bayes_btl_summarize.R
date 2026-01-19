@@ -23,6 +23,7 @@ NULL
 #' @noRd
 summarize_theta <- function(theta_draws) {
   ids <- .btl_mcmc_validate_draws(theta_draws)
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   tibble::tibble(
     ID = ids,
     mean = as.double(colMeans(theta_draws)),
@@ -39,6 +40,7 @@ summarize_theta <- function(theta_draws) {
 #' @noRd
 summarize_ranks <- function(theta_draws) {
   ids <- .btl_mcmc_validate_draws(theta_draws)
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   rank_mat <- t(apply(theta_draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- ids
 
@@ -58,6 +60,7 @@ summarize_ranks <- function(theta_draws) {
 #' @noRd
 compute_adjacent_win_probs <- function(theta_draws, ranking_ids) {
   ids <- .btl_mcmc_validate_draws(theta_draws)
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   ranking_ids <- as.character(ranking_ids)
   if (length(ranking_ids) < 2L) {
     rlang::abort("`ranking_ids` must contain at least two ids.")
@@ -102,6 +105,7 @@ finalize_adaptive_ranking <- function(state, mcmc_fit) {
     rlang::abort("`mcmc_fit` must contain `theta_draws` or `draws`.")
   }
   ids <- .btl_mcmc_validate_draws(theta_draws)
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
 
   theta_mean <- colMeans(theta_draws)
   ranking_ids <- names(sort(theta_mean, decreasing = TRUE))

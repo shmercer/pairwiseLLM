@@ -493,6 +493,7 @@ build_item_summary <- function(state, fit = NULL) {
   }
 
   theta_draws <- theta_draws[, state$ids, drop = FALSE]
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   theta_mean <- as.double(colMeans(theta_draws))
   theta_sd <- as.double(apply(theta_draws, 2, stats::sd))
   theta_ci90_lo <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.05, names = FALSE))

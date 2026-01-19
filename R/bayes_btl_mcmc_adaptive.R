@@ -215,12 +215,21 @@
 #' @noRd
 summarize_draws <- function(draws) {
   unpacked <- .btl_mcmc_v3_unpack_draws(draws)
-  theta_draws <- unpacked$theta_draws
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(unpacked$theta_draws, name = "theta_draws")
   epsilon_draws <- unpacked$epsilon_draws
 
   item_id <- colnames(theta_draws)
   if (is.null(item_id)) {
     item_id <- as.character(seq_len(ncol(theta_draws)))
+  }
+
+  epsilon_draws <- as.double(epsilon_draws)
+  if (any(!is.finite(epsilon_draws))) {
+    rlang::warn("Non-finite values detected in `epsilon_draws`; dropping before summarising.")
+    epsilon_draws <- epsilon_draws[is.finite(epsilon_draws)]
+  }
+  if (length(epsilon_draws) < 2L) {
+    rlang::abort("`epsilon_draws` must contain at least two finite values.")
   }
 
   theta_summary <- tibble::tibble(
