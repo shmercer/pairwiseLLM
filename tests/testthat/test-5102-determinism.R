@@ -29,7 +29,14 @@ testthat::test_that(".fit_bayes_btl_mcmc_adaptive is deterministic with fixed se
 
   withr::local_seed(202)
   fit1 <- tryCatch(
-    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
+    withCallingHandlers(
+      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
+      warning = function(w) {
+        if (grepl("The ESS has been capped to avoid unstable estimates.", conditionMessage(w), fixed = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+      }
+    ),
     error = function(e) {
       testthat::skip(paste("CmdStan not usable for MCMC test:", conditionMessage(e)))
     }
@@ -37,7 +44,14 @@ testthat::test_that(".fit_bayes_btl_mcmc_adaptive is deterministic with fixed se
 
   withr::local_seed(202)
   fit2 <- tryCatch(
-    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
+    withCallingHandlers(
+      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
+      warning = function(w) {
+        if (grepl("The ESS has been capped to avoid unstable estimates.", conditionMessage(w), fixed = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+      }
+    ),
     error = function(e) {
       testthat::skip(paste("CmdStan not usable for MCMC test:", conditionMessage(e)))
     }
