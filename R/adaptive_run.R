@@ -417,6 +417,30 @@ NULL
   list(state = state, fit = state$fast_fit, refit_performed = refit_performed)
 }
 
+.adaptive_dup_threshold_from_utilities <- function(U_all) {
+  U_all <- as.double(U_all)
+  n_candidates <- length(U_all)
+  if (n_candidates == 0L || all(is.na(U_all))) {
+    return(NA_real_)
+  }
+  if (n_candidates >= 50L) {
+    return(as.double(stats::quantile(U_all, 0.90, type = 7, na.rm = TRUE)[[1L]]))
+  }
+  as.double(max(U_all, na.rm = TRUE))
+}
+
+.adaptive_update_dup_threshold <- function(state, utilities, refit_performed) {
+  if (!isTRUE(refit_performed)) {
+    return(state)
+  }
+  if (!is.data.frame(utilities)) {
+    rlang::abort("`utilities` must be a data frame or tibble.")
+  }
+  U_all <- utilities$utility %||% double()
+  state$posterior$U_dup_threshold <- .adaptive_dup_threshold_from_utilities(U_all)
+  state
+}
+
 .adaptive_run_stopping_checks <- function(state, adaptive, seed, allow_refit = NULL) {
   validate_state(state)
   if (state$comparisons_observed < 1L) {
@@ -495,6 +519,7 @@ NULL
     utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
     utilities <- apply_degree_penalty(utilities, state)
   }
+  state <- .adaptive_update_dup_threshold(state, utilities, refit_performed)
 
   metrics <- compute_stop_metrics(
     state = state,
@@ -604,6 +629,7 @@ NULL
     utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
     utilities <- apply_degree_penalty(utilities, state)
   }
+  state <- .adaptive_update_dup_threshold(state, utilities, fit_out$refit_performed)
 
   config_select <- v3_config
   config_select$batch_size <- target_pairs
@@ -807,6 +833,7 @@ NULL
     utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
     utilities <- apply_degree_penalty(utilities, state)
   }
+  state <- .adaptive_update_dup_threshold(state, utilities, fit_out$refit_performed)
 
   check_stop <- !isTRUE(state$config$skip_stop_checks)
   if (isTRUE(check_stop)) {
