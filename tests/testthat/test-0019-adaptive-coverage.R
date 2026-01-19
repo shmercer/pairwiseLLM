@@ -258,17 +258,16 @@ test_that("adaptive constraints cover key helpers, duplicates, and exposure", {
 
 test_that("adaptive_with_seed preserves RNG state", {
   withr::local_seed(1)
-  old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-  pairwiseLLM:::.adaptive_with_seed(42, stats::runif(1))
-  expect_equal(get(".Random.seed", envir = .GlobalEnv, inherits = FALSE), old_seed)
+  baseline_pre <- stats::runif(3)
+  baseline_post <- stats::runif(3)
 
-  if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-    old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    on.exit(assign(".Random.seed", old_seed, envir = .GlobalEnv), add = TRUE)
-    rm(".Random.seed", envir = .GlobalEnv)
-  }
+  withr::local_seed(1)
+  pre <- stats::runif(3)
   pairwiseLLM:::.adaptive_with_seed(42, stats::runif(1))
-  expect_false(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
+  post <- stats::runif(3)
+
+  expect_equal(pre, baseline_pre)
+  expect_equal(post, baseline_post)
 })
 
 test_that("position balancing covers all ordering branches", {

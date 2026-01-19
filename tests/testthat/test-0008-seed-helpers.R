@@ -5,28 +5,17 @@ testthat::test_that(".pairwiseLLM_with_seed validates seed input", {
   )
 })
 
-testthat::test_that(".pairwiseLLM_with_seed removes transient RNG state", {
-  had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-  old_seed <- if (had_seed) get(".Random.seed", envir = .GlobalEnv) else NULL
+testthat::test_that(".pairwiseLLM_with_seed preserves RNG state", {
+  withr::local_seed(202)
+  baseline_pre <- stats::runif(3)
+  baseline_post <- stats::runif(3)
 
-  on.exit(
-    {
-      if (had_seed) {
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
-      }
-    },
-    add = TRUE
-  )
-
-  if (had_seed) {
-    rm(".Random.seed", envir = .GlobalEnv)
-  }
-
-  testthat::expect_false(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
-
+  withr::local_seed(202)
+  pre <- stats::runif(3)
   out <- .pairwiseLLM_with_seed(123, function() stats::runif(1))
+  post <- stats::runif(3)
+
+  testthat::expect_equal(pre, baseline_pre)
+  testthat::expect_equal(post, baseline_post)
   testthat::expect_true(is.numeric(out))
-  testthat::expect_false(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
 })

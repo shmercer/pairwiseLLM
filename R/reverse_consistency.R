@@ -325,14 +325,22 @@ check_positional_bias <- function(consistency,
   prop_consistent <- mean(details$is_consistent)
 
   # Bootstrap CI
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-
-  boot_props <- numeric(n_boot)
-  for (b in seq_len(n_boot)) {
-    idx <- sample.int(n_pairs, size = n_pairs, replace = TRUE)
-    boot_props[b] <- mean(details$is_consistent[idx])
+  boot_props <- if (is.null(seed)) {
+    boot_props <- numeric(n_boot)
+    for (b in seq_len(n_boot)) {
+      idx <- sample.int(n_pairs, size = n_pairs, replace = TRUE)
+      boot_props[b] <- mean(details$is_consistent[idx])
+    }
+    boot_props
+  } else {
+    withr::with_seed(seed, {
+      boot_props <- numeric(n_boot)
+      for (b in seq_len(n_boot)) {
+        idx <- sample.int(n_pairs, size = n_pairs, replace = TRUE)
+        boot_props[b] <- mean(details$is_consistent[idx])
+      }
+      boot_props
+    })
   }
 
   alpha <- 1 - conf_level
