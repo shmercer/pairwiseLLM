@@ -200,12 +200,24 @@ fit_bayes_btl_fast <- function(
   edges <- .btl_fast_prepare_edges(results)
   fit <- .btl_fast_fit(edges, ids)
 
-  theta_centered <- fit$theta_raw - mean(fit$theta_raw)
+  theta_raw <- fit$theta_raw
+  if (any(!is.finite(theta_raw))) {
+    finite_vals <- theta_raw[is.finite(theta_raw)]
+    replacement <- if (length(finite_vals) > 0L) stats::median(finite_vals) else 0
+    theta_raw[!is.finite(theta_raw)] <- replacement
+    rlang::warn("Non-finite theta estimates in fast BTL fit; using median fallback.")
+  }
+
+  theta_centered <- theta_raw - mean(theta_raw)
   scale_sd <- stats::sd(theta_centered)
   if (!is.finite(scale_sd) || scale_sd <= 0) {
     scale_sd <- 1
   }
   theta_mean <- theta_centered / scale_sd
+  if (any(!is.finite(theta_mean))) {
+    theta_mean[!is.finite(theta_mean)] <- 0
+    rlang::warn("Non-finite theta means in fast BTL fit; using zero fallback.")
+  }
   names(theta_mean) <- ids
 
   se_scaled <- fit$se_raw / scale_sd
@@ -229,6 +241,7 @@ fit_bayes_btl_fast <- function(
   row_sd[!is.finite(row_sd) | row_sd <= 0] <- 1
   theta_draws <- theta_draws / row_sd
   colnames(theta_draws) <- ids
+  theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
 
   end_time <- proc.time()[["elapsed"]]
   fit_time <- as.double(end_time - start_time)
