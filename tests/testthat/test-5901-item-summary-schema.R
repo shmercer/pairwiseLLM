@@ -1,5 +1,5 @@
 testthat::test_that("item summary schema matches contract", {
-  schema <- item_summary_schema_v3()
+  schema <- item_summary_schema()
 
   expected <- c(
     "ID",
@@ -42,10 +42,10 @@ testthat::test_that("item summary builder emits one row per item", {
     )
   )
 
-  summary <- build_item_summary_v3(state, fit)
+  summary <- build_item_summary(state, fit)
 
   testthat::expect_equal(nrow(summary), state$N)
-  testthat::expect_identical(colnames(summary), colnames(item_summary_schema_v3()))
+  testthat::expect_identical(colnames(summary), colnames(item_summary_schema()))
   testthat::expect_true(all(summary$ID == state$ids))
   testthat::expect_true(is.double(summary$rank_mean))
   testthat::expect_true(is.integer(summary$deg))

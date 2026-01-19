@@ -10,6 +10,10 @@ testthat::test_that("exploration sampler favors low-degree items and avoids dupl
   state$deg[["B"]] <- 8L
   state$deg[["C"]] <- 1L
   state$deg[["D"]] <- 1L
+  state$pos1 <- state$deg
+  state$pos2 <- stats::setNames(rep.int(0L, length(state$ids)), state$ids)
+  state$imb <- state$pos1 - state$pos2
+  state$pos_count <- state$pos1
 
   combos <- utils::combn(state$ids, 2)
   candidates <- tibble::tibble(
@@ -24,7 +28,7 @@ testthat::test_that("exploration sampler favors low-degree items and avoids dupl
   withr::local_seed(1)
   counts <- stats::setNames(rep.int(0L, length(state$ids)), state$ids)
   for (idx in seq_len(200L)) {
-    picks <- pairwiseLLM:::sample_exploration_pairs_v3(
+    picks <- pairwiseLLM:::sample_exploration_pairs(
       state = state,
       candidates = candidates,
       n_explore = 2L,
@@ -37,7 +41,7 @@ testthat::test_that("exploration sampler favors low-degree items and avoids dupl
   expect_gt(mean(counts[c("C", "D")]), mean(counts[c("A", "B")]))
 
   withr::local_seed(2)
-  batch <- pairwiseLLM:::sample_exploration_pairs_v3(
+  batch <- pairwiseLLM:::sample_exploration_pairs(
     state = state,
     candidates = candidates,
     n_explore = 3L,

@@ -29,7 +29,7 @@ testthat::test_that("repair mode uses exploration-only selection", {
   )
 
   expected <- pairwiseLLM:::.pairwiseLLM_with_seed(2, function() {
-    pairwiseLLM:::sample_exploration_pairs_v3(
+    pairwiseLLM:::sample_exploration_pairs(
       state = state,
       candidates = candidates,
       n_explore = config$batch_size,
@@ -37,7 +37,7 @@ testthat::test_that("repair mode uses exploration-only selection", {
     )
   })
 
-  out <- pairwiseLLM:::select_batch_v3(
+  out <- pairwiseLLM:::select_batch(
     state = state,
     candidates_with_utility = candidates,
     config = config,

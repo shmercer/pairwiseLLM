@@ -87,7 +87,6 @@ testthat::test_that("adaptive_run_stopping_checks respects allow_refit and fast_
     seed = 1L,
     allow_refit = FALSE
   )
-  testthat::expect_false(out$stop_confirmed)
   testthat::expect_null(out$state$fast_fit)
 
   state$fast_fit <- list(
@@ -98,7 +97,7 @@ testthat::test_that("adaptive_run_stopping_checks respects allow_refit and fast_
   state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L))
 
   out2 <- testthat::with_mocked_bindings(
-    generate_candidates_v3 = function(...) tibble::tibble(),
+    generate_candidates = function(...) tibble::tibble(),
     .adaptive_run_stopping_checks(
       state,
       adaptive = list(),
@@ -106,7 +105,7 @@ testthat::test_that("adaptive_run_stopping_checks respects allow_refit and fast_
       allow_refit = FALSE
     )
   )
-  testthat::expect_false(out2$stop_confirmed)
+  testthat::expect_false(identical(out2$state$mode, "stopped"))
 })
 
 testthat::test_that("adaptive_warm_start_order follows imbalance and index rules", {

@@ -1,4 +1,4 @@
-testthat::test_that("diagnostics_gate_v3 passes when thresholds are met", {
+testthat::test_that("diagnostics_gate passes when thresholds are met", {
   config <- pairwiseLLM:::adaptive_v3_config(
     3L,
     list(
@@ -16,10 +16,10 @@ testthat::test_that("diagnostics_gate_v3 passes when thresholds are met", {
     )
   )
 
-  expect_true(pairwiseLLM:::diagnostics_gate_v3(fit, config))
+  expect_true(pairwiseLLM:::diagnostics_gate(fit, config))
 })
 
-testthat::test_that("diagnostics_gate_v3 fails on individual criteria", {
+testthat::test_that("diagnostics_gate fails on individual criteria", {
   config <- pairwiseLLM:::adaptive_v3_config(
     3L,
     list(
@@ -39,18 +39,18 @@ testthat::test_that("diagnostics_gate_v3 fails on individual criteria", {
 
   bad_div <- base_fit
   bad_div$diagnostics$divergences <- 2L
-  expect_false(pairwiseLLM:::diagnostics_gate_v3(bad_div, config))
+  expect_false(pairwiseLLM:::diagnostics_gate(bad_div, config))
 
   bad_rhat <- base_fit
   bad_rhat$diagnostics$max_rhat <- 1.10
-  expect_false(pairwiseLLM:::diagnostics_gate_v3(bad_rhat, config))
+  expect_false(pairwiseLLM:::diagnostics_gate(bad_rhat, config))
 
   bad_ess <- base_fit
   bad_ess$diagnostics$min_ess_bulk <- 150
-  expect_false(pairwiseLLM:::diagnostics_gate_v3(bad_ess, config))
+  expect_false(pairwiseLLM:::diagnostics_gate(bad_ess, config))
 })
 
-testthat::test_that("diagnostics_gate_v3 uses stricter ESS near stop", {
+testthat::test_that("diagnostics_gate uses stricter ESS near stop", {
   config <- pairwiseLLM:::adaptive_v3_config(
     3L,
     list(
@@ -67,6 +67,6 @@ testthat::test_that("diagnostics_gate_v3 uses stricter ESS near stop", {
     )
   )
 
-  expect_true(pairwiseLLM:::diagnostics_gate_v3(fit, config, near_stop = FALSE))
-  expect_false(pairwiseLLM:::diagnostics_gate_v3(fit, config, near_stop = TRUE))
+  expect_true(pairwiseLLM:::diagnostics_gate(fit, config, near_stop = FALSE))
+  expect_false(pairwiseLLM:::diagnostics_gate(fit, config, near_stop = TRUE))
 })

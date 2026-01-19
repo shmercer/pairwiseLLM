@@ -1,4 +1,4 @@
-testthat::test_that("select_anchors_v3 prioritizes extremes and uncertainty", {
+testthat::test_that("select_anchors prioritizes extremes and uncertainty", {
   withr::local_seed(1)
   samples <- tibble::tibble(
     ID = LETTERS[1:8],
@@ -20,10 +20,10 @@ testthat::test_that("select_anchors_v3 prioritizes extremes and uncertainty", {
     theta_sd = c(0.1, 0.2, 0.5, 0.4, 0.6, 0.6, 0.3, 0.2)
   )
 
-  anchors <- pairwiseLLM:::select_anchors_v3(theta_summary, state, config)
+  anchors <- pairwiseLLM:::select_anchors(theta_summary, state, config)
   expect_equal(anchors, c("A", "B", "H", "G", "F"))
   expect_true(length(anchors) <= config$A_anchors)
 
-  anchors2 <- pairwiseLLM:::select_anchors_v3(theta_summary, state, config)
+  anchors2 <- pairwiseLLM:::select_anchors(theta_summary, state, config)
   expect_equal(anchors, anchors2)
 })

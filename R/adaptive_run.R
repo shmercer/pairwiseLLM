@@ -1,5 +1,5 @@
-#' @include adaptive_v3_contracts.R
-#' @include bayes_btl_mcmc_v3.R
+#' @include adaptive_contracts.R
+#' @include bayes_btl_mcmc_adaptive.R
 NULL
 
 # -------------------------------------------------------------------------
@@ -102,12 +102,12 @@ NULL
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state.")
   }
-  config_v3 <- state$config$v3 %||% list()
-  if (!isTRUE(config_v3$write_outputs)) {
+  v3_config <- state$config$v3 %||% list()
+  if (!isTRUE(v3_config$write_outputs)) {
     return(invisible(FALSE))
   }
 
-  output_dir <- output_dir %||% config_v3$output_dir %||% state$config$output_dir %||% NULL
+  output_dir <- output_dir %||% v3_config$output_dir %||% state$config$output_dir %||% NULL
   if (is.null(output_dir)) {
     rlang::abort("`output_dir` must be provided when `write_outputs` is TRUE.")
   }
@@ -119,17 +119,17 @@ NULL
   config_path <- file.path(output_dir, "adaptive_config.rds")
   saveRDS(state$config, config_path)
 
-  round_log <- state$config$round_log %||% round_log_schema_v3()
+  round_log <- state$config$round_log %||% round_log_schema()
   round_log <- tibble::as_tibble(round_log)
   round_log_path <- file.path(output_dir, "round_log.rds")
   saveRDS(round_log, round_log_path)
 
-  item_summary <- build_item_summary_v3(state, fit = fit)
+  item_summary <- build_item_summary(state, fit = fit)
   item_summary_path <- file.path(output_dir, "item_summary.rds")
   saveRDS(item_summary, item_summary_path)
 
-  if (isTRUE(config_v3$keep_draws)) {
-    thin_draws <- as.integer(config_v3$thin_draws %||% 1L)
+  if (isTRUE(v3_config$keep_draws)) {
+    thin_draws <- as.integer(v3_config$thin_draws %||% 1L)
     if (is.na(thin_draws) || thin_draws < 1L) {
       rlang::abort("`thin_draws` must be a positive integer.")
     }
@@ -420,12 +420,12 @@ NULL
 .adaptive_run_stopping_checks <- function(state, adaptive, seed, allow_refit = NULL) {
   validate_state(state)
   if (state$comparisons_observed < 1L) {
-    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+    return(list(state = state))
   }
   allow_refit <- allow_refit %||% state$config$allow_refit %||% TRUE
 
   if (!isTRUE(allow_refit) && is.null(state$fast_fit)) {
-    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+    return(list(state = state))
   }
 
   CW <- state$config$CW %||% floor(state$N / 2)
@@ -434,17 +434,17 @@ NULL
     rlang::abort("`CW` must be a positive integer.")
   }
   if (identical(state$mode, "warm_start") && identical(state$phase, "phase1")) {
-    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+    return(list(state = state))
   }
   if (identical(state$mode, "adaptive") &&
     identical(state$phase, "phase2") &&
     is.integer(state$iter) &&
     length(state$iter) == 1L &&
     state$iter == 0L) {
-    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+    return(list(state = state))
   }
 
-  config_v3 <- state$config$v3 %||% adaptive_v3_config(state$N)
+  v3_config <- state$config$v3 %||% adaptive_v3_config(state$N)
   refit_performed <- FALSE
   if (isTRUE(allow_refit)) {
     fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = seed)
@@ -456,24 +456,24 @@ NULL
   }
 
   if (is.null(fit) || is.null(fit$theta_draws)) {
-    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+    return(list(state = state))
   }
   if (!is.matrix(fit$theta_draws) || nrow(fit$theta_draws) < 2L) {
-    return(list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed)))
+    return(list(state = state))
   }
 
   if (is.null(fit$diagnostics)) {
     state$posterior$diagnostics_pass <- TRUE
   } else {
-    state$posterior$diagnostics_pass <- diagnostics_gate_v3(
+    state$posterior$diagnostics_pass <- diagnostics_gate(
       fit,
-      config_v3,
+      v3_config,
       near_stop = near_stop_from_state(state)
     )
   }
 
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
-  candidates <- generate_candidates_v3(theta_summary, state, config_v3)
+  candidates <- generate_candidates(theta_summary, state, v3_config)
 
   if (nrow(candidates) == 0L) {
     utilities <- tibble::tibble(
@@ -492,78 +492,35 @@ NULL
     names(candidates)[names(candidates) == "i"] <- "i_id"
     names(candidates)[names(candidates) == "j"] <- "j_id"
     epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
-    utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
+    utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
     utilities <- apply_degree_penalty(utilities, state)
   }
 
-  legacy_checks_passed <- 0L
-  if (!is.null(fit$theta_mean)) {
-    ranking <- compute_ranking_from_theta_mean(fit$theta_mean, state)
-    legacy_out <- stopping_check(
-      state = state,
-      fast_fit = fit,
-      ranking_ids = ranking,
-      candidates = candidates,
-      utilities_tbl = utilities
-    )
-    state$last_check_at <- legacy_out$state$last_check_at
-    state$stop_candidate <- legacy_out$state$stop_candidate
-    legacy_checks_passed <- legacy_out$state$checks_passed_in_row
-  }
-
-  metrics <- compute_stop_metrics_v3(
+  metrics <- compute_stop_metrics(
     state = state,
     fit = fit,
     candidates_with_utility = utilities,
-    config = config_v3
+    config = v3_config
   )
   metrics$refit_performed <- refit_performed
   state$posterior$stop_metrics <- metrics
 
-  stop_out <- should_stop_v3(metrics, state, config_v3)
+  stop_out <- should_stop(metrics, state, v3_config)
   state <- stop_out$state
 
   if (isTRUE(refit_performed)) {
-    round_row <- build_round_log_row_v3(
+    round_row <- build_round_log_row(
       state = state,
       fit = fit,
       metrics = metrics,
       stop_out = stop_out,
-      config = config_v3
+      config = v3_config
     )
-    prior_log <- state$config$round_log %||% round_log_schema_v3()
+    prior_log <- state$config$round_log %||% round_log_schema()
     state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
   }
 
-  mcmc_ready <- isTRUE(state$checks_passed_in_row >= 2L) ||
-    isTRUE(legacy_checks_passed >= 2L)
-  if (mcmc_ready && !isTRUE(state$config$stop_confirmed)) {
-    check_at <- as.integer(state$comparisons_observed)
-    last_attempt_at <- state$config$mcmc_attempted_at %||% -1L
-    if (check_at > last_attempt_at) {
-      bt_data <- .btl_mcmc_v3_prepare_bt_data(state$history_results, state$ids)
-      mcmc_fit <- tryCatch(
-        fit_bayes_btl_mcmc_v3(bt_data = bt_data, config = state$config$v3, seed = seed),
-        error = function(e) e
-      )
-      state$config$mcmc_attempted_at <- as.integer(check_at)
-
-      if (inherits(mcmc_fit, "error")) {
-        state$config$mcmc_error <- conditionMessage(mcmc_fit)
-        rlang::warn(paste0("MCMC confirmation failed: ", conditionMessage(mcmc_fit)))
-      } else {
-        state$config$stop_confirmed <- TRUE
-        state$config$final_summary <- finalize_adaptive_ranking(state, mcmc_fit)
-        state$config$mcmc_error <- NULL
-      }
-    }
-  }
-
-  if (isTRUE(state$config$stop_confirmed)) {
-    state$mode <- "stopped"
-  }
-
-  list(state = state, stop_confirmed = isTRUE(state$config$stop_confirmed))
+  list(state = state)
 }
 
 .adaptive_apply_diagnostics_gate <- function(state, fit, config, near_stop) {
@@ -573,7 +530,7 @@ NULL
     return(list(state = state, diagnostics_pass = TRUE))
   }
 
-  diagnostics_pass <- diagnostics_gate_v3(fit, config, near_stop = near_stop)
+  diagnostics_pass <- diagnostics_gate(fit, config, near_stop = near_stop)
   if (isTRUE(diagnostics_pass)) {
     state$posterior$diagnostics_pass <- TRUE
     if (!is.null(state$repair_attempts) && state$repair_attempts > 0L) {
@@ -618,38 +575,101 @@ NULL
 
   phase <- state$phase
   iter <- as.integer(state$iter + 1L)
-  seen_before <- state$unordered_count
 
-  out <- phase1_generate_pairs(
+  fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = target_pairs, seed = seed)
+  state <- fit_out$state
+  fit <- fit_out$fit
+
+  v3_config <- state$config$v3 %||% adaptive_v3_config(state$N)
+  theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+  candidates <- generate_candidates(theta_summary, state, v3_config)
+
+  if (nrow(candidates) == 0L) {
+    utilities <- tibble::tibble(
+      unordered_key = character(),
+      i_id = character(),
+      j_id = character(),
+      i = character(),
+      j = character(),
+      mean_d = double(),
+      var_d = double(),
+      p_mean = double(),
+      utility = double(),
+      utility_raw = double()
+    )
+  } else {
+    names(candidates)[names(candidates) == "i"] <- "i_id"
+    names(candidates)[names(candidates) == "j"] <- "j_id"
+    epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
+    utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
+    utilities <- apply_degree_penalty(utilities, state)
+  }
+
+  config_select <- v3_config
+  config_select$batch_size <- target_pairs
+  selection <- select_batch(
     state = state,
-    n_pairs = target_pairs,
-    mix_struct = adaptive$mix_struct,
-    within_adj_split = adaptive$within_adj_split,
-    bins = adaptive$bins,
-    seed = seed
+    candidates_with_utility = utilities,
+    config = config_select,
+    seed = seed,
+    exploration_only = TRUE
   )
 
-  state <- out$state
-  pairs <- out$pairs
-  if (nrow(pairs) > 0L && !is.null(seen_before) && length(seen_before) > 0L) {
-    dup_counts <- seen_before[pairs$unordered_key]
-    dup_mask <- !is.na(dup_counts) & dup_counts > 0L
-    if (any(dup_mask)) {
-      rlang::warn("Repair batch generated duplicate comparisons due to constraints.")
-    }
-  }
-  if (nrow(pairs) > 0L) {
-    pairs$phase <- phase
-    pairs$iter <- iter
-    idx_start <- nrow(state$history_pairs) - nrow(pairs) + 1L
-    idx <- seq.int(idx_start, nrow(state$history_pairs))
-    state$history_pairs$phase[idx] <- phase
-    state$history_pairs$iter[idx] <- iter
+  if (nrow(selection) == 0L) {
     state$iter <- iter
+    state$mode <- "repair"
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
-  state$mode <- "repair"
 
-  list(state = state, pairs = pairs)
+  created_at <- Sys.time()
+  rows <- vector("list", nrow(selection))
+  state_local <- state
+  for (idx in seq_len(nrow(selection))) {
+    row <- selection[idx, , drop = FALSE]
+    A_id <- as.character(row$A_id)
+    B_id <- as.character(row$B_id)
+    unordered_key <- as.character(row$unordered_key)
+    ordered_key <- make_ordered_key(A_id, B_id)
+    pair_uid <- pair_uid_from_state(state_local, unordered_key)
+
+    pair_row <- tibble::tibble(
+      pair_uid = pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = A_id,
+      B_id = B_id,
+      A_text = state_local$texts[[A_id]],
+      B_text = state_local$texts[[B_id]],
+      phase = phase,
+      iter = iter,
+      created_at = created_at,
+      utility_raw = as.double(row$utility_raw),
+      utility = as.double(row$utility),
+      deg_A = as.integer(state_local$deg[[A_id]]),
+      deg_B = as.integer(state_local$deg[[B_id]]),
+      imb_A = as.integer(state_local$imb[[A_id]]),
+      imb_B = as.integer(state_local$imb[[B_id]])
+    )
+
+    state_local <- record_presentation(state_local, A_id, B_id)
+    state_local$history_pairs <- dplyr::bind_rows(state_local$history_pairs, pair_row)
+    state_local$comparisons_scheduled <- as.integer(state_local$comparisons_scheduled + 1L)
+    rows[[idx]] <- pair_row
+  }
+
+  pairs_tbl <- dplyr::bind_rows(rows)
+  pairs_tbl <- tibble::as_tibble(pairs_tbl)
+  validate_pairs_tbl(pairs_tbl)
+  required_cols <- c(
+    "pair_uid", "unordered_key", "ordered_key",
+    "A_id", "B_id", "A_text", "B_text",
+    "phase", "iter", "created_at"
+  )
+  pairs_tbl <- pairs_tbl[, c(required_cols, setdiff(names(pairs_tbl), required_cols)), drop = FALSE]
+  state_local$iter <- iter
+  state_local$mode <- "repair"
+
+  list(state = state_local, pairs = pairs_tbl)
 }
 
 .adaptive_warm_start_order <- function(state, i_id, j_id, pair_index) {
@@ -668,7 +688,7 @@ NULL
 }
 
 .adaptive_schedule_warm_start <- function(state, config) {
-  warm_pairs <- warm_start_v3(state$ids, config)
+  warm_pairs <- warm_start(state$ids, config)
   warm_pairs <- tibble::as_tibble(warm_pairs)
   if (nrow(warm_pairs) == 0L) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
@@ -763,9 +783,9 @@ NULL
   gate_out <- .adaptive_apply_diagnostics_gate(state, fit, state$config$v3, near_stop = near_stop)
   state <- gate_out$state
 
-  config_v3 <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
+  v3_config <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
-  candidates <- generate_candidates_v3(theta_summary, state, config_v3)
+  candidates <- generate_candidates(theta_summary, state, v3_config)
 
   if (nrow(candidates) == 0L) {
     utilities <- tibble::tibble(
@@ -784,32 +804,32 @@ NULL
     names(candidates)[names(candidates) == "i"] <- "i_id"
     names(candidates)[names(candidates) == "j"] <- "j_id"
     epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
-    utilities <- compute_pair_utility_v3(fit$theta_draws, candidates, epsilon_mean)
+    utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
     utilities <- apply_degree_penalty(utilities, state)
   }
 
   check_stop <- !isTRUE(state$config$skip_stop_checks)
   if (isTRUE(check_stop)) {
-    stop_metrics <- compute_stop_metrics_v3(
+    stop_metrics <- compute_stop_metrics(
       state = state,
       fit = fit,
       candidates_with_utility = utilities,
-      config = config_v3
+      config = v3_config
     )
     stop_metrics$refit_performed <- isTRUE(fit_out$refit_performed)
     state$posterior$stop_metrics <- stop_metrics
 
-    stop_out <- should_stop_v3(stop_metrics, state, config_v3)
+    stop_out <- should_stop(stop_metrics, state, v3_config)
     state <- stop_out$state
     if (isTRUE(stop_out$stop_decision) || identical(state$mode, "stopped")) {
       return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
     }
   }
-  config_select <- config_v3
+  config_select <- v3_config
   config_select$batch_size <- batch_size
   exploration_only <- identical(state$mode, "repair")
 
-  selection <- select_batch_v3(
+  selection <- select_batch(
     state = state,
     candidates_with_utility = utilities,
     config = config_select,
@@ -916,9 +936,6 @@ NULL
     !is.na(stop_reason) &&
     nzchar(stop_reason)) {
     return(list(action = "done", reason = stop_reason))
-  }
-  if (isTRUE(state$config$stop_confirmed)) {
-    return(list(action = "done", reason = "stop_confirmed"))
   }
   if (state$comparisons_scheduled >= state$budget_max) {
     return(list(action = "done", reason = "budget_exhausted"))
@@ -1222,7 +1239,7 @@ adaptive_rank_start <- function(
   adaptive <- .adaptive_merge_config(adaptive)
   n_items <- nrow(tibble::as_tibble(samples))
   v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
-  config_v3 <- adaptive_v3_config(n_items, v3_overrides)
+  v3_config <- adaptive_v3_config(n_items, v3_overrides)
   path_info <- .adaptive_prepare_paths(paths, submission, mode)
 
   config <- list(
@@ -1232,7 +1249,7 @@ adaptive_rank_start <- function(
   )
   state <- adaptive_state_new(samples, config = config, seed = seed)
   state$config$adaptive <- adaptive
-  state$config$v3 <- config_v3
+  state$config$v3 <- v3_config
   state$config$backend <- backend
   state$config$model <- model
   state$config$trait_name <- trait_name
@@ -1243,7 +1260,7 @@ adaptive_rank_start <- function(
   state <- .adaptive_merge_submission_options(state, submission)
   state <- .adaptive_get_batch_sizes(state, adaptive)
   state <- .adaptive_state_sync_results_seen(state)
-  validate_state_v3(state, config_v3)
+  validate_state(state)
 
   target_info <- .adaptive_schedule_target(state, adaptive)
   state <- target_info$state
@@ -1445,9 +1462,9 @@ adaptive_rank_resume <- function(
 
   adaptive <- .adaptive_merge_config(adaptive)
   v3_overrides <- .adaptive_v3_overrides_from_adaptive(state$N, adaptive)
-  config_v3 <- adaptive_v3_config(state$N, v3_overrides)
-  state$config$v3 <- config_v3
-  validate_state_v3(state, config_v3)
+  v3_config <- adaptive_v3_config(state$N, v3_overrides)
+  state$config$v3 <- v3_config
+  validate_state(state)
   state$config$adaptive <- utils::modifyList(state$config$adaptive %||% list(), adaptive)
   state <- .adaptive_merge_submission_options(state, submission)
   state <- .adaptive_get_batch_sizes(state, adaptive)
@@ -1518,7 +1535,7 @@ adaptive_rank_resume <- function(
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
-  if (isTRUE(state$config$stop_confirmed) || identical(state$mode, "stopped")) {
+  if (identical(state$mode, "stopped")) {
     scheduled <- list(state = state, pairs = .adaptive_empty_pairs_tbl())
   } else if (missing > 0L) {
     replacement_phase <- .adaptive_phase_scalar_from_pairs(pairs_submitted) %||% state$phase

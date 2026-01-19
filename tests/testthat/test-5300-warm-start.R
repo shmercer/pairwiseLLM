@@ -1,4 +1,4 @@
-testthat::test_that("warm_start_v3 produces a connected ring backbone", {
+testthat::test_that("warm_start produces a connected ring backbone", {
   withr::local_seed(101)
   is_connected <- function(ids, pairs) {
     ids <- as.character(ids)
@@ -27,15 +27,15 @@ testthat::test_that("warm_start_v3 produces a connected ring backbone", {
 
   for (n_items in c(6L, 10L, 12L)) {
     ids <- as.character(seq_len(n_items))
-    pairs <- pairwiseLLM:::warm_start_v3(ids, config = list())
+    pairs <- pairwiseLLM:::warm_start(ids, config = list())
     expect_true(is_connected(ids, pairs))
   }
 })
 
-testthat::test_that("warm_start_v3 enforces minimum degree, uniqueness, and determinism", {
+testthat::test_that("warm_start enforces minimum degree, uniqueness, and determinism", {
   withr::local_seed(202)
   ids <- as.character(seq_len(10L))
-  pairs <- pairwiseLLM:::warm_start_v3(ids, config = list())
+  pairs <- pairwiseLLM:::warm_start(ids, config = list())
   deg <- stats::setNames(rep.int(0L, length(ids)), ids)
 
   for (idx in seq_len(nrow(pairs))) {
@@ -48,7 +48,7 @@ testthat::test_that("warm_start_v3 enforces minimum degree, uniqueness, and dete
   keys <- paste(pairs$i, pairs$j, sep = ":")
   expect_equal(length(keys), length(unique(keys)))
 
-  pairs_min3 <- pairwiseLLM:::warm_start_v3(ids, config = list(min_degree = 3L))
+  pairs_min3 <- pairwiseLLM:::warm_start(ids, config = list(min_degree = 3L))
   deg_min3 <- stats::setNames(rep.int(0L, length(ids)), ids)
   for (idx in seq_len(nrow(pairs_min3))) {
     deg_min3[[pairs_min3$i[[idx]]]] <- deg_min3[[pairs_min3$i[[idx]]]] + 1L
@@ -56,7 +56,7 @@ testthat::test_that("warm_start_v3 enforces minimum degree, uniqueness, and dete
   }
   expect_true(min(deg_min3) >= 3L)
 
-  pairs_a <- pairwiseLLM:::warm_start_v3(ids, config = list())
-  pairs_b <- pairwiseLLM:::warm_start_v3(ids, config = list())
+  pairs_a <- pairwiseLLM:::warm_start(ids, config = list())
+  pairs_b <- pairwiseLLM:::warm_start(ids, config = list())
   expect_identical(pairs_a, pairs_b)
 })

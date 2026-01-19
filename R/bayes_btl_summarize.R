@@ -1,4 +1,4 @@
-#' @include bayes_btl_mcmc_v3.R
+#' @include bayes_btl_mcmc_adaptive.R
 NULL
 
 # -------------------------------------------------------------------------

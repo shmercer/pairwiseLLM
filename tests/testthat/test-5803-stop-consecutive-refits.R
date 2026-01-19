@@ -21,18 +21,18 @@ testthat::test_that("consecutive passing refits trigger v3 convergence", {
     refit_performed = TRUE
   )
 
-  out1 <- should_stop_v3(metrics, state, config_v3)
+  out1 <- should_stop(metrics, state, config_v3)
   testthat::expect_false(out1$stop_decision)
   testthat::expect_equal(out1$state$checks_passed_in_row, 1L)
 
-  out2 <- should_stop_v3(metrics, out1$state, config_v3)
+  out2 <- should_stop(metrics, out1$state, config_v3)
   testthat::expect_true(out2$stop_decision)
   testthat::expect_identical(out2$state$stop_reason, "v3_converged")
 
   state_fail <- out1$state
   metrics_fail <- metrics
   metrics_fail$U_pass <- FALSE
-  out_fail <- should_stop_v3(metrics_fail, state_fail, config_v3)
+  out_fail <- should_stop(metrics_fail, state_fail, config_v3)
   testthat::expect_false(out_fail$stop_decision)
   testthat::expect_equal(out_fail$state$checks_passed_in_row, 0L)
 })

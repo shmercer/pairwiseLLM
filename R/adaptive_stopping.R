@@ -142,8 +142,8 @@ near_stop_from_state <- function(state) {
 
 #' @keywords internal
 #' @noRd
-compute_stop_metrics_v3 <- function(state, fit, candidates_with_utility, config) {
-  validate_state_v3(state, config)
+compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
+  validate_state(state)
   if (!is.list(fit) || is.null(fit$theta_draws)) {
     rlang::abort("`fit` must include `theta_draws`.")
   }
@@ -244,8 +244,8 @@ compute_stop_metrics_v3 <- function(state, fit, candidates_with_utility, config)
 
 #' @keywords internal
 #' @noRd
-should_stop_v3 <- function(metrics, state, config) {
-  validate_state_v3(state, config)
+should_stop <- function(metrics, state, config) {
+  validate_state(state)
   if (!is.list(metrics)) {
     rlang::abort("`metrics` must be a list.")
   }

@@ -22,7 +22,7 @@ testthat::test_that("diagnostics failure blocks uncertainty and utility stopping
     refit_performed = TRUE
   )
 
-  out <- should_stop_v3(metrics, state, config_v3)
+  out <- should_stop(metrics, state, config_v3)
   testthat::expect_false(out$stop_decision)
   testthat::expect_equal(out$state$checks_passed_in_row, 0L)
 })

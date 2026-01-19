@@ -1,4 +1,4 @@
-testthat::test_that("summarize_draws_v3 returns required columns and ordered CIs", {
+testthat::test_that("summarize_draws returns required columns and ordered CIs", {
   draws <- list(
     theta = matrix(
       c(0, 1, 2,
@@ -11,7 +11,7 @@ testthat::test_that("summarize_draws_v3 returns required columns and ordered CIs
   )
   colnames(draws$theta) <- c("A", "B", "C")
 
-  out <- pairwiseLLM:::summarize_draws_v3(draws)
+  out <- pairwiseLLM:::summarize_draws(draws)
   expect_true(all(c("theta_summary", "epsilon_summary") %in% names(out)))
 
   theta_cols <- c(

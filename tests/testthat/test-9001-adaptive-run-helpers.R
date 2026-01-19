@@ -174,10 +174,9 @@ testthat::test_that("adaptive_run stopping checks cover early and validation pat
     text = c("alpha", "bravo", "charlie")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
-  state$config$stop_confirmed <- TRUE
 
   out <- pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = list(), seed = 1)
-  expect_true(isTRUE(out$stop_confirmed))
+  expect_false(identical(out$state$mode, "stopped"))
 
   state$history_results <- tibble::tibble(
     pair_uid = "A:B#1",
@@ -265,10 +264,9 @@ testthat::test_that("adaptive_run stopping checks return when no candidates", {
         )
       )
     },
-    compute_ranking_from_theta_mean = function(theta_mean, state) state$ids,
-    generate_candidates_v3 = function(...) tibble::tibble(i = character(), j = character())
+    generate_candidates = function(...) tibble::tibble(i = character(), j = character())
   )
-  expect_false(isTRUE(out$stop_confirmed))
+  expect_false(identical(out$state$mode, "stopped"))
 })
 
 testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
@@ -297,7 +295,7 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
         )
       )
     },
-    generate_candidates_v3 = function(...) tibble::tibble(i = character(), j = character())
+    generate_candidates = function(...) tibble::tibble(i = character(), j = character())
   )
   expect_equal(nrow(no_candidates$pairs), 0L)
 })
@@ -311,11 +309,11 @@ testthat::test_that("adaptive_run scheduling helpers cover stop and budget branc
   adaptive <- list(bins = 2L)
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
 
-  state$config$stop_confirmed <- TRUE
+  state$mode <- "stopped"
   stop_out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1)
   expect_equal(nrow(stop_out$pairs), 0L)
 
-  state$config$stop_confirmed <- FALSE
+  state$mode <- "adaptive"
   state$comparisons_scheduled <- state$budget_max
   budget_out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1)
   expect_equal(nrow(budget_out$pairs), 0L)
@@ -380,16 +378,17 @@ testthat::test_that("adaptive_run helpers cover target selection and replacement
   expect_equal(nrow(replacement_non_phase1$pairs), 0L)
 })
 
-testthat::test_that("adaptive_run next_action covers stop confirmed", {
+testthat::test_that("adaptive_run next_action covers stopped mode", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "bravo")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 9)
-  state$config$stop_confirmed <- TRUE
+  state$mode <- "stopped"
+  state$stop_reason <- "v3_converged"
 
   done_stop <- pairwiseLLM:::.adaptive_next_action(state, scheduled_pairs = 1L)
-  expect_equal(done_stop$reason, "stop_confirmed")
+  expect_equal(done_stop$reason, "v3_converged")
 })
 
 testthat::test_that("adaptive_run schedule_target moves to phase3 when near stop", {

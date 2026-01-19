@@ -1,4 +1,4 @@
-testthat::test_that("generate_candidates_v3 caps deterministically at C_max", {
+testthat::test_that("generate_candidates caps deterministically at C_max", {
   withr::local_seed(1)
   samples <- tibble::tibble(
     ID = LETTERS[1:10],
@@ -17,8 +17,8 @@ testthat::test_that("generate_candidates_v3 caps deterministically at C_max", {
     theta_sd = rep(0.4, state$N)
   )
 
-  out1 <- pairwiseLLM:::generate_candidates_v3(theta_summary, state, config)
-  out2 <- pairwiseLLM:::generate_candidates_v3(theta_summary, state, config)
+  out1 <- pairwiseLLM:::generate_candidates(theta_summary, state, config)
+  out2 <- pairwiseLLM:::generate_candidates(theta_summary, state, config)
 
   expect_equal(nrow(out1), config$C_max)
   expect_equal(out1, out2)

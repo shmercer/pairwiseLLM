@@ -40,7 +40,7 @@ testthat::test_that("artifact writing writes expected files", {
     diagnostics_pass = TRUE
   )
   stop_out <- list(stop_decision = FALSE, stop_reason = NA_character_)
-  state$config$round_log <- build_round_log_row_v3(
+  state$config$round_log <- build_round_log_row(
     state = state,
     fit = fit,
     metrics = metrics,

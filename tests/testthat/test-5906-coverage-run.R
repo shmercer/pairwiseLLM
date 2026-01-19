@@ -124,13 +124,14 @@ testthat::test_that("adaptive_run_stopping_checks appends round log on refit", {
 
   adaptive <- pairwiseLLM:::.adaptive_merge_config(list())
   out <- NULL
-  testthat::expect_warning(
-    out <- testthat::with_mocked_bindings(
-      generate_candidates_v3 = function(...) tibble::tibble(),
-      pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = adaptive, seed = 1L),
-      .package = "pairwiseLLM"
-    ),
-    "Candidate utilities are empty"
+  testthat::expect_silent(
+    {
+      out <- testthat::with_mocked_bindings(
+        generate_candidates = function(...) tibble::tibble(),
+        pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = adaptive, seed = 1L),
+        .package = "pairwiseLLM"
+      )
+    }
   )
 
   round_log <- out$state$config$round_log

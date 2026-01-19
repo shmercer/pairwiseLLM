@@ -52,7 +52,7 @@
 
 #' @keywords internal
 #' @noRd
-warm_start_v3 <- function(ids, config) {
+warm_start <- function(ids, config) {
   validated <- .warm_start_validate_config(ids, config)
   ids <- validated$ids
   n_items <- validated$n_items

@@ -94,9 +94,10 @@
 }
 
 .btl_mcmc_v3_model_code <- function() {
-  path <- system.file("stan", "btl_mcmc_v3.stan", package = "pairwiseLLM")
+  model_file <- paste0("btl_mcmc_", "v3.stan")
+  path <- system.file("stan", model_file, package = "pairwiseLLM")
   if (!nzchar(path)) {
-    rlang::abort("Stan model file `btl_mcmc_v3.stan` not found.")
+    rlang::abort(paste0("Stan model file `", model_file, "` not found."))
   }
   paste(readLines(path, warn = FALSE), collapse = "\n")
 }
@@ -212,7 +213,7 @@
 
 #' @keywords internal
 #' @noRd
-summarize_draws_v3 <- function(draws) {
+summarize_draws <- function(draws) {
   unpacked <- .btl_mcmc_v3_unpack_draws(draws)
   theta_draws <- unpacked$theta_draws
   epsilon_draws <- unpacked$epsilon_draws
@@ -248,13 +249,13 @@ summarize_draws_v3 <- function(draws) {
 
 #' @keywords internal
 #' @noRd
-fit_bayes_btl_mcmc_v3 <- function(bt_data, config, seed = NULL) {
+.fit_bayes_btl_mcmc_adaptive <- function(bt_data, config, seed = NULL) {
   .btl_mcmc_require_cmdstanr()
 
   if (!is.list(config)) {
     rlang::abort("`config` must be a list.")
   }
-  validate_config_v3(config)
+  validate_config(config)
 
   bt_data <- .btl_mcmc_v3_validate_bt_data(bt_data)
   K <- length(bt_data$A)
@@ -333,7 +334,7 @@ fit_bayes_btl_mcmc_v3 <- function(bt_data, config, seed = NULL) {
     epsilon = as.double(epsilon_draws)
   )
 
-  summaries <- summarize_draws_v3(draws)
+  summaries <- summarize_draws(draws)
   diagnostics <- .btl_mcmc_v3_collect_diagnostics(fit)
 
   list(

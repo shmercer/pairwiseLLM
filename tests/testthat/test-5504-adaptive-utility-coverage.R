@@ -51,117 +51,117 @@ testthat::test_that("epsilon_mean validation covers error branches", {
   testthat::expect_equal(pairwiseLLM:::.adaptive_epsilon_mean_from_state(NULL, fit_eps), 0.12)
 })
 
-testthat::test_that("compute_pair_stats_from_draws_v3 validates inputs", {
+testthat::test_that("compute_pair_stats_from_draws validates inputs", {
   withr::local_seed(1)
 
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(list(), tibble::tibble(i_id = "A", j_id = "B")),
+    pairwiseLLM:::compute_pair_stats_from_draws(list(), tibble::tibble(i_id = "A", j_id = "B")),
     "numeric matrix"
   )
 
   draws_one <- matrix(0, nrow = 1, ncol = 2)
   colnames(draws_one) <- c("A", "B")
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(draws_one, tibble::tibble(i_id = "A", j_id = "B")),
+    pairwiseLLM:::compute_pair_stats_from_draws(draws_one, tibble::tibble(i_id = "A", j_id = "B")),
     "at least two"
   )
 
   draws_inf <- matrix(c(0, Inf, 0, 0), nrow = 2)
   colnames(draws_inf) <- c("A", "B")
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(draws_inf, tibble::tibble(i_id = "A", j_id = "B")),
+    pairwiseLLM:::compute_pair_stats_from_draws(draws_inf, tibble::tibble(i_id = "A", j_id = "B")),
     "finite"
   )
 
   draws <- matrix(0, nrow = 2, ncol = 2)
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(draws, tibble::tibble(i_id = "A", j_id = "B")),
+    pairwiseLLM:::compute_pair_stats_from_draws(draws, tibble::tibble(i_id = "A", j_id = "B")),
     "column names"
   )
 
   draws <- matrix(c(0, 1, 1, 0), nrow = 2, byrow = TRUE)
   colnames(draws) <- c("A", "B")
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(draws, list()),
+    pairwiseLLM:::compute_pair_stats_from_draws(draws, list()),
     "data frame"
   )
 
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(draws, tibble::tibble(x = 1)),
+    pairwiseLLM:::compute_pair_stats_from_draws(draws, tibble::tibble(x = 1)),
     "i_id"
   )
 
-  empty_out <- pairwiseLLM:::compute_pair_stats_from_draws_v3(
+  empty_out <- pairwiseLLM:::compute_pair_stats_from_draws(
     draws,
     tibble::tibble(i_id = character(), j_id = character())
   )
   testthat::expect_equal(nrow(empty_out), 0L)
 
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(draws, tibble::tibble(i_id = NA, j_id = "B")),
+    pairwiseLLM:::compute_pair_stats_from_draws(draws, tibble::tibble(i_id = NA, j_id = "B")),
     "non-missing"
   )
 
   testthat::expect_error(
-    pairwiseLLM:::compute_pair_stats_from_draws_v3(draws, tibble::tibble(i_id = "A", j_id = "C")),
+    pairwiseLLM:::compute_pair_stats_from_draws(draws, tibble::tibble(i_id = "A", j_id = "C")),
     "present in `draws`"
   )
 })
 
-testthat::test_that("compute_pair_stats_from_draws_v3 accepts i/j column names", {
+testthat::test_that("compute_pair_stats_from_draws accepts i/j column names", {
   withr::local_seed(1)
 
   draws <- matrix(c(0, 1, 1, 0), nrow = 2, byrow = TRUE)
   colnames(draws) <- c("A", "B")
   candidates <- tibble::tibble(i = "A", j = "B")
-  out <- pairwiseLLM:::compute_pair_stats_from_draws_v3(draws, candidates)
+  out <- pairwiseLLM:::compute_pair_stats_from_draws(draws, candidates)
   testthat::expect_equal(out$i, "A")
   testthat::expect_equal(out$j, "B")
 })
 
-testthat::test_that("utility_delta_var_p_v3 validates inputs", {
+testthat::test_that("utility_delta_var_p validates inputs", {
   withr::local_seed(1)
 
   testthat::expect_error(
-    pairwiseLLM:::utility_delta_var_p_v3("x", 1, 0.1),
+    pairwiseLLM:::utility_delta_var_p("x", 1, 0.1),
     "numeric"
   )
   testthat::expect_error(
-    pairwiseLLM:::utility_delta_var_p_v3(c(1, 2), 1, 0.1),
+    pairwiseLLM:::utility_delta_var_p(c(1, 2), 1, 0.1),
     "same length"
   )
   testthat::expect_equal(
-    pairwiseLLM:::utility_delta_var_p_v3(numeric(), numeric(), 0.1),
+    pairwiseLLM:::utility_delta_var_p(numeric(), numeric(), 0.1),
     numeric()
   )
   testthat::expect_error(
-    pairwiseLLM:::utility_delta_var_p_v3(c(Inf), c(1), 0.1),
+    pairwiseLLM:::utility_delta_var_p(c(Inf), c(1), 0.1),
     "finite"
   )
   testthat::expect_error(
-    pairwiseLLM:::utility_delta_var_p_v3(c(0), c(-1), 0.1),
+    pairwiseLLM:::utility_delta_var_p(c(0), c(-1), 0.1),
     "non-negative"
   )
   testthat::expect_error(
-    pairwiseLLM:::utility_delta_var_p_v3(c(0), c(1), NA_real_),
+    pairwiseLLM:::utility_delta_var_p(c(0), c(1), NA_real_),
     "finite"
   )
   testthat::expect_error(
-    pairwiseLLM:::utility_delta_var_p_v3(c(0), c(1), 1.5),
+    pairwiseLLM:::utility_delta_var_p(c(0), c(1), 1.5),
     "in \\[0, 1\\]"
   )
 })
 
-testthat::test_that("compute_pair_utility_v3 handles empty candidates and unordered_key", {
+testthat::test_that("compute_pair_utility handles empty candidates and unordered_key", {
   withr::local_seed(1)
 
   draws <- matrix(c(0, 1, 1, 0), nrow = 2, byrow = TRUE)
   colnames(draws) <- c("A", "B")
   empty_candidates <- tibble::tibble(i_id = character(), j_id = character())
-  out_empty <- pairwiseLLM:::compute_pair_utility_v3(draws, empty_candidates, epsilon_mean = 0.1)
+  out_empty <- pairwiseLLM:::compute_pair_utility(draws, empty_candidates, epsilon_mean = 0.1)
   testthat::expect_equal(nrow(out_empty), 0L)
 
   candidates <- tibble::tibble(i_id = "A", j_id = "B", unordered_key = "A:B")
-  out <- pairwiseLLM:::compute_pair_utility_v3(draws, candidates, epsilon_mean = 0.1)
+  out <- pairwiseLLM:::compute_pair_utility(draws, candidates, epsilon_mean = 0.1)
   testthat::expect_equal(out$unordered_key, "A:B")
 })

@@ -55,7 +55,7 @@ testthat::test_that("theta summaries from fit validate required fields", {
   )
 })
 
-testthat::test_that("select_anchors_v3 handles single-anchor requests", {
+testthat::test_that("select_anchors handles single-anchor requests", {
   withr::local_seed(1)
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
@@ -70,6 +70,6 @@ testthat::test_that("select_anchors_v3 handles single-anchor requests", {
     theta_mean = c(2, 0, -1),
     theta_sd = c(0.2, 0.3, 0.4)
   )
-  anchors <- pairwiseLLM:::select_anchors_v3(theta_summary, state, config)
+  anchors <- pairwiseLLM:::select_anchors(theta_summary, state, config)
   expect_equal(anchors, "A")
 })
