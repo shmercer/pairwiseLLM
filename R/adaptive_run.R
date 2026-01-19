@@ -98,6 +98,66 @@ NULL
   list(state_path = state_path, output_dir = output_dir)
 }
 
+.adaptive_write_v3_artifacts <- function(state, fit = NULL, output_dir = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
+  config_v3 <- state$config$v3 %||% list()
+  if (!isTRUE(config_v3$write_outputs)) {
+    return(invisible(FALSE))
+  }
+
+  output_dir <- output_dir %||% config_v3$output_dir %||% state$config$output_dir %||% NULL
+  if (is.null(output_dir)) {
+    rlang::abort("`output_dir` must be provided when `write_outputs` is TRUE.")
+  }
+  if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+    rlang::abort("`output_dir` must be a length-1 character path.")
+  }
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+  config_path <- file.path(output_dir, "adaptive_config.rds")
+  saveRDS(state$config, config_path)
+
+  round_log <- state$config$round_log %||% round_log_schema_v3()
+  round_log <- tibble::as_tibble(round_log)
+  round_log_path <- file.path(output_dir, "round_log.rds")
+  saveRDS(round_log, round_log_path)
+
+  item_summary <- build_item_summary_v3(state, fit = fit)
+  item_summary_path <- file.path(output_dir, "item_summary.rds")
+  saveRDS(item_summary, item_summary_path)
+
+  if (isTRUE(config_v3$keep_draws)) {
+    thin_draws <- as.integer(config_v3$thin_draws %||% 1L)
+    if (is.na(thin_draws) || thin_draws < 1L) {
+      rlang::abort("`thin_draws` must be a positive integer.")
+    }
+
+    draws <- NULL
+    if (is.list(fit) && !is.null(fit$draws)) {
+      draws <- fit$draws
+    } else if (is.list(fit) && !is.null(fit$theta_draws)) {
+      draws <- list(theta = fit$theta_draws)
+    }
+
+    if (!is.null(draws) && !is.null(draws$theta)) {
+      theta_draws <- draws$theta
+      if (is.matrix(theta_draws) && thin_draws > 1L) {
+        keep_idx <- seq(1L, nrow(theta_draws), by = thin_draws)
+        draws$theta <- theta_draws[keep_idx, , drop = FALSE]
+        if (!is.null(draws$epsilon)) {
+          draws$epsilon <- draws$epsilon[keep_idx]
+        }
+      }
+      draws_path <- file.path(output_dir, "theta_draws.rds")
+      saveRDS(draws, draws_path)
+    }
+  }
+
+  invisible(TRUE)
+}
+
 .adaptive_pairs_to_submit_tbl <- function(pairs_tbl) {
   pairs_tbl <- tibble::as_tibble(pairs_tbl)
   required <- c("A_id", "B_id", "A_text", "B_text", "pair_uid", "phase", "iter")
@@ -462,6 +522,18 @@ NULL
 
   stop_out <- should_stop_v3(metrics, state, config_v3)
   state <- stop_out$state
+
+  if (isTRUE(refit_performed)) {
+    round_row <- build_round_log_row_v3(
+      state = state,
+      fit = fit,
+      metrics = metrics,
+      stop_out = stop_out,
+      config = config_v3
+    )
+    prior_log <- state$config$round_log %||% round_log_schema_v3()
+    state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
+  }
 
   mcmc_ready <- isTRUE(state$checks_passed_in_row >= 2L) ||
     isTRUE(legacy_checks_passed >= 2L)
@@ -1265,6 +1337,8 @@ adaptive_rank_start <- function(
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
+  .adaptive_write_v3_artifacts(state, fit = state$fast_fit, output_dir = path_info$output_dir)
+
   if (mode == "batch" && !is.null(path_info$state_path)) {
     adaptive_state_save(state, path_info$state_path)
   }
@@ -1549,6 +1623,9 @@ adaptive_rank_resume <- function(
   state$config$allow_refit <- TRUE
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
+
+  output_dir_write <- submission_info$output_dir %||% state$config$output_dir %||% NULL
+  .adaptive_write_v3_artifacts(state, fit = state$fast_fit, output_dir = output_dir_write)
 
   if (!is.null(state_path) && mode == "batch") {
     adaptive_state_save(state, state_path)

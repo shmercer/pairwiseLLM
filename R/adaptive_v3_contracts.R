@@ -355,3 +355,241 @@ item_summary_schema_v3 <- function() {
     posA_prop = double()
   )
 }
+
+#' @keywords internal
+#' @noRd
+compute_reliability_EAP <- function(draws) {
+  if (is.null(draws) || !is.matrix(draws) || !is.numeric(draws)) {
+    return(NA_real_)
+  }
+  if (nrow(draws) < 2L || ncol(draws) < 2L) {
+    return(NA_real_)
+  }
+  if (any(!is.finite(draws))) {
+    return(NA_real_)
+  }
+
+  theta_mean <- colMeans(draws)
+  theta_var <- apply(draws, 2, stats::var)
+  mean_var <- mean(theta_var)
+  var_mean <- stats::var(theta_mean)
+
+  if (!is.finite(mean_var) || !is.finite(var_mean) || var_mean <= 0) {
+    return(NA_real_)
+  }
+
+  reliability <- var_mean / (var_mean + mean_var)
+  reliability <- min(1, max(0, reliability))
+  as.double(reliability)
+}
+
+#' @keywords internal
+#' @noRd
+compute_gini_degree <- function(deg) {
+  if (is.null(deg)) {
+    return(NA_real_)
+  }
+  deg <- as.double(deg)
+  deg <- deg[is.finite(deg)]
+  if (length(deg) == 0L) {
+    return(NA_real_)
+  }
+  if (any(deg < 0)) {
+    rlang::abort("`deg` must be non-negative.")
+  }
+
+  total <- sum(deg)
+  n <- length(deg)
+  if (total == 0) {
+    return(0)
+  }
+  if (n == 1L) {
+    return(0)
+  }
+
+  deg <- sort(deg)
+  idx <- seq_len(n)
+  gini <- (2 * sum(deg * idx) / (n * total)) - (n + 1) / n
+  as.double(max(0, gini))
+}
+
+.adaptive_round_log_defaults <- function() {
+  schema <- round_log_schema_v3()
+  defaults <- lapply(schema, function(col) {
+    if (is.integer(col)) {
+      NA_integer_
+    } else if (is.double(col)) {
+      NA_real_
+    } else if (is.logical(col)) {
+      NA
+    } else if (is.character(col)) {
+      NA_character_
+    } else {
+      NA
+    }
+  })
+  tibble::as_tibble(defaults)
+}
+
+.adaptive_item_summary_defaults <- function(n_rows = 0L) {
+  schema <- item_summary_schema_v3()
+  if (n_rows < 1L) {
+    return(schema)
+  }
+  schema[rep_len(1L, n_rows), , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
+build_round_log_row_v3 <- function(state,
+    fit = NULL,
+    metrics = NULL,
+    stop_out = NULL,
+    config = NULL,
+    round_id = NULL,
+    batch_size = NULL,
+    window_W = NULL,
+    exploration_rate = NULL,
+    new_pairs = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
+  config <- config %||% state$config$v3 %||% list()
+
+  row <- .adaptive_round_log_defaults()
+  if (is.null(round_id)) {
+    prior <- state$config$round_log
+    round_id <- if (is.data.frame(prior)) nrow(prior) + 1L else 1L
+  }
+
+  total_pairs <- state$N * (state$N - 1L) / 2
+  mean_degree <- mean(as.double(state$deg))
+  min_degree <- min(as.integer(state$deg))
+
+  deg <- as.double(state$deg)
+  pos1 <- as.double(state$pos1)
+  pos_balance <- rep(NA_real_, length(deg))
+  positive <- deg > 0
+  pos_balance[positive] <- (pos1[positive] / deg[positive]) - 0.5
+  pos_balance_sd <- if (all(is.na(pos_balance))) NA_real_ else stats::sd(pos_balance, na.rm = TRUE)
+
+  epsilon_mean <- state$posterior$epsilon_mean %||% NA_real_
+  epsilon_ci90_lo <- NA_real_
+  epsilon_ci90_hi <- NA_real_
+  if (is.list(fit) && !is.null(fit$epsilon_summary)) {
+    eps_summary <- tibble::as_tibble(fit$epsilon_summary)
+    if (nrow(eps_summary) >= 1L) {
+      epsilon_mean <- eps_summary$epsilon_mean[[1L]] %||% epsilon_mean
+      epsilon_ci90_lo <- eps_summary$epsilon_ci90_low[[1L]] %||% NA_real_
+      epsilon_ci90_hi <- eps_summary$epsilon_ci90_high[[1L]] %||% NA_real_
+    }
+  }
+
+  theta_draws <- NULL
+  if (is.list(fit) && !is.null(fit$theta_draws)) {
+    theta_draws <- fit$theta_draws
+  } else if (is.list(fit) && !is.null(fit$draws)) {
+    theta_draws <- tryCatch(
+      .btl_mcmc_v3_theta_draws(fit$draws, item_id = state$ids),
+      error = function(e) NULL
+    )
+  }
+  reliability_EAP <- compute_reliability_EAP(theta_draws)
+
+  diagnostics <- fit$diagnostics %||% list()
+  divergences <- diagnostics$divergences %||% NA_integer_
+  min_ess_bulk <- diagnostics$min_ess_bulk %||% NA_real_
+  max_rhat <- diagnostics$max_rhat %||% NA_real_
+
+  stop_decision <- stop_out$stop_decision %||% NA
+  stop_reason <- stop_out$stop_reason %||% state$stop_reason %||% NA_character_
+
+  row$round_id <- as.integer(round_id)
+  row$n_items <- as.integer(state$N)
+  row$total_pairs <- as.integer(total_pairs)
+  row$new_pairs <- as.integer(new_pairs %||% NA_integer_)
+  row$batch_size <- as.integer(batch_size %||% NA_integer_)
+  row$window_W <- as.integer(window_W %||% NA_integer_)
+  row$exploration_rate <- as.double(exploration_rate %||% NA_real_)
+  row$mean_degree <- as.double(mean_degree)
+  row$min_degree <- as.integer(min_degree)
+  row$pos_balance_sd <- as.double(pos_balance_sd)
+  row$epsilon_mean <- as.double(epsilon_mean)
+  row$epsilon_ci90_lo <- as.double(epsilon_ci90_lo)
+  row$epsilon_ci90_hi <- as.double(epsilon_ci90_hi)
+  row$reliability_EAP <- as.double(reliability_EAP)
+  row$theta_sd_median <- as.double(metrics$theta_sd_median_S %||% NA_real_)
+  row$tau <- as.double(metrics$tau %||% NA_real_)
+  row$theta_sd_pass <- as.logical(metrics$theta_sd_pass %||% NA)
+  row$U0 <- as.double(metrics$U0 %||% state$U0 %||% NA_real_)
+  row$U_abs <- as.double(config$U_abs %||% NA_real_)
+  row$U_pass <- as.logical(metrics$U_pass %||% NA)
+  row$U_dup_threshold <- as.double(state$posterior$U_dup_threshold %||% NA_real_)
+  row$divergences <- as.integer(divergences)
+  row$min_ess_bulk <- as.double(min_ess_bulk)
+  row$max_rhat <- as.double(max_rhat)
+  row$diagnostics_pass <- as.logical(metrics$diagnostics_pass %||% NA)
+  row$stop_decision <- as.logical(stop_decision)
+  row$stop_reason <- as.character(stop_reason)
+  row$mode <- as.character(state$mode %||% NA_character_)
+  row
+}
+
+#' @keywords internal
+#' @noRd
+build_item_summary_v3 <- function(state, fit = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
+
+  theta_draws <- NULL
+  if (is.list(fit) && !is.null(fit$theta_draws)) {
+    theta_draws <- fit$theta_draws
+  } else if (is.list(fit) && !is.null(fit$draws)) {
+    theta_draws <- tryCatch(
+      .btl_mcmc_v3_theta_draws(fit$draws, item_id = state$ids),
+      error = function(e) NULL
+    )
+  }
+
+  if (is.null(theta_draws) || !is.matrix(theta_draws) || !is.numeric(theta_draws)) {
+    return(.adaptive_item_summary_defaults())
+  }
+
+  if (is.null(colnames(theta_draws))) {
+    colnames(theta_draws) <- as.character(state$ids)
+  }
+
+  theta_draws <- theta_draws[, state$ids, drop = FALSE]
+  theta_mean <- as.double(colMeans(theta_draws))
+  theta_sd <- as.double(apply(theta_draws, 2, stats::sd))
+  theta_ci90_lo <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.05, names = FALSE))
+  theta_ci90_hi <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.95, names = FALSE))
+  theta_ci95_lo <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.025, names = FALSE))
+  theta_ci95_hi <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.975, names = FALSE))
+
+  rank_mat <- t(apply(theta_draws, 1, function(row) rank(-row, ties.method = "average")))
+  colnames(rank_mat) <- state$ids
+  rank_mean <- as.double(colMeans(rank_mat))
+  rank_sd <- as.double(apply(rank_mat, 2, stats::sd))
+
+  deg <- as.integer(state$deg)
+  pos1 <- as.double(state$pos1)
+  posA_prop <- rep(NA_real_, length(deg))
+  positive <- deg > 0
+  posA_prop[positive] <- pos1[positive] / deg[positive]
+
+  tibble::tibble(
+    ID = as.character(state$ids),
+    theta_mean = theta_mean,
+    theta_sd = theta_sd,
+    theta_ci90_lo = theta_ci90_lo,
+    theta_ci90_hi = theta_ci90_hi,
+    theta_ci95_lo = theta_ci95_lo,
+    theta_ci95_hi = theta_ci95_hi,
+    rank_mean = rank_mean,
+    rank_sd = rank_sd,
+    deg = deg,
+    posA_prop = as.double(posA_prop)
+  )
+}
