@@ -16,7 +16,7 @@ transformed parameters {
 model {
   vector[K] p;
   theta_raw ~ normal(0, 1);
-  epsilon ~ beta(2, 10);
+  epsilon ~ beta(2, 20);
   for (k in 1:K) {
     p[k] = (1 - epsilon) * inv_logit(theta[A[k]] - theta[B[k]]) + epsilon * 0.5;
   }
