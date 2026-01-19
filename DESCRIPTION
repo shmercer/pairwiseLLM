@@ -57,6 +57,7 @@ VignetteBuilder: knitr
 Collate: 
     'adaptive_candidates.R'
     'adaptive_constraints.R'
+    'draws_sanitize.R'
     'adaptive_contracts.R'
     'adaptive_diagnostics.R'
     'adaptive_refit.R'
