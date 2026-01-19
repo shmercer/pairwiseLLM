@@ -24,12 +24,17 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates cmdstan config", {
 
   config$cmdstan <- list(output_dir = 1)
   testthat::with_mocked_bindings(
-    expect_error(
-      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
-      "output_dir"
+    testthat::with_mocked_bindings(
+      expect_error(
+        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
+        "output_dir"
+      ),
+      .btl_mcmc_require_cmdstanr = function() NULL,
+      .package = "pairwiseLLM"
     ),
-    .btl_mcmc_require_cmdstanr = function() NULL,
-    .package = "pairwiseLLM"
+    cmdstan_model = function(file) list(sample = function(...) NULL),
+    write_stan_file = function(code) "fake.stan",
+    .package = "cmdstanr"
   )
 })
 
