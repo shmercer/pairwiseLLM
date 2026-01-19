@@ -232,3 +232,33 @@ test_that("retry request validates max_attempts and retries transient http error
   expect_equal(call_count, 2L)
   expect_equal(attr(res, "retry_failures")$error_code, "http_error")
 })
+
+test_that("retry request retries httr2_http errors when status is stored in `resp`", {
+  call_count <- 0L
+  http_err <- structure(
+    list(resp = list(status = 503L)),
+    class = c("httr2_http", "error", "condition")
+  )
+  fake_resp <- function(status) {
+    structure(list(status = status), class = "httr2_response")
+  }
+
+  res <- with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) {
+      call_count <<- call_count + 1L
+      if (call_count == 1L) {
+        stop(http_err)
+      }
+      fake_resp(200L)
+    },
+    `.pairwiseLLM_resp_status` = function(resp) resp$status,
+    {
+      .retry_httr2_request(list(), max_attempts = 2L, base_delay = 0, jitter = 0)
+    }
+  )
+
+  expect_equal(call_count, 2L)
+  failures <- attr(res, "retry_failures")
+  expect_equal(nrow(failures), 1L)
+  expect_true(all(failures$error_code == "http_error"))
+})
