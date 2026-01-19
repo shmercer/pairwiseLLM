@@ -268,6 +268,10 @@ should_stop <- function(metrics, state, config) {
     ))
   }
 
+  if (!is.finite(state$U0) && is.finite(metrics$U0)) {
+    state$U0 <- as.double(metrics$U0)
+  }
+
   min_comparisons <- state$M1_target %||% NA_integer_
   if (!is.integer(min_comparisons) || length(min_comparisons) != 1L) {
     rlang::abort("`state$M1_target` must be a length-1 integer.")
@@ -279,10 +283,6 @@ should_stop <- function(metrics, state, config) {
       stop_decision = FALSE,
       stop_reason = state$stop_reason %||% NA_character_
     ))
-  }
-
-  if (!is.finite(state$U0) && is.finite(metrics$U0)) {
-    state$U0 <- as.double(metrics$U0)
   }
 
   diagnostics_pass <- isTRUE(metrics$diagnostics_pass)

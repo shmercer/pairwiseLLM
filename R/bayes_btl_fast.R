@@ -88,6 +88,8 @@
   w <- rep.int(1, N)
   converged <- FALSE
 
+  w_floor <- 1e-6
+  w_ceiling <- 1e6
   for (iter in seq_len(max_iter)) {
     denom <- edges$n_ij / (w[i_idx] + w[j_idx])
     denom_sum <- sum_by_index(denom, i_idx, N) +
@@ -97,6 +99,7 @@
     w_new <- w
     update_mask <- denom_sum > 0 & is.finite(wins_adj)
     w_new[update_mask] <- w[update_mask] * (wins_adj[update_mask] / denom_sum[update_mask])
+    w_new <- pmin(pmax(w_new, w_floor), w_ceiling)
     bad_w <- !is.finite(w_new)
     if (any(bad_w)) {
       w_new[bad_w] <- w[bad_w]
@@ -111,6 +114,7 @@
     w <- w_new
   }
 
+  w <- pmin(pmax(w, w_floor), w_ceiling)
   theta_raw <- log(w)
   se_raw <- ifelse(total_comp > 0, 1 / sqrt(total_comp), 1)
   se_raw <- stats::setNames(as.double(se_raw), ids)
