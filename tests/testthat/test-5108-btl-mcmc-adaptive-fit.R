@@ -13,9 +13,13 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates cmdstan config", {
   config <- pairwiseLLM:::adaptive_v3_config(2L)
 
   config$cmdstan <- 1
-  expect_error(
-    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
-    "config\\$cmdstan"
+  testthat::with_mocked_bindings(
+    expect_error(
+      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
+      "config\\$cmdstan"
+    ),
+    .btl_mcmc_require_cmdstanr = function() NULL,
+    .package = "pairwiseLLM"
   )
 
   config$cmdstan <- list(output_dir = 1)
