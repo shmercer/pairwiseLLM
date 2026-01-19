@@ -322,3 +322,74 @@ testthat::test_that("replacement loop defaults batch size and phase when missing
   expect_equal(captured$phase, "phase1")
   expect_equal(length(out$submissions), 0L)
 })
+
+testthat::test_that("repair schedule handles empty utilities and selection", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$phase <- "phase2"
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
+  adaptive <- list()
+
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_schedule_repair_pairs(state, 1L, adaptive, seed = 1),
+    .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
+      list(
+        state = state,
+        fit = list(
+          theta_mean = stats::setNames(c(0, 0), state$ids),
+          theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
+          diagnostics = NULL
+        )
+      )
+    },
+    generate_candidates = function(...) tibble::tibble(),
+    select_batch = function(...) pairwiseLLM:::.adaptive_empty_pairs_tbl(),
+    .package = "pairwiseLLM"
+  )
+
+  expect_equal(nrow(out$pairs), 0L)
+  expect_equal(out$state$mode, "repair")
+  expect_equal(out$state$iter, 1L)
+})
+
+testthat::test_that("adaptive_rank_resume seeds repair defaults when NULL", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$repair_attempts <- NULL
+  state$stop_reason <- NULL
+  state$config$backend <- "openai"
+  state$config$model <- "gpt-test"
+  state$config$trait_name <- "quality"
+  state$config$trait_description <- "Which is better?"
+  state$config$prompt_template <- "template"
+  state$config$submission <- list()
+
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = state,
+      mode = "live",
+      submission_info = list(
+        backend = "openai",
+        model = "gpt-test",
+        trait_name = "quality",
+        trait_description = "Which is better?",
+        prompt_template = "template"
+      )
+    ),
+    validate_state = function(state) invisible(state),
+    .adaptive_run_stopping_checks = function(state, adaptive, seed) {
+      state$mode <- "stopped"
+      list(state = state)
+    },
+    .package = "pairwiseLLM"
+  )
+
+  expect_equal(out$state$repair_attempts, 0L)
+  expect_true(is.na(out$state$stop_reason))
+})
