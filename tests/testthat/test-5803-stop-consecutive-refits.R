@@ -9,6 +9,7 @@ testthat::test_that("consecutive passing refits trigger v3 convergence", {
     samples = samples,
     config = list(d1 = 2L, M1_target = 4L, budget_max = 10L)
   )
+  state$M1_target <- 0L
   config_v3 <- adaptive_v3_config(state$N, list(checks_passed_target = 2L))
   state$config$v3 <- config_v3
 
