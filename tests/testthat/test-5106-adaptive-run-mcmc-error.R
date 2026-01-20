@@ -58,7 +58,13 @@ testthat::test_that("adaptive stopping checks do not stop on minimal state", {
   theta_mean <- stats::setNames(c(2, 1, 0), state$ids)
   draws <- matrix(rep(theta_mean, each = 4), nrow = 4, byrow = FALSE)
   colnames(draws) <- state$ids
-  state$fast_fit <- list(theta_mean = theta_mean, theta_draws = draws)
+  state$fit <- list(
+    theta_mean = theta_mean,
+    theta_draws = draws,
+    epsilon_mean = 0.1,
+    diagnostics = list()
+  )
+  state$config$allow_refit <- FALSE
 
   state <- add_results(state, 2L)
   state$config$last_refit_at <- as.integer(state$comparisons_observed)

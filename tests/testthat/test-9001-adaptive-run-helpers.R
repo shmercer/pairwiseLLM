@@ -412,14 +412,43 @@ testthat::test_that("adaptive_run helper error paths cover missing refit state",
     text = c("alpha", "bravo")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 6)
-  adaptive <- list(n_draws_fast = 10L)
+  adaptive <- list()
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC"),
+    backend = "openai",
+    model = "gpt-test"
+  )
+  state$history_pairs <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase2",
+    iter = 1L,
+    created_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
+  )
+  state$comparisons_observed <- 1L
+  state$comparisons_scheduled <- 1L
 
   expect_error(
     testthat::with_mocked_bindings(
       pairwiseLLM:::.adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = 1),
-      fit_bayes_btl_fast = function(...) NULL
+      .fit_bayes_btl_mcmc_adaptive = function(...) list(),
+      as_v3_fit_contract_from_mcmc = function(...) NULL
     ),
-    "Fast inference failed"
+    "MCMC inference failed"
   )
 })
 

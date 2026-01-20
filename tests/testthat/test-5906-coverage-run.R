@@ -117,7 +117,8 @@ testthat::test_that("adaptive_run_stopping_checks appends round log on refit", {
   fit <- list(
     theta_mean = stats::setNames(rep(0, state$N), state$ids),
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    diagnostics = NULL
+    epsilon_mean = 0.1,
+    diagnostics = list()
   )
 
   state$new_since_refit <- 1L
@@ -128,6 +129,9 @@ testthat::test_that("adaptive_run_stopping_checks appends round log on refit", {
     {
       out <- testthat::with_mocked_bindings(
         generate_candidates = function(...) tibble::tibble(),
+        .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
+          list(state = state, fit = fit, refit_performed = TRUE)
+        },
         pairwiseLLM:::.adaptive_run_stopping_checks(state, adaptive = adaptive, seed = 1L),
         .package = "pairwiseLLM"
       )
