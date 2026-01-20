@@ -3,6 +3,12 @@
 #   Tests for ollama_compare_pair_live() and submit_ollama_pairs_live()
 # =====================================================================
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+ollama_compare_pair_live <- pairwiseLLM::ollama_compare_pair_live
+submit_ollama_pairs_live <- pairwiseLLM::submit_ollama_pairs_live
+ensure_only_ollama_model_loaded <- pairwiseLLM:::ensure_only_ollama_model_loaded
+
 # ---------------------------------------------------------------------
 # ollama_compare_pair_live: happy path
 # ---------------------------------------------------------------------

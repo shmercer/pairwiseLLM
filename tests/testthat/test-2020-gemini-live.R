@@ -1,5 +1,10 @@
 # tests/testthat/test-gemini_live.R
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+gemini_compare_pair_live <- pairwiseLLM::gemini_compare_pair_live
+submit_gemini_pairs_live <- pairwiseLLM::submit_gemini_pairs_live
+
 test_that("gemini_compare_pair_live parses a successful response without
           thoughts", {
   skip_if_not_installed("httr2")

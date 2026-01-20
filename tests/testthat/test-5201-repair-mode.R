@@ -24,7 +24,8 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
               theta_mean = stats::setNames(c(0, 0, 0), state$ids),
               theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
               diagnostics = list(divergences = 1L, max_rhat = 1.5, min_ess_bulk = 10)
-            )
+            ),
+            refit_performed = TRUE
           )
         },
         diagnostics_gate = function(...) FALSE,
@@ -42,9 +43,9 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
           )
         },
         apply_degree_penalty = function(utilities, state) utilities,
-        select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+        .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
           called$selection <- TRUE
-          called$exploration_only <- exploration_only
+          called$exploration_only <- TRUE
           tibble::tibble(
             i_id = character(),
             j_id = character(),
@@ -77,7 +78,8 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
           theta_mean = stats::setNames(c(0, 0, 0), state$ids),
           theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
           diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
-        )
+        ),
+        refit_performed = TRUE
       )
     },
     diagnostics_gate = function(...) TRUE,

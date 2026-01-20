@@ -260,8 +260,10 @@ testthat::test_that("adaptive_run stopping checks return when no candidates", {
         state = state,
         fit = list(
           theta_mean = stats::setNames(c(0, 0, 0), state$ids),
-          theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids))
-        )
+          theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
+          diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+        ),
+        refit_performed = TRUE
       )
     },
     generate_candidates = function(...) tibble::tibble(i = character(), j = character())
@@ -291,8 +293,10 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
         state = state,
         fit = list(
           theta_mean = stats::setNames(c(0, 0, 0), c("A", "B", "C")),
-          theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, c("A", "B", "C")))
-        )
+          theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, c("A", "B", "C"))),
+          diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+        ),
+        refit_performed = TRUE
       )
     },
     generate_candidates = function(...) tibble::tibble(i = character(), j = character())

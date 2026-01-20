@@ -3,6 +3,24 @@
 # Tests for internal and exported helpers in R/openai_batch_api.R
 # =====================================================================
 
+.openai_api_key <- pairwiseLLM:::.openai_api_key
+.openai_base_url <- pairwiseLLM:::.openai_base_url
+.openai_request <- pairwiseLLM:::.openai_request
+.openai_req_body_json <- pairwiseLLM:::.openai_req_body_json
+.openai_req_perform <- pairwiseLLM:::.openai_req_perform
+.openai_resp_body_json <- pairwiseLLM:::.openai_resp_body_json
+.openai_resp_status <- pairwiseLLM:::.openai_resp_status
+openai_upload_batch_file <- pairwiseLLM::openai_upload_batch_file
+openai_create_batch <- pairwiseLLM::openai_create_batch
+openai_get_batch <- pairwiseLLM::openai_get_batch
+openai_download_batch_output <- pairwiseLLM::openai_download_batch_output
+openai_poll_batch_until_complete <- pairwiseLLM::openai_poll_batch_until_complete
+run_openai_batch_pipeline <- pairwiseLLM::run_openai_batch_pipeline
+trait_description <- pairwiseLLM:::trait_description
+build_openai_batch_requests <- pairwiseLLM:::build_openai_batch_requests
+write_openai_batch_file <- pairwiseLLM:::write_openai_batch_file
+parse_openai_batch_output <- pairwiseLLM:::parse_openai_batch_output
+
 # ---------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------

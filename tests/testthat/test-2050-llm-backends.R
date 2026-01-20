@@ -3,6 +3,11 @@
 #   Tests for llm_compare_pair() and submit_llm_pairs()
 # =====================================================================
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+llm_compare_pair <- pairwiseLLM::llm_compare_pair
+submit_llm_pairs <- pairwiseLLM::submit_llm_pairs
+
 # ---------------------------------------------------------------------
 # Defaults: backend and endpoint
 # ---------------------------------------------------------------------

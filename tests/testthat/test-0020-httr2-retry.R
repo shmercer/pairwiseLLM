@@ -1,3 +1,9 @@
+.retry_httr2_request <- pairwiseLLM:::.retry_httr2_request
+.pairwiseLLM_retry_backoff <- pairwiseLLM:::.pairwiseLLM_retry_backoff
+.pairwiseLLM_retry_is_transient <- pairwiseLLM:::.pairwiseLLM_retry_is_transient
+.pairwiseLLM_req_perform <- pairwiseLLM:::.pairwiseLLM_req_perform
+.pairwiseLLM_resp_status <- pairwiseLLM:::.pairwiseLLM_resp_status
+
 test_that("retry helper retries transient status codes and records failures", {
   call_count <- 0L
   fake_resp <- function(status) {

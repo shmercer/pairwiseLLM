@@ -3,6 +3,11 @@
 #   Tests for anthropic_compare_pair_live() and submit_anthropic_pairs_live()
 # =====================================================================
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+anthropic_compare_pair_live <- pairwiseLLM::anthropic_compare_pair_live
+submit_anthropic_pairs_live <- pairwiseLLM::submit_anthropic_pairs_live
+
 testthat::test_that("anthropic_compare_pair_live parses /v1/messages correctly", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()

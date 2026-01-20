@@ -1,5 +1,10 @@
 library(tibble)
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+llm_submit_pairs_multi_batch <- pairwiseLLM::llm_submit_pairs_multi_batch
+llm_resume_multi_batches <- pairwiseLLM::llm_resume_multi_batches
+
 test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes registry", {
   # Prepare a small set of pairs
   pairs <- tibble::tibble(

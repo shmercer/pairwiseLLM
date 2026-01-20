@@ -484,15 +484,11 @@ NULL
     return(list(state = state))
   }
 
-  if (is.null(fit$diagnostics)) {
-    state$posterior$diagnostics_pass <- TRUE
-  } else {
-    state$posterior$diagnostics_pass <- diagnostics_gate(
-      fit,
-      v3_config,
-      near_stop = near_stop_from_state(state)
-    )
-  }
+  state$posterior$diagnostics_pass <- diagnostics_gate(
+    fit,
+    v3_config,
+    near_stop = near_stop_from_state(state)
+  )
 
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates(theta_summary, state, v3_config)
@@ -546,13 +542,7 @@ NULL
   list(state = state)
 }
 
-.adaptive_apply_diagnostics_gate <- function(state, fit, config, near_stop) {
-  diagnostics <- fit$diagnostics %||% NULL
-  if (is.null(diagnostics)) {
-    state$posterior$diagnostics_pass <- TRUE
-    return(list(state = state, diagnostics_pass = TRUE))
-  }
-
+.adaptive_apply_diagnostics_gate <- function(state, fit, config, near_stop, refit_performed = TRUE) {
   diagnostics_pass <- diagnostics_gate(fit, config, near_stop = near_stop)
   if (isTRUE(diagnostics_pass)) {
     state$posterior$diagnostics_pass <- TRUE
@@ -567,9 +557,11 @@ NULL
 
   state$posterior$diagnostics_pass <- FALSE
   state$mode <- "repair"
-  state$repair_attempts <- as.integer((state$repair_attempts %||% 0L) + 1L)
+  if (isTRUE(refit_performed)) {
+    state$repair_attempts <- as.integer((state$repair_attempts %||% 0L) + 1L)
+  }
   max_cycles <- as.integer(config$repair_max_cycles)
-  if (state$repair_attempts > max_cycles) {
+  if (isTRUE(refit_performed) && state$repair_attempts > max_cycles) {
     state$mode <- "stopped"
     state$stop_reason <- "diagnostics_failed"
     rlang::warn("Diagnostics gate failed; repair limit exceeded. Stopping adaptive run.")
@@ -585,6 +577,38 @@ NULL
   ))
 
   list(state = state, diagnostics_pass = FALSE)
+}
+
+.adaptive_select_exploration_only <- function(state, candidates_with_utility, config, seed = NULL) {
+  validate_state(state)
+  if (!is.data.frame(candidates_with_utility)) {
+    rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
+  }
+  candidates_with_utility <- tibble::as_tibble(candidates_with_utility)
+  required <- c("i_id", "j_id", "unordered_key", "utility", "utility_raw", "p_mean")
+  .adaptive_required_cols(candidates_with_utility, "candidates_with_utility", required)
+
+  batch_size <- as.integer(config$batch_size)
+  if (is.na(batch_size) || batch_size < 0L) {
+    rlang::abort("`config$batch_size` must be a non-negative integer.")
+  }
+  if (batch_size == 0L) {
+    return(candidates_with_utility[0, , drop = FALSE])
+  }
+
+  explore <- .pairwiseLLM_with_seed(seed, function() {
+    sample_exploration_pairs(
+      state = state,
+      candidates = candidates_with_utility,
+      n_explore = batch_size,
+      config = config
+    )
+  })
+
+  if (nrow(explore) == 0L) {
+    return(explore)
+  }
+  assign_order(explore, state)
 }
 
 .adaptive_schedule_repair_pairs <- function(state, target_pairs, adaptive, seed) {
@@ -631,12 +655,12 @@ NULL
 
   config_select <- v3_config
   config_select$batch_size <- target_pairs
-  selection <- select_batch(
+  config_select$dup_max_count <- 0L
+  selection <- .adaptive_select_exploration_only(
     state = state,
     candidates_with_utility = utilities,
     config = config_select,
-    seed = seed,
-    exploration_only = TRUE
+    seed = seed
   )
 
   if (nrow(selection) == 0L) {
@@ -820,8 +844,17 @@ NULL
   state <- fit_out$state
   fit <- fit_out$fit
 
-  gate_out <- .adaptive_apply_diagnostics_gate(state, fit, state$config$v3, near_stop = near_stop)
+  gate_out <- .adaptive_apply_diagnostics_gate(
+    state,
+    fit,
+    state$config$v3,
+    near_stop = near_stop,
+    refit_performed = fit_out$refit_performed
+  )
   state <- gate_out$state
+  if (identical(state$mode, "stopped")) {
+    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
+  }
 
   v3_config <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
@@ -869,14 +902,23 @@ NULL
   config_select <- v3_config
   config_select$batch_size <- batch_size
   exploration_only <- identical(state$mode, "repair")
-
-  selection <- select_batch(
-    state = state,
-    candidates_with_utility = utilities,
-    config = config_select,
-    seed = seed,
-    exploration_only = exploration_only
-  )
+  if (isTRUE(exploration_only)) {
+    config_select$dup_max_count <- 0L
+    selection <- .adaptive_select_exploration_only(
+      state = state,
+      candidates_with_utility = utilities,
+      config = config_select,
+      seed = seed
+    )
+  } else {
+    selection <- select_batch(
+      state = state,
+      candidates_with_utility = utilities,
+      config = config_select,
+      seed = seed,
+      exploration_only = FALSE
+    )
+  }
 
   if (nrow(selection) == 0L) {
     state$iter <- iter
