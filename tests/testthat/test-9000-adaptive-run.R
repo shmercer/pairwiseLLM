@@ -78,6 +78,24 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
     )
   }
 
+  mock_mcmc_fit <- function(bt_data, config, seed = NULL) {
+    force(config)
+    force(seed)
+    ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+    theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    list(
+      draws = list(theta = theta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+    )
+  }
+
   withr::local_seed(101)
   out <- testthat::with_mocked_bindings(
     adaptive_rank_start(
@@ -90,7 +108,8 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
       adaptive = adaptive,
       seed = 101
     ),
-    submit_llm_pairs = mock_submit
+    submit_llm_pairs = mock_submit,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
   )
 
   expect_equal(out$state$comparisons_observed, 3L)
@@ -173,6 +192,24 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
     )
   }
 
+  mock_mcmc_fit <- function(bt_data, config, seed = NULL) {
+    force(config)
+    force(seed)
+    ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+    theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    list(
+      draws = list(theta = theta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+    )
+  }
+
   withr::local_seed(202)
   start_out <- testthat::with_mocked_bindings(
     adaptive_rank_start(
@@ -186,7 +223,8 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
       paths = list(output_dir = withr::local_tempdir()),
       seed = 202
     ),
-    llm_submit_pairs_multi_batch = mock_submit_batch
+    llm_submit_pairs_multi_batch = mock_submit_batch,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
   )
 
   expect_equal(start_out$state$comparisons_observed, 0L)
@@ -200,7 +238,8 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
       seed = 202
     ),
     llm_resume_multi_batches = mock_resume_batch,
-    llm_submit_pairs_multi_batch = mock_submit_batch
+    llm_submit_pairs_multi_batch = mock_submit_batch,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
   )
 
   expect_equal(resume_out$state$comparisons_observed, 4L)
@@ -214,7 +253,8 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
       seed = 202
     ),
     llm_resume_multi_batches = mock_resume_batch,
-    llm_submit_pairs_multi_batch = mock_submit_batch
+    llm_submit_pairs_multi_batch = mock_submit_batch,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
   )
 
   expect_equal(resume_out2$state$comparisons_observed, 4L)
@@ -257,10 +297,10 @@ testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
         model = "gpt-test",
         trait_name = "quality",
         trait_description = "Which is better?",
-        prompt_template = "template"
-      ),
-      seed = 101
+      prompt_template = "template"
     ),
+    seed = 101
+  ),
     .adaptive_run_stopping_checks = function(state, adaptive, seed) {
       list(state = state)
     },
@@ -270,6 +310,23 @@ testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
     .adaptive_submit_live = function(...) list(results = tibble::tibble()),
     .adaptive_normalize_submission_output = function(...) {
       list(results = empty_results, failed_attempts = empty_failed)
+    },
+    .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
+      force(config)
+      force(seed)
+      ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+      theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      list(
+        draws = list(theta = theta_draws),
+        theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+      )
     }
   )
 
@@ -356,7 +413,24 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       paths = list(output_dir = out_dir),
       seed = 555
     ),
-    llm_submit_pairs_multi_batch = mock_submit_batch
+    llm_submit_pairs_multi_batch = mock_submit_batch,
+    .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
+      force(config)
+      force(seed)
+      ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+      theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      list(
+        draws = list(theta = theta_draws),
+        theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+      )
+    }
   )
 
   expect_equal(captured_submit$batch_size, 2L)
@@ -379,7 +453,24 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       adaptive = adaptive,
       seed = 555
     ),
-    llm_resume_multi_batches = mock_resume_batch
+    llm_resume_multi_batches = mock_resume_batch,
+    .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
+      force(config)
+      force(seed)
+      ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+      theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      list(
+        draws = list(theta = theta_draws),
+        theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+      )
+    }
   )
 
   expect_equal(captured_resume$openai_max_retries, 7L)
@@ -408,19 +499,38 @@ testthat::test_that("adaptive_rank_resume normalizes raw live results before ing
     better_sample = "SAMPLE_1"
   )
 
-  resume_out <- adaptive_rank_resume(
-    state = state,
-    mode = "live",
-    submission_info = list(
-      backend = "openai",
-      model = "gpt-test",
-      trait_name = "quality",
-      trait_description = "Which is better?",
-      prompt_template = "TEMPLATE",
-      pairs_submitted = pairs_submitted,
-      results = raw_results
+  resume_out <- testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = state,
+      mode = "live",
+      submission_info = list(
+        backend = "openai",
+        model = "gpt-test",
+        trait_name = "quality",
+        trait_description = "Which is better?",
+        prompt_template = "TEMPLATE",
+        pairs_submitted = pairs_submitted,
+        results = raw_results
+      ),
+      seed = 777
     ),
-    seed = 777
+    .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
+      force(config)
+      force(seed)
+      ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+      theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      list(
+        draws = list(theta = theta_draws),
+        theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+      )
+    }
   )
 
   expect_equal(resume_out$state$comparisons_observed, 1L)
@@ -481,7 +591,24 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       adaptive = adaptive,
       seed = 303
     ),
-    submit_llm_pairs = mock_submit
+    submit_llm_pairs = mock_submit,
+    .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
+      force(config)
+      force(seed)
+      ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+      theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      list(
+        draws = list(theta = theta_draws),
+        theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+      )
+    }
   )
 
   captured_pairs <- list()
@@ -507,7 +634,24 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       adaptive = adaptive,
       seed = 404
     ),
-    submit_llm_pairs = mock_submit_capture
+    submit_llm_pairs = mock_submit_capture,
+    .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
+      force(config)
+      force(seed)
+      ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+      theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      list(
+        draws = list(theta = theta_draws),
+        theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+      )
+    }
   )
 
   withr::local_seed(404)
@@ -519,7 +663,24 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       adaptive = adaptive,
       seed = 404
     ),
-    submit_llm_pairs = mock_submit_capture
+    submit_llm_pairs = mock_submit_capture,
+    .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
+      force(config)
+      force(seed)
+      ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+      theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      list(
+        draws = list(theta = theta_draws),
+        theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+      )
+    }
   )
 
   expect_true(length(captured_pairs) %in% c(0L, 2L))
@@ -527,3 +688,4 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
     expect_equal(captured_pairs[[1]], captured_pairs[[2]])
   }
 })
+
