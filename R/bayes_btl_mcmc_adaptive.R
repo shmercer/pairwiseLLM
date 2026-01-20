@@ -93,9 +93,18 @@
   )
 }
 
-.btl_mcmc_v3_model_code <- function() {
+.btl_mcmc_v3_model_code <- function(path_override = NULL) {
+  if (!is.null(path_override)) {
+    if (!is.character(path_override) || length(path_override) != 1L || is.na(path_override)) {
+      rlang::abort("`path_override` must be a length-1 character path or NULL.")
+    }
+  }
   model_file <- paste0("btl_mcmc_", "v3.stan")
-  path <- system.file("stan", model_file, package = "pairwiseLLM")
+  path <- if (is.null(path_override)) {
+    system.file("stan", model_file, package = "pairwiseLLM")
+  } else {
+    path_override
+  }
   if (!nzchar(path)) {
     rlang::abort(paste0("Stan model file `", model_file, "` not found."))
   }
