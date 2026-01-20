@@ -439,7 +439,7 @@ NULL
   state
 }
 
-.adaptive_run_stopping_checks <- function(state, adaptive, seed, allow_refit = NULL) {
+.adaptive_run_stopping_checks <- function(state, adaptive, seed = NULL, allow_refit = NULL) {
   validate_state(state)
   if (state$comparisons_observed < 1L) {
     return(list(state = state))
