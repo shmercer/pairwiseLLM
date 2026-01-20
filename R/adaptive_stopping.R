@@ -33,12 +33,61 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     rlang::abort("`config$S_subset` must be a positive integer.")
   }
   S_subset <- min(S_subset, nrow(theta_summary))
-  theta_summary <- dplyr::arrange(
-    theta_summary,
-    dplyr::desc(.data$theta_sd),
-    .data$item_id
-  )
-  theta_subset <- dplyr::slice_head(theta_summary, n = S_subset)
+
+  if (S_subset >= nrow(theta_summary)) {
+    theta_subset <- theta_summary
+  } else {
+    n_top <- floor(S_subset / 3)
+    n_bottom <- floor(S_subset / 3)
+
+    top_tbl <- dplyr::arrange(
+      theta_summary,
+      dplyr::desc(.data$theta_mean),
+      .data$item_id
+    )
+    bottom_tbl <- dplyr::arrange(
+      theta_summary,
+      .data$theta_mean,
+      .data$item_id
+    )
+
+    top_ids <- if (n_top > 0L) {
+      dplyr::slice_head(top_tbl, n = n_top)$item_id
+    } else {
+      character()
+    }
+    bottom_ids <- if (n_bottom > 0L) {
+      dplyr::slice_head(bottom_tbl, n = n_bottom)$item_id
+    } else {
+      character()
+    }
+    used_ids <- unique(c(as.character(top_ids), as.character(bottom_ids)))
+
+    remaining_n <- as.integer(S_subset - length(used_ids))
+    if (remaining_n < 0L) {
+      rlang::abort("Stopping subset size exceeded available ids.")
+    }
+
+    remaining_tbl <- theta_summary[!theta_summary$item_id %in% used_ids, , drop = FALSE]
+    remaining_tbl <- dplyr::arrange(
+      remaining_tbl,
+      dplyr::desc(.data$theta_sd),
+      .data$item_id
+    )
+    uncertainty_ids <- if (remaining_n > 0L) {
+      dplyr::slice_head(remaining_tbl, n = remaining_n)$item_id
+    } else {
+      character()
+    }
+
+    subset_ids <- c(as.character(top_ids), as.character(bottom_ids), as.character(uncertainty_ids))
+    subset_ids <- subset_ids[!is.na(subset_ids) & subset_ids != ""]
+    subset_ids <- unique(subset_ids)
+    if (length(subset_ids) != S_subset) {
+      rlang::abort("Stopping subset selection failed to reach `S_subset`.")
+    }
+    theta_subset <- theta_summary[theta_summary$item_id %in% subset_ids, , drop = FALSE]
+  }
   theta_sd_median_S <- stats::median(theta_subset$theta_sd)
 
   tau <- config$tau_fn(state$N)
