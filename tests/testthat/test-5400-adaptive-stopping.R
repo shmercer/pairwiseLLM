@@ -38,6 +38,18 @@ test_that("compute_adjacent_certainty validates inputs", {
   )
 })
 
+test_that("compute_adjacent_certainty returns per-adjacent win probabilities", {
+  theta_draws <- matrix(
+    c(2, 1, 0,
+      0, 1, 2),
+    nrow = 2,
+    byrow = TRUE
+  )
+  colnames(theta_draws) <- c("A", "B", "C")
+  out <- pairwiseLLM:::compute_adjacent_certainty(theta_draws, c("A", "B", "C"))
+  expect_equal(out, c(0.5, 0.5))
+})
+
 test_that("compute_Umax validates utility inputs and all-missing case", {
   expect_error(
     pairwiseLLM:::compute_Umax(matrix(1, nrow = 1)),
@@ -51,6 +63,11 @@ test_that("compute_Umax validates utility inputs and all-missing case", {
   utilities <- tibble::tibble(utility_raw = c(NA_real_, NA_real_))
   expect_warning(pairwiseLLM:::compute_Umax(utilities), "missing")
   expect_equal(suppressWarnings(pairwiseLLM:::compute_Umax(utilities)), 0)
+})
+
+test_that("compute_Umax returns the maximum non-missing utility_raw", {
+  utilities <- tibble::tibble(utility_raw = c(0.1, NA_real_, 0.4, 0.2))
+  expect_equal(pairwiseLLM:::compute_Umax(utilities), 0.4)
 })
 
 test_that("summarize_theta and summarize_ranks return MCMC summaries", {
