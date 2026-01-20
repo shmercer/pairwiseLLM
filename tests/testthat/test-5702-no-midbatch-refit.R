@@ -10,10 +10,11 @@ testthat::test_that("no mid-batch refit occurs before batch completion", {
     config = list(d1 = 2L, M1_target = 2L, budget_max = 6L)
   )
   state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 3L))
-  state$fast_fit <- list(
+  state$fit <- list(
     theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    theta_draws = matrix(0, nrow = 1L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    diagnostics = NULL
+    theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
+    epsilon_mean = 0.1,
+    diagnostics = list()
   )
 
   make_result <- function(state, A_id, B_id, better_id) {
@@ -38,17 +39,25 @@ testthat::test_that("no mid-batch refit occurs before batch completion", {
   }
 
   calls <- rlang::env(refits = 0L)
-  mock_fit <- function(results, ids, n_draws, seed = NULL) {
-    calls$refits <- calls$refits + 1L
+  make_mcmc_fit <- function(ids) {
+    theta_draws <- matrix(0, nrow = 2L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      theta_mean = stats::setNames(rep(0, length(ids)), ids),
-      theta_draws = matrix(0, nrow = 1L, ncol = length(ids), dimnames = list(NULL, ids)),
-      diagnostics = NULL
+      draws = list(theta = theta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      diagnostics = list()
     )
+  }
+  mock_fit <- function(bt_data, config, seed = NULL) {
+    calls$refits <- calls$refits + 1L
+    force(config)
+    force(seed)
+    ids <- bt_data$item_id %||% state$ids
+    make_mcmc_fit(ids)
   }
 
   testthat::with_mocked_bindings(
-    fit_bayes_btl_fast = mock_fit,
+    .fit_bayes_btl_mcmc_adaptive = mock_fit,
     {
       ingest <- .adaptive_ingest_results_incremental(
         state,
@@ -68,7 +77,7 @@ testthat::test_that("no mid-batch refit occurs before batch completion", {
 
       out <- .adaptive_get_refit_fit(
         state,
-        adaptive = list(n_draws_fast = 10L),
+        adaptive = list(),
         batch_size = 3L,
         seed = 1L,
         allow_refit = FALSE
@@ -79,7 +88,7 @@ testthat::test_that("no mid-batch refit occurs before batch completion", {
 
       out <- .adaptive_get_refit_fit(
         state,
-        adaptive = list(n_draws_fast = 10L),
+        adaptive = list(),
         batch_size = 3L,
         seed = 1L,
         allow_refit = TRUE

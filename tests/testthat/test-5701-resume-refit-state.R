@@ -12,10 +12,11 @@ testthat::test_that("resume preserves refit state and timing", {
       config = list(d1 = 2L, M1_target = 2L, budget_max = 6L)
     )
     state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 3L))
-    state$fast_fit <- list(
+    state$fit <- list(
       theta_mean = stats::setNames(rep(0, state$N), state$ids),
-      theta_draws = matrix(0, nrow = 1L, ncol = state$N, dimnames = list(NULL, state$ids)),
-      diagnostics = NULL
+      theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
+      epsilon_mean = 0.1,
+      diagnostics = list()
     )
     state
   }
@@ -58,25 +59,33 @@ testthat::test_that("resume preserves refit state and timing", {
     )
   }
 
-  mock_fit <- function(results, ids, n_draws, seed = NULL) {
+  make_mcmc_fit <- function(ids) {
+    theta_draws <- matrix(0, nrow = 2L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      theta_mean = stats::setNames(rep(0, length(ids)), ids),
-      theta_draws = matrix(0, nrow = 1L, ncol = length(ids), dimnames = list(NULL, ids)),
-      diagnostics = NULL
+      draws = list(theta = theta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      diagnostics = list()
     )
+  }
+  mock_fit <- function(bt_data, config, seed = NULL) {
+    force(config)
+    force(seed)
+    ids <- bt_data$item_id %||% state$ids
+    make_mcmc_fit(ids)
   }
 
   temp_dir <- withr::local_tempdir()
   state_path <- file.path(temp_dir, "adaptive_state.rds")
 
   calls_resume <- rlang::env(refits = 0L)
-  mock_fit_resume <- function(results, ids, n_draws, seed = NULL) {
+  mock_fit_resume <- function(bt_data, config, seed = NULL) {
     calls_resume$refits <- calls_resume$refits + 1L
-    mock_fit(results, ids, n_draws, seed = seed)
+    mock_fit(bt_data, config, seed = seed)
   }
 
   testthat::with_mocked_bindings(
-    fit_bayes_btl_fast = mock_fit_resume,
+    .fit_bayes_btl_mcmc_adaptive = mock_fit_resume,
     {
       state <- make_state()
       ingest <- .adaptive_ingest_results_incremental(
@@ -91,7 +100,7 @@ testthat::test_that("resume preserves refit state and timing", {
       state <- ingest$state
       out <- .adaptive_get_refit_fit(
         state,
-        adaptive = list(n_draws_fast = 10L),
+        adaptive = list(),
         batch_size = 1L,
         seed = 1L
       )
@@ -114,7 +123,7 @@ testthat::test_that("resume preserves refit state and timing", {
       state_loaded <- ingest$state
       out <- .adaptive_get_refit_fit(
         state_loaded,
-        adaptive = list(n_draws_fast = 10L),
+        adaptive = list(),
         batch_size = 1L,
         seed = 1L
       )
@@ -127,13 +136,13 @@ testthat::test_that("resume preserves refit state and timing", {
   )
 
   calls_continuous <- rlang::env(refits = 0L)
-  mock_fit_continuous <- function(results, ids, n_draws, seed = NULL) {
+  mock_fit_continuous <- function(bt_data, config, seed = NULL) {
     calls_continuous$refits <- calls_continuous$refits + 1L
-    mock_fit(results, ids, n_draws, seed = seed)
+    mock_fit(bt_data, config, seed = seed)
   }
 
   testthat::with_mocked_bindings(
-    fit_bayes_btl_fast = mock_fit_continuous,
+    .fit_bayes_btl_mcmc_adaptive = mock_fit_continuous,
     {
       state <- make_state()
       ingest <- .adaptive_ingest_results_incremental(
@@ -148,7 +157,7 @@ testthat::test_that("resume preserves refit state and timing", {
       state <- ingest$state
       out <- .adaptive_get_refit_fit(
         state,
-        adaptive = list(n_draws_fast = 10L),
+        adaptive = list(),
         batch_size = 1L,
         seed = 1L
       )
@@ -162,7 +171,7 @@ testthat::test_that("resume preserves refit state and timing", {
       state <- ingest$state
       out <- .adaptive_get_refit_fit(
         state,
-        adaptive = list(n_draws_fast = 10L),
+        adaptive = list(),
         batch_size = 1L,
         seed = 1L
       )
