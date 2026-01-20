@@ -57,7 +57,6 @@ VignetteBuilder: knitr
 Collate: 
     'adaptive_candidates.R'
     'adaptive_constraints.R'
-    'draws_sanitize.R'
     'adaptive_contracts.R'
     'adaptive_diagnostics.R'
     'adaptive_refit.R'
@@ -68,6 +67,7 @@ Collate:
     'adaptive_state.R'
     'adaptive_stopping.R'
     'adaptive_utility.R'
+    'adaptive_v3_contracts.R'
     'adaptive_warm_start.R'
     'anthropic_batch_api.R'
     'anthropic_live.R'
@@ -82,6 +82,7 @@ Collate:
     'custom_id.R'
     'data-example_writing.R'
     'data_import.R'
+    'draws_sanitize.R'
     'elo_model.R'
     'gemini_batch_api.R'
     'gemini_live.R'
