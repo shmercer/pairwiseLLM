@@ -5,6 +5,10 @@
 #' @keywords internal
 #' @noRd
 .adaptive_epsilon_mean_from_state <- function(state, fit = NULL) {
+  if (!is.null(state) && is.list(fit) &&
+    !is.null(fit$theta_draws) && !is.null(fit$epsilon_mean) && !is.null(fit$diagnostics)) {
+    validate_v3_fit_contract(fit, ids = state$ids)
+  }
   prior_alpha <- NULL
   prior_beta <- NULL
   if (!is.null(state) && is.list(state$config) && is.list(state$config$v3)) {
