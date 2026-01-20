@@ -28,7 +28,7 @@
   .adaptive_required_cols(results, "results", required)
   validate_results_tbl(results)
 
-  ids <- .btl_fast_validate_ids(ids)
+  ids <- .btl_validate_ids(ids)
   result_ids <- unique(c(results$A_id, results$B_id, results$better_id))
   missing_ids <- setdiff(result_ids, ids)
   if (length(missing_ids) > 0L) {

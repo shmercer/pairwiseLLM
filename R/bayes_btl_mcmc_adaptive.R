@@ -6,6 +6,20 @@
   is.numeric(x) && all(is.finite(x)) && all(abs(x - round(x)) < 1e-8)
 }
 
+.btl_validate_ids <- function(ids) {
+  ids <- as.character(ids)
+  if (length(ids) < 2L) {
+    rlang::abort("`ids` must contain at least two ids.")
+  }
+  if (any(is.na(ids)) || any(ids == "")) {
+    rlang::abort("`ids` must not contain missing or empty values.")
+  }
+  if (anyDuplicated(ids)) {
+    rlang::abort("`ids` must be unique.")
+  }
+  ids
+}
+
 .btl_mcmc_v3_validate_bt_data <- function(bt_data) {
   if (!is.list(bt_data)) {
     rlang::abort("`bt_data` must be a list.")
@@ -70,7 +84,7 @@
   .adaptive_required_cols(results, "results", required)
   validate_results_tbl(results)
 
-  ids <- .btl_fast_validate_ids(ids)
+  ids <- .btl_validate_ids(ids)
   result_ids <- unique(c(results$A_id, results$B_id, results$better_id))
   missing_ids <- setdiff(result_ids, ids)
   if (length(missing_ids) > 0L) {
