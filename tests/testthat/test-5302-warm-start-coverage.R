@@ -74,21 +74,19 @@ testthat::test_that("warm_start covers min-degree fallback with mocked combn", {
   )
 })
 
-testthat::test_that("warm_start expansion respects ordering with mocked combn", {
+testthat::test_that("warm_start mean-degree fill adds random remaining edges", {
   withr::local_seed(1004)
   ids <- c("A", "B", "C", "D")
 
-  mock_combn <- function(x, m) {
-    matrix(c("B", "A", "C", "A"), nrow = 2L)
-  }
+  pairs <- pairwiseLLM:::warm_start(ids, config = list(target_mean_degree = 2.5))
 
-  pairs <- testthat::with_mocked_bindings(
-    pairwiseLLM:::warm_start(ids, config = list(target_mean_degree = 2.5)),
-    combn = mock_combn,
-    .package = "utils"
-  )
+  ring_pairs <- pairwiseLLM:::warm_start(ids, config = list(target_mean_degree = NULL))
+  ring_keys <- pairwiseLLM:::make_unordered_key(ring_pairs$i, ring_pairs$j)
+  keys <- pairwiseLLM:::make_unordered_key(pairs$i, pairs$j)
+  extra_keys <- setdiff(keys, ring_keys)
 
-  expect_true(any(pairs$i == "A" & pairs$j == "C"))
+  expect_equal(length(extra_keys), 1L)
+  expect_true(extra_keys %in% c("A:C", "B:D"))
 })
 
 testthat::test_that("warm-start scheduling covers even index and empty pairs", {
@@ -110,7 +108,9 @@ testthat::test_that("warm-start scheduling covers even index and empty pairs", {
 
   empty_out <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_schedule_warm_start(state, config = state$config$v3),
-    warm_start = function(ids, config) tibble::tibble(i = character(), j = character()),
+    warm_start = function(ids, config, seed = NULL) {
+      tibble::tibble(i = character(), j = character())
+    },
     .package = "pairwiseLLM"
   )
   expect_equal(nrow(empty_out$pairs), 0L)

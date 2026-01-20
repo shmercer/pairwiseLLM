@@ -52,7 +52,7 @@
 
 #' @keywords internal
 #' @noRd
-warm_start <- function(ids, config) {
+warm_start <- function(ids, config, seed = NULL) {
   validated <- .warm_start_validate_config(ids, config)
   ids <- validated$ids
   n_items <- validated$n_items
@@ -118,21 +118,33 @@ warm_start <- function(ids, config) {
 
     if (max_edges > current_edges) {
       combos <- utils::combn(ids, 2L)
-      for (idx in seq_len(ncol(combos))) {
-        if (current_edges >= max_edges) break
-        i_id <- combos[[1L, idx]]
-        j_id <- combos[[2L, idx]]
-        key <- make_unordered_key(i_id, j_id)
-        if (key %in% pair_keys) next
-        ordered <- if (id_pos[[i_id]] < id_pos[[j_id]]) {
-          c(i_id, j_id)
-        } else {
-          c(j_id, i_id)
+      all_i <- combos[1L, ]
+      all_j <- combos[2L, ]
+      all_keys <- make_unordered_key(all_i, all_j)
+      remaining <- which(!all_keys %in% pair_keys)
+      needed <- as.integer(max_edges - current_edges)
+      needed <- min(needed, length(remaining))
+
+      if (needed > 0L) {
+        picked <- .pairwiseLLM_with_seed(seed, function() {
+          sample(remaining, size = needed, replace = FALSE)
+        })
+        for (idx in picked) {
+          i_id <- all_i[[idx]]
+          j_id <- all_j[[idx]]
+          key <- all_keys[[idx]]
+          if (key %in% pair_keys) next
+          ordered <- if (id_pos[[i_id]] < id_pos[[j_id]]) {
+            c(i_id, j_id)
+          } else {
+            c(j_id, i_id)
+          }
+          pairs_i <- c(pairs_i, ordered[[1L]])
+          pairs_j <- c(pairs_j, ordered[[2L]])
+          pair_keys <- c(pair_keys, key)
+          current_edges <- current_edges + 1L
+          if (current_edges >= max_edges) break
         }
-        pairs_i <- c(pairs_i, ordered[[1L]])
-        pairs_j <- c(pairs_j, ordered[[2L]])
-        pair_keys <- c(pair_keys, key)
-        current_edges <- current_edges + 1L
       }
     }
   }

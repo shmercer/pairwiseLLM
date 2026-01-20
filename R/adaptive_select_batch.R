@@ -215,6 +215,16 @@ assign_order <- function(pairs, state) {
     return(pairs)
   }
 
+  seed_use <- state$seed
+  balanced_margin <- 0.02
+  flip <- if (is.null(seed_use)) {
+    rep_len(TRUE, nrow(pairs))
+  } else {
+    .pairwiseLLM_with_seed(seed_use, function() {
+      stats::runif(nrow(pairs)) < 0.5
+    })
+  }
+
   A_id <- character(nrow(pairs))
   B_id <- character(nrow(pairs))
   for (idx in seq_len(nrow(pairs))) {
@@ -241,7 +251,7 @@ assign_order <- function(pairs, state) {
     pos_j <- as.integer(state$pos_count[[j_id]])
     p_i <- as.double(pos_i) / max(1L, deg_i)
     p_j <- as.double(pos_j) / max(1L, deg_j)
-    if (abs(p_i - p_j) > 0.02) {
+    if (abs(p_i - p_j) > balanced_margin) {
       if (p_i > p_j) {
         A_id[[idx]] <- j_id
         B_id[[idx]] <- i_id
@@ -250,7 +260,7 @@ assign_order <- function(pairs, state) {
         B_id[[idx]] <- j_id
       }
     } else {
-      if (i_id <= j_id) {
+      if (isTRUE(flip[[idx]])) {
         A_id[[idx]] <- i_id
         B_id[[idx]] <- j_id
       } else {
@@ -321,6 +331,9 @@ select_batch <- function(state, candidates_with_utility, config, seed = NULL, ex
   )
 
   combined <- dplyr::bind_rows(explore, exploit)
-  assigned <- assign_order(combined, state)
+  state_seed <- seed %||% state$seed
+  state_tmp <- state
+  state_tmp$seed <- state_seed
+  assigned <- assign_order(combined, state_tmp)
   assigned
 }

@@ -734,8 +734,9 @@ NULL
   list(A_id = i_id, B_id = j_id)
 }
 
-.adaptive_schedule_warm_start <- function(state, config) {
-  warm_pairs <- warm_start(state$ids, config)
+.adaptive_schedule_warm_start <- function(state, config, seed = NULL) {
+  seed_use <- seed %||% state$seed
+  warm_pairs <- warm_start(state$ids, config, seed = seed_use)
   warm_pairs <- tibble::as_tibble(warm_pairs)
   if (nrow(warm_pairs) == 0L) {
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
@@ -828,7 +829,7 @@ NULL
   target_pairs <- min(target_pairs, as.integer(remaining_unique))
 
   if (identical(state$mode, "warm_start") && identical(state$phase, "phase1")) {
-    return(.adaptive_schedule_warm_start(state, state$config$v3))
+    return(.adaptive_schedule_warm_start(state, state$config$v3, seed = seed))
   }
 
   near_stop <- isTRUE(near_stop) || near_stop_from_state(state)
