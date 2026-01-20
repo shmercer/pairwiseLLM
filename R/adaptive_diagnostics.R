@@ -9,7 +9,7 @@ diagnostics_gate <- function(fit, config, near_stop = FALSE) {
     rlang::abort("`fit` must be a list.")
   }
   diagnostics <- fit$diagnostics %||% NULL
-  if (!is.list(diagnostics)) {
+  if (is.null(diagnostics) || !is.list(diagnostics)) {
     rlang::abort("`fit$diagnostics` must be a list.")
   }
   validate_config(config)

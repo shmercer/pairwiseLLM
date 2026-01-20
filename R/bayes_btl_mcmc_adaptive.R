@@ -93,9 +93,18 @@
   )
 }
 
-.btl_mcmc_v3_model_code <- function() {
+.btl_mcmc_v3_model_code <- function(path_override = NULL) {
+  if (!is.null(path_override)) {
+    if (!is.character(path_override) || length(path_override) != 1L || is.na(path_override)) {
+      rlang::abort("`path_override` must be a length-1 character path or NULL.")
+    }
+  }
   model_file <- paste0("btl_mcmc_", "v3.stan")
-  path <- system.file("stan", model_file, package = "pairwiseLLM")
+  path <- if (is.null(path_override)) {
+    system.file("stan", model_file, package = "pairwiseLLM")
+  } else {
+    path_override
+  }
   if (!nzchar(path)) {
     rlang::abort(paste0("Stan model file `", model_file, "` not found."))
   }
@@ -254,6 +263,73 @@ summarize_draws <- function(draws) {
     theta_summary = theta_summary,
     epsilon_summary = epsilon_summary
   )
+}
+
+#' @keywords internal
+#' @noRd
+as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
+  if (!is.list(mcmc_fit)) {
+    rlang::abort("`mcmc_fit` must be a list.")
+  }
+  ids <- as.character(ids)
+  if (length(ids) < 1L || anyNA(ids) || any(ids == "")) {
+    rlang::abort("`ids` must be a non-empty character vector.")
+  }
+  if (anyDuplicated(ids)) {
+    rlang::abort("`ids` must be unique.")
+  }
+
+  draws <- mcmc_fit$draws %||% NULL
+  if (is.null(draws) || !is.list(draws)) {
+    rlang::abort("`mcmc_fit$draws` must be a list.")
+  }
+  theta_draws <- draws$theta %||% draws$theta_draws %||% NULL
+  if (is.null(theta_draws) || !is.matrix(theta_draws) || !is.numeric(theta_draws)) {
+    rlang::abort("`mcmc_fit$draws$theta` must be a numeric matrix.")
+  }
+  if (is.null(colnames(theta_draws))) {
+    rlang::abort("`mcmc_fit$draws$theta` must have column names.")
+  }
+  theta_draws <- reorder_theta_draws(theta_draws, ids)
+
+  theta_summary <- mcmc_fit$theta_summary %||% NULL
+  if (is.null(theta_summary) || !is.data.frame(theta_summary)) {
+    rlang::abort("`mcmc_fit$theta_summary` must be a data frame.")
+  }
+  required <- c("item_id", "theta_mean")
+  .adaptive_required_cols(theta_summary, "theta_summary", required)
+  theta_ids <- as.character(theta_summary$item_id)
+  if (anyNA(theta_ids) || any(theta_ids == "")) {
+    rlang::abort("`theta_summary$item_id` must be non-missing.")
+  }
+  idx <- match(ids, theta_ids)
+  if (anyNA(idx)) {
+    rlang::abort("`theta_summary$item_id` must cover all `ids`.")
+  }
+  theta_mean <- as.double(theta_summary$theta_mean[idx])
+  names(theta_mean) <- ids
+
+  epsilon_summary <- mcmc_fit$epsilon_summary %||% NULL
+  if (is.null(epsilon_summary) || !is.data.frame(epsilon_summary)) {
+    rlang::abort("`mcmc_fit$epsilon_summary` must be a data frame.")
+  }
+  if (!"epsilon_mean" %in% names(epsilon_summary)) {
+    rlang::abort("`mcmc_fit$epsilon_summary` must include `epsilon_mean`.")
+  }
+  epsilon_mean <- epsilon_summary$epsilon_mean[[1L]]
+  if (!is.numeric(epsilon_mean) || length(epsilon_mean) != 1L || !is.finite(epsilon_mean)) {
+    rlang::abort("`mcmc_fit$epsilon_summary$epsilon_mean` must be a finite numeric scalar.")
+  }
+
+  fit <- list(
+    theta_draws = theta_draws,
+    theta_mean = theta_mean,
+    epsilon_mean = as.double(epsilon_mean),
+    diagnostics = mcmc_fit$diagnostics %||% NULL,
+    raw_mcmc_fit = mcmc_fit
+  )
+  validate_v3_fit_contract(fit, ids)
+  fit
 }
 
 #' @keywords internal
