@@ -21,11 +21,14 @@ testthat::test_that("repair mode stops when diagnostics keep failing", {
               theta_mean = stats::setNames(c(0, 0, 0), state$ids),
               theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
               diagnostics = list(divergences = 1L, max_rhat = 1.5, min_ess_bulk = 10)
-            )
+            ),
+            refit_performed = TRUE
           )
         },
         diagnostics_gate = function(...) FALSE,
-        select_batch = function(...) testthat::fail("Repair batch should not be scheduled.")
+        .adaptive_select_exploration_only = function(...) {
+          testthat::fail("Repair batch should not be scheduled.")
+        }
       )
     },
     "Diagnostics gate failed; repair limit exceeded"

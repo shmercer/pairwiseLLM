@@ -28,8 +28,9 @@ testthat::test_that("adaptive scheduling avoids legacy paths", {
         fit = list(
           theta_mean = stats::setNames(rep(0, state$N), state$ids),
           theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
-          diagnostics = NULL
-        )
+          diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+        ),
+        refit_performed = TRUE
       )
     },
     generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),

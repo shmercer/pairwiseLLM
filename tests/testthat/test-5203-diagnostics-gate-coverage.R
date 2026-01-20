@@ -1,8 +1,8 @@
 testthat::test_that("diagnostics_gate validates inputs", {
   config <- pairwiseLLM:::adaptive_v3_config(3L)
 
-  expect_error(pairwiseLLM:::diagnostics_gate(1, config), "`fit`")
-  expect_error(pairwiseLLM:::diagnostics_gate(list(), config), "fit\\$diagnostics")
+  expect_false(pairwiseLLM:::diagnostics_gate(1, config))
+  expect_false(pairwiseLLM:::diagnostics_gate(list(), config))
 
   fit <- list(
     diagnostics = list(
@@ -58,13 +58,20 @@ testthat::test_that("diagnostics gate integration covers pass/fail branches", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
   config <- pairwiseLLM:::adaptive_v3_config(state$N)
 
-  pass_out <- pairwiseLLM:::.adaptive_apply_diagnostics_gate(
-    state,
-    fit = list(diagnostics = NULL),
-    config = config,
-    near_stop = FALSE
+  pass_out <- NULL
+  testthat::expect_warning(
+    {
+      pass_out <- pairwiseLLM:::.adaptive_apply_diagnostics_gate(
+        state,
+        fit = list(diagnostics = NULL),
+        config = config,
+        near_stop = FALSE
+      )
+    },
+    "entering repair mode"
   )
-  expect_true(pass_out$diagnostics_pass)
+  expect_false(pass_out$diagnostics_pass)
+  expect_equal(pass_out$state$mode, "repair")
 
   state$mode <- "repair"
   state$repair_attempts <- 2L
@@ -137,8 +144,9 @@ testthat::test_that("repair scheduling handles target bounds and duplicates", {
         fit = list(
           theta_mean = stats::setNames(c(0, 0), state$ids),
           theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
-          diagnostics = NULL
-        )
+          diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+        ),
+        refit_performed = TRUE
       )
     },
     generate_candidates = function(...) {
@@ -155,7 +163,7 @@ testthat::test_that("repair scheduling handles target bounds and duplicates", {
       )
     },
     apply_degree_penalty = function(utilities, state) utilities,
-    select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+    .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -206,8 +214,9 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
         fit = list(
           theta_mean = stats::setNames(c(0, 0), state$ids),
           theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
-          diagnostics = NULL
-        )
+          diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+        ),
+        refit_performed = TRUE
       )
     },
     generate_candidates = function(...) {
@@ -219,7 +228,8 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
         j_id = "B",
         unordered_key = "A:B",
         utility = 0.2,
-        utility_raw = 0.2
+        utility_raw = 0.2,
+        p_mean = 0.5
       )
     },
     apply_degree_penalty = function(utilities, state) utilities,
@@ -341,12 +351,15 @@ testthat::test_that("repair schedule handles empty utilities and selection", {
         fit = list(
           theta_mean = stats::setNames(c(0, 0), state$ids),
           theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
-          diagnostics = NULL
-        )
+          diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+        ),
+        refit_performed = TRUE
       )
     },
     generate_candidates = function(...) tibble::tibble(),
-    select_batch = function(...) pairwiseLLM:::.adaptive_empty_pairs_tbl(),
+    .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
+      candidates_with_utility[0, , drop = FALSE]
+    },
     .package = "pairwiseLLM"
   )
 
