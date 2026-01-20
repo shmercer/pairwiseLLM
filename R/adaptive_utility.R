@@ -52,9 +52,6 @@
   if (is.null(eps) && !is.null(state) && is.list(state$posterior)) {
     eps <- state$posterior$epsilon_mean %||% NULL
   }
-  if (is.null(eps) && is.list(fit) && !is.null(fit$epsilon_mean)) {
-    eps <- fit$epsilon_mean
-  }
   if (is.null(eps) && !is.null(state) && is.list(state$config) && is.list(state$config$v3)) {
     eps <- state$config$v3$epsilon_mean %||% NULL
   }
