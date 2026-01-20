@@ -1,9 +1,12 @@
 testthat::test_that("warm_start respects target mean degree", {
-  withr::local_seed(303)
   ids <- as.character(seq_len(8L))
   config <- list(min_degree = 2L, target_mean_degree = 3.5)
 
-  pairs <- pairwiseLLM:::warm_start(ids, config = config)
+  pairs_a <- pairwiseLLM:::warm_start(ids, config = config, seed = 303)
+  pairs_b <- pairwiseLLM:::warm_start(ids, config = config, seed = 303)
+  expect_identical(pairs_a, pairs_b)
+
+  pairs <- pairs_a
   mean_degree <- 2 * nrow(pairs) / length(ids)
   deg <- stats::setNames(rep.int(0L, length(ids)), ids)
   for (idx in seq_len(nrow(pairs))) {

@@ -22,6 +22,9 @@ testthat::test_that("adaptive scheduling avoids legacy paths", {
 
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1),
+    duplicate_allowed = function(...) {
+      testthat::fail("duplicate_allowed should not be called in v3 scheduling.")
+    },
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
