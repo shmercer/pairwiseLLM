@@ -56,21 +56,19 @@ testthat::test_that("warm_start handles ring duplicates for N = 2", {
   expect_equal(length(unique(keys)), 1L)
 })
 
-testthat::test_that("warm_start covers min-degree fallback with mocked combn", {
+testthat::test_that("warm_start errors clearly if min-degree completion stalls", {
   withr::local_seed(1003)
   ids <- c("A", "B", "C", "D")
-
-  mock_combn <- function(x, m) {
-    matrix(c("B", "A", "C", "A"), nrow = 2L)
-  }
 
   testthat::with_mocked_bindings(
     expect_error(
       pairwiseLLM:::warm_start(ids, config = list(min_degree = 3L)),
-      "Warm start failed"
+      "min-degree completion stalled"
     ),
-    combn = mock_combn,
-    .package = "utils"
+    make_unordered_key = function(id1, id2) {
+      rep.int("A:B", max(length(id1), length(id2)))
+    },
+    .package = "pairwiseLLM"
   )
 })
 
