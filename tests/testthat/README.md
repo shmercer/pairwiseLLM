@@ -40,6 +40,14 @@ Notes specific to adaptive pairing tests:
 - Always restore options, environment variables, and working directories via
   `withr::local_*()` helpers.
 
+## Function Availability (namespaces)
+
+- The full test suite may run in contexts where `pairwiseLLM` is not attached. `tests/testthat/setup.R` ensures `pairwiseLLM` functions are available for tests (exported + internal) to prevent order-dependent "could not find function" errors.
+- Prefer explicit `pairwiseLLM::` / `pairwiseLLM:::` qualification (or a per-file alias at the top of the file) for clarity and to keep tests robust if the setup behavior changes.
+- When mocking:
+  - mock internal functions with `testthat::with_mocked_bindings(..., .env = asNamespace("pairwiseLLM"))`
+  - mock imported functions with `testthat::with_mocked_bindings(..., .package = "<pkg>")` (e.g., `"httr2"`)
+
 ## Temp Files & Directories
 
 - Use `withr::local_tempdir()` for temporary directories.
