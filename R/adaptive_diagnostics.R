@@ -5,12 +5,16 @@
 #' @keywords internal
 #' @noRd
 diagnostics_gate <- function(fit, config, near_stop = FALSE) {
-  if (!is.list(fit)) {
-    rlang::abort("`fit` must be a list.")
+  diagnostics <- NULL
+  if (is.list(fit) && !is.null(fit$diagnostics)) {
+    diagnostics <- fit$diagnostics
+  } else if (is.list(fit) &&
+    all(c("divergences", "max_rhat", "min_ess_bulk") %in% names(fit))) {
+    diagnostics <- fit
   }
-  diagnostics <- fit$diagnostics %||% NULL
   if (is.null(diagnostics) || !is.list(diagnostics)) {
-    rlang::abort("`fit$diagnostics` must be a list.")
+    rlang::warn("Diagnostics missing or invalid; gate failed.")
+    return(FALSE)
   }
   validate_config(config)
   if (!is.logical(near_stop) || length(near_stop) != 1L || is.na(near_stop)) {
@@ -20,6 +24,10 @@ diagnostics_gate <- function(fit, config, near_stop = FALSE) {
   divergences <- diagnostics$divergences
   max_rhat <- diagnostics$max_rhat
   min_ess_bulk <- diagnostics$min_ess_bulk
+  if (is.null(divergences) || is.null(max_rhat) || is.null(min_ess_bulk)) {
+    rlang::warn("Diagnostics missing required fields; gate failed.")
+    return(FALSE)
+  }
 
   divergences_ok <- isTRUE(as.integer(divergences) == 0L)
   rhat_ok <- is.finite(max_rhat) && max_rhat <= config$max_rhat
