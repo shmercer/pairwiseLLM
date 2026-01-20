@@ -3,6 +3,11 @@
 # Tests for openai_compare_pair_live() and submit_openai_pairs_live()
 # =====================================================================
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+openai_compare_pair_live <- pairwiseLLM::openai_compare_pair_live
+submit_openai_pairs_live <- pairwiseLLM::submit_openai_pairs_live
+
 testthat::test_that("openai_compare_pair_live parses chat.completions correctly", {
   data("example_writing_samples", package = "pairwiseLLM")
   td <- trait_description("overall_quality")

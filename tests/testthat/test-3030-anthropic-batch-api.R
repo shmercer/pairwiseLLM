@@ -1,3 +1,23 @@
+make_pairs <- pairwiseLLM::make_pairs
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+build_anthropic_batch_requests <- pairwiseLLM:::build_anthropic_batch_requests
+parse_anthropic_batch_output <- pairwiseLLM:::parse_anthropic_batch_output
+anthropic_create_batch <- pairwiseLLM::anthropic_create_batch
+anthropic_get_batch <- pairwiseLLM::anthropic_get_batch
+anthropic_poll_batch_until_complete <- pairwiseLLM::anthropic_poll_batch_until_complete
+anthropic_download_batch_results <- pairwiseLLM::anthropic_download_batch_results
+.parse_ids_from_custom_id <- pairwiseLLM:::.parse_ids_from_custom_id
+.parse_anthropic_pair_message <- pairwiseLLM:::.parse_anthropic_pair_message
+.anthropic_now <- pairwiseLLM:::.anthropic_now
+.anthropic_sleep <- pairwiseLLM:::.anthropic_sleep
+.anthropic_request <- pairwiseLLM:::.anthropic_request
+.anthropic_req_body_json <- pairwiseLLM:::.anthropic_req_body_json
+.anthropic_req_perform <- pairwiseLLM:::.anthropic_req_perform
+.anthropic_resp_body_json <- pairwiseLLM:::.anthropic_resp_body_json
+build_prompt <- pairwiseLLM:::build_prompt
+run_anthropic_batch_pipeline <- pairwiseLLM::run_anthropic_batch_pipeline
+
 testthat::test_that("build_anthropic_batch_requests builds valid requests", {
   data("example_writing_samples", package = "pairwiseLLM")
 

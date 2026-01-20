@@ -3,6 +3,11 @@
 #   Tests for together_compare_pair_live() and submit_together_pairs_live()
 # =====================================================================
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+together_compare_pair_live <- pairwiseLLM::together_compare_pair_live
+submit_together_pairs_live <- pairwiseLLM::submit_together_pairs_live
+
 testthat::test_that(
   "together_compare_pair_live parses a successful response without thoughts and respects explicit temperature",
   {

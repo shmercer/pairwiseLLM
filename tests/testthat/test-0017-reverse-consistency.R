@@ -1,3 +1,6 @@
+compute_reverse_consistency <- pairwiseLLM:::compute_reverse_consistency
+check_positional_bias <- pairwiseLLM:::check_positional_bias
+
 test_that("compute_reverse_consistency works for fully consistent pairs", {
   main <- tibble::tibble(
     ID1       = c("S1", "S1", "S2"),

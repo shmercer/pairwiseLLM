@@ -2,6 +2,9 @@
 # build_elo_data tests
 # -------------------------------------------------------------------------
 
+build_elo_data <- pairwiseLLM:::build_elo_data
+fit_elo_model <- pairwiseLLM:::fit_elo_model
+
 test_that("build_elo_data converts better_id into winner/loser", {
   results <- tibble::tibble(
     ID1       = c("S1", "S1", "S2", "S3"),

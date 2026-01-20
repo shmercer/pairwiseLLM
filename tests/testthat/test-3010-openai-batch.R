@@ -3,6 +3,14 @@
 # Tests for build_openai_batch_requests() and related batch helpers
 # =====================================================================
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+make_pairs <- pairwiseLLM::make_pairs
+build_openai_batch_requests <- pairwiseLLM:::build_openai_batch_requests
+write_openai_batch_file <- pairwiseLLM:::write_openai_batch_file
+parse_openai_batch_output <- pairwiseLLM:::parse_openai_batch_output
+build_prompt <- pairwiseLLM:::build_prompt
+
 testthat::test_that("build_openai_batch_requests builds valid chat.completions JSONL objects", {
   data("example_writing_samples", package = "pairwiseLLM")
   pairs <- make_pairs(example_writing_samples)

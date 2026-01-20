@@ -93,28 +93,27 @@ testthat::test_that("repair mode uses exploration-only selection and skips legac
     B_id = "B"
   )
 
-  testthat::local_mocked_bindings(
-    .fit_bayes_btl_mcmc_adaptive = function(...) list(),
-    as_v3_fit_contract_from_mcmc = function(...) fit,
-    diagnostics_gate = function(...) FALSE,
-    generate_candidates = function(...) candidate_tbl,
-    compute_pair_utility = function(...) utilities_tbl,
-    apply_degree_penalty = function(utility_tbl, state) utility_tbl,
-    select_exploitation_pairs = function(...) rlang::abort("exploitation called"),
-    .adaptive_schedule_repair_pairs = function(...) {
-      rlang::abort("legacy repair scheduler called")
-    },
-    .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
-      testthat::expect_equal(config$dup_max_count, 0L)
-      selection_tbl
-    },
-    .env = ns
-  )
-
   out <- NULL
   testthat::expect_warning(
     {
-      out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1)
+      out <- testthat::with_mocked_bindings(
+        pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1),
+        .fit_bayes_btl_mcmc_adaptive = function(...) list(),
+        as_v3_fit_contract_from_mcmc = function(...) fit,
+        diagnostics_gate = function(...) FALSE,
+        generate_candidates = function(...) candidate_tbl,
+        compute_pair_utility = function(...) utilities_tbl,
+        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        select_exploitation_pairs = function(...) rlang::abort("exploitation called"),
+        .adaptive_schedule_repair_pairs = function(...) {
+          rlang::abort("legacy repair scheduler called")
+        },
+        .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
+          testthat::expect_equal(config$dup_max_count, 0L)
+          selection_tbl
+        },
+        .package = "pairwiseLLM"
+      )
     },
     "Diagnostics gate failed; entering repair mode"
   )
@@ -155,23 +154,22 @@ testthat::test_that("repair mode stops after bounded retry failures", {
     utility_raw = 0.4
   )
 
-  testthat::local_mocked_bindings(
-    .fit_bayes_btl_mcmc_adaptive = function(...) list(),
-    as_v3_fit_contract_from_mcmc = function(...) fit,
-    diagnostics_gate = function(...) FALSE,
-    generate_candidates = function(...) candidate_tbl,
-    compute_pair_utility = function(...) utilities_tbl,
-    apply_degree_penalty = function(utility_tbl, state) utility_tbl,
-    .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
-      candidates_with_utility[0, , drop = FALSE]
-    },
-    .env = ns
-  )
-
   out1 <- NULL
   testthat::expect_warning(
     {
-      out1 <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1)
+      out1 <- testthat::with_mocked_bindings(
+        pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1),
+        .fit_bayes_btl_mcmc_adaptive = function(...) list(),
+        as_v3_fit_contract_from_mcmc = function(...) fit,
+        diagnostics_gate = function(...) FALSE,
+        generate_candidates = function(...) candidate_tbl,
+        compute_pair_utility = function(...) utilities_tbl,
+        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
+          candidates_with_utility[0, , drop = FALSE]
+        },
+        .package = "pairwiseLLM"
+      )
     },
     "Diagnostics gate failed; entering repair mode"
   )
@@ -181,7 +179,19 @@ testthat::test_that("repair mode stops after bounded retry failures", {
   out2 <- NULL
   testthat::expect_warning(
     {
-      out2 <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1)
+      out2 <- testthat::with_mocked_bindings(
+        pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1),
+        .fit_bayes_btl_mcmc_adaptive = function(...) list(),
+        as_v3_fit_contract_from_mcmc = function(...) fit,
+        diagnostics_gate = function(...) FALSE,
+        generate_candidates = function(...) candidate_tbl,
+        compute_pair_utility = function(...) utilities_tbl,
+        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
+          candidates_with_utility[0, , drop = FALSE]
+        },
+        .package = "pairwiseLLM"
+      )
     },
     "Diagnostics gate failed; repair limit exceeded"
   )

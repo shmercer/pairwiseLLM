@@ -1,3 +1,5 @@
+compute_batch_sizes <- pairwiseLLM:::compute_batch_sizes
+
 test_that("compute_batch_sizes handles small N", {
   sizes <- compute_batch_sizes(50)
   expect_equal(sizes$BATCH1, 500L)

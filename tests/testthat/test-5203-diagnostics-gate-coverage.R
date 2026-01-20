@@ -1,3 +1,5 @@
+adaptive_rank_resume <- pairwiseLLM::adaptive_rank_resume
+
 testthat::test_that("diagnostics_gate validates inputs", {
   config <- pairwiseLLM:::adaptive_v3_config(3L)
 

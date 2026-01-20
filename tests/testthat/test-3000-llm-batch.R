@@ -1,5 +1,15 @@
 # tests/testthat/test-llm-batch.R
 
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+llm_submit_pairs_batch <- pairwiseLLM::llm_submit_pairs_batch
+llm_download_batch_results <- pairwiseLLM::llm_download_batch_results
+make_pairs <- pairwiseLLM::make_pairs
+parse_openai_batch_output <- pairwiseLLM:::parse_openai_batch_output
+build_openai_batch_requests <- pairwiseLLM:::build_openai_batch_requests
+write_openai_batch_file <- pairwiseLLM:::write_openai_batch_file
+build_prompt <- pairwiseLLM:::build_prompt
+
 test_that("llm_submit_pairs_batch validates pairs and model", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()

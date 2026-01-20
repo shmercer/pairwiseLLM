@@ -1,5 +1,17 @@
 # tests/testthat/test-gemini_batch_api.R
 
+make_pairs <- pairwiseLLM::make_pairs
+trait_description <- pairwiseLLM:::trait_description
+set_prompt_template <- pairwiseLLM:::set_prompt_template
+build_gemini_batch_requests <- pairwiseLLM:::build_gemini_batch_requests
+parse_gemini_batch_output <- pairwiseLLM:::parse_gemini_batch_output
+build_prompt <- pairwiseLLM:::build_prompt
+gemini_create_batch <- pairwiseLLM::gemini_create_batch
+gemini_get_batch <- pairwiseLLM::gemini_get_batch
+gemini_poll_batch_until_complete <- pairwiseLLM::gemini_poll_batch_until_complete
+gemini_download_batch_results <- pairwiseLLM::gemini_download_batch_results
+run_gemini_batch_pipeline <- pairwiseLLM::run_gemini_batch_pipeline
+
 orig_gemini_download_batch_results <- pairwiseLLM::gemini_download_batch_results
 
 # ==============================================================================

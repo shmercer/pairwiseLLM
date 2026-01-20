@@ -89,20 +89,19 @@ testthat::test_that("diagnostics failure blocks convergence stopping and enters 
     B_id = "B"
   )
 
-  testthat::local_mocked_bindings(
-    .fit_bayes_btl_mcmc_adaptive = function(...) list(),
-    as_v3_fit_contract_from_mcmc = function(...) fit,
-    generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
-    compute_pair_utility = function(...) utilities_tbl,
-    apply_degree_penalty = function(utility_tbl, state) utility_tbl,
-    .adaptive_select_exploration_only = function(...) selection_tbl,
-    .env = ns
-  )
-
   out <- NULL
   testthat::expect_warning(
     {
-      out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1)
+      out <- testthat::with_mocked_bindings(
+        pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1),
+        .fit_bayes_btl_mcmc_adaptive = function(...) list(),
+        as_v3_fit_contract_from_mcmc = function(...) fit,
+        generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
+        compute_pair_utility = function(...) utilities_tbl,
+        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        .adaptive_select_exploration_only = function(...) selection_tbl,
+        .package = "pairwiseLLM"
+      )
     },
     "Diagnostics gate failed; entering repair mode"
   )
@@ -139,7 +138,8 @@ testthat::test_that("diagnostics pass does not block convergence checks", {
     p_mean = 0.5
   )
 
-  testthat::local_mocked_bindings(
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1),
     .fit_bayes_btl_mcmc_adaptive = function(...) list(),
     as_v3_fit_contract_from_mcmc = function(...) fit,
     generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
@@ -151,10 +151,8 @@ testthat::test_that("diagnostics pass does not block convergence checks", {
       list(state = state, stop_decision = FALSE, stop_reason = NA_character_)
     },
     select_batch = function(...) selection_tbl,
-    .env = ns
+    .package = "pairwiseLLM"
   )
-
-  out <- pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1)
   testthat::expect_true(called)
   testthat::expect_equal(out$state$mode, "adaptive")
 })
