@@ -16,7 +16,7 @@ testthat::test_that("adaptive_get_refit_fit validates refit_B and batch_size", {
   testthat::expect_error(
     .adaptive_get_refit_fit(
       state_bad,
-      adaptive = list(n_draws_fast = 10L),
+      adaptive = list(),
       batch_size = 1L,
       seed = 1L
     ),
@@ -26,7 +26,7 @@ testthat::test_that("adaptive_get_refit_fit validates refit_B and batch_size", {
   testthat::expect_error(
     .adaptive_get_refit_fit(
       state,
-      adaptive = list(n_draws_fast = 10L),
+      adaptive = list(),
       batch_size = -1L,
       seed = 1L
     ),
@@ -34,7 +34,7 @@ testthat::test_that("adaptive_get_refit_fit validates refit_B and batch_size", {
   )
 })
 
-testthat::test_that("adaptive_run_stopping_checks respects allow_refit and fast_fit", {
+testthat::test_that("adaptive_run_stopping_checks respects allow_refit and existing fit", {
   withr::local_seed(123)
 
   samples <- tibble::tibble(
@@ -87,12 +87,11 @@ testthat::test_that("adaptive_run_stopping_checks respects allow_refit and fast_
     seed = 1L,
     allow_refit = FALSE
   )
-  testthat::expect_null(out$state$fast_fit)
+  testthat::expect_null(out$state$fit)
 
-  state$fast_fit <- list(
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
+  state$fit <- list(
     theta_draws = matrix(0, nrow = 1L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    diagnostics = NULL
+    theta_mean = stats::setNames(rep(0, state$N), state$ids)
   )
   state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L))
 
