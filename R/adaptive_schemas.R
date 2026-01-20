@@ -208,6 +208,12 @@ validate_state <- function(state) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
+  if ("fast_fit" %in% names(state)) {
+    rlang::abort("`state$fast_fit` is no longer supported; use `state$fit`.")
+  }
+  if (!"fit" %in% names(state)) {
+    rlang::abort("`state$fit` must be present (NULL or a v3 fit contract).")
+  }
   if (!is.integer(state$schema_version) || length(state$schema_version) != 1L) {
     rlang::abort("`state$schema_version` must be a length-1 integer.")
   }
@@ -225,6 +231,9 @@ validate_state <- function(state) {
   }
   if (!identical(names(state$texts), state$ids)) {
     rlang::abort("`state$texts` names must match `state$ids`.")
+  }
+  if (!is.null(state$fit)) {
+    validate_v3_fit_contract(state$fit, ids = state$ids)
   }
 
   counts <- c("deg", "pos1", "pos2", "imb", "pos_count")

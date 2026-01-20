@@ -4,63 +4,6 @@
 
 #' @keywords internal
 #' @noRd
-compute_adjacent_certainty <- function(theta_draws, ranking_ids) {
-  if (!is.matrix(theta_draws) || !is.numeric(theta_draws)) {
-    rlang::abort("`theta_draws` must be a numeric matrix.")
-  }
-  if (nrow(theta_draws) < 2L) {
-    rlang::abort("`theta_draws` must have at least two draws.")
-  }
-  ids <- colnames(theta_draws)
-  if (is.null(ids) || any(is.na(ids)) || any(ids == "")) {
-    rlang::abort("`theta_draws` must have non-empty column names.")
-  }
-
-  ranking_ids <- as.character(ranking_ids)
-  if (length(ranking_ids) < 2L) {
-    rlang::abort("`ranking_ids` must contain at least two ids.")
-  }
-  if (anyDuplicated(ranking_ids)) {
-    rlang::abort("`ranking_ids` must not contain duplicates.")
-  }
-  if (!setequal(ranking_ids, ids) || length(ranking_ids) != length(ids)) {
-    rlang::abort("`ranking_ids` must match `theta_draws` column names.")
-  }
-
-  idx <- match(ranking_ids, ids)
-  q_vals <- numeric(length(idx) - 1L)
-  for (k in seq_along(q_vals)) {
-    lhs <- theta_draws[, idx[k], drop = TRUE]
-    rhs <- theta_draws[, idx[k + 1L], drop = TRUE]
-    q_vals[k] <- mean(lhs > rhs)
-  }
-  q_vals
-}
-
-#' @keywords internal
-#' @noRd
-compute_Umax <- function(utilities_tbl) {
-  if (is.null(utilities_tbl) || nrow(utilities_tbl) == 0L) {
-    rlang::warn("Candidate utilities are empty; treating U_max as 0.")
-    return(0)
-  }
-  if (!is.data.frame(utilities_tbl)) {
-    rlang::abort("`utilities_tbl` must be a data frame or tibble.")
-  }
-  utilities_tbl <- tibble::as_tibble(utilities_tbl)
-  .adaptive_required_cols(utilities_tbl, "utilities_tbl", "utility_raw")
-  if (!is.numeric(utilities_tbl$utility_raw)) {
-    rlang::abort("`utilities_tbl$utility_raw` must be numeric.")
-  }
-  if (all(is.na(utilities_tbl$utility_raw))) {
-    rlang::warn("All `utility_raw` values are missing; treating U_max as 0.")
-    return(0)
-  }
-  max(utilities_tbl$utility_raw, na.rm = TRUE)
-}
-
-#' @keywords internal
-#' @noRd
 near_stop_from_state <- function(state) {
   validate_state(state)
   isTRUE(state$stop_candidate) || state$checks_passed_in_row > 0L
