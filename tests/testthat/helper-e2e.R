@@ -163,6 +163,23 @@ e2e_run_locked_scenario <- function(seed) {
   }
 
   mock_submit <- e2e_mock_submit_from_theta(theta_true)
+  mock_mcmc_fit <- function(bt_data, config, seed = NULL) {
+    force(config)
+    force(seed)
+    ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+    theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    list(
+      draws = list(theta = theta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+    )
+  }
 
   out <- testthat::with_mocked_bindings(
     pairwiseLLM::adaptive_rank_run_live(
@@ -178,7 +195,8 @@ e2e_run_locked_scenario <- function(seed) {
       max_iterations = 200L
     ),
     submit_llm_pairs = mock_submit,
-    select_batch = wrap_select_batch
+    select_batch = wrap_select_batch,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
   )
 
   selection_log <- dplyr::bind_rows(log_env$selections)

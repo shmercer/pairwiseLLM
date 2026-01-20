@@ -106,7 +106,7 @@ testthat::test_that("e2e adaptive run satisfies structural and contract invarian
   testthat::expect_identical(resume_out$next_action$action, "done")
   testthat::expect_equal(nrow(resume_out$submission_info$pairs_submitted), 0L)
 
-  item_summary <- pairwiseLLM:::build_item_summary(state, fit = state$fast_fit)
+  item_summary <- pairwiseLLM:::build_item_summary(state, fit = state$fit)
   testthat::expect_equal(nrow(item_summary), state$N)
   testthat::expect_identical(colnames(item_summary), colnames(item_summary_schema()))
 
