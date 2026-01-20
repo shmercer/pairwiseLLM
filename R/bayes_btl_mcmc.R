@@ -4,11 +4,11 @@
 
 .btl_mcmc_require_cmdstanr <- function() {
   if (!requireNamespace("cmdstanr", quietly = TRUE)) {
-    rlang::abort(
+    rlang::abort(paste0(
       "CmdStanR is required for MCMC audit. Install with:\n",
       "install.packages(\"cmdstanr\", repos = c(\"https://mc-stan.org/r-packages/\", getOption(\"repos\")))\n",
       "Then install CmdStan: cmdstanr::install_cmdstan()"
-    )
+    ))
   }
   cmdstan_path <- tryCatch(
     cmdstanr::cmdstan_path(),
