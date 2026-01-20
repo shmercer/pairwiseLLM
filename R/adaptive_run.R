@@ -14,7 +14,6 @@ NULL
     within_adj_split = 0.50,
     exploration_frac = 0.05,
     per_item_cap = NULL,
-    n_draws_fast = 400L,
     batch_overrides = list(),
     max_refill_rounds = 2L,
     max_replacements = NULL,
@@ -1216,8 +1215,8 @@ NULL
 #' @param adaptive A list of adaptive configuration overrides. Supported keys
 #'   include: \code{d1} (default 8), \code{bins} (8), \code{mix_struct} (0.70),
 #'   \code{within_adj_split} (0.50), \code{exploration_frac} (0.05),
-#'   \code{per_item_cap} (NULL), \code{n_draws_fast} (400),
-#'   \code{batch_overrides} (list), \code{max_refill_rounds} (2),
+#'   \code{per_item_cap} (NULL), \code{batch_overrides} (list),
+#'   \code{max_refill_rounds} (2),
 #'   \code{max_replacements} (NULL), \code{max_iterations} (50),
 #'   \code{budget_max} (NULL; defaults to 0.40 * choose(N,2)), and
 #'   \code{M1_target} (NULL; defaults to floor(N * d1 / 2)). The list is
