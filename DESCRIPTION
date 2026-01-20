@@ -72,7 +72,6 @@ Collate:
     'anthropic_batch_api.R'
     'anthropic_live.R'
     'api_keys.R'
-    'bayes_btl_fast.R'
     'bayes_btl_mcmc.R'
     'bayes_btl_summarize.R'
     'bt_helpers.R'
