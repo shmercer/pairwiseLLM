@@ -390,18 +390,16 @@ NULL
     rlang::abort("`batch_size` must be non-negative.")
   }
 
-  needs_init <- is.null(state$fast_fit)
+  needs_init <- is.null(state$fit)
   do_refit <- isTRUE(allow_refit) && isTRUE(state$new_since_refit >= refit_B)
   refit_performed <- FALSE
 
   if (needs_init || do_refit) {
-    fit <- fit_bayes_btl_fast(
-      results = state$history_results,
-      ids = state$ids,
-      n_draws = adaptive$n_draws_fast,
-      seed = seed
-    )
-    state$fast_fit <- fit
+    bt_data <- .btl_mcmc_v3_prepare_bt_data(state$history_results, state$ids)
+    mcmc_config <- state$config$v3 %||% adaptive_v3_config(state$N)
+    mcmc_fit <- .fit_bayes_btl_mcmc_adaptive(bt_data, config = mcmc_config, seed = seed)
+    fit_contract <- as_v3_fit_contract_from_mcmc(mcmc_fit, ids = state$ids)
+    state$fit <- fit_contract
     refit_performed <- TRUE
     if (do_refit) {
       state$last_refit_at <- as.integer(state$comparisons_observed)
@@ -410,11 +408,11 @@ NULL
     }
   }
 
-  if (is.null(state$fast_fit)) {
-    rlang::abort("Fast inference failed to initialize.")
+  if (is.null(state$fit)) {
+    rlang::abort("MCMC inference failed to initialize.")
   }
 
-  list(state = state, fit = state$fast_fit, refit_performed = refit_performed)
+  list(state = state, fit = state$fit, refit_performed = refit_performed)
 }
 
 .adaptive_dup_threshold_from_utilities <- function(U_all) {
@@ -448,7 +446,7 @@ NULL
   }
   allow_refit <- allow_refit %||% state$config$allow_refit %||% TRUE
 
-  if (!isTRUE(allow_refit) && is.null(state$fast_fit)) {
+  if (!isTRUE(allow_refit) && is.null(state$fit)) {
     return(list(state = state))
   }
 
@@ -476,7 +474,7 @@ NULL
     fit <- fit_out$fit
     refit_performed <- isTRUE(fit_out$refit_performed)
   } else {
-    fit <- state$fast_fit
+    fit <- state$fit
   }
 
   if (is.null(fit) || is.null(fit$theta_draws)) {
@@ -1397,7 +1395,7 @@ adaptive_rank_start <- function(
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
-  .adaptive_write_v3_artifacts(state, fit = state$fast_fit, output_dir = path_info$output_dir)
+  .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = path_info$output_dir)
 
   if (mode == "batch" && !is.null(path_info$state_path)) {
     adaptive_state_save(state, path_info$state_path)
@@ -1685,7 +1683,7 @@ adaptive_rank_resume <- function(
   state <- stop_out$state
 
   output_dir_write <- submission_info$output_dir %||% state$config$output_dir %||% NULL
-  .adaptive_write_v3_artifacts(state, fit = state$fast_fit, output_dir = output_dir_write)
+  .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = output_dir_write)
 
   if (!is.null(state_path) && mode == "batch") {
     adaptive_state_save(state, state_path)
