@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Stopping checks for adaptive refinement (fast inference + confirmation).
+# Stopping checks for adaptive refinement.
 # -------------------------------------------------------------------------
 
 #' @keywords internal
@@ -57,80 +57,6 @@ compute_Umax <- function(utilities_tbl) {
     return(0)
   }
   max(utilities_tbl$utility_raw, na.rm = TRUE)
-}
-
-#' @keywords internal
-#' @noRd
-stopping_check <- function(
-    state,
-    fast_fit,
-    ranking_ids,
-    candidates,
-    utilities_tbl
-) {
-  validate_state(state)
-  if (!is.list(fast_fit) || is.null(fast_fit$theta_draws)) {
-    rlang::abort("`fast_fit` must contain `theta_draws`.")
-  }
-  if (!is.data.frame(candidates)) {
-    rlang::abort("`candidates` must be a data frame or tibble.")
-  }
-
-  CW <- state$config$CW %||% floor(state$N / 2)
-  CW <- as.integer(CW)
-  if (is.na(CW) || CW < 1L) {
-    rlang::abort("`CW` must be a positive integer.")
-  }
-  check_due <- (state$comparisons_observed - state$last_check_at) >= CW
-
-  if (!check_due) {
-    return(list(
-      state = state,
-      check_performed = FALSE,
-      condition_A = NA,
-      condition_B = NA,
-      q_summary = list(median = NA_real_, p10 = NA_real_),
-      U_max = NA_real_,
-      U_0 = state$U0,
-      stop_candidate = state$stop_candidate,
-      checks_passed_in_row = state$checks_passed_in_row
-    ))
-  }
-
-  q_vals <- compute_adjacent_certainty(fast_fit$theta_draws, ranking_ids)
-  q_median <- stats::median(q_vals)
-  q_p10 <- as.double(stats::quantile(q_vals, probs = 0.1, names = FALSE))
-  condition_A <- (q_median > 0.95) && (q_p10 > 0.80)
-
-  U_max <- compute_Umax(utilities_tbl)
-  if (!is.finite(state$U0)) {
-    state$U0 <- as.double(U_max)
-  }
-  U_0 <- state$U0
-
-  condition_B <- is.finite(U_max) && is.finite(U_0) && U_0 > 0 &&
-    (U_max < 0.05 * U_0)
-
-  if (isTRUE(condition_A) && isTRUE(condition_B)) {
-    state$stop_candidate <- TRUE
-    state$checks_passed_in_row <- as.integer(state$checks_passed_in_row + 1L)
-  } else {
-    state$stop_candidate <- FALSE
-    state$checks_passed_in_row <- 0L
-  }
-  state$last_check_at <- as.integer(state$comparisons_observed)
-
-  list(
-    state = state,
-    check_performed = TRUE,
-    condition_A = condition_A,
-    condition_B = condition_B,
-    q_summary = list(median = q_median, p10 = q_p10),
-    U_max = U_max,
-    U_0 = U_0,
-    stop_candidate = state$stop_candidate,
-    checks_passed_in_row = state$checks_passed_in_row
-  )
 }
 
 #' @keywords internal
