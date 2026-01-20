@@ -13,7 +13,6 @@ diagnostics_gate <- function(fit, config, near_stop = FALSE) {
     diagnostics <- fit
   }
   if (is.null(diagnostics) || !is.list(diagnostics)) {
-    rlang::warn("Diagnostics missing or invalid; gate failed.")
     return(FALSE)
   }
   validate_config(config)
@@ -25,7 +24,6 @@ diagnostics_gate <- function(fit, config, near_stop = FALSE) {
   max_rhat <- diagnostics$max_rhat
   min_ess_bulk <- diagnostics$min_ess_bulk
   if (is.null(divergences) || is.null(max_rhat) || is.null(min_ess_bulk)) {
-    rlang::warn("Diagnostics missing required fields; gate failed.")
     return(FALSE)
   }
 
