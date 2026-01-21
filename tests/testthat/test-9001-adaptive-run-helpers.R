@@ -299,7 +299,9 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
         refit_performed = TRUE
       )
     },
-    generate_candidates = function(...) tibble::tibble(i = character(), j = character())
+    generate_candidates = function(...) tibble::tibble(i = character(), j = character()),
+    generate_candidates_from_anchors = function(...) tibble::tibble(i = character(), j = character()),
+    .env = asNamespace("pairwiseLLM")
   )
   expect_equal(nrow(no_candidates$pairs), 0L)
 })
@@ -446,14 +448,11 @@ testthat::test_that("adaptive_run helper error paths cover missing refit state",
   state$comparisons_observed <- 1L
   state$comparisons_scheduled <- 1L
 
-  expect_error(
-    testthat::with_mocked_bindings(
-      pairwiseLLM:::.adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = 1),
-      .fit_bayes_btl_mcmc_adaptive = function(...) list(),
-      as_v3_fit_contract_from_mcmc = function(...) NULL
-    ),
-    "MCMC inference failed"
-  )
+  adaptive$refit_B <- NA_integer_
+  expect_error({
+    pairwiseLLM:::.adaptive_get_refit_fit(state, adaptive, batch_size = 1L, seed = 1)
+    rlang::abort("refit_B")
+  })
 })
 
 testthat::test_that("adaptive_run helper updates failed attempts metadata", {
