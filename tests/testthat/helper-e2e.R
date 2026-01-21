@@ -196,7 +196,9 @@ e2e_run_locked_scenario <- function(seed) {
     ),
     submit_llm_pairs = mock_submit,
     select_batch = wrap_select_batch,
-    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
+    diagnostics_gate = function(...) TRUE,
+    .package = "pairwiseLLM"
   )
 
   selection_log <- dplyr::bind_rows(log_env$selections)
