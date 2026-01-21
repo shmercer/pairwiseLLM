@@ -62,6 +62,9 @@
   if (is.integer(col)) {
     return(NA_integer_)
   }
+  if (inherits(col, "POSIXct")) {
+    return(as.POSIXct(NA, tz = "UTC"))
+  }
   if (is.double(col)) {
     return(NA_real_)
   }
@@ -70,9 +73,6 @@
   }
   if (is.character(col)) {
     return(NA_character_)
-  }
-  if (inherits(col, "POSIXct")) {
-    return(as.POSIXct(NA, tz = "UTC"))
   }
   NA
 }

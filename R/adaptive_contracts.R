@@ -416,14 +416,14 @@ compute_gini_degree <- function(deg) {
   defaults <- lapply(schema, function(col) {
     if (is.integer(col)) {
       NA_integer_
+    } else if (inherits(col, "POSIXct")) {
+      as.POSIXct(NA, tz = "UTC")
     } else if (is.double(col)) {
       NA_real_
     } else if (is.logical(col)) {
       NA
     } else if (is.character(col)) {
       NA_character_
-    } else if (inherits(col, "POSIXct")) {
-      as.POSIXct(NA, tz = "UTC")
     } else {
       NA
     }
@@ -436,14 +436,14 @@ compute_gini_degree <- function(deg) {
   defaults <- lapply(schema, function(col) {
     if (is.integer(col)) {
       NA_integer_
+    } else if (inherits(col, "POSIXct")) {
+      as.POSIXct(NA, tz = "UTC")
     } else if (is.double(col)) {
       NA_real_
     } else if (is.logical(col)) {
       NA
     } else if (is.character(col)) {
       NA_character_
-    } else if (inherits(col, "POSIXct")) {
-      as.POSIXct(NA, tz = "UTC")
     } else {
       NA
     }
