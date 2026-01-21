@@ -426,6 +426,36 @@ compute_gini_degree <- function(deg) {
   as.double(max(0, gini))
 }
 
+#' @keywords internal
+#' @noRd
+compute_gini_posA <- function(posA_counts) {
+  if (is.null(posA_counts)) {
+    return(NA_real_)
+  }
+  posA_counts <- as.double(posA_counts)
+  posA_counts <- posA_counts[is.finite(posA_counts)]
+  if (length(posA_counts) == 0L) {
+    return(NA_real_)
+  }
+  if (any(posA_counts < 0)) {
+    rlang::abort("`posA_counts` must be non-negative.")
+  }
+
+  total <- sum(posA_counts)
+  n <- length(posA_counts)
+  if (total == 0) {
+    return(0)
+  }
+  if (n == 1L) {
+    return(0)
+  }
+
+  posA_counts <- sort(posA_counts)
+  idx <- seq_len(n)
+  gini <- (2 * sum(posA_counts * idx) / (n * total)) - (n + 1) / n
+  as.double(max(0, gini))
+}
+
 .adaptive_round_log_defaults <- function() {
   schema <- round_log_schema()
   defaults <- lapply(schema, function(col) {

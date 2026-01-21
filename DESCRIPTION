@@ -67,6 +67,7 @@ Collate:
     'adaptive_select_batch.R'
     'adaptive_state.R'
     'adaptive_stopping.R'
+    'adaptive_summaries.R'
     'adaptive_utility.R'
     'adaptive_v3_contracts.R'
     'adaptive_warm_start.R'
