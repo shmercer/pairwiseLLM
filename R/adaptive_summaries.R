@@ -202,6 +202,7 @@
     return(stats::setNames(rep_len(NA_integer_, length(ids)), ids))
   }
   repeats <- pmax(as.integer(pair_count) - 1L, 0L)
+  names(repeats) <- names(pair_count)
   if (all(repeats == 0L)) {
     return(stats::setNames(rep.int(0L, length(ids)), ids))
   }
