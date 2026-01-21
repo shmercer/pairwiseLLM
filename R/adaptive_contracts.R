@@ -90,6 +90,11 @@ adaptive_v3_defaults <- function(N) {
 adaptive_v3_config <- function(N, ...) {
   overrides <- list(...)
   if (length(overrides) == 1L &&
+    is.null(names(overrides)) &&
+    is.null(overrides[[1L]])) {
+    overrides <- NULL
+  }
+  if (length(overrides) == 1L &&
     is.list(overrides[[1L]]) &&
     is.null(names(overrides))) {
     overrides <- overrides[[1L]]
