@@ -360,6 +360,9 @@ select_batch <- function(state, candidates_with_utility, config, seed = NULL, ex
       config = config
     )
   })
+  if (nrow(explore) > 0L) {
+    explore$is_explore <- TRUE
+  }
   selected_keys <- as.character(explore$unordered_key)
   if (length(selected_keys) > 0L) {
     candidates_with_utility <- candidates_with_utility[
@@ -379,8 +382,14 @@ select_batch <- function(state, candidates_with_utility, config, seed = NULL, ex
     n_exploit = n_exploit,
     config = config
   )
+  if (nrow(exploit) > 0L) {
+    exploit$is_explore <- FALSE
+  }
 
   combined <- dplyr::bind_rows(explore, exploit)
+  if (nrow(combined) == 0L) {
+    combined$is_explore <- logical()
+  }
   state_seed <- seed %||% state$seed
   state_tmp <- state
   state_tmp$seed <- state_seed
