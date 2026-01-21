@@ -10,6 +10,7 @@ test_that("adaptive_v3_defaults includes required fields", {
     "min_new_pairs_for_check", "rank_weak_adj_threshold", "rank_weak_adj_frac_max", "rank_min_adj_prob",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
+    "progress", "progress_every_iter", "progress_every_refit", "progress_level",
     "write_outputs", "output_dir", "keep_draws", "thin_draws"
   )
 
