@@ -166,7 +166,7 @@ e2e_run_locked_scenario <- function(seed) {
   mock_mcmc_fit <- function(bt_data, config, seed = NULL) {
     force(config)
     force(seed)
-    ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+    ids <- as.character(names(theta_true))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
       draws = list(theta = theta_draws),
@@ -179,6 +179,26 @@ e2e_run_locked_scenario <- function(seed) {
         min_ess_tail = 1000
       )
     )
+  }
+
+  mock_candidates <- function(theta_summary, state, config) {
+    validate_state(state)
+    ids <- as.character(state$ids)
+    if (length(ids) < 2L) {
+      return(tibble::tibble(i = character(), j = character()))
+    }
+    pairs <- utils::combn(ids, 2)
+    i_id <- pmin(pairs[1L, ], pairs[2L, ])
+    j_id <- pmax(pairs[1L, ], pairs[2L, ])
+    out <- tibble::tibble(i = i_id, j = j_id)
+    cap <- as.integer(config$C_max %||% nrow(out))
+    if (!is.na(cap) && cap > 0L && nrow(out) > cap) {
+      out <- dplyr::mutate(out, unordered_key = pairwiseLLM:::make_unordered_key(.data$i, .data$j))
+      out <- dplyr::arrange(out, .data$unordered_key)
+      out <- dplyr::slice_head(out, n = cap)
+      out <- dplyr::select(out, "i", "j")
+    }
+    tibble::as_tibble(out)
   }
 
   out <- testthat::with_mocked_bindings(
@@ -196,6 +216,8 @@ e2e_run_locked_scenario <- function(seed) {
     ),
     submit_llm_pairs = mock_submit,
     select_batch = wrap_select_batch,
+    generate_candidates = mock_candidates,
+    generate_candidates_from_anchors = mock_candidates,
     .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
     diagnostics_gate = function(...) TRUE,
     .package = "pairwiseLLM"
