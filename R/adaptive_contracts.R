@@ -80,7 +80,8 @@ adaptive_v3_defaults <- function(N) {
     write_outputs = FALSE,
     output_dir = NULL,
     keep_draws = FALSE,
-    thin_draws = 1L
+    thin_draws = 1L,
+    cmdstan = list(core_fraction = 0.6)
   )
 }
 
@@ -315,6 +316,13 @@ round_log_schema <- function() {
     min_ess_bulk = double(),
     max_rhat = double(),
     diagnostics_pass = logical(),
+    mcmc_chains = integer(),
+    mcmc_parallel_chains = integer(),
+    mcmc_core_fraction = double(),
+    mcmc_cores_detected_physical = integer(),
+    mcmc_cores_detected_logical = integer(),
+    mcmc_threads_per_chain = integer(),
+    mcmc_cmdstanr_version = character(),
     stop_decision = logical(),
     stop_reason = character(),
     mode = character()
@@ -566,6 +574,7 @@ build_round_log_row <- function(state,
   divergences <- diagnostics$divergences %||% NA_integer_
   min_ess_bulk <- diagnostics$min_ess_bulk %||% NA_real_
   max_rhat <- diagnostics$max_rhat %||% NA_real_
+  mcmc_config_used <- state$posterior$mcmc_config_used %||% list()
 
   stop_decision <- stop_out$stop_decision %||% NA
   stop_reason <- stop_out$stop_reason %||% state$stop_reason %||% NA_character_
@@ -610,6 +619,13 @@ build_round_log_row <- function(state,
   row$min_ess_bulk <- as.double(min_ess_bulk)
   row$max_rhat <- as.double(max_rhat)
   row$diagnostics_pass <- as.logical(metrics$diagnostics_pass %||% NA)
+  row$mcmc_chains <- as.integer(mcmc_config_used$chains %||% NA_integer_)
+  row$mcmc_parallel_chains <- as.integer(mcmc_config_used$parallel_chains %||% NA_integer_)
+  row$mcmc_core_fraction <- as.double(mcmc_config_used$core_fraction %||% NA_real_)
+  row$mcmc_cores_detected_physical <- as.integer(mcmc_config_used$cores_detected_physical %||% NA_integer_)
+  row$mcmc_cores_detected_logical <- as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_)
+  row$mcmc_threads_per_chain <- as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_)
+  row$mcmc_cmdstanr_version <- as.character(mcmc_config_used$cmdstanr_version %||% NA_character_)
   row$stop_decision <- as.logical(stop_decision)
   row$stop_reason <- as.character(stop_reason)
   row$mode <- as.character(state$mode %||% NA_character_)
