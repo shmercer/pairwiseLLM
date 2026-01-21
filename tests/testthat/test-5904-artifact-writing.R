@@ -52,10 +52,11 @@ testthat::test_that("artifact writing writes expected files", {
 
   config_path <- file.path(output_dir, "adaptive_config.rds")
   round_log_path <- file.path(output_dir, "round_log.rds")
+  batch_log_path <- file.path(output_dir, "batch_log.rds")
   item_summary_path <- file.path(output_dir, "item_summary.rds")
   draws_path <- file.path(output_dir, "theta_draws.rds")
 
-  for (path in c(config_path, round_log_path, item_summary_path, draws_path)) {
+  for (path in c(config_path, round_log_path, batch_log_path, item_summary_path, draws_path)) {
     testthat::expect_true(file.exists(path))
     testthat::expect_true(file.info(path)$size > 0)
   }
