@@ -240,7 +240,7 @@
     summary <- summary |> dplyr::arrange(.data[[".sort_value"]])
   }
 
-  summary <- summary |> dplyr::select(-.data[[".sort_value"]])
+  summary <- summary |> dplyr::select(-dplyr::all_of(".sort_value"))
   if (!is.null(top_n)) {
     summary <- summary |> dplyr::slice_head(n = top_n)
   }
