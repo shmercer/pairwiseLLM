@@ -50,3 +50,17 @@ test_that("adaptive_v3_config merges overrides", {
   cfg2 <- pairwiseLLM:::adaptive_v3_config(12, list(batch_size = 33L))
   expect_equal(cfg2$batch_size, 33L)
 })
+
+test_that("adaptive_v3_config handles NULL overrides", {
+  cfg <- pairwiseLLM:::adaptive_v3_config(6, NULL)
+  expect_equal(cfg$N, 6L)
+})
+
+test_that("adaptive_round_log_defaults returns typed NA row", {
+  defaults <- pairwiseLLM:::.adaptive_round_log_defaults()
+  expect_equal(nrow(defaults), 1L)
+  expect_true(is.double(defaults$epsilon_mean))
+  expect_true(all(is.na(defaults$epsilon_mean)))
+  expect_true(is.logical(defaults$diagnostics_pass))
+  expect_true(is.na(defaults$diagnostics_pass[[1L]]))
+})
