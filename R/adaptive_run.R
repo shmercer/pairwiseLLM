@@ -554,6 +554,7 @@ NULL
     )
     prior_log <- state$config$round_log %||% round_log_schema()
     state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
+    .adaptive_progress_emit_refit(state, round_row, v3_config)
   }
 
   list(state = state)
@@ -923,6 +924,8 @@ NULL
   state$batch_log <- dplyr::bind_rows(state$batch_log, row)
   state$log_counters$comparisons_observed <- as.integer(state$comparisons_observed)
   state$log_counters$failed_attempts <- as.integer(nrow(state$failed_attempts))
+
+  .adaptive_progress_emit_iter(state)
 
   state
 }
@@ -1296,6 +1299,7 @@ NULL
       )
       prior_log <- state$config$round_log %||% round_log_schema()
       state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
+      .adaptive_progress_emit_refit(state, round_row, v3_config)
     }
     if (isTRUE(stop_out$stop_decision) || identical(state$mode, "stopped")) {
       return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
@@ -1315,6 +1319,7 @@ NULL
     )
     prior_log <- state$config$round_log %||% round_log_schema()
     state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
+    .adaptive_progress_emit_refit(state, round_row, v3_config)
   }
 
   selection_out <- .adaptive_select_batch_with_fallbacks(
@@ -1666,7 +1671,9 @@ NULL
 #'   \code{max_replacements} (NULL), \code{max_iterations} (50),
 #'   \code{budget_max} (NULL; defaults to 0.40 * choose(N,2)), and
 #'   \code{M1_target} (NULL; defaults to floor(N * d1 / 2)). The list is
-#'   extensible in future versions.
+#'   extensible in future versions. Use \code{adaptive$v3} to override v3
+#'   config fields such as \code{progress}, \code{progress_every_iter},
+#'   \code{progress_every_refit}, and \code{progress_level}.
 #' @param paths A list with optional \code{state_path} and \code{output_dir}.
 #'   For batch mode, \code{state_path} defaults to
 #'   \code{file.path(output_dir, "adaptive_state.rds")}.

@@ -73,6 +73,10 @@ adaptive_v3_defaults <- function(N) {
     min_ess_bulk_near_stop = 1000,
     require_divergences_zero = TRUE,
     repair_max_cycles = 3L,
+    progress = FALSE,
+    progress_every_iter = 1L,
+    progress_every_refit = 1L,
+    progress_level = "refit",
     write_outputs = FALSE,
     output_dir = NULL,
     keep_draws = FALSE,
@@ -164,6 +168,7 @@ validate_config <- function(config) {
     "rank_weak_adj_frac_max", "rank_min_adj_prob",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
+    "progress", "progress_every_iter", "progress_every_refit", "progress_level",
     "write_outputs", "output_dir", "keep_draws", "thin_draws"
   )
   missing <- setdiff(required, names(config))
@@ -241,6 +246,16 @@ validate_config <- function(config) {
   "`require_divergences_zero` must be logical.")
   .adaptive_v3_check(.adaptive_v3_intish(config$repair_max_cycles) && config$repair_max_cycles >= 1L,
     "`repair_max_cycles` must be >= 1.")
+
+  .adaptive_v3_check(is.logical(config$progress) && length(config$progress) == 1L,
+    "`progress` must be logical.")
+  .adaptive_v3_check(.adaptive_v3_intish(config$progress_every_iter) && config$progress_every_iter >= 1L,
+    "`progress_every_iter` must be >= 1.")
+  .adaptive_v3_check(.adaptive_v3_intish(config$progress_every_refit) && config$progress_every_refit >= 1L,
+    "`progress_every_refit` must be >= 1.")
+  .adaptive_v3_check(is.character(config$progress_level) && length(config$progress_level) == 1L &&
+    config$progress_level %in% c("basic", "refit", "full"),
+  "`progress_level` must be one of 'basic', 'refit', or 'full'.")
 
   .adaptive_v3_check(is.logical(config$write_outputs) && length(config$write_outputs) == 1L,
     "`write_outputs` must be logical.")

@@ -51,7 +51,9 @@ include: \code{d1} (default 8), \code{bins} (8), \code{mix_struct} (0.70),
 \code{max_replacements} (NULL), \code{max_iterations} (50),
 \code{budget_max} (NULL; defaults to 0.40 * choose(N,2)), and
 \code{M1_target} (NULL; defaults to floor(N * d1 / 2)). The list is
-extensible in future versions.}
+extensible in future versions. Use \code{adaptive$v3} to override v3
+config fields such as \code{progress}, \code{progress_every_iter},
+\code{progress_every_refit}, and \code{progress_level}.}
 
 \item{paths}{A list with optional \code{state_path} and \code{output_dir}.
 For batch mode, \code{state_path} defaults to

@@ -10,6 +10,7 @@ test_that("adaptive_v3_defaults includes required fields", {
     "min_new_pairs_for_check", "rank_weak_adj_threshold", "rank_weak_adj_frac_max", "rank_min_adj_prob",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
+    "progress", "progress_every_iter", "progress_every_refit", "progress_level",
     "write_outputs", "output_dir", "keep_draws", "thin_draws"
   )
 
@@ -48,4 +49,18 @@ test_that("adaptive_v3_config merges overrides", {
 
   cfg2 <- pairwiseLLM:::adaptive_v3_config(12, list(batch_size = 33L))
   expect_equal(cfg2$batch_size, 33L)
+})
+
+test_that("adaptive_v3_config handles NULL overrides", {
+  cfg <- pairwiseLLM:::adaptive_v3_config(6, NULL)
+  expect_equal(cfg$N, 6L)
+})
+
+test_that("adaptive_round_log_defaults returns typed NA row", {
+  defaults <- pairwiseLLM:::.adaptive_round_log_defaults()
+  expect_equal(nrow(defaults), 1L)
+  expect_true(is.double(defaults$epsilon_mean))
+  expect_true(all(is.na(defaults$epsilon_mean)))
+  expect_true(is.logical(defaults$diagnostics_pass))
+  expect_true(is.na(defaults$diagnostics_pass[[1L]]))
 })
