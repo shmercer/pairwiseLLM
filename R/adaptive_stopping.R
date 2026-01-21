@@ -28,6 +28,8 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
   }
 
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+  theta_mean <- stats::setNames(theta_summary$theta_mean, theta_summary$item_id)
+  ranking_ids <- compute_ranking_from_theta_mean(theta_mean, state)
   S_subset <- as.integer(config$S_subset)
   if (is.na(S_subset) || S_subset < 1L) {
     rlang::abort("`config$S_subset` must be a positive integer.")
@@ -148,10 +150,43 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
   n_unique_pairs_seen <- sum(state$pair_count >= 1L)
   hard_cap_reached <- n_unique_pairs_seen >= hard_cap_threshold
 
+  weak_adj_threshold <- as.double(config$rank_weak_adj_threshold)
+  weak_adj_frac_max <- as.double(config$rank_weak_adj_frac_max)
+  min_adj_prob_threshold <- as.double(config$rank_min_adj_prob)
+  min_new_pairs_for_check <- as.integer(config$min_new_pairs_for_check)
+  if (is.na(min_new_pairs_for_check) || min_new_pairs_for_check < 1L) {
+    rlang::abort("`config$min_new_pairs_for_check` must be a positive integer.")
+  }
+
+  adj_probs <- numeric()
+  if (length(ranking_ids) > 1L) {
+    adj_probs <- vapply(seq_len(length(ranking_ids) - 1L), function(idx) {
+      left_id <- ranking_ids[[idx]]
+      right_id <- ranking_ids[[idx + 1L]]
+      mean(theta_draws[, left_id] > theta_draws[, right_id])
+    }, numeric(1L))
+  }
+
+  frac_weak_adj <- NA_real_
+  min_adj_prob <- NA_real_
+  rank_stability_pass <- NA
+  if (length(adj_probs) > 0L) {
+    weak_adj <- adj_probs < weak_adj_threshold
+    frac_weak_adj <- mean(weak_adj)
+    min_adj_prob <- min(adj_probs)
+    rank_stability_pass <- is.finite(frac_weak_adj) &&
+      is.finite(min_adj_prob) &&
+      frac_weak_adj <= weak_adj_frac_max &&
+      min_adj_prob >= min_adj_prob_threshold
+  }
+
   list(
     hard_cap_reached = hard_cap_reached,
     hard_cap_threshold = hard_cap_threshold,
     n_unique_pairs_seen = n_unique_pairs_seen,
+    scheduled_pairs = as.integer(state$comparisons_scheduled),
+    proposed_pairs = as.integer(nrow(utilities_tbl)),
+    completed_pairs = as.integer(state$comparisons_observed),
     diagnostics_pass = diagnostics_pass,
     theta_sd_median_S = theta_sd_median_S,
     theta_sd_pass = theta_sd_pass,
@@ -159,7 +194,14 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     U0 = U0,
     U_top_median = U_top_median,
     U_abs = U_abs,
-    U_pass = U_pass
+    U_pass = U_pass,
+    rank_stability_pass = rank_stability_pass,
+    frac_weak_adj = frac_weak_adj,
+    min_adj_prob = min_adj_prob,
+    weak_adj_threshold = weak_adj_threshold,
+    weak_adj_frac_max = weak_adj_frac_max,
+    min_adj_prob_threshold = min_adj_prob_threshold,
+    min_new_pairs_for_check = min_new_pairs_for_check
   )
 }
 
@@ -197,6 +239,23 @@ should_stop <- function(metrics, state, config) {
   if (!is.integer(min_comparisons) || length(min_comparisons) != 1L) {
     rlang::abort("`state$M1_target` must be a length-1 integer.")
   }
+
+  min_new_pairs_for_check <- as.integer(config$min_new_pairs_for_check)
+  if (is.na(min_new_pairs_for_check) || min_new_pairs_for_check < 1L) {
+    rlang::abort("`config$min_new_pairs_for_check` must be a positive integer.")
+  }
+  comparisons_since_check <- state$comparisons_observed - state$last_check_at
+  refit_performed <- isTRUE(metrics$refit_performed)
+  check_eligible <- refit_performed || comparisons_since_check >= min_new_pairs_for_check
+  if (!isTRUE(check_eligible)) {
+    return(list(
+      state = state,
+      stop_decision = FALSE,
+      stop_reason = state$stop_reason %||% NA_character_
+    ))
+  }
+  state$last_check_at <- as.integer(state$comparisons_observed)
+
   if (!is.na(min_comparisons) && state$comparisons_observed < min_comparisons) {
     state$checks_passed_in_row <- 0L
     return(list(
@@ -209,8 +268,9 @@ should_stop <- function(metrics, state, config) {
   diagnostics_pass <- isTRUE(metrics$diagnostics_pass)
   theta_sd_pass <- isTRUE(metrics$theta_sd_pass)
   U_pass <- isTRUE(metrics$U_pass)
+  rank_stability_pass <- isTRUE(metrics$rank_stability_pass)
 
-  if (diagnostics_pass && theta_sd_pass && U_pass) {
+  if (diagnostics_pass && theta_sd_pass && U_pass && rank_stability_pass) {
     state$checks_passed_in_row <- as.integer(state$checks_passed_in_row + 1L)
   } else {
     state$checks_passed_in_row <- 0L

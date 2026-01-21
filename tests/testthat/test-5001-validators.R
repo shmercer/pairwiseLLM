@@ -23,6 +23,22 @@ test_that("validate_config rejects invalid fields", {
   bad_cap$hard_cap_frac <- 1.2
   expect_error(pairwiseLLM:::validate_config(bad_cap), "hard_cap_frac")
 
+  bad_min_new <- cfg
+  bad_min_new$min_new_pairs_for_check <- 0L
+  expect_error(pairwiseLLM:::validate_config(bad_min_new), "min_new_pairs_for_check")
+
+  bad_weak_thresh <- cfg
+  bad_weak_thresh$rank_weak_adj_threshold <- 1.2
+  expect_error(pairwiseLLM:::validate_config(bad_weak_thresh), "rank_weak_adj_threshold")
+
+  bad_weak_frac <- cfg
+  bad_weak_frac$rank_weak_adj_frac_max <- -0.1
+  expect_error(pairwiseLLM:::validate_config(bad_weak_frac), "rank_weak_adj_frac_max")
+
+  bad_min_adj <- cfg
+  bad_min_adj$rank_min_adj_prob <- 1.5
+  expect_error(pairwiseLLM:::validate_config(bad_min_adj), "rank_min_adj_prob")
+
   bad_output <- cfg
   bad_output$output_dir <- 123
   expect_error(pairwiseLLM:::validate_config(bad_output), "output_dir")
