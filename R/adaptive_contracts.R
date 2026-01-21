@@ -64,6 +64,10 @@ adaptive_v3_defaults <- function(N) {
     K_top = as.integer(K_top),
     U_abs = as.double(U_abs),
     checks_passed_target = 2L,
+    min_new_pairs_for_check = 5L,
+    rank_weak_adj_threshold = 0.95,
+    rank_weak_adj_frac_max = 0.05,
+    rank_min_adj_prob = 0.60,
     max_rhat = 1.01,
     min_ess_bulk = 300,
     min_ess_bulk_near_stop = 1000,
@@ -156,6 +160,8 @@ validate_config <- function(config) {
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
     "S_subset", "tau_fn", "K_top", "U_abs", "checks_passed_target",
+    "min_new_pairs_for_check", "rank_weak_adj_threshold",
+    "rank_weak_adj_frac_max", "rank_min_adj_prob",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
     "write_outputs", "output_dir", "keep_draws", "thin_draws"
@@ -206,6 +212,21 @@ validate_config <- function(config) {
     config$U_abs > 0, "`U_abs` must be > 0.")
   .adaptive_v3_check(.adaptive_v3_intish(config$checks_passed_target) && config$checks_passed_target >= 1L,
     "`checks_passed_target` must be >= 1.")
+  .adaptive_v3_check(.adaptive_v3_intish(config$min_new_pairs_for_check) &&
+    config$min_new_pairs_for_check >= 1L,
+  "`min_new_pairs_for_check` must be >= 1.")
+  .adaptive_v3_check(is.numeric(config$rank_weak_adj_threshold) &&
+    length(config$rank_weak_adj_threshold) == 1L &&
+    config$rank_weak_adj_threshold > 0 && config$rank_weak_adj_threshold < 1,
+  "`rank_weak_adj_threshold` must be in (0, 1).")
+  .adaptive_v3_check(is.numeric(config$rank_weak_adj_frac_max) &&
+    length(config$rank_weak_adj_frac_max) == 1L &&
+    config$rank_weak_adj_frac_max >= 0 && config$rank_weak_adj_frac_max <= 1,
+  "`rank_weak_adj_frac_max` must be in [0, 1].")
+  .adaptive_v3_check(is.numeric(config$rank_min_adj_prob) &&
+    length(config$rank_min_adj_prob) == 1L &&
+    config$rank_min_adj_prob >= 0 && config$rank_min_adj_prob <= 1,
+  "`rank_min_adj_prob` must be in [0, 1].")
 
   .adaptive_v3_check(is.numeric(config$max_rhat) && length(config$max_rhat) == 1L &&
     config$max_rhat >= 1, "`max_rhat` must be >= 1.")
