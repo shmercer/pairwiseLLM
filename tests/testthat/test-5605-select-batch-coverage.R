@@ -33,6 +33,56 @@ testthat::test_that("batch helpers handle empty history and duplicate gating", {
   expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.5, 0.5, config))
 })
 
+testthat::test_that("duplicate gating rejects invalid utility and wide p_mean", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  config <- pairwiseLLM:::adaptive_v3_config(state$N, list(dup_max_count = 2L, dup_p_margin = 0.05))
+
+  state$pair_count <- stats::setNames(1L, "A:B")
+  state$posterior$U_dup_threshold <- 0.1
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.5, NA_real_, config))
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.9, 0.5, config))
+})
+
+testthat::test_that("candidate filter counts reject invalid inputs", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  config <- pairwiseLLM:::adaptive_v3_config(state$N)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_candidate_after_filters("bad", state, config),
+    "data frame"
+  )
+
+  bad_ids <- tibble::tibble(
+    i_id = "A",
+    j_id = "Z",
+    unordered_key = "A:Z",
+    utility = 0.1,
+    p_mean = 0.5
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_candidate_after_filters(bad_ids, state, config),
+    "state\\$ids"
+  )
+
+  self_pairs <- tibble::tibble(
+    i_id = "A",
+    j_id = "A",
+    unordered_key = "A:A",
+    utility = 0.1,
+    p_mean = 0.5
+  )
+  out_self <- pairwiseLLM:::.adaptive_candidate_after_filters(self_pairs, state, config)
+  expect_equal(out_self, 0L)
+})
+
 testthat::test_that("exploration sampling validates inputs and defaults utility_raw", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
@@ -73,6 +123,77 @@ testthat::test_that("exploration sampling validates inputs and defaults utility_
   expect_equal(nrow(empty_out), 0L)
   expect_true("utility_raw" %in% names(empty_out))
 
+})
+
+testthat::test_that("exploration sampling handles missing counts and rejects duplicates", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  config <- pairwiseLLM:::adaptive_v3_config(state$N, list(dup_max_count = 2L))
+
+  candidates <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B",
+    utility = 0.3,
+    p_mean = 0.5
+  )
+  withr::local_seed(9)
+  pick <- pairwiseLLM:::sample_exploration_pairs(
+    state = state,
+    candidates = candidates,
+    n_explore = 1L,
+    config = config
+  )
+  expect_equal(nrow(pick), 1L)
+  expect_true(is.na(pick$utility))
+
+  state$pair_count <- stats::setNames(1L, "A:B")
+  state$posterior$U_dup_threshold <- 0.9
+  candidates_dup <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B",
+    utility = 0.1,
+    utility_raw = 0.1,
+    p_mean = 0.5
+  )
+  withr::local_seed(10)
+  dup_out <- pairwiseLLM:::sample_exploration_pairs(
+    state = state,
+    candidates = candidates_dup,
+    n_explore = 1L,
+    config = config
+  )
+  expect_equal(nrow(dup_out), 0L)
+})
+
+testthat::test_that("exploration sampling returns empty when lookup missing", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  state$pair_count <- stats::setNames(1L, "A:B")
+  config <- pairwiseLLM:::adaptive_v3_config(state$N, list(dup_max_count = 2L))
+
+  candidates_empty <- tibble::tibble(
+    i_id = character(),
+    j_id = character(),
+    unordered_key = character(),
+    utility = double(),
+    p_mean = double()
+  )
+  withr::local_seed(5)
+  out <- pairwiseLLM:::sample_exploration_pairs(
+    state = state,
+    candidates = candidates_empty,
+    n_explore = 1L,
+    config = config
+  )
+  expect_equal(nrow(out), 0L)
 })
 
 testthat::test_that("exploration sampling covers missing lookup and duplicate reuse", {
@@ -217,5 +338,34 @@ testthat::test_that("select_batch validates inputs and handles zero batch size",
   config_zero <- config
   config_zero$batch_size <- 0L
   out <- pairwiseLLM:::select_batch(state, candidates, config_zero)
+  expect_equal(nrow(out), 0L)
+})
+
+testthat::test_that("select_batch increases exploit count when explore undershoots", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  config <- pairwiseLLM:::adaptive_v3_config(
+    state$N,
+    list(batch_size = 2L, explore_rate = 0.5, dup_max_count = 1L)
+  )
+
+  pair_ids <- utils::combn(state$ids, 2)
+  keys <- pairwiseLLM:::make_unordered_key(pair_ids[1L, ], pair_ids[2L, ])
+  state$pair_count <- stats::setNames(rep.int(1L, length(keys)), keys)
+
+  candidates <- tibble::tibble(
+    i_id = c("A", "A"),
+    j_id = c("B", "C"),
+    unordered_key = c("A:B", "A:C"),
+    utility = c(0.2, 0.1),
+    utility_raw = c(0.2, 0.1),
+    p_mean = c(0.5, 0.5)
+  )
+
+  withr::local_seed(4)
+  out <- pairwiseLLM:::select_batch(state, candidates, config, seed = 1L)
   expect_equal(nrow(out), 0L)
 })

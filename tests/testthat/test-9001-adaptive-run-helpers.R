@@ -571,6 +571,65 @@ testthat::test_that("adaptive_run replacement loop defaults refill rounds", {
   expect_equal(length(out$submissions), 0L)
 })
 
+testthat::test_that("adaptive_run replacement loop breaks when missing filled", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 2)
+  adaptive <- list(max_refill_rounds = 2L)
+
+  pairs <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase1",
+    iter = 1L,
+    created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+  )
+  results_tbl <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase1",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "openai",
+    model = "gpt-test"
+  )
+
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_run_replacements_live(
+      state = state,
+      model = "gpt-test",
+      trait_name = "quality",
+      trait_description = "Which is better?",
+      prompt_template = "template",
+      backend = "openai",
+      adaptive = adaptive,
+      submission = list(),
+      missing = 1L,
+      seed = 1,
+      replacement_phase = "phase1",
+      base_batch_size = 1L
+    ),
+    .adaptive_schedule_replacement_pairs = function(...) {
+      list(state = state, pairs = pairs)
+    },
+    .adaptive_submit_live = function(...) results_tbl,
+    .env = asNamespace("pairwiseLLM")
+  )
+  expect_equal(length(out$submissions), 1L)
+})
+
 testthat::test_that("adaptive_rank_resume and run_live cover error and branch paths", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
