@@ -1186,11 +1186,6 @@ NULL
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
   remaining_unique <- hard_cap_threshold - n_unique_pairs_seen
-  if (remaining_unique <= 0L) {
-    state$mode <- "stopped"
-    state$stop_reason <- "hard_cap_40pct"
-    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
-  }
   target_pairs <- min(target_pairs, as.integer(remaining_unique))
 
   if (identical(state$mode, "warm_start") && identical(state$phase, "phase1")) {
