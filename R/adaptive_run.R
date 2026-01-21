@@ -123,6 +123,11 @@ NULL
   round_log_path <- file.path(output_dir, "round_log.rds")
   saveRDS(round_log, round_log_path)
 
+  batch_log <- state$batch_log %||% batch_log_schema()
+  batch_log <- tibble::as_tibble(batch_log)
+  batch_log_path <- file.path(output_dir, "batch_log.rds")
+  saveRDS(batch_log, batch_log_path)
+
   item_summary <- build_item_summary(state, fit = fit)
   item_summary_path <- file.path(output_dir, "item_summary.rds")
   saveRDS(item_summary, item_summary_path)
@@ -392,6 +397,7 @@ NULL
   needs_init <- is.null(state$fit)
   do_refit <- isTRUE(allow_refit) && isTRUE(state$new_since_refit >= refit_B)
   refit_performed <- FALSE
+  new_pairs <- as.integer(state$new_since_refit %||% 0L)
 
   if (needs_init || do_refit) {
     bt_data <- .btl_mcmc_v3_prepare_bt_data(state$history_results, state$ids)
@@ -411,7 +417,12 @@ NULL
     rlang::abort("MCMC inference failed to initialize.")
   }
 
-  list(state = state, fit = state$fit, refit_performed = refit_performed)
+  list(
+    state = state,
+    fit = state$fit,
+    refit_performed = refit_performed,
+    new_pairs = as.integer(new_pairs)
+  )
 }
 
 .adaptive_dup_threshold_from_utilities <- function(U_all) {
@@ -472,8 +483,10 @@ NULL
     state <- fit_out$state
     fit <- fit_out$fit
     refit_performed <- isTRUE(fit_out$refit_performed)
+    new_pairs <- as.integer(fit_out$new_pairs %||% 0L)
   } else {
     fit <- state$fit
+    new_pairs <- as.integer(state$new_since_refit %||% 0L)
   }
 
   if (is.null(fit) || is.null(fit$theta_draws)) {
@@ -533,7 +546,11 @@ NULL
       fit = fit,
       metrics = metrics,
       stop_out = stop_out,
-      config = v3_config
+      config = v3_config,
+      batch_size = v3_config$batch_size,
+      window_W = v3_config$W,
+      exploration_rate = v3_config$explore_rate,
+      new_pairs = new_pairs
     )
     prior_log <- state$config$round_log %||% round_log_schema()
     state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
@@ -608,7 +625,9 @@ NULL
   if (nrow(explore) == 0L) {
     return(explore)
   }
-  assign_order(explore, state)
+  ordered <- assign_order(explore, state)
+  ordered$is_explore <- TRUE
+  ordered
 }
 
 .adaptive_filter_candidates_to_draws <- function(candidates, theta_draws) {
@@ -722,7 +741,8 @@ NULL
       selection = base_selection,
       candidate_starved = FALSE,
       candidate_stats = base_counts,
-      fallback_stage = "base"
+      fallback_stage = "base",
+      W_used = config$W
     ))
   }
 
@@ -768,7 +788,8 @@ NULL
       selection = attempt1$selection,
       candidate_starved = FALSE,
       candidate_stats = attempt1$candidate_stats,
-      fallback_stage = "broaden_window"
+      fallback_stage = "broaden_window",
+      W_used = config_broaden$W
     ))
   }
 
@@ -785,8 +806,125 @@ NULL
     selection = attempt2$selection,
     candidate_starved = candidate_starved,
     candidate_stats = attempt2$candidate_stats,
-    fallback_stage = fallback_stage
+    fallback_stage = fallback_stage,
+    W_used = config_relax$W
   )
+}
+
+.adaptive_quantile <- function(values, prob) {
+  values <- as.double(values)
+  values <- values[is.finite(values)]
+  if (length(values) == 0L) {
+    return(NA_real_)
+  }
+  as.double(stats::quantile(values, prob, type = 7, na.rm = TRUE)[[1L]])
+}
+
+.adaptive_append_batch_log <- function(state,
+    iter,
+    phase,
+    mode,
+    created_at,
+    batch_size_target,
+    selection,
+    candidate_stats,
+    candidate_starved,
+    fallback_stage,
+    W_used,
+    config,
+    exploration_only,
+    utilities,
+    iter_exit_path = NULL) {
+  state <- .adaptive_state_init_logs(state)
+
+  selection <- tibble::as_tibble(selection %||% tibble::tibble())
+  n_pairs_selected <- nrow(selection)
+
+  counters <- state$log_counters %||% list()
+  prev_observed <- as.integer(counters$comparisons_observed %||% 0L)
+  prev_failed <- as.integer(counters$failed_attempts %||% 0L)
+  n_pairs_completed <- as.integer(state$comparisons_observed - prev_observed)
+  n_pairs_failed <- as.integer(nrow(state$failed_attempts) - prev_failed)
+  n_pairs_completed <- as.integer(max(0L, n_pairs_completed))
+  n_pairs_failed <- as.integer(max(0L, n_pairs_failed))
+
+  backlog_unjudged <- as.integer(state$comparisons_scheduled - state$comparisons_observed)
+
+  explore_rate <- as.double(config$explore_rate %||% NA_real_)
+  if (isTRUE(exploration_only)) {
+    n_explore_target <- as.integer(batch_size_target)
+    n_exploit_target <- 0L
+    explore_rate_used <- 1
+  } else {
+    n_explore_target <- as.integer(round(explore_rate * batch_size_target))
+    n_exploit_target <- as.integer(batch_size_target - n_explore_target)
+    explore_rate_used <- explore_rate
+  }
+
+  if ("is_explore" %in% names(selection)) {
+    n_explore_selected <- as.integer(sum(selection$is_explore %in% TRUE))
+    n_exploit_selected <- as.integer(n_pairs_selected - n_explore_selected)
+  } else if (isTRUE(exploration_only)) {
+    n_explore_selected <- as.integer(n_pairs_selected)
+    n_exploit_selected <- 0L
+  } else {
+    n_explore_selected <- NA_integer_
+    n_exploit_selected <- NA_integer_
+  }
+
+  utilities_tbl <- tibble::as_tibble(utilities %||% tibble::tibble())
+  utility_candidate_p90 <- NA_real_
+  if ("utility" %in% names(utilities_tbl)) {
+    utility_candidate_p90 <- .adaptive_quantile(utilities_tbl$utility, 0.90)
+  }
+
+  exploit_utilities <- numeric()
+  if (n_pairs_selected > 0L && "utility" %in% names(selection)) {
+    if ("is_explore" %in% names(selection)) {
+      exploit_utilities <- selection$utility[!selection$is_explore %in% TRUE]
+    } else if (!isTRUE(exploration_only)) {
+      exploit_utilities <- selection$utility
+    }
+  }
+  utility_selected_p50 <- .adaptive_quantile(exploit_utilities, 0.50)
+  utility_selected_p90 <- .adaptive_quantile(exploit_utilities, 0.90)
+
+  reason_short_batch <- NA_character_
+  if (is.finite(batch_size_target) && n_pairs_selected < batch_size_target) {
+    reason_short_batch <- as.character(fallback_stage %||% "short_batch")
+  }
+
+  row <- build_batch_log_row(
+    iter = iter,
+    phase = phase,
+    mode = mode,
+    created_at = created_at,
+    batch_size_target = batch_size_target,
+    n_pairs_selected = n_pairs_selected,
+    n_pairs_completed = n_pairs_completed,
+    n_pairs_failed = n_pairs_failed,
+    backlog_unjudged = backlog_unjudged,
+    n_explore_target = n_explore_target,
+    n_explore_selected = n_explore_selected,
+    n_exploit_target = n_exploit_target,
+    n_exploit_selected = n_exploit_selected,
+    n_candidates_generated = candidate_stats$n_candidates_generated %||% NA_integer_,
+    n_candidates_after_filters = candidate_stats$n_candidates_after_filters %||% NA_integer_,
+    candidate_starved = candidate_starved %||% NA,
+    reason_short_batch = reason_short_batch,
+    W_used = W_used %||% config$W %||% NA_integer_,
+    explore_rate_used = explore_rate_used,
+    utility_selected_p50 = utility_selected_p50,
+    utility_selected_p90 = utility_selected_p90,
+    utility_candidate_p90 = utility_candidate_p90,
+    iter_exit_path = iter_exit_path
+  )
+
+  state$batch_log <- dplyr::bind_rows(state$batch_log, row)
+  state$log_counters$comparisons_observed <- as.integer(state$comparisons_observed)
+  state$log_counters$failed_attempts <- as.integer(nrow(state$failed_attempts))
+
+  state
 }
 
 .adaptive_schedule_repair_pairs <- function(state, target_pairs, adaptive, seed) {
@@ -800,16 +938,19 @@ NULL
 
   phase <- state$phase
   iter <- as.integer(state$iter + 1L)
+  iter_start <- Sys.time()
 
   fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size = target_pairs, seed = seed)
   state <- fit_out$state
   fit <- fit_out$fit
+  new_pairs <- as.integer(fit_out$new_pairs %||% 0L)
 
   v3_config <- state$config$v3 %||% adaptive_v3_config(state$N)
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates(theta_summary, state, v3_config)
 
   candidates <- .adaptive_filter_candidates_to_draws(candidates, fit$theta_draws)
+  n_candidates_generated <- as.integer(nrow(candidates))
 
   if (nrow(candidates) == 0L) {
     utilities <- tibble::tibble(
@@ -842,14 +983,37 @@ NULL
     config = config_select,
     seed = seed
   )
+  candidate_stats <- list(
+    n_pairs_requested = as.integer(target_pairs),
+    n_pairs_selected = as.integer(nrow(selection)),
+    n_candidates_generated = n_candidates_generated,
+    n_candidates_after_filters = as.integer(.adaptive_candidate_after_filters(utilities, state, config_select))
+  )
 
   if (nrow(selection) == 0L) {
     state$iter <- iter
     state$mode <- "repair"
+    state <- .adaptive_append_batch_log(
+      state = state,
+      iter = iter,
+      phase = phase,
+      mode = state$mode,
+      created_at = iter_start,
+      batch_size_target = target_pairs,
+      selection = selection,
+      candidate_stats = candidate_stats,
+      candidate_starved = TRUE,
+      fallback_stage = "repair",
+      W_used = v3_config$W,
+      config = config_select,
+      exploration_only = TRUE,
+      utilities = utilities,
+      iter_exit_path = "repair_no_pairs"
+    )
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
-  created_at <- Sys.time()
+  created_at <- iter_start
   rows <- vector("list", nrow(selection))
   state_local <- state
   for (idx in seq_len(nrow(selection))) {
@@ -896,6 +1060,22 @@ NULL
   pairs_tbl <- pairs_tbl[, c(required_cols, setdiff(names(pairs_tbl), required_cols)), drop = FALSE]
   state_local$iter <- iter
   state_local$mode <- "repair"
+  state_local <- .adaptive_append_batch_log(
+    state = state_local,
+    iter = iter,
+    phase = phase,
+    mode = state_local$mode,
+    created_at = created_at,
+    batch_size_target = target_pairs,
+    selection = selection,
+    candidate_stats = candidate_stats,
+    candidate_starved = nrow(selection) < target_pairs,
+    fallback_stage = "repair",
+    W_used = v3_config$W,
+    config = config_select,
+    exploration_only = TRUE,
+    utilities = utilities
+  )
 
   list(state = state_local, pairs = pairs_tbl)
 }
@@ -1020,10 +1200,12 @@ NULL
   phase <- state$phase
   batch_size <- target_pairs
   iter <- as.integer(state$iter + 1L)
+  iter_start <- Sys.time()
 
   fit_out <- .adaptive_get_refit_fit(state, adaptive, batch_size, seed)
   state <- fit_out$state
   fit <- fit_out$fit
+  new_pairs <- as.integer(fit_out$new_pairs %||% 0L)
 
   gate_out <- .adaptive_apply_diagnostics_gate(
     state,
@@ -1064,6 +1246,28 @@ NULL
     utilities <- apply_degree_penalty(utilities, state)
   }
   state <- .adaptive_update_dup_threshold(state, utilities, fit_out$refit_performed)
+  if (isTRUE(fit_out$refit_performed)) {
+    round_row <- build_round_log_row(
+      state = state,
+      fit = fit,
+      metrics = state$posterior$stop_metrics %||% list(),
+      stop_out = list(stop_decision = NA, stop_reason = state$stop_reason %||% NA_character_),
+      config = v3_config,
+      batch_size = target_pairs,
+      window_W = v3_config$W,
+      exploration_rate = v3_config$explore_rate,
+      new_pairs = new_pairs
+    )
+    prior_log <- state$config$round_log %||% round_log_schema()
+    state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
+  }
+
+  config_select <- v3_config
+  config_select$batch_size <- batch_size
+  exploration_only <- identical(state$mode, "repair")
+  if (isTRUE(exploration_only)) {
+    config_select$dup_max_count <- 0L
+  }
 
   check_stop <- !isTRUE(state$config$skip_stop_checks)
   if (isTRUE(check_stop)) {
@@ -1078,15 +1282,39 @@ NULL
 
     stop_out <- should_stop(stop_metrics, state, v3_config)
     state <- stop_out$state
+    if (isTRUE(fit_out$refit_performed)) {
+      round_row <- build_round_log_row(
+        state = state,
+        fit = fit,
+        metrics = stop_metrics,
+        stop_out = stop_out,
+        config = v3_config,
+        batch_size = batch_size,
+        window_W = config_select$W,
+        exploration_rate = config_select$explore_rate,
+        new_pairs = new_pairs
+      )
+      prior_log <- state$config$round_log %||% round_log_schema()
+      state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
+    }
     if (isTRUE(stop_out$stop_decision) || identical(state$mode, "stopped")) {
       return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
     }
   }
-  config_select <- v3_config
-  config_select$batch_size <- batch_size
-  exploration_only <- identical(state$mode, "repair")
-  if (isTRUE(exploration_only)) {
-    config_select$dup_max_count <- 0L
+  if (!isTRUE(check_stop) && isTRUE(fit_out$refit_performed)) {
+    round_row <- build_round_log_row(
+      state = state,
+      fit = fit,
+      metrics = state$posterior$stop_metrics %||% list(),
+      stop_out = list(stop_decision = NA, stop_reason = state$stop_reason %||% NA_character_),
+      config = v3_config,
+      batch_size = batch_size,
+      window_W = config_select$W,
+      exploration_rate = config_select$explore_rate,
+      new_pairs = new_pairs
+    )
+    prior_log <- state$config$round_log %||% round_log_schema()
+    state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
   }
 
   selection_out <- .adaptive_select_batch_with_fallbacks(
@@ -1106,10 +1334,27 @@ NULL
 
   if (nrow(selection) == 0L) {
     state$iter <- iter
+    state <- .adaptive_append_batch_log(
+      state = state,
+      iter = iter,
+      phase = phase,
+      mode = state$mode,
+      created_at = iter_start,
+      batch_size_target = batch_size,
+      selection = selection,
+      candidate_stats = selection_out$candidate_stats,
+      candidate_starved = selection_out$candidate_starved,
+      fallback_stage = selection_out$fallback_stage,
+      W_used = selection_out$W_used,
+      config = config_select,
+      exploration_only = exploration_only,
+      utilities = utilities,
+      iter_exit_path = "no_pairs_selected"
+    )
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
-  created_at <- Sys.time()
+  created_at <- iter_start
   rows <- vector("list", nrow(selection))
   state_local <- state
   for (idx in seq_len(nrow(selection))) {
@@ -1155,6 +1400,22 @@ NULL
   )
   pairs_tbl <- pairs_tbl[, c(required_cols, setdiff(names(pairs_tbl), required_cols)), drop = FALSE]
   state_local$iter <- iter
+  state_local <- .adaptive_append_batch_log(
+    state = state_local,
+    iter = iter,
+    phase = phase,
+    mode = state_local$mode,
+    created_at = created_at,
+    batch_size_target = batch_size,
+    selection = selection,
+    candidate_stats = selection_out$candidate_stats,
+    candidate_starved = selection_out$candidate_starved,
+    fallback_stage = selection_out$fallback_stage,
+    W_used = selection_out$W_used,
+    config = config_select,
+    exploration_only = exploration_only,
+    utilities = utilities
+  )
   list(state = state_local, pairs = pairs_tbl)
 }
 
@@ -1719,6 +1980,7 @@ adaptive_rank_resume <- function(
     }
     state <- adaptive_state_load(state_path)
   }
+  state <- .adaptive_state_init_logs(state)
   validate_state(state)
   if (is.null(state$repair_attempts)) {
     state$repair_attempts <- 0L
