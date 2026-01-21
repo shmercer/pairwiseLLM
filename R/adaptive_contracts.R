@@ -261,6 +261,7 @@ validate_config <- function(config) {
 round_log_schema <- function() {
   tibble::tibble(
     round_id = integer(),
+    iter_at_refit = integer(),
     n_items = integer(),
     total_pairs = integer(),
     new_pairs = integer(),
@@ -278,9 +279,23 @@ round_log_schema <- function() {
     tau = double(),
     theta_sd_pass = logical(),
     U0 = double(),
+    U_top_median = double(),
     U_abs = double(),
     U_pass = logical(),
     U_dup_threshold = double(),
+    hard_cap_reached = logical(),
+    hard_cap_threshold = integer(),
+    n_unique_pairs_seen = integer(),
+    scheduled_pairs = integer(),
+    proposed_pairs = integer(),
+    completed_pairs = integer(),
+    rank_stability_pass = logical(),
+    frac_weak_adj = double(),
+    min_adj_prob = double(),
+    weak_adj_threshold = double(),
+    weak_adj_frac_max = double(),
+    min_adj_prob_threshold = double(),
+    min_new_pairs_for_check = integer(),
     divergences = integer(),
     min_ess_bulk = double(),
     max_rhat = double(),
@@ -288,6 +303,36 @@ round_log_schema <- function() {
     stop_decision = logical(),
     stop_reason = character(),
     mode = character()
+  )
+}
+
+#' @keywords internal
+#' @noRd
+batch_log_schema <- function() {
+  tibble::tibble(
+    iter = integer(),
+    phase = character(),
+    mode = character(),
+    created_at = as.POSIXct(character(), tz = "UTC"),
+    batch_size_target = integer(),
+    n_pairs_selected = integer(),
+    n_pairs_completed = integer(),
+    n_pairs_failed = integer(),
+    backlog_unjudged = integer(),
+    n_explore_target = integer(),
+    n_explore_selected = integer(),
+    n_exploit_target = integer(),
+    n_exploit_selected = integer(),
+    n_candidates_generated = integer(),
+    n_candidates_after_filters = integer(),
+    candidate_starved = logical(),
+    reason_short_batch = character(),
+    W_used = integer(),
+    explore_rate_used = double(),
+    utility_selected_p50 = double(),
+    utility_selected_p90 = double(),
+    utility_candidate_p90 = double(),
+    iter_exit_path = character()
   )
 }
 
@@ -377,6 +422,28 @@ compute_gini_degree <- function(deg) {
       NA
     } else if (is.character(col)) {
       NA_character_
+    } else if (inherits(col, "POSIXct")) {
+      as.POSIXct(NA, tz = "UTC")
+    } else {
+      NA
+    }
+  })
+  tibble::as_tibble(defaults)
+}
+
+.adaptive_batch_log_defaults <- function() {
+  schema <- batch_log_schema()
+  defaults <- lapply(schema, function(col) {
+    if (is.integer(col)) {
+      NA_integer_
+    } else if (is.double(col)) {
+      NA_real_
+    } else if (is.logical(col)) {
+      NA
+    } else if (is.character(col)) {
+      NA_character_
+    } else if (inherits(col, "POSIXct")) {
+      as.POSIXct(NA, tz = "UTC")
     } else {
       NA
     }
@@ -415,6 +482,7 @@ build_round_log_row <- function(state,
     round_id <- if (is.data.frame(prior)) nrow(prior) + 1L else 1L
   }
 
+  metrics <- metrics %||% state$posterior$stop_metrics %||% list()
   total_pairs <- state$N * (state$N - 1L) / 2
   mean_degree <- mean(as.double(state$deg))
   min_degree <- min(as.integer(state$deg))
@@ -458,12 +526,13 @@ build_round_log_row <- function(state,
   stop_reason <- stop_out$stop_reason %||% state$stop_reason %||% NA_character_
 
   row$round_id <- as.integer(round_id)
+  row$iter_at_refit <- as.integer(state$iter %||% NA_integer_)
   row$n_items <- as.integer(state$N)
   row$total_pairs <- as.integer(total_pairs)
   row$new_pairs <- as.integer(new_pairs %||% NA_integer_)
-  row$batch_size <- as.integer(batch_size %||% NA_integer_)
-  row$window_W <- as.integer(window_W %||% NA_integer_)
-  row$exploration_rate <- as.double(exploration_rate %||% NA_real_)
+  row$batch_size <- as.integer(batch_size %||% config$batch_size %||% NA_integer_)
+  row$window_W <- as.integer(window_W %||% config$W %||% NA_integer_)
+  row$exploration_rate <- as.double(exploration_rate %||% config$explore_rate %||% NA_real_)
   row$mean_degree <- as.double(mean_degree)
   row$min_degree <- as.integer(min_degree)
   row$pos_balance_sd <- as.double(pos_balance_sd)
@@ -475,9 +544,23 @@ build_round_log_row <- function(state,
   row$tau <- as.double(metrics$tau %||% NA_real_)
   row$theta_sd_pass <- as.logical(metrics$theta_sd_pass %||% NA)
   row$U0 <- as.double(metrics$U0 %||% state$U0 %||% NA_real_)
+  row$U_top_median <- as.double(metrics$U_top_median %||% NA_real_)
   row$U_abs <- as.double(config$U_abs %||% NA_real_)
   row$U_pass <- as.logical(metrics$U_pass %||% NA)
   row$U_dup_threshold <- as.double(state$posterior$U_dup_threshold %||% NA_real_)
+  row$hard_cap_reached <- as.logical(metrics$hard_cap_reached %||% NA)
+  row$hard_cap_threshold <- as.integer(metrics$hard_cap_threshold %||% NA_integer_)
+  row$n_unique_pairs_seen <- as.integer(metrics$n_unique_pairs_seen %||% NA_integer_)
+  row$scheduled_pairs <- as.integer(metrics$scheduled_pairs %||% NA_integer_)
+  row$proposed_pairs <- as.integer(metrics$proposed_pairs %||% NA_integer_)
+  row$completed_pairs <- as.integer(metrics$completed_pairs %||% NA_integer_)
+  row$rank_stability_pass <- as.logical(metrics$rank_stability_pass %||% NA)
+  row$frac_weak_adj <- as.double(metrics$frac_weak_adj %||% NA_real_)
+  row$min_adj_prob <- as.double(metrics$min_adj_prob %||% NA_real_)
+  row$weak_adj_threshold <- as.double(metrics$weak_adj_threshold %||% NA_real_)
+  row$weak_adj_frac_max <- as.double(metrics$weak_adj_frac_max %||% NA_real_)
+  row$min_adj_prob_threshold <- as.double(metrics$min_adj_prob_threshold %||% NA_real_)
+  row$min_new_pairs_for_check <- as.integer(metrics$min_new_pairs_for_check %||% NA_integer_)
   row$divergences <- as.integer(divergences)
   row$min_ess_bulk <- as.double(min_ess_bulk)
   row$max_rhat <- as.double(max_rhat)
@@ -485,6 +568,58 @@ build_round_log_row <- function(state,
   row$stop_decision <- as.logical(stop_decision)
   row$stop_reason <- as.character(stop_reason)
   row$mode <- as.character(state$mode %||% NA_character_)
+  row
+}
+
+#' @keywords internal
+#' @noRd
+build_batch_log_row <- function(iter,
+    phase,
+    mode,
+    created_at,
+    batch_size_target,
+    n_pairs_selected,
+    n_pairs_completed,
+    n_pairs_failed,
+    backlog_unjudged,
+    n_explore_target,
+    n_explore_selected,
+    n_exploit_target,
+    n_exploit_selected,
+    n_candidates_generated,
+    n_candidates_after_filters,
+    candidate_starved,
+    reason_short_batch,
+    W_used,
+    explore_rate_used,
+    utility_selected_p50,
+    utility_selected_p90,
+    utility_candidate_p90,
+    iter_exit_path = NULL) {
+  row <- .adaptive_batch_log_defaults()
+  row$iter <- as.integer(iter)
+  row$phase <- as.character(phase)
+  row$mode <- as.character(mode)
+  row$created_at <- as.POSIXct(created_at, tz = "UTC")
+  row$batch_size_target <- as.integer(batch_size_target)
+  row$n_pairs_selected <- as.integer(n_pairs_selected)
+  row$n_pairs_completed <- as.integer(n_pairs_completed)
+  row$n_pairs_failed <- as.integer(n_pairs_failed)
+  row$backlog_unjudged <- as.integer(backlog_unjudged)
+  row$n_explore_target <- as.integer(n_explore_target)
+  row$n_explore_selected <- as.integer(n_explore_selected)
+  row$n_exploit_target <- as.integer(n_exploit_target)
+  row$n_exploit_selected <- as.integer(n_exploit_selected)
+  row$n_candidates_generated <- as.integer(n_candidates_generated)
+  row$n_candidates_after_filters <- as.integer(n_candidates_after_filters)
+  row$candidate_starved <- as.logical(candidate_starved)
+  row$reason_short_batch <- as.character(reason_short_batch)
+  row$W_used <- as.integer(W_used)
+  row$explore_rate_used <- as.double(explore_rate_used)
+  row$utility_selected_p50 <- as.double(utility_selected_p50)
+  row$utility_selected_p90 <- as.double(utility_selected_p90)
+  row$utility_candidate_p90 <- as.double(utility_candidate_p90)
+  row$iter_exit_path <- as.character(iter_exit_path %||% NA_character_)
   row
 }
 
