@@ -21,3 +21,4 @@
     c("ID", "theta_mean", "theta_sd", "theta_ci90_lo", "theta_ci90_hi", 
     "theta_ci95_lo", "theta_ci95_hi", "rank_mean", "rank_sd", "deg", 
     "posA_prop")
+
