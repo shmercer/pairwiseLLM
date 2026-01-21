@@ -10,7 +10,10 @@
     "completed_pairs", "rank_stability_pass", "frac_weak_adj", 
     "min_adj_prob", "weak_adj_threshold", "weak_adj_frac_max", 
     "min_adj_prob_threshold", "min_new_pairs_for_check", "divergences", 
-    "min_ess_bulk", "max_rhat", "diagnostics_pass", "stop_decision", 
+    "min_ess_bulk", "max_rhat", "diagnostics_pass", "mcmc_chains", 
+    "mcmc_parallel_chains", "mcmc_core_fraction", 
+    "mcmc_cores_detected_physical", "mcmc_cores_detected_logical", 
+    "mcmc_threads_per_chain", "mcmc_cmdstanr_version", "stop_decision", 
     "stop_reason", "mode")
 
 # item_summary_schema columns are stable
@@ -18,4 +21,3 @@
     c("ID", "theta_mean", "theta_sd", "theta_ci90_lo", "theta_ci90_hi", 
     "theta_ci95_lo", "theta_ci95_hi", "rank_mean", "rank_sd", "deg", 
     "posA_prop")
-
