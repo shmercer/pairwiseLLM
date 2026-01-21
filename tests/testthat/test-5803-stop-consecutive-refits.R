@@ -18,6 +18,7 @@ testthat::test_that("consecutive passing refits trigger v3 convergence", {
     diagnostics_pass = TRUE,
     theta_sd_pass = TRUE,
     U_pass = TRUE,
+    rank_stability_pass = TRUE,
     U0 = 0.1,
     refit_performed = TRUE
   )

@@ -7,6 +7,7 @@ test_that("adaptive_v3_defaults includes required fields", {
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
     "S_subset", "tau_fn", "K_top", "U_abs", "checks_passed_target",
+    "min_new_pairs_for_check", "rank_weak_adj_threshold", "rank_weak_adj_frac_max", "rank_min_adj_prob",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
     "write_outputs", "output_dir", "keep_draws", "thin_draws"
