@@ -491,6 +491,7 @@ NULL
 
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates(theta_summary, state, v3_config)
+  candidates <- .adaptive_filter_candidates_to_draws(candidates, fit$theta_draws)
 
   if (nrow(candidates) == 0L) {
     utilities <- tibble::tibble(
@@ -610,6 +611,35 @@ NULL
   assign_order(explore, state)
 }
 
+.adaptive_filter_candidates_to_draws <- function(candidates, theta_draws) {
+  if (!is.data.frame(candidates)) {
+    rlang::abort("`candidates` must be a data frame or tibble.")
+  }
+  if (!is.matrix(theta_draws) || is.null(colnames(theta_draws))) {
+    rlang::abort("`theta_draws` must be a matrix with column names.")
+  }
+
+  candidates <- tibble::as_tibble(candidates)
+  if (nrow(candidates) == 0L) {
+    return(candidates)
+  }
+
+  id_cols <- NULL
+  if (all(c("i_id", "j_id") %in% names(candidates))) {
+    id_cols <- c("i_id", "j_id")
+  } else if (all(c("i", "j") %in% names(candidates))) {
+    id_cols <- c("i", "j")
+  }
+  if (is.null(id_cols)) {
+    rlang::abort("`candidates` must include `i_id`/`j_id` or `i`/`j` columns.")
+  }
+
+  i_id <- as.character(candidates[[id_cols[[1L]]]])
+  j_id <- as.character(candidates[[id_cols[[2L]]]])
+  keep <- i_id %in% colnames(theta_draws) & j_id %in% colnames(theta_draws)
+  candidates[keep, , drop = FALSE]
+}
+
 .adaptive_expand_window <- function(W, N) {
   W <- as.integer(W)
   if (is.na(W) || W < 1L) {
@@ -714,6 +744,8 @@ NULL
 
   attempt_from_candidates <- function(candidates) {
     candidates <- tibble::as_tibble(candidates)
+    n_generated <- nrow(candidates)
+    candidates <- .adaptive_filter_candidates_to_draws(candidates, fit$theta_draws)
     if (nrow(candidates) == 0L) {
       utilities <- empty_utilities()
     } else {
@@ -724,7 +756,7 @@ NULL
     }
 
     selection <- select_from_utilities(utilities)
-    counts <- build_counts(utilities, nrow(candidates), nrow(selection))
+    counts <- build_counts(utilities, n_generated, nrow(selection))
     list(selection = selection, candidate_stats = counts)
   }
 
@@ -776,6 +808,8 @@ NULL
   v3_config <- state$config$v3 %||% adaptive_v3_config(state$N)
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates(theta_summary, state, v3_config)
+
+  candidates <- .adaptive_filter_candidates_to_draws(candidates, fit$theta_draws)
 
   if (nrow(candidates) == 0L) {
     utilities <- tibble::tibble(
@@ -1006,6 +1040,8 @@ NULL
   v3_config <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   candidates <- generate_candidates(theta_summary, state, v3_config)
+
+  candidates <- .adaptive_filter_candidates_to_draws(candidates, fit$theta_draws)
 
   if (nrow(candidates) == 0L) {
     utilities <- tibble::tibble(
