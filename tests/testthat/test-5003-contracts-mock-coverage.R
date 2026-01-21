@@ -9,15 +9,14 @@ testthat::test_that("adaptive_v3_config covers NULL override normalization", {
 })
 
 testthat::test_that("adaptive_v3_config rejects non-list overrides after normalization", {
-  testthat::with_mocked_bindings(
-    {
-      testthat::expect_error(
-        pairwiseLLM:::adaptive_v3_config(6),
-        "overrides"
-      )
-    },
-    is.list = function(x) FALSE,
-    .package = "base"
+  fn <- pairwiseLLM:::adaptive_v3_config
+  test_env <- new.env(parent = environment(fn))
+  assign("list", function(...) character(), envir = test_env)
+  environment(fn) <- test_env
+
+  testthat::expect_error(
+    fn(6),
+    "overrides"
   )
 })
 
