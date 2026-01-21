@@ -34,6 +34,18 @@ testthat::test_that("adaptive_get_refit_fit validates refit_B and batch_size", {
   )
 })
 
+testthat::test_that("adaptive_update_dup_threshold validates utilities", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- adaptive_state_new(samples = samples, config = list(d1 = 2L))
+  testthat::expect_error(
+    .adaptive_update_dup_threshold(state, utilities = "bad", refit_performed = TRUE),
+    "data frame"
+  )
+})
+
 testthat::test_that("adaptive_run_stopping_checks respects allow_refit and existing fit", {
   withr::local_seed(123)
 
@@ -97,17 +109,15 @@ testthat::test_that("adaptive_run_stopping_checks respects allow_refit and exist
   )
   state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L))
 
-  out2 <- testthat::with_mocked_bindings(
-    generate_candidates = function(...) tibble::tibble(),
-    .adaptive_run_stopping_checks(
-      state,
-      adaptive = list(),
-      seed = 1L,
-      allow_refit = FALSE
-    )
+  out2 <- .adaptive_run_stopping_checks(
+    state,
+    adaptive = list(),
+    seed = 1L,
+    allow_refit = FALSE
   )
   testthat::expect_false(identical(out2$state$mode, "stopped"))
 })
+
 
 testthat::test_that("adaptive_warm_start_order follows imbalance and index rules", {
   samples <- tibble::tibble(
@@ -130,4 +140,64 @@ testthat::test_that("adaptive_warm_start_order follows imbalance and index rules
   state$imb[["B"]] <- 0L
   order3 <- .adaptive_warm_start_order(state, "A", "B", pair_index = 2L)
   testthat::expect_identical(order3, list(A_id = "B", B_id = "A"))
+})
+
+testthat::test_that("adaptive_select_exploration_only respects batch size and assigns order", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- adaptive_state_new(samples, config = list(d1 = 2L), seed = 1L)
+  config <- adaptive_v3_config(state$N)
+  config$batch_size <- 0L
+
+  utilities <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B",
+    utility = 0.2,
+    utility_raw = 0.2,
+    p_mean = 0.5
+  )
+  out_empty <- .adaptive_select_exploration_only(state, utilities, config, seed = 1L)
+  testthat::expect_equal(nrow(out_empty), 0L)
+
+  config$batch_size <- 1L
+  state$pair_count <- stats::setNames(rep.int(1L, length(state$pair_count)), names(state$pair_count))
+  empty_utilities <- utilities[0, , drop = FALSE]
+  out_skip <- .adaptive_select_exploration_only(state, empty_utilities, config, seed = 1L)
+  testthat::expect_equal(nrow(out_skip), 0L)
+
+  state$pair_count <- stats::setNames(integer(length(state$pair_count)), names(state$pair_count))
+  out <- .adaptive_select_exploration_only(state, utilities, config, seed = 1L)
+  testthat::expect_true(all(c("A_id", "B_id") %in% names(out)))
+})
+
+testthat::test_that("adaptive_filter_candidates_to_draws validates inputs and filters", {
+  candidates <- tibble::tibble(i = c("A", "B"), j = c("B", "C"))
+  theta_draws <- matrix(0, nrow = 2L, ncol = 2L, dimnames = list(NULL, c("A", "B")))
+
+  testthat::expect_error(
+    .adaptive_filter_candidates_to_draws("bad", theta_draws),
+    "data frame"
+  )
+  testthat::expect_error(
+    .adaptive_filter_candidates_to_draws(candidates, matrix(0, nrow = 1L, ncol = 2L)),
+    "column names"
+  )
+  bad_cols <- tibble::tibble(x = "A", y = "B")
+  testthat::expect_error(
+    .adaptive_filter_candidates_to_draws(bad_cols, theta_draws),
+    "must include"
+  )
+
+  out <- .adaptive_filter_candidates_to_draws(candidates, theta_draws)
+  testthat::expect_equal(nrow(out), 1L)
+})
+
+testthat::test_that("adaptive_expand_window validates inputs and expands", {
+  testthat::expect_error(.adaptive_expand_window(0L, 5L), "positive integer")
+  testthat::expect_error(.adaptive_expand_window(2L, 1L), "integer >= 2")
+  testthat::expect_equal(.adaptive_expand_window(2L, 5L), 4L)
+  testthat::expect_equal(.adaptive_expand_window(4L, 5L), 4L)
 })

@@ -44,6 +44,56 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_candidate_after_filters <- function(candidates_with_utility, state, config) {
+  validate_state(state)
+  if (!is.data.frame(candidates_with_utility)) {
+    rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
+  }
+  candidates_with_utility <- tibble::as_tibble(candidates_with_utility)
+  required <- c("i_id", "j_id", "unordered_key", "utility", "p_mean")
+  .adaptive_required_cols(candidates_with_utility, "candidates_with_utility", required)
+
+  if (nrow(candidates_with_utility) == 0L) {
+    return(0L)
+  }
+
+  i_id <- as.character(candidates_with_utility$i_id)
+  j_id <- as.character(candidates_with_utility$j_id)
+  missing_ids <- setdiff(unique(c(i_id, j_id)), state$ids)
+  if (length(missing_ids) > 0L) {
+    rlang::abort("`candidates_with_utility` ids must exist in `state$ids`.")
+  }
+  keep <- i_id != j_id
+  if (!any(keep)) {
+    return(0L)
+  }
+  candidates_with_utility <- candidates_with_utility[keep, , drop = FALSE]
+
+  unordered_key <- as.character(candidates_with_utility$unordered_key)
+  p_mean <- as.double(candidates_with_utility$p_mean)
+  utility <- as.double(candidates_with_utility$utility)
+  counts <- state$pair_count[unordered_key]
+  counts[is.na(counts)] <- 0L
+
+  allowed <- vapply(seq_len(nrow(candidates_with_utility)), function(idx) {
+    count <- counts[[idx]]
+    if (is.na(count) || count <= 0L) {
+      return(TRUE)
+    }
+    .adaptive_duplicate_allowed(
+      state = state,
+      unordered_key = unordered_key[[idx]],
+      p_mean = p_mean[[idx]],
+      utility = utility[[idx]],
+      config = config
+    )
+  }, logical(1L))
+
+  as.integer(sum(allowed))
+}
+
+#' @keywords internal
+#' @noRd
 sample_exploration_pairs <- function(state, candidates, n_explore, config) {
   validate_state(state)
   if (!is.data.frame(candidates)) {

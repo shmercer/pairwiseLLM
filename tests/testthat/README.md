@@ -39,6 +39,14 @@ Notes specific to adaptive pairing tests:
 - Use `with_mocked_bindings()` or `local_mocked_bindings()` to avoid leakage.
 - Always restore options, environment variables, and working directories via
   `withr::local_*()` helpers.
+- Avoid mocking adaptive core helpers in coverage tests (leakage risk under
+  `pkgload::load_all()`): `.adaptive_get_refit_fit()`, `sample_exploration_pairs()`,
+  `compute_stop_metrics()`, `should_stop()`, `compute_pair_utility()`,
+  `apply_degree_penalty()`, `generate_candidates()`.
+- Prefer constructing small deterministic `state`, `fit`, and `candidates` data
+  to reach the branch instead of mocking; this keeps full-suite behavior stable.
+- Do not override base generics or assign methods in `.GlobalEnv` (e.g., `sum`,
+  `Ops.*`); these can leak across tests even when scoped.
 
 ## Function Availability (namespaces)
 
