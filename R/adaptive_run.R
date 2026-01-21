@@ -610,6 +610,153 @@ NULL
   assign_order(explore, state)
 }
 
+.adaptive_expand_window <- function(W, N) {
+  W <- as.integer(W)
+  if (is.na(W) || W < 1L) {
+    rlang::abort("`W` must be a positive integer.")
+  }
+  N <- as.integer(N)
+  if (is.na(N) || N < 2L) {
+    rlang::abort("`N` must be an integer >= 2.")
+  }
+  max_W <- max(1L, N - 1L)
+  if (W >= max_W) {
+    return(as.integer(W))
+  }
+  as.integer(min(max_W, W * 2L))
+}
+
+.adaptive_select_batch_with_fallbacks <- function(
+    state,
+    fit,
+    theta_summary,
+    config,
+    candidates_with_utility,
+    n_candidates_generated = NULL,
+    seed = NULL,
+    exploration_only = FALSE
+) {
+  validate_state(state)
+  if (!is.list(fit) || is.null(fit$theta_draws)) {
+    rlang::abort("`fit` must include `theta_draws`.")
+  }
+  if (!is.data.frame(candidates_with_utility)) {
+    rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
+  }
+  candidates_with_utility <- tibble::as_tibble(candidates_with_utility)
+
+  batch_size <- as.integer(config$batch_size)
+  if (is.na(batch_size) || batch_size < 0L) {
+    rlang::abort("`config$batch_size` must be a non-negative integer.")
+  }
+
+  if (is.null(n_candidates_generated)) {
+    n_candidates_generated <- nrow(candidates_with_utility)
+  }
+  n_candidates_generated <- as.integer(n_candidates_generated)
+  if (is.na(n_candidates_generated) || n_candidates_generated < 0L) {
+    rlang::abort("`n_candidates_generated` must be a non-negative integer.")
+  }
+
+  select_from_utilities <- function(utilities) {
+    if (isTRUE(exploration_only)) {
+      return(.adaptive_select_exploration_only(
+        state = state,
+        candidates_with_utility = utilities,
+        config = config,
+        seed = seed
+      ))
+    }
+    select_batch(
+      state = state,
+      candidates_with_utility = utilities,
+      config = config,
+      seed = seed,
+      exploration_only = FALSE
+    )
+  }
+
+  build_counts <- function(utilities, n_candidates_generated, n_pairs_selected) {
+    list(
+      n_pairs_requested = as.integer(batch_size),
+      n_pairs_selected = as.integer(n_pairs_selected),
+      n_candidates_generated = as.integer(n_candidates_generated),
+      n_candidates_after_filters = as.integer(.adaptive_candidate_after_filters(utilities, state, config))
+    )
+  }
+
+  base_selection <- select_from_utilities(candidates_with_utility)
+  base_counts <- build_counts(candidates_with_utility, n_candidates_generated, nrow(base_selection))
+  if (batch_size == 0L || base_counts$n_pairs_selected >= base_counts$n_pairs_requested) {
+    return(list(
+      selection = base_selection,
+      candidate_starved = FALSE,
+      candidate_stats = base_counts,
+      fallback_stage = "base"
+    ))
+  }
+
+  epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
+  empty_utilities <- function() {
+    tibble::tibble(
+      unordered_key = character(),
+      i_id = character(),
+      j_id = character(),
+      i = character(),
+      j = character(),
+      mean_d = double(),
+      var_d = double(),
+      p_mean = double(),
+      utility = double(),
+      utility_raw = double()
+    )
+  }
+
+  attempt_from_candidates <- function(candidates) {
+    candidates <- tibble::as_tibble(candidates)
+    if (nrow(candidates) == 0L) {
+      utilities <- empty_utilities()
+    } else {
+      names(candidates)[names(candidates) == "i"] <- "i_id"
+      names(candidates)[names(candidates) == "j"] <- "j_id"
+      utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
+      utilities <- apply_degree_penalty(utilities, state)
+    }
+
+    selection <- select_from_utilities(utilities)
+    counts <- build_counts(utilities, nrow(candidates), nrow(selection))
+    list(selection = selection, candidate_stats = counts)
+  }
+
+  config_broaden <- config
+  config_broaden$W <- .adaptive_expand_window(config$W, state$N)
+  attempt1 <- attempt_from_candidates(generate_candidates(theta_summary, state, config_broaden))
+  if (attempt1$candidate_stats$n_pairs_selected >= batch_size) {
+    return(list(
+      selection = attempt1$selection,
+      candidate_starved = FALSE,
+      candidate_stats = attempt1$candidate_stats,
+      fallback_stage = "broaden_window"
+    ))
+  }
+
+  config_relax <- config_broaden
+  config_relax$W <- as.integer(max(config_broaden$W, as.integer(state$N - 1L)))
+  anchors <- as.character(theta_summary$item_id)
+  attempt2 <- attempt_from_candidates(
+    generate_candidates_from_anchors(anchors, theta_summary, state, config_relax)
+  )
+  candidate_starved <- attempt2$candidate_stats$n_pairs_selected < batch_size
+  fallback_stage <- if (candidate_starved) "starved" else "relax_constraints"
+
+  list(
+    selection = attempt2$selection,
+    candidate_starved = candidate_starved,
+    candidate_stats = attempt2$candidate_stats,
+    fallback_stage = fallback_stage
+  )
+}
+
 .adaptive_schedule_repair_pairs <- function(state, target_pairs, adaptive, seed) {
   target_pairs <- as.integer(target_pairs)
   if (is.na(target_pairs) || target_pairs < 0L) {
@@ -904,21 +1051,22 @@ NULL
   exploration_only <- identical(state$mode, "repair")
   if (isTRUE(exploration_only)) {
     config_select$dup_max_count <- 0L
-    selection <- .adaptive_select_exploration_only(
-      state = state,
-      candidates_with_utility = utilities,
-      config = config_select,
-      seed = seed
-    )
-  } else {
-    selection <- select_batch(
-      state = state,
-      candidates_with_utility = utilities,
-      config = config_select,
-      seed = seed,
-      exploration_only = FALSE
-    )
   }
+
+  selection_out <- .adaptive_select_batch_with_fallbacks(
+    state = state,
+    fit = fit,
+    theta_summary = theta_summary,
+    config = config_select,
+    candidates_with_utility = utilities,
+    n_candidates_generated = nrow(candidates),
+    seed = seed,
+    exploration_only = exploration_only
+  )
+  selection <- selection_out$selection
+  state$posterior$candidate_starved <- selection_out$candidate_starved
+  state$posterior$candidate_stats <- selection_out$candidate_stats
+  state$posterior$candidate_fallback_stage <- selection_out$fallback_stage
 
   if (nrow(selection) == 0L) {
     state$iter <- iter
