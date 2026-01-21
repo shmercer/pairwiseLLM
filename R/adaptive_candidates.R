@@ -264,6 +264,36 @@ generate_candidates <- function(theta_summary, state, config) {
   tibble::as_tibble(candidates)
 }
 
+#' @keywords internal
+#' @noRd
+generate_candidates_from_anchors <- function(anchors, theta_summary, state, config) {
+  validate_state(state)
+  theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
+  anchors <- unique(as.character(anchors))
+  anchors <- anchors[!is.na(anchors) & anchors != ""]
+  candidates <- enumerate_candidates(anchors, theta_summary, state, config)
+
+  i <- NULL
+  j <- NULL
+  unordered_key <- NULL
+
+  cap <- as.integer(config$C_max)
+  if (is.na(cap) || cap < 1L) {
+    rlang::abort("`config$C_max` must be a positive integer.")
+  }
+  if (nrow(candidates) > cap) {
+    candidates <- dplyr::mutate(
+      candidates,
+      unordered_key = make_unordered_key(.data$i, .data$j)
+    )
+    candidates <- dplyr::arrange(candidates, .data$unordered_key)
+    candidates <- dplyr::slice_head(candidates, n = cap)
+    candidates <- dplyr::select(candidates, "i", "j")
+  }
+
+  tibble::as_tibble(candidates)
+}
+
 .adaptive_unordered_allowed <- function(state, i_id, j_id) {
   duplicate_allowed(state, i_id, j_id) || duplicate_allowed(state, j_id, i_id)
 }
