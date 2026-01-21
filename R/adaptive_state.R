@@ -58,6 +58,64 @@
   paste(pmin(combos[1L, ], combos[2L, ]), pmax(combos[1L, ], combos[2L, ]), sep = ":")
 }
 
+.adaptive_log_default_value <- function(col) {
+  if (is.integer(col)) {
+    return(NA_integer_)
+  }
+  if (is.double(col)) {
+    return(NA_real_)
+  }
+  if (is.logical(col)) {
+    return(NA)
+  }
+  if (is.character(col)) {
+    return(NA_character_)
+  }
+  if (inherits(col, "POSIXct")) {
+    return(as.POSIXct(NA, tz = "UTC"))
+  }
+  NA
+}
+
+.adaptive_align_log_schema <- function(log, schema) {
+  if (is.null(log) || !is.data.frame(log)) {
+    log <- schema
+  }
+  log <- tibble::as_tibble(log)
+  schema <- tibble::as_tibble(schema)
+  missing <- setdiff(names(schema), names(log))
+  if (length(missing) > 0L) {
+    for (col in missing) {
+      default_val <- .adaptive_log_default_value(schema[[col]])
+      log[[col]] <- rep_len(default_val, nrow(log))
+    }
+  }
+  ordered <- c(names(schema), setdiff(names(log), names(schema)))
+  log[, ordered, drop = FALSE]
+}
+
+.adaptive_state_init_logs <- function(state) {
+  state$config <- state$config %||% list()
+
+  round_log <- state$config$round_log %||% round_log_schema()
+  state$config$round_log <- .adaptive_align_log_schema(round_log, round_log_schema())
+
+  batch_log <- state$batch_log %||% batch_log_schema()
+  state$batch_log <- .adaptive_align_log_schema(batch_log, batch_log_schema())
+
+  counters <- state$log_counters %||% list()
+  if (!is.list(counters)) {
+    counters <- list()
+  }
+  counters$comparisons_observed <- as.integer(counters$comparisons_observed %||%
+    state$comparisons_observed %||% 0L)
+  counters$failed_attempts <- as.integer(counters$failed_attempts %||%
+    nrow(state$failed_attempts %||% tibble::tibble()))
+  state$log_counters <- counters
+
+  state
+}
+
 #' @keywords internal
 #' @noRd
 adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L) {
@@ -132,11 +190,14 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       repair_attempts = 0L,
       stop_reason = NA_character_,
       seed = seed,
-      config = config
+      config = config,
+      batch_log = batch_log_schema(),
+      log_counters = list(comparisons_observed = 0L, failed_attempts = 0L)
     ),
     class = "adaptive_state"
   )
 
+  state <- .adaptive_state_init_logs(state)
   validate_state(state)
   state
 }
@@ -153,6 +214,7 @@ adaptive_state_save <- function(state, path) {
 #' @noRd
 adaptive_state_load <- function(path) {
   state <- readRDS(path)
+  state <- .adaptive_state_init_logs(state)
   validate_state(state)
   state
 }
