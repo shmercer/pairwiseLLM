@@ -6,6 +6,97 @@
   is.numeric(x) && all(is.finite(x)) && all(abs(x - round(x)) < 1e-8)
 }
 
+.btl_mcmc_detect_cores <- function() {
+  physical <- tryCatch(
+    parallel::detectCores(logical = FALSE),
+    error = function(e) NA_integer_
+  )
+  logical <- tryCatch(
+    parallel::detectCores(logical = TRUE),
+    error = function(e) NA_integer_
+  )
+  if (is.na(physical) || physical < 1L) {
+    physical <- NA_integer_
+  } else {
+    physical <- as.integer(physical)
+  }
+  if (is.na(logical) || logical < 1L) {
+    logical <- NA_integer_
+  } else {
+    logical <- as.integer(logical)
+  }
+  effective <- physical
+  if (is.na(effective) || effective < 1L) {
+    effective <- logical
+  }
+  if (is.na(effective) || effective < 1L) {
+    effective <- 1L
+  }
+  list(
+    physical = physical,
+    logical = logical,
+    effective = as.integer(effective)
+  )
+}
+
+.btl_mcmc_resolve_cmdstan_config <- function(cmdstan) {
+  cmdstan <- cmdstan %||% list()
+  if (!is.list(cmdstan)) {
+    rlang::abort("`cmdstan` must be a list.")
+  }
+
+  core_fraction <- cmdstan$core_fraction %||% 0.6
+  if (!is.numeric(core_fraction) || length(core_fraction) != 1L ||
+    !is.finite(core_fraction) || core_fraction <= 0 || core_fraction > 1) {
+    rlang::abort("`cmdstan$core_fraction` must be in (0, 1].")
+  }
+
+  cores <- .btl_mcmc_detect_cores()
+  chains <- as.integer(cmdstan$chains %||% min(8L, cores$effective))
+  if (is.na(chains) || chains < 1L) {
+    return(list(
+      chains = chains,
+      parallel_chains = NA_integer_,
+      core_fraction = as.double(core_fraction),
+      cores_detected_physical = cores$physical,
+      cores_detected_logical = cores$logical,
+      threads_per_chain = as.integer(cmdstan$threads_per_chain %||% NA_integer_),
+      cmdstanr_version = .btl_mcmc_cmdstanr_version()
+    ))
+  }
+
+  parallel_chains <- cmdstan$parallel_chains %||% NULL
+  if (is.null(parallel_chains)) {
+    core_budget <- max(1L, floor(cores$effective * core_fraction))
+    parallel_chains <- min(chains, core_budget)
+  } else {
+    parallel_chains <- as.integer(parallel_chains)
+    if (is.na(parallel_chains) || parallel_chains < 1L) {
+      rlang::abort("`cmdstan$parallel_chains` must be a positive integer.")
+    }
+  }
+  if (parallel_chains > chains) {
+    parallel_chains <- chains
+  }
+
+  list(
+    chains = chains,
+    parallel_chains = as.integer(parallel_chains),
+    core_fraction = as.double(core_fraction),
+    cores_detected_physical = cores$physical,
+    cores_detected_logical = cores$logical,
+    threads_per_chain = as.integer(cmdstan$threads_per_chain %||% NA_integer_),
+    cmdstanr_version = .btl_mcmc_cmdstanr_version()
+  )
+}
+
+.btl_mcmc_cmdstanr_version <- function() {
+  if (!requireNamespace("cmdstanr", quietly = TRUE)) {
+    return(NA_character_)
+  }
+  as.character(utils::packageVersion("cmdstanr"))
+}
+
 .btl_validate_ids <- function(ids) {
   ids <- as.character(ids)
   if (length(ids) < 2L) {
@@ -370,16 +461,19 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   if (!is.list(cmdstan)) {
     rlang::abort("`config$cmdstan` must be a list when provided.")
   }
-  chains <- as.integer(cmdstan$chains %||% 4L)
+  resolved_cmdstan <- .btl_mcmc_resolve_cmdstan_config(cmdstan)
+  chains <- resolved_cmdstan$chains
   iter_warmup <- as.integer(cmdstan$iter_warmup %||% 1000L)
   iter_sampling <- as.integer(cmdstan$iter_sampling %||% 1000L)
-  core_fraction <- cmdstan$core_fraction %||% 0.6
   output_dir <- cmdstan$output_dir %||% NULL
-  parallel_chains <- compute_core_budget(core_fraction = core_fraction, min_cores = 1L)
+  parallel_chains <- resolved_cmdstan$parallel_chains
 
   if (any(is.na(c(chains, iter_warmup, iter_sampling))) || chains < 1L ||
     iter_warmup < 1L || iter_sampling < 1L) {
     rlang::abort("CmdStan settings must be positive integers.")
+  }
+  if (is.na(parallel_chains) || parallel_chains < 1L) {
+    rlang::abort("`cmdstan$parallel_chains` must be a positive integer.")
   }
 
   stan_file <- cmdstanr::write_stan_file(.btl_mcmc_v3_model_code())
@@ -440,6 +534,7 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     draws = draws,
     theta_summary = summaries$theta_summary,
     epsilon_summary = summaries$epsilon_summary,
-    diagnostics = diagnostics
+    diagnostics = diagnostics,
+    mcmc_config_used = resolved_cmdstan
   )
 }

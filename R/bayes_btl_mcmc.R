@@ -84,9 +84,10 @@ model {
 #' @param results Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
 #'   \code{better_id}.
 #' @param ids Character vector of all sample ids (length \code{N}).
-#' @param cmdstan List of CmdStan settings: \code{chains} (4),
-#'   \code{iter_warmup} (1000), \code{iter_sampling} (1000), \code{seed} (NULL),
-#'   and \code{core_fraction} (0.6). The list is extensible in future versions.
+#' @param cmdstan List of CmdStan settings: \code{chains} (defaults to
+#'   \code{min(8, physical_cores)}), \code{iter_warmup} (1000),
+#'   \code{iter_sampling} (1000), \code{seed} (NULL), and
+#'   \code{core_fraction} (0.6). The list is extensible in future versions.
 #'
 #' @return A list with:
 #' \describe{
@@ -126,7 +127,6 @@ fit_bayes_btl_mcmc <- function(
     results,
     ids,
     cmdstan = list(
-      chains = 4,
       iter_warmup = 1000,
       iter_sampling = 1000,
       seed = NULL,
@@ -150,16 +150,19 @@ fit_bayes_btl_mcmc <- function(
   data <- prep$data
   ids <- prep$ids
 
-  chains <- as.integer(cmdstan$chains %||% 4L)
+  resolved_cmdstan <- .btl_mcmc_resolve_cmdstan_config(cmdstan)
+  chains <- resolved_cmdstan$chains
   iter_warmup <- as.integer(cmdstan$iter_warmup %||% 1000L)
   iter_sampling <- as.integer(cmdstan$iter_sampling %||% 1000L)
   seed <- cmdstan$seed %||% NULL
-  core_fraction <- cmdstan$core_fraction %||% 0.6
-  parallel_chains <- compute_core_budget(core_fraction = core_fraction, min_cores = 1L)
+  parallel_chains <- resolved_cmdstan$parallel_chains
 
   if (any(is.na(c(chains, iter_warmup, iter_sampling))) || chains < 1L ||
     iter_warmup < 1L || iter_sampling < 1L) {
     rlang::abort("CmdStan settings must be positive integers.")
+  }
+  if (is.na(parallel_chains) || parallel_chains < 1L) {
+    rlang::abort("`cmdstan$parallel_chains` must be a positive integer.")
   }
 
   stan_file <- cmdstanr::write_stan_file(.btl_mcmc_model_code())
