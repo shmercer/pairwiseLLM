@@ -112,6 +112,85 @@ record_presentation <- function(state, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
+rollback_presentation <- function(state, A_id, B_id) {
+  if (!A_id %in% state$ids || !B_id %in% state$ids) {
+    rlang::abort("`A_id` and `B_id` must exist in `state$ids`.")
+  }
+
+  ordered_key <- make_ordered_key(A_id, B_id)
+  unordered_key <- make_unordered_key(A_id, B_id)
+
+  counts <- state$unordered_count
+  if (is.null(names(counts)) || length(counts) == 0L || !unordered_key %in% names(counts)) {
+    rlang::abort("`state$unordered_count` is missing the requested unordered pair.")
+  }
+  current <- counts[[unordered_key]]
+  if (is.na(current) || current < 1L) {
+    rlang::abort("`state$unordered_count` cannot be rolled back below zero.")
+  }
+  counts[unordered_key] <- current - 1L
+  count_names <- names(counts)
+  counts <- as.integer(counts)
+  names(counts) <- count_names
+  state$unordered_count <- counts
+
+  ordered_counts <- state$pair_ordered_count
+  if (is.null(ordered_counts) || length(ordered_counts) == 0L ||
+    is.null(names(ordered_counts)) || !ordered_key %in% names(ordered_counts)) {
+    rlang::abort("`state$pair_ordered_count` is missing the requested ordered pair.")
+  }
+  ordered_current <- ordered_counts[[ordered_key]]
+  if (is.na(ordered_current) || ordered_current < 1L) {
+    rlang::abort("`state$pair_ordered_count` cannot be rolled back below zero.")
+  }
+  ordered_counts[ordered_key] <- ordered_current - 1L
+  if (ordered_counts[[ordered_key]] == 0L) {
+    ordered_counts[ordered_key] <- NULL
+  }
+  ordered_names <- names(ordered_counts)
+  ordered_counts <- as.integer(ordered_counts)
+  names(ordered_counts) <- ordered_names
+  state$pair_ordered_count <- ordered_counts
+
+  seen <- state$ordered_seen
+  keep_seen <- !is.null(ordered_counts) &&
+    length(ordered_counts) > 0L &&
+    !is.null(names(ordered_counts)) &&
+    ordered_key %in% names(ordered_counts)
+
+  if (is.environment(seen)) {
+    if (!exists(ordered_key, envir = seen, inherits = FALSE)) {
+      rlang::abort("`state$ordered_seen` is missing the requested ordered pair.")
+    }
+    if (!isTRUE(seen[[ordered_key]])) {
+      rlang::abort("`state$ordered_seen` cannot be rolled back below zero.")
+    }
+    if (isTRUE(keep_seen)) {
+      seen[[ordered_key]] <- TRUE
+    } else {
+      rm(list = ordered_key, envir = seen)
+    }
+    state$ordered_seen <- seen
+  } else {
+    if (is.null(names(seen)) || length(seen) == 0L || !ordered_key %in% names(seen)) {
+      rlang::abort("`state$ordered_seen` is missing the requested ordered pair.")
+    }
+    if (!isTRUE(seen[[ordered_key]])) {
+      rlang::abort("`state$ordered_seen` cannot be rolled back below zero.")
+    }
+    if (isTRUE(keep_seen)) {
+      seen[ordered_key] <- TRUE
+    } else {
+      seen[ordered_key] <- NULL
+    }
+    state$ordered_seen <- seen
+  }
+
+  state
+}
+
+#' @keywords internal
+#' @noRd
 record_judgment_exposure <- function(state, A_id, B_id) {
   if (!A_id %in% state$ids || !B_id %in% state$ids) {
     rlang::abort("`A_id` and `B_id` must exist in `state$ids`.")
