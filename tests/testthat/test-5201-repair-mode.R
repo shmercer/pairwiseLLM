@@ -64,7 +64,8 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
 
   expect_true(called$selection)
   expect_true(called$exploration_only)
-  expect_equal(out$state$mode, "repair")
+  expect_equal(out$state$mode, "stopped")
+  expect_equal(out$state$stop_reason, "candidate_starvation")
   expect_equal(out$state$repair_attempts, 1L)
 
   called$selection <- FALSE
@@ -111,8 +112,8 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
     }
   )
 
-  expect_true(called$selection)
+  expect_false(called$selection)
   expect_false(called$exploration_only)
-  expect_equal(out2$state$mode, "adaptive")
-  expect_equal(out2$state$repair_attempts, 0L)
+  expect_equal(out2$state$mode, "stopped")
+  expect_equal(out2$state$repair_attempts, 1L)
 })

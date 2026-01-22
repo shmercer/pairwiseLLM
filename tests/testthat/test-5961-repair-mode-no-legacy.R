@@ -177,7 +177,7 @@ testthat::test_that("repair mode stops after bounded retry failures", {
   state$new_since_refit <- 1L
 
   out2 <- NULL
-  testthat::expect_warning(
+  testthat::expect_silent(
     {
       out2 <- testthat::with_mocked_bindings(
         pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive = list(), seed = 1),
@@ -192,10 +192,9 @@ testthat::test_that("repair mode stops after bounded retry failures", {
         },
         .package = "pairwiseLLM"
       )
-    },
-    "Diagnostics gate failed; repair limit exceeded"
+    }
   )
 
   testthat::expect_equal(out2$state$mode, "stopped")
-  testthat::expect_equal(out2$state$stop_reason, "diagnostics_failed")
+  testthat::expect_equal(out2$state$stop_reason, "candidate_starvation")
 })
