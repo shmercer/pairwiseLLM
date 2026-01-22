@@ -366,7 +366,8 @@ testthat::test_that("repair schedule handles empty utilities and selection", {
   )
 
   expect_equal(nrow(out$pairs), 0L)
-  expect_equal(out$state$mode, "repair")
+  expect_equal(out$state$mode, "stopped")
+  expect_equal(out$state$stop_reason, "candidate_starvation")
   expect_equal(out$state$iter, 1L)
 })
 

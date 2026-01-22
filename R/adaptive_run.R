@@ -452,6 +452,8 @@ NULL
 
 .adaptive_run_stopping_checks <- function(state, adaptive, seed = NULL, allow_refit = NULL) {
   validate_state(state)
+  state$posterior <- state$posterior %||% list()
+  state$posterior$stop_metrics <- .adaptive_stop_metrics_align(state$posterior$stop_metrics %||% NULL)
   if (state$comparisons_observed < 1L) {
     return(list(state = state))
   }
@@ -896,6 +898,28 @@ NULL
     reason_short_batch <- as.character(fallback_stage %||% "short_batch")
   }
 
+  metrics <- .adaptive_stop_metrics_align(state$posterior$stop_metrics %||% NULL)
+  metrics$scheduled_pairs <- as.integer(state$comparisons_scheduled)
+  metrics$completed_pairs <- as.integer(state$comparisons_observed)
+  if (is.data.frame(utilities_tbl)) {
+    metrics$proposed_pairs <- as.integer(nrow(utilities_tbl))
+  }
+  metrics$candidate_starved <- as.logical(candidate_starved %||% NA)
+  metrics$reason_short_batch <- as.character(reason_short_batch)
+  state$posterior$stop_metrics <- metrics
+
+  stop_reason <- state$stop_reason %||% NA_character_
+  if (isTRUE(candidate_starved) &&
+    n_pairs_selected == 0L &&
+    (!is.character(stop_reason) ||
+      length(stop_reason) != 1L ||
+      is.na(stop_reason) ||
+      !nzchar(stop_reason))) {
+    mode <- "stopped"
+    state$mode <- "stopped"
+    state$stop_reason <- "candidate_starvation"
+  }
+
   row <- build_batch_log_row(
     iter = iter,
     phase = phase,
@@ -1245,21 +1269,6 @@ NULL
     utilities <- apply_degree_penalty(utilities, state)
   }
   state <- .adaptive_update_dup_threshold(state, utilities, fit_out$refit_performed)
-  if (isTRUE(fit_out$refit_performed)) {
-    round_row <- build_round_log_row(
-      state = state,
-      fit = fit,
-      metrics = state$posterior$stop_metrics %||% list(),
-      stop_out = list(stop_decision = NA, stop_reason = state$stop_reason %||% NA_character_),
-      config = v3_config,
-      batch_size = target_pairs,
-      window_W = v3_config$W,
-      exploration_rate = v3_config$explore_rate,
-      new_pairs = new_pairs
-    )
-    prior_log <- state$config$round_log %||% round_log_schema()
-    state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
-  }
 
   config_select <- v3_config
   config_select$batch_size <- batch_size
@@ -1300,22 +1309,32 @@ NULL
     if (isTRUE(stop_out$stop_decision) || identical(state$mode, "stopped")) {
       return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
     }
-  }
-  if (!isTRUE(check_stop) && isTRUE(fit_out$refit_performed)) {
-    round_row <- build_round_log_row(
+  } else {
+    stop_metrics <- compute_stop_metrics(
       state = state,
       fit = fit,
-      metrics = state$posterior$stop_metrics %||% list(),
-      stop_out = list(stop_decision = NA, stop_reason = state$stop_reason %||% NA_character_),
-      config = v3_config,
-      batch_size = batch_size,
-      window_W = config_select$W,
-      exploration_rate = config_select$explore_rate,
-      new_pairs = new_pairs
+      candidates_with_utility = utilities,
+      config = v3_config
     )
-    prior_log <- state$config$round_log %||% round_log_schema()
-    state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
-    .adaptive_progress_emit_refit(state, round_row, v3_config)
+    stop_metrics$refit_performed <- isTRUE(fit_out$refit_performed)
+    state$posterior$stop_metrics <- stop_metrics
+
+    if (isTRUE(fit_out$refit_performed)) {
+      round_row <- build_round_log_row(
+        state = state,
+        fit = fit,
+        metrics = stop_metrics,
+        stop_out = list(stop_decision = NA, stop_reason = state$stop_reason %||% NA_character_),
+        config = v3_config,
+        batch_size = batch_size,
+        window_W = config_select$W,
+        exploration_rate = config_select$explore_rate,
+        new_pairs = new_pairs
+      )
+      prior_log <- state$config$round_log %||% round_log_schema()
+      state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
+      .adaptive_progress_emit_refit(state, round_row, v3_config)
+    }
   }
 
   selection_out <- .adaptive_select_batch_with_fallbacks(

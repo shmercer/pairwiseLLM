@@ -47,6 +47,7 @@ testthat::test_that("U_dup_threshold uses quantile for >= 50 candidates", {
 
   fit <- list(
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
+    theta_mean = stats::setNames(rep(0, state$N), state$ids),
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
 
@@ -55,7 +56,6 @@ testthat::test_that("U_dup_threshold uses quantile for >= 50 candidates", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
       list(state = state, fit = fit, refit_performed = TRUE)
     },
-    .adaptive_theta_summary_from_fit = function(fit, state) list(),
     generate_candidates = function(theta_summary, state, config) candidate_tbl,
     compute_pair_utility = function(draws, candidates, epsilon_mean) utilities_tbl,
     apply_degree_penalty = function(utility_tbl, state) utility_tbl
@@ -117,6 +117,7 @@ testthat::test_that("U_dup_threshold uses max for < 50 candidates", {
 
   fit <- list(
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
+    theta_mean = stats::setNames(rep(0, state$N), state$ids),
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
 
@@ -125,7 +126,6 @@ testthat::test_that("U_dup_threshold uses max for < 50 candidates", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
       list(state = state, fit = fit, refit_performed = TRUE)
     },
-    .adaptive_theta_summary_from_fit = function(fit, state) list(),
     generate_candidates = function(theta_summary, state, config) candidate_tbl,
     compute_pair_utility = function(draws, candidates, epsilon_mean) utilities_tbl,
     apply_degree_penalty = function(utility_tbl, state) utility_tbl

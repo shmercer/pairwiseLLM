@@ -506,6 +506,51 @@ compute_gini_posA <- function(posA_counts) {
   schema[rep_len(1L, n_rows), , drop = FALSE]
 }
 
+.adaptive_stop_metrics_defaults <- function() {
+  list(
+    hard_cap_reached = NA,
+    hard_cap_threshold = NA_integer_,
+    n_unique_pairs_seen = NA_integer_,
+    scheduled_pairs = NA_integer_,
+    proposed_pairs = NA_integer_,
+    completed_pairs = NA_integer_,
+    diagnostics_pass = NA,
+    divergences = NA_integer_,
+    min_ess_bulk = NA_real_,
+    max_rhat = NA_real_,
+    theta_sd_median_S = NA_real_,
+    theta_sd_pass = NA,
+    tau = NA_real_,
+    U0 = NA_real_,
+    U_top_median = NA_real_,
+    U_abs = NA_real_,
+    U_pass = NA,
+    rank_stability_pass = NA,
+    frac_weak_adj = NA_real_,
+    min_adj_prob = NA_real_,
+    weak_adj_threshold = NA_real_,
+    weak_adj_frac_max = NA_real_,
+    min_adj_prob_threshold = NA_real_,
+    min_new_pairs_for_check = NA_integer_,
+    refit_performed = NA,
+    candidate_starved = NA,
+    reason_short_batch = NA_character_
+  )
+}
+
+.adaptive_stop_metrics_align <- function(metrics) {
+  defaults <- .adaptive_stop_metrics_defaults()
+  if (!is.list(metrics)) {
+    return(defaults)
+  }
+  for (nm in names(defaults)) {
+    if (!nm %in% names(metrics) || is.null(metrics[[nm]])) {
+      metrics[[nm]] <- defaults[[nm]]
+    }
+  }
+  metrics
+}
+
 #' @keywords internal
 #' @noRd
 build_round_log_row <- function(state,
