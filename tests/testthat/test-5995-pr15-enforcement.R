@@ -76,7 +76,9 @@ testthat::test_that("PR15 gate: no legacy scheduler is invoked from public API",
     .adaptive_theta_summary_from_fit = function(fit, state) {
       tibble::tibble(item_id = state$ids, theta_sd = rep(0.1, length(state$ids)))
     },
-    generate_candidates = function(theta_summary, state, config) tibble::tibble(i = "A", j = "B"),
+    generate_candidates = function(theta_summary, state, config, allow_repeats = FALSE) {
+      tibble::tibble(i = "A", j = "B")
+    },
     compute_pair_utility = function(draws, candidates, epsilon_mean) {
       tibble::tibble(
         i_id = "A",

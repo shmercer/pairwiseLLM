@@ -181,7 +181,25 @@ e2e_run_locked_scenario <- function(seed) {
     )
   }
 
-  mock_candidates <- function(theta_summary, state, config) {
+  mock_candidates <- function(...) {
+    args <- list(...)
+    state <- args$state %||% NULL
+    if (is.null(state) && length(args) >= 3L && inherits(args[[3L]], "adaptive_state")) {
+      state <- args[[3L]]
+    }
+    if (is.null(state) && length(args) >= 2L && inherits(args[[2L]], "adaptive_state")) {
+      state <- args[[2L]]
+    }
+    if (is.null(state)) {
+      rlang::abort("`state` must be provided for mock candidates.")
+    }
+    config <- args$config %||% NULL
+    if (is.null(config) && length(args) >= 4L && is.list(args[[4L]])) {
+      config <- args[[4L]]
+    }
+    if (is.null(config)) {
+      config <- list()
+    }
     validate_state(state)
     ids <- as.character(state$ids)
     if (length(ids) < 2L) {
