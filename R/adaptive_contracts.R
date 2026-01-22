@@ -469,8 +469,7 @@ compute_gini_posA <- function(posA_counts) {
   as.double(max(0, gini))
 }
 
-.adaptive_round_log_defaults <- function() {
-  schema <- round_log_schema()
+.adaptive_log_defaults_from_schema <- function(schema) {
   defaults <- lapply(schema, function(col) {
     if (is.integer(col)) {
       NA_integer_
@@ -489,24 +488,14 @@ compute_gini_posA <- function(posA_counts) {
   tibble::as_tibble(defaults)
 }
 
+.adaptive_round_log_defaults <- function() {
+  schema <- round_log_schema()
+  .adaptive_log_defaults_from_schema(schema)
+}
+
 .adaptive_batch_log_defaults <- function() {
   schema <- batch_log_schema()
-  defaults <- lapply(schema, function(col) {
-    if (is.integer(col)) {
-      NA_integer_
-    } else if (inherits(col, "POSIXct")) {
-      as.POSIXct(NA, tz = "UTC")
-    } else if (is.double(col)) {
-      NA_real_
-    } else if (is.logical(col)) {
-      NA
-    } else if (is.character(col)) {
-      NA_character_
-    } else {
-      NA
-    }
-  })
-  tibble::as_tibble(defaults)
+  .adaptive_log_defaults_from_schema(schema)
 }
 
 .adaptive_item_summary_defaults <- function(n_rows = 0L) {
