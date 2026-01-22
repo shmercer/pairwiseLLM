@@ -44,6 +44,28 @@ as_pairs_tbl <- function(...) {
   }
 }
 
+.adaptive_fallback_used_levels <- function() {
+  c(
+    "base_window",
+    "expand_2x",
+    "expand_4x",
+    "uncertainty_pool",
+    "dup_relax",
+    "global_safe",
+    "FAILED"
+  )
+}
+
+.adaptive_starvation_reason_levels <- function() {
+  c(
+    "few_candidates_generated",
+    "filtered_by_duplicates",
+    "filtered_by_paircount",
+    "filtered_by_other_filters",
+    "unknown"
+  )
+}
+
 #' @keywords internal
 #' @noRd
 validate_pairs_tbl <- function(pairs) {
