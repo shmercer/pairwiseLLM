@@ -310,7 +310,8 @@ generate_candidates_streamed <- function(
 #' @keywords internal
 #' @noRd
 enumerate_candidates <- function(anchors, theta_summary, state, config,
-                                 dup_policy = c("default", "relaxed")) {
+                                 dup_policy = c("default", "relaxed"),
+                                 allow_repeats = FALSE) {
   dup_policy <- match.arg(dup_policy)
   validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
@@ -344,24 +345,38 @@ enumerate_candidates <- function(anchors, theta_summary, state, config,
     mode = "window_stream",
     seed = state$seed
   )
-  .adaptive_filter_candidate_pool(candidates, state, dup_policy = dup_policy)
+  .adaptive_filter_candidate_pool(
+    candidates,
+    state,
+    dup_policy = dup_policy,
+    allow_repeats = allow_repeats
+  )
 }
 
 #' @keywords internal
 #' @noRd
-generate_candidates <- function(theta_summary, state, config, dup_policy = c("default", "relaxed")) {
+generate_candidates <- function(theta_summary, state, config, dup_policy = c("default", "relaxed"),
+                                allow_repeats = FALSE) {
   dup_policy <- match.arg(dup_policy)
   validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
   anchors <- select_anchors(theta_summary, state, config)
-  candidates <- enumerate_candidates(anchors, theta_summary, state, config, dup_policy = dup_policy)
+  candidates <- enumerate_candidates(
+    anchors,
+    theta_summary,
+    state,
+    config,
+    dup_policy = dup_policy,
+    allow_repeats = allow_repeats
+  )
   tibble::as_tibble(candidates)
 }
 
 #' @keywords internal
 #' @noRd
 generate_candidates_from_anchors <- function(anchors, theta_summary, state, config,
-                                             dup_policy = c("default", "relaxed")) {
+                                             dup_policy = c("default", "relaxed"),
+                                             allow_repeats = FALSE) {
   dup_policy <- match.arg(dup_policy)
   validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
@@ -397,10 +412,16 @@ generate_candidates_from_anchors <- function(anchors, theta_summary, state, conf
     mode = mode,
     seed = state$seed
   )
-  .adaptive_filter_candidate_pool(candidates, state, dup_policy = dup_policy)
+  .adaptive_filter_candidate_pool(
+    candidates,
+    state,
+    dup_policy = dup_policy,
+    allow_repeats = allow_repeats
+  )
 }
 
-.adaptive_filter_candidate_pool <- function(candidates, state, dup_policy = c("default", "relaxed")) {
+.adaptive_filter_candidate_pool <- function(candidates, state, dup_policy = c("default", "relaxed"),
+                                            allow_repeats = FALSE) {
   dup_policy <- match.arg(dup_policy)
   validate_state(state)
   if (!is.data.frame(candidates)) {
@@ -433,7 +454,13 @@ generate_candidates_from_anchors <- function(anchors, theta_summary, state, conf
   allowed <- rep(FALSE, length(keep))
   if (any(keep)) {
     allowed[keep] <- mapply(
-      function(i, j) .adaptive_unordered_allowed(state, i, j, dup_policy = dup_policy),
+      function(i, j) .adaptive_unordered_allowed(
+        state,
+        i,
+        j,
+        dup_policy = dup_policy,
+        allow_repeats = allow_repeats
+      ),
       i_id[keep],
       j_id[keep],
       USE.NAMES = FALSE
