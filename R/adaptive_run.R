@@ -403,6 +403,7 @@ NULL
     bt_data <- .btl_mcmc_v3_prepare_bt_data(state$history_results, state$ids)
     mcmc_config <- state$config$v3 %||% adaptive_v3_config(state$N)
     mcmc_fit <- .fit_bayes_btl_mcmc_adaptive(bt_data, config = mcmc_config, seed = seed)
+    state$posterior$mcmc_config_used <- mcmc_fit$mcmc_config_used %||% list()
     fit_contract <- as_v3_fit_contract_from_mcmc(mcmc_fit, ids = state$ids)
     state$fit <- fit_contract
     refit_performed <- TRUE
@@ -1185,11 +1186,6 @@ NULL
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
   remaining_unique <- hard_cap_threshold - n_unique_pairs_seen
-  if (remaining_unique <= 0L) {
-    state$mode <- "stopped"
-    state$stop_reason <- "hard_cap_40pct"
-    return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
-  }
   target_pairs <- min(target_pairs, as.integer(remaining_unique))
 
   if (identical(state$mode, "warm_start") && identical(state$phase, "phase1")) {

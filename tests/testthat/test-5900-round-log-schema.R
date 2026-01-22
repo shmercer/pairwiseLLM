@@ -42,6 +42,13 @@ testthat::test_that("round log schema matches contract", {
     "min_ess_bulk",
     "max_rhat",
     "diagnostics_pass",
+    "mcmc_chains",
+    "mcmc_parallel_chains",
+    "mcmc_core_fraction",
+    "mcmc_cores_detected_physical",
+    "mcmc_cores_detected_logical",
+    "mcmc_threads_per_chain",
+    "mcmc_cmdstanr_version",
     "stop_decision",
     "stop_reason",
     "mode"
