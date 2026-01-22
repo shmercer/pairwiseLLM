@@ -135,7 +135,7 @@ testthat::test_that("adaptive_filter_candidates_to_draws respects i_id/j_id colu
   expect_equal(nrow(filtered), 2L)
 })
 
-testthat::test_that("select_batch_with_fallbacks defaults n_candidates_generated", {
+testthat::test_that("select_batch_by_ladder defaults n_candidates_generated", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "bravo")
@@ -154,7 +154,7 @@ testthat::test_that("select_batch_with_fallbacks defaults n_candidates_generated
   )
   config <- pairwiseLLM:::adaptive_v3_config(state$N, list(batch_size = 1L))
 
-  out <- pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+  out <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = tibble::tibble(item_id = state$ids, theta_mean = 0, theta_sd = 0),

@@ -20,7 +20,7 @@ testthat::test_that("batch selection fills when feasible", {
   utilities <- pairwiseLLM:::compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
   utilities <- pairwiseLLM:::apply_degree_penalty(utilities, state)
 
-  selection_out <- pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+  selection_out <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
@@ -33,7 +33,7 @@ testthat::test_that("batch selection fills when feasible", {
 
   testthat::expect_equal(nrow(selection_out$selection), config$batch_size)
   testthat::expect_false(selection_out$candidate_starved)
-  testthat::expect_identical(selection_out$fallback_stage, "base")
+  testthat::expect_identical(selection_out$fallback_stage, "base_window")
 })
 
 testthat::test_that("candidate starvation is flagged deterministically", {
@@ -62,7 +62,7 @@ testthat::test_that("candidate starvation is flagged deterministically", {
   utilities <- pairwiseLLM:::compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
   utilities <- pairwiseLLM:::apply_degree_penalty(utilities, state)
 
-  out1 <- pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+  out1 <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
@@ -72,7 +72,7 @@ testthat::test_that("candidate starvation is flagged deterministically", {
     seed = 101,
     exploration_only = FALSE
   )
-  out2 <- pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+  out2 <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
@@ -117,7 +117,7 @@ testthat::test_that("tiny batches require a starvation flag", {
   utilities <- pairwiseLLM:::compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
   utilities <- pairwiseLLM:::apply_degree_penalty(utilities, state)
 
-  selection_out <- pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+  selection_out <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
@@ -177,7 +177,7 @@ testthat::test_that("fallbacks use relax constraints when anchors are blocked", 
     utility_raw = double()
   )
 
-  out <- pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+  out <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
@@ -188,7 +188,7 @@ testthat::test_that("fallbacks use relax constraints when anchors are blocked", 
     exploration_only = FALSE
   )
 
-  testthat::expect_identical(out$fallback_stage, "relax_constraints")
+  testthat::expect_identical(out$fallback_stage, "uncertainty_pool")
   testthat::expect_equal(nrow(out$selection), config$batch_size)
 })
 
@@ -224,7 +224,7 @@ testthat::test_that("fallbacks can complete at broadened window", {
     utility_raw = double()
   )
 
-  out <- pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+  out <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
@@ -235,7 +235,7 @@ testthat::test_that("fallbacks can complete at broadened window", {
     exploration_only = FALSE
   )
 
-  testthat::expect_identical(out$fallback_stage, "broaden_window")
+  testthat::expect_identical(out$fallback_stage, "expand_2x")
   testthat::expect_equal(nrow(out$selection), config$batch_size)
 })
 
@@ -262,7 +262,7 @@ testthat::test_that("select_batch_with_fallbacks validates inputs", {
   config_bad <- config
   config_bad$batch_size <- -1L
   testthat::expect_error(
-    pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+    pairwiseLLM:::.adaptive_select_batch_by_ladder(
       state = state,
       fit = "bad",
       theta_summary = tibble::tibble(),
@@ -272,7 +272,7 @@ testthat::test_that("select_batch_with_fallbacks validates inputs", {
     "theta_draws"
   )
   testthat::expect_error(
-    pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+    pairwiseLLM:::.adaptive_select_batch_by_ladder(
       state = state,
       fit = fit,
       theta_summary = tibble::tibble(),
@@ -282,7 +282,7 @@ testthat::test_that("select_batch_with_fallbacks validates inputs", {
     "data frame"
   )
   testthat::expect_error(
-    pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+    pairwiseLLM:::.adaptive_select_batch_by_ladder(
       state = state,
       fit = fit,
       theta_summary = tibble::tibble(),
@@ -292,7 +292,7 @@ testthat::test_that("select_batch_with_fallbacks validates inputs", {
     "batch_size"
   )
   testthat::expect_error(
-    pairwiseLLM:::.adaptive_select_batch_with_fallbacks(
+    pairwiseLLM:::.adaptive_select_batch_by_ladder(
       state = state,
       fit = fit,
       theta_summary = tibble::tibble(),
