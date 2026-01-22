@@ -305,6 +305,9 @@ testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
       list(state = state)
     },
     .adaptive_schedule_next_pairs = function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
+      state <- pairwiseLLM:::record_presentation(state, "A", "B")
+      state$history_pairs <- dplyr::bind_rows(state$history_pairs, pairs_tbl)
+      state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
       list(state = state, pairs = pairs_tbl)
     },
     .adaptive_submit_live = function(...) list(results = tibble::tibble()),
