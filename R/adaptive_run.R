@@ -216,6 +216,69 @@ NULL
   state
 }
 
+.adaptive_remove_history_pair <- function(state, pair_uid) {
+  pair_uid <- as.character(pair_uid)
+  if (length(pair_uid) != 1L || is.na(pair_uid) || !nzchar(pair_uid)) {
+    rlang::abort("`pair_uid` must be a non-empty character scalar.")
+  }
+  pairs <- state$history_pairs
+  if (is.null(pairs) || nrow(pairs) == 0L) {
+    rlang::abort("`state$history_pairs` is empty; cannot rollback presentation.")
+  }
+  idx <- which(pairs$pair_uid == pair_uid)
+  if (length(idx) != 1L) {
+    rlang::abort("`state$history_pairs` must contain exactly one matching `pair_uid`.")
+  }
+  state$history_pairs <- pairs[-idx, , drop = FALSE]
+  state$comparisons_scheduled <- as.integer(state$comparisons_scheduled - 1L)
+  if (is.na(state$comparisons_scheduled) || state$comparisons_scheduled < 0L) {
+    rlang::abort("`state$comparisons_scheduled` cannot be rolled back below zero.")
+  }
+  state
+}
+
+.adaptive_rollback_presentations <- function(state, pairs_submitted, failed_attempts = NULL) {
+  if (is.null(pairs_submitted) || nrow(pairs_submitted) == 0L) {
+    return(state)
+  }
+
+  pairs_submitted <- tibble::as_tibble(pairs_submitted)
+  required <- c("pair_uid", "A_id", "B_id")
+  .adaptive_required_cols(pairs_submitted, "pairs_submitted", required)
+
+  observed <- .adaptive_results_seen_names(state)
+  missing_mask <- !(pairs_submitted$pair_uid %in% observed)
+  missing_tbl <- pairs_submitted[missing_mask, c("pair_uid", "A_id", "B_id"), drop = FALSE]
+
+  failed_attempts <- failed_attempts %||% .adaptive_empty_failed_attempts_tbl()
+  failed_tbl <- if (!is.null(failed_attempts) && nrow(failed_attempts) > 0L) {
+    failed_attempts <- tibble::as_tibble(failed_attempts)
+    .adaptive_required_cols(failed_attempts, "failed_attempts", required)
+    failed_attempts[, c("pair_uid", "A_id", "B_id"), drop = FALSE]
+  } else {
+    tibble::tibble(pair_uid = character(), A_id = character(), B_id = character())
+  }
+
+  rollback_tbl <- dplyr::bind_rows(missing_tbl, failed_tbl)
+  if (nrow(rollback_tbl) == 0L) {
+    return(state)
+  }
+  rollback_tbl <- rollback_tbl[!(rollback_tbl$pair_uid %in% observed), , drop = FALSE]
+  if (nrow(rollback_tbl) == 0L) {
+    return(state)
+  }
+  rollback_tbl <- dplyr::distinct(rollback_tbl, pair_uid, .keep_all = TRUE)
+
+  for (idx in seq_len(nrow(rollback_tbl))) {
+    A_id <- as.character(rollback_tbl$A_id[[idx]])
+    B_id <- as.character(rollback_tbl$B_id[[idx]])
+    state <- rollback_presentation(state, A_id, B_id)
+    state <- .adaptive_remove_history_pair(state, rollback_tbl$pair_uid[[idx]])
+  }
+
+  state
+}
+
 .adaptive_state_sync_results_seen <- function(state) {
   if (!is.null(state$results_seen) && length(.adaptive_results_seen_names(state)) > 0L) {
     return(state)
@@ -2000,6 +2063,11 @@ NULL
       phase = unique(pairs$phase),
       iter = unique(pairs$iter)
     )
+    state <- .adaptive_rollback_presentations(
+      state,
+      pairs_submitted = pairs,
+      failed_attempts = normalized$failed_attempts
+    )
     submissions[[length(submissions) + 1L]] <- list(pairs = pairs, results = normalized$results)
 
     observed_now <- sum(pairs$pair_uid %in% .adaptive_results_seen_names(state))
@@ -2236,6 +2304,11 @@ adaptive_rank_start <- function(
         phase = unique(pairs$phase),
         iter = unique(pairs$iter)
       )
+      state <- .adaptive_rollback_presentations(
+        state,
+        pairs_submitted = pairs,
+        failed_attempts = normalized$failed_attempts
+      )
 
       observed_now <- sum(pairs$pair_uid %in% .adaptive_results_seen_names(state))
       missing <- nrow(pairs) - observed_now
@@ -2415,6 +2488,7 @@ adaptive_rank_resume <- function(
   }
   pairs_submitted <- submission_info$pairs_submitted %||% NULL
   new_results <- .adaptive_empty_results_tbl()
+  failed_attempts_current <- .adaptive_empty_failed_attempts_tbl()
 
   if (mode == "batch") {
     .adaptive_check_backend(backend, mode)
@@ -2437,6 +2511,7 @@ adaptive_rank_resume <- function(
       state,
       res$failed_attempts %||% .adaptive_empty_failed_attempts_tbl()
     )
+    failed_attempts_current <- res$failed_attempts %||% .adaptive_empty_failed_attempts_tbl()
   } else {
     if (!is.null(submission_info$results)) {
       normalized <- .adaptive_normalize_submission_output(
@@ -2450,11 +2525,22 @@ adaptive_rank_resume <- function(
       state <- ingest$state
       new_results <- ingest$new_results
       state <- .adaptive_append_failed_attempts(state, normalized$failed_attempts)
+      failed_attempts_current <- normalized$failed_attempts
     }
     if (!is.null(submission_info$failed_attempts)) {
       state <- .adaptive_append_failed_attempts(state, submission_info$failed_attempts)
+      failed_attempts_current <- dplyr::bind_rows(
+        failed_attempts_current,
+        submission_info$failed_attempts
+      )
     }
   }
+
+  state <- .adaptive_rollback_presentations(
+    state,
+    pairs_submitted = pairs_submitted,
+    failed_attempts = failed_attempts_current
+  )
 
   missing <- 0L
   if (!is.null(pairs_submitted) && nrow(pairs_submitted) > 0L) {
@@ -2525,6 +2611,11 @@ adaptive_rank_resume <- function(
         normalized$failed_attempts,
         phase = unique(pairs$phase),
         iter = unique(pairs$iter)
+      )
+      state <- .adaptive_rollback_presentations(
+        state,
+        pairs_submitted = pairs,
+        failed_attempts = normalized$failed_attempts
       )
       submission_out$live_submissions <- list(list(pairs = pairs, results = normalized$results))
 

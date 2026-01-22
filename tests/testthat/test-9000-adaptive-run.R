@@ -113,7 +113,7 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
   )
 
   expect_equal(out$state$comparisons_observed, 3L)
-  expect_equal(out$state$comparisons_scheduled, 4L)
+  expect_equal(out$state$comparisons_scheduled, 3L)
   expect_equal(nrow(out$state$failed_attempts), 1L)
   expect_equal(length(out$submission_info$live_submissions), 1L)
 })
@@ -305,6 +305,9 @@ testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
       list(state = state)
     },
     .adaptive_schedule_next_pairs = function(state, target_pairs, adaptive, seed, near_stop = FALSE) {
+      state <- pairwiseLLM:::record_presentation(state, "A", "B")
+      state$history_pairs <- dplyr::bind_rows(state$history_pairs, pairs_tbl)
+      state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
       list(state = state, pairs = pairs_tbl)
     },
     .adaptive_submit_live = function(...) list(results = tibble::tibble()),
@@ -453,6 +456,7 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       adaptive = adaptive,
       seed = 555
     ),
+    llm_submit_pairs_multi_batch = mock_submit_batch,
     llm_resume_multi_batches = mock_resume_batch,
     .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
       force(config)
