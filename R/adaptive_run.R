@@ -1050,6 +1050,107 @@ NULL
   as.double(stats::quantile(values, prob, type = 7, na.rm = TRUE)[[1L]])
 }
 
+.adaptive_starvation_reason_from_attempts <- function(stage_attempts, batch_size, config) {
+  if (!is.data.frame(stage_attempts) || nrow(stage_attempts) == 0L) {
+    return(NA_character_)
+  }
+  if (!all(c("n_selected", "n_generated") %in% names(stage_attempts))) {
+    return(NA_character_)
+  }
+  batch_size <- as.integer(batch_size)
+  if (is.na(batch_size) || batch_size < 0L) {
+    return(NA_character_)
+  }
+  incomplete <- stage_attempts[stage_attempts$n_selected < batch_size, , drop = FALSE]
+  if (nrow(incomplete) == 0L) {
+    return(NA_character_)
+  }
+  idx <- which.max(incomplete$n_generated)
+  best <- incomplete[idx, , drop = FALSE]
+  C_max <- as.integer(config$C_max %||% NA_integer_)
+  threshold <- if (!is.na(C_max)) max(10L, floor(0.05 * C_max)) else 10L
+  n_generated <- as.integer(best$n_generated[[1L]])
+  if (!is.na(n_generated) && n_generated < threshold) {
+    return("few_candidates_generated")
+  }
+  "unknown"
+}
+
+.adaptive_stage_attempts_fields <- function(stage_attempts, batch_size, config, candidate_starved) {
+  attempts_tbl <- tibble::tibble()
+  if (is.list(stage_attempts) && length(stage_attempts) > 0L) {
+    attempts_tbl <- dplyr::bind_rows(stage_attempts)
+  }
+  attempts_tbl <- tibble::as_tibble(attempts_tbl)
+
+  extract <- function(tbl, name, default) {
+    if (nrow(tbl) == 0L || !name %in% names(tbl)) {
+      return(default)
+    }
+    value <- tbl[[name]][[1L]]
+    if (is.null(value)) {
+      return(default)
+    }
+    value
+  }
+
+  get_attempt <- function(idx) {
+    if (nrow(attempts_tbl) >= idx) {
+      return(attempts_tbl[idx, , drop = FALSE])
+    }
+    tibble::tibble()
+  }
+
+  a1 <- get_attempt(1L)
+  a2 <- get_attempt(2L)
+  a3 <- get_attempt(3L)
+
+  aN_tried <- max(0L, nrow(attempts_tbl) - 3L)
+  aN_best <- tibble::tibble()
+  if (aN_tried > 0L) {
+    beyond <- attempts_tbl[4:nrow(attempts_tbl), , drop = FALSE]
+    if ("n_selected" %in% names(beyond) && any(!is.na(beyond$n_selected))) {
+      best_idx <- which.max(replace(beyond$n_selected, is.na(beyond$n_selected), -Inf))
+      aN_best <- beyond[best_idx, , drop = FALSE]
+    }
+  }
+
+  starvation_reason <- NA_character_
+  if (isTRUE(candidate_starved)) {
+    starvation_reason <- .adaptive_starvation_reason_from_attempts(attempts_tbl, batch_size, config)
+    if (is.na(starvation_reason)) {
+      starvation_reason <- "unknown"
+    }
+  }
+
+  list(
+    a1_stage = extract(a1, "stage", NA_character_),
+    a1_W_used = extract(a1, "W_used", NA_integer_),
+    a1_anchor_pool = extract(a1, "anchor_pool", NA_character_),
+    a1_n_generated = extract(a1, "n_generated", NA_integer_),
+    a1_n_survive = extract(a1, "n_survive", NA_integer_),
+    a1_n_selected = extract(a1, "n_selected", NA_integer_),
+    a2_stage = extract(a2, "stage", NA_character_),
+    a2_W_used = extract(a2, "W_used", NA_integer_),
+    a2_anchor_pool = extract(a2, "anchor_pool", NA_character_),
+    a2_n_generated = extract(a2, "n_generated", NA_integer_),
+    a2_n_survive = extract(a2, "n_survive", NA_integer_),
+    a2_n_selected = extract(a2, "n_selected", NA_integer_),
+    a3_stage = extract(a3, "stage", NA_character_),
+    a3_W_used = extract(a3, "W_used", NA_integer_),
+    a3_anchor_pool = extract(a3, "anchor_pool", NA_character_),
+    a3_n_generated = extract(a3, "n_generated", NA_integer_),
+    a3_n_survive = extract(a3, "n_survive", NA_integer_),
+    a3_n_selected = extract(a3, "n_selected", NA_integer_),
+    aN_tried = as.integer(aN_tried),
+    aN_best_stage = extract(aN_best, "stage", NA_character_),
+    aN_best_n_generated = extract(aN_best, "n_generated", NA_integer_),
+    aN_best_n_survive = extract(aN_best, "n_survive", NA_integer_),
+    aN_best_n_selected = extract(aN_best, "n_selected", NA_integer_),
+    starvation_reason = starvation_reason
+  )
+}
+
 .adaptive_append_batch_log <- function(state,
     iter,
     phase,
@@ -1060,6 +1161,9 @@ NULL
     candidate_stats,
     candidate_starved,
     fallback_stage,
+    fallback_used = NULL,
+    fallback_path = NULL,
+    stage_attempts = NULL,
     W_used,
     config,
     exploration_only,
@@ -1135,22 +1239,39 @@ NULL
   state$posterior$stop_metrics <- metrics
 
   stop_reason <- state$stop_reason %||% NA_character_
-  if (isTRUE(candidate_starved) &&
-    n_pairs_selected == 0L &&
-    (!is.character(stop_reason) ||
-      length(stop_reason) != 1L ||
-      is.na(stop_reason) ||
-      !nzchar(stop_reason))) {
+    if (isTRUE(candidate_starved) &&
+      n_pairs_selected == 0L &&
+      (!is.character(stop_reason) ||
+        length(stop_reason) != 1L ||
+        is.na(stop_reason) ||
+        !nzchar(stop_reason))) {
     mode <- "stopped"
     state$mode <- "stopped"
-    state$stop_reason <- "candidate_starvation"
-  }
+      state$stop_reason <- "candidate_starvation"
+    }
 
-  row <- build_batch_log_row(
-    iter = iter,
-    phase = phase,
-    mode = mode,
-    created_at = created_at,
+    fallback_used <- fallback_used %||% NA_character_
+    fallback_path <- fallback_path %||% NA_character_
+    if (length(fallback_path) > 1L) {
+      fallback_path <- paste(as.character(fallback_path), collapse = ">")
+    } else if (length(fallback_path) == 1L && !is.na(fallback_path)) {
+      fallback_path <- as.character(fallback_path)
+    } else {
+      fallback_path <- NA_character_
+    }
+
+    stage_fields <- .adaptive_stage_attempts_fields(
+      stage_attempts,
+      batch_size = batch_size_target,
+      config = config,
+      candidate_starved = candidate_starved
+    )
+
+    row <- build_batch_log_row(
+      iter = iter,
+      phase = phase,
+      mode = mode,
+      created_at = created_at,
     batch_size_target = batch_size_target,
     n_pairs_selected = n_pairs_selected,
     n_pairs_completed = n_pairs_completed,
@@ -1160,12 +1281,38 @@ NULL
     n_explore_selected = n_explore_selected,
     n_exploit_target = n_exploit_target,
     n_exploit_selected = n_exploit_selected,
-    n_candidates_generated = candidate_stats$n_candidates_generated %||% NA_integer_,
-    n_candidates_after_filters = candidate_stats$n_candidates_after_filters %||% NA_integer_,
-    candidate_starved = candidate_starved %||% NA,
-    reason_short_batch = reason_short_batch,
-    W_used = W_used %||% config$W %||% NA_integer_,
-    explore_rate_used = explore_rate_used,
+      n_candidates_generated = candidate_stats$n_candidates_generated %||% NA_integer_,
+      n_candidates_after_filters = candidate_stats$n_candidates_after_filters %||% NA_integer_,
+      candidate_starved = candidate_starved %||% NA,
+      fallback_used = fallback_used,
+      fallback_path = fallback_path,
+      a1_stage = stage_fields$a1_stage,
+      a1_W_used = stage_fields$a1_W_used,
+      a1_anchor_pool = stage_fields$a1_anchor_pool,
+      a1_n_generated = stage_fields$a1_n_generated,
+      a1_n_survive = stage_fields$a1_n_survive,
+      a1_n_selected = stage_fields$a1_n_selected,
+      a2_stage = stage_fields$a2_stage,
+      a2_W_used = stage_fields$a2_W_used,
+      a2_anchor_pool = stage_fields$a2_anchor_pool,
+      a2_n_generated = stage_fields$a2_n_generated,
+      a2_n_survive = stage_fields$a2_n_survive,
+      a2_n_selected = stage_fields$a2_n_selected,
+      a3_stage = stage_fields$a3_stage,
+      a3_W_used = stage_fields$a3_W_used,
+      a3_anchor_pool = stage_fields$a3_anchor_pool,
+      a3_n_generated = stage_fields$a3_n_generated,
+      a3_n_survive = stage_fields$a3_n_survive,
+      a3_n_selected = stage_fields$a3_n_selected,
+      aN_tried = stage_fields$aN_tried,
+      aN_best_stage = stage_fields$aN_best_stage,
+      aN_best_n_generated = stage_fields$aN_best_n_generated,
+      aN_best_n_survive = stage_fields$aN_best_n_survive,
+      aN_best_n_selected = stage_fields$aN_best_n_selected,
+      starvation_reason = stage_fields$starvation_reason,
+      reason_short_batch = reason_short_batch,
+      W_used = W_used %||% config$W %||% NA_integer_,
+      explore_rate_used = explore_rate_used,
     utility_selected_p50 = utility_selected_p50,
     utility_selected_p90 = utility_selected_p90,
     utility_candidate_p90 = utility_candidate_p90,
@@ -1580,23 +1727,26 @@ NULL
 
   if (nrow(selection) == 0L) {
     state$iter <- iter
-    state <- .adaptive_append_batch_log(
-      state = state,
-      iter = iter,
-      phase = phase,
-      mode = state$mode,
-      created_at = iter_start,
-      batch_size_target = batch_size,
-      selection = selection,
-      candidate_stats = selection_out$candidate_stats,
-      candidate_starved = selection_out$candidate_starved,
-      fallback_stage = selection_out$fallback_stage,
-      W_used = selection_out$W_used,
-      config = config_select,
-      exploration_only = exploration_only,
-      utilities = utilities,
-      iter_exit_path = "no_pairs_selected"
-    )
+      state <- .adaptive_append_batch_log(
+        state = state,
+        iter = iter,
+        phase = phase,
+        mode = state$mode,
+        created_at = iter_start,
+        batch_size_target = batch_size,
+        selection = selection,
+        candidate_stats = selection_out$candidate_stats,
+        candidate_starved = selection_out$candidate_starved,
+        fallback_stage = selection_out$fallback_stage,
+        fallback_used = selection_out$fallback_used,
+        fallback_path = selection_out$fallback_path,
+        stage_attempts = selection_out$stage_attempts,
+        W_used = selection_out$W_used,
+        config = config_select,
+        exploration_only = exploration_only,
+        utilities = utilities,
+        iter_exit_path = "no_pairs_selected"
+      )
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
@@ -1646,22 +1796,25 @@ NULL
   )
   pairs_tbl <- pairs_tbl[, c(required_cols, setdiff(names(pairs_tbl), required_cols)), drop = FALSE]
   state_local$iter <- iter
-  state_local <- .adaptive_append_batch_log(
-    state = state_local,
-    iter = iter,
-    phase = phase,
-    mode = state_local$mode,
-    created_at = created_at,
-    batch_size_target = batch_size,
-    selection = selection,
-    candidate_stats = selection_out$candidate_stats,
-    candidate_starved = selection_out$candidate_starved,
-    fallback_stage = selection_out$fallback_stage,
-    W_used = selection_out$W_used,
-    config = config_select,
-    exploration_only = exploration_only,
-    utilities = utilities
-  )
+    state_local <- .adaptive_append_batch_log(
+      state = state_local,
+      iter = iter,
+      phase = phase,
+      mode = state_local$mode,
+      created_at = created_at,
+      batch_size_target = batch_size,
+      selection = selection,
+      candidate_stats = selection_out$candidate_stats,
+      candidate_starved = selection_out$candidate_starved,
+      fallback_stage = selection_out$fallback_stage,
+      fallback_used = selection_out$fallback_used,
+      fallback_path = selection_out$fallback_path,
+      stage_attempts = selection_out$stage_attempts,
+      W_used = selection_out$W_used,
+      config = config_select,
+      exploration_only = exploration_only,
+      utilities = utilities
+    )
   list(state = state_local, pairs = pairs_tbl)
 }
 
