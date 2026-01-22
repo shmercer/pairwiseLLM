@@ -310,7 +310,9 @@ generate_candidates_streamed <- function(
 
 #' @keywords internal
 #' @noRd
-enumerate_candidates <- function(anchors, theta_summary, state, config) {
+enumerate_candidates <- function(anchors, theta_summary, state, config,
+                                 dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
 
@@ -335,7 +337,7 @@ enumerate_candidates <- function(anchors, theta_summary, state, config) {
   ord <- order(-theta_summary$theta_mean, theta_summary$item_id)
   ranked_ids <- theta_summary$item_id[ord]
 
-  generate_candidates_streamed(
+  candidates <- generate_candidates_streamed(
     ranked_ids = ranked_ids,
     anchors = anchors,
     W = W,
@@ -343,21 +345,25 @@ enumerate_candidates <- function(anchors, theta_summary, state, config) {
     mode = "window_stream",
     seed = state$seed
   )
+  .adaptive_filter_candidate_pool(candidates, state, dup_policy = dup_policy)
 }
 
 #' @keywords internal
 #' @noRd
-generate_candidates <- function(theta_summary, state, config) {
+generate_candidates <- function(theta_summary, state, config, dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
   anchors <- select_anchors(theta_summary, state, config)
-  candidates <- enumerate_candidates(anchors, theta_summary, state, config)
+  candidates <- enumerate_candidates(anchors, theta_summary, state, config, dup_policy = dup_policy)
   tibble::as_tibble(candidates)
 }
 
 #' @keywords internal
 #' @noRd
-generate_candidates_from_anchors <- function(anchors, theta_summary, state, config) {
+generate_candidates_from_anchors <- function(anchors, theta_summary, state, config,
+                                             dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
   anchors <- unique(as.character(anchors))
@@ -384,7 +390,7 @@ generate_candidates_from_anchors <- function(anchors, theta_summary, state, conf
   global_safe <- length(anchors) == length(ranked_ids) && W >= length(ranked_ids) - 1L
   mode <- if (isTRUE(global_safe)) "global_sample" else "window_stream"
 
-  generate_candidates_streamed(
+  candidates <- generate_candidates_streamed(
     ranked_ids = ranked_ids,
     anchors = anchors,
     W = W,
@@ -392,10 +398,49 @@ generate_candidates_from_anchors <- function(anchors, theta_summary, state, conf
     mode = mode,
     seed = state$seed
   )
+  .adaptive_filter_candidate_pool(candidates, state, dup_policy = dup_policy)
 }
 
-.adaptive_unordered_allowed <- function(state, i_id, j_id) {
-  duplicate_allowed(state, i_id, j_id) || duplicate_allowed(state, j_id, i_id)
+.adaptive_filter_candidate_pool <- function(candidates, state, dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
+  validate_state(state)
+  if (!is.data.frame(candidates)) {
+    rlang::abort("`candidates` must be a data frame or tibble.")
+  }
+  candidates <- tibble::as_tibble(candidates)
+  if (nrow(candidates) == 0L) {
+    return(candidates)
+  }
+
+  id_cols <- NULL
+  if (all(c("i", "j") %in% names(candidates))) {
+    id_cols <- c("i", "j")
+  } else if (all(c("i_id", "j_id") %in% names(candidates))) {
+    id_cols <- c("i_id", "j_id")
+  } else {
+    rlang::abort("`candidates` must include `i`/`j` or `i_id`/`j_id` columns.")
+  }
+
+  i_id <- as.character(candidates[[id_cols[[1L]]]])
+  j_id <- as.character(candidates[[id_cols[[2L]]]])
+  keep <- !is.na(i_id) & !is.na(j_id)
+  keep <- keep & i_id != "" & j_id != ""
+  keep <- keep & i_id != j_id
+  keep <- keep & i_id %in% state$ids & j_id %in% state$ids
+  if (!any(keep)) {
+    return(candidates[0, , drop = FALSE])
+  }
+
+  allowed <- rep(FALSE, length(keep))
+  if (any(keep)) {
+    allowed[keep] <- mapply(
+      function(i, j) .adaptive_unordered_allowed(state, i, j, dup_policy = dup_policy),
+      i_id[keep],
+      j_id[keep],
+      USE.NAMES = FALSE
+    )
+  }
+  candidates[keep & allowed, , drop = FALSE]
 }
 
 #' @keywords internal
@@ -405,8 +450,10 @@ build_candidate_pairs <- function(
     W,
     state,
     exploration_frac = 0.05,
-    seed = NULL
+    seed = NULL,
+    dup_policy = c("default", "relaxed")
 ) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   ranking_ids <- as.character(ranking_ids)
   if (length(ranking_ids) < 2L) {
@@ -457,7 +504,7 @@ build_candidate_pairs <- function(
     window_tbl <- window_tbl[window_tbl$i_id != window_tbl$j_id, , drop = FALSE]
     window_tbl <- dplyr::distinct(window_tbl, unordered_key, .keep_all = TRUE)
     allowed <- mapply(
-      function(i, j) .adaptive_unordered_allowed(state, i, j),
+      function(i, j) .adaptive_unordered_allowed(state, i, j, dup_policy = dup_policy),
       window_tbl$i_id,
       window_tbl$j_id,
       USE.NAMES = FALSE
@@ -471,7 +518,7 @@ build_candidate_pairs <- function(
   all_unordered <- make_unordered_key(all_i, all_j)
   all_tbl <- tibble::tibble(i_id = all_i, j_id = all_j, unordered_key = all_unordered)
   allowed_all <- mapply(
-    function(i, j) .adaptive_unordered_allowed(state, i, j),
+    function(i, j) .adaptive_unordered_allowed(state, i, j, dup_policy = dup_policy),
     all_tbl$i_id,
     all_tbl$j_id,
     USE.NAMES = FALSE
