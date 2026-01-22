@@ -321,13 +321,15 @@ enumerate_candidates <- function(anchors, theta_summary, state, config) {
   }
 
   W <- as.integer(config$W)
-  if (is.na(W) || W < 1L) {
+  if (length(W) != 1L || is.na(W) || W < 1L) {
     rlang::abort("`config$W` must be a positive integer.")
+    return(tibble::tibble(i = character(), j = character()))
   }
 
   cap <- as.integer(config$C_max)
-  if (is.na(cap) || cap < 1L) {
+  if (length(cap) != 1L || is.na(cap) || cap < 1L) {
     rlang::abort("`config$C_max` must be a positive integer.")
+    return(tibble::tibble(i = character(), j = character()))
   }
 
   ord <- order(-theta_summary$theta_mean, theta_summary$item_id)
@@ -366,12 +368,14 @@ generate_candidates_from_anchors <- function(anchors, theta_summary, state, conf
   }
 
   W <- as.integer(config$W)
-  if (is.na(W) || W < 1L) {
+  if (length(W) != 1L || is.na(W) || W < 1L) {
     rlang::abort("`config$W` must be a positive integer.")
+    return(tibble::tibble(i = character(), j = character()))
   }
   cap <- as.integer(config$C_max)
-  if (is.na(cap) || cap < 1L) {
+  if (length(cap) != 1L || is.na(cap) || cap < 1L) {
     rlang::abort("`config$C_max` must be a positive integer.")
+    return(tibble::tibble(i = character(), j = character()))
   }
 
   ord <- order(-theta_summary$theta_mean, theta_summary$item_id)
