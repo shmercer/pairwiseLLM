@@ -25,7 +25,7 @@ testthat::test_that("ladder handles primitive select_batch when batch_size is ze
   ns <- asNamespace("pairwiseLLM")
   original_select_batch <- get("select_batch", envir = ns)
   base::unlockBinding("select_batch", ns)
-  assign("select_batch", base::c, envir = ns)
+  assign("select_batch", base::list, envir = ns)
   base::lockBinding("select_batch", ns)
   on.exit({
     base::unlockBinding("select_batch", ns)
