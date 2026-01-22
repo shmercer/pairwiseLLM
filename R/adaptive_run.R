@@ -858,6 +858,12 @@ NULL
       utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
       utilities <- apply_degree_penalty(utilities, state)
     }
+    utilities <- .adaptive_filter_duplicate_candidates(
+      utilities,
+      state,
+      config,
+      dup_policy = dup_policy
+    )
 
     selection <- select_from_utilities(utilities, dup_policy = dup_policy)
     counts <- build_counts(utilities, n_generated, nrow(selection), dup_policy = dup_policy)
@@ -873,6 +879,12 @@ NULL
     list(selection = selection, candidate_stats = counts, stage_attempt = attempt)
   }
 
+  candidates_with_utility <- .adaptive_filter_duplicate_candidates(
+    candidates_with_utility,
+    state,
+    config,
+    dup_policy = "default"
+  )
   base_selection <- select_from_utilities(candidates_with_utility, dup_policy = "default")
   base_counts <- build_counts(
     candidates_with_utility,
@@ -913,7 +925,7 @@ NULL
   config_expand <- config
   config_expand$W <- W2
   attempt <- attempt_from_candidates(
-    generate_candidates(theta_summary, state, config_expand),
+    generate_candidates(theta_summary, state, config_expand, allow_repeats = TRUE),
     stage_name = "expand_2x",
     W_used = W2,
     anchor_pool = "default",
@@ -944,7 +956,7 @@ NULL
 
   config_expand$W <- W4
   attempt <- attempt_from_candidates(
-    generate_candidates(theta_summary, state, config_expand),
+    generate_candidates(theta_summary, state, config_expand, allow_repeats = TRUE),
     stage_name = "expand_4x",
     W_used = W4,
     anchor_pool = "default",
@@ -977,7 +989,13 @@ NULL
   config_uncertainty$W <- W_base
   uncertainty_anchors <- select_uncertainty_anchors(state, config, theta_summary = theta_summary)
   attempt <- attempt_from_candidates(
-    generate_candidates_from_anchors(uncertainty_anchors, theta_summary, state, config_uncertainty),
+    generate_candidates_from_anchors(
+      uncertainty_anchors,
+      theta_summary,
+      state,
+      config_uncertainty,
+      allow_repeats = TRUE
+    ),
     stage_name = "uncertainty_pool",
     W_used = W_base,
     anchor_pool = "uncertainty",
@@ -1012,7 +1030,8 @@ NULL
       theta_summary,
       state,
       config_uncertainty,
-      dup_policy = "relaxed"
+      dup_policy = "relaxed",
+      allow_repeats = TRUE
     ),
     stage_name = "dup_relax",
     W_used = W_base,
@@ -1046,7 +1065,13 @@ NULL
   config_global$W <- W_cap
   all_anchors <- as.character(theta_summary$item_id)
   attempt <- attempt_from_candidates(
-    generate_candidates_from_anchors(all_anchors, theta_summary, state, config_global),
+    generate_candidates_from_anchors(
+      all_anchors,
+      theta_summary,
+      state,
+      config_global,
+      allow_repeats = TRUE
+    ),
     stage_name = "global_safe",
     W_used = W_cap,
     anchor_pool = "global",
@@ -1686,7 +1711,7 @@ NULL
 
   v3_config <- state$config$v3 %||% rlang::abort("`state$config$v3` must be set.")
   theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
-  candidates <- generate_candidates(theta_summary, state, v3_config)
+  candidates <- generate_candidates(theta_summary, state, v3_config, allow_repeats = TRUE)
 
   candidates <- .adaptive_filter_candidates_to_draws(candidates, fit$theta_draws)
 

@@ -61,7 +61,8 @@ duplicate_allowed <- function(state, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
-.adaptive_unordered_allowed <- function(state, i_id, j_id, dup_policy = c("default", "relaxed")) {
+.adaptive_unordered_allowed <- function(state, i_id, j_id, dup_policy = c("default", "relaxed"),
+                                        allow_repeats = FALSE) {
   dup_policy <- match.arg(dup_policy)
   if (dup_policy == "relaxed") {
     return(TRUE)
@@ -75,7 +76,7 @@ duplicate_allowed <- function(state, A_id, B_id) {
 
   count <- counts[[unordered_key]]
   if (is.na(count) || count == 0L) return(TRUE)
-  if (count >= 2L) return(FALSE)
+  if (count >= 2L && !isTRUE(allow_repeats)) return(FALSE)
 
   ordered_key <- make_ordered_key(i_id, j_id)
   reverse_key <- make_ordered_key(j_id, i_id)
@@ -86,6 +87,10 @@ duplicate_allowed <- function(state, A_id, B_id) {
   } else {
     reverse_seen <- isTRUE(seen[reverse_key])
     same_seen <- isTRUE(seen[ordered_key])
+  }
+
+  if (isTRUE(allow_repeats) && count >= 2L) {
+    return(isTRUE(same_seen) || isTRUE(reverse_seen))
   }
 
   xor(same_seen, reverse_seen)

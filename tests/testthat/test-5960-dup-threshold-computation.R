@@ -56,7 +56,7 @@ testthat::test_that("U_dup_threshold uses quantile for >= 50 candidates", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
       list(state = state, fit = fit, refit_performed = TRUE)
     },
-    generate_candidates = function(theta_summary, state, config) candidate_tbl,
+    generate_candidates = function(theta_summary, state, config, allow_repeats = FALSE) candidate_tbl,
     compute_pair_utility = function(draws, candidates, epsilon_mean) utilities_tbl,
     apply_degree_penalty = function(utility_tbl, state) utility_tbl
   )
@@ -126,7 +126,7 @@ testthat::test_that("U_dup_threshold uses max for < 50 candidates", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
       list(state = state, fit = fit, refit_performed = TRUE)
     },
-    generate_candidates = function(theta_summary, state, config) candidate_tbl,
+    generate_candidates = function(theta_summary, state, config, allow_repeats = FALSE) candidate_tbl,
     compute_pair_utility = function(draws, candidates, epsilon_mean) utilities_tbl,
     apply_degree_penalty = function(utility_tbl, state) utility_tbl
   )
