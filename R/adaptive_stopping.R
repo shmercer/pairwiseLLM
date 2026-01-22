@@ -180,29 +180,36 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
       min_adj_prob >= min_adj_prob_threshold
   }
 
-  list(
-    hard_cap_reached = hard_cap_reached,
-    hard_cap_threshold = hard_cap_threshold,
-    n_unique_pairs_seen = n_unique_pairs_seen,
-    scheduled_pairs = as.integer(state$comparisons_scheduled),
-    proposed_pairs = as.integer(nrow(utilities_tbl)),
-    completed_pairs = as.integer(state$comparisons_observed),
-    diagnostics_pass = diagnostics_pass,
-    theta_sd_median_S = theta_sd_median_S,
-    theta_sd_pass = theta_sd_pass,
-    tau = tau,
-    U0 = U0,
-    U_top_median = U_top_median,
-    U_abs = U_abs,
-    U_pass = U_pass,
-    rank_stability_pass = rank_stability_pass,
-    frac_weak_adj = frac_weak_adj,
-    min_adj_prob = min_adj_prob,
-    weak_adj_threshold = weak_adj_threshold,
-    weak_adj_frac_max = weak_adj_frac_max,
-    min_adj_prob_threshold = min_adj_prob_threshold,
-    min_new_pairs_for_check = min_new_pairs_for_check
-  )
+  metrics <- .adaptive_stop_metrics_defaults()
+  diagnostics <- fit$diagnostics %||% list()
+
+  metrics$hard_cap_reached <- hard_cap_reached
+  metrics$hard_cap_threshold <- hard_cap_threshold
+  metrics$n_unique_pairs_seen <- n_unique_pairs_seen
+  metrics$scheduled_pairs <- as.integer(state$comparisons_scheduled)
+  metrics$proposed_pairs <- as.integer(nrow(utilities_tbl))
+  metrics$completed_pairs <- as.integer(state$comparisons_observed)
+  metrics$diagnostics_pass <- diagnostics_pass
+  metrics$divergences <- as.integer(diagnostics$divergences %||% NA_integer_)
+  metrics$min_ess_bulk <- as.double(diagnostics$min_ess_bulk %||% NA_real_)
+  metrics$max_rhat <- as.double(diagnostics$max_rhat %||% NA_real_)
+  metrics$theta_sd_median_S <- theta_sd_median_S
+  metrics$theta_sd_pass <- theta_sd_pass
+  metrics$tau <- tau
+  metrics$U0 <- U0
+  metrics$U_top_median <- U_top_median
+  metrics$U_abs <- U_abs
+  metrics$U_pass <- U_pass
+  metrics$rank_stability_pass <- rank_stability_pass
+  metrics$frac_weak_adj <- frac_weak_adj
+  metrics$min_adj_prob <- min_adj_prob
+  metrics$weak_adj_threshold <- weak_adj_threshold
+  metrics$weak_adj_frac_max <- weak_adj_frac_max
+  metrics$min_adj_prob_threshold <- min_adj_prob_threshold
+  metrics$min_new_pairs_for_check <- min_new_pairs_for_check
+  metrics$candidate_starved <- as.logical(state$posterior$candidate_starved %||% NA)
+
+  metrics
 }
 
 #' @keywords internal
