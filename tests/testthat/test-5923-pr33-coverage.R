@@ -65,8 +65,7 @@ testthat::test_that("round log rollups filter batches since last refit", {
   row2$starvation_reason <- "unknown"
 
   state$batch_log <- dplyr::bind_rows(row1, row2)
-  state$config$round_log <- pairwiseLLM:::round_log_schema()
-  state$config$round_log$iter_at_refit <- 1L
+  state$config$round_log <- tibble::tibble(iter_at_refit = 1L)
 
   round_row <- pairwiseLLM:::build_round_log_row(state, config = state$config$v3)
   testthat::expect_equal(round_row$starve_rate_since_last_refit[[1L]], 0)
@@ -130,7 +129,7 @@ testthat::test_that("fallback attempt helpers handle edge paths", {
       stage = "expand_4x",
       W_used = 8L,
       anchor_pool = "default",
-      n_generated = 12L,
+      n_generated = 9L,
       n_survive = 9L,
       n_selected = 4L
     ),
@@ -171,6 +170,8 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     text = c("alpha", "bravo")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
+  state$deg <- c(A = 1L, B = 2L)
+  state$pos1 <- c(A = 1L, B = 0L)
   state$pos_count <- state$pos1
 
   testthat::expect_null(pairwiseLLM:::.adaptive_extract_theta_draws(1, state$ids))
