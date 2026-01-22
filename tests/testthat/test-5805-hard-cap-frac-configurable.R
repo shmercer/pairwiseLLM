@@ -5,11 +5,11 @@ testthat::test_that("hard cap fraction controls the threshold", {
     ID = LETTERS[1:10],
     text = paste0("text-", seq_len(10))
   )
-  state <- pairwiseLLM::adaptive_state_new(
+  state <- pairwiseLLM:::adaptive_state_new(
     samples = samples,
     config = list(d1 = 2L, M1_target = 4L, budget_max = 20L)
   )
-  config_v3 <- pairwiseLLM::adaptive_v3_config(
+  config_v3 <- pairwiseLLM:::adaptive_v3_config(
     state$N,
     list(hard_cap_frac = 0.10, S_subset = 3L, K_top = 2L, U_abs = 0.2)
   )
@@ -31,7 +31,7 @@ testthat::test_that("hard cap fraction controls the threshold", {
   metrics$refit_performed <- TRUE
   stop_out <- pairwiseLLM:::should_stop(metrics, state, config_v3)
 
-  testthat::expect_identical(metrics$hard_cap_threshold, 5L)
+  testthat::expect_equal(metrics$hard_cap_threshold, 5)
   testthat::expect_true(metrics$hard_cap_reached)
   testthat::expect_true(stop_out$stop_decision)
   testthat::expect_identical(stop_out$state$stop_reason, "hard_cap_40pct")
@@ -44,11 +44,11 @@ testthat::test_that("hard cap fraction validation rejects invalid values", {
     ID = LETTERS[1:5],
     text = paste0("text-", seq_len(5))
   )
-  state <- pairwiseLLM::adaptive_state_new(
+  state <- pairwiseLLM:::adaptive_state_new(
     samples = samples,
     config = list(d1 = 2L, M1_target = 4L, budget_max = 20L)
   )
-  config_v3 <- pairwiseLLM::adaptive_v3_config(
+  config_v3 <- pairwiseLLM:::adaptive_v3_config(
     state$N,
     list(S_subset = 3L, K_top = 2L, U_abs = 0.2)
   )
