@@ -30,6 +30,18 @@
   as.character(value)
 }
 
+.adaptive_progress_effective_cores <- function(physical, logical) {
+  physical <- suppressWarnings(as.integer(physical %||% NA_integer_))
+  logical <- suppressWarnings(as.integer(logical %||% NA_integer_))
+  if (!is.na(physical) && physical >= 1L) {
+    return(physical)
+  }
+  if (!is.na(logical) && logical >= 1L) {
+    return(logical)
+  }
+  1L
+}
+
 .adaptive_progress_should_iter <- function(config, iter) {
   if (!isTRUE(config$progress)) return(FALSE)
   every <- as.integer(config$progress_every_iter %||% 1L)
@@ -97,6 +109,27 @@
 
   lines <- c(
     header,
+    {
+      cores_physical <- row$mcmc_cores_detected_physical %||% NA_integer_
+      cores_logical <- row$mcmc_cores_detected_logical %||% NA_integer_
+      cores_effective <- .adaptive_progress_effective_cores(cores_physical, cores_logical)
+      mcmc_line <- paste0(
+        "  MCMC config: chains=", .adaptive_progress_value(row$mcmc_chains),
+        " parallel=", .adaptive_progress_value(row$mcmc_parallel_chains),
+        " cores=", .adaptive_progress_value(cores_physical),
+        "/", .adaptive_progress_value(cores_logical),
+        " eff=", .adaptive_progress_value(cores_effective)
+      )
+      core_fraction <- row$mcmc_core_fraction %||% NA_real_
+      if (!is.na(core_fraction)) {
+        mcmc_line <- paste0(
+          mcmc_line,
+          " core_fraction=",
+          .adaptive_progress_value(core_fraction)
+        )
+      }
+      mcmc_line
+    },
     paste0(
       "  MCMC: div=", .adaptive_progress_value(row$divergences),
       " rhat_max=", .adaptive_progress_value(row$max_rhat),
