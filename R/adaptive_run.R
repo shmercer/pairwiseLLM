@@ -1007,7 +1007,13 @@ NULL
   }
 
   attempt <- attempt_from_candidates(
-    generate_candidates_from_anchors(uncertainty_anchors, theta_summary, state, config_uncertainty),
+    generate_candidates_from_anchors(
+      uncertainty_anchors,
+      theta_summary,
+      state,
+      config_uncertainty,
+      dup_policy = "relaxed"
+    ),
     stage_name = "dup_relax",
     W_used = W_base,
     anchor_pool = "uncertainty",

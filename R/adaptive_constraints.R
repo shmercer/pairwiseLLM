@@ -61,6 +61,38 @@ duplicate_allowed <- function(state, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_unordered_allowed <- function(state, i_id, j_id, dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
+  if (dup_policy == "relaxed") {
+    return(TRUE)
+  }
+
+  unordered_key <- make_unordered_key(i_id, j_id)
+  counts <- state$unordered_count
+  if (is.null(names(counts)) || length(counts) == 0L || !unordered_key %in% names(counts)) {
+    return(TRUE)
+  }
+
+  count <- counts[[unordered_key]]
+  if (is.na(count) || count == 0L) return(TRUE)
+  if (count >= 2L) return(FALSE)
+
+  ordered_key <- make_ordered_key(i_id, j_id)
+  reverse_key <- make_ordered_key(j_id, i_id)
+  seen <- state$ordered_seen
+  if (is.environment(seen)) {
+    reverse_seen <- isTRUE(seen[[reverse_key]])
+    same_seen <- isTRUE(seen[[ordered_key]])
+  } else {
+    reverse_seen <- isTRUE(seen[reverse_key])
+    same_seen <- isTRUE(seen[ordered_key])
+  }
+
+  xor(same_seen, reverse_seen)
+}
+
+#' @keywords internal
+#' @noRd
 record_presentation <- function(state, A_id, B_id) {
   if (!A_id %in% state$ids || !B_id %in% state$ids) {
     rlang::abort("`A_id` and `B_id` must exist in `state$ids`.")
