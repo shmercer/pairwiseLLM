@@ -99,12 +99,8 @@
 
 .adaptive_refit_summary_schema <- function(include_optional = TRUE) {
   schema <- round_log_schema()
-  gini <- tibble::tibble(
-    gini_degree = .adaptive_summary_empty_value("double"),
-    gini_pos_A = .adaptive_summary_empty_value("double")
-  )
   if (isTRUE(include_optional)) {
-    return(dplyr::bind_cols(schema, gini))
+    return(schema)
   }
 
   required <- c(
@@ -140,7 +136,6 @@
     "mode"
   )
   required <- unique(c(required, "gini_degree", "gini_pos_A"))
-  schema <- dplyr::bind_cols(schema, gini)
   schema[, required, drop = FALSE]
 }
 
@@ -299,7 +294,7 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
   gini_pos_A <- if ("gini_pos_A" %in% names(log)) {
     as.double(log$gini_pos_A)
   } else {
-    rep_len(compute_gini_posA(state$pos1), n)
+    rep_len(compute_gini_posA(state$pos_count, state$deg), n)
   }
 
   summary <- tibble::tibble(
@@ -417,7 +412,7 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   gini_pos_A <- if ("gini_pos_A" %in% names(log)) {
     as.double(log$gini_pos_A)
   } else {
-    rep_len(compute_gini_posA(state$pos1), n)
+    rep_len(compute_gini_posA(state$pos_count, state$deg), n)
   }
 
   summary <- log |>
