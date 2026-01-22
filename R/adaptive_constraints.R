@@ -145,7 +145,7 @@ rollback_presentation <- function(state, A_id, B_id) {
   }
   ordered_counts[ordered_key] <- ordered_current - 1L
   if (ordered_counts[[ordered_key]] == 0L) {
-    ordered_counts[ordered_key] <- NULL
+    ordered_counts <- ordered_counts[names(ordered_counts) != ordered_key]
   }
   ordered_names <- names(ordered_counts)
   ordered_counts <- as.integer(ordered_counts)
@@ -181,7 +181,7 @@ rollback_presentation <- function(state, A_id, B_id) {
     if (isTRUE(keep_seen)) {
       seen[ordered_key] <- TRUE
     } else {
-      seen[ordered_key] <- NULL
+      seen <- seen[names(seen) != ordered_key]
     }
     state$ordered_seen <- seen
   }
