@@ -600,7 +600,9 @@ NULL
   list(state = state, diagnostics_pass = FALSE)
 }
 
-.adaptive_select_exploration_only <- function(state, candidates_with_utility, config, seed = NULL) {
+.adaptive_select_exploration_only <- function(state, candidates_with_utility, config, seed = NULL,
+                                              dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   if (!is.data.frame(candidates_with_utility)) {
     rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
@@ -622,7 +624,8 @@ NULL
       state = state,
       candidates = candidates_with_utility,
       n_explore = batch_size,
-      config = config
+      config = config,
+      dup_policy = dup_policy
     )
   })
 
@@ -679,7 +682,7 @@ NULL
   as.integer(min(max_W, W * 2L))
 }
 
-.adaptive_select_batch_with_fallbacks <- function(
+.adaptive_select_batch_by_ladder <- function(
     state,
     fit,
     theta_summary,
@@ -711,13 +714,14 @@ NULL
     rlang::abort("`n_candidates_generated` must be a non-negative integer.")
   }
 
-  select_from_utilities <- function(utilities) {
+  select_from_utilities <- function(utilities, dup_policy = "default") {
     if (isTRUE(exploration_only)) {
       return(.adaptive_select_exploration_only(
         state = state,
         candidates_with_utility = utilities,
         config = config,
-        seed = seed
+        seed = seed,
+        dup_policy = dup_policy
       ))
     }
     select_batch(
@@ -725,30 +729,29 @@ NULL
       candidates_with_utility = utilities,
       config = config,
       seed = seed,
-      exploration_only = FALSE
+      exploration_only = FALSE,
+      dup_policy = dup_policy
     )
   }
 
-  build_counts <- function(utilities, n_candidates_generated, n_pairs_selected) {
+  build_counts <- function(utilities, n_candidates_generated, n_pairs_selected, dup_policy = "default") {
     list(
       n_pairs_requested = as.integer(batch_size),
       n_pairs_selected = as.integer(n_pairs_selected),
       n_candidates_generated = as.integer(n_candidates_generated),
-      n_candidates_after_filters = as.integer(.adaptive_candidate_after_filters(utilities, state, config))
+      n_candidates_after_filters = as.integer(.adaptive_candidate_after_filters(
+        utilities,
+        state,
+        config,
+        dup_policy = dup_policy
+      ))
     )
   }
 
-  base_selection <- select_from_utilities(candidates_with_utility)
-  base_counts <- build_counts(candidates_with_utility, n_candidates_generated, nrow(base_selection))
-  if (batch_size == 0L || base_counts$n_pairs_selected >= base_counts$n_pairs_requested) {
-    return(list(
-      selection = base_selection,
-      candidate_starved = FALSE,
-      candidate_stats = base_counts,
-      fallback_stage = "base",
-      W_used = config$W
-    ))
-  }
+  W_base <- as.integer(config$W)
+  W_cap <- as.integer(.adaptive_v3_clamp(1L, state$N - 1L, state$N - 1L))
+  W2 <- as.integer(min(2L * W_base, W_cap))
+  W4 <- as.integer(min(4L * W_base, W_cap))
 
   epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
   empty_utilities <- function() {
@@ -766,7 +769,8 @@ NULL
     )
   }
 
-  attempt_from_candidates <- function(candidates) {
+  attempt_from_candidates <- function(candidates, stage_name, W_used, anchor_pool,
+                                      dup_policy = "default") {
     candidates <- tibble::as_tibble(candidates)
     n_generated <- nrow(candidates)
     candidates <- .adaptive_filter_candidates_to_draws(candidates, fit$theta_draws)
@@ -779,39 +783,248 @@ NULL
       utilities <- apply_degree_penalty(utilities, state)
     }
 
-    selection <- select_from_utilities(utilities)
-    counts <- build_counts(utilities, n_generated, nrow(selection))
-    list(selection = selection, candidate_stats = counts)
+    selection <- select_from_utilities(utilities, dup_policy = dup_policy)
+    counts <- build_counts(utilities, n_generated, nrow(selection), dup_policy = dup_policy)
+    attempt <- tibble::tibble(
+      stage = as.character(stage_name),
+      W_used = as.integer(W_used),
+      anchor_pool = as.character(anchor_pool),
+      n_generated = as.integer(n_generated),
+      n_survive = as.integer(counts$n_candidates_after_filters),
+      n_selected = as.integer(counts$n_pairs_selected),
+      dup_policy = as.character(dup_policy)
+    )
+    list(selection = selection, candidate_stats = counts, stage_attempt = attempt)
   }
 
-  config_broaden <- config
-  config_broaden$W <- .adaptive_expand_window(config$W, state$N)
-  attempt1 <- attempt_from_candidates(generate_candidates(theta_summary, state, config_broaden))
-  if (attempt1$candidate_stats$n_pairs_selected >= batch_size) {
+  base_selection <- select_from_utilities(candidates_with_utility, dup_policy = "default")
+  base_counts <- build_counts(
+    candidates_with_utility,
+    n_candidates_generated,
+    nrow(base_selection),
+    dup_policy = "default"
+  )
+  stage_attempts <- list(tibble::tibble(
+    stage = "base_window",
+    W_used = as.integer(W_base),
+    anchor_pool = "default",
+    n_generated = as.integer(n_candidates_generated),
+    n_survive = as.integer(base_counts$n_candidates_after_filters),
+    n_selected = as.integer(base_counts$n_pairs_selected),
+    dup_policy = "default"
+  ))
+  fallback_path <- c("base_window")
+  best <- list(
+    selection = base_selection,
+    candidate_stats = base_counts,
+    W_used = W_base,
+    fallback_stage = "base_window"
+  )
+
+  if (batch_size == 0L || base_counts$n_pairs_selected >= base_counts$n_pairs_requested) {
     return(list(
-      selection = attempt1$selection,
+      selection = base_selection,
       candidate_starved = FALSE,
-      candidate_stats = attempt1$candidate_stats,
-      fallback_stage = "broaden_window",
-      W_used = config_broaden$W
+      candidate_stats = base_counts,
+      fallback_stage = "base_window",
+      W_used = W_base,
+      fallback_used = "base_window",
+      fallback_path = fallback_path,
+      stage_attempts = stage_attempts
     ))
   }
 
-  config_relax <- config_broaden
-  config_relax$W <- as.integer(max(config_broaden$W, as.integer(state$N - 1L)))
-  anchors <- as.character(theta_summary$item_id)
-  attempt2 <- attempt_from_candidates(
-    generate_candidates_from_anchors(anchors, theta_summary, state, config_relax)
+  config_expand <- config
+  config_expand$W <- W2
+  attempt <- attempt_from_candidates(
+    generate_candidates(theta_summary, state, config_expand),
+    stage_name = "expand_2x",
+    W_used = W2,
+    anchor_pool = "default",
+    dup_policy = "default"
   )
-  candidate_starved <- attempt2$candidate_stats$n_pairs_selected < batch_size
-  fallback_stage <- if (candidate_starved) "starved" else "relax_constraints"
+  stage_attempts <- c(stage_attempts, list(attempt$stage_attempt))
+  fallback_path <- c(fallback_path, "expand_2x")
+  if (attempt$candidate_stats$n_pairs_selected > best$candidate_stats$n_pairs_selected) {
+    best <- list(
+      selection = attempt$selection,
+      candidate_stats = attempt$candidate_stats,
+      W_used = W2,
+      fallback_stage = "expand_2x"
+    )
+  }
+  if (attempt$candidate_stats$n_pairs_selected >= batch_size) {
+    return(list(
+      selection = attempt$selection,
+      candidate_starved = FALSE,
+      candidate_stats = attempt$candidate_stats,
+      fallback_stage = "expand_2x",
+      W_used = W2,
+      fallback_used = "expand_2x",
+      fallback_path = fallback_path,
+      stage_attempts = stage_attempts
+    ))
+  }
 
+  config_expand$W <- W4
+  attempt <- attempt_from_candidates(
+    generate_candidates(theta_summary, state, config_expand),
+    stage_name = "expand_4x",
+    W_used = W4,
+    anchor_pool = "default",
+    dup_policy = "default"
+  )
+  stage_attempts <- c(stage_attempts, list(attempt$stage_attempt))
+  fallback_path <- c(fallback_path, "expand_4x")
+  if (attempt$candidate_stats$n_pairs_selected > best$candidate_stats$n_pairs_selected) {
+    best <- list(
+      selection = attempt$selection,
+      candidate_stats = attempt$candidate_stats,
+      W_used = W4,
+      fallback_stage = "expand_4x"
+    )
+  }
+  if (attempt$candidate_stats$n_pairs_selected >= batch_size) {
+    return(list(
+      selection = attempt$selection,
+      candidate_starved = FALSE,
+      candidate_stats = attempt$candidate_stats,
+      fallback_stage = "expand_4x",
+      W_used = W4,
+      fallback_used = "expand_4x",
+      fallback_path = fallback_path,
+      stage_attempts = stage_attempts
+    ))
+  }
+
+  config_uncertainty <- config
+  config_uncertainty$W <- W_base
+  uncertainty_anchors <- select_uncertainty_anchors(state, config, theta_summary = theta_summary)
+  attempt <- attempt_from_candidates(
+    generate_candidates_from_anchors(uncertainty_anchors, theta_summary, state, config_uncertainty),
+    stage_name = "uncertainty_pool",
+    W_used = W_base,
+    anchor_pool = "uncertainty",
+    dup_policy = "default"
+  )
+  stage_attempts <- c(stage_attempts, list(attempt$stage_attempt))
+  fallback_path <- c(fallback_path, "uncertainty_pool")
+  if (attempt$candidate_stats$n_pairs_selected > best$candidate_stats$n_pairs_selected) {
+    best <- list(
+      selection = attempt$selection,
+      candidate_stats = attempt$candidate_stats,
+      W_used = W_base,
+      fallback_stage = "uncertainty_pool"
+    )
+  }
+  if (attempt$candidate_stats$n_pairs_selected >= batch_size) {
+    return(list(
+      selection = attempt$selection,
+      candidate_starved = FALSE,
+      candidate_stats = attempt$candidate_stats,
+      fallback_stage = "uncertainty_pool",
+      W_used = W_base,
+      fallback_used = "uncertainty_pool",
+      fallback_path = fallback_path,
+      stage_attempts = stage_attempts
+    ))
+  }
+
+  attempt <- attempt_from_candidates(
+    generate_candidates_from_anchors(uncertainty_anchors, theta_summary, state, config_uncertainty),
+    stage_name = "dup_relax",
+    W_used = W_base,
+    anchor_pool = "uncertainty",
+    dup_policy = "relaxed"
+  )
+  stage_attempts <- c(stage_attempts, list(attempt$stage_attempt))
+  fallback_path <- c(fallback_path, "dup_relax")
+  if (attempt$candidate_stats$n_pairs_selected > best$candidate_stats$n_pairs_selected) {
+    best <- list(
+      selection = attempt$selection,
+      candidate_stats = attempt$candidate_stats,
+      W_used = W_base,
+      fallback_stage = "dup_relax"
+    )
+  }
+  if (attempt$candidate_stats$n_pairs_selected >= batch_size) {
+    return(list(
+      selection = attempt$selection,
+      candidate_starved = FALSE,
+      candidate_stats = attempt$candidate_stats,
+      fallback_stage = "dup_relax",
+      W_used = W_base,
+      fallback_used = "dup_relax",
+      fallback_path = fallback_path,
+      stage_attempts = stage_attempts
+    ))
+  }
+
+  config_global <- config
+  config_global$W <- W_cap
+  all_anchors <- as.character(theta_summary$item_id)
+  attempt <- attempt_from_candidates(
+    generate_candidates_from_anchors(all_anchors, theta_summary, state, config_global),
+    stage_name = "global_safe",
+    W_used = W_cap,
+    anchor_pool = "global",
+    dup_policy = "default"
+  )
+  stage_attempts <- c(stage_attempts, list(attempt$stage_attempt))
+  fallback_path <- c(fallback_path, "global_safe")
+  if (attempt$candidate_stats$n_pairs_selected > best$candidate_stats$n_pairs_selected) {
+    best <- list(
+      selection = attempt$selection,
+      candidate_stats = attempt$candidate_stats,
+      W_used = W_cap,
+      fallback_stage = "global_safe"
+    )
+  }
+  if (attempt$candidate_stats$n_pairs_selected >= batch_size) {
+    return(list(
+      selection = attempt$selection,
+      candidate_starved = FALSE,
+      candidate_stats = attempt$candidate_stats,
+      fallback_stage = "global_safe",
+      W_used = W_cap,
+      fallback_used = "global_safe",
+      fallback_path = fallback_path,
+      stage_attempts = stage_attempts
+    ))
+  }
+
+  candidate_starved <- best$candidate_stats$n_pairs_selected < batch_size
   list(
-    selection = attempt2$selection,
+    selection = best$selection,
     candidate_starved = candidate_starved,
-    candidate_stats = attempt2$candidate_stats,
-    fallback_stage = fallback_stage,
-    W_used = config_relax$W
+    candidate_stats = best$candidate_stats,
+    fallback_stage = "FAILED",
+    W_used = best$W_used,
+    fallback_used = "FAILED",
+    fallback_path = fallback_path,
+    stage_attempts = stage_attempts
+  )
+}
+
+.adaptive_select_batch_with_fallbacks <- function(
+    state,
+    fit,
+    theta_summary,
+    config,
+    candidates_with_utility,
+    n_candidates_generated = NULL,
+    seed = NULL,
+    exploration_only = FALSE
+) {
+  .adaptive_select_batch_by_ladder(
+    state = state,
+    fit = fit,
+    theta_summary = theta_summary,
+    config = config,
+    candidates_with_utility = candidates_with_utility,
+    n_candidates_generated = n_candidates_generated,
+    seed = seed,
+    exploration_only = exploration_only
   )
 }
 
@@ -1337,7 +1550,7 @@ NULL
     }
   }
 
-  selection_out <- .adaptive_select_batch_with_fallbacks(
+  selection_out <- .adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
