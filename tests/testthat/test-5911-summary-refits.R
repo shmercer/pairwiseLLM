@@ -7,6 +7,7 @@ testthat::test_that("summarize_refits returns stable schema with gini metrics", 
   state$config$v3 <- pairwiseLLM:::adaptive_v3_defaults(state$N)
   state$deg <- c(A = 1L, B = 2L, C = 3L)
   state$pos1 <- c(A = 1L, B = 1L, C = 0L)
+  state$pos_count <- state$pos1
 
   fit <- list(
     theta_draws = matrix(
@@ -63,7 +64,10 @@ testthat::test_that("summarize_refits returns stable schema with gini metrics", 
   testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(all(c("reliability_EAP", "epsilon_mean") %in% names(summary)))
   testthat::expect_equal(summary$gini_degree[[1L]], pairwiseLLM:::compute_gini_degree(state$deg))
-  testthat::expect_equal(summary$gini_pos_A[[1L]], pairwiseLLM:::compute_gini_posA(state$pos1))
+  testthat::expect_equal(
+    summary$gini_pos_A[[1L]],
+    pairwiseLLM:::compute_gini_posA(state$pos_count, state$deg)
+  )
 })
 
 testthat::test_that("summarize_refits handles missing logs", {

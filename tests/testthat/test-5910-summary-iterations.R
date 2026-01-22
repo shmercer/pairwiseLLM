@@ -6,6 +6,7 @@ testthat::test_that("summarize_iterations returns stable schema with gini metric
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
   state$deg <- c(A = 1L, B = 2L, C = 3L)
   state$pos1 <- c(A = 1L, B = 1L, C = 0L)
+  state$pos_count <- state$pos1
 
   row <- pairwiseLLM:::build_batch_log_row(
     iter = 1L,
@@ -39,7 +40,10 @@ testthat::test_that("summarize_iterations returns stable schema with gini metric
   testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(all(c("n_candidates_generated", "utility_selected_p90", "backlog_unjudged") %in% names(summary)))
   testthat::expect_equal(summary$gini_degree[[1L]], pairwiseLLM:::compute_gini_degree(state$deg))
-  testthat::expect_equal(summary$gini_pos_A[[1L]], pairwiseLLM:::compute_gini_posA(state$pos1))
+  testthat::expect_equal(
+    summary$gini_pos_A[[1L]],
+    pairwiseLLM:::compute_gini_posA(state$pos_count, state$deg)
+  )
   testthat::expect_true("iter_start_time" %in% names(summary))
 })
 

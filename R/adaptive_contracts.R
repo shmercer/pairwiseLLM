@@ -292,6 +292,8 @@ round_log_schema <- function() {
     mean_degree = double(),
     min_degree = integer(),
     pos_balance_sd = double(),
+    gini_degree = double(),
+    gini_pos_A = double(),
     epsilon_mean = double(),
     epsilon_ci90_lo = double(),
     epsilon_ci90_hi = double(),
@@ -310,6 +312,10 @@ round_log_schema <- function() {
     scheduled_pairs = integer(),
     proposed_pairs = integer(),
     completed_pairs = integer(),
+    starve_rate_since_last_refit = double(),
+    fallback_rate_since_last_refit = double(),
+    fallback_used_mode = character(),
+    starvation_reason_mode = character(),
     rank_stability_pass = logical(),
     frac_weak_adj = double(),
     min_adj_prob = double(),
@@ -354,6 +360,32 @@ batch_log_schema <- function() {
     n_candidates_generated = integer(),
     n_candidates_after_filters = integer(),
     candidate_starved = logical(),
+    fallback_used = character(),
+    fallback_path = character(),
+    a1_stage = character(),
+    a1_W_used = integer(),
+    a1_anchor_pool = character(),
+    a1_n_generated = integer(),
+    a1_n_survive = integer(),
+    a1_n_selected = integer(),
+    a2_stage = character(),
+    a2_W_used = integer(),
+    a2_anchor_pool = character(),
+    a2_n_generated = integer(),
+    a2_n_survive = integer(),
+    a2_n_selected = integer(),
+    a3_stage = character(),
+    a3_W_used = integer(),
+    a3_anchor_pool = character(),
+    a3_n_generated = integer(),
+    a3_n_survive = integer(),
+    a3_n_selected = integer(),
+    aN_tried = integer(),
+    aN_best_stage = character(),
+    aN_best_n_generated = integer(),
+    aN_best_n_survive = integer(),
+    aN_best_n_selected = integer(),
+    starvation_reason = character(),
     reason_short_batch = character(),
     W_used = integer(),
     explore_rate_used = double(),
@@ -441,21 +473,41 @@ compute_gini_degree <- function(deg) {
 
 #' @keywords internal
 #' @noRd
-compute_gini_posA <- function(posA_counts) {
+compute_gini_posA <- function(posA_counts, deg = NULL) {
   if (is.null(posA_counts)) {
     return(NA_real_)
   }
   posA_counts <- as.double(posA_counts)
-  posA_counts <- posA_counts[is.finite(posA_counts)]
   if (length(posA_counts) == 0L) {
     return(NA_real_)
   }
-  if (any(posA_counts < 0)) {
+  if (any(is.finite(posA_counts) & posA_counts < 0)) {
     rlang::abort("`posA_counts` must be non-negative.")
   }
 
-  total <- sum(posA_counts)
-  n <- length(posA_counts)
+  values <- posA_counts
+  if (!is.null(deg)) {
+    deg <- as.double(deg)
+    if (length(deg) != length(posA_counts)) {
+      rlang::abort("`deg` must be the same length as `posA_counts`.")
+    }
+    if (any(is.finite(deg) & deg < 0)) {
+      rlang::abort("`deg` must be non-negative.")
+    }
+    posA_rate <- rep(NA_real_, length(posA_counts))
+    positive <- is.finite(deg) & deg > 0 & is.finite(posA_counts)
+    posA_rate[positive] <- posA_counts[positive] / deg[positive]
+    values <- posA_rate[is.finite(posA_rate)]
+  } else {
+    values <- posA_counts[is.finite(posA_counts)]
+  }
+
+  if (length(values) == 0L) {
+    return(NA_real_)
+  }
+
+  total <- sum(values)
+  n <- length(values)
   if (total == 0) {
     return(0)
   }
@@ -463,9 +515,9 @@ compute_gini_posA <- function(posA_counts) {
     return(0)
   }
 
-  posA_counts <- sort(posA_counts)
+  values <- sort(values)
   idx <- seq_len(n)
-  gini <- (2 * sum(posA_counts * idx) / (n * total)) - (n + 1) / n
+  gini <- (2 * sum(values * idx) / (n * total)) - (n + 1) / n
   as.double(max(0, gini))
 }
 
@@ -551,6 +603,25 @@ compute_gini_posA <- function(posA_counts) {
   metrics
 }
 
+.adaptive_mode_non_na <- function(values) {
+  values <- as.character(values)
+  values <- values[!is.na(values) & values != ""]
+  if (length(values) == 0L) {
+    return(NA_character_)
+  }
+  tab <- table(values)
+  names(tab)[[which.max(tab)]]
+}
+
+.adaptive_mean_or_na <- function(values) {
+  values <- as.double(values)
+  values <- values[is.finite(values)]
+  if (length(values) == 0L) {
+    return(NA_real_)
+  }
+  as.double(mean(values))
+}
+
 #' @keywords internal
 #' @noRd
 build_round_log_row <- function(state,
@@ -585,6 +656,8 @@ build_round_log_row <- function(state,
   positive <- deg > 0
   pos_balance[positive] <- (pos1[positive] / deg[positive]) - 0.5
   pos_balance_sd <- if (all(is.na(pos_balance))) NA_real_ else stats::sd(pos_balance, na.rm = TRUE)
+  gini_degree <- compute_gini_degree(state$deg)
+  gini_pos_A <- compute_gini_posA(state$pos_count, state$deg)
 
   epsilon_mean <- state$posterior$epsilon_mean %||% NA_real_
   epsilon_ci90_lo <- NA_real_
@@ -618,6 +691,29 @@ build_round_log_row <- function(state,
   stop_decision <- stop_out$stop_decision %||% NA
   stop_reason <- stop_out$stop_reason %||% state$stop_reason %||% NA_character_
 
+  batch_log <- state$batch_log %||% tibble::tibble()
+  if (!is.data.frame(batch_log)) {
+    batch_log <- tibble::tibble()
+  }
+  batch_log <- .adaptive_align_log_schema(batch_log, batch_log_schema())
+  batch_log <- tibble::as_tibble(batch_log)
+  if (nrow(batch_log) > 0L) {
+    prior_log <- state$config$round_log %||% tibble::tibble()
+    last_iter_at_refit <- if (is.data.frame(prior_log) && nrow(prior_log) > 0L) {
+      prior_log$iter_at_refit[[nrow(prior_log)]]
+    } else {
+      NA_integer_
+    }
+    if (!is.na(last_iter_at_refit)) {
+      batch_log <- batch_log[batch_log$iter > last_iter_at_refit, , drop = FALSE]
+    }
+  }
+
+  starve_rate_since_last_refit <- .adaptive_mean_or_na(batch_log$candidate_starved)
+  fallback_rate_since_last_refit <- .adaptive_mean_or_na(batch_log$fallback_used != "base_window")
+  fallback_used_mode <- .adaptive_mode_non_na(batch_log$fallback_used)
+  starvation_reason_mode <- .adaptive_mode_non_na(batch_log$starvation_reason)
+
   row$round_id <- as.integer(round_id)
   row$iter_at_refit <- as.integer(state$iter %||% NA_integer_)
   row$n_items <- as.integer(state$N)
@@ -629,6 +725,8 @@ build_round_log_row <- function(state,
   row$mean_degree <- as.double(mean_degree)
   row$min_degree <- as.integer(min_degree)
   row$pos_balance_sd <- as.double(pos_balance_sd)
+  row$gini_degree <- as.double(gini_degree)
+  row$gini_pos_A <- as.double(gini_pos_A)
   row$epsilon_mean <- as.double(epsilon_mean)
   row$epsilon_ci90_lo <- as.double(epsilon_ci90_lo)
   row$epsilon_ci90_hi <- as.double(epsilon_ci90_hi)
@@ -647,6 +745,10 @@ build_round_log_row <- function(state,
   row$scheduled_pairs <- as.integer(metrics$scheduled_pairs %||% NA_integer_)
   row$proposed_pairs <- as.integer(metrics$proposed_pairs %||% NA_integer_)
   row$completed_pairs <- as.integer(metrics$completed_pairs %||% NA_integer_)
+  row$starve_rate_since_last_refit <- as.double(starve_rate_since_last_refit)
+  row$fallback_rate_since_last_refit <- as.double(fallback_rate_since_last_refit)
+  row$fallback_used_mode <- as.character(fallback_used_mode)
+  row$starvation_reason_mode <- as.character(starvation_reason_mode)
   row$rank_stability_pass <- as.logical(metrics$rank_stability_pass %||% NA)
   row$frac_weak_adj <- as.double(metrics$frac_weak_adj %||% NA_real_)
   row$min_adj_prob <- as.double(metrics$min_adj_prob %||% NA_real_)
@@ -689,6 +791,32 @@ build_batch_log_row <- function(iter,
     n_candidates_generated,
     n_candidates_after_filters,
     candidate_starved,
+    fallback_used = NA_character_,
+    fallback_path = NA_character_,
+    a1_stage = NA_character_,
+    a1_W_used = NA_integer_,
+    a1_anchor_pool = NA_character_,
+    a1_n_generated = NA_integer_,
+    a1_n_survive = NA_integer_,
+    a1_n_selected = NA_integer_,
+    a2_stage = NA_character_,
+    a2_W_used = NA_integer_,
+    a2_anchor_pool = NA_character_,
+    a2_n_generated = NA_integer_,
+    a2_n_survive = NA_integer_,
+    a2_n_selected = NA_integer_,
+    a3_stage = NA_character_,
+    a3_W_used = NA_integer_,
+    a3_anchor_pool = NA_character_,
+    a3_n_generated = NA_integer_,
+    a3_n_survive = NA_integer_,
+    a3_n_selected = NA_integer_,
+    aN_tried = NA_integer_,
+    aN_best_stage = NA_character_,
+    aN_best_n_generated = NA_integer_,
+    aN_best_n_survive = NA_integer_,
+    aN_best_n_selected = NA_integer_,
+    starvation_reason = NA_character_,
     reason_short_batch,
     W_used,
     explore_rate_used,
@@ -713,6 +841,32 @@ build_batch_log_row <- function(iter,
   row$n_candidates_generated <- as.integer(n_candidates_generated)
   row$n_candidates_after_filters <- as.integer(n_candidates_after_filters)
   row$candidate_starved <- as.logical(candidate_starved)
+  row$fallback_used <- as.character(fallback_used)
+  row$fallback_path <- as.character(fallback_path)
+  row$a1_stage <- as.character(a1_stage)
+  row$a1_W_used <- as.integer(a1_W_used)
+  row$a1_anchor_pool <- as.character(a1_anchor_pool)
+  row$a1_n_generated <- as.integer(a1_n_generated)
+  row$a1_n_survive <- as.integer(a1_n_survive)
+  row$a1_n_selected <- as.integer(a1_n_selected)
+  row$a2_stage <- as.character(a2_stage)
+  row$a2_W_used <- as.integer(a2_W_used)
+  row$a2_anchor_pool <- as.character(a2_anchor_pool)
+  row$a2_n_generated <- as.integer(a2_n_generated)
+  row$a2_n_survive <- as.integer(a2_n_survive)
+  row$a2_n_selected <- as.integer(a2_n_selected)
+  row$a3_stage <- as.character(a3_stage)
+  row$a3_W_used <- as.integer(a3_W_used)
+  row$a3_anchor_pool <- as.character(a3_anchor_pool)
+  row$a3_n_generated <- as.integer(a3_n_generated)
+  row$a3_n_survive <- as.integer(a3_n_survive)
+  row$a3_n_selected <- as.integer(a3_n_selected)
+  row$aN_tried <- as.integer(aN_tried)
+  row$aN_best_stage <- as.character(aN_best_stage)
+  row$aN_best_n_generated <- as.integer(aN_best_n_generated)
+  row$aN_best_n_survive <- as.integer(aN_best_n_survive)
+  row$aN_best_n_selected <- as.integer(aN_best_n_selected)
+  row$starvation_reason <- as.character(starvation_reason)
   row$reason_short_batch <- as.character(reason_short_batch)
   row$W_used <- as.integer(W_used)
   row$explore_rate_used <- as.double(explore_rate_used)
