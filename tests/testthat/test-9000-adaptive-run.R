@@ -115,7 +115,7 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
   expect_equal(out$state$comparisons_observed, 3L)
   expect_equal(out$state$comparisons_scheduled, 4L)
   expect_equal(nrow(out$state$failed_attempts), 1L)
-  expect_equal(length(out$submission_info$live_submissions), 1L)
+  expect_equal(length(out$submission_info$live_submissions), 2L)
 })
 
 testthat::test_that("adaptive_rank_resume ingests batch results incrementally", {
