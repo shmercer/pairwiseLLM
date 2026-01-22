@@ -51,6 +51,70 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_filter_duplicate_candidates <- function(candidates_with_utility, state, config,
+                                                  dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
+  validate_state(state)
+  if (!is.data.frame(candidates_with_utility)) {
+    rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
+  }
+  candidates_with_utility <- tibble::as_tibble(candidates_with_utility)
+  required <- c("i_id", "j_id", "unordered_key", "utility", "p_mean")
+  .adaptive_required_cols(candidates_with_utility, "candidates_with_utility", required)
+
+  if (nrow(candidates_with_utility) == 0L) {
+    return(candidates_with_utility)
+  }
+
+  i_id <- as.character(candidates_with_utility$i_id)
+  j_id <- as.character(candidates_with_utility$j_id)
+  missing_ids <- setdiff(unique(c(i_id, j_id)), state$ids)
+  if (length(missing_ids) > 0L) {
+    rlang::abort("`candidates_with_utility` ids must exist in `state$ids`.")
+  }
+
+  keep <- i_id != j_id
+  if (!any(keep)) {
+    return(candidates_with_utility[0, , drop = FALSE])
+  }
+  candidates_with_utility <- candidates_with_utility[keep, , drop = FALSE]
+
+  unordered_key <- as.character(candidates_with_utility$unordered_key)
+  counts <- state$unordered_count
+  if (is.null(names(counts)) || length(counts) == 0L) {
+    counts <- integer()
+  }
+  count_vals <- counts[unordered_key]
+  count_vals[is.na(count_vals)] <- 0L
+  repeat_mask <- count_vals >= 2L
+
+  if (!any(repeat_mask)) {
+    return(candidates_with_utility)
+  }
+
+  threshold <- state$posterior$U_dup_threshold
+  if (!is.numeric(threshold) || length(threshold) != 1L || !is.finite(threshold)) {
+    return(candidates_with_utility[!repeat_mask, , drop = FALSE])
+  }
+
+  max_count <- as.integer(config$dup_max_count)
+  if (dup_policy == "relaxed") {
+    max_count <- max_count + 1L
+  }
+
+  p_mean <- as.double(candidates_with_utility$p_mean)
+  utility <- as.double(candidates_with_utility$utility)
+  allowed_repeats <- is.finite(p_mean) & is.finite(utility) &
+    abs(p_mean - 0.5) <= config$dup_p_margin &
+    utility >= threshold &
+    count_vals < max_count
+
+  allowed <- !repeat_mask | allowed_repeats
+  candidates_with_utility[allowed, , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_candidate_after_filters <- function(candidates_with_utility, state, config,
                                               dup_policy = c("default", "relaxed")) {
   dup_policy <- match.arg(dup_policy)
