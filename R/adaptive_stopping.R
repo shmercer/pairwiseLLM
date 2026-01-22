@@ -145,8 +145,16 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     }
   }
 
+  hard_cap_frac <- config$hard_cap_frac
+  if (!is.numeric(hard_cap_frac) ||
+    length(hard_cap_frac) != 1L ||
+    !is.finite(hard_cap_frac) ||
+    hard_cap_frac <= 0 ||
+    hard_cap_frac > 1) {
+    rlang::abort("`config$hard_cap_frac` must be a finite numeric scalar in (0, 1].")
+  }
   total_pairs <- state$N * (state$N - 1L) / 2
-  hard_cap_threshold <- ceiling(0.40 * total_pairs)
+  hard_cap_threshold <- ceiling(hard_cap_frac * total_pairs)
   n_unique_pairs_seen <- sum(state$pair_count >= 1L)
   hard_cap_reached <- n_unique_pairs_seen >= hard_cap_threshold
 
