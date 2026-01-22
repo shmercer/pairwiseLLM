@@ -456,6 +456,7 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       adaptive = adaptive,
       seed = 555
     ),
+    llm_submit_pairs_multi_batch = mock_submit_batch,
     llm_resume_multi_batches = mock_resume_batch,
     .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
       force(config)
