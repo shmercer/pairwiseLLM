@@ -61,6 +61,16 @@ duplicate_allowed <- function(state, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_unordered_allowed <- function(state, i_id, j_id, dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
+  if (dup_policy == "relaxed") {
+    return(TRUE)
+  }
+  duplicate_allowed(state, i_id, j_id) || duplicate_allowed(state, j_id, i_id)
+}
+
+#' @keywords internal
+#' @noRd
 record_presentation <- function(state, A_id, B_id) {
   if (!A_id %in% state$ids || !B_id %in% state$ids) {
     rlang::abort("`A_id` and `B_id` must exist in `state$ids`.")
