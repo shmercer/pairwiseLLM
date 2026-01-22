@@ -251,7 +251,6 @@ generate_candidates_streamed <- function(
       for (partner_id in window_ids) {
         i_id <- pmin(anchor_id, partner_id)
         j_id <- pmax(anchor_id, partner_id)
-        if (i_id == j_id) next
         unordered_key <- make_unordered_key(i_id, j_id)
         if (exists(unordered_key, envir = seen, inherits = FALSE)) next
 
