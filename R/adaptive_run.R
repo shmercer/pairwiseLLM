@@ -714,24 +714,37 @@ NULL
     rlang::abort("`n_candidates_generated` must be a non-negative integer.")
   }
 
+  call_with_formals <- function(fn, args) {
+    fn_formals <- formals(fn)
+    if (is.null(fn_formals)) {
+      return(do.call(fn, args))
+    }
+    fn_names <- names(fn_formals)
+    if ("..." %in% fn_names) {
+      return(do.call(fn, args))
+    }
+    args <- args[names(args) %in% fn_names]
+    do.call(fn, args)
+  }
+
   select_from_utilities <- function(utilities, dup_policy = "default") {
     if (isTRUE(exploration_only)) {
-      return(.adaptive_select_exploration_only(
+      return(call_with_formals(.adaptive_select_exploration_only, list(
         state = state,
         candidates_with_utility = utilities,
         config = config,
         seed = seed,
         dup_policy = dup_policy
-      ))
+      )))
     }
-    select_batch(
+    call_with_formals(select_batch, list(
       state = state,
       candidates_with_utility = utilities,
       config = config,
       seed = seed,
       exploration_only = FALSE,
       dup_policy = dup_policy
-    )
+    ))
   }
 
   build_counts <- function(utilities, n_candidates_generated, n_pairs_selected, dup_policy = "default") {
