@@ -58,6 +58,7 @@ Collate:
     'adaptive_candidates.R'
     'adaptive_constraints.R'
     'adaptive_contracts.R'
+    'adaptive_uncertainty_pool.R'
     'adaptive_diagnostics.R'
     'adaptive_printing.R'
     'adaptive_refit.R'
