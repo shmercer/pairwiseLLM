@@ -18,7 +18,9 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_duplicate_allowed <- function(state, unordered_key, p_mean, utility, config) {
+.adaptive_duplicate_allowed <- function(state, unordered_key, p_mean, utility, config,
+                                        policy = c("default", "relaxed")) {
+  policy <- match.arg(policy)
   counts <- state$pair_count
   count <- if (!is.null(names(counts)) && unordered_key %in% names(counts)) {
     counts[[unordered_key]]
@@ -29,7 +31,6 @@
     return(TRUE)
   }
 
-  if (count >= as.integer(config$dup_max_count)) return(FALSE)
   if (!is.numeric(p_mean) || length(p_mean) != 1L || !is.finite(p_mean)) return(FALSE)
   if (!is.numeric(utility) || length(utility) != 1L || !is.finite(utility)) return(FALSE)
   if (abs(p_mean - 0.5) > config$dup_p_margin) return(FALSE)
@@ -38,13 +39,21 @@
   if (!is.numeric(threshold) || length(threshold) != 1L || !is.finite(threshold)) return(FALSE)
   if (utility < threshold) return(FALSE)
 
+  max_count <- as.integer(config$dup_max_count)
+  if (policy == "relaxed") {
+    max_count <- max_count + 1L
+  }
+  if (count >= max_count) return(FALSE)
+
   last_order <- .adaptive_last_order_for_pair(state, unordered_key)
   !is.null(last_order)
 }
 
 #' @keywords internal
 #' @noRd
-.adaptive_candidate_after_filters <- function(candidates_with_utility, state, config) {
+.adaptive_candidate_after_filters <- function(candidates_with_utility, state, config,
+                                              dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   if (!is.data.frame(candidates_with_utility)) {
     rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
@@ -85,7 +94,8 @@
       unordered_key = unordered_key[[idx]],
       p_mean = p_mean[[idx]],
       utility = utility[[idx]],
-      config = config
+      config = config,
+      policy = dup_policy
     )
   }, logical(1L))
 
@@ -94,7 +104,9 @@
 
 #' @keywords internal
 #' @noRd
-sample_exploration_pairs <- function(state, candidates, n_explore, config) {
+sample_exploration_pairs <- function(state, candidates, n_explore, config,
+                                     dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   if (!is.data.frame(candidates)) {
     rlang::abort("`candidates` must be a data frame or tibble.")
@@ -153,7 +165,14 @@ sample_exploration_pairs <- function(state, candidates, n_explore, config) {
       idx <- key_idx[[unordered_key]]
       utility <- lookup$utility[[idx]]
       p_mean <- lookup$p_mean[[idx]]
-      if (!.adaptive_duplicate_allowed(state, unordered_key, p_mean, utility, config)) {
+      if (!.adaptive_duplicate_allowed(
+        state,
+        unordered_key,
+        p_mean,
+        utility,
+        config,
+        policy = dup_policy
+      )) {
         next
       }
       utility_raw <- lookup$utility_raw[[idx]]
@@ -183,7 +202,9 @@ sample_exploration_pairs <- function(state, candidates, n_explore, config) {
 
 #' @keywords internal
 #' @noRd
-select_exploitation_pairs <- function(candidates_with_utility, state, n_exploit, config) {
+select_exploitation_pairs <- function(candidates_with_utility, state, n_exploit, config,
+                                      dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   if (!is.data.frame(candidates_with_utility)) {
     rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
@@ -232,7 +253,8 @@ select_exploitation_pairs <- function(candidates_with_utility, state, n_exploit,
       unordered_key,
       row$p_mean[[1L]],
       row$utility[[1L]],
-      config
+      config,
+      policy = dup_policy
     )) {
       next
     }
@@ -327,7 +349,10 @@ assign_order <- function(pairs, state) {
 
 #' @keywords internal
 #' @noRd
-select_batch <- function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
+select_batch <- function(state, candidates_with_utility, config, seed = NULL,
+                         exploration_only = FALSE,
+                         dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
   validate_state(state)
   if (!is.data.frame(candidates_with_utility)) {
     rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
@@ -357,7 +382,8 @@ select_batch <- function(state, candidates_with_utility, config, seed = NULL, ex
       state = state,
       candidates = candidates_with_utility,
       n_explore = n_explore,
-      config = config
+      config = config,
+      dup_policy = dup_policy
     )
   })
   if (nrow(explore) > 0L) {
@@ -380,7 +406,8 @@ select_batch <- function(state, candidates_with_utility, config, seed = NULL, ex
     candidates_with_utility,
     state = state,
     n_exploit = n_exploit,
-    config = config
+    config = config,
+    dup_policy = dup_policy
   )
   if (nrow(exploit) > 0L) {
     exploit$is_explore <- FALSE
