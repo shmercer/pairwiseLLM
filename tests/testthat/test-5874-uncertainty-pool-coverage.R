@@ -33,12 +33,19 @@ testthat::test_that("select_uncertainty_anchors errors when state N is invalid",
     theta_sd = c(0.2, 0.3)
   )
 
+  ns <- asNamespace("pairwiseLLM")
+  original_validate_state <- get("validate_state", envir = ns)
+  base::unlockBinding("validate_state", ns)
+  assign("validate_state", function(...) TRUE, envir = ns)
+  base::lockBinding("validate_state", ns)
+  on.exit({
+    base::unlockBinding("validate_state", ns)
+    assign("validate_state", original_validate_state, envir = ns)
+    base::lockBinding("validate_state", ns)
+  }, add = TRUE)
+
   testthat::expect_error(
-    testthat::with_mocked_bindings(
-      pairwiseLLM:::select_uncertainty_anchors(state, config = list(), theta_summary = theta_summary),
-      validate_state = function(...) TRUE,
-      .env = asNamespace("pairwiseLLM")
-    ),
+    pairwiseLLM:::select_uncertainty_anchors(state, config = list(), theta_summary = theta_summary),
     "state\\$N"
   )
 })
@@ -50,16 +57,23 @@ testthat::test_that("select_uncertainty_anchors returns empty when summary is em
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
 
-  out <- testthat::with_mocked_bindings(
-    pairwiseLLM:::select_uncertainty_anchors(
-      state,
-      config = list(),
-      theta_summary = tibble::tibble(item_id = character(), theta_mean = double(), theta_sd = double())
-    ),
-    .adaptive_v3_theta_summary = function(...) {
-      tibble::tibble(item_id = character(), theta_mean = double(), theta_sd = double(), deg = integer())
-    },
-    .env = asNamespace("pairwiseLLM")
+  ns <- asNamespace("pairwiseLLM")
+  original_summary <- get(".adaptive_v3_theta_summary", envir = ns)
+  base::unlockBinding(".adaptive_v3_theta_summary", ns)
+  assign(".adaptive_v3_theta_summary", function(...) {
+    tibble::tibble(item_id = character(), theta_mean = double(), theta_sd = double(), deg = integer())
+  }, envir = ns)
+  base::lockBinding(".adaptive_v3_theta_summary", ns)
+  on.exit({
+    base::unlockBinding(".adaptive_v3_theta_summary", ns)
+    assign(".adaptive_v3_theta_summary", original_summary, envir = ns)
+    base::lockBinding(".adaptive_v3_theta_summary", ns)
+  }, add = TRUE)
+
+  out <- pairwiseLLM:::select_uncertainty_anchors(
+    state,
+    config = list(),
+    theta_summary = tibble::tibble(item_id = character(), theta_mean = double(), theta_sd = double())
   )
 
   testthat::expect_identical(out, character())
