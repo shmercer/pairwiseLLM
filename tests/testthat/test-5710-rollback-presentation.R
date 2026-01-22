@@ -31,9 +31,9 @@ testthat::test_that("rollback_presentation reverses presentation bookkeeping", {
   state <- pairwiseLLM:::rollback_presentation(state, "B", "A")
   testthat::expect_equal(state$unordered_count[["A:B"]], 1L)
   testthat::expect_true(isTRUE(state$ordered_seen[["A:B"]]))
-  testthat::expect_false(isTRUE(state$ordered_seen[["B:A"]]))
+  testthat::expect_false("B:A" %in% names(state$ordered_seen))
   testthat::expect_equal(state$pair_ordered_count[["A:B"]], 1L)
-  testthat::expect_true(is.null(state$pair_ordered_count[["B:A"]]))
+  testthat::expect_false("B:A" %in% names(state$pair_ordered_count))
 
   state <- pairwiseLLM:::rollback_presentation(state, "A", "B")
   testthat::expect_identical(state$unordered_count, baseline$unordered_count)
