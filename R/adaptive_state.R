@@ -103,6 +103,10 @@
   batch_log <- state$batch_log %||% batch_log_schema()
   state$batch_log <- .adaptive_align_log_schema(batch_log, batch_log_schema())
 
+  posterior <- state$posterior %||% list()
+  posterior$stop_metrics <- .adaptive_stop_metrics_align(posterior$stop_metrics %||% NULL)
+  state$posterior <- posterior
+
   counters <- state$log_counters %||% list()
   if (!is.list(counters)) {
     counters <- list()
@@ -184,7 +188,8 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       last_refit_at = 0L,
       posterior = list(
         U_dup_threshold = NA_real_,
-        epsilon_mean = epsilon_prior_mean
+        epsilon_mean = epsilon_prior_mean,
+        stop_metrics = .adaptive_stop_metrics_defaults()
       ),
       mode = "warm_start",
       repair_attempts = 0L,
