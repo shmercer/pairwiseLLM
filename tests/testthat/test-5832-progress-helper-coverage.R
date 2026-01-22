@@ -88,7 +88,12 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
     min_adj_prob = 0.72,
     n_unique_pairs_seen = 3L,
     hard_cap_threshold = 12L,
-    hard_cap_reached = FALSE
+    hard_cap_reached = FALSE,
+    mcmc_chains = 2L,
+    mcmc_parallel_chains = 2L,
+    mcmc_cores_detected_physical = 4L,
+    mcmc_cores_detected_logical = 8L,
+    mcmc_core_fraction = 0.6
   )
 
   lines <- pairwiseLLM:::.adaptive_progress_format_refit_block(round_row, state, config)
@@ -153,7 +158,12 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
     U_pass = TRUE,
     rank_stability_pass = NA,
     frac_weak_adj = NA_real_,
-    min_adj_prob = NA_real_
+    min_adj_prob = NA_real_,
+    mcmc_chains = 2L,
+    mcmc_parallel_chains = 2L,
+    mcmc_cores_detected_physical = 4L,
+    mcmc_cores_detected_logical = 8L,
+    mcmc_core_fraction = 0.6
   )
 
   state$config$v3 <- list(progress = FALSE, progress_level = "refit", progress_every_refit = 1L)
