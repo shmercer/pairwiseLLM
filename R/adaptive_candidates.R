@@ -185,13 +185,134 @@ select_anchors <- function(theta_summary, state, config) {
 
 #' @keywords internal
 #' @noRd
+generate_candidates_streamed <- function(
+    ranked_ids,
+    anchors,
+    W,
+    cap,
+    mode = c("window_stream", "global_sample"),
+    seed = NULL
+) {
+  ranked_ids <- as.character(ranked_ids)
+  if (length(ranked_ids) < 2L) {
+    rlang::abort("`ranked_ids` must contain at least two ids.")
+  }
+  if (anyNA(ranked_ids) || any(ranked_ids == "")) {
+    rlang::abort("`ranked_ids` must be non-empty and non-missing.")
+  }
+  if (anyDuplicated(ranked_ids)) {
+    rlang::abort("`ranked_ids` must be unique.")
+  }
+
+  anchors <- unique(as.character(anchors))
+  anchors <- anchors[!is.na(anchors) & anchors != ""]
+  anchors <- anchors[anchors %in% ranked_ids]
+  if (length(anchors) == 0L) {
+    return(tibble::tibble(i = character(), j = character()))
+  }
+
+  W <- as.integer(W)
+  if (is.na(W) || W < 1L) {
+    rlang::abort("`W` must be a positive integer.")
+  }
+  cap <- as.integer(cap)
+  if (is.na(cap) || cap < 1L) {
+    rlang::abort("`cap` must be a positive integer.")
+  }
+
+  n_ids <- length(ranked_ids)
+  max_pairs <- as.integer(n_ids * (n_ids - 1L) / 2)
+  cap <- min(cap, max_pairs)
+  if (cap < 1L) {
+    return(tibble::tibble(i = character(), j = character()))
+  }
+
+  mode <- match.arg(mode)
+
+  i_vals <- character()
+  j_vals <- character()
+  n_added <- 0L
+
+  if (mode == "window_stream") {
+    rank_map <- stats::setNames(seq_len(n_ids), ranked_ids)
+    seen <- new.env(parent = emptyenv())
+    i_vals <- character(cap)
+    j_vals <- character(cap)
+
+    for (anchor_id in anchors) {
+      anchor_rank <- rank_map[[anchor_id]]
+      if (is.null(anchor_rank)) next
+      lower <- max(1L, anchor_rank - W)
+      upper <- min(n_ids, anchor_rank + W)
+      window_ids <- ranked_ids[lower:upper]
+      window_ids <- window_ids[window_ids != anchor_id]
+      if (length(window_ids) == 0L) next
+
+      for (partner_id in window_ids) {
+        i_id <- pmin(anchor_id, partner_id)
+        j_id <- pmax(anchor_id, partner_id)
+        if (i_id == j_id) next
+        unordered_key <- make_unordered_key(i_id, j_id)
+        if (exists(unordered_key, envir = seen, inherits = FALSE)) next
+
+        n_added <- n_added + 1L
+        i_vals[[n_added]] <- i_id
+        j_vals[[n_added]] <- j_id
+        seen[[unordered_key]] <- TRUE
+        if (n_added >= cap) break
+      }
+      if (n_added >= cap) break
+    }
+
+    if (n_added > 0L) {
+      i_vals <- i_vals[seq_len(n_added)]
+      j_vals <- j_vals[seq_len(n_added)]
+    } else {
+      i_vals <- character()
+      j_vals <- character()
+    }
+  } else {
+    counts <- seq.int(n_ids - 1L, 1L, by = -1L)
+    cumulative <- cumsum(counts)
+    total_pairs <- cumulative[[length(cumulative)]]
+    cap <- min(cap, total_pairs)
+    if (cap > 0L) {
+      pair_idx <- .pairwiseLLM_with_seed(seed, function() {
+        sample.int(total_pairs, size = cap, replace = FALSE)
+      })
+      i_idx <- findInterval(pair_idx - 1L, cumulative) + 1L
+      prev <- numeric(length(i_idx))
+      use_idx <- i_idx > 1L
+      if (any(use_idx)) {
+        prev[use_idx] <- cumulative[i_idx[use_idx] - 1L]
+      }
+      j_offset <- pair_idx - prev
+      j_idx <- i_idx + j_offset
+      i_vals <- ranked_ids[i_idx]
+      j_vals <- ranked_ids[j_idx]
+      n_added <- length(i_vals)
+    }
+  }
+
+  if (n_added == 0L) {
+    return(tibble::tibble(i = character(), j = character()))
+  }
+
+  out <- tibble::tibble(
+    i = as.character(i_vals),
+    j = as.character(j_vals),
+    unordered_key = make_unordered_key(i_vals, j_vals)
+  )
+  out <- dplyr::arrange(out, .data$unordered_key)
+  out <- dplyr::select(out, "i", "j")
+  tibble::as_tibble(out)
+}
+
+#' @keywords internal
+#' @noRd
 enumerate_candidates <- function(anchors, theta_summary, state, config) {
   validate_state(state)
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
-
-  i <- NULL
-  j <- NULL
-  unordered_key <- NULL
 
   anchors <- unique(as.character(anchors))
   anchors <- anchors[anchors %in% theta_summary$item_id]
@@ -200,39 +321,28 @@ enumerate_candidates <- function(anchors, theta_summary, state, config) {
   }
 
   W <- as.integer(config$W)
-  if (is.na(W) || W < 1L) {
+  if (length(W) != 1L || is.na(W) || W < 1L) {
     rlang::abort("`config$W` must be a positive integer.")
+    return(tibble::tibble(i = character(), j = character()))
+  }
+
+  cap <- as.integer(config$C_max)
+  if (length(cap) != 1L || is.na(cap) || cap < 1L) {
+    rlang::abort("`config$C_max` must be a positive integer.")
+    return(tibble::tibble(i = character(), j = character()))
   }
 
   ord <- order(-theta_summary$theta_mean, theta_summary$item_id)
   ranked_ids <- theta_summary$item_id[ord]
-  rank_vals <- seq_along(ranked_ids)
-  rank_map <- stats::setNames(rank_vals, ranked_ids)
 
-  i_vals <- character()
-  j_vals <- character()
-  for (anchor_id in anchors) {
-    anchor_rank <- rank_map[[anchor_id]]
-    window_ids <- names(rank_map)[abs(rank_map - anchor_rank) <= W]
-    window_ids <- window_ids[window_ids != anchor_id]
-    if (length(window_ids) == 0L) next
-    i_vals <- c(i_vals, rep(anchor_id, length(window_ids)))
-    j_vals <- c(j_vals, window_ids)
-  }
-
-  if (length(i_vals) == 0L) {
-    return(tibble::tibble(i = character(), j = character()))
-  }
-
-  i_id <- pmin(i_vals, j_vals)
-  j_id <- pmax(i_vals, j_vals)
-  unordered_key <- make_unordered_key(i_id, j_id)
-  out <- tibble::tibble(i = i_id, j = j_id, unordered_key = unordered_key)
-  out <- out[out$i != out$j, , drop = FALSE]
-  out <- dplyr::distinct(out, .data$unordered_key, .keep_all = TRUE)
-  out <- dplyr::arrange(out, .data$unordered_key)
-  out <- dplyr::select(out, "i", "j")
-  tibble::as_tibble(out)
+  generate_candidates_streamed(
+    ranked_ids = ranked_ids,
+    anchors = anchors,
+    W = W,
+    cap = cap,
+    mode = "window_stream",
+    seed = state$seed
+  )
 }
 
 #' @keywords internal
@@ -242,25 +352,6 @@ generate_candidates <- function(theta_summary, state, config) {
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
   anchors <- select_anchors(theta_summary, state, config)
   candidates <- enumerate_candidates(anchors, theta_summary, state, config)
-
-  i <- NULL
-  j <- NULL
-  unordered_key <- NULL
-
-  cap <- as.integer(config$C_max)
-  if (is.na(cap) || cap < 1L) {
-    rlang::abort("`config$C_max` must be a positive integer.")
-  }
-  if (nrow(candidates) > cap) {
-    candidates <- dplyr::mutate(
-      candidates,
-      unordered_key = make_unordered_key(.data$i, .data$j)
-    )
-    candidates <- dplyr::arrange(candidates, .data$unordered_key)
-    candidates <- dplyr::slice_head(candidates, n = cap)
-    candidates <- dplyr::select(candidates, "i", "j")
-  }
-
   tibble::as_tibble(candidates)
 }
 
@@ -271,27 +362,36 @@ generate_candidates_from_anchors <- function(anchors, theta_summary, state, conf
   theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
   anchors <- unique(as.character(anchors))
   anchors <- anchors[!is.na(anchors) & anchors != ""]
-  candidates <- enumerate_candidates(anchors, theta_summary, state, config)
+  anchors <- anchors[anchors %in% theta_summary$item_id]
+  if (length(anchors) == 0L) {
+    return(tibble::tibble(i = character(), j = character()))
+  }
 
-  i <- NULL
-  j <- NULL
-  unordered_key <- NULL
-
+  W <- as.integer(config$W)
+  if (length(W) != 1L || is.na(W) || W < 1L) {
+    rlang::abort("`config$W` must be a positive integer.")
+    return(tibble::tibble(i = character(), j = character()))
+  }
   cap <- as.integer(config$C_max)
-  if (is.na(cap) || cap < 1L) {
+  if (length(cap) != 1L || is.na(cap) || cap < 1L) {
     rlang::abort("`config$C_max` must be a positive integer.")
-  }
-  if (nrow(candidates) > cap) {
-    candidates <- dplyr::mutate(
-      candidates,
-      unordered_key = make_unordered_key(.data$i, .data$j)
-    )
-    candidates <- dplyr::arrange(candidates, .data$unordered_key)
-    candidates <- dplyr::slice_head(candidates, n = cap)
-    candidates <- dplyr::select(candidates, "i", "j")
+    return(tibble::tibble(i = character(), j = character()))
   }
 
-  tibble::as_tibble(candidates)
+  ord <- order(-theta_summary$theta_mean, theta_summary$item_id)
+  ranked_ids <- theta_summary$item_id[ord]
+
+  global_safe <- length(anchors) == length(ranked_ids) && W >= length(ranked_ids) - 1L
+  mode <- if (isTRUE(global_safe)) "global_sample" else "window_stream"
+
+  generate_candidates_streamed(
+    ranked_ids = ranked_ids,
+    anchors = anchors,
+    W = W,
+    cap = cap,
+    mode = mode,
+    seed = state$seed
+  )
 }
 
 .adaptive_unordered_allowed <- function(state, i_id, j_id) {
