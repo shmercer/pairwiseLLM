@@ -38,6 +38,9 @@ testthat::test_that("adaptive progress helpers cover value formatting and gating
     list(progress = TRUE, progress_every_refit = 2L),
     4L
   ))
+
+  expect_equal(pairwiseLLM:::.adaptive_progress_effective_cores(NA, 6L), 6L)
+  expect_equal(pairwiseLLM:::.adaptive_progress_effective_cores(NA, NA), 1L)
 })
 
 testthat::test_that("adaptive progress formatting includes short batch details", {
@@ -56,6 +59,22 @@ testthat::test_that("adaptive progress formatting includes short batch details",
   expect_true(grepl("iter=3", line))
   expect_true(grepl("starved=TRUE", line))
   expect_true(grepl("reason=dup_gate_exhausted", line))
+})
+
+testthat::test_that("adaptive progress formatting omits starved and reason when absent", {
+  batch_row <- tibble::tibble(
+    phase = "phase1",
+    iter = 1L,
+    n_pairs_selected = 2L,
+    batch_size_target = 2L,
+    n_pairs_completed = 1L,
+    candidate_starved = NA,
+    reason_short_batch = NA_character_
+  )
+
+  line <- pairwiseLLM:::.adaptive_progress_format_iter_line(batch_row)
+  expect_false(grepl("starved=", line))
+  expect_false(grepl("reason=", line))
 })
 
 testthat::test_that("adaptive progress refit block formats diagnostics and stability", {
@@ -88,7 +107,12 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
     min_adj_prob = 0.72,
     n_unique_pairs_seen = 3L,
     hard_cap_threshold = 12L,
-    hard_cap_reached = FALSE
+    hard_cap_reached = FALSE,
+    mcmc_chains = 2L,
+    mcmc_parallel_chains = 2L,
+    mcmc_cores_detected_physical = 4L,
+    mcmc_cores_detected_logical = 8L,
+    mcmc_core_fraction = 0.6
   )
 
   lines <- pairwiseLLM:::.adaptive_progress_format_refit_block(round_row, state, config)
@@ -132,8 +156,9 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
 
   state$batch_log$iter <- 2L
   iter_out <- capture.output({
-    invisible(pairwiseLLM:::.adaptive_progress_emit_iter(state))
+    iter_result <- pairwiseLLM:::.adaptive_progress_emit_iter(state)
   })
+  expect_true(isTRUE(iter_result))
   expect_true(any(grepl("selected=", iter_out)))
 
   round_row <- tibble::tibble(
@@ -153,7 +178,12 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
     U_pass = TRUE,
     rank_stability_pass = NA,
     frac_weak_adj = NA_real_,
-    min_adj_prob = NA_real_
+    min_adj_prob = NA_real_,
+    mcmc_chains = 2L,
+    mcmc_parallel_chains = 2L,
+    mcmc_cores_detected_physical = 4L,
+    mcmc_cores_detected_logical = 8L,
+    mcmc_core_fraction = 0.6
   )
 
   state$config$v3 <- list(progress = FALSE, progress_level = "refit", progress_every_refit = 1L)
@@ -167,7 +197,61 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
 
   state$config$v3 <- list(progress = TRUE, progress_level = "refit", progress_every_refit = 1L)
   refit_out <- capture.output({
-    invisible(pairwiseLLM:::.adaptive_progress_emit_refit(state, round_row))
+    refit_result <- pairwiseLLM:::.adaptive_progress_emit_refit(state, round_row)
   })
+  expect_true(isTRUE(refit_result))
   expect_true(any(grepl("rel_EAP", refit_out)))
+})
+
+testthat::test_that("adaptive progress emitters print when configured", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  state$phase <- "phase2"
+
+  state$config$v3 <- list(progress = TRUE, progress_every_iter = 1L)
+  state$batch_log <- tibble::tibble(
+    phase = "phase2",
+    iter = 1L,
+    n_pairs_selected = 1L,
+    batch_size_target = 1L,
+    n_pairs_completed = 1L,
+    candidate_starved = FALSE,
+    reason_short_batch = NA_character_
+  )
+  iter_out <- capture.output({
+    iter_result <- pairwiseLLM:::.adaptive_progress_emit_iter(state)
+  })
+  expect_true(isTRUE(iter_result))
+  expect_true(any(grepl("selected=", iter_out)))
+
+  round_row <- pairwiseLLM:::.adaptive_round_log_defaults()
+  round_row$round_id <- 1L
+  round_row$iter_at_refit <- 1L
+  round_row$mcmc_chains <- 2L
+  round_row$mcmc_parallel_chains <- 2L
+  round_row$mcmc_cores_detected_physical <- 4L
+  round_row$mcmc_cores_detected_logical <- 8L
+  round_row$mcmc_core_fraction <- 0.6
+  round_row$divergences <- 0L
+  round_row$max_rhat <- 1.01
+  round_row$min_ess_bulk <- 900
+  round_row$epsilon_mean <- 0.09
+  round_row$reliability_EAP <- 0.87
+  round_row$diagnostics_pass <- TRUE
+  round_row$theta_sd_median <- 0.48
+  round_row$tau <- 0.80
+  round_row$theta_sd_pass <- TRUE
+  round_row$U0 <- 0.0012
+  round_row$U_abs <- 0.0024
+  round_row$U_pass <- TRUE
+
+  state$config$v3 <- list(progress = TRUE, progress_level = "refit", progress_every_refit = 1L)
+  refit_out <- capture.output({
+    refit_result <- pairwiseLLM:::.adaptive_progress_emit_refit(state, round_row)
+  })
+  expect_true(isTRUE(refit_result))
+  expect_true(any(grepl("MCMC config", refit_out)))
 })
