@@ -14,7 +14,7 @@ gemini_compare_pair_live(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("minimal", "low", "medium", "high"),
+  thinking_level = "low",
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,

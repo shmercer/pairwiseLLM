@@ -201,7 +201,7 @@ gemini_compare_pair_live <- function(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("minimal", "low", "medium", "high"),
+  thinking_level = "low",
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -220,7 +220,7 @@ gemini_compare_pair_live <- function(
   # Identify Flash vs non-Flash behavior (Gemini 3 Flash supports minimal/medium)
   is_flash <- grepl("gemini-3-.*flash", model, ignore.case = TRUE)
 
-  thinking_level <- match.arg(thinking_level)
+  thinking_level <- match.arg(thinking_level, c("minimal", "low", "medium", "high"))
 
   dots <- list(...)
   if (!is.null(dots$thinking_budget)) {
@@ -271,19 +271,19 @@ gemini_compare_pair_live <- function(
   }
 
   # Map R-level thinking_level to Gemini JSON values.
-  # - Flash: minimal/low/medium/high pass through (lowercase)
-  # - Non-Flash: low -> low; medium/high -> high (with warning for medium)
+  # - Flash: minimal/low/medium/high pass through (title case)
+  # - Non-Flash: low -> Low; medium/high -> High (with warning for medium)
   if (!is.null(thinking_level)) {
     tl_map <- if (is_flash) {
-      c(minimal = "minimal", low = "low", medium = "medium", high = "high")
+      c(minimal = "Minimal", low = "Low", medium = "Medium", high = "High")
     } else {
-      c(low = "low", medium = "high", high = "high")
+      c(low = "Low", medium = "High", high = "High")
     }
 
     if (!is_flash && identical(thinking_level, "medium")) {
       rlang::warn(paste0(
         "`thinking_level = \"medium\"` is not supported for non-Flash Gemini 3 models; ",
-        "mapping to \"high\" internally."
+        "mapping to \"High\" internally."
       ))
     }
 
@@ -636,7 +636,7 @@ submit_gemini_pairs_live <- function(
     trait_description,
     prompt_template = set_prompt_template(),
     api_key = NULL,
-    thinking_level = c("minimal", "low", "medium", "high"),
+    thinking_level = "low",
     temperature = NULL,
     top_p = NULL,
     top_k = NULL,
@@ -781,7 +781,7 @@ submit_gemini_pairs_live <- function(
   status_every <- as.integer(status_every)
 
   # Validate thinking_level against model family once (gemini_compare_pair_live will also validate)
-  thinking_level <- match.arg(thinking_level)
+  thinking_level <- match.arg(thinking_level, c("minimal", "low", "medium", "high"))
   is_flash <- grepl("gemini-3-.*flash", model, ignore.case = TRUE)
   if (!is_flash && identical(thinking_level, "minimal")) {
     rlang::abort(paste0(

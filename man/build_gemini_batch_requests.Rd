@@ -10,7 +10,7 @@ build_gemini_batch_requests(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("minimal", "low", "medium", "high"),
+  thinking_level = "low",
   custom_id_prefix = "GEM",
   temperature = NULL,
   top_p = NULL,

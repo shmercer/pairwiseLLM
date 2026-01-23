@@ -267,7 +267,7 @@ NULL
   if (nrow(rollback_tbl) == 0L) {
     return(state)
   }
-  rollback_tbl <- dplyr::distinct(rollback_tbl, pair_uid, .keep_all = TRUE)
+  rollback_tbl <- dplyr::distinct(rollback_tbl, .data$pair_uid, .keep_all = TRUE)
 
   for (idx in seq_len(nrow(rollback_tbl))) {
     A_id <- as.character(rollback_tbl$A_id[[idx]])
