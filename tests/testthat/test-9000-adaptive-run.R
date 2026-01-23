@@ -260,6 +260,166 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
   expect_equal(resume_out2$state$comparisons_observed, 4L)
 })
 
+testthat::test_that("adaptive_rank_resume filters batch polling args to formals", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C", "D"),
+    text = c("alpha", "bravo", "charlie", "delta")
+  )
+
+  adaptive <- list(
+    d1 = 2L,
+    M1_target = 4L,
+    budget_max = 4L,
+    bins = 2L,
+    batch_overrides = list(BATCH1 = 4L)
+  )
+
+  last_pairs <- NULL
+  make_results <- function(pairs, backend, model) {
+    ids1 <- pairs$ID1
+    ids2 <- pairs$ID2
+    unordered_key <- pairwiseLLM:::make_unordered_key(ids1, ids2)
+    ordered_key <- pairwiseLLM:::make_ordered_key(ids1, ids2)
+    tibble::tibble(
+      pair_uid = pairs$pair_uid,
+      unordered_key = unordered_key,
+      ordered_key = ordered_key,
+      A_id = ids1,
+      B_id = ids2,
+      better_id = ids1,
+      winner_pos = as.integer(1L),
+      phase = as.character(pairs$phase),
+      iter = as.integer(pairs$iter),
+      received_at = as.POSIXct("2026-01-11 00:00:00", tz = "UTC"),
+      backend = as.character(backend),
+      model = as.character(model)
+    )
+  }
+
+  mock_submit_batch <- function(pairs, model, trait_name, trait_description,
+                                prompt_template, backend, ...) {
+    last_pairs <<- pairs
+    list(
+      jobs = list(list(
+        segment_index = 1L,
+        provider = backend,
+        model = model,
+        batch_id = "batch-1",
+        batch_input_path = "in.jsonl",
+        batch_output_path = "out.jsonl",
+        csv_path = "out.csv",
+        pairs = pairs,
+        done = FALSE
+      )),
+      registry = tibble::tibble(
+        segment_index = 1L,
+        provider = backend,
+        model = model,
+        batch_id = "batch-1",
+        batch_input_path = "in.jsonl",
+        batch_output_path = "out.jsonl",
+        csv_path = "out.csv",
+        done = FALSE
+      )
+    )
+  }
+
+  called <- list()
+  mock_resume_batch <- function(
+      jobs = NULL,
+      output_dir = NULL,
+      interval_seconds = 60,
+      per_job_delay = 2,
+      write_results_csv = FALSE,
+      keep_jsonl = TRUE,
+      write_registry = FALSE,
+      tag_prefix = "<BETTER_SAMPLE>",
+      tag_suffix = "</BETTER_SAMPLE>",
+      verbose = FALSE,
+      write_combined_csv = FALSE,
+      combined_csv_path = NULL,
+      openai_max_retries = 3
+  ) {
+    called <<- list(
+      interval_seconds = interval_seconds,
+      per_job_delay = per_job_delay,
+      verbose = verbose
+    )
+    results <- make_results(last_pairs, "openai", "gpt-test")
+    list(
+      jobs = jobs,
+      combined = results,
+      failed_attempts = pairwiseLLM:::.adaptive_empty_failed_attempts_tbl(),
+      batch_failures = tibble::tibble()
+    )
+  }
+
+  mock_mcmc_fit <- function(bt_data, config, seed = NULL) {
+    force(config)
+    force(seed)
+    ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+    theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    list(
+      draws = list(theta = theta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+    )
+  }
+
+  withr::local_seed(303)
+  start_out <- testthat::with_mocked_bindings(
+    adaptive_rank_start(
+      samples = samples,
+      model = "gpt-test",
+      trait_name = "quality",
+      trait_description = "Which is better?",
+      backend = "openai",
+      mode = "batch",
+      submission = list(
+        n_segments = 2L,
+        progress = TRUE,
+        interval_seconds = 5,
+        per_job_delay = 1,
+        verbose = TRUE
+      ),
+      adaptive = adaptive,
+      paths = list(output_dir = withr::local_tempdir()),
+      seed = 303
+    ),
+    llm_submit_pairs_multi_batch = mock_submit_batch,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
+  )
+
+  resume_out <- testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = start_out$state,
+      mode = "batch",
+      submission_info = start_out$submission_info,
+      submission = list(
+        interval_seconds = 12,
+        per_job_delay = 7,
+        verbose = TRUE
+      ),
+      adaptive = adaptive,
+      seed = 303
+    ),
+    llm_resume_multi_batches = mock_resume_batch,
+    llm_submit_pairs_multi_batch = mock_submit_batch,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
+  )
+
+  expect_equal(resume_out$state$comparisons_observed, 4L)
+  expect_equal(called$interval_seconds, 12)
+  expect_equal(called$per_job_delay, 7)
+  expect_true(called$verbose)
+})
+
 testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
   samples <- tibble::tibble(
     ID = c("A", "B"),

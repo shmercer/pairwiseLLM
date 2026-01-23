@@ -2531,6 +2531,8 @@ adaptive_rank_resume <- function(
     resume_args <- state$config$submission
     resume_args$jobs <- submission_info$jobs %||% NULL
     resume_args$output_dir <- output_dir
+    resume_formals <- names(formals(llm_resume_multi_batches))
+    resume_args <- resume_args[names(resume_args) %in% resume_formals]
     res <- do.call(llm_resume_multi_batches, resume_args)
 
     if (!is.null(res$combined) && nrow(res$combined) > 0L) {
