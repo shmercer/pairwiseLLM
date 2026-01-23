@@ -2,6 +2,7 @@
 
 S3method(print,pairwiseLLM_cost_estimate)
 export(adaptive_rank_resume)
+export(adaptive_rank_run_batch)
 export(adaptive_rank_run_live)
 export(adaptive_rank_start)
 export(alternate_pair_order)
