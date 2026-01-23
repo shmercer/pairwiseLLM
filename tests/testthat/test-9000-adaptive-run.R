@@ -118,6 +118,172 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
   expect_equal(length(out$submission_info$live_submissions), 1L)
 })
 
+testthat::test_that("adaptive_rank_start saves live state when state_path is provided", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C", "D"),
+    text = c("alpha", "bravo", "charlie", "delta")
+  )
+
+  adaptive <- list(
+    d1 = 2L,
+    M1_target = 2L,
+    budget_max = 6L,
+    bins = 2L,
+    batch_overrides = list(BATCH1 = 2L)
+  )
+
+  mock_submit <- function(pairs, model, trait_name, trait_description,
+                          prompt_template, backend, ...) {
+    ids1 <- pairs$ID1
+    ids2 <- pairs$ID2
+    results <- tibble::tibble(
+      pair_uid = pairs$pair_uid,
+      unordered_key = pairwiseLLM:::make_unordered_key(ids1, ids2),
+      ordered_key = pairwiseLLM:::make_ordered_key(ids1, ids2),
+      A_id = ids1,
+      B_id = ids2,
+      better_id = ids1,
+      winner_pos = as.integer(1L),
+      phase = as.character(pairs$phase),
+      iter = as.integer(pairs$iter),
+      received_at = as.POSIXct("2026-01-10 00:00:00", tz = "UTC"),
+      backend = as.character(backend),
+      model = as.character(model)
+    )
+
+    list(
+      results = results,
+      failed_pairs = tibble::tibble(),
+      failed_attempts = pairwiseLLM:::.adaptive_empty_failed_attempts_tbl()
+    )
+  }
+
+  mock_mcmc_fit <- function(bt_data, config, seed = NULL) {
+    force(config)
+    force(seed)
+    ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
+    theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    list(
+      draws = list(theta = theta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1,
+        min_ess_bulk = 1000,
+        min_ess_tail = 1000
+      )
+    )
+  }
+
+  out_dir <- withr::local_tempdir()
+  state_path <- file.path(out_dir, "adaptive_state.rds")
+  withr::local_seed(202)
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_start(
+      samples = samples,
+      model = "gpt-test",
+      trait_name = "quality",
+      trait_description = "Which is better?",
+      backend = "openai",
+      mode = "live",
+      adaptive = adaptive,
+      paths = list(output_dir = out_dir, state_path = state_path),
+      seed = 202
+    ),
+    submit_llm_pairs = mock_submit,
+    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit
+  )
+
+  expect_true(file.exists(state_path))
+  expect_identical(out$state$config$state_path, state_path)
+})
+
+testthat::test_that("adaptive_rank_resume skips rollback when live results are absent", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 2L, M1_target = 1L, budget_max = 2L),
+    seed = 1L
+  )
+
+  pairs_submitted <- tibble::tibble(
+    pair_uid = "A:B#1",
+    A_id = "A",
+    B_id = "B"
+  )
+
+  testthat::expect_error(
+    testthat::with_mocked_bindings(
+      adaptive_rank_resume(
+        state = state,
+        mode = "live",
+        submission_info = list(
+          backend = "openai",
+          model = "gpt-test",
+          trait_name = "quality",
+          trait_description = "Which is better?",
+          prompt_template = "template",
+          pairs_submitted = pairs_submitted
+        ),
+        adaptive = list(d1 = 2L),
+        seed = 1L
+      ),
+      .adaptive_run_stopping_checks = function(state, adaptive, seed) {
+        list(state = state)
+      },
+      .adaptive_schedule_target = function(state, adaptive) {
+        list(state = state, target = 0L)
+      }
+    ),
+    NA
+  )
+})
+
+testthat::test_that("adaptive_rank_resume saves live state when configured", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 2L, M1_target = 1L, budget_max = 2L),
+    seed = 1L
+  )
+  out_dir <- withr::local_tempdir()
+  save_path <- file.path(out_dir, "adaptive_state.rds")
+  state$config$state_path <- save_path
+
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_resume(
+      state = state,
+      mode = "live",
+      submission_info = list(
+        backend = "openai",
+        model = "gpt-test",
+        trait_name = "quality",
+        trait_description = "Which is better?",
+        prompt_template = "template",
+        pairs_submitted = pairwiseLLM:::.adaptive_empty_pairs_tbl()
+      ),
+      adaptive = list(d1 = 2L),
+      seed = 1L
+    ),
+    .adaptive_run_stopping_checks = function(state, adaptive, seed) {
+      list(state = state)
+    },
+    .adaptive_schedule_target = function(state, adaptive) {
+      list(state = state, target = 0L)
+    }
+  )
+
+  expect_true(file.exists(save_path))
+  expect_identical(out$state_path, save_path)
+})
+
 testthat::test_that("adaptive_rank_resume ingests batch results incrementally", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C", "D"),
