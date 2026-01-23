@@ -97,6 +97,7 @@ Collate:
     'ollama_live.R'
     'openai_batch_api.R'
     'openai_live.R'
+    'openai_params.R'
     'pairing.R'
     'prompt_template.R'
     'reverse_consistency.R'
