@@ -2843,6 +2843,13 @@ adaptive_rank_run_live <- function(
 #' costs for hosted backends. Batch mode is recommended for longer runs because
 #' it supports checkpointing and controlled polling behavior.
 #'
+#' Some backends and helper functions accept different arguments for batch
+#' submission vs polling/resume. This wrapper uses \code{formals()}-based
+#' filtering to pass only arguments that are accepted by the polling function
+#' (currently \code{llm_resume_multi_batches()}) during the resume loop. This
+#' prevents unused-argument errors when the same \code{submission} list contains
+#' submit-only keys (e.g., \code{n_segments}, \code{progress}).
+#'
 #' @param samples A data frame or tibble with columns \code{ID} and \code{text}.
 #' @param model Model identifier for the selected backend.
 #' @param trait_name Short label for the trait.
@@ -2855,7 +2862,9 @@ adaptive_rank_run_live <- function(
 #' @param submission A list of arguments passed through to
 #'   \code{llm_submit_pairs_multi_batch()} (and the corresponding resume/polling
 #'   functions) on each batch submission. This wrapper will force
-#'   \code{submission$n_segments <- 1}.
+#'   \code{submission$n_segments <- 1}. During polling, the wrapper will filter
+#'   the list to the formals of \code{llm_resume_multi_batches()} before calling
+#'   \code{adaptive_rank_resume()}.
 #' @param adaptive A list of adaptive configuration overrides. See
 #'   \code{adaptive_rank_start()} for supported keys.
 #' @param paths A list with optional \code{state_path} and \code{output_dir}.
@@ -2881,7 +2890,8 @@ adaptive_rank_run_live <- function(
 #'   trait_description = td$description,
 #'   backend = "gemini",
 #'   submission = list(
-#'     # any additional batch/polling controls supported by your backend
+#'     # submit-time and poll-time controls may be mixed here;
+#'     # submit-only keys will be filtered out automatically during polling
 #'     interval_seconds = 60,
 #'     per_job_delay = 2,
 #'     progress = TRUE,
@@ -2915,10 +2925,6 @@ adaptive_rank_run_batch <- function(
     adaptive$max_iterations <- max_iterations
   }
 
-  # Force single-segment batch behavior
-  if (is.null(submission) || !is.list(submission)) submission <- list()
-  submission$n_segments <- 1L
-
   n_items <- nrow(tibble::as_tibble(samples))
   v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
   adaptive_v3_config(n_items, v3_overrides)
@@ -2928,6 +2934,17 @@ adaptive_rank_run_batch <- function(
     rlang::abort("`max_iterations` must be a positive integer.")
   }
 
+  if (is.null(submission) || !is.list(submission)) submission <- list()
+
+  # Submit args: force single-segment batching
+  submission_submit <- submission
+  submission_submit$n_segments <- 1L
+
+  # Poll/resume args: filter to what llm_resume_multi_batches() actually accepts.
+  # Note: adaptive_rank_resume() ultimately calls llm_resume_multi_batches() via do.call().
+  poll_formals <- names(formals(llm_resume_multi_batches))
+  submission_poll <- submission[names(submission) %in% poll_formals]
+
   start_out <- adaptive_rank_start(
     samples = samples,
     model = model,
@@ -2936,7 +2953,7 @@ adaptive_rank_run_batch <- function(
     prompt_template = prompt_template,
     backend = backend,
     mode = "batch",
-    submission = submission,
+    submission = submission_submit,
     adaptive = adaptive,
     paths = paths,
     seed = seed
@@ -2952,7 +2969,7 @@ adaptive_rank_run_batch <- function(
       state = state,
       mode = "batch",
       submission_info = submission_info,
-      submission = submission,
+      submission = submission_poll,
       adaptive = adaptive,
       seed = seed
     )

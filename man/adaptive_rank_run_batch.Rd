@@ -37,7 +37,9 @@ adaptive_rank_run_batch(
 \item{submission}{A list of arguments passed through to
 \code{llm_submit_pairs_multi_batch()} (and the corresponding resume/polling
 functions) on each batch submission. This wrapper will force
-\code{submission$n_segments <- 1}.}
+\code{submission$n_segments <- 1}. During polling, the wrapper will filter
+the list to the formals of \code{llm_resume_multi_batches()} before calling
+\code{adaptive_rank_resume()}.}
 
 \item{adaptive}{A list of adaptive configuration overrides. See
 \code{adaptive_rank_start()} for supported keys.}
@@ -72,6 +74,13 @@ submits a single batch segment (rather than splitting into multiple segments).
 Running this function will submit LLM comparisons and will incur API usage
 costs for hosted backends. Batch mode is recommended for longer runs because
 it supports checkpointing and controlled polling behavior.
+
+Some backends and helper functions accept different arguments for batch
+submission vs polling/resume. This wrapper uses \code{formals()}-based
+filtering to pass only arguments that are accepted by the polling function
+(currently \code{llm_resume_multi_batches()}) during the resume loop. This
+prevents unused-argument errors when the same \code{submission} list contains
+submit-only keys (e.g., \code{n_segments}, \code{progress}).
 }
 \examples{
 \dontrun{
@@ -83,7 +92,8 @@ out <- adaptive_rank_run_batch(
   trait_description = td$description,
   backend = "gemini",
   submission = list(
-    # any additional batch/polling controls supported by your backend
+    # submit-time and poll-time controls may be mixed here;
+    # submit-only keys will be filtered out automatically during polling
     interval_seconds = 60,
     per_job_delay = 2,
     progress = TRUE,
