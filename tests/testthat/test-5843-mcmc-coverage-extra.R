@@ -135,7 +135,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates parallel chains", {
       list(
         chains = 1L,
         parallel_chains = NA_integer_,
-        core_fraction = 0.6,
+        core_fraction = 0.8,
         cores_detected_physical = 1L,
         cores_detected_logical = 1L,
         threads_per_chain = NA_integer_,
@@ -196,7 +196,7 @@ testthat::test_that("fit_bayes_btl_mcmc rejects invalid parallel chains", {
       list(
         chains = 1L,
         parallel_chains = NA_integer_,
-        core_fraction = 0.6,
+        core_fraction = 0.8,
         cores_detected_physical = 1L,
         cores_detected_logical = 1L,
         threads_per_chain = NA_integer_,

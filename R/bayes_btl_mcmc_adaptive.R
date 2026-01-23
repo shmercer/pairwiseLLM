@@ -45,7 +45,7 @@
     rlang::abort("`cmdstan` must be a list.")
   }
 
-  core_fraction <- cmdstan$core_fraction %||% 0.6
+  core_fraction <- cmdstan$core_fraction %||% 0.8
   if (!is.numeric(core_fraction) || length(core_fraction) != 1L ||
     !is.finite(core_fraction) || core_fraction <= 0 || core_fraction > 1) {
     rlang::abort("`cmdstan$core_fraction` must be in (0, 1].")

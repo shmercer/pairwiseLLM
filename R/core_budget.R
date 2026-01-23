@@ -23,7 +23,7 @@ detect_physical_cores <- function() {
 
 #' @keywords internal
 #' @noRd
-compute_core_budget <- function(core_fraction = 0.6, max_cores = NULL, min_cores = 1) {
+compute_core_budget <- function(core_fraction = 0.8, max_cores = NULL, min_cores = 1) {
   if (!is.numeric(core_fraction) || length(core_fraction) != 1L || core_fraction < 0) {
     rlang::abort("`core_fraction` must be a non-negative number.")
   }

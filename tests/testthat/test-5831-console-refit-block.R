@@ -36,7 +36,7 @@ testthat::test_that("refit progress block includes EAP reliability", {
     mcmc_parallel_chains = 2L,
     mcmc_cores_detected_physical = 4L,
     mcmc_cores_detected_logical = 8L,
-    mcmc_core_fraction = 0.6
+    mcmc_core_fraction = 0.8
   )
 
   out <- capture.output({

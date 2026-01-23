@@ -101,7 +101,7 @@ testthat::test_that("refit stores mcmc config used on state", {
   state$comparisons_observed <- 1L
   state$new_since_refit <- 1L
 
-  used <- list(chains = 2L, parallel_chains = 2L, core_fraction = 0.6)
+  used <- list(chains = 2L, parallel_chains = 2L, core_fraction = 0.8)
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_get_refit_fit(
       state,

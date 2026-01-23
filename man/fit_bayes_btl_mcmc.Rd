@@ -8,7 +8,7 @@ fit_bayes_btl_mcmc(
   results,
   ids,
   cmdstan = list(iter_warmup = 1000, iter_sampling = 1000, seed = NULL, core_fraction =
-    0.6)
+    0.8)
 )
 }
 \arguments{
@@ -20,7 +20,7 @@ fit_bayes_btl_mcmc(
 \item{cmdstan}{List of CmdStan settings: \code{chains} (defaults to
 \code{min(8, physical_cores)}), \code{iter_warmup} (1000),
 \code{iter_sampling} (1000), \code{seed} (NULL), and
-\code{core_fraction} (0.6). The list is extensible in future versions.}
+\code{core_fraction} (0.8). The list is extensible in future versions.}
 }
 \value{
 A list with:

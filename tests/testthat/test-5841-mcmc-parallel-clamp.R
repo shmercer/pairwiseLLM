@@ -12,7 +12,7 @@ testthat::test_that("mcmc parallel chains clamp to configured chains", {
 
 testthat::test_that("mcmc parallel chains honor core fraction budget", {
   resolved <- testthat::with_mocked_bindings(
-    pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(core_fraction = 0.6)),
+    pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(core_fraction = 0.8)),
     detectCores = function(logical = FALSE, ...) {
       if (isTRUE(logical)) 16L else 12L
     },
@@ -20,7 +20,7 @@ testthat::test_that("mcmc parallel chains honor core fraction budget", {
   )
 
   testthat::expect_equal(resolved$chains, 8L)
-  testthat::expect_equal(resolved$parallel_chains, 7L)
+  testthat::expect_equal(resolved$parallel_chains, 8L)
 })
 
 testthat::test_that("mcmc core fraction and parallel inputs are validated", {

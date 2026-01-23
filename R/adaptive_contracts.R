@@ -81,7 +81,7 @@ adaptive_v3_defaults <- function(N) {
     output_dir = NULL,
     keep_draws = FALSE,
     thin_draws = 1L,
-    cmdstan = list(core_fraction = 0.6)
+    cmdstan = list(core_fraction = 0.8)
   )
 }
 
