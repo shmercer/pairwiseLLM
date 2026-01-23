@@ -83,11 +83,12 @@ NULL
     rlang::abort("`paths` must be a list.")
   }
   submission <- submission %||% list()
+  user_output_dir <- !is.null(paths$output_dir) || !is.null(submission$output_dir)
   output_dir <- paths$output_dir %||% submission$output_dir %||% tempfile("adaptive_rank_")
   if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
     rlang::abort("`paths$output_dir` must be a single character path.")
   }
-  if (mode == "batch") {
+  if (mode == "batch" || isTRUE(user_output_dir)) {
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   }
   state_path <- paths$state_path
@@ -2387,9 +2388,10 @@ adaptive_rank_start <- function(
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
-  .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = path_info$output_dir)
+    .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = path_info$output_dir)
 
-  if (mode == "batch" && !is.null(path_info$state_path)) {
+  if (!is.null(path_info$state_path)) {
+    dir.create(dirname(path_info$state_path), recursive = TRUE, showWarnings = FALSE)
     adaptive_state_save(state, path_info$state_path)
   }
 
@@ -2518,6 +2520,11 @@ adaptive_rank_resume <- function(
     rlang::abort("`submission_info` must include `trait_name` and `trait_description`.")
   }
   pairs_submitted <- submission_info$pairs_submitted %||% NULL
+  if (mode == "live" &&
+    is.null(submission_info$results) &&
+    is.null(submission_info$failed_attempts)) {
+    pairs_submitted <- .adaptive_empty_pairs_tbl()
+  }
   new_results <- .adaptive_empty_results_tbl()
   failed_attempts_current <- .adaptive_empty_failed_attempts_tbl()
 
@@ -2698,13 +2705,15 @@ adaptive_rank_resume <- function(
   output_dir_write <- submission_info$output_dir %||% state$config$output_dir %||% NULL
   .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = output_dir_write)
 
-  if (!is.null(state_path) && mode == "batch") {
-    adaptive_state_save(state, state_path)
+  save_path <- state_path %||% state$config$state_path %||% NULL
+  if (!is.null(save_path)) {
+    dir.create(dirname(save_path), recursive = TRUE, showWarnings = FALSE)
+    adaptive_state_save(state, save_path)
   }
 
   list(
     state = state,
-    state_path = state_path,
+    state_path = save_path,
     submission_info = submission_out,
     next_action = .adaptive_next_action(state, nrow(pairs)),
     new_results = new_results,
