@@ -4,7 +4,7 @@ testthat::test_that("adaptive_rank_run_batch filters polling args and loops unti
     text = c("alpha", "bravo")
   )
 
-  captured <- list()
+  capture_env <- new.env(parent = emptyenv())
   mock_start <- function(samples,
                          model,
                          trait_name,
@@ -16,7 +16,7 @@ testthat::test_that("adaptive_rank_run_batch filters polling args and loops unti
                          adaptive,
                          paths,
                          seed) {
-    captured$start_submission <<- submission
+    capture_env$start_submission <- submission
     list(
       state = list(step = 1L),
       submission_info = list(token = "job-1"),
@@ -25,7 +25,7 @@ testthat::test_that("adaptive_rank_run_batch filters polling args and loops unti
   }
 
   mock_resume <- function(state, mode, submission_info, submission, adaptive, seed) {
-    captured$resume_submission <<- submission
+    capture_env$resume_submission <- submission
     list(
       state = list(step = 2L),
       submission_info = submission_info,
@@ -33,8 +33,37 @@ testthat::test_that("adaptive_rank_run_batch filters polling args and loops unti
     )
   }
 
+  run_with_mocks <- function(expr) {
+    expr <- substitute(expr)
+    ns_env <- asNamespace("pairwiseLLM")
+    global_env <- .GlobalEnv
+    orig_start <- get("adaptive_rank_start", envir = ns_env)
+    orig_resume <- get("adaptive_rank_resume", envir = ns_env)
+    orig_start_global <- get("adaptive_rank_start", envir = global_env)
+    orig_resume_global <- get("adaptive_rank_resume", envir = global_env)
+    start_locked <- bindingIsLocked("adaptive_rank_start", ns_env)
+    resume_locked <- bindingIsLocked("adaptive_rank_resume", ns_env)
+    on.exit({
+      if (start_locked) unlockBinding("adaptive_rank_start", ns_env)
+      if (resume_locked) unlockBinding("adaptive_rank_resume", ns_env)
+      assign("adaptive_rank_start", orig_start, envir = ns_env)
+      assign("adaptive_rank_resume", orig_resume, envir = ns_env)
+      if (start_locked) lockBinding("adaptive_rank_start", ns_env)
+      if (resume_locked) lockBinding("adaptive_rank_resume", ns_env)
+      assign("adaptive_rank_start", orig_start_global, envir = global_env)
+      assign("adaptive_rank_resume", orig_resume_global, envir = global_env)
+    }, add = TRUE)
+    if (start_locked) unlockBinding("adaptive_rank_start", ns_env)
+    if (resume_locked) unlockBinding("adaptive_rank_resume", ns_env)
+    assign("adaptive_rank_start", mock_start, envir = ns_env)
+    assign("adaptive_rank_resume", mock_resume, envir = ns_env)
+    if (start_locked) lockBinding("adaptive_rank_start", ns_env)
+    if (resume_locked) lockBinding("adaptive_rank_resume", ns_env)
+    eval(expr, parent.frame())
+  }
+
   withr::local_seed(101)
-  out <- testthat::with_mocked_bindings(
+  out <- run_with_mocks(
     pairwiseLLM::adaptive_rank_run_batch(
       samples = samples,
       model = "gpt-test",
@@ -50,20 +79,17 @@ testthat::test_that("adaptive_rank_run_batch filters polling args and loops unti
       ),
       max_iterations = 3L,
       seed = 101
-    ),
-    adaptive_rank_start = mock_start,
-    adaptive_rank_resume = mock_resume,
-    .env = asNamespace("pairwiseLLM")
+    )
   )
 
   expect_equal(out$iterations, 2L)
   expect_equal(out$state$step, 2L)
-  expect_equal(captured$start_submission$n_segments, 1L)
-  expect_null(captured$resume_submission$n_segments)
-  expect_null(captured$resume_submission$progress)
-  expect_equal(captured$resume_submission$interval_seconds, 10)
-  expect_equal(captured$resume_submission$per_job_delay, 1)
-  expect_true(captured$resume_submission$verbose)
+  expect_equal(capture_env$start_submission$n_segments, 1L)
+  expect_null(capture_env$resume_submission$n_segments)
+  expect_null(capture_env$resume_submission$progress)
+  expect_equal(capture_env$resume_submission$interval_seconds, 10)
+  expect_equal(capture_env$resume_submission$per_job_delay, 1)
+  expect_true(capture_env$resume_submission$verbose)
 })
 
 testthat::test_that("adaptive_rank_run_batch coerces non-list submission to list", {
@@ -72,7 +98,7 @@ testthat::test_that("adaptive_rank_run_batch coerces non-list submission to list
     text = c("alpha", "bravo")
   )
 
-  captured <- list()
+  capture_env <- new.env(parent = emptyenv())
   mock_start <- function(samples,
                          model,
                          trait_name,
@@ -84,7 +110,7 @@ testthat::test_that("adaptive_rank_run_batch coerces non-list submission to list
                          adaptive,
                          paths,
                          seed) {
-    captured$start_submission <<- submission
+    capture_env$start_submission <- submission
     list(
       state = list(step = 1L),
       submission_info = list(token = "job-1"),
@@ -92,8 +118,27 @@ testthat::test_that("adaptive_rank_run_batch coerces non-list submission to list
     )
   }
 
+  run_with_mocks <- function(expr) {
+    expr <- substitute(expr)
+    ns_env <- asNamespace("pairwiseLLM")
+    global_env <- .GlobalEnv
+    orig_start <- get("adaptive_rank_start", envir = ns_env)
+    orig_start_global <- get("adaptive_rank_start", envir = global_env)
+    start_locked <- bindingIsLocked("adaptive_rank_start", ns_env)
+    on.exit({
+      if (start_locked) unlockBinding("adaptive_rank_start", ns_env)
+      assign("adaptive_rank_start", orig_start, envir = ns_env)
+      if (start_locked) lockBinding("adaptive_rank_start", ns_env)
+      assign("adaptive_rank_start", orig_start_global, envir = global_env)
+    }, add = TRUE)
+    if (start_locked) unlockBinding("adaptive_rank_start", ns_env)
+    assign("adaptive_rank_start", mock_start, envir = ns_env)
+    if (start_locked) lockBinding("adaptive_rank_start", ns_env)
+    eval(expr, parent.frame())
+  }
+
   withr::local_seed(202)
-  out <- testthat::with_mocked_bindings(
+  out <- run_with_mocks(
     pairwiseLLM::adaptive_rank_run_batch(
       samples = samples,
       model = "gpt-test",
@@ -103,13 +148,11 @@ testthat::test_that("adaptive_rank_run_batch coerces non-list submission to list
       submission = "nope",
       max_iterations = 1L,
       seed = 202
-    ),
-    adaptive_rank_start = mock_start,
-    .env = asNamespace("pairwiseLLM")
+    )
   )
 
   expect_equal(out$iterations, 1L)
-  expect_equal(captured$start_submission, list(n_segments = 1L))
+  expect_equal(capture_env$start_submission, list(n_segments = 1L))
 })
 
 testthat::test_that("adaptive_rank_run_batch validates max_iterations", {
