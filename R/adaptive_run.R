@@ -2827,3 +2827,145 @@ adaptive_rank_run_live <- function(
     iterations = iter
   )
 }
+
+#' Run adaptive ranking in a batch loop
+#'
+#' Convenience wrapper that repeatedly calls
+#' \code{adaptive_rank_start()} and \code{adaptive_rank_resume()} in batch mode
+#' until the budget is exhausted, no feasible pairs remain, or
+#' \code{max_iterations} is reached.
+#'
+#' This wrapper is intended for hosted backends that support batch submission
+#' (e.g., Gemini). It forces \code{n_segments = 1} so each adaptive iteration
+#' submits a single batch segment (rather than splitting into multiple segments).
+#'
+#' Running this function will submit LLM comparisons and will incur API usage
+#' costs for hosted backends. Batch mode is recommended for longer runs because
+#' it supports checkpointing and controlled polling behavior.
+#'
+#' @param samples A data frame or tibble with columns \code{ID} and \code{text}.
+#' @param model Model identifier for the selected backend.
+#' @param trait_name Short label for the trait.
+#' @param trait_description Full-text trait description.
+#' @param prompt_template Optional prompt template string. Defaults to
+#'   \code{set_prompt_template()}.
+#' @param backend Backend name (batch-capable): one of \code{"openai"},
+#'   \code{"anthropic"}, \code{"gemini"}, \code{"together"}, or \code{"ollama"}.
+#'   (Note: actual batch support depends on the backend implementation.)
+#' @param submission A list of arguments passed through to
+#'   \code{llm_submit_pairs_multi_batch()} (and the corresponding resume/polling
+#'   functions) on each batch submission. This wrapper will force
+#'   \code{submission$n_segments <- 1}.
+#' @param adaptive A list of adaptive configuration overrides. See
+#'   \code{adaptive_rank_start()} for supported keys.
+#' @param paths A list with optional \code{state_path} and \code{output_dir}.
+#'   Batch mode strongly benefits from setting these so the run can be resumed.
+#' @param seed Optional integer seed for deterministic scheduling.
+#' @param max_iterations Optional integer override for the batch loop cap.
+#'
+#' @return A list with:
+#' \describe{
+#'   \item{state}{The final \code{adaptive_state}.}
+#'   \item{submission_info}{Metadata for the last submission.}
+#'   \item{next_action}{List with \code{action} and \code{reason}.}
+#'   \item{iterations}{Number of iterations executed.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Gemini batch loop, single segment per iteration
+#' out <- adaptive_rank_run_batch(
+#'   samples = samples,
+#'   model = "gemini-3-flash-preview",
+#'   trait_name = td$name,
+#'   trait_description = td$description,
+#'   backend = "gemini",
+#'   submission = list(
+#'     # any additional batch/polling controls supported by your backend
+#'     interval_seconds = 60,
+#'     per_job_delay = 2,
+#'     progress = TRUE,
+#'     verbose = TRUE
+#'   ),
+#'   paths = list(
+#'     state_path = "./dev-output/adaptive_gemini/state.rds",
+#'     output_dir = "./dev-output/adaptive_gemini"
+#'   ),
+#'   seed = 123,
+#'   max_iterations = 10
+#' )
+#' }
+#'
+#' @export
+adaptive_rank_run_batch <- function(
+    samples,
+    model,
+    trait_name,
+    trait_description,
+    prompt_template = NULL,
+    backend = NULL,
+    submission = list(),
+    adaptive = list(),
+    paths = list(state_path = NULL, output_dir = NULL),
+    seed = NULL,
+    max_iterations = NULL
+) {
+  adaptive <- .adaptive_merge_config(adaptive)
+  if (!is.null(max_iterations)) {
+    adaptive$max_iterations <- max_iterations
+  }
+
+  # Force single-segment batch behavior
+  if (is.null(submission) || !is.list(submission)) submission <- list()
+  submission$n_segments <- 1L
+
+  n_items <- nrow(tibble::as_tibble(samples))
+  v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
+  adaptive_v3_config(n_items, v3_overrides)
+
+  max_iterations <- as.integer(adaptive$max_iterations)
+  if (is.na(max_iterations) || max_iterations < 1L) {
+    rlang::abort("`max_iterations` must be a positive integer.")
+  }
+
+  start_out <- adaptive_rank_start(
+    samples = samples,
+    model = model,
+    trait_name = trait_name,
+    trait_description = trait_description,
+    prompt_template = prompt_template,
+    backend = backend,
+    mode = "batch",
+    submission = submission,
+    adaptive = adaptive,
+    paths = paths,
+    seed = seed
+  )
+
+  state <- start_out$state
+  submission_info <- start_out$submission_info
+  next_action <- start_out$next_action
+
+  iter <- 1L
+  while (next_action$action == "resume" && iter < max_iterations) {
+    resume_out <- adaptive_rank_resume(
+      state = state,
+      mode = "batch",
+      submission_info = submission_info,
+      submission = submission,
+      adaptive = adaptive,
+      seed = seed
+    )
+    state <- resume_out$state
+    submission_info <- resume_out$submission_info
+    next_action <- resume_out$next_action
+    iter <- iter + 1L
+  }
+
+  list(
+    state = state,
+    submission_info = submission_info,
+    next_action = next_action,
+    iterations = iter
+  )
+}
