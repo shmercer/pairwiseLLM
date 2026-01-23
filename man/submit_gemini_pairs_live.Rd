@@ -11,7 +11,7 @@ submit_gemini_pairs_live(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("minimal", "low", "medium", "high"),
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -31,7 +31,8 @@ submit_gemini_pairs_live(
 \arguments{
 \item{pairs}{Tibble/data frame with columns \code{ID1}, \code{text1}, \code{ID2}, \code{text2}.}
 
-\item{model}{Gemini model name (e.g. \code{"gemini-3-pro-preview"}).}
+\item{model}{Gemini model name (e.g. \code{"gemini-3-pro-preview"} or
+\code{"gemini-3-flash-preview"}).}
 
 \item{trait_name}{Trait name.}
 
@@ -42,7 +43,9 @@ submit_gemini_pairs_live(
 
 \item{api_key}{Optional Gemini API key.}
 
-\item{thinking_level}{Default \code{"low"}; see \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}.}
+\item{thinking_level}{Default \code{"low"}; see \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. For
+Gemini 3 Flash models, \code{"minimal"} is also supported (e.g.,
+\code{thinking_level = "minimal"} with \code{model = "gemini-3-flash-preview"}).}
 
 \item{temperature}{Optional numeric temperature; forwarded to
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. See Gemini docs; if \code{NULL} (default), the
@@ -154,6 +157,17 @@ res_par <- submit_gemini_pairs_live(
   save_path         = "results_gemini_par.csv",
   parallel          = TRUE,
   workers           = 4
+)
+
+# 3. Gemini 3 Flash example (minimal thinking)
+res_flash <- submit_gemini_pairs_live(
+  pairs             = pairs,
+  model             = "gemini-3-flash-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "minimal",
+  save_path         = "results_gemini_flash.csv"
 )
 
 # Inspect results

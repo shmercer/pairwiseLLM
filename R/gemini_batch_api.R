@@ -327,10 +327,20 @@
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}. The template should embed your full
 #'   instructions, rubric text, and \verb{<BETTER_SAMPLE>} tagging convention.
-#' @param thinking_level One of \code{"low"}, \code{"medium"}, or \code{"high"}.
-#'   This is mapped to Gemini's \code{thinkingConfig.thinkingLevel}, where
-#'   \code{"low"} maps to "Low" and both \code{"medium"} and \code{"high"} map
-#'   to "High". "Medium" currently behaves like "High".
+#' @param thinking_level One of \code{"minimal"}, \code{"low"}, \code{"medium"},
+#'   or \code{"high"}.
+#'
+#'   This is mapped to Gemini's \code{thinkingConfig.thinkingLevel}.
+#'
+#'   \itemize{
+#'     \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
+#'       \code{"minimal"} is supported and is passed through as \code{"minimal"}.
+#'     \item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+#'       \code{"minimal"} is not supported.
+#'     \item For backward compatibility with earlier Gemini 3 Pro usage,
+#'       \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
+#'       map to \code{"high"}. "Medium" currently behaves like "High".
+#'   }
 #' @param custom_id_prefix Prefix for the \code{custom_id} field. Defaults to
 #'   \code{"GEM"} so that IDs take the form \code{"GEM_<ID1>_vs_<ID2>"}.
 #' @param temperature Optional numeric temperature. If \code{NULL}, it is
@@ -343,7 +353,7 @@
 #'   visible chain-of-thought. For most pairwise scoring use cases this should
 #'   remain \code{FALSE}.
 #' @param ... Reserved for future extensions. Any \code{thinking_budget}
-#'   entries are ignored (Gemini 3 Pro does not support thinking budgets).
+#'   entries are ignored (Gemini 3 does not support thinking budgets).
 #'
 #' @return A tibble with one row per pair and two main columns:
 #' \describe{
@@ -363,6 +373,7 @@
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
+#' # Gemini 3 Pro example (existing behavior)
 #' reqs <- build_gemini_batch_requests(
 #'   pairs             = pairs,
 #'   model             = "gemini-3-pro-preview",
@@ -375,6 +386,19 @@
 #'
 #' reqs
 #'
+#' # Gemini 3 Flash example (minimal thinking)
+#' reqs_flash <- build_gemini_batch_requests(
+#'   pairs             = pairs,
+#'   model             = "gemini-3-flash-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "minimal",
+#'   include_thoughts  = FALSE
+#' )
+#'
+#' reqs_flash
+#'
 #' @export
 build_gemini_batch_requests <- function(
   pairs,
@@ -382,7 +406,7 @@ build_gemini_batch_requests <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("minimal", "low", "medium", "high"),
   custom_id_prefix = "GEM",
   temperature = NULL,
   top_p = NULL,
@@ -409,6 +433,9 @@ build_gemini_batch_requests <- function(
     stop("`model` must be a non-empty character scalar.", call. = FALSE)
   }
 
+  # Identify Flash vs non-Flash behavior (Gemini 3 Flash supports minimal/medium)
+  is_flash <- grepl("gemini-3-.*flash", model, ignore.case = TRUE)
+
   dots <- list(...)
   if (!is.null(dots$thinking_budget)) {
     warning(
@@ -418,15 +445,28 @@ build_gemini_batch_requests <- function(
     )
   }
 
-  # Map R-level thinking_level to Gemini values
-  tl_map <- c(low = "Low", medium = "High", high = "High")
-  if (identical(thinking_level, "medium")) {
-    warning(
-      "`thinking_level = \"medium\"` is not yet officially
-      documented for the REST API; ",
-      "mapping to \"High\" internally.",
+  # Validate / map thinking level by model family
+  if (!is_flash && identical(thinking_level, "minimal")) {
+    stop(
+      "`thinking_level = \"minimal\"` is only supported for Gemini 3 Flash models ",
+      "(e.g., `gemini-3-flash-preview`).",
       call. = FALSE
     )
+  }
+
+  if (!is_flash && identical(thinking_level, "medium")) {
+    warning(
+      "`thinking_level = \"medium\"` is not supported for non-Flash Gemini 3 models; ",
+      "mapping to \"high\" internally.",
+      call. = FALSE
+    )
+  }
+
+  # REST/Batch API expects lowercase thinkingLevel values for Gemini 3.
+  tl_map <- if (is_flash) {
+    c(minimal = "minimal", low = "low", medium = "medium", high = "high")
+  } else {
+    c(low = "low", medium = "high", high = "high")
   }
 
   get_request_for_pair <- function(ID1, text1, ID2, text2) {
@@ -455,7 +495,7 @@ build_gemini_batch_requests <- function(
 
     thinking_config <- list(
       includeThoughts = isTRUE(include_thoughts),
-      thinkingLevel   = tl_map[[thinking_level]]
+      thinkingLevel   = unname(tl_map[[thinking_level]])
     )
 
     generation_config$thinkingConfig <- thinking_config

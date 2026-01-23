@@ -10,7 +10,7 @@ build_gemini_batch_requests(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("minimal", "low", "medium", "high"),
   custom_id_prefix = "GEM",
   temperature = NULL,
   top_p = NULL,
@@ -39,10 +39,20 @@ backends and potential validation.}
 \code{\link{set_prompt_template}}. The template should embed your full
 instructions, rubric text, and \verb{<BETTER_SAMPLE>} tagging convention.}
 
-\item{thinking_level}{One of \code{"low"}, \code{"medium"}, or \code{"high"}.
-This is mapped to Gemini's \code{thinkingConfig.thinkingLevel}, where
-\code{"low"} maps to "Low" and both \code{"medium"} and \code{"high"} map
-to "High". "Medium" currently behaves like "High".}
+\item{thinking_level}{One of \code{"minimal"}, \code{"low"}, \code{"medium"},
+or \code{"high"}.
+
+This is mapped to Gemini's \code{thinkingConfig.thinkingLevel}.
+
+\itemize{
+\item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
+\code{"minimal"} is supported and is passed through as \code{"minimal"}.
+\item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+\code{"minimal"} is not supported.
+\item For backward compatibility with earlier Gemini 3 Pro usage,
+\code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
+map to \code{"high"}. "Medium" currently behaves like "High".
+}}
 
 \item{custom_id_prefix}{Prefix for the \code{custom_id} field. Defaults to
 \code{"GEM"} so that IDs take the form \code{"GEM_<ID1>_vs_<ID2>"}.}
@@ -62,7 +72,7 @@ visible chain-of-thought. For most pairwise scoring use cases this should
 remain \code{FALSE}.}
 
 \item{...}{Reserved for future extensions. Any \code{thinking_budget}
-entries are ignored (Gemini 3 Pro does not support thinking budgets).}
+entries are ignored (Gemini 3 does not support thinking budgets).}
 }
 \value{
 A tibble with one row per pair and two main columns:
@@ -94,6 +104,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
+# Gemini 3 Pro example (existing behavior)
 reqs <- build_gemini_batch_requests(
   pairs             = pairs,
   model             = "gemini-3-pro-preview",
@@ -105,5 +116,18 @@ reqs <- build_gemini_batch_requests(
 )
 
 reqs
+
+# Gemini 3 Flash example (minimal thinking)
+reqs_flash <- build_gemini_batch_requests(
+  pairs             = pairs,
+  model             = "gemini-3-flash-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "minimal",
+  include_thoughts  = FALSE
+)
+
+reqs_flash
 
 }

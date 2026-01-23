@@ -63,7 +63,7 @@
 #' Live Google Gemini comparison for a single pair of samples
 #'
 #' This function sends a single pairwise comparison prompt to the Google Gemini
-#' Generative Language API (Gemini 3 Pro) and parses the result into a one-row
+#' Generative Language API (Gemini 3 Pro / Flash) and parses the result into a one-row
 #' tibble that mirrors the structure used for OpenAI / Anthropic live calls.
 #'
 #' It expects the prompt template to instruct the model to choose exactly one of
@@ -77,7 +77,7 @@
 #'   <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 #'
 #' If `include_thoughts = TRUE`, the function additionally requests Gemini's
-#' explicit chain-of-thought style reasoning (\"thoughts\") via the
+#' explicit chain-of-thought style reasoning ("thoughts") via the
 #' `thinkingConfig` block and stores it in a separate `thoughts` column, while
 #' still using the final answer content to detect the `<BETTER_SAMPLE>` tag.
 #'
@@ -85,8 +85,8 @@
 #' @param text1 Character containing the first sample text.
 #' @param ID2 Character ID for the second sample.
 #' @param text2 Character containing the second sample text.
-#' @param model Gemini model identifier (for example `"gemini-3-pro-preview"`).
-#'   The value is interpolated into the path
+#' @param model Gemini model identifier (for example `"gemini-3-pro-preview"` or
+#'   `"gemini-3-flash-preview"`). The value is interpolated into the path
 #'   `"/{api_version}/models/<model>:generateContent"`.
 #' @param trait_name Short label for the trait (e.g. `"Overall Quality"`).
 #' @param trait_description Full-text trait / rubric description.
@@ -94,11 +94,18 @@
 #'   [set_prompt_template()]. The template should embed `<BETTER_SAMPLE>` tags.
 #' @param api_key Optional Gemini API key (defaults to
 #'   `Sys.getenv("GEMINI_API_KEY")`).
-#' @param thinking_level One of `"low"`, `"medium"`, or `"high"`. This controls
-#'   the maximum depth of internal reasoning for Gemini 3 Pro. For pairwise
-#'   scoring, `"low"` is used by default to reduce latency and cost. Currently,
-#'   the Gemini REST API only supports `"Low"` and `"High"` values; `"medium"`
-#'   is mapped internally to `"High"` with a warning.
+#' @param thinking_level One of `"minimal"`, `"low"`, `"medium"`, or `"high"`.
+#'   This controls the maximum depth of internal reasoning.
+#'
+#'   \itemize{
+#'     \item For Gemini 3 Flash models (for example `"gemini-3-flash-preview"`),
+#'       `"minimal"` is supported and is passed through as `"minimal"`.
+#'     \item For non-Flash Gemini 3 models (for example `"gemini-3-pro-preview"`),
+#'       `"minimal"` is not supported.
+#'     \item For backward compatibility with earlier Gemini 3 Pro usage,
+#'       `"low"` maps to `"low"` and both `"medium"` and `"high"` map to `"high"`.
+#'       "Medium" currently behaves like "High".
+#'   }
 #' @param temperature Optional numeric temperature. If `NULL` (default), the
 #'   parameter is omitted and Gemini uses its own default (currently 1.0).
 #' @param top_p Optional nucleus sampling parameter. If `NULL`, omitted.
@@ -147,6 +154,7 @@
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
+#' # Gemini 3 Pro example (existing behavior)
 #' res <- gemini_compare_pair_live(
 #'   ID1               = "S01",
 #'   text1             = "Text 1",
@@ -163,6 +171,23 @@
 #'
 #' res
 #' res$better_id
+#'
+#' # Gemini 3 Flash example (minimal thinking)
+#' res_flash <- gemini_compare_pair_live(
+#'   ID1               = "S01",
+#'   text1             = "Text 1",
+#'   ID2               = "S02",
+#'   text2             = "Text 2",
+#'   model             = "gemini-3-flash-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "minimal",
+#'   include_thoughts  = FALSE,
+#'   include_raw       = FALSE
+#' )
+#'
+#' res_flash
 #' }
 #'
 #' @export
@@ -176,7 +201,7 @@ gemini_compare_pair_live <- function(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = c("minimal", "low", "medium", "high"),
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -192,6 +217,9 @@ gemini_compare_pair_live <- function(
     rlang::abort("`model` must be a non-empty character scalar.")
   }
 
+  # Identify Flash vs non-Flash behavior (Gemini 3 Flash supports minimal/medium)
+  is_flash <- grepl("gemini-3-.*flash", model, ignore.case = TRUE)
+
   thinking_level <- match.arg(thinking_level)
 
   dots <- list(...)
@@ -199,6 +227,13 @@ gemini_compare_pair_live <- function(
     rlang::warn(paste0(
       "`thinking_budget` is ignored for Gemini 3. ",
       "Use `thinking_level` instead and do not supply both."
+    ))
+  }
+
+  if (!is_flash && identical(thinking_level, "minimal")) {
+    rlang::abort(paste0(
+      "`thinking_level = \"minimal\"` is only supported for Gemini 3 Flash models ",
+      "(e.g., `gemini-3-flash-preview`)."
     ))
   }
 
@@ -235,16 +270,20 @@ gemini_compare_pair_live <- function(
     generation_config$maxOutputTokens <- max_output_tokens
   }
 
-  # Map R-level thinking_level ("low", "medium", "high") to Gemini JSON values.
-  # Gemini 3 currently supports "Low" and "High". "Medium" is not yet supported,
-  # so we map it to "High" with a warning.
+  # Map R-level thinking_level to Gemini JSON values.
+  # - Flash: minimal/low/medium/high pass through (lowercase)
+  # - Non-Flash: low -> low; medium/high -> high (with warning for medium)
   if (!is.null(thinking_level)) {
-    tl_map <- c(low = "Low", medium = "High", high = "High")
+    tl_map <- if (is_flash) {
+      c(minimal = "minimal", low = "low", medium = "medium", high = "high")
+    } else {
+      c(low = "low", medium = "high", high = "high")
+    }
 
-    if (identical(thinking_level, "medium")) {
+    if (!is_flash && identical(thinking_level, "medium")) {
       rlang::warn(paste0(
-        "`thinking_level = \"medium\"` is not yet supported by the Gemini ",
-        "REST API; mapping to \"High\" internally."
+        "`thinking_level = \"medium\"` is not supported for non-Flash Gemini 3 models; ",
+        "mapping to \"high\" internally."
       ))
     }
 
@@ -483,13 +522,16 @@ gemini_compare_pair_live <- function(
 #' }
 #'
 #' @param pairs Tibble/data frame with columns `ID1`, `text1`, `ID2`, `text2`.
-#' @param model Gemini model name (e.g. `"gemini-3-pro-preview"`).
+#' @param model Gemini model name (e.g. `"gemini-3-pro-preview"` or
+#'   `"gemini-3-flash-preview"`).
 #' @param trait_name Trait name.
 #' @param trait_description Trait description.
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param api_key Optional Gemini API key.
-#' @param thinking_level Default `"low"`; see [gemini_compare_pair_live()].
+#' @param thinking_level Default `"low"`; see [gemini_compare_pair_live()]. For
+#'   Gemini 3 Flash models, `"minimal"` is also supported (e.g.,
+#'   `thinking_level = "minimal"` with `model = "gemini-3-flash-preview"`).
 #' @param temperature Optional numeric temperature; forwarded to
 #'   [gemini_compare_pair_live()]. See Gemini docs; if `NULL` (default), the
 #'   model uses its own default.
@@ -571,6 +613,17 @@ gemini_compare_pair_live <- function(
 #'   workers           = 4
 #' )
 #'
+#' # 3. Gemini 3 Flash example (minimal thinking)
+#' res_flash <- submit_gemini_pairs_live(
+#'   pairs             = pairs,
+#'   model             = "gemini-3-flash-preview",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   prompt_template   = tmpl,
+#'   thinking_level    = "minimal",
+#'   save_path         = "results_gemini_flash.csv"
+#' )
+#'
 #' # Inspect results
 #' head(res_par$results)
 #' }
@@ -583,7 +636,7 @@ submit_gemini_pairs_live <- function(
     trait_description,
     prompt_template = set_prompt_template(),
     api_key = NULL,
-    thinking_level = c("low", "medium", "high"),
+    thinking_level = c("minimal", "low", "medium", "high"),
     temperature = NULL,
     top_p = NULL,
     top_k = NULL,
@@ -726,7 +779,17 @@ submit_gemini_pairs_live <- function(
     rlang::abort("`status_every` must be a single positive integer.")
   }
   status_every <- as.integer(status_every)
+
+  # Validate thinking_level against model family once (gemini_compare_pair_live will also validate)
   thinking_level <- match.arg(thinking_level)
+  is_flash <- grepl("gemini-3-.*flash", model, ignore.case = TRUE)
+  if (!is_flash && identical(thinking_level, "minimal")) {
+    rlang::abort(paste0(
+      "`thinking_level = \"minimal\"` is only supported for Gemini 3 Flash models ",
+      "(e.g., `gemini-3-flash-preview`)."
+    ))
+  }
+
   fmt_secs <- function(x) sprintf("%.1fs", x)
   all_new_results <- vector("list", n)
 
