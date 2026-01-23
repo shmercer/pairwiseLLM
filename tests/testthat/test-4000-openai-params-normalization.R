@@ -95,6 +95,20 @@ testthat::test_that("normalize_openai_sampling drops sampling for GPT-5 minimal"
   testthat::expect_null(res$logprobs)
 })
 
+testthat::test_that("normalize_openai_sampling errors for GPT-5 non-minimal reasoning", {
+  testthat::expect_error(
+    normalize_openai_sampling(
+      model = "gpt-5",
+      endpoint = "responses",
+      reasoning_effort = "low",
+      temperature = 0,
+      top_p = NULL,
+      logprobs = NULL
+    ),
+    "gpt-5/gpt-5-mini/gpt-5-nano"
+  )
+})
+
 testthat::test_that("normalize_openai_sampling keeps sampling when reasoning inactive", {
   res <- normalize_openai_sampling(
     model = "gpt-5.1",

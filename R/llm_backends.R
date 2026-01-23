@@ -358,7 +358,8 @@ llm_compare_pair <- function(
 #'   \code{parallel = TRUE}. Defaults to 1.
 #' @param ... Additional backend-specific parameters. For `"openai"` these
 #'   are forwarded to [submit_openai_pairs_live()] and typically include
-#'   `temperature`, `top_p`, `logprobs`, `reasoning`, and `include_thoughts`.
+#'   `temperature`, `top_p`, `logprobs`, `reasoning`, `service_tier`, and
+#'   `include_thoughts`.
 #'   For `"anthropic"` and `"gemini"`, they are forwarded to
 #'   [submit_anthropic_pairs_live()] or [submit_gemini_pairs_live()] and
 #'   may include options such as `max_output_tokens`, `include_thoughts`, and
@@ -413,6 +414,18 @@ llm_compare_pair <- function(
 #'   backend           = "ollama",
 #'   save_path         = "results_ollama.csv",
 #'   verbose           = TRUE
+#' )
+#'
+#' # GPT-5 live comparisons with service tier
+#' res_gpt5 <- submit_llm_pairs(
+#'   pairs             = pairs,
+#'   model             = "gpt-5",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   backend           = "openai",
+#'   endpoint          = "responses",
+#'   reasoning         = "none",
+#'   service_tier      = "flex"
 #' )
 #'
 #' res_ollama$results

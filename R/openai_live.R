@@ -43,7 +43,8 @@ NULL
 #' @param include_raw Logical; if TRUE, adds a \code{raw_response} column.
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-#'   \code{pair_uid}, and (optionally) \code{include_thoughts}. When
+#'   \code{service_tier}, \code{pair_uid}, and (optionally)
+#'   \code{include_thoughts}. When
 #'   \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
 #'   The same validation rules for
 #'   gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
@@ -99,7 +100,8 @@ NULL
 #'   trait_description = "Which text is clearer?",
 #'   endpoint = "responses",
 #'   include_thoughts = TRUE,
-#'   reasoning = "high"
+#'   reasoning = "high",
+#'   service_tier = "flex"
 #' )
 #' print(res_reasoning$thoughts)
 #' }
@@ -130,16 +132,33 @@ openai_compare_pair_live <- function(
   if (!is.character(model) || length(model) != 1L) stop("model invalid")
 
   dots <- list(...)
-  top_p <- dots$top_p %||% NULL
-  logprobs <- dots$logprobs %||% NULL
-  reasoning_effort <- dots$reasoning %||% NULL
   include_thoughts <- dots$include_thoughts %||% FALSE
   pair_uid <- dots$pair_uid %||% NULL
+  top_p <- dots$top_p %||% NULL
+  logprobs <- dots$logprobs %||% NULL
+
+  reasoning_effort <- normalize_openai_reasoning(
+    model = model,
+    reasoning = dots$reasoning %||% NULL,
+    include_thoughts = include_thoughts
+  )
+
+  service_tier <- normalize_openai_service_tier(dots$service_tier %||% "standard")
+  if (!is_gpt5_series_model(model) || service_tier %in% c("default", "auto")) {
+    service_tier <- NULL
+  }
 
   # Determine temperature default
-  is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
-  reasoning_active <- is_reasoning_model &&
-    (!is.null(reasoning_effort) && reasoning_effort != "none")
+  is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
+  is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
+
+  reasoning_active <- if (is_gpt5_reasoning) {
+    !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
+  } else if (is_gpt5_base) {
+    !is.null(reasoning_effort)
+  } else {
+    FALSE
+  }
 
   temperature <- if ("temperature" %in% names(dots)) {
     dots$temperature
@@ -149,16 +168,17 @@ openai_compare_pair_live <- function(
     0 # Default to 0 for everything else (standard or disabled reasoning)
   }
 
-  # Validation: Only block temp/top_p/logprobs if reasoning is ACTIVE
-  # We do NOT block generic gpt-5 models here, allowing temp=0.
-  if (is_reasoning_model && reasoning_active) {
-    if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
-      rlang::abort(paste0(
-        "For gpt-5.1/5.2 with reasoning effort not equal to 'none', ",
-        "temperature, top_p, and logprobs must be NULL."
-      ))
-    }
-  }
+  sampling <- normalize_openai_sampling(
+    model = model,
+    endpoint = endpoint,
+    reasoning_effort = reasoning_effort,
+    temperature = temperature,
+    top_p = top_p,
+    logprobs = logprobs
+  )
+  temperature <- sampling$temperature
+  top_p <- sampling$top_p
+  logprobs <- sampling$logprobs
 
   prompt <- build_prompt(
     template = prompt_template,
@@ -181,6 +201,7 @@ openai_compare_pair_live <- function(
       if (isTRUE(include_thoughts)) reasoning_list$summary <- "auto"
       body$reasoning <- reasoning_list
     }
+    if (!is.null(service_tier)) body$service_tier <- service_tier
     if (!is.null(temperature)) body$temperature <- temperature
     if (!is.null(top_p)) body$top_p <- top_p
     if (!is.null(logprobs)) body$logprobs <- logprobs
@@ -355,7 +376,8 @@ openai_compare_pair_live <- function(
 #'   too high (e.g., >20) may trigger OpenAI rate limit errors (HTTP 429)
 #'   depending on your usage tier.
 #' @param ... Additional OpenAI parameters (temperature, top_p, logprobs,
-#'   reasoning, and so on) passed on to \code{openai_compare_pair_live}.
+#'   reasoning, service_tier, and so on) passed on to
+#'   \code{openai_compare_pair_live}.
 #'
 #' @return A list containing three elements:
 #' \describe{
@@ -415,6 +437,17 @@ openai_compare_pair_live <- function(
 #'   message("Some pairs failed:")
 #'   print(res_par$failed_pairs)
 #' }
+#'
+#' # 3. GPT-5 live run with service tier (Responses endpoint)
+#' res_gpt5 <- submit_openai_pairs_live(
+#'   pairs             = pairs,
+#'   model             = "gpt-5",
+#'   trait_name        = td$name,
+#'   trait_description = td$description,
+#'   endpoint          = "responses",
+#'   reasoning         = "none",
+#'   service_tier      = "priority"
+#' )
 #' }
 #'
 #' @export

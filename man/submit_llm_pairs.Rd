@@ -87,7 +87,8 @@ all backends (though defaults may vary).}
 
 \item{...}{Additional backend-specific parameters. For \code{"openai"} these
 are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} and typically include
-\code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, and \code{include_thoughts}.
+\code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, \code{service_tier}, and
+\code{include_thoughts}.
 For \code{"anthropic"} and \code{"gemini"}, they are forwarded to
 \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}} or \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} and
 may include options such as \code{max_output_tokens}, \code{include_thoughts}, and
@@ -162,6 +163,18 @@ res_ollama <- submit_llm_pairs(
   backend           = "ollama",
   save_path         = "results_ollama.csv",
   verbose           = TRUE
+)
+
+# GPT-5 live comparisons with service tier
+res_gpt5 <- submit_llm_pairs(
+  pairs             = pairs,
+  model             = "gpt-5",
+  trait_name        = td$name,
+  trait_description = td$description,
+  backend           = "openai",
+  endpoint          = "responses",
+  reasoning         = "none",
+  service_tier      = "flex"
 )
 
 res_ollama$results
