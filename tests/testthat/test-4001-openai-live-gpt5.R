@@ -5,7 +5,6 @@
 
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
-openai_compare_pair_live <- pairwiseLLM::openai_compare_pair_live
 
 testthat::test_that("gpt-5 reasoning none maps to minimal and drops sampling", {
   td <- trait_description("overall_quality")
@@ -24,7 +23,7 @@ testthat::test_that("gpt-5 reasoning none maps to minimal and drops sampling", {
     .openai_resp_body_json = function(...) fake_body,
     .openai_resp_status = function(...) 200L,
     {
-      openai_compare_pair_live(
+      pairwiseLLM::openai_compare_pair_live(
         ID1 = "A", text1 = "Text A",
         ID2 = "B", text2 = "Text B",
         model = "gpt-5",
@@ -51,7 +50,7 @@ testthat::test_that("gpt-5 reasoning low rejects sampling params", {
   tmpl <- set_prompt_template()
 
   testthat::expect_error(
-    openai_compare_pair_live(
+    pairwiseLLM::openai_compare_pair_live(
       ID1 = "A", text1 = "Text A",
       ID2 = "B", text2 = "Text B",
       model = "gpt-5",
@@ -83,7 +82,7 @@ testthat::test_that("gpt-5.2 service_tier includes flex/priority and omits stand
     .openai_resp_body_json = function(...) fake_body,
     .openai_resp_status = function(...) 200L,
     {
-      openai_compare_pair_live(
+      pairwiseLLM::openai_compare_pair_live(
         ID1 = "A", text1 = "Text A",
         ID2 = "B", text2 = "Text B",
         model = "gpt-5.2-2025-12-11",
@@ -96,7 +95,7 @@ testthat::test_that("gpt-5.2 service_tier includes flex/priority and omits stand
       )
       testthat::expect_equal(captured_body$service_tier, "flex")
 
-      openai_compare_pair_live(
+      pairwiseLLM::openai_compare_pair_live(
         ID1 = "A", text1 = "Text A",
         ID2 = "B", text2 = "Text B",
         model = "gpt-5.2-2025-12-11",
@@ -109,7 +108,7 @@ testthat::test_that("gpt-5.2 service_tier includes flex/priority and omits stand
       )
       testthat::expect_equal(captured_body$service_tier, "priority")
 
-      openai_compare_pair_live(
+      pairwiseLLM::openai_compare_pair_live(
         ID1 = "A", text1 = "Text A",
         ID2 = "B", text2 = "Text B",
         model = "gpt-5.2-2025-12-11",

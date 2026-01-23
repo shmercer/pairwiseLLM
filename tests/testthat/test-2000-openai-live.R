@@ -7,6 +7,7 @@ trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 openai_compare_pair_live <- pairwiseLLM::openai_compare_pair_live
 submit_openai_pairs_live <- pairwiseLLM::submit_openai_pairs_live
+openai_compare_pair_live_orig <- openai_compare_pair_live
 
 testthat::test_that("openai_compare_pair_live parses chat.completions correctly", {
   data("example_writing_samples", package = "pairwiseLLM")
@@ -941,6 +942,8 @@ testthat::test_that("submit_openai_pairs_live handles row-wise execution and ret
     text2 = c("Text 2", "Text 4")
   )
   td <- trait_description("overall_quality")
+  pll_ns <- asNamespace("pairwiseLLM")
+  on.exit(assign("openai_compare_pair_live", openai_compare_pair_live_orig, envir = pll_ns), add = TRUE)
 
   # Mock the single-pair function
   fake_result_fn <- function(ID1, ID2, ...) {
@@ -955,6 +958,7 @@ testthat::test_that("submit_openai_pairs_live handles row-wise execution and ret
 
   testthat::with_mocked_bindings(
     openai_compare_pair_live = function(ID1, ID2, ...) fake_result_fn(ID1, ID2),
+    .env = pll_ns,
     {
       res <- submit_openai_pairs_live(
         pairs = pairs,
@@ -981,6 +985,8 @@ testthat::test_that("submit_openai_pairs_live separates failed pairs", {
     text2 = c("D", "E")
   )
   td <- trait_description("overall_quality")
+  pll_ns <- asNamespace("pairwiseLLM")
+  on.exit(assign("openai_compare_pair_live", openai_compare_pair_live_orig, envir = pll_ns), add = TRUE)
 
   # Mock function that fails for the second pair
   testthat::with_mocked_bindings(
@@ -993,6 +999,7 @@ testthat::test_that("submit_openai_pairs_live separates failed pairs", {
         better_id = ID1
       )
     },
+    .env = pll_ns,
     {
       # Run quietly
       res <- submit_openai_pairs_live(
@@ -1015,6 +1022,8 @@ testthat::test_that("submit_openai_pairs_live respects save_path (Resume Logic)"
   testthat::skip_if_not_installed("readr")
 
   td <- trait_description("overall_quality")
+  pll_ns <- asNamespace("pairwiseLLM")
+  on.exit(assign("openai_compare_pair_live", openai_compare_pair_live_orig, envir = pll_ns), add = TRUE)
   tmp_csv <- tempfile(fileext = ".csv")
 
   # 1. Create a "fake" existing result file
@@ -1057,6 +1066,7 @@ testthat::test_that("submit_openai_pairs_live respects save_path (Resume Logic)"
         better_id = "S03"
       )
     },
+    .env = pll_ns,
     {
       res <- submit_openai_pairs_live(
         pairs = pairs,
@@ -1308,6 +1318,7 @@ testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response
 testthat::test_that("submit_openai_pairs_live: Sequential Internal Error Handling", {
   # Covers the sequential loop tryCatch error handler (Lines 598-609)
   pll_ns <- asNamespace("pairwiseLLM")
+  on.exit(assign("openai_compare_pair_live", openai_compare_pair_live_orig, envir = pll_ns), add = TRUE)
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
 
