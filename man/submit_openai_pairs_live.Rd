@@ -70,7 +70,8 @@ too high (e.g., >20) may trigger OpenAI rate limit errors (HTTP 429)
 depending on your usage tier.}
 
 \item{...}{Additional OpenAI parameters (temperature, top_p, logprobs,
-reasoning, and so on) passed on to \code{openai_compare_pair_live}.}
+reasoning, service_tier, and so on) passed on to
+\code{openai_compare_pair_live}.}
 }
 \value{
 A list containing three elements:
@@ -149,6 +150,17 @@ if (nrow(res_par$failed_pairs) > 0) {
   message("Some pairs failed:")
   print(res_par$failed_pairs)
 }
+
+# 3. GPT-5 live run with service tier (Responses endpoint)
+res_gpt5 <- submit_openai_pairs_live(
+  pairs             = pairs,
+  model             = "gpt-5",
+  trait_name        = td$name,
+  trait_description = td$description,
+  endpoint          = "responses",
+  reasoning         = "none",
+  service_tier      = "priority"
+)
 }
 
 }
