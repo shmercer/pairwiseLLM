@@ -61,7 +61,7 @@ normalize_openai_sampling <- function(model,
   }
 
   is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
-  is_gpt5_reasoning <- grepl("^gpt-5\\.(1|2)", model)
+  is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
 
   reasoning_active <- if (is_gpt5_reasoning) {
     !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
@@ -80,6 +80,13 @@ normalize_openai_sampling <- function(model,
         ))
       }
     } else if (is_gpt5_base) {
+      if (!identical(reasoning_effort, "minimal") &&
+        (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs))) {
+        rlang::abort(paste0(
+          "For gpt-5/gpt-5-mini/gpt-5-nano with reasoning effort not equal to ",
+          "'minimal', temperature, top_p, and logprobs must be NULL."
+        ))
+      }
       temperature <- NULL
       top_p <- NULL
       logprobs <- NULL
