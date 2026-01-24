@@ -283,60 +283,61 @@ round_log_schema <- function() {
   tibble::tibble(
     round_id = integer(),
     iter_at_refit = integer(),
+    mode = character(),
+    model_variant = character(),
     n_items = integer(),
     total_pairs = integer(),
+    hard_cap_threshold = integer(),
+    n_unique_pairs_seen = integer(),
+    scheduled_pairs = integer(),
+    completed_pairs = integer(),
+    backlog_unjudged = integer(),
     new_pairs = integer(),
+    proposed_pairs = integer(),
     batch_size = integer(),
     window_W = integer(),
     exploration_rate = double(),
     mean_degree = double(),
     min_degree = integer(),
+    pos_balance_mean = double(),
     pos_balance_sd = double(),
-    gini_degree = double(),
-    gini_pos_A = double(),
     epsilon_mean = double(),
-    epsilon_ci90_lo = double(),
-    epsilon_ci90_hi = double(),
+    epsilon_p2.5 = double(),
+    epsilon_p5 = double(),
+    epsilon_p50 = double(),
+    epsilon_p95 = double(),
+    epsilon_p97.5 = double(),
+    b_mean = double(),
+    b_p2.5 = double(),
+    b_p5 = double(),
+    b_p50 = double(),
+    b_p95 = double(),
+    b_p97.5 = double(),
+    divergences = integer(),
+    max_rhat = double(),
+    min_ess_bulk = double(),
+    diagnostics_pass = logical(),
     reliability_EAP = double(),
-    theta_sd_median = double(),
-    tau = double(),
-    theta_sd_pass = logical(),
-    U0 = double(),
-    U_top_median = double(),
-    U_abs = double(),
-    U_pass = logical(),
-    U_dup_threshold = double(),
-    hard_cap_reached = logical(),
-    hard_cap_threshold = integer(),
-    n_unique_pairs_seen = integer(),
-    scheduled_pairs = integer(),
-    proposed_pairs = integer(),
-    completed_pairs = integer(),
+    theta_sd_eap = double(),
+    rho_theta_lag = double(),
+    delta_sd_theta_lag = double(),
+    rho_rank_lag = double(),
+    rank_stability_pass = logical(),
+    stop_passes = integer(),
+    stop_eligible = logical(),
+    stop_decision = logical(),
+    stop_reason = character(),
     starve_rate_since_last_refit = double(),
     fallback_rate_since_last_refit = double(),
     fallback_used_mode = character(),
     starvation_reason_mode = character(),
-    rank_stability_pass = logical(),
-    frac_weak_adj = double(),
-    min_adj_prob = double(),
-    weak_adj_threshold = double(),
-    weak_adj_frac_max = double(),
-    min_adj_prob_threshold = double(),
-    min_new_pairs_for_check = integer(),
-    divergences = integer(),
-    min_ess_bulk = double(),
-    max_rhat = double(),
-    diagnostics_pass = logical(),
     mcmc_chains = integer(),
     mcmc_parallel_chains = integer(),
     mcmc_core_fraction = double(),
     mcmc_cores_detected_physical = integer(),
     mcmc_cores_detected_logical = integer(),
     mcmc_threads_per_chain = integer(),
-    mcmc_cmdstanr_version = character(),
-    stop_decision = logical(),
-    stop_reason = character(),
-    mode = character()
+    mcmc_cmdstanr_version = character()
   )
 }
 
@@ -655,19 +656,52 @@ build_round_log_row <- function(state,
   pos_balance <- rep(NA_real_, length(deg))
   positive <- deg > 0
   pos_balance[positive] <- (pos1[positive] / deg[positive]) - 0.5
+  pos_balance_mean <- .adaptive_mean_or_na(pos_balance)
   pos_balance_sd <- if (all(is.na(pos_balance))) NA_real_ else stats::sd(pos_balance, na.rm = TRUE)
-  gini_degree <- compute_gini_degree(state$deg)
-  gini_pos_A <- compute_gini_posA(state$pos_count, state$deg)
 
   epsilon_mean <- state$posterior$epsilon_mean %||% NA_real_
-  epsilon_ci90_lo <- NA_real_
-  epsilon_ci90_hi <- NA_real_
+  epsilon_p2.5 <- NA_real_
+  epsilon_p5 <- NA_real_
+  epsilon_p50 <- NA_real_
+  epsilon_p95 <- NA_real_
+  epsilon_p97.5 <- NA_real_
   if (is.list(fit) && !is.null(fit$epsilon_summary)) {
     eps_summary <- tibble::as_tibble(fit$epsilon_summary)
     if (nrow(eps_summary) >= 1L) {
       epsilon_mean <- eps_summary$epsilon_mean[[1L]] %||% epsilon_mean
-      epsilon_ci90_lo <- eps_summary$epsilon_ci90_low[[1L]] %||% NA_real_
-      epsilon_ci90_hi <- eps_summary$epsilon_ci90_high[[1L]] %||% NA_real_
+      epsilon_p2.5 <- (eps_summary[["epsilon_p2.5"]] %||%
+        eps_summary[["epsilon_ci95_low"]] %||% NA_real_)[[1L]]
+      epsilon_p5 <- (eps_summary[["epsilon_p5"]] %||%
+        eps_summary[["epsilon_ci90_low"]] %||% NA_real_)[[1L]]
+      epsilon_p50 <- (eps_summary[["epsilon_p50"]] %||%
+        eps_summary[["epsilon_median"]] %||% NA_real_)[[1L]]
+      epsilon_p95 <- (eps_summary[["epsilon_p95"]] %||%
+        eps_summary[["epsilon_ci90_high"]] %||% NA_real_)[[1L]]
+      epsilon_p97.5 <- (eps_summary[["epsilon_p97.5"]] %||%
+        eps_summary[["epsilon_ci95_high"]] %||% NA_real_)[[1L]]
+    }
+  }
+
+  b_mean <- NA_real_
+  b_p2.5 <- NA_real_
+  b_p5 <- NA_real_
+  b_p50 <- NA_real_
+  b_p95 <- NA_real_
+  b_p97.5 <- NA_real_
+  if (is.list(fit) && !is.null(fit$b_summary)) {
+    b_summary <- tibble::as_tibble(fit$b_summary)
+    if (nrow(b_summary) >= 1L) {
+      b_mean <- b_summary$b_mean[[1L]] %||% NA_real_
+      b_p2.5 <- (b_summary[["b_p2.5"]] %||%
+        b_summary[["b_ci95_low"]] %||% NA_real_)[[1L]]
+      b_p5 <- (b_summary[["b_p5"]] %||%
+        b_summary[["b_ci90_low"]] %||% NA_real_)[[1L]]
+      b_p50 <- (b_summary[["b_p50"]] %||%
+        b_summary[["b_median"]] %||% NA_real_)[[1L]]
+      b_p95 <- (b_summary[["b_p95"]] %||%
+        b_summary[["b_ci90_high"]] %||% NA_real_)[[1L]]
+      b_p97.5 <- (b_summary[["b_p97.5"]] %||%
+        b_summary[["b_ci95_high"]] %||% NA_real_)[[1L]]
     }
   }
 
@@ -690,6 +724,8 @@ build_round_log_row <- function(state,
 
   stop_decision <- stop_out$stop_decision %||% NA
   stop_reason <- stop_out$stop_reason %||% state$stop_reason %||% NA_character_
+  stop_passes <- state$checks_passed_in_row %||% NA_integer_
+  stop_eligible <- state$stop_candidate %||% NA
 
   batch_log <- state$batch_log %||% tibble::tibble()
   if (!is.data.frame(batch_log)) {
@@ -716,50 +752,61 @@ build_round_log_row <- function(state,
 
   row$round_id <- as.integer(round_id)
   row$iter_at_refit <- as.integer(state$iter %||% NA_integer_)
+  row$mode <- as.character(state$mode %||% NA_character_)
+  row$model_variant <- as.character(fit$model_variant %||%
+    state$posterior$model_variant %||% NA_character_)
   row$n_items <- as.integer(state$N)
   row$total_pairs <- as.integer(total_pairs)
+  row$hard_cap_threshold <- as.integer(metrics$hard_cap_threshold %||% NA_integer_)
+  row$n_unique_pairs_seen <- as.integer(metrics$n_unique_pairs_seen %||% NA_integer_)
+  row$scheduled_pairs <- as.integer(metrics$scheduled_pairs %||% NA_integer_)
+  row$completed_pairs <- as.integer(metrics$completed_pairs %||% NA_integer_)
+  row$backlog_unjudged <- as.integer(
+    if (is.na(row$scheduled_pairs) || is.na(row$completed_pairs)) {
+      NA_integer_
+    } else {
+      row$scheduled_pairs - row$completed_pairs
+    }
+  )
   row$new_pairs <- as.integer(new_pairs %||% NA_integer_)
+  row$proposed_pairs <- as.integer(metrics$proposed_pairs %||% NA_integer_)
   row$batch_size <- as.integer(batch_size %||% config$batch_size %||% NA_integer_)
   row$window_W <- as.integer(window_W %||% config$W %||% NA_integer_)
   row$exploration_rate <- as.double(exploration_rate %||% config$explore_rate %||% NA_real_)
   row$mean_degree <- as.double(mean_degree)
   row$min_degree <- as.integer(min_degree)
+  row$pos_balance_mean <- as.double(pos_balance_mean)
   row$pos_balance_sd <- as.double(pos_balance_sd)
-  row$gini_degree <- as.double(gini_degree)
-  row$gini_pos_A <- as.double(gini_pos_A)
   row$epsilon_mean <- as.double(epsilon_mean)
-  row$epsilon_ci90_lo <- as.double(epsilon_ci90_lo)
-  row$epsilon_ci90_hi <- as.double(epsilon_ci90_hi)
+  row$epsilon_p2.5 <- as.double(epsilon_p2.5)
+  row$epsilon_p5 <- as.double(epsilon_p5)
+  row$epsilon_p50 <- as.double(epsilon_p50)
+  row$epsilon_p95 <- as.double(epsilon_p95)
+  row$epsilon_p97.5 <- as.double(epsilon_p97.5)
+  row$b_mean <- as.double(b_mean)
+  row$b_p2.5 <- as.double(b_p2.5)
+  row$b_p5 <- as.double(b_p5)
+  row$b_p50 <- as.double(b_p50)
+  row$b_p95 <- as.double(b_p95)
+  row$b_p97.5 <- as.double(b_p97.5)
+  row$divergences <- as.integer(divergences)
+  row$max_rhat <- as.double(max_rhat)
+  row$min_ess_bulk <- as.double(min_ess_bulk)
+  row$diagnostics_pass <- as.logical(metrics$diagnostics_pass %||% NA)
   row$reliability_EAP <- as.double(reliability_EAP)
-  row$theta_sd_median <- as.double(metrics$theta_sd_median_S %||% NA_real_)
-  row$tau <- as.double(metrics$tau %||% NA_real_)
-  row$theta_sd_pass <- as.logical(metrics$theta_sd_pass %||% NA)
-  row$U0 <- as.double(metrics$U0 %||% state$U0 %||% NA_real_)
-  row$U_top_median <- as.double(metrics$U_top_median %||% NA_real_)
-  row$U_abs <- as.double(config$U_abs %||% NA_real_)
-  row$U_pass <- as.logical(metrics$U_pass %||% NA)
-  row$U_dup_threshold <- as.double(state$posterior$U_dup_threshold %||% NA_real_)
-  row$hard_cap_reached <- as.logical(metrics$hard_cap_reached %||% NA)
-  row$hard_cap_threshold <- as.integer(metrics$hard_cap_threshold %||% NA_integer_)
-  row$n_unique_pairs_seen <- as.integer(metrics$n_unique_pairs_seen %||% NA_integer_)
-  row$scheduled_pairs <- as.integer(metrics$scheduled_pairs %||% NA_integer_)
-  row$proposed_pairs <- as.integer(metrics$proposed_pairs %||% NA_integer_)
-  row$completed_pairs <- as.integer(metrics$completed_pairs %||% NA_integer_)
+  row$theta_sd_eap <- as.double(metrics$theta_sd_median_S %||% NA_real_)
+  row$rho_theta_lag <- as.double(metrics$rho_theta_lag %||% NA_real_)
+  row$delta_sd_theta_lag <- as.double(metrics$delta_sd_theta_lag %||% NA_real_)
+  row$rho_rank_lag <- as.double(metrics$rho_rank_lag %||% NA_real_)
+  row$rank_stability_pass <- as.logical(metrics$rank_stability_pass %||% NA)
+  row$stop_passes <- as.integer(stop_passes)
+  row$stop_eligible <- as.logical(stop_eligible)
+  row$stop_decision <- as.logical(stop_decision)
+  row$stop_reason <- as.character(stop_reason)
   row$starve_rate_since_last_refit <- as.double(starve_rate_since_last_refit)
   row$fallback_rate_since_last_refit <- as.double(fallback_rate_since_last_refit)
   row$fallback_used_mode <- as.character(fallback_used_mode)
   row$starvation_reason_mode <- as.character(starvation_reason_mode)
-  row$rank_stability_pass <- as.logical(metrics$rank_stability_pass %||% NA)
-  row$frac_weak_adj <- as.double(metrics$frac_weak_adj %||% NA_real_)
-  row$min_adj_prob <- as.double(metrics$min_adj_prob %||% NA_real_)
-  row$weak_adj_threshold <- as.double(metrics$weak_adj_threshold %||% NA_real_)
-  row$weak_adj_frac_max <- as.double(metrics$weak_adj_frac_max %||% NA_real_)
-  row$min_adj_prob_threshold <- as.double(metrics$min_adj_prob_threshold %||% NA_real_)
-  row$min_new_pairs_for_check <- as.integer(metrics$min_new_pairs_for_check %||% NA_integer_)
-  row$divergences <- as.integer(divergences)
-  row$min_ess_bulk <- as.double(min_ess_bulk)
-  row$max_rhat <- as.double(max_rhat)
-  row$diagnostics_pass <- as.logical(metrics$diagnostics_pass %||% NA)
   row$mcmc_chains <- as.integer(mcmc_config_used$chains %||% NA_integer_)
   row$mcmc_parallel_chains <- as.integer(mcmc_config_used$parallel_chains %||% NA_integer_)
   row$mcmc_core_fraction <- as.double(mcmc_config_used$core_fraction %||% NA_real_)
@@ -767,9 +814,6 @@ build_round_log_row <- function(state,
   row$mcmc_cores_detected_logical <- as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_)
   row$mcmc_threads_per_chain <- as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_)
   row$mcmc_cmdstanr_version <- as.character(mcmc_config_used$cmdstanr_version %||% NA_character_)
-  row$stop_decision <- as.logical(stop_decision)
-  row$stop_reason <- as.character(stop_reason)
-  row$mode <- as.character(state$mode %||% NA_character_)
   row
 }
 
