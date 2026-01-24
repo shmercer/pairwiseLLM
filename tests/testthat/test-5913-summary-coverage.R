@@ -181,10 +181,19 @@ testthat::test_that("summaries cover validation and logged gini values", {
   testthat::expect_error(pairwiseLLM::summarize_items(state, top_n = 0))
   testthat::expect_error(pairwiseLLM::summarize_items(state, include_optional = NA))
 
-  item_summary <- pairwiseLLM::summarize_items(
-    state,
-    posterior = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
-    include_optional = FALSE
+  state$config$item_summary <- tibble::tibble(
+    ID = state$ids,
+    theta_mean = c(0.1, 0.2, 0.3),
+    theta_sd = c(0.1, 0.1, 0.1),
+    theta_ci90_lo = c(-0.1, -0.1, -0.1),
+    theta_ci90_hi = c(0.2, 0.3, 0.4),
+    theta_ci95_lo = c(-0.2, -0.2, -0.2),
+    theta_ci95_hi = c(0.3, 0.4, 0.5),
+    rank_mean = c(1.0, 2.0, 3.0),
+    rank_sd = c(0.1, 0.1, 0.1),
+    deg = c(1L, 2L, 3L),
+    posA_prop = c(0.5, 0.5, 0.5)
   )
+  item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
   testthat::expect_false("theta_q975" %in% names(item_summary))
 })

@@ -4,32 +4,31 @@ testthat::test_that("summarize_items returns item diagnostics without gini colum
     text = c("alpha", "bravo", "charlie")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
-  state$deg <- c(A = 1L, B = 2L, C = 3L)
-  state$pos1 <- c(A = 1L, B = 1L, C = 0L)
-
-  theta_draws <- matrix(
-    c(
-      0.2, -0.1, 0.0,
-      0.1, 0.0, -0.2,
-      0.3, -0.2, 0.1,
-      0.4, -0.1, 0.2
-    ),
-    nrow = 4,
-    byrow = TRUE,
-    dimnames = list(NULL, state$ids)
+  item_summary <- tibble::tibble(
+    ID = state$ids,
+    theta_mean = c(0.2, -0.1, 0.0),
+    theta_sd = c(0.1, 0.2, 0.3),
+    theta_ci90_lo = c(-0.1, -0.2, -0.3),
+    theta_ci90_hi = c(0.3, 0.2, 0.1),
+    theta_ci95_lo = c(-0.2, -0.3, -0.4),
+    theta_ci95_hi = c(0.4, 0.3, 0.2),
+    rank_mean = c(1.0, 2.0, 3.0),
+    rank_sd = c(0.1, 0.2, 0.3),
+    deg = c(1L, 2L, 3L),
+    posA_prop = c(1.0, 0.5, 0.0)
   )
-  fit <- list(theta_draws = theta_draws)
+  state$config$item_summary <- item_summary
 
-  summary <- pairwiseLLM::summarize_items(state, posterior = fit)
+  summary <- pairwiseLLM::summarize_items(state)
 
   testthat::expect_s3_class(summary, "tbl_df")
   testthat::expect_true(all(c("item_id", "theta_mean", "rank_mean", "pos_A_rate") %in% names(summary)))
   testthat::expect_false(any(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(setequal(summary$item_id, state$ids))
-  testthat::expect_equal(summary$theta_mean[[1L]], mean(theta_draws[, 1L]))
-  rank_A <- summary$rank_mean[summary$item_id == "A"]
-  rank_B <- summary$rank_mean[summary$item_id == "B"]
-  testthat::expect_true(rank_A <= rank_B)
+  testthat::expect_equal(summary$theta_mean[[1L]], item_summary$theta_mean[[1L]])
+  testthat::expect_equal(summary$theta_q05[[1L]], item_summary$theta_ci90_lo[[1L]])
+  testthat::expect_equal(summary$theta_q95[[1L]], item_summary$theta_ci90_hi[[1L]])
+  testthat::expect_equal(summary$pos_A_rate[[1L]], item_summary$posA_prop[[1L]])
 })
 
 testthat::test_that("summarize_items supports sorting and missing posterior", {
@@ -38,31 +37,30 @@ testthat::test_that("summarize_items supports sorting and missing posterior", {
     text = c("alpha", "bravo", "charlie")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
-  state$deg <- c(A = 1L, B = 2L, C = 3L)
-  state$pos1 <- c(A = 1L, B = 1L, C = 0L)
-
-  theta_draws <- matrix(
-    c(
-      0.2, -0.1, 0.0,
-      0.1, 0.0, -0.2,
-      0.3, -0.2, 0.1
-    ),
-    nrow = 3,
-    byrow = TRUE,
-    dimnames = list(NULL, state$ids)
+  item_summary <- tibble::tibble(
+    ID = state$ids,
+    theta_mean = c(0.2, -0.1, 0.0),
+    theta_sd = c(0.1, 0.2, 0.3),
+    theta_ci90_lo = c(-0.1, -0.2, -0.3),
+    theta_ci90_hi = c(0.3, 0.2, 0.1),
+    theta_ci95_lo = c(-0.2, -0.3, -0.4),
+    theta_ci95_hi = c(0.4, 0.3, 0.2),
+    rank_mean = c(1.0, 2.0, 3.0),
+    rank_sd = c(0.1, 0.2, 0.3),
+    deg = c(1L, 2L, 3L),
+    posA_prop = c(1.0, 0.5, 0.0)
   )
-  fit <- list(theta_draws = theta_draws)
+  state$config$item_summary <- item_summary
 
   summary_top <- pairwiseLLM::summarize_items(
     state,
-    posterior = fit,
     top_n = 2L,
     sort_by = "theta_mean"
   )
   testthat::expect_equal(nrow(summary_top), 2L)
   testthat::expect_true(summary_top$theta_mean[[1L]] >= summary_top$theta_mean[[2L]])
 
+  state$config$item_summary <- NULL
   summary_missing <- pairwiseLLM::summarize_items(state, posterior = NULL)
-  testthat::expect_true(all(is.na(summary_missing$theta_mean)))
-  testthat::expect_equal(unname(summary_missing$degree), unname(state$deg))
+  testthat::expect_equal(nrow(summary_missing), 0L)
 })

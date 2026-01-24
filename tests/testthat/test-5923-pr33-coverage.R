@@ -238,20 +238,23 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     {
       summary <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
       testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
-      testthat::expect_true(is.finite(summary$gini_pos_A[[1L]]))
+      testthat::expect_true(is.na(summary$gini_pos_A[[1L]]))
     }
   )
 
-  theta_draws <- matrix(
-    c(0.1, 0.2, 0.3, 0.0),
-    nrow = 2L,
-    ncol = 2L,
-    byrow = TRUE
+  state$config$item_summary <- tibble::tibble(
+    ID = state$ids,
+    theta_mean = c(0.1, 0.2),
+    theta_sd = c(0.1, 0.1),
+    theta_ci90_lo = c(0.0, 0.0),
+    theta_ci90_hi = c(0.3, 0.4),
+    theta_ci95_lo = c(-0.1, -0.1),
+    theta_ci95_hi = c(0.4, 0.5),
+    rank_mean = c(1.0, 2.0),
+    rank_sd = c(0.1, 0.1),
+    deg = c(1L, 2L),
+    posA_prop = c(0.5, 0.5)
   )
-  item_summary <- pairwiseLLM::summarize_items(
-    state,
-    posterior = theta_draws,
-    include_optional = FALSE
-  )
+  item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
   testthat::expect_identical(item_summary$item_id, state$ids)
 })
