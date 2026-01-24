@@ -56,6 +56,8 @@ testthat::test_that("summarize_refits returns stable schema with gini metrics", 
     stop_out = stop_out,
     new_pairs = 2L
   )
+  row$gini_degree <- 0.21
+  row$gini_pos_A <- 0.43
   state$config$round_log <- dplyr::bind_rows(state$config$round_log, row)
 
   summary <- pairwiseLLM::summarize_refits(state, last_n = 1L)
@@ -63,11 +65,8 @@ testthat::test_that("summarize_refits returns stable schema with gini metrics", 
   testthat::expect_s3_class(summary, "tbl_df")
   testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(all(c("reliability_EAP", "epsilon_mean") %in% names(summary)))
-  testthat::expect_equal(summary$gini_degree[[1L]], pairwiseLLM:::compute_gini_degree(state$deg))
-  testthat::expect_equal(
-    summary$gini_pos_A[[1L]],
-    pairwiseLLM:::compute_gini_posA(state$pos_count, state$deg)
-  )
+  testthat::expect_equal(summary$gini_degree[[1L]], 0.21)
+  testthat::expect_equal(summary$gini_pos_A[[1L]], 0.43)
 })
 
 testthat::test_that("summarize_refits handles missing logs", {

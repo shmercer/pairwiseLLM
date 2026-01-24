@@ -99,6 +99,12 @@ produced only after the full MCMC audit.
 All LLM outputs are normalized into a single canonical results schema,
 independent of backend, and all downstream logic operates exclusively on
 this canonical form.
+
+Canonical adaptive outputs are \code{batch_log}, \code{round_log}, and
+\code{item_summary}. The logs live on the state as \code{state$batch_log} and
+\code{state$config$round_log}. When outputs are written, the final
+\code{item_summary} is cached on \code{state$config$item_summary}; summary
+helpers are pure views of these tables.
 }
 \examples{
 # Minimal synthetic setup (no submission).

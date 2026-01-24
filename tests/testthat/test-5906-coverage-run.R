@@ -33,6 +33,20 @@ testthat::test_that("adaptive_write_v3_artifacts validates inputs", {
   )
 })
 
+testthat::test_that("adaptive_write_v3_artifacts returns state when outputs disabled", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(write_outputs = FALSE))
+
+  out <- pairwiseLLM:::.adaptive_write_v3_artifacts(state, fit = NULL, output_dir = NULL)
+
+  testthat::expect_true(inherits(out$state, "adaptive_state"))
+  testthat::expect_null(out$item_summary)
+})
+
 testthat::test_that("adaptive_write_v3_artifacts thins draws with epsilon", {
   output_dir <- withr::local_tempdir()
   samples <- tibble::tibble(
