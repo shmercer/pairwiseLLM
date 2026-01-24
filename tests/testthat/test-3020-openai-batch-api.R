@@ -245,7 +245,7 @@ testthat::test_that("openai_poll_batch_until_complete handles loops and limits",
 testthat::test_that("run_openai_batch_pipeline exercises all steps", {
   pairs <- tibble::tibble(ID1 = "a", text1 = "a", ID2 = "b", text2 = "b")
 
-  # 1. Endpoint auto-selection (include_thoughts=TRUE -> responses)
+  # 1. Endpoint auto-selection (GPT-5 + include_thoughts=TRUE -> responses)
   #    and poll=FALSE branch
   testthat::with_mocked_bindings(
     build_openai_batch_requests = function(...) {
@@ -259,7 +259,14 @@ testthat::test_that("run_openai_batch_pipeline exercises all steps", {
     openai_upload_batch_file = function(...) list(id = "f1"),
     openai_create_batch = function(...) list(id = "b1", status = "validating"),
     {
-      res <- run_openai_batch_pipeline(pairs, "mod", "tr", "desc", include_thoughts = TRUE, poll = FALSE)
+      res <- run_openai_batch_pipeline(
+        pairs,
+        "gpt-5.1",
+        "tr",
+        "desc",
+        include_thoughts = TRUE,
+        poll = FALSE
+      )
       testthat::expect_equal(res$batch$id, "b1")
       testthat::expect_null(res$results)
     }

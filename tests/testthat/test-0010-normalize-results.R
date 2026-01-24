@@ -39,6 +39,54 @@ test_that("normalize_llm_results returns canonical observed rows with keys", {
   expect_type(out$results$ID2, "character")
 })
 
+test_that("normalize_llm_results assigns pair_uid per row when missing in pairs", {
+  pairs <- tibble::tibble(
+    ID1 = c("S17", "S19"),
+    text1 = c("alpha", "bravo"),
+    ID2 = c("S12", "S15"),
+    text2 = c("charlie", "delta")
+  )
+
+  raw <- tibble::tibble(
+    ID1 = c("S17", "S19"),
+    ID2 = c("S12", "S15"),
+    better_id = c("S17", "S15")
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_equal(out$results$unordered_key, c("S12:S17", "S15:S19"))
+  expect_equal(out$results$pair_uid, c("S12:S17#1", "S15:S19#1"))
+  expect_true(all(is.na(out$results$pair_uid_provided)))
+})
+
+test_that("failed_attempts_from_pairs computes pair_uid per row when missing", {
+  pairs <- tibble::tibble(
+    ID1 = c("S17", "S19"),
+    text1 = c("alpha", "bravo"),
+    ID2 = c("S12", "S15"),
+    text2 = c("charlie", "delta")
+  )
+
+  out <- .pairwiseLLM_failed_attempts_from_pairs(
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    error_code = "http_error",
+    error_detail = "unit test"
+  )
+
+  expect_equal(out$unordered_key, c("S12:S17", "S15:S19"))
+  expect_equal(out$pair_uid, c("S12:S17#1", "S15:S19#1"))
+  expect_true(all(is.na(out$pair_uid_provided)))
+})
+
 test_that("normalize_llm_results routes invalid winners to failed_attempts", {
   pairs <- tibble::tibble(
     ID1 = "A",
@@ -759,6 +807,33 @@ test_that("normalize_llm_results coalesces suffixed columns from row-order align
   )
 
   expect_equal(out$results$ID1, "A")
+})
+
+test_that("normalize_llm_results drops .x/.y columns after ID join", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A",
+    unordered_key = "A:B",
+    ordered_key = "A:B"
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_false(any(grepl("\\\\.x$|\\\\.y$", names(out$results))))
 })
 
 test_that("normalize_llm_results outputs satisfy adaptive schema validators", {

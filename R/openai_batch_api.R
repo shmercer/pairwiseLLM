@@ -354,13 +354,14 @@ openai_poll_batch_until_complete <- function(
 #' for end-to-end batch runs on a set of pairwise comparisons. For more control
 #' (or testing), you can call the components directly.
 #'
-#' When \code{endpoint} is not specified, it is chosen automatically:
-#' \itemize{
-#'   \item if \code{include_thoughts = TRUE}, the \code{"responses"} endpoint
-#'         is used and, for \code{"gpt-5.1"}, a default reasoning effort of
-#'         \code{"low"} is applied (unless overridden via \code{reasoning}).
-#'   \item otherwise, \code{"chat.completions"} is used.
-#' }
+  #' When \code{endpoint} is not specified, it is chosen automatically:
+  #' \itemize{
+  #'   \item if \code{include_thoughts = TRUE} or GPT-5 reasoning is requested,
+  #'         the \code{"responses"} endpoint is used and a default reasoning
+  #'         effort of \code{"low"} is applied for GPT-5 series models unless
+  #'         overridden via \code{reasoning}.
+  #'   \item otherwise, \code{"chat.completions"} is used.
+  #' }
 #'
 #' @param pairs Tibble of pairs with at least `ID1`, `text1`, `ID2`, `text2`.
 #'   Typically produced by [make_pairs()], [sample_pairs()], and
@@ -398,9 +399,9 @@ openai_poll_batch_until_complete <- function(
 #'   [openai_create_batch()].
 #' @param api_key Optional OpenAI API key. Defaults to
 #'   `Sys.getenv("OPENAI_API_KEY")`.
-#' @param ... Additional arguments passed through to
-#'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`.
+  #' @param ... Additional arguments passed through to
+  #'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
+  #'   `reasoning`, `service_tier`.
 #'
 #' @return A list with elements:
 #' * `batch_input_path`  – path to the input `.jsonl` file.
@@ -448,7 +449,7 @@ openai_poll_batch_until_complete <- function(
 #' }
 #'
 #' @export
-run_openai_batch_pipeline <- function(
+  run_openai_batch_pipeline <- function(
     pairs,
     model,
     trait_name,
@@ -466,12 +467,35 @@ run_openai_batch_pipeline <- function(
     metadata = NULL,
     api_key = NULL,
     ...
-) {
-  # If endpoint not supplied, choose automatically based on include_thoughts
-  if (is.null(endpoint)) {
-    endpoint <- if (isTRUE(include_thoughts)) "responses" else "chat.completions"
-  }
-  endpoint <- match.arg(endpoint, c("chat.completions", "responses"))
+  ) {
+    dot_list <- list(...)
+
+    # If endpoint not supplied, choose automatically based on GPT-5 rules
+    if (is.null(endpoint)) {
+      reasoning_effort <- normalize_openai_reasoning(
+        model = model,
+        reasoning = dot_list$reasoning %||% NULL,
+        include_thoughts = include_thoughts
+      )
+
+      is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
+      is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
+
+      reasoning_active <- if (is_gpt5_reasoning) {
+        !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
+      } else if (is_gpt5_base) {
+        !is.null(reasoning_effort)
+      } else {
+        FALSE
+      }
+
+      if (is_gpt5_series_model(model) && (isTRUE(include_thoughts) || reasoning_active)) {
+        endpoint <- "responses"
+      } else {
+        endpoint <- "chat.completions"
+      }
+    }
+    endpoint <- match.arg(endpoint, c("chat.completions", "responses"))
 
   # Endpoint for the Batch API expects the full path
   batch_api_endpoint <- switch(endpoint,
@@ -565,12 +589,17 @@ run_openai_batch_pipeline <- function(
 #'   (enabled).
 #' @param top_p Optional top_p parameter.
 #' @param logprobs Optional logprobs parameter.
-#' @param reasoning Optional reasoning effort for \code{gpt-5.1/5.2} when using
-#'   the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
-#'   \code{"medium"}, or \code{"high"}.
-#' @param include_thoughts Logical; if TRUE and using \code{responses} endpoint
-#'   with reasoning, requests a summary. Defaults \code{reasoning} to \code{"low"}
-#'   for gpt-5.1/5.2 if not specified.
+  #' @param reasoning Optional reasoning effort for GPT-5 series when using
+  #'   the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
+  #'   \code{"gpt-5-mini"}, \code{"none"} is normalized to \code{"minimal"}.
+  #'   For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
+  #'   \code{"medium"}, or \code{"high"}.
+  #' @param include_thoughts Logical; if TRUE and using \code{responses} endpoint
+  #'   with reasoning, requests a summary. Defaults \code{reasoning} to
+  #'   \code{"low"} for GPT-5 series models if not specified.
+  #' @param service_tier Optional OpenAI service tier. Use \code{"flex"} or
+  #'   \code{"priority"} to request explicit tiers; \code{"standard"} is
+  #'   normalized to the default tier and omitted from the request.
 #' @param request_id_prefix String prefix for \code{custom_id}; the full
 #'   ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.
 #'
@@ -609,74 +638,105 @@ run_openai_batch_pipeline <- function(
 #'   temperature       = 0
 #' )
 #'
-#' # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
-#' batch_resp <- build_openai_batch_requests(
-#'   pairs = pairs,
-#'   model = "gpt-5.2-2025-12-11",
-#'   trait_name = td$name,
-#'   trait_description = td$description,
-#'   prompt_template = tmpl,
-#'   endpoint = "responses",
-#'   include_thoughts = TRUE, # implies reasoning="low" if not set
-#'   reasoning = "medium"
-#' )
+  #' # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
+  #' batch_resp <- build_openai_batch_requests(
+  #'   pairs = pairs,
+  #'   model = "gpt-5.2-2025-12-11",
+  #'   trait_name = td$name,
+  #'   trait_description = td$description,
+  #'   prompt_template = tmpl,
+  #'   endpoint = "responses",
+  #'   include_thoughts = TRUE, # implies reasoning="low" if not set
+  #'   reasoning = "medium"
+  #' )
+  #'
+  #' # 3. GPT-5 Responses Batch with service tier
+  #' batch_resp_tier <- build_openai_batch_requests(
+  #'   pairs = pairs,
+  #'   model = "gpt-5",
+  #'   trait_name = td$name,
+  #'   trait_description = td$description,
+  #'   prompt_template = tmpl,
+  #'   endpoint = "responses",
+  #'   reasoning = "none",
+  #'   service_tier = "flex"
+  #' )
 #' batch_tbl_chat
 #' batch_tbl_resp
 #' }
 #'
 #' @import tibble
 #' @export
-build_openai_batch_requests <- function(pairs,
-                                        model,
-                                        trait_name,
-                                        trait_description,
-                                        prompt_template = set_prompt_template(),
-                                        endpoint = c(
-                                          "chat.completions",
-                                          "responses"
-                                        ),
-                                        temperature = NULL,
-                                        top_p = NULL,
-                                        logprobs = NULL,
-                                        reasoning = NULL,
-                                        include_thoughts = FALSE,
-                                        request_id_prefix = "EXP") {
-  endpoint <- match.arg(endpoint)
-  pairs <- tibble::as_tibble(pairs)
+  build_openai_batch_requests <- function(pairs,
+                                          model,
+                                          trait_name,
+                                          trait_description,
+                                          prompt_template = set_prompt_template(),
+                                          endpoint = c(
+                                            "chat.completions",
+                                            "responses"
+                                          ),
+                                          temperature = NULL,
+                                          top_p = NULL,
+                                          logprobs = NULL,
+                                          reasoning = NULL,
+                                          include_thoughts = FALSE,
+                                          service_tier = NULL,
+                                          request_id_prefix = "EXP") {
+    endpoint <- match.arg(endpoint)
+    pairs <- tibble::as_tibble(pairs)
 
-  if (nrow(pairs) == 0L) {
-    return(tibble::tibble(
-      custom_id = character(0), method = character(0), url = character(0), body = list()
-    ))
-  }
+    if (nrow(pairs) == 0L) {
+      return(tibble::tibble(
+        custom_id = character(0), method = character(0), url = character(0), body = list()
+      ))
+    }
 
-  # Validate model vs temperature / top_p / logprobs / reasoning
-  is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
+    reasoning_effort <- normalize_openai_reasoning(
+      model = model,
+      reasoning = reasoning,
+      include_thoughts = include_thoughts
+    )
 
-  # Default reasoning if thoughts requested on responses endpoint
-  if (endpoint == "responses" && isTRUE(include_thoughts) && is.null(reasoning)) {
-    if (is_reasoning_model) {
-      reasoning <- "low"
+    if (endpoint == "responses" && isTRUE(include_thoughts) &&
+      is.null(reasoning_effort) && !is_gpt5_series_model(model)) {
+      rlang::warn("include_thoughts requested for non-reasoning model; ignores thoughts.")
+    }
+
+    is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
+    is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
+
+    reasoning_active <- if (is_gpt5_reasoning) {
+      !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
+    } else if (is_gpt5_base) {
+      !is.null(reasoning_effort)
     } else {
-      warning("include_thoughts requested for non-reasoning model; ignores thoughts.", call. = FALSE)
+      FALSE
     }
-  }
 
-  reasoning_active <- is_reasoning_model && (!is.null(reasoning) && reasoning != "none")
-
-  # Apply default temperature = 0 if strictly not reasoning
-  if (is.null(temperature) && !reasoning_active) {
-    temperature <- 0
-  }
-
-  # Validation: only strict check for ACTIVE reasoning
-  if (is_reasoning_model && reasoning_active) {
-    if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
-      stop("For gpt-5.1/5.2 with reasoning, temperature/top_p/logprobs must be NULL.", call. = FALSE)
+    if (is.null(temperature) && !reasoning_active) {
+      temperature <- 0
     }
-  }
 
-  out_list <- vector("list", nrow(pairs))
+    sampling <- normalize_openai_sampling(
+      model = model,
+      endpoint = endpoint,
+      reasoning_effort = reasoning_effort,
+      temperature = temperature,
+      top_p = top_p,
+      logprobs = logprobs
+    )
+    temperature <- sampling$temperature
+    top_p <- sampling$top_p
+    logprobs <- sampling$logprobs
+
+    service_tier <- normalize_openai_service_tier(service_tier)
+    if (!is_gpt5_series_model(model) ||
+      (!is.null(service_tier) && service_tier %in% c("default", "auto"))) {
+      service_tier <- NULL
+    }
+
+    out_list <- vector("list", nrow(pairs))
 
   for (i in seq_len(nrow(pairs))) {
     id1 <- as.character(pairs$ID1[i])
@@ -700,18 +760,19 @@ build_openai_batch_requests <- function(pairs,
       if (!is.null(top_p)) body$top_p <- top_p
       if (!is.null(logprobs)) body$logprobs <- logprobs
       obj <- list(custom_id = custom_id, method = "POST", url = "/v1/chat/completions", body = body)
-    } else {
-      body <- list(model = model, input = prompt)
-      if (!is.null(reasoning)) {
-        block <- list(effort = reasoning)
-        if (!identical(reasoning, "none") && isTRUE(include_thoughts)) block$summary <- "auto"
-        body$reasoning <- block
+      } else {
+        body <- list(model = model, input = prompt)
+        if (!is.null(reasoning_effort)) {
+          block <- list(effort = reasoning_effort)
+          if (isTRUE(include_thoughts)) block$summary <- "auto"
+          body$reasoning <- block
+        }
+        if (!is.null(service_tier)) body$service_tier <- service_tier
+        if (!is.null(temperature)) body$temperature <- temperature
+        if (!is.null(top_p)) body$top_p <- top_p
+        if (!is.null(logprobs)) body$logprobs <- logprobs
+        obj <- list(custom_id = custom_id, method = "POST", url = "/v1/responses", body = body)
       }
-      if (!is.null(temperature)) body$temperature <- temperature
-      if (!is.null(top_p)) body$top_p <- top_p
-      if (!is.null(logprobs)) body$logprobs <- logprobs
-      obj <- list(custom_id = custom_id, method = "POST", url = "/v1/responses", body = body)
-    }
     out_list[[i]] <- obj
   }
 

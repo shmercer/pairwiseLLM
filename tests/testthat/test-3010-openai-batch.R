@@ -125,7 +125,7 @@ testthat::test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning 
   )
 })
 
-testthat::test_that("build_openai_batch_requests allows other gpt-5* models with default temp=0", {
+testthat::test_that("build_openai_batch_requests drops temp for gpt-5 base with reasoning", {
   data("example_writing_samples", package = "pairwiseLLM")
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
@@ -146,8 +146,8 @@ testthat::test_that("build_openai_batch_requests allows other gpt-5* models with
   )
   testthat::expect_s3_class(batch, "tbl_df")
   testthat::expect_equal(nrow(batch), 1L)
-  # Verify temperature defaulted to 0
-  testthat::expect_equal(batch$body[[1]]$temperature, 0)
+  # Verify temperature is omitted
+  testthat::expect_false("temperature" %in% names(batch$body[[1]]))
 })
 
 testthat::test_that("parse_openai_batch_output collects thoughts and message text separately for responses", {
@@ -247,7 +247,7 @@ testthat::test_that("build_openai_batch_requests adds reasoning summary when inc
   testthat::expect_true("reasoning" %in% names(b1))
   testthat::expect_equal(b1$reasoning$effort, "low")
   testthat::expect_equal(b1$reasoning$summary, "auto")
-  # include_thoughts = TRUE but reasoning = "none" -> no summary field
+  # include_thoughts = TRUE but reasoning = "none" -> summary included
   batch_none <- build_openai_batch_requests(
     pairs = pairs,
     model = "gpt-5.1",
@@ -261,7 +261,7 @@ testthat::test_that("build_openai_batch_requests adds reasoning summary when inc
   b2 <- batch_none$body[[1]]
   testthat::expect_true("reasoning" %in% names(b2))
   testthat::expect_equal(b2$reasoning$effort, "none")
-  testthat::expect_false("summary" %in% names(b2$reasoning))
+  testthat::expect_equal(b2$reasoning$summary, "auto")
 })
 
 testthat::test_that("build_openai_batch_requests handles empty pairs tibble", {
