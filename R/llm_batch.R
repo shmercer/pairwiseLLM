@@ -12,17 +12,17 @@
 #' For OpenAI, this helper will by default:
 #' * Use the `chat.completions` batch style for most models, and
 #' * Automatically switch to the `responses` style endpoint when:
-#'     - `model` starts with `"gpt-5.1"` or `"gpt-5.2"` (including date-stamped
-#'        versions like `"gpt-5.2-2025-12-11"`) and
-#'     - either `include_thoughts = TRUE` **or** a non-`"none"` `reasoning`
-#'       effort is supplied in `...`.
+#'     - `model` is in the GPT-5 series (including `gpt-5`, `gpt-5-mini`, and
+#'       date-stamped `gpt-5.1/5.2` variants), and
+#'     - either `include_thoughts = TRUE` **or** a `reasoning` effort is supplied
+#'       in `...` (for GPT-5, `reasoning = "none"` maps to `"minimal"`).
 #'
 #' **Temperature Defaults:**
 #' For OpenAI, if `temperature` is not specified in `...`:
 #' * It defaults to `0` (deterministic) for standard models or when reasoning is
-#'   disabled (`reasoning = "none"`) on supported models (5.1/5.2).
-#' * It remains `NULL` (API default) when reasoning is enabled, as the API
-#'   does not support temperature with reasoning.
+#'   disabled (`reasoning = "none"`) on supported GPT-5.1/5.2 models.
+#' * It remains `NULL` (API default) when reasoning is enabled, or for GPT-5
+#'   minimal reasoning (which ignores temperature).
 #'
 #' For Anthropic, standard and date-stamped model names
 #' (e.g. `"claude-sonnet-4-5-20250929"`) are supported. This helper delegates
@@ -58,8 +58,9 @@
 #' @param backend Character scalar; one of `"openai"`, `"anthropic"`, or
 #'   `"gemini"`. Matching is case-insensitive.
 #' @param model Character scalar model name to use for the batch job.
-#'   * For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5.1"`, or `"gpt-5.2"`
-#'     (including date-stamped versions like `"gpt-5.2-2025-12-11"`).
+#'   * For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5"`, `"gpt-5-mini"`,
+#'     `"gpt-5.1"`, or `"gpt-5.2"` (including date-stamped versions like
+#'     `"gpt-5.2-2025-12-11"`).
 #'   * For `"anthropic"`, use provider names like `"claude-4-5-sonnet"`
 #'     or date-stamped versions like `"claude-sonnet-4-5-20250929"`.
 #'   * For `"gemini"`, use names like `"gemini-3-pro-preview"`.
@@ -70,7 +71,7 @@
 #'   or a compatible character scalar.
 #' @param include_thoughts Logical; whether to request and parse model
 #'   "thoughts" (where supported).
-#'   * For OpenAI GPT-5.1/5.2, setting this to `TRUE` defaults to the
+#'   * For OpenAI GPT-5 series, setting this to `TRUE` defaults to the
 #'     `responses` endpoint.
 #'   * For Anthropic, setting this to `TRUE` implies `reasoning = "enabled"`
 #'     (unless overridden) and sets `temperature = 1`.
@@ -80,7 +81,7 @@
 #'   `run_*_batch_pipeline()` functions. This can include provider-specific
 #'   options such as temperature or batch configuration fields. For OpenAI,
 #'   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`, etc. For Anthropic, this may include `reasoning`,
+#'   `reasoning`, `service_tier`, etc. For Anthropic, this may include `reasoning`,
 #'   `max_tokens`, `temperature`, or `thinking_budget_tokens`.
 #'
 #' @return
@@ -119,11 +120,12 @@
 #' batch_openai <- llm_submit_pairs_batch(
 #'   pairs             = pairs,
 #'   backend           = "openai",
-#'   model             = "gpt-4.1",
+#'   model             = "gpt-5-mini",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   include_thoughts  = FALSE
+#'   include_thoughts  = FALSE,
+#'   service_tier      = "flex"
 #' )
 #' res_openai <- llm_download_batch_results(batch_openai)
 #'
@@ -184,22 +186,35 @@ llm_submit_pairs_batch <- function(
   dot_list <- list(...)
 
   if (backend == "openai") {
-    # Detect GPT-5.1/5.2 (and date variants)
-    is_reasoning_model <- grepl("^gpt-5\\.[12]", model)
-
     reasoning <- if ("reasoning" %in% names(dot_list)) {
       dot_list$reasoning
     } else {
       NULL
     }
 
+    reasoning_effort <- normalize_openai_reasoning(
+      model = model,
+      reasoning = reasoning,
+      include_thoughts = include_thoughts
+    )
+
+    is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
+    is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
+
     # Determine endpoint automatically if not provided
     endpoint <- if ("endpoint" %in% names(dot_list)) {
       dot_list$endpoint
     } else {
-      # Auto-select "responses" for reasoning models when thoughts are enabled
-      if (is_reasoning_model && (isTRUE(include_thoughts) ||
-        (!is.null(reasoning) && !identical(reasoning, "none")))) {
+      # Auto-select "responses" for GPT-5 series when reasoning is in play
+      reasoning_active <- if (is_gpt5_reasoning) {
+        !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
+      } else if (is_gpt5_base) {
+        !is.null(reasoning_effort)
+      } else {
+        FALSE
+      }
+
+      if (is_gpt5_series_model(model) && (isTRUE(include_thoughts) || reasoning_active)) {
         "responses"
       } else {
         "chat.completions"
@@ -208,15 +223,18 @@ llm_submit_pairs_batch <- function(
 
     # Determine default temperature logic
     # Reasoning is ACTIVE if:
-    # 1. Explicitly set to something other than NULL or "none"
-    # 2. OR if it is NULL, but include_thoughts=TRUE (which forces default 'low')
-    reasoning_active <- is_reasoning_model && (
-      (!is.null(reasoning) && reasoning != "none") ||
-        (is.null(reasoning) && isTRUE(include_thoughts))
-    )
+    # 1. GPT-5.1/5.2 reasoning is non-"none", or
+    # 2. GPT-5 base models have any reasoning effort (including "minimal").
+    reasoning_active <- if (is_gpt5_reasoning) {
+      !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
+    } else if (is_gpt5_base) {
+      !is.null(reasoning_effort)
+    } else {
+      FALSE
+    }
 
     # Default to 0 ONLY if reasoning is NOT active.
-    # This covers standard models AND gpt-5.1/5.2 with reasoning disabled.
+    # This covers standard models and GPT-5.1/5.2 with reasoning disabled.
     if (!"temperature" %in% names(dot_list) && !reasoning_active) {
       dot_list$temperature <- 0
     }

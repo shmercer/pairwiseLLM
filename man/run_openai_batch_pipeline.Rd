@@ -79,7 +79,7 @@ testing).}
 
 \item{...}{Additional arguments passed through to
 \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}, e.g. \code{temperature}, \code{top_p}, \code{logprobs},
-\code{reasoning}.}
+\code{reasoning}, \code{service_tier}.}
 }
 \value{
 A list with elements:
@@ -114,9 +114,10 @@ for end-to-end batch runs on a set of pairwise comparisons. For more control
 
 When \code{endpoint} is not specified, it is chosen automatically:
 \itemize{
-\item if \code{include_thoughts = TRUE}, the \code{"responses"} endpoint
-is used and, for \code{"gpt-5.1"}, a default reasoning effort of
-\code{"low"} is applied (unless overridden via \code{reasoning}).
+\item if \code{include_thoughts = TRUE} or GPT-5 reasoning is requested,
+the \code{"responses"} endpoint is used and a default reasoning
+effort of \code{"low"} is applied for GPT-5 series models unless
+overridden via \code{reasoning}.
 \item otherwise, \code{"chat.completions"} is used.
 }
 }

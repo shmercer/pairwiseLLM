@@ -16,6 +16,7 @@ build_openai_batch_requests(
   logprobs = NULL,
   reasoning = NULL,
   include_thoughts = FALSE,
+  service_tier = NULL,
   request_id_prefix = "EXP"
 )
 }
@@ -46,13 +47,19 @@ standard models (deterministic). Must be \code{NULL} for reasoning models
 
 \item{logprobs}{Optional logprobs parameter.}
 
-\item{reasoning}{Optional reasoning effort for \code{gpt-5.1/5.2} when using
-the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
+\item{reasoning}{Optional reasoning effort for GPT-5 series when using
+the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
+\code{"gpt-5-mini"}, \code{"none"} is normalized to \code{"minimal"}.
+For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
 \code{"medium"}, or \code{"high"}.}
 
 \item{include_thoughts}{Logical; if TRUE and using \code{responses} endpoint
-with reasoning, requests a summary. Defaults \code{reasoning} to \code{"low"}
-for gpt-5.1/5.2 if not specified.}
+with reasoning, requests a summary. Defaults \code{reasoning} to
+\code{"low"} for GPT-5 series models if not specified.}
+
+\item{service_tier}{Optional OpenAI service tier. Use \code{"flex"} or
+\code{"priority"} to request explicit tiers; \code{"standard"} is
+normalized to the default tier and omitted from the request.}
 
 \item{request_id_prefix}{String prefix for \code{custom_id}; the full
 ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.}
@@ -108,6 +115,18 @@ batch_resp <- build_openai_batch_requests(
   endpoint = "responses",
   include_thoughts = TRUE, # implies reasoning="low" if not set
   reasoning = "medium"
+)
+
+# 3. GPT-5 Responses Batch with service tier
+batch_resp_tier <- build_openai_batch_requests(
+  pairs = pairs,
+  model = "gpt-5",
+  trait_name = td$name,
+  trait_description = td$description,
+  prompt_template = tmpl,
+  endpoint = "responses",
+  reasoning = "none",
+  service_tier = "flex"
 )
 batch_tbl_chat
 batch_tbl_resp
