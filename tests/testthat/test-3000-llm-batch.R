@@ -469,7 +469,7 @@ test_that("build_openai_batch_requests errors for gpt-5.1/5.2 + reasoning != 'no
       pairs = pairs, model = "gpt-5.1", trait_name = td$name, trait_description = td$description,
       endpoint = "responses", reasoning = "low", temperature = 0
     ),
-    regexp = "For gpt-5.1/5.2 with reasoning, temperature/top_p/logprobs must be NULL."
+    regexp = "gpt-5.1/5.2.*temperature"
   )
 
   # GPT-5.2
@@ -478,19 +478,18 @@ test_that("build_openai_batch_requests errors for gpt-5.1/5.2 + reasoning != 'no
       pairs = pairs, model = "gpt-5.2", trait_name = td$name, trait_description = td$description,
       endpoint = "responses", reasoning = "high", top_p = 0.5
     ),
-    regexp = "For gpt-5.1/5.2 with reasoning, temperature/top_p/logprobs must be NULL."
+    regexp = "gpt-5.1/5.2.*temperature"
   )
 })
 
-test_that("build_openai_batch_requests allows other gpt-5* models with default temp=0", {
+test_that("build_openai_batch_requests drops temp for gpt-5 base with reasoning", {
   data("example_writing_samples", package = "pairwiseLLM")
   pairs <- make_pairs(example_writing_samples)
   pairs <- pairs[1:1, ]
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
-  # Pass NULL temp; since reasoning logic doesn't match 5.1/5.2 regex,
-  # it should default to 0 inside the function and succeed.
+  # GPT-5 base with reasoning should ignore sampling parameters.
   batch <- build_openai_batch_requests(
     pairs = pairs,
     model = "gpt-5-mini",
@@ -507,8 +506,8 @@ test_that("build_openai_batch_requests allows other gpt-5* models with default t
   expect_equal(nrow(batch), 1L)
   b1 <- batch$body[[1]]
   expect_equal(b1$model, "gpt-5-mini")
-  # Verify temperature defaulted to 0
-  expect_equal(b1$temperature, 0)
+  # Verify temperature is omitted
+  expect_false("temperature" %in% names(b1))
 })
 
 testthat::test_that("parse_openai_batch_output collects thoughts and message text separately for responses", {
@@ -608,7 +607,7 @@ test_that("build_openai_batch_requests adds reasoning summary when include_thoug
   testthat::expect_true("reasoning" %in% names(b1))
   testthat::expect_equal(b1$reasoning$effort, "low")
   testthat::expect_equal(b1$reasoning$summary, "auto")
-  # include_thoughts = TRUE but reasoning = "none" -> no summary field
+  # include_thoughts = TRUE but reasoning = "none" -> summary included
   batch_none <- build_openai_batch_requests(
     pairs = pairs,
     model = "gpt-5.1",
@@ -622,5 +621,5 @@ test_that("build_openai_batch_requests adds reasoning summary when include_thoug
   b2 <- batch_none$body[[1]]
   testthat::expect_true("reasoning" %in% names(b2))
   testthat::expect_equal(b2$reasoning$effort, "none")
-  testthat::expect_false("summary" %in% names(b2$reasoning))
+  testthat::expect_equal(b2$reasoning$summary, "auto")
 })
