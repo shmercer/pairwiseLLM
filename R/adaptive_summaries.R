@@ -79,9 +79,7 @@
     candidate_starved = .adaptive_summary_empty_value("logical"),
     reason_short_batch = .adaptive_summary_empty_value("character"),
     n_explore_selected = .adaptive_summary_empty_value("integer"),
-    n_exploit_selected = .adaptive_summary_empty_value("integer"),
-    gini_degree = .adaptive_summary_empty_value("double"),
-    gini_pos_A = .adaptive_summary_empty_value("double")
+    n_exploit_selected = .adaptive_summary_empty_value("integer")
   )
   if (!isTRUE(include_optional)) {
     return(required)
@@ -133,30 +131,20 @@
     "min_ess_bulk",
     "epsilon_mean",
     "reliability_EAP",
-    "theta_sd_median",
-    "tau",
-    "theta_sd_pass",
-    "U0",
-    "U_top_median",
-    "U_abs",
-    "U_pass",
-    "U_dup_threshold",
-    "hard_cap_reached",
+    "theta_sd_eap",
+    "rho_theta_lag",
+    "delta_sd_theta_lag",
+    "rho_rank_lag",
     "hard_cap_threshold",
     "n_unique_pairs_seen",
     "rank_stability_pass",
-    "frac_weak_adj",
-    "min_adj_prob",
-    "weak_adj_threshold",
-    "weak_adj_frac_max",
-    "min_adj_prob_threshold",
-    "min_new_pairs_for_check",
     "diagnostics_pass",
+    "stop_passes",
+    "stop_eligible",
     "stop_decision",
     "stop_reason",
     "mode"
   )
-  required <- unique(c(required, "gini_degree", "gini_pos_A"))
   schema[, required, drop = FALSE]
 }
 
@@ -304,9 +292,6 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
     rep_len(as.POSIXct(NA, tz = "UTC"), n)
   }
 
-  gini_degree <- as.double(.adaptive_summary_col(log, "gini_degree", NA_real_, n))
-  gini_pos_A <- as.double(.adaptive_summary_col(log, "gini_pos_A", NA_real_, n))
-
   summary <- tibble::tibble(
     iter = as.integer(log$iter),
     phase = as.character(log$phase),
@@ -318,9 +303,7 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
     candidate_starved = as.logical(log$candidate_starved),
     reason_short_batch = as.character(log$reason_short_batch),
     n_explore_selected = as.integer(log$n_explore_selected),
-    n_exploit_selected = as.integer(log$n_exploit_selected),
-    gini_degree = gini_degree,
-    gini_pos_A = gini_pos_A
+    n_exploit_selected = as.integer(log$n_exploit_selected)
   )
 
   if (isTRUE(include_optional)) {
@@ -381,6 +364,19 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
 #' Build a per-refit diagnostics summary from the adaptive round log. This is
 #' a pure view over \code{round_log} and does not recompute metrics.
 #'
+#' @details
+#' The round log is the canonical stop-audit trail and groups fields by
+#' identity/cadence, run-scale counts, design knobs, coverage/imbalance,
+#' posterior percentiles, diagnostics, stop quality metrics, stop bookkeeping,
+#' stop decision, candidate health, and MCMC configuration. Run-scale counts
+#' include scheduled/completed pairs and \code{backlog_unjudged} (scheduled
+#' minus completed). Percentile columns are fixed (e.g.,
+#' \code{epsilon_p2.5}, \code{epsilon_p50}, \code{epsilon_p97.5}) and remain
+#' present with \code{NA} values when a parameter is not part of a model
+#' variant. Stopping metrics report posterior quality (e.g.,
+#' \code{reliability_EAP}) and stability checks (e.g.,
+#' \code{rank_stability_pass}) without recomputation.
+#'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param last_n Optional positive integer; return only the last \code{n} rows.
 #' @param include_optional Logical; include optional diagnostic columns.
@@ -410,15 +406,7 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
     return(.adaptive_refit_summary_schema(include_optional = include_optional))
   }
 
-  n <- nrow(log)
-  gini_degree <- as.double(.adaptive_summary_col(log, "gini_degree", NA_real_, n))
-  gini_pos_A <- as.double(.adaptive_summary_col(log, "gini_pos_A", NA_real_, n))
-
-  summary <- log |>
-    dplyr::mutate(
-      gini_degree = gini_degree,
-      gini_pos_A = gini_pos_A
-    )
+  summary <- log
 
   schema <- .adaptive_refit_summary_schema(include_optional = include_optional)
   summary <- .adaptive_align_log_schema(summary, schema)
