@@ -1,4 +1,4 @@
-testthat::test_that("summarize_iterations returns stable schema with gini metrics", {
+testthat::test_that("summarize_iterations returns stable schema", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -32,17 +32,12 @@ testthat::test_that("summarize_iterations returns stable schema with gini metric
     utility_selected_p90 = 0.9,
     utility_candidate_p90 = 0.95
   )
-  row$gini_degree <- 0.12
-  row$gini_pos_A <- 0.34
   state$batch_log <- dplyr::bind_rows(state$batch_log, row)
 
   summary <- pairwiseLLM::summarize_iterations(state, last_n = 1L)
 
   testthat::expect_s3_class(summary, "tbl_df")
-  testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(all(c("n_candidates_generated", "utility_selected_p90", "backlog_unjudged") %in% names(summary)))
-  testthat::expect_equal(summary$gini_degree[[1L]], 0.12)
-  testthat::expect_equal(summary$gini_pos_A[[1L]], 0.34)
   testthat::expect_true("iter_start_time" %in% names(summary))
 })
 
@@ -58,7 +53,5 @@ testthat::test_that("summarize_iterations handles missing logs", {
 
   testthat::expect_s3_class(summary, "tbl_df")
   testthat::expect_equal(nrow(summary), 0L)
-  testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(all(c("n_candidates_generated", "utility_selected_p90") %in% names(summary)))
-  testthat::expect_true(all(is.na(summary$gini_degree)))
 })

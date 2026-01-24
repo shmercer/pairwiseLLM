@@ -82,7 +82,7 @@ testthat::test_that("item summary defaults and round log row fill metrics", {
     config = state$config$v3
   )
 
-  testthat::expect_equal(row$theta_sd_median, metrics$theta_sd_median_S)
+  testthat::expect_equal(row$theta_sd_eap, metrics$theta_sd_median_S)
   testthat::expect_equal(row$epsilon_mean, 0.1)
 })
 

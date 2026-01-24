@@ -1,4 +1,4 @@
-test_that("summaries include gini fields alongside reliability_EAP", {
+test_that("summaries exclude gini fields in outputs", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -42,7 +42,7 @@ test_that("summaries include gini fields alongside reliability_EAP", {
   refit_summary <- pairwiseLLM::summarize_refits(state)
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
 
-  expect_true(all(c("gini_degree", "gini_pos_A") %in% names(iter_summary)))
-  expect_true(all(c("gini_degree", "gini_pos_A") %in% names(refit_summary)))
+  expect_false(any(c("gini_degree", "gini_pos_A") %in% names(iter_summary)))
+  expect_false(any(c("gini_degree", "gini_pos_A") %in% names(refit_summary)))
   expect_false(any(c("gini_degree", "gini_pos_A") %in% names(item_summary)))
 })

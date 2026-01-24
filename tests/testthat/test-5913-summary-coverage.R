@@ -44,7 +44,7 @@ testthat::test_that("summary schemas and defaults are stable", {
   testthat::expect_false("n_candidates_generated" %in% names(iter_schema))
 
   refit_schema <- pairwiseLLM:::.adaptive_refit_summary_schema(include_optional = FALSE)
-  testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(refit_schema)))
+  testthat::expect_false(any(c("gini_degree", "gini_pos_A") %in% names(refit_schema)))
   testthat::expect_false("batch_size" %in% names(refit_schema))
 
   item_schema <- pairwiseLLM:::.adaptive_item_summary_schema(include_optional = FALSE)
@@ -113,7 +113,7 @@ testthat::test_that("summary helpers handle draw extraction and repeats", {
   testthat::expect_equal(repeats[["C"]], 2L)
 })
 
-testthat::test_that("summaries cover validation and logged gini values", {
+testthat::test_that("summaries cover validation and logged values", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -153,13 +153,11 @@ testthat::test_that("summaries cover validation and logged gini values", {
     utility_selected_p90 = 0.9,
     utility_candidate_p90 = 0.95
   )
-  row$gini_degree <- 0.12
-  row$gini_pos_A <- 0.34
   state$batch_log <- dplyr::bind_rows(state$batch_log, row)
 
   summary_logged <- pairwiseLLM::summarize_iterations(state, include_optional = FALSE)
-  testthat::expect_equal(summary_logged$gini_degree[[1L]], 0.12)
-  testthat::expect_equal(summary_logged$gini_pos_A[[1L]], 0.34)
+  testthat::expect_equal(summary_logged$n_pairs_selected[[1L]], 6L)
+  testthat::expect_equal(summary_logged$n_pairs_completed[[1L]], 5L)
 
   state$config$round_log <- "bad"
   refit_empty <- pairwiseLLM::summarize_refits(state)
@@ -170,13 +168,10 @@ testthat::test_that("summaries cover validation and logged gini values", {
 
   state$config$round_log <- pairwiseLLM:::round_log_schema()
   refit_row <- pairwiseLLM:::build_round_log_row(state, new_pairs = 2L)
-  refit_row$gini_degree <- 0.21
-  refit_row$gini_pos_A <- 0.43
   state$config$round_log <- dplyr::bind_rows(state$config$round_log, refit_row)
 
   refit_logged <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
-  testthat::expect_equal(refit_logged$gini_degree[[1L]], 0.21)
-  testthat::expect_equal(refit_logged$gini_pos_A[[1L]], 0.43)
+  testthat::expect_equal(refit_logged$new_pairs[[1L]], 2L)
 
   testthat::expect_error(pairwiseLLM::summarize_items(state, top_n = 0))
   testthat::expect_error(pairwiseLLM::summarize_items(state, include_optional = NA))

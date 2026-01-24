@@ -8,7 +8,7 @@ test_that("round_log_schema columns are stable", {
 
   expect_true(is.integer(round_log$round_id))
   expect_true(is.double(round_log$reliability_EAP))
-  expect_true(is.logical(round_log$theta_sd_pass))
+  expect_true(is.logical(round_log$stop_decision))
   expect_true(is.character(round_log$stop_reason))
 })
 
