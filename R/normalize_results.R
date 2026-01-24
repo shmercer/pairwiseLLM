@@ -19,7 +19,7 @@
     pair_uid_provided <- if ("pair_uid" %in% names(pairs_tbl)) {
       as.character(pairs_tbl$pair_uid)
     } else {
-      NA_character_
+      rep(NA_character_, nrow(pairs_tbl))
     }
 
     pairs_keyed <- pairs_tbl |>
@@ -431,9 +431,8 @@
     }
   }
   # Drop the suffixed variants to avoid downstream surprises.
-  drop_suffix <- c(".x", ".y")
-  aligned <- aligned |> dplyr::select(!dplyr::any_of(paste0(prefer_cols, drop_suffix[1])),
-                                     !dplyr::any_of(paste0(prefer_cols, drop_suffix[2])))
+  drop_cols <- c(paste0(prefer_cols, ".x"), paste0(prefer_cols, ".y"))
+  aligned <- aligned[, setdiff(names(aligned), drop_cols), drop = FALSE]
 
   if (any(is.na(aligned$.matched))) {
     missing_idx <- is.na(aligned$.matched)
@@ -768,7 +767,7 @@
   pair_uid_provided <- if ("pair_uid" %in% names(pairs_tbl)) {
     as.character(pairs_tbl$pair_uid)
   } else {
-    NA_character_
+    rep(NA_character_, nrow(pairs_tbl))
   }
 
   pairs_keyed <- pairs_tbl |>
