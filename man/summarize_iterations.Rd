@@ -7,7 +7,7 @@
 summarize_iterations(state, last_n = NULL, include_optional = TRUE)
 }
 \arguments{
-\item{state}{An \code{adaptive_state}.}
+\item{state}{An \code{adaptive_state} or list containing adaptive logs.}
 
 \item{last_n}{Optional positive integer; return only the last \code{n} rows.}
 
@@ -17,7 +17,6 @@ summarize_iterations(state, last_n = NULL, include_optional = TRUE)
 A tibble with one row per iteration.
 }
 \description{
-Build a per-iteration diagnostics summary from the adaptive batch log. When
-per-iteration Gini metrics are not logged, this helper uses the current
-state to compute \code{gini_degree} and \code{gini_pos_A}.
+Build a per-iteration diagnostics summary from the adaptive batch log. This
+is a pure view over \code{batch_log} and does not recompute metrics.
 }

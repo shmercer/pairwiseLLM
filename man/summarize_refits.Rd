@@ -7,7 +7,7 @@
 summarize_refits(state, last_n = NULL, include_optional = TRUE)
 }
 \arguments{
-\item{state}{An \code{adaptive_state}.}
+\item{state}{An \code{adaptive_state} or list containing adaptive logs.}
 
 \item{last_n}{Optional positive integer; return only the last \code{n} rows.}
 
@@ -17,7 +17,6 @@ summarize_refits(state, last_n = NULL, include_optional = TRUE)
 A tibble with one row per refit.
 }
 \description{
-Build a per-refit diagnostics summary from the adaptive round log. When
-per-refit Gini metrics are not logged, this helper uses the current state to
-compute \code{gini_degree} and \code{gini_pos_A}.
+Build a per-refit diagnostics summary from the adaptive round log. This is
+a pure view over \code{round_log} and does not recompute metrics.
 }

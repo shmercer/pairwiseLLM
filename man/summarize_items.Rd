@@ -13,10 +13,11 @@ summarize_items(
 )
 }
 \arguments{
-\item{state}{An \code{adaptive_state}.}
+\item{state}{An \code{adaptive_state} or list containing adaptive logs.}
 
-\item{posterior}{Optional fit object or draws matrix; defaults to
-\code{state$fit} when available.}
+\item{posterior}{Optional item summary table (or list containing
+\code{item_summary}). When \code{NULL}, uses the cached
+\code{state$config$item_summary} when available.}
 
 \item{top_n}{Optional positive integer; return only the top \code{n} rows
 after sorting.}
@@ -29,6 +30,6 @@ after sorting.}
 A tibble with one row per item.
 }
 \description{
-Build an item-level diagnostics summary combining posterior draws and
-exposure statistics.
+Build an item-level diagnostics summary from the canonical item summary. This
+is a pure view and does not recompute posterior draws or exposure metrics.
 }
