@@ -104,7 +104,7 @@ NULL
   }
   v3_config <- state$config$v3 %||% list()
   if (!isTRUE(v3_config$write_outputs)) {
-    return(invisible(FALSE))
+    return(list(state = state, item_summary = NULL))
   }
 
   output_dir <- output_dir %||% v3_config$output_dir %||% state$config$output_dir %||% NULL
@@ -132,6 +132,7 @@ NULL
   item_summary <- build_item_summary(state, fit = fit)
   item_summary_path <- file.path(output_dir, "item_summary.rds")
   saveRDS(item_summary, item_summary_path)
+  state$config$item_summary <- item_summary
 
   if (isTRUE(v3_config$keep_draws)) {
     thin_draws <- as.integer(v3_config$thin_draws %||% 1L)
@@ -160,7 +161,7 @@ NULL
     }
   }
 
-  invisible(TRUE)
+  list(state = state, item_summary = item_summary)
 }
 
 .adaptive_pairs_to_submit_tbl <- function(pairs_tbl) {
@@ -2141,6 +2142,12 @@ NULL
 #' independent of backend, and all downstream logic operates exclusively on
 #' this canonical form.
 #'
+#' Canonical adaptive outputs are \code{batch_log}, \code{round_log}, and
+#' \code{item_summary}. The logs live on the state as \code{state$batch_log} and
+#' \code{state$config$round_log}. When outputs are written, the final
+#' \code{item_summary} is cached on \code{state$config$item_summary}; summary
+#' helpers are pure views of these tables.
+#'
 #' @param samples A data frame or tibble with columns \code{ID} and \code{text}.
 #' @param model Model identifier for the selected backend.
 #' @param trait_name Short label for the trait.
@@ -2388,7 +2395,8 @@ adaptive_rank_start <- function(
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
-    .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = path_info$output_dir)
+  artifacts <- .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = path_info$output_dir)
+  state <- artifacts$state
 
   if (!is.null(path_info$state_path)) {
     dir.create(dirname(path_info$state_path), recursive = TRUE, showWarnings = FALSE)
@@ -2703,7 +2711,8 @@ adaptive_rank_resume <- function(
   state <- stop_out$state
 
   output_dir_write <- submission_info$output_dir %||% state$config$output_dir %||% NULL
-  .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = output_dir_write)
+  artifacts <- .adaptive_write_v3_artifacts(state, fit = state$fit, output_dir = output_dir_write)
+  state <- artifacts$state
 
   save_path <- state_path %||% state$config$state_path %||% NULL
   if (!is.null(save_path)) {
