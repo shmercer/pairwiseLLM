@@ -87,7 +87,14 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     if (!is.numeric(lag_theta) || length(lag_theta) != length(state$ids)) {
       rlang::abort("Lagged theta history must be a numeric vector over `state$ids`.")
     }
-    if (is.null(names(lag_theta)) || !setequal(names(lag_theta), state$ids)) {
+    if (is.null(names(lag_theta))) {
+      if (length(lag_theta) == length(state$ids)) {
+        names(lag_theta) <- state$ids
+      } else {
+        rlang::abort("Lagged theta history must be named over `state$ids`.")
+      }
+    }
+    if (!setequal(names(lag_theta), state$ids)) {
       rlang::abort("Lagged theta history must be named over `state$ids`.")
     }
     lag_theta <- as.double(lag_theta[state$ids])
