@@ -1,5 +1,6 @@
-# Ensure E2E helpers are available even if helper loading is altered elsewhere.
+# Ensure helpers are available even if helper loading is altered elsewhere.
 source(testthat::test_path("helper-e2e.R"))
+source(testthat::test_path("helper-fit-contract.R"))
 
 if (!"package:pairwiseLLM" %in% search()) {
   suppressWarnings(suppressMessages(library(pairwiseLLM)))

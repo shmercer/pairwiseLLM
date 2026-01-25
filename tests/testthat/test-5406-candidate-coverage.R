@@ -73,43 +73,34 @@ testthat::test_that("adaptive_theta_summary_from_fit rejects bad inputs", {
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
 
-  bad_draws <- matrix("x", nrow = 2, ncol = 2)
-  colnames(bad_draws) <- state$ids
+  fit <- make_v3_fit_contract(state$ids)
+
+  bad_mean <- fit
+  bad_mean$theta_mean <- "nope"
   expect_error(
-    pairwiseLLM:::.adaptive_theta_summary_from_fit(
-      list(theta_draws = bad_draws, theta_mean = c(1, 0)),
-      state
-    ),
-    "numeric matrix"
+    pairwiseLLM:::.adaptive_theta_summary_from_fit(bad_mean, state),
+    "theta_mean"
   )
 
-  no_names <- matrix(c(1, 0, 1, 0), nrow = 2)
+  missing_names <- fit
+  names(missing_names$theta_mean) <- NULL
   expect_error(
-    pairwiseLLM:::.adaptive_theta_summary_from_fit(
-      list(theta_draws = no_names, theta_mean = c(1, 0)),
-      state
-    ),
-    "column names"
+    pairwiseLLM:::.adaptive_theta_summary_from_fit(missing_names, state),
+    "named"
   )
 
-  wrong_ids <- matrix(c(1, 0, 1, 0), nrow = 2)
-  colnames(wrong_ids) <- c("A", "C")
+  wrong_names <- fit
+  names(wrong_names$theta_sd) <- rev(state$ids)
   expect_error(
-    pairwiseLLM:::.adaptive_theta_summary_from_fit(
-      list(theta_draws = wrong_ids, theta_mean = c(1, 0)),
-      state
-    ),
-    "match `state\\$ids`"
+    pairwiseLLM:::.adaptive_theta_summary_from_fit(wrong_names, state),
+    "names must match"
   )
 
-  ok_draws <- matrix(c(1, 0, 1, 0), nrow = 2)
-  colnames(ok_draws) <- state$ids
+  short_sd <- fit
+  short_sd$theta_sd <- stats::setNames(0.1, "A")
   expect_error(
-    pairwiseLLM:::.adaptive_theta_summary_from_fit(
-      list(theta_draws = ok_draws, theta_mean = 1),
-      state
-    ),
-    "numeric vector"
+    pairwiseLLM:::.adaptive_theta_summary_from_fit(short_sd, state),
+    "align with `state\\$ids`"
   )
 })
 

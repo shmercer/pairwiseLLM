@@ -18,10 +18,7 @@ testthat::test_that("stop metrics cover subset selection edge branches", {
     byrow = TRUE,
     dimnames = list(NULL, state$ids)
   )
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   config_small <- pairwiseLLM:::adaptive_v3_config(
     state$N,
@@ -95,10 +92,7 @@ testthat::test_that("stop metrics abort when subset ids miss target count", {
     byrow = TRUE,
     dimnames = list(NULL, state$ids)
   )
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
   config_bad <- pairwiseLLM:::adaptive_v3_config(
     state$N,
     list(S_subset = 3L, K_top = 1L, U_abs = 0.5)
@@ -139,10 +133,7 @@ testthat::test_that("stop metric config checks reject invalid min_new_pairs_for_
   state$posterior$diagnostics_pass <- TRUE
   draws <- matrix(c(0.1, -0.1, 0.2, -0.2), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
   config_bad <- pairwiseLLM:::adaptive_v3_config(
     state$N,
     list(S_subset = 1L, K_top = 1L, U_abs = 0.5)

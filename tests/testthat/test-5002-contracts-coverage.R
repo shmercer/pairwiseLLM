@@ -52,21 +52,15 @@ testthat::test_that("item summary defaults and round log row fill metrics", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list())
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(
       c(0.1, -0.1, 0.2, -0.2),
       nrow = 2,
       byrow = TRUE,
       dimnames = list(NULL, state$ids)
     ),
-    epsilon_summary = tibble::tibble(
-      epsilon_mean = 0.1,
-      epsilon_p2.5 = 0.04,
-      epsilon_p5 = 0.05,
-      epsilon_p50 = 0.1,
-      epsilon_p95 = 0.15,
-      epsilon_p97.5 = 0.16
-    )
+    epsilon_draws = c(0.1, 0.1)
   )
   metrics <- list(
     theta_sd_median_S = 0.2,

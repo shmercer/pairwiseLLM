@@ -17,7 +17,8 @@ testthat::test_that("artifact writing writes expected files", {
     )
   )
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(
       c(
         0.2, -0.1, -0.1,

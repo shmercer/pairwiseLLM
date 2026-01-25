@@ -64,10 +64,9 @@ testthat::test_that("diagnostics failure blocks convergence stopping and enters 
   state <- make_state_with_result()
   ns <- asNamespace("pairwiseLLM")
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    epsilon_mean = 0.1,
     diagnostics = list(divergences = 0L, max_rhat = 1.20, min_ess_bulk = 1000)
   )
   utilities_tbl <- tibble::tibble(
@@ -115,10 +114,9 @@ testthat::test_that("diagnostics pass does not block convergence checks", {
   ns <- asNamespace("pairwiseLLM")
   called <- FALSE
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    epsilon_mean = 0.1,
     diagnostics = list(divergences = 0L, max_rhat = 1.00, min_ess_bulk = 1000)
   )
   utilities_tbl <- tibble::tibble(

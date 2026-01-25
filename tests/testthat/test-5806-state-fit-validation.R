@@ -10,17 +10,12 @@ testthat::test_that("validate_state enforces contract-only `state$fit`", {
   expect_silent(pairwiseLLM:::validate_state(state))
 
   theta_draws <- matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids))
-  fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    epsilon_mean = 0.1,
-    diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   state$fit <- fit
   expect_silent(pairwiseLLM:::validate_state(state))
 
   state$fit <- list(theta_draws = theta_draws, theta_mean = fit$theta_mean)
-  expect_error(pairwiseLLM:::validate_state(state), "epsilon_mean")
+  expect_error(pairwiseLLM:::validate_state(state), "missing required fields")
 
   state$fit <- NULL
   expect_false("fit" %in% names(state))

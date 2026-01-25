@@ -258,8 +258,8 @@ testthat::test_that("adaptive_run stopping checks return when no candidates", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(c(0, 0, 0), state$ids),
+        fit = make_v3_fit_contract(
+          state$ids,
           theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
           diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
         ),
@@ -291,8 +291,8 @@ testthat::test_that("adaptive_run scheduling helpers cover edge branches", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(c(0, 0, 0), c("A", "B", "C")),
+        fit = make_v3_fit_contract(
+          c("A", "B", "C"),
           theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, c("A", "B", "C"))),
           diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
         ),

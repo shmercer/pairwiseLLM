@@ -47,7 +47,7 @@ testthat::test_that("batch_log tracks every iteration and required columns", {
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      draws = list(theta = theta_draws),
+      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = tibble::tibble(
         epsilon_mean = 0.1,
@@ -148,7 +148,7 @@ testthat::test_that("round_log fills refit fields and matches stop metrics", {
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      draws = list(theta = theta_draws),
+      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = tibble::tibble(
         epsilon_mean = 0.1,

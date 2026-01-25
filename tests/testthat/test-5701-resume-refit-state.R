@@ -12,11 +12,10 @@ testthat::test_that("resume preserves refit state and timing", {
       config = list(d1 = 2L, M1_target = 2L, budget_max = 6L)
     )
     state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 3L))
-    state$fit <- list(
-      theta_mean = stats::setNames(rep(0, state$N), state$ids),
+    state$fit <- make_v3_fit_contract(
+      state$ids,
       theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-      epsilon_mean = 0.1,
-      diagnostics = list()
+      epsilon_draws = c(0.1, 0.12)
     )
     state
   }
@@ -62,7 +61,7 @@ testthat::test_that("resume preserves refit state and timing", {
   make_mcmc_fit <- function(ids) {
     theta_draws <- matrix(0, nrow = 2L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      draws = list(theta = theta_draws),
+      draws = list(theta = theta_draws, epsilon = c(0.1, 0.12)),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = tibble::tibble(
         epsilon_mean = 0.1,

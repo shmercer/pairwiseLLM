@@ -45,13 +45,13 @@ testthat::test_that("theta summaries from fit validate required fields", {
 
   theta_draws <- matrix(c(1, 0, 1, 0), nrow = 2, byrow = TRUE)
   colnames(theta_draws) <- state$ids
-  fit <- list(theta_draws = theta_draws, theta_mean = c(1, 0))
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   out <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
   expect_equal(out$item_id, state$ids)
 
   expect_error(
     pairwiseLLM:::.adaptive_theta_summary_from_fit(list(theta_mean = c(1, 0)), state),
-    "theta_draws"
+    "theta_mean"
   )
 })
 

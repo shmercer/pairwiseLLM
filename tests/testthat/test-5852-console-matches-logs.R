@@ -67,10 +67,9 @@ testthat::test_that("refit console block matches round_log gate values", {
 
   theta_draws <- matrix(0, nrow = 2L, ncol = state$N)
   colnames(theta_draws) <- state$ids
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = theta_draws,
-    theta_mean = stats::setNames(colMeans(theta_draws), state$ids),
-    epsilon_mean = 0.1,
     diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
   )
 

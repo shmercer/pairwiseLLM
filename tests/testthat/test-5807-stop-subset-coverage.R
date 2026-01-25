@@ -23,10 +23,7 @@ testthat::test_that("stop subset selection covers top, bottom, and uncertainty i
     byrow = TRUE,
     dimnames = list(NULL, state$ids)
   )
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   metrics <- pairwiseLLM:::compute_stop_metrics(
     state,

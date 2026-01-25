@@ -45,9 +45,9 @@ testthat::test_that("U_dup_threshold uses quantile for >= 50 candidates", {
   )
   state$comparisons_scheduled <- 1L
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
 
@@ -115,9 +115,9 @@ testthat::test_that("U_dup_threshold uses max for < 50 candidates", {
   )
   state$comparisons_scheduled <- 1L
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
 

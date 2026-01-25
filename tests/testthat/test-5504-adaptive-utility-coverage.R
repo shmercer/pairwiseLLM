@@ -20,16 +20,16 @@ testthat::test_that("epsilon_mean validation covers error branches", {
     "must be positive"
   )
 
-  bad_summary_type <- list(epsilon_summary = 1)
+  bad_eps_type <- list(epsilon_mean = "bad")
   testthat::expect_error(
-    pairwiseLLM:::.adaptive_epsilon_mean_from_state(NULL, bad_summary_type),
-    "epsilon_summary"
+    pairwiseLLM:::.adaptive_epsilon_mean_from_state(NULL, bad_eps_type),
+    "finite numeric scalar"
   )
 
-  bad_summary_cols <- list(epsilon_summary = tibble::tibble(foo = 1))
+  bad_eps_len <- list(epsilon_mean = c(0.1, 0.2))
   testthat::expect_error(
-    pairwiseLLM:::.adaptive_epsilon_mean_from_state(NULL, bad_summary_cols),
-    "epsilon_mean"
+    pairwiseLLM:::.adaptive_epsilon_mean_from_state(NULL, bad_eps_len),
+    "finite numeric scalar"
   )
 
   state_cfg <- list(config = list(v3 = list(epsilon_mean = 0.22)))

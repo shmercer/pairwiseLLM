@@ -95,7 +95,7 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      draws = list(theta = theta_draws),
+      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -175,7 +175,7 @@ testthat::test_that("adaptive_rank_start saves live state when state_path is pro
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      draws = list(theta = theta_draws),
+      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -375,7 +375,7 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      draws = list(theta = theta_draws),
+      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -537,7 +537,7 @@ testthat::test_that("adaptive_rank_resume filters batch polling args to formals"
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
     list(
-      draws = list(theta = theta_draws),
+      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -657,7 +657,7 @@ testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
       list(
-        draws = list(theta = theta_draws),
+        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
@@ -760,7 +760,7 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
       list(
-        draws = list(theta = theta_draws),
+        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
@@ -801,7 +801,7 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
       list(
-        draws = list(theta = theta_draws),
+        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
@@ -861,7 +861,7 @@ testthat::test_that("adaptive_rank_resume normalizes raw live results before ing
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
       list(
-        draws = list(theta = theta_draws),
+        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
@@ -939,7 +939,7 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
       list(
-        draws = list(theta = theta_draws),
+        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
@@ -982,7 +982,7 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
       list(
-        draws = list(theta = theta_draws),
+        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
@@ -1011,7 +1011,7 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
       list(
-        draws = list(theta = theta_draws),
+        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(

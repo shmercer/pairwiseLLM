@@ -65,10 +65,7 @@ testthat::test_that("adaptive_run_stopping_checks returns when draws are too few
   state$comparisons_observed <- 1L
 
   state$fit <- list(
-    theta_draws = matrix(0, nrow = 1L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    epsilon_mean = 0.1,
-    diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+    theta_draws = matrix(0, nrow = 1L, ncol = state$N, dimnames = list(NULL, state$ids))
   )
 
   out <- testthat::with_mocked_bindings(
@@ -127,7 +124,8 @@ testthat::test_that("select_batch_by_ladder defaults n_candidates_generated", {
     text = c("alpha", "bravo")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids))
   )
   candidates <- tibble::tibble(
@@ -233,10 +231,9 @@ testthat::test_that("schedule_next_pairs stops when stop decision is reached", {
   )
   state$comparisons_observed <- 1L
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    epsilon_mean = 0.1,
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
   state$fit <- fit
