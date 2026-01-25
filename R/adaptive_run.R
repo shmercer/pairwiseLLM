@@ -1770,6 +1770,18 @@ NULL
     stop_out <- should_stop(stop_metrics, state, v3_config)
     state <- stop_out$state
     if (isTRUE(fit_out$refit_performed)) {
+      history <- state$posterior$theta_mean_history %||% list()
+      if (!is.list(history)) {
+        rlang::abort("`state$posterior$theta_mean_history` must be a list when set.")
+      }
+      min_refits_for_stability <- as.integer(v3_config$min_refits_for_stability)
+      if (is.na(min_refits_for_stability) || min_refits_for_stability < 1L) {
+        rlang::abort("`config$min_refits_for_stability` must be a positive integer.")
+      }
+      current_refit <- length(history) + 1L
+      state$stop_candidate <- isTRUE(current_refit >= min_refits_for_stability &&
+        isTRUE(stop_metrics$diagnostics_pass))
+
       round_row <- build_round_log_row(
         state = state,
         fit = fit,
@@ -1813,6 +1825,7 @@ NULL
       prior_log <- state$config$round_log %||% round_log_schema()
       state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
       .adaptive_progress_emit_refit(state, round_row, v3_config)
+      state <- .adaptive_update_theta_history(state, fit)
     }
   }
 
