@@ -27,7 +27,14 @@ after sorting.}
 \item{include_optional}{Logical; include optional diagnostic columns.}
 }
 \value{
-A tibble with one row per item.
+A tibble with one row per item. Columns include \code{item_id},
+\code{theta_mean}, \code{theta_sd}, \code{theta_p2.5}, \code{theta_p5},
+\code{theta_p50}, \code{theta_p95}, \code{theta_p97.5}, \code{rank_mean},
+\code{rank_sd}, \code{rank_p2.5}, \code{rank_p5}, \code{rank_p50},
+\code{rank_p95}, \code{rank_p97.5}, \code{degree}, and \code{pos_A_rate}.
+Rank percentiles summarize per-draw induced ranks (lower is better). When
+\code{include_optional = TRUE}, repeated-pair and adjacent-win diagnostics
+are appended.
 }
 \description{
 Build an item-level diagnostics summary from the canonical item summary. This

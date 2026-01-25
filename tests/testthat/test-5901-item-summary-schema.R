@@ -3,16 +3,22 @@ testthat::test_that("item summary schema matches contract", {
 
   expected <- c(
     "ID",
-    "theta_mean",
-    "theta_sd",
-    "theta_ci90_lo",
-    "theta_ci90_hi",
-    "theta_ci95_lo",
-    "theta_ci95_hi",
-    "rank_mean",
-    "rank_sd",
     "deg",
-    "posA_prop"
+    "posA_prop",
+    "theta_mean",
+    "theta_p2.5",
+    "theta_p5",
+    "theta_p50",
+    "theta_p95",
+    "theta_p97.5",
+    "theta_sd",
+    "rank_mean",
+    "rank_p2.5",
+    "rank_p5",
+    "rank_p50",
+    "rank_p95",
+    "rank_p97.5",
+    "rank_sd"
   )
 
   testthat::expect_identical(colnames(schema), expected)

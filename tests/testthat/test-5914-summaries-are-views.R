@@ -44,11 +44,17 @@ testthat::test_that("summaries are views over canonical outputs", {
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
-    theta_ci90_lo = c(-0.1, -0.2, -0.3),
-    theta_ci90_hi = c(0.3, 0.2, 0.1),
-    theta_ci95_lo = c(-0.2, -0.3, -0.4),
-    theta_ci95_hi = c(0.4, 0.3, 0.2),
+    theta_p2.5 = c(-0.2, -0.3, -0.4),
+    theta_p5 = c(-0.1, -0.2, -0.3),
+    theta_p50 = c(0.1, -0.05, 0.0),
+    theta_p95 = c(0.3, 0.2, 0.1),
+    theta_p97.5 = c(0.4, 0.3, 0.2),
     rank_mean = c(1.0, 2.0, 3.0),
+    rank_p2.5 = c(1.0, 1.8, 2.7),
+    rank_p5 = c(1.0, 1.9, 2.8),
+    rank_p50 = c(1.0, 2.0, 3.0),
+    rank_p95 = c(1.2, 2.1, 3.2),
+    rank_p97.5 = c(1.3, 2.2, 3.3),
     rank_sd = c(0.1, 0.2, 0.3),
     deg = c(1L, 2L, 3L),
     posA_prop = c(1.0, 0.5, 0.0)
@@ -63,8 +69,8 @@ testthat::test_that("summaries are views over canonical outputs", {
   testthat::expect_equal(refit_summary$stop_reason[[1L]], "manual")
 
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_equal(item_summary$theta_q05[[1L]], state$config$item_summary$theta_ci90_lo[[1L]])
-  testthat::expect_equal(item_summary$theta_q95[[1L]], state$config$item_summary$theta_ci90_hi[[1L]])
+  testthat::expect_equal(item_summary$theta_p5[[1L]], state$config$item_summary$theta_p5[[1L]])
+  testthat::expect_equal(item_summary$theta_p95[[1L]], state$config$item_summary$theta_p95[[1L]])
   testthat::expect_equal(item_summary$pos_A_rate[[1L]], state$config$item_summary$posA_prop[[1L]])
 })
 
