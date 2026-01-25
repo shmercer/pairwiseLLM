@@ -42,6 +42,7 @@ A list with:
 \item{submission_info}{Metadata for subsequent resumes.}
 \item{next_action}{List with \code{action} and \code{reason}.}
 \item{new_results}{The newly ingested results, if any.}
+\item{final_summary}{Cached summary payload, if produced.}
 }
 }
 \description{
@@ -55,6 +56,10 @@ Incremental ingestion is idempotent: results are filtered to previously
 unseen \code{pair_uid}s before updating \code{history_results}. This ensures
 that cumulative backend returns can be resumed safely without double-counting.
 Resume may schedule new comparisons if the budget and constraints allow.
+
+Model variants, stopping gates, and canonical outputs follow the same rules
+as \code{adaptive_rank_start()}. Refits occur when at least \code{refit_B}
+new results are available (or when the first refit is needed).
 }
 \examples{
 # Minimal synthetic setup (no submission).
