@@ -94,7 +94,10 @@ testthat::test_that("adaptive_run_stopping_checks appends round log on refit", {
   )
   state$phase <- "phase2"
   state$config$CW <- 1L
-  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(refit_B = 1L))
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(
+    state$N,
+    list(refit_B = 1L, progress = FALSE)
+  )
 
   unordered_key <- pairwiseLLM:::make_unordered_key("A", "B")
   ordered_key <- pairwiseLLM:::make_ordered_key("A", "B")
