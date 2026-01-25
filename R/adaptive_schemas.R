@@ -330,6 +330,12 @@ validate_state <- function(state) {
   if (!is.integer(state$comparisons_observed) || length(state$comparisons_observed) != 1L) {
     rlang::abort("`state$comparisons_observed` must be a length-1 integer.")
   }
+  if (state$comparisons_scheduled < 0L) {
+    rlang::abort("`state$comparisons_scheduled` must be non-negative.")
+  }
+  if (state$comparisons_observed < 0L) {
+    rlang::abort("`state$comparisons_observed` must be non-negative.")
+  }
   if (state$comparisons_scheduled != nrow(state$history_pairs)) {
     rlang::abort("`state$comparisons_scheduled` must equal nrow(history_pairs).")
   }
@@ -338,6 +344,11 @@ validate_state <- function(state) {
   }
   if (nrow(state$history_results) != state$comparisons_observed) {
     rlang::abort("`state$history_results` must have rows equal to comparisons_observed.")
+  }
+  total_pairs <- as.integer(state$N * (state$N - 1L) / 2L)
+  n_unique_pairs_seen <- sum(state$pair_count >= 1L)
+  if (n_unique_pairs_seen > total_pairs) {
+    rlang::abort("`state$pair_count` implies more unique pairs than possible for `state$ids`.")
   }
 
   if (!is.character(state$phase) || length(state$phase) != 1L) {
@@ -374,6 +385,16 @@ validate_state <- function(state) {
   }
   if (state$last_refit_at < 0L) {
     rlang::abort("`state$last_refit_at` must be non-negative.")
+  }
+  if (state$last_refit_at > state$comparisons_observed) {
+    rlang::abort("`state$last_refit_at` cannot exceed `comparisons_observed`.")
+  }
+  if (state$new_since_refit > state$comparisons_observed) {
+    rlang::abort("`state$new_since_refit` cannot exceed `comparisons_observed`.")
+  }
+  expected_new_since <- as.integer(state$comparisons_observed - state$last_refit_at)
+  if (state$new_since_refit != expected_new_since) {
+    rlang::abort("`state$new_since_refit` must equal `comparisons_observed - last_refit_at`.")
   }
 
   if (!is.list(state$posterior)) {

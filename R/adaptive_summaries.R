@@ -258,6 +258,15 @@
 #' Build a per-iteration diagnostics summary from the adaptive batch log. This
 #' is a pure view over \code{batch_log} and does not recompute metrics.
 #'
+#' @details
+#' Run-scale iteration counts reflect a single scheduling cycle. The batch log
+#' records \code{n_pairs_selected} (pairs scheduled this iteration),
+#' \code{n_pairs_completed} (newly observed since the previous log),
+#' \code{n_pairs_failed} (newly failed attempts since the previous log), and
+#' \code{backlog_unjudged} (scheduled minus completed, measured after
+#' scheduling). Candidate health is captured by \code{candidate_starved} when
+#' fewer than the target pairs are selected.
+#'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param last_n Optional positive integer; return only the last \code{n} rows.
 #' @param include_optional Logical; include optional diagnostic columns.
@@ -369,8 +378,13 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
 #' identity/cadence, run-scale counts, design knobs, coverage/imbalance,
 #' posterior percentiles, diagnostics, stop quality metrics, stop bookkeeping,
 #' stop decision, candidate health, and MCMC configuration. Run-scale counts
-#' include scheduled/completed pairs and \code{backlog_unjudged} (scheduled
-#' minus completed). Percentile columns are fixed (e.g.,
+#' include \code{total_pairs} (\eqn{N(N-1)/2}), \code{hard_cap_threshold}
+#' (\eqn{\lceil0.40 * total\_pairs\rceil}), \code{n_unique_pairs_seen} (unique
+#' unordered pairs with \code{pair_count >= 1}), \code{scheduled_pairs},
+#' \code{completed_pairs}, \code{backlog_unjudged} (scheduled minus completed),
+#' \code{new_pairs} (newly completed since the previous refit), and
+#' \code{proposed_pairs} (candidate unordered pairs evaluated at refit).
+#' Percentile columns are fixed (e.g.,
 #' \code{epsilon_p2.5}, \code{epsilon_p50}, \code{epsilon_p97.5}) and remain
 #' present with \code{NA} values when a parameter is not part of a model
 #' variant. Stopping metrics report posterior quality (e.g.,

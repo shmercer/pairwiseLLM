@@ -25,8 +25,13 @@ The round log is the canonical stop-audit trail and groups fields by
 identity/cadence, run-scale counts, design knobs, coverage/imbalance,
 posterior percentiles, diagnostics, stop quality metrics, stop bookkeeping,
 stop decision, candidate health, and MCMC configuration. Run-scale counts
-include scheduled/completed pairs and \code{backlog_unjudged} (scheduled
-minus completed). Percentile columns are fixed (e.g.,
+include \code{total_pairs} (\eqn{N(N-1)/2}), \code{hard_cap_threshold}
+(\eqn{\lceil0.40 * total\_pairs\rceil}), \code{n_unique_pairs_seen} (unique
+unordered pairs with \code{pair_count >= 1}), \code{scheduled_pairs},
+\code{completed_pairs}, \code{backlog_unjudged} (scheduled minus completed),
+\code{new_pairs} (newly completed since the previous refit), and
+\code{proposed_pairs} (candidate unordered pairs evaluated at refit).
+Percentile columns are fixed (e.g.,
 \code{epsilon_p2.5}, \code{epsilon_p50}, \code{epsilon_p97.5}) and remain
 present with \code{NA} values when a parameter is not part of a model
 variant. Stopping metrics report posterior quality (e.g.,

@@ -20,3 +20,12 @@ A tibble with one row per iteration.
 Build a per-iteration diagnostics summary from the adaptive batch log. This
 is a pure view over \code{batch_log} and does not recompute metrics.
 }
+\details{
+Run-scale iteration counts reflect a single scheduling cycle. The batch log
+records \code{n_pairs_selected} (pairs scheduled this iteration),
+\code{n_pairs_completed} (newly observed since the previous log),
+\code{n_pairs_failed} (newly failed attempts since the previous log), and
+\code{backlog_unjudged} (scheduled minus completed, measured after
+scheduling). Candidate health is captured by \code{candidate_starved} when
+fewer than the target pairs are selected.
+}

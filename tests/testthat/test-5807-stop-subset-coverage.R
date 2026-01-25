@@ -41,6 +41,8 @@ testthat::test_that("compute_stop_metrics reports theta_sd_eap and counts", {
   state$history_results <- result_rows
   state$comparisons_scheduled <- as.integer(nrow(pair_rows))
   state$comparisons_observed <- as.integer(nrow(result_rows))
+  state$last_refit_at <- 0L
+  state$new_since_refit <- as.integer(state$comparisons_observed)
 
   draws <- matrix(
     c(1, 0, -1,
