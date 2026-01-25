@@ -53,7 +53,9 @@ include: \code{d1} (default 8), \code{bins} (8), \code{mix_struct} (0.70),
 \code{M1_target} (NULL; defaults to floor(N * d1 / 2)). The list is
 extensible in future versions. Use \code{adaptive$v3} to override v3
 config fields such as \code{progress}, \code{progress_every_iter},
-\code{progress_every_refit}, and \code{progress_level}.}
+\code{progress_every_refit}, and \code{progress_level}. Progress printing
+is enabled by default; set \code{adaptive$v3$progress = FALSE} for silent
+runs or adjust \code{progress_level} for more detail.}
 
 \item{paths}{A list with optional \code{state_path} and \code{output_dir}.
 For batch mode, \code{state_path} defaults to
