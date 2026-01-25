@@ -7,27 +7,14 @@ testthat::test_that("adaptive_get_refit_fit aborts when fit fails to initialize"
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list())
   state$new_since_refit <- 1L
 
-  ns <- asNamespace("pairwiseLLM")
-  orig_fit <- get("as_v3_fit_contract_from_mcmc", envir = ns)
-  orig_mcmc <- get(".fit_bayes_btl_mcmc_adaptive", envir = ns)
-  unlockBinding("as_v3_fit_contract_from_mcmc", ns)
-  unlockBinding(".fit_bayes_btl_mcmc_adaptive", ns)
-  on.exit({
-    unlockBinding("as_v3_fit_contract_from_mcmc", ns)
-    unlockBinding(".fit_bayes_btl_mcmc_adaptive", ns)
-    assign("as_v3_fit_contract_from_mcmc", orig_fit, envir = ns)
-    assign(".fit_bayes_btl_mcmc_adaptive", orig_mcmc, envir = ns)
-    lockBinding("as_v3_fit_contract_from_mcmc", ns)
-    lockBinding(".fit_bayes_btl_mcmc_adaptive", ns)
-  }, add = TRUE)
-  assign("as_v3_fit_contract_from_mcmc", function(...) NULL, envir = ns)
-  assign(".fit_bayes_btl_mcmc_adaptive", function(...) list(), envir = ns)
-  lockBinding("as_v3_fit_contract_from_mcmc", ns)
-  lockBinding(".fit_bayes_btl_mcmc_adaptive", ns)
-
-  testthat::expect_error(
-    pairwiseLLM:::.adaptive_get_refit_fit(state, adaptive = list(), batch_size = 1L, seed = 1L),
-    "MCMC inference failed to initialize"
+  testthat::with_mocked_bindings(
+    testthat::expect_error(
+      pairwiseLLM:::.adaptive_get_refit_fit(state, adaptive = list(), batch_size = 1L, seed = 1L),
+      "MCMC inference failed to initialize"
+    ),
+    as_v3_fit_contract_from_mcmc = function(...) NULL,
+    .fit_bayes_btl_mcmc_adaptive = function(...) list(),
+    .env = asNamespace("pairwiseLLM")
   )
 })
 
