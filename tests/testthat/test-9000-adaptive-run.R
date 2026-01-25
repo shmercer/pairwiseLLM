@@ -1,3 +1,14 @@
+epsilon_summary_fixture <- function(mean = 0.1) {
+  tibble::tibble(
+    epsilon_mean = mean,
+    epsilon_p2.5 = 0.01,
+    epsilon_p5 = 0.02,
+    epsilon_p50 = mean,
+    epsilon_p95 = 0.2,
+    epsilon_p97.5 = 0.21
+  )
+}
+
 testthat::test_that("adaptive_rank_start ingests live results and schedules replacements", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C", "D"),
@@ -86,7 +97,7 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
     list(
       draws = list(theta = theta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -166,7 +177,7 @@ testthat::test_that("adaptive_rank_start saves live state when state_path is pro
     list(
       draws = list(theta = theta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -366,7 +377,7 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
     list(
       draws = list(theta = theta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -528,7 +539,7 @@ testthat::test_that("adaptive_rank_resume filters batch polling args to formals"
     list(
       draws = list(theta = theta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -648,7 +659,7 @@ testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
       list(
         draws = list(theta = theta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -751,7 +762,7 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       list(
         draws = list(theta = theta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -792,7 +803,7 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       list(
         draws = list(theta = theta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -852,7 +863,7 @@ testthat::test_that("adaptive_rank_resume normalizes raw live results before ing
       list(
         draws = list(theta = theta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -930,7 +941,7 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       list(
         draws = list(theta = theta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -973,7 +984,7 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       list(
         draws = list(theta = theta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
         divergences = 0L,
         max_rhat = 1,
@@ -1002,7 +1013,7 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       list(
         draws = list(theta = theta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-        epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+        epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
         divergences = 0L,
         max_rhat = 1,

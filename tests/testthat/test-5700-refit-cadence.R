@@ -44,7 +44,14 @@ testthat::test_that("refit cadence follows refit_B threshold", {
     list(
       draws = list(theta = theta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      epsilon_summary = tibble::tibble(
+        epsilon_mean = 0.1,
+        epsilon_p2.5 = 0.01,
+        epsilon_p5 = 0.02,
+        epsilon_p50 = 0.1,
+        epsilon_p95 = 0.2,
+        epsilon_p97.5 = 0.21
+      ),
       diagnostics = list()
     )
   }
