@@ -1,4 +1,4 @@
-testthat::test_that("summarize_refits returns stable schema with gini metrics", {
+testthat::test_that("summarize_refits returns stable schema", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -28,23 +28,9 @@ testthat::test_that("summarize_refits returns stable schema with gini metrics", 
   )
 
   metrics <- list(
-    theta_sd_median_S = 0.2,
-    tau = 1.1,
-    theta_sd_pass = TRUE,
-    U0 = 0.3,
-    U_top_median = 0.4,
-    U_pass = TRUE,
-    U_abs = 0.1,
-    hard_cap_reached = FALSE,
     hard_cap_threshold = 10L,
     n_unique_pairs_seen = 4L,
     rank_stability_pass = TRUE,
-    frac_weak_adj = 0.0,
-    min_adj_prob = 0.8,
-    weak_adj_threshold = 0.95,
-    weak_adj_frac_max = 0.05,
-    min_adj_prob_threshold = 0.6,
-    min_new_pairs_for_check = 5L,
     diagnostics_pass = TRUE
   )
   stop_out <- list(stop_decision = FALSE, stop_reason = NA_character_)
@@ -56,17 +42,12 @@ testthat::test_that("summarize_refits returns stable schema with gini metrics", 
     stop_out = stop_out,
     new_pairs = 2L
   )
-  row$gini_degree <- 0.21
-  row$gini_pos_A <- 0.43
   state$config$round_log <- dplyr::bind_rows(state$config$round_log, row)
 
   summary <- pairwiseLLM::summarize_refits(state, last_n = 1L)
 
   testthat::expect_s3_class(summary, "tbl_df")
-  testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(all(c("reliability_EAP", "epsilon_mean") %in% names(summary)))
-  testthat::expect_equal(summary$gini_degree[[1L]], 0.21)
-  testthat::expect_equal(summary$gini_pos_A[[1L]], 0.43)
 })
 
 testthat::test_that("summarize_refits handles missing logs", {
@@ -81,5 +62,4 @@ testthat::test_that("summarize_refits handles missing logs", {
 
   testthat::expect_s3_class(summary, "tbl_df")
   testthat::expect_equal(nrow(summary), 0L)
-  testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
 })

@@ -41,7 +41,7 @@ testthat::test_that("stop_metrics defaults are complete and non-null", {
   testthat::expect_false(any(vapply(metrics[required], is.null, logical(1L))))
 })
 
-testthat::test_that("round_log uses the same U_pass as stop_metrics", {
+testthat::test_that("round_log uses the same rank_stability_pass as stop_metrics", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C", "D"),
     text = c("alpha", "bravo", "charlie", "delta")
@@ -75,6 +75,9 @@ testthat::test_that("round_log uses the same U_pass as stop_metrics", {
     config = config
   )
 
-  testthat::expect_identical(as.logical(round_row$U_pass), as.logical(metrics$U_pass))
+  testthat::expect_identical(
+    as.logical(round_row$rank_stability_pass),
+    as.logical(metrics$rank_stability_pass)
+  )
   testthat::expect_identical(as.integer(metrics$divergences), 0L)
 })

@@ -73,8 +73,10 @@ testthat::test_that("round log builder uses epsilon summary and draws", {
   )
 
   testthat::expect_equal(row$epsilon_mean, 0.06)
-  testthat::expect_equal(row$epsilon_ci90_lo, 0.05)
-  testthat::expect_equal(row$epsilon_ci90_hi, 0.07)
+  testthat::expect_equal(row$epsilon_p5, 0.05)
+  testthat::expect_equal(row$epsilon_p95, 0.07)
+  testthat::expect_true(is.na(row$epsilon_p2.5))
+  testthat::expect_true(is.na(row$epsilon_p97.5))
 })
 
 testthat::test_that("item summary builder handles missing draws and colnames", {

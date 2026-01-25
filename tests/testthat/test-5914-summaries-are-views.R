@@ -29,16 +29,14 @@ testthat::test_that("summaries are views over canonical outputs", {
     utility_selected_p90 = 0.9,
     utility_candidate_p90 = 0.95
   )
-  batch_row$gini_degree <- 9.9
-  batch_row$gini_pos_A <- 8.8
   state$batch_log <- dplyr::bind_rows(state$batch_log, batch_row)
 
   round_log <- pairwiseLLM:::round_log_schema()
   round_log <- dplyr::bind_rows(round_log, tibble::tibble(
     round_id = 1L,
     iter_at_refit = 0L,
-    gini_degree = 0.77,
-    gini_pos_A = 0.88
+    stop_decision = TRUE,
+    stop_reason = "manual"
   ))
   state$config$round_log <- round_log
 
@@ -57,12 +55,12 @@ testthat::test_that("summaries are views over canonical outputs", {
   )
 
   iter_summary <- pairwiseLLM::summarize_iterations(list(state = state), include_optional = FALSE)
-  testthat::expect_equal(iter_summary$gini_degree[[1L]], 9.9)
-  testthat::expect_equal(iter_summary$gini_pos_A[[1L]], 8.8)
+  testthat::expect_equal(iter_summary$n_pairs_selected[[1L]], 6L)
+  testthat::expect_equal(iter_summary$n_pairs_completed[[1L]], 5L)
 
   refit_summary <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
-  testthat::expect_equal(refit_summary$gini_degree[[1L]], 0.77)
-  testthat::expect_equal(refit_summary$gini_pos_A[[1L]], 0.88)
+  testthat::expect_true(refit_summary$stop_decision[[1L]])
+  testthat::expect_equal(refit_summary$stop_reason[[1L]], "manual")
 
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
   testthat::expect_equal(item_summary$theta_q05[[1L]], state$config$item_summary$theta_ci90_lo[[1L]])
@@ -101,16 +99,14 @@ testthat::test_that("summaries handle log lists and warn on non-summary posterio
     utility_selected_p90 = 0.6,
     utility_candidate_p90 = 0.7
   )
-  batch_row$gini_degree <- 1.23
-  batch_row$gini_pos_A <- 4.56
   state$batch_log <- dplyr::bind_rows(state$batch_log, batch_row)
 
   iter_summary <- pairwiseLLM::summarize_iterations(
     list(batch_log = state$batch_log),
     include_optional = FALSE
   )
-  testthat::expect_equal(iter_summary$gini_degree[[1L]], 1.23)
-  testthat::expect_equal(iter_summary$gini_pos_A[[1L]], 4.56)
+  testthat::expect_equal(iter_summary$n_pairs_selected[[1L]], 2L)
+  testthat::expect_equal(iter_summary$n_pairs_completed[[1L]], 2L)
 
   testthat::expect_warning(
     pairwiseLLM::summarize_items(state, posterior = matrix(0, nrow = 1, ncol = 1)),

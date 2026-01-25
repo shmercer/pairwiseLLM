@@ -20,3 +20,16 @@ A tibble with one row per refit.
 Build a per-refit diagnostics summary from the adaptive round log. This is
 a pure view over \code{round_log} and does not recompute metrics.
 }
+\details{
+The round log is the canonical stop-audit trail and groups fields by
+identity/cadence, run-scale counts, design knobs, coverage/imbalance,
+posterior percentiles, diagnostics, stop quality metrics, stop bookkeeping,
+stop decision, candidate health, and MCMC configuration. Run-scale counts
+include scheduled/completed pairs and \code{backlog_unjudged} (scheduled
+minus completed). Percentile columns are fixed (e.g.,
+\code{epsilon_p2.5}, \code{epsilon_p50}, \code{epsilon_p97.5}) and remain
+present with \code{NA} values when a parameter is not part of a model
+variant. Stopping metrics report posterior quality (e.g.,
+\code{reliability_EAP}) and stability checks (e.g.,
+\code{rank_stability_pass}) without recomputation.
+}

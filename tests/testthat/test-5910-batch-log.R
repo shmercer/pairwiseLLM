@@ -236,9 +236,9 @@ testthat::test_that("round_log fills refit fields and matches stop metrics", {
   testthat::expect_false(any(is.na(round_log$exploration_rate)))
 
   last_idx <- nrow(round_log)
-  expected_U_pass <- resume_out2$state$posterior$stop_metrics$U_pass %||% NA
+  expected_rank_stability_pass <- resume_out2$state$posterior$stop_metrics$rank_stability_pass %||% NA
   testthat::expect_identical(
-    as.logical(round_log$U_pass[[last_idx]]),
-    as.logical(expected_U_pass)
+    as.logical(round_log$rank_stability_pass[[last_idx]]),
+    as.logical(expected_rank_stability_pass)
   )
 })

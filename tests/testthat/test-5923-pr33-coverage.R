@@ -227,7 +227,6 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
       log <- tibble::as_tibble(log)
       schema <- tibble::as_tibble(schema)
       missing <- setdiff(names(schema), names(log))
-      missing <- setdiff(missing, c("gini_degree", "gini_pos_A"))
       for (col in missing) {
         default_val <- pairwiseLLM:::.adaptive_log_default_value(schema[[col]])
         log[[col]] <- rep_len(default_val, nrow(log))
@@ -237,8 +236,7 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     .env = asNamespace("pairwiseLLM"),
     {
       summary <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
-      testthat::expect_true(all(c("gini_degree", "gini_pos_A") %in% names(summary)))
-      testthat::expect_true(is.na(summary$gini_pos_A[[1L]]))
+      testthat::expect_true(all(c("stop_decision", "stop_reason") %in% names(summary)))
     }
   )
 
