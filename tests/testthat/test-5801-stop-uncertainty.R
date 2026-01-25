@@ -17,7 +17,7 @@ testthat::test_that("lagged theta stability metrics compute when eligible", {
   )
   state$posterior$theta_mean_history <- history
 
-  draws <- matrix(rep(c(0, 1, 2, 3), each = 2), nrow = 2, byrow = TRUE)
+  draws <- matrix(rep(c(0, 1, 2, 3), times = 2), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
   fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
@@ -44,7 +44,7 @@ testthat::test_that("lagged stability metrics are NA before eligibility", {
   history <- list(stats::setNames(c(0, 1, 2), state$ids))
   state$posterior$theta_mean_history <- history
 
-  draws <- matrix(rep(c(0, 1, 2), each = 2), nrow = 2, byrow = TRUE)
+  draws <- matrix(rep(c(0, 1, 2), times = 2), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
   fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 

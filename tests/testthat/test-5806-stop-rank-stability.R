@@ -18,7 +18,7 @@ testthat::test_that("rank stability uses lagged Spearman correlation", {
   history <- list(stats::setNames(c(0, 1, 2, 3), state$ids))
   state$posterior$theta_mean_history <- history
 
-  draws <- matrix(rep(c(3, 2, 1, 0), each = 2), nrow = 2, byrow = TRUE)
+  draws <- matrix(rep(c(3, 2, 1, 0), times = 2), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
   fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 

@@ -239,6 +239,7 @@ testthat::test_that("schedule_next_pairs stops when stop decision is reached", {
   )
   state$fit <- fit
   state$posterior$theta_mean_history <- list(stats::setNames(c(1, 0, -1), state$ids))
+  state$new_since_refit <- 100L
 
   v3_config <- pairwiseLLM:::adaptive_v3_config(
     state$N,
