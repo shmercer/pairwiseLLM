@@ -1,4 +1,4 @@
-testthat::test_that("summarize_draws returns required columns and ordered CIs", {
+testthat::test_that("summarize_draws returns required columns and percentiles", {
   draws <- list(
     theta = matrix(
       c(0, 1, 2,
@@ -26,13 +26,17 @@ testthat::test_that("summarize_draws returns required columns and ordered CIs", 
 
   epsilon_cols <- c(
     "epsilon_mean",
-    "epsilon_ci90_low", "epsilon_ci90_high",
-    "epsilon_ci95_low", "epsilon_ci95_high"
+    "epsilon_p2.5", "epsilon_p5", "epsilon_p50",
+    "epsilon_p95", "epsilon_p97.5"
   )
   expect_true(all(epsilon_cols %in% names(out$epsilon_summary)))
   expect_true(is.finite(out$epsilon_summary$epsilon_mean))
-  expect_true(out$epsilon_summary$epsilon_ci90_low <= out$epsilon_summary$epsilon_ci90_high)
-  expect_true(out$epsilon_summary$epsilon_ci95_low <= out$epsilon_summary$epsilon_ci95_high)
+  eps_probs <- stats::quantile(draws$epsilon, probs = c(0.025, 0.05, 0.5, 0.95, 0.975), names = FALSE)
+  expect_equal(out$epsilon_summary$epsilon_p2.5, eps_probs[[1L]])
+  expect_equal(out$epsilon_summary$epsilon_p5, eps_probs[[2L]])
+  expect_equal(out$epsilon_summary$epsilon_p50, eps_probs[[3L]])
+  expect_equal(out$epsilon_summary$epsilon_p95, eps_probs[[4L]])
+  expect_equal(out$epsilon_summary$epsilon_p97.5, eps_probs[[5L]])
 })
 
 testthat::test_that("summarize_draws assigns item_id when theta colnames missing", {

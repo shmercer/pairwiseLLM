@@ -12,7 +12,14 @@ testthat::test_that("as_v3_fit_contract_from_mcmc returns v3 contract shape", {
       item_id = c("id3", "id1", "id2"),
       theta_mean = c(0.3, 0.1, 0.2)
     ),
-    epsilon_summary = tibble::tibble(epsilon_mean = 0.2),
+    epsilon_summary = tibble::tibble(
+      epsilon_mean = 0.2,
+      epsilon_p2.5 = 0.12,
+      epsilon_p5 = 0.14,
+      epsilon_p50 = 0.2,
+      epsilon_p95 = 0.28,
+      epsilon_p97.5 = 0.3
+    ),
     diagnostics = list(max_rhat = 1.01)
   )
 
@@ -20,7 +27,7 @@ testthat::test_that("as_v3_fit_contract_from_mcmc returns v3 contract shape", {
 
   testthat::expect_true(is.list(fit))
   testthat::expect_true(all(c(
-    "theta_draws", "theta_mean", "epsilon_mean", "diagnostics"
+    "theta_draws", "theta_mean", "epsilon_mean", "epsilon_summary", "b_summary", "diagnostics"
   ) %in% names(fit)))
   testthat::expect_identical(colnames(fit$theta_draws), ids)
   testthat::expect_identical(names(fit$theta_mean), ids)

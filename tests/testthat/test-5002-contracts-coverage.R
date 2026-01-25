@@ -61,8 +61,11 @@ testthat::test_that("item summary defaults and round log row fill metrics", {
     ),
     epsilon_summary = tibble::tibble(
       epsilon_mean = 0.1,
-      epsilon_ci90_low = 0.05,
-      epsilon_ci90_high = 0.15
+      epsilon_p2.5 = 0.04,
+      epsilon_p5 = 0.05,
+      epsilon_p50 = 0.1,
+      epsilon_p95 = 0.15,
+      epsilon_p97.5 = 0.16
     )
   )
   metrics <- list(
