@@ -100,6 +100,31 @@
   }
   config <- config %||% state$config$v3 %||% list()
   row <- tibble::as_tibble(round_row)[1, , drop = FALSE]
+  metrics <- state$posterior$stop_metrics %||% list()
+  progress_field <- function(name, fallback = NA) {
+    if (name %in% names(row)) {
+      return(row[[name]][[1L]] %||% fallback)
+    }
+    if (is.list(metrics) && name %in% names(metrics)) {
+      return(metrics[[name]] %||% fallback)
+    }
+    fallback
+  }
+  theta_sd_val <- if ("theta_sd_median" %in% names(row)) {
+    row$theta_sd_median[[1L]]
+  } else if ("theta_sd_eap" %in% names(row)) {
+    row$theta_sd_eap[[1L]]
+  } else {
+    metrics$theta_sd_median_S %||% NA_real_
+  }
+  tau_val <- progress_field("tau", NA_real_)
+  theta_sd_pass <- progress_field("theta_sd_pass", NA)
+  U0_val <- progress_field("U0", state$U0 %||% NA_real_)
+  U_abs_val <- progress_field("U_abs", config$U_abs %||% NA_real_)
+  U_pass_val <- progress_field("U_pass", NA)
+  frac_weak_adj_val <- progress_field("frac_weak_adj", NA_real_)
+  min_adj_prob_val <- progress_field("min_adj_prob", NA_real_)
+  hard_cap_reached_val <- progress_field("hard_cap_reached", NA)
   phase <- state$phase %||% NA_character_
   header <- paste0(
     "[REFIT r=", .adaptive_progress_value(row$round_id),
@@ -143,26 +168,26 @@
       "  Gate: diagnostics_pass=", .adaptive_progress_value(row$diagnostics_pass)
     ),
     paste0(
-      "  SD: median_S=", .adaptive_progress_value(row$theta_sd_median),
-      " tau=", .adaptive_progress_value(row$tau),
-      " pass=", .adaptive_progress_value(row$theta_sd_pass)
+      "  SD: median_S=", .adaptive_progress_value(theta_sd_val),
+      " tau=", .adaptive_progress_value(tau_val),
+      " pass=", .adaptive_progress_value(theta_sd_pass)
     ),
     paste0(
-      "  U: U0=", .adaptive_progress_value(row$U0),
-      " U_abs=", .adaptive_progress_value(row$U_abs),
-      " pass=", .adaptive_progress_value(row$U_pass)
+      "  U: U0=", .adaptive_progress_value(U0_val),
+      " U_abs=", .adaptive_progress_value(U_abs_val),
+      " pass=", .adaptive_progress_value(U_pass_val)
     )
   )
 
-  has_stability <- !(is.na(row$frac_weak_adj) &&
-    is.na(row$min_adj_prob) &&
+  has_stability <- !(is.na(frac_weak_adj_val) &&
+    is.na(min_adj_prob_val) &&
     is.na(row$rank_stability_pass))
   if (isTRUE(has_stability)) {
     lines <- c(
       lines,
       paste0(
-        "  Stability: weak=", .adaptive_progress_value(row$frac_weak_adj),
-        " min_adj=", .adaptive_progress_value(row$min_adj_prob),
+        "  Stability: weak=", .adaptive_progress_value(frac_weak_adj_val),
+        " min_adj=", .adaptive_progress_value(min_adj_prob_val),
         " pass=", .adaptive_progress_value(row$rank_stability_pass)
       )
     )
@@ -187,7 +212,7 @@
       paste0(
         "  Hard cap: seen=", .adaptive_progress_value(row$n_unique_pairs_seen),
         " cap=", .adaptive_progress_value(row$hard_cap_threshold),
-        " reached=", .adaptive_progress_value(row$hard_cap_reached)
+        " reached=", .adaptive_progress_value(hard_cap_reached_val)
       )
     )
   }
