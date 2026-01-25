@@ -180,7 +180,6 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       wc = NULL,
       bin = NULL,
       bin_edges = NULL,
-      U0 = NA_real_,
       last_check_at = 0L,
       stop_candidate = FALSE,
       checks_passed_in_row = 0L,
