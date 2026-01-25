@@ -102,15 +102,21 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
       rlang::abort("Lagged theta history must be finite.")
     }
 
-    rho_theta_lag <- stats::cor(theta_mean, lag_theta, use = "complete.obs")
     sd_current <- stats::sd(theta_mean)
     sd_lag <- stats::sd(lag_theta)
+    if (is.finite(sd_current) && is.finite(sd_lag) && sd_current > 0 && sd_lag > 0) {
+      rho_theta_lag <- stats::cor(theta_mean, lag_theta, use = "complete.obs")
+    }
     if (is.finite(sd_lag) && sd_lag > 0) {
       delta_sd_theta_lag <- abs(sd_current - sd_lag) / sd_lag
     }
     rank_current <- rank(-theta_mean, ties.method = "average")
     rank_lag <- rank(-lag_theta, ties.method = "average")
-    rho_rank_lag <- stats::cor(rank_current, rank_lag, use = "complete.obs")
+    sd_rank_current <- stats::sd(rank_current)
+    sd_rank_lag <- stats::sd(rank_lag)
+    if (is.finite(sd_rank_current) && is.finite(sd_rank_lag) && sd_rank_current > 0 && sd_rank_lag > 0) {
+      rho_rank_lag <- stats::cor(rank_current, rank_lag, use = "complete.obs")
+    }
     rank_spearman_min <- as.double(config$rank_spearman_min)
     if (!is.finite(rank_spearman_min) || length(rank_spearman_min) != 1L) {
       rlang::abort("`config$rank_spearman_min` must be a finite numeric scalar.")
