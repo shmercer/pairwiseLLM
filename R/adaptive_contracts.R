@@ -410,16 +410,22 @@ batch_log_schema <- function() {
 item_summary_schema <- function() {
   tibble::tibble(
     ID = character(),
-    theta_mean = double(),
-    theta_sd = double(),
-    theta_ci90_lo = double(),
-    theta_ci90_hi = double(),
-    theta_ci95_lo = double(),
-    theta_ci95_hi = double(),
-    rank_mean = double(),
-    rank_sd = double(),
     deg = integer(),
-    posA_prop = double()
+    posA_prop = double(),
+    theta_mean = double(),
+    theta_p2.5 = double(),
+    theta_p5 = double(),
+    theta_p50 = double(),
+    theta_p95 = double(),
+    theta_p97.5 = double(),
+    theta_sd = double(),
+    rank_mean = double(),
+    rank_p2.5 = double(),
+    rank_p5 = double(),
+    rank_p50 = double(),
+    rank_p95 = double(),
+    rank_p97.5 = double(),
+    rank_sd = double()
   )
 }
 
@@ -948,15 +954,32 @@ build_item_summary <- function(state, fit = NULL) {
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   theta_mean <- as.double(colMeans(theta_draws))
   theta_sd <- as.double(apply(theta_draws, 2, stats::sd))
-  theta_ci90_lo <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.05, names = FALSE))
-  theta_ci90_hi <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.95, names = FALSE))
-  theta_ci95_lo <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.025, names = FALSE))
-  theta_ci95_hi <- as.double(apply(theta_draws, 2, stats::quantile, probs = 0.975, names = FALSE))
+  probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
+  theta_quantiles <- vapply(
+    seq_len(ncol(theta_draws)),
+    function(idx) stats::quantile(theta_draws[, idx], probs = probs, names = FALSE),
+    numeric(length(probs))
+  )
+  theta_p2.5 <- as.double(theta_quantiles[1L, ])
+  theta_p5 <- as.double(theta_quantiles[2L, ])
+  theta_p50 <- as.double(theta_quantiles[3L, ])
+  theta_p95 <- as.double(theta_quantiles[4L, ])
+  theta_p97.5 <- as.double(theta_quantiles[5L, ])
 
   rank_mat <- t(apply(theta_draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- state$ids
   rank_mean <- as.double(colMeans(rank_mat))
   rank_sd <- as.double(apply(rank_mat, 2, stats::sd))
+  rank_quantiles <- vapply(
+    seq_len(ncol(rank_mat)),
+    function(idx) stats::quantile(rank_mat[, idx], probs = probs, names = FALSE),
+    numeric(length(probs))
+  )
+  rank_p2.5 <- as.double(rank_quantiles[1L, ])
+  rank_p5 <- as.double(rank_quantiles[2L, ])
+  rank_p50 <- as.double(rank_quantiles[3L, ])
+  rank_p95 <- as.double(rank_quantiles[4L, ])
+  rank_p97.5 <- as.double(rank_quantiles[5L, ])
 
   deg <- as.integer(state$deg)
   pos1 <- as.double(state$pos1)
@@ -966,15 +989,21 @@ build_item_summary <- function(state, fit = NULL) {
 
   tibble::tibble(
     ID = as.character(state$ids),
-    theta_mean = theta_mean,
-    theta_sd = theta_sd,
-    theta_ci90_lo = theta_ci90_lo,
-    theta_ci90_hi = theta_ci90_hi,
-    theta_ci95_lo = theta_ci95_lo,
-    theta_ci95_hi = theta_ci95_hi,
-    rank_mean = rank_mean,
-    rank_sd = rank_sd,
     deg = deg,
-    posA_prop = as.double(posA_prop)
+    posA_prop = as.double(posA_prop),
+    theta_mean = theta_mean,
+    theta_p2.5 = theta_p2.5,
+    theta_p5 = theta_p5,
+    theta_p50 = theta_p50,
+    theta_p95 = theta_p95,
+    theta_p97.5 = theta_p97.5,
+    theta_sd = theta_sd,
+    rank_mean = rank_mean,
+    rank_p2.5 = rank_p2.5,
+    rank_p5 = rank_p5,
+    rank_p50 = rank_p50,
+    rank_p95 = rank_p95,
+    rank_p97.5 = rank_p97.5,
+    rank_sd = rank_sd
   )
 }
