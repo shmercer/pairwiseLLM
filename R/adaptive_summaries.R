@@ -153,11 +153,18 @@
     item_id = .adaptive_summary_empty_value("character"),
     theta_mean = .adaptive_summary_empty_value("double"),
     theta_sd = .adaptive_summary_empty_value("double"),
-    theta_q05 = .adaptive_summary_empty_value("double"),
-    theta_q95 = .adaptive_summary_empty_value("double"),
+    theta_p2.5 = .adaptive_summary_empty_value("double"),
+    theta_p5 = .adaptive_summary_empty_value("double"),
+    theta_p50 = .adaptive_summary_empty_value("double"),
+    theta_p95 = .adaptive_summary_empty_value("double"),
+    theta_p97.5 = .adaptive_summary_empty_value("double"),
     rank_mean = .adaptive_summary_empty_value("double"),
-    rank_q05 = .adaptive_summary_empty_value("double"),
-    rank_q95 = .adaptive_summary_empty_value("double"),
+    rank_p2.5 = .adaptive_summary_empty_value("double"),
+    rank_p5 = .adaptive_summary_empty_value("double"),
+    rank_p50 = .adaptive_summary_empty_value("double"),
+    rank_p95 = .adaptive_summary_empty_value("double"),
+    rank_p97.5 = .adaptive_summary_empty_value("double"),
+    rank_sd = .adaptive_summary_empty_value("double"),
     degree = .adaptive_summary_empty_value("integer"),
     pos_A_count = .adaptive_summary_empty_value("integer"),
     pos_A_rate = .adaptive_summary_empty_value("double")
@@ -167,9 +174,6 @@
   }
 
   optional <- tibble::tibble(
-    theta_q025 = .adaptive_summary_empty_value("double"),
-    theta_q975 = .adaptive_summary_empty_value("double"),
-    rank_sd = .adaptive_summary_empty_value("double"),
     repeated_pairs = .adaptive_summary_empty_value("integer"),
     adjacent_prev_prob = .adaptive_summary_empty_value("double"),
     adjacent_next_prob = .adaptive_summary_empty_value("double")
@@ -426,7 +430,14 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #'   after sorting.
 #' @param sort_by Column used for sorting. Defaults to \code{"rank_mean"}.
 #' @param include_optional Logical; include optional diagnostic columns.
-#' @return A tibble with one row per item.
+#' @return A tibble with one row per item. Columns include \code{item_id},
+#'   \code{theta_mean}, \code{theta_sd}, \code{theta_p2.5}, \code{theta_p5},
+#'   \code{theta_p50}, \code{theta_p95}, \code{theta_p97.5}, \code{rank_mean},
+#'   \code{rank_sd}, \code{rank_p2.5}, \code{rank_p5}, \code{rank_p50},
+#'   \code{rank_p95}, \code{rank_p97.5}, \code{degree}, and \code{pos_A_rate}.
+#'   Rank percentiles summarize per-draw induced ranks (lower is better). When
+#'   \code{include_optional = TRUE}, repeated-pair and adjacent-win diagnostics
+#'   are appended.
 #' @export
 summarize_items <- function(state,
     posterior = NULL,
@@ -460,11 +471,18 @@ summarize_items <- function(state,
     item_id = as.character(.adaptive_summary_col(item_summary, "ID", NA_character_, n_items)),
     theta_mean = as.double(.adaptive_summary_col(item_summary, "theta_mean", NA_real_, n_items)),
     theta_sd = as.double(.adaptive_summary_col(item_summary, "theta_sd", NA_real_, n_items)),
-    theta_q05 = as.double(.adaptive_summary_col(item_summary, "theta_ci90_lo", NA_real_, n_items)),
-    theta_q95 = as.double(.adaptive_summary_col(item_summary, "theta_ci90_hi", NA_real_, n_items)),
+    theta_p2.5 = as.double(.adaptive_summary_col(item_summary, "theta_p2.5", NA_real_, n_items)),
+    theta_p5 = as.double(.adaptive_summary_col(item_summary, "theta_p5", NA_real_, n_items)),
+    theta_p50 = as.double(.adaptive_summary_col(item_summary, "theta_p50", NA_real_, n_items)),
+    theta_p95 = as.double(.adaptive_summary_col(item_summary, "theta_p95", NA_real_, n_items)),
+    theta_p97.5 = as.double(.adaptive_summary_col(item_summary, "theta_p97.5", NA_real_, n_items)),
     rank_mean = as.double(.adaptive_summary_col(item_summary, "rank_mean", NA_real_, n_items)),
-    rank_q05 = as.double(.adaptive_summary_col(item_summary, "rank_q05", NA_real_, n_items)),
-    rank_q95 = as.double(.adaptive_summary_col(item_summary, "rank_q95", NA_real_, n_items)),
+    rank_p2.5 = as.double(.adaptive_summary_col(item_summary, "rank_p2.5", NA_real_, n_items)),
+    rank_p5 = as.double(.adaptive_summary_col(item_summary, "rank_p5", NA_real_, n_items)),
+    rank_p50 = as.double(.adaptive_summary_col(item_summary, "rank_p50", NA_real_, n_items)),
+    rank_p95 = as.double(.adaptive_summary_col(item_summary, "rank_p95", NA_real_, n_items)),
+    rank_p97.5 = as.double(.adaptive_summary_col(item_summary, "rank_p97.5", NA_real_, n_items)),
+    rank_sd = as.double(.adaptive_summary_col(item_summary, "rank_sd", NA_real_, n_items)),
     degree = as.integer(.adaptive_summary_col(item_summary, "deg", NA_integer_, n_items)),
     pos_A_count = as.integer(.adaptive_summary_col(item_summary, "pos_A_count", NA_integer_, n_items)),
     pos_A_rate = as.double(.adaptive_summary_col(item_summary, "posA_prop", NA_real_, n_items))
@@ -473,9 +491,6 @@ summarize_items <- function(state,
   if (isTRUE(include_optional)) {
     summary <- summary |>
       dplyr::mutate(
-        theta_q025 = as.double(.adaptive_summary_col(item_summary, "theta_ci95_lo", NA_real_, n_items)),
-        theta_q975 = as.double(.adaptive_summary_col(item_summary, "theta_ci95_hi", NA_real_, n_items)),
-        rank_sd = as.double(.adaptive_summary_col(item_summary, "rank_sd", NA_real_, n_items)),
         repeated_pairs = as.integer(.adaptive_summary_col(item_summary, "repeated_pairs", NA_integer_, n_items)),
         adjacent_prev_prob = as.double(.adaptive_summary_col(item_summary, "adjacent_prev_prob", NA_real_, n_items)),
         adjacent_next_prob = as.double(.adaptive_summary_col(item_summary, "adjacent_next_prob", NA_real_, n_items))
