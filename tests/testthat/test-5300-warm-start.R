@@ -60,3 +60,15 @@ testthat::test_that("warm_start enforces minimum degree, uniqueness, and determi
   pairs_b <- pairwiseLLM:::warm_start(ids, config = list())
   expect_identical(pairs_a, pairs_b)
 })
+
+testthat::test_that("warm_start completes higher min_degree and target mean", {
+  ids <- c("A", "B", "C", "D")
+  config <- list(min_degree = 3L, target_mean_degree = 3)
+
+  pairs <- pairwiseLLM:::warm_start(ids, config = config, seed = 42)
+  keys <- paste(pairs$i, pairs$j, sep = ":")
+
+  expect_true(all(pairs$i != pairs$j))
+  expect_equal(length(keys), length(unique(keys)))
+  expect_true(nrow(pairs) >= 4L)
+})

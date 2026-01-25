@@ -76,3 +76,35 @@ testthat::test_that("summarize_items supports sorting and missing posterior", {
   summary_missing <- pairwiseLLM::summarize_items(state, posterior = NULL)
   testthat::expect_equal(nrow(summary_missing), 0L)
 })
+
+testthat::test_that("summarize_items unwraps list item_summary inputs", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
+
+  item_summary <- tibble::tibble(
+    ID = state$ids,
+    theta_mean = c(0.2, -0.1),
+    theta_sd = c(0.1, 0.2),
+    theta_p2.5 = c(-0.2, -0.3),
+    theta_p5 = c(-0.1, -0.2),
+    theta_p50 = c(0.1, -0.05),
+    theta_p95 = c(0.3, 0.2),
+    theta_p97.5 = c(0.4, 0.3),
+    rank_mean = c(1.0, 2.0),
+    rank_p2.5 = c(1.0, 1.8),
+    rank_p5 = c(1.0, 1.9),
+    rank_p50 = c(1.0, 2.0),
+    rank_p95 = c(1.2, 2.1),
+    rank_p97.5 = c(1.3, 2.2),
+    rank_sd = c(0.1, 0.2),
+    deg = c(1L, 2L),
+    posA_prop = c(1.0, 0.5)
+  )
+
+  out <- pairwiseLLM::summarize_items(state, posterior = list(item_summary = item_summary))
+  testthat::expect_equal(nrow(out), 2L)
+  testthat::expect_equal(out$item_id, state$ids)
+})

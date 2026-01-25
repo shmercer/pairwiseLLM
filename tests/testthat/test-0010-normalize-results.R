@@ -864,3 +864,66 @@ test_that("normalize_llm_results outputs satisfy adaptive schema validators", {
   expect_silent(validate_results_tbl(out$results))
   expect_silent(validate_failed_attempts_tbl(out$failed_attempts))
 })
+
+test_that("normalize_llm_results records duplicate custom_id attempts with extra metadata", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta",
+    pair_uid = "pair-meta"
+  )
+
+  raw <- tibble::tibble(
+    custom_id = c("pair-meta", "pair-meta"),
+    ID1 = c("A", "A"),
+    ID2 = c("B", "B"),
+    better_id = c("A", "A"),
+    ordered_occurrence_index = c(1L, 2L),
+    status_code = c(500L, 200L),
+    error_message = c("HTTP 500", NA_character_),
+    prompt_tokens = c(10, 11),
+    completion_tokens = c(20, 21),
+    total_tokens = c(30, 32),
+    cost = c(0.1, 0.2)
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(nrow(out$failed_attempts) >= 1L)
+  expect_true(is.integer(out$failed_attempts$status_code))
+  expect_true(is.numeric(out$failed_attempts$total_tokens))
+})
+
+test_that("normalize_llm_results records duplicate ordered_key attempts with totals", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = c("A", "A"),
+    ID2 = c("B", "B"),
+    better_id = c("A", "A"),
+    total_tokens = c(40, 41)
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(any(out$failed_attempts$error_code == "http_error"))
+  expect_true(is.numeric(out$failed_attempts$total_tokens))
+})

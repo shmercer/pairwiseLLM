@@ -15,3 +15,7 @@ test_that("compute_batch_sizes handles large N", {
   expect_equal(sizes$BATCH3, 500L)
   expect_equal(sizes$CW, 5000L)
 })
+
+test_that("compute_batch_sizes validates N", {
+  expect_error(compute_batch_sizes(0), "positive")
+})

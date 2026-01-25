@@ -137,3 +137,19 @@ testthat::test_that("round log builder emits a single typed row", {
   testthat::expect_equal(row$b_p50[[1L]], 0.15)
   testthat::expect_equal(row$rho_theta_lag[[1L]], 0.1)
 })
+
+testthat::test_that("round log builder tolerates non-data batch_log inputs", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- adaptive_state_new(samples, config = list(d1 = 2L))
+  state$config$v3 <- adaptive_v3_config(state$N, list())
+  state$batch_log <- "not a data frame"
+
+  fit <- make_v3_fit_contract(state$ids)
+  row <- build_round_log_row(state = state, fit = fit, new_pairs = 0L)
+
+  testthat::expect_equal(nrow(row), 1L)
+  testthat::expect_identical(colnames(row), colnames(round_log_schema()))
+})

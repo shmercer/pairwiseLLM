@@ -59,6 +59,19 @@ testthat::test_that("state log initialization aligns stored logs", {
   )
 })
 
+testthat::test_that("state log initialization resets non-list counters", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  state$log_counters <- "bad"
+
+  state <- pairwiseLLM:::.adaptive_state_init_logs(state)
+  testthat::expect_true(is.list(state$log_counters))
+  testthat::expect_true(is.integer(state$log_counters$comparisons_observed))
+})
+
 testthat::test_that("log default builders handle POSIXct columns", {
   batch_defaults <- pairwiseLLM:::.adaptive_batch_log_defaults()
   expect_true(inherits(batch_defaults$created_at, "POSIXct"))

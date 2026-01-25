@@ -29,7 +29,8 @@ testthat::test_that("artifact writing writes expected files", {
       nrow = 4,
       byrow = TRUE,
       dimnames = list(NULL, state$ids)
-    )
+    ),
+    b_draws = c(0.1, 0.2, 0.3, 0.4)
   )
 
   metrics <- list(

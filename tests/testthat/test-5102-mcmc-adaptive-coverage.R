@@ -130,6 +130,13 @@ testthat::test_that("as_v3_fit_contract_from_mcmc rejects bad shapes", {
     pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_eps_bounds, ids),
     "within \\[0, 1\\]"
   )
+
+  bad_b_draws <- base_fit
+  bad_b_draws$draws$b <- "nope"
+  testthat::expect_error(
+    pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_b_draws, ids),
+    "draws\\$b"
+  )
 })
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive validates config and thin draws", {
@@ -151,6 +158,13 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates config and thin draws
   testthat::expect_error(
     pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = config_bad),
     "positive integers"
+  )
+
+  config_bad_cmdstan <- pairwiseLLM:::adaptive_v3_config(2)
+  config_bad_cmdstan$cmdstan <- "bad"
+  testthat::expect_error(
+    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = config_bad_cmdstan),
+    "cmdstan"
   )
 })
 
@@ -185,6 +199,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive handles draw matrix checks", {
     "missing theta draws"
   )
 })
+
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive validates thin_draws", {
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("a", "b"))

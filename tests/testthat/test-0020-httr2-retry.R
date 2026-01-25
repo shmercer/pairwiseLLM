@@ -268,3 +268,21 @@ test_that("retry request retries httr2_http errors when status is stored in `res
   expect_equal(nrow(failures), 1L)
   expect_true(all(failures$error_code == "http_error"))
 })
+
+test_that("retry request records non-timeout errors as http_error", {
+  plain_err <- structure(list(message = "boom"), class = c("error", "condition"))
+
+  err <- with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) stop(plain_err),
+    {
+      tryCatch(
+        .retry_httr2_request(list(), max_attempts = 1L, base_delay = 0, jitter = 0),
+        error = function(e) e
+      )
+    }
+  )
+
+  expect_s3_class(err, "pairwiseLLM_retry_error")
+  failures <- attr(err, "retry_failures")
+  expect_equal(failures$error_code[[1L]], "http_error")
+})
