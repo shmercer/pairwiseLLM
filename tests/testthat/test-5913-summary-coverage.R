@@ -48,7 +48,7 @@ testthat::test_that("summary schemas and defaults are stable", {
   testthat::expect_false("batch_size" %in% names(refit_schema))
 
   item_schema <- pairwiseLLM:::.adaptive_item_summary_schema(include_optional = FALSE)
-  testthat::expect_false("theta_q975" %in% names(item_schema))
+  testthat::expect_false("repeated_pairs" %in% names(item_schema))
 })
 
 testthat::test_that("summary helpers handle draw extraction and repeats", {
@@ -180,15 +180,21 @@ testthat::test_that("summaries cover validation and logged values", {
     ID = state$ids,
     theta_mean = c(0.1, 0.2, 0.3),
     theta_sd = c(0.1, 0.1, 0.1),
-    theta_ci90_lo = c(-0.1, -0.1, -0.1),
-    theta_ci90_hi = c(0.2, 0.3, 0.4),
-    theta_ci95_lo = c(-0.2, -0.2, -0.2),
-    theta_ci95_hi = c(0.3, 0.4, 0.5),
+    theta_p2.5 = c(-0.2, -0.2, -0.2),
+    theta_p5 = c(-0.1, -0.1, -0.1),
+    theta_p50 = c(0.1, 0.2, 0.3),
+    theta_p95 = c(0.2, 0.3, 0.4),
+    theta_p97.5 = c(0.3, 0.4, 0.5),
     rank_mean = c(1.0, 2.0, 3.0),
+    rank_p2.5 = c(1.0, 1.0, 1.0),
+    rank_p5 = c(1.0, 1.0, 1.0),
+    rank_p50 = c(1.0, 2.0, 3.0),
+    rank_p95 = c(1.2, 2.2, 3.2),
+    rank_p97.5 = c(1.3, 2.3, 3.3),
     rank_sd = c(0.1, 0.1, 0.1),
     deg = c(1L, 2L, 3L),
     posA_prop = c(0.5, 0.5, 0.5)
   )
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_false("theta_q975" %in% names(item_summary))
+  testthat::expect_false("repeated_pairs" %in% names(item_summary))
 })

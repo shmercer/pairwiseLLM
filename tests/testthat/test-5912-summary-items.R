@@ -8,11 +8,17 @@ testthat::test_that("summarize_items returns item diagnostics without gini colum
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
-    theta_ci90_lo = c(-0.1, -0.2, -0.3),
-    theta_ci90_hi = c(0.3, 0.2, 0.1),
-    theta_ci95_lo = c(-0.2, -0.3, -0.4),
-    theta_ci95_hi = c(0.4, 0.3, 0.2),
+    theta_p2.5 = c(-0.2, -0.3, -0.4),
+    theta_p5 = c(-0.1, -0.2, -0.3),
+    theta_p50 = c(0.1, -0.05, 0.0),
+    theta_p95 = c(0.3, 0.2, 0.1),
+    theta_p97.5 = c(0.4, 0.3, 0.2),
     rank_mean = c(1.0, 2.0, 3.0),
+    rank_p2.5 = c(1.0, 1.8, 2.7),
+    rank_p5 = c(1.0, 1.9, 2.8),
+    rank_p50 = c(1.0, 2.0, 3.0),
+    rank_p95 = c(1.2, 2.1, 3.2),
+    rank_p97.5 = c(1.3, 2.2, 3.3),
     rank_sd = c(0.1, 0.2, 0.3),
     deg = c(1L, 2L, 3L),
     posA_prop = c(1.0, 0.5, 0.0)
@@ -26,8 +32,8 @@ testthat::test_that("summarize_items returns item diagnostics without gini colum
   testthat::expect_false(any(c("gini_degree", "gini_pos_A") %in% names(summary)))
   testthat::expect_true(setequal(summary$item_id, state$ids))
   testthat::expect_equal(summary$theta_mean[[1L]], item_summary$theta_mean[[1L]])
-  testthat::expect_equal(summary$theta_q05[[1L]], item_summary$theta_ci90_lo[[1L]])
-  testthat::expect_equal(summary$theta_q95[[1L]], item_summary$theta_ci90_hi[[1L]])
+  testthat::expect_equal(summary$theta_p5[[1L]], item_summary$theta_p5[[1L]])
+  testthat::expect_equal(summary$theta_p95[[1L]], item_summary$theta_p95[[1L]])
   testthat::expect_equal(summary$pos_A_rate[[1L]], item_summary$posA_prop[[1L]])
 })
 
@@ -41,11 +47,17 @@ testthat::test_that("summarize_items supports sorting and missing posterior", {
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
-    theta_ci90_lo = c(-0.1, -0.2, -0.3),
-    theta_ci90_hi = c(0.3, 0.2, 0.1),
-    theta_ci95_lo = c(-0.2, -0.3, -0.4),
-    theta_ci95_hi = c(0.4, 0.3, 0.2),
+    theta_p2.5 = c(-0.2, -0.3, -0.4),
+    theta_p5 = c(-0.1, -0.2, -0.3),
+    theta_p50 = c(0.1, -0.05, 0.0),
+    theta_p95 = c(0.3, 0.2, 0.1),
+    theta_p97.5 = c(0.4, 0.3, 0.2),
     rank_mean = c(1.0, 2.0, 3.0),
+    rank_p2.5 = c(1.0, 1.8, 2.7),
+    rank_p5 = c(1.0, 1.9, 2.8),
+    rank_p50 = c(1.0, 2.0, 3.0),
+    rank_p95 = c(1.2, 2.1, 3.2),
+    rank_p97.5 = c(1.3, 2.2, 3.3),
     rank_sd = c(0.1, 0.2, 0.3),
     deg = c(1L, 2L, 3L),
     posA_prop = c(1.0, 0.5, 0.0)
