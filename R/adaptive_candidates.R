@@ -109,29 +109,25 @@ select_window_size <- function(N, phase = c("phase2", "phase3"), near_stop = FAL
 }
 
 .adaptive_theta_summary_from_fit <- function(fit, state) {
-  if (!is.list(fit) || is.null(fit$theta_draws) || is.null(fit$theta_mean)) {
-    rlang::abort("`fit` must include `theta_draws` and `theta_mean`.")
-  }
-  theta_draws <- fit$theta_draws
-  if (!is.matrix(theta_draws) || !is.numeric(theta_draws)) {
-    rlang::abort("`fit$theta_draws` must be a numeric matrix.")
-  }
-  ids <- colnames(theta_draws)
-  if (is.null(ids) || any(is.na(ids)) || any(ids == "")) {
-    rlang::abort("`fit$theta_draws` must have non-empty column names.")
-  }
-  if (!setequal(ids, state$ids) || length(ids) != length(state$ids)) {
-    rlang::abort("`fit$theta_draws` columns must match `state$ids`.")
+  if (!is.list(fit) || is.null(fit$theta_mean) || is.null(fit$theta_sd)) {
+    rlang::abort("`fit` must include `theta_mean` and `theta_sd`.")
   }
   theta_mean <- fit$theta_mean
-  if (!is.numeric(theta_mean) || length(theta_mean) != length(state$ids)) {
-    rlang::abort("`fit$theta_mean` must be a numeric vector over `state$ids`.")
+  theta_sd <- fit$theta_sd
+  if (!is.numeric(theta_mean) || !is.numeric(theta_sd)) {
+    rlang::abort("`fit$theta_mean` and `fit$theta_sd` must be numeric.")
   }
-  if (is.null(names(theta_mean))) {
-    names(theta_mean) <- ids
+  if (length(theta_mean) != length(state$ids) || length(theta_sd) != length(state$ids)) {
+    rlang::abort("`fit$theta_mean` and `fit$theta_sd` must align with `state$ids`.")
+  }
+  if (is.null(names(theta_mean)) || is.null(names(theta_sd))) {
+    rlang::abort("`fit$theta_mean` and `fit$theta_sd` must be named.")
+  }
+  if (!identical(names(theta_mean), state$ids) || !identical(names(theta_sd), state$ids)) {
+    rlang::abort("`fit$theta_mean` and `fit$theta_sd` names must match `state$ids`.")
   }
   theta_mean <- as.double(theta_mean[state$ids])
-  theta_sd <- as.double(apply(theta_draws[, state$ids, drop = FALSE], 2, stats::sd))
+  theta_sd <- as.double(theta_sd[state$ids])
 
   tibble::tibble(
     item_id = as.character(state$ids),

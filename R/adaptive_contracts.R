@@ -679,16 +679,13 @@ build_round_log_row <- function(state,
   epsilon_p50 <- NA_real_
   epsilon_p95 <- NA_real_
   epsilon_p97.5 <- NA_real_
-  if (is.list(fit) && !is.null(fit$epsilon_summary)) {
-    eps_summary <- tibble::as_tibble(fit$epsilon_summary)
-    if (nrow(eps_summary) >= 1L) {
-      epsilon_mean <- eps_summary$epsilon_mean[[1L]] %||% epsilon_mean
-      epsilon_p2.5 <- (eps_summary[["epsilon_p2.5"]] %||% NA_real_)[[1L]]
-      epsilon_p5 <- (eps_summary[["epsilon_p5"]] %||% NA_real_)[[1L]]
-      epsilon_p50 <- (eps_summary[["epsilon_p50"]] %||% NA_real_)[[1L]]
-      epsilon_p95 <- (eps_summary[["epsilon_p95"]] %||% NA_real_)[[1L]]
-      epsilon_p97.5 <- (eps_summary[["epsilon_p97.5"]] %||% NA_real_)[[1L]]
-    }
+  if (is.list(fit)) {
+    epsilon_mean <- fit$epsilon_mean %||% epsilon_mean
+    epsilon_p2.5 <- fit$epsilon_p2.5 %||% NA_real_
+    epsilon_p5 <- fit$epsilon_p5 %||% NA_real_
+    epsilon_p50 <- fit$epsilon_p50 %||% NA_real_
+    epsilon_p95 <- fit$epsilon_p95 %||% NA_real_
+    epsilon_p97.5 <- fit$epsilon_p97.5 %||% NA_real_
   }
 
   b_mean <- NA_real_
@@ -697,26 +694,18 @@ build_round_log_row <- function(state,
   b_p50 <- NA_real_
   b_p95 <- NA_real_
   b_p97.5 <- NA_real_
-  if (is.list(fit) && !is.null(fit$b_summary)) {
-    b_summary <- tibble::as_tibble(fit$b_summary)
-    if (nrow(b_summary) >= 1L) {
-      b_mean <- b_summary$b_mean[[1L]] %||% NA_real_
-      b_p2.5 <- (b_summary[["b_p2.5"]] %||% NA_real_)[[1L]]
-      b_p5 <- (b_summary[["b_p5"]] %||% NA_real_)[[1L]]
-      b_p50 <- (b_summary[["b_p50"]] %||% NA_real_)[[1L]]
-      b_p95 <- (b_summary[["b_p95"]] %||% NA_real_)[[1L]]
-      b_p97.5 <- (b_summary[["b_p97.5"]] %||% NA_real_)[[1L]]
-    }
+  if (is.list(fit)) {
+    b_mean <- fit$b_mean %||% NA_real_
+    b_p2.5 <- fit$b_p2.5 %||% NA_real_
+    b_p5 <- fit$b_p5 %||% NA_real_
+    b_p50 <- fit$b_p50 %||% NA_real_
+    b_p95 <- fit$b_p95 %||% NA_real_
+    b_p97.5 <- fit$b_p97.5 %||% NA_real_
   }
 
   theta_draws <- NULL
   if (is.list(fit) && !is.null(fit$theta_draws)) {
     theta_draws <- fit$theta_draws
-  } else if (is.list(fit) && !is.null(fit$draws)) {
-    theta_draws <- tryCatch(
-      .btl_mcmc_v3_theta_draws(fit$draws, item_id = state$ids),
-      error = function(e) NULL
-    )
   }
   reliability_EAP <- compute_reliability_EAP(theta_draws)
 
@@ -935,11 +924,6 @@ build_item_summary <- function(state, fit = NULL) {
   theta_draws <- NULL
   if (is.list(fit) && !is.null(fit$theta_draws)) {
     theta_draws <- fit$theta_draws
-  } else if (is.list(fit) && !is.null(fit$draws)) {
-    theta_draws <- tryCatch(
-      .btl_mcmc_v3_theta_draws(fit$draws, item_id = state$ids),
-      error = function(e) NULL
-    )
   }
 
   if (is.null(theta_draws) || !is.matrix(theta_draws) || !is.numeric(theta_draws)) {
