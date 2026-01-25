@@ -273,6 +273,14 @@ validate_config <- function(config) {
     "`keep_draws` must be logical.")
   .adaptive_v3_check(.adaptive_v3_intish(config$thin_draws) && config$thin_draws >= 1L,
     "`thin_draws` must be >= 1.")
+  if (!is.list(config$cmdstan)) {
+    rlang::abort("`config$cmdstan` must be a list when provided.")
+  }
+  cmdstan_output_dir <- config$cmdstan$output_dir %||% NULL
+  if (!is.null(cmdstan_output_dir)) {
+    .adaptive_v3_check(is.character(cmdstan_output_dir) && length(cmdstan_output_dir) == 1L,
+      "`config$cmdstan$output_dir` must be a length-1 character path.")
+  }
 
   invisible(config)
 }
@@ -669,16 +677,11 @@ build_round_log_row <- function(state,
     eps_summary <- tibble::as_tibble(fit$epsilon_summary)
     if (nrow(eps_summary) >= 1L) {
       epsilon_mean <- eps_summary$epsilon_mean[[1L]] %||% epsilon_mean
-      epsilon_p2.5 <- (eps_summary[["epsilon_p2.5"]] %||%
-        eps_summary[["epsilon_ci95_low"]] %||% NA_real_)[[1L]]
-      epsilon_p5 <- (eps_summary[["epsilon_p5"]] %||%
-        eps_summary[["epsilon_ci90_low"]] %||% NA_real_)[[1L]]
-      epsilon_p50 <- (eps_summary[["epsilon_p50"]] %||%
-        eps_summary[["epsilon_median"]] %||% NA_real_)[[1L]]
-      epsilon_p95 <- (eps_summary[["epsilon_p95"]] %||%
-        eps_summary[["epsilon_ci90_high"]] %||% NA_real_)[[1L]]
-      epsilon_p97.5 <- (eps_summary[["epsilon_p97.5"]] %||%
-        eps_summary[["epsilon_ci95_high"]] %||% NA_real_)[[1L]]
+      epsilon_p2.5 <- (eps_summary[["epsilon_p2.5"]] %||% NA_real_)[[1L]]
+      epsilon_p5 <- (eps_summary[["epsilon_p5"]] %||% NA_real_)[[1L]]
+      epsilon_p50 <- (eps_summary[["epsilon_p50"]] %||% NA_real_)[[1L]]
+      epsilon_p95 <- (eps_summary[["epsilon_p95"]] %||% NA_real_)[[1L]]
+      epsilon_p97.5 <- (eps_summary[["epsilon_p97.5"]] %||% NA_real_)[[1L]]
     }
   }
 
@@ -692,16 +695,11 @@ build_round_log_row <- function(state,
     b_summary <- tibble::as_tibble(fit$b_summary)
     if (nrow(b_summary) >= 1L) {
       b_mean <- b_summary$b_mean[[1L]] %||% NA_real_
-      b_p2.5 <- (b_summary[["b_p2.5"]] %||%
-        b_summary[["b_ci95_low"]] %||% NA_real_)[[1L]]
-      b_p5 <- (b_summary[["b_p5"]] %||%
-        b_summary[["b_ci90_low"]] %||% NA_real_)[[1L]]
-      b_p50 <- (b_summary[["b_p50"]] %||%
-        b_summary[["b_median"]] %||% NA_real_)[[1L]]
-      b_p95 <- (b_summary[["b_p95"]] %||%
-        b_summary[["b_ci90_high"]] %||% NA_real_)[[1L]]
-      b_p97.5 <- (b_summary[["b_p97.5"]] %||%
-        b_summary[["b_ci95_high"]] %||% NA_real_)[[1L]]
+      b_p2.5 <- (b_summary[["b_p2.5"]] %||% NA_real_)[[1L]]
+      b_p5 <- (b_summary[["b_p5"]] %||% NA_real_)[[1L]]
+      b_p50 <- (b_summary[["b_p50"]] %||% NA_real_)[[1L]]
+      b_p95 <- (b_summary[["b_p95"]] %||% NA_real_)[[1L]]
+      b_p97.5 <- (b_summary[["b_p97.5"]] %||% NA_real_)[[1L]]
     }
   }
 

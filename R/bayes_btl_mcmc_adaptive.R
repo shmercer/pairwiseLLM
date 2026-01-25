@@ -358,10 +358,11 @@ summarize_draws <- function(draws) {
 
   epsilon_summary <- tibble::tibble(
     epsilon_mean = as.double(mean(epsilon_draws)),
-    epsilon_ci90_low = as.double(stats::quantile(epsilon_draws, probs = 0.05, names = FALSE)),
-    epsilon_ci90_high = as.double(stats::quantile(epsilon_draws, probs = 0.95, names = FALSE)),
-    epsilon_ci95_low = as.double(stats::quantile(epsilon_draws, probs = 0.025, names = FALSE)),
-    epsilon_ci95_high = as.double(stats::quantile(epsilon_draws, probs = 0.975, names = FALSE))
+    epsilon_p2.5 = as.double(stats::quantile(epsilon_draws, probs = 0.025, names = FALSE)),
+    epsilon_p5 = as.double(stats::quantile(epsilon_draws, probs = 0.05, names = FALSE)),
+    epsilon_p50 = as.double(stats::quantile(epsilon_draws, probs = 0.5, names = FALSE)),
+    epsilon_p95 = as.double(stats::quantile(epsilon_draws, probs = 0.95, names = FALSE)),
+    epsilon_p97.5 = as.double(stats::quantile(epsilon_draws, probs = 0.975, names = FALSE))
   )
 
   list(
@@ -418,18 +419,37 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   if (is.null(epsilon_summary) || !is.data.frame(epsilon_summary)) {
     rlang::abort("`mcmc_fit$epsilon_summary` must be a data frame.")
   }
-  if (!"epsilon_mean" %in% names(epsilon_summary)) {
-    rlang::abort("`mcmc_fit$epsilon_summary` must include `epsilon_mean`.")
-  }
+  epsilon_summary <- tibble::as_tibble(epsilon_summary)
+  required_eps <- c(
+    "epsilon_mean",
+    "epsilon_p2.5",
+    "epsilon_p5",
+    "epsilon_p50",
+    "epsilon_p95",
+    "epsilon_p97.5"
+  )
+  .adaptive_required_cols(epsilon_summary, "epsilon_summary", required_eps)
   epsilon_mean <- epsilon_summary$epsilon_mean[[1L]]
   if (!is.numeric(epsilon_mean) || length(epsilon_mean) != 1L || !is.finite(epsilon_mean)) {
     rlang::abort("`mcmc_fit$epsilon_summary$epsilon_mean` must be a finite numeric scalar.")
+  }
+
+  b_summary <- mcmc_fit$b_summary %||% NULL
+  if (!is.null(b_summary)) {
+    if (!is.data.frame(b_summary)) {
+      rlang::abort("`mcmc_fit$b_summary` must be a data frame.")
+    }
+    b_summary <- tibble::as_tibble(b_summary)
+    required_b <- c("b_mean", "b_p2.5", "b_p5", "b_p50", "b_p95", "b_p97.5")
+    .adaptive_required_cols(b_summary, "b_summary", required_b)
   }
 
   fit <- list(
     theta_draws = theta_draws,
     theta_mean = theta_mean,
     epsilon_mean = as.double(epsilon_mean),
+    epsilon_summary = epsilon_summary,
+    b_summary = b_summary %||% NULL,
     diagnostics = mcmc_fit$diagnostics %||% NULL,
     raw_mcmc_fit = mcmc_fit
   )

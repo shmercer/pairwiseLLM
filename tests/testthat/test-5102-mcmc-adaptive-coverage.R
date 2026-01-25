@@ -74,7 +74,14 @@ testthat::test_that("as_v3_fit_contract_from_mcmc rejects bad shapes", {
   base_fit <- list(
     draws = list(theta = theta_draws, epsilon = c(0.1, 0.2)),
     theta_summary = tibble::tibble(item_id = ids, theta_mean = c(0.1, 0.2)),
-    epsilon_summary = tibble::tibble(epsilon_mean = 0.2),
+    epsilon_summary = tibble::tibble(
+      epsilon_mean = 0.2,
+      epsilon_p2.5 = 0.12,
+      epsilon_p5 = 0.14,
+      epsilon_p50 = 0.2,
+      epsilon_p95 = 0.28,
+      epsilon_p97.5 = 0.3
+    ),
     diagnostics = list()
   )
 
@@ -148,7 +155,14 @@ testthat::test_that("as_v3_fit_contract_from_mcmc rejects bad shapes", {
   )
 
   bad_eps_value <- base_fit
-  bad_eps_value$epsilon_summary <- tibble::tibble(epsilon_mean = NA_real_)
+  bad_eps_value$epsilon_summary <- tibble::tibble(
+    epsilon_mean = NA_real_,
+    epsilon_p2.5 = 0.12,
+    epsilon_p5 = 0.14,
+    epsilon_p50 = 0.2,
+    epsilon_p95 = 0.28,
+    epsilon_p97.5 = 0.3
+  )
   testthat::expect_error(
     pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_eps_value, ids),
     "finite numeric scalar"

@@ -471,6 +471,11 @@ NULL
     state$posterior$mcmc_config_used <- mcmc_fit$mcmc_config_used %||% list()
     fit_contract <- as_v3_fit_contract_from_mcmc(mcmc_fit, ids = state$ids)
     state$fit <- fit_contract
+    # Use posterior mean from the fit contract (avoid prior fallback).
+    epsilon_mean <- fit_contract$epsilon_mean %||% NULL
+    if (is.numeric(epsilon_mean) && length(epsilon_mean) == 1L && is.finite(epsilon_mean)) {
+      state$posterior$epsilon_mean <- as.double(epsilon_mean)
+    }
     refit_performed <- TRUE
     if (do_refit) {
       state$last_refit_at <- as.integer(state$comparisons_observed)

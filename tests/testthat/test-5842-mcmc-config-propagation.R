@@ -102,6 +102,27 @@ testthat::test_that("refit stores mcmc config used on state", {
   state$new_since_refit <- 1L
 
   used <- list(chains = 2L, parallel_chains = 2L, core_fraction = 0.8)
+  make_mcmc_fit <- function(ids) {
+    theta_draws <- matrix(
+      0,
+      nrow = 2,
+      ncol = length(ids),
+      dimnames = list(NULL, ids)
+    )
+    list(
+      draws = list(theta = theta_draws, epsilon = c(0.1, 0.12)),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = tibble::tibble(
+        epsilon_mean = 0.1,
+        epsilon_p2.5 = 0.01,
+        epsilon_p5 = 0.02,
+        epsilon_p50 = 0.1,
+        epsilon_p95 = 0.2,
+        epsilon_p97.5 = 0.21
+      ),
+      diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+    )
+  }
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_get_refit_fit(
       state,
@@ -110,10 +131,10 @@ testthat::test_that("refit stores mcmc config used on state", {
       seed = NULL
     ),
     .fit_bayes_btl_mcmc_adaptive = function(...) {
-      list(mcmc_config_used = used)
-    },
-    as_v3_fit_contract_from_mcmc = function(mcmc_fit, ids) {
-      list(theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, ids)))
+      ids <- state$ids
+      mcmc_fit <- make_mcmc_fit(ids)
+      mcmc_fit$mcmc_config_used <- used
+      mcmc_fit
     },
     .env = asNamespace("pairwiseLLM")
   )

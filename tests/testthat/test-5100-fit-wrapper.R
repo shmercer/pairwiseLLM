@@ -55,8 +55,8 @@ testthat::test_that(".fit_bayes_btl_mcmc_adaptive returns required outputs", {
 
   epsilon_cols <- c(
     "epsilon_mean",
-    "epsilon_ci90_low", "epsilon_ci90_high",
-    "epsilon_ci95_low", "epsilon_ci95_high"
+    "epsilon_p2.5", "epsilon_p5", "epsilon_p50",
+    "epsilon_p95", "epsilon_p97.5"
   )
   expect_true(all(epsilon_cols %in% names(fit$epsilon_summary)))
   expect_true(is.numeric(fit$epsilon_summary$epsilon_mean))
