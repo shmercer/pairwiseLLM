@@ -57,6 +57,10 @@ testthat::test_that("normalize_openai_reasoning preserves GPT-5.1 none", {
 
 testthat::test_that("normalize_openai_reasoning validates inputs", {
   testthat::expect_error(
+    normalize_openai_reasoning(1, "low", include_thoughts = FALSE),
+    "model"
+  )
+  testthat::expect_error(
     normalize_openai_reasoning("gpt-5", 1, include_thoughts = FALSE),
     "reasoning"
   )
@@ -142,6 +146,39 @@ testthat::test_that("normalize_openai_sampling does not enforce for chat.complet
 testthat::test_that("normalize_openai_sampling validates endpoint", {
   testthat::expect_error(
     normalize_openai_sampling(
+      model = 1,
+      endpoint = "responses",
+      reasoning_effort = NULL,
+      temperature = NULL,
+      top_p = NULL,
+      logprobs = NULL
+    ),
+    "model"
+  )
+  testthat::expect_error(
+    normalize_openai_sampling(
+      model = "gpt-5",
+      endpoint = "responses",
+      reasoning_effort = 1,
+      temperature = NULL,
+      top_p = NULL,
+      logprobs = NULL
+    ),
+    "reasoning_effort"
+  )
+  testthat::expect_error(
+    normalize_openai_sampling(
+      model = "gpt-5",
+      endpoint = NA_character_,
+      reasoning_effort = NULL,
+      temperature = NULL,
+      top_p = NULL,
+      logprobs = NULL
+    ),
+    "endpoint"
+  )
+  testthat::expect_error(
+    normalize_openai_sampling(
       model = "gpt-5",
       endpoint = "invalid",
       reasoning_effort = NULL,
@@ -161,6 +198,10 @@ testthat::test_that("normalize_openai_service_tier maps and validates tiers", {
   testthat::expect_equal(normalize_openai_service_tier("priority"), "priority")
   testthat::expect_equal(normalize_openai_service_tier("auto"), "auto")
 
+  testthat::expect_error(
+    normalize_openai_service_tier(1),
+    "service_tier"
+  )
   testthat::expect_error(
     normalize_openai_service_tier("gold"),
     "service_tier"

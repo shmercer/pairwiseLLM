@@ -64,6 +64,11 @@ until the budget is exhausted, no feasible pairs remain, or
 Running this function will submit LLM comparisons and will incur API usage
 costs for hosted backends. For larger runs, prefer batch mode so you can
 checkpoint and control polling.
+
+Model variants, stopping gates, and canonical outputs match
+\code{adaptive_rank_start()}. Each refit occurs after \code{refit_B}
+new results, and stop checks apply the diagnostics, reliability, and
+stability gates described there.
 }
 \examples{
 \dontrun{

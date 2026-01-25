@@ -369,3 +369,72 @@ testthat::test_that("select_batch increases exploit count when explore undershoo
   out <- pairwiseLLM:::select_batch(state, candidates, config, seed = 1L)
   expect_equal(nrow(out), 0L)
 })
+
+testthat::test_that("filter duplicate candidates validates inputs and handles policies", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  config <- pairwiseLLM:::adaptive_v3_config(state$N, list(dup_max_count = 2L, dup_p_margin = 0.05))
+
+  expect_error(
+    pairwiseLLM:::.adaptive_filter_duplicate_candidates("bad", state, config),
+    "data frame"
+  )
+
+  bad_ids <- tibble::tibble(
+    i_id = "A",
+    j_id = "Z",
+    unordered_key = "A:Z",
+    utility = 0.1,
+    p_mean = 0.5
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_filter_duplicate_candidates(bad_ids, state, config),
+    "state\\$ids"
+  )
+
+  self_pairs <- tibble::tibble(
+    i_id = "A",
+    j_id = "A",
+    unordered_key = "A:A",
+    utility = 0.1,
+    p_mean = 0.5
+  )
+  out_self <- pairwiseLLM:::.adaptive_filter_duplicate_candidates(self_pairs, state, config)
+  expect_equal(nrow(out_self), 0L)
+
+  state$unordered_count <- integer()
+  candidates <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B",
+    utility = 0.2,
+    p_mean = 0.5
+  )
+  out_missing_counts <- pairwiseLLM:::.adaptive_filter_duplicate_candidates(candidates, state, config)
+  expect_equal(nrow(out_missing_counts), 1L)
+
+  state$unordered_count <- c("A:B" = 2L, "A:C" = 0L)
+  state$posterior$U_dup_threshold <- NA_real_
+  candidates <- tibble::tibble(
+    i_id = c("A", "A"),
+    j_id = c("B", "C"),
+    unordered_key = c("A:B", "A:C"),
+    utility = c(0.9, 0.2),
+    p_mean = c(0.5, 0.5)
+  )
+  out_threshold <- pairwiseLLM:::.adaptive_filter_duplicate_candidates(candidates, state, config)
+  expect_equal(nrow(out_threshold), 1L)
+  expect_equal(out_threshold$unordered_key[[1L]], "A:C")
+
+  state$posterior$U_dup_threshold <- 0.1
+  relaxed <- pairwiseLLM:::.adaptive_filter_duplicate_candidates(
+    candidates,
+    state,
+    config,
+    dup_policy = "relaxed"
+  )
+  expect_true(any(relaxed$unordered_key == "A:B"))
+})

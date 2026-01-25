@@ -70,3 +70,31 @@ testthat::test_that("diagnostics_gate uses stricter ESS near stop", {
   expect_true(pairwiseLLM:::diagnostics_gate(fit, config, near_stop = FALSE))
   expect_false(pairwiseLLM:::diagnostics_gate(fit, config, near_stop = TRUE))
 })
+
+testthat::test_that("diagnostics_gate reads diagnostics fields directly from fit", {
+  config <- pairwiseLLM:::adaptive_v3_config(
+    3L,
+    list(
+      max_rhat = 1.05,
+      min_ess_bulk = 200,
+      min_ess_bulk_near_stop = 500
+    )
+  )
+
+  fit <- list(divergences = 0L, max_rhat = 1.01, min_ess_bulk = 300)
+  testthat::expect_true(pairwiseLLM:::diagnostics_gate(fit, config))
+})
+
+testthat::test_that("diagnostics_gate returns FALSE when diagnostics fields are missing", {
+  config <- pairwiseLLM:::adaptive_v3_config(
+    3L,
+    list(
+      max_rhat = 1.05,
+      min_ess_bulk = 200,
+      min_ess_bulk_near_stop = 500
+    )
+  )
+
+  fit <- list(divergences = 0L, max_rhat = 1.01)
+  testthat::expect_false(pairwiseLLM:::diagnostics_gate(fit, config))
+})

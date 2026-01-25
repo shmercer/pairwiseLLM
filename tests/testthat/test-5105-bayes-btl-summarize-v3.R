@@ -45,3 +45,26 @@ testthat::test_that("finalize_adaptive_ranking supports v3 draws", {
   expect_true(is.list(out$rank_summary))
   expect_true(all(c("win_prob", "win_prob_btl") %in% names(out$adjacent_win_probs)))
 })
+
+testthat::test_that("finalize_adaptive_ranking validates mcmc_fit inputs", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 1L))
+
+  testthat::expect_error(
+    pairwiseLLM:::finalize_adaptive_ranking(state, mcmc_fit = 1),
+    "mcmc_fit"
+  )
+
+  testthat::expect_error(
+    pairwiseLLM:::finalize_adaptive_ranking(state, mcmc_fit = list()),
+    "theta_draws"
+  )
+
+  theta_draws <- matrix(c(1, 2, 2, 3), nrow = 2, byrow = TRUE)
+  colnames(theta_draws) <- state$ids
+  out <- pairwiseLLM:::finalize_adaptive_ranking(state, mcmc_fit = list(theta_draws = theta_draws))
+  testthat::expect_true(is.list(out$theta_summary))
+})

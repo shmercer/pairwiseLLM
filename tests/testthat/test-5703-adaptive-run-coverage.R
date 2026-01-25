@@ -34,6 +34,7 @@ testthat::test_that("adaptive_get_refit_fit validates refit_B and batch_size", {
   )
 })
 
+
 testthat::test_that("adaptive_update_dup_threshold validates utilities", {
   samples <- tibble::tibble(
     ID = c("A", "B"),

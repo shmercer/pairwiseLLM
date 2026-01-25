@@ -77,6 +77,9 @@ testthat::test_that("summary helpers handle draw extraction and repeats", {
     pairwiseLLM:::.adaptive_extract_theta_draws(list(theta_draws = theta_draws), state$ids),
     theta_draws
   )
+  testthat::expect_null(
+    pairwiseLLM:::.adaptive_extract_theta_draws(list(other = 1), state$ids)
+  )
 
   testthat::with_mocked_bindings(
     .btl_mcmc_v3_theta_draws = function(draws, item_id) theta_draws,

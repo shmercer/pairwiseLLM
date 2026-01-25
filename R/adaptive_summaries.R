@@ -265,12 +265,32 @@
 #' \code{n_pairs_failed} (newly failed attempts since the previous log), and
 #' \code{backlog_unjudged} (scheduled minus completed, measured after
 #' scheduling). Candidate health is captured by \code{candidate_starved} when
-#' fewer than the target pairs are selected.
+#' fewer than the target pairs are selected. This summary omits detailed
+#' fallback-stage fields; see \code{adaptive_rank_start()} for the full
+#' \code{batch_log} schema.
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param last_n Optional positive integer; return only the last \code{n} rows.
 #' @param include_optional Logical; include optional diagnostic columns.
-#' @return A tibble with one row per iteration.
+#' @return A tibble with one row per iteration. Required columns:
+#'   \describe{
+#'     \item{\code{iter}}{Iteration index.}
+#'     \item{\code{phase}}{Phase label.}
+#'     \item{\code{mode}}{Run mode.}
+#'     \item{\code{iter_start_time}}{Iteration start time (UTC).}
+#'     \item{\code{batch_size_target}}{Target batch size.}
+#'     \item{\code{n_pairs_selected}}{Pairs scheduled this iteration.}
+#'     \item{\code{n_pairs_completed}}{New results observed since last log.}
+#'     \item{\code{candidate_starved}}{TRUE when fewer than target pairs were
+#'     scheduled.}
+#'     \item{\code{reason_short_batch}}{Reason for short batch, if any.}
+#'     \item{\code{n_explore_selected}}{Exploration pairs scheduled.}
+#'     \item{\code{n_exploit_selected}}{Exploitation pairs scheduled.}
+#'   }
+#'   Optional columns (when \code{include_optional = TRUE}) include
+#'   \code{n_pairs_failed}, \code{backlog_unjudged}, exploration/exploitation
+#'   targets, candidate counts, configuration used, utility percentiles, exit
+#'   path markers, diagnostics gates, and stop indicators.
 #' @export
 summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) {
   last_n <- .adaptive_summary_validate_last_n(last_n)
@@ -389,12 +409,14 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
 #' present with \code{NA} values when a parameter is not part of a model
 #' variant. Stopping metrics report posterior quality (e.g.,
 #' \code{reliability_EAP}) and stability checks (e.g.,
-#' \code{rank_stability_pass}) without recomputation.
+#' \code{rank_stability_pass}) without recomputation. See
+#' \code{adaptive_rank_start()} for the full \code{round_log} column
+#' definitions.
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param last_n Optional positive integer; return only the last \code{n} rows.
 #' @param include_optional Logical; include optional diagnostic columns.
-#' @return A tibble with one row per refit.
+#' @return A tibble with one row per refit (canonical \code{round_log} schema).
 #' @export
 summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   last_n <- .adaptive_summary_validate_last_n(last_n)
@@ -431,6 +453,12 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #'
 #' Build an item-level diagnostics summary from the canonical item summary. This
 #' is a pure view and does not recompute posterior draws or exposure metrics.
+#'
+#' @details
+#' Rank percentiles are computed from the per-draw induced ranks (lower is
+#' better). Rank uncertainty grows when draws disagree on the ordering. Degree
+#' and position exposure metrics summarize how frequently each item was shown
+#' and whether it appeared as the first option (A position).
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param posterior Optional item summary table (or list containing

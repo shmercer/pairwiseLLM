@@ -8,3 +8,14 @@ testthat::test_that("compute_gini_degree matches expected cases", {
     "`deg` must be non-negative."
   )
 })
+
+testthat::test_that("compute_gini_posA handles degree adjustments and empty rates", {
+  testthat::expect_equal(
+    compute_gini_posA(c(1, 2), deg = c(2, 4)),
+    0
+  )
+
+  testthat::expect_true(
+    is.na(compute_gini_posA(c(1, 2), deg = c(0, 0)))
+  )
+})

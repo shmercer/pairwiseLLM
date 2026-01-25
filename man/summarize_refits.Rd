@@ -14,7 +14,7 @@ summarize_refits(state, last_n = NULL, include_optional = TRUE)
 \item{include_optional}{Logical; include optional diagnostic columns.}
 }
 \value{
-A tibble with one row per refit.
+A tibble with one row per refit (canonical \code{round_log} schema).
 }
 \description{
 Build a per-refit diagnostics summary from the adaptive round log. This is
@@ -36,5 +36,7 @@ Percentile columns are fixed (e.g.,
 present with \code{NA} values when a parameter is not part of a model
 variant. Stopping metrics report posterior quality (e.g.,
 \code{reliability_EAP}) and stability checks (e.g.,
-\code{rank_stability_pass}) without recomputation.
+\code{rank_stability_pass}) without recomputation. See
+\code{adaptive_rank_start()} for the full \code{round_log} column
+definitions.
 }

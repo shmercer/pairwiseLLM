@@ -43,18 +43,10 @@ For batch mode: one of \code{"openai"}, \code{"anthropic"}, or
 \code{batch_size}, and \code{n_segments}. The list is extensible in future
 versions.}
 
-\item{adaptive}{A list of adaptive configuration overrides. Supported keys
-include: \code{d1} (default 8), \code{bins} (8), \code{mix_struct} (0.70),
-\code{within_adj_split} (0.50), \code{exploration_frac} (0.05),
-\code{per_item_cap} (NULL), \code{batch_overrides} (list),
-\code{max_refill_rounds} (2),
-\code{max_replacements} (NULL), \code{max_iterations} (50),
-\code{budget_max} (NULL; defaults to 0.40 * choose(N,2)), and
-\code{M1_target} (NULL; defaults to floor(N * d1 / 2)). The list is
-extensible in future versions. Use \code{adaptive$v3} to override v3
-config fields such as \code{progress}, \code{progress_every_iter},
-\code{progress_every_refit}, and \code{progress_level}. Progress printing
-is enabled by default; set \code{adaptive$v3$progress = FALSE} for silent
+\item{adaptive}{A list of adaptive configuration overrides. See the
+"Adaptive configuration" and "Canonical outputs" sections for v3-specific
+controls, stopping thresholds, and logging behavior. Progress printing is
+enabled by default; set \code{adaptive$v3$progress = FALSE} for silent
 runs or adjust \code{progress_level} for more detail.}
 
 \item{paths}{A list with optional \code{state_path} and \code{output_dir}.
@@ -70,6 +62,7 @@ A list with:
 \item{state_path}{Path where the state was saved (batch mode only).}
 \item{submission_info}{Metadata needed for resume, including pairs submitted.}
 \item{next_action}{List with \code{action} and \code{reason}.}
+\item{final_summary}{Cached summary payload, if produced.}
 }
 }
 \description{
@@ -92,22 +85,293 @@ outcomes are ingested only after a backend returns results. Failed attempts
 are logged separately and never treated as observations. This separation
 prevents retries or missing results from contaminating the ranking signal.
 
-The adaptive engine uses a confirmation window (CW) based on observed
-comparisons, along with a two-check confirmation rule, to decide when to
-stop refinement. Fast inference provides selection-grade posterior draws for
-adaptive selection and stopping checks. Final uncertainty summaries are
-produced only after the full MCMC audit.
+Adaptive refits are triggered when at least \code{refit_B} new observations
+arrive since the last refit (or when the first refit is needed). Each refit
+updates the posterior used for scheduling and stopping checks. When stopping
+criteria are met, the state moves to \code{mode = "stopped"} and no new
+batches are scheduled.
 
 All LLM outputs are normalized into a single canonical results schema,
 independent of backend, and all downstream logic operates exclusively on
 this canonical form.
+}
+\section{Model variants}{
+
+Adaptive v3 tracks model variants in the fit contract and logs. Supported
+labels include \code{"BTL"}, \code{"BTL+epsilon"}, \code{"BTL+b"}, and
+\code{"BTL+b+epsilon"}. Variants that omit parameters still carry the full
+output schema: percentile columns such as \code{epsilon_p2.5} or \code{b_p50}
+remain present and are \code{NA} when the parameter is not estimated. The
+current MCMC backend provides epsilon draws; \code{model_variant} is recorded
+when supplied by the backend and is otherwise \code{NA}.
+}
+
+\section{Stopping logic}{
+
+Stopping is a staged gate evaluated only after a refit. First, the run must
+meet the minimum observed comparisons (\code{M1_target}). Next, diagnostics
+must pass: zero divergences, \code{max_rhat} below \code{max_rhat}, and
+\code{min_ess_bulk} above a threshold (using \code{min_ess_bulk_near_stop}
+once near-stop checks begin). If diagnostics pass, reliability must exceed
+\code{eap_reliability_min}. Stability is evaluated against a lagged refit:
+theta means must have correlation at least \code{theta_corr_min} and a
+relative SD change no larger than \code{theta_sd_rel_change_max}, and ranks
+must have Spearman correlation at least \code{rank_spearman_min}. A stop is
+declared only after \code{stability_consecutive} consecutive refits pass all
+checks. Refits are eligible for stability checks only after
+\code{min_refits_for_stability} and once a lag of \code{stability_lag} refits
+is available.
+}
+
+\section{Adaptive configuration}{
+
+The \code{adaptive} list controls run-scale scheduling:
+\describe{
+\item{\code{d1}}{Warm-start degree target used to compute the default
+\code{M1_target} (\code{floor(N * d1 / 2)}).}
+\item{\code{bins}}{Reserved for legacy binning logic; currently unused.}
+\item{\code{mix_struct}}{Reserved for legacy mixing logic; currently unused.}
+\item{\code{within_adj_split}}{Reserved for legacy adjacency splits;
+currently unused.}
+\item{\code{exploration_frac}}{Reserved for legacy exploration logic;
+currently unused in v3 scheduling.}
+\item{\code{per_item_cap}}{Reserved per-item cap; currently unused.}
+\item{\code{batch_overrides}}{Named list overriding batch sizes computed by
+\code{compute_batch_sizes()} (e.g., \code{BATCH1}, \code{BATCH2},
+\code{BATCH3}, \code{CW}).}
+\item{\code{max_refill_rounds}}{Maximum number of live replacement rounds
+attempted when submissions are missing.}
+\item{\code{max_replacements}}{Maximum number of replacement pairs per
+iteration; defaults to the batch size.}
+\item{\code{max_iterations}}{Maximum number of start/resume iterations in
+wrappers such as \code{adaptive_rank_run_live()}.}
+\item{\code{budget_max}}{Hard cap on scheduled comparisons; defaults to
+\code{floor(0.40 * choose(N, 2))}.}
+\item{\code{M1_target}}{Minimum observed comparisons before stop checks
+are eligible; defaults to \code{floor(N * d1 / 2)}.}
+}
+The \code{adaptive$v3} list overrides v3 configuration fields:
+\describe{
+\item{\code{W}}{Window size used in candidate generation.}
+\item{\code{A_anchors}}{Anchor count used in candidate selection.}
+\item{\code{C_max}}{Maximum candidate pairs considered per stage.}
+\item{\code{refit_B}}{Refit cadence in newly observed pairs.}
+\item{\code{batch_size}}{Target pairs scheduled per iteration.}
+\item{\code{explore_rate}}{Fraction of exploration pairs within a batch.}
+\item{\code{min_degree}}{Warm-start minimum degree per item.}
+\item{\code{target_mean_degree}}{Optional warm-start mean degree target;
+expands the initial schedule when set.}
+\item{\code{dup_p_margin}}{Repeat allowance margin for ambiguous pairs.}
+\item{\code{dup_max_count}}{Maximum repeated presentations per unordered
+pair.}
+\item{\code{dup_utility_quantile}}{Utility quantile for repeat allowance.}
+\item{\code{hard_cap_frac}}{Fraction of all unordered pairs that triggers
+the hard stop (\code{0.40} by default).}
+\item{\code{eap_reliability_min}}{Minimum \code{reliability_EAP} for stop
+eligibility.}
+\item{\code{min_refits_for_stability}}{Minimum refits before stability
+checks are evaluated.}
+\item{\code{stability_lag}}{Lag (in refits) used to compare theta and rank
+stability.}
+\item{\code{theta_corr_min}}{Minimum correlation between current and lagged
+theta means.}
+\item{\code{theta_sd_rel_change_max}}{Maximum relative change in theta SD
+versus the lagged refit.}
+\item{\code{rank_spearman_min}}{Minimum Spearman correlation between
+current and lagged ranks.}
+\item{\code{stability_consecutive}}{Consecutive refits required to stop.}
+\item{\code{max_rhat}}{Maximum allowed R-hat for diagnostics pass.}
+\item{\code{min_ess_bulk}}{Minimum bulk ESS for diagnostics pass.}
+\item{\code{min_ess_bulk_near_stop}}{Minimum bulk ESS once near-stop checks
+have begun.}
+\item{\code{require_divergences_zero}}{Reserved; diagnostics currently
+require zero divergences regardless of this value.}
+\item{\code{repair_max_cycles}}{Maximum repair cycles before giving up.}
+\item{\code{progress}}{Logical toggle for progress reporting.}
+\item{\code{progress_every_iter}}{Iteration cadence for progress prints.}
+\item{\code{progress_every_refit}}{Refit cadence for progress prints.}
+\item{\code{progress_level}}{Verbosity level: \code{"basic"},
+\code{"refit"}, or \code{"full"}.}
+\item{\code{write_outputs}}{Whether to write \code{batch_log},
+\code{round_log}, and \code{item_summary} to disk.}
+\item{\code{output_dir}}{Directory used for adaptive artifacts when
+\code{write_outputs = TRUE}.}
+\item{\code{keep_draws}}{Whether to write thinned posterior draws to disk.}
+\item{\code{thin_draws}}{Thinning interval for saved draws.}
+\item{\code{cmdstan}}{CmdStan configuration list (chains, parallelism,
+core fraction, output directory).}
+}
+}
+
+\section{Canonical outputs}{
 
 Canonical adaptive outputs are \code{batch_log}, \code{round_log}, and
-\code{item_summary}. The logs live on the state as \code{state$batch_log} and
-\code{state$config$round_log}. When outputs are written, the final
-\code{item_summary} is cached on \code{state$config$item_summary}; summary
-helpers are pure views of these tables.
+\code{item_summary}. They are stored on the state as \code{state$batch_log},
+\code{state$config$round_log}, and \code{state$config$item_summary}. When
+\code{adaptive$v3$write_outputs = TRUE}, they are written to
+\code{batch_log.rds}, \code{round_log.rds}, and \code{item_summary.rds} in
+\code{output_dir}. Summary helpers such as \code{summarize_iterations()},
+\code{summarize_refits()}, and \code{summarize_items()} are pure views of
+these tables.
+
+Batch log columns (one row per iteration):
+\describe{
+\item{\code{iter}}{Iteration index (starting at 1).}
+\item{\code{phase}}{Phase label: \code{"phase1"}, \code{"phase2"}, or
+\code{"phase3"}.}
+\item{\code{mode}}{Run mode: \code{"warm_start"}, \code{"adaptive"}, or
+\code{"stopped"}.}
+\item{\code{created_at}}{Timestamp when the iteration log row was created.}
+\item{\code{batch_size_target}}{Target number of pairs for the iteration.}
+\item{\code{n_pairs_selected}}{Pairs scheduled in this iteration.}
+\item{\code{n_pairs_completed}}{New results observed since the previous
+iteration log.}
+\item{\code{n_pairs_failed}}{New failed attempts since the previous log.}
+\item{\code{backlog_unjudged}}{Scheduled minus completed pairs after
+scheduling.}
+\item{\code{n_explore_target}}{Target exploration pairs in the batch.}
+\item{\code{n_explore_selected}}{Exploration pairs scheduled.}
+\item{\code{n_exploit_target}}{Target exploitation pairs in the batch.}
+\item{\code{n_exploit_selected}}{Exploitation pairs scheduled.}
+\item{\code{n_candidates_generated}}{Candidate pairs generated before
+filtering.}
+\item{\code{n_candidates_after_filters}}{Candidates remaining after
+filtering (duplicates, degree, constraints).}
+\item{\code{candidate_starved}}{TRUE when fewer than target pairs were
+scheduled due to candidate scarcity.}
+\item{\code{fallback_used}}{Fallback mode used when starved (from
+\code{.adaptive_fallback_used_levels()}).}
+\item{\code{fallback_path}}{Fallback path taken for the iteration.}
+\item{\code{a1_stage}}{Stage label for the first fallback attempt.}
+\item{\code{a1_W_used}}{Window size used in stage 1.}
+\item{\code{a1_anchor_pool}}{Anchor pool used in stage 1.}
+\item{\code{a1_n_generated}}{Candidates generated in stage 1.}
+\item{\code{a1_n_survive}}{Candidates surviving filters in stage 1.}
+\item{\code{a1_n_selected}}{Pairs selected in stage 1.}
+\item{\code{a2_stage}}{Stage label for the second fallback attempt.}
+\item{\code{a2_W_used}}{Window size used in stage 2.}
+\item{\code{a2_anchor_pool}}{Anchor pool used in stage 2.}
+\item{\code{a2_n_generated}}{Candidates generated in stage 2.}
+\item{\code{a2_n_survive}}{Candidates surviving filters in stage 2.}
+\item{\code{a2_n_selected}}{Pairs selected in stage 2.}
+\item{\code{a3_stage}}{Stage label for the third fallback attempt.}
+\item{\code{a3_W_used}}{Window size used in stage 3.}
+\item{\code{a3_anchor_pool}}{Anchor pool used in stage 3.}
+\item{\code{a3_n_generated}}{Candidates generated in stage 3.}
+\item{\code{a3_n_survive}}{Candidates surviving filters in stage 3.}
+\item{\code{a3_n_selected}}{Pairs selected in stage 3.}
+\item{\code{aN_tried}}{Number of fallback stages attempted.}
+\item{\code{aN_best_stage}}{Best fallback stage selected.}
+\item{\code{aN_best_n_generated}}{Candidates generated in best stage.}
+\item{\code{aN_best_n_survive}}{Candidates surviving in best stage.}
+\item{\code{aN_best_n_selected}}{Pairs selected in best stage.}
+\item{\code{starvation_reason}}{Primary starvation reason label (from
+\code{.adaptive_starvation_reason_levels()}).}
+\item{\code{reason_short_batch}}{Human-readable reason for short batch.}
+\item{\code{W_used}}{Window size actually used for selection.}
+\item{\code{explore_rate_used}}{Exploration rate actually used.}
+\item{\code{utility_selected_p50}}{Median utility of selected pairs.}
+\item{\code{utility_selected_p90}}{90th percentile utility of selected
+pairs.}
+\item{\code{utility_candidate_p90}}{90th percentile utility of candidate
+pool.}
+\item{\code{iter_exit_path}}{Exit path label for the iteration.}
 }
+
+Round log columns (one row per refit, canonical stop audit trail):
+\describe{
+\item{\code{round_id}}{Refit index (starting at 1).}
+\item{\code{iter_at_refit}}{Iteration index at refit time.}
+\item{\code{mode}}{Run mode at refit.}
+\item{\code{model_variant}}{Model variant label (see Model variants).}
+\item{\code{n_items}}{Number of items in the run.}
+\item{\code{total_pairs}}{Total unordered pairs, \eqn{N(N-1)/2}.}
+\item{\code{hard_cap_threshold}}{Hard cap count based on
+\code{hard_cap_frac}.}
+\item{\code{n_unique_pairs_seen}}{Unique unordered pairs observed at least
+once.}
+\item{\code{scheduled_pairs}}{Total scheduled pairs.}
+\item{\code{completed_pairs}}{Total observed results.}
+\item{\code{backlog_unjudged}}{Scheduled minus completed at refit time.}
+\item{\code{new_pairs}}{Pairs observed since the previous refit.}
+\item{\code{proposed_pairs}}{Candidate pairs evaluated at refit time.}
+\item{\code{batch_size}}{Batch size target in effect at refit.}
+\item{\code{window_W}}{Window size used for candidate generation.}
+\item{\code{exploration_rate}}{Exploration rate used for candidate mixes.}
+\item{\code{mean_degree}}{Mean item degree at refit.}
+\item{\code{min_degree}}{Minimum item degree at refit.}
+\item{\code{pos_balance_mean}}{Mean position balance across items.}
+\item{\code{pos_balance_sd}}{SD of position balance across items.}
+\item{\code{epsilon_mean}}{Posterior mean of epsilon (NA if absent).}
+\item{\code{epsilon_p2.5}}{2.5th percentile of epsilon (NA if absent).}
+\item{\code{epsilon_p5}}{5th percentile of epsilon (NA if absent).}
+\item{\code{epsilon_p50}}{Median epsilon (NA if absent).}
+\item{\code{epsilon_p95}}{95th percentile of epsilon (NA if absent).}
+\item{\code{epsilon_p97.5}}{97.5th percentile of epsilon (NA if absent).}
+\item{\code{b_mean}}{Posterior mean of b (NA if absent).}
+\item{\code{b_p2.5}}{2.5th percentile of b (NA if absent).}
+\item{\code{b_p5}}{5th percentile of b (NA if absent).}
+\item{\code{b_p50}}{Median b (NA if absent).}
+\item{\code{b_p95}}{95th percentile of b (NA if absent).}
+\item{\code{b_p97.5}}{97.5th percentile of b (NA if absent).}
+\item{\code{divergences}}{Total divergences reported by MCMC.}
+\item{\code{max_rhat}}{Maximum R-hat across parameters.}
+\item{\code{min_ess_bulk}}{Minimum bulk ESS across parameters.}
+\item{\code{diagnostics_pass}}{Diagnostics gate status.}
+\item{\code{reliability_EAP}}{EAP reliability statistic.}
+\item{\code{theta_sd_eap}}{SD of theta means at refit.}
+\item{\code{rho_theta_lag}}{Correlation between current and lagged theta
+means.}
+\item{\code{delta_sd_theta_lag}}{Relative change in theta SD vs lagged
+refit.}
+\item{\code{rho_rank_lag}}{Spearman correlation between current and lagged
+ranks.}
+\item{\code{rank_stability_pass}}{Rank stability gate status.}
+\item{\code{stop_passes}}{Consecutive refits meeting all stop checks.}
+\item{\code{stop_eligible}}{TRUE when refit count meets stability minimum.}
+\item{\code{stop_decision}}{TRUE when stop criteria are met.}
+\item{\code{stop_reason}}{Stop reason label when stopped.}
+\item{\code{starve_rate_since_last_refit}}{Fraction of iterations since
+last refit that were candidate-starved.}
+\item{\code{fallback_rate_since_last_refit}}{Fraction of iterations since
+last refit that used fallback selection.}
+\item{\code{fallback_used_mode}}{Most frequent fallback mode since last
+refit.}
+\item{\code{starvation_reason_mode}}{Most frequent starvation reason since
+last refit.}
+\item{\code{mcmc_chains}}{Number of MCMC chains used.}
+\item{\code{mcmc_parallel_chains}}{Number of chains run in parallel.}
+\item{\code{mcmc_core_fraction}}{Core fraction used to size parallel
+chains.}
+\item{\code{mcmc_cores_detected_physical}}{Detected physical cores.}
+\item{\code{mcmc_cores_detected_logical}}{Detected logical cores.}
+\item{\code{mcmc_threads_per_chain}}{Threads per chain (if set).}
+\item{\code{mcmc_cmdstanr_version}}{CmdStanR version used for the refit.}
+}
+
+Item summary columns (one row per item):
+\describe{
+\item{\code{ID}}{Item identifier.}
+\item{\code{deg}}{Observed degree (total comparisons involving the item).}
+\item{\code{posA_prop}}{Share of comparisons where the item appeared in
+position A.}
+\item{\code{theta_mean}}{Posterior mean of item strength.}
+\item{\code{theta_p2.5}}{2.5th percentile of theta.}
+\item{\code{theta_p5}}{5th percentile of theta.}
+\item{\code{theta_p50}}{Median theta.}
+\item{\code{theta_p95}}{95th percentile of theta.}
+\item{\code{theta_p97.5}}{97.5th percentile of theta.}
+\item{\code{theta_sd}}{Posterior SD of theta.}
+\item{\code{rank_mean}}{Mean induced rank (lower is better).}
+\item{\code{rank_p2.5}}{2.5th percentile of rank.}
+\item{\code{rank_p5}}{5th percentile of rank.}
+\item{\code{rank_p50}}{Median rank.}
+\item{\code{rank_p95}}{95th percentile of rank.}
+\item{\code{rank_p97.5}}{97.5th percentile of rank.}
+\item{\code{rank_sd}}{Posterior SD of rank.}
+}
+}
+
 \examples{
 # Minimal synthetic setup (no submission).
 samples <- tibble::tibble(

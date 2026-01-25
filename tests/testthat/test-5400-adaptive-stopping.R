@@ -39,6 +39,29 @@ test_that("compute_adjacent_win_probs uses ranking order", {
   expect_equal(out$B_id, c("B", "C"))
 })
 
+test_that("compute_adjacent_win_probs validates ranking ids", {
+  theta_draws <- matrix(
+    c(2, 1, 0,
+      3, 2, 1),
+    nrow = 2,
+    byrow = TRUE
+  )
+  colnames(theta_draws) <- c("A", "B", "C")
+
+  expect_error(
+    pairwiseLLM:::compute_adjacent_win_probs(theta_draws, ranking_ids = "A"),
+    "at least two"
+  )
+  expect_error(
+    pairwiseLLM:::compute_adjacent_win_probs(theta_draws, ranking_ids = c("A", "A", "B")),
+    "duplicates"
+  )
+  expect_error(
+    pairwiseLLM:::compute_adjacent_win_probs(theta_draws, ranking_ids = c("A", "B", "D")),
+    "match"
+  )
+})
+
 test_that("fit_bayes_btl_mcmc runs when CmdStan is available", {
   testthat::skip_if_not_installed("cmdstanr")
   cmdstan_path <- tryCatch(cmdstanr::cmdstan_path(), error = function(e) "")

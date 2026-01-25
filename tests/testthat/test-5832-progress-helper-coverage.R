@@ -6,6 +6,8 @@ testthat::test_that("adaptive progress helpers cover value formatting and gating
   expect_equal(pairwiseLLM:::.adaptive_progress_value(NA_real_), "NA")
   expect_equal(pairwiseLLM:::.adaptive_progress_value(TRUE), "TRUE")
   expect_equal(pairwiseLLM:::.adaptive_progress_value(2), "2")
+  expect_equal(pairwiseLLM:::.adaptive_progress_value_with_note(2, note = NULL), "2")
+  expect_equal(pairwiseLLM:::.adaptive_progress_value_with_note(NULL, note = "missing"), "NA (missing)")
 
   numeric_out <- pairwiseLLM:::.adaptive_progress_value(0.1234, digits = 2)
   expect_true(grepl("0.12", numeric_out))
@@ -61,6 +63,13 @@ testthat::test_that("adaptive progress formatting includes short batch details",
   expect_true(grepl("starved=TRUE", line))
   expect_true(grepl("fallback=expand_2x", line))
   expect_true(grepl("reason=dup_gate_exhausted", line))
+})
+
+testthat::test_that("adaptive progress formatting rejects non-data frames", {
+  testthat::expect_error(
+    pairwiseLLM:::.adaptive_progress_format_iter_line("bad"),
+    "data frame"
+  )
 })
 
 testthat::test_that("adaptive progress formatting omits starved and reason when absent", {
@@ -222,6 +231,17 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
   })
   expect_true(isTRUE(refit_result))
   expect_true(any(grepl("Reliability:", refit_out)))
+})
+
+testthat::test_that("adaptive progress emitters reject non-state inputs", {
+  testthat::expect_error(
+    pairwiseLLM:::.adaptive_progress_emit_iter(list()),
+    "adaptive_state"
+  )
+  testthat::expect_error(
+    pairwiseLLM:::.adaptive_progress_emit_refit(list(), tibble::tibble()),
+    "adaptive_state"
+  )
 })
 
 testthat::test_that("adaptive progress emitters print when configured", {

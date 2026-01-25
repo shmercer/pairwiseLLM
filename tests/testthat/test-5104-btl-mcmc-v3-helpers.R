@@ -92,6 +92,11 @@ testthat::test_that("btl mcmc v3 unpacking handles list and matrix draws", {
     pairwiseLLM:::.btl_mcmc_v3_unpack_draws(bad_mat),
     "must include theta and epsilon"
   )
+
+  expect_error(
+    pairwiseLLM:::.btl_mcmc_v3_unpack_draws("bad"),
+    "list or matrix"
+  )
 })
 
 testthat::test_that("btl mcmc v3 collects diagnostics and notes missing fields", {

@@ -40,3 +40,9 @@ are appended.
 Build an item-level diagnostics summary from the canonical item summary. This
 is a pure view and does not recompute posterior draws or exposure metrics.
 }
+\details{
+Rank percentiles are computed from the per-draw induced ranks (lower is
+better). Rank uncertainty grows when draws disagree on the ordering. Degree
+and position exposure metrics summarize how frequently each item was shown
+and whether it appeared as the first option (A position).
+}
