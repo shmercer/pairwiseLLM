@@ -61,7 +61,7 @@ adaptive_v3_defaults <- function(N) {
     min_ess_bulk_near_stop = 1000,
     require_divergences_zero = TRUE,
     repair_max_cycles = 3L,
-    progress = FALSE,
+    progress = TRUE,
     progress_every_iter = 1L,
     progress_every_refit = 1L,
     progress_level = "refit",

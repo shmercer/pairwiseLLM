@@ -51,6 +51,7 @@ testthat::test_that("adaptive progress formatting includes short batch details",
     batch_size_target = 2L,
     n_pairs_completed = 0L,
     candidate_starved = TRUE,
+    fallback_used = "expand_2x",
     reason_short_batch = "dup_gate_exhausted"
   )
 
@@ -58,6 +59,7 @@ testthat::test_that("adaptive progress formatting includes short batch details",
   expect_true(grepl("phase2", line))
   expect_true(grepl("iter=3", line))
   expect_true(grepl("starved=TRUE", line))
+  expect_true(grepl("fallback=expand_2x", line))
   expect_true(grepl("reason=dup_gate_exhausted", line))
 })
 
@@ -69,27 +71,25 @@ testthat::test_that("adaptive progress formatting omits starved and reason when 
     batch_size_target = 2L,
     n_pairs_completed = 1L,
     candidate_starved = NA,
+    fallback_used = "base_window",
     reason_short_batch = NA_character_
   )
 
   line <- pairwiseLLM:::.adaptive_progress_format_iter_line(batch_row)
   expect_false(grepl("starved=", line))
+  expect_false(grepl("fallback=", line))
   expect_false(grepl("reason=", line))
 })
 
 testthat::test_that("adaptive progress refit block formats diagnostics and stability", {
-  samples <- tibble::tibble(
-    ID = c("A", "B", "C"),
-    text = c("alpha", "bravo", "charlie")
-  )
-  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
-  state$phase <- "phase2"
-  state$checks_passed_in_row <- 1L
-
-  config <- list(progress_level = "full", stability_consecutive = 2L)
+  config <- list(progress_level = "full", stability_consecutive = 2L, eap_reliability_min = 0.9)
   round_row <- tibble::tibble(
     round_id = 2L,
     iter_at_refit = 5L,
+    mode = "adaptive",
+    scheduled_pairs = 10L,
+    completed_pairs = 8L,
+    backlog_unjudged = 2L,
     divergences = 0L,
     max_rhat = 1.01,
     min_ess_bulk = 900,
@@ -101,6 +101,10 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
     delta_sd_theta_lag = 0.01,
     rho_rank_lag = 0.99,
     rank_stability_pass = TRUE,
+    stop_passes = 1L,
+    stop_eligible = TRUE,
+    stop_decision = FALSE,
+    stop_reason = NA_character_,
     n_unique_pairs_seen = 3L,
     hard_cap_threshold = 12L,
     hard_cap_reached = FALSE,
@@ -111,18 +115,43 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
     mcmc_core_fraction = 0.8
   )
 
-  lines <- pairwiseLLM:::.adaptive_progress_format_refit_block(round_row, state, config)
+  lines <- pairwiseLLM:::.adaptive_progress_format_refit_block(round_row, config)
   expect_true(any(grepl("Stability:", lines)))
+  expect_true(any(grepl("Stop:", lines)))
   expect_true(any(grepl("Hard cap:", lines)))
+  expect_true(any(grepl("Reliability:", lines)))
+  expect_true(any(grepl("pass=FALSE", lines)))
 
   expect_error(
-    pairwiseLLM:::.adaptive_progress_format_refit_block(1, state, config),
+    pairwiseLLM:::.adaptive_progress_format_refit_block(1, config),
     "round_row"
   )
-  expect_error(
-    pairwiseLLM:::.adaptive_progress_format_refit_block(tibble::tibble(), list(), config),
-    "adaptive_state"
+})
+
+testthat::test_that("adaptive progress refit block marks stability as not eligible when NA", {
+  config <- list(progress_level = "refit", stability_consecutive = 2L)
+  round_row <- tibble::tibble(
+    round_id = 1L,
+    iter_at_refit = 2L,
+    mode = "adaptive",
+    scheduled_pairs = 4L,
+    completed_pairs = 2L,
+    backlog_unjudged = 2L,
+    reliability_EAP = 0.9,
+    diagnostics_pass = TRUE,
+    theta_sd_eap = 0.12,
+    rho_theta_lag = NA_real_,
+    delta_sd_theta_lag = NA_real_,
+    rho_rank_lag = NA_real_,
+    rank_stability_pass = NA,
+    stop_passes = 0L,
+    stop_eligible = FALSE,
+    stop_decision = FALSE,
+    stop_reason = NA_character_
   )
+
+  lines <- pairwiseLLM:::.adaptive_progress_format_refit_block(round_row, config)
+  expect_true(any(grepl("not eligible yet", lines)))
 })
 
 testthat::test_that("adaptive progress emitters respect cadence and level", {
@@ -192,7 +221,7 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
     refit_result <- pairwiseLLM:::.adaptive_progress_emit_refit(state, round_row)
   })
   expect_true(isTRUE(refit_result))
-  expect_true(any(grepl("rel_EAP", refit_out)))
+  expect_true(any(grepl("Reliability:", refit_out)))
 })
 
 testthat::test_that("adaptive progress emitters print when configured", {

@@ -14,6 +14,9 @@ testthat::test_that("refit progress block includes EAP reliability", {
   round_row <- tibble::tibble(
     round_id = 1L,
     iter_at_refit = 1L,
+    scheduled_pairs = 10L,
+    completed_pairs = 8L,
+    backlog_unjudged = 2L,
     divergences = 0L,
     max_rhat = 1.01,
     min_ess_bulk = 1200,
@@ -25,6 +28,10 @@ testthat::test_that("refit progress block includes EAP reliability", {
     delta_sd_theta_lag = 0.01,
     rho_rank_lag = 0.99,
     rank_stability_pass = TRUE,
+    stop_passes = 1L,
+    stop_eligible = TRUE,
+    stop_decision = FALSE,
+    stop_reason = NA_character_,
     n_unique_pairs_seen = 3L,
     hard_cap_threshold = 12L,
     hard_cap_reached = FALSE,
@@ -39,5 +46,5 @@ testthat::test_that("refit progress block includes EAP reliability", {
     pairwiseLLM:::.adaptive_progress_emit_refit(state, round_row)
   })
 
-  testthat::expect_true(any(grepl("rel_EAP", out)))
+  testthat::expect_true(any(grepl("Reliability:", out)))
 })

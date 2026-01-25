@@ -32,6 +32,7 @@ testthat::test_that("iteration console line matches batch_log values", {
       candidate_stats = list(n_candidates_generated = 3L, n_candidates_after_filters = 3L),
       candidate_starved = TRUE,
       fallback_stage = "starved",
+      fallback_used = "expand_2x",
       W_used = config$W,
       config = config,
       exploration_only = FALSE,
@@ -46,6 +47,7 @@ testthat::test_that("iteration console line matches batch_log values", {
   testthat::expect_true(grepl("selected=2/3", line))
   testthat::expect_true(grepl("completed=1", line))
   testthat::expect_true(grepl("starved=TRUE", line))
+  testthat::expect_true(grepl("fallback=expand_2x", line))
   testthat::expect_true(grepl("reason=starved", line))
   testthat::expect_identical(batch_row$candidate_starved[[1L]], TRUE)
 })
@@ -93,9 +95,16 @@ testthat::test_that("refit console block matches round_log gate values", {
     pairwiseLLM:::.adaptive_progress_emit_refit(state, round_row, config)
   )
   text <- paste(output, collapse = "\n")
-  expected_diag <- paste0("diagnostics_pass=", ifelse(round_row$diagnostics_pass, "TRUE", "FALSE"))
+  expected_diag <- paste0("Diagnostics: pass=", ifelse(round_row$diagnostics_pass, "TRUE", "FALSE"))
+  expected_pairs <- paste0(
+    "Pairs: completed=",
+    pairwiseLLM:::.adaptive_progress_value(round_row$completed_pairs),
+    "/",
+    pairwiseLLM:::.adaptive_progress_value(round_row$scheduled_pairs)
+  )
   expected_theta <- paste0("Theta: sd_eap=", pairwiseLLM:::.adaptive_progress_value(round_row$theta_sd_eap))
 
   testthat::expect_true(grepl(expected_diag, text, fixed = TRUE))
+  testthat::expect_true(grepl(expected_pairs, text, fixed = TRUE))
   testthat::expect_true(grepl(expected_theta, text, fixed = TRUE))
 })
