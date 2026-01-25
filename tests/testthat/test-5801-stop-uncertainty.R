@@ -19,10 +19,7 @@ testthat::test_that("theta_sd subset median controls uncertainty pass", {
     -4.8, 12, 14, 16, 3, 5.2
   ), nrow = 2, byrow = TRUE)
   colnames(pass_draws) <- state$ids
-  pass_fit <- list(
-    theta_draws = pass_draws,
-    theta_mean = stats::setNames(colMeans(pass_draws), state$ids)
-  )
+  pass_fit <- make_v3_fit_contract(state$ids, theta_draws = pass_draws)
   utilities <- tibble::tibble(utility = c(0.1, 0.05, 0.03))
   pass_metrics <- compute_stop_metrics(state, pass_fit, utilities, config_v3)
   testthat::expect_true(pass_metrics$theta_sd_pass)
@@ -32,10 +29,7 @@ testthat::test_that("theta_sd subset median controls uncertainty pass", {
     -2, 12, 14, 16, -2, 8
   ), nrow = 2, byrow = TRUE)
   colnames(fail_draws) <- state$ids
-  fail_fit <- list(
-    theta_draws = fail_draws,
-    theta_mean = stats::setNames(colMeans(fail_draws), state$ids)
-  )
+  fail_fit <- make_v3_fit_contract(state$ids, theta_draws = fail_draws)
   fail_metrics <- compute_stop_metrics(state, fail_fit, utilities, config_v3)
   testthat::expect_false(fail_metrics$theta_sd_pass)
 })
@@ -61,10 +55,7 @@ testthat::test_that("stopping subset tie-breaking is deterministic by item id", 
     0.2, 1.1, 16, 10.1, 20
   ), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
   metrics <- compute_stop_metrics(state, fit, tibble::tibble(utility = 0.1), config_v3)
   testthat::expect_true(metrics$theta_sd_pass)
 })

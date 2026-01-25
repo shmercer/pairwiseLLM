@@ -143,8 +143,8 @@ testthat::test_that("repair scheduling handles target bounds and duplicates", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(c(0, 0), state$ids),
+        fit = make_v3_fit_contract(
+          state$ids,
           theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
           diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
         ),
@@ -213,8 +213,8 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(c(0, 0), state$ids),
+        fit = make_v3_fit_contract(
+          state$ids,
           theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
           diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
         ),
@@ -350,8 +350,8 @@ testthat::test_that("repair schedule handles empty utilities and selection", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(c(0, 0), state$ids),
+        fit = make_v3_fit_contract(
+          state$ids,
           theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
           diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
         ),

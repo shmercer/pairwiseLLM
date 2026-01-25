@@ -23,10 +23,7 @@ testthat::test_that("utility top-K median controls U_pass", {
     byrow = TRUE
   )
   colnames(draws) <- state$ids
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   utilities_pass <- tibble::tibble(utility = c(0.12, 0.1, 0.08, 0.05))
   metrics_pass <- compute_stop_metrics(state, fit, utilities_pass, config_v3)

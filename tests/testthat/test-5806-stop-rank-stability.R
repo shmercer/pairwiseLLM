@@ -20,10 +20,7 @@ testthat::test_that("rank stability metrics use adjacent posterior probabilities
     3, 0, 2, 1
   ), nrow = 3, byrow = TRUE)
   colnames(draws) <- state$ids
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   utilities <- tibble::tibble(utility = 0.1)
   metrics <- pairwiseLLM:::compute_stop_metrics(state, fit, utilities, config_v3)
@@ -44,10 +41,7 @@ testthat::test_that("rank stability metrics use adjacent posterior probabilities
     4, 3, 2, 1
   ), nrow = 3, byrow = TRUE)
   colnames(strong_draws) <- state$ids
-  strong_fit <- list(
-    theta_draws = strong_draws,
-    theta_mean = stats::setNames(colMeans(strong_draws), state$ids)
-  )
+  strong_fit <- make_v3_fit_contract(state$ids, theta_draws = strong_draws)
 
   strong_metrics <- pairwiseLLM:::compute_stop_metrics(state, strong_fit, utilities, config_v3)
   testthat::expect_true(strong_metrics$rank_stability_pass)
@@ -76,10 +70,7 @@ testthat::test_that("weak boundary tolerance allows exactly five percent", {
   draws[1, "I10"] <- base_means[10] - 3
   draws[1, "I11"] <- base_means[11] + 3
 
-  fit_pass <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), ids)
-  )
+  fit_pass <- make_v3_fit_contract(ids, theta_draws = draws)
   metrics_pass <- pairwiseLLM:::compute_stop_metrics(
     state,
     fit_pass,
@@ -91,10 +82,7 @@ testthat::test_that("weak boundary tolerance allows exactly five percent", {
 
   draws[1, "I12"] <- base_means[12] - 3
   draws[1, "I13"] <- base_means[13] + 3
-  fit_fail <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), ids)
-  )
+  fit_fail <- make_v3_fit_contract(ids, theta_draws = draws)
   metrics_fail <- pairwiseLLM:::compute_stop_metrics(
     state,
     fit_fail,

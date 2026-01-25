@@ -17,7 +17,7 @@ testthat::test_that("item summary percentiles match posterior draws", {
     byrow = TRUE,
     dimnames = list(NULL, state$ids)
   )
-  fit <- list(theta_draws = theta_draws)
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
 
   summary <- pairwiseLLM:::build_item_summary(state, fit)
   probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)

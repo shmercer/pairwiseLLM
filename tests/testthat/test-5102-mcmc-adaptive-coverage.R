@@ -73,15 +73,6 @@ testthat::test_that("as_v3_fit_contract_from_mcmc rejects bad shapes", {
 
   base_fit <- list(
     draws = list(theta = theta_draws, epsilon = c(0.1, 0.2)),
-    theta_summary = tibble::tibble(item_id = ids, theta_mean = c(0.1, 0.2)),
-    epsilon_summary = tibble::tibble(
-      epsilon_mean = 0.2,
-      epsilon_p2.5 = 0.12,
-      epsilon_p5 = 0.14,
-      epsilon_p50 = 0.2,
-      epsilon_p95 = 0.28,
-      epsilon_p97.5 = 0.3
-    ),
     diagnostics = list()
   )
 
@@ -119,53 +110,25 @@ testthat::test_that("as_v3_fit_contract_from_mcmc rejects bad shapes", {
     "column names"
   )
 
-  bad_summary <- base_fit
-  bad_summary$theta_summary <- "nope"
+  bad_eps_draws <- base_fit
+  bad_eps_draws$draws$epsilon <- "nope"
   testthat::expect_error(
-    pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_summary, ids),
-    "theta_summary"
+    pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_eps_draws, ids),
+    "epsilon"
   )
 
-  missing_ids <- base_fit
-  missing_ids$theta_summary$item_id <- c("a", NA_character_)
+  short_eps_draws <- base_fit
+  short_eps_draws$draws$epsilon <- 0.1
   testthat::expect_error(
-    pairwiseLLM:::as_v3_fit_contract_from_mcmc(missing_ids, ids),
-    "non-missing"
+    pairwiseLLM:::as_v3_fit_contract_from_mcmc(short_eps_draws, ids),
+    "at least two"
   )
 
-  wrong_ids <- base_fit
-  wrong_ids$theta_summary$item_id <- c("a", "c")
+  bad_eps_bounds <- base_fit
+  bad_eps_bounds$draws$epsilon <- c(-0.1, 0.2)
   testthat::expect_error(
-    pairwiseLLM:::as_v3_fit_contract_from_mcmc(wrong_ids, ids),
-    "cover all"
-  )
-
-  bad_eps_summary <- base_fit
-  bad_eps_summary$epsilon_summary <- "nope"
-  testthat::expect_error(
-    pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_eps_summary, ids),
-    "epsilon_summary"
-  )
-
-  missing_eps <- base_fit
-  missing_eps$epsilon_summary <- tibble::tibble(other = 0.2)
-  testthat::expect_error(
-    pairwiseLLM:::as_v3_fit_contract_from_mcmc(missing_eps, ids),
-    "epsilon_mean"
-  )
-
-  bad_eps_value <- base_fit
-  bad_eps_value$epsilon_summary <- tibble::tibble(
-    epsilon_mean = NA_real_,
-    epsilon_p2.5 = 0.12,
-    epsilon_p5 = 0.14,
-    epsilon_p50 = 0.2,
-    epsilon_p95 = 0.28,
-    epsilon_p97.5 = 0.3
-  )
-  testthat::expect_error(
-    pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_eps_value, ids),
-    "finite numeric scalar"
+    pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_eps_bounds, ids),
+    "within \\[0, 1\\]"
   )
 })
 

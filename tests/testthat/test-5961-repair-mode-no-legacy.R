@@ -63,10 +63,9 @@ testthat::test_that("repair mode uses exploration-only selection and skips legac
   state <- make_state_with_result()
   ns <- asNamespace("pairwiseLLM")
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    epsilon_mean = 0.1,
     diagnostics = list(divergences = 0L, max_rhat = 1.20, min_ess_bulk = 1000)
   )
   candidate_tbl <- tibble::tibble(
@@ -134,10 +133,9 @@ testthat::test_that("repair mode stops after bounded retry failures", {
   ))
   ns <- asNamespace("pairwiseLLM")
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
-    epsilon_mean = 0.1,
     diagnostics = list(divergences = 0L, max_rhat = 1.20, min_ess_bulk = 1000)
   )
   candidate_tbl <- tibble::tibble(

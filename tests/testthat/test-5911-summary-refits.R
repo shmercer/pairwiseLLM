@@ -9,7 +9,8 @@ testthat::test_that("summarize_refits returns stable schema", {
   state$pos1 <- c(A = 1L, B = 1L, C = 0L)
   state$pos_count <- state$pos1
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(
       c(
         0.2, -0.1, 0.0,

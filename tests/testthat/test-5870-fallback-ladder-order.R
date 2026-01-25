@@ -12,10 +12,7 @@ testthat::test_that("fallback ladder attempts stages in order and stops on first
 
   theta_draws <- matrix(rep(seq_len(state$N), each = 2L), nrow = 2L, byrow = TRUE)
   colnames(theta_draws) <- state$ids
-  fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = stats::setNames(colMeans(theta_draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
   pair_ids <- utils::combn(state$ids, 2)
   keys <- pairwiseLLM:::make_unordered_key(pair_ids[1L, ], pair_ids[2L, ])

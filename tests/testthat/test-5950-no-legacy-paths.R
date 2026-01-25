@@ -28,8 +28,8 @@ testthat::test_that("adaptive scheduling avoids legacy paths", {
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(rep(0, state$N), state$ids),
+        fit = make_v3_fit_contract(
+          state$ids,
           theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
           diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
         ),

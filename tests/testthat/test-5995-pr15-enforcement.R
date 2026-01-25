@@ -64,10 +64,9 @@ testthat::test_that("PR15 gate: no legacy scheduler is invoked from public API",
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(rep(0, state$N), state$ids),
-          theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids)),
-          diagnostics = list()
+        fit = make_v3_fit_contract(
+          state$ids,
+          theta_draws = matrix(0, nrow = 2, ncol = state$N, dimnames = list(NULL, state$ids))
         ),
         refit_performed = TRUE
       )
@@ -155,7 +154,8 @@ testthat::test_that("PR15 gate: round_log builder matches contract schema", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list())
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(
       c(0.1, -0.1, 0.2, -0.2),
       nrow = 2,

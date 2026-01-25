@@ -16,9 +16,7 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
   if (!is.list(fit) || is.null(fit$theta_draws)) {
     rlang::abort("`fit` must include `theta_draws`.")
   }
-  if (!is.null(fit$epsilon_mean) && !is.null(fit$diagnostics)) {
-    validate_v3_fit_contract(fit, ids = state$ids)
-  }
+  validate_v3_fit_contract(fit, ids = state$ids)
   theta_draws <- fit$theta_draws
   if (!is.matrix(theta_draws) || !is.numeric(theta_draws)) {
     rlang::abort("`fit$theta_draws` must be a numeric matrix.")

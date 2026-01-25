@@ -20,8 +20,8 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
         .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
           list(
             state = state,
-            fit = list(
-              theta_mean = stats::setNames(c(0, 0, 0), state$ids),
+            fit = make_v3_fit_contract(
+              state$ids,
               theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
               diagnostics = list(divergences = 1L, max_rhat = 1.5, min_ess_bulk = 10)
             ),
@@ -75,8 +75,8 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
       list(
         state = state,
-        fit = list(
-          theta_mean = stats::setNames(c(0, 0, 0), state$ids),
+        fit = make_v3_fit_contract(
+          state$ids,
           theta_draws = matrix(0, nrow = 2, ncol = 3, dimnames = list(NULL, state$ids)),
           diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
         ),

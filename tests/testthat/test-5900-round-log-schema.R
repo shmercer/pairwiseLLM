@@ -97,21 +97,15 @@ testthat::test_that("round log builder emits a single typed row", {
   state$stop_candidate <- TRUE
   state$checks_passed_in_row <- 2L
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(
       c(0.1, -0.1, 0.2, -0.2),
       nrow = 2,
       byrow = TRUE,
       dimnames = list(NULL, state$ids)
     ),
-    b_summary = tibble::tibble(
-      b_mean = 0.15,
-      b_p2.5 = 0.01,
-      b_p5 = 0.02,
-      b_p50 = 0.15,
-      b_p95 = 0.28,
-      b_p97.5 = 0.3
-    ),
+    b_draws = c(0.15, 0.15),
     model_variant = "mcmc"
   )
   metrics <- list(

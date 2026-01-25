@@ -26,10 +26,7 @@ testthat::test_that("hard cap stop triggers immediately", {
     byrow = TRUE
   )
   colnames(draws) <- state$ids
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   utilities <- tibble::tibble(utility = c(0.1, 0.05, 0.03))
   metrics <- compute_stop_metrics(state, fit, utilities, config_v3)

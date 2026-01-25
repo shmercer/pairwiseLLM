@@ -26,7 +26,7 @@ testthat::test_that("item summary defaults can expand rows", {
   testthat::expect_identical(colnames(defaults), colnames(pairwiseLLM:::item_summary_schema()))
 })
 
-testthat::test_that("round log builder uses epsilon summary and draws", {
+testthat::test_that("round log builder uses epsilon summaries from fit contract", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -34,27 +34,20 @@ testthat::test_that("round log builder uses epsilon summary and draws", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list())
 
-  draws <- list(
-    theta = matrix(
-      c(
-        0.1, 0.0, -0.1,
-        0.2, -0.1, -0.1
-      ),
-      nrow = 2,
-      byrow = TRUE
+  theta_draws <- matrix(
+    c(
+      0.1, 0.0, -0.1,
+      0.2, -0.1, -0.1
     ),
-    epsilon = c(0.05, 0.07)
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(NULL, state$ids)
   )
-  fit <- list(
-    draws = draws,
-    epsilon_summary = tibble::tibble(
-      epsilon_mean = 0.06,
-      epsilon_p2.5 = 0.04,
-      epsilon_p5 = 0.05,
-      epsilon_p50 = 0.06,
-      epsilon_p95 = 0.07,
-      epsilon_p97.5 = 0.08
-    )
+  epsilon_draws <- c(0.05, 0.07)
+  fit <- make_v3_fit_contract(
+    state$ids,
+    theta_draws = theta_draws,
+    epsilon_draws = epsilon_draws
   )
 
   metrics <- list(
@@ -75,11 +68,16 @@ testthat::test_that("round log builder uses epsilon summary and draws", {
     config = state$config$v3
   )
 
-  testthat::expect_equal(row$epsilon_mean, 0.06)
-  testthat::expect_equal(row$epsilon_p5, 0.05)
-  testthat::expect_equal(row$epsilon_p95, 0.07)
-  testthat::expect_equal(row$epsilon_p2.5, 0.04)
-  testthat::expect_equal(row$epsilon_p97.5, 0.08)
+  eps_probs <- stats::quantile(
+    epsilon_draws,
+    probs = c(0.025, 0.05, 0.95, 0.975),
+    names = FALSE
+  )
+  testthat::expect_equal(row$epsilon_mean, mean(epsilon_draws))
+  testthat::expect_equal(row$epsilon_p5, eps_probs[[2L]])
+  testthat::expect_equal(row$epsilon_p95, eps_probs[[3L]])
+  testthat::expect_equal(row$epsilon_p2.5, eps_probs[[1L]])
+  testthat::expect_equal(row$epsilon_p97.5, eps_probs[[4L]])
 })
 
 testthat::test_that("item summary builder handles missing draws and colnames", {

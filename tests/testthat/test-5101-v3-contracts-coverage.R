@@ -36,14 +36,7 @@ testthat::test_that("validate_v3_fit_contract catches schema violations", {
   ids <- c("a", "b")
   theta_draws <- matrix(c(0.1, 0.2, 0.3, 0.4), nrow = 2, ncol = 2)
   colnames(theta_draws) <- ids
-  theta_mean <- stats::setNames(c(0.1, 0.2), ids)
-
-  base_fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = theta_mean,
-    epsilon_mean = 0.2,
-    diagnostics = list()
-  )
+  base_fit <- make_v3_fit_contract(ids, theta_draws = theta_draws)
 
   testthat::expect_error(
     pairwiseLLM:::validate_v3_fit_contract("bad", ids),

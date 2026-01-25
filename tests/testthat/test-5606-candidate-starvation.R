@@ -10,10 +10,7 @@ testthat::test_that("batch selection fills when feasible", {
 
   theta_draws <- matrix(seq_len(2L * state$N), nrow = 2L, ncol = state$N)
   colnames(theta_draws) <- state$ids
-  fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = stats::setNames(colMeans(theta_draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
   candidates <- pairwiseLLM:::generate_candidates(theta_summary, state, config)
   epsilon_mean <- pairwiseLLM:::.adaptive_epsilon_mean_from_state(state, fit)
@@ -52,10 +49,7 @@ testthat::test_that("candidate starvation is flagged deterministically", {
 
   theta_draws <- matrix(seq_len(2L * state$N), nrow = 2L, ncol = state$N)
   colnames(theta_draws) <- state$ids
-  fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = stats::setNames(colMeans(theta_draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
   candidates <- pairwiseLLM:::generate_candidates(theta_summary, state, config)
   epsilon_mean <- pairwiseLLM:::.adaptive_epsilon_mean_from_state(state, fit)
@@ -107,10 +101,7 @@ testthat::test_that("tiny batches require a starvation flag", {
 
   theta_draws <- matrix(seq_len(2L * state$N), nrow = 2L, ncol = state$N)
   colnames(theta_draws) <- state$ids
-  fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = stats::setNames(colMeans(theta_draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
   candidates <- pairwiseLLM:::generate_candidates(theta_summary, state, config)
   epsilon_mean <- pairwiseLLM:::.adaptive_epsilon_mean_from_state(state, fit)
@@ -158,10 +149,7 @@ testthat::test_that("fallbacks use relax constraints when anchors are blocked", 
     byrow = TRUE
   )
   colnames(theta_draws) <- state$ids
-  fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = stats::setNames(colMeans(theta_draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
 
   base_utilities <- tibble::tibble(
@@ -205,10 +193,7 @@ testthat::test_that("fallbacks can complete at broadened window", {
 
   theta_draws <- matrix(seq_len(2L * state$N), nrow = 2L, ncol = state$N)
   colnames(theta_draws) <- state$ids
-  fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = stats::setNames(colMeans(theta_draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
 
   base_utilities <- tibble::tibble(
@@ -249,7 +234,7 @@ testthat::test_that("select_batch_with_fallbacks validates inputs", {
 
   theta_draws <- matrix(seq_len(2L * state$N), nrow = 2L, ncol = state$N)
   colnames(theta_draws) <- state$ids
-  fit <- list(theta_draws = theta_draws)
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   utilities <- tibble::tibble(
     unordered_key = "A:B",
     i_id = "A",

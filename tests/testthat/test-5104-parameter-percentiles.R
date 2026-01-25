@@ -64,7 +64,8 @@ testthat::test_that("round log uses epsilon percentiles and leaves b fields NA w
     probs = c(0.025, 0.05, 0.5, 0.95, 0.975),
     names = FALSE
   )
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(
       c(0.1, 0.0, -0.1,
         0.2, -0.1, -0.1),
@@ -72,14 +73,7 @@ testthat::test_that("round log uses epsilon percentiles and leaves b fields NA w
       byrow = TRUE,
       dimnames = list(NULL, state$ids)
     ),
-    epsilon_summary = tibble::tibble(
-      epsilon_mean = mean(epsilon_draws),
-      epsilon_p2.5 = eps_probs[[1L]],
-      epsilon_p5 = eps_probs[[2L]],
-      epsilon_p50 = eps_probs[[3L]],
-      epsilon_p95 = eps_probs[[4L]],
-      epsilon_p97.5 = eps_probs[[5L]]
-    )
+    epsilon_draws = epsilon_draws
   )
   metrics <- list(
     theta_sd_median_S = 0.1,

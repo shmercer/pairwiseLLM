@@ -25,11 +25,10 @@ testthat::test_that("adaptive epsilon mean uses v3 contract validation", {
   theta_draws <- matrix(c(0.1, 0.2, 0.2, 0.1), nrow = 2, ncol = 2)
   colnames(theta_draws) <- ids
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    ids,
     theta_draws = theta_draws,
-    theta_mean = stats::setNames(c(0.1, 0.2), ids),
-    epsilon_mean = 0.2,
-    diagnostics = list()
+    epsilon_draws = c(0.2, 0.2)
   )
   state <- list(ids = ids, config = list(v3 = list()))
 
@@ -114,10 +113,9 @@ testthat::test_that("compute_stop_metrics validates v3 fits and utilities", {
     ncol = 3
   )
   colnames(theta_draws) <- state$ids
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = theta_draws,
-    theta_mean = stats::setNames(c(0.1, 0.2, 0.3), state$ids),
-    epsilon_mean = 0.2,
     diagnostics = list(divergences = 0, max_rhat = 1.0, min_ess_bulk = 500)
   )
 

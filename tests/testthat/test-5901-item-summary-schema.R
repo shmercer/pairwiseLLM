@@ -34,7 +34,8 @@ testthat::test_that("item summary builder emits one row per item", {
   )
   state <- adaptive_state_new(samples, config = list(d1 = 2L))
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(
       c(
         0.2, -0.1, -0.1,

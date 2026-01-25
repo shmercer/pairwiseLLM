@@ -5,8 +5,7 @@
 #' @keywords internal
 #' @noRd
 .adaptive_epsilon_mean_from_state <- function(state, fit = NULL) {
-  if (!is.null(state) && is.list(fit) &&
-    !is.null(fit$theta_draws) && !is.null(fit$epsilon_mean) && !is.null(fit$diagnostics)) {
+  if (inherits(state, "adaptive_state") && is.list(fit)) {
     validate_v3_fit_contract(fit, ids = state$ids)
   }
   prior_alpha <- NULL
@@ -30,24 +29,8 @@
   }
 
   eps <- NULL
-  fit_requires_epsilon <- is.list(fit) &&
-    (!is.null(fit$epsilon_summary) || (!is.null(fit$draws) && !is.null(fit$diagnostics)))
   if (is.list(fit)) {
-    eps_summary <- fit$epsilon_summary %||% NULL
-    if (!is.null(eps_summary)) {
-      if (!is.data.frame(eps_summary)) {
-        rlang::abort("`fit$epsilon_summary` must be a tibble with one row.")
-      }
-      if (nrow(eps_summary) != 1L) {
-        rlang::abort("`fit$epsilon_summary` must have exactly one row (PR2 contract).")
-      }
-      if (!"epsilon_mean" %in% names(eps_summary)) {
-        rlang::abort("`fit$epsilon_summary` must include `epsilon_mean` (PR2 contract).")
-      }
-      eps <- eps_summary$epsilon_mean[[1L]]
-    } else if (!is.null(fit$epsilon_mean)) {
-      eps <- fit$epsilon_mean
-    }
+    eps <- fit$epsilon_mean %||% NULL
   }
   if (is.null(eps) && !is.null(state) && is.list(state$posterior)) {
     eps <- state$posterior$epsilon_mean %||% NULL
@@ -56,9 +39,6 @@
     eps <- state$config$v3$epsilon_mean %||% NULL
   }
   if (is.null(eps)) {
-    if (isTRUE(fit_requires_epsilon)) {
-      rlang::abort("`epsilon_mean` missing from fit output; check PR2 epsilon_summary contract.")
-    }
     rlang::warn("Using epsilon prior mean fallback; no posterior epsilon available.")
     eps <- prior_alpha / (prior_alpha + prior_beta)
   }

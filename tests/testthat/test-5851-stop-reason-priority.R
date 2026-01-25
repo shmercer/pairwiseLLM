@@ -38,7 +38,8 @@ testthat::test_that("diagnostics failure takes precedence over v3_converged", {
   state$config$v3 <- config
   state$repair_attempts <- config$repair_max_cycles
 
-  fit <- list(
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(seq_len(2L * state$N), nrow = 2L, ncol = state$N),
     diagnostics = list(divergences = 1L, max_rhat = 1.10, min_ess_bulk = 10)
   )

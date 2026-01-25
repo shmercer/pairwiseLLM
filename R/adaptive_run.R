@@ -141,10 +141,12 @@ NULL
     }
 
     draws <- NULL
-    if (is.list(fit) && !is.null(fit$draws)) {
-      draws <- fit$draws
-    } else if (is.list(fit) && !is.null(fit$theta_draws)) {
-      draws <- list(theta = fit$theta_draws)
+    if (is.list(fit) && !is.null(fit$theta_draws)) {
+      draws <- list(
+        theta = fit$theta_draws,
+        epsilon = fit$epsilon_draws %||% NULL,
+        b = fit$b_draws %||% NULL
+      )
     }
 
     if (!is.null(draws) && !is.null(draws$theta)) {
@@ -154,6 +156,9 @@ NULL
         draws$theta <- theta_draws[keep_idx, , drop = FALSE]
         if (!is.null(draws$epsilon)) {
           draws$epsilon <- draws$epsilon[keep_idx]
+        }
+        if (!is.null(draws$b)) {
+          draws$b <- draws$b[keep_idx]
         }
       }
       draws_path <- file.path(output_dir, "theta_draws.rds")

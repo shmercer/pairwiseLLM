@@ -21,10 +21,7 @@ testthat::test_that("hard cap fraction controls the threshold", {
 
   draws <- matrix(seq(0, 0.9, length.out = 20), nrow = 2L, byrow = TRUE)
   colnames(draws) <- state$ids
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   utilities <- tibble::tibble(utility = c(0.1, 0.05, 0.03))
   metrics <- pairwiseLLM:::compute_stop_metrics(state, fit, utilities, config_v3)
@@ -58,10 +55,7 @@ testthat::test_that("hard cap fraction validation rejects invalid values", {
 
   draws <- matrix(seq(0, 0.4, length.out = 10), nrow = 2L, byrow = TRUE)
   colnames(draws) <- state$ids
-  fit <- list(
-    theta_draws = draws,
-    theta_mean = stats::setNames(colMeans(draws), state$ids)
-  )
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   utilities <- tibble::tibble(utility = c(0.1, 0.05, 0.03))
 

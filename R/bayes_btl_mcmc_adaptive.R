@@ -398,63 +398,24 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   }
   theta_draws <- reorder_theta_draws(theta_draws, ids)
 
-  theta_summary <- mcmc_fit$theta_summary %||% NULL
-  if (is.null(theta_summary) || !is.data.frame(theta_summary)) {
-    rlang::abort("`mcmc_fit$theta_summary` must be a data frame.")
-  }
-  required <- c("item_id", "theta_mean")
-  .adaptive_required_cols(theta_summary, "theta_summary", required)
-  theta_ids <- as.character(theta_summary$item_id)
-  if (anyNA(theta_ids) || any(theta_ids == "")) {
-    rlang::abort("`theta_summary$item_id` must be non-missing.")
-  }
-  idx <- match(ids, theta_ids)
-  if (anyNA(idx)) {
-    rlang::abort("`theta_summary$item_id` must cover all `ids`.")
-  }
-  theta_mean <- as.double(theta_summary$theta_mean[idx])
-  names(theta_mean) <- ids
-
-  epsilon_summary <- mcmc_fit$epsilon_summary %||% NULL
-  if (is.null(epsilon_summary) || !is.data.frame(epsilon_summary)) {
-    rlang::abort("`mcmc_fit$epsilon_summary` must be a data frame.")
-  }
-  epsilon_summary <- tibble::as_tibble(epsilon_summary)
-  required_eps <- c(
-    "epsilon_mean",
-    "epsilon_p2.5",
-    "epsilon_p5",
-    "epsilon_p50",
-    "epsilon_p95",
-    "epsilon_p97.5"
-  )
-  .adaptive_required_cols(epsilon_summary, "epsilon_summary", required_eps)
-  epsilon_mean <- epsilon_summary$epsilon_mean[[1L]]
-  if (!is.numeric(epsilon_mean) || length(epsilon_mean) != 1L || !is.finite(epsilon_mean)) {
-    rlang::abort("`mcmc_fit$epsilon_summary$epsilon_mean` must be a finite numeric scalar.")
+  epsilon_draws <- draws$epsilon %||% draws$epsilon_draws %||% NULL
+  if (!is.null(epsilon_draws) && !is.numeric(epsilon_draws)) {
+    rlang::abort("`mcmc_fit$draws$epsilon` must be numeric when provided.")
   }
 
-  b_summary <- mcmc_fit$b_summary %||% NULL
-  if (!is.null(b_summary)) {
-    if (!is.data.frame(b_summary)) {
-      rlang::abort("`mcmc_fit$b_summary` must be a data frame.")
-    }
-    b_summary <- tibble::as_tibble(b_summary)
-    required_b <- c("b_mean", "b_p2.5", "b_p5", "b_p50", "b_p95", "b_p97.5")
-    .adaptive_required_cols(b_summary, "b_summary", required_b)
+  b_draws <- draws$b %||% draws$b_draws %||% NULL
+  if (!is.null(b_draws) && !is.numeric(b_draws)) {
+    rlang::abort("`mcmc_fit$draws$b` must be numeric when provided.")
   }
 
-  fit <- list(
+  build_v3_fit_contract(
     theta_draws = theta_draws,
-    theta_mean = theta_mean,
-    epsilon_mean = as.double(epsilon_mean),
-    epsilon_summary = epsilon_summary,
-    b_summary = b_summary %||% NULL,
+    epsilon_draws = epsilon_draws,
+    b_draws = b_draws,
     diagnostics = mcmc_fit$diagnostics %||% NULL,
-    raw_mcmc_fit = mcmc_fit
+    model_variant = mcmc_fit$model_variant %||% NA_character_,
+    mcmc_config_used = mcmc_fit$mcmc_config_used %||% NULL
   )
-  validate_v3_fit_contract(fit, ids)
-  fit
 }
 
 #' @keywords internal

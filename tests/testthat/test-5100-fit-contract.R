@@ -27,25 +27,24 @@ testthat::test_that("as_v3_fit_contract_from_mcmc returns v3 contract shape", {
 
   testthat::expect_true(is.list(fit))
   testthat::expect_true(all(c(
-    "theta_draws", "theta_mean", "epsilon_mean", "epsilon_summary", "b_summary", "diagnostics"
+    "theta_draws", "theta_mean", "theta_sd",
+    "epsilon_draws", "epsilon_mean", "epsilon_p50",
+    "b_draws", "b_mean", "b_p50",
+    "diagnostics", "diagnostics_pass",
+    "n_items", "n_draws", "model_variant", "mcmc_config_used"
   ) %in% names(fit)))
   testthat::expect_identical(colnames(fit$theta_draws), ids)
   testthat::expect_identical(names(fit$theta_mean), ids)
   testthat::expect_true(is.numeric(fit$epsilon_mean) && length(fit$epsilon_mean) == 1L)
+  testthat::expect_equal(fit$n_items, length(ids))
+  testthat::expect_equal(fit$n_draws, nrow(fit$theta_draws))
 })
 
 testthat::test_that("validate_v3_fit_contract rejects malformed fits", {
   ids <- c("A", "B")
   theta_draws <- matrix(c(1, 2, 3, 4), nrow = 2, ncol = 2)
   colnames(theta_draws) <- ids
-  theta_mean <- stats::setNames(c(0.1, 0.2), ids)
-
-  base_fit <- list(
-    theta_draws = theta_draws,
-    theta_mean = theta_mean,
-    epsilon_mean = 0.2,
-    diagnostics = list()
-  )
+  base_fit <- make_v3_fit_contract(ids, theta_draws = theta_draws)
 
   missing_cols <- base_fit
   colnames(missing_cols$theta_draws) <- NULL

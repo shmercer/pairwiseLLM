@@ -59,20 +59,21 @@ testthat::test_that("adaptive_write_v3_artifacts thins draws with epsilon", {
     list(write_outputs = TRUE, keep_draws = TRUE, thin_draws = 2L, output_dir = output_dir)
   )
 
-  fit <- list(
-    draws = list(
-      theta = matrix(
-        c(
-          0.1, 0.0, -0.1,
-          0.2, -0.1, -0.1,
-          0.3, -0.2, -0.1,
-          0.4, -0.3, -0.1
-        ),
-        nrow = 4,
-        byrow = TRUE
-      ),
-      epsilon = c(0.01, 0.02, 0.03, 0.04)
-    )
+  theta_draws <- matrix(
+    c(
+      0.1, 0.0, -0.1,
+      0.2, -0.1, -0.1,
+      0.3, -0.2, -0.1,
+      0.4, -0.3, -0.1
+    ),
+    nrow = 4,
+    byrow = TRUE,
+    dimnames = list(NULL, state$ids)
+  )
+  fit <- make_v3_fit_contract(
+    state$ids,
+    theta_draws = theta_draws,
+    epsilon_draws = c(0.01, 0.02, 0.03, 0.04)
   )
 
   pairwiseLLM:::.adaptive_write_v3_artifacts(state, fit = fit, output_dir = output_dir)
@@ -128,10 +129,9 @@ testthat::test_that("adaptive_run_stopping_checks appends round log on refit", {
   )
   state$comparisons_observed <- 1L
 
-  fit <- list(
-    theta_mean = stats::setNames(rep(0, state$N), state$ids),
+  fit <- make_v3_fit_contract(
+    state$ids,
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
-    epsilon_mean = 0.1,
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
 
