@@ -110,20 +110,11 @@
     }
     fallback
   }
-  theta_sd_val <- if ("theta_sd_median" %in% names(row)) {
-    row$theta_sd_median[[1L]]
-  } else if ("theta_sd_eap" %in% names(row)) {
-    row$theta_sd_eap[[1L]]
-  } else {
-    metrics$theta_sd_median_S %||% NA_real_
-  }
-  tau_val <- progress_field("tau", NA_real_)
-  theta_sd_pass <- progress_field("theta_sd_pass", NA)
-  U0_val <- progress_field("U0", state$U0 %||% NA_real_)
-  U_abs_val <- progress_field("U_abs", config$U_abs %||% NA_real_)
-  U_pass_val <- progress_field("U_pass", NA)
-  frac_weak_adj_val <- progress_field("frac_weak_adj", NA_real_)
-  min_adj_prob_val <- progress_field("min_adj_prob", NA_real_)
+  theta_sd_val <- progress_field("theta_sd_eap", NA_real_)
+  rho_theta_lag_val <- progress_field("rho_theta_lag", NA_real_)
+  delta_sd_theta_lag_val <- progress_field("delta_sd_theta_lag", NA_real_)
+  rho_rank_lag_val <- progress_field("rho_rank_lag", NA_real_)
+  rank_stability_pass_val <- progress_field("rank_stability_pass", NA)
   hard_cap_reached_val <- progress_field("hard_cap_reached", NA)
   phase <- state$phase %||% NA_character_
   header <- paste0(
@@ -168,33 +159,32 @@
       "  Gate: diagnostics_pass=", .adaptive_progress_value(row$diagnostics_pass)
     ),
     paste0(
-      "  SD: median_S=", .adaptive_progress_value(theta_sd_val),
-      " tau=", .adaptive_progress_value(tau_val),
-      " pass=", .adaptive_progress_value(theta_sd_pass)
-    ),
-    paste0(
-      "  U: U0=", .adaptive_progress_value(U0_val),
-      " U_abs=", .adaptive_progress_value(U_abs_val),
-      " pass=", .adaptive_progress_value(U_pass_val)
+      "  Theta: sd_eap=", .adaptive_progress_value(theta_sd_val)
     )
   )
 
-  has_stability <- !(is.na(frac_weak_adj_val) &&
-    is.na(min_adj_prob_val) &&
-    is.na(row$rank_stability_pass))
+  has_stability <- !(is.na(rho_theta_lag_val) &&
+    is.na(delta_sd_theta_lag_val) &&
+    is.na(rho_rank_lag_val) &&
+    is.na(rank_stability_pass_val))
   if (isTRUE(has_stability)) {
     lines <- c(
       lines,
       paste0(
-        "  Stability: weak=", .adaptive_progress_value(frac_weak_adj_val),
-        " min_adj=", .adaptive_progress_value(min_adj_prob_val),
-        " pass=", .adaptive_progress_value(row$rank_stability_pass)
+        "  Stability: rho_theta=",
+        .adaptive_progress_value(rho_theta_lag_val),
+        " delta_sd=",
+        .adaptive_progress_value(delta_sd_theta_lag_val),
+        " rho_rank=",
+        .adaptive_progress_value(rho_rank_lag_val),
+        " rank_pass=",
+        .adaptive_progress_value(rank_stability_pass_val)
       )
     )
   }
 
   checks_passed <- state$checks_passed_in_row %||% NA_integer_
-  checks_target <- config$checks_passed_target %||% NA_integer_
+  checks_target <- config$stability_consecutive %||% NA_integer_
   if (!is.na(checks_passed) || !is.na(checks_target)) {
     lines <- c(
       lines,
