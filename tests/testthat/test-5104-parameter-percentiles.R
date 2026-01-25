@@ -23,6 +23,33 @@ testthat::test_that("summarize_draws computes epsilon percentiles from posterior
   testthat::expect_false(isTRUE(all.equal(out$epsilon_summary$epsilon_mean, 2 / 22)))
 })
 
+local_rebind_namespace <- function(ns, name, value) {
+  env <- asNamespace(ns)
+  has_old <- exists(name, envir = env, inherits = FALSE)
+  old <- if (has_old) get(name, envir = env, inherits = FALSE) else NULL
+  locked <- if (has_old) bindingIsLocked(name, env) else FALSE
+  if (locked) {
+    unlockBinding(name, env)
+  }
+  assign(name, value, envir = env)
+  if (locked) {
+    lockBinding(name, env)
+  }
+  function() {
+    if (locked) {
+      unlockBinding(name, env)
+    }
+    if (has_old) {
+      assign(name, old, envir = env)
+    } else if (exists(name, envir = env, inherits = FALSE)) {
+      rm(list = name, envir = env)
+    }
+    if (locked) {
+      lockBinding(name, env)
+    }
+  }
+}
+
 testthat::test_that("round log uses epsilon percentiles and leaves b fields NA when absent", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
@@ -112,18 +139,18 @@ testthat::test_that("refit updates state epsilon mean from fit contract", {
     mcmc_config_used = list(chains = 2L)
   )
 
-  out <- testthat::with_mocked_bindings(
-    .fit_bayes_btl_mcmc_adaptive = function(...) mcmc_fit,
-    .env = asNamespace("pairwiseLLM"),
-    {
-      pairwiseLLM:::.adaptive_get_refit_fit(
-        state = state,
-        adaptive = list(refit_B = 1L),
-        batch_size = 1L,
-        seed = 1,
-        allow_refit = TRUE
-      )
-    }
+  restore <- local_rebind_namespace(
+    "pairwiseLLM",
+    ".fit_bayes_btl_mcmc_adaptive",
+    function(...) mcmc_fit
+  )
+  on.exit(restore(), add = TRUE)
+  out <- pairwiseLLM:::.adaptive_get_refit_fit(
+    state = state,
+    adaptive = list(refit_B = 1L),
+    batch_size = 1L,
+    seed = 1,
+    allow_refit = TRUE
   )
 
   testthat::expect_equal(out$state$posterior$epsilon_mean, mean(epsilon_draws))

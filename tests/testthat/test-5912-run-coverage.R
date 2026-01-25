@@ -1,4 +1,4 @@
-testthat::test_that("adaptive_get_refit_fit aborts when fit fails to initialize", {
+testthat::test_that("adaptive_get_refit_fit aborts when fit contract is invalid", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "bravo")
@@ -10,9 +10,8 @@ testthat::test_that("adaptive_get_refit_fit aborts when fit fails to initialize"
   testthat::with_mocked_bindings(
     testthat::expect_error(
       pairwiseLLM:::.adaptive_get_refit_fit(state, adaptive = list(), batch_size = 1L, seed = 1L),
-      "MCMC inference failed to initialize"
+      "draws"
     ),
-    as_v3_fit_contract_from_mcmc = function(...) NULL,
     .fit_bayes_btl_mcmc_adaptive = function(...) list(),
     .env = asNamespace("pairwiseLLM")
   )

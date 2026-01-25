@@ -49,66 +49,49 @@ testthat::test_that("batch_log tracks every iteration and required columns", {
     list(
       draws = list(theta = theta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      epsilon_summary = tibble::tibble(
+        epsilon_mean = 0.1,
+        epsilon_p2.5 = 0.05,
+        epsilon_p5 = 0.06,
+        epsilon_p50 = 0.1,
+        epsilon_p95 = 0.14,
+        epsilon_p97.5 = 0.15
+      ),
       diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
     )
   }
 
-  mock_fit_contract <- function(mcmc_fit, ids) {
-    theta_draws <- mcmc_fit$draws$theta
-    colnames(theta_draws) <- ids
-    list(
-      theta_draws = theta_draws,
-      theta_mean = stats::setNames(rep(0, length(ids)), ids),
-      epsilon_mean = 0.1,
-      diagnostics = mcmc_fit$diagnostics %||% list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
-    )
-  }
-
   withr::local_seed(444)
-  start_out <- testthat::with_mocked_bindings(
-    adaptive_rank_start(
-      samples = samples,
-      model = "gpt-test",
-      trait_name = "quality",
-      trait_description = "Which is better?",
-      backend = "openai",
-      mode = "live",
-      adaptive = adaptive,
-      seed = 444
-    ),
+  testthat::local_mocked_bindings(
     submit_llm_pairs = mock_submit,
     .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
-    as_v3_fit_contract_from_mcmc = mock_fit_contract,
     .env = asNamespace("pairwiseLLM")
   )
-
-  resume_out <- testthat::with_mocked_bindings(
-    adaptive_rank_resume(
-      state = start_out$state,
-      mode = "live",
-      submission_info = start_out$submission_info,
-      adaptive = adaptive,
-      seed = 444
-    ),
-    submit_llm_pairs = mock_submit,
-    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
-    as_v3_fit_contract_from_mcmc = mock_fit_contract,
-    .env = asNamespace("pairwiseLLM")
+  start_out <- adaptive_rank_start(
+    samples = samples,
+    model = "gpt-test",
+    trait_name = "quality",
+    trait_description = "Which is better?",
+    backend = "openai",
+    mode = "live",
+    adaptive = adaptive,
+    seed = 444
   )
 
-  resume_out2 <- testthat::with_mocked_bindings(
-    adaptive_rank_resume(
-      state = resume_out$state,
-      mode = "live",
-      submission_info = resume_out$submission_info,
-      adaptive = adaptive,
-      seed = 444
-    ),
-    submit_llm_pairs = mock_submit,
-    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
-    as_v3_fit_contract_from_mcmc = mock_fit_contract,
-    .env = asNamespace("pairwiseLLM")
+  resume_out <- adaptive_rank_resume(
+    state = start_out$state,
+    mode = "live",
+    submission_info = start_out$submission_info,
+    adaptive = adaptive,
+    seed = 444
+  )
+
+  resume_out2 <- adaptive_rank_resume(
+    state = resume_out$state,
+    mode = "live",
+    submission_info = resume_out$submission_info,
+    adaptive = adaptive,
+    seed = 444
   )
 
   state <- resume_out2$state
@@ -167,65 +150,49 @@ testthat::test_that("round_log fills refit fields and matches stop metrics", {
     list(
       draws = list(theta = theta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(epsilon_mean = 0.1),
+      epsilon_summary = tibble::tibble(
+        epsilon_mean = 0.1,
+        epsilon_p2.5 = 0.05,
+        epsilon_p5 = 0.06,
+        epsilon_p50 = 0.1,
+        epsilon_p95 = 0.14,
+        epsilon_p97.5 = 0.15
+      ),
       diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
-    )
-  }
-  mock_fit_contract <- function(mcmc_fit, ids) {
-    theta_draws <- mcmc_fit$draws$theta
-    colnames(theta_draws) <- ids
-    list(
-      theta_draws = theta_draws,
-      theta_mean = stats::setNames(rep(0, length(ids)), ids),
-      epsilon_mean = 0.1,
-      diagnostics = mcmc_fit$diagnostics %||% list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
     )
   }
 
   withr::local_seed(777)
-  start_out <- testthat::with_mocked_bindings(
-    adaptive_rank_start(
-      samples = samples,
-      model = "gpt-test",
-      trait_name = "quality",
-      trait_description = "Which is better?",
-      backend = "openai",
-      mode = "live",
-      adaptive = adaptive,
-      seed = 777
-    ),
+  testthat::local_mocked_bindings(
     submit_llm_pairs = mock_submit,
     .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
-    as_v3_fit_contract_from_mcmc = mock_fit_contract,
     .env = asNamespace("pairwiseLLM")
   )
-
-  resume_out <- testthat::with_mocked_bindings(
-    adaptive_rank_resume(
-      state = start_out$state,
-      mode = "live",
-      submission_info = start_out$submission_info,
-      adaptive = adaptive,
-      seed = 777
-    ),
-    submit_llm_pairs = mock_submit,
-    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
-    .env = asNamespace("pairwiseLLM"),
-    .package = "pairwiseLLM"
+  start_out <- adaptive_rank_start(
+    samples = samples,
+    model = "gpt-test",
+    trait_name = "quality",
+    trait_description = "Which is better?",
+    backend = "openai",
+    mode = "live",
+    adaptive = adaptive,
+    seed = 777
   )
 
-  resume_out2 <- testthat::with_mocked_bindings(
-    adaptive_rank_resume(
-      state = resume_out$state,
-      mode = "live",
-      submission_info = resume_out$submission_info,
-      adaptive = adaptive,
-      seed = 777
-    ),
-    submit_llm_pairs = mock_submit,
-    .fit_bayes_btl_mcmc_adaptive = mock_mcmc_fit,
-    .env = asNamespace("pairwiseLLM"),
-    .package = "pairwiseLLM"
+  resume_out <- adaptive_rank_resume(
+    state = start_out$state,
+    mode = "live",
+    submission_info = start_out$submission_info,
+    adaptive = adaptive,
+    seed = 777
+  )
+
+  resume_out2 <- adaptive_rank_resume(
+    state = resume_out$state,
+    mode = "live",
+    submission_info = resume_out$submission_info,
+    adaptive = adaptive,
+    seed = 777
   )
 
   round_log <- resume_out2$state$config$round_log
