@@ -22,12 +22,6 @@
   invisible(TRUE)
 }
 
-.adaptive_v3_tau_fn <- function(N) {
-  N <- as.integer(N)
-  .adaptive_v3_check(!is.na(N) && N >= 2L, "`tau_fn` requires `N >= 2`.")
-  .adaptive_v3_clamp(0.8, 3.0, sqrt(N) / 25)
-}
-
 #' @keywords internal
 #' @noRd
 adaptive_v3_defaults <- function(N) {
@@ -39,10 +33,6 @@ adaptive_v3_defaults <- function(N) {
   batch_size <- .adaptive_v3_clamp(10L, 80L, .adaptive_v3_round_int(4 * sqrt(N)))
   refit_B <- .adaptive_v3_clamp(100L, 800L, .adaptive_v3_round_int(10 * sqrt(N)))
   A_anchors <- .adaptive_v3_clamp(25L, 120L, .adaptive_v3_round_int(2 * sqrt(N)))
-  S_subset <- .adaptive_v3_clamp(100L, 400L, .adaptive_v3_round_int(6 * sqrt(N)))
-  K_top <- .adaptive_v3_clamp(20L, 200L, .adaptive_v3_round_int(2 * W))
-  U_abs <- .adaptive_v3_clamp(0.0015, 0.006, 0.004 * (30 / N)^0.25)
-
   min_degree <- if (N < 3L) 1L else 2L
 
   list(
@@ -59,15 +49,13 @@ adaptive_v3_defaults <- function(N) {
     dup_max_count = 6L,
     dup_utility_quantile = 0.90,
     hard_cap_frac = 0.40,
-    S_subset = as.integer(S_subset),
-    tau_fn = .adaptive_v3_tau_fn,
-    K_top = as.integer(K_top),
-    U_abs = as.double(U_abs),
-    checks_passed_target = 2L,
-    min_new_pairs_for_check = 5L,
-    rank_weak_adj_threshold = 0.95,
-    rank_weak_adj_frac_max = 0.05,
-    rank_min_adj_prob = 0.60,
+    eap_reliability_min = 0.98,
+    min_refits_for_stability = 3L,
+    stability_lag = 2L,
+    theta_corr_min = 0.99,
+    theta_sd_rel_change_max = 0.01,
+    rank_spearman_min = 0.99,
+    stability_consecutive = 2L,
     max_rhat = 1.01,
     min_ess_bulk = 300,
     min_ess_bulk_near_stop = 1000,
@@ -169,9 +157,9 @@ validate_config <- function(config) {
     "min_degree", "target_mean_degree",
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
-    "S_subset", "tau_fn", "K_top", "U_abs", "checks_passed_target",
-    "min_new_pairs_for_check", "rank_weak_adj_threshold",
-    "rank_weak_adj_frac_max", "rank_min_adj_prob",
+    "eap_reliability_min", "min_refits_for_stability", "stability_lag",
+    "theta_corr_min", "theta_sd_rel_change_max", "rank_spearman_min",
+    "stability_consecutive",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
     "progress", "progress_every_iter", "progress_every_refit", "progress_level",
@@ -215,29 +203,32 @@ validate_config <- function(config) {
   .adaptive_v3_check(is.numeric(config$hard_cap_frac) && length(config$hard_cap_frac) == 1L &&
     config$hard_cap_frac > 0 && config$hard_cap_frac <= 1, "`hard_cap_frac` must be in (0, 1].")
 
-  .adaptive_v3_check(.adaptive_v3_intish(config$S_subset) && config$S_subset >= 1L,
-    "`S_subset` must be >= 1.")
-  .adaptive_v3_check(is.function(config$tau_fn), "`tau_fn` must be a function.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$K_top) && config$K_top >= 1L, "`K_top` must be >= 1.")
-  .adaptive_v3_check(is.numeric(config$U_abs) && length(config$U_abs) == 1L &&
-    config$U_abs > 0, "`U_abs` must be > 0.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$checks_passed_target) && config$checks_passed_target >= 1L,
-    "`checks_passed_target` must be >= 1.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$min_new_pairs_for_check) &&
-    config$min_new_pairs_for_check >= 1L,
-  "`min_new_pairs_for_check` must be >= 1.")
-  .adaptive_v3_check(is.numeric(config$rank_weak_adj_threshold) &&
-    length(config$rank_weak_adj_threshold) == 1L &&
-    config$rank_weak_adj_threshold > 0 && config$rank_weak_adj_threshold < 1,
-  "`rank_weak_adj_threshold` must be in (0, 1).")
-  .adaptive_v3_check(is.numeric(config$rank_weak_adj_frac_max) &&
-    length(config$rank_weak_adj_frac_max) == 1L &&
-    config$rank_weak_adj_frac_max >= 0 && config$rank_weak_adj_frac_max <= 1,
-  "`rank_weak_adj_frac_max` must be in [0, 1].")
-  .adaptive_v3_check(is.numeric(config$rank_min_adj_prob) &&
-    length(config$rank_min_adj_prob) == 1L &&
-    config$rank_min_adj_prob >= 0 && config$rank_min_adj_prob <= 1,
-  "`rank_min_adj_prob` must be in [0, 1].")
+  .adaptive_v3_check(is.numeric(config$eap_reliability_min) &&
+    length(config$eap_reliability_min) == 1L &&
+    config$eap_reliability_min >= 0 && config$eap_reliability_min <= 1,
+  "`eap_reliability_min` must be in [0, 1].")
+  .adaptive_v3_check(.adaptive_v3_intish(config$min_refits_for_stability) &&
+    config$min_refits_for_stability >= 1L,
+  "`min_refits_for_stability` must be >= 1.")
+  .adaptive_v3_check(.adaptive_v3_intish(config$stability_lag) &&
+    config$stability_lag >= 1L,
+  "`stability_lag` must be >= 1.")
+  .adaptive_v3_check(is.numeric(config$theta_corr_min) &&
+    length(config$theta_corr_min) == 1L &&
+    config$theta_corr_min >= 0 && config$theta_corr_min <= 1,
+  "`theta_corr_min` must be in [0, 1].")
+  .adaptive_v3_check(is.numeric(config$theta_sd_rel_change_max) &&
+    length(config$theta_sd_rel_change_max) == 1L &&
+    is.finite(config$theta_sd_rel_change_max) &&
+    config$theta_sd_rel_change_max >= 0,
+  "`theta_sd_rel_change_max` must be a finite value >= 0.")
+  .adaptive_v3_check(is.numeric(config$rank_spearman_min) &&
+    length(config$rank_spearman_min) == 1L &&
+    config$rank_spearman_min >= 0 && config$rank_spearman_min <= 1,
+  "`rank_spearman_min` must be in [0, 1].")
+  .adaptive_v3_check(.adaptive_v3_intish(config$stability_consecutive) &&
+    config$stability_consecutive >= 1L,
+  "`stability_consecutive` must be >= 1.")
 
   .adaptive_v3_check(is.numeric(config$max_rhat) && length(config$max_rhat) == 1L &&
     config$max_rhat >= 1, "`max_rhat` must be >= 1.")
@@ -585,20 +576,12 @@ compute_gini_posA <- function(posA_counts, deg = NULL) {
     divergences = NA_integer_,
     min_ess_bulk = NA_real_,
     max_rhat = NA_real_,
-    theta_sd_median_S = NA_real_,
-    theta_sd_pass = NA,
-    tau = NA_real_,
-    U0 = NA_real_,
-    U_top_median = NA_real_,
-    U_abs = NA_real_,
-    U_pass = NA,
+    reliability_EAP = NA_real_,
+    theta_sd_eap = NA_real_,
+    rho_theta_lag = NA_real_,
+    delta_sd_theta_lag = NA_real_,
+    rho_rank_lag = NA_real_,
     rank_stability_pass = NA,
-    frac_weak_adj = NA_real_,
-    min_adj_prob = NA_real_,
-    weak_adj_threshold = NA_real_,
-    weak_adj_frac_max = NA_real_,
-    min_adj_prob_threshold = NA_real_,
-    min_new_pairs_for_check = NA_integer_,
     refit_performed = NA,
     candidate_starved = NA,
     reason_short_batch = NA_character_
@@ -707,7 +690,7 @@ build_round_log_row <- function(state,
   if (is.list(fit) && !is.null(fit$theta_draws)) {
     theta_draws <- fit$theta_draws
   }
-  reliability_EAP <- compute_reliability_EAP(theta_draws)
+  reliability_EAP <- metrics$reliability_EAP %||% compute_reliability_EAP(theta_draws)
 
   diagnostics <- fit$diagnostics %||% list()
   divergences <- diagnostics$divergences %||% NA_integer_
@@ -787,7 +770,7 @@ build_round_log_row <- function(state,
   row$min_ess_bulk <- as.double(min_ess_bulk)
   row$diagnostics_pass <- as.logical(metrics$diagnostics_pass %||% NA)
   row$reliability_EAP <- as.double(reliability_EAP)
-  row$theta_sd_eap <- as.double(metrics$theta_sd_median_S %||% NA_real_)
+  row$theta_sd_eap <- as.double(metrics$theta_sd_eap %||% NA_real_)
   row$rho_theta_lag <- as.double(metrics$rho_theta_lag %||% NA_real_)
   row$delta_sd_theta_lag <- as.double(metrics$delta_sd_theta_lag %||% NA_real_)
   row$rho_rank_lag <- as.double(metrics$rho_rank_lag %||% NA_real_)

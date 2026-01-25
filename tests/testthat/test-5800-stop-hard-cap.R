@@ -9,10 +9,7 @@ testthat::test_that("hard cap stop triggers immediately", {
     samples = samples,
     config = list(d1 = 2L, M1_target = 4L, budget_max = 20L)
   )
-  config_v3 <- adaptive_v3_config(
-    state$N,
-    list(S_subset = 3L, K_top = 2L, U_abs = 0.2)
-  )
+  config_v3 <- adaptive_v3_config(state$N)
   state$config$v3 <- config_v3
   state$posterior$diagnostics_pass <- TRUE
 

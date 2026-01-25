@@ -17,20 +17,12 @@ testthat::test_that("stop_metrics defaults are complete and non-null", {
     "divergences",
     "min_ess_bulk",
     "max_rhat",
-    "theta_sd_median_S",
-    "theta_sd_pass",
-    "tau",
-    "U0",
-    "U_top_median",
-    "U_abs",
-    "U_pass",
+    "reliability_EAP",
+    "theta_sd_eap",
+    "rho_theta_lag",
+    "delta_sd_theta_lag",
+    "rho_rank_lag",
     "rank_stability_pass",
-    "frac_weak_adj",
-    "min_adj_prob",
-    "weak_adj_threshold",
-    "weak_adj_frac_max",
-    "min_adj_prob_threshold",
-    "min_new_pairs_for_check",
     "refit_performed",
     "candidate_starved",
     "reason_short_batch"
@@ -58,7 +50,7 @@ testthat::test_that("round_log uses the same rank_stability_pass as stop_metrics
     diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
   )
 
-  utilities <- tibble::tibble(utility = c(0.02, 0.01, 0.03))
+  utilities <- tibble::tibble()
   metrics <- pairwiseLLM:::compute_stop_metrics(
     state = state,
     fit = fit,

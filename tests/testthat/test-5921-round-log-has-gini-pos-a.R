@@ -14,7 +14,7 @@ test_that("round log includes position balance and backlog fields", {
     state = state,
     fit = NULL,
     metrics = list(scheduled_pairs = 10L, completed_pairs = 7L),
-    config = list(batch_size = 2L, W = 2L, explore_rate = 0.2, U_abs = 0.1)
+    config = list(batch_size = 2L, W = 2L, explore_rate = 0.2)
   )
 
   expect_true("pos_balance_mean" %in% names(row))

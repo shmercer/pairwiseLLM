@@ -53,7 +53,6 @@ testthat::test_that("adaptive stopping checks do not stop on minimal state", {
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
   state$phase <- "phase2"
   state$config$CW <- 1L
-  state$U0 <- 1
 
   theta_mean <- stats::setNames(c(2, 1, 0), state$ids)
   draws <- matrix(rep(theta_mean, each = 4), nrow = 4, byrow = FALSE)

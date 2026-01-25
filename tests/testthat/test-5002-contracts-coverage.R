@@ -63,11 +63,8 @@ testthat::test_that("item summary defaults and round log row fill metrics", {
     epsilon_draws = c(0.1, 0.1)
   )
   metrics <- list(
-    theta_sd_median_S = 0.2,
-    tau = 0.3,
-    theta_sd_pass = TRUE,
-    U0 = 0.5,
-    U_pass = TRUE,
+    theta_sd_eap = 0.2,
+    reliability_EAP = 0.91,
     diagnostics_pass = TRUE
   )
 
@@ -79,7 +76,7 @@ testthat::test_that("item summary defaults and round log row fill metrics", {
     config = state$config$v3
   )
 
-  testthat::expect_equal(row$theta_sd_eap, metrics$theta_sd_median_S)
+  testthat::expect_equal(row$theta_sd_eap, metrics$theta_sd_eap)
   testthat::expect_equal(row$epsilon_mean, 0.1)
 })
 

@@ -1,61 +1,56 @@
-testthat::test_that("theta_sd subset median controls uncertainty pass", {
+testthat::test_that("lagged theta stability metrics compute when eligible", {
   samples <- tibble::tibble(
-    ID = c("A", "B", "C", "D", "E", "F"),
-    text = c("alpha", "bravo", "charlie", "delta", "echo", "foxtrot")
+    ID = c("A", "B", "C", "D"),
+    text = c("alpha", "bravo", "charlie", "delta")
   )
   state <- adaptive_state_new(
     samples = samples,
     config = list(d1 = 2L, M1_target = 4L, budget_max = 20L)
   )
-  config_v3 <- adaptive_v3_config(
-    state$N,
-    list(S_subset = 3L, K_top = 2L, U_abs = 0.2)
-  )
+  config_v3 <- adaptive_v3_config(state$N)
   state$config$v3 <- config_v3
   state$posterior$diagnostics_pass <- TRUE
 
-  pass_draws <- matrix(c(
-    -5, -20, -20, -20, -5, 5,
-    -4.8, 12, 14, 16, 3, 5.2
-  ), nrow = 2, byrow = TRUE)
-  colnames(pass_draws) <- state$ids
-  pass_fit <- make_v3_fit_contract(state$ids, theta_draws = pass_draws)
-  utilities <- tibble::tibble(utility = c(0.1, 0.05, 0.03))
-  pass_metrics <- compute_stop_metrics(state, pass_fit, utilities, config_v3)
-  testthat::expect_true(pass_metrics$theta_sd_pass)
-
-  fail_draws <- matrix(c(
-    -5, -20, -20, -20, -5, 5,
-    -2, 12, 14, 16, -2, 8
-  ), nrow = 2, byrow = TRUE)
-  colnames(fail_draws) <- state$ids
-  fail_fit <- make_v3_fit_contract(state$ids, theta_draws = fail_draws)
-  fail_metrics <- compute_stop_metrics(state, fail_fit, utilities, config_v3)
-  testthat::expect_false(fail_metrics$theta_sd_pass)
-})
-
-testthat::test_that("stopping subset tie-breaking is deterministic by item id", {
-  samples <- tibble::tibble(
-    ID = c("A", "B", "C", "D", "E"),
-    text = c("alpha", "bravo", "charlie", "delta", "echo")
+  history <- list(
+    stats::setNames(c(0, 1, 2, 3), state$ids),
+    stats::setNames(c(0.1, 1.1, 2.1, 3.1), state$ids)
   )
-  state <- adaptive_state_new(
-    samples = samples,
-    config = list(d1 = 2L, M1_target = 4L, budget_max = 20L)
-  )
-  config_v3 <- adaptive_v3_config(
-    state$N,
-    list(S_subset = 3L, K_top = 2L, U_abs = 0.2)
-  )
-  state$config$v3 <- config_v3
-  state$posterior$diagnostics_pass <- TRUE
+  state$posterior$theta_mean_history <- history
 
-  draws <- matrix(c(
-    0, 0.9, -12, 9.9, 0,
-    0.2, 1.1, 16, 10.1, 20
-  ), nrow = 2, byrow = TRUE)
+  draws <- matrix(rep(c(0, 1, 2, 3), times = 2), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
   fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
-  metrics <- compute_stop_metrics(state, fit, tibble::tibble(utility = 0.1), config_v3)
-  testthat::expect_true(metrics$theta_sd_pass)
+
+  metrics <- compute_stop_metrics(state, fit, tibble::tibble(), config_v3)
+  testthat::expect_equal(metrics$rho_theta_lag, 1)
+  testthat::expect_equal(metrics$delta_sd_theta_lag, 0)
+  testthat::expect_equal(metrics$rho_rank_lag, 1)
+  testthat::expect_true(metrics$rank_stability_pass)
+})
+
+testthat::test_that("lagged stability metrics are NA before eligibility", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 2L, M1_target = 4L, budget_max = 20L)
+  )
+  config_v3 <- adaptive_v3_config(state$N)
+  state$config$v3 <- config_v3
+  state$posterior$diagnostics_pass <- TRUE
+
+  history <- list(stats::setNames(c(0, 1, 2), state$ids))
+  state$posterior$theta_mean_history <- history
+
+  draws <- matrix(rep(c(0, 1, 2), times = 2), nrow = 2, byrow = TRUE)
+  colnames(draws) <- state$ids
+  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
+
+  metrics <- compute_stop_metrics(state, fit, tibble::tibble(), config_v3)
+  testthat::expect_true(is.na(metrics$rho_theta_lag))
+  testthat::expect_true(is.na(metrics$delta_sd_theta_lag))
+  testthat::expect_true(is.na(metrics$rho_rank_lag))
+  testthat::expect_true(is.na(metrics$rank_stability_pass))
 })

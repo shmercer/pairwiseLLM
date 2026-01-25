@@ -164,11 +164,8 @@ testthat::test_that("PR15 gate: round_log builder matches contract schema", {
     )
   )
   metrics <- list(
-    theta_sd_median_S = 0.1,
-    tau = 0.2,
-    theta_sd_pass = TRUE,
-    U0 = 0.5,
-    U_pass = TRUE,
+    theta_sd_eap = 0.1,
+    reliability_EAP = 0.9,
     diagnostics_pass = TRUE
   )
   stop_out <- list(stop_decision = FALSE, stop_reason = NA_character_)
@@ -189,7 +186,7 @@ testthat::test_that("PR15 gate: round_log builder matches contract schema", {
 })
 
 testthat::test_that("PR15 gate: stop_reason is present and non-empty when stopped", {
-  config <- pairwiseLLM:::adaptive_v3_config(3L, list(checks_passed_target = 1L))
+  config <- pairwiseLLM:::adaptive_v3_config(3L, list())
   state <- pairwiseLLM:::adaptive_state_new(
     samples = tibble::tibble(ID = c("A", "B", "C"), text = c("a", "b", "c")),
     config = list(),
@@ -198,11 +195,7 @@ testthat::test_that("PR15 gate: stop_reason is present and non-empty when stoppe
   state$config$v3 <- config
 
   metrics <- list(
-    hard_cap_reached = TRUE,
-    diagnostics_pass = TRUE,
-    theta_sd_pass = TRUE,
-    U_pass = TRUE,
-    U0 = 0.5
+    hard_cap_reached = TRUE
   )
 
   stop_out <- pairwiseLLM:::should_stop(metrics = metrics, state = state, config = config)

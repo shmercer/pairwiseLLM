@@ -128,7 +128,10 @@ testthat::test_that("compute_stop_metrics validates v3 fits and utilities", {
   )
 
   testthat::expect_true(is.list(metrics))
-  testthat::expect_true(is.finite(metrics$U_top_median))
+  testthat::expect_true(is.finite(metrics$theta_sd_eap))
+  testthat::expect_true(is.finite(metrics$reliability_EAP))
+  testthat::expect_true(is.na(metrics$rho_theta_lag))
+  testthat::expect_true(is.na(metrics$rho_rank_lag))
 })
 
 testthat::test_that("should_stop rejects non-integer M1_target", {
@@ -138,10 +141,12 @@ testthat::test_that("should_stop rejects non-integer M1_target", {
 
   metrics <- list(
     hard_cap_reached = FALSE,
-    U0 = NA_real_,
+    refit_performed = TRUE,
     diagnostics_pass = FALSE,
-    theta_sd_pass = FALSE,
-    U_pass = FALSE
+    reliability_EAP = NA_real_,
+    rho_theta_lag = NA_real_,
+    delta_sd_theta_lag = NA_real_,
+    rank_stability_pass = NA
   )
   v3_config <- pairwiseLLM:::adaptive_v3_config(state$N)
 

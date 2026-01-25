@@ -1,36 +1,32 @@
-testthat::test_that("utility top-K median controls U_pass", {
-  withr::local_seed(123)
-
+testthat::test_that("EAP reliability gate controls stop passes", {
   samples <- tibble::tibble(
-    ID = c("A", "B", "C", "D", "E"),
-    text = c("alpha", "bravo", "charlie", "delta", "echo")
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
   )
-  state <- adaptive_state_new(
-    samples = samples,
-    config = list(d1 = 2L, M1_target = 4L, budget_max = 20L)
-  )
-  config_v3 <- adaptive_v3_config(
-    state$N,
-    list(S_subset = 3L, K_top = 3L, U_abs = 0.15)
-  )
+  state <- adaptive_state_new(samples, config = list(d1 = 2L, M1_target = 0L))
+  config_v3 <- adaptive_v3_config(state$N, list(
+    min_refits_for_stability = 2L,
+    stability_lag = 1L,
+    stability_consecutive = 2L
+  ))
   state$config$v3 <- config_v3
-  state$posterior$diagnostics_pass <- TRUE
+  state$posterior$theta_mean_history <- list(stats::setNames(c(0, 1, 2), state$ids))
 
-  draws <- matrix(
-    c(0, 0.1, 0.2, 0.3, 0.4,
-      0.2, 0.3, 0.4, 0.5, 0.6),
-    nrow = 2,
-    byrow = TRUE
-  )
+  draws <- matrix(rep(c(0, 1, 2), each = 2), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
-  fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
+  state$fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
-  utilities_pass <- tibble::tibble(utility = c(0.12, 0.1, 0.08, 0.05))
-  metrics_pass <- compute_stop_metrics(state, fit, utilities_pass, config_v3)
-  testthat::expect_true(metrics_pass$U_pass)
-  testthat::expect_equal(metrics_pass$U0, metrics_pass$U_top_median)
+  metrics <- list(
+    hard_cap_reached = FALSE,
+    refit_performed = TRUE,
+    diagnostics_pass = TRUE,
+    reliability_EAP = 0.5,
+    rho_theta_lag = 1,
+    delta_sd_theta_lag = 0,
+    rank_stability_pass = TRUE
+  )
+  out <- should_stop(metrics, state, config_v3)
 
-  utilities_fail <- tibble::tibble(utility = c(0.3, 0.25, 0.2, 0.1))
-  metrics_fail <- compute_stop_metrics(state, fit, utilities_fail, config_v3)
-  testthat::expect_false(metrics_fail$U_pass)
+  testthat::expect_false(out$stop_decision)
+  testthat::expect_equal(out$state$checks_passed_in_row, 0L)
 })

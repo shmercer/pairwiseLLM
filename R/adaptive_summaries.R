@@ -99,8 +99,6 @@
     utility_candidate_p90 = .adaptive_summary_empty_value("double"),
     iter_exit_path = .adaptive_summary_empty_value("character"),
     diagnostics_pass = .adaptive_summary_empty_value("logical"),
-    theta_sd_pass = .adaptive_summary_empty_value("logical"),
-    U_pass = .adaptive_summary_empty_value("logical"),
     rank_stability_pass = .adaptive_summary_empty_value("logical"),
     hard_cap_reached = .adaptive_summary_empty_value("logical"),
     stop_decision = .adaptive_summary_empty_value("logical"),
@@ -338,8 +336,6 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
         ),
         iter_exit_path = as.character(.adaptive_summary_col(log, "iter_exit_path", NA_character_, n)),
         diagnostics_pass = as.logical(.adaptive_summary_col(log, "diagnostics_pass", NA, n)),
-        theta_sd_pass = as.logical(.adaptive_summary_col(log, "theta_sd_pass", NA, n)),
-        U_pass = as.logical(.adaptive_summary_col(log, "U_pass", NA, n)),
         rank_stability_pass = as.logical(
           .adaptive_summary_col(log, "rank_stability_pass", NA, n)
         ),

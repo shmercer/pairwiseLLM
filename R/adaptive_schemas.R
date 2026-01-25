@@ -354,9 +354,6 @@ validate_state <- function(state) {
   if (!is.integer(state$M1_target) || length(state$M1_target) != 1L) {
     rlang::abort("`state$M1_target` must be a length-1 integer.")
   }
-  if (!is.numeric(state$U0) || length(state$U0) != 1L) {
-    rlang::abort("`state$U0` must be a length-1 numeric value.")
-  }
   if (!is.integer(state$last_check_at) || length(state$last_check_at) != 1L) {
     rlang::abort("`state$last_check_at` must be a length-1 integer.")
   }

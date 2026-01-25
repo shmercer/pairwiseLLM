@@ -94,10 +94,8 @@ testthat::test_that("refit console block matches round_log gate values", {
   )
   text <- paste(output, collapse = "\n")
   expected_diag <- paste0("diagnostics_pass=", ifelse(round_row$diagnostics_pass, "TRUE", "FALSE"))
-  expected_sd <- paste0("SD: median_S=", pairwiseLLM:::.adaptive_progress_value(round_row$theta_sd_eap))
-  expected_u <- paste0("U: U0=", pairwiseLLM:::.adaptive_progress_value(metrics$U0))
+  expected_theta <- paste0("Theta: sd_eap=", pairwiseLLM:::.adaptive_progress_value(round_row$theta_sd_eap))
 
   testthat::expect_true(grepl(expected_diag, text, fixed = TRUE))
-  testthat::expect_true(grepl(expected_sd, text, fixed = TRUE))
-  testthat::expect_true(grepl(expected_u, text, fixed = TRUE))
+  testthat::expect_true(grepl(expected_theta, text, fixed = TRUE))
 })

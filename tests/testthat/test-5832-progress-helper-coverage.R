@@ -86,7 +86,7 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
   state$phase <- "phase2"
   state$checks_passed_in_row <- 1L
 
-  config <- list(progress_level = "full", checks_passed_target = 2L)
+  config <- list(progress_level = "full", stability_consecutive = 2L)
   round_row <- tibble::tibble(
     round_id = 2L,
     iter_at_refit = 5L,
@@ -96,15 +96,11 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
     epsilon_mean = 0.09,
     reliability_EAP = 0.87,
     diagnostics_pass = TRUE,
-    theta_sd_median = 0.48,
-    tau = 0.80,
-    theta_sd_pass = TRUE,
-    U0 = 0.0012,
-    U_abs = 0.0024,
-    U_pass = TRUE,
+    theta_sd_eap = 0.48,
+    rho_theta_lag = 0.99,
+    delta_sd_theta_lag = 0.01,
+    rho_rank_lag = 0.99,
     rank_stability_pass = TRUE,
-    frac_weak_adj = 0.03,
-    min_adj_prob = 0.72,
     n_unique_pairs_seen = 3L,
     hard_cap_threshold = 12L,
     hard_cap_reached = FALSE,
@@ -170,15 +166,11 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
     epsilon_mean = 0.09,
     reliability_EAP = 0.87,
     diagnostics_pass = TRUE,
-    theta_sd_median = 0.48,
-    tau = 0.80,
-    theta_sd_pass = TRUE,
-    U0 = 0.0012,
-    U_abs = 0.0024,
-    U_pass = TRUE,
+    theta_sd_eap = 0.48,
+    rho_theta_lag = NA_real_,
+    delta_sd_theta_lag = NA_real_,
+    rho_rank_lag = NA_real_,
     rank_stability_pass = NA,
-    frac_weak_adj = NA_real_,
-    min_adj_prob = NA_real_,
     mcmc_chains = 2L,
     mcmc_parallel_chains = 2L,
     mcmc_cores_detected_physical = 4L,
@@ -241,12 +233,11 @@ testthat::test_that("adaptive progress emitters print when configured", {
   round_row$epsilon_mean <- 0.09
   round_row$reliability_EAP <- 0.87
   round_row$diagnostics_pass <- TRUE
-  round_row$theta_sd_median <- 0.48
-  round_row$tau <- 0.80
-  round_row$theta_sd_pass <- TRUE
-  round_row$U0 <- 0.0012
-  round_row$U_abs <- 0.0024
-  round_row$U_pass <- TRUE
+  round_row$theta_sd_eap <- 0.48
+  round_row$rho_theta_lag <- 0.99
+  round_row$delta_sd_theta_lag <- 0.01
+  round_row$rho_rank_lag <- 0.99
+  round_row$rank_stability_pass <- TRUE
 
   state$config$v3 <- list(progress = TRUE, progress_level = "refit", progress_every_refit = 1L)
   refit_out <- capture.output({

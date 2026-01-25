@@ -19,7 +19,7 @@ test_that("summaries exclude gini fields in outputs", {
   round_row <- pairwiseLLM:::build_round_log_row(
     state = state,
     fit = list(theta_draws = theta_draws),
-    config = list(batch_size = 2L, W = 2L, explore_rate = 0.2, U_abs = 0.1)
+    config = list(batch_size = 2L, W = 2L, explore_rate = 0.2)
   )
   state$config$round_log <- round_row
 

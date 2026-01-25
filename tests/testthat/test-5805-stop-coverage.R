@@ -118,28 +118,16 @@ testthat::test_that("compute_stop_metrics validates inputs and should_stop valid
     "at least two draws"
   )
 
-  config_bad_subset <- config_v3
-  config_bad_subset$S_subset <- 0L
+  config_bad_lag <- config_v3
+  config_bad_lag$stability_lag <- 0L
   testthat::expect_error(
     compute_stop_metrics(
       state,
       fit = base_fit,
       candidates_with_utility = tibble::tibble(),
-      config = config_bad_subset
+      config = config_bad_lag
     ),
-    "S_subset"
-  )
-
-  config_bad_tau <- config_v3
-  config_bad_tau$tau_fn <- function(N) NA_real_
-  testthat::expect_error(
-    compute_stop_metrics(
-      state,
-      fit = base_fit,
-      candidates_with_utility = tibble::tibble(),
-      config = config_bad_tau
-    ),
-    "tau_fn"
+    "stability_lag"
   )
 
   testthat::expect_error(
@@ -150,28 +138,6 @@ testthat::test_that("compute_stop_metrics validates inputs and should_stop valid
       config = config_v3
     ),
     "data frame"
-  )
-
-  testthat::expect_error(
-    compute_stop_metrics(
-      state,
-      fit = base_fit,
-      candidates_with_utility = tibble::tibble(other = 1),
-      config = config_v3
-    ),
-    "utility"
-  )
-
-  config_bad_k <- config_v3
-  config_bad_k$K_top <- 0L
-  testthat::expect_error(
-    compute_stop_metrics(
-      state,
-      fit = base_fit,
-      candidates_with_utility = tibble::tibble(utility = 0.1),
-      config = config_bad_k
-    ),
-    "K_top"
   )
 
   state$posterior$diagnostics_pass <- "bad"
