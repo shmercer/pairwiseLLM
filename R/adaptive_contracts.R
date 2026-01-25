@@ -273,6 +273,14 @@ validate_config <- function(config) {
     "`keep_draws` must be logical.")
   .adaptive_v3_check(.adaptive_v3_intish(config$thin_draws) && config$thin_draws >= 1L,
     "`thin_draws` must be >= 1.")
+  if (!is.list(config$cmdstan)) {
+    rlang::abort("`config$cmdstan` must be a list when provided.")
+  }
+  cmdstan_output_dir <- config$cmdstan$output_dir %||% NULL
+  if (!is.null(cmdstan_output_dir)) {
+    .adaptive_v3_check(is.character(cmdstan_output_dir) && length(cmdstan_output_dir) == 1L,
+      "`config$cmdstan$output_dir` must be a length-1 character path.")
+  }
 
   invisible(config)
 }
