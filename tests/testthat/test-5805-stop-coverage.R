@@ -37,6 +37,8 @@ testthat::test_that("adaptive_run stopping checks cover fit/dx/empty candidates 
     )
     state$comparisons_scheduled <- 1L
     state$comparisons_observed <- 1L
+    state$last_refit_at <- 0L
+    state$new_since_refit <- 1L
     state
   }
 

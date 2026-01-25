@@ -92,6 +92,8 @@ testthat::test_that("adaptive_run_stopping_checks respects allow_refit and exist
     model = "mock"
   )
   state$comparisons_observed <- 1L
+  state$last_refit_at <- 0L
+  state$new_since_refit <- 1L
 
   out <- .adaptive_run_stopping_checks(
     state,

@@ -65,7 +65,8 @@ testthat::test_that("adaptive stopping checks do not stop on minimal state", {
   state$config$allow_refit <- FALSE
 
   state <- add_results(state, 2L)
-  state$config$last_refit_at <- as.integer(state$comparisons_observed)
+  state$last_refit_at <- as.integer(state$comparisons_observed)
+  state$new_since_refit <- 0L
   out <- pairwiseLLM:::.adaptive_run_stopping_checks(
     state,
     adaptive = list(exploration_frac = 0.05)
