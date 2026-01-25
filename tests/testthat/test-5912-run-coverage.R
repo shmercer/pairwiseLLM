@@ -233,20 +233,23 @@ testthat::test_that("schedule_next_pairs stops when stop decision is reached", {
 
   fit <- make_v3_fit_contract(
     state$ids,
-    theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
+    theta_draws = matrix(c(1, 0, -1, 1, 0, -1), nrow = 2L, byrow = TRUE,
+      dimnames = list(NULL, state$ids)),
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
   state$fit <- fit
+  state$posterior$theta_mean_history <- list(stats::setNames(c(1, 0, -1), state$ids))
 
   v3_config <- pairwiseLLM:::adaptive_v3_config(
     state$N,
     list(
-      checks_passed_target = 1L,
-      min_new_pairs_for_check = 1L,
-      rank_weak_adj_threshold = 0.01,
-      rank_weak_adj_frac_max = 1,
-      rank_min_adj_prob = 0,
-      U_abs = 1,
+      stability_consecutive = 1L,
+      min_refits_for_stability = 2L,
+      stability_lag = 1L,
+      eap_reliability_min = 0,
+      theta_corr_min = 0,
+      theta_sd_rel_change_max = 1,
+      rank_spearman_min = 0,
       refit_B = 100L
     )
   )

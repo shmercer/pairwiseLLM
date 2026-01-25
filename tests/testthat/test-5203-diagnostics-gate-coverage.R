@@ -204,10 +204,8 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
   state$phase <- "phase2"
   state$budget_max <- 10L
   state$comparisons_scheduled <- 0L
-  state$U0 <- NA_real_
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
 
-  captured <- new.env(parent = emptyenv())
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1, near_stop = TRUE),
     .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed) {
@@ -236,7 +234,6 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
     },
     apply_degree_penalty = function(utilities, state) utilities,
     select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
-      captured$U0 <- state$U0
       tibble::tibble(
         i_id = character(),
         j_id = character(),
@@ -252,7 +249,6 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
   )
 
   expect_equal(out$state$phase, "phase3")
-  expect_equal(captured$U0, 0.2)
 })
 
 testthat::test_that("next_action respects stop_reason and resume seeds repair fields", {

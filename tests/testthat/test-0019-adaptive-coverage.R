@@ -199,10 +199,6 @@ test_that("adaptive state helper and validation branches are covered", {
   expect_error(pairwiseLLM:::validate_state(bad), "M1_target")
 
   bad <- state
-  bad$U0 <- "nope"
-  expect_error(pairwiseLLM:::validate_state(bad), "U0")
-
-  bad <- state
   bad$last_check_at <- 1.5
   expect_error(pairwiseLLM:::validate_state(bad), "last_check_at")
 

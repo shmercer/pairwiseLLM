@@ -51,11 +51,8 @@ testthat::test_that("round log builder uses epsilon summaries from fit contract"
   )
 
   metrics <- list(
-    theta_sd_median_S = 0.1,
-    tau = 0.2,
-    theta_sd_pass = TRUE,
-    U0 = 0.5,
-    U_pass = TRUE,
+    theta_sd_eap = 0.1,
+    reliability_EAP = 0.9,
     diagnostics_pass = TRUE
   )
   stop_out <- list(stop_decision = FALSE, stop_reason = NA_character_)

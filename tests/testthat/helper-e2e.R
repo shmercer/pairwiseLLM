@@ -23,7 +23,7 @@ e2e_locked_adaptive_config <- function() {
     budget_max = 100L,
     batch_size = 4L,
     refit_B = 4L,
-    checks_passed_target = 2L,
+    stability_consecutive = 2L,
     hard_cap_frac = 0.40,
     write_outputs = FALSE,
     explore_rate = 0.25,

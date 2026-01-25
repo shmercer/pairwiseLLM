@@ -23,21 +23,33 @@ test_that("validate_config rejects invalid fields", {
   bad_cap$hard_cap_frac <- 1.2
   expect_error(pairwiseLLM:::validate_config(bad_cap), "hard_cap_frac")
 
-  bad_min_new <- cfg
-  bad_min_new$min_new_pairs_for_check <- 0L
-  expect_error(pairwiseLLM:::validate_config(bad_min_new), "min_new_pairs_for_check")
+  bad_eap <- cfg
+  bad_eap$eap_reliability_min <- 1.5
+  expect_error(pairwiseLLM:::validate_config(bad_eap), "eap_reliability_min")
 
-  bad_weak_thresh <- cfg
-  bad_weak_thresh$rank_weak_adj_threshold <- 1.2
-  expect_error(pairwiseLLM:::validate_config(bad_weak_thresh), "rank_weak_adj_threshold")
+  bad_min_refits <- cfg
+  bad_min_refits$min_refits_for_stability <- 0L
+  expect_error(pairwiseLLM:::validate_config(bad_min_refits), "min_refits_for_stability")
 
-  bad_weak_frac <- cfg
-  bad_weak_frac$rank_weak_adj_frac_max <- -0.1
-  expect_error(pairwiseLLM:::validate_config(bad_weak_frac), "rank_weak_adj_frac_max")
+  bad_lag <- cfg
+  bad_lag$stability_lag <- 0L
+  expect_error(pairwiseLLM:::validate_config(bad_lag), "stability_lag")
 
-  bad_min_adj <- cfg
-  bad_min_adj$rank_min_adj_prob <- 1.5
-  expect_error(pairwiseLLM:::validate_config(bad_min_adj), "rank_min_adj_prob")
+  bad_theta_corr <- cfg
+  bad_theta_corr$theta_corr_min <- -0.1
+  expect_error(pairwiseLLM:::validate_config(bad_theta_corr), "theta_corr_min")
+
+  bad_theta_sd <- cfg
+  bad_theta_sd$theta_sd_rel_change_max <- -0.1
+  expect_error(pairwiseLLM:::validate_config(bad_theta_sd), "theta_sd_rel_change_max")
+
+  bad_rank_corr <- cfg
+  bad_rank_corr$rank_spearman_min <- 1.5
+  expect_error(pairwiseLLM:::validate_config(bad_rank_corr), "rank_spearman_min")
+
+  bad_consecutive <- cfg
+  bad_consecutive$stability_consecutive <- 0L
+  expect_error(pairwiseLLM:::validate_config(bad_consecutive), "stability_consecutive")
 
   bad_output <- cfg
   bad_output$output_dir <- 123
@@ -75,9 +87,3 @@ test_that("adaptive_v3_config normalizes overrides", {
   expect_error(pairwiseLLM:::adaptive_v3_config(6, 1), "overrides")
 })
 
-test_that("adaptive_v3 tau function uses N scaling", {
-  cfg <- pairwiseLLM:::adaptive_v3_defaults(10)
-  tau <- cfg$tau_fn(10)
-  expect_true(is.numeric(tau))
-  expect_true(tau >= 0.8 && tau <= 3.0)
-})

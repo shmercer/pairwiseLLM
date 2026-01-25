@@ -6,8 +6,9 @@ test_that("adaptive_v3_defaults includes required fields", {
     "min_degree", "target_mean_degree",
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
-    "S_subset", "tau_fn", "K_top", "U_abs", "checks_passed_target",
-    "min_new_pairs_for_check", "rank_weak_adj_threshold", "rank_weak_adj_frac_max", "rank_min_adj_prob",
+    "eap_reliability_min", "min_refits_for_stability", "stability_lag",
+    "theta_corr_min", "theta_sd_rel_change_max", "rank_spearman_min",
+    "stability_consecutive",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
     "progress", "progress_every_iter", "progress_every_refit", "progress_level",
@@ -24,20 +25,21 @@ test_that("adaptive_v3_defaults scales with N", {
     batch_size <- max(10L, min(80L, as.integer(round(4 * sqrt(N)))))
     refit_B <- max(100L, min(800L, as.integer(round(10 * sqrt(N)))))
     anchors <- max(25L, min(120L, as.integer(round(2 * sqrt(N)))))
-    S_subset <- max(100L, min(400L, as.integer(round(6 * sqrt(N)))))
-    K_top <- max(20L, min(200L, as.integer(round(2 * W))))
     explore_rate <- max(0.10, min(0.25, 0.20 - 0.02 * log10(N)))
-    U_abs <- max(0.0015, min(0.006, 0.004 * (30 / N)^0.25))
 
     expect_equal(cfg$W, W)
     expect_equal(cfg$batch_size, batch_size)
     expect_equal(cfg$refit_B, refit_B)
     expect_equal(cfg$A_anchors, anchors)
-    expect_equal(cfg$S_subset, S_subset)
-    expect_equal(cfg$K_top, K_top)
     expect_equal(cfg$explore_rate, explore_rate)
-    expect_equal(cfg$U_abs, U_abs)
     expect_equal(cfg$hard_cap_frac, 0.40)
+    expect_equal(cfg$eap_reliability_min, 0.98)
+    expect_equal(cfg$min_refits_for_stability, 3L)
+    expect_equal(cfg$stability_lag, 2L)
+    expect_equal(cfg$theta_corr_min, 0.99)
+    expect_equal(cfg$theta_sd_rel_change_max, 0.01)
+    expect_equal(cfg$rank_spearman_min, 0.99)
+    expect_equal(cfg$stability_consecutive, 2L)
   }
 })
 

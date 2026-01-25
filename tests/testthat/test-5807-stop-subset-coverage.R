@@ -1,24 +1,21 @@
-testthat::test_that("stop subset selection covers top, bottom, and uncertainty ids", {
+testthat::test_that("compute_stop_metrics reports theta_sd_eap and counts", {
   samples <- tibble::tibble(
-    ID = c("A", "B", "C", "D", "E", "F"),
-    text = c("alpha", "bravo", "charlie", "delta", "echo", "foxtrot")
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
   )
   state <- pairwiseLLM:::adaptive_state_new(
     samples = samples,
     config = list(d1 = 2L, M1_target = 2L, budget_max = 12L)
   )
-  config_v3 <- pairwiseLLM:::adaptive_v3_config(
-    state$N,
-    list(S_subset = 3L, K_top = 1L, U_abs = 0.5)
-  )
+  config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
   state$config$v3 <- config_v3
   state$posterior$diagnostics_pass <- TRUE
+  state$comparisons_scheduled <- 5L
+  state$comparisons_observed <- 3L
 
   draws <- matrix(
-    c(
-      3, 2, 1, 0, -1, -2,
-      3.2, 2.1, 0.9, 0.1, -0.8, -2.2
-    ),
+    c(1, 0, -1,
+      1.2, 0.2, -0.8),
     nrow = 2,
     byrow = TRUE,
     dimnames = list(NULL, state$ids)
@@ -28,13 +25,11 @@ testthat::test_that("stop subset selection covers top, bottom, and uncertainty i
   metrics <- pairwiseLLM:::compute_stop_metrics(
     state,
     fit,
-    tibble::tibble(utility = 0.1),
+    tibble::tibble(),
     config_v3
   )
 
-  testthat::expect_true(is.finite(metrics$theta_sd_median_S))
-  testthat::expect_true(is.logical(metrics$theta_sd_pass))
-  testthat::expect_true(!is.na(metrics$rank_stability_pass))
-  testthat::expect_equal(metrics$scheduled_pairs, 0L)
-  testthat::expect_equal(metrics$completed_pairs, 0L)
+  testthat::expect_true(is.finite(metrics$theta_sd_eap))
+  testthat::expect_equal(metrics$scheduled_pairs, 5L)
+  testthat::expect_equal(metrics$completed_pairs, 3L)
 })
