@@ -8,9 +8,9 @@ testthat::test_that("compute_stop_metrics validates lagged theta history", {
     config = list(d1 = 2L, M1_target = 2L, budget_max = 6L)
   )
   state$posterior$diagnostics_pass <- TRUE
-  state$posterior$theta_mean_history <- list(c(0, 1, 2))
+  state$posterior$theta_mean_history <- list(c(0, 1))
 
-  draws <- matrix(rep(c(0, 1, 2), each = 2), nrow = 2, byrow = TRUE)
+  draws <- matrix(rep(c(0, 1, 2), times = 2), nrow = 2, byrow = TRUE)
   colnames(draws) <- state$ids
   fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
@@ -20,7 +20,7 @@ testthat::test_that("compute_stop_metrics validates lagged theta history", {
 
   testthat::expect_error(
     pairwiseLLM:::compute_stop_metrics(state, fit, tibble::tibble(), config_v3),
-    "theta history"
+    "Lagged theta history"
   )
 })
 

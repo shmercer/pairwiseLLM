@@ -256,11 +256,22 @@ testthat::test_that("schedule_next_pairs stops when stop decision is reached", {
   )
   state$config$v3 <- v3_config
 
-  out <- pairwiseLLM:::.adaptive_schedule_next_pairs(
-    state = state,
-    target_pairs = 1L,
-    adaptive = list(),
-    seed = 1L
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::.adaptive_schedule_next_pairs(
+      state = state,
+      target_pairs = 1L,
+      adaptive = list(),
+      seed = 1L
+    ),
+    .adaptive_get_refit_fit = function(state, adaptive, batch_size, seed, allow_refit = TRUE) {
+      list(
+        state = state,
+        fit = state$fit,
+        refit_performed = TRUE,
+        new_pairs = state$new_since_refit
+      )
+    },
+    .package = "pairwiseLLM"
   )
   expect_equal(nrow(out$pairs), 0L)
   expect_true(identical(out$state$mode, "stopped"))
