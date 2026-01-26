@@ -258,13 +258,9 @@ sample_exploration_pairs <- function(state, candidates, n_explore, config,
     if (unordered_key %in% picked_keys) next
 
     counts <- state$pair_count
-    if (is.null(names(counts)) || length(counts) == 0L || !unordered_key %in% names(counts)) {
+    count <- counts[unordered_key]
+    if (length(count) == 0L || is.na(count)) {
       count <- 0L
-    } else {
-      count <- counts[[unordered_key]]
-      if (is.null(count) || is.na(count)) {
-        count <- 0L
-      }
     }
     if (!is.na(count) && count >= 1L) {
       if (!unordered_key %in% names(key_idx)) next
