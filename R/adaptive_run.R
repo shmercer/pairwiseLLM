@@ -600,9 +600,13 @@ NULL
   } else {
     names(candidates)[names(candidates) == "i"] <- "i_id"
     names(candidates)[names(candidates) == "j"] <- "j_id"
-    epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
-    utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
-    utilities <- apply_degree_penalty(utilities, state)
+    utilities <- compute_pair_utility_dispatch(
+      fit = fit,
+      candidates = candidates,
+      state = state,
+      config = v3_config,
+      diagnostics_pass = state$posterior$diagnostics_pass
+    )
   }
   state <- .adaptive_update_dup_threshold(state, utilities, refit_performed)
 
@@ -841,7 +845,6 @@ NULL
   W2 <- as.integer(min(2L * W_base, W_cap))
   W4 <- as.integer(min(4L * W_base, W_cap))
 
-  epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
   empty_utilities <- function() {
     tibble::tibble(
       unordered_key = character(),
@@ -867,8 +870,13 @@ NULL
     } else {
       names(candidates)[names(candidates) == "i"] <- "i_id"
       names(candidates)[names(candidates) == "j"] <- "j_id"
-      utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
-      utilities <- apply_degree_penalty(utilities, state)
+      utilities <- compute_pair_utility_dispatch(
+        fit = fit,
+        candidates = candidates,
+        state = state,
+        config = config,
+        diagnostics_pass = state$posterior$diagnostics_pass
+      )
     }
     utilities <- .adaptive_filter_duplicate_candidates(
       utilities,
@@ -1475,9 +1483,13 @@ NULL
   } else {
     names(candidates)[names(candidates) == "i"] <- "i_id"
     names(candidates)[names(candidates) == "j"] <- "j_id"
-    epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
-    utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
-    utilities <- apply_degree_penalty(utilities, state)
+    utilities <- compute_pair_utility_dispatch(
+      fit = fit,
+      candidates = candidates,
+      state = state,
+      config = v3_config,
+      diagnostics_pass = state$posterior$diagnostics_pass
+    )
   }
   state <- .adaptive_update_dup_threshold(state, utilities, fit_out$refit_performed)
 
@@ -1743,9 +1755,13 @@ NULL
   } else {
     names(candidates)[names(candidates) == "i"] <- "i_id"
     names(candidates)[names(candidates) == "j"] <- "j_id"
-    epsilon_mean <- .adaptive_epsilon_mean_from_state(state, fit)
-    utilities <- compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
-    utilities <- apply_degree_penalty(utilities, state)
+    utilities <- compute_pair_utility_dispatch(
+      fit = fit,
+      candidates = candidates,
+      state = state,
+      config = v3_config,
+      diagnostics_pass = state$posterior$diagnostics_pass
+    )
   }
   state <- .adaptive_update_dup_threshold(state, utilities, fit_out$refit_performed)
 

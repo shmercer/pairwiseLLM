@@ -32,7 +32,7 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
         generate_candidates = function(...) {
           tibble::tibble(i = "A", j = "B")
         },
-        compute_pair_utility = function(...) {
+        compute_pair_utility_dispatch = function(...) {
           tibble::tibble(
             i_id = "A",
             j_id = "B",
@@ -42,7 +42,6 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
             utility_raw = 0.2
           )
         },
-        apply_degree_penalty = function(utilities, state) utilities,
         .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
           called$selection <- TRUE
           called$exploration_only <- TRUE
@@ -85,7 +84,7 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
     },
     diagnostics_gate = function(...) TRUE,
     generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
-    compute_pair_utility = function(...) {
+    compute_pair_utility_dispatch = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -95,7 +94,6 @@ testthat::test_that("diagnostics failures trigger repair mode and exploration-on
         utility_raw = 0.2
       )
     },
-    apply_degree_penalty = function(utilities, state) utilities,
     select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
       called$selection <- TRUE
       called$exploration_only <- exploration_only

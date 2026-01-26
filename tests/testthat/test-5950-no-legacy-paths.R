@@ -37,7 +37,7 @@ testthat::test_that("adaptive scheduling avoids legacy paths", {
       )
     },
     generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
-    compute_pair_utility = function(...) {
+    compute_pair_utility_dispatch = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -47,7 +47,6 @@ testthat::test_that("adaptive scheduling avoids legacy paths", {
         p_mean = 0.5
       )
     },
-    apply_degree_penalty = function(utilities, state) utilities,
     select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
       tibble::tibble(
         i_id = character(),

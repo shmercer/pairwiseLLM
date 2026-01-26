@@ -11,3 +11,4 @@ docs
 tests/testthat/bad.csv
 dev-checklists
 agents.md
+inst/stan/btl_e_b.exe

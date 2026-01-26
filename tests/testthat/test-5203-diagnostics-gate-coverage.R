@@ -154,7 +154,7 @@ testthat::test_that("repair scheduling handles target bounds and duplicates", {
     generate_candidates = function(...) {
       tibble::tibble(i = "A", j = "B")
     },
-    compute_pair_utility = function(...) {
+    compute_pair_utility_dispatch = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -164,7 +164,6 @@ testthat::test_that("repair scheduling handles target bounds and duplicates", {
         p_mean = 0.5
       )
     },
-    apply_degree_penalty = function(utilities, state) utilities,
     .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
       tibble::tibble(
         i_id = "A",
@@ -222,7 +221,7 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
     generate_candidates = function(...) {
       tibble::tibble(i = "A", j = "B")
     },
-    compute_pair_utility = function(...) {
+    compute_pair_utility_dispatch = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -232,7 +231,6 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
         p_mean = 0.5
       )
     },
-    apply_degree_penalty = function(utilities, state) utilities,
     select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
       tibble::tibble(
         i_id = character(),
