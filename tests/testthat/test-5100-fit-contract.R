@@ -20,7 +20,8 @@ testthat::test_that("as_v3_fit_contract_from_mcmc returns v3 contract shape", {
       epsilon_p95 = 0.28,
       epsilon_p97.5 = 0.3
     ),
-    diagnostics = list(max_rhat = 1.01)
+    diagnostics = list(max_rhat = 1.01),
+    model_variant = "btl_e"
   )
 
   fit <- pairwiseLLM:::as_v3_fit_contract_from_mcmc(mcmc_fit, ids)
@@ -29,7 +30,7 @@ testthat::test_that("as_v3_fit_contract_from_mcmc returns v3 contract shape", {
   testthat::expect_true(all(c(
     "theta_draws", "theta_mean", "theta_sd",
     "epsilon_draws", "epsilon_mean", "epsilon_p50",
-    "b_draws", "b_mean", "b_p50",
+    "beta_draws", "beta_mean", "beta_p50",
     "diagnostics", "diagnostics_pass",
     "n_items", "n_draws", "model_variant", "mcmc_config_used"
   ) %in% names(fit)))

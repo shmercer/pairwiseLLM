@@ -249,17 +249,17 @@ testthat::test_that("validate_v3_fit_contract checks scalars and metadata", {
   )
 
   b_not_numeric <- base_fit
-  b_not_numeric$b_draws <- "bad"
+  b_not_numeric$beta_draws <- "bad"
   testthat::expect_error(
     pairwiseLLM:::validate_v3_fit_contract(b_not_numeric, ids),
-    "b_draws"
+    "beta_draws"
   )
 
   b_too_short <- base_fit
-  b_too_short$b_draws <- 0.1
+  b_too_short$beta_draws <- 0.1
   testthat::expect_error(
     pairwiseLLM:::validate_v3_fit_contract(b_too_short, ids),
-    "b_draws"
+    "beta_draws"
   )
 
   bad_diag <- base_fit

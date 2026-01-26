@@ -14,8 +14,8 @@
 #'   \eqn{[n\_draws x n\_items]} with column names matching item ids.
 #' @param epsilon_draws Optional numeric vector of epsilon draws or \code{NULL}
 #'   when epsilon is not applicable.
-#' @param b_draws Optional numeric vector of b draws or \code{NULL} when
-#'   the b parameter is not applicable.
+#' @param beta_draws Optional numeric vector of beta draws or \code{NULL} when
+#'   the beta parameter is not applicable.
 #' @param diagnostics List with diagnostic summaries (divergences, max_rhat,
 #'   min_ess_bulk).
 #' @param model_variant Optional model variant label.
@@ -30,7 +30,7 @@
 #' @noRd
 build_v3_fit_contract <- function(theta_draws,
     epsilon_draws = NULL,
-    b_draws = NULL,
+    beta_draws = NULL,
     diagnostics = NULL,
     model_variant = NA_character_,
     mcmc_config_used = NULL,
@@ -51,9 +51,9 @@ build_v3_fit_contract <- function(theta_draws,
     bounds = c(0, 1),
     probs = probs
   )
-  b_summary <- .v3_contract_vector_summary(
-    draws = b_draws,
-    name = "b_draws",
+  beta_summary <- .v3_contract_vector_summary(
+    draws = beta_draws,
+    name = "beta_draws",
     bounds = NULL,
     probs = probs
   )
@@ -62,10 +62,16 @@ build_v3_fit_contract <- function(theta_draws,
   diagnostics_pass <- .v3_contract_diagnostics_pass(diagnostics_pass)
   mcmc_config_used <- .v3_contract_mcmc_defaults(mcmc_config_used)
 
+  model_variant <- if (is.na(model_variant %||% NA_character_)) {
+    NA_character_
+  } else {
+    normalize_model_variant(model_variant)
+  }
+
   fit <- list(
     theta_draws = theta_draws,
     epsilon_draws = epsilon_summary$draws,
-    b_draws = b_summary$draws,
+    beta_draws = beta_summary$draws,
     theta_mean = theta_mean,
     theta_sd = theta_sd,
     epsilon_mean = epsilon_summary$mean,
@@ -74,33 +80,51 @@ build_v3_fit_contract <- function(theta_draws,
     epsilon_p50 = epsilon_summary$p50,
     epsilon_p95 = epsilon_summary$p95,
     epsilon_p97.5 = epsilon_summary$p97.5,
-    b_mean = b_summary$mean,
-    b_p2.5 = b_summary$p2.5,
-    b_p5 = b_summary$p5,
-    b_p50 = b_summary$p50,
-    b_p95 = b_summary$p95,
-    b_p97.5 = b_summary$p97.5,
+    beta_mean = beta_summary$mean,
+    beta_p2.5 = beta_summary$p2.5,
+    beta_p5 = beta_summary$p5,
+    beta_p50 = beta_summary$p50,
+    beta_p95 = beta_summary$p95,
+    beta_p97.5 = beta_summary$p97.5,
     diagnostics = diagnostics,
     diagnostics_pass = diagnostics_pass,
     n_items = as.integer(ncol(theta_draws)),
     n_draws = as.integer(nrow(theta_draws)),
-    model_variant = as.character(model_variant %||% NA_character_),
+    model_variant = as.character(model_variant),
     mcmc_config_used = mcmc_config_used
   )
   validate_v3_fit_contract(fit, ids = ids)
   fit
 }
 
+percentiles_2_5_50_95_97_5 <- function(x) {
+  probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
+  qs <- stats::quantile(x, probs = probs, names = FALSE)
+  stats::setNames(as.double(qs), c("p2.5", "p5", "p50", "p95", "p97.5"))
+}
+
+na_param_summary <- function() {
+  c(
+    mean = NA_real_,
+    p2.5 = NA_real_,
+    p5 = NA_real_,
+    p50 = NA_real_,
+    p95 = NA_real_,
+    p97.5 = NA_real_
+  )
+}
+
 .v3_contract_vector_summary <- function(draws, name, bounds, probs) {
   if (is.null(draws)) {
+    summary <- na_param_summary()
     return(list(
       draws = NULL,
-      mean = NA_real_,
-      p2.5 = NA_real_,
-      p5 = NA_real_,
-      p50 = NA_real_,
-      p95 = NA_real_,
-      p97.5 = NA_real_
+      mean = summary[["mean"]],
+      p2.5 = summary[["p2.5"]],
+      p5 = summary[["p5"]],
+      p50 = summary[["p50"]],
+      p95 = summary[["p95"]],
+      p97.5 = summary[["p97.5"]]
     ))
   }
   if (!is.numeric(draws)) {
@@ -120,15 +144,15 @@ build_v3_fit_contract <- function(theta_draws,
     }
   }
 
-  qs <- stats::quantile(draws, probs = probs, names = FALSE)
+  qs <- percentiles_2_5_50_95_97_5(draws)
   list(
     draws = draws,
     mean = as.double(mean(draws)),
-    p2.5 = as.double(qs[[1L]]),
-    p5 = as.double(qs[[2L]]),
-    p50 = as.double(qs[[3L]]),
-    p95 = as.double(qs[[4L]]),
-    p97.5 = as.double(qs[[5L]])
+    p2.5 = as.double(qs[["p2.5"]]),
+    p5 = as.double(qs[["p5"]]),
+    p50 = as.double(qs[["p50"]]),
+    p95 = as.double(qs[["p95"]]),
+    p97.5 = as.double(qs[["p97.5"]])
   )
 }
 
@@ -210,9 +234,9 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
 
   required <- c(
     "theta_draws", "theta_mean", "theta_sd",
-    "epsilon_draws", "b_draws",
+    "epsilon_draws", "beta_draws",
     "epsilon_mean", "epsilon_p2.5", "epsilon_p5", "epsilon_p50", "epsilon_p95", "epsilon_p97.5",
-    "b_mean", "b_p2.5", "b_p5", "b_p50", "b_p95", "b_p97.5",
+    "beta_mean", "beta_p2.5", "beta_p5", "beta_p50", "beta_p95", "beta_p97.5",
     "diagnostics", "diagnostics_pass",
     "n_items", "n_draws", "model_variant", "mcmc_config_used"
   )
@@ -322,21 +346,21 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
     }
   }
 
-  b_draws <- fit$b_draws %||% NULL
-  b_fields <- c("b_mean", "b_p2.5", "b_p5", "b_p50", "b_p95", "b_p97.5")
-  if (is.null(b_draws)) {
-    for (nm in b_fields) {
+  beta_draws <- fit$beta_draws %||% NULL
+  beta_fields <- c("beta_mean", "beta_p2.5", "beta_p5", "beta_p50", "beta_p95", "beta_p97.5")
+  if (is.null(beta_draws)) {
+    for (nm in beta_fields) {
       .v3_contract_validate_scalar(fit[[nm]], nm, allow_na = TRUE)
     }
   } else {
-    if (!is.numeric(b_draws)) {
-      rlang::abort("`fit$b_draws` must be a numeric vector or NULL.", call = where)
+    if (!is.numeric(beta_draws)) {
+      rlang::abort("`fit$beta_draws` must be a numeric vector or NULL.", call = where)
     }
-    b_draws <- as.double(b_draws)
-    if (length(b_draws) < 2L || any(!is.finite(b_draws))) {
-      rlang::abort("`fit$b_draws` must contain at least two finite draws.", call = where)
+    beta_draws <- as.double(beta_draws)
+    if (length(beta_draws) < 2L || any(!is.finite(beta_draws))) {
+      rlang::abort("`fit$beta_draws` must contain at least two finite draws.", call = where)
     }
-    for (nm in b_fields) {
+    for (nm in beta_fields) {
       .v3_contract_validate_scalar(fit[[nm]], nm, allow_na = FALSE)
     }
   }

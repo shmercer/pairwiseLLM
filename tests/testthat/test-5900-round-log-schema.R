@@ -28,12 +28,12 @@ testthat::test_that("round log schema matches contract", {
     "epsilon_p50",
     "epsilon_p95",
     "epsilon_p97.5",
-    "b_mean",
-    "b_p2.5",
-    "b_p5",
-    "b_p50",
-    "b_p95",
-    "b_p97.5",
+    "beta_mean",
+    "beta_p2.5",
+    "beta_p5",
+    "beta_p50",
+    "beta_p95",
+    "beta_p97.5",
     "divergences",
     "max_rhat",
     "min_ess_bulk",
@@ -105,8 +105,8 @@ testthat::test_that("round log builder emits a single typed row", {
       byrow = TRUE,
       dimnames = list(NULL, state$ids)
     ),
-    b_draws = c(0.15, 0.15),
-    model_variant = "mcmc"
+    beta_draws = c(0.15, 0.15),
+    model_variant = "btl_b"
   )
   metrics <- list(
     diagnostics_pass = TRUE,
@@ -133,8 +133,8 @@ testthat::test_that("round log builder emits a single typed row", {
   testthat::expect_equal(row$backlog_unjudged[[1L]], 3L)
   testthat::expect_equal(row$stop_passes[[1L]], 2L)
   testthat::expect_true(row$stop_eligible[[1L]])
-  testthat::expect_equal(row$model_variant[[1L]], "mcmc")
-  testthat::expect_equal(row$b_p50[[1L]], 0.15)
+  testthat::expect_equal(row$model_variant[[1L]], "btl_b")
+  testthat::expect_equal(row$beta_p50[[1L]], 0.15)
   testthat::expect_equal(row$rho_theta_lag[[1L]], 0.1)
 })
 

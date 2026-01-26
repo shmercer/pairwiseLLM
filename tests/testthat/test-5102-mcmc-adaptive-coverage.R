@@ -73,7 +73,8 @@ testthat::test_that("as_v3_fit_contract_from_mcmc rejects bad shapes", {
 
   base_fit <- list(
     draws = list(theta = theta_draws, epsilon = c(0.1, 0.2)),
-    diagnostics = list()
+    diagnostics = list(),
+    model_variant = "btl_e"
   )
 
   testthat::expect_error(
@@ -131,11 +132,15 @@ testthat::test_that("as_v3_fit_contract_from_mcmc rejects bad shapes", {
     "within \\[0, 1\\]"
   )
 
-  bad_b_draws <- base_fit
-  bad_b_draws$draws$b <- "nope"
+  bad_b_draws <- list(
+    draws = list(theta = theta_draws, beta = c(0.1, 0.2)),
+    diagnostics = list(),
+    model_variant = "btl_b"
+  )
+  bad_b_draws$draws$beta <- "nope"
   testthat::expect_error(
     pairwiseLLM:::as_v3_fit_contract_from_mcmc(bad_b_draws, ids),
-    "draws\\$b"
+    "draws\\$beta"
   )
 })
 
@@ -170,7 +175,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates config and thin draws
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive handles draw matrix checks", {
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("a", "b"))
-  config <- pairwiseLLM:::adaptive_v3_config(2)
+  config <- pairwiseLLM:::adaptive_v3_config(2, list(model_variant = "btl_e"))
   config$cmdstan <- list(output_dir = tempdir())
 
   restore_req <- local_rebind_namespace(
@@ -178,7 +183,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive handles draw matrix checks", {
     ".btl_mcmc_require_cmdstanr",
     function() invisible(TRUE)
   )
-  restore_write <- local_rebind_namespace("cmdstanr", "write_stan_file", function(...) "fake.stan")
+  restore_write <- local_rebind_namespace("pairwiseLLM", "stan_file_for_variant", function(...) "fake.stan")
   stub_model <- function(...) {
     list(sample = function(...) {
       list(draws = function(...) {
@@ -203,7 +208,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive handles draw matrix checks", {
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive validates thin_draws", {
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("a", "b"))
-  config <- pairwiseLLM:::adaptive_v3_config(2)
+  config <- pairwiseLLM:::adaptive_v3_config(2, list(model_variant = "btl_e"))
   config$thin_draws <- 0L
 
   restore_req <- local_rebind_namespace(
@@ -211,7 +216,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates thin_draws", {
     ".btl_mcmc_require_cmdstanr",
     function() invisible(TRUE)
   )
-  restore_write <- local_rebind_namespace("cmdstanr", "write_stan_file", function(...) "fake.stan")
+  restore_write <- local_rebind_namespace("pairwiseLLM", "stan_file_for_variant", function(...) "fake.stan")
   restore_model <- local_rebind_namespace("cmdstanr", "cmdstan_model", function(...) {
     list(sample = function(...) {
       list(draws = function(...) {
@@ -238,7 +243,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates thin_draws", {
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive thins draws deterministically", {
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("a", "b"))
-  config <- pairwiseLLM:::adaptive_v3_config(2)
+  config <- pairwiseLLM:::adaptive_v3_config(2, list(model_variant = "btl_e"))
   config$thin_draws <- 2L
 
   draws_matrix <- matrix(
@@ -257,7 +262,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive thins draws deterministically",
     ".btl_mcmc_require_cmdstanr",
     function() invisible(TRUE)
   )
-  restore_write <- local_rebind_namespace("cmdstanr", "write_stan_file", function(...) "fake.stan")
+  restore_write <- local_rebind_namespace("pairwiseLLM", "stan_file_for_variant", function(...) "fake.stan")
   restore_model <- local_rebind_namespace("cmdstanr", "cmdstan_model", function(...) {
     list(sample = function(...) {
       list(

@@ -50,7 +50,7 @@ local_rebind_namespace <- function(ns, name, value) {
   }
 }
 
-testthat::test_that("round log uses epsilon percentiles and leaves b fields NA when absent", {
+testthat::test_that("round log uses epsilon percentiles and leaves beta fields NA when absent", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -91,8 +91,15 @@ testthat::test_that("round log uses epsilon percentiles and leaves b fields NA w
 
   testthat::expect_equal(row$epsilon_mean, mean(epsilon_draws))
   testthat::expect_equal(row$epsilon_p50, eps_probs[[3L]])
-  b_vals <- c(row$b_mean, row$b_p2.5, row$b_p5, row$b_p50, row$b_p95, row$b_p97.5)
-  testthat::expect_true(all(is.na(b_vals)))
+  beta_vals <- c(
+    row$beta_mean,
+    row$beta_p2.5,
+    row$beta_p5,
+    row$beta_p50,
+    row$beta_p95,
+    row$beta_p97.5
+  )
+  testthat::expect_true(all(is.na(beta_vals)))
 })
 
 testthat::test_that("refit updates state epsilon mean from fit contract", {
@@ -127,7 +134,8 @@ testthat::test_that("refit updates state epsilon mean from fit contract", {
       epsilon_p97.5 = eps_probs[[5L]]
     ),
     diagnostics = list(max_rhat = 1.01),
-    mcmc_config_used = list(chains = 2L)
+    mcmc_config_used = list(chains = 2L),
+    model_variant = "btl_e"
   )
 
   restore <- local_rebind_namespace(

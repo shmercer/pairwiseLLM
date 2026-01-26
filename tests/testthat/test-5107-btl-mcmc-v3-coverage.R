@@ -96,7 +96,7 @@ testthat::test_that("btl mcmc v3 diagnostics cover non-finite and missing summar
   out_nonfinite <- NULL
   testthat::expect_warning(
     {
-      out_nonfinite <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_nonfinite)
+      out_nonfinite <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_nonfinite, model_variant = "btl_e_b")
     },
     "NAs introduced"
   )
@@ -107,7 +107,7 @@ testthat::test_that("btl mcmc v3 diagnostics cover non-finite and missing summar
     diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
     summary = function(variables = NULL) stop("summary missing")
   )
-  out_missing <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_missing)
+  out_missing <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_missing, model_variant = "btl_e_b")
   expect_true(is.na(out_missing$max_rhat))
   expect_true(length(out_missing$notes) > 0L)
 })

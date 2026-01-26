@@ -216,12 +216,29 @@
   paste(readLines(path, warn = FALSE), collapse = "\n")
 }
 
-.btl_mcmc_v3_unpack_draws <- function(draws) {
-  if (is.list(draws) &&
-    (!is.null(draws$theta) || !is.null(draws$theta_draws)) &&
-    (!is.null(draws$epsilon) || !is.null(draws$epsilon_draws))) {
+stan_file_for_variant <- function(model_variant) {
+  model_variant <- normalize_model_variant(model_variant)
+  path <- system.file("stan", paste0(model_variant, ".stan"), package = "pairwiseLLM")
+  if (!nzchar(path)) {
+    rlang::abort(paste0("Stan model file for `", model_variant, "` not found."))
+  }
+  path
+}
+
+.btl_mcmc_v3_unpack_draws <- function(draws, model_variant = NULL) {
+  if (!is.null(model_variant)) {
+    model_variant <- normalize_model_variant(model_variant)
+  }
+  has_e <- isTRUE(!is.null(model_variant) && model_has_e(model_variant))
+  has_b <- isTRUE(!is.null(model_variant) && model_has_b(model_variant))
+
+  epsilon_draws <- NULL
+  beta_draws <- NULL
+
+  if (is.list(draws) && (!is.null(draws$theta) || !is.null(draws$theta_draws))) {
     theta_draws <- draws$theta %||% draws$theta_draws
-    epsilon_draws <- draws$epsilon %||% draws$epsilon_draws
+    epsilon_draws <- draws$epsilon %||% draws$epsilon_draws %||% NULL
+    beta_draws <- draws$beta %||% draws$beta_draws %||% draws$b %||% draws$b_draws %||% NULL
   } else if (is.matrix(draws)) {
     cols <- colnames(draws)
     if (is.null(cols)) {
@@ -229,26 +246,46 @@
     }
     theta_cols <- grep("^theta\\[", cols)
     epsilon_col <- which(cols == "epsilon")
-    if (length(theta_cols) == 0L || length(epsilon_col) != 1L) {
-      rlang::abort("`draws` matrix must include theta and epsilon columns.")
+    beta_col <- which(cols == "beta")
+    if (length(theta_cols) == 0L) {
+      rlang::abort("`draws` matrix must include theta columns.")
     }
     theta_draws <- draws[, theta_cols, drop = FALSE]
-    epsilon_draws <- draws[, epsilon_col, drop = TRUE]
+    if (length(epsilon_col) == 1L) {
+      epsilon_draws <- draws[, epsilon_col, drop = TRUE]
+    }
+    if (length(beta_col) == 1L) {
+      beta_draws <- draws[, beta_col, drop = TRUE]
+    }
   } else {
-    rlang::abort("`draws` must be a list or matrix containing theta and epsilon draws.")
+    rlang::abort("`draws` must be a list or matrix containing theta draws.")
   }
 
   if (!is.matrix(theta_draws) || !is.numeric(theta_draws)) {
     rlang::abort("`draws$theta` must be a numeric matrix.")
   }
-  if (!is.numeric(epsilon_draws)) {
+  if (has_e && is.null(epsilon_draws)) {
+    rlang::abort("`draws` must include epsilon draws for this model variant.")
+  }
+  if (has_b && is.null(beta_draws)) {
+    rlang::abort("`draws` must include beta draws for this model variant.")
+  }
+  if (!is.null(epsilon_draws) && !is.numeric(epsilon_draws)) {
     rlang::abort("`draws$epsilon` must be numeric.")
   }
+  if (!is.null(beta_draws) && !is.numeric(beta_draws)) {
+    rlang::abort("`draws$beta` must be numeric.")
+  }
 
-  list(theta_draws = theta_draws, epsilon_draws = as.double(epsilon_draws))
+  list(
+    theta_draws = theta_draws,
+    epsilon_draws = if (!is.null(epsilon_draws)) as.double(epsilon_draws) else NULL,
+    beta_draws = if (!is.null(beta_draws)) as.double(beta_draws) else NULL
+  )
 }
 
-.btl_mcmc_v3_collect_diagnostics <- function(fit) {
+.btl_mcmc_v3_collect_diagnostics <- function(fit, model_variant) {
+  model_variant <- normalize_model_variant(model_variant)
   diagnostics <- list(
     divergences = NA_integer_,
     max_rhat = NA_real_,
@@ -269,7 +306,20 @@
     notes <- c(notes, "CmdStan diagnostics missing num_divergent.")
   }
 
-  summary_tbl <- tryCatch(fit$summary(variables = c("theta", "epsilon")), error = function(e) NULL)
+  vars <- c("theta")
+  if (model_has_e(model_variant)) {
+    vars <- c(vars, "epsilon")
+  }
+  if (model_has_b(model_variant)) {
+    vars <- c(vars, "beta")
+  }
+  summary_tbl <- tryCatch(
+    withCallingHandlers(
+      fit$summary(variables = vars),
+      warning = function(w) invokeRestart("muffleWarning")
+    ),
+    error = function(e) NULL
+  )
   if (!is.null(summary_tbl) && nrow(summary_tbl) > 0L) {
     if ("rhat" %in% names(summary_tbl)) {
       rhat_vals <- summary_tbl$rhat
@@ -327,23 +377,42 @@
 
 #' @keywords internal
 #' @noRd
-summarize_draws <- function(draws) {
-  unpacked <- .btl_mcmc_v3_unpack_draws(draws)
+.btl_mcmc_v3_infer_variant <- function(draws) {
+  has_e <- FALSE
+  has_b <- FALSE
+  if (is.list(draws)) {
+    has_e <- !is.null(draws$epsilon) || !is.null(draws$epsilon_draws)
+    has_b <- !is.null(draws$beta) || !is.null(draws$beta_draws) ||
+      !is.null(draws$b) || !is.null(draws$b_draws)
+  } else if (is.matrix(draws)) {
+    cols <- colnames(draws) %||% character()
+    has_e <- any(cols == "epsilon")
+    has_b <- any(cols == "beta")
+  }
+  if (isTRUE(has_e) && isTRUE(has_b)) {
+    return("btl_e_b")
+  }
+  if (isTRUE(has_e)) {
+    return("btl_e")
+  }
+  if (isTRUE(has_b)) {
+    return("btl_b")
+  }
+  "btl"
+}
+
+summarize_draws <- function(draws, model_variant = NULL) {
+  if (is.null(model_variant)) {
+    model_variant <- .btl_mcmc_v3_infer_variant(draws)
+  }
+  model_variant <- normalize_model_variant(model_variant)
+  unpacked <- .btl_mcmc_v3_unpack_draws(draws, model_variant = model_variant)
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(unpacked$theta_draws, name = "theta_draws")
-  epsilon_draws <- unpacked$epsilon_draws
+  epsilon_draws <- unpacked$epsilon_draws %||% NULL
 
   item_id <- colnames(theta_draws)
   if (is.null(item_id)) {
     item_id <- as.character(seq_len(ncol(theta_draws)))
-  }
-
-  epsilon_draws <- as.double(epsilon_draws)
-  if (any(!is.finite(epsilon_draws))) {
-    rlang::warn("Non-finite values detected in `epsilon_draws`; dropping before summarising.")
-    epsilon_draws <- epsilon_draws[is.finite(epsilon_draws)]
-  }
-  if (length(epsilon_draws) < 2L) {
-    rlang::abort("`epsilon_draws` must contain at least two finite values.")
   }
 
   theta_summary <- tibble::tibble(
@@ -356,14 +425,33 @@ summarize_draws <- function(draws) {
     theta_ci95_high = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.975, names = FALSE))
   )
 
-  epsilon_summary <- tibble::tibble(
-    epsilon_mean = as.double(mean(epsilon_draws)),
-    epsilon_p2.5 = as.double(stats::quantile(epsilon_draws, probs = 0.025, names = FALSE)),
-    epsilon_p5 = as.double(stats::quantile(epsilon_draws, probs = 0.05, names = FALSE)),
-    epsilon_p50 = as.double(stats::quantile(epsilon_draws, probs = 0.5, names = FALSE)),
-    epsilon_p95 = as.double(stats::quantile(epsilon_draws, probs = 0.95, names = FALSE)),
-    epsilon_p97.5 = as.double(stats::quantile(epsilon_draws, probs = 0.975, names = FALSE))
-  )
+  if (model_has_e(model_variant)) {
+    epsilon_draws <- as.double(epsilon_draws)
+    if (any(!is.finite(epsilon_draws))) {
+      rlang::warn("Non-finite values detected in `epsilon_draws`; dropping before summarising.")
+      epsilon_draws <- epsilon_draws[is.finite(epsilon_draws)]
+    }
+    if (length(epsilon_draws) < 2L) {
+      rlang::abort("`epsilon_draws` must contain at least two finite values.")
+    }
+    epsilon_summary <- tibble::tibble(
+      epsilon_mean = as.double(mean(epsilon_draws)),
+      epsilon_p2.5 = as.double(stats::quantile(epsilon_draws, probs = 0.025, names = FALSE)),
+      epsilon_p5 = as.double(stats::quantile(epsilon_draws, probs = 0.05, names = FALSE)),
+      epsilon_p50 = as.double(stats::quantile(epsilon_draws, probs = 0.5, names = FALSE)),
+      epsilon_p95 = as.double(stats::quantile(epsilon_draws, probs = 0.95, names = FALSE)),
+      epsilon_p97.5 = as.double(stats::quantile(epsilon_draws, probs = 0.975, names = FALSE))
+    )
+  } else {
+    epsilon_summary <- tibble::tibble(
+      epsilon_mean = NA_real_,
+      epsilon_p2.5 = NA_real_,
+      epsilon_p5 = NA_real_,
+      epsilon_p50 = NA_real_,
+      epsilon_p95 = NA_real_,
+      epsilon_p97.5 = NA_real_
+    )
+  }
 
   list(
     theta_summary = theta_summary,
@@ -385,6 +473,7 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     rlang::abort("`ids` must be unique.")
   }
 
+  model_variant <- normalize_model_variant(mcmc_fit$model_variant %||% "btl_e_b")
   draws <- mcmc_fit$draws %||% NULL
   if (is.null(draws) || !is.list(draws)) {
     rlang::abort("`mcmc_fit$draws` must be a list.")
@@ -398,22 +487,28 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   }
   theta_draws <- reorder_theta_draws(theta_draws, ids)
 
-  epsilon_draws <- draws$epsilon %||% draws$epsilon_draws %||% NULL
-  if (!is.null(epsilon_draws) && !is.numeric(epsilon_draws)) {
-    rlang::abort("`mcmc_fit$draws$epsilon` must be numeric when provided.")
+  epsilon_draws <- NULL
+  if (model_has_e(model_variant)) {
+    epsilon_draws <- draws$epsilon %||% draws$epsilon_draws %||% NULL
+    if (is.null(epsilon_draws) || !is.numeric(epsilon_draws)) {
+      rlang::abort("`mcmc_fit$draws$epsilon` must be numeric when provided.")
+    }
   }
 
-  b_draws <- draws$b %||% draws$b_draws %||% NULL
-  if (!is.null(b_draws) && !is.numeric(b_draws)) {
-    rlang::abort("`mcmc_fit$draws$b` must be numeric when provided.")
+  beta_draws <- NULL
+  if (model_has_b(model_variant)) {
+    beta_draws <- draws$beta %||% draws$beta_draws %||% draws$b %||% draws$b_draws %||% NULL
+    if (is.null(beta_draws) || !is.numeric(beta_draws)) {
+      rlang::abort("`mcmc_fit$draws$beta` must be numeric when provided.")
+    }
   }
 
   build_v3_fit_contract(
     theta_draws = theta_draws,
     epsilon_draws = epsilon_draws,
-    b_draws = b_draws,
+    beta_draws = beta_draws,
     diagnostics = mcmc_fit$diagnostics %||% NULL,
-    model_variant = mcmc_fit$model_variant %||% NA_character_,
+    model_variant = model_variant,
     mcmc_config_used = mcmc_fit$mcmc_config_used %||% NULL
   )
 }
@@ -427,12 +522,13 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     rlang::abort("`config` must be a list.")
   }
   validate_config(config)
+  model_variant <- normalize_model_variant(config$model_variant %||% "btl_e_b")
 
   bt_data <- .btl_mcmc_v3_validate_bt_data(bt_data)
-  K <- length(bt_data$A)
+  M <- length(bt_data$A)
   stan_data <- list(
     N = as.integer(bt_data$N),
-    K = as.integer(K),
+    M = as.integer(M),
     A = as.integer(bt_data$A),
     B = as.integer(bt_data$B),
     Y = as.integer(bt_data$Y)
@@ -457,7 +553,7 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     rlang::abort("`cmdstan$parallel_chains` must be a positive integer.")
   }
 
-  stan_file <- cmdstanr::write_stan_file(.btl_mcmc_v3_model_code())
+  stan_file <- stan_file_for_variant(model_variant)
   model <- cmdstanr::cmdstan_model(stan_file)
 
   sample_args <- list(
@@ -480,18 +576,37 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
 
   fit <- do.call(model$sample, sample_args)
 
-  draws_matrix <- fit$draws(variables = c("theta", "epsilon"), format = "matrix")
+  vars <- c("theta")
+  if (model_has_e(model_variant)) {
+    vars <- c(vars, "epsilon")
+  }
+  if (model_has_b(model_variant)) {
+    vars <- c(vars, "beta")
+  }
+  draws_matrix <- fit$draws(variables = vars, format = "matrix")
   theta_cols <- paste0("theta[", seq_len(bt_data$N), "]")
   if (!all(theta_cols %in% colnames(draws_matrix))) {
     rlang::abort("CmdStan output missing theta draws.")
   }
-  if (!"epsilon" %in% colnames(draws_matrix)) {
+  if (model_has_e(model_variant) && !"epsilon" %in% colnames(draws_matrix)) {
     rlang::abort("CmdStan output missing epsilon draws.")
+  }
+  if (model_has_b(model_variant) && !"beta" %in% colnames(draws_matrix)) {
+    rlang::abort("CmdStan output missing beta draws.")
   }
 
   theta_draws <- draws_matrix[, theta_cols, drop = FALSE]
   colnames(theta_draws) <- bt_data$item_id %||% as.character(seq_len(bt_data$N))
-  epsilon_draws <- draws_matrix[, "epsilon", drop = TRUE]
+  epsilon_draws <- if (model_has_e(model_variant)) {
+    draws_matrix[, "epsilon", drop = TRUE]
+  } else {
+    NULL
+  }
+  beta_draws <- if (model_has_b(model_variant)) {
+    draws_matrix[, "beta", drop = TRUE]
+  } else {
+    NULL
+  }
 
   thin_draws <- as.integer(config$thin_draws %||% 1L)
   if (is.na(thin_draws) || thin_draws < 1L) {
@@ -500,22 +615,29 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   if (thin_draws > 1L) {
     keep_idx <- seq(1L, nrow(theta_draws), by = thin_draws)
     theta_draws <- theta_draws[keep_idx, , drop = FALSE]
-    epsilon_draws <- epsilon_draws[keep_idx]
+    if (!is.null(epsilon_draws)) {
+      epsilon_draws <- epsilon_draws[keep_idx]
+    }
+    if (!is.null(beta_draws)) {
+      beta_draws <- beta_draws[keep_idx]
+    }
   }
 
   draws <- list(
     theta = theta_draws,
-    epsilon = as.double(epsilon_draws)
+    epsilon = if (is.null(epsilon_draws)) NULL else as.double(epsilon_draws),
+    beta = if (is.null(beta_draws)) NULL else as.double(beta_draws)
   )
 
-  summaries <- summarize_draws(draws)
-  diagnostics <- .btl_mcmc_v3_collect_diagnostics(fit)
+  summaries <- summarize_draws(draws, model_variant = model_variant)
+  diagnostics <- .btl_mcmc_v3_collect_diagnostics(fit, model_variant = model_variant)
 
   list(
     draws = draws,
     theta_summary = summaries$theta_summary,
     epsilon_summary = summaries$epsilon_summary,
     diagnostics = diagnostics,
-    mcmc_config_used = resolved_cmdstan
+    mcmc_config_used = resolved_cmdstan,
+    model_variant = model_variant
   )
 }
