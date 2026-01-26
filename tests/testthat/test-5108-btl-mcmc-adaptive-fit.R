@@ -10,7 +10,7 @@ make_v3_bt_data <- function() {
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive validates cmdstan config", {
   bt_data <- make_v3_bt_data()
-  config <- pairwiseLLM:::adaptive_v3_config(2L)
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
 
   config$cmdstan <- 1
   testthat::with_mocked_bindings(
@@ -19,6 +19,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates cmdstan config", {
       "config\\$cmdstan"
     ),
     .btl_mcmc_require_cmdstanr = function() NULL,
+    stan_file_for_variant = function(...) "fake.stan",
     .package = "pairwiseLLM"
   )
 
@@ -30,17 +31,17 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates cmdstan config", {
         "output_dir"
       ),
       .btl_mcmc_require_cmdstanr = function() NULL,
+      stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
     cmdstan_model = function(file) list(sample = function(...) NULL),
-    write_stan_file = function(code) "fake.stan",
     .package = "cmdstanr"
   )
 })
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive returns draws with mocked cmdstan", {
   bt_data <- make_v3_bt_data()
-  config <- pairwiseLLM:::adaptive_v3_config(2L)
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
   config$cmdstan <- list(
     chains = 2L,
     iter_warmup = 2L,
@@ -69,10 +70,10 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive returns draws with mocked cmdst
     testthat::with_mocked_bindings(
       pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config, seed = 1),
       .btl_mcmc_require_cmdstanr = function() NULL,
+      stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
     cmdstan_model = function(file) fake_model,
-    write_stan_file = function(code) "fake.stan",
     .package = "cmdstanr"
   )
 
@@ -83,7 +84,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive returns draws with mocked cmdst
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive catches bad draws output", {
   bt_data <- make_v3_bt_data()
-  config <- pairwiseLLM:::adaptive_v3_config(2L)
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
   config$cmdstan <- list(chains = 1L, iter_warmup = 1L, iter_sampling = 1L)
 
   fake_fit <- list(
@@ -104,17 +105,17 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive catches bad draws output", {
         "epsilon"
       ),
       .btl_mcmc_require_cmdstanr = function() NULL,
+      stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
     cmdstan_model = function(file) fake_model,
-    write_stan_file = function(code) "fake.stan",
     .package = "cmdstanr"
   )
 })
 
 testthat::test_that("fit_bayes_btl_mcmc_adaptive rejects invalid thinning", {
   bt_data <- make_v3_bt_data()
-  config <- pairwiseLLM:::adaptive_v3_config(2L)
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
   config$thin_draws <- 0L
 
   fake_fit <- list(
@@ -135,10 +136,10 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive rejects invalid thinning", {
         "thin_draws"
       ),
       .btl_mcmc_require_cmdstanr = function() NULL,
+      stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
     cmdstan_model = function(file) fake_model,
-    write_stan_file = function(code) "fake.stan",
     .package = "cmdstanr"
   )
 })

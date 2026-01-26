@@ -69,7 +69,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive rejects invalid thinning", {
     testthat::skip("mcmc fit helper is mocked; skipping thin_draws validation.")
   }
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("a", "b"))
-  config <- pairwiseLLM:::adaptive_v3_config(2L)
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
   config$thin_draws <- NA_integer_
   config$cmdstan <- list(chains = 1L, iter_warmup = 1L, iter_sampling = 1L)
 
@@ -91,9 +91,9 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive rejects invalid thinning", {
     ".btl_mcmc_require_cmdstanr",
     function() NULL
   )
-  restore_write <- local_rebind_namespace(
-    "cmdstanr",
-    "write_stan_file",
+  restore_stan <- local_rebind_namespace(
+    "pairwiseLLM",
+    "stan_file_for_variant",
     function(...) "fake.stan"
   )
   restore_model <- local_rebind_namespace(
@@ -103,7 +103,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive rejects invalid thinning", {
   )
   on.exit({
     restore_model()
-    restore_write()
+    restore_stan()
     restore_req()
   }, add = TRUE)
 
@@ -120,7 +120,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates parallel chains", {
     testthat::skip("mcmc fit helper is mocked; skipping parallel_chains validation.")
   }
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("a", "b"))
-  config <- pairwiseLLM:::adaptive_v3_config(2L)
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
   config$cmdstan <- list(iter_warmup = 1L, iter_sampling = 1L)
 
   restore_req <- local_rebind_namespace(

@@ -94,8 +94,19 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
     force(seed)
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    model_variant <- config$model_variant %||% "btl_e_b"
+    epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+      rep(0.1, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+      rep(0, nrow(theta_draws))
+    } else {
+      NULL
+    }
     list(
-      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+      draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -103,7 +114,8 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
         max_rhat = 1,
         min_ess_bulk = 1000,
         min_ess_tail = 1000
-      )
+      ),
+      model_variant = model_variant
     )
   }
 
@@ -174,8 +186,19 @@ testthat::test_that("adaptive_rank_start saves live state when state_path is pro
     force(seed)
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    model_variant <- config$model_variant %||% "btl_e_b"
+    epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+      rep(0.1, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+      rep(0, nrow(theta_draws))
+    } else {
+      NULL
+    }
     list(
-      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+      draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -183,7 +206,8 @@ testthat::test_that("adaptive_rank_start saves live state when state_path is pro
         max_rhat = 1,
         min_ess_bulk = 1000,
         min_ess_tail = 1000
-      )
+      ),
+      model_variant = model_variant
     )
   }
 
@@ -374,8 +398,19 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
     force(seed)
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    model_variant <- config$model_variant %||% "btl_e_b"
+    epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+      rep(0.1, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+      rep(0, nrow(theta_draws))
+    } else {
+      NULL
+    }
     list(
-      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+      draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -383,7 +418,8 @@ testthat::test_that("adaptive_rank_resume ingests batch results incrementally", 
         max_rhat = 1,
         min_ess_bulk = 1000,
         min_ess_tail = 1000
-      )
+      ),
+      model_variant = model_variant
     )
   }
 
@@ -536,8 +572,19 @@ testthat::test_that("adaptive_rank_resume filters batch polling args to formals"
     force(seed)
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+    model_variant <- config$model_variant %||% "btl_e_b"
+    epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+      rep(0.1, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+      rep(0, nrow(theta_draws))
+    } else {
+      NULL
+    }
     list(
-      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+      draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
       theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
       epsilon_summary = epsilon_summary_fixture(),
       diagnostics = list(
@@ -545,7 +592,8 @@ testthat::test_that("adaptive_rank_resume filters batch polling args to formals"
         max_rhat = 1,
         min_ess_bulk = 1000,
         min_ess_tail = 1000
-      )
+      ),
+      model_variant = model_variant
     )
   }
 
@@ -656,16 +704,28 @@ testthat::test_that("adaptive_rank_resume submits when scheduled pairs exist", {
       force(seed)
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      model_variant <- config$model_variant %||% "btl_e_b"
+      epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+        rep(0.1, nrow(theta_draws))
+      } else {
+        NULL
+      }
+      beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+        rep(0, nrow(theta_draws))
+      } else {
+        NULL
+      }
       list(
-        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+        draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        min_ess_tail = 1000
-      )
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          min_ess_tail = 1000
+        ),
+        model_variant = model_variant
       )
     }
   )
@@ -759,16 +819,28 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       force(seed)
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      model_variant <- config$model_variant %||% "btl_e_b"
+      epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+        rep(0.1, nrow(theta_draws))
+      } else {
+        NULL
+      }
+      beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+        rep(0, nrow(theta_draws))
+      } else {
+        NULL
+      }
       list(
-        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+        draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        min_ess_tail = 1000
-      )
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          min_ess_tail = 1000
+        ),
+        model_variant = model_variant
       )
     }
   )
@@ -800,16 +872,28 @@ testthat::test_that("adaptive_rank_start stores submission options in state and 
       force(seed)
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      model_variant <- config$model_variant %||% "btl_e_b"
+      epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+        rep(0.1, nrow(theta_draws))
+      } else {
+        NULL
+      }
+      beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+        rep(0, nrow(theta_draws))
+      } else {
+        NULL
+      }
       list(
-        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+        draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        min_ess_tail = 1000
-      )
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          min_ess_tail = 1000
+        ),
+        model_variant = model_variant
       )
     }
   )
@@ -860,16 +944,28 @@ testthat::test_that("adaptive_rank_resume normalizes raw live results before ing
       force(seed)
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      model_variant <- config$model_variant %||% "btl_e_b"
+      epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+        rep(0.1, nrow(theta_draws))
+      } else {
+        NULL
+      }
+      beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+        rep(0, nrow(theta_draws))
+      } else {
+        NULL
+      }
       list(
-        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+        draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        min_ess_tail = 1000
-      )
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          min_ess_tail = 1000
+        ),
+        model_variant = model_variant
       )
     }
   )
@@ -938,16 +1034,28 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       force(seed)
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      model_variant <- config$model_variant %||% "btl_e_b"
+      epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+        rep(0.1, nrow(theta_draws))
+      } else {
+        NULL
+      }
+      beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+        rep(0, nrow(theta_draws))
+      } else {
+        NULL
+      }
       list(
-        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+        draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        min_ess_tail = 1000
-      )
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          min_ess_tail = 1000
+        ),
+        model_variant = model_variant
       )
     }
   )
@@ -981,16 +1089,28 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       force(seed)
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      model_variant <- config$model_variant %||% "btl_e_b"
+      epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+        rep(0.1, nrow(theta_draws))
+      } else {
+        NULL
+      }
+      beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+        rep(0, nrow(theta_draws))
+      } else {
+        NULL
+      }
       list(
-        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+        draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        min_ess_tail = 1000
-      )
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          min_ess_tail = 1000
+        ),
+        model_variant = model_variant
       )
     }
   )
@@ -1010,16 +1130,28 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
       force(seed)
       ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
       theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
+      model_variant <- config$model_variant %||% "btl_e_b"
+      epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+        rep(0.1, nrow(theta_draws))
+      } else {
+        NULL
+      }
+      beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+        rep(0, nrow(theta_draws))
+      } else {
+        NULL
+      }
       list(
-        draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
+        draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
         theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
         epsilon_summary = epsilon_summary_fixture(),
         diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        min_ess_tail = 1000
-      )
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          min_ess_tail = 1000
+        ),
+        model_variant = model_variant
       )
     }
   )

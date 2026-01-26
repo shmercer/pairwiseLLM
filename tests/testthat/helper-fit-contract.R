@@ -1,9 +1,9 @@
 make_v3_fit_contract <- function(ids,
     theta_draws = NULL,
     epsilon_draws = NULL,
-    b_draws = NULL,
+    beta_draws = NULL,
     diagnostics = NULL,
-    model_variant = "btl_mcmc_v3",
+    model_variant = "btl_e_b",
     mcmc_config_used = NULL,
     diagnostics_pass = NA) {
   ids <- as.character(ids)
@@ -30,7 +30,7 @@ make_v3_fit_contract <- function(ids,
   fit <- pairwiseLLM:::build_v3_fit_contract(
     theta_draws = theta_draws,
     epsilon_draws = epsilon_draws,
-    b_draws = b_draws,
+    beta_draws = beta_draws,
     diagnostics = diagnostics,
     model_variant = model_variant,
     mcmc_config_used = mcmc_config_used,

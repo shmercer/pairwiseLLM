@@ -10,7 +10,7 @@ make_v3_bt_data_5842 <- function() {
 
 testthat::test_that("cmdstanr sampling receives resolved chain settings", {
   bt_data <- make_v3_bt_data_5842()
-  config <- pairwiseLLM:::adaptive_v3_config(2L)
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
   config$cmdstan <- list(
     chains = 4L,
     parallel_chains = 7L,
@@ -39,10 +39,10 @@ testthat::test_that("cmdstanr sampling receives resolved chain settings", {
     testthat::with_mocked_bindings(
       pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
       .btl_mcmc_require_cmdstanr = function() NULL,
+      stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
     cmdstan_model = function(file) fake_model,
-    write_stan_file = function(code) "fake.stan",
     .package = "cmdstanr"
   )
 
@@ -120,7 +120,8 @@ testthat::test_that("refit stores mcmc config used on state", {
         epsilon_p95 = 0.2,
         epsilon_p97.5 = 0.21
       ),
-      diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+      diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000),
+      model_variant = "btl_e"
     )
   }
   out <- testthat::with_mocked_bindings(

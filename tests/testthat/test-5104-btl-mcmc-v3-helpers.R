@@ -89,8 +89,8 @@ testthat::test_that("btl mcmc v3 unpacking handles list and matrix draws", {
   bad_mat <- matrix(c(0, 1), nrow = 1)
   colnames(bad_mat) <- c("theta[1]", "theta[2]")
   expect_error(
-    pairwiseLLM:::.btl_mcmc_v3_unpack_draws(bad_mat),
-    "must include theta and epsilon"
+    pairwiseLLM:::.btl_mcmc_v3_unpack_draws(bad_mat, model_variant = "btl_e"),
+    "epsilon"
   )
 
   expect_error(
@@ -110,7 +110,7 @@ testthat::test_that("btl mcmc v3 collects diagnostics and notes missing fields",
       )
     }
   )
-  out_ok <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_ok)
+  out_ok <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_ok, model_variant = "btl_e_b")
   expect_equal(out_ok$divergences, 1L)
   expect_equal(out_ok$max_rhat, 1.01)
   expect_equal(out_ok$min_ess_bulk, 200)
@@ -120,7 +120,7 @@ testthat::test_that("btl mcmc v3 collects diagnostics and notes missing fields",
     diagnostic_summary = function() tibble::tibble(other = 1L),
     summary = function(variables = NULL) tibble::tibble(value = 1)
   )
-  out_missing <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_missing)
+  out_missing <- pairwiseLLM:::.btl_mcmc_v3_collect_diagnostics(fit_missing, model_variant = "btl_e_b")
   expect_true(is.na(out_missing$divergences))
   expect_true(is.na(out_missing$max_rhat))
   expect_true(is.na(out_missing$min_ess_bulk))

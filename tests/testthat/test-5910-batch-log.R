@@ -46,18 +46,42 @@ testthat::test_that("batch_log tracks every iteration and required columns", {
     force(seed)
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
-    list(
-      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
-      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(
+    model_variant <- config$model_variant %||% "btl_e_b"
+    epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+      rep(0.1, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+      rep(0, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    epsilon_summary <- if (!is.null(epsilon_draws)) {
+      tibble::tibble(
         epsilon_mean = 0.1,
         epsilon_p2.5 = 0.05,
         epsilon_p5 = 0.06,
         epsilon_p50 = 0.1,
         epsilon_p95 = 0.14,
         epsilon_p97.5 = 0.15
-      ),
-      diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+      )
+    } else {
+      tibble::tibble(
+        epsilon_mean = NA_real_,
+        epsilon_p2.5 = NA_real_,
+        epsilon_p5 = NA_real_,
+        epsilon_p50 = NA_real_,
+        epsilon_p95 = NA_real_,
+        epsilon_p97.5 = NA_real_
+      )
+    }
+    list(
+      draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = epsilon_summary,
+      diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000),
+      model_variant = model_variant
     )
   }
 
@@ -147,18 +171,42 @@ testthat::test_that("round_log fills refit fields and matches stop metrics", {
     force(seed)
     ids <- as.character(bt_data$item_id %||% seq_len(bt_data$N))
     theta_draws <- matrix(0, nrow = 4L, ncol = length(ids), dimnames = list(NULL, ids))
-    list(
-      draws = list(theta = theta_draws, epsilon = rep(0.1, nrow(theta_draws))),
-      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
-      epsilon_summary = tibble::tibble(
+    model_variant <- config$model_variant %||% "btl_e_b"
+    epsilon_draws <- if (pairwiseLLM:::model_has_e(model_variant)) {
+      rep(0.1, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    beta_draws <- if (pairwiseLLM:::model_has_b(model_variant)) {
+      rep(0, nrow(theta_draws))
+    } else {
+      NULL
+    }
+    epsilon_summary <- if (!is.null(epsilon_draws)) {
+      tibble::tibble(
         epsilon_mean = 0.1,
         epsilon_p2.5 = 0.05,
         epsilon_p5 = 0.06,
         epsilon_p50 = 0.1,
         epsilon_p95 = 0.14,
         epsilon_p97.5 = 0.15
-      ),
-      diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
+      )
+    } else {
+      tibble::tibble(
+        epsilon_mean = NA_real_,
+        epsilon_p2.5 = NA_real_,
+        epsilon_p5 = NA_real_,
+        epsilon_p50 = NA_real_,
+        epsilon_p95 = NA_real_,
+        epsilon_p97.5 = NA_real_
+      )
+    }
+    list(
+      draws = list(theta = theta_draws, epsilon = epsilon_draws, beta = beta_draws),
+      theta_summary = tibble::tibble(item_id = ids, theta_mean = rep(0, length(ids))),
+      epsilon_summary = epsilon_summary,
+      diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000),
+      model_variant = model_variant
     )
   }
 
