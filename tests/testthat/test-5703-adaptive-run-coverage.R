@@ -9,7 +9,7 @@ testthat::test_that("adaptive_get_refit_fit validates refit_B and batch_size", {
     samples = samples,
     config = list(d1 = 2L, M1_target = 2L, budget_max = 6L)
   )
-  state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L))
+  state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L, model_variant = "btl"))
 
   state_bad <- state
   state_bad$config$v3$refit_B <- 0L
@@ -109,7 +109,7 @@ testthat::test_that("adaptive_run_stopping_checks respects allow_refit and exist
     theta_draws = matrix(0, nrow = 2L, ncol = state$N, dimnames = list(NULL, state$ids)),
     diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
   )
-  state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L))
+  state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L, model_variant = "btl"))
 
   out2 <- .adaptive_run_stopping_checks(
     state,

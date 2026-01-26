@@ -4,7 +4,7 @@ testthat::test_that("adaptive_get_refit_fit aborts when fit contract is invalid"
     text = c("alpha", "bravo")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
-  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list())
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(model_variant = "btl"))
   state$new_since_refit <- 1L
 
   testthat::with_mocked_bindings(
@@ -29,7 +29,7 @@ testthat::test_that("adaptive_run_stopping_checks returns when draws are too few
   state$phase <- "phase2"
   state$mode <- "adaptive"
   state$iter <- 1L
-  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list())
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(model_variant = "btl"))
 
   unordered_key <- pairwiseLLM:::make_unordered_key("A", "B")
   ordered_key <- pairwiseLLM:::make_ordered_key("A", "B")
@@ -244,6 +244,7 @@ testthat::test_that("schedule_next_pairs stops when stop decision is reached", {
   v3_config <- pairwiseLLM:::adaptive_v3_config(
     state$N,
     list(
+      model_variant = "btl",
       stability_consecutive = 1L,
       min_refits_for_stability = 2L,
       stability_lag = 1L,

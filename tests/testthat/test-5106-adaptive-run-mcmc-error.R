@@ -50,7 +50,7 @@ testthat::test_that("adaptive stopping checks do not stop on minimal state", {
     config = list(d1 = 1L, M1_target = 1L, budget_max = 10L),
     seed = 1
   )
-  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(model_variant = "btl_e"))
   state$phase <- "phase2"
   state$config$CW <- 1L
 

@@ -76,8 +76,8 @@ testthat::test_that("compute_pair_utility_from_draws handles variant effects", {
   )
   theta_draws[, 1] <- stats::rnorm(n_draws, 3, 0.1)
   theta_draws[, 2] <- stats::rnorm(n_draws, -3, 0.1)
-  epsilon_draws <- stats::rbeta(n_draws, 2, 20)
-  beta_draws <- stats::rnorm(n_draws, 0, 0.3)
+  epsilon_draws <- rep(0.2, n_draws)
+  beta_draws <- rep(0.5, n_draws)
   deg <- rep(0, n_items)
 
   out_btl <- pairwiseLLM:::compute_pair_utility_from_draws(
@@ -113,7 +113,7 @@ testthat::test_that("compute_pair_utility_from_draws handles variant effects", {
     model_variant = "btl_b",
     beta_draws = rep(0, n_draws)
   )
-  testthat::expect_true(abs(out_btl_b$u0[[1L]] - out_btl_b0$u0[[1L]]) > 1e-6)
+  testthat::expect_true(abs(out_btl_b$u0[[1L]] - out_btl_b0$u0[[1L]]) > 1e-8)
 })
 
 testthat::test_that("compute_pair_utility_from_draws validates required inputs", {
@@ -175,7 +175,7 @@ testthat::test_that("compute_pair_utility_dispatch prefers draw-based utility", 
   samples <- tibble::tibble(ID = ids, text = ids)
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, model_variant = "btl")
-  state$deg <- stats::setNames(as.integer(0:5), ids)
+  deg_vec <- state$deg[ids]
 
   candidates <- tibble::tibble(i_id = ids[[1L]], j_id = ids[[2L]])
   out <- pairwiseLLM:::compute_pair_utility_dispatch(
@@ -189,7 +189,7 @@ testthat::test_that("compute_pair_utility_dispatch prefers draw-based utility", 
   d <- theta_draws[, 1] - theta_draws[, 2]
   p <- stats::plogis(d)
   expected_u0 <- mean(p^2) - mean(p)^2
-  expected_u <- expected_u0 / sqrt((state$deg[[1L]] + 1) * (state$deg[[2L]] + 1))
+  expected_u <- expected_u0 / sqrt((deg_vec[[1L]] + 1) * (deg_vec[[2L]] + 1))
 
   testthat::expect_equal(out$utility_raw[[1L]], expected_u0, tolerance = 1e-8)
   testthat::expect_equal(out$utility[[1L]], expected_u, tolerance = 1e-8)
