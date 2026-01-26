@@ -62,6 +62,22 @@ testthat::test_that("dup_relax is used only after starvation", {
   )
   state$history_pairs <- dplyr::bind_rows(state$history_pairs, history_row)
   state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
+  state$history_results <- tibble::tibble(
+    pair_uid = "p1",
+    unordered_key = "A:B",
+    ordered_key = pairwiseLLM:::make_ordered_key("A", "B"),
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2020-01-01", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- as.integer(nrow(state$history_results))
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   state$posterior$U_dup_threshold <- 0
 
   theta_draws <- matrix(0, nrow = 2L, ncol = state$N)
