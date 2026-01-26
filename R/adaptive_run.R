@@ -145,7 +145,7 @@ NULL
       draws <- list(
         theta = fit$theta_draws,
         epsilon = fit$epsilon_draws %||% NULL,
-        b = fit$b_draws %||% NULL
+        beta = fit$beta_draws %||% NULL
       )
     }
 
@@ -157,8 +157,8 @@ NULL
         if (!is.null(draws$epsilon)) {
           draws$epsilon <- draws$epsilon[keep_idx]
         }
-        if (!is.null(draws$b)) {
-          draws$b <- draws$b[keep_idx]
+        if (!is.null(draws$beta)) {
+          draws$beta <- draws$beta[keep_idx]
         }
       }
       draws_path <- file.path(output_dir, "theta_draws.rds")
@@ -2167,12 +2167,11 @@ NULL
 #'
 #' @section Model variants:
 #' Adaptive v3 tracks model variants in the fit contract and logs. Supported
-#' labels include \code{"BTL"}, \code{"BTL+epsilon"}, \code{"BTL+b"}, and
-#' \code{"BTL+b+epsilon"}. Variants that omit parameters still carry the full
-#' output schema: percentile columns such as \code{epsilon_p2.5} or \code{b_p50}
-#' remain present and are \code{NA} when the parameter is not estimated. The
-#' current MCMC backend provides epsilon draws; \code{model_variant} is recorded
-#' when supplied by the backend and is otherwise \code{NA}.
+#' labels include \code{"btl"} (plain Bradley--Terry), \code{"btl_e"} (lapse
+#' epsilon), \code{"btl_b"} (position bias beta), and \code{"btl_e_b"} (both;
+#' default). Variants that omit parameters still carry the full output schema:
+#' percentile columns such as \code{epsilon_p2.5} or \code{beta_p50} remain
+#' present and are \code{NA} when the parameter is not estimated.
 #'
 #' @section Stopping logic:
 #' Stopping is a staged gate evaluated only after a refit. First, the run must
@@ -2371,12 +2370,12 @@ NULL
 #'   \item{\code{epsilon_p50}}{Median epsilon (NA if absent).}
 #'   \item{\code{epsilon_p95}}{95th percentile of epsilon (NA if absent).}
 #'   \item{\code{epsilon_p97.5}}{97.5th percentile of epsilon (NA if absent).}
-#'   \item{\code{b_mean}}{Posterior mean of b (NA if absent).}
-#'   \item{\code{b_p2.5}}{2.5th percentile of b (NA if absent).}
-#'   \item{\code{b_p5}}{5th percentile of b (NA if absent).}
-#'   \item{\code{b_p50}}{Median b (NA if absent).}
-#'   \item{\code{b_p95}}{95th percentile of b (NA if absent).}
-#'   \item{\code{b_p97.5}}{97.5th percentile of b (NA if absent).}
+#'   \item{\code{beta_mean}}{Posterior mean of beta (NA if absent).}
+#'   \item{\code{beta_p2.5}}{2.5th percentile of beta (NA if absent).}
+#'   \item{\code{beta_p5}}{5th percentile of beta (NA if absent).}
+#'   \item{\code{beta_p50}}{Median beta (NA if absent).}
+#'   \item{\code{beta_p95}}{95th percentile of beta (NA if absent).}
+#'   \item{\code{beta_p97.5}}{97.5th percentile of beta (NA if absent).}
 #'   \item{\code{divergences}}{Total divergences reported by MCMC.}
 #'   \item{\code{max_rhat}}{Maximum R-hat across parameters.}
 #'   \item{\code{min_ess_bulk}}{Minimum bulk ESS across parameters.}
