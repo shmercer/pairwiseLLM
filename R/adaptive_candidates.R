@@ -27,33 +27,6 @@ compute_ranking_from_theta_mean <- function(theta_mean, state) {
   as.character(ids[ord])
 }
 
-#' @keywords internal
-#' @noRd
-select_window_size <- function(N, phase = c("phase2", "phase3"), near_stop = FALSE) {
-  if (!is.numeric(N) || length(N) != 1L || is.na(N) || N < 1) {
-    rlang::abort("`N` must be a positive numeric value.")
-  }
-  phase <- match.arg(phase)
-  if (!is.logical(near_stop) || length(near_stop) != 1L || is.na(near_stop)) {
-    rlang::abort("`near_stop` must be TRUE or FALSE.")
-  }
-
-  if (near_stop) {
-    phase <- "phase3"
-  }
-
-  if (phase == "phase2") {
-    if (N <= 500) {
-      return(50L)
-    }
-    return(100L)
-  }
-
-  window <- floor(N / 10)
-  window <- max(25L, min(50L, as.integer(window)))
-  as.integer(window)
-}
-
 .adaptive_v3_theta_summary <- function(theta_summary, state) {
   if (!is.data.frame(theta_summary)) {
     rlang::abort("`theta_summary` must be a data frame or tibble.")

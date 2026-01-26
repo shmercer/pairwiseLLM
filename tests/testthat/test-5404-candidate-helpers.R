@@ -121,26 +121,43 @@ testthat::test_that("compute_ranking_from_theta_mean validates inputs and orders
   testthat::expect_equal(ranking, c("A", "B", "C"))
 })
 
-testthat::test_that("select_window_size validates inputs and follows phase rules", {
-  testthat::expect_error(
-    pairwiseLLM:::select_window_size(N = NA_real_),
-    "positive numeric value"
+testthat::test_that("candidate generation and selection wiring runs on tiny state", {
+  withr::local_seed(1)
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C", "D"),
+    text = c("alpha", "beta", "gamma", "delta")
   )
-  testthat::expect_error(
-    pairwiseLLM:::select_window_size(N = 0),
-    "positive numeric value"
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
+  config <- pairwiseLLM:::adaptive_v3_config(state$N, list(
+    W = 1L,
+    A_anchors = 2L,
+    C_max = 10L,
+    batch_size = 2L,
+    explore_rate = 0.5
+  ))
+  config$epsilon_mean <- 0.1
+  state$config$v3 <- config
+
+  theta_draws <- matrix(c(1, 0, 0, -1, 0.5, -0.5, 0.5, -0.5), nrow = 2, byrow = TRUE)
+  colnames(theta_draws) <- state$ids
+  fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
+
+  theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
+  candidates <- pairwiseLLM:::generate_candidates(theta_summary, state, config)
+  utilities <- pairwiseLLM:::compute_pair_utility_dispatch(
+    fit = fit,
+    candidates = candidates,
+    state = state,
+    config = config,
+    diagnostics_pass = FALSE
   )
-  testthat::expect_error(
-    pairwiseLLM:::select_window_size(N = 10, near_stop = NA),
-    "TRUE or FALSE"
-  )
+  selected <- pairwiseLLM:::select_batch(state, utilities, config, seed = 1L)
 
-  testthat::expect_equal(pairwiseLLM:::select_window_size(N = 500, phase = "phase2"), 50L)
-  testthat::expect_equal(pairwiseLLM:::select_window_size(N = 501, phase = "phase2"), 100L)
-
-  testthat::expect_equal(pairwiseLLM:::select_window_size(N = 100, phase = "phase3"), 25L)
-  testthat::expect_equal(pairwiseLLM:::select_window_size(N = 500, phase = "phase3"), 50L)
-  testthat::expect_equal(pairwiseLLM:::select_window_size(N = 1000, phase = "phase3"), 50L)
-
-  testthat::expect_equal(pairwiseLLM:::select_window_size(N = 200, phase = "phase2", near_stop = TRUE), 25L)
+  testthat::expect_true(all(c("A_id", "B_id", "i_id", "j_id", "unordered_key") %in% names(selected)))
+  testthat::expect_lte(nrow(selected), config$batch_size)
+  if (nrow(selected) > 0L) {
+    testthat::expect_true(all(selected$A_id %in% state$ids))
+    testthat::expect_true(all(selected$B_id %in% state$ids))
+    testthat::expect_false(any(selected$A_id == selected$B_id))
+  }
 })
