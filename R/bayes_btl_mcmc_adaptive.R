@@ -313,7 +313,13 @@ stan_file_for_variant <- function(model_variant) {
   if (model_has_b(model_variant)) {
     vars <- c(vars, "beta")
   }
-  summary_tbl <- tryCatch(fit$summary(variables = vars), error = function(e) NULL)
+  summary_tbl <- tryCatch(
+    withCallingHandlers(
+      fit$summary(variables = vars),
+      warning = function(w) invokeRestart("muffleWarning")
+    ),
+    error = function(e) NULL
+  )
   if (!is.null(summary_tbl) && nrow(summary_tbl) > 0L) {
     if ("rhat" %in% names(summary_tbl)) {
       rhat_vals <- summary_tbl$rhat
@@ -371,7 +377,34 @@ stan_file_for_variant <- function(model_variant) {
 
 #' @keywords internal
 #' @noRd
-summarize_draws <- function(draws, model_variant = "btl_e_b") {
+.btl_mcmc_v3_infer_variant <- function(draws) {
+  has_e <- FALSE
+  has_b <- FALSE
+  if (is.list(draws)) {
+    has_e <- !is.null(draws$epsilon) || !is.null(draws$epsilon_draws)
+    has_b <- !is.null(draws$beta) || !is.null(draws$beta_draws) ||
+      !is.null(draws$b) || !is.null(draws$b_draws)
+  } else if (is.matrix(draws)) {
+    cols <- colnames(draws) %||% character()
+    has_e <- any(cols == "epsilon")
+    has_b <- any(cols == "beta")
+  }
+  if (isTRUE(has_e) && isTRUE(has_b)) {
+    return("btl_e_b")
+  }
+  if (isTRUE(has_e)) {
+    return("btl_e")
+  }
+  if (isTRUE(has_b)) {
+    return("btl_b")
+  }
+  "btl"
+}
+
+summarize_draws <- function(draws, model_variant = NULL) {
+  if (is.null(model_variant)) {
+    model_variant <- .btl_mcmc_v3_infer_variant(draws)
+  }
   model_variant <- normalize_model_variant(model_variant)
   unpacked <- .btl_mcmc_v3_unpack_draws(draws, model_variant = model_variant)
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(unpacked$theta_draws, name = "theta_draws")
