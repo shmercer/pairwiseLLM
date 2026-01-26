@@ -42,6 +42,7 @@ add_completed_pair <- function(state, A_id, B_id, pair_index = 1L, iter = 1L) {
   state$history_results <- dplyr::bind_rows(state$history_results, result_row)
   state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
   state$comparisons_observed <- as.integer(nrow(state$history_results))
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
 
   current <- state$pair_count[[unordered_key]]
   if (is.null(current) || is.na(current)) {

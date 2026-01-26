@@ -38,6 +38,7 @@ testthat::test_that("duplicate policy enforces all locked conditions", {
   )
   state$comparisons_scheduled <- 1L
   state$comparisons_observed <- 1L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
 
   allowed <- tibble::tibble(
     i_id = "A",
@@ -91,6 +92,7 @@ testthat::test_that("duplicate policy enforces all locked conditions", {
   )
   state$comparisons_scheduled <- 2L
   state$comparisons_observed <- 2L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   out_count <- pairwiseLLM:::select_exploitation_pairs(
     candidates_with_utility = blocked_count,
     state = state,

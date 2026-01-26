@@ -85,6 +85,7 @@ testthat::test_that("ordering reverses duplicates and balances positions", {
   )
   state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
   state$comparisons_observed <- as.integer(nrow(state$history_results))
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   dup_pairs <- tibble::tibble(
     i_id = "A",
     j_id = "B",

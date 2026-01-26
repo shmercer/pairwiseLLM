@@ -52,6 +52,7 @@ testthat::test_that("ambiguous repeats can be selected in relaxed mode", {
     model = "test"
   )
   state$comparisons_observed <- as.integer(nrow(state$history_results))
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
 
   theta_summary <- tibble::tibble(
     item_id = state$ids,
@@ -106,6 +107,6 @@ testthat::test_that("ambiguous repeats can be selected in relaxed mode", {
   )
 
   testthat::expect_equal(nrow(selected), 1L)
-  testthat::expect_equal(selected$A_id, "B")
-  testthat::expect_equal(selected$B_id, "A")
+  testthat::expect_equal(selected$A_id, "A")
+  testthat::expect_equal(selected$B_id, "B")
 })

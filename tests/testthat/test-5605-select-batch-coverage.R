@@ -42,6 +42,7 @@ testthat::test_that("batch helpers handle empty history and duplicate gating", {
     model = "test"
   )
   state$comparisons_observed <- 1L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   state$posterior$U_dup_threshold <- 0.4
   expect_true(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", NA_real_, 0.5, config))
 })
@@ -70,6 +71,7 @@ testthat::test_that("duplicate gating rejects invalid utility and wide p_mean", 
     model = "test"
   )
   state$comparisons_observed <- 1L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   state$posterior$U_dup_threshold <- 0.1
   expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.5, NA_real_, config, policy = "relaxed"))
   expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.9, 0.5, config, policy = "relaxed"))
@@ -207,6 +209,7 @@ testthat::test_that("exploration sampling handles missing counts and rejects dup
     model = "test"
   )
   state$comparisons_observed <- 1L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   state$posterior$U_dup_threshold <- 0.9
   candidates_dup <- tibble::tibble(
     i_id = "A",
@@ -290,6 +293,7 @@ testthat::test_that("exploration sampling covers missing lookup and duplicate re
     model = "test"
   )
   state$comparisons_observed <- 1L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   candidates <- tibble::tibble(
     i_id = "A",
     j_id = "B",
@@ -452,6 +456,7 @@ testthat::test_that("select_batch increases exploit count when explore undershoo
     model = "test"
   )
   state$comparisons_observed <- 2L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
 
   candidates <- tibble::tibble(
     i_id = c("A", "A"),
