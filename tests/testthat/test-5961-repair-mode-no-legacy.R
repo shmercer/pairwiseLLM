@@ -101,8 +101,7 @@ testthat::test_that("repair mode uses exploration-only selection and skips legac
         as_v3_fit_contract_from_mcmc = function(...) fit,
         diagnostics_gate = function(...) FALSE,
         generate_candidates = function(...) candidate_tbl,
-        compute_pair_utility = function(...) utilities_tbl,
-        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        compute_pair_utility_dispatch = function(...) utilities_tbl,
         select_exploitation_pairs = function(...) rlang::abort("exploitation called"),
         .adaptive_schedule_repair_pairs = function(...) {
           rlang::abort("legacy repair scheduler called")
@@ -161,8 +160,7 @@ testthat::test_that("repair mode stops after bounded retry failures", {
         as_v3_fit_contract_from_mcmc = function(...) fit,
         diagnostics_gate = function(...) FALSE,
         generate_candidates = function(...) candidate_tbl,
-        compute_pair_utility = function(...) utilities_tbl,
-        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        compute_pair_utility_dispatch = function(...) utilities_tbl,
         .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
           candidates_with_utility[0, , drop = FALSE]
         },
@@ -183,8 +181,7 @@ testthat::test_that("repair mode stops after bounded retry failures", {
         as_v3_fit_contract_from_mcmc = function(...) fit,
         diagnostics_gate = function(...) FALSE,
         generate_candidates = function(...) candidate_tbl,
-        compute_pair_utility = function(...) utilities_tbl,
-        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        compute_pair_utility_dispatch = function(...) utilities_tbl,
         .adaptive_select_exploration_only = function(state, candidates_with_utility, config, seed = NULL) {
           candidates_with_utility[0, , drop = FALSE]
         },

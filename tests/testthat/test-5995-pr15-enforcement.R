@@ -78,7 +78,7 @@ testthat::test_that("PR15 gate: no legacy scheduler is invoked from public API",
     generate_candidates = function(theta_summary, state, config, allow_repeats = FALSE) {
       tibble::tibble(i = "A", j = "B")
     },
-    compute_pair_utility = function(draws, candidates, epsilon_mean) {
+    compute_pair_utility_dispatch = function(...) {
       tibble::tibble(
         i_id = "A",
         j_id = "B",
@@ -88,7 +88,6 @@ testthat::test_that("PR15 gate: no legacy scheduler is invoked from public API",
         p_mean = 0.5
       )
     },
-    apply_degree_penalty = function(utilities, state) utilities,
     select_batch = function(state, candidates_with_utility, config, seed = NULL, exploration_only = FALSE) {
       tibble::tibble(
         A_id = character(),

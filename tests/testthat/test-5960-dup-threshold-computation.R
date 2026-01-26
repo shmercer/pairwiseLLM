@@ -57,8 +57,7 @@ testthat::test_that("U_dup_threshold uses quantile for >= 50 candidates", {
       list(state = state, fit = fit, refit_performed = TRUE)
     },
     generate_candidates = function(theta_summary, state, config, allow_repeats = FALSE) candidate_tbl,
-    compute_pair_utility = function(draws, candidates, epsilon_mean) utilities_tbl,
-    apply_degree_penalty = function(utility_tbl, state) utility_tbl
+    compute_pair_utility_dispatch = function(...) utilities_tbl
   )
 
   expected_threshold <- stats::quantile(U_all, 0.90, type = 7, na.rm = TRUE)[[1L]]
@@ -127,8 +126,7 @@ testthat::test_that("U_dup_threshold uses max for < 50 candidates", {
       list(state = state, fit = fit, refit_performed = TRUE)
     },
     generate_candidates = function(theta_summary, state, config, allow_repeats = FALSE) candidate_tbl,
-    compute_pair_utility = function(draws, candidates, epsilon_mean) utilities_tbl,
-    apply_degree_penalty = function(utility_tbl, state) utility_tbl
+    compute_pair_utility_dispatch = function(...) utilities_tbl
   )
 
   expected_threshold <- max(U_all, na.rm = TRUE)

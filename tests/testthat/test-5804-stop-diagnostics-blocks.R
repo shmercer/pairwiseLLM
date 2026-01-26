@@ -96,8 +96,7 @@ testthat::test_that("diagnostics failure blocks convergence stopping and enters 
         .fit_bayes_btl_mcmc_adaptive = function(...) list(),
         as_v3_fit_contract_from_mcmc = function(...) fit,
         generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
-        compute_pair_utility = function(...) utilities_tbl,
-        apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+        compute_pair_utility_dispatch = function(...) utilities_tbl,
         .adaptive_select_exploration_only = function(...) selection_tbl,
         .package = "pairwiseLLM"
       )
@@ -141,8 +140,7 @@ testthat::test_that("diagnostics pass does not block convergence checks", {
     .fit_bayes_btl_mcmc_adaptive = function(...) list(),
     as_v3_fit_contract_from_mcmc = function(...) fit,
     generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
-    compute_pair_utility = function(...) utilities_tbl,
-    apply_degree_penalty = function(utility_tbl, state) utility_tbl,
+    compute_pair_utility_dispatch = function(...) utilities_tbl,
     should_stop = function(metrics, state, config) {
       testthat::expect_true(isTRUE(metrics$diagnostics_pass))
       called <<- TRUE
