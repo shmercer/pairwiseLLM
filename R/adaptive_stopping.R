@@ -110,12 +110,11 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     if (is.finite(sd_lag) && sd_lag > 0) {
       delta_sd_theta_lag <- abs(sd_current - sd_lag) / sd_lag
     }
-    rank_current <- rank(-theta_mean, ties.method = "average")
-    rank_lag <- rank(-lag_theta, ties.method = "average")
-    sd_rank_current <- stats::sd(rank_current)
-    sd_rank_lag <- stats::sd(rank_lag)
-    if (is.finite(sd_rank_current) && is.finite(sd_rank_lag) && sd_rank_current > 0 && sd_rank_lag > 0) {
-      rho_rank_lag <- stats::cor(rank_current, rank_lag, use = "complete.obs")
+    if (is.finite(sd_current) && is.finite(sd_lag) && sd_current > 0 && sd_lag > 0) {
+      rho_rank_lag <- stats::cor(theta_mean, lag_theta,
+        method = "spearman",
+        use = "complete.obs"
+      )
     }
     rank_spearman_min <- as.double(config$rank_spearman_min)
     if (!is.finite(rank_spearman_min) || length(rank_spearman_min) != 1L) {
