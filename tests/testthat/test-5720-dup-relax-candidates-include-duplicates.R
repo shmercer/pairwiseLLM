@@ -4,7 +4,7 @@ testthat::test_that("dup_relax candidate generation keeps seen pairs", {
     text = c("alpha", "bravo", "charlie", "delta")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
-  state$unordered_count[["A:B"]] <- 2L
+  state$pair_count[["A:B"]] <- 2L
 
   theta_summary <- tibble::tibble(
     item_id = state$ids,
@@ -18,7 +18,8 @@ testthat::test_that("dup_relax candidate generation keeps seen pairs", {
     theta_summary = theta_summary,
     state = state,
     config = config,
-    dup_policy = "relaxed"
+    dup_policy = "relaxed",
+    allow_repeats = TRUE
   )
 
   keys <- pairwiseLLM:::make_unordered_key(candidates$i, candidates$j)

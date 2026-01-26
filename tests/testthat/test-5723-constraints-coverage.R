@@ -5,13 +5,10 @@ testthat::test_that("adaptive_unordered_allowed covers relaxed and env branches"
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
 
-  state$unordered_count <- integer()
+  state$pair_count <- integer()
   testthat::expect_true(pairwiseLLM:::.adaptive_unordered_allowed(state, "A", "B"))
 
-  state$unordered_count <- c("A:B" = 1L)
-  seen <- new.env(parent = emptyenv())
-  seen[["B:A"]] <- TRUE
-  state$ordered_seen <- seen
+  state$pair_count <- c("A:B" = 1L)
   testthat::expect_true(pairwiseLLM:::.adaptive_unordered_allowed(state, "A", "B"))
 })
 

@@ -1,4 +1,4 @@
-testthat::test_that("ambiguous repeats can be selected in default mode", {
+testthat::test_that("ambiguous repeats can be selected in relaxed mode", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -6,32 +6,53 @@ testthat::test_that("ambiguous repeats can be selected in default mode", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   unordered_key <- pairwiseLLM:::make_unordered_key("A", "B")
   ordered_key <- pairwiseLLM:::make_ordered_key("A", "B")
-  state$unordered_count[[unordered_key]] <- 2L
   state$pair_count[[unordered_key]] <- 2L
   state$posterior$U_dup_threshold <- 0.4
-  state$ordered_seen <- stats::setNames(TRUE, ordered_key)
 
-  testthat::expect_true(pairwiseLLM:::.adaptive_unordered_allowed(
+  testthat::expect_false(pairwiseLLM:::.adaptive_unordered_allowed(
     state,
     "A",
     "B",
     allow_repeats = TRUE
   ))
+  testthat::expect_true(pairwiseLLM:::.adaptive_unordered_allowed(
+    state,
+    "A",
+    "B",
+    dup_policy = "relaxed",
+    allow_repeats = TRUE
+  ))
 
-  history_row <- tibble::tibble(
-    pair_uid = paste0(unordered_key, "#2"),
+  history_rows <- tibble::tibble(
+    pair_uid = c(paste0(unordered_key, "#1"), paste0(unordered_key, "#2")),
     unordered_key = unordered_key,
-    ordered_key = ordered_key,
-    A_id = "A",
-    B_id = "B",
-    A_text = "alpha",
-    B_text = "bravo",
+    ordered_key = c(ordered_key, "B:A"),
+    A_id = c("A", "B"),
+    B_id = c("B", "A"),
+    A_text = c("alpha", "bravo"),
+    B_text = c("bravo", "alpha"),
     phase = "phase2",
-    iter = 1L,
-    created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+    iter = c(1L, 2L),
+    created_at = as.POSIXct(c("2026-01-01 00:00:00", "2026-01-02 00:00:00"), tz = "UTC")
   )
-  state$history_pairs <- dplyr::bind_rows(state$history_pairs, history_row)
+  state$history_pairs <- dplyr::bind_rows(state$history_pairs, history_rows)
   state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
+  state$history_results <- tibble::tibble(
+    pair_uid = c(paste0(unordered_key, "#1"), paste0(unordered_key, "#2")),
+    unordered_key = unordered_key,
+    ordered_key = c(ordered_key, "B:A"),
+    A_id = c("A", "B"),
+    B_id = c("B", "A"),
+    better_id = c("A", "B"),
+    winner_pos = c(1L, 1L),
+    phase = "phase2",
+    iter = c(1L, 2L),
+    received_at = as.POSIXct(c("2026-01-01 00:00:00", "2026-01-02 00:00:00"), tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- as.integer(nrow(state$history_results))
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
 
   theta_summary <- tibble::tibble(
     item_id = state$ids,
@@ -47,6 +68,7 @@ testthat::test_that("ambiguous repeats can be selected in default mode", {
     theta_summary = theta_summary,
     state = state,
     config = candidate_config,
+    dup_policy = "relaxed",
     allow_repeats = TRUE
   )
   candidate_keys <- pairwiseLLM:::make_unordered_key(candidate_pool$i, candidate_pool$j)
@@ -70,7 +92,7 @@ testthat::test_that("ambiguous repeats can be selected in default mode", {
     candidates,
     state,
     config,
-    dup_policy = "default"
+    dup_policy = "relaxed"
   )
   testthat::expect_equal(nrow(filtered), 1L)
   testthat::expect_equal(filtered$unordered_key, unordered_key)
@@ -81,10 +103,10 @@ testthat::test_that("ambiguous repeats can be selected in default mode", {
     config = config,
     seed = NULL,
     exploration_only = FALSE,
-    dup_policy = "default"
+    dup_policy = "relaxed"
   )
 
   testthat::expect_equal(nrow(selected), 1L)
-  testthat::expect_equal(selected$A_id, "B")
-  testthat::expect_equal(selected$B_id, "A")
+  testthat::expect_equal(selected$A_id, "A")
+  testthat::expect_equal(selected$B_id, "B")
 })

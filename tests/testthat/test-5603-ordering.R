@@ -69,7 +69,23 @@ testthat::test_that("ordering reverses duplicates and balances positions", {
     iter = 1L,
     created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
   state$comparisons_scheduled <- as.integer(nrow(state$history_pairs))
+  state$comparisons_observed <- as.integer(nrow(state$history_results))
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
   dup_pairs <- tibble::tibble(
     i_id = "A",
     j_id = "B",

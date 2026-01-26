@@ -5,8 +5,7 @@ testthat::test_that("build_candidate_pairs filters duplicates and window pairs",
     text = c("alpha", "beta", "gamma", "delta")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 1)
-  state$unordered_count[["B:C"]] <- 2L
-  state$ordered_seen <- c("B:C" = TRUE, "C:B" = TRUE)
+  state$pair_count[["B:C"]] <- 2L
 
   ranking_ids <- state$ids
   out <- pairwiseLLM:::build_candidate_pairs(

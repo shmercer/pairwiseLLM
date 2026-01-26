@@ -6,7 +6,6 @@ testthat::test_that("non-ambiguous repeats are filtered in default mode", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   unordered_key <- pairwiseLLM:::make_unordered_key("A", "B")
   ordered_key <- pairwiseLLM:::make_ordered_key("A", "B")
-  state$unordered_count[[unordered_key]] <- 2L
   state$pair_count[[unordered_key]] <- 2L
   state$posterior$U_dup_threshold <- 0.4
 

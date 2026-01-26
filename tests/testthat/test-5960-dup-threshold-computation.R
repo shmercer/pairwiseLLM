@@ -44,6 +44,22 @@ testthat::test_that("U_dup_threshold uses quantile for >= 50 candidates", {
     created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
   state$comparisons_scheduled <- 1L
+  state$history_results <- tibble::tibble(
+    pair_uid = paste0(dup_key, "#1"),
+    unordered_key = dup_key,
+    ordered_key = dup_key,
+    A_id = candidate_tbl$i[[1L]],
+    B_id = candidate_tbl$j[[1L]],
+    better_id = candidate_tbl$i[[1L]],
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- 1L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
 
   fit <- make_v3_fit_contract(
     state$ids,
@@ -113,6 +129,22 @@ testthat::test_that("U_dup_threshold uses max for < 50 candidates", {
     created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
   state$comparisons_scheduled <- 1L
+  state$history_results <- tibble::tibble(
+    pair_uid = paste0(dup_key, "#1"),
+    unordered_key = dup_key,
+    ordered_key = dup_key,
+    A_id = candidate_tbl$i[[1L]],
+    B_id = candidate_tbl$j[[1L]],
+    better_id = candidate_tbl$i[[1L]],
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- 1L
+  state$new_since_refit <- state$comparisons_observed - state$last_refit_at
 
   fit <- make_v3_fit_contract(
     state$ids,
