@@ -257,9 +257,14 @@ sample_exploration_pairs <- function(state, candidates, n_explore, config,
     unordered_key <- make_unordered_key(i_id, j_id)
     if (unordered_key %in% picked_keys) next
 
-    count <- state$pair_count[[unordered_key]]
-    if (is.null(count)) {
+    counts <- state$pair_count
+    if (is.null(names(counts)) || length(counts) == 0L || !unordered_key %in% names(counts)) {
       count <- 0L
+    } else {
+      count <- counts[[unordered_key]]
+      if (is.null(count) || is.na(count)) {
+        count <- 0L
+      }
     }
     if (!is.na(count) && count >= 1L) {
       if (!unordered_key %in% names(key_idx)) next
@@ -408,7 +413,15 @@ assign_order <- function(pairs, state) {
       rlang::abort("`pairs` ids must exist in `state$ids`.")
     }
     unordered_key <- as.character(pairs$unordered_key[[idx]])
-    count <- state$pair_count[[unordered_key]]
+    counts <- state$pair_count
+    if (is.null(names(counts)) || length(counts) == 0L || !unordered_key %in% names(counts)) {
+      count <- 0L
+    } else {
+      count <- counts[[unordered_key]]
+      if (is.null(count) || is.na(count)) {
+        count <- 0L
+      }
+    }
     if (!is.na(count) && count >= 1L) {
       last_order <- .adaptive_last_order_for_pair(state, unordered_key)
       if (is.null(last_order)) {
