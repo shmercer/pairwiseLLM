@@ -5,14 +5,14 @@
 #' @keywords internal
 #' @noRd
 .adaptive_last_order_for_pair <- function(state, unordered_key) {
-  pairs <- state$history_pairs
-  if (is.null(pairs) || nrow(pairs) == 0L) return(NULL)
-  idx <- which(pairs$unordered_key == unordered_key)
+  results <- state$history_results
+  if (is.null(results) || nrow(results) == 0L) return(NULL)
+  idx <- which(results$unordered_key == unordered_key)
   if (length(idx) == 0L) return(NULL)
   last_idx <- max(idx)
   list(
-    A_id = as.character(pairs$A_id[[last_idx]]),
-    B_id = as.character(pairs$B_id[[last_idx]])
+    A_id = as.character(results$A_id[[last_idx]]),
+    B_id = as.character(results$B_id[[last_idx]])
   )
 }
 
@@ -30,6 +30,16 @@
   if (is.na(count) || count <= 0L) {
     return(TRUE)
   }
+  last_order <- .adaptive_last_order_for_pair(state, unordered_key)
+  if (is.null(last_order)) {
+    rlang::abort("Duplicate ordering requires a prior completed presentation.")
+  }
+  if (count == 1L) {
+    return(TRUE)
+  }
+  if (policy != "relaxed") {
+    return(FALSE)
+  }
 
   if (!is.numeric(p_mean) || length(p_mean) != 1L || !is.finite(p_mean)) return(FALSE)
   if (!is.numeric(utility) || length(utility) != 1L || !is.finite(utility)) return(FALSE)
@@ -44,9 +54,7 @@
     max_count <- max_count + 1L
   }
   if (count >= max_count) return(FALSE)
-
-  last_order <- .adaptive_last_order_for_pair(state, unordered_key)
-  !is.null(last_order)
+  TRUE
 }
 
 #' @keywords internal
@@ -80,7 +88,7 @@
   candidates_with_utility <- candidates_with_utility[keep, , drop = FALSE]
 
   unordered_key <- as.character(candidates_with_utility$unordered_key)
-  counts <- state$unordered_count
+  counts <- state$pair_count
   if (is.null(names(counts)) || length(counts) == 0L) {
     counts <- integer()
   }
@@ -90,6 +98,10 @@
 
   if (!any(repeat_mask)) {
     return(candidates_with_utility)
+  }
+
+  if (dup_policy != "relaxed") {
+    return(candidates_with_utility[!repeat_mask, , drop = FALSE])
   }
 
   threshold <- state$posterior$U_dup_threshold
@@ -111,6 +123,31 @@
 
   allowed <- !repeat_mask | allowed_repeats
   candidates_with_utility[allowed, , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_inflight_unordered_keys <- function(state) {
+  pairs <- state$history_pairs
+  if (is.null(pairs) || nrow(pairs) == 0L) return(character())
+  results <- state$history_results
+  observed <- if (is.null(results) || nrow(results) == 0L) {
+    character()
+  } else {
+    as.character(results$pair_uid)
+  }
+  pending <- !(as.character(pairs$pair_uid) %in% observed)
+  if (!any(pending)) return(character())
+  unique(as.character(pairs$unordered_key[pending]))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_filter_inflight_pairs <- function(pairs, state) {
+  pairs <- tibble::as_tibble(pairs)
+  inflight <- .adaptive_inflight_unordered_keys(state)
+  if (length(inflight) == 0L) return(pairs)
+  pairs[!as.character(pairs$unordered_key) %in% inflight, , drop = FALSE]
 }
 
 #' @keywords internal
@@ -345,6 +382,7 @@ assign_order <- function(pairs, state) {
   required <- c("i_id", "j_id", "unordered_key")
   .adaptive_required_cols(pairs, "pairs", required)
 
+  pairs <- .adaptive_filter_inflight_pairs(pairs, state)
   if (nrow(pairs) == 0L) {
     pairs$A_id <- character()
     pairs$B_id <- character()
@@ -374,7 +412,7 @@ assign_order <- function(pairs, state) {
     if (!is.na(count) && count >= 1L) {
       last_order <- .adaptive_last_order_for_pair(state, unordered_key)
       if (is.null(last_order)) {
-        rlang::abort("Duplicate ordering requires a prior presentation.")
+        rlang::abort("Duplicate ordering requires a prior completed presentation.")
       }
       A_id[[idx]] <- last_order$B_id
       B_id[[idx]] <- last_order$A_id
