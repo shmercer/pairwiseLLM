@@ -12,8 +12,8 @@ testthat::test_that("invalid model_variant aborts with allowed values", {
 
 testthat::test_that("model variant helpers report epsilon and beta flags", {
   variants <- c("btl", "btl_e", "btl_b", "btl_e_b")
-  has_e <- vapply(variants, pairwiseLLM:::model_has_e, logical(1L))
-  has_b <- vapply(variants, pairwiseLLM:::model_has_b, logical(1L))
+  has_e <- unname(vapply(variants, pairwiseLLM:::model_has_e, logical(1L)))
+  has_b <- unname(vapply(variants, pairwiseLLM:::model_has_b, logical(1L)))
 
   testthat::expect_identical(has_e, c(FALSE, TRUE, FALSE, TRUE))
   testthat::expect_identical(has_b, c(FALSE, FALSE, TRUE, TRUE))
