@@ -34,17 +34,29 @@ pair_uid_from_state <- function(state, unordered_key) {
 #' @noRd
 duplicate_allowed <- function(state, A_id, B_id) {
   unordered_key <- make_unordered_key(A_id, B_id)
+  ordered_key <- make_ordered_key(A_id, B_id)
+  reverse_key <- make_ordered_key(B_id, A_id)
 
-  counts <- state$pair_count
+  counts <- state$unordered_count
   if (is.null(names(counts)) || length(counts) == 0L || !unordered_key %in% names(counts)) {
     return(TRUE)
   }
 
   count <- counts[[unordered_key]]
-  if (is.na(count) || count <= 1L) {
-    return(TRUE)
+  if (count == 0L) return(TRUE)
+  if (count >= 2L) return(FALSE)
+
+  seen <- state$ordered_seen
+  if (is.environment(seen)) {
+    reverse_seen <- isTRUE(seen[[reverse_key]])
+    same_seen <- isTRUE(seen[[ordered_key]])
+  } else {
+    reverse_seen <- isTRUE(seen[reverse_key])
+    same_seen <- isTRUE(seen[ordered_key])
   }
-  FALSE
+
+  if (same_seen) return(FALSE)
+  reverse_seen
 }
 
 #' @keywords internal
