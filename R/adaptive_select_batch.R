@@ -32,7 +32,7 @@
   }
   last_order <- .adaptive_last_order_for_pair(state, unordered_key)
   if (is.null(last_order)) {
-    rlang::abort("Duplicate ordering requires a prior completed presentation.")
+    return(FALSE)
   }
   if (count == 1L) {
     return(TRUE)
