@@ -427,7 +427,7 @@ testthat::test_that("select_batch increases exploit count when explore undershoo
     list(batch_size = 2L, explore_rate = 0.5, dup_max_count = 1L)
   )
 
-  state$pair_count <- c("A:B" = 2L, "A:C" = 2L)
+  state$pair_count <- c("A:B" = 2L, "A:C" = 2L, "B:C" = 1L)
   state$history_pairs <- tibble::tibble(
     pair_uid = c("A:B#1", "A:C#1"),
     unordered_key = c("A:B", "A:C"),
