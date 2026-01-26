@@ -27,10 +27,23 @@ testthat::test_that("batch helpers handle empty history and duplicate gating", {
   expect_true(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.5, 0.5, config))
 
   state$pair_count <- stats::setNames(1L, "A:B")
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase1",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- 1L
   state$posterior$U_dup_threshold <- 0.4
-  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", NA_real_, 0.5, config))
-  state$posterior$U_dup_threshold <- NA_real_
-  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.5, 0.5, config))
+  expect_true(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", NA_real_, 0.5, config))
 })
 
 testthat::test_that("duplicate gating rejects invalid utility and wide p_mean", {
@@ -41,10 +54,25 @@ testthat::test_that("duplicate gating rejects invalid utility and wide p_mean", 
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   config <- pairwiseLLM:::adaptive_v3_config(state$N, list(dup_max_count = 2L, dup_p_margin = 0.05))
 
-  state$pair_count <- stats::setNames(1L, "A:B")
+  state$pair_count <- stats::setNames(2L, "A:B")
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase1",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- 1L
   state$posterior$U_dup_threshold <- 0.1
-  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.5, NA_real_, config))
-  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.9, 0.5, config))
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.5, NA_real_, config, policy = "relaxed"))
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.9, 0.5, config, policy = "relaxed"))
 })
 
 testthat::test_that("candidate filter counts reject invalid inputs", {
@@ -150,7 +178,35 @@ testthat::test_that("exploration sampling handles missing counts and rejects dup
   expect_equal(nrow(pick), 1L)
   expect_true(is.na(pick$utility))
 
-  state$pair_count <- stats::setNames(1L, "A:B")
+  state$pair_count <- stats::setNames(2L, "A:B")
+  state$history_pairs <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase1",
+    iter = 1L,
+    created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+  )
+  state$comparisons_scheduled <- 1L
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase1",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- 1L
   state$posterior$U_dup_threshold <- 0.9
   candidates_dup <- tibble::tibble(
     i_id = "A",
@@ -219,6 +275,21 @@ testthat::test_that("exploration sampling covers missing lookup and duplicate re
     created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
   )
   state$comparisons_scheduled <- 1L
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- 1L
   candidates <- tibble::tibble(
     i_id = "A",
     j_id = "B",
@@ -304,7 +375,7 @@ testthat::test_that("exploitation and ordering helpers enforce validation", {
   expect_error(pairwiseLLM:::assign_order(missing, state), "state\\$ids")
   state$pair_count <- stats::setNames(1L, "A:B")
   dup_pair <- tibble::tibble(i_id = "A", j_id = "B", unordered_key = "A:B")
-  expect_error(pairwiseLLM:::assign_order(dup_pair, state), "prior presentation")
+  expect_error(pairwiseLLM:::assign_order(dup_pair, state), "prior completed presentation")
 })
 
 testthat::test_that("select_batch validates inputs and handles zero batch size", {
@@ -352,9 +423,35 @@ testthat::test_that("select_batch increases exploit count when explore undershoo
     list(batch_size = 2L, explore_rate = 0.5, dup_max_count = 1L)
   )
 
-  pair_ids <- utils::combn(state$ids, 2)
-  keys <- pairwiseLLM:::make_unordered_key(pair_ids[1L, ], pair_ids[2L, ])
-  state$pair_count <- stats::setNames(rep.int(1L, length(keys)), keys)
+  state$pair_count <- c("A:B" = 2L, "A:C" = 2L)
+  state$history_pairs <- tibble::tibble(
+    pair_uid = c("A:B#1", "A:C#1"),
+    unordered_key = c("A:B", "A:C"),
+    ordered_key = c("A:B", "A:C"),
+    A_id = c("A", "A"),
+    B_id = c("B", "C"),
+    A_text = c("alpha", "alpha"),
+    B_text = c("bravo", "charlie"),
+    phase = "phase2",
+    iter = c(1L, 1L),
+    created_at = as.POSIXct(c("2026-01-01 00:00:00", "2026-01-01 00:00:00"), tz = "UTC")
+  )
+  state$comparisons_scheduled <- 2L
+  state$history_results <- tibble::tibble(
+    pair_uid = c("A:B#1", "A:C#1"),
+    unordered_key = c("A:B", "A:C"),
+    ordered_key = c("A:B", "A:C"),
+    A_id = c("A", "A"),
+    B_id = c("B", "C"),
+    better_id = c("A", "A"),
+    winner_pos = c(1L, 1L),
+    phase = "phase2",
+    iter = c(1L, 1L),
+    received_at = as.POSIXct(c("2026-01-01 00:00:00", "2026-01-01 00:00:00"), tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$comparisons_observed <- 2L
 
   candidates <- tibble::tibble(
     i_id = c("A", "A"),
@@ -405,7 +502,7 @@ testthat::test_that("filter duplicate candidates validates inputs and handles po
   out_self <- pairwiseLLM:::.adaptive_filter_duplicate_candidates(self_pairs, state, config)
   expect_equal(nrow(out_self), 0L)
 
-  state$unordered_count <- integer()
+  state$pair_count <- integer()
   candidates <- tibble::tibble(
     i_id = "A",
     j_id = "B",
@@ -416,7 +513,7 @@ testthat::test_that("filter duplicate candidates validates inputs and handles po
   out_missing_counts <- pairwiseLLM:::.adaptive_filter_duplicate_candidates(candidates, state, config)
   expect_equal(nrow(out_missing_counts), 1L)
 
-  state$unordered_count <- c("A:B" = 2L, "A:C" = 0L)
+  state$pair_count <- c("A:B" = 2L, "A:C" = 0L)
   state$posterior$U_dup_threshold <- NA_real_
   candidates <- tibble::tibble(
     i_id = c("A", "A"),
