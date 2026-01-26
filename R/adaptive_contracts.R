@@ -37,6 +37,7 @@ adaptive_v3_defaults <- function(N) {
 
   list(
     N = N,
+    model_variant = "btl_e_b",
     W = as.integer(W),
     A_anchors = as.integer(A_anchors),
     C_max = 20000L,
@@ -102,6 +103,7 @@ adaptive_v3_config <- function(N, ...) {
   defaults <- adaptive_v3_defaults(N)
   config <- utils::modifyList(defaults, overrides)
   config$N <- defaults$N
+  config$model_variant <- normalize_model_variant(config$model_variant %||% defaults$model_variant)
   validate_config(config)
   config
 }
@@ -152,7 +154,7 @@ validate_config <- function(config) {
   }
 
   required <- c(
-    "N", "W", "A_anchors", "C_max",
+    "N", "model_variant", "W", "A_anchors", "C_max",
     "refit_B", "batch_size", "explore_rate",
     "min_degree", "target_mean_degree",
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
@@ -171,6 +173,9 @@ validate_config <- function(config) {
   )
 
   .adaptive_v3_check(.adaptive_v3_intish(config$N) && config$N >= 2L, "`N` must be >= 2.")
+  .adaptive_v3_check(is.character(config$model_variant) && length(config$model_variant) == 1L,
+    "`model_variant` must be a length-1 character value.")
+  normalize_model_variant(config$model_variant)
   .adaptive_v3_check(.adaptive_v3_intish(config$W) && config$W >= 1L, "`W` must be >= 1.")
   .adaptive_v3_check(.adaptive_v3_intish(config$A_anchors) && config$A_anchors >= 1L, "`A_anchors` must be >= 1.")
   .adaptive_v3_check(.adaptive_v3_intish(config$C_max) && config$C_max >= 1L, "`C_max` must be >= 1.")
@@ -306,12 +311,12 @@ round_log_schema <- function() {
     epsilon_p50 = double(),
     epsilon_p95 = double(),
     epsilon_p97.5 = double(),
-    b_mean = double(),
-    b_p2.5 = double(),
-    b_p5 = double(),
-    b_p50 = double(),
-    b_p95 = double(),
-    b_p97.5 = double(),
+    beta_mean = double(),
+    beta_p2.5 = double(),
+    beta_p5 = double(),
+    beta_p50 = double(),
+    beta_p95 = double(),
+    beta_p97.5 = double(),
     divergences = integer(),
     max_rhat = double(),
     min_ess_bulk = double(),
@@ -671,19 +676,19 @@ build_round_log_row <- function(state,
     epsilon_p97.5 <- fit$epsilon_p97.5 %||% NA_real_
   }
 
-  b_mean <- NA_real_
-  b_p2.5 <- NA_real_
-  b_p5 <- NA_real_
-  b_p50 <- NA_real_
-  b_p95 <- NA_real_
-  b_p97.5 <- NA_real_
+  beta_mean <- NA_real_
+  beta_p2.5 <- NA_real_
+  beta_p5 <- NA_real_
+  beta_p50 <- NA_real_
+  beta_p95 <- NA_real_
+  beta_p97.5 <- NA_real_
   if (is.list(fit)) {
-    b_mean <- fit$b_mean %||% NA_real_
-    b_p2.5 <- fit$b_p2.5 %||% NA_real_
-    b_p5 <- fit$b_p5 %||% NA_real_
-    b_p50 <- fit$b_p50 %||% NA_real_
-    b_p95 <- fit$b_p95 %||% NA_real_
-    b_p97.5 <- fit$b_p97.5 %||% NA_real_
+    beta_mean <- fit$beta_mean %||% NA_real_
+    beta_p2.5 <- fit$beta_p2.5 %||% NA_real_
+    beta_p5 <- fit$beta_p5 %||% NA_real_
+    beta_p50 <- fit$beta_p50 %||% NA_real_
+    beta_p95 <- fit$beta_p95 %||% NA_real_
+    beta_p97.5 <- fit$beta_p97.5 %||% NA_real_
   }
 
   theta_draws <- NULL
@@ -759,12 +764,12 @@ build_round_log_row <- function(state,
   row$epsilon_p50 <- as.double(epsilon_p50)
   row$epsilon_p95 <- as.double(epsilon_p95)
   row$epsilon_p97.5 <- as.double(epsilon_p97.5)
-  row$b_mean <- as.double(b_mean)
-  row$b_p2.5 <- as.double(b_p2.5)
-  row$b_p5 <- as.double(b_p5)
-  row$b_p50 <- as.double(b_p50)
-  row$b_p95 <- as.double(b_p95)
-  row$b_p97.5 <- as.double(b_p97.5)
+  row$beta_mean <- as.double(beta_mean)
+  row$beta_p2.5 <- as.double(beta_p2.5)
+  row$beta_p5 <- as.double(beta_p5)
+  row$beta_p50 <- as.double(beta_p50)
+  row$beta_p95 <- as.double(beta_p95)
+  row$beta_p97.5 <- as.double(beta_p97.5)
   row$divergences <- as.integer(divergences)
   row$max_rhat <- as.double(max_rhat)
   row$min_ess_bulk <- as.double(min_ess_bulk)
