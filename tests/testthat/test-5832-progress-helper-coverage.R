@@ -91,7 +91,7 @@ testthat::test_that("adaptive progress formatting omits starved and reason when 
 })
 
 testthat::test_that("adaptive progress refit block formats diagnostics and stability", {
-  config <- list(progress_level = "full", stability_consecutive = 2L, eap_reliability_min = 0.9)
+  config <- list(progress_level = "full", eap_reliability_min = 0.9)
   round_row <- tibble::tibble(
     round_id = 2L,
     iter_at_refit = 5L,
@@ -104,13 +104,16 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
     min_ess_bulk = 900,
     epsilon_mean = 0.09,
     reliability_EAP = 0.87,
+    eap_pass = FALSE,
     diagnostics_pass = TRUE,
     theta_sd_eap = 0.48,
     rho_theta_lag = 0.99,
+    theta_corr_pass = TRUE,
     delta_sd_theta_lag = 0.01,
+    delta_sd_theta_pass = TRUE,
     rho_rank_lag = 0.99,
+    rho_rank_pass = TRUE,
     rank_stability_pass = TRUE,
-    stop_passes = 1L,
     stop_eligible = TRUE,
     stop_decision = FALSE,
     stop_reason = NA_character_,
@@ -138,7 +141,7 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
 })
 
 testthat::test_that("adaptive progress refit block marks stability as not eligible when NA", {
-  config <- list(progress_level = "refit", stability_consecutive = 2L)
+  config <- list(progress_level = "refit")
   round_row <- tibble::tibble(
     round_id = 1L,
     iter_at_refit = 2L,
@@ -153,7 +156,6 @@ testthat::test_that("adaptive progress refit block marks stability as not eligib
     delta_sd_theta_lag = NA_real_,
     rho_rank_lag = NA_real_,
     rank_stability_pass = NA,
-    stop_passes = 0L,
     stop_eligible = FALSE,
     stop_decision = FALSE,
     stop_reason = NA_character_
@@ -203,6 +205,7 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
     min_ess_bulk = 900,
     epsilon_mean = 0.09,
     reliability_EAP = 0.87,
+    eap_pass = FALSE,
     diagnostics_pass = TRUE,
     theta_sd_eap = 0.48,
     rho_theta_lag = NA_real_,

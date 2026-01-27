@@ -42,12 +42,15 @@ testthat::test_that("round log schema matches contract", {
     "min_ess_bulk",
     "diagnostics_pass",
     "reliability_EAP",
+    "eap_pass",
     "theta_sd_eap",
     "rho_theta_lag",
+    "theta_corr_pass",
     "delta_sd_theta_lag",
+    "delta_sd_theta_pass",
     "rho_rank_lag",
+    "rho_rank_pass",
     "rank_stability_pass",
-    "stop_passes",
     "stop_eligible",
     "stop_decision",
     "stop_reason",
@@ -97,8 +100,6 @@ testthat::test_that("round log builder emits a single typed row", {
   )
   state <- adaptive_state_new(samples, config = list(d1 = 2L))
   state$config$v3 <- adaptive_v3_config(state$N, list())
-  state$stop_candidate <- TRUE
-  state$checks_passed_in_row <- 2L
 
   fit <- make_v3_fit_contract(
     state$ids,
@@ -117,7 +118,8 @@ testthat::test_that("round log builder emits a single typed row", {
     completed_pairs = 7L,
     rho_theta_lag = 0.1,
     delta_sd_theta_lag = 0.2,
-    rho_rank_lag = 0.3
+    rho_rank_lag = 0.3,
+    stop_eligible = TRUE
   )
   stop_out <- list(stop_decision = FALSE, stop_reason = NA_character_)
 
@@ -134,7 +136,6 @@ testthat::test_that("round log builder emits a single typed row", {
   testthat::expect_true(is.integer(row$round_id))
   testthat::expect_true(is.double(row$reliability_EAP))
   testthat::expect_equal(row$backlog_unjudged[[1L]], 3L)
-  testthat::expect_equal(row$stop_passes[[1L]], 2L)
   testthat::expect_true(row$stop_eligible[[1L]])
   testthat::expect_equal(row$model_variant[[1L]], "btl_b")
   testthat::expect_equal(row$beta_p50[[1L]], 0.15)

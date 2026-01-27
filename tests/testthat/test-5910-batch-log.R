@@ -10,7 +10,7 @@ testthat::test_that("batch_log tracks every iteration and required columns", {
     budget_max = 20L,
     bins = 2L,
     batch_overrides = list(BATCH1 = 2L, BATCH2 = 2L, BATCH3 = 2L),
-    v3 = list(stability_consecutive = 10L, refit_B = 1L)
+    v3 = list(refit_B = 1L)
   )
 
   make_results <- function(pairs, backend, model) {
@@ -138,7 +138,7 @@ testthat::test_that("round_log fills refit fields and matches stop metrics", {
     budget_max = 20L,
     bins = 2L,
     batch_overrides = list(BATCH1 = 2L, BATCH2 = 2L, BATCH3 = 2L),
-    v3 = list(stability_consecutive = 10L, refit_B = 1L)
+    v3 = list(refit_B = 1L)
   )
 
   mock_submit <- function(pairs, model, trait_name, trait_description,

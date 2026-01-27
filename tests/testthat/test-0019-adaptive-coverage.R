@@ -203,12 +203,6 @@ test_that("adaptive state helper and validation branches are covered", {
   expect_error(pairwiseLLM:::validate_state(bad), "last_check_at")
 
   bad <- state
-  bad$stop_candidate <- 1.5
-  expect_error(pairwiseLLM:::validate_state(bad), "stop_candidate")
-
-  bad <- state
-  bad$checks_passed_in_row <- 1.5
-  expect_error(pairwiseLLM:::validate_state(bad), "checks_passed_in_row")
 })
 
 test_that("adaptive constraints cover key helpers, duplicates, and exposure", {

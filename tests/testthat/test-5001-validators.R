@@ -47,10 +47,6 @@ test_that("validate_config rejects invalid fields", {
   bad_rank_corr$rank_spearman_min <- 1.5
   expect_error(pairwiseLLM:::validate_config(bad_rank_corr), "rank_spearman_min")
 
-  bad_consecutive <- cfg
-  bad_consecutive$stability_consecutive <- 0L
-  expect_error(pairwiseLLM:::validate_config(bad_consecutive), "stability_consecutive")
-
   bad_output <- cfg
   bad_output$output_dir <- 123
   expect_error(pairwiseLLM:::validate_config(bad_output), "output_dir")
@@ -86,4 +82,3 @@ test_that("adaptive_v3_config normalizes overrides", {
 
   expect_error(pairwiseLLM:::adaptive_v3_config(6, 1), "overrides")
 })
-
