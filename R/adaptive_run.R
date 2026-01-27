@@ -58,6 +58,84 @@ NULL
   invisible(backend)
 }
 
+.adaptive_validate_max_iterations <- function(max_iterations) {
+  if (is.null(max_iterations)) {
+    return(Inf)
+  }
+  if (!is.numeric(max_iterations) || length(max_iterations) != 1L || is.na(max_iterations)) {
+    rlang::abort("`max_iterations` must be a positive integer.")
+  }
+  if (is.infinite(max_iterations)) {
+    if (max_iterations > 0) {
+      return(Inf)
+    }
+    rlang::abort("`max_iterations` must be a positive integer.")
+  }
+  max_iterations_int <- as.integer(max_iterations)
+  if (is.na(max_iterations_int) || max_iterations_int < 1L || max_iterations_int != max_iterations) {
+    rlang::abort("`max_iterations` must be a positive integer.")
+  }
+  max_iterations_int
+}
+
+.adaptive_validate_resume_samples <- function(samples, state, resume_validate = c("strict", "warn", "none")) {
+  resume_validate <- match.arg(resume_validate)
+  if (resume_validate == "none") {
+    return(TRUE)
+  }
+
+  s_tbl <- tibble::as_tibble(samples)
+
+  if (!("ID" %in% names(s_tbl)) || is.null(state$ids)) {
+    msg <- "Cannot validate resume: `ID` column missing in `samples` or `state$ids` missing in checkpoint."
+    if (resume_validate == "strict") {
+      rlang::abort(msg)
+    } else {
+      rlang::warn(msg)
+      return(FALSE)
+    }
+  }
+
+  ids_new <- as.character(s_tbl$ID)
+  ids_old <- as.character(state$ids)
+  mismatch <- (length(ids_new) != length(ids_old)) || any(ids_new != ids_old)
+  if (mismatch) {
+    msg <- paste0(
+      "Checkpoint exists but `samples$ID` does not match checkpoint `state$ids`.\n",
+      "Refusing to resume to prevent corrupting the run.\n",
+      "Fix: pass the identical `samples` (same IDs and order) used to start the run,\n",
+      "or set `resume=\"never\"`, or set `resume_validate=\"warn\"` to fall back to starting a new run."
+    )
+    if (resume_validate == "strict") {
+      rlang::abort(msg)
+    } else {
+      rlang::warn(msg)
+      return(FALSE)
+    }
+  }
+
+  if (resume_validate == "strict") {
+    if (is.null(state$texts)) {
+      rlang::abort("Cannot validate resume: `state$texts` missing in checkpoint.")
+    }
+    if (!("text" %in% names(s_tbl))) {
+      rlang::abort("Cannot validate resume: `text` column missing in `samples` (needed to check against `state$texts`).")
+    }
+    texts_new <- as.character(s_tbl$text)
+    names(texts_new) <- as.character(s_tbl$ID)
+    if (!identical(texts_new, state$texts)) {
+      rlang::abort(
+        paste0(
+          "Checkpoint exists but `samples$text` does not match checkpoint `state$texts`.\n",
+          "Refusing to resume to prevent corrupting the run."
+        )
+      )
+    }
+  }
+
+  TRUE
+}
+
 .adaptive_sanitize_submission_options <- function(submission, reserved = character()) {
   submission <- submission %||% list()
   if (!is.list(submission)) {
@@ -3132,8 +3210,9 @@ adaptive_rank_resume <- function(
 #' @param paths A list with entries `state_path` and `output_dir`. If `state_path`
 #'   is provided, the run state will be checkpointed there after each resume step.
 #' @param seed Optional integer seed for reproducibility.
-#' @param max_iterations Optional integer safety cap on the number of wrapper
-#'   iterations. If `NULL`, uses the configured default (currently 50).
+#' @param max_iterations Optional safety cap on the number of wrapper iterations.
+#'   If `NULL`, uses the configured default (currently 50). Use `Inf` (or
+#'   `adaptive$max_iterations = NULL`) for no cap.
 #' @param resume Controls checkpoint resume behavior. One of:
 #'   \describe{
 #'     \item{`"auto"`}{Resume if `paths$state_path` exists; otherwise start new.}
@@ -3225,7 +3304,7 @@ adaptive_rank_run_live <- function(
   resume_validate <- match.arg(resume_validate)
 
   adaptive <- .adaptive_merge_config(adaptive)
-  if (!is.null(max_iterations)) {
+  if (!missing(max_iterations)) {
     adaptive$max_iterations <- max_iterations
   }
 
@@ -3233,10 +3312,7 @@ adaptive_rank_run_live <- function(
   v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
   adaptive_v3_config(n_items, v3_overrides)
 
-  max_iterations <- as.integer(adaptive$max_iterations)
-  if (is.na(max_iterations) || max_iterations < 1L) {
-    rlang::abort("`max_iterations` must be a positive integer.")
-  }
+  max_iterations <- .adaptive_validate_max_iterations(adaptive$max_iterations)
 
   state_path <- paths$state_path %||% NULL
   has_checkpoint <- !is.null(state_path) && file.exists(state_path)
@@ -3257,58 +3333,7 @@ adaptive_rank_run_live <- function(
     # NOTE: pairwiseLLM 1.2.0 checkpoint stores items in `state$ids` and `state$texts`
     # (there is no `state$samples`).
     if (resume_validate != "none") {
-      s_tbl <- tibble::as_tibble(samples)
-
-      if (!("ID" %in% names(s_tbl)) || is.null(st0$ids)) {
-        msg <- "Cannot validate resume: `ID` column missing in `samples` or `state$ids` missing in checkpoint."
-        if (resume_validate == "strict") {
-          rlang::abort(msg)
-        } else {
-          rlang::warn(msg)
-          do_resume <- FALSE
-        }
-      } else {
-        ids_new <- as.character(s_tbl$ID)
-        ids_old <- as.character(st0$ids)
-
-        mismatch <- (length(ids_new) != length(ids_old)) || any(ids_new != ids_old)
-        if (mismatch) {
-          msg <- paste0(
-            "Checkpoint exists but `samples$ID` does not match checkpoint `state$ids`.\n",
-            "Refusing to resume to prevent corrupting the run.\n",
-            "Fix: pass the identical `samples` (same IDs and order) used to start the run,\n",
-            "or set `resume=\"never\"`, or set `resume_validate=\"warn\"` to fall back to starting a new run."
-          )
-          if (resume_validate == "strict") {
-            rlang::abort(msg)
-          } else {
-            rlang::warn(msg)
-            do_resume <- FALSE
-          }
-        }
-      }
-
-      # Optional stronger check: validate text identity against `state$texts`
-      # Enable by default only in strict mode (recommended)
-      if (do_resume && resume_validate == "strict") {
-        if (is.null(st0$texts)) {
-          rlang::abort("Cannot validate resume: `state$texts` missing in checkpoint.")
-        }
-        if (!("text" %in% names(s_tbl))) {
-          rlang::abort("Cannot validate resume: `text` column missing in `samples` (needed to check against `state$texts`).")
-        }
-        texts_new <- as.character(s_tbl$text)
-        names(texts_new) <- as.character(s_tbl$ID)
-
-        if (!identical(texts_new, st0$texts)) {
-          rlang::abort(
-            paste0(
-              "Checkpoint exists but `samples$text` does not match checkpoint `state$texts`.\n",
-              "Refusing to resume to prevent corrupting the run."
-            )
-          )
-        }
-      }
+      do_resume <- .adaptive_validate_resume_samples(samples, st0, resume_validate)
     }
 
     if (do_resume) {
@@ -3426,7 +3451,9 @@ adaptive_rank_run_live <- function(
 #'
 #' Running this function will submit LLM comparisons and will incur API usage
 #' costs for hosted backends. Batch mode is recommended for longer runs because
-#' it supports checkpointing and controlled polling behavior.
+#' it supports checkpointing and controlled polling behavior. When
+#' `paths$state_path` points to an existing checkpoint, the wrapper resumes that
+#' run (with strict sample validation) instead of starting fresh.
 #'
 #' Some backends and helper functions accept different arguments for batch
 #' submission vs polling/resume. This wrapper uses \code{formals()}-based
@@ -3455,7 +3482,8 @@ adaptive_rank_run_live <- function(
 #' @param paths A list with optional \code{state_path} and \code{output_dir}.
 #'   Batch mode strongly benefits from setting these so the run can be resumed.
 #' @param seed Optional integer seed for deterministic scheduling.
-#' @param max_iterations Optional integer override for the batch loop cap.
+#' @param max_iterations Optional override for the batch loop cap. Use `Inf`
+#'   (or `adaptive$max_iterations = NULL`) for no cap.
 #'
 #' @return A list with:
 #' \describe{
@@ -3506,7 +3534,7 @@ adaptive_rank_run_batch <- function(
     max_iterations = NULL
 ) {
   adaptive <- .adaptive_merge_config(adaptive)
-  if (!is.null(max_iterations)) {
+  if (!missing(max_iterations)) {
     adaptive$max_iterations <- max_iterations
   }
 
@@ -3514,10 +3542,7 @@ adaptive_rank_run_batch <- function(
   v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
   adaptive_v3_config(n_items, v3_overrides)
 
-  max_iterations <- as.integer(adaptive$max_iterations)
-  if (is.na(max_iterations) || max_iterations < 1L) {
-    rlang::abort("`max_iterations` must be a positive integer.")
-  }
+  max_iterations <- .adaptive_validate_max_iterations(adaptive$max_iterations)
 
   if (is.null(submission) || !is.list(submission)) submission <- list()
 
@@ -3530,23 +3555,82 @@ adaptive_rank_run_batch <- function(
   poll_formals <- names(formals(llm_resume_multi_batches))
   submission_poll <- submission[names(submission) %in% poll_formals]
 
-  start_out <- adaptive_rank_start(
-    samples = samples,
-    model = model,
-    trait_name = trait_name,
-    trait_description = trait_description,
-    prompt_template = prompt_template,
-    backend = backend,
-    mode = "batch",
-    submission = submission_submit,
-    adaptive = adaptive,
-    paths = paths,
-    seed = seed
-  )
+  state_path <- paths$state_path %||% NULL
+  if (is.null(state_path) && !is.null(paths$output_dir)) {
+    state_path <- file.path(paths$output_dir, "adaptive_state.rds")
+  }
+  has_checkpoint <- !is.null(state_path) && file.exists(state_path)
+  do_resume <- has_checkpoint
 
-  state <- start_out$state
-  submission_info <- start_out$submission_info
-  next_action <- start_out$next_action
+  if (do_resume) {
+    st0 <- adaptive_state_load(state_path)
+    do_resume <- .adaptive_validate_resume_samples(samples, st0, "strict")
+  }
+
+  if (do_resume) {
+    submission_info <- list(
+      backend = backend %||% st0$config$backend %||% NULL,
+      model = model %||% st0$config$model %||% NULL,
+      trait_name = trait_name %||% st0$config$trait_name %||% NULL,
+      trait_description = trait_description %||% st0$config$trait_description %||% NULL,
+      prompt_template = prompt_template %||% st0$config$prompt_template %||% NULL
+    )
+
+    if (!is.null(paths$output_dir)) {
+      submission_info$output_dir <- paths$output_dir
+    } else if (!is.null(st0$config$output_dir)) {
+      submission_info$output_dir <- st0$config$output_dir
+    } else if (!is.null(state_path)) {
+      submission_info$output_dir <- dirname(state_path)
+    } else {
+      submission_info$output_dir <- NULL
+    }
+
+    if (!is.null(paths$state_path)) {
+      submission_info$state_path <- paths$state_path
+    } else if (!is.null(st0$config$state_path)) {
+      submission_info$state_path <- st0$config$state_path
+    } else {
+      submission_info$state_path <- state_path
+    }
+
+    if (is.null(submission_info$backend) || is.null(submission_info$model)) {
+      rlang::abort("Cannot resume: backend/model not found in args or checkpoint state.")
+    }
+    if (is.null(submission_info$trait_name) || is.null(submission_info$trait_description)) {
+      rlang::abort("Cannot resume: trait_name/trait_description not found in args or checkpoint state.")
+    }
+
+    resume_out <- adaptive_rank_resume(
+      state_path = state_path,
+      mode = "batch",
+      submission_info = submission_info,
+      submission = submission_poll,
+      adaptive = adaptive,
+      seed = seed
+    )
+    state <- resume_out$state
+    submission_info <- resume_out$submission_info
+    next_action <- resume_out$next_action
+  } else {
+    start_out <- adaptive_rank_start(
+      samples = samples,
+      model = model,
+      trait_name = trait_name,
+      trait_description = trait_description,
+      prompt_template = prompt_template,
+      backend = backend,
+      mode = "batch",
+      submission = submission_submit,
+      adaptive = adaptive,
+      paths = paths,
+      seed = seed
+    )
+
+    state <- start_out$state
+    submission_info <- start_out$submission_info
+    next_action <- start_out$next_action
+  }
 
   iter <- 1L
   while (next_action$action == "resume" && iter < max_iterations) {
