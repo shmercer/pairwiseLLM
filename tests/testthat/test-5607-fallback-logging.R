@@ -13,24 +13,29 @@ testthat::test_that("fallback logging uses best stage when ladder is exhausted",
   counts <- stats::setNames(rep.int(2L, length(keys)), keys)
   counts[["A:B"]] <- 0L
   state$pair_count <- counts
+  state$posterior <- list(U_dup_threshold = NA_real_)
 
-  withr::local_seed(123)
   theta_draws <- matrix(seq_len(2L * state$N), nrow = 2L, ncol = state$N)
   colnames(theta_draws) <- state$ids
   fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
   theta_summary <- pairwiseLLM:::.adaptive_theta_summary_from_fit(fit, state)
-  candidates <- pairwiseLLM:::generate_candidates(theta_summary, state, config)
-  epsilon_mean <- pairwiseLLM:::.adaptive_epsilon_mean_from_state(state, fit)
-  utilities <- pairwiseLLM:::compute_pair_utility(fit$theta_draws, candidates, epsilon_mean)
-  utilities <- pairwiseLLM:::apply_degree_penalty(utilities, state)
+  utilities <- tibble::tibble(
+    unordered_key = "A:B",
+    i_id = "A",
+    j_id = "B",
+    utility = 0.2,
+    utility_raw = 0.2,
+    p_mean = 0.5
+  )
 
+  withr::local_seed(123)
   out <- pairwiseLLM:::.adaptive_select_batch_by_ladder(
     state = state,
     fit = fit,
     theta_summary = theta_summary,
     config = config,
     candidates_with_utility = utilities,
-    n_candidates_generated = nrow(candidates),
+    n_candidates_generated = nrow(utilities),
     seed = 123,
     exploration_only = FALSE
   )
