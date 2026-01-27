@@ -623,6 +623,16 @@ NULL
   state <- stop_out$state
 
   if (isTRUE(refit_performed)) {
+    if (isTRUE(metrics$diagnostics_pass)) {
+      eap_min <- as.double(v3_config$eap_reliability_min)
+      if (!is.finite(eap_min) || length(eap_min) != 1L) {
+        rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
+      }
+      phase3_threshold <- max(0, eap_min - 0.05)
+      if (is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= phase3_threshold) {
+        state$phase <- "phase3"
+      }
+    }
     round_row <- build_round_log_row(
       state = state,
       fit = fit,
@@ -1732,10 +1742,7 @@ NULL
     return(.adaptive_schedule_warm_start(state, state$config$v3, seed = seed))
   }
 
-  near_stop <- isTRUE(near_stop) || near_stop_from_state(state)
-  if (near_stop && state$phase == "phase2") {
-    state$phase <- "phase3"
-  }
+  near_stop <- isTRUE(near_stop) || identical(state$phase, "phase3")
   phase <- state$phase
   batch_size <- target_pairs
   iter <- as.integer(state$iter + 1L)
@@ -1813,17 +1820,16 @@ NULL
     stop_out <- should_stop(stop_metrics, state, v3_config)
     state <- stop_out$state
     if (isTRUE(fit_out$refit_performed)) {
-      history <- state$posterior$theta_mean_history %||% list()
-      if (!is.list(history)) {
-        rlang::abort("`state$posterior$theta_mean_history` must be a list when set.")
+      if (isTRUE(stop_metrics$diagnostics_pass)) {
+        eap_min <- as.double(v3_config$eap_reliability_min)
+        if (!is.finite(eap_min) || length(eap_min) != 1L) {
+          rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
+        }
+        phase3_threshold <- max(0, eap_min - 0.05)
+        if (is.finite(stop_metrics$reliability_EAP) && stop_metrics$reliability_EAP >= phase3_threshold) {
+          state$phase <- "phase3"
+        }
       }
-      min_refits_for_stability <- as.integer(v3_config$min_refits_for_stability)
-      if (is.na(min_refits_for_stability) || min_refits_for_stability < 1L) {
-        rlang::abort("`config$min_refits_for_stability` must be a positive integer.")
-      }
-      current_refit <- length(history) + 1L
-      state$stop_candidate <- isTRUE(current_refit >= min_refits_for_stability &&
-        isTRUE(stop_metrics$diagnostics_pass))
 
       round_row <- build_round_log_row(
         state = state,
@@ -1854,6 +1860,16 @@ NULL
     state$posterior$stop_metrics <- stop_metrics
 
     if (isTRUE(fit_out$refit_performed)) {
+      if (isTRUE(stop_metrics$diagnostics_pass)) {
+        eap_min <- as.double(v3_config$eap_reliability_min)
+        if (!is.finite(eap_min) || length(eap_min) != 1L) {
+          rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
+        }
+        phase3_threshold <- max(0, eap_min - 0.05)
+        if (is.finite(stop_metrics$reliability_EAP) && stop_metrics$reliability_EAP >= phase3_threshold) {
+          state$phase <- "phase3"
+        }
+      }
       round_row <- build_round_log_row(
         state = state,
         fit = fit,
@@ -2046,9 +2062,6 @@ NULL
     state <- .adaptive_get_batch_sizes(state, adaptive)
     batch_sizes <- state$config$batch_sizes
   }
-  if (state$phase != "phase1" && near_stop_from_state(state)) {
-    state$phase <- "phase3"
-  }
   if (state$phase == "phase3") {
     return(list(state = state, target = batch_sizes$BATCH3))
   }
@@ -2231,10 +2244,9 @@ NULL
 #' theta means must have correlation at least \code{theta_corr_min} and a
 #' relative SD change no larger than \code{theta_sd_rel_change_max}, and ranks
 #' must have Spearman correlation at least \code{rank_spearman_min}. A stop is
-#' declared only after \code{stability_consecutive} consecutive refits pass all
-#' checks. Refits are eligible for stability checks only after
-#' \code{min_refits_for_stability} and once a lag of \code{stability_lag} refits
-#' is available.
+#' declared immediately when all gates pass at an eligible refit. Refits are
+#' eligible for stability checks only after \code{min_refits_for_stability} and
+#' once a lag of \code{stability_lag} refits is available.
 #'
 #' @section Adaptive configuration:
 #' The \code{adaptive} list controls run-scale scheduling:
@@ -2291,7 +2303,6 @@ NULL
 #'   versus the lagged refit.}
 #'   \item{\code{rank_spearman_min}}{Minimum Spearman correlation between
 #'   current and lagged ranks.}
-#'   \item{\code{stability_consecutive}}{Consecutive refits required to stop.}
 #'   \item{\code{max_rhat}}{Maximum allowed R-hat for diagnostics pass.}
 #'   \item{\code{min_ess_bulk}}{Minimum bulk ESS for diagnostics pass.}
 #'   \item{\code{min_ess_bulk_near_stop}}{Minimum bulk ESS once near-stop checks
@@ -2444,8 +2455,15 @@ NULL
 #'   refit.}
 #'   \item{\code{rho_rank_lag}}{Spearman correlation between current and lagged
 #'   ranks.}
+#'   \item{\code{eap_pass}}{TRUE when diagnostics pass and EAP reliability meets
+#'   the stop threshold.}
+#'   \item{\code{theta_corr_pass}}{TRUE when the lagged theta correlation meets
+#'   the threshold.}
+#'   \item{\code{delta_sd_theta_pass}}{TRUE when lagged theta SD change meets
+#'   the threshold.}
+#'   \item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets the
+#'   threshold.}
 #'   \item{\code{rank_stability_pass}}{Rank stability gate status.}
-#'   \item{\code{stop_passes}}{Consecutive refits meeting all stop checks.}
 #'   \item{\code{stop_eligible}}{TRUE when refit count meets stability minimum.}
 #'   \item{\code{stop_decision}}{TRUE when stop criteria are met.}
 #'   \item{\code{stop_reason}}{Stop reason label when stopped.}
