@@ -538,3 +538,116 @@ select_batch <- function(state, candidates_with_utility, config, seed = NULL,
   assigned <- assign_order(combined, state_tmp)
   assigned
 }
+
+#' @keywords internal
+#' @noRd
+.adaptive_select_safe_no_utility <- function(state, candidates_with_utility, config, seed = NULL,
+                                             dup_policy = c("default", "relaxed")) {
+  dup_policy <- match.arg(dup_policy)
+  validate_state(state)
+  if (!is.data.frame(candidates_with_utility)) {
+    rlang::abort("`candidates_with_utility` must be a data frame or tibble.")
+  }
+  candidates_with_utility <- tibble::as_tibble(candidates_with_utility)
+  required <- c("i_id", "j_id", "unordered_key", "utility", "utility_raw", "p_mean")
+  .adaptive_required_cols(candidates_with_utility, "candidates_with_utility", required)
+
+  batch_size <- as.integer(config$batch_size)
+  if (is.na(batch_size) || batch_size < 0L) {
+    rlang::abort("`config$batch_size` must be a non-negative integer.")
+  }
+  if (batch_size == 0L) {
+    return(candidates_with_utility[0, , drop = FALSE])
+  }
+
+  n_explore <- as.integer(round(config$explore_rate * batch_size))
+  if (is.na(n_explore)) {
+    rlang::abort("`config$explore_rate` must produce a finite `n_explore`.")
+  }
+  n_explore <- max(0L, min(batch_size, n_explore))
+
+  explore <- .pairwiseLLM_with_seed(seed, function() {
+    sample_exploration_pairs(
+      state = state,
+      candidates = candidates_with_utility,
+      n_explore = n_explore,
+      config = config,
+      dup_policy = dup_policy
+    )
+  })
+  if (nrow(explore) > 0L) {
+    explore$is_explore <- TRUE
+  }
+
+  selected_keys <- as.character(explore$unordered_key)
+  candidates_remaining <- candidates_with_utility
+  if (length(selected_keys) > 0L) {
+    candidates_remaining <- candidates_remaining[
+      !candidates_remaining$unordered_key %in% selected_keys,
+      ,
+      drop = FALSE
+    ]
+  }
+
+  n_remaining <- as.integer(batch_size - nrow(explore))
+  if (n_remaining < 0L) {
+    n_remaining <- 0L
+  }
+
+  if (n_remaining == 0L || nrow(candidates_remaining) == 0L) {
+    combined <- explore
+  } else {
+    i_id <- as.character(candidates_remaining$i_id)
+    j_id <- as.character(candidates_remaining$j_id)
+    candidates_remaining <- candidates_remaining[i_id != j_id, , drop = FALSE]
+
+    picked <- vector("list", n_remaining)
+    accepted <- 0L
+    if (nrow(candidates_remaining) > 0L) {
+      order_idx <- .pairwiseLLM_with_seed(seed, function() {
+        sample.int(nrow(candidates_remaining))
+      })
+
+      for (idx in order_idx) {
+        if (accepted >= n_remaining) break
+        row <- candidates_remaining[idx, , drop = FALSE]
+        unordered_key <- as.character(row$unordered_key[[1L]])
+        if (unordered_key %in% selected_keys) next
+
+        if (!.adaptive_duplicate_allowed(
+          state,
+          unordered_key,
+          row$p_mean[[1L]],
+          row$utility[[1L]],
+          config,
+          policy = dup_policy
+        )) {
+          next
+        }
+
+        accepted <- accepted + 1L
+        picked[[accepted]] <- row
+        selected_keys <- c(selected_keys, unordered_key)
+      }
+    }
+
+    if (accepted == 0L) {
+      remainder <- candidates_remaining[0, , drop = FALSE]
+    } else {
+      remainder <- dplyr::bind_rows(picked[seq_len(accepted)])
+    }
+    if (nrow(remainder) > 0L) {
+      remainder$is_explore <- FALSE
+    }
+    combined <- dplyr::bind_rows(explore, remainder)
+  }
+
+  if (nrow(combined) == 0L) {
+    combined$is_explore <- logical()
+  }
+  state_seed <- seed %||% state$seed
+  state_tmp <- state
+  state_tmp$seed <- state_seed
+  assigned <- assign_order(combined, state_tmp)
+  assigned
+}
