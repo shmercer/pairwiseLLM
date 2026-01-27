@@ -67,6 +67,57 @@
   last_n
 }
 
+.adaptive_compute_scheduled_exposure <- function(state) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
+
+  ids <- as.character(state$ids %||% character())
+  if (length(ids) == 0L) {
+    return(list(
+      deg_scheduled = integer(),
+      posA_scheduled = integer(),
+      pos_balance_sd_scheduled = NA_real_,
+      mean_degree_scheduled = NA_real_,
+      min_degree_scheduled = NA_integer_
+    ))
+  }
+
+  deg <- stats::setNames(rep.int(0L, length(ids)), ids)
+  posA <- stats::setNames(rep.int(0L, length(ids)), ids)
+  pairs <- state$history_pairs
+
+  if (is.data.frame(pairs) && nrow(pairs) > 0L) {
+    idx_A <- match(as.character(pairs$A_id), ids)
+    idx_B <- match(as.character(pairs$B_id), ids)
+    if (any(is.na(idx_A) | is.na(idx_B))) {
+      rlang::abort("`state$history_pairs` must reference valid ids.")
+    }
+
+    count_A <- tabulate(idx_A, nbins = length(ids))
+    count_B <- tabulate(idx_B, nbins = length(ids))
+    deg <- as.integer(count_A + count_B)
+    posA <- as.integer(count_A)
+    names(deg) <- ids
+    names(posA) <- ids
+  }
+
+  pos_balance <- as.double(posA) / pmax(as.double(deg), 1)
+  pos_balance_sd <- if (length(pos_balance) == 0L) {
+    NA_real_
+  } else {
+    stats::sd(pos_balance)
+  }
+
+  list(
+    deg_scheduled = deg,
+    posA_scheduled = posA,
+    pos_balance_sd_scheduled = as.double(pos_balance_sd),
+    mean_degree_scheduled = as.double(mean(as.double(deg))),
+    min_degree_scheduled = as.integer(min(deg))
+  )
+}
+
 .adaptive_iteration_summary_schema <- function(include_optional = TRUE) {
   required <- tibble::tibble(
     iter = .adaptive_summary_empty_value("integer"),

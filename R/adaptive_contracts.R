@@ -305,6 +305,9 @@ round_log_schema <- function() {
     min_degree = integer(),
     pos_balance_mean = double(),
     pos_balance_sd = double(),
+    mean_degree_scheduled = double(),
+    min_degree_scheduled = integer(),
+    pos_balance_sd_scheduled = double(),
     epsilon_mean = double(),
     epsilon_p2.5 = double(),
     epsilon_p5 = double(),
@@ -662,6 +665,7 @@ build_round_log_row <- function(state,
   pos_balance[positive] <- (pos1[positive] / deg[positive]) - 0.5
   pos_balance_mean <- .adaptive_mean_or_na(pos_balance)
   pos_balance_sd <- if (all(is.na(pos_balance))) NA_real_ else stats::sd(pos_balance, na.rm = TRUE)
+  scheduled_exposure <- .adaptive_compute_scheduled_exposure(state)
 
   epsilon_mean <- state$posterior$epsilon_mean %||% NA_real_
   epsilon_p2.5 <- NA_real_
@@ -760,6 +764,9 @@ build_round_log_row <- function(state,
   row$min_degree <- as.integer(min_degree)
   row$pos_balance_mean <- as.double(pos_balance_mean)
   row$pos_balance_sd <- as.double(pos_balance_sd)
+  row$mean_degree_scheduled <- as.double(scheduled_exposure$mean_degree_scheduled %||% NA_real_)
+  row$min_degree_scheduled <- as.integer(scheduled_exposure$min_degree_scheduled %||% NA_integer_)
+  row$pos_balance_sd_scheduled <- as.double(scheduled_exposure$pos_balance_sd_scheduled %||% NA_real_)
   row$epsilon_mean <- as.double(epsilon_mean)
   row$epsilon_p2.5 <- as.double(epsilon_p2.5)
   row$epsilon_p5 <- as.double(epsilon_p5)

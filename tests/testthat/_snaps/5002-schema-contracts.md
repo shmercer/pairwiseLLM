@@ -5,6 +5,7 @@
     "scheduled_pairs", "completed_pairs", "backlog_unjudged", "new_pairs", 
     "proposed_pairs", "batch_size", "window_W", "exploration_rate", 
     "mean_degree", "min_degree", "pos_balance_mean", "pos_balance_sd", 
+    "mean_degree_scheduled", "min_degree_scheduled", "pos_balance_sd_scheduled", 
     "epsilon_mean", "epsilon_p2.5", "epsilon_p5", "epsilon_p50", 
     "epsilon_p95", "epsilon_p97.5", "beta_mean", "beta_p2.5", "beta_p5", 
     "beta_p50", "beta_p95", "beta_p97.5", "divergences", "max_rhat", "min_ess_bulk", 
