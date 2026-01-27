@@ -204,6 +204,26 @@ should_stop <- function(metrics, state, config) {
   if (!is.list(metrics)) {
     rlang::abort("`metrics` must be a list.")
   }
+  if (is.null(config) || !is.list(config)) {
+    rlang::abort("`config` must be a list.")
+  }
+
+  eap_min <- as.double(config$eap_reliability_min)
+  theta_corr_min <- as.double(config$theta_corr_min)
+  theta_sd_rel_change_max <- as.double(config$theta_sd_rel_change_max)
+  rank_spearman_min <- as.double(config$rank_spearman_min)
+  if (!is.finite(eap_min) || length(eap_min) != 1L) {
+    rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
+  }
+  if (!is.finite(theta_corr_min) || length(theta_corr_min) != 1L) {
+    rlang::abort("`config$theta_corr_min` must be a finite numeric scalar.")
+  }
+  if (!is.finite(theta_sd_rel_change_max) || length(theta_sd_rel_change_max) != 1L) {
+    rlang::abort("`config$theta_sd_rel_change_max` must be a finite numeric scalar.")
+  }
+  if (!is.finite(rank_spearman_min) || length(rank_spearman_min) != 1L) {
+    rlang::abort("`config$rank_spearman_min` must be a finite numeric scalar.")
+  }
 
   if (isTRUE(metrics$hard_cap_reached)) {
     state$mode <- "stopped"
@@ -258,10 +278,27 @@ should_stop <- function(metrics, state, config) {
   if (!isTRUE(stop_eligible) && !isFALSE(stop_eligible)) {
     stop_eligible <- current_refit >= min_refits_for_stability
   }
-  eap_pass <- isTRUE(metrics$eap_pass)
-  theta_corr_pass <- isTRUE(metrics$theta_corr_pass)
-  delta_sd_theta_pass <- isTRUE(metrics$delta_sd_theta_pass)
-  rho_rank_pass <- isTRUE(metrics$rho_rank_pass)
+  eap_pass <- metrics$eap_pass
+  if (!isTRUE(eap_pass) && !isFALSE(eap_pass)) {
+    eap_pass <- is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= eap_min
+  }
+  theta_corr_pass <- metrics$theta_corr_pass
+  if (!isTRUE(theta_corr_pass) && !isFALSE(theta_corr_pass)) {
+    theta_corr_pass <- is.finite(metrics$rho_theta_lag) && metrics$rho_theta_lag >= theta_corr_min
+  }
+  delta_sd_theta_pass <- metrics$delta_sd_theta_pass
+  if (!isTRUE(delta_sd_theta_pass) && !isFALSE(delta_sd_theta_pass)) {
+    delta_sd_theta_pass <- is.finite(metrics$delta_sd_theta_lag) &&
+      metrics$delta_sd_theta_lag <= theta_sd_rel_change_max
+  }
+  rho_rank_pass <- metrics$rho_rank_pass
+  if (!isTRUE(rho_rank_pass) && !isFALSE(rho_rank_pass)) {
+    if (isTRUE(metrics$rank_stability_pass) || isFALSE(metrics$rank_stability_pass)) {
+      rho_rank_pass <- isTRUE(metrics$rank_stability_pass)
+    } else {
+      rho_rank_pass <- is.finite(metrics$rho_rank_lag) && metrics$rho_rank_lag >= rank_spearman_min
+    }
+  }
 
   state <- .adaptive_update_theta_history(state, state$fit)
 

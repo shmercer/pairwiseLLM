@@ -203,7 +203,7 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
   state$phase <- "phase2"
   state$budget_max <- 10L
   state$comparisons_scheduled <- 0L
-  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N)
+  state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(eap_reliability_min = 0.95))
 
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::.adaptive_schedule_next_pairs(state, 1L, adaptive, seed = 1, near_stop = TRUE),
@@ -212,7 +212,12 @@ testthat::test_that("schedule_next_pairs covers stopped mode and near-stop phase
         state = state,
         fit = make_v3_fit_contract(
           state$ids,
-          theta_draws = matrix(0, nrow = 2, ncol = 2, dimnames = list(NULL, state$ids)),
+          theta_draws = matrix(
+            c(0, 1, 0.01, 1.01),
+            nrow = 2,
+            byrow = TRUE,
+            dimnames = list(NULL, state$ids)
+          ),
           diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000)
         ),
         refit_performed = TRUE

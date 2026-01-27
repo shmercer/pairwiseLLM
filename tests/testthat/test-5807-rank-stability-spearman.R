@@ -87,7 +87,7 @@ testthat::test_that("rank stability remains NA when ineligible", {
   )
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
     min_refits_for_stability = 3L,
-    stability_lag = 1L,
+    stability_lag = 2L,
     rank_spearman_min = 0.5
   ))
   state$config$v3 <- config_v3
