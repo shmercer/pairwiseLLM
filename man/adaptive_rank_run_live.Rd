@@ -2,7 +2,7 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_run_live}
 \alias{adaptive_rank_run_live}
-\title{Run adaptive ranking in a live loop}
+\title{Run an adaptive ranking session in live mode (with optional auto-resume)}
 \usage{
 adaptive_rank_run_live(
   samples,
@@ -15,74 +15,143 @@ adaptive_rank_run_live(
   adaptive = list(),
   paths = list(state_path = NULL, output_dir = NULL),
   seed = NULL,
-  max_iterations = NULL
+  max_iterations = NULL,
+  resume = c("auto", "never", "always"),
+  resume_validate = c("strict", "warn", "none")
 )
 }
 \arguments{
-\item{samples}{A data frame or tibble with columns \code{ID} and \code{text}.}
+\item{samples}{A data frame / tibble of items to rank. Must include an \code{ID}
+column (character/integer) that uniquely identifies each item. Any other
+columns are preserved in the state and can be used by prompt templates.}
 
-\item{model}{Model identifier for the selected backend.}
+\item{model}{Model identifier used by the live backend (e.g. \code{"gpt-4.1-mini"}).}
 
-\item{trait_name}{Short label for the trait.}
+\item{trait_name}{Short name of the trait being judged.}
 
-\item{trait_description}{Full-text trait description.}
+\item{trait_description}{Longer description/instructions for the trait.}
 
-\item{prompt_template}{Optional prompt template string. Defaults to
-\code{set_prompt_template()}.}
+\item{prompt_template}{Optional prompt template override. If \code{NULL}, a default
+template is used.}
 
-\item{backend}{Backend name (live-only): one of \code{"openai"},
-\code{"anthropic"}, \code{"gemini"}, \code{"together"}, or \code{"ollama"}.}
+\item{backend}{Backend identifier for live judging (e.g. \code{"openai"}). If \code{NULL}
+and resuming, the checkpoint's backend is used.}
 
-\item{submission}{A list of arguments passed through to
-\code{submit_llm_pairs()} on each live submission.}
+\item{submission}{List of live submission options (parallelism, verbosity, etc.).
+Passed through to internal submission helpers.}
 
-\item{adaptive}{A list of adaptive configuration overrides. See
-\code{adaptive_rank_start()} for supported keys.}
+\item{adaptive}{List of adaptive configuration overrides. Merged with defaults
+by \code{.adaptive_merge_config()}.}
 
-\item{paths}{A list with optional \code{state_path} and \code{output_dir}.}
+\item{paths}{A list with entries \code{state_path} and \code{output_dir}. If \code{state_path}
+is provided, the run state will be checkpointed there after each resume step.}
 
-\item{seed}{Optional integer seed for deterministic scheduling.}
+\item{seed}{Optional integer seed for reproducibility.}
 
-\item{max_iterations}{Optional integer override for the live loop cap.}
+\item{max_iterations}{Optional integer safety cap on the number of wrapper
+iterations. If \code{NULL}, uses the configured default (currently 50).}
+
+\item{resume}{Controls checkpoint resume behavior. One of:
+\describe{
+\item{\code{"auto"}}{Resume if \code{paths$state_path} exists; otherwise start new.}
+\item{\code{"never"}}{Always start a new run even if a checkpoint exists.}
+\item{\code{"always"}}{Require a checkpoint at \code{paths$state_path}; error if missing.}
+}}
+
+\item{resume_validate}{How strictly to validate that \code{samples} match the checkpoint
+when resuming. One of:
+\describe{
+\item{\code{"strict"}}{IDs must exist and match exactly (including order); otherwise error.}
+\item{\code{"warn"}}{If mismatch, warn and start a new run (equivalent to \code{resume="never"} for this call).}
+\item{\code{"none"}}{Skip validation (not recommended; can corrupt runs if samples differ).}
+}}
 }
 \value{
 A list with:
 \describe{
-\item{state}{The final \code{adaptive_state}.}
-\item{submission_info}{Metadata for the last submission.}
-\item{next_action}{List with \code{action} and \code{reason}.}
-\item{iterations}{Number of iterations executed.}
+\item{\code{state}}{The current adaptive state (checkpointable).}
+\item{\code{submission_info}}{Submission metadata used for the last step.}
+\item{\code{next_action}}{Next action requested by the engine (e.g., \code{"resume"} or stop).}
+\item{\code{iterations}}{Number of wrapper iterations executed in this call.}
+\item{\code{resumed}}{Logical, whether the call resumed from checkpoint.}
 }
 }
 \description{
-Convenience wrapper that repeatedly calls
-\code{adaptive_rank_start()} and \code{adaptive_rank_resume()} in live mode
-until the budget is exhausted, no feasible pairs remain, or
-\code{max_iterations} is reached.
+This is a high-level convenience wrapper around the adaptive v3 engine for
+\emph{live} judging (e.g., via an LLM backend). It starts a new run (default) or,
+if configured, automatically resumes from an on-disk checkpoint when one is
+present at \code{paths$state_path}.
 }
 \details{
-Running this function will submit LLM comparisons and will incur API usage
-costs for hosted backends. For larger runs, prefer batch mode so you can
-checkpoint and control polling.
+\subsection{Iterations vs. statistical stopping}{
 
-Model variants, stopping gates, and canonical outputs match
-\code{adaptive_rank_start()}. Each refit occurs after \code{refit_B}
-new results, and stop checks apply the diagnostics, reliability, and
-stability gates described there.
+\code{adaptive_rank_run_live()} runs a loop of \strong{adaptive iterations} (each
+iteration schedules/collects a batch of comparisons) until either:
+\itemize{
+\item the adaptive engine returns a non-\code{"resume"} next action (e.g. stopped),
+\item or the wrapper hits \code{max_iterations} (a safety cap; default is 50 via config).
+}
+
+The Bayesian stopping criteria (diagnostics, reliability, stability) are
+evaluated at refits, but this wrapper can still terminate early if it hits
+the iteration cap. Increase \code{max_iterations} if you want the run to continue
+until statistical stopping is reached.
+}
+
+\subsection{Auto-resume behavior}{
+
+When \code{resume = "auto"} (default), and \code{paths$state_path} points to an existing
+checkpoint file, this function resumes that run instead of starting a new one.
+By default it performs a strict identity check that the provided \code{samples}
+match the checkpoint's items (IDs and order).
+}
 }
 \examples{
 \dontrun{
-# Full live loop with safety cap
+# --- Start a new live run ---
 out <- adaptive_rank_run_live(
   samples = samples,
-  model = "gpt-4.1",
-  trait_name = td$name,
-  trait_description = td$description,
+  model = "gpt-4.1-mini",
+  trait_name = "Overall Quality",
+  trait_description = "Choose the better of the two responses for overall quality.",
   backend = "openai",
-  adaptive = list(d1 = 8, M1_target = 40),
   seed = 123,
-  max_iterations = 10
+  submission = list(parallel = TRUE, workers = 8, progress = TRUE, verbose = TRUE),
+  paths = list(
+    state_path = "./dev-output/adaptive_gpt4.1-mini/state.rds",
+    output_dir  = "./dev-output/adaptive_gpt4.1-mini"
+  ),
+  max_iterations = 50
+)
+
+# --- Resume automatically (same call, same state_path) ---
+# This will continue from the saved checkpoint (iter 51, etc.) if it exists.
+out2 <- adaptive_rank_run_live(
+  samples = samples,
+  model = "gpt-4.1-mini",
+  trait_name = "Overall Quality",
+  trait_description = "Choose the better of the two responses for overall quality.",
+  backend = "openai",
+  seed = 123,
+  submission = list(parallel = TRUE, workers = 8, progress = TRUE, verbose = TRUE),
+  paths = list(
+    state_path = "./dev-output/adaptive_gpt4.1-mini/state.rds",
+    output_dir  = "./dev-output/adaptive_gpt4.1-mini"
+  ),
+  max_iterations = 200,
+  resume = "auto",
+  resume_validate = "strict"
+)
+
+# --- Require a checkpoint and fail if missing ---
+out3 <- adaptive_rank_run_live(
+  samples = samples,
+  model = "gpt-4.1-mini",
+  trait_name = "Overall Quality",
+  trait_description = "Choose the better of the two responses for overall quality.",
+  backend = "openai",
+  paths = list(state_path = "./dev-output/adaptive_gpt4.1-mini/state.rds"),
+  resume = "always"
 )
 }
-
 }

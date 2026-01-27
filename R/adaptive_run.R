@@ -3071,61 +3071,122 @@ adaptive_rank_resume <- function(
   )
 }
 
-#' Run adaptive ranking in a live loop
+#' Run an adaptive ranking session in live mode (with optional auto-resume)
 #'
-#' Convenience wrapper that repeatedly calls
-#' \code{adaptive_rank_start()} and \code{adaptive_rank_resume()} in live mode
-#' until the budget is exhausted, no feasible pairs remain, or
-#' \code{max_iterations} is reached.
+#' This is a high-level convenience wrapper around the adaptive v3 engine for
+#' *live* judging (e.g., via an LLM backend). It starts a new run (default) or,
+#' if configured, automatically resumes from an on-disk checkpoint when one is
+#' present at `paths$state_path`.
 #'
-#' Running this function will submit LLM comparisons and will incur API usage
-#' costs for hosted backends. For larger runs, prefer batch mode so you can
-#' checkpoint and control polling.
+#' ## Iterations vs. statistical stopping
+#' `adaptive_rank_run_live()` runs a loop of **adaptive iterations** (each
+#' iteration schedules/collects a batch of comparisons) until either:
+#' \itemize{
+#'   \item the adaptive engine returns a non-`"resume"` next action (e.g. stopped),
+#'   \item or the wrapper hits `max_iterations` (a safety cap; default is 50 via config).
+#' }
 #'
-#' Model variants, stopping gates, and canonical outputs match
-#' \code{adaptive_rank_start()}. Each refit occurs after \code{refit_B}
-#' new results, and stop checks apply the diagnostics, reliability, and
-#' stability gates described there.
+#' The Bayesian stopping criteria (diagnostics, reliability, stability) are
+#' evaluated at refits, but this wrapper can still terminate early if it hits
+#' the iteration cap. Increase `max_iterations` if you want the run to continue
+#' until statistical stopping is reached.
 #'
-#' @param samples A data frame or tibble with columns \code{ID} and \code{text}.
-#' @param model Model identifier for the selected backend.
-#' @param trait_name Short label for the trait.
-#' @param trait_description Full-text trait description.
-#' @param prompt_template Optional prompt template string. Defaults to
-#'   \code{set_prompt_template()}.
-#' @param backend Backend name (live-only): one of \code{"openai"},
-#'   \code{"anthropic"}, \code{"gemini"}, \code{"together"}, or \code{"ollama"}.
-#' @param submission A list of arguments passed through to
-#'   \code{submit_llm_pairs()} on each live submission.
-#' @param adaptive A list of adaptive configuration overrides. See
-#'   \code{adaptive_rank_start()} for supported keys.
-#' @param paths A list with optional \code{state_path} and \code{output_dir}.
-#' @param seed Optional integer seed for deterministic scheduling.
-#' @param max_iterations Optional integer override for the live loop cap.
+#' ## Auto-resume behavior
+#' When `resume = "auto"` (default), and `paths$state_path` points to an existing
+#' checkpoint file, this function resumes that run instead of starting a new one.
+#' By default it performs a strict identity check that the provided `samples`
+#' match the checkpoint's items (IDs and order).
+#'
+#' @param samples A data frame / tibble of items to rank. Must include an `ID`
+#'   column (character/integer) that uniquely identifies each item. Any other
+#'   columns are preserved in the state and can be used by prompt templates.
+#' @param model Model identifier used by the live backend (e.g. `"gpt-4.1-mini"`).
+#' @param trait_name Short name of the trait being judged.
+#' @param trait_description Longer description/instructions for the trait.
+#' @param prompt_template Optional prompt template override. If `NULL`, a default
+#'   template is used.
+#' @param backend Backend identifier for live judging (e.g. `"openai"`). If `NULL`
+#'   and resuming, the checkpoint's backend is used.
+#' @param submission List of live submission options (parallelism, verbosity, etc.).
+#'   Passed through to internal submission helpers.
+#' @param adaptive List of adaptive configuration overrides. Merged with defaults
+#'   by `.adaptive_merge_config()`.
+#' @param paths A list with entries `state_path` and `output_dir`. If `state_path`
+#'   is provided, the run state will be checkpointed there after each resume step.
+#' @param seed Optional integer seed for reproducibility.
+#' @param max_iterations Optional integer safety cap on the number of wrapper
+#'   iterations. If `NULL`, uses the configured default (currently 50).
+#' @param resume Controls checkpoint resume behavior. One of:
+#'   \describe{
+#'     \item{`"auto"`}{Resume if `paths$state_path` exists; otherwise start new.}
+#'     \item{`"never"`}{Always start a new run even if a checkpoint exists.}
+#'     \item{`"always"`}{Require a checkpoint at `paths$state_path`; error if missing.}
+#'   }
+#' @param resume_validate How strictly to validate that `samples` match the checkpoint
+#'   when resuming. One of:
+#'   \describe{
+#'     \item{`"strict"`}{IDs must exist and match exactly (including order); otherwise error.}
+#'     \item{`"warn"`}{If mismatch, warn and start a new run (equivalent to `resume="never"` for this call).}
+#'     \item{`"none"`}{Skip validation (not recommended; can corrupt runs if samples differ).}
+#'   }
 #'
 #' @return A list with:
 #' \describe{
-#'   \item{state}{The final \code{adaptive_state}.}
-#'   \item{submission_info}{Metadata for the last submission.}
-#'   \item{next_action}{List with \code{action} and \code{reason}.}
-#'   \item{iterations}{Number of iterations executed.}
+#'   \item{`state`}{The current adaptive state (checkpointable).}
+#'   \item{`submission_info`}{Submission metadata used for the last step.}
+#'   \item{`next_action`}{Next action requested by the engine (e.g., `"resume"` or stop).}
+#'   \item{`iterations`}{Number of wrapper iterations executed in this call.}
+#'   \item{`resumed`}{Logical, whether the call resumed from checkpoint.}
 #' }
 #'
 #' @examples
 #' \dontrun{
-#' # Full live loop with safety cap
+#' # --- Start a new live run ---
 #' out <- adaptive_rank_run_live(
 #'   samples = samples,
-#'   model = "gpt-4.1",
-#'   trait_name = td$name,
-#'   trait_description = td$description,
+#'   model = "gpt-4.1-mini",
+#'   trait_name = "Overall Quality",
+#'   trait_description = "Choose the better of the two responses for overall quality.",
 #'   backend = "openai",
-#'   adaptive = list(d1 = 8, M1_target = 40),
 #'   seed = 123,
-#'   max_iterations = 10
+#'   submission = list(parallel = TRUE, workers = 8, progress = TRUE, verbose = TRUE),
+#'   paths = list(
+#'     state_path = "./dev-output/adaptive_gpt4.1-mini/state.rds",
+#'     output_dir  = "./dev-output/adaptive_gpt4.1-mini"
+#'   ),
+#'   max_iterations = 50
+#' )
+#'
+#' # --- Resume automatically (same call, same state_path) ---
+#' # This will continue from the saved checkpoint (iter 51, etc.) if it exists.
+#' out2 <- adaptive_rank_run_live(
+#'   samples = samples,
+#'   model = "gpt-4.1-mini",
+#'   trait_name = "Overall Quality",
+#'   trait_description = "Choose the better of the two responses for overall quality.",
+#'   backend = "openai",
+#'   seed = 123,
+#'   submission = list(parallel = TRUE, workers = 8, progress = TRUE, verbose = TRUE),
+#'   paths = list(
+#'     state_path = "./dev-output/adaptive_gpt4.1-mini/state.rds",
+#'     output_dir  = "./dev-output/adaptive_gpt4.1-mini"
+#'   ),
+#'   max_iterations = 200,
+#'   resume = "auto",
+#'   resume_validate = "strict"
+#' )
+#'
+#' # --- Require a checkpoint and fail if missing ---
+#' out3 <- adaptive_rank_run_live(
+#'   samples = samples,
+#'   model = "gpt-4.1-mini",
+#'   trait_name = "Overall Quality",
+#'   trait_description = "Choose the better of the two responses for overall quality.",
+#'   backend = "openai",
+#'   paths = list(state_path = "./dev-output/adaptive_gpt4.1-mini/state.rds"),
+#'   resume = "always"
 #' )
 #' }
-#'
 #' @export
 adaptive_rank_run_live <- function(
     samples,
@@ -3138,40 +3199,179 @@ adaptive_rank_run_live <- function(
     adaptive = list(),
     paths = list(state_path = NULL, output_dir = NULL),
     seed = NULL,
-    max_iterations = NULL
+    max_iterations = NULL,
+    resume = c("auto", "never", "always"),
+    resume_validate = c("strict", "warn", "none")
 ) {
+  resume <- match.arg(resume)
+  resume_validate <- match.arg(resume_validate)
+
   adaptive <- .adaptive_merge_config(adaptive)
   if (!is.null(max_iterations)) {
     adaptive$max_iterations <- max_iterations
   }
+
   n_items <- nrow(tibble::as_tibble(samples))
   v3_overrides <- .adaptive_v3_overrides_from_adaptive(n_items, adaptive)
   adaptive_v3_config(n_items, v3_overrides)
+
   max_iterations <- as.integer(adaptive$max_iterations)
   if (is.na(max_iterations) || max_iterations < 1L) {
     rlang::abort("`max_iterations` must be a positive integer.")
   }
 
-  start_out <- adaptive_rank_start(
-    samples = samples,
-    model = model,
-    trait_name = trait_name,
-    trait_description = trait_description,
-    prompt_template = prompt_template,
-    backend = backend,
-    mode = "live",
-    submission = submission,
-    adaptive = adaptive,
-    paths = paths,
-    seed = seed
-  )
+  state_path <- paths$state_path %||% NULL
+  has_checkpoint <- !is.null(state_path) && file.exists(state_path)
+  resumed <- FALSE
 
-  state <- start_out$state
-  submission_info <- start_out$submission_info
-  next_action <- start_out$next_action
+  if (resume == "always" && !has_checkpoint) {
+    rlang::abort("`resume = \"always\"` requested, but no checkpoint found at `paths$state_path`.")
+  }
+
+  # Decide whether to resume on this call.
+  do_resume <- has_checkpoint && (resume %in% c("auto", "always"))
+
+  if (do_resume) {
+    # Load checkpoint for validation + config harvesting
+    st0 <- adaptive_state_load(state_path)
+
+    # Optional strict identity check (recommended)
+    # NOTE: pairwiseLLM 1.2.0 checkpoint stores items in `state$ids` and `state$texts`
+    # (there is no `state$samples`).
+    if (resume_validate != "none") {
+      s_tbl <- tibble::as_tibble(samples)
+
+      if (!("ID" %in% names(s_tbl)) || is.null(st0$ids)) {
+        msg <- "Cannot validate resume: `ID` column missing in `samples` or `state$ids` missing in checkpoint."
+        if (resume_validate == "strict") {
+          rlang::abort(msg)
+        } else {
+          rlang::warn(msg)
+          do_resume <- FALSE
+        }
+      } else {
+        ids_new <- as.character(s_tbl$ID)
+        ids_old <- as.character(st0$ids)
+
+        mismatch <- (length(ids_new) != length(ids_old)) || any(ids_new != ids_old)
+        if (mismatch) {
+          msg <- paste0(
+            "Checkpoint exists but `samples$ID` does not match checkpoint `state$ids`.\n",
+            "Refusing to resume to prevent corrupting the run.\n",
+            "Fix: pass the identical `samples` (same IDs and order) used to start the run,\n",
+            "or set `resume=\"never\"`, or set `resume_validate=\"warn\"` to fall back to starting a new run."
+          )
+          if (resume_validate == "strict") {
+            rlang::abort(msg)
+          } else {
+            rlang::warn(msg)
+            do_resume <- FALSE
+          }
+        }
+      }
+
+      # Optional stronger check: validate text identity against `state$texts`
+      # Enable by default only in strict mode (recommended)
+      if (do_resume && resume_validate == "strict") {
+        if (is.null(st0$texts)) {
+          rlang::abort("Cannot validate resume: `state$texts` missing in checkpoint.")
+        }
+        if (!("text" %in% names(s_tbl))) {
+          rlang::abort("Cannot validate resume: `text` column missing in `samples` (needed to check against `state$texts`).")
+        }
+        texts_new <- as.character(s_tbl$text)
+        names(texts_new) <- as.character(s_tbl$ID)
+
+        if (!identical(texts_new, st0$texts)) {
+          rlang::abort(
+            paste0(
+              "Checkpoint exists but `samples$text` does not match checkpoint `state$texts`.\n",
+              "Refusing to resume to prevent corrupting the run."
+            )
+          )
+        }
+      }
+    }
+
+    if (do_resume) {
+      # Build a minimal submission_info for resume.
+      # NOTE: adaptive_rank_resume() expects submission_info to be a list and
+      # to contain backend/model either in submission_info or in state$config.
+      submission_info <- list(
+        backend = backend %||% st0$config$backend %||% NULL,
+        model = model %||% st0$config$model %||% NULL,
+        trait_name = trait_name %||% st0$config$trait_name %||% NULL,
+        trait_description = trait_description %||% st0$config$trait_description %||% NULL,
+        prompt_template = prompt_template %||% st0$config$prompt_template %||% NULL
+      )
+
+      # Keep output_dir/state_path consistent: prefer explicit `paths` overrides,
+      # else fall back to checkpoint config when present.
+      if (!is.null(paths$output_dir)) {
+        submission_info$output_dir <- paths$output_dir
+      } else if (!is.null(st0$config$output_dir)) {
+        submission_info$output_dir <- st0$config$output_dir
+      } else {
+        submission_info$output_dir <- NULL
+      }
+
+      if (!is.null(paths$state_path)) {
+        submission_info$state_path <- paths$state_path
+      } else if (!is.null(st0$config$state_path)) {
+        submission_info$state_path <- st0$config$state_path
+      } else {
+        submission_info$state_path <- state_path
+      }
+
+      if (is.null(submission_info$backend) || is.null(submission_info$model)) {
+        rlang::abort("Cannot resume: backend/model not found in args or checkpoint state.")
+      }
+      if (is.null(submission_info$trait_name) || is.null(submission_info$trait_description)) {
+        rlang::abort("Cannot resume: trait_name/trait_description not found in args or checkpoint state.")
+      }
+
+      resume_out <- adaptive_rank_resume(
+        state_path = state_path,
+        mode = "live",
+        submission_info = submission_info,
+        submission = submission,
+        adaptive = adaptive,
+        seed = seed
+      )
+
+      state <- resume_out$state
+      submission_info <- resume_out$submission_info
+      next_action <- resume_out$next_action
+      resumed <- TRUE
+    }
+  }
+
+  if (!do_resume) {
+    start_out <- adaptive_rank_start(
+      samples = samples,
+      model = model,
+      trait_name = trait_name,
+      trait_description = trait_description,
+      prompt_template = prompt_template,
+      backend = backend,
+      mode = "live",
+      submission = submission,
+      adaptive = adaptive,
+      paths = paths,
+      seed = seed
+    )
+
+    state <- start_out$state
+    submission_info <- start_out$submission_info
+    next_action <- start_out$next_action
+    resumed <- FALSE
+  }
 
   iter <- 1L
   while (next_action$action == "resume" && iter < max_iterations) {
+    # Ensure submission_info is always a list for adaptive_rank_resume()
+    submission_info <- submission_info %||% list()
+
     resume_out <- adaptive_rank_resume(
       state = state,
       mode = "live",
@@ -3190,7 +3390,8 @@ adaptive_rank_run_live <- function(
     state = state,
     submission_info = submission_info,
     next_action = next_action,
-    iterations = iter
+    iterations = iter,
+    resumed = resumed
   )
 }
 
