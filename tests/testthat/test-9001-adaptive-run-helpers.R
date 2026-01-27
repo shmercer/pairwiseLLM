@@ -780,6 +780,32 @@ testthat::test_that("adaptive_rank_resume and run_live cover error and branch pa
     "max_iterations"
   )
 
+  live_inf <- testthat::with_mocked_bindings(
+    adaptive_rank_run_live(
+      samples = samples,
+      model = "gpt-test",
+      trait_name = "quality",
+      trait_description = "Which is better?",
+      backend = "openai",
+      max_iterations = Inf
+    ),
+    adaptive_rank_start = function(...) {
+      list(
+        state = list(),
+        submission_info = list(),
+        next_action = list(action = "resume")
+      )
+    },
+    adaptive_rank_resume = function(...) {
+      list(
+        state = list(),
+        submission_info = list(),
+        next_action = list(action = "done")
+      )
+    }
+  )
+  expect_equal(live_inf$iterations, 2L)
+
   live_out <- testthat::with_mocked_bindings(
     adaptive_rank_run_live(
       samples = samples,
