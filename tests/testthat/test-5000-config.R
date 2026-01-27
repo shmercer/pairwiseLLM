@@ -8,7 +8,6 @@ test_that("adaptive_v3_defaults includes required fields", {
     "hard_cap_frac",
     "eap_reliability_min", "min_refits_for_stability", "stability_lag",
     "theta_corr_min", "theta_sd_rel_change_max", "rank_spearman_min",
-    "stability_consecutive",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
     "progress", "progress_every_iter", "progress_every_refit", "progress_level",
@@ -33,13 +32,12 @@ test_that("adaptive_v3_defaults scales with N", {
     expect_equal(cfg$A_anchors, anchors)
     expect_equal(cfg$explore_rate, explore_rate)
     expect_equal(cfg$hard_cap_frac, 0.40)
-    expect_equal(cfg$eap_reliability_min, 0.98)
+    expect_equal(cfg$eap_reliability_min, 0.95)
     expect_equal(cfg$min_refits_for_stability, 3L)
     expect_equal(cfg$stability_lag, 2L)
-    expect_equal(cfg$theta_corr_min, 0.99)
+    expect_equal(cfg$theta_corr_min, 0.995)
     expect_equal(cfg$theta_sd_rel_change_max, 0.01)
-    expect_equal(cfg$rank_spearman_min, 0.99)
-    expect_equal(cfg$stability_consecutive, 2L)
+    expect_equal(cfg$rank_spearman_min, 0.995)
   }
 })
 

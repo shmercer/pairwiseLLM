@@ -50,13 +50,12 @@ adaptive_v3_defaults <- function(N) {
     dup_max_count = 6L,
     dup_utility_quantile = 0.90,
     hard_cap_frac = 0.40,
-    eap_reliability_min = 0.98,
+    eap_reliability_min = 0.95,
     min_refits_for_stability = 3L,
     stability_lag = 2L,
-    theta_corr_min = 0.99,
+    theta_corr_min = 0.995,
     theta_sd_rel_change_max = 0.01,
-    rank_spearman_min = 0.99,
-    stability_consecutive = 2L,
+    rank_spearman_min = 0.995,
     max_rhat = 1.01,
     min_ess_bulk = 300,
     min_ess_bulk_near_stop = 1000,
@@ -161,7 +160,6 @@ validate_config <- function(config) {
     "hard_cap_frac",
     "eap_reliability_min", "min_refits_for_stability", "stability_lag",
     "theta_corr_min", "theta_sd_rel_change_max", "rank_spearman_min",
-    "stability_consecutive",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
     "progress", "progress_every_iter", "progress_every_refit", "progress_level",
@@ -231,10 +229,6 @@ validate_config <- function(config) {
     length(config$rank_spearman_min) == 1L &&
     config$rank_spearman_min >= 0 && config$rank_spearman_min <= 1,
   "`rank_spearman_min` must be in [0, 1].")
-  .adaptive_v3_check(.adaptive_v3_intish(config$stability_consecutive) &&
-    config$stability_consecutive >= 1L,
-  "`stability_consecutive` must be >= 1.")
-
   .adaptive_v3_check(is.numeric(config$max_rhat) && length(config$max_rhat) == 1L &&
     config$max_rhat >= 1, "`max_rhat` must be >= 1.")
   .adaptive_v3_check(is.numeric(config$min_ess_bulk) && length(config$min_ess_bulk) == 1L &&
@@ -325,12 +319,15 @@ round_log_schema <- function() {
     min_ess_bulk = double(),
     diagnostics_pass = logical(),
     reliability_EAP = double(),
+    eap_pass = logical(),
     theta_sd_eap = double(),
     rho_theta_lag = double(),
+    theta_corr_pass = logical(),
     delta_sd_theta_lag = double(),
+    delta_sd_theta_pass = logical(),
     rho_rank_lag = double(),
+    rho_rank_pass = logical(),
     rank_stability_pass = logical(),
-    stop_passes = integer(),
     stop_eligible = logical(),
     stop_decision = logical(),
     stop_reason = character(),
@@ -587,11 +584,16 @@ compute_gini_posA <- function(posA_counts, deg = NULL) {
     min_ess_bulk = NA_real_,
     max_rhat = NA_real_,
     reliability_EAP = NA_real_,
+    eap_pass = NA,
     theta_sd_eap = NA_real_,
     rho_theta_lag = NA_real_,
+    theta_corr_pass = NA,
     delta_sd_theta_lag = NA_real_,
+    delta_sd_theta_pass = NA,
     rho_rank_lag = NA_real_,
+    rho_rank_pass = NA,
     rank_stability_pass = NA,
+    stop_eligible = NA,
     refit_performed = NA,
     candidate_starved = NA,
     reason_short_batch = NA_character_
@@ -711,8 +713,7 @@ build_round_log_row <- function(state,
 
   stop_decision <- stop_out$stop_decision %||% NA
   stop_reason <- stop_out$stop_reason %||% state$stop_reason %||% NA_character_
-  stop_passes <- state$checks_passed_in_row %||% NA_integer_
-  stop_eligible <- state$stop_candidate %||% NA
+  stop_eligible <- metrics$stop_eligible %||% NA
 
   batch_log <- state$batch_log %||% tibble::tibble()
   if (!is.data.frame(batch_log)) {
@@ -784,12 +785,15 @@ build_round_log_row <- function(state,
   row$min_ess_bulk <- as.double(min_ess_bulk)
   row$diagnostics_pass <- as.logical(metrics$diagnostics_pass %||% NA)
   row$reliability_EAP <- as.double(reliability_EAP)
+  row$eap_pass <- as.logical(metrics$eap_pass %||% NA)
   row$theta_sd_eap <- as.double(metrics$theta_sd_eap %||% NA_real_)
   row$rho_theta_lag <- as.double(metrics$rho_theta_lag %||% NA_real_)
+  row$theta_corr_pass <- as.logical(metrics$theta_corr_pass %||% NA)
   row$delta_sd_theta_lag <- as.double(metrics$delta_sd_theta_lag %||% NA_real_)
+  row$delta_sd_theta_pass <- as.logical(metrics$delta_sd_theta_pass %||% NA)
   row$rho_rank_lag <- as.double(metrics$rho_rank_lag %||% NA_real_)
+  row$rho_rank_pass <- as.logical(metrics$rho_rank_pass %||% NA)
   row$rank_stability_pass <- as.logical(metrics$rank_stability_pass %||% NA)
-  row$stop_passes <- as.integer(stop_passes)
   row$stop_eligible <- as.logical(stop_eligible)
   row$stop_decision <- as.logical(stop_decision)
   row$stop_reason <- as.character(stop_reason)

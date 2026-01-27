@@ -207,25 +207,21 @@
     )
   )
 
-  checks_passed <- progress_field("stop_passes", NA_integer_)
-  checks_target <- config$stability_consecutive %||% NA_integer_
   lines <- c(
     lines,
     paste0(
-      "  Stop: passes=",
-      .adaptive_progress_value(checks_passed), "/",
-      .adaptive_progress_value(checks_target),
-      " eligible=",
-      .adaptive_progress_value(progress_field("stop_eligible", NA))
+      "  Stop: eligible=",
+      .adaptive_progress_value(progress_field("stop_eligible", NA)),
+      " decision=",
+      .adaptive_progress_value(progress_field("stop_decision", NA))
     )
   )
-
   stop_decision <- progress_field("stop_decision", NA)
   if (isTRUE(stop_decision %in% TRUE)) {
     lines <- c(
       lines,
       paste0(
-        "  Stop decision: TRUE reason=",
+        "  Stop reason: ",
         .adaptive_progress_value(progress_field("stop_reason", NA_character_))
       )
     )

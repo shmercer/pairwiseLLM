@@ -181,8 +181,6 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
       bin = NULL,
       bin_edges = NULL,
       last_check_at = 0L,
-      stop_candidate = FALSE,
-      checks_passed_in_row = 0L,
       new_since_refit = 0L,
       last_refit_at = 0L,
       posterior = list(

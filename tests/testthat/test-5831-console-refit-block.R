@@ -9,7 +9,6 @@ testthat::test_that("refit progress block includes EAP reliability", {
     list(progress = TRUE, progress_every_refit = 1L, progress_level = "refit")
   )
   state$phase <- "phase2"
-  state$checks_passed_in_row <- 1L
 
   round_row <- tibble::tibble(
     round_id = 1L,
@@ -22,13 +21,15 @@ testthat::test_that("refit progress block includes EAP reliability", {
     min_ess_bulk = 1200,
     epsilon_mean = 0.09,
     reliability_EAP = 0.87,
+    eap_pass = FALSE,
     diagnostics_pass = TRUE,
     theta_sd_eap = 0.48,
     rho_theta_lag = 0.99,
+    theta_corr_pass = TRUE,
     delta_sd_theta_lag = 0.01,
     rho_rank_lag = 0.99,
+    rho_rank_pass = TRUE,
     rank_stability_pass = TRUE,
-    stop_passes = 1L,
     stop_eligible = TRUE,
     stop_decision = FALSE,
     stop_reason = NA_character_,

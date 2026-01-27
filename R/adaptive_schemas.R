@@ -368,12 +368,6 @@ validate_state <- function(state) {
   if (!is.integer(state$last_check_at) || length(state$last_check_at) != 1L) {
     rlang::abort("`state$last_check_at` must be a length-1 integer.")
   }
-  if (!is.logical(state$stop_candidate) || length(state$stop_candidate) != 1L) {
-    rlang::abort("`state$stop_candidate` must be a length-1 logical.")
-  }
-  if (!is.integer(state$checks_passed_in_row) || length(state$checks_passed_in_row) != 1L) {
-    rlang::abort("`state$checks_passed_in_row` must be a length-1 integer.")
-  }
   if (!is.integer(state$new_since_refit) || length(state$new_since_refit) != 1L) {
     rlang::abort("`state$new_since_refit` must be a length-1 integer.")
   }

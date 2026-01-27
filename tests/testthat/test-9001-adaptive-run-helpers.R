@@ -397,14 +397,13 @@ testthat::test_that("adaptive_run next_action covers stopped mode", {
   expect_equal(done_stop$reason, "v3_converged")
 })
 
-testthat::test_that("adaptive_run schedule_target moves to phase3 when near stop", {
+testthat::test_that("adaptive_run schedule_target uses phase3 targets", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "bravo")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L), seed = 10)
-  state$phase <- "phase2"
-  state$stop_candidate <- TRUE
+  state$phase <- "phase3"
   state$config$batch_sizes <- list(BATCH1 = 1L, BATCH2 = 2L, BATCH3 = 3L)
 
   target <- pairwiseLLM:::.adaptive_schedule_target(state, adaptive = list())
