@@ -4,6 +4,9 @@ testthat::test_that("consecutive-pass stopping references are removed", {
     testthat::test_path("..", "..", "R", "adaptive_contracts.R"),
     testthat::test_path("..", "..", "R", "adaptive_run.R")
   )
+  if (!all(file.exists(files))) {
+    testthat::skip("R source files not available; skipping source scan")
+  }
   content <- paste(vapply(files, function(path) {
     paste(readLines(path, warn = FALSE), collapse = "\n")
   }, character(1L)), collapse = "\n")
