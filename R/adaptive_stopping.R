@@ -7,7 +7,7 @@
 #' @noRd
 near_stop_from_state <- function(state) {
   validate_state(state)
-  isTRUE(state$stop_candidate) || state$checks_passed_in_row > 0L
+  identical(state$phase, "phase3")
 }
 
 #' @keywords internal
@@ -76,12 +76,17 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     rlang::abort("`config$stability_lag` must be a positive integer.")
   }
 
+  stop_eligible <- current_refit >= min_refits_for_stability
+  lag_eligible <- current_refit > stability_lag
+
   rho_theta_lag <- NA_real_
   delta_sd_theta_lag <- NA_real_
   rho_rank_lag <- NA_real_
+  theta_corr_pass <- NA
+  delta_sd_theta_pass <- NA
+  rho_rank_pass <- NA
   rank_stability_pass <- NA
-  eligible <- current_refit >= min_refits_for_stability && length(history) >= stability_lag
-  if (isTRUE(eligible)) {
+  if (isTRUE(lag_eligible)) {
     lag_idx <- length(history) - stability_lag + 1L
     lag_theta <- history[[lag_idx]]
     if (!is.numeric(lag_theta) || length(lag_theta) != length(state$ids)) {
@@ -105,7 +110,10 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     sd_current <- stats::sd(theta_mean)
     sd_lag <- stats::sd(lag_theta)
     if (is.finite(sd_current) && is.finite(sd_lag) && sd_current > 0 && sd_lag > 0) {
-      rho_theta_lag <- stats::cor(theta_mean, lag_theta, use = "complete.obs")
+      rho_theta_lag <- stats::cor(theta_mean, lag_theta,
+        method = "pearson",
+        use = "complete.obs"
+      )
     }
     if (is.finite(sd_lag) && sd_lag > 0) {
       delta_sd_theta_lag <- abs(sd_current - sd_lag) / sd_lag
@@ -116,11 +124,22 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
         use = "complete.obs"
       )
     }
+    theta_corr_min <- as.double(config$theta_corr_min)
+    theta_sd_rel_change_max <- as.double(config$theta_sd_rel_change_max)
     rank_spearman_min <- as.double(config$rank_spearman_min)
+    if (!is.finite(theta_corr_min) || length(theta_corr_min) != 1L) {
+      rlang::abort("`config$theta_corr_min` must be a finite numeric scalar.")
+    }
+    if (!is.finite(theta_sd_rel_change_max) || length(theta_sd_rel_change_max) != 1L) {
+      rlang::abort("`config$theta_sd_rel_change_max` must be a finite numeric scalar.")
+    }
     if (!is.finite(rank_spearman_min) || length(rank_spearman_min) != 1L) {
       rlang::abort("`config$rank_spearman_min` must be a finite numeric scalar.")
     }
-    rank_stability_pass <- is.finite(rho_rank_lag) && rho_rank_lag >= rank_spearman_min
+    theta_corr_pass <- is.finite(rho_theta_lag) && rho_theta_lag >= theta_corr_min
+    delta_sd_theta_pass <- is.finite(delta_sd_theta_lag) && delta_sd_theta_lag <= theta_sd_rel_change_max
+    rho_rank_pass <- is.finite(rho_rank_lag) && rho_rank_lag >= rank_spearman_min
+    rank_stability_pass <- rho_rank_pass
   }
 
   metrics <- .adaptive_stop_metrics_defaults()
@@ -137,12 +156,25 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
   metrics$min_ess_bulk <- as.double(diagnostics$min_ess_bulk %||% NA_real_)
   metrics$max_rhat <- as.double(diagnostics$max_rhat %||% NA_real_)
   metrics$reliability_EAP <- as.double(reliability_EAP)
+  metrics$eap_pass <- NA
   metrics$theta_sd_eap <- as.double(theta_sd_eap)
   metrics$rho_theta_lag <- as.double(rho_theta_lag)
+  metrics$theta_corr_pass <- theta_corr_pass
   metrics$delta_sd_theta_lag <- as.double(delta_sd_theta_lag)
+  metrics$delta_sd_theta_pass <- delta_sd_theta_pass
   metrics$rho_rank_lag <- as.double(rho_rank_lag)
+  metrics$rho_rank_pass <- rho_rank_pass
   metrics$rank_stability_pass <- rank_stability_pass
   metrics$candidate_starved <- as.logical(state$posterior$candidate_starved %||% NA)
+  metrics$stop_eligible <- isTRUE(stop_eligible)
+
+  if (isTRUE(diagnostics_pass)) {
+    eap_min <- as.double(config$eap_reliability_min)
+    if (!is.finite(eap_min) || length(eap_min) != 1L) {
+      rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
+    }
+    metrics$eap_pass <- is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= eap_min
+  }
 
   metrics
 }
@@ -196,8 +228,6 @@ should_stop <- function(metrics, state, config) {
     rlang::abort("`state$M1_target` must be a length-1 integer.")
   }
   if (!is.na(min_comparisons) && state$comparisons_observed < min_comparisons) {
-    state$checks_passed_in_row <- 0L
-    state$stop_candidate <- FALSE
     return(list(
       state = state,
       stop_decision = FALSE,
@@ -224,45 +254,23 @@ should_stop <- function(metrics, state, config) {
   if (is.na(min_refits_for_stability) || min_refits_for_stability < 1L) {
     rlang::abort("`config$min_refits_for_stability` must be a positive integer.")
   }
-  stop_eligible <- current_refit >= min_refits_for_stability
-
-  if (!isTRUE(diagnostics_pass)) {
-    state$checks_passed_in_row <- 0L
-    state$stop_candidate <- FALSE
-  } else {
-    eap_min <- as.double(config$eap_reliability_min)
-    if (!is.finite(eap_min) || length(eap_min) != 1L) {
-      rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
-    }
-    eap_pass <- is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= eap_min
-
-    theta_corr_min <- as.double(config$theta_corr_min)
-    theta_sd_rel_change_max <- as.double(config$theta_sd_rel_change_max)
-    if (!is.finite(theta_corr_min) || length(theta_corr_min) != 1L) {
-      rlang::abort("`config$theta_corr_min` must be a finite numeric scalar.")
-    }
-    if (!is.finite(theta_sd_rel_change_max) || length(theta_sd_rel_change_max) != 1L) {
-      rlang::abort("`config$theta_sd_rel_change_max` must be a finite numeric scalar.")
-    }
-    theta_stability_pass <- stop_eligible &&
-      is.finite(metrics$rho_theta_lag) &&
-      metrics$rho_theta_lag >= theta_corr_min &&
-      is.finite(metrics$delta_sd_theta_lag) &&
-      metrics$delta_sd_theta_lag <= theta_sd_rel_change_max
-
-    rank_stability_pass <- stop_eligible && isTRUE(metrics$rank_stability_pass)
-
-    if (stop_eligible && diagnostics_pass && eap_pass && theta_stability_pass && rank_stability_pass) {
-      state$checks_passed_in_row <- as.integer(state$checks_passed_in_row + 1L)
-    } else {
-      state$checks_passed_in_row <- 0L
-    }
-    state$stop_candidate <- isTRUE(stop_eligible)
+  stop_eligible <- metrics$stop_eligible
+  if (!isTRUE(stop_eligible) && !isFALSE(stop_eligible)) {
+    stop_eligible <- current_refit >= min_refits_for_stability
   }
+  eap_pass <- isTRUE(metrics$eap_pass)
+  theta_corr_pass <- isTRUE(metrics$theta_corr_pass)
+  delta_sd_theta_pass <- isTRUE(metrics$delta_sd_theta_pass)
+  rho_rank_pass <- isTRUE(metrics$rho_rank_pass)
 
   state <- .adaptive_update_theta_history(state, state$fit)
 
-  stop_decision <- isTRUE(state$checks_passed_in_row >= config$stability_consecutive)
+  stop_decision <- isTRUE(stop_eligible) &&
+    isTRUE(diagnostics_pass) &&
+    eap_pass &&
+    theta_corr_pass &&
+    delta_sd_theta_pass &&
+    rho_rank_pass
   if (stop_decision) {
     state$mode <- "stopped"
     state$stop_reason <- "v3_converged"
