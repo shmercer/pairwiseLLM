@@ -238,6 +238,8 @@ filtering.}
 filtering (duplicates, degree, constraints).}
 \item{\code{candidate_starved}}{TRUE when fewer than target pairs were
 scheduled due to candidate scarcity.}
+\item{\code{fallback_exhausted}}{TRUE when the fallback ladder was fully
+exhausted without reaching the target batch size.}
 \item{\code{fallback_used}}{Fallback mode used when starved (from
 \code{.adaptive_fallback_used_levels()}).}
 \item{\code{fallback_path}}{Fallback path taken for the iteration.}

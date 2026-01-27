@@ -365,6 +365,7 @@ batch_log_schema <- function() {
     n_candidates_generated = integer(),
     n_candidates_after_filters = integer(),
     candidate_starved = logical(),
+    fallback_exhausted = logical(),
     fallback_used = character(),
     fallback_path = character(),
     a1_stage = character(),
@@ -816,6 +817,7 @@ build_batch_log_row <- function(iter,
     n_candidates_generated,
     n_candidates_after_filters,
     candidate_starved,
+    fallback_exhausted = NA,
     fallback_used = NA_character_,
     fallback_path = NA_character_,
     a1_stage = NA_character_,
@@ -866,6 +868,7 @@ build_batch_log_row <- function(iter,
   row$n_candidates_generated <- as.integer(n_candidates_generated)
   row$n_candidates_after_filters <- as.integer(n_candidates_after_filters)
   row$candidate_starved <- as.logical(candidate_starved)
+  row$fallback_exhausted <- as.logical(fallback_exhausted)
   row$fallback_used <- as.character(fallback_used)
   row$fallback_path <- as.character(fallback_path)
   row$a1_stage <- as.character(a1_stage)

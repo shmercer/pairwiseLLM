@@ -937,6 +937,7 @@ NULL
       fallback_stage = "base_window",
       W_used = W_base,
       fallback_used = "base_window",
+      fallback_exhausted = FALSE,
       fallback_path = fallback_path,
       stage_attempts = stage_attempts
     ))
@@ -969,6 +970,7 @@ NULL
       fallback_stage = "expand_2x",
       W_used = W2,
       fallback_used = "expand_2x",
+      fallback_exhausted = FALSE,
       fallback_path = fallback_path,
       stage_attempts = stage_attempts
     ))
@@ -1000,6 +1002,7 @@ NULL
       fallback_stage = "expand_4x",
       W_used = W4,
       fallback_used = "expand_4x",
+      fallback_exhausted = FALSE,
       fallback_path = fallback_path,
       stage_attempts = stage_attempts
     ))
@@ -1039,6 +1042,7 @@ NULL
       fallback_stage = "uncertainty_pool",
       W_used = W_base,
       fallback_used = "uncertainty_pool",
+      fallback_exhausted = FALSE,
       fallback_path = fallback_path,
       stage_attempts = stage_attempts
     ))
@@ -1076,6 +1080,7 @@ NULL
       fallback_stage = "dup_relax",
       W_used = W_base,
       fallback_used = "dup_relax",
+      fallback_exhausted = FALSE,
       fallback_path = fallback_path,
       stage_attempts = stage_attempts
     ))
@@ -1115,19 +1120,23 @@ NULL
       fallback_stage = "global_safe",
       W_used = W_cap,
       fallback_used = "global_safe",
+      fallback_exhausted = FALSE,
       fallback_path = fallback_path,
       stage_attempts = stage_attempts
     ))
   }
 
   candidate_starved <- best$candidate_stats$n_pairs_selected < batch_size
+  selection_empty <- best$candidate_stats$n_pairs_selected == 0L
+  fallback_stage <- if (selection_empty) "FAILED" else best$fallback_stage
   list(
     selection = best$selection,
     candidate_starved = candidate_starved,
     candidate_stats = best$candidate_stats,
-    fallback_stage = "FAILED",
+    fallback_stage = fallback_stage,
     W_used = best$W_used,
-    fallback_used = "FAILED",
+    fallback_used = fallback_stage,
+    fallback_exhausted = TRUE,
     fallback_path = fallback_path,
     stage_attempts = stage_attempts
   )
@@ -1274,6 +1283,7 @@ NULL
     selection,
     candidate_stats,
     candidate_starved,
+    fallback_exhausted = NULL,
     fallback_stage,
     fallback_used = NULL,
     fallback_path = NULL,
@@ -1398,6 +1408,7 @@ NULL
       n_candidates_generated = candidate_stats$n_candidates_generated %||% NA_integer_,
       n_candidates_after_filters = candidate_stats$n_candidates_after_filters %||% NA_integer_,
       candidate_starved = candidate_starved %||% NA,
+      fallback_exhausted = fallback_exhausted %||% NA,
       fallback_used = fallback_used,
       fallback_path = fallback_path,
       a1_stage = stage_fields$a1_stage,
@@ -1872,6 +1883,7 @@ NULL
         selection = selection,
         candidate_stats = selection_out$candidate_stats,
         candidate_starved = selection_out$candidate_starved,
+        fallback_exhausted = selection_out$fallback_exhausted,
         fallback_stage = selection_out$fallback_stage,
         fallback_used = selection_out$fallback_used,
         fallback_path = selection_out$fallback_path,
@@ -1941,6 +1953,7 @@ NULL
       selection = selection,
       candidate_stats = selection_out$candidate_stats,
       candidate_starved = selection_out$candidate_starved,
+      fallback_exhausted = selection_out$fallback_exhausted,
       fallback_stage = selection_out$fallback_stage,
       fallback_used = selection_out$fallback_used,
       fallback_path = selection_out$fallback_path,
@@ -2317,6 +2330,8 @@ NULL
 #'   filtering (duplicates, degree, constraints).}
 #'   \item{\code{candidate_starved}}{TRUE when fewer than target pairs were
 #'   scheduled due to candidate scarcity.}
+#'   \item{\code{fallback_exhausted}}{TRUE when the fallback ladder was fully
+#'   exhausted without reaching the target batch size.}
 #'   \item{\code{fallback_used}}{Fallback mode used when starved (from
 #'   \code{.adaptive_fallback_used_levels()}).}
 #'   \item{\code{fallback_path}}{Fallback path taken for the iteration.}

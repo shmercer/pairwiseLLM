@@ -26,7 +26,8 @@ test_that("batch log fallback fields are scalar and enums are valid", {
     "aN_best_n_generated",
     "aN_best_n_survive",
     "aN_best_n_selected",
-    "starvation_reason"
+    "starvation_reason",
+    "fallback_exhausted"
   )
   expect_true(all(new_cols %in% names(schema)))
   expect_false(any(vctrs::vec_is_list(schema)))
@@ -48,6 +49,7 @@ test_that("batch log fallback fields are scalar and enums are valid", {
     n_candidates_generated = 10L,
     n_candidates_after_filters = 8L,
     candidate_starved = TRUE,
+    fallback_exhausted = TRUE,
     fallback_used = "expand_2x",
     fallback_path = "base_window>expand_2x",
     a1_stage = "base_window",
