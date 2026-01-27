@@ -116,10 +116,9 @@ once near-stop checks begin). If diagnostics pass, reliability must exceed
 theta means must have correlation at least \code{theta_corr_min} and a
 relative SD change no larger than \code{theta_sd_rel_change_max}, and ranks
 must have Spearman correlation at least \code{rank_spearman_min}. A stop is
-declared only after \code{stability_consecutive} consecutive refits pass all
-checks. Refits are eligible for stability checks only after
-\code{min_refits_for_stability} and once a lag of \code{stability_lag} refits
-is available.
+declared immediately when all gates pass at an eligible refit. Refits are
+eligible for stability checks only after \code{min_refits_for_stability} and
+once a lag of \code{stability_lag} refits is available.
 }
 
 \section{Adaptive configuration}{
@@ -178,7 +177,6 @@ theta means.}
 versus the lagged refit.}
 \item{\code{rank_spearman_min}}{Minimum Spearman correlation between
 current and lagged ranks.}
-\item{\code{stability_consecutive}}{Consecutive refits required to stop.}
 \item{\code{max_rhat}}{Maximum allowed R-hat for diagnostics pass.}
 \item{\code{min_ess_bulk}}{Minimum bulk ESS for diagnostics pass.}
 \item{\code{min_ess_bulk_near_stop}}{Minimum bulk ESS once near-stop checks
@@ -333,8 +331,15 @@ means.}
 refit.}
 \item{\code{rho_rank_lag}}{Spearman correlation between current and lagged
 ranks.}
+\item{\code{eap_pass}}{TRUE when diagnostics pass and EAP reliability meets
+the stop threshold.}
+\item{\code{theta_corr_pass}}{TRUE when the lagged theta correlation meets
+the threshold.}
+\item{\code{delta_sd_theta_pass}}{TRUE when lagged theta SD change meets
+the threshold.}
+\item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets the
+threshold.}
 \item{\code{rank_stability_pass}}{Rank stability gate status.}
-\item{\code{stop_passes}}{Consecutive refits meeting all stop checks.}
 \item{\code{stop_eligible}}{TRUE when refit count meets stability minimum.}
 \item{\code{stop_decision}}{TRUE when stop criteria are met.}
 \item{\code{stop_reason}}{Stop reason label when stopped.}
