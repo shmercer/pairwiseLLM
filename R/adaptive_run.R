@@ -769,7 +769,8 @@ NULL
     candidates_with_utility,
     n_candidates_generated = NULL,
     seed = NULL,
-    exploration_only = FALSE
+    exploration_only = FALSE,
+    safe_no_utility = FALSE
 ) {
   validate_state(state)
   if (!is.list(fit) || is.null(fit$theta_draws)) {
@@ -809,6 +810,15 @@ NULL
   select_from_utilities <- function(utilities, dup_policy = "default") {
     if (isTRUE(exploration_only)) {
       return(call_with_formals(.adaptive_select_exploration_only, list(
+        state = state,
+        candidates_with_utility = utilities,
+        config = config,
+        seed = seed,
+        dup_policy = dup_policy
+      )))
+    }
+    if (isTRUE(safe_no_utility)) {
+      return(call_with_formals(.adaptive_select_safe_no_utility, list(
         state = state,
         candidates_with_utility = utilities,
         config = config,
@@ -1150,7 +1160,8 @@ NULL
     candidates_with_utility,
     n_candidates_generated = NULL,
     seed = NULL,
-    exploration_only = FALSE
+    exploration_only = FALSE,
+    safe_no_utility = FALSE
 ) {
   .adaptive_select_batch_by_ladder(
     state = state,
@@ -1160,7 +1171,8 @@ NULL
     candidates_with_utility = candidates_with_utility,
     n_candidates_generated = n_candidates_generated,
     seed = seed,
-    exploration_only = exploration_only
+    exploration_only = exploration_only,
+    safe_no_utility = safe_no_utility
   )
 }
 
@@ -1291,6 +1303,7 @@ NULL
     W_used,
     config,
     exploration_only,
+    safe_no_utility = FALSE,
     utilities,
     iter_exit_path = NULL) {
   state <- .adaptive_state_init_logs(state)
@@ -1391,7 +1404,7 @@ NULL
       candidate_starved = candidate_starved
     )
 
-    row <- build_batch_log_row(
+  row <- build_batch_log_row(
       iter = iter,
       phase = phase,
       mode = mode,
@@ -1405,6 +1418,7 @@ NULL
     n_explore_selected = n_explore_selected,
     n_exploit_target = n_exploit_target,
     n_exploit_selected = n_exploit_selected,
+      safe_no_utility = safe_no_utility,
       n_candidates_generated = candidate_stats$n_candidates_generated %||% NA_integer_,
       n_candidates_after_filters = candidate_stats$n_candidates_after_filters %||% NA_integer_,
       candidate_starved = candidate_starved %||% NA,
@@ -1778,7 +1792,9 @@ NULL
 
   config_select <- v3_config
   config_select$batch_size <- batch_size
+  diagnostics_pass <- isTRUE(state$posterior$diagnostics_pass)
   exploration_only <- identical(state$mode, "repair")
+  safe_no_utility <- !diagnostics_pass && !identical(state$mode, "repair")
   if (isTRUE(exploration_only)) {
     config_select$dup_max_count <- 0L
   }
@@ -1864,7 +1880,8 @@ NULL
     candidates_with_utility = utilities,
     n_candidates_generated = nrow(candidates),
     seed = seed,
-    exploration_only = exploration_only
+    exploration_only = exploration_only,
+    safe_no_utility = safe_no_utility
   )
   selection <- selection_out$selection
   state$posterior$candidate_starved <- selection_out$candidate_starved
@@ -1891,6 +1908,7 @@ NULL
         W_used = selection_out$W_used,
         config = config_select,
         exploration_only = exploration_only,
+        safe_no_utility = safe_no_utility,
         utilities = utilities,
         iter_exit_path = "no_pairs_selected"
       )
@@ -1961,6 +1979,7 @@ NULL
       W_used = selection_out$W_used,
       config = config_select,
       exploration_only = exploration_only,
+      safe_no_utility = safe_no_utility,
       utilities = utilities
     )
   list(state = state_local, pairs = pairs_tbl)

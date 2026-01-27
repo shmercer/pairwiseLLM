@@ -362,6 +362,7 @@ batch_log_schema <- function() {
     n_explore_selected = integer(),
     n_exploit_target = integer(),
     n_exploit_selected = integer(),
+    safe_no_utility = logical(),
     n_candidates_generated = integer(),
     n_candidates_after_filters = integer(),
     candidate_starved = logical(),
@@ -814,6 +815,7 @@ build_batch_log_row <- function(iter,
     n_explore_selected,
     n_exploit_target,
     n_exploit_selected,
+    safe_no_utility = NA,
     n_candidates_generated,
     n_candidates_after_filters,
     candidate_starved,
@@ -865,6 +867,7 @@ build_batch_log_row <- function(iter,
   row$n_explore_selected <- as.integer(n_explore_selected)
   row$n_exploit_target <- as.integer(n_exploit_target)
   row$n_exploit_selected <- as.integer(n_exploit_selected)
+  row$safe_no_utility <- as.logical(safe_no_utility)
   row$n_candidates_generated <- as.integer(n_candidates_generated)
   row$n_candidates_after_filters <- as.integer(n_candidates_after_filters)
   row$candidate_starved <- as.logical(candidate_starved)
