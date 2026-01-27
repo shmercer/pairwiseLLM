@@ -120,6 +120,60 @@ testthat::test_that("compute_stop_metrics validates inputs and should_stop valid
     "at least two draws"
   )
 
+  local_rebind_namespace <- function(ns, name, value) {
+    env <- asNamespace(ns)
+    has_old <- exists(name, envir = env, inherits = FALSE)
+    old <- if (has_old) get(name, envir = env, inherits = FALSE) else NULL
+    locked <- if (has_old) bindingIsLocked(name, env) else FALSE
+    if (locked) {
+      unlockBinding(name, env)
+    }
+    assign(name, value, envir = env)
+    if (locked) {
+      lockBinding(name, env)
+    }
+    function() {
+      if (locked) {
+        unlockBinding(name, env)
+      }
+      if (has_old) {
+        assign(name, old, envir = env)
+      } else if (exists(name, envir = env, inherits = FALSE)) {
+        rm(list = name, envir = env)
+      }
+      if (locked) {
+        lockBinding(name, env)
+      }
+    }
+  }
+  restore_validate <- local_rebind_namespace(
+    "pairwiseLLM",
+    "validate_v3_fit_contract",
+    function(...) NULL
+  )
+  on.exit(restore_validate(), add = TRUE)
+
+  testthat::expect_error(
+    compute_stop_metrics(
+      state,
+      fit = within(base_fit, theta_draws <- "bad"),
+      candidates_with_utility = tibble::tibble(),
+      config = config_v3
+    ),
+    "theta_draws"
+  )
+
+  one_draw_bad <- matrix(0, nrow = 1, ncol = state$N, dimnames = list(NULL, state$ids))
+  testthat::expect_error(
+    compute_stop_metrics(
+      state,
+      fit = within(base_fit, theta_draws <- one_draw_bad),
+      candidates_with_utility = tibble::tibble(),
+      config = config_v3
+    ),
+    "at least two draws"
+  )
+
   config_bad_lag <- config_v3
   config_bad_lag$stability_lag <- 0L
   testthat::expect_error(
@@ -194,6 +248,21 @@ testthat::test_that("compute_stop_metrics validates history and stability inputs
       config = config_v3
     ),
     "theta_mean_history"
+  )
+
+  state_bad_lag <- state
+  state_bad_lag$posterior$theta_mean_history <- list(c(0.1))
+  config_lag <- config_v3
+  config_lag$min_refits_for_stability <- 1L
+  config_lag$stability_lag <- 1L
+  testthat::expect_error(
+    compute_stop_metrics(
+      state_bad_lag,
+      fit = fit,
+      candidates_with_utility = tibble::tibble(),
+      config = config_lag
+    ),
+    "Lagged theta history"
   )
 
   config_bad_refits <- config_v3
@@ -382,4 +451,3 @@ testthat::test_that("should_stop validates state fields and config thresholds", 
     "theta_sd_rel_change_max"
   )
 })
-

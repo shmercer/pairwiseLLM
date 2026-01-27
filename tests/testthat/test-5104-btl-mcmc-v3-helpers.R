@@ -99,6 +99,35 @@ testthat::test_that("btl mcmc v3 unpacking handles list and matrix draws", {
   )
 })
 
+testthat::test_that("btl mcmc v3 unpacking validates theta and beta draws", {
+  bad_theta <- matrix(c(0, 1, 0.1, 0.2), nrow = 2, byrow = TRUE)
+  colnames(bad_theta) <- c("epsilon", "beta")
+  testthat::expect_error(
+    pairwiseLLM:::.btl_mcmc_v3_unpack_draws(bad_theta),
+    "theta columns"
+  )
+
+  draws_beta <- matrix(c(0, 1, 0.5, 1, 2, 0.6), nrow = 2, byrow = TRUE)
+  colnames(draws_beta) <- c("theta[1]", "theta[2]", "beta")
+  unpacked_beta <- pairwiseLLM:::.btl_mcmc_v3_unpack_draws(draws_beta)
+  testthat::expect_equal(length(unpacked_beta$beta_draws), 2L)
+
+  draws_list <- list(theta = matrix(c(0, 1, 2, 3), nrow = 2, byrow = TRUE))
+  testthat::expect_error(
+    pairwiseLLM:::.btl_mcmc_v3_unpack_draws(draws_list, model_variant = "btl_b"),
+    "beta"
+  )
+
+  draws_bad_beta <- list(
+    theta = matrix(c(0, 1, 2, 3), nrow = 2, byrow = TRUE),
+    beta = "bad"
+  )
+  testthat::expect_error(
+    pairwiseLLM:::.btl_mcmc_v3_unpack_draws(draws_bad_beta, model_variant = "btl_b"),
+    "beta"
+  )
+})
+
 testthat::test_that("btl mcmc v3 collects diagnostics and notes missing fields", {
   fit_ok <- list(
     diagnostic_summary = function() tibble::tibble(num_divergent = c(0L, 1L)),
@@ -126,4 +155,21 @@ testthat::test_that("btl mcmc v3 collects diagnostics and notes missing fields",
   expect_true(is.na(out_missing$min_ess_bulk))
   expect_true(is.na(out_missing$min_ess_tail))
   expect_true(length(out_missing$notes) > 0L)
+})
+
+testthat::test_that("btl mcmc v3 infers model variant from matrix columns", {
+  base_draws <- matrix(0, nrow = 2, ncol = 2)
+  colnames(base_draws) <- c("theta[1]", "theta[2]")
+  testthat::expect_identical(pairwiseLLM:::.btl_mcmc_v3_infer_variant(base_draws), "btl")
+
+  draws_e <- base_draws
+  draws_e <- cbind(draws_e, epsilon = c(0.1, 0.2))
+  testthat::expect_identical(pairwiseLLM:::.btl_mcmc_v3_infer_variant(draws_e), "btl_e")
+
+  draws_b <- base_draws
+  draws_b <- cbind(draws_b, beta = c(0.1, 0.2))
+  testthat::expect_identical(pairwiseLLM:::.btl_mcmc_v3_infer_variant(draws_b), "btl_b")
+
+  draws_eb <- cbind(draws_e, beta = c(0.1, 0.2))
+  testthat::expect_identical(pairwiseLLM:::.btl_mcmc_v3_infer_variant(draws_eb), "btl_e_b")
 })

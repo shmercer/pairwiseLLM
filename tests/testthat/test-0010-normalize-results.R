@@ -901,6 +901,7 @@ test_that("normalize_llm_results records duplicate custom_id attempts with extra
   expect_true(is.numeric(out$failed_attempts$total_tokens))
 })
 
+
 test_that("normalize_llm_results records duplicate ordered_key attempts with totals", {
   pairs <- tibble::tibble(
     ID1 = "A",
@@ -926,4 +927,69 @@ test_that("normalize_llm_results records duplicate ordered_key attempts with tot
 
   expect_true(any(out$failed_attempts$error_code == "http_error"))
   expect_true(is.numeric(out$failed_attempts$total_tokens))
+})
+
+test_that("normalize_llm_results falls back to .y columns when unsuffixed missing", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+
+  raw <- tibble::tibble(
+    ID1 = "A",
+    ID2 = "B",
+    better_id = "A",
+    `custom_id.y` = "custom-y"
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true("custom_id" %in% names(out$results))
+  expect_equal(out$results$custom_id, "custom-y")
+})
+
+test_that("normalize_llm_results casts failed_attempts iter to integer", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "alpha",
+    ID2 = "B",
+    text2 = "beta"
+  )
+  raw <- list(
+    results = tibble::tibble(
+      ID1 = "A",
+      ID2 = "B",
+      better_id = "A"
+    ),
+    failed_attempts = tibble::tibble(
+      A_id = "A",
+      B_id = "B",
+      unordered_key = "A:B",
+      ordered_key = "A:B",
+      backend = "openai",
+      model = "gpt-test",
+      error_code = "http_error",
+      error_detail = "fail",
+      attempted_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      iter = "2"
+    )
+  )
+
+  out <- .normalize_llm_results(
+    raw = raw,
+    pairs = pairs,
+    backend = "openai",
+    model = "gpt-test",
+    include_raw = FALSE
+  )
+
+  expect_true(is.integer(out$failed_attempts$iter))
 })

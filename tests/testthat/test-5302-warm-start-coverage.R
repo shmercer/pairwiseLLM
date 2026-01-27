@@ -72,6 +72,25 @@ testthat::test_that("warm_start errors clearly if min-degree completion stalls",
   )
 })
 
+testthat::test_that("warm_start aborts if min-degree completion cannot finish", {
+  ids <- c("A", "B", "C", "D")
+  mocked <- list(
+    deg = stats::setNames(rep(1L, length(ids)), ids),
+    pairs_i = "A",
+    pairs_j = "B",
+    pair_keys = "A:B"
+  )
+
+  testthat::with_mocked_bindings(
+    testthat::expect_error(
+      pairwiseLLM:::warm_start(ids, config = list(min_degree = 3L)),
+      "failed to reach"
+    ),
+    .pairwiseLLM_with_seed = function(...) mocked,
+    .package = "pairwiseLLM"
+  )
+})
+
 testthat::test_that("warm_start mean-degree fill adds random remaining edges", {
   withr::local_seed(1004)
   ids <- c("A", "B", "C", "D")

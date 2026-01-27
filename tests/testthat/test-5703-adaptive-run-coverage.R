@@ -34,6 +34,66 @@ testthat::test_that("adaptive_get_refit_fit validates refit_B and batch_size", {
   )
 })
 
+testthat::test_that("adaptive_get_refit_fit aborts when fit contract is missing", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- adaptive_state_new(samples = samples, config = list(d1 = 2L))
+  state$config$v3 <- adaptive_v3_config(state$N, list(refit_B = 1L, model_variant = "btl"))
+
+  local_rebind_namespace <- function(ns, name, value) {
+    env <- asNamespace(ns)
+    has_old <- exists(name, envir = env, inherits = FALSE)
+    old <- if (has_old) get(name, envir = env, inherits = FALSE) else NULL
+    locked <- if (has_old) bindingIsLocked(name, env) else FALSE
+    if (locked) {
+      unlockBinding(name, env)
+    }
+    assign(name, value, envir = env)
+    if (locked) {
+      lockBinding(name, env)
+    }
+    function() {
+      if (locked) {
+        unlockBinding(name, env)
+      }
+      if (has_old) {
+        assign(name, old, envir = env)
+      } else if (exists(name, envir = env, inherits = FALSE)) {
+        rm(list = name, envir = env)
+      }
+      if (locked) {
+        lockBinding(name, env)
+      }
+    }
+  }
+  restore_fit <- local_rebind_namespace(
+    "pairwiseLLM",
+    ".fit_bayes_btl_mcmc_adaptive",
+    function(...) list(mcmc_config_used = list())
+  )
+  restore_contract <- local_rebind_namespace(
+    "pairwiseLLM",
+    "as_v3_fit_contract_from_mcmc",
+    function(...) NULL
+  )
+  on.exit({
+    restore_contract()
+    restore_fit()
+  }, add = TRUE)
+
+  testthat::expect_error(
+    .adaptive_get_refit_fit(
+      state = state,
+      adaptive = list(),
+      batch_size = 1L,
+      seed = 1L
+    ),
+    "failed to initialize"
+  )
+})
+
 
 testthat::test_that("adaptive_update_dup_threshold validates utilities", {
   samples <- tibble::tibble(

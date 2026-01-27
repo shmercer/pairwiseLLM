@@ -48,3 +48,13 @@ testthat::test_that("summarize_draws assigns item_id when theta colnames missing
   out <- pairwiseLLM:::summarize_draws(draws)
   expect_equal(out$theta_summary$item_id, c("1", "2"))
 })
+
+testthat::test_that("summarize_draws fills epsilon percentiles with NA when absent", {
+  draws <- list(
+    theta = matrix(c(0, 1, 2, 3), nrow = 2, byrow = TRUE)
+  )
+  colnames(draws$theta) <- c("A", "B")
+
+  out <- pairwiseLLM:::summarize_draws(draws, model_variant = "btl")
+  testthat::expect_true(all(is.na(out$epsilon_summary)))
+})

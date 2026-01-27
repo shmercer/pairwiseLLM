@@ -77,6 +77,71 @@ testthat::test_that("duplicate gating rejects invalid utility and wide p_mean", 
   expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(state, "A:B", 0.9, 0.5, config, policy = "relaxed"))
 })
 
+testthat::test_that("duplicate gating validates p_mean, thresholds, and max count", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  config <- pairwiseLLM:::adaptive_v3_config(state$N, list(dup_max_count = 2L, dup_p_margin = 0.05))
+
+  state$pair_count <- stats::setNames(2L, "A:B")
+  state$history_results <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase1",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+    backend = "test",
+    model = "test"
+  )
+  state$posterior$U_dup_threshold <- 0.2
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(
+    state,
+    "A:B",
+    NA_real_,
+    0.5,
+    config,
+    policy = "relaxed"
+  ))
+
+  state$posterior$U_dup_threshold <- NA_real_
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(
+    state,
+    "A:B",
+    0.5,
+    0.5,
+    config,
+    policy = "relaxed"
+  ))
+
+  state$posterior$U_dup_threshold <- 0.6
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(
+    state,
+    "A:B",
+    0.5,
+    0.2,
+    config,
+    policy = "relaxed"
+  ))
+
+  state$pair_count <- stats::setNames(3L, "A:B")
+  state$posterior$U_dup_threshold <- 0.1
+  expect_false(pairwiseLLM:::.adaptive_duplicate_allowed(
+    state,
+    "A:B",
+    0.5,
+    0.5,
+    config,
+    policy = "relaxed"
+  ))
+})
+
 testthat::test_that("candidate filter counts reject invalid inputs", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
@@ -153,6 +218,35 @@ testthat::test_that("exploration sampling validates inputs and defaults utility_
   expect_equal(nrow(empty_out), 0L)
   expect_true("utility_raw" %in% names(empty_out))
 
+})
+
+testthat::test_that("sample_exploration_pairs treats missing counts as zero", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
+  state$pair_count <- stats::setNames(1L, "A:C")
+
+  candidates <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B",
+    utility = 0.1,
+    utility_raw = 0.1,
+    p_mean = 0.5
+  )
+  config <- pairwiseLLM:::adaptive_v3_config(state$N)
+
+  withr::local_seed(99)
+  picked <- pairwiseLLM:::sample_exploration_pairs(
+    state = state,
+    candidates = candidates,
+    n_explore = 1L,
+    config = config
+  )
+  testthat::expect_true(is.na(picked$utility[[1L]]))
+  testthat::expect_true(is.na(picked$p_mean[[1L]]))
 })
 
 testthat::test_that("exploration sampling handles missing counts and rejects duplicates", {
@@ -380,6 +474,56 @@ testthat::test_that("exploitation and ordering helpers enforce validation", {
   state$pair_count <- stats::setNames(1L, "A:B")
   dup_pair <- tibble::tibble(i_id = "A", j_id = "B", unordered_key = "A:B")
   expect_error(pairwiseLLM:::assign_order(dup_pair, state), "prior completed presentation")
+})
+
+testthat::test_that("assign_order treats missing or NA pair_count as zero", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(), seed = 1L)
+
+  pairs <- tibble::tibble(
+    i_id = "A",
+    j_id = "B",
+    unordered_key = "A:B"
+  )
+
+  state$pair_count <- stats::setNames(1L, "A:C")
+  ordered_missing <- pairwiseLLM:::assign_order(pairs, state)
+  testthat::expect_true(all(c("A_id", "B_id") %in% names(ordered_missing)))
+
+  state$pair_count <- stats::setNames(NA_integer_, "A:B")
+  local_rebind_namespace <- function(ns, name, value) {
+    env <- asNamespace(ns)
+    has_old <- exists(name, envir = env, inherits = FALSE)
+    old <- if (has_old) get(name, envir = env, inherits = FALSE) else NULL
+    locked <- if (has_old) bindingIsLocked(name, env) else FALSE
+    if (locked) {
+      unlockBinding(name, env)
+    }
+    assign(name, value, envir = env)
+    if (locked) {
+      lockBinding(name, env)
+    }
+    function() {
+      if (locked) {
+        unlockBinding(name, env)
+      }
+      if (has_old) {
+        assign(name, old, envir = env)
+      } else if (exists(name, envir = env, inherits = FALSE)) {
+        rm(list = name, envir = env)
+      }
+      if (locked) {
+        lockBinding(name, env)
+      }
+    }
+  }
+  restore_validate <- local_rebind_namespace("pairwiseLLM", "validate_state", function(x) x)
+  on.exit(restore_validate(), add = TRUE)
+  ordered_na <- pairwiseLLM:::assign_order(pairs, state)
+  testthat::expect_true(all(c("A_id", "B_id") %in% names(ordered_na)))
 })
 
 testthat::test_that("select_batch validates inputs and handles zero batch size", {
