@@ -303,6 +303,12 @@ once.}
 \item{\code{min_degree}}{Minimum item degree at refit.}
 \item{\code{pos_balance_mean}}{Mean position balance across items.}
 \item{\code{pos_balance_sd}}{SD of position balance across items.}
+\item{\code{mean_degree_scheduled}}{Mean item degree based on scheduled
+pairs (\code{history_pairs}).}
+\item{\code{min_degree_scheduled}}{Minimum item degree based on scheduled
+pairs (\code{history_pairs}).}
+\item{\code{pos_balance_sd_scheduled}}{SD of position A share based on
+scheduled pairs, computed as \code{posA_scheduled / pmax(deg_scheduled, 1)}.}
 \item{\code{epsilon_mean}}{Posterior mean of epsilon (NA if absent).}
 \item{\code{epsilon_p2.5}}{2.5th percentile of epsilon (NA if absent).}
 \item{\code{epsilon_p5}}{5th percentile of epsilon (NA if absent).}
