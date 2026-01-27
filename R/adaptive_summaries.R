@@ -188,7 +188,6 @@
     "n_unique_pairs_seen",
     "rank_stability_pass",
     "diagnostics_pass",
-    "stop_passes",
     "stop_eligible",
     "stop_decision",
     "stop_reason",
