@@ -51,7 +51,7 @@ testthat::test_that("round log schema matches contract", {
     "rho_rank_lag",
     "rho_rank_pass",
     "rank_stability_pass",
-    "stop_eligible",
+    "lag_eligible",
     "stop_decision",
     "stop_reason",
     "starve_rate_since_last_refit",
@@ -68,6 +68,8 @@ testthat::test_that("round log schema matches contract", {
   )
 
   testthat::expect_identical(colnames(schema), expected)
+  stop_field <- paste0("stop", "_eligible")
+  testthat::expect_false(stop_field %in% colnames(schema))
   obsolete <- c(
     "gini_degree",
     "gini_pos_A",
@@ -119,7 +121,7 @@ testthat::test_that("round log builder emits a single typed row", {
     rho_theta_lag = 0.1,
     delta_sd_theta_lag = 0.2,
     rho_rank_lag = 0.3,
-    stop_eligible = TRUE
+    lag_eligible = TRUE
   )
   stop_out <- list(stop_decision = FALSE, stop_reason = NA_character_)
 
@@ -136,7 +138,7 @@ testthat::test_that("round log builder emits a single typed row", {
   testthat::expect_true(is.integer(row$round_id))
   testthat::expect_true(is.double(row$reliability_EAP))
   testthat::expect_equal(row$backlog_unjudged[[1L]], 3L)
-  testthat::expect_true(row$stop_eligible[[1L]])
+  testthat::expect_true(row$lag_eligible[[1L]])
   testthat::expect_equal(row$model_variant[[1L]], "btl_b")
   testthat::expect_equal(row$beta_p50[[1L]], 0.15)
   testthat::expect_equal(row$rho_theta_lag[[1L]], 0.1)

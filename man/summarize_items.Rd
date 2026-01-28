@@ -18,9 +18,8 @@ summarize_items(
 \item{state}{An \code{adaptive_state} or list containing adaptive logs.}
 
 \item{posterior}{Optional \code{item_log_list} (list of item log tables) or
-a legacy item summary table (or list containing \code{item_log_list} or the
-legacy \code{item_summary}). When \code{NULL}, uses
-\code{state$logs$item_log_list} when available.}
+an item log table. When \code{NULL}, uses \code{state$logs$item_log_list}
+when available.}
 
 \item{refit}{Optional refit index. When \code{NULL}, the most recent refit is
 returned.}

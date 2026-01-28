@@ -338,7 +338,7 @@ the threshold.}
 \item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets the
 threshold.}
 \item{\code{rank_stability_pass}}{Rank stability gate status.}
-\item{\code{stop_eligible}}{TRUE when lagged stability checks are
+\item{\code{lag_eligible}}{TRUE when lagged stability checks are
 eligible (current refit exceeds \code{stability_lag}).}
 \item{\code{stop_decision}}{TRUE when stop criteria are met.}
 \item{\code{stop_reason}}{Stop reason label when stopped.}

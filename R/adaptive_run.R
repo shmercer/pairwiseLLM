@@ -199,12 +199,12 @@ NULL
   }
   state <- .adaptive_init_item_log_list(state)
 
-  item_summary <- build_item_summary(state, fit = fit)
-  item_summary <- tibble::as_tibble(item_summary)
+  item_log <- build_item_summary(state, fit = fit)
+  item_log <- tibble::as_tibble(item_log)
   refit_id <- as.integer(length(state$logs$item_log_list) + 1L)
-  item_summary$refit_id <- rep.int(refit_id, nrow(item_summary))
-  item_summary <- dplyr::relocate(item_summary, refit_id, .before = 1L)
-  state$logs$item_log_list[[refit_id]] <- item_summary
+  item_log$refit_id <- rep.int(refit_id, nrow(item_log))
+  item_log <- dplyr::relocate(item_log, refit_id, .before = 1L)
+  state$logs$item_log_list[[refit_id]] <- item_log
 
   v3_config <- state$config$v3 %||% list()
   if (isTRUE(v3_config$write_outputs)) {
@@ -217,7 +217,7 @@ NULL
     }
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
     filename <- sprintf("item_log_refit_%04d.rds", refit_id)
-    saveRDS(item_summary, file.path(output_dir, filename))
+    saveRDS(item_log, file.path(output_dir, filename))
   }
 
   state
@@ -229,7 +229,7 @@ NULL
   }
   v3_config <- state$config$v3 %||% list()
   if (!isTRUE(v3_config$write_outputs)) {
-    return(list(state = state, item_summary = NULL))
+    return(list(state = state))
   }
 
   output_dir <- output_dir %||% v3_config$output_dir %||% state$config$output_dir %||% NULL
@@ -286,7 +286,7 @@ NULL
     }
   }
 
-  list(state = state, item_summary = NULL)
+  list(state = state)
 }
 
 .adaptive_pairs_to_submit_tbl <- function(pairs_tbl) {
@@ -740,7 +740,7 @@ NULL
   metrics$refit_performed <- refit_performed
   state$posterior$stop_metrics <- metrics
 
-  stop_out <- should_stop(metrics, state, v3_config)
+  stop_out <- should_stop(metrics, state, v3_config, theta_summary = theta_summary)
   state <- stop_out$state
 
   if (isTRUE(refit_performed)) {
@@ -1940,7 +1940,7 @@ NULL
     stop_metrics$refit_performed <- isTRUE(fit_out$refit_performed)
     state$posterior$stop_metrics <- stop_metrics
 
-    stop_out <- should_stop(stop_metrics, state, v3_config)
+    stop_out <- should_stop(stop_metrics, state, v3_config, theta_summary = theta_summary)
     state <- stop_out$state
     if (isTRUE(fit_out$refit_performed)) {
       if (isTRUE(stop_metrics$diagnostics_pass)) {
@@ -2011,7 +2011,7 @@ NULL
       prior_log <- state$config$round_log %||% round_log_schema()
       state$config$round_log <- dplyr::bind_rows(prior_log, round_row)
       .adaptive_progress_emit_refit(state, round_row, v3_config)
-      state <- .adaptive_update_theta_history(state, fit)
+      state <- .adaptive_update_theta_history(state, theta_summary = theta_summary)
     }
   }
 
@@ -2589,7 +2589,7 @@ NULL
 #'   \item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets the
 #'   threshold.}
 #'   \item{\code{rank_stability_pass}}{Rank stability gate status.}
-#'   \item{\code{stop_eligible}}{TRUE when lagged stability checks are
+#'   \item{\code{lag_eligible}}{TRUE when lagged stability checks are
 #'   eligible (current refit exceeds \code{stability_lag}).}
 #'   \item{\code{stop_decision}}{TRUE when stop criteria are met.}
 #'   \item{\code{stop_reason}}{Stop reason label when stopped.}

@@ -161,7 +161,7 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
   metrics$rho_rank_pass <- rho_rank_pass
   metrics$rank_stability_pass <- rank_stability_pass
   metrics$candidate_starved <- as.logical(state$posterior$candidate_starved %||% NA)
-  metrics$stop_eligible <- isTRUE(lag_eligible)
+  metrics$lag_eligible <- isTRUE(lag_eligible)
 
   if (isTRUE(diagnostics_pass)) {
     eap_min <- as.double(config$eap_reliability_min)
@@ -176,12 +176,16 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
 
 #' @keywords internal
 #' @noRd
-.adaptive_update_theta_history <- function(state, fit) {
+.adaptive_update_theta_history <- function(state, theta_summary = NULL, fit = NULL) {
   validate_state(state)
-  if (!is.list(fit) || is.null(fit$theta_mean) || is.null(fit$theta_sd)) {
-    rlang::abort("`fit` must include `theta_mean` and `theta_sd`.")
+  if (is.null(theta_summary)) {
+    if (is.null(fit)) {
+      rlang::abort("`theta_summary` (or `fit`) is required to update theta history.")
+    }
+    theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+  } else {
+    theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
   }
-  theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
   theta_mean <- stats::setNames(theta_summary$theta_mean, theta_summary$item_id)
   theta_mean <- as.double(theta_mean[state$ids])
   history <- state$posterior$theta_mean_history %||% list()
@@ -194,7 +198,10 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
 
 #' @keywords internal
 #' @noRd
-should_stop <- function(metrics, state, config) {
+should_stop <- function(metrics, state, config, theta_summary = NULL, fit = NULL) {
+  if (!"fit" %in% names(state)) {
+    state <- structure(c(state, list(fit = NULL)), class = class(state))
+  }
   validate_state(state)
   if (!is.list(metrics)) {
     rlang::abort("`metrics` must be a list.")
@@ -258,6 +265,9 @@ should_stop <- function(metrics, state, config) {
       stop_reason = state$stop_reason %||% NA_character_
     ))
   }
+  if (is.null(theta_summary) && is.null(fit)) {
+    rlang::abort("Refit stop checks require `theta_summary` (or `fit`) to update theta history.")
+  }
 
   diagnostics_pass <- isTRUE(metrics$diagnostics_pass)
   history <- state$posterior$theta_mean_history %||% list()
@@ -298,7 +308,7 @@ should_stop <- function(metrics, state, config) {
     rho_rank_pass <- TRUE
   }
 
-  state <- .adaptive_update_theta_history(state, state$fit)
+  state <- .adaptive_update_theta_history(state, theta_summary = theta_summary, fit = fit)
 
   stop_decision <- isTRUE(diagnostics_pass) &&
     eap_pass &&

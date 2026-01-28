@@ -44,7 +44,13 @@ testthat::test_that("adaptive_write_v3_artifacts returns state when outputs disa
   out <- pairwiseLLM:::.adaptive_write_v3_artifacts(state, fit = NULL, output_dir = NULL)
 
   testthat::expect_true(inherits(out$state, "adaptive_state"))
-  testthat::expect_null(out$item_summary)
+  testthat::expect_false("item_summary" %in% names(out))
+  testthat::expect_false("item_summary" %in% names(out$state))
+  config <- out$state$config
+  if (is.null(config)) {
+    config <- list()
+  }
+  testthat::expect_false("item_summary" %in% names(config))
 })
 
 testthat::test_that("adaptive_write_v3_artifacts thins draws with epsilon", {

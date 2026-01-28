@@ -12,7 +12,7 @@
     "diagnostics_pass", "reliability_EAP", "eap_pass", "theta_sd_eap", 
     "rho_theta_lag", "theta_corr_pass", "delta_sd_theta_lag", 
     "delta_sd_theta_pass", "rho_rank_lag", "rho_rank_pass", 
-    "rank_stability_pass", "stop_eligible", "stop_decision", "stop_reason", 
+    "rank_stability_pass", "lag_eligible", "stop_decision", "stop_reason", 
     "starve_rate_since_last_refit", "fallback_rate_since_last_refit", 
     "fallback_used_mode", "starvation_reason_mode", "mcmc_chains", 
     "mcmc_parallel_chains", "mcmc_core_fraction", 

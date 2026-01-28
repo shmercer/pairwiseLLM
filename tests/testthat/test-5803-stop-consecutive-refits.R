@@ -28,12 +28,12 @@ testthat::test_that("stop triggers immediately when all gates pass", {
     refit_performed = TRUE
   )
 
-  out1 <- should_stop(metrics, state, config_v3)
+  out1 <- should_stop(metrics, state, config_v3, fit = state$fit)
   testthat::expect_true(out1$stop_decision)
   testthat::expect_identical(out1$state$stop_reason, "v3_converged")
 
   metrics_fail <- metrics
   metrics_fail$eap_pass <- FALSE
-  out_fail <- should_stop(metrics_fail, state, config_v3)
+  out_fail <- should_stop(metrics_fail, state, config_v3, fit = state$fit)
   testthat::expect_false(out_fail$stop_decision)
 })

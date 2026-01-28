@@ -114,7 +114,7 @@ testthat::test_that("adaptive progress refit block formats diagnostics and stabi
     rho_rank_lag = 0.99,
     rho_rank_pass = TRUE,
     rank_stability_pass = TRUE,
-    stop_eligible = TRUE,
+    lag_eligible = TRUE,
     stop_decision = FALSE,
     stop_reason = NA_character_,
     n_unique_pairs_seen = 3L,
@@ -156,7 +156,7 @@ testthat::test_that("adaptive progress refit block marks stability as not eligib
     delta_sd_theta_lag = NA_real_,
     rho_rank_lag = NA_real_,
     rank_stability_pass = NA,
-    stop_eligible = FALSE,
+    lag_eligible = FALSE,
     stop_decision = FALSE,
     stop_reason = NA_character_
   )
