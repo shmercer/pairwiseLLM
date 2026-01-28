@@ -8,7 +8,6 @@ testthat::test_that("stop triggers immediately when all gates pass", {
     config = list(d1 = 2L, M1_target = 0L, budget_max = 10L)
   )
   config_v3 <- adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L,
     eap_reliability_min = 0.9
   ))

@@ -245,7 +245,6 @@ testthat::test_that("schedule_next_pairs stops when stop decision is reached", {
     state$N,
     list(
       model_variant = "btl",
-      min_refits_for_stability = 2L,
       stability_lag = 1L,
       eap_reliability_min = 0,
       theta_corr_min = 0,

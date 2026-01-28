@@ -6,7 +6,7 @@ test_that("adaptive_v3_defaults includes required fields", {
     "min_degree", "target_mean_degree",
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
-    "eap_reliability_min", "min_refits_for_stability", "stability_lag",
+    "eap_reliability_min", "stability_lag",
     "theta_corr_min", "theta_sd_rel_change_max", "rank_spearman_min",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
@@ -33,12 +33,22 @@ test_that("adaptive_v3_defaults scales with N", {
     expect_equal(cfg$explore_rate, explore_rate)
     expect_equal(cfg$hard_cap_frac, 0.40)
     expect_equal(cfg$eap_reliability_min, 0.95)
-    expect_equal(cfg$min_refits_for_stability, 3L)
     expect_equal(cfg$stability_lag, 2L)
     expect_equal(cfg$theta_corr_min, 0.995)
     expect_equal(cfg$theta_sd_rel_change_max, 0.01)
     expect_equal(cfg$rank_spearman_min, 0.995)
   }
+})
+
+test_that("adaptive default config leaves max_iterations unbounded", {
+  cfg <- pairwiseLLM:::.adaptive_default_config()
+  expect_true(is.null(cfg$max_iterations))
+})
+
+test_that("wrapper iteration guard treats default max_iterations as unbounded", {
+  adaptive <- pairwiseLLM:::.adaptive_merge_config(list())
+  max_iterations <- pairwiseLLM:::.adaptive_validate_max_iterations(adaptive$max_iterations)
+  expect_true(is.infinite(max_iterations))
 })
 
 test_that("adaptive_v3_config merges overrides", {

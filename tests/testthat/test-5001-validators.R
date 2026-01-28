@@ -27,10 +27,6 @@ test_that("validate_config rejects invalid fields", {
   bad_eap$eap_reliability_min <- 1.5
   expect_error(pairwiseLLM:::validate_config(bad_eap), "eap_reliability_min")
 
-  bad_min_refits <- cfg
-  bad_min_refits$min_refits_for_stability <- 0L
-  expect_error(pairwiseLLM:::validate_config(bad_min_refits), "min_refits_for_stability")
-
   bad_lag <- cfg
   bad_lag$stability_lag <- 0L
   expect_error(pairwiseLLM:::validate_config(bad_lag), "stability_lag")

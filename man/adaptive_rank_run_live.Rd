@@ -49,7 +49,7 @@ is provided, the run state will be checkpointed there after each resume step.}
 \item{seed}{Optional integer seed for reproducibility.}
 
 \item{max_iterations}{Optional safety cap on the number of wrapper iterations.
-If \code{NULL}, uses the configured default (currently 50). Use \code{Inf} (or
+If \code{NULL}, uses the configured default (no cap). Use \code{Inf} (or
 \code{adaptive$max_iterations = NULL}) for no cap.}
 
 \item{resume}{Controls checkpoint resume behavior. One of:
@@ -90,12 +90,12 @@ present at \code{paths$state_path}.
 iteration schedules/collects a batch of comparisons) until either:
 \itemize{
 \item the adaptive engine returns a non-\code{"resume"} next action (e.g. stopped),
-\item or the wrapper hits \code{max_iterations} (a safety cap; default is 50 via config).
+\item or the wrapper hits \code{max_iterations} (a safety cap; defaults to no cap).
 }
 
 The Bayesian stopping criteria (diagnostics, reliability, stability) are
 evaluated at refits, but this wrapper can still terminate early if it hits
-the iteration cap. Increase \code{max_iterations} if you want the run to continue
+the iteration cap. Set \code{max_iterations} if you want the run to continue
 until statistical stopping is reached.
 }
 

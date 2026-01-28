@@ -116,9 +116,8 @@ once near-stop checks begin). If diagnostics pass, reliability must exceed
 theta means must have correlation at least \code{theta_corr_min} and a
 relative SD change no larger than \code{theta_sd_rel_change_max}, and ranks
 must have Spearman correlation at least \code{rank_spearman_min}. A stop is
-declared immediately when all gates pass at an eligible refit. Refits are
-eligible for stability checks only after \code{min_refits_for_stability} and
-once a lag of \code{stability_lag} refits is available.
+declared immediately when all gates pass at a refit. Lagged stability checks
+are evaluated only once a lag of \code{stability_lag} refits is available.
 }
 
 \section{Adaptive configuration}{
@@ -142,7 +141,7 @@ attempted when submissions are missing.}
 \item{\code{max_replacements}}{Maximum number of replacement pairs per
 iteration; defaults to the batch size.}
 \item{\code{max_iterations}}{Maximum number of start/resume iterations in
-wrappers such as \code{adaptive_rank_run_live()}.}
+wrappers such as \code{adaptive_rank_run_live()} (NULL means no cap).}
 \item{\code{budget_max}}{Hard cap on scheduled comparisons; defaults to
 \code{floor(0.40 * choose(N, 2))}.}
 \item{\code{M1_target}}{Minimum observed comparisons before stop checks
@@ -167,8 +166,6 @@ pair.}
 the hard stop (\code{0.40} by default).}
 \item{\code{eap_reliability_min}}{Minimum \code{reliability_EAP} for stop
 eligibility.}
-\item{\code{min_refits_for_stability}}{Minimum refits before stability
-checks are evaluated.}
 \item{\code{stability_lag}}{Lag (in refits) used to compare theta and rank
 stability.}
 \item{\code{theta_corr_min}}{Minimum correlation between current and lagged
@@ -341,7 +338,8 @@ the threshold.}
 \item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets the
 threshold.}
 \item{\code{rank_stability_pass}}{Rank stability gate status.}
-\item{\code{stop_eligible}}{TRUE when refit count meets stability minimum.}
+\item{\code{stop_eligible}}{TRUE when lagged stability checks are
+eligible (current refit exceeds \code{stability_lag}).}
 \item{\code{stop_decision}}{TRUE when stop criteria are met.}
 \item{\code{stop_reason}}{Stop reason label when stopped.}
 \item{\code{starve_rate_since_last_refit}}{Fraction of iterations since
