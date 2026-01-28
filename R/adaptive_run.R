@@ -194,7 +194,9 @@ NULL
 }
 
 .adaptive_append_item_log <- function(state, fit, output_dir = NULL) {
-  validate_state(state)
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
   state <- .adaptive_init_item_log_list(state)
 
   item_summary <- build_item_summary(state, fit = fit)
