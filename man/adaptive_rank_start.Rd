@@ -189,8 +189,8 @@ require zero divergences regardless of this value.}
 \item{\code{progress_every_refit}}{Refit cadence for progress prints.}
 \item{\code{progress_level}}{Verbosity level: \code{"basic"},
 \code{"refit"}, or \code{"full"}.}
-\item{\code{write_outputs}}{Whether to write \code{batch_log},
-\code{round_log}, and \code{item_summary} to disk.}
+\item{\code{write_outputs}}{Whether to write \code{batch_log} and
+\code{round_log} to disk; item logs are written per refit.}
 \item{\code{output_dir}}{Directory used for adaptive artifacts when
 \code{write_outputs = TRUE}.}
 \item{\code{keep_draws}}{Whether to write thinned posterior draws to disk.}
@@ -203,11 +203,12 @@ core fraction, output directory).}
 \section{Canonical outputs}{
 
 Canonical adaptive outputs are \code{batch_log}, \code{round_log}, and
-\code{item_summary}. They are stored on the state as \code{state$batch_log},
-\code{state$config$round_log}, and \code{state$config$item_summary}. When
-\code{adaptive$v3$write_outputs = TRUE}, they are written to
-\code{batch_log.rds}, \code{round_log.rds}, and \code{item_summary.rds} in
-\code{output_dir}. Summary helpers such as \code{summarize_iterations()},
+per-refit item logs. They are stored on the state as \code{state$batch_log},
+\code{state$config$round_log}, and \code{state$logs$item_log_list}. When
+\code{adaptive$v3$write_outputs = TRUE}, \code{batch_log.rds} and
+\code{round_log.rds} are written to \code{output_dir}, and item logs are
+written as \code{item_log_refit_0001.rds}, \code{item_log_refit_0002.rds},
+etc. Summary helpers such as \code{summarize_iterations()},
 \code{summarize_refits()}, and \code{summarize_items()} are pure views of
 these tables.
 

@@ -7,6 +7,8 @@
 summarize_items(
   state,
   posterior = NULL,
+  refit = NULL,
+  bind = FALSE,
   top_n = NULL,
   sort_by = c("rank_mean", "theta_mean", "theta_sd", "degree", "pos_A_rate"),
   include_optional = TRUE
@@ -15,9 +17,14 @@ summarize_items(
 \arguments{
 \item{state}{An \code{adaptive_state} or list containing adaptive logs.}
 
-\item{posterior}{Optional item summary table (or list containing
-\code{item_summary}). When \code{NULL}, uses the cached
-\code{state$config$item_summary} when available.}
+\item{posterior}{Optional item log list or item summary table (or list
+containing \code{item_log_list} or \code{item_summary}). When \code{NULL},
+uses \code{state$logs$item_log_list} when available.}
+
+\item{refit}{Optional refit index. When \code{NULL}, the most recent refit is
+returned.}
+
+\item{bind}{Logical; when \code{TRUE}, stack all refits into a single table.}
 
 \item{top_n}{Optional positive integer; return only the top \code{n} rows
 after sorting.}
@@ -27,7 +34,8 @@ after sorting.}
 \item{include_optional}{Logical; include optional diagnostic columns.}
 }
 \value{
-A tibble with one row per item. Columns include \code{item_id},
+A tibble with one row per item. Columns include \code{refit_id},
+\code{item_id},
 \code{theta_mean}, \code{theta_sd}, \code{theta_p2.5}, \code{theta_p5},
 \code{theta_p50}, \code{theta_p95}, \code{theta_p97.5}, \code{rank_mean},
 \code{rank_sd}, \code{rank_p2.5}, \code{rank_p5}, \code{rank_p50},
@@ -37,7 +45,7 @@ Rank percentiles summarize per-draw induced ranks (lower is better). When
 are appended.
 }
 \description{
-Build an item-level diagnostics summary from the canonical item summary. This
+Build an item-level diagnostics summary from the canonical item logs. This
 is a pure view and does not recompute posterior draws or exposure metrics.
 }
 \details{
