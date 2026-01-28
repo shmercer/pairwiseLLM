@@ -141,6 +141,62 @@ testthat::test_that("adaptive_rank_start ingests live results and schedules repl
   expect_equal(length(out$submission_info$live_submissions), 1L)
 })
 
+testthat::test_that("adaptive_rank_start errors when API key is missing in live submissions", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C", "D"),
+    text = c("alpha", "bravo", "charlie", "delta")
+  )
+
+  adaptive <- list(
+    d1 = 2L,
+    M1_target = 2L,
+    budget_max = 6L,
+    bins = 2L,
+    batch_overrides = list(BATCH1 = 2L)
+  )
+
+  mock_submit <- function(pairs, model, trait_name, trait_description,
+                          prompt_template, backend, ...) {
+    failed_attempts <- tibble::tibble(
+      pair_uid = pairs$pair_uid,
+      unordered_key = pairwiseLLM:::make_unordered_key(pairs$ID1, pairs$ID2),
+      ordered_key = pairwiseLLM:::make_ordered_key(pairs$ID1, pairs$ID2),
+      A_id = as.character(pairs$ID1),
+      B_id = as.character(pairs$ID2),
+      phase = as.character(pairs$phase),
+      iter = as.integer(pairs$iter),
+      attempted_at = as.POSIXct("2026-01-10 00:00:00", tz = "UTC"),
+      backend = as.character(backend),
+      model = as.character(model),
+      error_code = "backend_missing_fields",
+      error_detail = "Error: No API key found for OpenAI."
+    )
+
+    list(
+      results = pairwiseLLM:::.adaptive_empty_results_tbl(),
+      failed_pairs = tibble::tibble(),
+      failed_attempts = failed_attempts
+    )
+  }
+
+  testthat::with_mocked_bindings(
+    testthat::expect_error(
+      adaptive_rank_start(
+        samples = samples,
+        model = "gpt-test",
+        trait_name = "quality",
+        trait_description = "Which is better?",
+        backend = "openai",
+        mode = "live",
+        adaptive = adaptive,
+        seed = 101
+      ),
+      "No API key found for OpenAI"
+    ),
+    submit_llm_pairs = mock_submit
+  )
+})
+
 testthat::test_that("adaptive_rank_start saves live state when state_path is provided", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C", "D"),
