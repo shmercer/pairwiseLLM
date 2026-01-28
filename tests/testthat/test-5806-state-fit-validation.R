@@ -25,4 +25,3 @@ testthat::test_that("validate_state enforces contract-only `state$fit`", {
   state$fast_fit <- list()
   expect_error(pairwiseLLM:::validate_state(state), "fast_fit")
 })
-

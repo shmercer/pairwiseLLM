@@ -1161,4 +1161,3 @@ testthat::test_that("adaptive_rank_resume is deterministic under fixed seed", {
     expect_equal(captured_pairs[[1]], captured_pairs[[2]])
   }
 })
-
