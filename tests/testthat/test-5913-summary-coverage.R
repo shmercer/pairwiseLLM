@@ -42,6 +42,8 @@ testthat::test_that("summary schemas and defaults are stable", {
 
   iter_schema <- pairwiseLLM:::.adaptive_iteration_summary_schema(include_optional = FALSE)
   testthat::expect_false("n_candidates_generated" %in% names(iter_schema))
+  testthat::expect_true("created_at" %in% names(iter_schema))
+  testthat::expect_false("iter_start_time" %in% names(iter_schema))
 
   refit_schema <- pairwiseLLM:::.adaptive_refit_summary_schema(include_optional = FALSE)
   testthat::expect_false(any(c("gini_degree", "gini_pos_A") %in% names(refit_schema)))
@@ -49,6 +51,7 @@ testthat::test_that("summary schemas and defaults are stable", {
 
   item_schema <- pairwiseLLM:::.adaptive_item_summary_schema(include_optional = FALSE)
   testthat::expect_false("repeated_pairs" %in% names(item_schema))
+  testthat::expect_true("ID" %in% names(item_schema))
 })
 
 testthat::test_that("summary helpers handle draw extraction and repeats", {
@@ -127,6 +130,7 @@ testthat::test_that("summaries cover validation and logged values", {
   state$batch_log <- "bad"
   summary_empty <- pairwiseLLM::summarize_iterations(state)
   testthat::expect_equal(nrow(summary_empty), 0L)
+  testthat::expect_equal(ncol(summary_empty), 0L)
 
   testthat::expect_error(pairwiseLLM::summarize_iterations(state, last_n = 0))
   testthat::expect_error(pairwiseLLM::summarize_iterations(state, include_optional = NA))
@@ -159,12 +163,28 @@ testthat::test_that("summaries cover validation and logged values", {
   state$batch_log <- dplyr::bind_rows(state$batch_log, row)
 
   summary_logged <- pairwiseLLM::summarize_iterations(state, include_optional = FALSE)
-  testthat::expect_equal(summary_logged$n_pairs_selected[[1L]], 6L)
-  testthat::expect_equal(summary_logged$n_pairs_completed[[1L]], 5L)
+  testthat::expect_equal(
+    summary_logged,
+    state$batch_log |>
+      dplyr::select(dplyr::any_of(c(
+        "iter",
+        "phase",
+        "mode",
+        "created_at",
+        "batch_size_target",
+        "n_pairs_selected",
+        "n_pairs_completed",
+        "candidate_starved",
+        "reason_short_batch",
+        "n_explore_selected",
+        "n_exploit_selected"
+      )))
+  )
 
   state$config$round_log <- "bad"
   refit_empty <- pairwiseLLM::summarize_refits(state)
   testthat::expect_equal(nrow(refit_empty), 0L)
+  testthat::expect_equal(ncol(refit_empty), 0L)
 
   testthat::expect_error(pairwiseLLM::summarize_refits(state, last_n = 0))
   testthat::expect_error(pairwiseLLM::summarize_refits(state, include_optional = NA))
@@ -174,7 +194,32 @@ testthat::test_that("summaries cover validation and logged values", {
   state$config$round_log <- dplyr::bind_rows(state$config$round_log, refit_row)
 
   refit_logged <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
-  testthat::expect_equal(refit_logged$new_pairs[[1L]], 2L)
+  testthat::expect_equal(
+    refit_logged,
+    state$config$round_log |>
+      dplyr::select(dplyr::any_of(c(
+        "round_id",
+        "iter_at_refit",
+        "new_pairs",
+        "divergences",
+        "max_rhat",
+        "min_ess_bulk",
+        "epsilon_mean",
+        "reliability_EAP",
+        "theta_sd_eap",
+        "rho_theta_lag",
+        "delta_sd_theta_lag",
+        "rho_rank_lag",
+        "hard_cap_threshold",
+        "n_unique_pairs_seen",
+        "rank_stability_pass",
+        "diagnostics_pass",
+        "stop_eligible",
+        "stop_decision",
+        "stop_reason",
+        "mode"
+      )))
+  )
 
   testthat::expect_error(pairwiseLLM::summarize_items(state, top_n = 0))
   testthat::expect_error(pairwiseLLM::summarize_items(state, include_optional = NA))

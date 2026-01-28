@@ -66,17 +66,50 @@ testthat::test_that("summaries are views over canonical outputs", {
   )
 
   iter_summary <- pairwiseLLM::summarize_iterations(list(state = state), include_optional = FALSE)
-  testthat::expect_equal(iter_summary$n_pairs_selected[[1L]], 6L)
-  testthat::expect_equal(iter_summary$n_pairs_completed[[1L]], 5L)
+  expected_iter <- state$batch_log |>
+    dplyr::select(dplyr::any_of(c(
+      "iter",
+      "phase",
+      "mode",
+      "created_at",
+      "batch_size_target",
+      "n_pairs_selected",
+      "n_pairs_completed",
+      "candidate_starved",
+      "reason_short_batch",
+      "n_explore_selected",
+      "n_exploit_selected"
+    )))
+  testthat::expect_equal(iter_summary, expected_iter)
 
   refit_summary <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
-  testthat::expect_true(refit_summary$stop_decision[[1L]])
-  testthat::expect_equal(refit_summary$stop_reason[[1L]], "manual")
+  expected_refit <- state$config$round_log |>
+    dplyr::select(dplyr::any_of(c(
+      "round_id",
+      "iter_at_refit",
+      "new_pairs",
+      "divergences",
+      "max_rhat",
+      "min_ess_bulk",
+      "epsilon_mean",
+      "reliability_EAP",
+      "theta_sd_eap",
+      "rho_theta_lag",
+      "delta_sd_theta_lag",
+      "rho_rank_lag",
+      "hard_cap_threshold",
+      "n_unique_pairs_seen",
+      "rank_stability_pass",
+      "diagnostics_pass",
+      "stop_eligible",
+      "stop_decision",
+      "stop_reason",
+      "mode"
+    )))
+  testthat::expect_equal(refit_summary, expected_refit)
 
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_equal(item_summary$theta_p5[[1L]], state$logs$item_log_list[[1L]]$theta_p5[[1L]])
-  testthat::expect_equal(item_summary$theta_p95[[1L]], state$logs$item_log_list[[1L]]$theta_p95[[1L]])
-  testthat::expect_equal(item_summary$pos_A_rate[[1L]], state$logs$item_log_list[[1L]]$posA_prop[[1L]])
+  testthat::expect_equal(item_summary, state$logs$item_log_list[[1L]])
 })
 
 testthat::test_that("summaries handle log lists and warn on non-summary posterior", {
@@ -116,11 +149,67 @@ testthat::test_that("summaries handle log lists and warn on non-summary posterio
     list(batch_log = state$batch_log),
     include_optional = FALSE
   )
-  testthat::expect_equal(iter_summary$n_pairs_selected[[1L]], 2L)
-  testthat::expect_equal(iter_summary$n_pairs_completed[[1L]], 2L)
+  testthat::expect_equal(iter_summary, state$batch_log |>
+    dplyr::select(dplyr::any_of(c(
+      "iter",
+      "phase",
+      "mode",
+      "created_at",
+      "batch_size_target",
+      "n_pairs_selected",
+      "n_pairs_completed",
+      "candidate_starved",
+      "reason_short_batch",
+      "n_explore_selected",
+      "n_exploit_selected"
+    ))))
 
   testthat::expect_warning(
     pairwiseLLM::summarize_items(state, posterior = matrix(0, nrow = 1, ncol = 1)),
     "item summary"
   )
+})
+
+testthat::test_that("summaries preserve logical and NA values", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
+
+  batch_log <- tibble::tibble(
+    iter = 1L,
+    phase = "phase1",
+    mode = "warm_start",
+    created_at = as.POSIXct("2024-01-01 00:00:00", tz = "UTC"),
+    batch_size_target = 2L,
+    n_pairs_selected = 2L,
+    n_pairs_completed = 1L,
+    candidate_starved = NA,
+    reason_short_batch = NA_character_,
+    n_explore_selected = 1L,
+    n_exploit_selected = 1L,
+    safe_no_utility = TRUE,
+    fallback_exhausted = FALSE
+  )
+  state$batch_log <- batch_log
+
+  iter_summary <- pairwiseLLM::summarize_iterations(state)
+  testthat::expect_identical(iter_summary$candidate_starved, batch_log$candidate_starved)
+  testthat::expect_identical(iter_summary$safe_no_utility, batch_log$safe_no_utility)
+  testthat::expect_identical(iter_summary$fallback_exhausted, batch_log$fallback_exhausted)
+
+  round_log <- tibble::tibble(
+    round_id = 1L,
+    iter_at_refit = 0L,
+    stop_decision = TRUE,
+    stop_eligible = FALSE,
+    diagnostics_pass = NA
+  )
+  state$config$round_log <- round_log
+
+  refit_summary <- pairwiseLLM::summarize_refits(state)
+  testthat::expect_identical(refit_summary$stop_decision, round_log$stop_decision)
+  testthat::expect_identical(refit_summary$stop_eligible, round_log$stop_eligible)
+  testthat::expect_identical(refit_summary$diagnostics_pass, round_log$diagnostics_pass)
 })

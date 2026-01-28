@@ -189,24 +189,25 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     n_exploit_selected = 1L
   )
 
-  testthat::with_mocked_bindings(
-    .adaptive_align_log_schema = function(log, schema) {
-      log <- tibble::as_tibble(log)
-      schema <- tibble::as_tibble(schema)
-      missing <- setdiff(names(schema), names(log))
-      missing <- setdiff(missing, "created_at")
-      for (col in missing) {
-        default_val <- pairwiseLLM:::.adaptive_log_default_value(schema[[col]])
-        log[[col]] <- rep_len(default_val, nrow(log))
-      }
-      log
-    },
-    .env = asNamespace("pairwiseLLM"),
-    {
-      summary <- pairwiseLLM::summarize_iterations(state, include_optional = FALSE)
-      testthat::expect_true(all(is.na(summary$iter_start_time)))
-    }
+  summary <- pairwiseLLM::summarize_iterations(state, include_optional = FALSE)
+  testthat::expect_equal(
+    summary,
+    state$batch_log |>
+      dplyr::select(dplyr::any_of(c(
+        "iter",
+        "phase",
+        "mode",
+        "created_at",
+        "batch_size_target",
+        "n_pairs_selected",
+        "n_pairs_completed",
+        "candidate_starved",
+        "reason_short_batch",
+        "n_explore_selected",
+        "n_exploit_selected"
+      )))
   )
+  testthat::expect_false("created_at" %in% names(summary))
 
   state$config$round_log <- tibble::tibble(
     round_id = 1L,
@@ -222,23 +223,34 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     pos_balance_sd = 0
   )
 
-  testthat::with_mocked_bindings(
-    .adaptive_align_log_schema = function(log, schema) {
-      log <- tibble::as_tibble(log)
-      schema <- tibble::as_tibble(schema)
-      missing <- setdiff(names(schema), names(log))
-      for (col in missing) {
-        default_val <- pairwiseLLM:::.adaptive_log_default_value(schema[[col]])
-        log[[col]] <- rep_len(default_val, nrow(log))
-      }
-      log
-    },
-    .env = asNamespace("pairwiseLLM"),
-    {
-      summary <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
-      testthat::expect_true(all(c("stop_decision", "stop_reason") %in% names(summary)))
-    }
+  summary <- pairwiseLLM::summarize_refits(state, include_optional = FALSE)
+  testthat::expect_equal(
+    summary,
+    state$config$round_log |>
+      dplyr::select(dplyr::any_of(c(
+        "round_id",
+        "iter_at_refit",
+        "new_pairs",
+        "divergences",
+        "max_rhat",
+        "min_ess_bulk",
+        "epsilon_mean",
+        "reliability_EAP",
+        "theta_sd_eap",
+        "rho_theta_lag",
+        "delta_sd_theta_lag",
+        "rho_rank_lag",
+        "hard_cap_threshold",
+        "n_unique_pairs_seen",
+        "rank_stability_pass",
+        "diagnostics_pass",
+        "stop_eligible",
+        "stop_decision",
+        "stop_reason",
+        "mode"
+      )))
   )
+  testthat::expect_false("stop_decision" %in% names(summary))
 
   item_summary <- tibble::tibble(
     ID = state$ids,
@@ -265,5 +277,5 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     )
   )
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_identical(item_summary$item_id, state$ids)
+  testthat::expect_identical(item_summary$ID, state$ids)
 })

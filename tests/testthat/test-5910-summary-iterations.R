@@ -37,8 +37,8 @@ testthat::test_that("summarize_iterations returns stable schema", {
   summary <- pairwiseLLM::summarize_iterations(state, last_n = 1L)
 
   testthat::expect_s3_class(summary, "tbl_df")
-  testthat::expect_true(all(c("n_candidates_generated", "utility_selected_p90", "backlog_unjudged") %in% names(summary)))
-  testthat::expect_true("iter_start_time" %in% names(summary))
+  testthat::expect_equal(summary, utils::tail(state$batch_log, 1L))
+  testthat::expect_identical(names(summary), names(state$batch_log))
 })
 
 testthat::test_that("summarize_iterations handles missing logs", {
@@ -53,5 +53,5 @@ testthat::test_that("summarize_iterations handles missing logs", {
 
   testthat::expect_s3_class(summary, "tbl_df")
   testthat::expect_equal(nrow(summary), 0L)
-  testthat::expect_true(all(c("n_candidates_generated", "utility_selected_p90") %in% names(summary)))
+  testthat::expect_equal(ncol(summary), 0L)
 })
