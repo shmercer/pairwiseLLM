@@ -379,11 +379,17 @@ testthat::test_that("should_stop validates state fields and config thresholds", 
     model = "test"
   )
   state$posterior$theta_mean_history <- "bad"
+  theta_summary <- tibble::tibble(
+    item_id = state$ids,
+    theta_mean = c(0.1, 0.2),
+    theta_sd = c(0.1, 0.2)
+  )
   testthat::expect_error(
     should_stop(
       metrics = list(refit_performed = TRUE, diagnostics_pass = TRUE),
       state = state,
-      config = config_v3
+      config = config_v3,
+      theta_summary = theta_summary
     ),
     "theta_mean_history"
   )
@@ -402,7 +408,8 @@ testthat::test_that("should_stop validates state fields and config thresholds", 
         rank_stability_pass = TRUE
       ),
       state = state,
-      config = config_bad_eap
+      config = config_bad_eap,
+      theta_summary = theta_summary
     ),
     "eap_reliability_min"
   )
@@ -420,8 +427,43 @@ testthat::test_that("should_stop validates state fields and config thresholds", 
         rank_stability_pass = TRUE
       ),
       state = state,
-      config = config_bad_theta_sd
+      config = config_bad_theta_sd,
+      theta_summary = theta_summary
     ),
     "theta_sd_rel_change_max"
+  )
+})
+
+testthat::test_that("should_stop requires explicit theta input at refit checks", {
+  samples <- tibble::tibble(
+    ID = c("A", "B"),
+    text = c("alpha", "bravo")
+  )
+  state <- adaptive_state_new(samples, config = list(d1 = 2L, M1_target = 0L, budget_max = 4L))
+  config_v3 <- adaptive_v3_config(state$N, list(stability_lag = 1L))
+  state$posterior$theta_mean_history <- list(stats::setNames(c(0.1, 0.2), state$ids))
+  state$fit <- NULL
+
+  metrics <- list(
+    hard_cap_reached = FALSE,
+    refit_performed = TRUE,
+    diagnostics_pass = TRUE,
+    eap_pass = TRUE,
+    theta_corr_pass = TRUE,
+    delta_sd_theta_pass = TRUE,
+    rho_rank_pass = TRUE
+  )
+  theta_summary <- tibble::tibble(
+    item_id = state$ids,
+    theta_mean = c(0.2, -0.1),
+    theta_sd = c(0.1, 0.1)
+  )
+
+  out <- should_stop(metrics, state, config_v3, theta_summary = theta_summary)
+  testthat::expect_equal(length(out$state$posterior$theta_mean_history), 2L)
+
+  testthat::expect_error(
+    should_stop(metrics, state, config_v3),
+    "Refit stop checks require"
   )
 })

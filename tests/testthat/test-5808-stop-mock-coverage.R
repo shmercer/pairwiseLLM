@@ -53,7 +53,7 @@ testthat::test_that("should_stop validates stability thresholds", {
   )
 
   testthat::expect_error(
-    pairwiseLLM:::should_stop(metrics, state, config_bad),
+    pairwiseLLM:::should_stop(metrics, state, config_bad, fit = state$fit),
     "theta_corr_min"
   )
 })

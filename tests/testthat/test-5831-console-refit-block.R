@@ -30,7 +30,7 @@ testthat::test_that("refit progress block includes EAP reliability", {
     rho_rank_lag = 0.99,
     rho_rank_pass = TRUE,
     rank_stability_pass = TRUE,
-    stop_eligible = TRUE,
+    lag_eligible = TRUE,
     stop_decision = FALSE,
     stop_reason = NA_character_,
     n_unique_pairs_seen = 3L,

@@ -214,7 +214,7 @@ testthat::test_that("summaries cover validation and logged values", {
         "n_unique_pairs_seen",
         "rank_stability_pass",
         "diagnostics_pass",
-        "stop_eligible",
+        "lag_eligible",
         "stop_decision",
         "stop_reason",
         "mode"

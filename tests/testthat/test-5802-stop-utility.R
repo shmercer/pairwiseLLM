@@ -23,7 +23,7 @@ testthat::test_that("EAP reliability gate controls stop decisions", {
     delta_sd_theta_pass = TRUE,
     rho_rank_pass = TRUE
   )
-  out <- should_stop(metrics, state, config_v3)
+  out <- should_stop(metrics, state, config_v3, fit = state$fit)
 
   testthat::expect_false(out$stop_decision)
 })

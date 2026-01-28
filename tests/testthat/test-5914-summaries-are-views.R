@@ -101,7 +101,7 @@ testthat::test_that("summaries are views over canonical outputs", {
       "n_unique_pairs_seen",
       "rank_stability_pass",
       "diagnostics_pass",
-      "stop_eligible",
+      "lag_eligible",
       "stop_decision",
       "stop_reason",
       "mode"
@@ -203,13 +203,13 @@ testthat::test_that("summaries preserve logical and NA values", {
     round_id = 1L,
     iter_at_refit = 0L,
     stop_decision = TRUE,
-    stop_eligible = FALSE,
+    lag_eligible = FALSE,
     diagnostics_pass = NA
   )
   state$config$round_log <- round_log
 
   refit_summary <- pairwiseLLM::summarize_refits(state)
   testthat::expect_identical(refit_summary$stop_decision, round_log$stop_decision)
-  testthat::expect_identical(refit_summary$stop_eligible, round_log$stop_eligible)
+  testthat::expect_identical(refit_summary$lag_eligible, round_log$lag_eligible)
   testthat::expect_identical(refit_summary$diagnostics_pass, round_log$diagnostics_pass)
 })

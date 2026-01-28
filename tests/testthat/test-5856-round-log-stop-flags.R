@@ -13,7 +13,7 @@ testthat::test_that("round_log records stop flag values from metrics", {
     delta_sd_theta_pass = TRUE,
     rho_rank_pass = FALSE,
     rank_stability_pass = FALSE,
-    stop_eligible = TRUE
+    lag_eligible = TRUE
   )
   fit <- make_v3_fit_contract(state$ids)
 

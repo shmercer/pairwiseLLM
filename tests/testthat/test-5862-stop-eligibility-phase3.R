@@ -73,7 +73,7 @@ testthat::test_that("stop ignores lagged gates when lag is ineligible", {
   )
   metrics$refit_performed <- TRUE
 
-  out <- pairwiseLLM:::should_stop(metrics, state, config_v3)
+  out <- pairwiseLLM:::should_stop(metrics, state, config_v3, fit = fit)
 
   testthat::expect_true(out$stop_decision)
   testthat::expect_true(is.na(metrics$rho_theta_lag))
@@ -159,12 +159,12 @@ testthat::test_that("lagged gates are required once eligible", {
     delta_sd_theta_pass = TRUE,
     rho_rank_pass = TRUE
   )
-  out_fail <- pairwiseLLM:::should_stop(metrics_fail, base_state, config_v3)
+  out_fail <- pairwiseLLM:::should_stop(metrics_fail, base_state, config_v3, fit = base_state$fit)
   testthat::expect_false(out_fail$stop_decision)
 
   metrics_pass <- metrics_fail
   metrics_pass$theta_corr_pass <- TRUE
-  out_pass <- pairwiseLLM:::should_stop(metrics_pass, base_state, config_v3)
+  out_pass <- pairwiseLLM:::should_stop(metrics_pass, base_state, config_v3, fit = base_state$fit)
   testthat::expect_true(out_pass$stop_decision)
 })
 
