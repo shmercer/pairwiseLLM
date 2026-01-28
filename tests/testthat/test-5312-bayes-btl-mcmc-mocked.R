@@ -126,7 +126,7 @@ testthat::test_that("fit_bayes_btl_mcmc returns theta_draws with mocked cmdstanr
           testthat::expect_true(is.character(code))
           "fake.stan"
         },
-        cmdstan_model = function(stan_file) {
+        cmdstan_model = function(stan_file, ...) {
           testthat::expect_equal(stan_file, "fake.stan")
           fake_model
         },

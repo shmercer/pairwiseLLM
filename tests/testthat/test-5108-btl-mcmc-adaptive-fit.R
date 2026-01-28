@@ -34,7 +34,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive validates cmdstan config", {
       stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
-    cmdstan_model = function(file) list(sample = function(...) NULL),
+    cmdstan_model = function(file, ...) list(sample = function(...) NULL),
     .package = "cmdstanr"
   )
 })
@@ -73,7 +73,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive returns draws with mocked cmdst
       stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
-    cmdstan_model = function(file) fake_model,
+    cmdstan_model = function(file, ...) fake_model,
     .package = "cmdstanr"
   )
 
@@ -108,7 +108,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive catches bad draws output", {
       stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
-    cmdstan_model = function(file) fake_model,
+    cmdstan_model = function(file, ...) fake_model,
     .package = "cmdstanr"
   )
 })
@@ -139,7 +139,7 @@ testthat::test_that("fit_bayes_btl_mcmc_adaptive rejects invalid thinning", {
       stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
-    cmdstan_model = function(file) fake_model,
+    cmdstan_model = function(file, ...) fake_model,
     .package = "cmdstanr"
   )
 })

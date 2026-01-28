@@ -42,7 +42,7 @@ testthat::test_that("cmdstanr sampling receives resolved chain settings", {
       stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
-    cmdstan_model = function(file) fake_model,
+    cmdstan_model = function(file, ...) fake_model,
     .package = "cmdstanr"
   )
 
@@ -89,7 +89,7 @@ testthat::test_that("cmdstan threads_per_chain overrides flow to sampler", {
       stan_file_for_variant = function(...) "fake.stan",
       .package = "pairwiseLLM"
     ),
-    cmdstan_model = function(file) fake_model,
+    cmdstan_model = function(file, ...) fake_model,
     .package = "cmdstanr"
   )
 
