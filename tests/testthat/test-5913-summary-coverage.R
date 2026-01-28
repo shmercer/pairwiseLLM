@@ -49,7 +49,7 @@ testthat::test_that("summary schemas and defaults are stable", {
   testthat::expect_false(any(c("gini_degree", "gini_pos_A") %in% names(refit_schema)))
   testthat::expect_false("batch_size" %in% names(refit_schema))
 
-  item_schema <- pairwiseLLM:::.adaptive_item_summary_schema(include_optional = FALSE)
+  item_schema <- pairwiseLLM:::.adaptive_item_log_schema(include_optional = FALSE)
   testthat::expect_false("repeated_pairs" %in% names(item_schema))
   testthat::expect_true("ID" %in% names(item_schema))
 })
@@ -224,7 +224,7 @@ testthat::test_that("summaries cover validation and logged values", {
   testthat::expect_error(pairwiseLLM::summarize_items(state, top_n = 0))
   testthat::expect_error(pairwiseLLM::summarize_items(state, include_optional = NA))
 
-  item_summary <- tibble::tibble(
+  item_log <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.1, 0.2, 0.3),
     theta_sd = c(0.1, 0.1, 0.1),
@@ -244,11 +244,11 @@ testthat::test_that("summaries cover validation and logged values", {
     posA_prop = c(0.5, 0.5, 0.5)
   )
   item_log <- dplyr::relocate(
-    dplyr::mutate(item_summary, refit_id = 1L),
+    dplyr::mutate(item_log, refit_id = 1L),
     refit_id,
     .before = 1L
   )
   state$logs <- list(item_log_list = list(item_log))
-  item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_false("repeated_pairs" %in% names(item_summary))
+  item_log <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
+  testthat::expect_false("repeated_pairs" %in% names(item_log))
 })

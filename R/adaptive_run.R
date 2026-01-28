@@ -199,7 +199,7 @@ NULL
   }
   state <- .adaptive_init_item_log_list(state)
 
-  item_log <- build_item_summary(state, fit = fit)
+  item_log <- build_item_log(state, fit = fit)
   item_log <- tibble::as_tibble(item_log)
   refit_id <- as.integer(length(state$logs$item_log_list) + 1L)
   item_log$refit_id <- rep.int(refit_id, nrow(item_log))
@@ -2611,7 +2611,7 @@ NULL
 #'   \item{\code{mcmc_cmdstanr_version}}{CmdStanR version used for the refit.}
 #' }
 #'
-#' Item summary columns (one row per item):
+#' Item log columns (one row per item per refit):
 #' \describe{
 #'   \item{\code{ID}}{Item identifier.}
 #'   \item{\code{deg}}{Observed degree (total comparisons involving the item).}

@@ -1,4 +1,4 @@
-testthat::test_that("item summary percentiles match posterior draws", {
+testthat::test_that("item log percentiles match posterior draws", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C", "D"),
     text = c("alpha", "bravo", "charlie", "delta")
@@ -19,7 +19,7 @@ testthat::test_that("item summary percentiles match posterior draws", {
   )
   fit <- make_v3_fit_contract(state$ids, theta_draws = theta_draws)
 
-  summary <- pairwiseLLM:::build_item_summary(state, fit)
+  summary <- pairwiseLLM:::build_item_log(state, fit)
   probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
   theta_quantiles <- apply(theta_draws, 2, stats::quantile, probs = probs, names = FALSE)
   rank_mat <- t(apply(theta_draws, 1, function(row) rank(-row, ties.method = "average")))

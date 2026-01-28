@@ -401,7 +401,7 @@ batch_log_schema <- function() {
 
 #' @keywords internal
 #' @noRd
-item_summary_schema <- function() {
+item_log_schema <- function() {
   tibble::tibble(
     ID = character(),
     deg = integer(),
@@ -559,8 +559,8 @@ compute_gini_posA <- function(posA_counts, deg = NULL) {
   .adaptive_log_defaults_from_schema(schema)
 }
 
-.adaptive_item_summary_defaults <- function(n_rows = 0L) {
-  schema <- item_summary_schema()
+.adaptive_item_log_defaults <- function(n_rows = 0L) {
+  schema <- item_log_schema()
   if (n_rows < 1L) {
     return(schema)
   }
@@ -920,7 +920,7 @@ build_batch_log_row <- function(iter,
 
 #' @keywords internal
 #' @noRd
-build_item_summary <- function(state, fit = NULL) {
+build_item_log <- function(state, fit = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state.")
   }
@@ -931,7 +931,7 @@ build_item_summary <- function(state, fit = NULL) {
   }
 
   if (is.null(theta_draws) || !is.matrix(theta_draws) || !is.numeric(theta_draws)) {
-    return(.adaptive_item_summary_defaults())
+    return(.adaptive_item_log_defaults())
   }
 
   if (is.null(colnames(theta_draws))) {

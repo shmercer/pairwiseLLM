@@ -1,5 +1,5 @@
-testthat::test_that("item summary schema matches contract", {
-  schema <- item_summary_schema()
+testthat::test_that("item log schema matches contract", {
+  schema <- item_log_schema()
 
   expected <- c(
     "ID",
@@ -27,7 +27,7 @@ testthat::test_that("item summary schema matches contract", {
   testthat::expect_true(is.integer(schema$deg))
 })
 
-testthat::test_that("item summary builder emits one row per item", {
+testthat::test_that("item log builder emits one row per item", {
   samples <- tibble::tibble(
     ID = c("A", "B", "C"),
     text = c("alpha", "bravo", "charlie")
@@ -49,10 +49,10 @@ testthat::test_that("item summary builder emits one row per item", {
     )
   )
 
-  summary <- build_item_summary(state, fit)
+  summary <- build_item_log(state, fit)
 
   testthat::expect_equal(nrow(summary), state$N)
-  testthat::expect_identical(colnames(summary), colnames(item_summary_schema()))
+  testthat::expect_identical(colnames(summary), colnames(item_log_schema()))
   testthat::expect_true(all(summary$ID == state$ids))
   testthat::expect_true(is.double(summary$rank_mean))
   testthat::expect_true(is.integer(summary$deg))

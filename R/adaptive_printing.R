@@ -117,7 +117,7 @@
   line
 }
 
-.adaptive_progress_format_refit_block <- function(round_row, config) {
+.adaptive_progress_format_refit_block <- function(round_row, config, state = NULL) {
   if (!is.data.frame(round_row)) {
     rlang::abort("`round_row` must be a data frame.")
   }
@@ -129,114 +129,122 @@
     }
     fallback
   }
-  theta_sd_val <- progress_field("theta_sd_eap", NA_real_)
   rho_theta_lag_val <- progress_field("rho_theta_lag", NA_real_)
   delta_sd_theta_lag_val <- progress_field("delta_sd_theta_lag", NA_real_)
   rho_rank_lag_val <- progress_field("rho_rank_lag", NA_real_)
-  rank_stability_pass_val <- progress_field("rank_stability_pass", NA)
-  hard_cap_reached_val <- progress_field("hard_cap_reached", NA)
+  lag_eligible_val <- progress_field("lag_eligible", NA)
+  batch_index <- NA_integer_
+  phase_val <- NA_character_
+  if (!is.null(state)) {
+    phase_val <- state$phase %||% phase_val
+    batch_index <- state$iter %||% batch_index
+    batch_log <- state$batch_log %||% tibble::tibble()
+    if (is.data.frame(batch_log) && nrow(batch_log) > 0L) {
+      phase_val <- phase_val %||% batch_log$phase[[nrow(batch_log)]]
+      batch_index <- batch_index %||% batch_log$iter[[nrow(batch_log)]]
+    }
+  }
+
   header <- paste0(
-    "[REFIT r=", .adaptive_progress_value(row$round_id),
-    " iter=", .adaptive_progress_value(row$iter_at_refit),
-    " mode=", .adaptive_progress_value(progress_field("mode", NA_character_)), "]"
+    "[adaptive pairing] REFIT ", .adaptive_progress_value(row$round_id),
+    "   iter=", .adaptive_progress_value(progress_field("iter_at_refit", NA_integer_)),
+    "   phase=", .adaptive_progress_value(phase_val)
+  )
+  header_sub <- paste0(
+    "batch=", .adaptive_progress_value(batch_index),
+    "   pairs=", .adaptive_progress_value(progress_field("total_pairs", NA_integer_)),
+    " (+", .adaptive_progress_value(progress_field("new_pairs", NA_integer_)), ")"
   )
 
   reliability_EAP <- progress_field("reliability_EAP", NA_real_)
   reliability_min <- config$eap_reliability_min %||% NA_real_
-  reliability_pass <- NA
-  if (is.finite(reliability_EAP) && is.finite(reliability_min)) {
-    reliability_pass <- reliability_EAP >= reliability_min
+  eap_pass <- progress_field("eap_pass", NA)
+  if (!isTRUE(eap_pass) && !isFALSE(eap_pass)) {
+    if (is.finite(reliability_EAP) && is.finite(reliability_min)) {
+      eap_pass <- reliability_EAP >= reliability_min
+    } else {
+      eap_pass <- NA
+    }
   }
+
+  diagnostics_pass <- progress_field("diagnostics_pass", NA)
+  divergences <- progress_field("divergences", NA_integer_)
+  max_rhat <- progress_field("max_rhat", NA_real_)
+  min_ess_bulk <- progress_field("min_ess_bulk", NA_real_)
+
+  theta_corr_pass_val <- if (isTRUE(lag_eligible_val)) {
+    progress_field("theta_corr_pass", NA)
+  } else {
+    NA
+  }
+  delta_sd_theta_pass_val <- if (isTRUE(lag_eligible_val)) {
+    progress_field("delta_sd_theta_pass", NA)
+  } else {
+    NA
+  }
+  rho_rank_pass_val <- if (isTRUE(lag_eligible_val)) {
+    progress_field("rho_rank_pass", NA)
+  } else {
+    NA
+  }
+
+  rho_theta_lag_val <- if (isTRUE(lag_eligible_val)) rho_theta_lag_val else NA_real_
+  delta_sd_theta_lag_val <- if (isTRUE(lag_eligible_val)) delta_sd_theta_lag_val else NA_real_
+  rho_rank_lag_val <- if (isTRUE(lag_eligible_val)) rho_rank_lag_val else NA_real_
 
   lines <- c(
     header,
+    header_sub,
+    "GATES",
     paste0(
-      "  Pairs: completed=", .adaptive_progress_value(progress_field("completed_pairs", NA_integer_)),
-      "/", .adaptive_progress_value(progress_field("scheduled_pairs", NA_integer_)),
-      " backlog=", .adaptive_progress_value(progress_field("backlog_unjudged", NA_integer_))
-    ),
-    {
-      cores_physical <- progress_field("mcmc_cores_detected_physical", NA_integer_)
-      cores_logical <- progress_field("mcmc_cores_detected_logical", NA_integer_)
-      cores_effective <- .adaptive_progress_effective_cores(cores_physical, cores_logical)
-      mcmc_line <- paste0(
-        "  MCMC config: chains=", .adaptive_progress_value(progress_field("mcmc_chains", NA_integer_)),
-        " parallel=", .adaptive_progress_value(progress_field("mcmc_parallel_chains", NA_integer_)),
-        " cores=", .adaptive_progress_value(cores_physical),
-        "/", .adaptive_progress_value(cores_logical),
-        " eff=", .adaptive_progress_value(cores_effective)
-      )
-      core_fraction <- progress_field("mcmc_core_fraction", NA_real_)
-      if (!is.na(core_fraction)) {
-        mcmc_line <- paste0(
-          mcmc_line,
-          " core_fraction=",
-          .adaptive_progress_value(core_fraction)
-        )
-      }
-      mcmc_line
-    },
-    paste0(
-      "  MCMC: div=", .adaptive_progress_value(progress_field("divergences", NA_integer_)),
-      " rhat_max=", .adaptive_progress_value(progress_field("max_rhat", NA_real_)),
-      " ess_min=", .adaptive_progress_value(progress_field("min_ess_bulk", NA_real_))
+      "  diagnostics_pass : ", .adaptive_progress_value(diagnostics_pass),
+      "    div=", .adaptive_progress_value(divergences),
+      "   max_rhat=", .adaptive_progress_value(max_rhat),
+      "   min_ess_bulk=", .adaptive_progress_value(min_ess_bulk)
     ),
     paste0(
-      "  Diagnostics: pass=", .adaptive_progress_value(progress_field("diagnostics_pass", NA))
+      "  eap_pass         : ", .adaptive_progress_value(eap_pass),
+      "   reliability_EAP=", .adaptive_progress_value(reliability_EAP),
+      "   min=", .adaptive_progress_value(reliability_min)
     ),
     paste0(
-      "  Reliability: EAP=", .adaptive_progress_value(reliability_EAP),
-      " pass=", .adaptive_progress_value(reliability_pass)
+      "LAG (eligible=", .adaptive_progress_value(lag_eligible_val),
+      ", L=", .adaptive_progress_value(config$stability_lag %||% NA_integer_),
+      ")"
     ),
     paste0(
-      "  Theta: sd_eap=", .adaptive_progress_value(theta_sd_val)
+      "  theta_corr_pass     : ", .adaptive_progress_value(theta_corr_pass_val),
+      "    rho_theta=", .adaptive_progress_value(rho_theta_lag_val),
+      "   min=", .adaptive_progress_value(config$theta_corr_min %||% NA_real_)
+    ),
+    paste0(
+      "  delta_sd_theta_pass : ", .adaptive_progress_value(delta_sd_theta_pass_val),
+      "    delta_sd_theta=", .adaptive_progress_value(delta_sd_theta_lag_val),
+      "   max=", .adaptive_progress_value(config$theta_sd_rel_change_max %||% NA_real_)
+    ),
+    paste0(
+      "  rho_rank_pass       : ", .adaptive_progress_value(rho_rank_pass_val),
+      "    rho_rank=", .adaptive_progress_value(rho_rank_lag_val),
+      "   min=", .adaptive_progress_value(config$rank_spearman_min %||% NA_real_)
+    ),
+    "STOP",
+    paste0(
+      "  stop_decision : ", .adaptive_progress_value(progress_field("stop_decision", NA))
     )
   )
 
-  lines <- c(
-    lines,
-    paste0(
-      "  Stability: rho_theta=",
-      .adaptive_progress_value_with_note(rho_theta_lag_val, "not eligible yet"),
-      " delta_sd=",
-      .adaptive_progress_value_with_note(delta_sd_theta_lag_val, "not eligible yet"),
-      " rho_rank=",
-      .adaptive_progress_value_with_note(rho_rank_lag_val, "not eligible yet"),
-      " rank_pass=",
-      .adaptive_progress_value_with_note(rank_stability_pass_val, "not eligible yet")
-    )
-  )
-
-  lines <- c(
-    lines,
-    paste0(
-      "  Stop: eligible=",
-      .adaptive_progress_value(progress_field("lag_eligible", NA)),
-      " decision=",
-      .adaptive_progress_value(progress_field("stop_decision", NA))
-    )
-  )
   stop_decision <- progress_field("stop_decision", NA)
-  if (isTRUE(stop_decision %in% TRUE)) {
-    lines <- c(
-      lines,
-      paste0(
-        "  Stop reason: ",
-        .adaptive_progress_value(progress_field("stop_reason", NA_character_))
-      )
-    )
+  stop_reason <- progress_field("stop_reason", NA_character_)
+  if (isTRUE(stop_decision %in% TRUE) &&
+    (is.na(stop_reason) || identical(stop_reason, "v3_converged"))) {
+    stop_reason <- "all_gates_passed"
   }
-
-  if (identical(.adaptive_progress_level(config), "full")) {
-    lines <- c(
-      lines,
-      paste0(
-        "  Hard cap: seen=", .adaptive_progress_value(row$n_unique_pairs_seen),
-        " cap=", .adaptive_progress_value(row$hard_cap_threshold),
-        " reached=", .adaptive_progress_value(hard_cap_reached_val)
-      )
+  lines <- c(
+    lines,
+    paste0(
+      "  stop_reason   : ", .adaptive_progress_value(stop_reason)
     )
-  }
+  )
   lines
 }
 
@@ -270,7 +278,7 @@
   if (!.adaptive_progress_should_refit(config, round_id)) {
     return(invisible(FALSE))
   }
-  lines <- .adaptive_progress_format_refit_block(round_row, config)
+  lines <- .adaptive_progress_format_refit_block(round_row, config, state = state)
   cat(paste(lines, collapse = "\n"), "\n", sep = "")
   invisible(TRUE)
 }

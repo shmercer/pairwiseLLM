@@ -40,8 +40,8 @@ testthat::test_that("adaptive_v3_check_named_int enforces naming and ids", {
   )
 })
 
-testthat::test_that("item summary defaults and round log row fill metrics", {
-  defaults <- pairwiseLLM:::.adaptive_item_summary_defaults(n_rows = 2L)
+testthat::test_that("item log defaults and round log row fill metrics", {
+  defaults <- pairwiseLLM:::.adaptive_item_log_defaults(n_rows = 2L)
   testthat::expect_equal(nrow(defaults), 2L)
   testthat::expect_true("theta_mean" %in% names(defaults))
 
@@ -80,7 +80,7 @@ testthat::test_that("item summary defaults and round log row fill metrics", {
   testthat::expect_equal(row$epsilon_mean, 0.1)
 })
 
-testthat::test_that("build_item_summary supplies missing draw colnames", {
+testthat::test_that("build_item_log supplies missing draw colnames", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "bravo")
@@ -90,7 +90,7 @@ testthat::test_that("build_item_summary supplies missing draw colnames", {
   draws <- matrix(c(0.1, 0.2, -0.1, -0.2), nrow = 2, byrow = TRUE)
   fit <- list(theta_draws = draws)
 
-  summary_tbl <- pairwiseLLM:::build_item_summary(state, fit = fit)
+  summary_tbl <- pairwiseLLM:::build_item_log(state, fit = fit)
   testthat::expect_equal(summary_tbl$ID, state$ids)
   testthat::expect_true(all(is.finite(summary_tbl$theta_mean)))
 })

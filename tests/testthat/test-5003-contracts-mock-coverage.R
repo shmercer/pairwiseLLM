@@ -20,14 +20,14 @@ testthat::test_that("adaptive_v3_config rejects non-list overrides after normali
   )
 })
 
-testthat::test_that("round log row and item summary require adaptive_state", {
+testthat::test_that("round log row and item log require adaptive_state", {
   testthat::expect_error(
     pairwiseLLM:::build_round_log_row(state = list()),
     "adaptive_state"
   )
 
   testthat::expect_error(
-    pairwiseLLM:::build_item_summary(state = list()),
+    pairwiseLLM:::build_item_log(state = list()),
     "adaptive_state"
   )
 })

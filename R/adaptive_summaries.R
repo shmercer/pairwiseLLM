@@ -196,7 +196,7 @@
   schema[, required, drop = FALSE]
 }
 
-.adaptive_item_summary_schema <- function(include_optional = TRUE) {
+.adaptive_item_log_schema <- function(include_optional = TRUE) {
   required <- tibble::tibble(
     refit_id = .adaptive_summary_empty_value("integer"),
     ID = .adaptive_summary_empty_value("character"),
@@ -389,7 +389,7 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
 #' @details
 #' The round log is the canonical stop-audit trail and groups fields by
 #' identity/cadence, run-scale counts, design knobs, coverage/imbalance,
-#' posterior percentiles, diagnostics, stop quality metrics, stop bookkeeping,
+#' posterior percentiles, diagnostics, stop quality metrics,
 #' stop decision, candidate health, and MCMC configuration. Run-scale counts
 #' include \code{total_pairs} (\eqn{N(N-1)/2}), \code{hard_cap_threshold}
 #' (\eqn{\lceil0.40 * total\_pairs\rceil}), \code{n_unique_pairs_seen} (unique
@@ -550,7 +550,7 @@ summarize_items <- function(state,
         rlang::abort("`item_log_list` entries must have identical columns when `bind = TRUE`.")
       }
     }
-    item_summary <- dplyr::bind_rows(lapply(item_log_list, tibble::as_tibble))
+    item_log <- dplyr::bind_rows(lapply(item_log_list, tibble::as_tibble))
   } else {
     idx <- refit %||% length(item_log_list)
     if (idx < 1L || idx > length(item_log_list)) {
@@ -562,26 +562,26 @@ summarize_items <- function(state,
         " refits are available."
       ))
     }
-    item_summary <- item_log_list[[idx]]
-    if (!is.data.frame(item_summary)) {
+    item_log <- item_log_list[[idx]]
+    if (!is.data.frame(item_log)) {
       rlang::abort("`item_log_list` entries must be data frames.")
     }
-    item_summary <- tibble::as_tibble(item_summary)
+    item_log <- tibble::as_tibble(item_log)
   }
 
   if (!isTRUE(include_optional)) {
     optional <- c("repeated_pairs", "adjacent_prev_prob", "adjacent_next_prob")
-    item_summary <- item_summary |> dplyr::select(-dplyr::any_of(optional))
+    item_log <- item_log |> dplyr::select(-dplyr::any_of(optional))
   }
 
-  if (!sort_by %in% names(item_summary)) {
+  if (!sort_by %in% names(item_log)) {
     rlang::abort("`sort_by` must be a column in the item log.")
   }
 
-  item_summary <- .adaptive_apply_sort_and_top_n(
-    item_summary,
+  item_log <- .adaptive_apply_sort_and_top_n(
+    item_log,
     sort_by = sort_by,
     top_n = top_n
   )
-  item_summary
+  item_log
 }
