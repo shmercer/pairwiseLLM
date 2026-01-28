@@ -17,8 +17,9 @@ summarize_refits(state, last_n = NULL, include_optional = TRUE)
 A tibble with one row per refit (canonical \code{round_log} schema).
 }
 \description{
-Build a per-refit diagnostics summary from the adaptive round log. This is
-a pure view over \code{round_log} and does not recompute metrics.
+Build a thin per-refit diagnostics summary from the adaptive round log. This is
+a pure view over \code{round_log} and does not recompute posterior
+quantities or stop metrics.
 }
 \details{
 The round log is the canonical stop-audit trail and groups fields by

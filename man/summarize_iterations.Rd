@@ -35,8 +35,9 @@ targets, candidate counts, configuration used, utility percentiles, exit
 path markers, diagnostics gates, and stop indicators.
 }
 \description{
-Build a per-iteration diagnostics summary from the adaptive batch log. This
-is a pure view over \code{batch_log} and does not recompute metrics.
+Build a thin per-iteration diagnostics summary from the adaptive batch log. This
+is a pure view over \code{batch_log} and does not recompute posterior
+quantities or stop metrics.
 }
 \details{
 Run-scale iteration counts reflect a single scheduling cycle. The batch log

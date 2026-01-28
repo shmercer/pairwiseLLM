@@ -22,7 +22,7 @@ an item log table. When \code{NULL}, uses \code{state$logs$item_log_list}
 when available.}
 
 \item{refit}{Optional refit index. When \code{NULL}, the most recent refit is
-returned.}
+returned; when set, the \code{k}-th refit is returned.}
 
 \item{bind}{Logical; when \code{TRUE}, stack all refits into a single table.}
 
@@ -43,11 +43,16 @@ adjacency diagnostics are dropped if present.
 }
 \description{
 Build an item-level diagnostics summary from the canonical item logs. This
-is a pure view and does not recompute posterior draws or exposure metrics.
+is a pure view and does not recompute posterior quantities or exposure
+metrics.
 }
 \details{
 Rank percentiles are computed from the per-draw induced ranks (lower is
 better). Rank uncertainty grows when draws disagree on the ordering. Degree
 and position exposure metrics summarize how frequently each item was shown
-and whether it appeared as the first option (A position).
+and whether it appeared as the first option (A position). When
+\code{refit = NULL}, the most recent refit is returned; when
+\code{refit = k}, the \code{k}-th refit is returned. When \code{bind = TRUE},
+all refits are stacked into a single table and \code{refit} must be
+\code{NULL}.
 }
