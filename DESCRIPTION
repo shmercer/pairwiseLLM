@@ -100,6 +100,7 @@ Collate:
     'openai_live.R'
     'openai_params.R'
     'pairing.R'
+    'pairwiseLLM-package.R'
     'prompt_template.R'
     'reverse_consistency.R'
     'seed_helpers.R'
