@@ -5,7 +5,7 @@ testthat::test_that("compute_stop_metrics uses Spearman rho without ties", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(
     state$N,
-    list(min_refits_for_stability = 2L, stability_lag = 1L, rank_spearman_min = 0, hard_cap_frac = 1)
+    list(stability_lag = 1L, rank_spearman_min = 0, hard_cap_frac = 1)
   )
 
   lag_theta <- stats::setNames(c(1, 2, 3), ids)
@@ -37,7 +37,7 @@ testthat::test_that("compute_stop_metrics uses Spearman rho with ties", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(
     state$N,
-    list(min_refits_for_stability = 2L, stability_lag = 1L, rank_spearman_min = 0, hard_cap_frac = 1)
+    list(stability_lag = 1L, rank_spearman_min = 0, hard_cap_frac = 1)
   )
 
   lag_theta <- stats::setNames(c(0, 1, 1), ids)
@@ -69,7 +69,7 @@ testthat::test_that("compute_stop_metrics reports NA rho when ineligible", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list())
   state$config$v3 <- pairwiseLLM:::adaptive_v3_config(
     state$N,
-    list(min_refits_for_stability = 3L, stability_lag = 2L, rank_spearman_min = 0, hard_cap_frac = 1)
+    list(stability_lag = 2L, rank_spearman_min = 0, hard_cap_frac = 1)
   )
 
   lag_theta <- stats::setNames(c(1, 2, 3), ids)

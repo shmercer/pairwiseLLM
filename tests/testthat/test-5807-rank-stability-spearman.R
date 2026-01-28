@@ -12,7 +12,6 @@ testthat::test_that("rank stability uses true Spearman without ties", {
     config = list(d1 = 2L, M1_target = 0L, budget_max = 10L)
   )
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L,
     rank_spearman_min = 0.5
   ))
@@ -49,7 +48,6 @@ testthat::test_that("rank stability uses true Spearman with ties", {
     config = list(d1 = 2L, M1_target = 0L, budget_max = 10L)
   )
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L,
     rank_spearman_min = 0.5
   ))
@@ -86,7 +84,6 @@ testthat::test_that("rank stability remains NA when ineligible", {
     config = list(d1 = 2L, M1_target = 0L, budget_max = 10L)
   )
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 3L,
     stability_lag = 2L,
     rank_spearman_min = 0.5
   ))

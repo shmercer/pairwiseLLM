@@ -5,7 +5,6 @@ testthat::test_that("EAP reliability gate controls stop decisions", {
   )
   state <- adaptive_state_new(samples, config = list(d1 = 2L, M1_target = 0L))
   config_v3 <- adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L
   ))
   state$config$v3 <- config_v3

@@ -8,7 +8,6 @@ testthat::test_that("rank stability uses lagged Spearman correlation", {
     config = list(d1 = 2L, M1_target = 2L, budget_max = 10L)
   )
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L,
     rank_spearman_min = 0.99
   ))
@@ -43,7 +42,6 @@ testthat::test_that("theta stability uses Pearson correlation", {
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L, M1_target = 2L))
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L
   ))
   state$config$v3 <- config_v3
@@ -74,7 +72,6 @@ testthat::test_that("lagged flags are NA when ineligible", {
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L, M1_target = 2L))
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 2L
   ))
   state$config$v3 <- config_v3

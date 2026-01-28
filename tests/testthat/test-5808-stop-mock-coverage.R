@@ -14,7 +14,6 @@ testthat::test_that("compute_stop_metrics validates lagged theta history", {
   colnames(draws) <- state$ids
   fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L
   ))
 
@@ -39,7 +38,6 @@ testthat::test_that("should_stop validates stability thresholds", {
   state$fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
 
   config_bad <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 1L
   ))
   config_bad$theta_corr_min <- NA_real_

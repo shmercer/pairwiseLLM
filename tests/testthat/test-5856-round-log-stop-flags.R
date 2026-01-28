@@ -38,7 +38,6 @@ testthat::test_that("round_log keeps lagged stop flags NA when ineligible", {
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L, M1_target = 2L))
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
-    min_refits_for_stability = 2L,
     stability_lag = 2L
   ))
   state$config$v3 <- config_v3

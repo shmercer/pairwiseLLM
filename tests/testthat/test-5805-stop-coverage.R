@@ -253,7 +253,6 @@ testthat::test_that("compute_stop_metrics validates history and stability inputs
   state_bad_lag <- state
   state_bad_lag$posterior$theta_mean_history <- list(c(0.1))
   config_lag <- config_v3
-  config_lag$min_refits_for_stability <- 1L
   config_lag$stability_lag <- 1L
   testthat::expect_error(
     compute_stop_metrics(
@@ -265,21 +264,8 @@ testthat::test_that("compute_stop_metrics validates history and stability inputs
     "Lagged theta history"
   )
 
-  config_bad_refits <- config_v3
-  config_bad_refits$min_refits_for_stability <- 0L
-  testthat::expect_error(
-    compute_stop_metrics(
-      state,
-      fit = fit,
-      candidates_with_utility = tibble::tibble(),
-      config = config_bad_refits
-    ),
-    "min_refits_for_stability"
-  )
-
   state$posterior$theta_mean_history <- list(stats::setNames(rep(0.1, state$N), state$ids))
   config_rank_bad <- config_v3
-  config_rank_bad$min_refits_for_stability <- 1L
   config_rank_bad$stability_lag <- 1L
   config_rank_bad$rank_spearman_min <- NA_real_
   testthat::expect_error(
@@ -295,7 +281,6 @@ testthat::test_that("compute_stop_metrics validates history and stability inputs
   lag_bad_names <- stats::setNames(rep(0.1, state$N), c("X", "Y", "Z"))
   state$posterior$theta_mean_history <- list(lag_bad_names)
   config_lag <- config_v3
-  config_lag$min_refits_for_stability <- 1L
   config_lag$stability_lag <- 1L
   testthat::expect_error(
     compute_stop_metrics(
@@ -404,17 +389,6 @@ testthat::test_that("should_stop validates state fields and config thresholds", 
   )
 
   state$posterior$theta_mean_history <- list(stats::setNames(c(0.1, 0.2), state$ids))
-  config_bad_min <- config_v3
-  config_bad_min$min_refits_for_stability <- 0L
-  testthat::expect_error(
-    should_stop(
-      metrics = list(refit_performed = TRUE, diagnostics_pass = TRUE),
-      state = state,
-      config = config_bad_min
-    ),
-    "min_refits_for_stability"
-  )
-
   config_bad_eap <- config_v3
   config_bad_eap$eap_reliability_min <- NA_real_
   testthat::expect_error(
