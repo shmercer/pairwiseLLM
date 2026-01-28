@@ -602,11 +602,9 @@ NULL
       state$posterior$epsilon_mean <- as.double(epsilon_mean)
     }
     refit_performed <- TRUE
-    if (do_refit) {
-      state$last_refit_at <- as.integer(state$comparisons_observed)
-      state$config$last_refit_at <- state$last_refit_at
-      state$new_since_refit <- 0L
-    }
+    state$last_refit_at <- as.integer(state$comparisons_observed)
+    state$config$last_refit_at <- state$last_refit_at
+    state$new_since_refit <- 0L
     state <- .adaptive_append_item_log(state, fit = state$fit)
   }
 
@@ -2871,7 +2869,7 @@ adaptive_rank_start <- function(
     }
   }
 
-  state$config$allow_refit <- TRUE
+  state$config$allow_refit <- isTRUE(state$comparisons_scheduled == state$comparisons_observed)
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
@@ -3080,7 +3078,7 @@ adaptive_rank_resume <- function(
     observed_now <- sum(pairs_submitted$pair_uid %in% .adaptive_results_seen_names(state))
     missing <- nrow(pairs_submitted) - observed_now
   }
-  state$config$allow_refit <- missing == 0L
+  state$config$allow_refit <- isTRUE(state$comparisons_scheduled == state$comparisons_observed)
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
@@ -3191,7 +3189,7 @@ adaptive_rank_resume <- function(
     }
   }
 
-  state$config$allow_refit <- TRUE
+  state$config$allow_refit <- isTRUE(state$comparisons_scheduled == state$comparisons_observed)
   stop_out <- .adaptive_run_stopping_checks(state, adaptive, seed)
   state <- stop_out$state
 
