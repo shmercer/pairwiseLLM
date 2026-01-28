@@ -48,7 +48,8 @@ testthat::test_that("summarize_refits returns stable schema", {
   summary <- pairwiseLLM::summarize_refits(state, last_n = 1L)
 
   testthat::expect_s3_class(summary, "tbl_df")
-  testthat::expect_true(all(c("reliability_EAP", "epsilon_mean") %in% names(summary)))
+  testthat::expect_equal(summary, utils::tail(state$config$round_log, 1L))
+  testthat::expect_identical(names(summary), names(state$config$round_log))
 })
 
 testthat::test_that("summarize_refits handles missing logs", {
@@ -63,4 +64,5 @@ testthat::test_that("summarize_refits handles missing logs", {
 
   testthat::expect_s3_class(summary, "tbl_df")
   testthat::expect_equal(nrow(summary), 0L)
+  testthat::expect_equal(ncol(summary), 0L)
 })

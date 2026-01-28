@@ -33,14 +33,10 @@ testthat::test_that("summarize_items returns item diagnostics without gini colum
   summary <- pairwiseLLM::summarize_items(state)
 
   testthat::expect_s3_class(summary, "tbl_df")
-  testthat::expect_true(all(c("refit_id", "item_id", "theta_mean", "rank_mean", "pos_A_rate") %in% names(summary)))
+  testthat::expect_true(all(c("refit_id", "ID", "theta_mean", "rank_mean", "posA_prop") %in% names(summary)))
   testthat::expect_false(any(c("gini_degree", "gini_pos_A") %in% names(summary)))
-  testthat::expect_true(all(summary$refit_id == 1L))
-  testthat::expect_true(setequal(summary$item_id, state$ids))
-  testthat::expect_equal(summary$theta_mean[[1L]], item_summary$theta_mean[[1L]])
-  testthat::expect_equal(summary$theta_p5[[1L]], item_summary$theta_p5[[1L]])
-  testthat::expect_equal(summary$theta_p95[[1L]], item_summary$theta_p95[[1L]])
-  testthat::expect_equal(summary$pos_A_rate[[1L]], item_summary$posA_prop[[1L]])
+  testthat::expect_equal(summary, item_log)
+  testthat::expect_identical(names(summary), names(item_log))
 })
 
 testthat::test_that("summarize_items supports sorting and missing posterior", {
@@ -86,6 +82,7 @@ testthat::test_that("summarize_items supports sorting and missing posterior", {
   state$logs$item_log_list <- NULL
   summary_missing <- pairwiseLLM::summarize_items(state, posterior = NULL)
   testthat::expect_equal(nrow(summary_missing), 0L)
+  testthat::expect_equal(ncol(summary_missing), 0L)
 })
 
 testthat::test_that("summarize_items unwraps list item_summary inputs", {
@@ -117,7 +114,7 @@ testthat::test_that("summarize_items unwraps list item_summary inputs", {
 
   out <- pairwiseLLM::summarize_items(state, posterior = list(item_summary = item_summary))
   testthat::expect_equal(nrow(out), 2L)
-  testthat::expect_equal(out$item_id, state$ids)
+  testthat::expect_equal(out$ID, state$ids)
 })
 
 testthat::test_that("summarize_items selects refits and binds when requested", {
@@ -155,14 +152,18 @@ testthat::test_that("summarize_items selects refits and binds when requested", {
   state$logs <- list(item_log_list = item_log_list)
 
   last_refit <- pairwiseLLM::summarize_items(state)
-  testthat::expect_true(all(last_refit$refit_id == 2L))
+  testthat::expect_equal(last_refit, item_log_list[[2L]])
 
   first_refit <- pairwiseLLM::summarize_items(state, refit = 1L)
-  testthat::expect_true(all(first_refit$refit_id == 1L))
+  testthat::expect_equal(first_refit, item_log_list[[1L]])
 
   bound <- pairwiseLLM::summarize_items(state, bind = TRUE)
-  testthat::expect_equal(nrow(bound), 4L)
-  testthat::expect_true(setequal(unique(bound$refit_id), c(1L, 2L)))
+  expected_bound <- pairwiseLLM:::.adaptive_apply_sort_and_top_n(
+    dplyr::bind_rows(item_log_list),
+    sort_by = "rank_mean",
+    top_n = NULL
+  )
+  testthat::expect_equal(bound, expected_bound)
 
   testthat::expect_error(pairwiseLLM::summarize_items(state, refit = 3L))
 })
