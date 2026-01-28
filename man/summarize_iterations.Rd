@@ -19,7 +19,7 @@ A tibble with one row per iteration. Required columns:
 \item{\code{iter}}{Iteration index.}
 \item{\code{phase}}{Phase label.}
 \item{\code{mode}}{Run mode.}
-\item{\code{iter_start_time}}{Iteration start time (UTC).}
+\item{\code{created_at}}{Iteration start time (UTC).}
 \item{\code{batch_size_target}}{Target batch size.}
 \item{\code{n_pairs_selected}}{Pairs scheduled this iteration.}
 \item{\code{n_pairs_completed}}{New results observed since last log.}
