@@ -69,7 +69,7 @@ adaptive_v3_defaults <- function(N) {
     output_dir = NULL,
     keep_draws = FALSE,
     thin_draws = 1L,
-    cmdstan = list(core_fraction = 0.8)
+    cmdstan = list(core_fraction = 0.8, threads_per_chain = 1L)
   )
 }
 
@@ -656,6 +656,7 @@ build_round_log_row <- function(state,
   }
 
   metrics <- metrics %||% state$posterior$stop_metrics %||% list()
+  metrics <- .adaptive_stop_metrics_align(metrics)
   total_pairs <- state$N * (state$N - 1L) / 2
   mean_degree <- mean(as.double(state$deg))
   min_degree <- min(as.integer(state$deg))
@@ -806,7 +807,9 @@ build_round_log_row <- function(state,
   row$mcmc_core_fraction <- as.double(mcmc_config_used$core_fraction %||% NA_real_)
   row$mcmc_cores_detected_physical <- as.integer(mcmc_config_used$cores_detected_physical %||% NA_integer_)
   row$mcmc_cores_detected_logical <- as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_)
-  row$mcmc_threads_per_chain <- as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_)
+  threads_per_chain <- mcmc_config_used$threads_per_chain %||%
+    config$cmdstan$threads_per_chain %||% 1L
+  row$mcmc_threads_per_chain <- as.integer(threads_per_chain %||% NA_integer_)
   row$mcmc_cmdstanr_version <- as.character(mcmc_config_used$cmdstanr_version %||% NA_character_)
   row
 }

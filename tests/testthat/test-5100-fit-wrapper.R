@@ -33,7 +33,16 @@ testthat::test_that(".fit_bayes_btl_mcmc_adaptive returns required outputs", {
 
   withr::local_seed(101)
   fit <- tryCatch(
-    pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 101),
+    withCallingHandlers(
+      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 101),
+      warning = function(w) {
+        msg <- conditionMessage(w)
+        if (grepl("threads_per_chain", msg, fixed = TRUE) &&
+          grepl("stan_threads", msg, fixed = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+      }
+    ),
     error = function(e) {
       testthat::skip(paste("CmdStan not usable for MCMC test:", conditionMessage(e)))
     }

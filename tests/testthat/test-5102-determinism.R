@@ -32,7 +32,12 @@ testthat::test_that(".fit_bayes_btl_mcmc_adaptive is deterministic with fixed se
     withCallingHandlers(
       pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
       warning = function(w) {
-        if (grepl("The ESS has been capped to avoid unstable estimates.", conditionMessage(w), fixed = TRUE)) {
+        msg <- conditionMessage(w)
+        if (grepl("The ESS has been capped to avoid unstable estimates.", msg, fixed = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+        if (grepl("threads_per_chain", msg, fixed = TRUE) &&
+          grepl("stan_threads", msg, fixed = TRUE)) {
           invokeRestart("muffleWarning")
         }
       }
@@ -47,7 +52,12 @@ testthat::test_that(".fit_bayes_btl_mcmc_adaptive is deterministic with fixed se
     withCallingHandlers(
       pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data = bt_data, config = config, seed = 99),
       warning = function(w) {
-        if (grepl("The ESS has been capped to avoid unstable estimates.", conditionMessage(w), fixed = TRUE)) {
+        msg <- conditionMessage(w)
+        if (grepl("The ESS has been capped to avoid unstable estimates.", msg, fixed = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+        if (grepl("threads_per_chain", msg, fixed = TRUE) &&
+          grepl("stan_threads", msg, fixed = TRUE)) {
           invokeRestart("muffleWarning")
         }
       }
