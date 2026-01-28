@@ -166,7 +166,10 @@ fit_bayes_btl_mcmc <- function(
   }
 
   stan_file <- cmdstanr::write_stan_file(.btl_mcmc_model_code())
-  model <- cmdstanr::cmdstan_model(stan_file)
+  model <- cmdstanr::cmdstan_model(
+    stan_file,
+    cpp_options = list(stan_threads = TRUE)
+  )
 
   sample_args <- list(
     data = data,

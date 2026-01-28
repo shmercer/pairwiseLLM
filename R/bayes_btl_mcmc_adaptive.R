@@ -559,7 +559,10 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   }
 
   stan_file <- stan_file_for_variant(model_variant)
-  model <- cmdstanr::cmdstan_model(stan_file)
+  model <- cmdstanr::cmdstan_model(
+    stan_file,
+    cpp_options = list(stan_threads = TRUE)
+  )
 
   sample_args <- list(
     data = stan_data,
