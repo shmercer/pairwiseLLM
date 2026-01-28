@@ -48,8 +48,53 @@ testthat::test_that("cmdstanr sampling receives resolved chain settings", {
 
   testthat::expect_equal(capture_env$args$chains, 4L)
   testthat::expect_equal(capture_env$args$parallel_chains, 4L)
+  testthat::expect_equal(capture_env$args$threads_per_chain, 1L)
   testthat::expect_true(is.list(out$mcmc_config_used))
   testthat::expect_equal(out$mcmc_config_used$parallel_chains, 4L)
+  testthat::expect_equal(out$mcmc_config_used$threads_per_chain, 1L)
+})
+
+testthat::test_that("cmdstan threads_per_chain overrides flow to sampler", {
+  bt_data <- make_v3_bt_data_5842()
+  config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
+  config$cmdstan <- list(
+    chains = 2L,
+    parallel_chains = 2L,
+    threads_per_chain = 3L,
+    iter_warmup = 2L,
+    iter_sampling = 2L
+  )
+
+  capture_env <- rlang::env(args = NULL)
+  fake_fit <- list(
+    draws = function(variables = NULL, format = NULL) {
+      mat <- matrix(c(0.1, 0.2, 0.3, 0.4, 0.05, 0.06), nrow = 2, byrow = TRUE)
+      colnames(mat) <- c("theta[1]", "theta[2]", "epsilon")
+      mat
+    },
+    diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
+    summary = function(variables = NULL) {
+      tibble::tibble(rhat = 1, ess_bulk = 100, ess_tail = 100)
+    }
+  )
+  fake_model <- list(sample = function(...) {
+    capture_env$args <- list(...)
+    fake_fit
+  })
+
+  out <- testthat::with_mocked_bindings(
+    testthat::with_mocked_bindings(
+      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
+      .btl_mcmc_require_cmdstanr = function() NULL,
+      stan_file_for_variant = function(...) "fake.stan",
+      .package = "pairwiseLLM"
+    ),
+    cmdstan_model = function(file) fake_model,
+    .package = "cmdstanr"
+  )
+
+  testthat::expect_equal(capture_env$args$threads_per_chain, 3L)
+  testthat::expect_equal(out$mcmc_config_used$threads_per_chain, 3L)
 })
 
 testthat::test_that("round log rows include mcmc config used", {
@@ -74,6 +119,7 @@ testthat::test_that("round log rows include mcmc config used", {
   testthat::expect_equal(row$mcmc_chains[[1L]], 6L)
   testthat::expect_equal(row$mcmc_parallel_chains[[1L]], 4L)
   testthat::expect_equal(row$mcmc_core_fraction[[1L]], 0.5)
+  testthat::expect_equal(row$mcmc_threads_per_chain[[1L]], 2L)
   testthat::expect_equal(row$mcmc_cmdstanr_version[[1L]], "0.0.0")
 })
 
