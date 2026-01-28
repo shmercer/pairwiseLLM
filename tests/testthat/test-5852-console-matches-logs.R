@@ -90,21 +90,23 @@ testthat::test_that("refit console block matches round_log gate values", {
     stop_out = list(stop_decision = FALSE, stop_reason = NA_character_),
     config = config
   )
+  state$batch_log <- tibble::tibble(iter = state$iter, phase = state$phase)
 
   output <- capture.output(
     pairwiseLLM:::.adaptive_progress_emit_refit(state, round_row, config)
   )
   text <- paste(output, collapse = "\n")
-  expected_diag <- paste0("Diagnostics: pass=", ifelse(round_row$diagnostics_pass, "TRUE", "FALSE"))
-  expected_pairs <- paste0(
-    "Pairs: completed=",
-    pairwiseLLM:::.adaptive_progress_value(round_row$completed_pairs),
-    "/",
-    pairwiseLLM:::.adaptive_progress_value(round_row$scheduled_pairs)
+  expected_diag <- paste0(
+    "diagnostics_pass : ",
+    ifelse(round_row$diagnostics_pass, "TRUE", "FALSE")
   )
-  expected_theta <- paste0("Theta: sd_eap=", pairwiseLLM:::.adaptive_progress_value(round_row$theta_sd_eap))
+  expected_eap <- paste0(
+    "eap_pass         : ",
+    pairwiseLLM:::.adaptive_progress_value(round_row$eap_pass)
+  )
+  expected_stop <- "stop_decision : FALSE"
 
   testthat::expect_true(grepl(expected_diag, text, fixed = TRUE))
-  testthat::expect_true(grepl(expected_pairs, text, fixed = TRUE))
-  testthat::expect_true(grepl(expected_theta, text, fixed = TRUE))
+  testthat::expect_true(grepl(expected_eap, text, fixed = TRUE))
+  testthat::expect_true(grepl(expected_stop, text, fixed = TRUE))
 })
