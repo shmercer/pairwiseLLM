@@ -45,6 +45,11 @@
     rlang::abort("`cmdstan` must be a list.")
   }
 
+  threads_per_chain <- as.integer(cmdstan$threads_per_chain %||% 1L)
+  if (is.na(threads_per_chain) || threads_per_chain < 1L) {
+    rlang::abort("`cmdstan$threads_per_chain` must be a positive integer.")
+  }
+
   core_fraction <- cmdstan$core_fraction %||% 0.8
   if (!is.numeric(core_fraction) || length(core_fraction) != 1L ||
     !is.finite(core_fraction) || core_fraction <= 0 || core_fraction > 1) {
@@ -60,7 +65,7 @@
       core_fraction = as.double(core_fraction),
       cores_detected_physical = cores$physical,
       cores_detected_logical = cores$logical,
-      threads_per_chain = as.integer(cmdstan$threads_per_chain %||% NA_integer_),
+      threads_per_chain = as.integer(threads_per_chain),
       cmdstanr_version = .btl_mcmc_cmdstanr_version()
     ))
   }
@@ -85,7 +90,7 @@
     core_fraction = as.double(core_fraction),
     cores_detected_physical = cores$physical,
     cores_detected_logical = cores$logical,
-    threads_per_chain = as.integer(cmdstan$threads_per_chain %||% NA_integer_),
+    threads_per_chain = as.integer(threads_per_chain),
     cmdstanr_version = .btl_mcmc_cmdstanr_version()
   )
 }
@@ -562,6 +567,7 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     iter_warmup = iter_warmup,
     iter_sampling = iter_sampling,
     parallel_chains = parallel_chains,
+    threads_per_chain = resolved_cmdstan$threads_per_chain,
     refresh = 0
   )
   if (!is.null(seed)) {
