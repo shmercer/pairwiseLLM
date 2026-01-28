@@ -360,7 +360,7 @@ chains.}
 \item{\code{mcmc_cmdstanr_version}}{CmdStanR version used for the refit.}
 }
 
-Item summary columns (one row per item):
+Item log columns (one row per item per refit):
 \describe{
 \item{\code{ID}}{Item identifier.}
 \item{\code{deg}}{Observed degree (total comparisons involving the item).}

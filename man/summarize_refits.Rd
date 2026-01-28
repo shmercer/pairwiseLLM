@@ -23,8 +23,8 @@ a pure view over \code{round_log} and does not recompute metrics.
 \details{
 The round log is the canonical stop-audit trail and groups fields by
 identity/cadence, run-scale counts, design knobs, coverage/imbalance,
-posterior percentiles, diagnostics, stop quality metrics, stop bookkeeping,
-stop decision, candidate health, and MCMC configuration. Run-scale counts
+posterior percentiles, diagnostics, stop quality metrics, stop decision,
+candidate health, and MCMC configuration. Run-scale counts
 include \code{total_pairs} (\eqn{N(N-1)/2}), \code{hard_cap_threshold}
 (\eqn{\lceil0.40 * total\_pairs\rceil}), \code{n_unique_pairs_seen} (unique
 unordered pairs with \code{pair_count >= 1}), \code{scheduled_pairs},
