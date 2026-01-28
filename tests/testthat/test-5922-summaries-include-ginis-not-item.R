@@ -38,6 +38,31 @@ test_that("summaries exclude gini fields in outputs", {
     reliability_EAP = 0.7
   )
 
+  item_summary <- tibble::tibble(
+    ID = state$ids,
+    theta_mean = c(0.2, -0.1, 0.0),
+    theta_sd = c(0.1, 0.2, 0.3),
+    theta_p2.5 = c(-0.2, -0.3, -0.4),
+    theta_p5 = c(-0.1, -0.2, -0.3),
+    theta_p50 = c(0.1, -0.05, 0.0),
+    theta_p95 = c(0.3, 0.2, 0.1),
+    theta_p97.5 = c(0.4, 0.3, 0.2),
+    rank_mean = c(1.0, 2.0, 3.0),
+    rank_p2.5 = c(1.0, 1.8, 2.7),
+    rank_p5 = c(1.0, 1.9, 2.8),
+    rank_p50 = c(1.0, 2.0, 3.0),
+    rank_p95 = c(1.2, 2.1, 3.2),
+    rank_p97.5 = c(1.3, 2.2, 3.3),
+    rank_sd = c(0.1, 0.2, 0.3),
+    deg = c(1L, 2L, 3L),
+    posA_prop = c(1.0, 0.5, 0.0)
+  )
+  state$logs <- list(
+    item_log_list = list(
+      dplyr::relocate(dplyr::mutate(item_summary, refit_id = 1L), refit_id, .before = 1L)
+    )
+  )
+
   iter_summary <- pairwiseLLM::summarize_iterations(state)
   refit_summary <- pairwiseLLM::summarize_refits(state)
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)

@@ -240,7 +240,7 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     }
   )
 
-  state$config$item_summary <- tibble::tibble(
+  item_summary <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.1, 0.2),
     theta_sd = c(0.1, 0.1),
@@ -258,6 +258,11 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
     rank_sd = c(0.1, 0.1),
     deg = c(1L, 2L),
     posA_prop = c(0.5, 0.5)
+  )
+  state$logs <- list(
+    item_log_list = list(
+      dplyr::relocate(dplyr::mutate(item_summary, refit_id = 1L), refit_id, .before = 1L)
+    )
   )
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
   testthat::expect_identical(item_summary$item_id, state$ids)
