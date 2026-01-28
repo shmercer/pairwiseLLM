@@ -166,7 +166,7 @@ testthat::test_that("summaries handle log lists and warn on non-summary posterio
 
   testthat::expect_warning(
     pairwiseLLM::summarize_items(state, posterior = matrix(0, nrow = 1, ncol = 1)),
-    "item summary"
+    "item log list"
   )
 })
 

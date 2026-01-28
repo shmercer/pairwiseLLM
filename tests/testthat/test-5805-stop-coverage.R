@@ -442,7 +442,6 @@ testthat::test_that("should_stop requires explicit theta input at refit checks",
   state <- adaptive_state_new(samples, config = list(d1 = 2L, M1_target = 0L, budget_max = 4L))
   config_v3 <- adaptive_v3_config(state$N, list(stability_lag = 1L))
   state$posterior$theta_mean_history <- list(stats::setNames(c(0.1, 0.2), state$ids))
-  state$fit <- NULL
 
   metrics <- list(
     hard_cap_reached = FALSE,

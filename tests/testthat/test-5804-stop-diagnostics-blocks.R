@@ -141,7 +141,7 @@ testthat::test_that("diagnostics pass does not block convergence checks", {
     as_v3_fit_contract_from_mcmc = function(...) fit,
     generate_candidates = function(...) tibble::tibble(i = "A", j = "B"),
     compute_pair_utility_dispatch = function(...) utilities_tbl,
-    should_stop = function(metrics, state, config) {
+    should_stop = function(metrics, state, config, ...) {
       testthat::expect_true(isTRUE(metrics$diagnostics_pass))
       called <<- TRUE
       list(state = state, stop_decision = FALSE, stop_reason = NA_character_)
