@@ -10,6 +10,41 @@ testthat::test_that("stop ignores lagged gates when lag is ineligible", {
   state$phase <- "phase2"
   state$mode <- "adaptive"
   state$comparisons_observed <- 1L
+  state$comparisons_scheduled <- 1L
+  state$last_refit_at <- 0L
+  state$new_since_refit <- 1L
+  A_id <- state$ids[[1L]]
+  B_id <- state$ids[[2L]]
+  unordered_key <- pairwiseLLM:::make_unordered_key(A_id, B_id)
+  ordered_key <- pairwiseLLM:::make_ordered_key(A_id, B_id)
+  pair_uid <- paste0(unordered_key, "#1")
+  created_at <- as.POSIXct("2024-01-01", tz = "UTC")
+  state$history_pairs <- tibble::tibble(
+    pair_uid = pair_uid,
+    unordered_key = unordered_key,
+    ordered_key = ordered_key,
+    A_id = A_id,
+    B_id = B_id,
+    A_text = state$texts[[A_id]],
+    B_text = state$texts[[B_id]],
+    phase = "phase2",
+    iter = 1L,
+    created_at = created_at
+  )
+  state$history_results <- tibble::tibble(
+    pair_uid = pair_uid,
+    unordered_key = unordered_key,
+    ordered_key = ordered_key,
+    A_id = A_id,
+    B_id = B_id,
+    better_id = A_id,
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = created_at,
+    backend = "test",
+    model = "test"
+  )
 
   draws <- matrix(
     c(0, 1, 2, 0.1, 1.1, 2.1),
@@ -20,13 +55,11 @@ testthat::test_that("stop ignores lagged gates when lag is ineligible", {
   fit <- make_v3_fit_contract(state$ids, theta_draws = draws)
   state$fit <- fit
   state$posterior$diagnostics_pass <- TRUE
-  state$posterior$theta_mean_history <- list(
-    stats::setNames(c(0, 1, 2), state$ids)
-  )
+  state$posterior$theta_mean_history <- list()
 
   config_v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
     stability_lag = 3L,
-    eap_reliability_min = 0.95,
+    eap_reliability_min = 0,
     theta_corr_min = 0,
     theta_sd_rel_change_max = 1,
     rank_spearman_min = 0
@@ -63,6 +96,41 @@ testthat::test_that("lagged gates are required once eligible", {
   base_state$phase <- "phase2"
   base_state$mode <- "adaptive"
   base_state$comparisons_observed <- 1L
+  base_state$comparisons_scheduled <- 1L
+  base_state$last_refit_at <- 0L
+  base_state$new_since_refit <- 1L
+  A_id <- base_state$ids[[1L]]
+  B_id <- base_state$ids[[2L]]
+  unordered_key <- pairwiseLLM:::make_unordered_key(A_id, B_id)
+  ordered_key <- pairwiseLLM:::make_ordered_key(A_id, B_id)
+  pair_uid <- paste0(unordered_key, "#1")
+  created_at <- as.POSIXct("2024-01-01", tz = "UTC")
+  base_state$history_pairs <- tibble::tibble(
+    pair_uid = pair_uid,
+    unordered_key = unordered_key,
+    ordered_key = ordered_key,
+    A_id = A_id,
+    B_id = B_id,
+    A_text = base_state$texts[[A_id]],
+    B_text = base_state$texts[[B_id]],
+    phase = "phase2",
+    iter = 1L,
+    created_at = created_at
+  )
+  base_state$history_results <- tibble::tibble(
+    pair_uid = pair_uid,
+    unordered_key = unordered_key,
+    ordered_key = ordered_key,
+    A_id = A_id,
+    B_id = B_id,
+    better_id = A_id,
+    winner_pos = 1L,
+    phase = "phase2",
+    iter = 1L,
+    received_at = created_at,
+    backend = "test",
+    model = "test"
+  )
 
   draws <- matrix(
     c(0, 1, 2, 0.1, 1.1, 2.1),
@@ -112,7 +180,8 @@ testthat::test_that("phase3 entry is restricted to phase2", {
     )
     state$config$v3 <- pairwiseLLM:::adaptive_v3_config(state$N, list(
       eap_reliability_min = 0.95,
-      stability_lag = 2L
+      stability_lag = 2L,
+      model_variant = "btl"
     ))
     state$phase <- phase
     state$mode <- "adaptive"
@@ -153,6 +222,7 @@ testthat::test_that("phase3 entry is restricted to phase2", {
     )
     state$comparisons_scheduled <- 1L
     state$comparisons_observed <- 1L
+    state$last_refit_at <- 0L
     state$new_since_refit <- 1L
     state
   }
