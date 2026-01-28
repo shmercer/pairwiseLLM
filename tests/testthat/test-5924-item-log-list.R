@@ -9,7 +9,7 @@ testthat::test_that("item_log_list appends per refit when outputs disabled", {
     list(write_outputs = FALSE)
   )
 
-  fit <- pairwiseLLM:::make_v3_fit_contract(
+  fit <- make_v3_fit_contract(
     state$ids,
     theta_draws = matrix(
       c(0.1, -0.1, 0.2, -0.2),
@@ -40,7 +40,7 @@ testthat::test_that("item logs write one file per refit when enabled", {
     list(write_outputs = TRUE, output_dir = output_dir)
   )
 
-  fit <- pairwiseLLM:::make_v3_fit_contract(
+  fit <- make_v3_fit_contract(
     state$ids,
     theta_draws = matrix(
       c(0.1, -0.1, 0.2, -0.2),
