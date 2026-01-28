@@ -48,8 +48,9 @@ is provided, the run state will be checkpointed there after each resume step.}
 
 \item{seed}{Optional integer seed for reproducibility.}
 
-\item{max_iterations}{Optional integer safety cap on the number of wrapper
-iterations. If \code{NULL}, uses the configured default (currently 50).}
+\item{max_iterations}{Optional safety cap on the number of wrapper iterations.
+If \code{NULL}, uses the configured default (currently 50). Use \code{Inf} (or
+\code{adaptive$max_iterations = NULL}) for no cap.}
 
 \item{resume}{Controls checkpoint resume behavior. One of:
 \describe{

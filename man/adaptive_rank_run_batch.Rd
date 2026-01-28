@@ -49,7 +49,8 @@ Batch mode strongly benefits from setting these so the run can be resumed.}
 
 \item{seed}{Optional integer seed for deterministic scheduling.}
 
-\item{max_iterations}{Optional integer override for the batch loop cap.}
+\item{max_iterations}{Optional override for the batch loop cap. Use \code{Inf}
+(or \code{adaptive$max_iterations = NULL}) for no cap.}
 }
 \value{
 A list with:
@@ -73,7 +74,9 @@ submits a single batch segment (rather than splitting into multiple segments).
 
 Running this function will submit LLM comparisons and will incur API usage
 costs for hosted backends. Batch mode is recommended for longer runs because
-it supports checkpointing and controlled polling behavior.
+it supports checkpointing and controlled polling behavior. When
+\code{paths$state_path} points to an existing checkpoint, the wrapper resumes that
+run (with strict sample validation) instead of starting fresh.
 
 Some backends and helper functions accept different arguments for batch
 submission vs polling/resume. This wrapper uses \code{formals()}-based
