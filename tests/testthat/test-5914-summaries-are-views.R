@@ -40,7 +40,7 @@ testthat::test_that("summaries are views over canonical outputs", {
   ))
   state$config$round_log <- round_log
 
-  state$config$item_summary <- tibble::tibble(
+  item_summary <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
@@ -59,6 +59,11 @@ testthat::test_that("summaries are views over canonical outputs", {
     deg = c(1L, 2L, 3L),
     posA_prop = c(1.0, 0.5, 0.0)
   )
+  state$logs <- list(
+    item_log_list = list(
+      dplyr::relocate(dplyr::mutate(item_summary, refit_id = 1L), refit_id, .before = 1L)
+    )
+  )
 
   iter_summary <- pairwiseLLM::summarize_iterations(list(state = state), include_optional = FALSE)
   testthat::expect_equal(iter_summary$n_pairs_selected[[1L]], 6L)
@@ -69,9 +74,9 @@ testthat::test_that("summaries are views over canonical outputs", {
   testthat::expect_equal(refit_summary$stop_reason[[1L]], "manual")
 
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_equal(item_summary$theta_p5[[1L]], state$config$item_summary$theta_p5[[1L]])
-  testthat::expect_equal(item_summary$theta_p95[[1L]], state$config$item_summary$theta_p95[[1L]])
-  testthat::expect_equal(item_summary$pos_A_rate[[1L]], state$config$item_summary$posA_prop[[1L]])
+  testthat::expect_equal(item_summary$theta_p5[[1L]], state$logs$item_log_list[[1L]]$theta_p5[[1L]])
+  testthat::expect_equal(item_summary$theta_p95[[1L]], state$logs$item_log_list[[1L]]$theta_p95[[1L]])
+  testthat::expect_equal(item_summary$pos_A_rate[[1L]], state$logs$item_log_list[[1L]]$posA_prop[[1L]])
 })
 
 testthat::test_that("summaries handle log lists and warn on non-summary posterior", {

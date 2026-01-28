@@ -179,7 +179,7 @@ testthat::test_that("summaries cover validation and logged values", {
   testthat::expect_error(pairwiseLLM::summarize_items(state, top_n = 0))
   testthat::expect_error(pairwiseLLM::summarize_items(state, include_optional = NA))
 
-  state$config$item_summary <- tibble::tibble(
+  item_summary <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.1, 0.2, 0.3),
     theta_sd = c(0.1, 0.1, 0.1),
@@ -198,6 +198,12 @@ testthat::test_that("summaries cover validation and logged values", {
     deg = c(1L, 2L, 3L),
     posA_prop = c(0.5, 0.5, 0.5)
   )
+  item_log <- dplyr::relocate(
+    dplyr::mutate(item_summary, refit_id = 1L),
+    refit_id,
+    .before = 1L
+  )
+  state$logs <- list(item_log_list = list(item_log))
   item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
   testthat::expect_false("repeated_pairs" %in% names(item_summary))
 })

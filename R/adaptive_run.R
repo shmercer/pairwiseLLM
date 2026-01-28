@@ -176,6 +176,53 @@ NULL
   list(state_path = state_path, output_dir = output_dir)
 }
 
+.adaptive_init_item_log_list <- function(state) {
+  logs <- state$logs %||% list()
+  if (!is.list(logs)) {
+    logs <- list()
+  }
+  item_log_list <- logs$item_log_list
+  if (is.null(item_log_list)) {
+    item_log_list <- list()
+  }
+  if (!is.list(item_log_list)) {
+    rlang::abort("`state$logs$item_log_list` must be a list.")
+  }
+  logs$item_log_list <- item_log_list
+  state$logs <- logs
+  state
+}
+
+.adaptive_append_item_log <- function(state, fit, output_dir = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
+  state <- .adaptive_init_item_log_list(state)
+
+  item_summary <- build_item_summary(state, fit = fit)
+  item_summary <- tibble::as_tibble(item_summary)
+  refit_id <- as.integer(length(state$logs$item_log_list) + 1L)
+  item_summary$refit_id <- rep.int(refit_id, nrow(item_summary))
+  item_summary <- dplyr::relocate(item_summary, refit_id, .before = 1L)
+  state$logs$item_log_list[[refit_id]] <- item_summary
+
+  v3_config <- state$config$v3 %||% list()
+  if (isTRUE(v3_config$write_outputs)) {
+    output_dir <- output_dir %||% v3_config$output_dir %||% state$config$output_dir %||% NULL
+    if (is.null(output_dir)) {
+      rlang::abort("`output_dir` must be provided when `write_outputs` is TRUE.")
+    }
+    if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+      rlang::abort("`output_dir` must be a length-1 character path.")
+    }
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+    filename <- sprintf("item_log_refit_%04d.rds", refit_id)
+    saveRDS(item_summary, file.path(output_dir, filename))
+  }
+
+  state
+}
+
 .adaptive_write_v3_artifacts <- function(state, fit = NULL, output_dir = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state.")
@@ -206,11 +253,6 @@ NULL
   batch_log <- tibble::as_tibble(batch_log)
   batch_log_path <- file.path(output_dir, "batch_log.rds")
   saveRDS(batch_log, batch_log_path)
-
-  item_summary <- build_item_summary(state, fit = fit)
-  item_summary_path <- file.path(output_dir, "item_summary.rds")
-  saveRDS(item_summary, item_summary_path)
-  state$config$item_summary <- item_summary
 
   if (isTRUE(v3_config$keep_draws)) {
     thin_draws <- as.integer(v3_config$thin_draws %||% 1L)
@@ -244,7 +286,7 @@ NULL
     }
   }
 
-  list(state = state, item_summary = item_summary)
+  list(state = state, item_summary = NULL)
 }
 
 .adaptive_pairs_to_submit_tbl <- function(pairs_tbl) {
@@ -565,6 +607,7 @@ NULL
       state$config$last_refit_at <- state$last_refit_at
       state$new_since_refit <- 0L
     }
+    state <- .adaptive_append_item_log(state, fit = state$fit)
   }
 
   if (is.null(state$fit)) {
@@ -2393,8 +2436,8 @@ NULL
 #'   \item{\code{progress_every_refit}}{Refit cadence for progress prints.}
 #'   \item{\code{progress_level}}{Verbosity level: \code{"basic"},
 #'   \code{"refit"}, or \code{"full"}.}
-#'   \item{\code{write_outputs}}{Whether to write \code{batch_log},
-#'   \code{round_log}, and \code{item_summary} to disk.}
+#'   \item{\code{write_outputs}}{Whether to write \code{batch_log} and
+#'   \code{round_log} to disk; item logs are written per refit.}
 #'   \item{\code{output_dir}}{Directory used for adaptive artifacts when
 #'   \code{write_outputs = TRUE}.}
 #'   \item{\code{keep_draws}}{Whether to write thinned posterior draws to disk.}
@@ -2405,11 +2448,12 @@ NULL
 #'
 #' @section Canonical outputs:
 #' Canonical adaptive outputs are \code{batch_log}, \code{round_log}, and
-#' \code{item_summary}. They are stored on the state as \code{state$batch_log},
-#' \code{state$config$round_log}, and \code{state$config$item_summary}. When
-#' \code{adaptive$v3$write_outputs = TRUE}, they are written to
-#' \code{batch_log.rds}, \code{round_log.rds}, and \code{item_summary.rds} in
-#' \code{output_dir}. Summary helpers such as \code{summarize_iterations()},
+#' per-refit item logs. They are stored on the state as \code{state$batch_log},
+#' \code{state$config$round_log}, and \code{state$logs$item_log_list}. When
+#' \code{adaptive$v3$write_outputs = TRUE}, \code{batch_log.rds} and
+#' \code{round_log.rds} are written to \code{output_dir}, and item logs are
+#' written as \code{item_log_refit_0001.rds}, \code{item_log_refit_0002.rds},
+#' etc. Summary helpers such as \code{summarize_iterations()},
 #' \code{summarize_refits()}, and \code{summarize_items()} are pure views of
 #' these tables.
 #'
