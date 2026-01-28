@@ -2332,7 +2332,10 @@ NULL
 #'
 #' @details
 #' Adaptive ranking proceeds in three phases: Phase 1 (warm start), Phase 2
-#' (adaptive refinement), and Phase 3 (near-stop polish). \code{adaptive_rank_start()}
+#' (adaptive refinement), and Phase 3 (near-stop polish). Phase 3 entry is
+#' evaluated only after a refit in Phase 2: diagnostics must pass and
+#' \code{reliability_EAP >= max(0, eap_reliability_min - 0.05)}. Phase transitions
+#' are one-way (\code{phase2 -> phase3} only). \code{adaptive_rank_start()}
 #' creates a fresh \code{adaptive_state}, schedules Phase 1 pairs up to the
 #' Phase 1 target, and submits those comparisons. \code{adaptive_rank_resume()}
 #' ingests newly observed results and schedules subsequent adaptive batches.
@@ -2366,13 +2369,19 @@ NULL
 #' meet the minimum observed comparisons (\code{M1_target}). Next, diagnostics
 #' must pass: zero divergences, \code{max_rhat} below \code{max_rhat}, and
 #' \code{min_ess_bulk} above a threshold (using \code{min_ess_bulk_near_stop}
-#' once near-stop checks begin). If diagnostics pass, reliability must exceed
-#' \code{eap_reliability_min}. Stability is evaluated against a lagged refit:
-#' theta means must have correlation at least \code{theta_corr_min} and a
-#' relative SD change no larger than \code{theta_sd_rel_change_max}, and ranks
-#' must have Spearman correlation at least \code{rank_spearman_min}. A stop is
-#' declared immediately when all gates pass at a refit. Lagged stability checks
-#' are evaluated only once a lag of \code{stability_lag} refits is available.
+#' once near-stop checks begin). Diagnostics status is recorded as
+#' \code{diagnostics_pass}. If diagnostics pass, reliability must exceed
+#' \code{eap_reliability_min}; \code{eap_pass} is TRUE when
+#' \code{reliability_EAP} meets the threshold and \code{diagnostics_pass} is
+#' TRUE, and otherwise is \code{NA}. Stability is evaluated against a lagged
+#' refit when \code{lag_eligible} is TRUE (current refit exceeds
+#' \code{stability_lag}). Lagged metrics \code{rho_theta_lag} (Pearson),
+#' \code{delta_sd_theta_lag}, and \code{rho_rank_lag} (Spearman) are \code{NA}
+#' when lag-ineligible; the corresponding pass flags
+#' (\code{theta_corr_pass}, \code{delta_sd_theta_pass}, \code{rho_rank_pass})
+#' are also \code{NA} and treated as satisfied until lag eligibility. A stop is
+#' declared immediately when all gates pass at an eligible refit (no consecutive
+#' passes are required).
 #'
 #' @section Adaptive configuration:
 #' The \code{adaptive} list controls run-scale scheduling:
@@ -2451,8 +2460,9 @@ NULL
 #'
 #' @section Canonical outputs:
 #' Canonical adaptive outputs are \code{batch_log}, \code{round_log}, and
-#' per-refit item logs. They are stored on the state as \code{state$batch_log},
-#' \code{state$config$round_log}, and \code{state$logs$item_log_list}. When
+#' \code{item_log_list} (a list of per-refit item log tables). They are stored
+#' on the state as \code{state$batch_log}, \code{state$config$round_log}, and
+#' \code{state$logs$item_log_list}. When
 #' \code{adaptive$v3$write_outputs = TRUE}, \code{batch_log.rds} and
 #' \code{round_log.rds} are written to \code{output_dir}, and item logs are
 #' written as \code{item_log_refit_0001.rds}, \code{item_log_refit_0002.rds},
@@ -2574,23 +2584,25 @@ NULL
 #'   \item{\code{diagnostics_pass}}{Diagnostics gate status.}
 #'   \item{\code{reliability_EAP}}{EAP reliability statistic.}
 #'   \item{\code{theta_sd_eap}}{SD of theta means at refit.}
-#'   \item{\code{rho_theta_lag}}{Correlation between current and lagged theta
-#'   means.}
+#'   \item{\code{rho_theta_lag}}{Pearson correlation between current and lagged
+#'   theta means (\code{NA} when \code{lag_eligible = FALSE}).}
 #'   \item{\code{delta_sd_theta_lag}}{Relative change in theta SD vs lagged
-#'   refit.}
+#'   refit (\code{NA} when \code{lag_eligible = FALSE}).}
 #'   \item{\code{rho_rank_lag}}{Spearman correlation between current and lagged
-#'   ranks.}
+#'   ranks (\code{NA} when \code{lag_eligible = FALSE}).}
 #'   \item{\code{eap_pass}}{TRUE when diagnostics pass and EAP reliability meets
-#'   the stop threshold.}
-#'   \item{\code{theta_corr_pass}}{TRUE when the lagged theta correlation meets
-#'   the threshold.}
+#'   \code{eap_reliability_min}; \code{NA} when \code{diagnostics_pass} is FALSE
+#'   or \code{NA}.}
+#'   \item{\code{theta_corr_pass}}{TRUE when lagged theta correlation meets
+#'   \code{theta_corr_min}; \code{NA} when \code{lag_eligible = FALSE}.}
 #'   \item{\code{delta_sd_theta_pass}}{TRUE when lagged theta SD change meets
-#'   the threshold.}
-#'   \item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets the
-#'   threshold.}
-#'   \item{\code{rank_stability_pass}}{Rank stability gate status.}
-#'   \item{\code{lag_eligible}}{TRUE when lagged stability checks are
-#'   eligible (current refit exceeds \code{stability_lag}).}
+#'   \code{theta_sd_rel_change_max}; \code{NA} when \code{lag_eligible = FALSE}.}
+#'   \item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets
+#'   \code{rank_spearman_min}; \code{NA} when \code{lag_eligible = FALSE}.}
+#'   \item{\code{rank_stability_pass}}{Rank stability gate status
+#'   (\code{NA} when \code{lag_eligible = FALSE}).}
+#'   \item{\code{lag_eligible}}{TRUE when lagged stability checks are eligible
+#'   (current refit exceeds \code{stability_lag}).}
 #'   \item{\code{stop_decision}}{TRUE when stop criteria are met.}
 #'   \item{\code{stop_reason}}{Stop reason label when stopped.}
 #'   \item{\code{starve_rate_since_last_refit}}{Fraction of iterations since

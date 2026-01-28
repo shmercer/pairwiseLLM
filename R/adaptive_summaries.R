@@ -305,8 +305,9 @@
 
 #' Summarize adaptive iterations
 #'
-#' Build a per-iteration diagnostics summary from the adaptive batch log. This
-#' is a pure view over \code{batch_log} and does not recompute metrics.
+#' Build a thin per-iteration diagnostics summary from the adaptive batch log. This
+#' is a pure view over \code{batch_log} and does not recompute posterior
+#' quantities or stop metrics.
 #'
 #' @details
 #' Run-scale iteration counts reflect a single scheduling cycle. The batch log
@@ -383,8 +384,9 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
 
 #' Summarize adaptive refits
 #'
-#' Build a per-refit diagnostics summary from the adaptive round log. This is
-#' a pure view over \code{round_log} and does not recompute metrics.
+#' Build a thin per-refit diagnostics summary from the adaptive round log. This is
+#' a pure view over \code{round_log} and does not recompute posterior
+#' quantities or stop metrics.
 #'
 #' @details
 #' The round log is the canonical stop-audit trail and groups fields by
@@ -462,20 +464,25 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' Summarize adaptive items
 #'
 #' Build an item-level diagnostics summary from the canonical item logs. This
-#' is a pure view and does not recompute posterior draws or exposure metrics.
+#' is a pure view and does not recompute posterior quantities or exposure
+#' metrics.
 #'
 #' @details
 #' Rank percentiles are computed from the per-draw induced ranks (lower is
 #' better). Rank uncertainty grows when draws disagree on the ordering. Degree
 #' and position exposure metrics summarize how frequently each item was shown
-#' and whether it appeared as the first option (A position).
+#' and whether it appeared as the first option (A position). When
+#' \code{refit = NULL}, the most recent refit is returned; when
+#' \code{refit = k}, the \code{k}-th refit is returned. When \code{bind = TRUE},
+#' all refits are stacked into a single table and \code{refit} must be
+#' \code{NULL}.
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param posterior Optional \code{item_log_list} (list of item log tables) or
 #'   an item log table. When \code{NULL}, uses \code{state$logs$item_log_list}
 #'   when available.
 #' @param refit Optional refit index. When \code{NULL}, the most recent refit is
-#'   returned.
+#'   returned; when set, the \code{k}-th refit is returned.
 #' @param bind Logical; when \code{TRUE}, stack all refits into a single table.
 #' @param top_n Optional positive integer; return only the top \code{n} rows
 #'   after sorting.
