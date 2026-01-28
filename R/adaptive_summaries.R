@@ -26,19 +26,17 @@
     return(list(
       batch_log = state$batch_log %||% tibble::tibble(),
       round_log = state$config$round_log %||% tibble::tibble(),
-      item_log_list = state$logs$item_log_list %||% NULL,
-      item_summary = state$config$item_summary %||% state$item_summary %||% NULL
+      item_log_list = state$logs$item_log_list %||% NULL
     ))
   }
   if (is.list(state) && inherits(state$state, "adaptive_state")) {
     return(.adaptive_summary_extract_source(state$state))
   }
-  if (is.list(state) && any(c("batch_log", "round_log", "item_log_list", "item_summary") %in% names(state))) {
+  if (is.list(state) && any(c("batch_log", "round_log", "item_log_list") %in% names(state))) {
     return(list(
       batch_log = state$batch_log %||% tibble::tibble(),
       round_log = state$round_log %||% tibble::tibble(),
-      item_log_list = state$item_log_list %||% NULL,
-      item_summary = state$item_summary %||% NULL
+      item_log_list = state$item_log_list %||% NULL
     ))
   }
   rlang::abort("`state` must be an adaptive_state or list with adaptive logs.")
@@ -190,7 +188,7 @@
     "n_unique_pairs_seen",
     "rank_stability_pass",
     "diagnostics_pass",
-    "stop_eligible",
+    "lag_eligible",
     "stop_decision",
     "stop_reason",
     "mode"
@@ -450,7 +448,7 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
       "n_unique_pairs_seen",
       "rank_stability_pass",
       "diagnostics_pass",
-      "stop_eligible",
+      "lag_eligible",
       "stop_decision",
       "stop_reason",
       "mode"
@@ -474,9 +472,8 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param posterior Optional \code{item_log_list} (list of item log tables) or
-#'   a legacy item summary table (or list containing \code{item_log_list} or the
-#'   legacy \code{item_summary}). When \code{NULL}, uses
-#'   \code{state$logs$item_log_list} when available.
+#'   an item log table. When \code{NULL}, uses \code{state$logs$item_log_list}
+#'   when available.
 #' @param refit Optional refit index. When \code{NULL}, the most recent refit is
 #'   returned.
 #' @param bind Logical; when \code{TRUE}, stack all refits into a single table.
@@ -515,18 +512,14 @@ summarize_items <- function(state,
   if (!is.null(posterior)) {
     if (is.data.frame(posterior)) {
       item_log_list <- list(posterior)
-    } else if (is.list(posterior)) {
-      if (is.list(posterior$item_log_list)) {
-        item_log_list <- posterior$item_log_list
-      } else if (is.data.frame(posterior$item_summary)) {
-        item_log_list <- list(posterior$item_summary)
-      }
+    } else if (is.list(posterior) && is.list(posterior$item_log_list)) {
+      item_log_list <- posterior$item_log_list
     }
   }
   item_log_list <- item_log_list %||% source$item_log_list %||% NULL
   if (is.null(item_log_list) || !is.list(item_log_list) || length(item_log_list) == 0L) {
     if (!is.null(posterior)) {
-      rlang::warn("`posterior` must be an item log list or item summary table; returning an empty view.")
+      rlang::warn("`posterior` must be an item log list; returning an empty view.")
     }
     return(tibble::tibble())
   }

@@ -324,7 +324,7 @@ round_log_schema <- function() {
     rho_rank_lag = double(),
     rho_rank_pass = logical(),
     rank_stability_pass = logical(),
-    stop_eligible = logical(),
+    lag_eligible = logical(),
     stop_decision = logical(),
     stop_reason = character(),
     starve_rate_since_last_refit = double(),
@@ -589,7 +589,7 @@ compute_gini_posA <- function(posA_counts, deg = NULL) {
     rho_rank_lag = NA_real_,
     rho_rank_pass = NA,
     rank_stability_pass = NA,
-    stop_eligible = NA,
+    lag_eligible = NA,
     refit_performed = NA,
     candidate_starved = NA,
     reason_short_batch = NA_character_
@@ -710,7 +710,7 @@ build_round_log_row <- function(state,
 
   stop_decision <- stop_out$stop_decision %||% NA
   stop_reason <- stop_out$stop_reason %||% state$stop_reason %||% NA_character_
-  stop_eligible <- metrics$stop_eligible %||% NA
+  lag_eligible <- metrics$lag_eligible %||% NA
 
   batch_log <- state$batch_log %||% tibble::tibble()
   if (!is.data.frame(batch_log)) {
@@ -791,7 +791,7 @@ build_round_log_row <- function(state,
   row$rho_rank_lag <- as.double(metrics$rho_rank_lag %||% NA_real_)
   row$rho_rank_pass <- as.logical(metrics$rho_rank_pass %||% NA)
   row$rank_stability_pass <- as.logical(metrics$rank_stability_pass %||% NA)
-  row$stop_eligible <- as.logical(stop_eligible)
+  row$lag_eligible <- as.logical(lag_eligible)
   row$stop_decision <- as.logical(stop_decision)
   row$stop_reason <- as.character(stop_reason)
   row$starve_rate_since_last_refit <- as.double(starve_rate_since_last_refit)

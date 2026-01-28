@@ -211,7 +211,7 @@
     lines,
     paste0(
       "  Stop: eligible=",
-      .adaptive_progress_value(progress_field("stop_eligible", NA)),
+      .adaptive_progress_value(progress_field("lag_eligible", NA)),
       " decision=",
       .adaptive_progress_value(progress_field("stop_decision", NA))
     )
