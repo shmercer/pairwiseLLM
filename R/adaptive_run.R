@@ -488,48 +488,91 @@ NULL
   isTRUE(ok)
 }
 
-.adaptive_normalize_submission_output <- function(raw, pairs_submitted, backend, model, include_raw = FALSE) {
-  empty <- list(
-    results = .adaptive_empty_results_tbl(),
-    failed_attempts = .adaptive_empty_failed_attempts_tbl()
-  )
-  if (is.null(raw)) return(empty)
-
-  # Already-normalized tibble (results_tbl).
-  if (is.data.frame(raw) && .adaptive_is_valid_results_tbl(raw)) {
-    return(list(results = tibble::as_tibble(raw), failed_attempts = .adaptive_empty_failed_attempts_tbl()))
+.adaptive_missing_api_key_message <- function(failed_attempts) {
+  if (is.null(failed_attempts) || !is.data.frame(failed_attempts)) {
+    return(NULL)
   }
+  failed_attempts <- tibble::as_tibble(failed_attempts)
+  if (!"error_detail" %in% names(failed_attempts) || nrow(failed_attempts) == 0L) {
+    return(NULL)
+  }
+  details <- as.character(failed_attempts$error_detail)
+  if (length(details) == 0L) {
+    return(NULL)
+  }
+  idx <- which(!is.na(details) & nzchar(details) & grepl("No API key found for", details, fixed = TRUE))
+  if (length(idx) == 0L) {
+    return(NULL)
+  }
+  msg <- details[[idx[1L]]]
+  msg <- sub("^Error:\\s*", "", msg)
+  msg
+}
 
-  if (is.list(raw) && !inherits(raw, "data.frame")) {
-    raw_results <- raw$results %||% NULL
-    raw_failed <- raw$failed_attempts %||% NULL
-    if (!is.null(raw_results) && is.data.frame(raw_results) && .adaptive_is_valid_results_tbl(raw_results)) {
-      failed_attempts <- if (!is.null(raw_failed) &&
-        is.data.frame(raw_failed) &&
-        .adaptive_is_valid_failed_attempts_tbl(raw_failed)) {
-        tibble::as_tibble(raw_failed)
+.adaptive_abort_if_missing_api_key <- function(failed_attempts) {
+  msg <- .adaptive_missing_api_key_message(failed_attempts)
+  if (!is.null(msg) && nzchar(msg)) {
+    rlang::abort(msg)
+  }
+}
+
+.adaptive_normalize_submission_output <- function(raw, pairs_submitted, backend, model, include_raw = FALSE) {
+  results <- .adaptive_empty_results_tbl()
+  failed_attempts <- .adaptive_empty_failed_attempts_tbl()
+
+  if (!is.null(raw)) {
+    # Already-normalized tibble (results_tbl).
+    if (is.data.frame(raw) && .adaptive_is_valid_results_tbl(raw)) {
+      results <- tibble::as_tibble(raw)
+    } else if (is.list(raw) && !inherits(raw, "data.frame")) {
+      raw_results <- raw$results %||% NULL
+      raw_failed <- raw$failed_attempts %||% NULL
+      if (!is.null(raw_results) && is.data.frame(raw_results) && .adaptive_is_valid_results_tbl(raw_results)) {
+        results <- tibble::as_tibble(raw_results)
+        failed_attempts <- if (!is.null(raw_failed) &&
+          is.data.frame(raw_failed) &&
+          .adaptive_is_valid_failed_attempts_tbl(raw_failed)) {
+          tibble::as_tibble(raw_failed)
+        } else {
+          .adaptive_empty_failed_attempts_tbl()
+        }
       } else {
-        .adaptive_empty_failed_attempts_tbl()
+        if (is.null(pairs_submitted) || nrow(pairs_submitted) == 0L) {
+          rlang::abort("Cannot normalize results without `pairs_submitted`.")
+        }
+        submit_tbl <- .adaptive_pairs_to_submit_tbl(pairs_submitted)
+        normalized <- .normalize_llm_results(
+          raw = raw,
+          pairs = submit_tbl,
+          backend = backend,
+          model = model,
+          include_raw = include_raw
+        )
+        results <- tibble::as_tibble(normalized$results)
+        failed_attempts <- tibble::as_tibble(normalized$failed_attempts)
       }
-      return(list(results = tibble::as_tibble(raw_results), failed_attempts = failed_attempts))
+    } else {
+      if (is.null(pairs_submitted) || nrow(pairs_submitted) == 0L) {
+        rlang::abort("Cannot normalize results without `pairs_submitted`.")
+      }
+      submit_tbl <- .adaptive_pairs_to_submit_tbl(pairs_submitted)
+      normalized <- .normalize_llm_results(
+        raw = raw,
+        pairs = submit_tbl,
+        backend = backend,
+        model = model,
+        include_raw = include_raw
+      )
+      results <- tibble::as_tibble(normalized$results)
+      failed_attempts <- tibble::as_tibble(normalized$failed_attempts)
     }
   }
 
-  if (is.null(pairs_submitted) || nrow(pairs_submitted) == 0L) {
-    rlang::abort("Cannot normalize results without `pairs_submitted`.")
-  }
+  .adaptive_abort_if_missing_api_key(failed_attempts)
 
-  submit_tbl <- .adaptive_pairs_to_submit_tbl(pairs_submitted)
-  normalized <- .normalize_llm_results(
-    raw = raw,
-    pairs = submit_tbl,
-    backend = backend,
-    model = model,
-    include_raw = include_raw
-  )
   list(
-    results = tibble::as_tibble(normalized$results),
-    failed_attempts = tibble::as_tibble(normalized$failed_attempts)
+    results = results,
+    failed_attempts = failed_attempts
   )
 }
 
