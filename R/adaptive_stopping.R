@@ -67,16 +67,11 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     rlang::abort("`state$posterior$theta_mean_history` must be a list when set.")
   }
   current_refit <- length(history) + 1L
-  min_refits_for_stability <- as.integer(config$min_refits_for_stability)
   stability_lag <- as.integer(config$stability_lag)
-  if (is.na(min_refits_for_stability) || min_refits_for_stability < 1L) {
-    rlang::abort("`config$min_refits_for_stability` must be a positive integer.")
-  }
   if (is.na(stability_lag) || stability_lag < 1L) {
     rlang::abort("`config$stability_lag` must be a positive integer.")
   }
 
-  stop_eligible <- current_refit >= min_refits_for_stability
   lag_eligible <- current_refit > stability_lag
 
   rho_theta_lag <- NA_real_
@@ -166,7 +161,7 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
   metrics$rho_rank_pass <- rho_rank_pass
   metrics$rank_stability_pass <- rank_stability_pass
   metrics$candidate_starved <- as.logical(state$posterior$candidate_starved %||% NA)
-  metrics$stop_eligible <- isTRUE(stop_eligible)
+  metrics$stop_eligible <- isTRUE(lag_eligible)
 
   if (isTRUE(diagnostics_pass)) {
     eap_min <- as.double(config$eap_reliability_min)
@@ -270,40 +265,42 @@ should_stop <- function(metrics, state, config) {
     rlang::abort("`state$posterior$theta_mean_history` must be a list when set.")
   }
   current_refit <- length(history) + 1L
-  min_refits_for_stability <- as.integer(config$min_refits_for_stability)
-  if (is.na(min_refits_for_stability) || min_refits_for_stability < 1L) {
-    rlang::abort("`config$min_refits_for_stability` must be a positive integer.")
+  stability_lag <- as.integer(config$stability_lag)
+  if (is.na(stability_lag) || stability_lag < 1L) {
+    rlang::abort("`config$stability_lag` must be a positive integer.")
   }
-  stop_eligible <- metrics$stop_eligible
-  if (!isTRUE(stop_eligible) && !isFALSE(stop_eligible)) {
-    stop_eligible <- current_refit >= min_refits_for_stability
-  }
+  lag_eligible <- current_refit > stability_lag
   eap_pass <- metrics$eap_pass
   if (!isTRUE(eap_pass) && !isFALSE(eap_pass)) {
     eap_pass <- is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= eap_min
   }
-  theta_corr_pass <- metrics$theta_corr_pass
-  if (!isTRUE(theta_corr_pass) && !isFALSE(theta_corr_pass)) {
-    theta_corr_pass <- is.finite(metrics$rho_theta_lag) && metrics$rho_theta_lag >= theta_corr_min
-  }
-  delta_sd_theta_pass <- metrics$delta_sd_theta_pass
-  if (!isTRUE(delta_sd_theta_pass) && !isFALSE(delta_sd_theta_pass)) {
-    delta_sd_theta_pass <- is.finite(metrics$delta_sd_theta_lag) &&
-      metrics$delta_sd_theta_lag <= theta_sd_rel_change_max
-  }
-  rho_rank_pass <- metrics$rho_rank_pass
-  if (!isTRUE(rho_rank_pass) && !isFALSE(rho_rank_pass)) {
-    if (isTRUE(metrics$rank_stability_pass) || isFALSE(metrics$rank_stability_pass)) {
-      rho_rank_pass <- isTRUE(metrics$rank_stability_pass)
-    } else {
-      rho_rank_pass <- is.finite(metrics$rho_rank_lag) && metrics$rho_rank_lag >= rank_spearman_min
+  if (isTRUE(lag_eligible)) {
+    theta_corr_pass <- metrics$theta_corr_pass
+    if (!isTRUE(theta_corr_pass) && !isFALSE(theta_corr_pass)) {
+      theta_corr_pass <- is.finite(metrics$rho_theta_lag) && metrics$rho_theta_lag >= theta_corr_min
     }
+    delta_sd_theta_pass <- metrics$delta_sd_theta_pass
+    if (!isTRUE(delta_sd_theta_pass) && !isFALSE(delta_sd_theta_pass)) {
+      delta_sd_theta_pass <- is.finite(metrics$delta_sd_theta_lag) &&
+        metrics$delta_sd_theta_lag <= theta_sd_rel_change_max
+    }
+    rho_rank_pass <- metrics$rho_rank_pass
+    if (!isTRUE(rho_rank_pass) && !isFALSE(rho_rank_pass)) {
+      if (isTRUE(metrics$rank_stability_pass) || isFALSE(metrics$rank_stability_pass)) {
+        rho_rank_pass <- isTRUE(metrics$rank_stability_pass)
+      } else {
+        rho_rank_pass <- is.finite(metrics$rho_rank_lag) && metrics$rho_rank_lag >= rank_spearman_min
+      }
+    }
+  } else {
+    theta_corr_pass <- TRUE
+    delta_sd_theta_pass <- TRUE
+    rho_rank_pass <- TRUE
   }
 
   state <- .adaptive_update_theta_history(state, state$fit)
 
-  stop_decision <- isTRUE(stop_eligible) &&
-    isTRUE(diagnostics_pass) &&
+  stop_decision <- isTRUE(diagnostics_pass) &&
     eap_pass &&
     theta_corr_pass &&
     delta_sd_theta_pass &&

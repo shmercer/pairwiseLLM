@@ -17,7 +17,7 @@ NULL
     batch_overrides = list(),
     max_refill_rounds = 2L,
     max_replacements = NULL,
-    max_iterations = 50L,
+    max_iterations = NULL,
     budget_max = NULL,
     M1_target = NULL
   )
@@ -750,7 +750,9 @@ NULL
         rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
       }
       phase3_threshold <- max(0, eap_min - 0.05)
-      if (is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= phase3_threshold) {
+      if (identical(state$phase, "phase2") &&
+        is.finite(metrics$reliability_EAP) &&
+        metrics$reliability_EAP >= phase3_threshold) {
         state$phase <- "phase3"
       }
     }
@@ -1947,7 +1949,9 @@ NULL
           rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
         }
         phase3_threshold <- max(0, eap_min - 0.05)
-        if (is.finite(stop_metrics$reliability_EAP) && stop_metrics$reliability_EAP >= phase3_threshold) {
+        if (identical(state$phase, "phase2") &&
+          is.finite(stop_metrics$reliability_EAP) &&
+          stop_metrics$reliability_EAP >= phase3_threshold) {
           state$phase <- "phase3"
         }
       }
@@ -1987,7 +1991,9 @@ NULL
           rlang::abort("`config$eap_reliability_min` must be a finite numeric scalar.")
         }
         phase3_threshold <- max(0, eap_min - 0.05)
-        if (is.finite(stop_metrics$reliability_EAP) && stop_metrics$reliability_EAP >= phase3_threshold) {
+        if (identical(state$phase, "phase2") &&
+          is.finite(stop_metrics$reliability_EAP) &&
+          stop_metrics$reliability_EAP >= phase3_threshold) {
           state$phase <- "phase3"
         }
       }
@@ -2365,9 +2371,8 @@ NULL
 #' theta means must have correlation at least \code{theta_corr_min} and a
 #' relative SD change no larger than \code{theta_sd_rel_change_max}, and ranks
 #' must have Spearman correlation at least \code{rank_spearman_min}. A stop is
-#' declared immediately when all gates pass at an eligible refit. Refits are
-#' eligible for stability checks only after \code{min_refits_for_stability} and
-#' once a lag of \code{stability_lag} refits is available.
+#' declared immediately when all gates pass at a refit. Lagged stability checks
+#' are evaluated only once a lag of \code{stability_lag} refits is available.
 #'
 #' @section Adaptive configuration:
 #' The \code{adaptive} list controls run-scale scheduling:
@@ -2389,7 +2394,7 @@ NULL
 #'   \item{\code{max_replacements}}{Maximum number of replacement pairs per
 #'   iteration; defaults to the batch size.}
 #'   \item{\code{max_iterations}}{Maximum number of start/resume iterations in
-#'   wrappers such as \code{adaptive_rank_run_live()}.}
+#'   wrappers such as \code{adaptive_rank_run_live()} (NULL means no cap).}
 #'   \item{\code{budget_max}}{Hard cap on scheduled comparisons; defaults to
 #'   \code{floor(0.40 * choose(N, 2))}.}
 #'   \item{\code{M1_target}}{Minimum observed comparisons before stop checks
@@ -2414,8 +2419,6 @@ NULL
 #'   the hard stop (\code{0.40} by default).}
 #'   \item{\code{eap_reliability_min}}{Minimum \code{reliability_EAP} for stop
 #'   eligibility.}
-#'   \item{\code{min_refits_for_stability}}{Minimum refits before stability
-#'   checks are evaluated.}
 #'   \item{\code{stability_lag}}{Lag (in refits) used to compare theta and rank
 #'   stability.}
 #'   \item{\code{theta_corr_min}}{Minimum correlation between current and lagged
@@ -2586,7 +2589,8 @@ NULL
 #'   \item{\code{rho_rank_pass}}{TRUE when lagged rank correlation meets the
 #'   threshold.}
 #'   \item{\code{rank_stability_pass}}{Rank stability gate status.}
-#'   \item{\code{stop_eligible}}{TRUE when refit count meets stability minimum.}
+#'   \item{\code{stop_eligible}}{TRUE when lagged stability checks are
+#'   eligible (current refit exceeds \code{stability_lag}).}
 #'   \item{\code{stop_decision}}{TRUE when stop criteria are met.}
 #'   \item{\code{stop_reason}}{Stop reason label when stopped.}
 #'   \item{\code{starve_rate_since_last_refit}}{Fraction of iterations since
@@ -3223,12 +3227,12 @@ adaptive_rank_resume <- function(
 #' iteration schedules/collects a batch of comparisons) until either:
 #' \itemize{
 #'   \item the adaptive engine returns a non-`"resume"` next action (e.g. stopped),
-#'   \item or the wrapper hits `max_iterations` (a safety cap; default is 50 via config).
+#'   \item or the wrapper hits `max_iterations` (a safety cap; defaults to no cap).
 #' }
 #'
 #' The Bayesian stopping criteria (diagnostics, reliability, stability) are
 #' evaluated at refits, but this wrapper can still terminate early if it hits
-#' the iteration cap. Increase `max_iterations` if you want the run to continue
+#' the iteration cap. Set `max_iterations` if you want the run to continue
 #' until statistical stopping is reached.
 #'
 #' ## Auto-resume behavior
@@ -3255,7 +3259,7 @@ adaptive_rank_resume <- function(
 #'   is provided, the run state will be checkpointed there after each resume step.
 #' @param seed Optional integer seed for reproducibility.
 #' @param max_iterations Optional safety cap on the number of wrapper iterations.
-#'   If `NULL`, uses the configured default (currently 50). Use `Inf` (or
+#'   If `NULL`, uses the configured default (no cap). Use `Inf` (or
 #'   `adaptive$max_iterations = NULL`) for no cap.
 #' @param resume Controls checkpoint resume behavior. One of:
 #'   \describe{

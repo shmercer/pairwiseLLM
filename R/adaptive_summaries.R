@@ -473,9 +473,10 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' and whether it appeared as the first option (A position).
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
-#' @param posterior Optional item log list or item summary table (or list
-#'   containing \code{item_log_list} or \code{item_summary}). When \code{NULL},
-#'   uses \code{state$logs$item_log_list} when available.
+#' @param posterior Optional \code{item_log_list} (list of item log tables) or
+#'   a legacy item summary table (or list containing \code{item_log_list} or the
+#'   legacy \code{item_summary}). When \code{NULL}, uses
+#'   \code{state$logs$item_log_list} when available.
 #' @param refit Optional refit index. When \code{NULL}, the most recent refit is
 #'   returned.
 #' @param bind Logical; when \code{TRUE}, stack all refits into a single table.
@@ -525,7 +526,7 @@ summarize_items <- function(state,
   item_log_list <- item_log_list %||% source$item_log_list %||% NULL
   if (is.null(item_log_list) || !is.list(item_log_list) || length(item_log_list) == 0L) {
     if (!is.null(posterior)) {
-      rlang::warn("`posterior` must be an item summary table; returning an empty view.")
+      rlang::warn("`posterior` must be an item log list or item summary table; returning an empty view.")
     }
     return(tibble::tibble())
   }

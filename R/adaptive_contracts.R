@@ -51,7 +51,6 @@ adaptive_v3_defaults <- function(N) {
     dup_utility_quantile = 0.90,
     hard_cap_frac = 0.40,
     eap_reliability_min = 0.95,
-    min_refits_for_stability = 3L,
     stability_lag = 2L,
     theta_corr_min = 0.995,
     theta_sd_rel_change_max = 0.01,
@@ -158,7 +157,7 @@ validate_config <- function(config) {
     "min_degree", "target_mean_degree",
     "dup_p_margin", "dup_max_count", "dup_utility_quantile",
     "hard_cap_frac",
-    "eap_reliability_min", "min_refits_for_stability", "stability_lag",
+    "eap_reliability_min", "stability_lag",
     "theta_corr_min", "theta_sd_rel_change_max", "rank_spearman_min",
     "max_rhat", "min_ess_bulk", "min_ess_bulk_near_stop",
     "require_divergences_zero", "repair_max_cycles",
@@ -210,9 +209,6 @@ validate_config <- function(config) {
     length(config$eap_reliability_min) == 1L &&
     config$eap_reliability_min >= 0 && config$eap_reliability_min <= 1,
   "`eap_reliability_min` must be in [0, 1].")
-  .adaptive_v3_check(.adaptive_v3_intish(config$min_refits_for_stability) &&
-    config$min_refits_for_stability >= 1L,
-  "`min_refits_for_stability` must be >= 1.")
   .adaptive_v3_check(.adaptive_v3_intish(config$stability_lag) &&
     config$stability_lag >= 1L,
   "`stability_lag` must be >= 1.")
