@@ -199,6 +199,9 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
 #' @keywords internal
 #' @noRd
 should_stop <- function(metrics, state, config, theta_summary = NULL, fit = NULL) {
+  if (!"fit" %in% names(state)) {
+    state <- structure(c(state, list(fit = NULL)), class = class(state))
+  }
   validate_state(state)
   if (!is.list(metrics)) {
     rlang::abort("`metrics` must be a list.")
