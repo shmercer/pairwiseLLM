@@ -4,7 +4,7 @@ testthat::test_that("summarize_items returns item diagnostics without gini colum
     text = c("alpha", "bravo", "charlie")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
-  item_summary <- tibble::tibble(
+  item_log <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
@@ -24,7 +24,7 @@ testthat::test_that("summarize_items returns item diagnostics without gini colum
     posA_prop = c(1.0, 0.5, 0.0)
   )
   item_log <- dplyr::relocate(
-    dplyr::mutate(item_summary, refit_id = 1L),
+    dplyr::mutate(item_log, refit_id = 1L),
     refit_id,
     .before = 1L
   )
@@ -45,7 +45,7 @@ testthat::test_that("summarize_items supports sorting and missing posterior", {
     text = c("alpha", "bravo", "charlie")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
-  item_summary <- tibble::tibble(
+  item_log <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
@@ -65,7 +65,7 @@ testthat::test_that("summarize_items supports sorting and missing posterior", {
     posA_prop = c(1.0, 0.5, 0.0)
   )
   item_log <- dplyr::relocate(
-    dplyr::mutate(item_summary, refit_id = 1L),
+    dplyr::mutate(item_log, refit_id = 1L),
     refit_id,
     .before = 1L
   )
@@ -92,7 +92,7 @@ testthat::test_that("summarize_items unwraps list item_log_list inputs", {
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
 
-  item_summary <- tibble::tibble(
+  item_log <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.2, -0.1),
     theta_sd = c(0.1, 0.2),
@@ -113,7 +113,7 @@ testthat::test_that("summarize_items unwraps list item_log_list inputs", {
   )
 
   item_log <- dplyr::relocate(
-    dplyr::mutate(item_summary, refit_id = 1L),
+    dplyr::mutate(item_log, refit_id = 1L),
     refit_id,
     .before = 1L
   )
@@ -129,7 +129,7 @@ testthat::test_that("summarize_items selects refits and binds when requested", {
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
 
-  item_summary_1 <- tibble::tibble(
+  item_log_1 <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.2, -0.1),
     theta_sd = c(0.1, 0.2),
@@ -148,11 +148,11 @@ testthat::test_that("summarize_items selects refits and binds when requested", {
     deg = c(1L, 2L),
     posA_prop = c(1.0, 0.5)
   )
-  item_summary_2 <- item_summary_1
-  item_summary_2$theta_mean <- c(0.3, -0.2)
+  item_log_2 <- item_log_1
+  item_log_2$theta_mean <- c(0.3, -0.2)
   item_log_list <- list(
-    dplyr::relocate(dplyr::mutate(item_summary_1, refit_id = 1L), refit_id, .before = 1L),
-    dplyr::relocate(dplyr::mutate(item_summary_2, refit_id = 2L), refit_id, .before = 1L)
+    dplyr::relocate(dplyr::mutate(item_log_1, refit_id = 1L), refit_id, .before = 1L),
+    dplyr::relocate(dplyr::mutate(item_log_2, refit_id = 2L), refit_id, .before = 1L)
   )
   state$logs <- list(item_log_list = item_log_list)
 
@@ -173,35 +173,15 @@ testthat::test_that("summarize_items selects refits and binds when requested", {
   testthat::expect_error(pairwiseLLM::summarize_items(state, refit = 3L))
 })
 
-testthat::test_that("summarize_items ignores legacy item_summary inputs", {
+testthat::test_that("summarize_items warns on unsupported posterior inputs", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "bravo")
   )
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
 
-  item_summary <- tibble::tibble(
-    ID = state$ids,
-    theta_mean = c(0.2, -0.1),
-    theta_sd = c(0.1, 0.2),
-    theta_p2.5 = c(-0.2, -0.3),
-    theta_p5 = c(-0.1, -0.2),
-    theta_p50 = c(0.1, -0.05),
-    theta_p95 = c(0.3, 0.2),
-    theta_p97.5 = c(0.4, 0.3),
-    rank_mean = c(1.0, 2.0),
-    rank_p2.5 = c(1.0, 1.8),
-    rank_p5 = c(1.0, 1.9),
-    rank_p50 = c(1.0, 2.0),
-    rank_p95 = c(1.2, 2.1),
-    rank_p97.5 = c(1.3, 2.2),
-    rank_sd = c(0.1, 0.2),
-    deg = c(1L, 2L),
-    posA_prop = c(1.0, 0.5)
-  )
-
   testthat::expect_warning(
-    out <- pairwiseLLM::summarize_items(state, posterior = list(item_summary = item_summary)),
+    out <- pairwiseLLM::summarize_items(state, posterior = list(foo = "bar")),
     "item log list"
   )
   testthat::expect_equal(nrow(out), 0L)

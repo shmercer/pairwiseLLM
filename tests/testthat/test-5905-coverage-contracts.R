@@ -20,10 +20,10 @@ testthat::test_that("reliability_EAP and gini_degree edge cases", {
   testthat::expect_equal(pairwiseLLM:::compute_gini_degree(5), 0)
 })
 
-testthat::test_that("item summary defaults can expand rows", {
-  defaults <- pairwiseLLM:::.adaptive_item_summary_defaults(2L)
+testthat::test_that("item log defaults can expand rows", {
+  defaults <- pairwiseLLM:::.adaptive_item_log_defaults(2L)
   testthat::expect_equal(nrow(defaults), 2L)
-  testthat::expect_identical(colnames(defaults), colnames(pairwiseLLM:::item_summary_schema()))
+  testthat::expect_identical(colnames(defaults), colnames(pairwiseLLM:::item_log_schema()))
 })
 
 testthat::test_that("round log builder uses epsilon summaries from fit contract", {
@@ -77,7 +77,7 @@ testthat::test_that("round log builder uses epsilon summaries from fit contract"
   testthat::expect_equal(row$epsilon_p97.5, eps_probs[[4L]])
 })
 
-testthat::test_that("item summary builder handles missing draws and colnames", {
+testthat::test_that("item log builder handles missing draws and colnames", {
   samples <- tibble::tibble(
     ID = c("A", "B"),
     text = c("alpha", "bravo")
@@ -85,7 +85,7 @@ testthat::test_that("item summary builder handles missing draws and colnames", {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
 
   bad_fit <- list(draws = list(theta = matrix(0, nrow = 2, ncol = 2)))
-  defaults <- pairwiseLLM:::build_item_summary(state, bad_fit)
+  defaults <- pairwiseLLM:::build_item_log(state, bad_fit)
   testthat::expect_equal(nrow(defaults), 0L)
 
   fit <- list(
@@ -95,6 +95,6 @@ testthat::test_that("item summary builder handles missing draws and colnames", {
       byrow = TRUE
     )
   )
-  summary <- pairwiseLLM:::build_item_summary(state, fit)
+  summary <- pairwiseLLM:::build_item_log(state, fit)
   testthat::expect_true(all(summary$ID == state$ids))
 })

@@ -252,7 +252,7 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
   )
   testthat::expect_false("stop_decision" %in% names(summary))
 
-  item_summary <- tibble::tibble(
+  item_log <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.1, 0.2),
     theta_sd = c(0.1, 0.1),
@@ -273,9 +273,9 @@ testthat::test_that("summaries cover error branches and missing schema fields", 
   )
   state$logs <- list(
     item_log_list = list(
-      dplyr::relocate(dplyr::mutate(item_summary, refit_id = 1L), refit_id, .before = 1L)
+      dplyr::relocate(dplyr::mutate(item_log, refit_id = 1L), refit_id, .before = 1L)
     )
   )
-  item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_identical(item_summary$ID, state$ids)
+  item_log <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
+  testthat::expect_identical(item_log$ID, state$ids)
 })

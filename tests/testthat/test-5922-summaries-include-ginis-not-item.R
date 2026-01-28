@@ -38,7 +38,7 @@ test_that("summaries exclude gini fields in outputs", {
     reliability_EAP = 0.7
   )
 
-  item_summary <- tibble::tibble(
+  item_log <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
@@ -59,15 +59,15 @@ test_that("summaries exclude gini fields in outputs", {
   )
   state$logs <- list(
     item_log_list = list(
-      dplyr::relocate(dplyr::mutate(item_summary, refit_id = 1L), refit_id, .before = 1L)
+      dplyr::relocate(dplyr::mutate(item_log, refit_id = 1L), refit_id, .before = 1L)
     )
   )
 
   iter_summary <- pairwiseLLM::summarize_iterations(state)
   refit_summary <- pairwiseLLM::summarize_refits(state)
-  item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
+  item_log <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
 
   expect_false(any(c("gini_degree", "gini_pos_A") %in% names(iter_summary)))
   expect_false(any(c("gini_degree", "gini_pos_A") %in% names(refit_summary)))
-  expect_false(any(c("gini_degree", "gini_pos_A") %in% names(item_summary)))
+  expect_false(any(c("gini_degree", "gini_pos_A") %in% names(item_log)))
 })

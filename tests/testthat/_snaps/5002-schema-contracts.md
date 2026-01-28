@@ -19,10 +19,9 @@
     "mcmc_cores_detected_physical", "mcmc_cores_detected_logical", 
     "mcmc_threads_per_chain", "mcmc_cmdstanr_version")
 
-# item_summary_schema columns are stable
+# item_log_schema columns are stable
 
     c("ID", "deg", "posA_prop", "theta_mean", "theta_p2.5", "theta_p5", 
     "theta_p50", "theta_p95", "theta_p97.5", "theta_sd", "rank_mean", 
     "rank_p2.5", "rank_p5", "rank_p50", "rank_p95", "rank_p97.5", 
     "rank_sd")
-

@@ -40,7 +40,7 @@ testthat::test_that("summaries are views over canonical outputs", {
   ))
   state$config$round_log <- round_log
 
-  item_summary <- tibble::tibble(
+  item_log <- tibble::tibble(
     ID = state$ids,
     theta_mean = c(0.2, -0.1, 0.0),
     theta_sd = c(0.1, 0.2, 0.3),
@@ -61,7 +61,7 @@ testthat::test_that("summaries are views over canonical outputs", {
   )
   state$logs <- list(
     item_log_list = list(
-      dplyr::relocate(dplyr::mutate(item_summary, refit_id = 1L), refit_id, .before = 1L)
+      dplyr::relocate(dplyr::mutate(item_log, refit_id = 1L), refit_id, .before = 1L)
     )
   )
 
@@ -108,8 +108,8 @@ testthat::test_that("summaries are views over canonical outputs", {
     )))
   testthat::expect_equal(refit_summary, expected_refit)
 
-  item_summary <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
-  testthat::expect_equal(item_summary, state$logs$item_log_list[[1L]])
+  item_log <- pairwiseLLM::summarize_items(state, include_optional = FALSE)
+  testthat::expect_equal(item_log, state$logs$item_log_list[[1L]])
 })
 
 testthat::test_that("summaries handle log lists and warn on non-summary posterior", {

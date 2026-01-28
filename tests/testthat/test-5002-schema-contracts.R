@@ -12,16 +12,16 @@ test_that("round_log_schema columns are stable", {
   expect_true(is.character(round_log$stop_reason))
 })
 
-test_that("item_summary_schema columns are stable", {
-  item_summary <- pairwiseLLM:::item_summary_schema()
+test_that("item_log_schema columns are stable", {
+  item_log <- pairwiseLLM:::item_log_schema()
 
   expect_snapshot_value(
-    colnames(item_summary),
+    colnames(item_log),
     style = "deparse"
   )
 
-  expect_true(is.character(item_summary$ID))
-  expect_true(is.double(item_summary$theta_mean))
-  expect_true(is.integer(item_summary$deg))
-  expect_true(is.double(item_summary$posA_prop))
+  expect_true(is.character(item_log$ID))
+  expect_true(is.double(item_log$theta_mean))
+  expect_true(is.integer(item_log$deg))
+  expect_true(is.double(item_log$posA_prop))
 })
