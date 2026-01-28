@@ -26,16 +26,18 @@
     return(list(
       batch_log = state$batch_log %||% tibble::tibble(),
       round_log = state$config$round_log %||% tibble::tibble(),
+      item_log_list = state$logs$item_log_list %||% NULL,
       item_summary = state$config$item_summary %||% state$item_summary %||% NULL
     ))
   }
   if (is.list(state) && inherits(state$state, "adaptive_state")) {
     return(.adaptive_summary_extract_source(state$state))
   }
-  if (is.list(state) && any(c("batch_log", "round_log", "item_summary") %in% names(state))) {
+  if (is.list(state) && any(c("batch_log", "round_log", "item_log_list", "item_summary") %in% names(state))) {
     return(list(
       batch_log = state$batch_log %||% tibble::tibble(),
       round_log = state$round_log %||% tibble::tibble(),
+      item_log_list = state$item_log_list %||% NULL,
       item_summary = state$item_summary %||% NULL
     ))
   }
@@ -198,6 +200,7 @@
 
 .adaptive_item_summary_schema <- function(include_optional = TRUE) {
   required <- tibble::tibble(
+    refit_id = .adaptive_summary_empty_value("integer"),
     item_id = .adaptive_summary_empty_value("character"),
     theta_mean = .adaptive_summary_empty_value("double"),
     theta_sd = .adaptive_summary_empty_value("double"),
@@ -501,7 +504,7 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 
 #' Summarize adaptive items
 #'
-#' Build an item-level diagnostics summary from the canonical item summary. This
+#' Build an item-level diagnostics summary from the canonical item logs. This
 #' is a pure view and does not recompute posterior draws or exposure metrics.
 #'
 #' @details
@@ -511,14 +514,18 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' and whether it appeared as the first option (A position).
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
-#' @param posterior Optional item summary table (or list containing
-#'   \code{item_summary}). When \code{NULL}, uses the cached
-#'   \code{state$config$item_summary} when available.
+#' @param posterior Optional item log list or item summary table (or list
+#'   containing \code{item_log_list} or \code{item_summary}). When \code{NULL},
+#'   uses \code{state$logs$item_log_list} when available.
+#' @param refit Optional refit index. When \code{NULL}, the most recent refit is
+#'   returned.
+#' @param bind Logical; when \code{TRUE}, stack all refits into a single table.
 #' @param top_n Optional positive integer; return only the top \code{n} rows
 #'   after sorting.
 #' @param sort_by Column used for sorting. Defaults to \code{"rank_mean"}.
 #' @param include_optional Logical; include optional diagnostic columns.
-#' @return A tibble with one row per item. Columns include \code{item_id},
+#' @return A tibble with one row per item. Columns include \code{refit_id},
+#'   \code{item_id},
 #'   \code{theta_mean}, \code{theta_sd}, \code{theta_p2.5}, \code{theta_p5},
 #'   \code{theta_p50}, \code{theta_p95}, \code{theta_p97.5}, \code{rank_mean},
 #'   \code{rank_sd}, \code{rank_p2.5}, \code{rank_p5}, \code{rank_p50},
@@ -529,6 +536,8 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' @export
 summarize_items <- function(state,
     posterior = NULL,
+    refit = NULL,
+    bind = FALSE,
     top_n = NULL,
     sort_by = c("rank_mean", "theta_mean", "theta_sd", "degree", "pos_A_rate"),
     include_optional = TRUE) {
@@ -537,25 +546,83 @@ summarize_items <- function(state,
     is.na(include_optional)) {
     rlang::abort("`include_optional` must be TRUE or FALSE.")
   }
+  if (!is.logical(bind) || length(bind) != 1L || is.na(bind)) {
+    rlang::abort("`bind` must be TRUE or FALSE.")
+  }
 
   top_n <- .adaptive_summary_validate_last_n(top_n)
   sort_by <- match.arg(sort_by)
   source <- .adaptive_summary_extract_source(state)
 
-  item_summary <- posterior %||% source$item_summary %||% NULL
-  if (is.list(item_summary) && !is.data.frame(item_summary)) {
-    item_summary <- item_summary$item_summary %||% NULL
+  item_log_list <- NULL
+  if (!is.null(posterior)) {
+    if (is.data.frame(posterior)) {
+      item_log_list <- list(posterior)
+    } else if (is.list(posterior)) {
+      if (is.list(posterior$item_log_list)) {
+        item_log_list <- posterior$item_log_list
+      } else if (is.data.frame(posterior$item_summary)) {
+        item_log_list <- list(posterior$item_summary)
+      }
+    }
   }
-  if (is.null(item_summary) || !is.data.frame(item_summary)) {
+  item_log_list <- item_log_list %||% source$item_log_list %||% NULL
+  if (is.null(item_log_list) && is.data.frame(source$item_summary)) {
+    item_log_list <- list(source$item_summary)
+  }
+  if (is.null(item_log_list) || !is.list(item_log_list) || length(item_log_list) == 0L) {
     if (!is.null(posterior)) {
       rlang::warn("`posterior` must be an item summary table; returning an empty view.")
     }
     return(.adaptive_item_summary_schema(include_optional = include_optional))
   }
-  item_summary <- tibble::as_tibble(item_summary)
+  if (!is.null(refit)) {
+    if (!is.numeric(refit) || length(refit) != 1L || is.na(refit)) {
+      rlang::abort("`refit` must be a single positive integer or NULL.")
+    }
+    refit <- as.integer(refit)
+    if (refit < 1L) {
+      rlang::abort("`refit` must be a single positive integer or NULL.")
+    }
+  }
+  if (isTRUE(bind) && !is.null(refit)) {
+    rlang::abort("`refit` must be NULL when `bind` is TRUE.")
+  }
+
+  normalize_item_log <- function(item_log, refit_id) {
+    if (is.null(item_log) || !is.data.frame(item_log)) {
+      item_log <- tibble::tibble()
+    }
+    item_log <- tibble::as_tibble(item_log)
+    if (!"refit_id" %in% names(item_log)) {
+      item_log$refit_id <- rep.int(as.integer(refit_id), nrow(item_log))
+    }
+    item_log$refit_id <- as.integer(item_log$refit_id)
+    dplyr::relocate(item_log, refit_id, .before = 1L)
+  }
+
+  if (isTRUE(bind)) {
+    item_summary <- dplyr::bind_rows(
+      lapply(seq_along(item_log_list), function(idx) normalize_item_log(item_log_list[[idx]], idx))
+    )
+  } else {
+    idx <- refit %||% length(item_log_list)
+    if (idx < 1L || idx > length(item_log_list)) {
+      rlang::abort(paste0(
+        "Requested refit ",
+        idx,
+        ", but only ",
+        length(item_log_list),
+        " refits are available."
+      ))
+    }
+    item_summary <- normalize_item_log(item_log_list[[idx]], idx)
+  }
+
   n_items <- nrow(item_summary)
 
   summary <- tibble::tibble(
+    refit_id = as.integer(.adaptive_summary_col(item_summary, "refit_id", NA_integer_, n_items)),
     item_id = as.character(.adaptive_summary_col(item_summary, "ID", NA_character_, n_items)),
     theta_mean = as.double(.adaptive_summary_col(item_summary, "theta_mean", NA_real_, n_items)),
     theta_sd = as.double(.adaptive_summary_col(item_summary, "theta_sd", NA_real_, n_items)),
