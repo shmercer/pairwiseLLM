@@ -42,9 +42,17 @@ fresh_btl_mcmc_env <- function() {
     return(env)
   }
 
-  fn <- get(".fit_bayes_btl_mcmc_adaptive", envir = asNamespace("pairwiseLLM"))
-  environment(fn) <- env
-  assign(".fit_bayes_btl_mcmc_adaptive", fn, envir = env)
+  ns <- asNamespace("pairwiseLLM")
+  env$.fit_bayes_btl_mcmc_adaptive <- function(...) {
+    overrides <- setdiff(ls(env, all.names = TRUE), ".fit_bayes_btl_mcmc_adaptive")
+    restores <- vector("list", length(overrides))
+    for (i in seq_along(overrides)) {
+      name <- overrides[[i]]
+      restores[[i]] <- local_rebind_namespace("pairwiseLLM", name, get(name, env))
+    }
+    on.exit(lapply(rev(restores), function(fn) fn()), add = TRUE)
+    get(".fit_bayes_btl_mcmc_adaptive", envir = ns)(...)
+  }
   env
 }
 
