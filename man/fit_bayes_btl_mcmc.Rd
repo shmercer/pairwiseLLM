@@ -17,43 +17,70 @@ fit_bayes_btl_mcmc(
 }
 \arguments{
 \item{results}{Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
-\code{better_id} (plus the standard adaptive results columns).}
+\code{better_id} (plus the standard adaptive results columns). See
+\code{validate_results_tbl()} for required structure.}
 
 \item{ids}{Character vector of all sample ids (length \code{N}).}
 
 \item{model_variant}{Model variant label: \code{"btl"}, \code{"btl_e"},
 \code{"btl_b"}, or \code{"btl_e_b"}. Defaults to \code{"btl_e_b"}.}
 
-\item{cmdstan}{List of CmdStan settings: \code{chains} (defaults to
-\code{min(8, physical_cores)}), \code{iter_warmup} (1000),
-\code{iter_sampling} (1000), \code{seed} (NULL),
-\code{core_fraction} (0.8), and optional \code{output_dir}.}
+\item{cmdstan}{List of CmdStan settings. Common fields:
+\describe{
+\item{chains}{Number of chains (defaults to \code{min(8, physical_cores)} via
+internal resolution).}
+\item{iter_warmup}{Warmup iterations (default \code{1000}).}
+\item{iter_sampling}{Sampling iterations (default \code{1000}).}
+\item{seed}{Optional integer seed forwarded to CmdStan (default \code{NULL}).}
+\item{core_fraction}{Fraction of physical cores for parallelization (default \code{0.8}).}
+\item{output_dir}{Optional directory for CmdStan output.}
+}}
 
 \item{pair_counts}{Optional integer vector of subset sizes (e.g.,
 \code{c(200, 500, 1000)}). When provided, the model is fit once per subset
-size and the round log contains one row per fit.}
+size and the round log contains one row per fit. If \code{NULL}, a single
+fit is run using all rows in \code{results}.}
 
 \item{subset_method}{Subset strategy when \code{pair_counts} is provided:
-\code{"first"} (default) or \code{"sample"}.}
+\code{"first"} (default) uses the first \code{n} rows of \code{results} for
+each refit; \code{"sample"} draws a random permutation once and then takes
+the first \code{n} rows of that permutation for each refit.}
 
-\item{seed}{Optional integer seed for deterministic subset selection. When
-\code{NULL}, falls back to \code{cmdstan$seed} if provided.}
+\item{seed}{Optional integer seed for deterministic subset selection when
+\code{subset_method = "sample"}. When \code{NULL}, falls back to
+\code{cmdstan$seed} if provided.}
 }
 \value{
 A list with:
 \describe{
-\item{item_summary}{Tibble matching the adaptive item log schema (one row per
-item per fit; \code{refit_id} identifies the fit).}
-\item{round_log}{Tibble matching the adaptive round log schema (one row per
-fit).}
-\item{fits}{List of adaptive v3 fit contracts (one per fit).}
-\item{fit}{Single fit contract (only when one fit is run).}
+\item{item_log_list}{List of item-log tables, one per refit, matching the
+canonical adaptive item log schema. This is the preferred structure for
+reuse with \code{\link[=summarize_items]{summarize_items()}}.}
+\item{item_summary}{A single tibble formed by row-binding \code{item_log_list}
+(kept for backward compatibility). Each row corresponds to an item within
+a refit; \code{refit_id} identifies the refit.}
+\item{round_log}{Tibble matching the canonical adaptive round log schema
+(one row per refit).}
+\item{fits}{List of adaptive v3 fit contracts (one per refit).}
+\item{fit}{Single fit contract (only when one refit is run).}
 }
 }
 \description{
-Final Bayesian posterior inference for adaptive ranking, using the adaptive
-v3 CmdStan machinery. The output mirrors adaptive logs and summaries so
-downstream consumers can reuse the same schemas.
+Runs full Bayesian posterior inference for a Bradley–Terry–Luce (BTL) style
+model using the package’s adaptive-v3 CmdStan machinery, but in a standalone
+(non-adaptive) context. The function is designed so downstream diagnostics
+and reporting can reuse the existing adaptive summary tools (notably
+\code{\link[=summarize_items]{summarize_items()}} and \code{\link[=summarize_refits]{summarize_refits()}}) without requiring new summary
+functions.
+}
+\details{
+Internally, the function can optionally refit the model on increasing subsets
+of the observed comparisons (via \code{pair_counts}). Each refit is treated
+as a "refit" in the adaptive logging sense, producing:
+\itemize{
+\item one round-log row per refit (compatible with \code{round_log_schema()}),
+\item one item-log table per refit (compatible with \code{.adaptive_item_log_schema()}).
+}
 }
 \examples{
 \dontrun{
@@ -71,13 +98,16 @@ results <- tibble::tibble(
   backend = "openai",
   model = "gpt-test"
 )
+
 fit <- fit_bayes_btl_mcmc(
   results,
   ids = c("A", "B"),
   model_variant = "btl_e_b"
 )
-fit$item_summary
-fit$round_log
+
+# Generate summaries
+summarize_refits(fit)
+summarize_items(fit)
 }
 
 }
