@@ -72,7 +72,10 @@
   round_id %% every == 0L
 }
 
-.adaptive_progress_format_iter_line <- function(batch_row) {
+.adaptive_progress_format_iter_line <- function(state, batch_row) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
   if (!is.data.frame(batch_row)) {
     rlang::abort("`batch_row` must be a data frame.")
   }
@@ -83,38 +86,74 @@
     }
     fallback
   }
-  phase <- progress_field("phase", NA_character_)
-  iter <- .adaptive_progress_value(progress_field("iter", NA_integer_))
-  n_selected <- .adaptive_progress_value(progress_field("n_pairs_selected", NA_integer_))
-  batch_target <- .adaptive_progress_value(progress_field("batch_size_target", NA_integer_))
-  n_completed <- .adaptive_progress_value(progress_field("n_pairs_completed", NA_integer_))
-  line <- paste0(
-    "[", phase, " iter=", iter, "] ",
-    "selected=", n_selected, "/", batch_target,
-    " completed=", n_completed
+
+  phase <- progress_field("phase", state$phase %||% NA_character_)
+  iter <- .adaptive_progress_value(progress_field("iter", state$iter %||% NA_integer_))
+
+  scheduled <- state$comparisons_scheduled %||% NA_integer_
+  completed <- state$comparisons_observed %||% NA_integer_
+  backlog <- if (is.na(scheduled) || is.na(completed)) {
+    NA_integer_
+  } else {
+    as.integer(scheduled - completed)
+  }
+  unique_pairs <- if (!is.null(state$pair_count) && length(state$pair_count) > 0L) {
+    as.integer(sum(state$pair_count >= 1L))
+  } else {
+    NA_integer_
+  }
+  failed <- if (is.data.frame(state$failed_attempts)) {
+    as.integer(nrow(state$failed_attempts))
+  } else if (is.list(state$log_counters)) {
+    as.integer(state$log_counters$failed_attempts %||% NA_integer_)
+  } else {
+    NA_integer_
+  }
+
+  line1 <- paste(
+    "Iter", iter,
+    "|", .adaptive_progress_value(phase),
+    "| scheduled", .adaptive_progress_value(scheduled),
+    "| completed", .adaptive_progress_value(completed),
+    "| backlog", .adaptive_progress_value(backlog),
+    "| unique", .adaptive_progress_value(unique_pairs),
+    "| failed", .adaptive_progress_value(failed)
   )
 
-  candidate_starved <- progress_field("candidate_starved", NA)
-  if (!is.na(candidate_starved)) {
-    line <- paste0(line, " starved=", .adaptive_progress_value(candidate_starved))
+  segments <- character()
+  n_selected <- progress_field("n_pairs_selected", NA_integer_)
+  n_completed <- progress_field("n_pairs_completed", NA_integer_)
+  n_failed <- progress_field("n_pairs_failed", NA_integer_)
+  if (!is.na(n_selected)) {
+    segments <- c(segments, paste0("+sel ", .adaptive_progress_value(n_selected)))
+  }
+  if (!is.na(n_completed)) {
+    segments <- c(segments, paste0("+done ", .adaptive_progress_value(n_completed)))
+  }
+  if (!is.na(n_failed)) {
+    segments <- c(segments, paste0("+fail ", .adaptive_progress_value(n_failed)))
   }
 
-  fallback_used <- progress_field("fallback_used", NA_character_)
-  if (!is.na(fallback_used) && nzchar(fallback_used) &&
-    !identical(fallback_used, "base_window")) {
-    line <- paste0(line, " fallback=", as.character(fallback_used))
+  candidate_count <- progress_field("n_candidates_after_filters", NA_integer_)
+  if (is.na(candidate_count)) {
+    candidate_count <- progress_field("n_candidates_generated", NA_integer_)
+  }
+  if (!is.na(candidate_count)) {
+    segments <- c(segments, paste0("cand ", .adaptive_progress_value(candidate_count)))
   }
 
-  reason_short_batch <- progress_field("reason_short_batch", NA_character_)
-  n_selected_num <- suppressWarnings(as.numeric(progress_field("n_pairs_selected", NA_real_)))
-  batch_target_num <- suppressWarnings(as.numeric(progress_field("batch_size_target", NA_real_)))
-  if (!is.na(n_selected_num) && !is.na(batch_target_num) &&
-    n_selected_num < batch_target_num &&
-    !is.na(reason_short_batch) &&
-    nzchar(reason_short_batch)) {
-    line <- paste0(line, " reason=", as.character(reason_short_batch))
+  mode <- progress_field("mode", state$mode %||% NA_character_)
+  if (!is.na(mode)) {
+    segments <- c(segments, paste0("mode ", .adaptive_progress_value(mode)))
   }
-  line
+
+  safe_no_utility <- progress_field("safe_no_utility", NA)
+  if (!is.na(safe_no_utility)) {
+    segments <- c(segments, paste0("safe ", .adaptive_progress_value(safe_no_utility)))
+  }
+
+  line2 <- paste0("      ", paste(segments, collapse = " | "))
+  c(line1, line2)
 }
 
 .adaptive_progress_format_refit_block <- function(round_row, config, state = NULL) {
@@ -262,8 +301,8 @@
   if (!.adaptive_progress_should_iter(config, batch_row$iter %||% NA_integer_)) {
     return(invisible(FALSE))
   }
-  line <- .adaptive_progress_format_iter_line(batch_row)
-  cat(line, "\n", sep = "")
+  lines <- .adaptive_progress_format_iter_line(state, batch_row)
+  cat(paste(lines, collapse = "\n"), "\n", sep = "")
   invisible(TRUE)
 }
 
