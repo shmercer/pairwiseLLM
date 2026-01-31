@@ -17,15 +17,15 @@ make_mcmc_results_tbl <- function() {
 
 testthat::test_that("btl mcmc helpers prepare data and model code", {
   results <- make_mcmc_results_tbl()
-  prep <- pairwiseLLM:::.btl_mcmc_prepare_data(results, ids = c("A", "B"))
+  prep <- pairwiseLLM:::.btl_mcmc_v3_prepare_bt_data(results, ids = c("A", "B"))
 
-  expect_equal(prep$data$N, 2L)
-  expect_equal(prep$data$K, 1L)
-  expect_equal(prep$data$winner, 2L)
-  expect_equal(prep$data$loser, 1L)
-  expect_equal(prep$ids, c("A", "B"))
+  expect_equal(prep$N, 2L)
+  expect_equal(prep$A, 1L)
+  expect_equal(prep$B, 2L)
+  expect_equal(prep$Y, 0L)
+  expect_equal(prep$item_id, c("A", "B"))
 
-  code <- pairwiseLLM:::.btl_mcmc_model_code()
+  code <- pairwiseLLM:::.btl_mcmc_v3_model_code()
   expect_true(is.character(code))
   expect_match(code, "data \\{")
   expect_match(code, "parameters \\{")
@@ -37,7 +37,7 @@ testthat::test_that("btl mcmc helper validates ids coverage", {
   results$better_id <- "C"
 
   expect_error(
-    pairwiseLLM:::.btl_mcmc_prepare_data(results, ids = c("A", "B")),
+    pairwiseLLM:::.btl_mcmc_v3_prepare_bt_data(results, ids = c("A", "B")),
     "contained in `ids`"
   )
 })

@@ -102,7 +102,9 @@ test_that("fit_bayes_btl_mcmc runs when CmdStan is available", {
       testthat::skip(paste("CmdStan not usable for MCMC test:", conditionMessage(e)))
     }
   )
-  expect_true(is.matrix(fit$theta_draws))
-  expect_equal(colnames(fit$theta_draws), c("A", "B"))
-  expect_true(nrow(fit$theta_draws) > 0L)
+  expect_true(is.data.frame(fit$item_summary))
+  expect_true(is.data.frame(fit$round_log))
+  expect_true(is.matrix(fit$fit$theta_draws))
+  expect_equal(colnames(fit$fit$theta_draws), c("A", "B"))
+  expect_true(nrow(fit$fit$theta_draws) > 0L)
 })
