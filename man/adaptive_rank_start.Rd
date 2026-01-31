@@ -471,7 +471,7 @@ while (identical(next_action$action, "resume")) {
     state = state,
     mode = "batch",
     submission_info = submission_info,
-    adaptive = adaptive_debug,
+    adaptive = adaptive_cfg,
     seed = 123
   )
   state <- res$state
