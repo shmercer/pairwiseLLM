@@ -520,7 +520,7 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
 
 #' @keywords internal
 #' @noRd
-.fit_bayes_btl_mcmc_adaptive <- function(bt_data, config, seed = NULL) {
+.fit_bayes_btl_mcmc_adaptive <- function(bt_data, config, seed = NULL, model_fn = NULL) {
   .btl_mcmc_require_cmdstanr()
 
   if (!is.list(config)) {
@@ -559,7 +559,13 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   }
 
   stan_file <- stan_file_for_variant(model_variant)
-  model <- cmdstanr::cmdstan_model(
+  if (is.null(model_fn)) {
+    model_fn <- cmdstanr::cmdstan_model
+  }
+  if (!is.function(model_fn)) {
+    rlang::abort("`model_fn` must be a function when provided.")
+  }
+  model <- model_fn(
     stan_file,
     cpp_options = list(stan_threads = TRUE)
   )
