@@ -60,6 +60,33 @@ fake_mcmc_fit <- function(ids) {
   )
 }
 
+local_rebind_namespace <- function(ns, name, value) {
+  env <- asNamespace(ns)
+  has_old <- exists(name, envir = env, inherits = FALSE)
+  old <- if (has_old) get(name, envir = env, inherits = FALSE) else NULL
+  locked <- if (has_old) bindingIsLocked(name, env) else FALSE
+  if (locked) {
+    unlockBinding(name, env)
+  }
+  assign(name, value, envir = env)
+  if (locked) {
+    lockBinding(name, env)
+  }
+  function() {
+    if (locked) {
+      unlockBinding(name, env)
+    }
+    if (has_old) {
+      assign(name, old, envir = env)
+    } else if (exists(name, envir = env, inherits = FALSE)) {
+      rm(list = name, envir = env)
+    }
+    if (locked) {
+      lockBinding(name, env)
+    }
+  }
+}
+
 testthat::test_that("fit_bayes_btl_mcmc validates cmdstan inputs before sampling", {
   results <- make_results_tbl()
 
@@ -82,22 +109,23 @@ testthat::test_that("fit_bayes_btl_mcmc returns adaptive outputs with mocked MCM
   results <- make_results_tbl()
   ids <- c("A", "B")
 
-  testthat::with_mocked_bindings(
-    .fit_bayes_btl_mcmc_adaptive = function(...) fake_mcmc_fit(ids),
-    {
-      out <- pairwiseLLM:::fit_bayes_btl_mcmc(
-        results,
-        ids = ids,
-        model_variant = "btl"
-      )
-      testthat::expect_true(is.data.frame(out$item_summary))
-      testthat::expect_true(is.data.frame(out$round_log))
-      testthat::expect_true(is.list(out$fit))
-      testthat::expect_true(all(c("refit_id", "theta_p2.5", "rank_p50") %in% names(out$item_summary)))
-      testthat::expect_true(all(c("epsilon_mean", "beta_mean") %in% names(out$round_log)))
-      testthat::expect_true(is.na(out$round_log$epsilon_mean[[1L]]))
-      testthat::expect_true(is.na(out$round_log$beta_mean[[1L]]))
-    },
-    .env = asNamespace("pairwiseLLM")
+  restore_fit <- local_rebind_namespace(
+    "pairwiseLLM",
+    ".fit_bayes_btl_mcmc_adaptive",
+    function(...) fake_mcmc_fit(ids)
   )
+  on.exit(restore_fit(), add = TRUE)
+
+  out <- pairwiseLLM:::fit_bayes_btl_mcmc(
+    results,
+    ids = ids,
+    model_variant = "btl"
+  )
+  testthat::expect_true(is.data.frame(out$item_summary))
+  testthat::expect_true(is.data.frame(out$round_log))
+  testthat::expect_true(is.list(out$fit))
+  testthat::expect_true(all(c("refit_id", "theta_p2.5", "rank_p50") %in% names(out$item_summary)))
+  testthat::expect_true(all(c("epsilon_mean", "beta_mean") %in% names(out$round_log)))
+  testthat::expect_true(is.na(out$round_log$epsilon_mean[[1L]]))
+  testthat::expect_true(is.na(out$round_log$beta_mean[[1L]]))
 })
