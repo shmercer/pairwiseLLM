@@ -8,6 +8,23 @@ make_v3_bt_data_5842 <- function() {
   )
 }
 
+local_rebind_namespace <- function(ns, name, value) {
+  ns_env <- asNamespace(ns)
+  if (!exists(name, envir = ns_env, inherits = FALSE)) {
+    rlang::abort(paste0("`", name, "` not found in namespace `", ns, "`."))
+  }
+  old <- get(name, envir = ns_env, inherits = FALSE)
+  unlockBinding(name, ns_env)
+  assign(name, value, envir = ns_env)
+  lockBinding(name, ns_env)
+  function() {
+    unlockBinding(name, ns_env)
+    assign(name, old, envir = ns_env)
+    lockBinding(name, ns_env)
+    invisible(TRUE)
+  }
+}
+
 testthat::test_that("cmdstanr sampling receives resolved chain settings", {
   bt_data <- make_v3_bt_data_5842()
   config <- pairwiseLLM:::adaptive_v3_config(2L, list(model_variant = "btl_e"))
@@ -35,16 +52,28 @@ testthat::test_that("cmdstanr sampling receives resolved chain settings", {
     fake_fit
   })
 
-  out <- testthat::with_mocked_bindings(
-    testthat::with_mocked_bindings(
-      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
-      .btl_mcmc_require_cmdstanr = function() NULL,
-      stan_file_for_variant = function(...) "fake.stan",
-      .package = "pairwiseLLM"
-    ),
-    cmdstan_model = function(file, ...) fake_model,
-    .package = "cmdstanr"
+  restore_req <- local_rebind_namespace(
+    "pairwiseLLM",
+    ".btl_mcmc_require_cmdstanr",
+    function() NULL
   )
+  restore_stan <- local_rebind_namespace(
+    "pairwiseLLM",
+    "stan_file_for_variant",
+    function(...) "fake.stan"
+  )
+  restore_model <- local_rebind_namespace(
+    "cmdstanr",
+    "cmdstan_model",
+    function(file, ...) fake_model
+  )
+  on.exit({
+    restore_model()
+    restore_stan()
+    restore_req()
+  }, add = TRUE)
+
+  out <- pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config)
 
   testthat::expect_equal(capture_env$args$chains, 4L)
   testthat::expect_equal(capture_env$args$parallel_chains, 4L)
@@ -82,16 +111,28 @@ testthat::test_that("cmdstan threads_per_chain overrides flow to sampler", {
     fake_fit
   })
 
-  out <- testthat::with_mocked_bindings(
-    testthat::with_mocked_bindings(
-      pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config),
-      .btl_mcmc_require_cmdstanr = function() NULL,
-      stan_file_for_variant = function(...) "fake.stan",
-      .package = "pairwiseLLM"
-    ),
-    cmdstan_model = function(file, ...) fake_model,
-    .package = "cmdstanr"
+  restore_req <- local_rebind_namespace(
+    "pairwiseLLM",
+    ".btl_mcmc_require_cmdstanr",
+    function() NULL
   )
+  restore_stan <- local_rebind_namespace(
+    "pairwiseLLM",
+    "stan_file_for_variant",
+    function(...) "fake.stan"
+  )
+  restore_model <- local_rebind_namespace(
+    "cmdstanr",
+    "cmdstan_model",
+    function(file, ...) fake_model
+  )
+  on.exit({
+    restore_model()
+    restore_stan()
+    restore_req()
+  }, add = TRUE)
+
+  out <- pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config)
 
   testthat::expect_equal(capture_env$args$threads_per_chain, 3L)
   testthat::expect_equal(out$mcmc_config_used$threads_per_chain, 3L)

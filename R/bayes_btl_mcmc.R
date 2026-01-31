@@ -58,35 +58,35 @@
 #' v3 CmdStan machinery. The output mirrors adaptive logs and summaries so
 #' downstream consumers can reuse the same schemas.
 #'
-#' @param results Canonical \\code{results_tbl} with \\code{A_id}, \\code{B_id}, and
-#'   \\code{better_id} (plus the standard adaptive results columns).
-#' @param ids Character vector of all sample ids (length \\code{N}).
-#' @param model_variant Model variant label: \\code{"btl"}, \\code{"btl_e"},
-#'   \\code{"btl_b"}, or \\code{"btl_e_b"}. Defaults to \\code{"btl_e_b"}.
-#' @param cmdstan List of CmdStan settings: \\code{chains} (defaults to
-#'   \\code{min(8, physical_cores)}), \\code{iter_warmup} (1000),
-#'   \\code{iter_sampling} (1000), \\code{seed} (NULL),
-#'   \\code{core_fraction} (0.8), and optional \\code{output_dir}.
+#' @param results Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
+#'   \code{better_id} (plus the standard adaptive results columns).
+#' @param ids Character vector of all sample ids (length \code{N}).
+#' @param model_variant Model variant label: \code{"btl"}, \code{"btl_e"},
+#'   \code{"btl_b"}, or \code{"btl_e_b"}. Defaults to \code{"btl_e_b"}.
+#' @param cmdstan List of CmdStan settings: \code{chains} (defaults to
+#'   \code{min(8, physical_cores)}), \code{iter_warmup} (1000),
+#'   \code{iter_sampling} (1000), \code{seed} (NULL),
+#'   \code{core_fraction} (0.8), and optional \code{output_dir}.
 #' @param pair_counts Optional integer vector of subset sizes (e.g.,
-#'   \\code{c(200, 500, 1000)}). When provided, the model is fit once per subset
+#'   \code{c(200, 500, 1000)}). When provided, the model is fit once per subset
 #'   size and the round log contains one row per fit.
-#' @param subset_method Subset strategy when \\code{pair_counts} is provided:
-#'   \\code{"first"} (default) or \\code{"sample"}.
+#' @param subset_method Subset strategy when \code{pair_counts} is provided:
+#'   \code{"first"} (default) or \code{"sample"}.
 #' @param seed Optional integer seed for deterministic subset selection. When
-#'   \\code{NULL}, falls back to \\code{cmdstan$seed} if provided.
+#'   \code{NULL}, falls back to \code{cmdstan$seed} if provided.
 #'
 #' @return A list with:
-#' \\describe{
-#'   \\item{item_summary}{Tibble matching the adaptive item log schema (one row per
-#'   item per fit; \\code{refit_id} identifies the fit).}
-#'   \\item{round_log}{Tibble matching the adaptive round log schema (one row per
+#' \describe{
+#'   \item{item_summary}{Tibble matching the adaptive item log schema (one row per
+#'   item per fit; \code{refit_id} identifies the fit).}
+#'   \item{round_log}{Tibble matching the adaptive round log schema (one row per
 #'   fit).}
-#'   \\item{fits}{List of adaptive v3 fit contracts (one per fit).}
-#'   \\item{fit}{Single fit contract (only when one fit is run).}
+#'   \item{fits}{List of adaptive v3 fit contracts (one per fit).}
+#'   \item{fit}{Single fit contract (only when one fit is run).}
 #' }
 #'
 #' @examples
-#' \\dontrun{
+#' \dontrun{
 #' results <- tibble::tibble(
 #'   pair_uid = "A:B#1",
 #'   unordered_key = "A:B",
@@ -144,6 +144,10 @@ fit_bayes_btl_mcmc <- function(
     if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
       rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
     }
+  }
+  resolved_cmdstan <- .btl_mcmc_resolve_cmdstan_config(cmdstan)
+  if (is.na(resolved_cmdstan$parallel_chains) || resolved_cmdstan$parallel_chains < 1L) {
+    rlang::abort("`cmdstan$parallel_chains` must be a positive integer.")
   }
 
   subset_method <- match.arg(subset_method)
@@ -214,7 +218,7 @@ fit_bayes_btl_mcmc <- function(
 
     item_log <- build_item_log(state, fit = fit_contract)
     item_log$refit_id <- rep.int(as.integer(idx), nrow(item_log))
-    item_log <- dplyr::relocate(item_log, refit_id, .before = 1L)
+    item_log <- dplyr::relocate(item_log, "refit_id", .before = 1L)
     item_log <- .adaptive_align_log_schema(item_log, .adaptive_item_log_schema())
     item_logs[[idx]] <- item_log
   }

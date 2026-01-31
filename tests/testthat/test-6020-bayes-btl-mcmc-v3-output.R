@@ -1,7 +1,7 @@
 mock_btl_mcmc_fit <- function(bt_data, config, seed = NULL) {
   model_variant <- config$model_variant %||% "btl_e_b"
   ids <- bt_data$item_id %||% as.character(seq_len(bt_data$N))
-  theta <- matrix(c(0.2, 0.1, -0.1, 0.3), nrow = 2)
+  theta <- matrix(seq_len(2L * length(ids)), nrow = 2L)
   colnames(theta) <- ids
   draws <- list(theta = theta)
   if (pairwiseLLM:::model_has_e(model_variant)) {

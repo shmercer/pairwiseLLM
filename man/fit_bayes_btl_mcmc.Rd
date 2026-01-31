@@ -16,38 +16,38 @@ fit_bayes_btl_mcmc(
 )
 }
 \arguments{
-\item{results}{Canonical \\code{results_tbl} with \\code{A_id}, \\code{B_id}, and
-\\code{better_id} (plus the standard adaptive results columns).}
+\item{results}{Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
+\code{better_id} (plus the standard adaptive results columns).}
 
-\item{ids}{Character vector of all sample ids (length \\code{N}).}
+\item{ids}{Character vector of all sample ids (length \code{N}).}
 
-\item{model_variant}{Model variant label: \\code{"btl"}, \\code{"btl_e"},
-\\code{"btl_b"}, or \\code{"btl_e_b"}. Defaults to \\code{"btl_e_b"}.}
+\item{model_variant}{Model variant label: \code{"btl"}, \code{"btl_e"},
+\code{"btl_b"}, or \code{"btl_e_b"}. Defaults to \code{"btl_e_b"}.}
 
-\item{cmdstan}{List of CmdStan settings: \\code{chains} (defaults to
-\\code{min(8, physical_cores)}), \\code{iter_warmup} (1000),
-\\code{iter_sampling} (1000), \\code{seed} (NULL),
-\\code{core_fraction} (0.8), and optional \\code{output_dir}.}
+\item{cmdstan}{List of CmdStan settings: \code{chains} (defaults to
+\code{min(8, physical_cores)}), \code{iter_warmup} (1000),
+\code{iter_sampling} (1000), \code{seed} (NULL),
+\code{core_fraction} (0.8), and optional \code{output_dir}.}
 
 \item{pair_counts}{Optional integer vector of subset sizes (e.g.,
-\\code{c(200, 500, 1000)}). When provided, the model is fit once per subset
+\code{c(200, 500, 1000)}). When provided, the model is fit once per subset
 size and the round log contains one row per fit.}
 
-\item{subset_method}{Subset strategy when \\code{pair_counts} is provided:
-\\code{"first"} (default) or \\code{"sample"}.}
+\item{subset_method}{Subset strategy when \code{pair_counts} is provided:
+\code{"first"} (default) or \code{"sample"}.}
 
 \item{seed}{Optional integer seed for deterministic subset selection. When
-\\code{NULL}, falls back to \\code{cmdstan$seed} if provided.}
+\code{NULL}, falls back to \code{cmdstan$seed} if provided.}
 }
 \value{
 A list with:
-\\describe{
-\\item{item_summary}{Tibble matching the adaptive item log schema (one row per
-item per fit; \\code{refit_id} identifies the fit).}
-\\item{round_log}{Tibble matching the adaptive round log schema (one row per
+\describe{
+\item{item_summary}{Tibble matching the adaptive item log schema (one row per
+item per fit; \code{refit_id} identifies the fit).}
+\item{round_log}{Tibble matching the adaptive round log schema (one row per
 fit).}
-\\item{fits}{List of adaptive v3 fit contracts (one per fit).}
-\\item{fit}{Single fit contract (only when one fit is run).}
+\item{fits}{List of adaptive v3 fit contracts (one per fit).}
+\item{fit}{Single fit contract (only when one fit is run).}
 }
 }
 \description{
@@ -56,7 +56,7 @@ v3 CmdStan machinery. The output mirrors adaptive logs and summaries so
 downstream consumers can reuse the same schemas.
 }
 \examples{
-\\dontrun{
+\dontrun{
 results <- tibble::tibble(
   pair_uid = "A:B#1",
   unordered_key = "A:B",
