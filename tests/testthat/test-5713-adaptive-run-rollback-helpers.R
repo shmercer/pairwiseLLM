@@ -90,6 +90,40 @@ testthat::test_that("adaptive rollback and starvation helpers cover branches", {
   testthat::expect_equal(nrow(state$history_pairs), 0L)
   testthat::expect_equal(state$comparisons_scheduled, 0L)
 
+  state <- pairwiseLLM:::adaptive_state_new(
+    samples = samples,
+    config = list(d1 = 2L, M1_target = 1L, budget_max = 2L)
+  )
+  state <- pairwiseLLM:::record_presentation(state, "A", "B")
+  state$history_pairs <- tibble::tibble(
+    pair_uid = "A:B#1",
+    unordered_key = "A:B",
+    ordered_key = "A:B",
+    A_id = "A",
+    B_id = "B",
+    A_text = "alpha",
+    B_text = "bravo",
+    phase = "phase1",
+    iter = 0L,
+    created_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+  )
+  state$comparisons_scheduled <- 1L
+  pairs_submitted <- state$history_pairs
+  failed_attempts <- tibble::tibble(
+    pair_uid = NA_character_,
+    A_id = "A",
+    B_id = "B"
+  )
+  testthat::expect_warning({
+    state <- pairwiseLLM:::.adaptive_rollback_presentations(
+      state,
+      pairs_submitted = pairs_submitted,
+      failed_attempts = failed_attempts
+    )
+  }, "missing `pair_uid`")
+  testthat::expect_equal(nrow(state$history_pairs), 0L)
+  testthat::expect_equal(state$comparisons_scheduled, 0L)
+
   attempts <- tibble::tibble(
     stage = c("stage1", "stage2", "stage3", "stage4"),
     n_generated = c(3L, 4L, 5L, 6L),
