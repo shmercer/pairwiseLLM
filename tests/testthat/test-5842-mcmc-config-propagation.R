@@ -36,11 +36,15 @@ fresh_btl_mcmc_env <- function() {
       path <- alt_path
     }
   }
-  if (!file.exists(path)) {
-    rlang::abort("Unable to locate bayes_btl_mcmc_adaptive.R for test isolation.")
-  }
   env <- new.env(parent = asNamespace("pairwiseLLM"))
-  sys.source(path, envir = env)
+  if (file.exists(path)) {
+    sys.source(path, envir = env)
+    return(env)
+  }
+
+  fn <- get(".fit_bayes_btl_mcmc_adaptive", envir = asNamespace("pairwiseLLM"))
+  environment(fn) <- env
+  assign(".fit_bayes_btl_mcmc_adaptive", fn, envir = env)
   env
 }
 
