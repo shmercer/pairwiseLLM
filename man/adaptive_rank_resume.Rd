@@ -72,13 +72,35 @@ state <- pairwiseLLM:::adaptive_state_new(
   config = list(d1 = 2L, M1_target = 2L, budget_max = 4L)
 )
 
+# Stop-criteria presets (copy/paste ready)
+adaptive_fast <- list(
+  v3 = list(
+    eap_reliability_min = 0.80,
+    min_ess_bulk = 150,
+    max_rhat = 1.05
+  )
+)
+adaptive_high_conf <- list(
+  v3 = list(
+    eap_reliability_min = 0.95,
+    min_ess_bulk = 1000,
+    max_rhat = 1.01
+  )
+)
+adaptive_debug <- list(
+  v3 = list(
+    progress = TRUE,
+    progress_level = "full"
+  )
+)
+
 \dontrun{
 # Batch resume (state loaded from disk)
 resume_out <- adaptive_rank_resume(
   state_path = "adaptive_runs/adaptive_state.rds",
   mode = "batch",
   submission_info = batch_out$submission_info,
-  adaptive = list(per_item_cap = 3),
+  adaptive = adaptive_fast,
   seed = 123
 )
 
@@ -87,7 +109,7 @@ resume_out <- adaptive_rank_resume(
   state = start_out$state,
   mode = "live",
   submission_info = start_out$submission_info,
-  adaptive = list(per_item_cap = 3),
+  adaptive = adaptive_high_conf,
   seed = 123
 )
 }

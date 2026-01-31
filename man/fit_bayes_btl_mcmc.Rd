@@ -2,37 +2,58 @@
 % Please edit documentation in R/bayes_btl_mcmc.R
 \name{fit_bayes_btl_mcmc}
 \alias{fit_bayes_btl_mcmc}
-\title{Full Bayesian BTL inference via CmdStanR (audit only)}
+\title{Full Bayesian BTL inference via CmdStanR (adaptive-compatible)}
 \usage{
 fit_bayes_btl_mcmc(
   results,
   ids,
+  model_variant = "btl_e_b",
   cmdstan = list(iter_warmup = 1000, iter_sampling = 1000, seed = NULL, core_fraction =
-    0.8)
+    0.8),
+  pair_counts = NULL,
+  subset_method = c("first", "sample"),
+  seed = NULL
 )
 }
 \arguments{
 \item{results}{Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
-\code{better_id}.}
+\code{better_id} (plus the standard adaptive results columns).}
 
 \item{ids}{Character vector of all sample ids (length \code{N}).}
 
+\item{model_variant}{Model variant label: \code{"btl"}, \code{"btl_e"},
+\code{"btl_b"}, or \code{"btl_e_b"}. Defaults to \code{"btl_e_b"}.}
+
 \item{cmdstan}{List of CmdStan settings: \code{chains} (defaults to
 \code{min(8, physical_cores)}), \code{iter_warmup} (1000),
-\code{iter_sampling} (1000), \code{seed} (NULL), and
-\code{core_fraction} (0.8). The list is extensible in future versions.}
+\code{iter_sampling} (1000), \code{seed} (NULL),
+\code{core_fraction} (0.8), and optional \code{output_dir}.}
+
+\item{pair_counts}{Optional integer vector of subset sizes (e.g.,
+\code{c(200, 500, 1000)}). When provided, the model is fit once per subset
+size and the round log contains one row per fit.}
+
+\item{subset_method}{Subset strategy when \code{pair_counts} is provided:
+\code{"first"} (default) or \code{"sample"}.}
+
+\item{seed}{Optional integer seed for deterministic subset selection. When
+\code{NULL}, falls back to \code{cmdstan$seed} if provided.}
 }
 \value{
 A list with:
 \describe{
-\item{theta_draws}{Matrix of posterior draws \code{[S, N]} (colnames == ids).}
-\item{fit_meta}{Sampling diagnostics and convergence metadata.}
+\item{item_summary}{Tibble matching the adaptive item log schema (one row per
+item per fit; \code{refit_id} identifies the fit).}
+\item{round_log}{Tibble matching the adaptive round log schema (one row per
+fit).}
+\item{fits}{List of adaptive v3 fit contracts (one per fit).}
+\item{fit}{Single fit contract (only when one fit is run).}
 }
 }
 \description{
 Final Bayesian posterior inference for adaptive ranking. This requires
-CmdStanR/CmdStan (optional dependency). All reported uncertainty summaries
-are derived from these draws only.
+CmdStanR/CmdStan (optional dependency). The output mirrors adaptive logs and
+summaries so downstream consumers can reuse the same schemas.
 }
 \examples{
 \dontrun{
@@ -50,14 +71,13 @@ results <- tibble::tibble(
   backend = "openai",
   model = "gpt-test"
 )
-fit <- fit_bayes_btl_mcmc(results, ids = c("A", "B"))
-
-# Full workflow shape (after stop confirmation):
-# 1) Run MCMC
-# 2) Summarize with MCMC-only helpers
-mcmc_fit <- fit_bayes_btl_mcmc(results, ids = c("A", "B"))
-theta_summary <- summarize_theta(mcmc_fit$theta_draws)
-rank_summary <- summarize_ranks(mcmc_fit$theta_draws)
+fit <- fit_bayes_btl_mcmc(
+  results,
+  ids = c("A", "B"),
+  model_variant = "btl_e_b"
+)
+fit$item_summary
+fit$round_log
 }
 
 
