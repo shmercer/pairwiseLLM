@@ -40,7 +40,6 @@ Suggests:
     future.apply,
     knitr,
     mockery,
-    pkgload,
     purrr,
     readr,
     rmarkdown,
