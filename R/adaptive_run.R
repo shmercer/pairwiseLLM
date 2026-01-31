@@ -395,6 +395,14 @@ NULL
     return(state)
   }
   rollback_tbl <- dplyr::distinct(rollback_tbl, .data$pair_uid, .keep_all = TRUE)
+  invalid_uid <- is.na(rollback_tbl$pair_uid) | !nzchar(rollback_tbl$pair_uid)
+  if (any(invalid_uid)) {
+    rlang::warn("Skipping rollback rows with missing `pair_uid`.")
+    rollback_tbl <- rollback_tbl[!invalid_uid, , drop = FALSE]
+    if (nrow(rollback_tbl) == 0L) {
+      return(state)
+    }
+  }
 
   for (idx in seq_len(nrow(rollback_tbl))) {
     A_id <- as.character(rollback_tbl$A_id[[idx]])
