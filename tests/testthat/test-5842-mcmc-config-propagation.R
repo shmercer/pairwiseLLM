@@ -9,10 +9,32 @@ make_v3_bt_data_5842 <- function() {
 }
 
 fresh_btl_mcmc_env <- function() {
-  root <- pkgload::pkg_path()
-  path <- if (is.null(root) || !nzchar(root)) "" else file.path(root, "R", "bayes_btl_mcmc_adaptive.R")
+  root <- NULL
+  cur <- getwd()
+  for (i in 0:6) {
+    desc <- file.path(cur, "DESCRIPTION")
+    if (file.exists(desc)) {
+      first_line <- readLines(desc, n = 1L, warn = FALSE)
+      if (length(first_line) && grepl("^Package\\s*:", first_line)) {
+        root <- cur
+        break
+      }
+    }
+    parent <- dirname(cur)
+    if (identical(parent, cur)) {
+      break
+    }
+    cur <- parent
+  }
+  if (is.null(root)) {
+    root <- getwd()
+  }
+  path <- file.path(root, "R", "bayes_btl_mcmc_adaptive.R")
   if (!file.exists(path)) {
-    path <- file.path("R", "bayes_btl_mcmc_adaptive.R")
+    alt_path <- file.path(root, "pairwiseLLM", "R", "bayes_btl_mcmc_adaptive.R")
+    if (file.exists(alt_path)) {
+      path <- alt_path
+    }
   }
   if (!file.exists(path)) {
     rlang::abort("Unable to locate bayes_btl_mcmc_adaptive.R for test isolation.")
