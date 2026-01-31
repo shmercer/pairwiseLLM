@@ -45,49 +45,78 @@ testthat::test_that("adaptive progress helpers cover value formatting and gating
   expect_equal(pairwiseLLM:::.adaptive_progress_effective_cores(NA, NA), 1L)
 })
 
-testthat::test_that("adaptive progress formatting includes short batch details", {
+testthat::test_that("adaptive progress formatting includes cumulative and delta counters", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
+  state$comparisons_scheduled <- 4L
+  state$comparisons_observed <- 2L
+  key <- names(state$pair_count)[1L]
+  state$pair_count[[key]] <- 1L
+  state$failed_attempts <- tibble::tibble(dummy = 1L)
+
   batch_row <- tibble::tibble(
     phase = "phase2",
     iter = 3L,
     n_pairs_selected = 1L,
     batch_size_target = 2L,
     n_pairs_completed = 0L,
-    candidate_starved = TRUE,
-    fallback_used = "expand_2x",
-    reason_short_batch = "dup_gate_exhausted"
+    n_pairs_failed = 1L,
+    n_candidates_after_filters = 5L,
+    mode = "adaptive",
+    safe_no_utility = TRUE
   )
 
-  line <- pairwiseLLM:::.adaptive_progress_format_iter_line(batch_row)
-  expect_true(grepl("phase2", line))
-  expect_true(grepl("iter=3", line))
-  expect_true(grepl("starved=TRUE", line))
-  expect_true(grepl("fallback=expand_2x", line))
-  expect_true(grepl("reason=dup_gate_exhausted", line))
+  lines <- pairwiseLLM:::.adaptive_progress_format_iter_line(state, batch_row)
+  expect_equal(length(lines), 2L)
+  expect_true(grepl("Iter 3", lines[[1L]]))
+  expect_true(grepl("scheduled 4", lines[[1L]]))
+  expect_true(grepl("completed 2", lines[[1L]]))
+  expect_true(grepl("backlog 2", lines[[1L]]))
+  expect_true(grepl("unique 1", lines[[1L]]))
+  expect_true(grepl("failed 1", lines[[1L]]))
+  expect_true(grepl("^\\s{6}\\+sel", lines[[2L]]))
+  expect_true(grepl("\\+sel 1", lines[[2L]]))
+  expect_true(grepl("\\+done 0", lines[[2L]]))
+  expect_true(grepl("\\+fail 1", lines[[2L]]))
+  expect_true(grepl("cand 5", lines[[2L]]))
+  expect_true(grepl("mode adaptive", lines[[2L]]))
+  expect_true(grepl("safe TRUE", lines[[2L]]))
 })
 
 testthat::test_that("adaptive progress formatting rejects non-data frames", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
   testthat::expect_error(
-    pairwiseLLM:::.adaptive_progress_format_iter_line("bad"),
+    pairwiseLLM:::.adaptive_progress_format_iter_line(state, "bad"),
     "data frame"
   )
 })
 
-testthat::test_that("adaptive progress formatting omits starved and reason when absent", {
+testthat::test_that("adaptive progress formatting omits missing optional deltas", {
+  samples <- tibble::tibble(
+    ID = c("A", "B", "C"),
+    text = c("alpha", "bravo", "charlie")
+  )
+  state <- pairwiseLLM:::adaptive_state_new(samples, config = list(d1 = 2L))
+  state$comparisons_scheduled <- 2L
+  state$comparisons_observed <- 1L
+
   batch_row <- tibble::tibble(
     phase = "phase1",
     iter = 1L,
     n_pairs_selected = 2L,
     batch_size_target = 2L,
-    n_pairs_completed = 1L,
-    candidate_starved = NA,
-    fallback_used = "base_window",
-    reason_short_batch = NA_character_
+    n_pairs_completed = 1L
   )
 
-  line <- pairwiseLLM:::.adaptive_progress_format_iter_line(batch_row)
-  expect_false(grepl("starved=", line))
-  expect_false(grepl("fallback=", line))
-  expect_false(grepl("reason=", line))
+  lines <- pairwiseLLM:::.adaptive_progress_format_iter_line(state, batch_row)
+  expect_false(grepl("\\+fail", lines[[2L]]))
 })
 
 testthat::test_that("adaptive progress refit block formats diagnostics and stability", {
@@ -210,7 +239,7 @@ testthat::test_that("adaptive progress emitters respect cadence and level", {
     iter_result <- pairwiseLLM:::.adaptive_progress_emit_iter(state)
   })
   expect_true(isTRUE(iter_result))
-  expect_true(any(grepl("selected=", iter_out)))
+  expect_true(any(grepl("scheduled", iter_out)))
 
   round_row <- tibble::tibble(
     round_id = 1L,
@@ -284,7 +313,7 @@ testthat::test_that("adaptive progress emitters print when configured", {
     iter_result <- pairwiseLLM:::.adaptive_progress_emit_iter(state)
   })
   expect_true(isTRUE(iter_result))
-  expect_true(any(grepl("selected=", iter_out)))
+  expect_true(any(grepl("scheduled", iter_out)))
 
   round_row <- pairwiseLLM:::.adaptive_round_log_defaults()
   round_row$round_id <- 1L

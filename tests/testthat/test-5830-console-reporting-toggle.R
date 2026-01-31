@@ -30,7 +30,7 @@ testthat::test_that("progress output is on by default", {
   })
 
   testthat::expect_true(length(out) > 0L)
-  testthat::expect_true(any(grepl("selected=", out)))
+  testthat::expect_true(any(grepl("Iter", out)))
 })
 
 testthat::test_that("iteration progress line prints when enabled", {
@@ -68,9 +68,9 @@ testthat::test_that("iteration progress line prints when enabled", {
   })
 
   testthat::expect_true(any(grepl("phase1", out)))
-  testthat::expect_true(any(grepl("iter=", out)))
-  testthat::expect_true(any(grepl("selected=", out)))
-  testthat::expect_true(any(grepl("completed=", out)))
+  testthat::expect_true(any(grepl("Iter", out)))
+  testthat::expect_true(any(grepl("scheduled", out)))
+  testthat::expect_true(any(grepl("completed", out)))
 })
 
 testthat::test_that("progress output is silent when disabled", {

@@ -41,14 +41,20 @@ testthat::test_that("iteration console line matches batch_log values", {
     )
   )
 
-  line <- output[[length(output)]]
+  line1 <- output[[length(output) - 1L]]
+  line2 <- output[[length(output)]]
   batch_row <- state$batch_log[nrow(state$batch_log), , drop = FALSE]
 
-  testthat::expect_true(grepl("selected=2/3", line))
-  testthat::expect_true(grepl("completed=1", line))
-  testthat::expect_true(grepl("starved=TRUE", line))
-  testthat::expect_true(grepl("fallback=expand_2x", line))
-  testthat::expect_true(grepl("reason=starved", line))
+  testthat::expect_true(grepl("scheduled 2", line1))
+  testthat::expect_true(grepl("completed 1", line1))
+  testthat::expect_true(grepl("backlog 1", line1))
+  testthat::expect_true(grepl("unique 0", line1))
+  testthat::expect_true(grepl("failed 0", line1))
+  testthat::expect_true(grepl("\\+sel 2", line2))
+  testthat::expect_true(grepl("\\+done 1", line2))
+  testthat::expect_true(grepl("cand 3", line2))
+  testthat::expect_true(grepl("mode adaptive", line2))
+  testthat::expect_true(grepl("safe FALSE", line2))
   testthat::expect_identical(batch_row$candidate_starved[[1L]], TRUE)
 })
 
