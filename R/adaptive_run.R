@@ -815,6 +815,16 @@ NULL
     .adaptive_progress_emit_refit(state, round_row, v3_config)
   }
 
+  if (identical(state$mode, "stopped")) {
+    state <- .adaptive_maybe_append_terminal_round_log(
+      state,
+      config = v3_config,
+      fit = fit,
+      metrics = metrics,
+      stop_out = stop_out
+    )
+  }
+
   list(state = state)
 }
 
@@ -1640,6 +1650,88 @@ NULL
 
   .adaptive_progress_emit_iter(state)
 
+  if (identical(state$mode, "stopped")) {
+    state <- .adaptive_maybe_append_terminal_round_log(state, config = config)
+  }
+
+  state
+}
+
+.adaptive_stop_reason_valid <- function(stop_reason) {
+  is.character(stop_reason) &&
+    length(stop_reason) == 1L &&
+    !is.na(stop_reason) &&
+    nzchar(stop_reason)
+}
+
+.adaptive_fill_terminal_stop_metrics <- function(state, config, metrics = NULL) {
+  metrics <- .adaptive_stop_metrics_align(metrics %||% state$posterior$stop_metrics %||% list())
+  metrics$scheduled_pairs <- as.integer(state$comparisons_scheduled %||% NA_integer_)
+  metrics$completed_pairs <- as.integer(state$comparisons_observed %||% NA_integer_)
+  metrics$n_unique_pairs_seen <- if (!is.null(state$pair_count) && length(state$pair_count) > 0L) {
+    as.integer(sum(state$pair_count >= 1L))
+  } else {
+    NA_integer_
+  }
+
+  hard_cap_frac <- as.double(config$hard_cap_frac %||% NA_real_)
+  total_pairs <- as.integer(state$N * (state$N - 1L) / 2)
+  if (is.finite(hard_cap_frac) && hard_cap_frac > 0 && hard_cap_frac <= 1) {
+    hard_cap_threshold <- as.integer(ceiling(hard_cap_frac * total_pairs))
+  } else {
+    hard_cap_threshold <- NA_integer_
+  }
+  metrics$hard_cap_threshold <- as.integer(hard_cap_threshold)
+  if (!is.na(metrics$n_unique_pairs_seen) && !is.na(metrics$hard_cap_threshold)) {
+    metrics$hard_cap_reached <- metrics$n_unique_pairs_seen >= metrics$hard_cap_threshold
+  }
+  metrics
+}
+
+.adaptive_maybe_append_terminal_round_log <- function(state,
+    config = NULL,
+    fit = NULL,
+    metrics = NULL,
+    stop_out = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
+  if (!identical(state$mode, "stopped")) {
+    return(state)
+  }
+  stop_reason <- state$stop_reason %||% NA_character_
+  if (!.adaptive_stop_reason_valid(stop_reason)) {
+    return(state)
+  }
+
+  config <- config %||% state$config$v3 %||% list()
+  round_log <- state$config$round_log %||% round_log_schema()
+  round_log <- .adaptive_align_log_schema(round_log, round_log_schema())
+  if (nrow(round_log) > 0L) {
+    last_row <- round_log[nrow(round_log), , drop = FALSE]
+    last_reason <- as.character(last_row$stop_reason[[1L]] %||% NA_character_)
+    last_mode <- as.character(last_row$mode[[1L]] %||% NA_character_)
+    if (identical(last_reason, stop_reason) && identical(last_mode, "stopped")) {
+      return(state)
+    }
+  }
+
+  metrics <- .adaptive_fill_terminal_stop_metrics(state, config, metrics)
+  stop_out <- stop_out %||% list(stop_decision = TRUE, stop_reason = stop_reason)
+  fit <- fit %||% state$fit %||% list()
+
+  round_row <- build_round_log_row(
+    state = state,
+    fit = fit,
+    metrics = metrics,
+    stop_out = stop_out,
+    config = config,
+    batch_size = config$batch_size %||% NA_integer_,
+    window_W = config$W %||% NA_integer_,
+    exploration_rate = config$explore_rate %||% NA_real_,
+    new_pairs = 0L
+  )
+  state$config$round_log <- dplyr::bind_rows(round_log, round_row)
   state
 }
 
@@ -1880,7 +1972,32 @@ NULL
   if (is.na(target_pairs) || target_pairs < 0L) {
     rlang::abort("`target_pairs` must be a non-negative integer.")
   }
+  v3_config <- state$config$v3 %||% adaptive_v3_config(state$N)
   if (target_pairs == 0L) {
+    state$mode <- "stopped"
+    state$stop_reason <- "no_feasible_pairs"
+    iter <- as.integer(state$iter + 1L)
+    state$iter <- iter
+    state <- .adaptive_append_batch_log(
+      state = state,
+      iter = iter,
+      phase = state$phase,
+      mode = state$mode,
+      created_at = Sys.time(),
+      batch_size_target = 0L,
+      selection = .adaptive_empty_pairs_tbl(),
+      candidate_stats = list(
+        n_candidates_generated = NA_integer_,
+        n_candidates_after_filters = NA_integer_
+      ),
+      candidate_starved = FALSE,
+      fallback_stage = "no_feasible_pairs",
+      W_used = v3_config$W,
+      config = v3_config,
+      exploration_only = FALSE,
+      utilities = tibble::tibble(),
+      iter_exit_path = "no_feasible_pairs"
+    )
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
   if (identical(state$mode, "stopped")) {
@@ -1889,6 +2006,30 @@ NULL
 
   budget_remaining <- as.integer(state$budget_max - state$comparisons_scheduled)
   if (budget_remaining <= 0L) {
+    state$mode <- "stopped"
+    state$stop_reason <- "budget_exhausted"
+    iter <- as.integer(state$iter + 1L)
+    state$iter <- iter
+    state <- .adaptive_append_batch_log(
+      state = state,
+      iter = iter,
+      phase = state$phase,
+      mode = state$mode,
+      created_at = Sys.time(),
+      batch_size_target = 0L,
+      selection = .adaptive_empty_pairs_tbl(),
+      candidate_stats = list(
+        n_candidates_generated = NA_integer_,
+        n_candidates_after_filters = NA_integer_
+      ),
+      candidate_starved = FALSE,
+      fallback_stage = "budget_exhausted",
+      W_used = v3_config$W,
+      config = v3_config,
+      exploration_only = FALSE,
+      utilities = tibble::tibble(),
+      iter_exit_path = "budget_exhausted"
+    )
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
   target_pairs <- min(target_pairs, budget_remaining)
@@ -1899,6 +2040,28 @@ NULL
   if (n_unique_pairs_seen >= hard_cap_threshold) {
     state$mode <- "stopped"
     state$stop_reason <- "hard_cap_40pct"
+    iter <- as.integer(state$iter + 1L)
+    state$iter <- iter
+    state <- .adaptive_append_batch_log(
+      state = state,
+      iter = iter,
+      phase = state$phase,
+      mode = state$mode,
+      created_at = Sys.time(),
+      batch_size_target = 0L,
+      selection = .adaptive_empty_pairs_tbl(),
+      candidate_stats = list(
+        n_candidates_generated = NA_integer_,
+        n_candidates_after_filters = NA_integer_
+      ),
+      candidate_starved = FALSE,
+      fallback_stage = "hard_cap_40pct",
+      W_used = v3_config$W,
+      config = v3_config,
+      exploration_only = FALSE,
+      utilities = tibble::tibble(),
+      iter_exit_path = "hard_cap_40pct"
+    )
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
   remaining_unique <- hard_cap_threshold - n_unique_pairs_seen
@@ -1928,6 +2091,28 @@ NULL
   )
   state <- gate_out$state
   if (identical(state$mode, "stopped")) {
+    state$iter <- iter
+    state <- .adaptive_append_batch_log(
+      state = state,
+      iter = iter,
+      phase = phase,
+      mode = state$mode,
+      created_at = iter_start,
+      batch_size_target = batch_size,
+      selection = .adaptive_empty_pairs_tbl(),
+      candidate_stats = list(
+        n_candidates_generated = NA_integer_,
+        n_candidates_after_filters = NA_integer_
+      ),
+      candidate_starved = FALSE,
+      fallback_stage = "diagnostics_failed",
+      W_used = v3_config$W,
+      config = v3_config,
+      exploration_only = FALSE,
+      safe_no_utility = FALSE,
+      utilities = tibble::tibble(),
+      iter_exit_path = "diagnostics_failed"
+    )
     return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
   }
 
@@ -2015,6 +2200,32 @@ NULL
       .adaptive_progress_emit_refit(state, round_row, v3_config)
     }
     if (isTRUE(stop_out$stop_decision) || identical(state$mode, "stopped")) {
+      state$iter <- iter
+      state <- .adaptive_append_batch_log(
+        state = state,
+        iter = iter,
+        phase = phase,
+        mode = state$mode,
+        created_at = iter_start,
+        batch_size_target = batch_size,
+        selection = .adaptive_empty_pairs_tbl(),
+        candidate_stats = list(
+          n_candidates_generated = nrow(candidates),
+          n_candidates_after_filters = as.integer(.adaptive_candidate_after_filters(
+            utilities,
+            state,
+            config_select
+          ))
+        ),
+        candidate_starved = FALSE,
+        fallback_stage = stop_out$stop_reason %||% "stopped",
+        W_used = config_select$W,
+        config = config_select,
+        exploration_only = exploration_only,
+        safe_no_utility = safe_no_utility,
+        utilities = utilities,
+        iter_exit_path = stop_out$stop_reason %||% "stopped_after_refit"
+      )
       return(list(state = state, pairs = .adaptive_empty_pairs_tbl()))
     }
   } else {
