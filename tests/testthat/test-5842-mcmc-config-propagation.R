@@ -8,6 +8,20 @@ make_v3_bt_data_5842 <- function() {
   )
 }
 
+fresh_btl_mcmc_env <- function() {
+  root <- pkgload::pkg_path()
+  path <- if (is.null(root) || !nzchar(root)) "" else file.path(root, "R", "bayes_btl_mcmc_adaptive.R")
+  if (!file.exists(path)) {
+    path <- file.path("R", "bayes_btl_mcmc_adaptive.R")
+  }
+  if (!file.exists(path)) {
+    rlang::abort("Unable to locate bayes_btl_mcmc_adaptive.R for test isolation.")
+  }
+  env <- new.env(parent = asNamespace("pairwiseLLM"))
+  sys.source(path, envir = env)
+  env
+}
+
 local_rebind_namespace <- function(ns, name, value) {
   env <- asNamespace(ns)
   has_old <- exists(name, envir = env, inherits = FALSE)
@@ -62,38 +76,22 @@ testthat::test_that("cmdstanr sampling receives resolved chain settings", {
     fake_fit
   })
 
-  restore_req <- local_rebind_namespace(
-    "pairwiseLLM",
-    ".btl_mcmc_require_cmdstanr",
-    function() NULL
-  )
-  restore_stan <- local_rebind_namespace(
-    "pairwiseLLM",
-    "stan_file_for_variant",
-    function(...) "fake.stan"
-  )
-  restore_resolve <- local_rebind_namespace(
-    "pairwiseLLM",
-    ".btl_mcmc_resolve_cmdstan_config",
-    function(...) {
-      list(
-        chains = 4L,
-        parallel_chains = 4L,
-        core_fraction = 0.8,
-        cores_detected_physical = 1L,
-        cores_detected_logical = 1L,
-        threads_per_chain = 1L,
-        cmdstanr_version = "0.1"
-      )
-    }
-  )
-  on.exit({
-    restore_resolve()
-    restore_stan()
-    restore_req()
-  }, add = TRUE)
+  env <- fresh_btl_mcmc_env()
+  env$.btl_mcmc_require_cmdstanr <- function() NULL
+  env$stan_file_for_variant <- function(...) "fake.stan"
+  env$.btl_mcmc_resolve_cmdstan_config <- function(...) {
+    list(
+      chains = 4L,
+      parallel_chains = 4L,
+      core_fraction = 0.8,
+      cores_detected_physical = 1L,
+      cores_detected_logical = 1L,
+      threads_per_chain = 1L,
+      cmdstanr_version = "0.1"
+    )
+  }
 
-  out <- pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
+  out <- env$.fit_bayes_btl_mcmc_adaptive(
     bt_data,
     config,
     model_fn = function(...) fake_model
@@ -135,38 +133,22 @@ testthat::test_that("cmdstan threads_per_chain overrides flow to sampler", {
     fake_fit
   })
 
-  restore_req <- local_rebind_namespace(
-    "pairwiseLLM",
-    ".btl_mcmc_require_cmdstanr",
-    function() NULL
-  )
-  restore_stan <- local_rebind_namespace(
-    "pairwiseLLM",
-    "stan_file_for_variant",
-    function(...) "fake.stan"
-  )
-  restore_resolve <- local_rebind_namespace(
-    "pairwiseLLM",
-    ".btl_mcmc_resolve_cmdstan_config",
-    function(...) {
-      list(
-        chains = 2L,
-        parallel_chains = 2L,
-        core_fraction = 0.8,
-        cores_detected_physical = 1L,
-        cores_detected_logical = 1L,
-        threads_per_chain = 3L,
-        cmdstanr_version = "0.1"
-      )
-    }
-  )
-  on.exit({
-    restore_resolve()
-    restore_stan()
-    restore_req()
-  }, add = TRUE)
+  env <- fresh_btl_mcmc_env()
+  env$.btl_mcmc_require_cmdstanr <- function() NULL
+  env$stan_file_for_variant <- function(...) "fake.stan"
+  env$.btl_mcmc_resolve_cmdstan_config <- function(...) {
+    list(
+      chains = 2L,
+      parallel_chains = 2L,
+      core_fraction = 0.8,
+      cores_detected_physical = 1L,
+      cores_detected_logical = 1L,
+      threads_per_chain = 3L,
+      cmdstanr_version = "0.1"
+    )
+  }
 
-  out <- pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
+  out <- env$.fit_bayes_btl_mcmc_adaptive(
     bt_data,
     config,
     model_fn = function(...) fake_model
