@@ -50,6 +50,8 @@ Suggests:
     tidyr,
     vctrs,
     withr
+Additional_repositories:
+    https://stan-dev.r-universe.dev
 Config/testthat/edition: 3
 URL: https://github.com/shmercer/pairwiseLLM, https://shmercer.github.io/pairwiseLLM/
 BugReports: https://github.com/shmercer/pairwiseLLM/issues
