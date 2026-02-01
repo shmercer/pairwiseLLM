@@ -342,6 +342,36 @@
 #'   \code{n_pairs_failed}, \code{backlog_unjudged}, exploration/exploitation
 #'   targets, candidate counts, configuration used, utility percentiles, exit
 #'   path markers, diagnostics gates, and stop indicators.
+#' 
+#' @examples
+#' logs <- list(
+#'   batch_log = tibble::tibble(
+#'     iter = 1:3,
+#'     phase = c("phase1", "phase1", "phase2"),
+#'     mode = "live",
+#'     created_at = as.POSIXct(
+#'       c("2026-01-01 00:00:00", "2026-01-01 00:05:00", "2026-01-01 00:10:00"),
+#'       tz = "UTC"
+#'     ),
+#'     batch_size_target = c(50L, 50L, 50L),
+#'     n_pairs_selected = c(50L, 50L, 40L),
+#'     n_pairs_completed = c(0L, 50L, 40L),
+#'     candidate_starved = c(FALSE, FALSE, TRUE),
+#'     reason_short_batch = c(NA_character_, NA_character_, "candidate_exhausted"),
+#'     n_explore_selected = c(10L, 10L, 10L),
+#'     n_exploit_selected = c(40L, 40L, 30L)
+#'   )
+#' )
+#'
+#' # Full per-iteration view:
+#' summarize_iterations(logs)
+#'
+#' # Only the last iteration:
+#' summarize_iterations(logs, last_n = 1)
+#'
+#' # Compact core columns only:
+#' summarize_iterations(logs, include_optional = FALSE)
+#' 
 #' @export
 summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) {
   last_n <- .adaptive_summary_validate_last_n(last_n)
@@ -412,6 +442,32 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
 #' @param last_n Optional positive integer; return only the last \code{n} rows.
 #' @param include_optional Logical; include optional diagnostic columns.
 #' @return A tibble with one row per refit (canonical \code{round_log} schema).
+#' @examples
+#' # These summaries work on either an adaptive_state or a plain list of logs.
+#' logs <- list(
+#'   round_log = tibble::tibble(
+#'     round_id = 1:2,
+#'     iter_at_refit = c(10L, 20L),
+#'     new_pairs = c(50L, 50L),
+#'     completed_pairs = c(50L, 100L),
+#'     divergences = c(0L, 0L),
+#'     max_rhat = c(1.01, 1.00),
+#'     min_ess_bulk = c(800, 900),
+#'     stop_decision = c(NA, TRUE),
+#'     stop_reason = c(NA_character_, "quality_threshold_met"),
+#'     mode = "live"
+#'   )
+#' )
+#'
+#' # Full per-refit view:
+#' summarize_refits(logs)
+#'
+#' # Only the most recent refit row:
+#' summarize_refits(logs, last_n = 1)
+#'
+#' # Drop optional diagnostics if you want a compact core summary:
+#' summarize_refits(logs, include_optional = FALSE)
+#' 
 #' @export
 summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   last_n <- .adaptive_summary_validate_last_n(last_n)
@@ -494,6 +550,42 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #'   Rank percentiles summarize per-draw induced ranks (lower is better). When
 #'   \code{include_optional = FALSE}, optional columns such as repeated-pair or
 #'   adjacency diagnostics are dropped if present.
+#' 
+#' @examples
+#' # summarize_items() expects an item_log_list (list of per-refit item tables).
+#' # This example constructs a minimal logs object that matches what adaptive runs emit.
+#'
+#' item_log_1 <- tibble::tibble(
+#'   refit_id = 1L,
+#'   ID = c("A", "B", "C"),
+#'   theta_mean = c(0.4, 0.1, -0.2),
+#'   theta_sd = c(0.2, 0.3, 0.25),
+#'   rank_mean = c(1.2, 2.1, 2.7),
+#'   degree = c(10L, 9L, 8L),
+#'   pos_A_rate = c(0.55, 0.50, 0.48)
+#' )
+#'
+#' item_log_2 <- dplyr::mutate(
+#'   item_log_1,
+#'   refit_id = 2L,
+#'   theta_mean = theta_mean + c(0.1, 0.05, 0.02),
+#'   rank_mean = rank_mean + c(-0.1, 0.0, 0.1)
+#' )
+#'
+#' logs <- list(item_log_list = list(item_log_1, item_log_2))
+#'
+#' # Default returns the most recent refit:
+#' summarize_items(logs)
+#'
+#' # Select a specific refit:
+#' summarize_items(logs, refit = 1)
+#'
+#' # Stack all refits into one table:
+#' summarize_items(logs, bind = TRUE)
+#'
+#' # Sort and take the top rows:
+#' summarize_items(logs, sort_by = "rank_mean", top_n = 2)
+#' 
 #' @export
 summarize_items <- function(state,
     posterior = NULL,

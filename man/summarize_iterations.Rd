@@ -50,3 +50,33 @@ fewer than the target pairs are selected. This summary omits detailed
 fallback-stage fields; see \code{adaptive_rank_start()} for the full
 \code{batch_log} schema.
 }
+\examples{
+logs <- list(
+  batch_log = tibble::tibble(
+    iter = 1:3,
+    phase = c("phase1", "phase1", "phase2"),
+    mode = "live",
+    created_at = as.POSIXct(
+      c("2026-01-01 00:00:00", "2026-01-01 00:05:00", "2026-01-01 00:10:00"),
+      tz = "UTC"
+    ),
+    batch_size_target = c(50L, 50L, 50L),
+    n_pairs_selected = c(50L, 50L, 40L),
+    n_pairs_completed = c(0L, 50L, 40L),
+    candidate_starved = c(FALSE, FALSE, TRUE),
+    reason_short_batch = c(NA_character_, NA_character_, "candidate_exhausted"),
+    n_explore_selected = c(10L, 10L, 10L),
+    n_exploit_selected = c(40L, 40L, 30L)
+  )
+)
+
+# Full per-iteration view:
+summarize_iterations(logs)
+
+# Only the last iteration:
+summarize_iterations(logs, last_n = 1)
+
+# Compact core columns only:
+summarize_iterations(logs, include_optional = FALSE)
+
+}

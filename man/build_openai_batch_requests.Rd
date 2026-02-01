@@ -16,7 +16,6 @@ build_openai_batch_requests(
   logprobs = NULL,
   reasoning = NULL,
   include_thoughts = FALSE,
-  service_tier = NULL,
   request_id_prefix = "EXP"
 )
 }
@@ -57,10 +56,6 @@ For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
 with reasoning, requests a summary. Defaults \code{reasoning} to
 \code{"low"} for GPT-5 series models if not specified.}
 
-\item{service_tier}{Optional OpenAI service tier. Use \code{"flex"} or
-\code{"priority"} to request explicit tiers; \code{"standard"} is
-normalized to the default tier and omitted from the request.}
-
 \item{request_id_prefix}{String prefix for \code{custom_id}; the full
 ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.}
 }
@@ -80,10 +75,6 @@ suitable for use with the OpenAI batch API. It supports both
 \code{/v1/chat/completions} and \code{/v1/responses} endpoints.
 }
 \examples{
-\dontrun{
-# Requires OPENAI_API_KEY and network access.
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
@@ -117,19 +108,7 @@ batch_resp <- build_openai_batch_requests(
   reasoning = "medium"
 )
 
-# 3. GPT-5 Responses Batch with service tier
-batch_resp_tier <- build_openai_batch_requests(
-  pairs = pairs,
-  model = "gpt-5",
-  trait_name = td$name,
-  trait_description = td$description,
-  prompt_template = tmpl,
-  endpoint = "responses",
-  reasoning = "none",
-  service_tier = "flex"
-)
 batch_tbl_chat
 batch_tbl_resp
-}
 
 }

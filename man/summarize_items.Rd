@@ -56,3 +56,39 @@ and whether it appeared as the first option (A position). When
 all refits are stacked into a single table and \code{refit} must be
 \code{NULL}.
 }
+\examples{
+# summarize_items() expects an item_log_list (list of per-refit item tables).
+# This example constructs a minimal logs object that matches what adaptive runs emit.
+
+item_log_1 <- tibble::tibble(
+  refit_id = 1L,
+  ID = c("A", "B", "C"),
+  theta_mean = c(0.4, 0.1, -0.2),
+  theta_sd = c(0.2, 0.3, 0.25),
+  rank_mean = c(1.2, 2.1, 2.7),
+  degree = c(10L, 9L, 8L),
+  pos_A_rate = c(0.55, 0.50, 0.48)
+)
+
+item_log_2 <- dplyr::mutate(
+  item_log_1,
+  refit_id = 2L,
+  theta_mean = theta_mean + c(0.1, 0.05, 0.02),
+  rank_mean = rank_mean + c(-0.1, 0.0, 0.1)
+)
+
+logs <- list(item_log_list = list(item_log_1, item_log_2))
+
+# Default returns the most recent refit:
+summarize_items(logs)
+
+# Select a specific refit:
+summarize_items(logs, refit = 1)
+
+# Stack all refits into one table:
+summarize_items(logs, bind = TRUE)
+
+# Sort and take the top rows:
+summarize_items(logs, sort_by = "rank_mean", top_n = 2)
+
+}

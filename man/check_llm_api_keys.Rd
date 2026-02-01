@@ -35,7 +35,6 @@ each key is present. This makes it safe to run in logs, scripts, and
 shared environments.
 }
 \examples{
-\dontrun{
 # In an interactive session, quickly check which keys are configured:
 check_llm_api_keys()
 
@@ -43,6 +42,5 @@ check_llm_api_keys()
 # result:
 status <- check_llm_api_keys(verbose = FALSE)
 status
-}
 
 }

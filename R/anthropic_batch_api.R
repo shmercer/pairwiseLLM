@@ -200,10 +200,6 @@ NULL
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' # Requires ANTHROPIC_API_KEY and network access.
-#' library(pairwiseLLM)
-#'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'
 #' pairs <- example_writing_samples |>
@@ -237,7 +233,6 @@ NULL
 #' )
 #'
 #' reqs_reason
-#' }
 #'
 #' @export
 build_anthropic_batch_requests <- function(

@@ -75,7 +75,6 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
 #' # In an interactive session, quickly check which keys are configured:
 #' check_llm_api_keys()
 #'
@@ -83,7 +82,6 @@
 #' # result:
 #' status <- check_llm_api_keys(verbose = FALSE)
 #' status
-#' }
 #'
 #' @export
 check_llm_api_keys <- function(verbose = TRUE) {

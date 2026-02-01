@@ -41,3 +41,30 @@ variant. Stopping metrics report posterior quality (e.g.,
 \code{adaptive_rank_start()} for the full \code{round_log} column
 definitions.
 }
+\examples{
+# These summaries work on either an adaptive_state or a plain list of logs.
+logs <- list(
+  round_log = tibble::tibble(
+    round_id = 1:2,
+    iter_at_refit = c(10L, 20L),
+    new_pairs = c(50L, 50L),
+    completed_pairs = c(50L, 100L),
+    divergences = c(0L, 0L),
+    max_rhat = c(1.01, 1.00),
+    min_ess_bulk = c(800, 900),
+    stop_decision = c(NA, TRUE),
+    stop_reason = c(NA_character_, "quality_threshold_met"),
+    mode = "live"
+  )
+)
+
+# Full per-refit view:
+summarize_refits(logs)
+
+# Only the most recent refit row:
+summarize_refits(logs, last_n = 1)
+
+# Drop optional diagnostics if you want a compact core summary:
+summarize_refits(logs, include_optional = FALSE)
+
+}

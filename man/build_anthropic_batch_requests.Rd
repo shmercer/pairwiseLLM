@@ -92,10 +92,6 @@ you opt into extended thinking (\code{reasoning = "enabled"}), Anthropic's
 requirement of \code{temperature = 1} is enforced for all batch requests.
 }
 \examples{
-\dontrun{
-# Requires ANTHROPIC_API_KEY and network access.
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
@@ -129,6 +125,5 @@ reqs_reason <- build_anthropic_batch_requests(
 )
 
 reqs_reason
-}
 
 }
