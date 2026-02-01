@@ -632,7 +632,7 @@ openai_poll_batch_until_complete <- function(
 #' )
 #'
 #' # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
-#' batch_resp <- build_openai_batch_requests(
+#' batch_tbl_resp <- build_openai_batch_requests(
 #'   pairs = pairs,
 #'   model = "gpt-5.2-2025-12-11",
 #'   trait_name = td$name,
