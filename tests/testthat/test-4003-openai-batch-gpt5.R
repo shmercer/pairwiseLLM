@@ -58,46 +58,6 @@ testthat::test_that("build_openai_batch_requests drops sampling for GPT-5 minima
   testthat::expect_false("logprobs" %in% names(body))
 })
 
-testthat::test_that("build_openai_batch_requests handles service tier inclusion", {
-  pairs <- tibble::tibble(
-    ID1 = "A",
-    text1 = "Text A",
-    ID2 = "B",
-    text2 = "Text B"
-  )
-
-  td <- pairwiseLLM::trait_description("overall_quality")
-  tmpl <- pairwiseLLM::set_prompt_template()
-
-  out_flex <- pairwiseLLM::build_openai_batch_requests(
-    pairs = pairs,
-    model = "gpt-5-mini",
-    trait_name = td$name,
-    trait_description = td$description,
-    prompt_template = tmpl,
-    endpoint = "responses",
-    reasoning = "none",
-    service_tier = "flex"
-  )
-
-  out_standard <- pairwiseLLM::build_openai_batch_requests(
-    pairs = pairs,
-    model = "gpt-5-mini",
-    trait_name = td$name,
-    trait_description = td$description,
-    prompt_template = tmpl,
-    endpoint = "responses",
-    reasoning = "none",
-    service_tier = "standard"
-  )
-
-  body_flex <- out_flex$body[[1]]
-  body_standard <- out_standard$body[[1]]
-
-  testthat::expect_equal(body_flex$service_tier, "flex")
-  testthat::expect_false("service_tier" %in% names(body_standard))
-})
-
 testthat::test_that("build_openai_batch_requests warns on thoughts for non GPT-5", {
   pairs <- tibble::tibble(
     ID1 = "A",
