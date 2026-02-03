@@ -1,42 +1,4 @@
-# dev/adaptive_vs_degree_balanced_random_10000pairs_N1000.R
-#
-# pairwiseLLM 1.2.0 — Adaptive vs Degree-Balanced Random (LIVE LLM calls)
-# -----------------------------------------------------------------------
-# Goal
-# ----
-# Collect EXACTLY 10,000 completed pairwise judgments for each mode:
-#   (1) adaptive pairing (v3 engine; batch_size = 100; refit_B = 100)
-#   (2) degree-balanced random pairing (non-utility baseline; exposure-balanced)
-#
-# Then:
-#   - Refit Bayesian BTL (MCMC) for BOTH modes at identical intervals:
-#       pair_counts = 100, 200, ..., 10,000
-#   - Compute canonical stop/stability metrics (the same fields as adaptive round_log)
-#   - Add a few extra, easy-to-interpret diagnostics per refit:
-#       max_degree, sd_degree, frac_zero_degree, degree_gini, unique_pair_rate
-#   - Save artifacts continuously so the run is resumable and debuggable.
-#
-# Resumability / Postmortem artifacts
-# ----------------------------------
-# Adaptive:
-#   - state.rds is checkpointed by adaptive_rank_resume() each step.
-#   - we save first-10k results + pairs to RDS for later debugging.
-# Random:
-#   - results.rds, failed_attempts.rds, pairs_submitted.rds are saved after every chunk.
-#   - pairs_completed.rds is saved at the end (pairs corresponding to the kept 10k results).
-#
-# Package source verification (pairwiseLLM 1.2.0 tarball)
-# -------------------------------------------------------
-# - build_round_log_row() already includes:
-#     mean_degree, min_degree, n_unique_pairs_seen, scheduled_pairs, completed_pairs,
-#     pos_balance_mean/sd, starve_rate_since_last_refit, fallback_rate_since_last_refit, etc.
-#   (see R/adaptive_contracts.R)
-# - v3 config fields batch_size, refit_B, W, explore_rate exist and are validated
-#   (see R/adaptive_contracts.R)
-# - compute_stop_metrics(), should_stop(), diagnostics_gate() exist
-#   (see R/adaptive_stopping.R, R/adaptive_diagnostics.R)
-#
-# -----------------------------------------------------------------------
+#!/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
   library(pairwiseLLM)
@@ -46,70 +8,92 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 if (!nzchar(Sys.getenv("OPENAI_API_KEY"))) {
   rlang::abort("OPENAI_API_KEY is not set. Please set it before running this script.")
 }
 
-# -----------------------------
-# Config
-# -----------------------------
+# -------------------------------------------------------------------------
+# Dev: Adaptive pairing vs degree-balanced random pairing (OpenAI GPT-5.1)
+#
+# Goal:
+# - Run a live ADAPTIVE session on `example_writing_samples1000` (N = 1000)
+#   and collect EXACTLY target_pairs completed judgments (default 10,000),
+#   with submission iterations of exactly 100 pairs (including warm start).
+# - Run a DEGREE-BALANCED RANDOM baseline that also collects 10,000 judgments,
+#   with the same 100-pair submission cadence.
+# - Fit Bayesian BTL (MCMC) for the random run at the same pair counts (every 100),
+#   compute canonical stop metrics, and store round logs for both.
+# - Generate one figure per stop metric (by pair count; lagged metrics shown
+#   only once eligible).
+#
+# Notes:
+# - This script makes live API calls. Ensure your OpenAI key is set.
+# - CmdStanR + CmdStan must be installed for MCMC fitting.
+# - Designed to be resumable: artifacts are written after every chunk.
+# - You said you will RESTART (not resume from the prior 1000-pair run).
+#   This script will always start a new run_tag unless you explicitly set
+#   PAIRWISELLM_RESUME_RUN_TAG (not recommended for a clean restart).
+# -------------------------------------------------------------------------
+
+# ---- Config ----
 model <- "gpt-5.1"
-service_tier <- "flex"
+service_tier <- "flex" # Alternative: "priority"
 endpoint <- "responses"
 reasoning <- "none"
 
 seed <- 123L
-workers_adaptive <- 8L
-workers_random <- 8L
+workers <- 8L
 
 target_pairs <- 10000L
-refit_interval <- 100L
+submit_chunk <- 100L              # hard requirement: submit exactly 100 pairs per iteration
+refit_interval <- 100L            # refit every 100 observed pairs
 pair_counts <- seq.int(refit_interval, target_pairs, by = refit_interval)
 
-td <- trait_description("overall_quality")
-
-# -------------------------------------------------------------------------
-# Adaptive v3 overrides for this study
-# -------------------------------------------------------------------------
-# We want:
-#   - batch_size = 100 (pairs scheduled per iteration target)
-#   - refit_B    = 100 (refit after each 100 new completed pairs)
-#
-# To avoid early stopping in a fixed-budget comparison, we set extremely strict
-# stop thresholds that are valid under validate_config() but practically impossible
-# to satisfy exactly:
-#   eap_reliability_min     = 1
-#   theta_corr_min          = 1
-#   rank_spearman_min       = 1
-#   theta_sd_rel_change_max = 0
-adaptive_v3_overrides <- list(
-  batch_size = as.integer(refit_interval),
-  refit_B = as.integer(refit_interval),
-  eap_reliability_min = 1,
-  theta_corr_min = 1,
-  rank_spearman_min = 1,
-  theta_sd_rel_change_max = 0
-)
-
+# Adaptive stop thresholds: make stopping effectively impossible until we reach target_pairs.
+# (We still compute stop metrics/logs; we just don't want early stop.)
 adaptive_cfg <- list(
-  v3 = adaptive_v3_overrides
+  # Ensure stop checks aren't eligible until we have all data we want.
+  M1_target = target_pairs,
+  # Keep default d1 unless you want to change it.
+  d1 = 8,
+  # Critical: override phase scheduling targets so Phase 1/2/3 submit 100 at a time.
+  batch_overrides = list(
+    BATCH1 = submit_chunk,
+    BATCH2 = submit_chunk,
+    BATCH3 = submit_chunk,
+    CW     = submit_chunk
+  ),
+  # v3 internal controls (refit cadence + selection batch size)
+  v3 = list(
+    batch_size = submit_chunk,
+    refit_B = refit_interval,
+
+    # "Never stop early" knobs:
+    eap_reliability_min = 1.10,   # reliability is <= 1, so this won't pass
+    theta_corr_min = 0.999,
+    rank_spearman_min = 0.999,
+    theta_sd_rel_change_max = 0.0
+  )
 )
 
-# -----------------------------
-# Run folder layout (resumable)
-# -----------------------------
+# If you want to *allow* stopping in other experiments, restore the defaults you were using:
+# adaptive_cfg$v3$eap_reliability_min <- 0.85
+# adaptive_cfg$v3$theta_corr_min <- 0.90
+# adaptive_cfg$v3$theta_sd_rel_change_max <- 0.20
+# adaptive_cfg$v3$rank_spearman_min <- 0.90
+# adaptive_cfg$M1_target <- NULL
+
+# Resumability toggle:
+# For a clean restart, leave PAIRWISELLM_RESUME_RUN_TAG unset.
 resume_run_tag <- Sys.getenv("PAIRWISELLM_RESUME_RUN_TAG", unset = "")
-run_tag <- if (nzchar(resume_run_tag)) resume_run_tag else format(Sys.time(), "%Y%m%d-%H%M%S")
+if (nzchar(resume_run_tag)) {
+  message("NOTE: PAIRWISELLM_RESUME_RUN_TAG is set. For a clean restart, unset it.")
+}
 
-base_dir <- file.path(
-  "dev-output",
-  paste0("adaptive_vs_db_random_", model, "_", service_tier, "_N1000"),
-  run_tag
-)
+run_tag <- if (nzchar(resume_run_tag)) resume_run_tag else format(Sys.time(), "%Y%m%d-%H%M%S")
+base_dir <- file.path("dev-output", paste0("adaptive_vs_random_", model, "_", service_tier), run_tag)
 adaptive_dir <- file.path(base_dir, "adaptive")
-random_dir <- file.path(base_dir, "random_degree_balanced")
+random_dir <- file.path(base_dir, "random")
 fig_dir <- file.path(base_dir, "figures")
 
 dir.create(adaptive_dir, recursive = TRUE, showWarnings = FALSE)
@@ -125,31 +109,19 @@ paths_random <- list(
   results_path = file.path(random_dir, "results.rds"),
   failed_attempts_path = file.path(random_dir, "failed_attempts.rds"),
   pairs_submitted_path = file.path(random_dir, "pairs_submitted.rds"),
+  pair_key_set_path = file.path(random_dir, "pair_key_set.rds"),
+  degree_path = file.path(random_dir, "degree.rds"),
   fit_path = file.path(random_dir, "fit_bayes_btl_mcmc.rds"),
-  round_log_path = file.path(random_dir, "round_log_refit100.rds"),
-  pairs_completed_path = file.path(random_dir, "pairs_completed.rds")
+  round_log_path = file.path(random_dir, "round_log.rds")
 )
 
 paths_compare <- list(
-  adaptive_results_path = file.path(adaptive_dir, "results_first10000.rds"),
-  adaptive_pairs_path = file.path(adaptive_dir, "pairs_first10000.rds"),
-  adaptive_round_log_path = file.path(adaptive_dir, "round_log_refit100.rds"),
-  combined_round_log_path = file.path(base_dir, "round_log_combined_refit100.rds"),
-  combined_round_log_csv = file.path(base_dir, "round_log_combined_refit100.csv")
+  adaptive_round_log_path = file.path(adaptive_dir, "round_log.rds"),
+  combined_round_log_path = file.path(base_dir, "round_log_combined.rds"),
+  combined_round_log_csv = file.path(base_dir, "round_log_combined.csv")
 )
 
-# -----------------------------
-# Small utilities
-# -----------------------------
-or_else <- function(x, y) if (is.null(x)) y else x
-
-load_or <- function(path, build_fn) {
-  if (file.exists(path)) return(readRDS(path))
-  obj <- build_fn()
-  saveRDS(obj, path)
-  obj
-}
-
+# ---- Helpers ----
 make_unordered_key <- function(id1, id2) {
   id1 <- as.character(id1)
   id2 <- as.character(id2)
@@ -160,334 +132,59 @@ make_ordered_key <- function(A_id, B_id) {
   paste(as.character(A_id), as.character(B_id), sep = ":")
 }
 
-# -----------------------------
-# Data (N = 1000) + resume guard
-# -----------------------------
-data("example_writing_samples1000", package = "pairwiseLLM")
-
-samples <- example_writing_samples1000 |>
-  dplyr::select(.data$ID, text = .data$text) |>
-  dplyr::mutate(ID = as.character(.data$ID))
-
-# If resuming, ensure the checkpoint corresponds to the SAME dataset.
-if (nzchar(resume_run_tag) && file.exists(paths_adaptive$state_path)) {
-  st <- readRDS(paths_adaptive$state_path)
-
-  if (is.null(st$ids) || is.null(st$texts)) {
-    rlang::abort("Adaptive checkpoint is missing `ids` or `texts`.")
-  }
-
-  ids_ckpt <- as.character(st$ids)
-  ids_data <- as.character(samples$ID)
-
-  if (!setequal(ids_ckpt, ids_data)) {
-    only_in_ckpt <- setdiff(ids_ckpt, ids_data)
-    only_in_data <- setdiff(ids_data, ids_ckpt)
-
-    rlang::abort(paste0(
-      "Refusing to resume: checkpoint item IDs do not match the loaded dataset.\n",
-      "Loaded dataset: example_writing_samples1000 (N = ", length(ids_data), ")\n",
-      "Checkpoint items: N = ", length(ids_ckpt), "\n\n",
-      "IDs only in checkpoint (up to 8): ",
-      paste(utils::head(only_in_ckpt, 8), collapse = ", "),
-      "\n",
-      "IDs only in dataset (up to 8): ",
-      paste(utils::head(only_in_data, 8), collapse = ", "),
-      "\n\n",
-      "Fix: unset PAIRWISELLM_RESUME_RUN_TAG to start fresh, or set it to the correct run folder."
-    ))
-  }
-
-  samples <- tibble::tibble(
-    ID = ids_ckpt,
-    text = as.character(unname(st$texts))
-  )
-
-  message("Resuming with checkpoint items (N = ", nrow(samples), ") from: ", base_dir)
+or_else <- function(x, y) {
+  if (is.null(x)) y else x
 }
 
+load_or <- function(path, build_fn) {
+  if (file.exists(path)) return(readRDS(path))
+  obj <- build_fn()
+  saveRDS(obj, path)
+  obj
+}
+
+# Non-exported helper (used by our refit-log reconstruction)
+adaptive_state_load <- getFromNamespace("adaptive_state_load", "pairwiseLLM")
+
+# ---- Data ----
+data("example_writing_samples1000", package = "pairwiseLLM")
+samples <- example_writing_samples1000 |>
+  dplyr::select("ID", text = "text") |>
+  dplyr::mutate(ID = as.character(.data$ID))
+
+td <- trait_description("overall_quality")
 text_map <- stats::setNames(as.character(samples$text), as.character(samples$ID))
+ids <- as.character(samples$ID)
+n_items <- length(ids)
 
-# -----------------------------
-# Logging helpers
-# -----------------------------
-degree_summary <- function(results, ids) {
-  ids <- as.character(ids)
-  deg <- stats::setNames(integer(length(ids)), ids)
-  if (!is.data.frame(results) || nrow(results) < 1L) {
-    return(list(
-      min_degree = 0L, mean_degree = 0, max_degree = 0L, sd_degree = 0,
-      frac_zero_degree = 1, gini_degree = NA_real_,
-      n_unique_pairs_seen = 0L, unique_pair_rate = NA_real_
-    ))
+# ---- Logging: degree summaries for a results table ----
+degree_summary_from_results <- function(results, ids) {
+  if (nrow(results) < 1) {
+    return(list(mean_degree = 0, min_degree = 0))
   }
-
+  deg <- integer(length(ids))
+  names(deg) <- ids
   A <- as.character(results$A_id)
   B <- as.character(results$B_id)
   tabA <- table(A)
   tabB <- table(B)
-  commonA <- intersect(names(tabA), names(deg))
-  commonB <- intersect(names(tabB), names(deg))
-  deg[commonA] <- deg[commonA] + as.integer(tabA[commonA])
-  deg[commonB] <- deg[commonB] + as.integer(tabB[commonB])
-
-  min_degree <- min(deg)
-  mean_degree <- mean(as.double(deg))
-  max_degree <- max(deg)
-  sd_degree <- stats::sd(as.double(deg))
-  frac_zero_degree <- mean(deg == 0L)
-
-  # Gini coefficient (simple, stable)
-  x <- sort(as.double(deg))
-  if (sum(x) == 0) {
-    gini <- NA_real_
-  } else {
-    n <- length(x)
-    gini <- (2 * sum(x * seq_len(n))) / (n * sum(x)) - (n + 1) / n
-  }
-
-  ukeys <- make_unordered_key(A, B)
-  n_unique <- dplyr::n_distinct(ukeys)
-  unique_rate <- n_unique / nrow(results)
-
-  list(
-    min_degree = as.integer(min_degree),
-    mean_degree = as.double(mean_degree),
-    max_degree = as.integer(max_degree),
-    sd_degree = as.double(sd_degree),
-    frac_zero_degree = as.double(frac_zero_degree),
-    gini_degree = as.double(gini),
-    n_unique_pairs_seen = as.integer(n_unique),
-    unique_pair_rate = as.double(unique_rate)
-  )
+  deg[names(tabA)] <- deg[names(tabA)] + as.integer(tabA)
+  deg[names(tabB)] <- deg[names(tabB)] + as.integer(tabB)
+  list(mean_degree = mean(deg), min_degree = min(deg))
 }
 
-log_progress <- function(prefix, results, ids) {
-  s <- degree_summary(results, ids)
-  msg <- paste0(
-    prefix,
-    " completed_pairs=", nrow(results),
-    " | deg(min/mean/max/sd)=", s$min_degree, "/",
-    sprintf("%.2f", s$mean_degree), "/", s$max_degree, "/",
-    sprintf("%.2f", s$sd_degree),
-    " | frac_zero_deg=", sprintf("%.3f", s$frac_zero_degree),
-    " | gini_deg=", ifelse(is.na(s$gini_degree), "NA", sprintf("%.3f", s$gini_degree)),
-    " | unique_pairs=", s$n_unique_pairs_seen,
-    " (rate=", ifelse(is.na(s$unique_pair_rate), "NA", sprintf("%.3f", s$unique_pair_rate)), ")"
-  )
-  message(msg)
-  invisible(s)
-}
-
-# -----------------------------
-# Random: degree-balanced sampler
-# -----------------------------
-make_degree_balanced_pairs <- function(ids,
-                                      n_needed,
-                                      degrees,
-                                      seen_keys,
-                                      seed,
-                                      alpha = 1.0,
-                                      avoid_repeats = TRUE,
-                                      max_attempts = NULL) {
-  ids <- as.character(ids)
-  degrees <- as.integer(degrees[ids])
-  degrees[is.na(degrees)] <- 0L
-
-  if (is.null(max_attempts)) {
-    max_attempts <- max(20000L, n_needed * 100L)
-  }
-
-  seen <- NULL
-  if (avoid_repeats) {
-    seen <- new.env(parent = emptyenv())
-    if (length(seen_keys) > 0L) {
-      for (k in seen_keys) assign(k, TRUE, envir = seen)
-    }
-  }
-
-  # weights: inverse-degree (smaller degree => higher chance to be selected)
-  weights <- function() {
-    w <- 1 / ((as.double(degrees) + 1) ^ alpha)
-    w / sum(w)
-  }
-
-  out <- vector("list", n_needed)
-  k <- 0L
-  attempts <- 0L
-
-  while (k < n_needed) {
-    attempts <- attempts + 1L
-    if (attempts > max_attempts) {
-      rlang::abort("Degree-balanced sampler hit max_attempts. Consider avoid_repeats=FALSE or smaller n_needed.")
-    }
-
-    set.seed(seed + attempts)
-    w <- weights()
-    A <- ids[[sample.int(length(ids), 1L, prob = w)]]
-    B <- ids[[sample.int(length(ids), 1L, prob = w)]]
-    if (A == B) next
-
-    ukey <- make_unordered_key(A, B)
-    if (!is.null(seen) && exists(ukey, envir = seen, inherits = FALSE)) next
-
-    # Randomize A/B presentation order deterministically
-    set.seed(seed + 999999L + attempts)
-    if (runif(1) < 0.5) {
-      tmp <- A; A <- B; B <- tmp
-    }
-
-    k <- k + 1L
-    out[[k]] <- tibble::tibble(
-      pair_uid = paste0(ukey, "#db_", attempts),
-      unordered_key = ukey,
-      ordered_key = make_ordered_key(A, B),
-      A_id = as.character(A),
-      B_id = as.character(B)
-    )
-
-    # update seen and degrees locally so within-chunk balancing improves
-    if (!is.null(seen)) assign(ukey, TRUE, envir = seen)
-    degrees[A] <- degrees[A] + 1L
-    degrees[B] <- degrees[B] + 1L
-  }
-
-  dplyr::bind_rows(out)
-}
-
-build_submit_pairs_tbl <- function(pairs_meta, text_map) {
-  A_text <- unname(text_map[as.character(pairs_meta$A_id)])
-  B_text <- unname(text_map[as.character(pairs_meta$B_id)])
-  if (any(is.na(A_text)) || any(is.na(B_text))) {
-    missing <- unique(c(pairs_meta$A_id[is.na(A_text)], pairs_meta$B_id[is.na(B_text)]))
-    rlang::abort(paste0("Missing texts for some IDs: ", paste(utils::head(missing, 8), collapse = ", ")))
-  }
-
-  tibble::tibble(
-    ID1 = as.character(pairs_meta$A_id),
-    text1 = as.character(A_text),
-    ID2 = as.character(pairs_meta$B_id),
-    text2 = as.character(B_text),
-    pair_uid = as.character(pairs_meta$pair_uid),
-    phase = "phase2",
-    iter = 1L
-  )
-}
-
-collect_random_results_degree_balanced <- function(target_pairs,
-                                                   alpha = 1.0,
-                                                   avoid_repeats = TRUE) {
-  results <- if (file.exists(paths_random$results_path)) readRDS(paths_random$results_path) else tibble::tibble()
-  failed_attempts <- if (file.exists(paths_random$failed_attempts_path)) readRDS(paths_random$failed_attempts_path) else tibble::tibble()
-  pairs_submitted <- if (file.exists(paths_random$pairs_submitted_path)) readRDS(paths_random$pairs_submitted_path) else tibble::tibble()
-
-  results <- tibble::as_tibble(results)
-  failed_attempts <- tibble::as_tibble(failed_attempts)
-  pairs_submitted <- tibble::as_tibble(pairs_submitted)
-
-  ids <- as.character(samples$ID)
-
-  # initial progress
-  log_progress("Random(DB) resume", results, ids)
-
-  while (nrow(results) < target_pairs) {
-    remaining <- target_pairs - nrow(results)
-    buffer <- max(50L, as.integer(ceiling(0.10 * remaining)))
-    request_n <- remaining + buffer
-
-    # Recompute degrees + seen keys from COMPLETED results (robust under resume/retries)
-    s <- degree_summary(results, ids)
-    degrees <- stats::setNames(integer(length(ids)), ids)
-    if (nrow(results) > 0L) {
-      # reuse degree_summary computation indirectly by rebuilding from results:
-      # (fast enough for 10k)
-      A <- as.character(results$A_id)
-      B <- as.character(results$B_id)
-      tabA <- table(A); tabB <- table(B)
-      commonA <- intersect(names(tabA), names(degrees))
-      commonB <- intersect(names(tabB), names(degrees))
-      degrees[commonA] <- degrees[commonA] + as.integer(tabA[commonA])
-      degrees[commonB] <- degrees[commonB] + as.integer(tabB[commonB])
-    }
-
-    seen_keys <- character(0)
-    if (avoid_repeats && nrow(results) > 0L) {
-      seen_keys <- make_unordered_key(results$A_id, results$B_id)
-    }
-
-    meta <- make_degree_balanced_pairs(
-      ids = ids,
-      n_needed = request_n,
-      degrees = degrees,
-      seen_keys = seen_keys,
-      seed = seed + nrow(results) + 1L,  # advance seed as results accumulate
-      alpha = alpha,
-      avoid_repeats = avoid_repeats
-    )
-
-    submit_pairs <- build_submit_pairs_tbl(meta, text_map)
-
-    res <- submit_llm_pairs(
-      pairs = submit_pairs,
-      model = model,
-      trait_name = td$name,
-      trait_description = td$description,
-      backend = "openai",
-      verbose = TRUE,
-      progress = TRUE,
-      parallel = TRUE,
-      workers = workers_random,
-      endpoint = endpoint,
-      reasoning = reasoning,
-      service_tier = service_tier
-    )
-
-    new_results <- tibble::as_tibble(or_else(res$results, tibble::tibble()))
-    results <- dplyr::bind_rows(results, new_results)
-    failed_attempts <- dplyr::bind_rows(failed_attempts, or_else(res$failed_attempts, tibble::tibble()))
-    pairs_submitted <- dplyr::bind_rows(pairs_submitted, submit_pairs)
-
-    # Persist after each chunk
-    saveRDS(results, paths_random$results_path)
-    saveRDS(failed_attempts, paths_random$failed_attempts_path)
-    saveRDS(pairs_submitted, paths_random$pairs_submitted_path)
-
-    log_progress("Random(DB)", results, ids)
-  }
-
-  # Keep first target_pairs completed judgments
-  results <- results[seq_len(target_pairs), , drop = FALSE]
-  saveRDS(results, paths_random$results_path)
-
-  # Save a "pairs_completed" artifact (pairs corresponding to kept results)
-  pairs_completed <- pairs_submitted
-  if ("pair_uid" %in% names(results) && "pair_uid" %in% names(pairs_submitted)) {
-    keep_uids <- results$pair_uid
-    pairs_completed <- pairs_submitted |> dplyr::filter(.data$pair_uid %in% keep_uids)
-  }
-  saveRDS(pairs_completed, paths_random$pairs_completed_path)
-
-  list(results = results, failed_attempts = failed_attempts, pairs_submitted = pairs_submitted)
-}
-
-# -------------------------------------------------------------------
-# PART A: ADAPTIVE — run until exactly 10,000 completed pairs
-# -------------------------------------------------------------------
-adaptive_start_or_resume <- function() {
+# ---- Adaptive live run: start + resume to EXACT target_pairs ----
+adaptive_collect_to_target <- function(target_pairs) {
   if (file.exists(paths_adaptive$state_path)) {
-    st0 <- adaptive_state_load(paths_adaptive$state_path)
-    submission_info <- list(
-      backend = st0$config$backend %||% "openai",
-      model = st0$config$model %||% model,
-      trait_name = st0$config$trait_name %||% td$name,
-      trait_description = st0$config$trait_description %||% td$description,
-      prompt_template = st0$config$prompt_template %||% NULL,
-      output_dir = paths_adaptive$output_dir,
-      state_path = paths_adaptive$state_path
-    )
-    list(mode = "resume", submission_info = submission_info)
+    # If you're truly restarting, delete the directory or use a new run_tag.
+    message("Found existing adaptive state at: ", paths_adaptive$state_path)
+    message("Resuming from checkpoint.")
+    state <- adaptive_state_load(paths_adaptive$state_path)
+    submission_info <- readRDS(file.path(adaptive_dir, "submission_info.rds"))
   } else {
-    start_out <- adaptive_rank_start(
+    message("Starting new adaptive run in: ", adaptive_dir)
+
+    out0 <- adaptive_rank_start(
       samples = samples,
       model = model,
       trait_name = td$name,
@@ -496,7 +193,7 @@ adaptive_start_or_resume <- function() {
       mode = "live",
       submission = list(
         parallel = TRUE,
-        workers = workers_adaptive,
+        workers = workers,
         progress = TRUE,
         verbose = TRUE,
         endpoint = endpoint,
@@ -507,50 +204,32 @@ adaptive_start_or_resume <- function() {
       paths = paths_adaptive,
       seed = seed
     )
-    list(mode = "start", submission_info = start_out$submission_info)
+
+    state <- out0$state
+    submission_info <- out0$submission_info
+
+    saveRDS(state, paths_adaptive$state_path)
+    saveRDS(submission_info, file.path(adaptive_dir, "submission_info.rds"))
   }
-}
 
-adaptive_collect_to_target <- function(target_pairs) {
-  init <- adaptive_start_or_resume()
+  t0 <- Sys.time()
+  last_completed <- as.integer(or_else(state$comparisons_observed, 0L))
+  last_print <- Sys.time()
 
-  repeat {
-    st <- if (file.exists(paths_adaptive$state_path)) adaptive_state_load(paths_adaptive$state_path) else NULL
-    completed <- as.integer(st$comparisons_observed %||% 0L)
+  while (as.integer(or_else(state$comparisons_observed, 0L)) < target_pairs) {
+    now_completed <- as.integer(or_else(state$comparisons_observed, 0L))
+    remaining <- target_pairs - now_completed
 
-    # degree + coverage logging from state (preferred)
-    if (!is.null(st) && !is.null(st$deg)) {
-      deg <- as.double(st$deg)
-      msg <- paste0(
-        "Adaptive completed_pairs=", completed, " / ", target_pairs,
-        " | deg(min/mean/max/sd)=",
-        min(deg), "/", sprintf("%.2f", mean(deg)), "/", max(deg), "/", sprintf("%.2f", stats::sd(deg)),
-        " | frac_zero_deg=", sprintf("%.3f", mean(deg == 0)),
-        " | pos_balance_mean=",
-        if (!is.null(st$pos1) && length(st$pos1) == length(st$deg)) {
-          pos1 <- as.double(st$pos1)
-          pb <- rep(NA_real_, length(deg))
-          pos <- deg > 0
-          pb[pos] <- (pos1[pos] / deg[pos]) - 0.5
-          sprintf("%.3f", mean(pb, na.rm = TRUE))
-        } else {
-          "NA"
-        }
-      )
-      message(msg)
-    } else {
-      message("Adaptive completed_pairs=", completed, " / ", target_pairs)
-    }
-
-    if (completed >= target_pairs) break
-
-    adaptive_rank_resume(
-      state_path = paths_adaptive$state_path,
+    # Safety: ensure we keep submitting exactly submit_chunk, unless we're very close to target.
+    # If remaining < submit_chunk, we still schedule submit_chunk; we will truncate later if needed.
+    # (That keeps the iteration sizes consistent, which you asked for.)
+    res <- adaptive_rank_resume(
+      state = state,
       mode = "live",
-      submission_info = init$submission_info,
+      submission_info = submission_info,
       submission = list(
         parallel = TRUE,
-        workers = workers_adaptive,
+        workers = workers,
         progress = TRUE,
         verbose = TRUE,
         endpoint = endpoint,
@@ -560,96 +239,319 @@ adaptive_collect_to_target <- function(target_pairs) {
       adaptive = adaptive_cfg,
       seed = seed
     )
+
+    state <- res$state
+    submission_info <- res$submission_info
+
+    # Persist after each resume iteration
+    saveRDS(state, paths_adaptive$state_path)
+    saveRDS(submission_info, file.path(adaptive_dir, "submission_info.rds"))
+
+    # Lightweight progress logging (also useful if something goes wrong later)
+    now_completed2 <- as.integer(or_else(state$comparisons_observed, 0L))
+    delta <- now_completed2 - last_completed
+    if (delta < 0) delta <- 0
+
+    if (as.numeric(difftime(Sys.time(), last_print, units = "secs")) >= 5 || delta > 0) {
+      # Degree summaries from observed results in state (history_results)
+      hist_res <- tibble::as_tibble(or_else(state$history_results, tibble()))
+      degsum <- degree_summary_from_results(hist_res, ids)
+
+      elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+      rate <- if (elapsed > 0) now_completed2 / elapsed else NA_real_
+
+      message(sprintf(
+        "[ADAPTIVE] completed=%d (+%d) / %d | mean_deg=%.2f min_deg=%d | elapsed=%.1fs rate=%.3f pairs/s",
+        now_completed2, delta, target_pairs, degsum$mean_degree, degsum$min_degree, elapsed, rate
+      ))
+      last_print <- Sys.time()
+    }
+
+    last_completed <- now_completed2
+
+    # If the adaptive code ever stops early (mode == stopped), break and error
+    if (!is.null(state$mode) && identical(state$mode, "stopped") && now_completed2 < target_pairs) {
+      rlang::abort(paste0(
+        "Adaptive run stopped early at completed_pairs=", now_completed2,
+        " < target_pairs=", target_pairs,
+        ". You can relax the 'never stop early' thresholds or set adaptive$M1_target higher."
+      ))
+    }
   }
 
-  st_final <- adaptive_state_load(paths_adaptive$state_path)
-
-  adaptive_results_all <- tibble::as_tibble(st_final$history_results %||% tibble::tibble())
-  adaptive_pairs_all <- tibble::as_tibble(st_final$history_pairs %||% tibble::tibble())
-
-  if (nrow(adaptive_results_all) < target_pairs) {
-    rlang::abort("Adaptive state has fewer completed results than target; cannot proceed.")
+  # Truncate to exactly target_pairs observed results if overshot.
+  # This keeps comparability exact.
+  if (!is.null(state$history_results) && nrow(state$history_results) > target_pairs) {
+    state$history_results <- state$history_results[seq_len(target_pairs), , drop = FALSE]
+    state$comparisons_observed <- target_pairs
+    saveRDS(state, paths_adaptive$state_path)
   }
 
-  adaptive_results <- adaptive_results_all[seq_len(target_pairs), , drop = FALSE]
-
-  if ("pair_uid" %in% names(adaptive_results) && "pair_uid" %in% names(adaptive_pairs_all)) {
-    keep_uids <- adaptive_results$pair_uid
-    adaptive_pairs <- adaptive_pairs_all |>
-      dplyr::filter(.data$pair_uid %in% keep_uids)
-  } else {
-    adaptive_pairs <- adaptive_pairs_all
-  }
-
-  saveRDS(adaptive_results, paths_compare$adaptive_results_path)
-  saveRDS(adaptive_pairs, paths_compare$adaptive_pairs_path)
-
-  list(state = st_final, results = adaptive_results, pairs = adaptive_pairs)
+  state
 }
 
-adaptive_out <- adaptive_collect_to_target(target_pairs)
+adaptive_state <- adaptive_collect_to_target(target_pairs = target_pairs)
+adaptive_out <- list(state = adaptive_state) # keep script structure similar to prior versions
 
-pairwiseLLM:::validate_results_tbl(tibble::as_tibble(adaptive_out$results))
+adaptive_round_log <- tibble::as_tibble(or_else(adaptive_out$state$config$round_log, tibble::tibble()))
+saveRDS(adaptive_round_log, paths_compare$adaptive_round_log_path)
 
-# -------------------------------------------------------------------
-# PART B: RANDOM (degree-balanced) — collect to 10,000 completed pairs
-# -------------------------------------------------------------------
-random_collect <- collect_random_results_degree_balanced(
-  target_pairs = target_pairs,
-  alpha = 1.0,
-  avoid_repeats = TRUE
-)
+# Determine v3 config + model variant used (for matching random refits)
+v3_config <- or_else(adaptive_out$state$config$v3, adaptive_v3_config(nrow(samples), adaptive_cfg))
+model_variant <- or_else(v3_config$model_variant, "btl_e_b")
 
-random_results <- tibble::as_tibble(random_collect$results)
-pairwiseLLM:::validate_results_tbl(random_results)
+# ---- Degree-balanced random pairing baseline (100 pairs per iteration) ----
+# Strategy:
+# - Maintain per-item degree counts (observed comparisons).
+# - Each new pair is formed by sampling two items from the lowest-degree pool
+#   (with some random tie-breaking) to keep degrees balanced.
+# - Avoid repeating unordered pairs using a set (environment) keyed by unordered_key.
+# - Randomize A/B order per pair.
+#
+# This baseline is easy to interpret:
+# - It matches the adaptive run's enforced degree-balancing in warm start and beyond.
+# - It avoids "tight windows" and samples globally from all items, but with an explicit
+#   balancing constraint to control graph coverage.
 
-# -------------------------------------------------------------------
-# PART C: Comparable refits at identical intervals (100..10000 by 100)
-# -------------------------------------------------------------------
-.btl_mcmc_require_cmdstanr <- getFromNamespace(".btl_mcmc_require_cmdstanr", "pairwiseLLM")
-.btl_mcmc_require_cmdstanr()
+random_pair_set_new <- function() {
+  # Environment as a hash set for unordered keys
+  e <- new.env(parent = emptyenv())
+  e
+}
 
-# Use the same model variant the adaptive run uses (for comparability)
-v3_config_final <- adaptive_out$state$config$v3 %||% adaptive_v3_config(nrow(samples), adaptive_v3_overrides)
-model_variant <- v3_config_final$model_variant %||% "btl_e_b"
+random_pair_set_has <- function(set_env, key) {
+  exists(key, envir = set_env, inherits = FALSE)
+}
 
-# Extra diagnostics to add to each refit row (beyond canonical round_log schema)
-extra_degree_metrics_from_state <- function(state) {
-  deg <- as.double(state$deg %||% numeric(0))
-  if (length(deg) == 0L) {
-    return(tibble(
-      max_degree = NA_integer_,
-      sd_degree = NA_real_,
-      frac_zero_degree = NA_real_,
-      degree_gini = NA_real_,
-      unique_pair_rate = NA_real_
-    ))
+random_pair_set_add <- function(set_env, key) {
+  assign(key, TRUE, envir = set_env)
+  invisible(TRUE)
+}
+
+sample_degree_balanced_pairs <- function(ids, deg, set_env, n_pairs, seed_offset = 0L) {
+  set.seed(seed + seed_offset)
+
+  out_A <- character(n_pairs)
+  out_B <- character(n_pairs)
+  out_unordered <- character(n_pairs)
+
+  # Precompute index map
+  id_vec <- ids
+  deg_vec <- deg
+  names(deg_vec) <- id_vec
+
+  # Helper: draw one id from the k-lowest degree items
+  draw_lowdeg <- function(k = 50L) {
+    # Choose from the k lowest-degree items (or all if N smaller)
+    ord <- order(deg_vec, runif(length(deg_vec)))
+    pool <- id_vec[ord[seq_len(min(k, length(id_vec)))]]
+    sample(pool, 1)
   }
 
-  # gini
-  x <- sort(deg)
-  if (sum(x) == 0) {
-    gini <- NA_real_
-  } else {
-    n <- length(x)
-    gini <- (2 * sum(x * seq_len(n))) / (n * sum(x)) - (n + 1) / n
+  i <- 1L
+  tries <- 0L
+  max_tries <- 200000L
+
+  while (i <= n_pairs) {
+    tries <- tries + 1L
+    if (tries > max_tries) {
+      rlang::abort("Degree-balanced random pairing: too many failed attempts to find new pairs.")
+    }
+
+    a <- draw_lowdeg(k = 80L)
+    b <- draw_lowdeg(k = 80L)
+    if (identical(a, b)) next
+
+    key <- make_unordered_key(a, b)
+    if (random_pair_set_has(set_env, key)) next
+
+    # accept
+    random_pair_set_add(set_env, key)
+
+    # randomize presentation order
+    if (runif(1) < 0.5) {
+      A <- a; B <- b
+    } else {
+      A <- b; B <- a
+    }
+
+    out_A[[i]] <- A
+    out_B[[i]] <- B
+    out_unordered[[i]] <- key
+
+    # update degrees immediately so the batch itself stays balanced
+    deg_vec[[A]] <- deg_vec[[A]] + 1L
+    deg_vec[[B]] <- deg_vec[[B]] + 1L
+
+    i <- i + 1L
   }
 
-  # unique_pair_rate from canonical fields if present
-  # (n_unique_pairs_seen / completed_pairs)
-  n_unique <- as.double(state$posterior$stop_metrics$n_unique_pairs_seen %||% NA_real_)
-  n_completed <- as.double(state$posterior$stop_metrics$completed_pairs %||% NA_real_)
-  unique_rate <- if (is.finite(n_unique) && is.finite(n_completed) && n_completed > 0) n_unique / n_completed else NA_real_
-
-  tibble(
-    max_degree = as.integer(max(deg)),
-    sd_degree = as.double(stats::sd(deg)),
-    frac_zero_degree = as.double(mean(deg == 0)),
-    degree_gini = as.double(gini),
-    unique_pair_rate = as.double(unique_rate)
+  list(
+    A_id = out_A,
+    B_id = out_B,
+    unordered_key = out_unordered,
+    deg = deg_vec
   )
 }
 
+build_submit_pairs_tbl <- function(A_id, B_id, unordered_key, samples, iter) {
+  s <- samples |>
+    dplyr::select("ID", "text") |>
+    dplyr::mutate(ID = as.character(.data$ID))
+
+  pairs_meta <- tibble::tibble(
+    A_id = as.character(A_id),
+    B_id = as.character(B_id),
+    unordered_key = as.character(unordered_key),
+    ordered_key = make_ordered_key(A_id, B_id),
+    pair_uid = paste0(unordered_key, "#", iter)
+  )
+
+  pairs_meta |>
+    dplyr::left_join(s, by = c("A_id" = "ID")) |>
+    dplyr::rename(text1 = .data$text) |>
+    dplyr::left_join(s, by = c("B_id" = "ID")) |>
+    dplyr::rename(text2 = .data$text) |>
+    dplyr::transmute(
+      ID1 = as.character(.data$A_id),
+      text1 = as.character(.data$text1),
+      ID2 = as.character(.data$B_id),
+      text2 = as.character(.data$text2),
+      pair_uid = as.character(.data$pair_uid),
+      phase = "phase2",
+      iter = as.integer(iter)
+    )
+}
+
+collect_random_results <- function(target_pairs, submit_chunk) {
+  results <- if (file.exists(paths_random$results_path)) readRDS(paths_random$results_path) else tibble::tibble()
+  failed_attempts <- if (file.exists(paths_random$failed_attempts_path)) readRDS(paths_random$failed_attempts_path) else tibble::tibble()
+  pairs_submitted <- if (file.exists(paths_random$pairs_submitted_path)) readRDS(paths_random$pairs_submitted_path) else tibble::tibble()
+
+  # Degree state + pair-key set for resumability
+  deg <- if (file.exists(paths_random$degree_path)) readRDS(paths_random$degree_path) else {
+    d <- integer(length(ids)); names(d) <- ids; d
+  }
+  pair_set <- if (file.exists(paths_random$pair_key_set_path)) readRDS(paths_random$pair_key_set_path) else random_pair_set_new()
+
+  results <- tibble::as_tibble(results)
+  pairs_submitted <- tibble::as_tibble(pairs_submitted)
+  failed_attempts <- tibble::as_tibble(failed_attempts)
+
+  iter <- if (nrow(pairs_submitted) < 1) 1L else (max(as.integer(pairs_submitted$iter), na.rm = TRUE) + 1L)
+
+  t0 <- Sys.time()
+  last_print <- Sys.time()
+
+  while (nrow(results) < target_pairs) {
+    remaining <- target_pairs - nrow(results)
+
+    # Keep iteration size exactly submit_chunk (even if remaining < submit_chunk),
+    # then truncate results at end to exactly target_pairs for comparability.
+    n_to_submit <- submit_chunk
+
+    # Generate degree-balanced pairs
+    samp <- sample_degree_balanced_pairs(
+      ids = ids,
+      deg = deg,
+      set_env = pair_set,
+      n_pairs = n_to_submit,
+      seed_offset = iter
+    )
+    deg <- samp$deg
+
+    submit_pairs <- build_submit_pairs_tbl(
+      A_id = samp$A_id,
+      B_id = samp$B_id,
+      unordered_key = samp$unordered_key,
+      samples = samples,
+      iter = iter
+    )
+
+    res <- submit_llm_pairs(
+      pairs = submit_pairs,
+      model = model,
+      trait_name = td$name,
+      trait_description = td$description,
+      backend = "openai",
+      verbose = TRUE,
+      progress = TRUE,
+      parallel = TRUE,
+      workers = workers,
+      endpoint = endpoint,
+      reasoning = reasoning,
+      service_tier = service_tier
+    )
+
+    results <- dplyr::bind_rows(results, or_else(res$results, tibble::tibble()))
+    failed_attempts <- dplyr::bind_rows(failed_attempts, or_else(res$failed_attempts, tibble::tibble()))
+    pairs_submitted <- dplyr::bind_rows(pairs_submitted, submit_pairs)
+
+    # Persist after each chunk (resumability + post-mortem debugging)
+    saveRDS(results, paths_random$results_path)
+    saveRDS(failed_attempts, paths_random$failed_attempts_path)
+    saveRDS(pairs_submitted, paths_random$pairs_submitted_path)
+    saveRDS(deg, paths_random$degree_path)
+    saveRDS(pair_set, paths_random$pair_key_set_path)
+
+    # Logging
+    if (as.numeric(difftime(Sys.time(), last_print, units = "secs")) >= 5) {
+      degsum <- list(mean_degree = mean(deg), min_degree = min(deg))
+      elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+      rate <- if (elapsed > 0) nrow(results) / elapsed else NA_real_
+      message(sprintf(
+        "[RANDOM-DEG] completed=%d / %d | mean_deg=%.2f min_deg=%d | elapsed=%.1fs rate=%.3f pairs/s",
+        nrow(results), target_pairs, degsum$mean_degree, degsum$min_degree, elapsed, rate
+      ))
+      last_print <- Sys.time()
+    }
+
+    iter <- iter + 1L
+  }
+
+  # Truncate to exactly target_pairs completed judgments (preserves completion order).
+  if (nrow(results) > target_pairs) {
+    results <- results[seq_len(target_pairs), , drop = FALSE]
+    saveRDS(results, paths_random$results_path)
+  }
+
+  list(
+    results = results,
+    failed_attempts = failed_attempts,
+    pairs_submitted = pairs_submitted
+  )
+}
+
+random_collect <- collect_random_results(target_pairs = target_pairs, submit_chunk = submit_chunk)
+random_results <- tibble::as_tibble(random_collect$results)
+
+# Validate that results match expected schema and IDs
+pairwiseLLM:::validate_results_tbl(random_results)
+missing_ids <- setdiff(unique(c(random_results$A_id, random_results$B_id)), ids)
+if (length(missing_ids) > 0L) {
+  rlang::abort(paste0(
+    "Random results contain item IDs not present in `samples`.\n",
+    "Missing IDs (showing up to 8): ", paste(utils::head(missing_ids, 8), collapse = ", ")
+  ))
+}
+
+# ---- Random pairing: refit BTL at pair_counts (MCMC) ----
+.btl_mcmc_require_cmdstanr <- getFromNamespace(".btl_mcmc_require_cmdstanr", "pairwiseLLM")
+.btl_mcmc_require_cmdstanr()
+
+random_fit <- load_or(paths_random$fit_path, function() {
+  fit_bayes_btl_mcmc(
+    results = random_results,
+    ids = samples$ID,
+    model_variant = model_variant,
+    cmdstan = or_else(v3_config$cmdstan, list()),
+    pair_counts = pair_counts,
+    subset_method = "first",
+    seed = seed
+  )
+})
+
+# ---- Build a comparable round_log from the random refits (same internal metrics) ----
 compute_round_log_from_refits <- function(samples, results, pair_counts, fits, v3_config, seed) {
   state <- pairwiseLLM:::adaptive_state_new(samples, config = list(), seed = seed)
   state$config$v3 <- v3_config
@@ -676,6 +578,14 @@ compute_round_log_from_refits <- function(samples, results, pair_counts, fits, v
         B_id <- as.character(new_results$B_id)
         A_text <- unname(text_map[A_id])
         B_text <- unname(text_map[B_id])
+
+        if (any(is.na(A_text)) || any(is.na(B_text))) {
+          missing <- unique(c(A_id[is.na(A_text)], B_id[is.na(B_text)]))
+          rlang::abort(paste0(
+            "Cannot reconstruct `history_pairs`: missing texts for some IDs.\n",
+            "Missing IDs (showing up to 8): ", paste(utils::head(missing, 8), collapse = ", ")
+          ))
+        }
 
         pairs_rows <- pairwiseLLM:::as_pairs_tbl(
           pair_uid = as.character(new_results$pair_uid),
@@ -723,7 +633,6 @@ compute_round_log_from_refits <- function(samples, results, pair_counts, fits, v
       fit = fit
     )
 
-    # IMPORTANT: build_round_log_row() already includes mean_degree + min_degree.
     round_row <- pairwiseLLM:::build_round_log_row(
       state = state,
       fit = fit,
@@ -738,13 +647,11 @@ compute_round_log_from_refits <- function(samples, results, pair_counts, fits, v
       window_W = v3_config$W,
       exploration_rate = v3_config$explore_rate,
       new_pairs = as.integer(n_pairs - prev_n)
-    ) |>
-      # Add extra metrics (interpretable, not duplicative of canonical fields)
-      dplyr::bind_cols(extra_degree_metrics_from_state(state))
+    )
 
     round_rows[[idx]] <- round_row
 
-    # Match adaptive lag-history convention: first refit does not create lag entry
+    # Align lag logic with the adaptive wrapper: do not append theta history on first refit
     if (idx > 1L) {
       state <- pairwiseLLM:::.adaptive_update_theta_history(state, fit = fit)
     }
@@ -755,58 +662,19 @@ compute_round_log_from_refits <- function(samples, results, pair_counts, fits, v
   dplyr::bind_rows(round_rows)
 }
 
-# --- Fit + round log for RANDOM(DB) ---
-random_fit <- load_or(paths_random$fit_path, function() {
-  fit_bayes_btl_mcmc(
-    results = random_results,
-    ids = samples$ID,
-    model_variant = model_variant,
-    cmdstan = or_else(v3_config_final$cmdstan, list()),
-    pair_counts = pair_counts,
-    subset_method = "first",
-    seed = seed
-  )
-})
-
 random_round_log <- compute_round_log_from_refits(
   samples = samples,
   results = random_results,
   pair_counts = pair_counts,
   fits = random_fit$fits,
-  v3_config = v3_config_final,
+  v3_config = v3_config,
   seed = seed
 )
+
 saveRDS(random_round_log, paths_random$round_log_path)
 
-# --- Fit + round log for ADAPTIVE (refit on first 10k results at same intervals) ---
-adaptive_results <- readRDS(paths_compare$adaptive_results_path)
-
-adaptive_fit <- load_or(file.path(adaptive_dir, "fit_bayes_btl_mcmc_refit100.rds"), function() {
-  fit_bayes_btl_mcmc(
-    results = adaptive_results,
-    ids = samples$ID,
-    model_variant = model_variant,
-    cmdstan = or_else(v3_config_final$cmdstan, list()),
-    pair_counts = pair_counts,
-    subset_method = "first",
-    seed = seed
-  )
-})
-
-adaptive_round_log_refit100 <- compute_round_log_from_refits(
-  samples = samples,
-  results = adaptive_results,
-  pair_counts = pair_counts,
-  fits = adaptive_fit$fits,
-  v3_config = v3_config_final,
-  seed = seed
-)
-saveRDS(adaptive_round_log_refit100, paths_compare$adaptive_round_log_path)
-
-# -------------------------------------------------------------------
-# PART D: Combine logs + plots
-# -------------------------------------------------------------------
-adaptive_round_log_cmp <- adaptive_round_log_refit100 |>
+# ---- Combine logs for comparison ----
+adaptive_round_log_cmp <- adaptive_round_log |>
   dplyr::mutate(
     method = "adaptive",
     run_tag = run_tag,
@@ -815,7 +683,7 @@ adaptive_round_log_cmp <- adaptive_round_log_refit100 |>
 
 random_round_log_cmp <- random_round_log |>
   dplyr::mutate(
-    method = "random_degree_balanced",
+    method = "random_deg_balanced",
     run_tag = run_tag,
     pair_count = as.integer(.data$completed_pairs)
   )
@@ -826,10 +694,9 @@ round_log_combined <- dplyr::bind_rows(adaptive_round_log_cmp, random_round_log_
 saveRDS(round_log_combined, paths_compare$combined_round_log_path)
 utils::write.csv(round_log_combined, paths_compare$combined_round_log_csv, row.names = FALSE)
 
-# --- Figures: canonical stop metrics + the extra degree metrics ---
+# ---- Figures: one per stop metric ----
 metric_specs <- tibble::tibble(
   metric = c(
-    # canonical
     "diagnostics_pass",
     "reliability_EAP",
     "eap_pass",
@@ -844,22 +711,15 @@ metric_specs <- tibble::tibble(
     "divergences",
     "max_rhat",
     "min_ess_bulk",
-    "n_unique_pairs_seen",
+    # additional graph coverage signals (already in round log)
     "mean_degree",
     "min_degree",
-    "pos_balance_mean",
+    "mean_degree_scheduled",
+    "min_degree_scheduled",
     "pos_balance_sd",
-    "starve_rate_since_last_refit",
-    "fallback_rate_since_last_refit",
-    # extras (added by this script)
-    "max_degree",
-    "sd_degree",
-    "frac_zero_degree",
-    "degree_gini",
-    "unique_pair_rate"
+    "pos_balance_sd_scheduled"
   ),
   kind = c(
-    # canonical
     "logical",
     "numeric",
     "logical",
@@ -875,13 +735,6 @@ metric_specs <- tibble::tibble(
     "numeric",
     "numeric",
     "numeric",
-    "numeric",
-    "numeric",
-    "numeric",
-    "numeric",
-    "numeric",
-    "numeric",
-    # extras
     "numeric",
     "numeric",
     "numeric",
@@ -891,15 +744,17 @@ metric_specs <- tibble::tibble(
 ) |>
   dplyr::mutate(
     threshold = dplyr::case_when(
-      .data$metric == "reliability_EAP" ~ as.double(or_else(v3_config_final$eap_reliability_min, NA_real_)),
-      .data$metric == "rho_theta_lag" ~ as.double(or_else(v3_config_final$theta_corr_min, NA_real_)),
-      .data$metric == "delta_sd_theta_lag" ~ as.double(or_else(v3_config_final$theta_sd_rel_change_max, NA_real_)),
-      .data$metric == "rho_rank_lag" ~ as.double(or_else(v3_config_final$rank_spearman_min, NA_real_)),
+      .data$metric == "reliability_EAP" ~ as.double(or_else(v3_config$eap_reliability_min, NA_real_)),
+      .data$metric == "rho_theta_lag" ~ as.double(or_else(v3_config$theta_corr_min, NA_real_)),
+      .data$metric == "delta_sd_theta_lag" ~ as.double(or_else(v3_config$theta_sd_rel_change_max, NA_real_)),
+      .data$metric == "rho_rank_lag" ~ as.double(or_else(v3_config$rank_spearman_min, NA_real_)),
       TRUE ~ NA_real_
     )
   )
 
 plot_metric <- function(df, metric, kind, threshold = NA_real_) {
+  if (!metric %in% names(df)) return(invisible(NULL))
+
   d <- df |>
     dplyr::select(.data$method, .data$pair_count, .data$lag_eligible, value = dplyr::all_of(metric)) |>
     dplyr::filter(!is.na(.data$pair_count))
@@ -920,13 +775,14 @@ plot_metric <- function(df, metric, kind, threshold = NA_real_) {
   }
 
   d <- dplyr::filter(d, !is.na(.data$value))
+  if (nrow(d) < 1) return(invisible(NULL))
 
   p <- ggplot(d, aes(x = .data$pair_count, y = .data$value, color = .data$method)) +
     geom_line() +
     geom_point() +
     labs(
       title = metric,
-      x = "Completed pairs (refit every 100)",
+      x = "Completed pairs (BTL refit count)",
       y = metric,
       color = NULL
     ) +
@@ -940,12 +796,12 @@ plot_metric <- function(df, metric, kind, threshold = NA_real_) {
     p <- p + scale_y_continuous(breaks = c(0, 1), limits = c(0, 1))
   }
 
-  out_path <- file.path(fig_dir, paste0("metric_", metric, "_refit100.png"))
+  out_path <- file.path(fig_dir, paste0("stop_metric_", metric, ".png"))
   ggsave(out_path, plot = p, width = 8, height = 4.5, dpi = 150)
   invisible(out_path)
 }
 
-purrr::walk2(
+walk2(
   metric_specs$metric,
   seq_len(nrow(metric_specs)),
   function(m, i) {
@@ -958,9 +814,4 @@ purrr::walk2(
   }
 )
 
-message("Done.")
-message("Outputs written under: ", base_dir)
-message("Adaptive checkpoint: ", paths_adaptive$state_path)
-message("Adaptive first-10k results: ", paths_compare$adaptive_results_path)
-message("Random(DB) results: ", paths_random$results_path)
-message("Combined log CSV: ", paths_compare$combined_round_log_csv)
+message("Done. Outputs written under: ", base_dir)
