@@ -69,7 +69,7 @@ adaptive_cfg <- list(
     refit_B = refit_interval,
 
     # "Never stop early" knobs:
-    eap_reliability_min = 1.10,   # reliability is <= 1, so this won't pass
+    eap_reliability_min = 1.00,   # reliability is <= 1, so this won't pass
     theta_corr_min = 0.999,
     rank_spearman_min = 0.999,
     theta_sd_rel_change_max = 0.0
