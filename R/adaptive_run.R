@@ -2618,6 +2618,24 @@ NULL
 #' independent of backend, and all downstream logic operates exclusively on
 #' this canonical form.
 #'
+#' \strong{Important note on batch sizing (outer scheduling vs v3 internals):}
+#' There are two layers of "batch size" that can affect observed behavior:
+#' \enumerate{
+#'   \item \strong{Outer phase scheduling targets} (\code{state$config$batch_sizes}):
+#'   these determine how many pairs are \emph{scheduled/submitted per start/resume iteration}
+#'   in each phase. By convention, \code{BATCH1} is used in Phase 1, \code{BATCH2} in Phase 2,
+#'   and \code{BATCH3} in Phase 3. These targets are computed at run start and stored on the state.
+#'   They can be overridden via \code{adaptive$batch_overrides}.
+#'   \item \strong{v3 internal controls} (\code{adaptive$v3}):
+#'   \code{refit_B} controls \emph{refit cadence in newly observed pairs}, and
+#'   \code{batch_size} is used by v3 selection logic (candidate/utility scheduling and logs).
+#'   These do not automatically override \code{BATCH1/BATCH2/BATCH3}.
+#' }
+#' As a result, you may observe iterations that submit \code{BATCH2} pairs in Phase 2
+#' even when \code{adaptive$v3$batch_size} and \code{adaptive$v3$refit_B} are smaller.
+#' For fixed-size iteration designs (e.g., "submit 100 pairs at a time"), set both the v3 fields
+#' and the phase scheduling targets via \code{adaptive$batch_overrides}.
+#'
 #' @section Model variants:
 #' Adaptive v3 tracks model variants in the fit contract and logs. Supported
 #' labels include \code{"btl"} (plain Bradley--Terry), \code{"btl_e"} (lapse
@@ -2657,9 +2675,15 @@ NULL
 #'   \item{\code{exploration_frac}}{Reserved for legacy exploration logic;
 #'   currently unused in v3 scheduling.}
 #'   \item{\code{per_item_cap}}{Reserved per-item cap; currently unused.}
-#'   \item{\code{batch_overrides}}{Named list overriding batch sizes computed by
-#'   \code{compute_batch_sizes()} (e.g., \code{BATCH1}, \code{BATCH2},
-#'   \code{BATCH3}, \code{CW}).}
+#'   \item{\code{batch_overrides}}{Named list overriding phase scheduling targets
+#'   stored on the state as \code{state$config$batch_sizes}. These targets control
+#'   how many pairs are scheduled/submitted per start/resume iteration by phase:
+#'   \code{BATCH1} (Phase 1), \code{BATCH2} (Phase 2), and \code{BATCH3} (Phase 3).
+#'   The defaults are computed at run start and saved on the state; override them
+#'   here to enforce consistent per-iteration submission sizes. \code{CW} is accepted
+#'   for backward compatibility with older sizing conventions; in v3 runs, refit cadence
+#'   is controlled by \code{adaptive$v3$refit_B} and phase scheduling is controlled by
+#'   \code{BATCH1/BATCH2/BATCH3}.}
 #'   \item{\code{max_refill_rounds}}{Maximum number of live replacement rounds
 #'   attempted when submissions are missing.}
 #'   \item{\code{max_replacements}}{Maximum number of replacement pairs per
@@ -2972,7 +2996,18 @@ NULL
 #'     progress_level = "full"
 #'   )
 #' )
-#' 
+#'
+#' # Fixed-size iteration design (submit 100 at a time; refit every 100 observed pairs)
+#' # Note: setting v3$batch_size/refit_B alone does not cap the number submitted per
+#' # start/resume iteration; set batch_overrides$BATCH2/BATCH3 as well.
+#' adaptive_fixed100 <- list(
+#'   batch_overrides = list(BATCH2 = 100, BATCH3 = 100),
+#'   v3 = list(
+#'     batch_size = 100,
+#'     refit_B = 100
+#'   )
+#' )
+#'
 #' \dontrun{
 #' # Live start (submits immediately and ingests observed results)
 #' start_out <- adaptive_rank_start(

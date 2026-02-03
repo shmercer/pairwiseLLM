@@ -135,6 +135,8 @@ NULL
 #' Generated via live OpenAI API calls using a controlled, bucketed quality prompt.
 #' See \code{data-raw/generate_example_writing_samples1000.R} for details.
 #'
+#' @usage data("example_writing_samples1000")
+#'
 #' @examples
 #' data(example_writing_samples1000)
 #' head(example_writing_samples1000)
