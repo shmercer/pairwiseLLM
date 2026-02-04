@@ -20,4 +20,5 @@
 ^\.lintr$
 ^inst/stan/btl_e_b\.exe$
 ^inst/stan/btl_e_b$
-^Codex$
+^codex$
+^scripts$
