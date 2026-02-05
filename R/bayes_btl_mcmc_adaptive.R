@@ -1,8 +1,8 @@
 # -------------------------------------------------------------------------
-# Bayesian BTL v3 (epsilon-lapse mixture) via CmdStanR.
+# Bayesian BTL (epsilon-lapse mixture) via CmdStanR.
 # -------------------------------------------------------------------------
 
-.btl_mcmc_v3_intish <- function(x) {
+.btl_mcmc_intish_vec <- function(x) {
   is.numeric(x) && all(is.finite(x)) && all(abs(x - round(x)) < 1e-8)
 }
 
@@ -116,7 +116,7 @@
   ids
 }
 
-.btl_mcmc_v3_validate_bt_data <- function(bt_data) {
+.btl_mcmc_validate_bt_data <- function(bt_data) {
   if (!is.list(bt_data)) {
     rlang::abort("`bt_data` must be a list.")
   }
@@ -127,7 +127,7 @@
   }
 
   N <- bt_data$N
-  if (!.btl_mcmc_v3_intish(N) || length(N) != 1L || is.na(N) || N < 2L) {
+  if (!.btl_mcmc_intish_vec(N) || length(N) != 1L || is.na(N) || N < 2L) {
     rlang::abort("`bt_data$N` must be an integer >= 2.")
   }
   N <- as.integer(N)
@@ -135,10 +135,10 @@
   A <- bt_data$A
   B <- bt_data$B
   Y <- bt_data$Y
-  if (!.btl_mcmc_v3_intish(A) || !.btl_mcmc_v3_intish(B)) {
+  if (!.btl_mcmc_intish_vec(A) || !.btl_mcmc_intish_vec(B)) {
     rlang::abort("`bt_data$A` and `bt_data$B` must be integer vectors.")
   }
-  if (!.btl_mcmc_v3_intish(Y)) {
+  if (!.btl_mcmc_intish_vec(Y)) {
     rlang::abort("`bt_data$Y` must be an integer vector.")
   }
   A <- as.integer(A)
@@ -174,7 +174,7 @@
   )
 }
 
-.btl_mcmc_v3_prepare_bt_data <- function(results, ids) {
+.btl_mcmc_prepare_bt_data <- function(results, ids) {
   results <- tibble::as_tibble(results)
   required <- c("A_id", "B_id", "better_id")
   .adaptive_required_cols(results, "results", required)
@@ -203,24 +203,6 @@
   )
 }
 
-.btl_mcmc_v3_model_code <- function(path_override = NULL) {
-  if (!is.null(path_override)) {
-    if (!is.character(path_override) || length(path_override) != 1L || is.na(path_override)) {
-      rlang::abort("`path_override` must be a length-1 character path or NULL.")
-    }
-  }
-  model_file <- paste0("btl_mcmc_", "v3.stan")
-  path <- if (is.null(path_override)) {
-    system.file("stan", model_file, package = "pairwiseLLM")
-  } else {
-    path_override
-  }
-  if (!nzchar(path)) {
-    rlang::abort(paste0("Stan model file `", model_file, "` not found."))
-  }
-  paste(readLines(path, warn = FALSE), collapse = "\n")
-}
-
 stan_file_for_variant <- function(model_variant) {
   model_variant <- normalize_model_variant(model_variant)
   path <- system.file("stan", paste0(model_variant, ".stan"), package = "pairwiseLLM")
@@ -230,7 +212,7 @@ stan_file_for_variant <- function(model_variant) {
   path
 }
 
-.btl_mcmc_v3_unpack_draws <- function(draws, model_variant = NULL) {
+.btl_mcmc_unpack_draws <- function(draws, model_variant = NULL) {
   if (!is.null(model_variant)) {
     model_variant <- normalize_model_variant(model_variant)
   }
@@ -289,7 +271,7 @@ stan_file_for_variant <- function(model_variant) {
   )
 }
 
-.btl_mcmc_v3_collect_diagnostics <- function(fit, model_variant) {
+.btl_mcmc_collect_diagnostics <- function(fit, model_variant) {
   model_variant <- normalize_model_variant(model_variant)
   diagnostics <- list(
     divergences = NA_integer_,
@@ -371,8 +353,8 @@ stan_file_for_variant <- function(model_variant) {
   diagnostics
 }
 
-.btl_mcmc_v3_theta_draws <- function(draws, item_id = NULL) {
-  unpacked <- .btl_mcmc_v3_unpack_draws(draws)
+.btl_mcmc_theta_draws <- function(draws, item_id = NULL) {
+  unpacked <- .btl_mcmc_unpack_draws(draws)
   theta_draws <- unpacked$theta_draws
   if (!is.null(item_id)) {
     colnames(theta_draws) <- as.character(item_id)
@@ -382,7 +364,7 @@ stan_file_for_variant <- function(model_variant) {
 
 #' @keywords internal
 #' @noRd
-.btl_mcmc_v3_infer_variant <- function(draws) {
+.btl_mcmc_infer_variant <- function(draws) {
   has_e <- FALSE
   has_b <- FALSE
   if (is.list(draws)) {
@@ -408,10 +390,10 @@ stan_file_for_variant <- function(model_variant) {
 
 summarize_draws <- function(draws, model_variant = NULL) {
   if (is.null(model_variant)) {
-    model_variant <- .btl_mcmc_v3_infer_variant(draws)
+    model_variant <- .btl_mcmc_infer_variant(draws)
   }
   model_variant <- normalize_model_variant(model_variant)
-  unpacked <- .btl_mcmc_v3_unpack_draws(draws, model_variant = model_variant)
+  unpacked <- .btl_mcmc_unpack_draws(draws, model_variant = model_variant)
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(unpacked$theta_draws, name = "theta_draws")
   epsilon_draws <- unpacked$epsilon_draws %||% NULL
 
@@ -466,7 +448,7 @@ summarize_draws <- function(draws, model_variant = NULL) {
 
 #' @keywords internal
 #' @noRd
-as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
+as_btl_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   if (!is.list(mcmc_fit)) {
     rlang::abort("`mcmc_fit` must be a list.")
   }
@@ -508,7 +490,7 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     }
   }
 
-  build_v3_fit_contract(
+  build_btl_fit_contract(
     theta_draws = theta_draws,
     epsilon_draws = epsilon_draws,
     beta_draws = beta_draws,
@@ -526,10 +508,10 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   if (!is.list(config)) {
     rlang::abort("`config` must be a list.")
   }
-  validate_config(config)
+  validate_btl_mcmc_config(config)
   model_variant <- normalize_model_variant(config$model_variant %||% "btl_e_b")
 
-  bt_data <- .btl_mcmc_v3_validate_bt_data(bt_data)
+  bt_data <- .btl_mcmc_validate_bt_data(bt_data)
   M <- length(bt_data$A)
   stan_data <- list(
     N = as.integer(bt_data$N),
@@ -645,7 +627,7 @@ as_v3_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
   )
 
   summaries <- summarize_draws(draws, model_variant = model_variant)
-  diagnostics <- .btl_mcmc_v3_collect_diagnostics(fit, model_variant = model_variant)
+  diagnostics <- .btl_mcmc_collect_diagnostics(fit, model_variant = model_variant)
 
   list(
     draws = draws,

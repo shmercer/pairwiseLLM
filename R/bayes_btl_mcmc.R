@@ -55,7 +55,7 @@
 #' Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 #'
 #' Runs full Bayesian posterior inference for a Bradley–Terry–Luce (BTL) style
-#' model using the package’s adaptive-v3 CmdStan machinery, but in a standalone
+#' model using the package’s CmdStan machinery, but in a standalone
 #' (non-adaptive) context. The function is designed so downstream diagnostics
 #' and reporting can reuse the existing adaptive summary tools (notably
 #' [summarize_items()] and [summarize_refits()]) without requiring new summary
@@ -107,7 +107,7 @@
 #'     a refit; \code{refit_id} identifies the refit.}
 #'   \item{round_log}{Tibble matching the canonical adaptive round log schema
 #'     (one row per refit).}
-#'   \item{fits}{List of adaptive v3 fit contracts (one per refit).}
+#'   \item{fits}{List of BTL fit contracts (one per refit).}
 #'   \item{fit}{Single fit contract (only when one refit is run).}
 #' }
 #'
@@ -210,37 +210,37 @@ fit_bayes_btl_mcmc <- function(
     subset_idx <- perm[seq_len(n_pairs)]
     results_subset <- results[subset_idx, , drop = FALSE]
 
-    bt_data <- .btl_mcmc_v3_prepare_bt_data(results_subset, ids)
-    v3_config <- adaptive_v3_config(length(ids), list(
+    bt_data <- .btl_mcmc_prepare_bt_data(results_subset, ids)
+    mcmc_config <- btl_mcmc_config(length(ids), list(
       model_variant = model_variant,
       cmdstan = cmdstan
     ))
 
-    mcmc_fit <- .fit_bayes_btl_mcmc_adaptive(bt_data, config = v3_config, seed = mcmc_seed)
-    fit_contract <- as_v3_fit_contract_from_mcmc(mcmc_fit, ids = ids)
+    mcmc_fit <- .fit_bayes_btl_mcmc_adaptive(bt_data, config = mcmc_config, seed = mcmc_seed)
+    fit_contract <- as_btl_fit_contract_from_mcmc(mcmc_fit, ids = ids)
     fits[[idx]] <- fit_contract
 
-    state <- adaptive_state_new(samples, config = list(), seed = seed)
-    state$config$v3 <- v3_config
+    state <- btl_mcmc_state_new(samples, config = list(), seed = seed)
+    state$config$mcmc <- mcmc_config
     state$mode <- "standalone"
 
-    ingest <- .adaptive_ingest_results_incremental(state, results_subset)
+    ingest <- btl_mcmc_ingest_results_incremental(state, results_subset)
     state <- ingest$state
     state$comparisons_scheduled <- as.integer(nrow(results_subset))
     state$posterior$mcmc_config_used <- fit_contract$mcmc_config_used
     state$posterior$model_variant <- fit_contract$model_variant
 
-    metrics <- .adaptive_fill_terminal_stop_metrics(state, v3_config)
+    metrics <- btl_mcmc_fill_terminal_stop_metrics(state, mcmc_config)
     round_row <- build_round_log_row(
       state = state,
       fit = fit_contract,
       metrics = metrics,
       stop_out = list(stop_decision = NA, stop_reason = NA_character_),
-      config = v3_config,
+      config = mcmc_config,
       round_id = as.integer(idx),
-      batch_size = v3_config$batch_size,
-      window_W = v3_config$W,
-      exploration_rate = v3_config$explore_rate,
+      batch_size = mcmc_config$batch_size,
+      window_W = mcmc_config$W,
+      exploration_rate = mcmc_config$explore_rate,
       new_pairs = as.integer(nrow(results_subset))
     )
     round_log <- dplyr::bind_rows(round_log, round_row)
