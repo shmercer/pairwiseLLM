@@ -130,6 +130,55 @@ trueskill_win_probability <- function(i, j, trueskill_state) {
   stats::pnorm((mu_i - mu_j) / sqrt(s2))
 }
 
+#' @keywords internal
+#' @noRd
+update_trueskill_state <- function(trueskill_state, winner_id, loser_id) {
+  validate_trueskill_state(trueskill_state)
+
+  if (length(winner_id) != 1L || length(loser_id) != 1L) {
+    rlang::abort("`winner_id` and `loser_id` must be length-1 ids.")
+  }
+  if (identical(winner_id, loser_id)) {
+    rlang::abort("`winner_id` and `loser_id` must be distinct.")
+  }
+
+  items <- trueskill_state$items
+  item_ids <- as.character(items$item_id)
+  winner_id <- as.character(winner_id)
+  loser_id <- as.character(loser_id)
+
+  w_idx <- match(winner_id, item_ids)
+  l_idx <- match(loser_id, item_ids)
+  if (is.na(w_idx) || is.na(l_idx)) {
+    rlang::abort("`winner_id` and `loser_id` must be present in `trueskill_state$items`.")
+  }
+
+  mu_w <- items$mu[[w_idx]]
+  mu_l <- items$mu[[l_idx]]
+  sigma_w <- items$sigma[[w_idx]]
+  sigma_l <- items$sigma[[l_idx]]
+
+  c_val <- sqrt(2 * trueskill_state$beta^2 + sigma_w^2 + sigma_l^2)
+  t_val <- (mu_w - mu_l) / c_val
+  v_val <- stats::dnorm(t_val) / stats::pnorm(t_val)
+  w_val <- v_val * (v_val + t_val)
+
+  mu_w <- mu_w + (sigma_w^2 / c_val) * v_val
+  mu_l <- mu_l - (sigma_l^2 / c_val) * v_val
+
+  sigma_w2 <- sigma_w^2 * (1 - (sigma_w^2 / c_val^2) * w_val)
+  sigma_l2 <- sigma_l^2 * (1 - (sigma_l^2 / c_val^2) * w_val)
+
+  min_sigma <- 1e-9
+  items$mu[[w_idx]] <- mu_w
+  items$mu[[l_idx]] <- mu_l
+  items$sigma[[w_idx]] <- sqrt(max(min_sigma, sigma_w2))
+  items$sigma[[l_idx]] <- sqrt(max(min_sigma, sigma_l2))
+
+  trueskill_state$items <- items
+  trueskill_state
+}
+
 .validate_trueskill_scalar <- function(value, name, allow_nonpositive) {
   if (!is.numeric(value) || length(value) != 1L || !is.finite(value)) {
     rlang::abort(paste0("`", name, "` must be a finite numeric scalar."))
