@@ -23,3 +23,17 @@ for (fn_name in exported_names) {
     assign(fn_name, obj, envir = .GlobalEnv)
   }
 }
+
+skip_if_no_psock <- function() {
+  ok <- tryCatch(
+    {
+      con <- base::serverSocket(0L)
+      on.exit(base::close(con), add = TRUE)
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+  if (!isTRUE(ok)) {
+    testthat::skip("PSOCK server sockets unavailable in this environment.")
+  }
+}

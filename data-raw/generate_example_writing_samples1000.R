@@ -142,7 +142,8 @@ build_generation_prompt <- function(level, K_levels, n_needed, writing_prompt,
     "Each quality level represents a RANGE of writing quality, not a single point.\n\n",
     "For EACH response you generate:\n",
     "- The writing must be internally coherent.\n",
-    "- Differences in quality should come from clarity, organization, development, precision of language, and effectiveness.\n",
+    "- Differences in quality should come from clarity, organization, development, ",
+    "precision of language, and effectiveness.\n",
     "- Do NOT mention quality levels, rubrics, or self-assessments.\n",
     "- Do NOT make the lowest levels nonsensical and do NOT make the highest levels perfect.\n",
     "- Stay within ", min_words, "–", max_words, " words.\n\n",
@@ -152,7 +153,8 @@ build_generation_prompt <- function(level, K_levels, n_needed, writing_prompt,
     "\"", writing_prompt, "\"\n\n",
     "Generate ", n_needed, " DIFFERENT responses for quality level ", level, ".\n",
     "Vary style, examples, and structure WITHIN the level.\n",
-    "Ensure responses at adjacent levels are sometimes hard to distinguish, but responses several levels apart are usually clearly different.\n\n",
+    "Ensure responses at adjacent levels are sometimes hard to distinguish, but ",
+    "responses several levels apart are usually clearly different.\n\n",
     "OUTPUT FORMAT (important):\n",
     "Return a JSON array of strings, where each element is one full response. No extra keys.\n"
   )
@@ -392,4 +394,3 @@ save(
 
 cat("Saved:", out_rda_path, "\n")
 cat("Object:", "example_writing_samples1000", "(", nrow(example_writing_samples1000), "rows )\n")
-

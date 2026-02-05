@@ -3,6 +3,8 @@
 # Tests for openai_compare_pair_live() and submit_openai_pairs_live()
 # =====================================================================
 
+skip_if_no_psock()
+
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 openai_compare_pair_live <- pairwiseLLM::openai_compare_pair_live
@@ -1369,3 +1371,4 @@ testthat::test_that("submit_openai_pairs_live: Resume Verbose Message", {
 
   unlink(tmp)
 })
+skip_if_no_psock()

@@ -24,7 +24,6 @@
 .adaptive_summary_extract_source <- function(state) {
   if (inherits(state, "adaptive_state")) {
     return(list(
-      batch_log = state$batch_log %||% tibble::tibble(),
       round_log = state$config$round_log %||% tibble::tibble(),
       item_log_list = state$logs$item_log_list %||% NULL
     ))
@@ -32,9 +31,8 @@
   if (is.list(state) && inherits(state$state, "adaptive_state")) {
     return(.adaptive_summary_extract_source(state$state))
   }
-  if (is.list(state) && any(c("batch_log", "round_log", "item_log_list") %in% names(state))) {
+  if (is.list(state) && any(c("round_log", "item_log_list") %in% names(state))) {
     return(list(
-      batch_log = state$batch_log %||% tibble::tibble(),
       round_log = state$round_log %||% tibble::tibble(),
       item_log_list = state$item_log_list %||% NULL
     ))
@@ -116,53 +114,6 @@
     mean_degree_scheduled = as.double(mean(as.double(deg))),
     min_degree_scheduled = as.integer(min(deg))
   )
-}
-
-.adaptive_iteration_summary_schema <- function(include_optional = TRUE) {
-  required <- tibble::tibble(
-    iter = .adaptive_summary_empty_value("integer"),
-    phase = .adaptive_summary_empty_value("character"),
-    mode = .adaptive_summary_empty_value("character"),
-    created_at = .adaptive_summary_empty_value("posixct"),
-    batch_size_target = .adaptive_summary_empty_value("integer"),
-    n_pairs_selected = .adaptive_summary_empty_value("integer"),
-    n_pairs_completed = .adaptive_summary_empty_value("integer"),
-    candidate_starved = .adaptive_summary_empty_value("logical"),
-    reason_short_batch = .adaptive_summary_empty_value("character"),
-    n_explore_selected = .adaptive_summary_empty_value("integer"),
-    n_exploit_selected = .adaptive_summary_empty_value("integer")
-  )
-  if (!isTRUE(include_optional)) {
-    return(required)
-  }
-
-  optional <- tibble::tibble(
-    n_pairs_failed = .adaptive_summary_empty_value("integer"),
-    backlog_unjudged = .adaptive_summary_empty_value("integer"),
-    n_explore_target = .adaptive_summary_empty_value("integer"),
-    n_exploit_target = .adaptive_summary_empty_value("integer"),
-    n_candidates_generated = .adaptive_summary_empty_value("integer"),
-    n_candidates_after_filters = .adaptive_summary_empty_value("integer"),
-    W_used = .adaptive_summary_empty_value("integer"),
-    explore_rate_used = .adaptive_summary_empty_value("double"),
-    utility_selected_p50 = .adaptive_summary_empty_value("double"),
-    utility_selected_p90 = .adaptive_summary_empty_value("double"),
-    utility_candidate_p90 = .adaptive_summary_empty_value("double"),
-    iter_exit_path = .adaptive_summary_empty_value("character"),
-    diagnostics_pass = .adaptive_summary_empty_value("logical"),
-    rank_stability_pass = .adaptive_summary_empty_value("logical"),
-    hard_cap_reached = .adaptive_summary_empty_value("logical"),
-    stop_decision = .adaptive_summary_empty_value("logical"),
-    stop_reason = .adaptive_summary_empty_value("character"),
-    divergences = .adaptive_summary_empty_value("integer"),
-    min_ess_bulk = .adaptive_summary_empty_value("double"),
-    max_rhat = .adaptive_summary_empty_value("double"),
-    reliability_EAP = .adaptive_summary_empty_value("double"),
-    epsilon_mean = .adaptive_summary_empty_value("double"),
-    n_unique_pairs_seen = .adaptive_summary_empty_value("integer"),
-    hard_cap_threshold = .adaptive_summary_empty_value("integer")
-  )
-  dplyr::bind_cols(required, optional)
 }
 
 .adaptive_refit_summary_schema <- function(include_optional = TRUE) {
@@ -303,115 +254,6 @@
   summary
 }
 
-#' Summarize adaptive iterations
-#'
-#' Build a thin per-iteration diagnostics summary from the adaptive batch log. This
-#' is a pure view over \code{batch_log} and does not recompute posterior
-#' quantities or stop metrics.
-#'
-#' @details
-#' Run-scale iteration counts reflect a single scheduling cycle. The batch log
-#' records \code{n_pairs_selected} (pairs scheduled this iteration),
-#' \code{n_pairs_completed} (newly observed since the previous log),
-#' \code{n_pairs_failed} (newly failed attempts since the previous log), and
-#' \code{backlog_unjudged} (scheduled minus completed, measured after
-#' scheduling). Candidate health is captured by \code{candidate_starved} when
-#' fewer than the target pairs are selected. This summary omits detailed
-#' fallback-stage fields; see \code{adaptive_rank_start()} for the full
-#' \code{batch_log} schema.
-#'
-#' @param state An \code{adaptive_state} or list containing adaptive logs.
-#' @param last_n Optional positive integer; return only the last \code{n} rows.
-#' @param include_optional Logical; include optional diagnostic columns.
-#' @return A tibble with one row per iteration. Required columns:
-#'   \describe{
-#'     \item{\code{iter}}{Iteration index.}
-#'     \item{\code{phase}}{Phase label.}
-#'     \item{\code{mode}}{Run mode.}
-#'     \item{\code{created_at}}{Iteration start time (UTC).}
-#'     \item{\code{batch_size_target}}{Target batch size.}
-#'     \item{\code{n_pairs_selected}}{Pairs scheduled this iteration.}
-#'     \item{\code{n_pairs_completed}}{New results observed since last log.}
-#'     \item{\code{candidate_starved}}{TRUE when fewer than target pairs were
-#'     scheduled.}
-#'     \item{\code{reason_short_batch}}{Reason for short batch, if any.}
-#'     \item{\code{n_explore_selected}}{Exploration pairs scheduled.}
-#'     \item{\code{n_exploit_selected}}{Exploitation pairs scheduled.}
-#'   }
-#'   Optional columns (when \code{include_optional = TRUE}) include
-#'   \code{n_pairs_failed}, \code{backlog_unjudged}, exploration/exploitation
-#'   targets, candidate counts, configuration used, utility percentiles, exit
-#'   path markers, diagnostics gates, and stop indicators.
-#' 
-#' @examples
-#' logs <- list(
-#'   batch_log = tibble::tibble(
-#'     iter = 1:3,
-#'     phase = c("phase1", "phase1", "phase2"),
-#'     mode = "live",
-#'     created_at = as.POSIXct(
-#'       c("2026-01-01 00:00:00", "2026-01-01 00:05:00", "2026-01-01 00:10:00"),
-#'       tz = "UTC"
-#'     ),
-#'     batch_size_target = c(50L, 50L, 50L),
-#'     n_pairs_selected = c(50L, 50L, 40L),
-#'     n_pairs_completed = c(0L, 50L, 40L),
-#'     candidate_starved = c(FALSE, FALSE, TRUE),
-#'     reason_short_batch = c(NA_character_, NA_character_, "candidate_exhausted"),
-#'     n_explore_selected = c(10L, 10L, 10L),
-#'     n_exploit_selected = c(40L, 40L, 30L)
-#'   )
-#' )
-#'
-#' # Full per-iteration view:
-#' summarize_iterations(logs)
-#'
-#' # Only the last iteration:
-#' summarize_iterations(logs, last_n = 1)
-#'
-#' # Compact core columns only:
-#' summarize_iterations(logs, include_optional = FALSE)
-#' 
-#' @export
-summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) {
-  last_n <- .adaptive_summary_validate_last_n(last_n)
-  if (!is.logical(include_optional) ||
-    length(include_optional) != 1L ||
-    is.na(include_optional)) {
-    rlang::abort("`include_optional` must be TRUE or FALSE.")
-  }
-
-  source <- .adaptive_summary_extract_source(state)
-  log <- source$batch_log %||% tibble::tibble()
-  if (!is.data.frame(log)) {
-    log <- tibble::tibble()
-  }
-  log <- tibble::as_tibble(log)
-
-  if (!is.null(last_n)) {
-    log <- utils::tail(log, last_n)
-  }
-
-  if (!isTRUE(include_optional)) {
-    required <- c(
-      "iter",
-      "phase",
-      "mode",
-      "created_at",
-      "batch_size_target",
-      "n_pairs_selected",
-      "n_pairs_completed",
-      "candidate_starved",
-      "reason_short_batch",
-      "n_explore_selected",
-      "n_exploit_selected"
-    )
-    log <- log |> dplyr::select(dplyr::any_of(required))
-  }
-
-  log
-}
-
 #' Summarize adaptive refits
 #'
 #' Build a thin per-refit diagnostics summary from the adaptive round log. This is
@@ -467,7 +309,7 @@ summarize_iterations <- function(state, last_n = NULL, include_optional = TRUE) 
 #'
 #' # Drop optional diagnostics if you want a compact core summary:
 #' summarize_refits(logs, include_optional = FALSE)
-#' 
+#'
 #' @export
 summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   last_n <- .adaptive_summary_validate_last_n(last_n)
@@ -550,7 +392,7 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #'   Rank percentiles summarize per-draw induced ranks (lower is better). When
 #'   \code{include_optional = FALSE}, optional columns such as repeated-pair or
 #'   adjacency diagnostics are dropped if present.
-#' 
+#'
 #' @examples
 #' # summarize_items() expects an item_log_list (list of per-refit item tables).
 #' # This example constructs a minimal logs object that matches what adaptive runs emit.
@@ -585,7 +427,7 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #'
 #' # Sort and take the top rows:
 #' summarize_items(logs, sort_by = "rank_mean", top_n = 2)
-#' 
+#'
 #' @export
 summarize_items <- function(state,
     posterior = NULL,

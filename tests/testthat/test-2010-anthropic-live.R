@@ -3,6 +3,8 @@
 #   Tests for anthropic_compare_pair_live() and submit_anthropic_pairs_live()
 # =====================================================================
 
+skip_if_no_psock()
+
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 anthropic_compare_pair_live <- pairwiseLLM::anthropic_compare_pair_live
@@ -1212,3 +1214,4 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel Save Error Handling",
     }
   )
 })
+skip_if_no_psock()

@@ -423,13 +423,15 @@ generate_candidates_from_anchors <- function(anchors, theta_summary, state, conf
   allowed <- rep(FALSE, length(keep))
   if (any(keep)) {
     allowed[keep] <- mapply(
-      function(i, j) .adaptive_unordered_allowed(
-        state,
-        i,
-        j,
-        dup_policy = dup_policy,
-        allow_repeats = allow_repeats
-      ),
+      function(i, j) {
+        .adaptive_unordered_allowed(
+          state,
+          i,
+          j,
+          dup_policy = dup_policy,
+          allow_repeats = allow_repeats
+        )
+      },
       i_id[keep],
       j_id[keep],
       USE.NAMES = FALSE

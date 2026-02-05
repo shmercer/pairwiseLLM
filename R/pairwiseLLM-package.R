@@ -27,7 +27,7 @@
 #'    - Bradley–Terry: [fit_bt_model()]
 #'    - Bayesian BTL (MCMC): [fit_bayes_btl_mcmc()]
 #'    - Summaries: [summarize_bt_fit()], [summarize_items()],
-#'      [summarize_iterations()], [summarize_refits()]
+#'      [summarize_refits()]
 #'
 #' ## Package organization
 #' The exported functions are intended to be read as a set of modules:
@@ -73,7 +73,7 @@
 #' - Diagnostics: [check_positional_bias()]
 #'
 #' ### 6) Adaptive Bayesian pairing + ranking loop
-#' - Entry / control: [adaptive_rank_start()], [adaptive_rank_run_batch()],
+#' - Entry / control: [adaptive_rank_start()],
 #'   [adaptive_rank_run_live()], [adaptive_rank_resume()]
 #'
 #' ## Design notes (adaptive Bayesian BTL)
@@ -86,7 +86,7 @@
 #' control with order reversal for repeated unordered pairs, and approximate
 #' 50/50 position balance across items.
 #'
-#' Adaptive decision-making is gated on strict MCMC diagnostics. 
+#' Adaptive decision-making is gated on strict MCMC diagnostics.
 #'
 #' When candidate generation is starved by constraints, the design specifies a
 #' deterministic fallback ladder (expanding windows, alternative anchor pools,
