@@ -4,7 +4,14 @@
 \alias{adaptive_rank_run_live}
 \title{Adaptive ranking live runner (v2)}
 \usage{
-adaptive_rank_run_live(state, judge, n_steps = 1L, ...)
+adaptive_rank_run_live(
+  state,
+  judge,
+  n_steps = 1L,
+  fit_fn = NULL,
+  btl_config = NULL,
+  ...
+)
 }
 \arguments{
 \item{state}{An Adaptive v2 state object created by \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}.}
@@ -14,6 +21,11 @@ list with \code{is_valid = TRUE} and \code{Y} in \code{0/1}, or \code{is_valid =
 \code{invalid_reason}.}
 
 \item{n_steps}{Number of steps to execute.}
+
+\item{fit_fn}{Optional BTL fit function for deterministic testing; defaults
+to \code{default_btl_fit_fn()} when a refit is due.}
+
+\item{btl_config}{Optional list overriding BTL refit/stop defaults.}
 
 \item{...}{Additional arguments passed through to \code{judge()}.}
 }
