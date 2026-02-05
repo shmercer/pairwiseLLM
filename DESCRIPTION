@@ -70,6 +70,7 @@ Collate:
     'adaptive_schemas.R'
     'adaptive_select.R'
     'adaptive_state.R'
+    'adaptive_step.R'
     'adaptive_trueskill.R'
     'adaptive_utility.R'
     'anthropic_batch_api.R'
