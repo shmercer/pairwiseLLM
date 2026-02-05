@@ -6,6 +6,9 @@
 \usage{
 adaptive_rank_resume(...)
 }
+\arguments{
+\item{...}{Reserved for future extensions; currently unused.}
+}
 \description{
 Resume support is not implemented yet.
 }
