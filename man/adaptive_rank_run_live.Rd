@@ -2,13 +2,21 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_run_live}
 \alias{adaptive_rank_run_live}
-\title{Adaptive ranking live runner (v2 scaffold)}
+\title{Adaptive ranking live runner (v2)}
 \usage{
-adaptive_rank_run_live(...)
+adaptive_rank_run_live(state, judge, n_steps = 1L, ...)
 }
 \arguments{
-\item{...}{Reserved for future extensions; currently unused.}
+\item{state}{An Adaptive v2 state object created by \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}.}
+
+\item{judge}{A function called as \code{judge(A, B, state, ...)} that returns a
+list with \code{is_valid = TRUE} and \code{Y} in \code{0/1}, or \code{is_valid = FALSE} with
+\code{invalid_reason}.}
+
+\item{n_steps}{Number of steps to execute.}
+
+\item{...}{Additional arguments passed through to \code{judge()}.}
 }
 \description{
-Stepwise execution is not implemented yet.
+Executes adaptive ranking steps using an injected judge function.
 }
