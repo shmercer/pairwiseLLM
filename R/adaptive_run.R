@@ -33,16 +33,38 @@ adaptive_rank_start <- function(items, ...) {
   new_adaptive_state(items, now_fn = now_fn)
 }
 
-#' Adaptive ranking live runner (v2 scaffold)
+#' Adaptive ranking live runner (v2)
 #'
 #' @description
-#' Stepwise execution is not implemented yet.
+#' Executes adaptive ranking steps using an injected judge function.
 #'
-#' @param ... Reserved for future extensions; currently unused.
+#' @param state An Adaptive v2 state object created by [adaptive_rank_start()].
+#' @param judge A function called as `judge(A, B, state, ...)` that returns a
+#'   list with `is_valid = TRUE` and `Y` in `0/1`, or `is_valid = FALSE` with
+#'   `invalid_reason`.
+#' @param n_steps Number of steps to execute.
+#' @param ... Additional arguments passed through to `judge()`.
 #'
 #' @export
-adaptive_rank_run_live <- function(...) {
-  rlang::abort("Adaptive: stepwise execution not implemented yet (see roadmap Step 5/6).")
+adaptive_rank_run_live <- function(state, judge, n_steps = 1L, ...) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state object.")
+  }
+  if (!is.function(judge)) {
+    rlang::abort("`judge` must be a function.")
+  }
+  n_steps <- as.integer(n_steps)
+  if (length(n_steps) != 1L || is.na(n_steps) || n_steps < 1L) {
+    rlang::abort("`n_steps` must be a positive integer.")
+  }
+
+  remaining <- n_steps
+  while (remaining > 0L) {
+    state <- run_one_step(state, judge, ...)
+    remaining <- remaining - 1L
+  }
+
+  state
 }
 
 #' Adaptive ranking resume (v2 scaffold)
