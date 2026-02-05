@@ -23,6 +23,9 @@
 
 .adaptive_summary_extract_source <- function(state) {
   if (inherits(state, "adaptive_state")) {
+    if (is.list(state$meta) && identical(state$meta$schema_version, "v2-0")) {
+      rlang::abort("Adaptive v2 state is not supported by v3 summary helpers.")
+    }
     return(list(
       round_log = state$config$round_log %||% tibble::tibble(),
       item_log_list = state$logs$item_log_list %||% NULL

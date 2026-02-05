@@ -3,37 +3,55 @@
 # non-adaptive MCMC utilities.
 # -------------------------------------------------------------------------
 
-#' Adaptive ranking (v2 migration stub)
+#' Adaptive ranking (v2 scaffold)
 #'
 #' @description
-#' Adaptive v2 pairing is not implemented yet. The legacy adaptive workflow has
-#' been removed during migration.
+#' Creates an Adaptive v2 state object with canonical logs. Pair selection and
+#' stepwise execution are implemented in later steps.
 #'
+#' @param items A vector or data frame of items. Data frames must include an
+#'   `item_id` column (or `id`/`ID`). Item IDs may be character; internal logs
+#'   use integer indices derived from these IDs.
+#' @param ... Internal/testing only. Supply `now_fn` to override the clock used
+#'   for timestamps.
+#'
+#' @return An Adaptive v2 state object containing `step_log`, `round_log`, and
+#'   `item_log`.
 #' @export
-adaptive_rank_start <- function(...) {
-  rlang::abort("Adaptive v2 migration: legacy adaptive workflow removed.")
+adaptive_rank_start <- function(items, ...) {
+  dots <- list(...)
+  if (length(dots) > 0L) {
+    dot_names <- names(dots)
+    if (is.null(dot_names) || any(dot_names == "")) {
+      rlang::abort("Only named `now_fn` is supported in `...` for now.")
+    }
+    bad <- setdiff(dot_names, "now_fn")
+    if (length(bad) > 0L) {
+      rlang::abort("Only `now_fn` is supported in `...` for now.")
+    }
+  }
+  now_fn <- dots$now_fn %||% function() Sys.time()
+  new_adaptive_state(items, now_fn = now_fn)
 }
 
-#' Adaptive ranking live runner (v2 migration stub)
+#' Adaptive ranking live runner (v2 scaffold)
 #'
 #' @description
-#' Adaptive v2 pairing is not implemented yet. The legacy adaptive workflow has
-#' been removed during migration.
+#' Stepwise execution is not implemented yet.
 #'
 #' @export
 adaptive_rank_run_live <- function(...) {
-  rlang::abort("Adaptive v2 migration: legacy adaptive workflow removed.")
+  rlang::abort("Adaptive: stepwise execution not implemented yet (see roadmap Step 5/6).")
 }
 
-#' Adaptive ranking resume (v2 migration stub)
+#' Adaptive ranking resume (v2 scaffold)
 #'
 #' @description
-#' Adaptive v2 pairing is not implemented yet. The legacy adaptive workflow has
-#' been removed during migration.
+#' Resume support is not implemented yet.
 #'
 #' @export
 adaptive_rank_resume <- function(...) {
-  rlang::abort("Adaptive v2 migration: legacy adaptive workflow removed.")
+  rlang::abort("Adaptive: stepwise execution not implemented yet (see roadmap Step 5/6).")
 }
 
 .adaptive_results_seen_names <- function(state) {

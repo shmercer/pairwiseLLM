@@ -2,11 +2,10 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_run_live}
 \alias{adaptive_rank_run_live}
-\title{Adaptive ranking live runner (v2 migration stub)}
+\title{Adaptive ranking live runner (v2 scaffold)}
 \usage{
 adaptive_rank_run_live(...)
 }
 \description{
-Adaptive v2 pairing is not implemented yet. The legacy adaptive workflow has
-been removed during migration.
+Stepwise execution is not implemented yet.
 }

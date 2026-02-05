@@ -230,6 +230,9 @@ validate_state <- function(state) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
+  if (is.list(state$meta) && identical(state$meta$schema_version, "v2-0")) {
+    rlang::abort("`state` is an Adaptive v2 scaffold; v3 validation is not supported.")
+  }
   if ("fast_fit" %in% names(state)) {
     rlang::abort("`state$fast_fit` is no longer supported; use `state$fit`.")
   }

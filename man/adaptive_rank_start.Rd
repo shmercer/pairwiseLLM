@@ -2,11 +2,23 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_start}
 \alias{adaptive_rank_start}
-\title{Adaptive ranking (v2 migration stub)}
+\title{Adaptive ranking (v2 scaffold)}
 \usage{
-adaptive_rank_start(...)
+adaptive_rank_start(items, ...)
+}
+\arguments{
+\item{items}{A vector or data frame of items. Data frames must include an
+\code{item_id} column (or \code{id}/\code{ID}). Item IDs may be character; internal logs
+use integer indices derived from these IDs.}
+
+\item{...}{Internal/testing only. Supply \code{now_fn} to override the clock used
+for timestamps.}
+}
+\value{
+An Adaptive v2 state object containing \code{step_log}, \code{round_log}, and
+\code{item_log}.
 }
 \description{
-Adaptive v2 pairing is not implemented yet. The legacy adaptive workflow has
-been removed during migration.
+Creates an Adaptive v2 state object with canonical logs. Pair selection and
+stepwise execution are implemented in later steps.
 }
