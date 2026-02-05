@@ -66,7 +66,60 @@ snapshot_state_core <- function(state) {
     "item_log",
     "trueskill_state",
     "btl_fit",
+    "stop_metrics",
     "config",
     "meta"
   )]
+}
+
+make_test_btl_fit <- function(ids, draws = NULL, diagnostics = NULL, model_variant = "btl_e_b") {
+  ids <- as.character(ids)
+  if (is.null(draws)) {
+    draws <- matrix(rep(seq_along(ids), each = 10L), nrow = 10L)
+  }
+  draws <- as.matrix(draws)
+  colnames(draws) <- ids
+
+  diagnostics <- diagnostics %||% list(
+    divergences = 0L,
+    max_rhat = 1.0,
+    min_ess_bulk = 1000
+  )
+
+  list(
+    btl_posterior_draws = draws,
+    theta_mean = stats::setNames(as.double(colMeans(draws)), ids),
+    theta_sd = stats::setNames(as.double(apply(draws, 2, stats::sd)), ids),
+    diagnostics = diagnostics,
+    model_variant = model_variant,
+    epsilon_mean = NA_real_,
+    epsilon_p2.5 = NA_real_,
+    epsilon_p5 = NA_real_,
+    epsilon_p50 = NA_real_,
+    epsilon_p95 = NA_real_,
+    epsilon_p97.5 = NA_real_,
+    beta_mean = NA_real_,
+    beta_p2.5 = NA_real_,
+    beta_p5 = NA_real_,
+    beta_p50 = NA_real_,
+    beta_p95 = NA_real_,
+    beta_p97.5 = NA_real_
+  )
+}
+
+make_deterministic_fit_fn <- function(ids, fit = NULL) {
+  env <- new.env(parent = emptyenv())
+  env$calls <- 0L
+  ids <- as.character(ids)
+  fit <- fit %||% make_test_btl_fit(ids)
+
+  fit_fn <- function(state, config) {
+    env$calls <- env$calls + 1L
+    fit
+  }
+
+  list(
+    fit_fn = fit_fn,
+    get_calls = function() env$calls
+  )
 }
