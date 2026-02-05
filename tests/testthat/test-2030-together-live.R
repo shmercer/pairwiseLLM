@@ -3,6 +3,8 @@
 #   Tests for together_compare_pair_live() and submit_together_pairs_live()
 # =====================================================================
 
+skip_if_no_psock()
+
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 together_compare_pair_live <- pairwiseLLM::together_compare_pair_live
@@ -930,3 +932,4 @@ testthat::test_that("submit_together_pairs_live: Parallel Save Strips raw_respon
   # 2. The raw_response column was STRIPPED from the CSV
   testthat::expect_false("raw_response" %in% names(saved))
 })
+skip_if_no_psock()

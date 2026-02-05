@@ -1,5 +1,7 @@
 # tests/testthat/test-gemini_live.R
 
+skip_if_no_psock()
+
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 gemini_compare_pair_live <- pairwiseLLM::gemini_compare_pair_live
@@ -1175,3 +1177,4 @@ test_that("submit_gemini_pairs_live reports parallel worker errors", {
   testthat::expect_equal(nrow(res$failed_pairs), 2L)
   testthat::expect_true(all(grepl("parallel fail", res$failed_pairs$error_message)))
 })
+skip_if_no_psock()
