@@ -2,11 +2,10 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_resume}
 \alias{adaptive_rank_resume}
-\title{Adaptive ranking resume (v2 migration stub)}
+\title{Adaptive ranking resume (v2 scaffold)}
 \usage{
 adaptive_rank_resume(...)
 }
 \description{
-Adaptive v2 pairing is not implemented yet. The legacy adaptive workflow has
-been removed during migration.
+Resume support is not implemented yet.
 }
