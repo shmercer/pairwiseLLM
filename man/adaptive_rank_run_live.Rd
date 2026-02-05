@@ -6,6 +6,9 @@
 \usage{
 adaptive_rank_run_live(...)
 }
+\arguments{
+\item{...}{Reserved for future extensions; currently unused.}
+}
 \description{
 Stepwise execution is not implemented yet.
 }

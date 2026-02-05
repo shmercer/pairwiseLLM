@@ -39,6 +39,8 @@ adaptive_rank_start <- function(items, ...) {
 #' @description
 #' Stepwise execution is not implemented yet.
 #'
+#' @param ... Reserved for future extensions; currently unused.
+#'
 #' @export
 adaptive_rank_run_live <- function(...) {
   rlang::abort("Adaptive: stepwise execution not implemented yet (see roadmap Step 5/6).")
@@ -48,6 +50,8 @@ adaptive_rank_run_live <- function(...) {
 #'
 #' @description
 #' Resume support is not implemented yet.
+#'
+#' @param ... Reserved for future extensions; currently unused.
 #'
 #' @export
 adaptive_rank_resume <- function(...) {
