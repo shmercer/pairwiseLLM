@@ -47,6 +47,10 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
   items <- .adaptive_state_normalize_items(items)
   item_ids <- as.character(items$item_id)
   item_index <- stats::setNames(seq_along(item_ids), item_ids)
+  history_pairs <- tibble::tibble(
+    A_id = character(),
+    B_id = character()
+  )
 
   state <- structure(
     list(
@@ -54,12 +58,14 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       item_index = item_index,
       n_items = as.integer(length(item_ids)),
       items = items,
+      history_pairs = history_pairs,
       step_log = new_step_log(now_fn = now_fn),
       round_log = new_round_log(),
       item_log = new_item_log(items),
-      trueskill_state = NULL,
+      trueskill_state = new_trueskill_state(items),
       btl_fit = NULL,
-      meta = list(schema_version = "v2-0", now_fn = now_fn)
+      config = list(),
+      meta = list(schema_version = "v2-0", now_fn = now_fn, seed = 1L)
     ),
     class = "adaptive_state"
   )
