@@ -40,6 +40,8 @@ test_that("append_step_log validates column names and fills missing columns", {
   expect_equal(nrow(out), 1L)
   expect_true(is.integer(out$pair_id))
   expect_true(is.na(out$pair_id))
+  expect_true(is.character(out$status))
+  expect_true(is.na(out$status))
   expect_true(is.logical(out$is_explore_step))
   expect_true(is.na(out$is_explore_step))
 })

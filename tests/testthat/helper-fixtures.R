@@ -40,3 +40,33 @@ make_test_state <- function(items, trueskill_state, history = tibble::tibble()) 
   state$history_pairs <- make_history(history)
   state
 }
+
+make_deterministic_judge <- function(always = c("i_wins", "j_wins", "invalid")) {
+  always <- match.arg(always)
+  force(always)
+
+  function(A, B, state, ...) {
+    if (identical(always, "invalid")) {
+      return(list(is_valid = FALSE, invalid_reason = "invalid_fixture"))
+    }
+    if (identical(always, "i_wins")) {
+      return(list(is_valid = TRUE, Y = 1L))
+    }
+    list(is_valid = TRUE, Y = 0L)
+  }
+}
+
+snapshot_state_core <- function(state) {
+  state[c(
+    "item_ids",
+    "item_index",
+    "n_items",
+    "items",
+    "history_pairs",
+    "item_log",
+    "trueskill_state",
+    "btl_fit",
+    "config",
+    "meta"
+  )]
+}
