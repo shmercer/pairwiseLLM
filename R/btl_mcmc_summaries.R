@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v3 summary helpers for diagnostics and inspection.
+# BTL MCMC summary helpers for diagnostics and inspection.
 # -------------------------------------------------------------------------
 
 .adaptive_summary_empty_value <- function(type) {
@@ -24,7 +24,7 @@
 .adaptive_summary_extract_source <- function(state) {
   if (inherits(state, "adaptive_state")) {
     if (is.list(state$meta) && identical(state$meta$schema_version, "v2-0")) {
-      rlang::abort("Adaptive v2 state is not supported by v3 summary helpers.")
+      rlang::abort("Adaptive v2 state is not supported by BTL MCMC summary helpers.")
     }
     return(list(
       round_log = state$config$round_log %||% tibble::tibble(),
@@ -195,7 +195,7 @@
   }
   if (!is.null(posterior$draws)) {
     return(tryCatch(
-      .btl_mcmc_v3_theta_draws(posterior$draws, item_id = ids),
+      .btl_mcmc_theta_draws(posterior$draws, item_id = ids),
       error = function(e) NULL
     ))
   }

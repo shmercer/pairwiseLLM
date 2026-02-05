@@ -93,14 +93,14 @@ compute_adjacent_win_probs <- function(theta_draws, ranking_ids) {
 #' @keywords internal
 #' @noRd
 finalize_adaptive_ranking <- function(state, mcmc_fit) {
-  validate_state(state)
+  validate_btl_mcmc_state(state)
   if (!is.list(mcmc_fit)) {
     rlang::abort("`mcmc_fit` must be a list.")
   }
   if (!is.null(mcmc_fit$theta_draws)) {
     theta_draws <- mcmc_fit$theta_draws
   } else if (!is.null(mcmc_fit$draws)) {
-    theta_draws <- .btl_mcmc_v3_theta_draws(mcmc_fit$draws, item_id = state$ids)
+    theta_draws <- .btl_mcmc_theta_draws(mcmc_fit$draws, item_id = state$ids)
   } else {
     rlang::abort("`mcmc_fit` must contain `theta_draws` or `draws`.")
   }

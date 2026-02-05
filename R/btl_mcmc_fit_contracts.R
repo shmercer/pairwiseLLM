@@ -1,12 +1,12 @@
 # -------------------------------------------------------------------------
-# Adaptive v3 fit contracts.
+# BTL MCMC fit contracts.
 # -------------------------------------------------------------------------
 
-#' Build the v3 adaptive fit contract
+#' Build the BTL MCMC fit contract
 #'
 #' @description
-#' Construct the canonical adaptive v3 fit contract that sits between MCMC
-#' inference outputs and downstream adaptive consumers. The contract includes
+#' Construct the canonical BTL MCMC fit contract that sits between MCMC
+#' inference outputs and downstream consumers. The contract includes
 #' posterior draws, summaries, diagnostics, and MCMC metadata in a single
 #' validated structure.
 #'
@@ -24,11 +24,11 @@
 #'   status, or \code{NA}.
 #'
 #' @return A validated list containing draws, summaries, diagnostics, and
-#'   metadata for adaptive v3 consumers.
+#'   metadata for BTL MCMC consumers.
 #'
 #' @keywords internal
 #' @noRd
-build_v3_fit_contract <- function(theta_draws,
+build_btl_fit_contract <- function(theta_draws,
     epsilon_draws = NULL,
     beta_draws = NULL,
     diagnostics = NULL,
@@ -45,22 +45,22 @@ build_v3_fit_contract <- function(theta_draws,
   theta_mean <- stats::setNames(as.double(colMeans(theta_draws)), ids)
   theta_sd <- stats::setNames(as.double(apply(theta_draws, 2, stats::sd)), ids)
 
-  epsilon_summary <- .v3_contract_vector_summary(
+  epsilon_summary <- .btl_contract_vector_summary(
     draws = epsilon_draws,
     name = "epsilon_draws",
     bounds = c(0, 1),
     probs = probs
   )
-  beta_summary <- .v3_contract_vector_summary(
+  beta_summary <- .btl_contract_vector_summary(
     draws = beta_draws,
     name = "beta_draws",
     bounds = NULL,
     probs = probs
   )
 
-  diagnostics <- .v3_contract_diagnostics_defaults(diagnostics)
-  diagnostics_pass <- .v3_contract_diagnostics_pass(diagnostics_pass)
-  mcmc_config_used <- .v3_contract_mcmc_defaults(mcmc_config_used)
+  diagnostics <- .btl_contract_diagnostics_defaults(diagnostics)
+  diagnostics_pass <- .btl_contract_diagnostics_pass(diagnostics_pass)
+  mcmc_config_used <- .btl_contract_mcmc_defaults(mcmc_config_used)
 
   model_variant <- if (is.na(model_variant %||% NA_character_)) {
     NA_character_
@@ -93,7 +93,7 @@ build_v3_fit_contract <- function(theta_draws,
     model_variant = as.character(model_variant),
     mcmc_config_used = mcmc_config_used
   )
-  validate_v3_fit_contract(fit, ids = ids)
+  validate_btl_fit_contract(fit, ids = ids)
   fit
 }
 
@@ -114,7 +114,7 @@ na_param_summary <- function() {
   )
 }
 
-.v3_contract_vector_summary <- function(draws, name, bounds, probs) {
+.btl_contract_vector_summary <- function(draws, name, bounds, probs) {
   if (is.null(draws)) {
     summary <- na_param_summary()
     return(list(
@@ -156,7 +156,7 @@ na_param_summary <- function() {
   )
 }
 
-.v3_contract_diagnostics_defaults <- function(diagnostics) {
+.btl_contract_diagnostics_defaults <- function(diagnostics) {
   if (is.null(diagnostics)) {
     diagnostics <- list()
   }
@@ -169,7 +169,7 @@ na_param_summary <- function() {
   diagnostics
 }
 
-.v3_contract_diagnostics_pass <- function(diagnostics_pass) {
+.btl_contract_diagnostics_pass <- function(diagnostics_pass) {
   if (is.null(diagnostics_pass)) {
     return(NA)
   }
@@ -179,7 +179,7 @@ na_param_summary <- function() {
   diagnostics_pass
 }
 
-.v3_contract_mcmc_defaults <- function(mcmc_config_used) {
+.btl_contract_mcmc_defaults <- function(mcmc_config_used) {
   mcmc_config_used <- mcmc_config_used %||% list()
   if (!is.list(mcmc_config_used)) {
     rlang::abort("`mcmc_config_used` must be a list.")
@@ -220,7 +220,7 @@ reorder_theta_draws <- function(theta_draws, ids) {
 
 #' @keywords internal
 #' @noRd
-validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
+validate_btl_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
   if (!is.list(fit)) {
     rlang::abort("`fit` must be a list.", call = where)
   }
@@ -302,7 +302,7 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
 
   n_items <- fit$n_items
   n_draws <- fit$n_draws
-  if (!.adaptive_v3_intish(n_items) || !.adaptive_v3_intish(n_draws)) {
+  if (!.btl_mcmc_intish(n_items) || !.btl_mcmc_intish(n_draws)) {
     rlang::abort("`fit$n_items` and `fit$n_draws` must be integer scalars.", call = where)
   }
   if (as.integer(n_items) != ncol(theta_draws)) {
@@ -312,7 +312,7 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
     rlang::abort("`fit$n_draws` must match `theta_draws` rows.", call = where)
   }
 
-  .v3_contract_validate_scalar <- function(value, name, allow_na = FALSE) {
+  .btl_contract_validate_scalar <- function(value, name, allow_na = FALSE) {
     if (!is.numeric(value) || length(value) != 1L) {
       rlang::abort(paste0("`fit$", name, "` must be a numeric scalar."), call = where)
     }
@@ -328,7 +328,7 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
   epsilon_fields <- c("epsilon_mean", "epsilon_p2.5", "epsilon_p5", "epsilon_p50", "epsilon_p95", "epsilon_p97.5")
   if (is.null(epsilon_draws)) {
     for (nm in epsilon_fields) {
-      .v3_contract_validate_scalar(fit[[nm]], nm, allow_na = TRUE)
+      .btl_contract_validate_scalar(fit[[nm]], nm, allow_na = TRUE)
     }
   } else {
     if (!is.numeric(epsilon_draws)) {
@@ -342,7 +342,7 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
       rlang::abort("`fit$epsilon_draws` must be within [0, 1].", call = where)
     }
     for (nm in epsilon_fields) {
-      .v3_contract_validate_scalar(fit[[nm]], nm, allow_na = FALSE)
+      .btl_contract_validate_scalar(fit[[nm]], nm, allow_na = FALSE)
     }
   }
 
@@ -350,7 +350,7 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
   beta_fields <- c("beta_mean", "beta_p2.5", "beta_p5", "beta_p50", "beta_p95", "beta_p97.5")
   if (is.null(beta_draws)) {
     for (nm in beta_fields) {
-      .v3_contract_validate_scalar(fit[[nm]], nm, allow_na = TRUE)
+      .btl_contract_validate_scalar(fit[[nm]], nm, allow_na = TRUE)
     }
   } else {
     if (!is.numeric(beta_draws)) {
@@ -361,7 +361,7 @@ validate_v3_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
       rlang::abort("`fit$beta_draws` must contain at least two finite draws.", call = where)
     }
     for (nm in beta_fields) {
-      .v3_contract_validate_scalar(fit[[nm]], nm, allow_na = FALSE)
+      .btl_contract_validate_scalar(fit[[nm]], nm, allow_na = FALSE)
     }
   }
 

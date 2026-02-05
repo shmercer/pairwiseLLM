@@ -122,7 +122,7 @@
 
 #' @keywords internal
 #' @noRd
-adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L) {
+btl_mcmc_state_new <- function(samples, config, seed = NULL, schema_version = 1L) {
   samples <- tibble::as_tibble(samples)
   if (!all(c("ID", "text") %in% names(samples))) {
     rlang::abort("`samples` must contain columns 'ID' and 'text'.")
@@ -200,23 +200,23 @@ adaptive_state_new <- function(samples, config, seed = NULL, schema_version = 1L
   )
 
   state <- .adaptive_state_init_logs(state)
-  validate_state(state)
+  validate_btl_mcmc_state(state)
   state
 }
 
 #' @keywords internal
 #' @noRd
-adaptive_state_save <- function(state, path) {
-  validate_state(state)
+btl_mcmc_state_save <- function(state, path) {
+  validate_btl_mcmc_state(state)
   saveRDS(state, path)
   invisible(path)
 }
 
 #' @keywords internal
 #' @noRd
-adaptive_state_load <- function(path) {
+btl_mcmc_state_load <- function(path) {
   state <- readRDS(path)
   state <- .adaptive_state_init_logs(state)
-  validate_state(state)
+  validate_btl_mcmc_state(state)
   state
 }

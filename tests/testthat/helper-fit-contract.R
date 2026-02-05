@@ -1,4 +1,4 @@
-make_v3_fit_contract <- function(ids,
+make_btl_fit_contract <- function(ids,
     theta_draws = NULL,
     epsilon_draws = NULL,
     beta_draws = NULL,
@@ -27,7 +27,7 @@ make_v3_fit_contract <- function(ids,
     cmdstanr_version = "test"
   )
 
-  fit <- pairwiseLLM:::build_v3_fit_contract(
+  fit <- pairwiseLLM:::build_btl_fit_contract(
     theta_draws = theta_draws,
     epsilon_draws = epsilon_draws,
     beta_draws = beta_draws,

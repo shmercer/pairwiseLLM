@@ -1,8 +1,8 @@
 # -------------------------------------------------------------------------
-# Adaptive v3 model variants.
+# BTL MCMC model variants.
 # -------------------------------------------------------------------------
 
-#' Normalize adaptive model variant
+#' Normalize model variant
 #'
 #' @keywords internal
 #' @noRd

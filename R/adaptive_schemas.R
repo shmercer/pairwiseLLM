@@ -226,18 +226,18 @@ validate_failed_attempts_tbl <- function(failed_attempts) {
 
 #' @keywords internal
 #' @noRd
-validate_state <- function(state) {
+validate_btl_mcmc_state <- function(state) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
   if (is.list(state$meta) && identical(state$meta$schema_version, "v2-0")) {
-    rlang::abort("`state` is an Adaptive v2 scaffold; v3 validation is not supported.")
+    rlang::abort("`state` is an Adaptive v2 scaffold; BTL MCMC validation is not supported.")
   }
   if ("fast_fit" %in% names(state)) {
     rlang::abort("`state$fast_fit` is no longer supported; use `state$fit`.")
   }
   if (!"fit" %in% names(state)) {
-    rlang::abort("`state$fit` must be present (NULL or a v3 fit contract).")
+    rlang::abort("`state$fit` must be present (NULL or a BTL fit contract).")
   }
   if (!is.integer(state$schema_version) || length(state$schema_version) != 1L) {
     rlang::abort("`state$schema_version` must be a length-1 integer.")
@@ -258,7 +258,7 @@ validate_state <- function(state) {
     rlang::abort("`state$texts` names must match `state$ids`.")
   }
   if (!is.null(state$fit)) {
-    validate_v3_fit_contract(state$fit, ids = state$ids)
+    validate_btl_fit_contract(state$fit, ids = state$ids)
   }
 
   counts <- c("deg", "pos1", "pos2", "imb", "pos_count")
@@ -289,7 +289,7 @@ validate_state <- function(state) {
   if (any(state$pair_count < 0L, na.rm = TRUE)) {
     rlang::abort("`state$pair_count` must be non-negative.")
   }
-  .adaptive_v3_validate_pair_keys(names(state$pair_count), state$ids, ordered = FALSE, "state$pair_count")
+  .btl_mcmc_validate_pair_keys(names(state$pair_count), state$ids, ordered = FALSE, "state$pair_count")
 
   if (!is.integer(state$pair_ordered_count)) {
     rlang::abort("`state$pair_ordered_count` must be an integer vector.")
@@ -302,7 +302,7 @@ validate_state <- function(state) {
   if (any(state$pair_ordered_count < 0L, na.rm = TRUE)) {
     rlang::abort("`state$pair_ordered_count` must be non-negative.")
   }
-  .adaptive_v3_validate_pair_keys(
+  .btl_mcmc_validate_pair_keys(
     names(state$pair_ordered_count),
     state$ids,
     ordered = TRUE,
@@ -422,6 +422,34 @@ validate_state <- function(state) {
     if (!is.character(state$stop_reason) || length(state$stop_reason) != 1L) {
       rlang::abort("`state$stop_reason` must be a length-1 character value or NULL.")
     }
+  }
+
+  invisible(state)
+}
+
+#' @keywords internal
+#' @noRd
+validate_state <- function(state) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state object.")
+  }
+  if (is.null(state$meta) || !identical(state$meta$schema_version, "v2-0")) {
+    rlang::abort("`state` must be an Adaptive v2 state.")
+  }
+  if (!is.character(state$item_ids) || length(state$item_ids) < 2L) {
+    rlang::abort("`state$item_ids` must include at least two item ids.")
+  }
+  if (!is.integer(state$n_items) || state$n_items != length(state$item_ids)) {
+    rlang::abort("`state$n_items` must match `state$item_ids`.")
+  }
+  if (!is.data.frame(state$items)) {
+    rlang::abort("`state$items` must be a data frame.")
+  }
+  if (!is.null(state$trueskill_state)) {
+    validate_trueskill_state(state$trueskill_state)
+  }
+  if (!is.data.frame(state$history_pairs)) {
+    rlang::abort("`state$history_pairs` must be a data frame.")
   }
 
   invisible(state)

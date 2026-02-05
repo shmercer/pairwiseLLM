@@ -61,13 +61,13 @@ reuse with \code{\link[=summarize_items]{summarize_items()}}.}
 a refit; \code{refit_id} identifies the refit.}
 \item{round_log}{Tibble matching the canonical adaptive round log schema
 (one row per refit).}
-\item{fits}{List of adaptive v3 fit contracts (one per refit).}
+\item{fits}{List of BTL fit contracts (one per refit).}
 \item{fit}{Single fit contract (only when one refit is run).}
 }
 }
 \description{
 Runs full Bayesian posterior inference for a Bradley–Terry–Luce (BTL) style
-model using the package’s adaptive-v3 CmdStan machinery, but in a standalone
+model using the package’s CmdStan machinery, but in a standalone
 (non-adaptive) context. The function is designed so downstream diagnostics
 and reporting can reuse the existing adaptive summary tools (notably
 \code{\link[=summarize_items]{summarize_items()}} and \code{\link[=summarize_refits]{summarize_refits()}}) without requiring new summary

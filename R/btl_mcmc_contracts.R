@@ -1,21 +1,21 @@
 # -------------------------------------------------------------------------
-# Adaptive v3 configuration, validation, and schema contracts
+# BTL MCMC configuration, validation, and schema contracts
 # -------------------------------------------------------------------------
 
-.adaptive_v3_clamp <- function(lower, upper, value) {
+.btl_mcmc_clamp <- function(lower, upper, value) {
   value <- max(lower, min(upper, value))
   value
 }
 
-.adaptive_v3_round_int <- function(value) {
+.btl_mcmc_round_int <- function(value) {
   as.integer(round(value))
 }
 
-.adaptive_v3_intish <- function(x) {
+.btl_mcmc_intish <- function(x) {
   is.numeric(x) && length(x) == 1L && is.finite(x) && abs(x - round(x)) < 1e-8
 }
 
-.adaptive_v3_check <- function(ok, message) {
+.btl_mcmc_check <- function(ok, message) {
   if (!isTRUE(ok)) {
     rlang::abort(message)
   }
@@ -24,15 +24,15 @@
 
 #' @keywords internal
 #' @noRd
-adaptive_v3_defaults <- function(N) {
+btl_mcmc_defaults <- function(N) {
   N <- as.integer(N)
-  .adaptive_v3_check(!is.na(N) && N >= 2L, "`N` must be an integer >= 2.")
+  .btl_mcmc_check(!is.na(N) && N >= 2L, "`N` must be an integer >= 2.")
 
-  W <- .adaptive_v3_clamp(5L, 60L, .adaptive_v3_round_int(2 * sqrt(N)))
-  explore_rate <- .adaptive_v3_clamp(0.10, 0.25, 0.20 - 0.02 * log10(N))
-  batch_size <- .adaptive_v3_clamp(10L, 80L, .adaptive_v3_round_int(4 * sqrt(N)))
-  refit_B <- .adaptive_v3_clamp(100L, 800L, .adaptive_v3_round_int(10 * sqrt(N)))
-  A_anchors <- .adaptive_v3_clamp(25L, 120L, .adaptive_v3_round_int(2 * sqrt(N)))
+  W <- .btl_mcmc_clamp(5L, 60L, .btl_mcmc_round_int(2 * sqrt(N)))
+  explore_rate <- .btl_mcmc_clamp(0.10, 0.25, 0.20 - 0.02 * log10(N))
+  batch_size <- .btl_mcmc_clamp(10L, 80L, .btl_mcmc_round_int(4 * sqrt(N)))
+  refit_B <- .btl_mcmc_clamp(100L, 800L, .btl_mcmc_round_int(10 * sqrt(N)))
+  A_anchors <- .btl_mcmc_clamp(25L, 120L, .btl_mcmc_round_int(2 * sqrt(N)))
   min_degree <- if (N < 3L) 1L else 2L
 
   list(
@@ -74,7 +74,7 @@ adaptive_v3_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
-adaptive_v3_config <- function(N, ...) {
+btl_mcmc_config <- function(N, ...) {
   overrides <- list(...)
   if (length(overrides) == 1L &&
     is.null(names(overrides)) &&
@@ -98,46 +98,46 @@ adaptive_v3_config <- function(N, ...) {
     rlang::abort("`overrides` must be a list.")
   }
 
-  defaults <- adaptive_v3_defaults(N)
+  defaults <- btl_mcmc_defaults(N)
   config <- utils::modifyList(defaults, overrides)
   config$N <- defaults$N
   config$model_variant <- normalize_model_variant(config$model_variant %||% defaults$model_variant)
-  validate_config(config)
+  validate_btl_mcmc_config(config)
   config
 }
 
-.adaptive_v3_check_named_int <- function(x, name, ids = NULL) {
-  .adaptive_v3_check(is.integer(x), paste0("`", name, "` must be integer."))
-  .adaptive_v3_check(!is.null(names(x)) || length(x) == 0L,
+.btl_mcmc_check_named_int <- function(x, name, ids = NULL) {
+  .btl_mcmc_check(is.integer(x), paste0("`", name, "` must be integer."))
+  .btl_mcmc_check(!is.null(names(x)) || length(x) == 0L,
     paste0("`", name, "` must be named when non-empty.")
   )
   if (!is.null(ids)) {
-    .adaptive_v3_check(
+    .btl_mcmc_check(
       length(x) == length(ids) && !is.null(names(x)) &&
         identical(names(x), ids),
       paste0("`", name, "` must be a named vector over `ids`.")
     )
   }
-  .adaptive_v3_check(all(x >= 0L), paste0("`", name, "` must be non-negative."))
+  .btl_mcmc_check(all(x >= 0L), paste0("`", name, "` must be non-negative."))
   invisible(x)
 }
 
-.adaptive_v3_validate_pair_keys <- function(keys, ids, ordered, name) {
+.btl_mcmc_validate_pair_keys <- function(keys, ids, ordered, name) {
   if (length(keys) == 0L) return(invisible(keys))
-  .adaptive_v3_check(!is.null(keys), paste0("`", name, "` must be named."))
-  .adaptive_v3_check(!any(is.na(keys) | keys == ""), paste0("`", name, "` has empty keys."))
+  .btl_mcmc_check(!is.null(keys), paste0("`", name, "` must be named."))
+  .btl_mcmc_check(!any(is.na(keys) | keys == ""), paste0("`", name, "` has empty keys."))
   parts <- strsplit(keys, ":", fixed = TRUE)
   bad_len <- lengths(parts) != 2L
-  .adaptive_v3_check(!any(bad_len), paste0("`", name, "` keys must be `A:B`."))
+  .btl_mcmc_check(!any(bad_len), paste0("`", name, "` keys must be `A:B`."))
   left <- vapply(parts, `[[`, character(1L), 1L)
   right <- vapply(parts, `[[`, character(1L), 2L)
-  .adaptive_v3_check(all(left %in% ids) && all(right %in% ids),
+  .btl_mcmc_check(all(left %in% ids) && all(right %in% ids),
     paste0("`", name, "` keys must reference valid ids.")
   )
-  .adaptive_v3_check(!any(left == right), paste0("`", name, "` cannot include self-pairs."))
+  .btl_mcmc_check(!any(left == right), paste0("`", name, "` cannot include self-pairs."))
   if (!ordered) {
     normalized <- make_unordered_key(left, right)
-    .adaptive_v3_check(all(normalized == keys),
+    .btl_mcmc_check(all(normalized == keys),
       paste0("`", name, "` keys must be unordered `min:max` form.")
     )
   }
@@ -146,7 +146,7 @@ adaptive_v3_config <- function(N, ...) {
 
 #' @keywords internal
 #' @noRd
-validate_config <- function(config) {
+validate_btl_mcmc_config <- function(config) {
   if (!is.list(config)) {
     rlang::abort("`config` must be a list.")
   }
@@ -165,106 +165,106 @@ validate_config <- function(config) {
     "write_outputs", "output_dir", "keep_draws", "thin_draws"
   )
   missing <- setdiff(required, names(config))
-  .adaptive_v3_check(length(missing) == 0L,
-    paste0("Missing v3 config fields: ", paste(missing, collapse = ", "), ".")
+  .btl_mcmc_check(length(missing) == 0L,
+    paste0("Missing config fields: ", paste(missing, collapse = ", "), ".")
   )
 
-  .adaptive_v3_check(.adaptive_v3_intish(config$N) && config$N >= 2L, "`N` must be >= 2.")
-  .adaptive_v3_check(is.character(config$model_variant) && length(config$model_variant) == 1L,
+  .btl_mcmc_check(.btl_mcmc_intish(config$N) && config$N >= 2L, "`N` must be >= 2.")
+  .btl_mcmc_check(is.character(config$model_variant) && length(config$model_variant) == 1L,
     "`model_variant` must be a length-1 character value.")
   normalize_model_variant(config$model_variant)
-  .adaptive_v3_check(.adaptive_v3_intish(config$W) && config$W >= 1L, "`W` must be >= 1.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$A_anchors) && config$A_anchors >= 1L, "`A_anchors` must be >= 1.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$C_max) && config$C_max >= 1L, "`C_max` must be >= 1.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$refit_B) && config$refit_B >= 1L, "`refit_B` must be >= 1.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$batch_size) && config$batch_size >= 1L, "`batch_size` must be >= 1.")
-  .adaptive_v3_check(is.numeric(config$explore_rate) && length(config$explore_rate) == 1L &&
+  .btl_mcmc_check(.btl_mcmc_intish(config$W) && config$W >= 1L, "`W` must be >= 1.")
+  .btl_mcmc_check(.btl_mcmc_intish(config$A_anchors) && config$A_anchors >= 1L, "`A_anchors` must be >= 1.")
+  .btl_mcmc_check(.btl_mcmc_intish(config$C_max) && config$C_max >= 1L, "`C_max` must be >= 1.")
+  .btl_mcmc_check(.btl_mcmc_intish(config$refit_B) && config$refit_B >= 1L, "`refit_B` must be >= 1.")
+  .btl_mcmc_check(.btl_mcmc_intish(config$batch_size) && config$batch_size >= 1L, "`batch_size` must be >= 1.")
+  .btl_mcmc_check(is.numeric(config$explore_rate) && length(config$explore_rate) == 1L &&
     config$explore_rate >= 0 && config$explore_rate <= 1, "`explore_rate` must be in [0, 1].")
-  .adaptive_v3_check(.adaptive_v3_intish(config$min_degree) && config$min_degree >= 1L,
+  .btl_mcmc_check(.btl_mcmc_intish(config$min_degree) && config$min_degree >= 1L,
     "`min_degree` must be >= 1.")
   if (config$N >= 3L) {
-    .adaptive_v3_check(config$min_degree >= 2L, "`min_degree` must be >= 2 for N >= 3.")
+    .btl_mcmc_check(config$min_degree >= 2L, "`min_degree` must be >= 2 for N >= 3.")
   }
-  .adaptive_v3_check(config$min_degree <= (config$N - 1L), "`min_degree` must be <= N - 1.")
+  .btl_mcmc_check(config$min_degree <= (config$N - 1L), "`min_degree` must be <= N - 1.")
   if (!is.null(config$target_mean_degree)) {
-    .adaptive_v3_check(is.numeric(config$target_mean_degree) && length(config$target_mean_degree) == 1L &&
+    .btl_mcmc_check(is.numeric(config$target_mean_degree) && length(config$target_mean_degree) == 1L &&
       is.finite(config$target_mean_degree),
     "`target_mean_degree` must be a finite numeric scalar or NULL.")
-    .adaptive_v3_check(config$target_mean_degree > 0, "`target_mean_degree` must be > 0.")
-    .adaptive_v3_check(config$target_mean_degree <= (config$N - 1L), "`target_mean_degree` must be <= N - 1.")
+    .btl_mcmc_check(config$target_mean_degree > 0, "`target_mean_degree` must be > 0.")
+    .btl_mcmc_check(config$target_mean_degree <= (config$N - 1L), "`target_mean_degree` must be <= N - 1.")
   }
 
-  .adaptive_v3_check(is.numeric(config$dup_p_margin) && length(config$dup_p_margin) == 1L &&
+  .btl_mcmc_check(is.numeric(config$dup_p_margin) && length(config$dup_p_margin) == 1L &&
     config$dup_p_margin >= 0 && config$dup_p_margin <= 1, "`dup_p_margin` must be in [0, 1].")
-  .adaptive_v3_check(.adaptive_v3_intish(config$dup_max_count) && config$dup_max_count >= 1L,
+  .btl_mcmc_check(.btl_mcmc_intish(config$dup_max_count) && config$dup_max_count >= 1L,
     "`dup_max_count` must be >= 1.")
-  .adaptive_v3_check(is.numeric(config$dup_utility_quantile) &&
+  .btl_mcmc_check(is.numeric(config$dup_utility_quantile) &&
     length(config$dup_utility_quantile) == 1L &&
     config$dup_utility_quantile >= 0 && config$dup_utility_quantile <= 1,
   "`dup_utility_quantile` must be in [0, 1].")
-  .adaptive_v3_check(is.numeric(config$hard_cap_frac) && length(config$hard_cap_frac) == 1L &&
+  .btl_mcmc_check(is.numeric(config$hard_cap_frac) && length(config$hard_cap_frac) == 1L &&
     config$hard_cap_frac > 0 && config$hard_cap_frac <= 1, "`hard_cap_frac` must be in (0, 1].")
 
-  .adaptive_v3_check(is.numeric(config$eap_reliability_min) &&
+  .btl_mcmc_check(is.numeric(config$eap_reliability_min) &&
     length(config$eap_reliability_min) == 1L &&
     config$eap_reliability_min >= 0 && config$eap_reliability_min <= 1,
   "`eap_reliability_min` must be in [0, 1].")
-  .adaptive_v3_check(.adaptive_v3_intish(config$stability_lag) &&
+  .btl_mcmc_check(.btl_mcmc_intish(config$stability_lag) &&
     config$stability_lag >= 1L,
   "`stability_lag` must be >= 1.")
-  .adaptive_v3_check(is.numeric(config$theta_corr_min) &&
+  .btl_mcmc_check(is.numeric(config$theta_corr_min) &&
     length(config$theta_corr_min) == 1L &&
     config$theta_corr_min >= 0 && config$theta_corr_min <= 1,
   "`theta_corr_min` must be in [0, 1].")
-  .adaptive_v3_check(is.numeric(config$theta_sd_rel_change_max) &&
+  .btl_mcmc_check(is.numeric(config$theta_sd_rel_change_max) &&
     length(config$theta_sd_rel_change_max) == 1L &&
     is.finite(config$theta_sd_rel_change_max) &&
     config$theta_sd_rel_change_max >= 0,
   "`theta_sd_rel_change_max` must be a finite value >= 0.")
-  .adaptive_v3_check(is.numeric(config$rank_spearman_min) &&
+  .btl_mcmc_check(is.numeric(config$rank_spearman_min) &&
     length(config$rank_spearman_min) == 1L &&
     config$rank_spearman_min >= 0 && config$rank_spearman_min <= 1,
   "`rank_spearman_min` must be in [0, 1].")
-  .adaptive_v3_check(is.numeric(config$max_rhat) && length(config$max_rhat) == 1L &&
+  .btl_mcmc_check(is.numeric(config$max_rhat) && length(config$max_rhat) == 1L &&
     config$max_rhat >= 1, "`max_rhat` must be >= 1.")
-  .adaptive_v3_check(is.numeric(config$min_ess_bulk) && length(config$min_ess_bulk) == 1L &&
+  .btl_mcmc_check(is.numeric(config$min_ess_bulk) && length(config$min_ess_bulk) == 1L &&
     config$min_ess_bulk > 0, "`min_ess_bulk` must be > 0.")
-  .adaptive_v3_check(is.numeric(config$min_ess_bulk_near_stop) &&
+  .btl_mcmc_check(is.numeric(config$min_ess_bulk_near_stop) &&
     length(config$min_ess_bulk_near_stop) == 1L &&
     config$min_ess_bulk_near_stop > 0,
   "`min_ess_bulk_near_stop` must be > 0.")
-  .adaptive_v3_check(is.logical(config$require_divergences_zero) &&
+  .btl_mcmc_check(is.logical(config$require_divergences_zero) &&
     length(config$require_divergences_zero) == 1L,
   "`require_divergences_zero` must be logical.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$repair_max_cycles) && config$repair_max_cycles >= 1L,
+  .btl_mcmc_check(.btl_mcmc_intish(config$repair_max_cycles) && config$repair_max_cycles >= 1L,
     "`repair_max_cycles` must be >= 1.")
 
-  .adaptive_v3_check(is.logical(config$progress) && length(config$progress) == 1L,
+  .btl_mcmc_check(is.logical(config$progress) && length(config$progress) == 1L,
     "`progress` must be logical.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$progress_every_iter) && config$progress_every_iter >= 1L,
+  .btl_mcmc_check(.btl_mcmc_intish(config$progress_every_iter) && config$progress_every_iter >= 1L,
     "`progress_every_iter` must be >= 1.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$progress_every_refit) && config$progress_every_refit >= 1L,
+  .btl_mcmc_check(.btl_mcmc_intish(config$progress_every_refit) && config$progress_every_refit >= 1L,
     "`progress_every_refit` must be >= 1.")
-  .adaptive_v3_check(is.character(config$progress_level) && length(config$progress_level) == 1L &&
+  .btl_mcmc_check(is.character(config$progress_level) && length(config$progress_level) == 1L &&
     config$progress_level %in% c("basic", "refit", "full"),
   "`progress_level` must be one of 'basic', 'refit', or 'full'.")
 
-  .adaptive_v3_check(is.logical(config$write_outputs) && length(config$write_outputs) == 1L,
+  .btl_mcmc_check(is.logical(config$write_outputs) && length(config$write_outputs) == 1L,
     "`write_outputs` must be logical.")
   if (!is.null(config$output_dir)) {
-    .adaptive_v3_check(is.character(config$output_dir) && length(config$output_dir) == 1L,
+    .btl_mcmc_check(is.character(config$output_dir) && length(config$output_dir) == 1L,
       "`output_dir` must be a length-1 character path or NULL.")
   }
-  .adaptive_v3_check(is.logical(config$keep_draws) && length(config$keep_draws) == 1L,
+  .btl_mcmc_check(is.logical(config$keep_draws) && length(config$keep_draws) == 1L,
     "`keep_draws` must be logical.")
-  .adaptive_v3_check(.adaptive_v3_intish(config$thin_draws) && config$thin_draws >= 1L,
+  .btl_mcmc_check(.btl_mcmc_intish(config$thin_draws) && config$thin_draws >= 1L,
     "`thin_draws` must be >= 1.")
   if (!is.list(config$cmdstan)) {
     rlang::abort("`config$cmdstan` must be a list when provided.")
   }
   cmdstan_output_dir <- config$cmdstan$output_dir %||% NULL
   if (!is.null(cmdstan_output_dir)) {
-    .adaptive_v3_check(is.character(cmdstan_output_dir) && length(cmdstan_output_dir) == 1L,
+    .btl_mcmc_check(is.character(cmdstan_output_dir) && length(cmdstan_output_dir) == 1L,
       "`config$cmdstan$output_dir` must be a length-1 character path.")
   }
 
@@ -643,7 +643,7 @@ build_round_log_row <- function(state,
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state.")
   }
-  config <- config %||% state$config$v3 %||% list()
+  config <- config %||% state$config$mcmc %||% list()
 
   row <- .adaptive_round_log_defaults()
   if (is.null(round_id)) {

@@ -6,18 +6,18 @@
 #' @keywords internal
 #' @noRd
 near_stop_from_state <- function(state) {
-  validate_state(state)
+  validate_btl_mcmc_state(state)
   identical(state$phase, "phase3")
 }
 
 #' @keywords internal
 #' @noRd
 compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
-  validate_state(state)
+  validate_btl_mcmc_state(state)
   if (!is.list(fit) || is.null(fit$theta_draws)) {
     rlang::abort("`fit` must include `theta_draws`.")
   }
-  validate_v3_fit_contract(fit, ids = state$ids)
+  validate_btl_fit_contract(fit, ids = state$ids)
   theta_draws <- fit$theta_draws
   if (!is.matrix(theta_draws) || !is.numeric(theta_draws)) {
     rlang::abort("`fit$theta_draws` must be a numeric matrix.")
@@ -26,7 +26,7 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
     rlang::abort("`fit$theta_draws` must have at least two draws.")
   }
 
-  theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+  theta_summary <- btl_mcmc_theta_summary_from_fit(fit, state)
   theta_mean <- stats::setNames(theta_summary$theta_mean, theta_summary$item_id)
   theta_mean <- as.double(theta_mean[state$ids])
   if (any(!is.finite(theta_mean))) {
@@ -177,14 +177,14 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
 #' @keywords internal
 #' @noRd
 .adaptive_update_theta_history <- function(state, theta_summary = NULL, fit = NULL) {
-  validate_state(state)
+  validate_btl_mcmc_state(state)
   if (is.null(theta_summary)) {
     if (is.null(fit)) {
       rlang::abort("`theta_summary` (or `fit`) is required to update theta history.")
     }
-    theta_summary <- .adaptive_theta_summary_from_fit(fit, state)
+    theta_summary <- btl_mcmc_theta_summary_from_fit(fit, state)
   } else {
-    theta_summary <- .adaptive_v3_theta_summary(theta_summary, state)
+    theta_summary <- btl_mcmc_theta_summary_normalize(theta_summary, state)
   }
   theta_mean <- stats::setNames(theta_summary$theta_mean, theta_summary$item_id)
   theta_mean <- as.double(theta_mean[state$ids])
@@ -202,7 +202,7 @@ should_stop <- function(metrics, state, config, theta_summary = NULL, fit = NULL
   if (!"fit" %in% names(state)) {
     state <- structure(c(state, list(fit = NULL)), class = class(state))
   }
-  validate_state(state)
+  validate_btl_mcmc_state(state)
   if (!is.list(metrics)) {
     rlang::abort("`metrics` must be a list.")
   }
@@ -317,7 +317,7 @@ should_stop <- function(metrics, state, config, theta_summary = NULL, fit = NULL
     rho_rank_pass
   if (stop_decision) {
     state$mode <- "stopped"
-    state$stop_reason <- "v3_converged"
+    state$stop_reason <- "btl_converged"
   }
 
   list(

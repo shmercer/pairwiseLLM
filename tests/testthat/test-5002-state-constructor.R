@@ -1,10 +1,3 @@
-make_test_items <- function(n) {
-  tibble::tibble(
-    item_id = seq_len(n),
-    text = paste("item", seq_len(n))
-  )
-}
-
 test_that("new_adaptive_state builds a stable v2 scaffold", {
   items <- make_test_items(3)
   now_fn <- function() as.POSIXct("2000-01-01", tz = "UTC")
@@ -16,6 +9,8 @@ test_that("new_adaptive_state builds a stable v2 scaffold", {
   expect_equal(state$meta$now_fn(), now_fn())
   expect_equal(state$item_ids, as.character(items$item_id))
   expect_equal(state$n_items, 3L)
+  expect_true(tibble::is_tibble(state$history_pairs))
+  expect_true(inherits(state$trueskill_state, "trueskill_state"))
   expect_true(tibble::is_tibble(state$step_log))
   expect_true(tibble::is_tibble(state$round_log))
   expect_true(tibble::is_tibble(state$item_log))
