@@ -63,6 +63,7 @@ Depends:
     R (>= 4.1)
 VignetteBuilder: knitr
 Collate: 
+    'adaptive_btl_refit.R'
     'adaptive_candidates.R'
     'adaptive_constraints.R'
     'adaptive_logs.R'
