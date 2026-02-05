@@ -36,7 +36,7 @@ optional reverse pairs via \code{\link[=sample_reverse_pairs]{sample_reverse_pai
 \item Bradley–Terry: \code{\link[=fit_bt_model]{fit_bt_model()}}
 \item Bayesian BTL (MCMC): \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}}
 \item Summaries: \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}, \code{\link[=summarize_items]{summarize_items()}},
-\code{\link[=summarize_iterations]{summarize_iterations()}}, \code{\link[=summarize_refits]{summarize_refits()}}
+\code{\link[=summarize_refits]{summarize_refits()}}
 }
 }
 }
@@ -101,7 +101,7 @@ The exported functions are intended to be read as a set of modules:
 
 \subsection{6) Adaptive Bayesian pairing + ranking loop}{
 \itemize{
-\item Entry / control: \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_run_batch]{adaptive_rank_run_batch()}},
+\item Entry / control: \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}
 }
 }
