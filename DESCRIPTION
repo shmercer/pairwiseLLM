@@ -71,6 +71,7 @@ Collate:
     'adaptive_run.R'
     'adaptive_schemas.R'
     'adaptive_state.R'
+    'adaptive_trueskill.R'
     'adaptive_uncertainty_pool.R'
     'adaptive_warm_start.R'
     'anthropic_batch_api.R'
