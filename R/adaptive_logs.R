@@ -11,6 +11,7 @@ schema_step_log <- c(
   A = "integer",
   B = "integer",
   Y = "integer",
+  status = "character",
   is_explore_step = "logical",
   explore_mode = "character",
   explore_reason = "character",
