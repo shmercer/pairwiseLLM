@@ -8,9 +8,8 @@
   - `adaptive_rank_start()`
   - `adaptive_rank_resume()`
   - `adaptive_rank_run_live()`
-  - `adaptive_rank_run_batch()`
 * Adaptive runs support checkpointing and resume via `paths$state_path`.
-* Standardized adaptive v3 configuration, state, and logging contracts across live and batch runners.
+* Standardized adaptive v3 configuration, state, and logging contracts across live runners.
 * Adaptive workflows emit canonical round-level and item-level logs compatible with existing summary and diagnostic tools.
 
 ### Bayesian Bradley–Terry–Luce model
@@ -83,4 +82,3 @@
 * Unified live and batch LLM comparison framework (OpenAI / Anthropic / Gemini).
 * Live support for Together.ai and local Ollama backends.
 * Tools for Bradley–Terry and Elo models, positional bias checks
-
