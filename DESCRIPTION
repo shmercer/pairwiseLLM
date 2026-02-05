@@ -73,6 +73,7 @@ Collate:
     'adaptive_state.R'
     'adaptive_trueskill.R'
     'adaptive_uncertainty_pool.R'
+    'adaptive_utility.R'
     'adaptive_warm_start.R'
     'anthropic_batch_api.R'
     'anthropic_live.R'
