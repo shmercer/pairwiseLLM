@@ -64,6 +64,14 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       item_log = new_item_log(items),
       trueskill_state = new_trueskill_state(items),
       btl_fit = NULL,
+      stop_metrics = NULL,
+      refit_meta = list(
+        last_refit_M_done = 0L,
+        last_refit_step = 0L,
+        last_refit_round_id = 0L,
+        theta_mean_history = list(),
+        near_stop = FALSE
+      ),
       config = list(),
       meta = list(schema_version = "v2-0", now_fn = now_fn, seed = 1L)
     ),

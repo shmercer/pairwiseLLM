@@ -43,10 +43,13 @@ adaptive_rank_start <- function(items, ...) {
 #'   list with `is_valid = TRUE` and `Y` in `0/1`, or `is_valid = FALSE` with
 #'   `invalid_reason`.
 #' @param n_steps Number of steps to execute.
+#' @param fit_fn Optional BTL fit function for deterministic testing; defaults
+#'   to `default_btl_fit_fn()` when a refit is due.
+#' @param btl_config Optional list overriding BTL refit/stop defaults.
 #' @param ... Additional arguments passed through to `judge()`.
 #'
 #' @export
-adaptive_rank_run_live <- function(state, judge, n_steps = 1L, ...) {
+adaptive_rank_run_live <- function(state, judge, n_steps = 1L, fit_fn = NULL, btl_config = NULL, ...) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
@@ -61,6 +64,26 @@ adaptive_rank_run_live <- function(state, judge, n_steps = 1L, ...) {
   remaining <- n_steps
   while (remaining > 0L) {
     state <- run_one_step(state, judge, ...)
+    refit_out <- maybe_refit_btl(state, config = btl_config, fit_fn = fit_fn)
+    state <- refit_out$state
+    if (isTRUE(refit_out$refit_performed)) {
+      metrics <- compute_stop_metrics(state, config = refit_out$config)
+      state$stop_metrics <- metrics
+      stop_decision <- should_stop(metrics, config = refit_out$config)
+      stop_reason <- if (isTRUE(stop_decision)) "btl_converged" else NA_character_
+
+      round_row <- .adaptive_round_log_row(
+        state = state,
+        metrics = metrics,
+        stop_decision = stop_decision,
+        stop_reason = stop_reason,
+        refit_context = refit_out$refit_context
+      )
+      state$round_log <- append_round_log(state$round_log, round_row)
+      if (isTRUE(stop_decision)) {
+        return(state)
+      }
+    }
     remaining <- remaining - 1L
   }
 

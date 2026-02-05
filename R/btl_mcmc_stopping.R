@@ -12,7 +12,7 @@ near_stop_from_state <- function(state) {
 
 #' @keywords internal
 #' @noRd
-compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
+btl_mcmc_compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
   validate_btl_mcmc_state(state)
   if (!is.list(fit) || is.null(fit$theta_draws)) {
     rlang::abort("`fit` must include `theta_draws`.")
@@ -198,7 +198,7 @@ compute_stop_metrics <- function(state, fit, candidates_with_utility, config) {
 
 #' @keywords internal
 #' @noRd
-should_stop <- function(metrics, state, config, theta_summary = NULL, fit = NULL) {
+btl_mcmc_should_stop <- function(metrics, state, config, theta_summary = NULL, fit = NULL) {
   if (!"fit" %in% names(state)) {
     state <- structure(c(state, list(fit = NULL)), class = class(state))
   }
