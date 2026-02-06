@@ -1,8 +1,8 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 stepwise selector (one pair per call)
+# Adaptive stepwise selector (one pair per call)
 # -------------------------------------------------------------------------
 
-adaptive_v2_defaults <- function(N) {
+adaptive_defaults <- function(N) {
   N <- as.integer(N)
   if (is.na(N) || N < 2L) {
     rlang::abort("`N` must be a positive integer >= 2.")
@@ -132,7 +132,8 @@ adaptive_v2_defaults <- function(N) {
     return(list(
       candidates = candidates,
       rejects = 0L,
-      reject_items = character()
+      reject_items = character(),
+      reject_items_count = 0L
     ))
   }
   i_ids <- as.character(candidates$i)
@@ -141,10 +142,12 @@ adaptive_v2_defaults <- function(N) {
   j_excess <- recent_deg[j_ids] > cap_count
   reject <- i_excess | j_excess
   reject_items <- unique(c(i_ids[i_excess], j_ids[j_excess]))
+  reject_items_count <- length(reject_items)
   list(
     candidates = candidates[!reject, , drop = FALSE],
     rejects = sum(reject),
-    reject_items = as.character(reject_items)
+    reject_items = as.character(reject_items),
+    reject_items_count = as.integer(reject_items_count)
   )
 }
 
@@ -234,10 +237,19 @@ adaptive_v2_defaults <- function(N) {
   c(A_id = ordered[[1L]], B_id = ordered[[2L]])
 }
 
-.adaptive_select_stage <- function(stage, state, config, history, counts, candidates = NULL) {
+.adaptive_select_stage <- function(
+  stage,
+  state,
+  config,
+  history,
+  counts,
+  step_id,
+  seed_base,
+  candidates = NULL
+) {
   ids <- as.character(state$trueskill_state$items$item_id)
-  seed_base <- as.integer(state$meta$seed %||% 1L)
-  stage_seed <- seed_base + as.integer(stage$idx)
+  seed_base <- as.integer(seed_base %||% 1L)
+  stage_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx)
 
   W_used <- stage$W_used
   if (is.null(candidates)) {
@@ -262,18 +274,32 @@ adaptive_v2_defaults <- function(N) {
         n_candidates_after_star_caps = 0L,
         n_candidates_scored = 0L
       ),
-      star_caps = list(rejects = 0L, reject_items = character())
+      star_caps = list(rejects = 0L, reject_items = character(), reject_items_count = 0L)
     ))
   }
 
   candidates <- tibble::as_tibble(candidates)
   candidates <- dplyr::filter(candidates, .data$i != .data$j)
+  if (nrow(candidates) > 0L) {
+    candidates <- score_candidates_u0(candidates, state$trueskill_state)
+    candidates$p <- vapply(seq_len(nrow(candidates)), function(idx) {
+      trueskill_win_probability(candidates$i[[idx]], candidates$j[[idx]], state$trueskill_state)
+    }, numeric(1L))
+  }
+  if (nrow(candidates) > 0L) {
+    unordered_key <- make_unordered_key(candidates$i, candidates$j)
+    pair_count <- counts$pair_count[unordered_key]
+    pair_count[is.na(pair_count)] <- 0L
+    has_order <- vapply(seq_along(unordered_key), function(idx) {
+      if (pair_count[[idx]] < 1L) {
+        return(TRUE)
+      }
+      last_order <- counts$pair_last_order[[unordered_key[[idx]]]]
+      !is.null(last_order) && length(last_order) == 2L
+    }, logical(1L))
+    candidates <- candidates[has_order, , drop = FALSE]
+  }
   n_after_hard <- nrow(candidates)
-
-  candidates <- score_candidates_u0(candidates, state$trueskill_state)
-  candidates$p <- vapply(seq_len(nrow(candidates)), function(idx) {
-    trueskill_win_probability(candidates$i[[idx]], candidates$j[[idx]], state$trueskill_state)
-  }, numeric(1L))
 
   cap_count <- ceiling(config$cap_frac * config$W_cap)
   recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
@@ -318,7 +344,8 @@ adaptive_v2_defaults <- function(N) {
     ),
     star_caps = list(
       rejects = as.integer(star_filtered$rejects),
-      reject_items = star_filtered$reject_items
+      reject_items = star_filtered$reject_items,
+      reject_items_count = as.integer(star_filtered$reject_items_count)
     ),
     recent_deg = recent_deg
   )
@@ -326,7 +353,7 @@ adaptive_v2_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
-select_next_pair <- function(state, candidates = NULL) {
+select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
@@ -336,9 +363,14 @@ select_next_pair <- function(state, candidates = NULL) {
   validate_trueskill_state(state$trueskill_state)
 
   ids <- as.character(state$trueskill_state$items$item_id)
-  defaults <- adaptive_v2_defaults(length(ids))
+  defaults <- adaptive_defaults(length(ids))
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, ids)
+  step_id <- as.integer(step_id %||% (nrow(state$step_log) + 1L))
+  if (length(step_id) != 1L || is.na(step_id) || step_id < 1L) {
+    rlang::abort("`step_id` must be a positive integer.")
+  }
+  seed_base <- as.integer(state$meta$seed %||% 1L)
 
   stage_defs <- list(
     list(name = "base_window", W_used = defaults$W, dup_policy = "default", explore_boost = 1),
@@ -355,7 +387,7 @@ select_next_pair <- function(state, candidates = NULL) {
 
   fallback_path <- character()
   last_counts <- NULL
-  last_star_caps <- list(rejects = 0L, reject_items = character())
+  last_star_caps <- list(rejects = 0L, reject_items = character(), reject_items_count = 0L)
   selected_pair <- NULL
   selected_stage <- NULL
   explore_mode <- NA_character_
@@ -374,6 +406,8 @@ select_next_pair <- function(state, candidates = NULL) {
       config = defaults,
       history = history,
       counts = counts,
+      step_id = step_id,
+      seed_base = seed_base,
       candidates = if (idx == 1L) candidates else NULL
     )
     last_counts <- stage_out$counts
@@ -394,30 +428,40 @@ select_next_pair <- function(state, candidates = NULL) {
     quota_eps <- defaults$quota_eps
     quota_pick <- FALSE
     if (quota_active) {
-      quota_pick <- .adaptive_with_seed(defaults$refit_pairs_target, stats::runif(1) < quota_eps)
+      quota_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 1L)
+      quota_pick <- .adaptive_with_seed(quota_seed, stats::runif(1) < quota_eps)
     }
+
+    stage_is_explore <- FALSE
+    stage_explore_mode <- NA_character_
+    stage_explore_reason <- NA_character_
 
     if (quota_pick) {
       eligible <- cand[cand$i %in% low_degree_set | cand$j %in% low_degree_set, , drop = FALSE]
       if (nrow(eligible) == 0L) next
       cand <- eligible
-      is_explore_step <- TRUE
-      explore_reason <- "coverage_quota_override"
+      stage_is_explore <- TRUE
+      stage_explore_reason <- "coverage_quota_override"
     } else {
-      is_explore_step <- .adaptive_with_seed(defaults$W, stats::runif(1) < explore_rate)
-      if (is_explore_step) {
-        explore_reason <- "probabilistic"
+      explore_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 2L)
+      stage_is_explore <- .adaptive_with_seed(explore_seed, stats::runif(1) < explore_rate)
+      if (stage_is_explore) {
+        stage_explore_reason <- "probabilistic"
       }
     }
 
-    if (is_explore_step) {
+    if (stage_is_explore) {
       underrep <- .adaptive_underrep_set(recent_deg)
       if (length(underrep) == 0L) {
         underrep <- ids
       }
 
-      explore_nonlocal <- .adaptive_with_seed(defaults$C_max, stats::runif(1) < defaults$explore_nonlocal_rate)
-      explore_mode <- if (explore_nonlocal) "nonlocal" else "local"
+      nonlocal_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 3L)
+      explore_nonlocal <- .adaptive_with_seed(
+        nonlocal_seed,
+        stats::runif(1) < defaults$explore_nonlocal_rate
+      )
+      stage_explore_mode <- if (explore_nonlocal) "nonlocal" else "local"
 
       mu_vals <- state$trueskill_state$items$mu
       names(mu_vals) <- as.character(state$trueskill_state$items$item_id)
@@ -426,8 +470,16 @@ select_next_pair <- function(state, candidates = NULL) {
 
       selected <- NULL
       for (attempt in seq_len(defaults$explore_resample_max)) {
-        i_id <- .adaptive_with_seed(defaults$W_cap + attempt, sample(underrep, size = 1L))
-        candidate <- .adaptive_select_partner(cand, i_id, mu_vals, recent_deg, explore_mode, rank_index)
+        attempt_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 100L + attempt)
+        i_id <- .adaptive_with_seed(attempt_seed, sample(underrep, size = 1L))
+        candidate <- .adaptive_select_partner(
+          cand,
+          i_id,
+          mu_vals,
+          recent_deg,
+          stage_explore_mode,
+          rank_index
+        )
         if (!is.null(candidate)) {
           selected <- candidate
           break
@@ -440,6 +492,9 @@ select_next_pair <- function(state, candidates = NULL) {
       selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
     }
 
+    is_explore_step <- stage_is_explore
+    explore_mode <- stage_explore_mode
+    explore_reason <- stage_explore_reason
     selected_stage <- stage
     break
   }
@@ -473,11 +528,7 @@ select_next_pair <- function(state, candidates = NULL) {
       p_ij = NA_real_,
       U0_ij = NA_real_,
       star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
-      star_cap_reject_items = if (length(last_star_caps$reject_items) > 0L) {
-        paste(sort(unique(last_star_caps$reject_items)), collapse = ",")
-      } else {
-        NA_character_
-      }
+      star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)
     ))
   }
 
@@ -524,10 +575,6 @@ select_next_pair <- function(state, candidates = NULL) {
     p_ij = as.double(p_ij),
     U0_ij = as.double(u0_ij),
     star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
-    star_cap_reject_items = if (length(last_star_caps$reject_items) > 0L) {
-      paste(sort(unique(last_star_caps$reject_items)), collapse = ",")
-    } else {
-      NA_character_
-    }
+    star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)
   )
 }
