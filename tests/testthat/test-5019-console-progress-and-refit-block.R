@@ -37,4 +37,5 @@ test_that("adaptive_rank_run_live prints refit blocks and stop criteria", {
   expect_true(any(grepl("min_ess_bulk", combined)))
   expect_true(any(grepl("Decision:", combined)))
   expect_true(any(grepl("\\[x\\]|\\[ \\]", combined)))
+  expect_true(any(grepl("^step [0-9]+: new_pairs_since_last_refit=", combined)))
 })
