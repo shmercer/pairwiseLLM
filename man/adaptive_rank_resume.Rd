@@ -2,13 +2,15 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_resume}
 \alias{adaptive_rank_resume}
-\title{Adaptive ranking resume (v2 scaffold)}
+\title{Adaptive ranking resume (v2)}
 \usage{
-adaptive_rank_resume(...)
+adaptive_rank_resume(session_dir, ...)
 }
 \arguments{
+\item{session_dir}{Directory containing session artifacts.}
+
 \item{...}{Reserved for future extensions; currently unused.}
 }
 \description{
-Resume support is not implemented yet.
+Resume an Adaptive v2 session from disk.
 }

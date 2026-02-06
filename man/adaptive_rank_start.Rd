@@ -4,12 +4,16 @@
 \alias{adaptive_rank_start}
 \title{Adaptive ranking (v2 scaffold)}
 \usage{
-adaptive_rank_start(items, ...)
+adaptive_rank_start(items, session_dir = NULL, persist_item_log = FALSE, ...)
 }
 \arguments{
 \item{items}{A vector or data frame of items. Data frames must include an
 \code{item_id} column (or \code{id}/\code{ID}). Item IDs may be character; internal logs
 use integer indices derived from these IDs.}
+
+\item{session_dir}{Optional directory for saving v2 session artifacts.}
+
+\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
 
 \item{...}{Internal/testing only. Supply \code{now_fn} to override the clock used
 for timestamps.}

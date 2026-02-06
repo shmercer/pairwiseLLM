@@ -10,6 +10,12 @@ adaptive_rank_run_live(
   n_steps = 1L,
   fit_fn = NULL,
   btl_config = NULL,
+  session_dir = NULL,
+  persist_item_log = NULL,
+  progress = c("all", "refits", "steps", "none"),
+  progress_redraw_every = 10L,
+  progress_show_events = TRUE,
+  progress_errors = TRUE,
   ...
 )
 }
@@ -26,6 +32,18 @@ list with \code{is_valid = TRUE} and \code{Y} in \code{0/1}, or \code{is_valid =
 to \code{default_btl_fit_fn()} when a refit is due.}
 
 \item{btl_config}{Optional list overriding BTL refit/stop defaults.}
+
+\item{session_dir}{Optional directory for saving v2 session artifacts.}
+
+\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
+
+\item{progress}{Progress output: "all", "refits", "steps", or "none".}
+
+\item{progress_redraw_every}{Redraw progress bar every N steps.}
+
+\item{progress_show_events}{Logical; when TRUE, print notable step events.}
+
+\item{progress_errors}{Logical; when TRUE, include invalid-step events.}
 
 \item{...}{Additional arguments passed through to \code{judge()}.}
 }
