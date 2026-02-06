@@ -36,6 +36,15 @@
   utils::modifyList(defaults, config)
 }
 
+.adaptive_refit_pairs_target <- function(state, config) {
+  refit_pairs_target <- config$refit_pairs_target %||% .btl_mcmc_clamp(
+    100L,
+    5000L,
+    as.integer(ceiling(state$n_items / 2))
+  )
+  as.integer(refit_pairs_target)
+}
+
 .adaptive_results_from_step_log <- function(state) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   if (nrow(step_log) == 0L) {
@@ -245,12 +254,8 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
   last_refit_M_done <- state$refit_meta$last_refit_M_done %||% 0L
   last_refit_step <- state$refit_meta$last_refit_step %||% 0L
 
-  refit_pairs_target <- config$refit_pairs_target %||% .btl_mcmc_clamp(
-    100L,
-    5000L,
-    as.integer(ceiling(state$n_items / 2))
-  )
-  refit_pairs_target <- as.integer(refit_pairs_target)
+  refit_pairs_target <- .adaptive_refit_pairs_target(state, config)
+  config$refit_pairs_target <- refit_pairs_target
   eligible <- (M_done - last_refit_M_done) >= refit_pairs_target
   if (!isTRUE(eligible)) {
     return(list(
