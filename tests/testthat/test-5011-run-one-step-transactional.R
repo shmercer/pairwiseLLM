@@ -59,3 +59,24 @@ test_that("run_one_step enforces canonical judge contract", {
 
   expect_equal(snapshot, snapshot_state_core(out))
 })
+
+test_that("run_one_step consumes warm-start pairs only on valid results", {
+  items <- make_test_items(3)
+  state <- adaptive_rank_start(items, seed = 42L)
+  judge_ok <- make_deterministic_judge("i_wins")
+  judge_bad <- make_deterministic_judge("invalid")
+
+  first_pair <- state$warm_start_pairs[1, , drop = FALSE]
+  out_bad <- pairwiseLLM:::run_one_step(state, judge_bad)
+  expect_equal(out_bad$warm_start_idx, 1L)
+  expect_false(out_bad$warm_start_done)
+
+  out_ok <- pairwiseLLM:::run_one_step(out_bad, judge_ok)
+  unordered <- pairwiseLLM:::make_unordered_key(
+    out_ok$history_pairs$A_id[[1L]],
+    out_ok$history_pairs$B_id[[1L]]
+  )
+  expected <- pairwiseLLM:::make_unordered_key(first_pair$i_id[[1L]], first_pair$j_id[[1L]])
+  expect_equal(unordered, expected)
+  expect_equal(out_ok$warm_start_idx, 2L)
+})

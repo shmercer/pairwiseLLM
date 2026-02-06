@@ -1,4 +1,4 @@
-test_that("new_adaptive_state builds a stable v2 scaffold", {
+test_that("new_adaptive_state builds a stable adaptive scaffold", {
   items <- make_test_items(3)
   now_fn <- function() as.POSIXct("2000-01-01", tz = "UTC")
 

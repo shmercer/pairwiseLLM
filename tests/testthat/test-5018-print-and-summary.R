@@ -1,4 +1,4 @@
-test_that("print and summarize_adaptive use v2 logs", {
+test_that("print and summarize_adaptive use adaptive logs", {
   items <- make_test_items(4)
   state <- adaptive_rank_start(items)
   judge <- make_deterministic_judge("i_wins")

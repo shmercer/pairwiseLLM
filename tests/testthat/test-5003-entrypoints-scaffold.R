@@ -5,7 +5,7 @@ make_test_items <- function(n) {
   )
 }
 
-test_that("adaptive_rank_start returns v2 state", {
+test_that("adaptive_rank_start returns adaptive state", {
   items <- make_test_items(2)
   now_fn <- function() as.POSIXct("2001-01-01", tz = "UTC")
 
@@ -34,7 +34,7 @@ test_that("adaptive_rank_run_live executes steps and resume errors without sessi
 test_that("adaptive_rank_start rejects unnamed extra arguments", {
   items <- make_test_items(2)
   expect_error(
-    adaptive_rank_start(items, session_dir = NULL, persist_item_log = FALSE, "oops"),
+    adaptive_rank_start(items, seed = 1L, session_dir = NULL, persist_item_log = FALSE, "oops"),
     "Only named `now_fn` is supported"
   )
 })
