@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2: Bayesian BTL refits (inference-only) + stopping rules.
+# Adaptive Bayesian BTL refits (inference-only) + stopping rules.
 # -------------------------------------------------------------------------
 
 .adaptive_btl_defaults <- function(N) {
@@ -21,7 +21,9 @@
     stability_lag = 2L,
     theta_corr_min = 0.95,
     theta_sd_rel_change_max = 0.10,
-    rank_spearman_min = 0.95
+    rank_spearman_min = 0.95,
+    near_tie_p_low = 0.40,
+    near_tie_p_high = 0.60
   )
 }
 
@@ -34,6 +36,15 @@
     rlang::abort("`config` must be a list when provided.")
   }
   utils::modifyList(defaults, config)
+}
+
+.adaptive_refit_pairs_target <- function(state, config) {
+  refit_pairs_target <- config$refit_pairs_target %||% .btl_mcmc_clamp(
+    100L,
+    5000L,
+    as.integer(ceiling(state$n_items / 2))
+  )
+  as.integer(refit_pairs_target)
 }
 
 .adaptive_results_from_step_log <- function(state) {
@@ -118,7 +129,7 @@
   )
 }
 
-.adaptive_round_log_row <- function(state, metrics, stop_decision, stop_reason, refit_context) {
+.adaptive_round_log_row <- function(state, metrics, stop_decision, stop_reason, refit_context, config) {
   ids <- as.character(state$item_ids)
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, ids)
@@ -160,9 +171,117 @@
   fallback_used_mode <- .adaptive_mode_value(step_subset$fallback_used)
   starved_rows <- step_subset[step_subset$candidate_starved %in% TRUE, , drop = FALSE]
   starvation_reason_mode <- .adaptive_mode_value(starved_rows$starvation_reason)
+  total_after_dup <- sum(step_subset$n_candidates_after_duplicates, na.rm = TRUE)
+  total_star_cap_rejects <- sum(step_subset$star_cap_rejects, na.rm = TRUE)
+  star_cap_reject_rate <- if (is.finite(total_after_dup) && total_after_dup > 0) {
+    total_star_cap_rejects / total_after_dup
+  } else {
+    NA_real_
+  }
 
   fit <- state$btl_fit %||% list()
   model_variant <- fit$model_variant %||% NA_character_
+
+  ts_sigma_mean <- NA_real_
+  ts_sigma_max <- NA_real_
+  ts_degree_sigma_corr <- NA_real_
+  ts_btl_theta_corr <- NA_real_
+  ts_btl_rank_spearman <- NA_real_
+  ci_width_median <- NA_real_
+  ci_width_p90 <- NA_real_
+  ci_width_max <- NA_real_
+  near_tie_adj_frac <- NA_real_
+  near_tie_adj_count <- NA_integer_
+  p_adj_median <- NA_real_
+
+  trueskill_state <- state$trueskill_state %||% NULL
+  defaults <- adaptive_defaults(length(ids))
+  recent_deg_summary <- .adaptive_recent_deg(history, ids, defaults$W_cap)
+  recent_deg_vals <- as.double(recent_deg_summary[ids])
+  recent_deg_median <- if (length(recent_deg_vals) > 0L) {
+    stats::median(recent_deg_vals)
+  } else {
+    NA_real_
+  }
+  recent_deg_max <- if (length(recent_deg_vals) > 0L) {
+    as.integer(max(recent_deg_vals))
+  } else {
+    NA_integer_
+  }
+  if (!is.null(trueskill_state) && is.data.frame(trueskill_state$items)) {
+    ts_items <- trueskill_state$items
+    ts_ids <- as.character(ts_items$item_id)
+    idx <- match(ids, ts_ids)
+    ts_sigma <- ts_items$sigma[idx]
+    ts_mu <- ts_items$mu[idx]
+    if (length(ts_sigma) > 0L && all(is.finite(ts_sigma))) {
+      ts_sigma_mean <- mean(ts_sigma)
+      ts_sigma_max <- max(ts_sigma)
+      if (length(ts_sigma) > 1L) {
+        sigma_sd <- stats::sd(ts_sigma)
+        deg_sd <- stats::sd(deg_vals)
+        if (is.finite(sigma_sd) && is.finite(deg_sd) && sigma_sd > 0 && deg_sd > 0) {
+          ts_degree_sigma_corr <- stats::cor(ts_sigma, deg_vals, use = "pairwise.complete.obs")
+        }
+      }
+    }
+  }
+
+  theta_mean <- .adaptive_btl_fit_theta_mean(fit)
+  if (length(theta_mean) == length(ids)) {
+    theta_mean <- as.double(theta_mean[ids])
+  } else {
+    theta_mean <- NULL
+  }
+
+  if (!is.null(theta_mean) && !is.null(trueskill_state)) {
+    ts_mu <- trueskill_state$items$mu[match(ids, trueskill_state$items$item_id)]
+    if (length(ts_mu) == length(theta_mean)) {
+      ts_btl_theta_corr <- stats::cor(ts_mu, theta_mean, use = "pairwise.complete.obs")
+      rank_theta <- rank(theta_mean, ties.method = "average")
+      rank_mu <- rank(ts_mu, ties.method = "average")
+      ts_btl_rank_spearman <- stats::cor(rank_mu, rank_theta,
+        method = "spearman",
+        use = "pairwise.complete.obs"
+      )
+    }
+  }
+
+  draws <- fit$btl_posterior_draws %||% NULL
+  if (is.matrix(draws) && is.numeric(draws)) {
+    if (is.null(colnames(draws))) {
+      colnames(draws) <- ids
+    }
+    draws <- draws[, ids, drop = FALSE]
+    draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
+
+    ci_bounds <- apply(
+      draws,
+      2,
+      stats::quantile,
+      probs = c(0.025, 0.975),
+      names = FALSE
+    )
+    ci_widths <- ci_bounds[2L, ] - ci_bounds[1L, ]
+    ci_width_median <- stats::median(ci_widths)
+    ci_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
+    ci_width_max <- max(ci_widths)
+
+    if (!is.null(theta_mean) && length(theta_mean) == length(ids) && length(ids) >= 2L) {
+      rank_order <- order(-theta_mean, ids)
+      p_adj <- vapply(seq_len(length(rank_order) - 1L), function(k) {
+        lhs <- rank_order[[k]]
+        rhs <- rank_order[[k + 1L]]
+        mean(draws[, lhs] > draws[, rhs])
+      }, numeric(1L))
+      near_low <- as.double(config$near_tie_p_low)
+      near_high <- as.double(config$near_tie_p_high)
+      near_tie <- p_adj >= near_low & p_adj <= near_high
+      near_tie_adj_frac <- mean(near_tie)
+      near_tie_adj_count <- sum(near_tie)
+      p_adj_median <- stats::median(p_adj)
+    }
+  }
 
   row <- list(
     round_id = as.integer(nrow(state$round_log) + 1L),
@@ -193,6 +312,21 @@
     b_p50 = as.double(fit$beta_p50 %||% NA_real_),
     b_p95 = as.double(fit$beta_p95 %||% NA_real_),
     b_p97.5 = as.double(fit$beta_p97.5 %||% NA_real_),
+    ts_sigma_mean = as.double(ts_sigma_mean),
+    ts_sigma_max = as.double(ts_sigma_max),
+    ts_degree_sigma_corr = as.double(ts_degree_sigma_corr),
+    ts_btl_theta_corr = as.double(ts_btl_theta_corr),
+    ts_btl_rank_spearman = as.double(ts_btl_rank_spearman),
+    star_cap_rejects_since_last_refit = as.integer(total_star_cap_rejects),
+    star_cap_reject_rate_since_last_refit = as.double(star_cap_reject_rate),
+    recent_deg_median_since_last_refit = as.double(recent_deg_median),
+    recent_deg_max_since_last_refit = as.integer(recent_deg_max),
+    ci_width_median = as.double(ci_width_median),
+    ci_width_p90 = as.double(ci_width_p90),
+    ci_width_max = as.double(ci_width_max),
+    near_tie_adj_frac = as.double(near_tie_adj_frac),
+    near_tie_adj_count = as.integer(near_tie_adj_count),
+    p_adj_median = as.double(p_adj_median),
     diagnostics_pass = as.logical(metrics$diagnostics_pass %||% NA),
     divergences = as.integer(metrics$divergences %||% NA_integer_),
     max_rhat = as.double(metrics$max_rhat %||% NA_real_),
@@ -201,7 +335,9 @@
     reliability_EAP = as.double(metrics$reliability_EAP %||% NA_real_),
     theta_sd_eap = as.double(metrics$theta_sd_eap %||% NA_real_),
     rho_theta = as.double(metrics$rho_theta %||% NA_real_),
+    theta_corr_pass = as.logical(metrics$theta_corr_pass %||% NA),
     delta_sd_theta = as.double(metrics$delta_sd_theta %||% NA_real_),
+    delta_sd_theta_pass = as.logical(metrics$delta_sd_theta_pass %||% NA),
     rho_rank = as.double(metrics$rho_rank %||% NA_real_),
     rho_rank_pass = as.logical(metrics$rho_rank_pass %||% NA),
     stop_decision = as.logical(stop_decision),
@@ -245,12 +381,8 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
   last_refit_M_done <- state$refit_meta$last_refit_M_done %||% 0L
   last_refit_step <- state$refit_meta$last_refit_step %||% 0L
 
-  refit_pairs_target <- config$refit_pairs_target %||% .btl_mcmc_clamp(
-    100L,
-    5000L,
-    as.integer(ceiling(state$n_items / 2))
-  )
-  refit_pairs_target <- as.integer(refit_pairs_target)
+  refit_pairs_target <- .adaptive_refit_pairs_target(state, config)
+  config$refit_pairs_target <- refit_pairs_target
   eligible <- (M_done - last_refit_M_done) >= refit_pairs_target
   if (!isTRUE(eligible)) {
     return(list(
@@ -347,7 +479,9 @@ compute_stop_metrics <- function(state, config) {
     current_refit > stability_lag
 
   rho_theta <- NA_real_
+  theta_corr_pass <- NA
   delta_sd_theta <- NA_real_
+  delta_sd_theta_pass <- NA
   rho_rank <- NA_real_
   rho_rank_pass <- NA
 
@@ -367,6 +501,16 @@ compute_stop_metrics <- function(state, config) {
       rho_rank <- stats::cor(rank_current, rank_lag, method = "spearman", use = "pairwise.complete.obs")
     }
 
+    theta_corr_pass <- if (is.finite(rho_theta)) {
+      rho_theta >= as.double(config$theta_corr_min)
+    } else {
+      NA
+    }
+    delta_sd_theta_pass <- if (is.finite(delta_sd_theta)) {
+      delta_sd_theta <= as.double(config$theta_sd_rel_change_max)
+    } else {
+      NA
+    }
     rho_rank_pass <- is.finite(rho_rank) && rho_rank >= as.double(config$rank_spearman_min)
   }
 
@@ -380,11 +524,30 @@ compute_stop_metrics <- function(state, config) {
     eap_pass = eap_pass,
     theta_sd_eap = theta_sd_eap,
     rho_theta = rho_theta,
+    theta_corr_pass = theta_corr_pass,
     delta_sd_theta = delta_sd_theta,
+    delta_sd_theta_pass = delta_sd_theta_pass,
     rho_rank = rho_rank,
     rho_rank_pass = rho_rank_pass,
     lag_eligible = lag_eligible
   )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_maybe_enter_phase3 <- function(state, metrics, config) {
+  if (isTRUE(state$refit_meta$near_stop)) {
+    return(state)
+  }
+  if (!isTRUE(metrics$diagnostics_pass)) {
+    return(state)
+  }
+  eap_min <- as.double(config$eap_reliability_min)
+  threshold <- eap_min - 0.05
+  if (is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= threshold) {
+    state$refit_meta$near_stop <- TRUE
+  }
+  state
 }
 
 #' @keywords internal

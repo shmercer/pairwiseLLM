@@ -23,7 +23,8 @@ test_that("adaptive_rank_run_live can stop early via BTL refit", {
     judge,
     n_steps = 10L,
     fit_fn = stub$fit_fn,
-    btl_config = btl_config
+    btl_config = btl_config,
+    progress = "none"
   )
 
   expect_true(inherits(out, "adaptive_state"))
@@ -31,4 +32,9 @@ test_that("adaptive_rank_run_live can stop early via BTL refit", {
   expect_equal(nrow(out$round_log), 2L)
   expect_true(isTRUE(out$round_log$stop_decision[[2L]]))
   expect_true(!is.na(out$round_log$stop_reason[[2L]]))
+  expect_true(all(c(
+    "ts_sigma_mean",
+    "ci_width_median",
+    "near_tie_adj_frac"
+  ) %in% names(out$round_log)))
 })

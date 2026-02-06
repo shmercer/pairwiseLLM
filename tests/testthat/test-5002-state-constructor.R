@@ -1,4 +1,4 @@
-test_that("new_adaptive_state builds a stable v2 scaffold", {
+test_that("new_adaptive_state builds a stable adaptive scaffold", {
   items <- make_test_items(3)
   now_fn <- function() as.POSIXct("2000-01-01", tz = "UTC")
 
@@ -13,7 +13,8 @@ test_that("new_adaptive_state builds a stable v2 scaffold", {
   expect_true(inherits(state$trueskill_state, "trueskill_state"))
   expect_true(tibble::is_tibble(state$step_log))
   expect_true(tibble::is_tibble(state$round_log))
-  expect_true(tibble::is_tibble(state$item_log))
+  expect_true(is.list(state$item_log))
+  expect_true(tibble::is_tibble(state$item_step_log))
 })
 
 test_that("new_adaptive_state rejects non-function now_fn", {

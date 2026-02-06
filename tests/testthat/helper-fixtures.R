@@ -38,6 +38,9 @@ make_test_state <- function(items, trueskill_state, history = tibble::tibble()) 
   state <- pairwiseLLM:::new_adaptive_state(items)
   state$trueskill_state <- trueskill_state
   state$history_pairs <- make_history(history)
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  state$warm_start_idx <- 1L
+  state$warm_start_done <- TRUE
   state
 }
 
@@ -64,7 +67,11 @@ snapshot_state_core <- function(state) {
     "items",
     "history_pairs",
     "item_log",
+    "item_step_log",
     "trueskill_state",
+    "warm_start_pairs",
+    "warm_start_idx",
+    "warm_start_done",
     "btl_fit",
     "stop_metrics",
     "config",

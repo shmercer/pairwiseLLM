@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 state constructor.
+# Adaptive state constructor.
 # -------------------------------------------------------------------------
 
 .adaptive_state_normalize_items <- function(items) {
@@ -61,8 +61,12 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       history_pairs = history_pairs,
       step_log = new_step_log(now_fn = now_fn),
       round_log = new_round_log(),
-      item_log = new_item_log(items),
+      item_log = list(),
+      item_step_log = new_item_step_log(items),
       trueskill_state = new_trueskill_state(items),
+      warm_start_pairs = tibble::tibble(i_id = character(), j_id = character()),
+      warm_start_idx = 1L,
+      warm_start_done = TRUE,
       btl_fit = NULL,
       stop_metrics = NULL,
       refit_meta = list(
@@ -73,7 +77,13 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         near_stop = FALSE
       ),
       config = list(),
-      meta = list(schema_version = "v2-0", now_fn = now_fn, seed = 1L)
+      meta = list(
+        schema_version = "v2-0",
+        now_fn = now_fn,
+        seed = 1L,
+        stop_decision = FALSE,
+        stop_reason = NA_character_
+      )
     ),
     class = "adaptive_state"
   )

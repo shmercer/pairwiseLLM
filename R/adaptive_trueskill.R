@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 TrueSkill state helpers.
+# Adaptive TrueSkill state helpers.
 # -------------------------------------------------------------------------
 
 #' @keywords internal

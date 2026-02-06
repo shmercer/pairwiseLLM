@@ -71,14 +71,14 @@ test_that("append_step_log rejects bad coercions and multirow input", {
   expect_error(pairwiseLLM:::append_step_log(step_log, multi), "exactly one row")
 })
 
-test_that("append_item_log allows multirow appends", {
+test_that("append_item_step_log allows multirow appends", {
   items <- make_test_items(2)
-  item_log <- pairwiseLLM:::new_item_log(items)
+  item_log <- pairwiseLLM:::new_item_step_log(items)
 
   rows <- tibble::tibble(
     item_id = c(1L, 2L),
     timestamp = as.POSIXct(c("2020-01-01", "2020-01-02"), tz = "UTC")
   )
-  out <- pairwiseLLM:::append_item_log(item_log, rows)
+  out <- pairwiseLLM:::append_item_step_log(item_log, rows)
   expect_equal(nrow(out), 2L)
 })

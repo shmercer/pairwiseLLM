@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 canonical log schemas and append helpers.
+# Adaptive canonical log schemas and append helpers.
 # -------------------------------------------------------------------------
 
 schema_step_log <- c(
@@ -35,7 +35,7 @@ schema_step_log <- c(
   p_ij = "double",
   U0_ij = "double",
   star_cap_rejects = "integer",
-  star_cap_reject_items = "character"
+  star_cap_reject_items = "integer"
 )
 
 schema_round_log <- c(
@@ -67,6 +67,21 @@ schema_round_log <- c(
   b_p50 = "double",
   b_p95 = "double",
   b_p97.5 = "double",
+  ts_sigma_mean = "double",
+  ts_sigma_max = "double",
+  ts_degree_sigma_corr = "double",
+  ts_btl_theta_corr = "double",
+  ts_btl_rank_spearman = "double",
+  star_cap_rejects_since_last_refit = "integer",
+  star_cap_reject_rate_since_last_refit = "double",
+  recent_deg_median_since_last_refit = "double",
+  recent_deg_max_since_last_refit = "integer",
+  ci_width_median = "double",
+  ci_width_p90 = "double",
+  ci_width_max = "double",
+  near_tie_adj_frac = "double",
+  near_tie_adj_count = "integer",
+  p_adj_median = "double",
   diagnostics_pass = "logical",
   divergences = "integer",
   max_rhat = "double",
@@ -75,14 +90,16 @@ schema_round_log <- c(
   reliability_EAP = "double",
   theta_sd_eap = "double",
   rho_theta = "double",
+  theta_corr_pass = "logical",
   delta_sd_theta = "double",
+  delta_sd_theta_pass = "logical",
   rho_rank = "double",
   rho_rank_pass = "logical",
   stop_decision = "logical",
   stop_reason = "character"
 )
 
-schema_item_log <- c(
+schema_item_step_log <- c(
   step_id = "integer",
   timestamp = "POSIXct",
   item_id = "integer",
@@ -268,7 +285,7 @@ append_round_log <- function(round_log, row) {
 
 #' @keywords internal
 #' @noRd
-new_item_log <- function(items) {
+new_item_step_log <- function(items) {
   if (!is.data.frame(items)) {
     rlang::abort("`items` must be a data frame.")
   }
@@ -276,11 +293,11 @@ new_item_log <- function(items) {
   if (!"item_id" %in% names(items)) {
     rlang::abort("`items` must include `item_id`.")
   }
-  .adaptive_schema_empty_tbl(schema_item_log)
+  .adaptive_schema_empty_tbl(schema_item_step_log)
 }
 
 #' @keywords internal
 #' @noRd
-append_item_log <- function(item_log, rows) {
-  append_canonical_row(item_log, rows, schema_item_log, allow_multirow = TRUE)
+append_item_step_log <- function(item_log, rows) {
+  append_canonical_row(item_log, rows, schema_item_step_log, allow_multirow = TRUE)
 }

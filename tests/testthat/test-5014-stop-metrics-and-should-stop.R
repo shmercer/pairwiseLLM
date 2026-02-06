@@ -39,5 +39,11 @@ test_that("compute_stop_metrics and should_stop follow thresholds", {
   strict_config$eap_reliability_min <- 1.01
   expect_false(pairwiseLLM:::should_stop(metrics, config = strict_config))
 
+  phase3_config <- config
+  phase3_config$eap_reliability_min <- 0.10
+  metrics2 <- pairwiseLLM:::compute_stop_metrics(state, config = phase3_config)
+  state2 <- pairwiseLLM:::.adaptive_maybe_enter_phase3(state, metrics2, phase3_config)
+  expect_true(isTRUE(state2$refit_meta$near_stop))
+
   expect_false(pairwiseLLM:::should_stop(NULL, config = config))
 })

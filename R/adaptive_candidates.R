@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 candidate generation
+# Adaptive candidate generation
 # -------------------------------------------------------------------------
 
 .validate_rank_mu <- function(rank_mu) {
