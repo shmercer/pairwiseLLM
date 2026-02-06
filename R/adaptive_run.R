@@ -1,25 +1,40 @@
 # -------------------------------------------------------------------------
-# Adaptive entrypoints (stubs for v2 migration).
+# Adaptive entrypoints.
 # -------------------------------------------------------------------------
 
-#' Adaptive ranking (v2 scaffold)
+.adaptive_build_warm_start_pairs <- function(item_ids, seed) {
+  item_ids <- as.character(item_ids)
+  if (length(item_ids) < 2L) {
+    return(tibble::tibble(i_id = character(), j_id = character()))
+  }
+  seed <- .adaptive_validate_seed(seed)
+  shuffled <- withr::with_seed(seed, sample(item_ids, size = length(item_ids)))
+  i_ids <- shuffled[-length(shuffled)]
+  j_ids <- shuffled[-1L]
+  tibble::tibble(i_id = i_ids, j_id = j_ids)
+}
+
+#' Adaptive ranking
 #'
 #' @description
-#' Creates an Adaptive v2 state object with canonical logs. Pair selection and
+#' Creates an adaptive state object with canonical logs. Pair selection and
 #' stepwise execution are implemented in later steps.
 #'
 #' @param items A vector or data frame of items. Data frames must include an
 #'   `item_id` column (or `id`/`ID`). Item IDs may be character; internal logs
 #'   use integer indices derived from these IDs.
-#' @param session_dir Optional directory for saving v2 session artifacts.
+#' @param seed Integer seed used for deterministic warm-start shuffling and
+#'   selection randomness.
+#' @param session_dir Optional directory for saving session artifacts.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #' @param ... Internal/testing only. Supply `now_fn` to override the clock used
 #'   for timestamps.
 #'
-#' @return An Adaptive v2 state object containing `step_log`, `round_log`, and
+#' @return An adaptive state object containing `step_log`, `round_log`, and
 #'   `item_log`.
 #' @export
 adaptive_rank_start <- function(items,
+                                seed = 1L,
                                 session_dir = NULL,
                                 persist_item_log = FALSE,
                                 ...) {
@@ -43,8 +58,13 @@ adaptive_rank_start <- function(items,
     is.na(persist_item_log)) {
     rlang::abort("`persist_item_log` must be TRUE or FALSE.")
   }
+  seed <- .adaptive_validate_seed(seed)
   now_fn <- dots$now_fn %||% function() Sys.time()
   state <- new_adaptive_state(items, now_fn = now_fn)
+  state$meta$seed <- seed
+  state$warm_start_pairs <- .adaptive_build_warm_start_pairs(state$item_ids, seed)
+  state$warm_start_idx <- 1L
+  state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
   state$config$session_dir <- session_dir %||% NULL
   state$config$persist_item_log <- isTRUE(persist_item_log)
   if (!is.null(session_dir)) {
@@ -53,12 +73,12 @@ adaptive_rank_start <- function(items,
   state
 }
 
-#' Adaptive ranking live runner (v2)
+#' Adaptive ranking live runner
 #'
 #' @description
 #' Executes adaptive ranking steps using an injected judge function.
 #'
-#' @param state An Adaptive v2 state object created by [adaptive_rank_start()].
+#' @param state An adaptive state object created by [adaptive_rank_start()].
 #' @param judge A function called as `judge(A, B, state, ...)` that returns a
 #'   list with `is_valid = TRUE` and `Y` in `0/1`, or `is_valid = FALSE` with
 #'   `invalid_reason`.
@@ -66,7 +86,7 @@ adaptive_rank_start <- function(items,
 #' @param fit_fn Optional BTL fit function for deterministic testing; defaults
 #'   to `default_btl_fit_fn()` when a refit is due.
 #' @param btl_config Optional list overriding BTL refit/stop defaults.
-#' @param session_dir Optional directory for saving v2 session artifacts.
+#' @param session_dir Optional directory for saving session artifacts.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #' @param progress Progress output: "all", "refits", "steps", or "none".
 #' @param progress_redraw_every Redraw progress bar every N steps.
@@ -135,6 +155,14 @@ adaptive_rank_run_live <- function(state,
     if (!is.null(event)) {
       cli::cli_inform(event)
     }
+    if (isTRUE(step_row$candidate_starved[[1L]])) {
+      state$meta$stop_decision <- TRUE
+      state$meta$stop_reason <- "candidate_starvation"
+      if (!is.null(state$config$session_dir)) {
+        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+      }
+      return(state)
+    }
 
     refit_out <- maybe_refit_btl(state, config = btl_cfg, fit_fn = fit_fn)
     state <- refit_out$state
@@ -142,6 +170,7 @@ adaptive_rank_run_live <- function(state,
       cfg$stop_thresholds <- refit_out$config
       metrics <- compute_stop_metrics(state, config = refit_out$config)
       state$stop_metrics <- metrics
+      state <- .adaptive_maybe_enter_phase3(state, metrics, refit_out$config)
       stop_decision <- should_stop(metrics, config = refit_out$config)
       stop_reason <- if (isTRUE(stop_decision)) "btl_converged" else NA_character_
 
@@ -150,7 +179,8 @@ adaptive_rank_run_live <- function(state,
         metrics = metrics,
         stop_decision = stop_decision,
         stop_reason = stop_reason,
-        refit_context = refit_out$refit_context
+        refit_context = refit_out$refit_context,
+        config = refit_out$config
       )
       state$round_log <- append_round_log(state$round_log, round_row)
       item_log_tbl <- .adaptive_build_item_log_refit(
@@ -173,6 +203,8 @@ adaptive_rank_run_live <- function(state,
         }
       }
       if (isTRUE(stop_decision)) {
+        state$meta$stop_decision <- TRUE
+        state$meta$stop_reason <- stop_reason
         if (!is.null(state$config$session_dir)) {
           save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
         }
@@ -189,10 +221,10 @@ adaptive_rank_run_live <- function(state,
   state
 }
 
-#' Adaptive ranking resume (v2)
+#' Adaptive ranking resume
 #'
 #' @description
-#' Resume an Adaptive v2 session from disk.
+#' Resume an adaptive session from disk.
 #'
 #' @param session_dir Directory containing session artifacts.
 #' @param ... Reserved for future extensions; currently unused.
