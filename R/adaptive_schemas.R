@@ -231,7 +231,7 @@ validate_btl_mcmc_state <- function(state) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
   if (is.list(state$meta) && identical(state$meta$schema_version, "v2-0")) {
-    rlang::abort("`state` is an Adaptive v2 scaffold; BTL MCMC validation is not supported.")
+    rlang::abort("`state` is an adaptive scaffold; BTL MCMC validation is not supported.")
   }
   if ("fast_fit" %in% names(state)) {
     rlang::abort("`state$fast_fit` is no longer supported; use `state$fit`.")
@@ -434,7 +434,7 @@ validate_state <- function(state) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
   if (is.null(state$meta) || !identical(state$meta$schema_version, "v2-0")) {
-    rlang::abort("`state` must be an Adaptive v2 state.")
+    rlang::abort("`state` must be an adaptive state.")
   }
   if (!is.character(state$item_ids) || length(state$item_ids) < 2L) {
     rlang::abort("`state$item_ids` must include at least two item ids.")
