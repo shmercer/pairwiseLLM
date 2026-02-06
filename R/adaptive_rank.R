@@ -445,7 +445,8 @@ adaptive_rank <- function(
   }
 
   samples <- .adaptive_rank_read_data(data, id_col = id_col, text_col = text_col)
-  items <- dplyr::rename(samples, item_id = ID)
+  items <- samples
+  names(items)[names(items) == "ID"] <- "item_id"
 
   if (!"text" %in% names(items)) {
     rlang::abort("Input data must include a text column after normalization.")
