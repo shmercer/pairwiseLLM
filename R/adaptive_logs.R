@@ -82,7 +82,7 @@ schema_round_log <- c(
   stop_reason = "character"
 )
 
-schema_item_log <- c(
+schema_item_step_log <- c(
   step_id = "integer",
   timestamp = "POSIXct",
   item_id = "integer",
@@ -268,7 +268,7 @@ append_round_log <- function(round_log, row) {
 
 #' @keywords internal
 #' @noRd
-new_item_log <- function(items) {
+new_item_step_log <- function(items) {
   if (!is.data.frame(items)) {
     rlang::abort("`items` must be a data frame.")
   }
@@ -276,11 +276,11 @@ new_item_log <- function(items) {
   if (!"item_id" %in% names(items)) {
     rlang::abort("`items` must include `item_id`.")
   }
-  .adaptive_schema_empty_tbl(schema_item_log)
+  .adaptive_schema_empty_tbl(schema_item_step_log)
 }
 
 #' @keywords internal
 #' @noRd
-append_item_log <- function(item_log, rows) {
-  append_canonical_row(item_log, rows, schema_item_log, allow_multirow = TRUE)
+append_item_step_log <- function(item_log, rows) {
+  append_canonical_row(item_log, rows, schema_item_step_log, allow_multirow = TRUE)
 }
