@@ -169,8 +169,29 @@
 
 #' Retrieve canonical adaptive logs.
 #'
+#' @details
+#' Returns the three canonical Adaptive logs as currently held in memory:
+#' \code{step_log}, \code{round_log}, and \code{item_log}. These correspond to
+#' step attempts, posterior refit rounds, and item-level refit summaries
+#' respectively.
+#'
 #' @param state Adaptive state.
 #'
+#' @return A named list with three elements:
+#' \describe{
+#'   \item{step_log}{A tibble with one row per attempted step.}
+#'   \item{round_log}{A tibble with one row per BTL refit round.}
+#'   \item{item_log}{A list of per-refit item tibbles.}
+#' }
+#'
+#' @examples
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' logs <- adaptive_get_logs(state)
+#' names(logs)
+#'
+#' @seealso [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()]
+#'
+#' @family adaptive logs
 #' @export
 adaptive_get_logs <- function(state) {
   if (!inherits(state, "adaptive_state")) {
@@ -194,8 +215,23 @@ adaptive_get_logs <- function(state) {
 
 #' Adaptive step log accessor.
 #'
+#' @details
+#' \code{step_log} is the canonical per-step audit log for the adaptive
+#' workflow. It records candidate pipeline outcomes, selected pair/order, and
+#' commit status. A step with invalid judge response keeps committed fields
+#' as \code{NA} and must not update model state.
+#'
 #' @param state Adaptive state.
 #'
+#' @return A tibble with one row per attempted step, in execution order.
+#'
+#' @examples
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' adaptive_step_log(state)
+#'
+#' @seealso [adaptive_get_logs()], [adaptive_round_log()], [adaptive_rank_run_live()]
+#'
+#' @family adaptive logs
 #' @export
 adaptive_step_log <- function(state) {
   if (is.null(state$step_log)) {
@@ -206,8 +242,24 @@ adaptive_step_log <- function(state) {
 
 #' Adaptive round log accessor.
 #'
+#' @details
+#' \code{round_log} is the canonical per-refit audit log for the adaptive
+#' pairing workflow.
+#' Each row summarizes one Bayesian BTL refit and includes
+#' diagnostics, reliability, and stopping-gate fields used to justify stop
+#' decisions.
+#'
 #' @param state Adaptive state.
 #'
+#' @return A tibble with one row per completed posterior refit round.
+#'
+#' @examples
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' adaptive_round_log(state)
+#'
+#' @seealso [adaptive_get_logs()], [summarize_refits()], [adaptive_rank_run_live()]
+#'
+#' @family adaptive logs
 #' @export
 adaptive_round_log <- function(state) {
   if (is.null(state$round_log)) {
@@ -218,10 +270,27 @@ adaptive_round_log <- function(state) {
 
 #' Adaptive item log accessor.
 #'
+#' @details
+#' \code{item_log} stores per-item posterior summaries by refit.
+#' The underlying state stores a list of refit tables; this
+#' accessor can return one refit table (default: most recent) or stack all
+#' refits into a single tibble.
+#'
 #' @param state Adaptive state.
 #' @param refit_id Optional refit index.
 #' @param stack When TRUE, stack all refits.
 #'
+#' @return A tibble of item-level summaries. When \code{stack = FALSE}, one row
+#'   per item for the selected refit. When \code{stack = TRUE}, one row per item
+#'   per refit with \code{refit_id} identifying source refit.
+#'
+#' @examples
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' adaptive_item_log(state)
+#'
+#' @seealso [adaptive_get_logs()], [summarize_items()], [adaptive_round_log()]
+#'
+#' @family adaptive logs
 #' @export
 adaptive_item_log <- function(state, refit_id = NULL, stack = FALSE) {
   if (is.null(state$item_log)) {
@@ -254,9 +323,31 @@ adaptive_item_log <- function(state, refit_id = NULL, stack = FALSE) {
 
 #' Adaptive results history in build_bt_data() format.
 #'
+#' @details
+#' Converts adaptive step outcomes into the three-column format used by
+#' [build_bt_data()] (\code{object1}, \code{object2}, \code{result}). With
+#' \code{committed_only = TRUE}, only committed steps (\code{pair_id} not
+#' missing) are retained. This preserves the transactional invariant that
+#' invalid steps do not contribute to inferred comparisons.
+#'
 #' @param state Adaptive state.
 #' @param committed_only Use only committed comparisons.
 #'
+#' @return A tibble with columns:
+#' \describe{
+#'   \item{object1}{Character item id shown in position A.}
+#'   \item{object2}{Character item id shown in position B.}
+#'   \item{result}{Numeric outcome in \code{\{0, 1\}} where \code{1} means
+#'     \code{object1} wins.}
+#' }
+#'
+#' @examples
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' adaptive_results_history(state)
+#'
+#' @seealso [build_bt_data()], [adaptive_step_log()]
+#'
+#' @family adaptive logs
 #' @export
 adaptive_results_history <- function(state, committed_only = TRUE) {
   step_log <- adaptive_step_log(state)
@@ -281,8 +372,24 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
 
 #' Summarize an adaptive state.
 #'
+#' @details
+#' Returns a compact run-level summary from canonical logs: attempted steps,
+#' committed comparisons, refit count, and last stop decision/reason. This is a
+#' pure view and does not recompute model quantities.
+#'
 #' @param state Adaptive state.
 #'
+#' @return A one-row tibble with columns \code{n_items},
+#'   \code{steps_attempted}, \code{committed_pairs}, \code{n_refits},
+#'   \code{last_stop_decision}, and \code{last_stop_reason}.
+#'
+#' @examples
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' summarize_adaptive(state)
+#'
+#' @seealso [adaptive_get_logs()], [base::print()]
+#'
+#' @family adaptive ranking
 #' @export
 summarize_adaptive <- function(state) {
   if (!inherits(state, "adaptive_state")) {
@@ -312,6 +419,22 @@ summarize_adaptive <- function(state) {
   )
 }
 
+#' Print an adaptive state summary.
+#'
+#' @description
+#' S3 method for printing \code{adaptive_state} objects.
+#'
+#' @param x An \code{adaptive_state} object.
+#' @param ... Unused.
+#'
+#' @return \code{x}, invisibly.
+#'
+#' @examples
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' print(state)
+#'
+#' @seealso [summarize_adaptive()]
+#'
 #' @export
 print.adaptive_state <- function(x, ...) {
   summary <- summarize_adaptive(x)

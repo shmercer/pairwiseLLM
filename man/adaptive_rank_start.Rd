@@ -29,9 +29,48 @@ for timestamps.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
-\code{item_log}.
+\code{item_log}. The object includes class \code{"adaptive_state"}, item ID
+mappings, TrueSkill state, warm-start queue, refit metadata, and runtime
+configuration.
 }
 \description{
-Creates an adaptive state object with canonical logs. Pair selection and
-stepwise execution are implemented in later steps.
+Initialize an adaptive ranking session and canonical state object.
 }
+\details{
+This function creates the stepwise controller state and seeds all canonical
+logs used in the adaptive pairing workflow. Warm start pair construction
+follows the shuffled chain design, which guarantees a connected comparison
+graph after \eqn{N - 1} committed comparisons.
+
+Pair selection in this framework is TrueSkill-driven and uses base utility
+\deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
+win probability for pair \eqn{\{i, j\}}. Bayesian
+BTL posterior draws are not used for pair selection; they are used for
+posterior inference, diagnostics, and stopping at refit rounds.
+
+The returned state contains canonical logs:
+\itemize{
+\item \code{step_log}: one row per attempted step,
+\item \code{round_log}: one row per posterior refit,
+\item \code{item_log}: per-item posterior summaries by refit.
+}
+If \code{session_dir} is supplied, the initialized state is persisted
+immediately using \code{\link[=save_adaptive_session]{save_adaptive_session()}}.
+}
+\examples{
+state <- adaptive_rank_start(c("a", "b", "c"), seed = 11)
+summarize_adaptive(state)
+
+}
+\seealso{
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
+
+Other adaptive ranking: 
+\code{\link{adaptive_rank}()},
+\code{\link{adaptive_rank_resume}()},
+\code{\link{adaptive_rank_run_live}()},
+\code{\link{make_adaptive_judge_llm}()},
+\code{\link{summarize_adaptive}()}
+}
+\concept{adaptive ranking}

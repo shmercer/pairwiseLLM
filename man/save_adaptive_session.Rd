@@ -13,6 +13,30 @@ save_adaptive_session(state, session_dir, overwrite = FALSE)
 
 \item{overwrite}{Logical; overwrite existing artifacts.}
 }
+\value{
+The \code{session_dir} path, invisibly.
+}
 \description{
 Save an adaptive session to disk.
 }
+\details{
+Saves canonical Adaptive artifacts under \code{session_dir}:
+\code{state.rds}, \code{step_log.rds}, \code{round_log.rds},
+\code{metadata.rds}, optional \code{btl_fit.rds}, and optional per-refit item
+log files when \code{state$config$persist_item_log} is \code{TRUE}. Writes
+are atomic at file level to reduce partial-write risk.
+}
+\examples{
+dir <- tempfile("pwllm-session-")
+state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+save_adaptive_session(state, dir, overwrite = TRUE)
+
+}
+\seealso{
+\code{\link[=validate_session_dir]{validate_session_dir()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}}
+
+Other adaptive persistence: 
+\code{\link{load_adaptive_session}()},
+\code{\link{validate_session_dir}()}
+}
+\concept{adaptive persistence}

@@ -9,6 +9,31 @@ adaptive_round_log(state)
 \arguments{
 \item{state}{Adaptive state.}
 }
+\value{
+A tibble with one row per completed posterior refit round.
+}
 \description{
 Adaptive round log accessor.
 }
+\details{
+\code{round_log} is the canonical per-refit audit log for the adaptive
+pairing workflow.
+Each row summarizes one Bayesian BTL refit and includes
+diagnostics, reliability, and stopping-gate fields used to justify stop
+decisions.
+}
+\examples{
+state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+adaptive_round_log(state)
+
+}
+\seealso{
+\code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[=summarize_refits]{summarize_refits()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
+
+Other adaptive logs: 
+\code{\link{adaptive_get_logs}()},
+\code{\link{adaptive_item_log}()},
+\code{\link{adaptive_results_history}()},
+\code{\link{adaptive_step_log}()}
+}
+\concept{adaptive logs}

@@ -9,6 +9,30 @@ adaptive_step_log(state)
 \arguments{
 \item{state}{Adaptive state.}
 }
+\value{
+A tibble with one row per attempted step, in execution order.
+}
 \description{
 Adaptive step log accessor.
 }
+\details{
+\code{step_log} is the canonical per-step audit log for the adaptive
+workflow. It records candidate pipeline outcomes, selected pair/order, and
+commit status. A step with invalid judge response keeps committed fields
+as \code{NA} and must not update model state.
+}
+\examples{
+state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+adaptive_step_log(state)
+
+}
+\seealso{
+\code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
+
+Other adaptive logs: 
+\code{\link{adaptive_get_logs}()},
+\code{\link{adaptive_item_log}()},
+\code{\link{adaptive_results_history}()},
+\code{\link{adaptive_round_log}()}
+}
+\concept{adaptive logs}

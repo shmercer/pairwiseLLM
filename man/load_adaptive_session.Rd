@@ -9,6 +9,31 @@ load_adaptive_session(session_dir)
 \arguments{
 \item{session_dir}{Directory containing session artifacts.}
 }
+\value{
+An \code{adaptive_state} object ready for resume.
+}
 \description{
 Load an adaptive session from disk.
 }
+\details{
+Restores a persisted Adaptive state and revalidates basic invariants such
+as schema version, required state fields, and index ranges in
+\code{step_log}. If per-refit item logs are found on disk, they are loaded
+into \code{state$item_log} and persistence is marked as enabled.
+}
+\examples{
+dir <- tempfile("pwllm-session-")
+state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+save_adaptive_session(state, dir, overwrite = TRUE)
+restored <- load_adaptive_session(dir)
+summarize_adaptive(restored)
+
+}
+\seealso{
+\code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=validate_session_dir]{validate_session_dir()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}
+
+Other adaptive persistence: 
+\code{\link{save_adaptive_session}()},
+\code{\link{validate_session_dir}()}
+}
+\concept{adaptive persistence}

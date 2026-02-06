@@ -9,6 +9,31 @@ validate_session_dir(session_dir)
 \arguments{
 \item{session_dir}{Directory containing session artifacts.}
 }
+\value{
+A metadata list containing at least \code{schema_version},
+\code{package_version}, and \code{n_items}.
+}
 \description{
 Validate an adaptive session directory.
 }
+\details{
+Verifies that required session artifacts exist and that serialized logs match
+canonical schemas for \code{step_log} and \code{round_log}. This check is
+intended as a preflight for \code{\link[=load_adaptive_session]{load_adaptive_session()}} and enforces the
+current Adaptive v2 session schema version.
+}
+\examples{
+dir <- tempfile("pwllm-session-")
+state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+save_adaptive_session(state, dir, overwrite = TRUE)
+validate_session_dir(dir)
+
+}
+\seealso{
+\code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}}
+
+Other adaptive persistence: 
+\code{\link{load_adaptive_session}()},
+\code{\link{save_adaptive_session}()}
+}
+\concept{adaptive persistence}
