@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 step execution (transactional).
+# Adaptive step execution (transactional).
 # -------------------------------------------------------------------------
 
 #' @keywords internal
@@ -63,6 +63,80 @@ validate_judge_result <- function(result, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_warm_start_active <- function(state) {
+  pairs <- state$warm_start_pairs %||% tibble::tibble(i_id = character(), j_id = character())
+  idx <- as.integer(state$warm_start_idx %||% 1L)
+  !isTRUE(state$warm_start_done) && nrow(pairs) > 0L && idx >= 1L && idx <= nrow(pairs)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_warm_start_selection <- function(state, step_id) {
+  pairs <- state$warm_start_pairs %||% tibble::tibble(i_id = character(), j_id = character())
+  idx <- as.integer(state$warm_start_idx %||% 1L)
+  pair <- pairs[idx, , drop = FALSE]
+  if (nrow(pair) != 1L) {
+    return(NULL)
+  }
+
+  i_id <- as.character(pair$i_id[[1L]])
+  j_id <- as.character(pair$j_id[[1L]])
+  history <- .adaptive_history_tbl(state)
+  counts <- .adaptive_pair_counts(history, state$item_ids)
+
+  order_vals <- .adaptive_assign_order(
+    tibble::tibble(i = i_id, j = j_id),
+    counts$posA,
+    counts$posB,
+    counts$pair_last_order
+  )
+
+  trueskill_state <- state$trueskill_state
+  mu_vals <- trueskill_state$items$mu
+  sigma_vals <- trueskill_state$items$sigma
+  names(mu_vals) <- as.character(trueskill_state$items$item_id)
+  names(sigma_vals) <- as.character(trueskill_state$items$item_id)
+
+  p_ij <- trueskill_win_probability(i_id, j_id, trueskill_state)
+  u0_ij <- p_ij * (1 - p_ij)
+
+  idx_map <- state$item_index %||% stats::setNames(seq_along(state$item_ids), state$item_ids)
+  recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
+
+  list(
+    i = as.integer(idx_map[[i_id]]),
+    j = as.integer(idx_map[[j_id]]),
+    A = as.integer(idx_map[[order_vals[["A_id"]]]]),
+    B = as.integer(idx_map[[order_vals[["B_id"]]]]),
+    is_explore_step = FALSE,
+    explore_mode = NA_character_,
+    explore_reason = NA_character_,
+    candidate_starved = FALSE,
+    fallback_used = "base_window",
+    fallback_path = "base_window",
+    starvation_reason = NA_character_,
+    n_candidates_generated = NA_integer_,
+    n_candidates_after_hard_filters = NA_integer_,
+    n_candidates_after_duplicates = NA_integer_,
+    n_candidates_after_star_caps = NA_integer_,
+    n_candidates_scored = NA_integer_,
+    deg_i = as.integer(counts$deg[[i_id]]),
+    deg_j = as.integer(counts$deg[[j_id]]),
+    recent_deg_i = as.integer(recent_deg[[i_id]]),
+    recent_deg_j = as.integer(recent_deg[[j_id]]),
+    mu_i = as.double(mu_vals[[i_id]]),
+    mu_j = as.double(mu_vals[[j_id]]),
+    sigma_i = as.double(sigma_vals[[i_id]]),
+    sigma_j = as.double(sigma_vals[[j_id]]),
+    p_ij = as.double(p_ij),
+    U0_ij = as.double(u0_ij),
+    star_cap_rejects = 0L,
+    star_cap_reject_items = 0L
+  )
+}
+
+#' @keywords internal
+#' @noRd
 apply_step_update <- function(state, step) {
   out <- state
   out$step_log <- append_step_log(out$step_log, step$row)
@@ -112,7 +186,11 @@ run_one_step <- function(state, judge, ...) {
   step_id <- as.integer(nrow(state$step_log) + 1L)
   timestamp <- now_fn()
 
-  selection <- select_next_pair(state)
+  if (.adaptive_warm_start_active(state)) {
+    selection <- .adaptive_warm_start_selection(state, step_id = step_id)
+  } else {
+    selection <- select_next_pair(state, step_id = step_id)
+  }
 
   is_valid <- FALSE
   invalid_reason <- NA_character_
@@ -189,7 +267,7 @@ run_one_step <- function(state, judge, ...) {
     star_cap_reject_items = selection$star_cap_reject_items
   )
 
-  apply_step_update(state, list(
+  out <- apply_step_update(state, list(
     row = step_row,
     is_valid = is_valid,
     invalid_reason = invalid_reason,
@@ -197,4 +275,13 @@ run_one_step <- function(state, judge, ...) {
     B_id = B_id,
     Y = Y
   ))
+
+  if (.adaptive_warm_start_active(out) && isTRUE(is_valid)) {
+    out$warm_start_idx <- as.integer(out$warm_start_idx %||% 1L) + 1L
+    if (out$warm_start_idx > nrow(out$warm_start_pairs)) {
+      out$warm_start_done <- TRUE
+    }
+  }
+
+  out
 }
