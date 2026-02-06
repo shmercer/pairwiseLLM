@@ -566,6 +566,22 @@ adaptive_progress_update <- function(handle, state, cfg) {
     ),
     error = function(e) NULL
   )
+  if (isTRUE(cfg$progress_show_events)) {
+    cli::cli_inform(paste0(
+      "step ",
+      step_id,
+      ": new_pairs_since_last_refit=",
+      metrics$new_pairs_since_last_refit,
+      "/",
+      handle$total,
+      " committed=",
+      metrics$committed_pairs_done,
+      " invalid=",
+      metrics$n_invalid_since_last_refit,
+      " starved=",
+      metrics$n_starved_since_last_refit
+    ))
+  }
   handle$last_redraw <- step_id
   handle
 }
