@@ -94,7 +94,7 @@ apply_step_update <- function(state, step) {
     sigma = as.double(items$sigma),
     degree = degree
   )
-  out$item_log <- append_item_log(out$item_log, rows)
+  out$item_step_log <- append_item_step_log(out$item_step_log, rows)
   out
 }
 
