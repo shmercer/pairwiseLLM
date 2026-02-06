@@ -26,12 +26,37 @@ adaptive_rank_run_live(
 list with \code{is_valid = TRUE} and \code{Y} in \code{0/1}, or \code{is_valid = FALSE} with
 \code{invalid_reason}.}
 
-\item{n_steps}{Number of steps to execute.}
+\item{n_steps}{Maximum number of attempted adaptive steps to execute in this
+call. The run may terminate earlier if candidate starvation is encountered
+or if BTL stopping criteria are met at a refit. Each attempted step counts
+toward this budget, including invalid judge responses.}
 
 \item{fit_fn}{Optional BTL fit function for deterministic testing; defaults
 to \code{default_btl_fit_fn()} when a refit is due.}
 
-\item{btl_config}{Optional list overriding BTL refit/stop defaults.}
+\item{btl_config}{Optional named list overriding BTL refit cadence, stopping
+thresholds, and selected round-log diagnostics. Supported fields:
+\describe{
+\item{\code{refit_pairs_target}}{Minimum new committed comparisons required
+before the next BTL refit.}
+\item{\code{model_variant}}{BTL MCMC variant: \code{"btl"}, \code{"btl_e"}, \code{"btl_b"},
+or \code{"btl_e_b"}.}
+\item{\code{ess_bulk_min}}{Minimum bulk ESS required for diagnostics to pass.}
+\item{\code{ess_bulk_min_near_stop}}{Stricter ESS requirement when a run is
+close to stopping.}
+\item{\code{max_rhat}}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.}
+\item{\code{divergences_max}}{Maximum allowed divergent transitions.}
+\item{\code{eap_reliability_min}}{Minimum EAP reliability to allow stopping.}
+\item{\code{stability_lag}}{Lag (in refits) used for stability checks.}
+\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means.}
+\item{\code{theta_sd_rel_change_max}}{Maximum relative change in posterior SD
+allowed by stability checks.}
+\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation.}
+\item{\code{near_tie_p_low}, \code{near_tie_p_high}}{Probability band used only for
+near-tie diagnostics in round logging (not used for stopping decisions).}
+}
+Defaults are resolved from the current item count, then merged with user
+overrides.}
 
 \item{session_dir}{Optional directory for saving session artifacts.}
 

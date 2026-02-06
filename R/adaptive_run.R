@@ -130,10 +130,35 @@ adaptive_rank_start <- function(items,
 #' @param judge A function called as `judge(A, B, state, ...)` that returns a
 #'   list with `is_valid = TRUE` and `Y` in `0/1`, or `is_valid = FALSE` with
 #'   `invalid_reason`.
-#' @param n_steps Number of steps to execute.
+#' @param n_steps Maximum number of attempted adaptive steps to execute in this
+#'   call. The run may terminate earlier if candidate starvation is encountered
+#'   or if BTL stopping criteria are met at a refit. Each attempted step counts
+#'   toward this budget, including invalid judge responses.
 #' @param fit_fn Optional BTL fit function for deterministic testing; defaults
 #'   to `default_btl_fit_fn()` when a refit is due.
-#' @param btl_config Optional list overriding BTL refit/stop defaults.
+#' @param btl_config Optional named list overriding BTL refit cadence, stopping
+#'   thresholds, and selected round-log diagnostics. Supported fields:
+#'   \describe{
+#'   \item{`refit_pairs_target`}{Minimum new committed comparisons required
+#'   before the next BTL refit.}
+#'   \item{`model_variant`}{BTL MCMC variant: `"btl"`, `"btl_e"`, `"btl_b"`,
+#'   or `"btl_e_b"`.}
+#'   \item{`ess_bulk_min`}{Minimum bulk ESS required for diagnostics to pass.}
+#'   \item{`ess_bulk_min_near_stop`}{Stricter ESS requirement when a run is
+#'   close to stopping.}
+#'   \item{`max_rhat`}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.}
+#'   \item{`divergences_max`}{Maximum allowed divergent transitions.}
+#'   \item{`eap_reliability_min`}{Minimum EAP reliability to allow stopping.}
+#'   \item{`stability_lag`}{Lag (in refits) used for stability checks.}
+#'   \item{`theta_corr_min`}{Minimum lagged correlation of posterior means.}
+#'   \item{`theta_sd_rel_change_max`}{Maximum relative change in posterior SD
+#'   allowed by stability checks.}
+#'   \item{`rank_spearman_min`}{Minimum lagged Spearman rank correlation.}
+#'   \item{`near_tie_p_low`, `near_tie_p_high`}{Probability band used only for
+#'   near-tie diagnostics in round logging (not used for stopping decisions).}
+#'   }
+#'   Defaults are resolved from the current item count, then merged with user
+#'   overrides.
 #' @param session_dir Optional directory for saving session artifacts.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #' @param progress Progress output: "all", "refits", "steps", or "none".

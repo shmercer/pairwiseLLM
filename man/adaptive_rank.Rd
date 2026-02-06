@@ -72,12 +72,22 @@ Only used when \code{backend = "openai"}; ignored otherwise.}
 \item{judge_call_args}{Named list of additional arguments forwarded to the
 judge at run time through \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
 
-\item{n_steps}{Number of adaptive steps to execute.}
+\item{n_steps}{Maximum number of attempted adaptive steps to execute in this
+call. The run may return earlier due to candidate starvation or BTL stop
+criteria. Attempted invalid steps also count toward this limit.}
 
 \item{fit_fn}{Optional fit override passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
 
-\item{btl_config}{Optional BTL configuration list passed to
-\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
+\item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
+to control BTL refit cadence, stopping diagnostics, and selected
+round-log diagnostics. Supported fields:
+\code{refit_pairs_target}, \code{model_variant}, \code{ess_bulk_min},
+\code{ess_bulk_min_near_stop}, \code{max_rhat}, \code{divergences_max},
+\code{eap_reliability_min}, \code{stability_lag}, \code{theta_corr_min},
+\code{theta_sd_rel_change_max}, \code{rank_spearman_min}, \code{near_tie_p_low},
+and \code{near_tie_p_high} (\verb{near_tie_*} affects round logging only, not stop
+decisions). Defaults are resolved from the current item count and merged
+with user overrides.}
 
 \item{session_dir}{Optional session directory for persistence/resume.}
 

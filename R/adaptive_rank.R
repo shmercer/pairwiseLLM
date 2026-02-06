@@ -292,10 +292,20 @@ make_adaptive_judge_llm <- function(
 #'   [llm_compare_pair()] by the generated judge.
 #' @param judge_call_args Named list of additional arguments forwarded to the
 #'   judge at run time through [adaptive_rank_run_live()].
-#' @param n_steps Number of adaptive steps to execute.
+#' @param n_steps Maximum number of attempted adaptive steps to execute in this
+#'   call. The run may return earlier due to candidate starvation or BTL stop
+#'   criteria. Attempted invalid steps also count toward this limit.
 #' @param fit_fn Optional fit override passed to [adaptive_rank_run_live()].
-#' @param btl_config Optional BTL configuration list passed to
-#'   [adaptive_rank_run_live()].
+#' @param btl_config Optional named list passed to [adaptive_rank_run_live()]
+#'   to control BTL refit cadence, stopping diagnostics, and selected
+#'   round-log diagnostics. Supported fields:
+#'   `refit_pairs_target`, `model_variant`, `ess_bulk_min`,
+#'   `ess_bulk_min_near_stop`, `max_rhat`, `divergences_max`,
+#'   `eap_reliability_min`, `stability_lag`, `theta_corr_min`,
+#'   `theta_sd_rel_change_max`, `rank_spearman_min`, `near_tie_p_low`,
+#'   and `near_tie_p_high` (`near_tie_*` affects round logging only, not stop
+#'   decisions). Defaults are resolved from the current item count and merged
+#'   with user overrides.
 #' @param session_dir Optional session directory for persistence/resume.
 #' @param persist_item_log Logical; write per-refit item logs when `TRUE`.
 #' @param resume Logical; when `TRUE` and `session_dir` contains a valid session,
