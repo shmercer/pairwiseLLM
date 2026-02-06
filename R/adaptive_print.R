@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 printing, summaries, and log accessors.
+# Adaptive printing, summaries, and log accessors.
 # -------------------------------------------------------------------------
 
 .adaptive_item_log_columns <- function() {
@@ -169,7 +169,7 @@
 
 #' Retrieve canonical adaptive logs.
 #'
-#' @param state Adaptive v2 state.
+#' @param state Adaptive state.
 #'
 #' @export
 adaptive_get_logs <- function(state) {
@@ -194,7 +194,7 @@ adaptive_get_logs <- function(state) {
 
 #' Adaptive step log accessor.
 #'
-#' @param state Adaptive v2 state.
+#' @param state Adaptive state.
 #'
 #' @export
 adaptive_step_log <- function(state) {
@@ -206,7 +206,7 @@ adaptive_step_log <- function(state) {
 
 #' Adaptive round log accessor.
 #'
-#' @param state Adaptive v2 state.
+#' @param state Adaptive state.
 #'
 #' @export
 adaptive_round_log <- function(state) {
@@ -218,7 +218,7 @@ adaptive_round_log <- function(state) {
 
 #' Adaptive item log accessor.
 #'
-#' @param state Adaptive v2 state.
+#' @param state Adaptive state.
 #' @param refit_id Optional refit index.
 #' @param stack When TRUE, stack all refits.
 #'
@@ -254,7 +254,7 @@ adaptive_item_log <- function(state, refit_id = NULL, stack = FALSE) {
 
 #' Adaptive results history in build_bt_data() format.
 #'
-#' @param state Adaptive v2 state.
+#' @param state Adaptive state.
 #' @param committed_only Use only committed comparisons.
 #'
 #' @export
@@ -279,9 +279,9 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
   )
 }
 
-#' Summarize an Adaptive v2 state.
+#' Summarize an adaptive state.
 #'
-#' @param state Adaptive v2 state.
+#' @param state Adaptive state.
 #'
 #' @export
 summarize_adaptive <- function(state) {
@@ -297,6 +297,9 @@ summarize_adaptive <- function(state) {
   if (nrow(round_log) > 0L) {
     last_stop_decision <- round_log$stop_decision[[nrow(round_log)]]
     last_stop_reason <- round_log$stop_reason[[nrow(round_log)]]
+  } else if (is.list(state$meta)) {
+    last_stop_decision <- as.logical(state$meta$stop_decision %||% NA)
+    last_stop_reason <- as.character(state$meta$stop_reason %||% NA_character_)
   }
 
   tibble::tibble(
@@ -312,7 +315,7 @@ summarize_adaptive <- function(state) {
 #' @export
 print.adaptive_state <- function(x, ...) {
   summary <- summarize_adaptive(x)
-  header <- "Adaptive v2 state"
+  header <- "Adaptive state"
   lines <- c(
     header,
     paste0("items: ", summary$n_items),
@@ -393,11 +396,11 @@ adaptive_progress_init <- function(state, cfg) {
   }
   total <- as.integer(cfg$refit_pairs_target %||% NA_integer_)
   if (!is.finite(total) || total < 1L) {
-    total <- as.integer(adaptive_v2_defaults(state$n_items)$refit_pairs_target)
+    total <- as.integer(adaptive_defaults(state$n_items)$refit_pairs_target)
   }
   id <- cli::cli_progress_bar(
     total = total,
-    format = "Adaptive v2 {cli::pb_bar} {current}/{total} pairs {extra}",
+    format = "Adaptive {cli::pb_bar} {current}/{total} pairs {extra}",
     .envir = rlang::caller_env()
   )
   list(id = id, last_redraw = 0L, total = total)

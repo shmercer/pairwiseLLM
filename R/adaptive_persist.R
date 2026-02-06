@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------
-# Adaptive v2 persistence helpers.
+# Adaptive persistence helpers.
 # -------------------------------------------------------------------------
 
 .adaptive_session_paths <- function(session_dir) {
@@ -150,7 +150,7 @@ read_log <- function(path) {
   lapply(paths, read_log)
 }
 
-#' Validate an Adaptive v2 session directory.
+#' Validate an adaptive session directory.
 #'
 #' @param session_dir Directory containing session artifacts.
 #'
@@ -183,9 +183,9 @@ validate_session_dir <- function(session_dir) {
   metadata
 }
 
-#' Save an Adaptive v2 session to disk.
+#' Save an adaptive session to disk.
 #'
-#' @param state Adaptive v2 state.
+#' @param state Adaptive state.
 #' @param session_dir Directory to write session artifacts.
 #' @param overwrite Logical; overwrite existing artifacts.
 #'
@@ -213,6 +213,13 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
       paths$btl_fit,
       paths$item_log_dir
     ))
+  } else {
+    if (is.null(state$btl_fit) && file.exists(paths$btl_fit)) {
+      file.remove(paths$btl_fit)
+    }
+    if (dir.exists(paths$item_log_dir)) {
+      unlink(paths$item_log_dir, recursive = TRUE, force = TRUE)
+    }
   }
 
   metadata <- list(
@@ -237,7 +244,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
   invisible(session_dir)
 }
 
-#' Load an Adaptive v2 session from disk.
+#' Load an adaptive session from disk.
 #'
 #' @param session_dir Directory containing session artifacts.
 #'
@@ -280,13 +287,18 @@ load_adaptive_session <- function(session_dir) {
 
   A <- state$step_log$A
   B <- state$step_log$B
-  ok_idx <- !is.na(A) | !is.na(B)
+  has_a <- !is.na(A)
+  has_b <- !is.na(B)
+  if (any(has_a != has_b)) {
+    rlang::abort("`step_log` contains incomplete item indices.")
+  }
+  ok_idx <- has_a & has_b
   if (any(ok_idx)) {
     invalid <- A[ok_idx] < 1L |
       A[ok_idx] > length(ids) |
       B[ok_idx] < 1L |
       B[ok_idx] > length(ids)
-    if (any(invalid, na.rm = TRUE)) {
+    if (any(invalid)) {
       rlang::abort("`step_log` contains invalid item indices.")
     }
   }
