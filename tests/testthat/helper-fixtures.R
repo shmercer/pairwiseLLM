@@ -64,6 +64,7 @@ snapshot_state_core <- function(state) {
     "items",
     "history_pairs",
     "item_log",
+    "item_step_log",
     "trueskill_state",
     "btl_fit",
     "stop_metrics",

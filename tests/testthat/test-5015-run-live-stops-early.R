@@ -23,7 +23,8 @@ test_that("adaptive_rank_run_live can stop early via BTL refit", {
     judge,
     n_steps = 10L,
     fit_fn = stub$fit_fn,
-    btl_config = btl_config
+    btl_config = btl_config,
+    progress = "none"
   )
 
   expect_true(inherits(out, "adaptive_state"))

@@ -13,7 +13,8 @@ test_that("new_adaptive_state builds a stable v2 scaffold", {
   expect_true(inherits(state$trueskill_state, "trueskill_state"))
   expect_true(tibble::is_tibble(state$step_log))
   expect_true(tibble::is_tibble(state$round_log))
-  expect_true(tibble::is_tibble(state$item_log))
+  expect_true(is.list(state$item_log))
+  expect_true(tibble::is_tibble(state$item_step_log))
 })
 
 test_that("new_adaptive_state rejects non-function now_fn", {

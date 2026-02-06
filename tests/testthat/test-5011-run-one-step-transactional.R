@@ -17,7 +17,7 @@ test_that("run_one_step commits valid results transactionally", {
   expect_false(isTRUE(all.equal(before_sigma, out$trueskill_state$items$sigma)))
 
   expect_equal(nrow(out$history_pairs), 1L)
-  expect_equal(nrow(out$item_log), out$n_items)
+  expect_equal(nrow(out$item_step_log), out$n_items)
 })
 
 test_that("run_one_step logs invalid results without mutating state", {
