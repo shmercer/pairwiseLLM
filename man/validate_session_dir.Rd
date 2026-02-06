@@ -2,7 +2,7 @@
 % Please edit documentation in R/adaptive_persist.R
 \name{validate_session_dir}
 \alias{validate_session_dir}
-\title{Validate an Adaptive v2 session directory.}
+\title{Validate an adaptive session directory.}
 \usage{
 validate_session_dir(session_dir)
 }
@@ -10,5 +10,5 @@ validate_session_dir(session_dir)
 \item{session_dir}{Directory containing session artifacts.}
 }
 \description{
-Validate an Adaptive v2 session directory.
+Validate an adaptive session directory.
 }

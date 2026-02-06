@@ -2,16 +2,25 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_start}
 \alias{adaptive_rank_start}
-\title{Adaptive ranking (v2 scaffold)}
+\title{Adaptive ranking}
 \usage{
-adaptive_rank_start(items, session_dir = NULL, persist_item_log = FALSE, ...)
+adaptive_rank_start(
+  items,
+  seed = 1L,
+  session_dir = NULL,
+  persist_item_log = FALSE,
+  ...
+)
 }
 \arguments{
 \item{items}{A vector or data frame of items. Data frames must include an
 \code{item_id} column (or \code{id}/\code{ID}). Item IDs may be character; internal logs
 use integer indices derived from these IDs.}
 
-\item{session_dir}{Optional directory for saving v2 session artifacts.}
+\item{seed}{Integer seed used for deterministic warm-start shuffling and
+selection randomness.}
+
+\item{session_dir}{Optional directory for saving session artifacts.}
 
 \item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
 
@@ -19,10 +28,10 @@ use integer indices derived from these IDs.}
 for timestamps.}
 }
 \value{
-An Adaptive v2 state object containing \code{step_log}, \code{round_log}, and
+An adaptive state object containing \code{step_log}, \code{round_log}, and
 \code{item_log}.
 }
 \description{
-Creates an Adaptive v2 state object with canonical logs. Pair selection and
+Creates an adaptive state object with canonical logs. Pair selection and
 stepwise execution are implemented in later steps.
 }

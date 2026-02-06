@@ -2,17 +2,17 @@
 % Please edit documentation in R/adaptive_persist.R
 \name{save_adaptive_session}
 \alias{save_adaptive_session}
-\title{Save an Adaptive v2 session to disk.}
+\title{Save an adaptive session to disk.}
 \usage{
 save_adaptive_session(state, session_dir, overwrite = FALSE)
 }
 \arguments{
-\item{state}{Adaptive v2 state.}
+\item{state}{Adaptive state.}
 
 \item{session_dir}{Directory to write session artifacts.}
 
 \item{overwrite}{Logical; overwrite existing artifacts.}
 }
 \description{
-Save an Adaptive v2 session to disk.
+Save an adaptive session to disk.
 }

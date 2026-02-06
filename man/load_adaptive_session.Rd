@@ -2,7 +2,7 @@
 % Please edit documentation in R/adaptive_persist.R
 \name{load_adaptive_session}
 \alias{load_adaptive_session}
-\title{Load an Adaptive v2 session from disk.}
+\title{Load an adaptive session from disk.}
 \usage{
 load_adaptive_session(session_dir)
 }
@@ -10,5 +10,5 @@ load_adaptive_session(session_dir)
 \item{session_dir}{Directory containing session artifacts.}
 }
 \description{
-Load an Adaptive v2 session from disk.
+Load an adaptive session from disk.
 }

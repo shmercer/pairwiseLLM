@@ -7,7 +7,7 @@
 adaptive_get_logs(state)
 }
 \arguments{
-\item{state}{Adaptive v2 state.}
+\item{state}{Adaptive state.}
 }
 \description{
 Retrieve canonical adaptive logs.

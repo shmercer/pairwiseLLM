@@ -2,7 +2,7 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_resume}
 \alias{adaptive_rank_resume}
-\title{Adaptive ranking resume (v2)}
+\title{Adaptive ranking resume}
 \usage{
 adaptive_rank_resume(session_dir, ...)
 }
@@ -12,5 +12,5 @@ adaptive_rank_resume(session_dir, ...)
 \item{...}{Reserved for future extensions; currently unused.}
 }
 \description{
-Resume an Adaptive v2 session from disk.
+Resume an adaptive session from disk.
 }

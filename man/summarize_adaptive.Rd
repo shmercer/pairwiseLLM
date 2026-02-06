@@ -2,13 +2,13 @@
 % Please edit documentation in R/adaptive_print.R
 \name{summarize_adaptive}
 \alias{summarize_adaptive}
-\title{Summarize an Adaptive v2 state.}
+\title{Summarize an adaptive state.}
 \usage{
 summarize_adaptive(state)
 }
 \arguments{
-\item{state}{Adaptive v2 state.}
+\item{state}{Adaptive state.}
 }
 \description{
-Summarize an Adaptive v2 state.
+Summarize an adaptive state.
 }

@@ -7,7 +7,7 @@
 adaptive_step_log(state)
 }
 \arguments{
-\item{state}{Adaptive v2 state.}
+\item{state}{Adaptive state.}
 }
 \description{
 Adaptive step log accessor.

@@ -2,7 +2,7 @@
 % Please edit documentation in R/adaptive_run.R
 \name{adaptive_rank_run_live}
 \alias{adaptive_rank_run_live}
-\title{Adaptive ranking live runner (v2)}
+\title{Adaptive ranking live runner}
 \usage{
 adaptive_rank_run_live(
   state,
@@ -20,7 +20,7 @@ adaptive_rank_run_live(
 )
 }
 \arguments{
-\item{state}{An Adaptive v2 state object created by \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}.}
+\item{state}{An adaptive state object created by \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}.}
 
 \item{judge}{A function called as \code{judge(A, B, state, ...)} that returns a
 list with \code{is_valid = TRUE} and \code{Y} in \code{0/1}, or \code{is_valid = FALSE} with
@@ -33,7 +33,7 @@ to \code{default_btl_fit_fn()} when a refit is due.}
 
 \item{btl_config}{Optional list overriding BTL refit/stop defaults.}
 
-\item{session_dir}{Optional directory for saving v2 session artifacts.}
+\item{session_dir}{Optional directory for saving session artifacts.}
 
 \item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
 

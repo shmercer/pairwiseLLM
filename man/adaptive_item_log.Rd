@@ -7,7 +7,7 @@
 adaptive_item_log(state, refit_id = NULL, stack = FALSE)
 }
 \arguments{
-\item{state}{Adaptive v2 state.}
+\item{state}{Adaptive state.}
 
 \item{refit_id}{Optional refit index.}
 

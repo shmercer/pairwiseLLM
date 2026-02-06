@@ -7,7 +7,7 @@
 adaptive_results_history(state, committed_only = TRUE)
 }
 \arguments{
-\item{state}{Adaptive v2 state.}
+\item{state}{Adaptive state.}
 
 \item{committed_only}{Use only committed comparisons.}
 }
