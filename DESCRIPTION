@@ -26,6 +26,7 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
+    cli,
     curl,
     dplyr,
     httr2,
@@ -67,6 +68,8 @@ Collate:
     'adaptive_candidates.R'
     'adaptive_constraints.R'
     'adaptive_logs.R'
+    'adaptive_persist.R'
+    'adaptive_print.R'
     'adaptive_run.R'
     'adaptive_schemas.R'
     'adaptive_select.R'
