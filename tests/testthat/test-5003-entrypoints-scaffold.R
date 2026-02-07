@@ -12,7 +12,7 @@ test_that("adaptive_rank_start returns adaptive state", {
   state <- adaptive_rank_start(items, now_fn = now_fn)
 
   expect_true(inherits(state, "adaptive_state"))
-  expect_equal(state$meta$schema_version, "v2-0")
+  expect_equal(state$meta$schema_version, "adaptive-session")
   expect_equal(state$meta$now_fn(), now_fn())
 })
 

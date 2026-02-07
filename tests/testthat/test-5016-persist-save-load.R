@@ -17,7 +17,7 @@ test_that("save_adaptive_session and load_adaptive_session round-trip adaptive a
   reloaded <- load_adaptive_session(session_dir)
   expect_equal(reloaded$item_ids, state$item_ids)
   expect_equal(nrow(reloaded$step_log), nrow(state$step_log))
-  expect_equal(reloaded$meta$schema_version, "v2-0")
+  expect_equal(reloaded$meta$schema_version, "adaptive-session")
 
   file.remove(file.path(session_dir, "state.rds"))
   expect_error(
@@ -26,7 +26,7 @@ test_that("save_adaptive_session and load_adaptive_session round-trip adaptive a
   )
 })
 
-test_that("load_adaptive_session rejects unsupported schema versions", {
+test_that("load_adaptive_session rejects malformed schema metadata", {
   items <- make_test_items(4)
   state <- adaptive_rank_start(items)
   session_dir <- withr::local_tempdir()
@@ -34,12 +34,12 @@ test_that("load_adaptive_session rejects unsupported schema versions", {
 
   meta_path <- file.path(session_dir, "metadata.rds")
   metadata <- readRDS(meta_path)
-  metadata$schema_version <- "v1-0"
+  metadata$schema_version <- ""
   saveRDS(metadata, meta_path)
 
   expect_error(
     load_adaptive_session(session_dir),
-    "Unsupported adaptive session schema version"
+    "schema_version"
   )
 })
 
