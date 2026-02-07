@@ -705,8 +705,24 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
   diagnostics <- c(
     "Diagnostics gate:",
     paste0("  diagnostics_pass=", row$diagnostics_pass),
-    paste0("  divergences=", row$divergences),
-    paste0("  max_rhat=", row$max_rhat),
+    paste0(
+      "  divergences=",
+      row$divergences,
+      " (need <= ",
+      row$divergences_max_allowed,
+      "; pass=",
+      row$diagnostics_divergences_pass,
+      ")"
+    ),
+    paste0(
+      "  max_rhat=",
+      row$max_rhat,
+      " (need <= ",
+      row$max_rhat_allowed,
+      "; pass=",
+      row$diagnostics_rhat_pass,
+      ")"
+    ),
     paste0("  min_ess_bulk=", row$min_ess_bulk, " (need >= ", row$ess_bulk_required, ")")
   )
 
@@ -720,7 +736,7 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
     )
   )
 
-  eap_min <- thresholds$eap_reliability_min %||% NA_real_
+  eap_min <- row$eap_reliability_min %||% thresholds$eap_reliability_min %||% NA_real_
   eap_pass <- .adaptive_meets_threshold(row$reliability_EAP, eap_min, "ge")
   stop_table <- c(
     stop_table,
@@ -735,7 +751,7 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
     )
   )
 
-  rho_rank_min <- thresholds$rank_spearman_min %||% NA_real_
+  rho_rank_min <- row$rank_spearman_min %||% thresholds$rank_spearman_min %||% NA_real_
   rho_rank_pass <- .adaptive_meets_threshold(row$rho_rank, rho_rank_min, "ge")
   stop_table <- c(
     stop_table,
@@ -750,7 +766,7 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
     )
   )
 
-  theta_min <- thresholds$theta_corr_min %||% NA_real_
+  theta_min <- row$theta_corr_min %||% thresholds$theta_corr_min %||% NA_real_
   theta_pass <- .adaptive_meets_threshold(row$rho_theta, theta_min, "ge")
   stop_table <- c(
     stop_table,
@@ -765,7 +781,7 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
     )
   )
 
-  sd_max <- thresholds$theta_sd_rel_change_max %||% NA_real_
+  sd_max <- row$theta_sd_rel_change_max %||% thresholds$theta_sd_rel_change_max %||% NA_real_
   sd_pass <- .adaptive_meets_threshold(row$delta_sd_theta, sd_max, "le")
   stop_table <- c(
     stop_table,
@@ -778,6 +794,29 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
       sd_max,
       ")"
     )
+  )
+  stop_table <- c(
+    stop_table,
+    paste0(
+      "  ",
+      if (isTRUE(row$lag_eligible)) "[x] " else "[ ] ",
+      "lag_eligible"
+    )
+  )
+
+  report_only <- c(
+    "Report-only metrics (not used for stopping):",
+    paste0("  uncertainty_concentration=", row$uncertainty_concentration),
+    paste0("  top_boundary_uncertainty=", row$top_boundary_uncertainty),
+    paste0("  adjacent_separation_uncertainty=", row$adjacent_separation_uncertainty)
+  )
+
+  mcmc <- c(
+    "Refit MCMC settings:",
+    paste0("  chains=", row$mcmc_chains),
+    paste0("  parallel_chains=", row$mcmc_parallel_chains),
+    paste0("  core_fraction=", row$mcmc_core_fraction),
+    paste0("  threads_per_chain=", row$mcmc_threads_per_chain)
   )
 
   decision <- if (isTRUE(row$stop_decision)) "Decision: STOP" else "Decision: continue"
@@ -799,7 +838,9 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
     selection,
     coverage,
     model_params,
+    mcmc,
     diagnostics,
+    report_only,
     stop_table,
     stop_summary,
     decision,
