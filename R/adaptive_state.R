@@ -112,6 +112,10 @@
     per_round_item_uses = stats::setNames(rep.int(0L, length(ids)), ids),
     repeat_in_round_budget = as.integer(defaults$repeat_in_round_budget),
     repeat_in_round_used = 0L,
+    anchor_ids = character(),
+    anchor_refresh_source = NA_character_,
+    anchor_refit_round_id = 0L,
+    anchor_round_id = as.integer(round_id),
     committed_total = 0L
   )
 }
