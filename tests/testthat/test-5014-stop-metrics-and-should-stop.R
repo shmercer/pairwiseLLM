@@ -43,9 +43,9 @@ test_that("compute_stop_metrics and should_stop follow thresholds", {
   expect_false(pairwiseLLM:::should_stop(metrics, config = strict_config))
 
   metrics_report_only <- metrics
-  metrics_report_only$uncertainty_concentration <- 0.99
-  metrics_report_only$top_boundary_uncertainty <- 0.49
-  metrics_report_only$adjacent_separation_uncertainty <- 0.49
+  metrics_report_only$cov_trace_theta <- 0.99
+  metrics_report_only$top20_boundary_entropy_mean <- 0.49
+  metrics_report_only$nn_diff_sd_mean <- 0.49
   expect_identical(
     pairwiseLLM:::should_stop(metrics_report_only, config = config),
     pairwiseLLM:::should_stop(metrics, config = config)

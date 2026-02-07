@@ -21,8 +21,8 @@ test_that("adaptive log accessors and history return canonical shapes", {
 
   step_log <- adaptive_step_log(state)
   round_log <- adaptive_round_log(state)
-  expect_true(all(c("step_id", "pair_id", "A", "B", "Y", "status") %in% names(step_log)))
-  expect_true(all(c("round_id", "step_id_at_refit") %in% names(round_log)))
+  expect_true(all(c("step_id", "pair_id", "A", "B", "Y", "status", "pair_type") %in% names(step_log)))
+  expect_true(all(c("refit_id", "round_id_at_refit", "step_id_at_refit") %in% names(round_log)))
 
   item_log <- adaptive_item_log(state)
   required_cols <- c(
@@ -66,4 +66,26 @@ test_that("adaptive log accessors and history return canonical shapes", {
   missing_state <- state
   missing_state$item_log <- NULL
   expect_error(adaptive_item_log(missing_state), "item_log")
+})
+
+test_that("invalid-step rows keep committed-only fields as NA", {
+  items <- make_test_items(3)
+  state <- adaptive_rank_start(items)
+  invalid_judge <- function(A, B, state, ...) {
+    list(is_valid = FALSE, invalid_reason = "invalid_contract")
+  }
+
+  withr::local_seed(1)
+  out <- adaptive_rank_run_live(
+    state,
+    invalid_judge,
+    n_steps = 1L,
+    progress = "none"
+  )
+
+  step_row <- adaptive_step_log(out)[1L, , drop = FALSE]
+  expect_true(is.na(step_row$pair_id[[1L]]))
+  expect_true(is.na(step_row$Y[[1L]]))
+  expect_true(is.na(step_row$p_ij[[1L]]))
+  expect_true(is.na(step_row$U0_ij[[1L]]))
 })
