@@ -482,12 +482,10 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     round_stage
   }
   stage_quota <- NA_integer_
-  stage_committed_before <- NA_integer_
-  round_committed_before <- NA_integer_
+  stage_committed_so_far <- NA_integer_
   if (!identical(round_stage, "warm_start")) {
     stage_quota <- as.integer(round$stage_quotas[[round_stage]] %||% NA_integer_)
-    stage_committed_before <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
-    round_committed_before <- as.integer(round$round_committed %||% 0L)
+    stage_committed_so_far <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
   }
 
   stage_defs <- list(
@@ -643,11 +641,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       starvation_reason = "few_candidates_generated",
       round_id = as.integer(round$round_id %||% NA_integer_),
       round_stage = as.character(round_stage),
+      pair_type = as.character(round_stage),
+      used_in_round_i = NA_integer_,
+      used_in_round_j = NA_integer_,
+      is_anchor_i = NA,
+      is_anchor_j = NA,
+      stratum_i = NA_integer_,
+      stratum_j = NA_integer_,
+      dist_stratum = NA_integer_,
+      stage_committed_so_far = stage_committed_so_far,
       stage_quota = stage_quota,
-      stage_committed_before = stage_committed_before,
-      stage_committed_after = stage_committed_before,
-      round_committed_before = round_committed_before,
-      round_committed_after = round_committed_before,
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
       n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
       n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
@@ -682,6 +685,20 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   u0_ij <- p_ij * (1 - p_ij)
 
   idx_map <- state$item_index %||% stats::setNames(seq_along(ids), ids)
+  per_round_uses <- round$per_round_item_uses %||% integer()
+  per_round_uses <- as.integer(per_round_uses)
+  names(per_round_uses) <- names(round$per_round_item_uses %||% per_round_uses)
+  anchor_ids <- as.character(round$anchor_ids %||% character())
+  proxy <- .adaptive_rank_proxy(state)
+  strata <- .adaptive_assign_strata(proxy$scores, defaults)
+  stratum_map <- strata$stratum_map
+  stratum_i <- as.integer(stratum_map[[i_id]] %||% NA_integer_)
+  stratum_j <- as.integer(stratum_map[[j_id]] %||% NA_integer_)
+  dist_stratum <- if (!is.na(stratum_i) && !is.na(stratum_j)) {
+    as.integer(abs(stratum_i - stratum_j))
+  } else {
+    NA_integer_
+  }
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -697,11 +714,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     starvation_reason = NA_character_,
     round_id = as.integer(round$round_id %||% NA_integer_),
     round_stage = as.character(round_stage),
+    pair_type = as.character(round_stage),
+    used_in_round_i = as.integer(per_round_uses[[i_id]] %||% 0L),
+    used_in_round_j = as.integer(per_round_uses[[j_id]] %||% 0L),
+    is_anchor_i = as.logical(i_id %in% anchor_ids),
+    is_anchor_j = as.logical(j_id %in% anchor_ids),
+    stratum_i = stratum_i,
+    stratum_j = stratum_j,
+    dist_stratum = dist_stratum,
+    stage_committed_so_far = stage_committed_so_far,
     stage_quota = stage_quota,
-    stage_committed_before = stage_committed_before,
-    stage_committed_after = stage_committed_before,
-    round_committed_before = round_committed_before,
-    round_committed_after = round_committed_before,
     n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
     n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
     n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
