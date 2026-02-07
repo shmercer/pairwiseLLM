@@ -78,7 +78,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       ),
       config = list(),
       meta = list(
-        schema_version = "v2-0",
+        schema_version = "adaptive-session",
         now_fn = now_fn,
         seed = 1L,
         stop_decision = FALSE,
