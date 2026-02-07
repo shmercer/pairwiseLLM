@@ -23,8 +23,14 @@
 
 .adaptive_summary_extract_source <- function(state) {
   if (inherits(state, "adaptive_state")) {
-    if (is.list(state$meta) && identical(state$meta$schema_version, "v2-0")) {
-      rlang::abort("Adaptive state is not supported by BTL MCMC summary helpers.")
+    is_canonical_runtime <- !is.null(state$item_ids) &&
+      !is.null(state$step_log) &&
+      !is.null(state$round_log)
+    if (isTRUE(is_canonical_runtime)) {
+      return(list(
+        round_log = state$round_log %||% tibble::tibble(),
+        item_log_list = state$item_log %||% NULL
+      ))
     }
     return(list(
       round_log = state$config$round_log %||% tibble::tibble(),

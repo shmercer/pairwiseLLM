@@ -154,6 +154,11 @@ validate_results_tbl <- function(results) {
   .adaptive_check_type(results$model, "results$model", "character", is.character)
   .adaptive_check_phase(results$phase, "results$phase")
 
+  has_self_pair <- !is.na(results$A_id) & !is.na(results$B_id) & results$A_id == results$B_id
+  if (any(has_self_pair)) {
+    rlang::abort("`results` must not contain self-pairs (`A_id == B_id`).")
+  }
+
   missing_better <- is.na(results$better_id)
   if (any(missing_better)) {
     rlang::abort("`results$better_id` must be non-missing and match `A_id` or `B_id`.")
@@ -230,8 +235,11 @@ validate_btl_mcmc_state <- function(state) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
-  if (is.list(state$meta) && identical(state$meta$schema_version, "v2-0")) {
-    rlang::abort("`state` is an adaptive scaffold; BTL MCMC validation is not supported.")
+  is_canonical_runtime <- !is.null(state$item_ids) &&
+    !is.null(state$step_log) &&
+    !is.null(state$round_log)
+  if (isTRUE(is_canonical_runtime)) {
+    rlang::abort("Canonical adaptive runtime state is not supported by this validator.")
   }
   if ("fast_fit" %in% names(state)) {
     rlang::abort("`state$fast_fit` is no longer supported; use `state$fit`.")
@@ -433,8 +441,9 @@ validate_state <- function(state) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
-  if (is.null(state$meta) || !identical(state$meta$schema_version, "v2-0")) {
-    rlang::abort("`state` must be an adaptive state.")
+  schema_version <- state$meta$schema_version %||% NA_character_
+  if (!is.character(schema_version) || length(schema_version) != 1L || is.na(schema_version) || schema_version == "") {
+    rlang::abort("`state$meta$schema_version` must be a non-empty string.")
   }
   if (!is.character(state$item_ids) || length(state$item_ids) < 2L) {
     rlang::abort("`state$item_ids` must include at least two item ids.")

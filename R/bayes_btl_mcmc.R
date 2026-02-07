@@ -52,6 +52,99 @@
   as.integer(seed)
 }
 
+# Build summary counts from observed results without relying on the legacy
+# scaffold state constructor.
+.btl_mcmc_summary_counts <- function(results, ids) {
+  ids <- as.character(ids)
+  deg <- stats::setNames(rep.int(0L, length(ids)), ids)
+  pos1 <- deg
+  pos2 <- deg
+
+  if (nrow(results) == 0L) {
+    keys <- character()
+  } else {
+    A_id <- as.character(results$A_id)
+    B_id <- as.character(results$B_id)
+    keep_key <- logical(nrow(results))
+    for (idx in seq_len(nrow(results))) {
+      A <- A_id[[idx]]
+      B <- B_id[[idx]]
+      if (!A %in% ids || !B %in% ids || identical(A, B)) {
+        next
+      }
+      keep_key[[idx]] <- TRUE
+      deg[[A]] <- deg[[A]] + 1L
+      deg[[B]] <- deg[[B]] + 1L
+      pos1[[A]] <- pos1[[A]] + 1L
+      pos2[[B]] <- pos2[[B]] + 1L
+    }
+    keys <- make_unordered_key(A_id[keep_key], B_id[keep_key])
+  }
+
+  all_keys <- if (length(ids) > 1L) {
+    combos <- utils::combn(ids, 2L)
+    make_unordered_key(combos[1L, ], combos[2L, ])
+  } else {
+    character()
+  }
+  pair_count <- stats::setNames(rep.int(0L, length(all_keys)), all_keys)
+  if (length(keys) > 0L) {
+    key_tab <- table(keys)
+    pair_count[names(key_tab)] <- as.integer(key_tab)
+  }
+
+  list(
+    deg = deg,
+    pos1 = pos1,
+    pos2 = pos2,
+    pair_count = pair_count
+  )
+}
+
+.btl_mcmc_summary_state <- function(results, ids, config, fit_contract) {
+  results <- tibble::as_tibble(results)
+  counts <- .btl_mcmc_summary_counts(results, ids)
+  iter_at_refit <- if (nrow(results) > 0L && "iter" %in% names(results)) {
+    max(as.integer(results$iter), na.rm = TRUE)
+  } else {
+    0L
+  }
+
+  structure(
+    list(
+      ids = as.character(ids),
+      N = as.integer(length(ids)),
+      deg = counts$deg,
+      pos1 = counts$pos1,
+      pos2 = counts$pos2,
+      imb = counts$pos1 - counts$pos2,
+      pos_count = counts$pos1,
+      pair_count = counts$pair_count,
+      history_pairs = tibble::tibble(
+        A_id = as.character(results$A_id %||% character()),
+        B_id = as.character(results$B_id %||% character())
+      ),
+      comparisons_scheduled = as.integer(nrow(results)),
+      comparisons_observed = as.integer(nrow(results)),
+      iter = as.integer(iter_at_refit),
+      mode = "standalone",
+      posterior = list(
+        epsilon_mean = as.double(fit_contract$epsilon_mean %||% NA_real_),
+        stop_metrics = .adaptive_stop_metrics_defaults(),
+        mcmc_config_used = fit_contract$mcmc_config_used %||% list(),
+        model_variant = fit_contract$model_variant %||% NA_character_
+      ),
+      config = list(
+        mcmc = config,
+        round_log = round_log_schema()
+      ),
+      batch_log = batch_log_schema(),
+      stop_reason = NA_character_
+    ),
+    class = "adaptive_state"
+  )
+}
+
 #' Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 #'
 #' Runs full Bayesian posterior inference for a Bradley–Terry–Luce (BTL) style
@@ -196,11 +289,6 @@ fit_bayes_btl_mcmc <- function(
     })
   }
 
-  samples <- tibble::tibble(
-    ID = as.character(ids),
-    text = rep("", length(ids))
-  )
-
   fits <- vector("list", length(pair_counts))
   item_logs <- vector("list", length(pair_counts))
   round_log <- round_log_schema()
@@ -220,17 +308,15 @@ fit_bayes_btl_mcmc <- function(
     fit_contract <- as_btl_fit_contract_from_mcmc(mcmc_fit, ids = ids)
     fits[[idx]] <- fit_contract
 
-    state <- btl_mcmc_state_new(samples, config = list(), seed = seed)
-    state$config$mcmc <- mcmc_config
-    state$mode <- "standalone"
-
-    ingest <- btl_mcmc_ingest_results_incremental(state, results_subset)
-    state <- ingest$state
-    state$comparisons_scheduled <- as.integer(nrow(results_subset))
-    state$posterior$mcmc_config_used <- fit_contract$mcmc_config_used
-    state$posterior$model_variant <- fit_contract$model_variant
+    state <- .btl_mcmc_summary_state(
+      results = results_subset,
+      ids = ids,
+      config = mcmc_config,
+      fit_contract = fit_contract
+    )
 
     metrics <- btl_mcmc_fill_terminal_stop_metrics(state, mcmc_config)
+    metrics$proposed_pairs <- as.integer(nrow(results_subset))
     round_row <- build_round_log_row(
       state = state,
       fit = fit_contract,

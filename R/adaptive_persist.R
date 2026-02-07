@@ -156,7 +156,7 @@ read_log <- function(path) {
 #' Verifies that required session artifacts exist and that serialized logs match
 #' canonical schemas for \code{step_log} and \code{round_log}. This check is
 #' intended as a preflight for [load_adaptive_session()] and enforces the
-#' current Adaptive v2 session schema version.
+#' canonical adaptive session metadata shape.
 #'
 #' @param session_dir Directory containing session artifacts.
 #'
@@ -188,9 +188,19 @@ validate_session_dir <- function(session_dir) {
   }
 
   metadata <- readRDS(paths$metadata)
+  if (!is.list(metadata)) {
+    rlang::abort("Session metadata must be a named list.")
+  }
   schema_version <- metadata$schema_version %||% NA_character_
-  if (!identical(schema_version, "v2-0")) {
-    rlang::abort("Unsupported adaptive session schema version.")
+  if (!is.character(schema_version) ||
+    length(schema_version) != 1L ||
+    is.na(schema_version) ||
+    schema_version == "") {
+    rlang::abort("Session metadata `schema_version` must be a non-empty string.")
+  }
+  n_items <- metadata$n_items %||% NA_integer_
+  if (!.adaptive_is_integerish(n_items) || length(n_items) != 1L || is.na(n_items) || n_items < 1L) {
+    rlang::abort("Session metadata `n_items` must be a positive integer.")
   }
 
   step_log <- read_log(paths$step_log)
@@ -258,7 +268,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
   }
 
   metadata <- list(
-    schema_version = "v2-0",
+    schema_version = as.character(state$meta$schema_version %||% "adaptive-session"),
     package_version = as.character(utils::packageVersion("pairwiseLLM")),
     n_items = as.integer(state$n_items)
   )

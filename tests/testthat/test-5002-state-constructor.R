@@ -5,7 +5,7 @@ test_that("new_adaptive_state builds a stable adaptive scaffold", {
   state <- pairwiseLLM:::new_adaptive_state(items, now_fn = now_fn)
 
   expect_true(inherits(state, "adaptive_state"))
-  expect_equal(state$meta$schema_version, "v2-0")
+  expect_equal(state$meta$schema_version, "adaptive-session")
   expect_equal(state$meta$now_fn(), now_fn())
   expect_equal(state$item_ids, as.character(items$item_id))
   expect_equal(state$n_items, 3L)

@@ -98,6 +98,25 @@ test_that("validate_results_tbl rejects missing winner_pos", {
   expect_error(pairwiseLLM:::validate_results_tbl(results), "winner_pos")
 })
 
+test_that("validate_results_tbl rejects self-pairs", {
+  results <- tibble::tibble(
+    pair_uid = "A:A#1",
+    unordered_key = "A:A",
+    ordered_key = "A:A",
+    A_id = "A",
+    B_id = "A",
+    better_id = "A",
+    winner_pos = 1L,
+    phase = "phase1",
+    iter = 1L,
+    received_at = as.POSIXct("2026-01-02 00:00:00", tz = "UTC"),
+    backend = "openai",
+    model = "gpt-test"
+  )
+
+  expect_error(pairwiseLLM:::validate_results_tbl(results), "self-pairs")
+})
+
 test_that("validate_failed_attempts_tbl accepts minimal required columns", {
   failed_attempts <- tibble::tibble(
     pair_uid = "A:B#1",
