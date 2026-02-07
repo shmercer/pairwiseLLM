@@ -221,6 +221,28 @@ adaptive_get_logs <- function(state) {
 #' commit status. A step with invalid judge response keeps committed fields
 #' as \code{NA} and must not update model state.
 #'
+#' Core columns:
+#' \itemize{
+#'   \item Identity/outcome: \code{step_id}, \code{timestamp}, \code{pair_id},
+#'   \code{i}, \code{j}, \code{A}, \code{B}, \code{Y}, \code{status}.
+#'   \item Routing/scheduling: \code{round_id}, \code{round_stage},
+#'   \code{pair_type}, \code{stage_committed_so_far}, \code{stage_quota}.
+#'   \item Exposure/strata: \code{used_in_round_i}, \code{used_in_round_j},
+#'   \code{is_anchor_i}, \code{is_anchor_j}, \code{stratum_i},
+#'   \code{stratum_j}, \code{dist_stratum}.
+#'   \item Candidate health: \code{is_explore_step}, \code{explore_mode},
+#'   \code{explore_reason}, \code{candidate_starved}, \code{fallback_used},
+#'   \code{fallback_path}, \code{starvation_reason}.
+#'   \item Candidate counts: \code{n_candidates_generated},
+#'   \code{n_candidates_after_hard_filters}, \code{n_candidates_after_duplicates},
+#'   \code{n_candidates_after_star_caps}, \code{n_candidates_scored}.
+#'   \item Endpoint diagnostics: \code{deg_i}, \code{deg_j},
+#'   \code{recent_deg_i}, \code{recent_deg_j}, \code{mu_i}, \code{mu_j},
+#'   \code{sigma_i}, \code{sigma_j}, \code{p_ij}, \code{U0_ij}.
+#'   \item Star-cap diagnostics: \code{star_cap_rejects},
+#'   \code{star_cap_reject_items}.
+#' }
+#'
 #' @param state Adaptive state.
 #'
 #' @return A tibble with one row per attempted step, in execution order.
@@ -248,6 +270,48 @@ adaptive_step_log <- function(state) {
 #' Each row summarizes one Bayesian BTL refit and includes
 #' diagnostics, reliability, and stopping-gate fields used to justify stop
 #' decisions.
+#'
+#' Core columns:
+#' \itemize{
+#'   \item Refit identity/state: \code{refit_id}, \code{round_id_at_refit},
+#'   \code{step_id_at_refit}, \code{timestamp}, \code{model_variant},
+#'   \code{n_items}, \code{total_pairs_done}, \code{new_pairs_since_last_refit},
+#'   \code{n_unique_pairs_seen}.
+#'   \item Candidate health: \code{proposed_pairs_mode},
+#'   \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
+#'   \code{fallback_used_mode}, \code{starvation_reason_mode}.
+#'   \item Coverage/imbalance: \code{mean_degree}, \code{min_degree},
+#'   \code{pos_balance_sd}, \code{star_cap_rejects_since_last_refit},
+#'   \code{star_cap_reject_rate_since_last_refit},
+#'   \code{recent_deg_median_since_last_refit},
+#'   \code{recent_deg_max_since_last_refit}.
+#'   \item Posterior parameter summaries:
+#'   \code{epsilon_mean}/percentiles and \code{b_mean}/percentiles.
+#'   \item Audit diagnostics: \code{ts_sigma_mean}, \code{ts_sigma_max},
+#'   \code{ts_degree_sigma_corr}, \code{ts_btl_theta_corr},
+#'   \code{ts_btl_rank_spearman}, \code{ci95_theta_width_*},
+#'   \code{near_tie_adj_frac}, \code{near_tie_adj_count}, \code{p_adj_median},
+#'   \code{cov_trace_theta}, \code{cov_logdet_diag_theta},
+#'   \code{post_sd_theta_p10}, \code{post_sd_theta_p50},
+#'   \code{post_sd_theta_p90}, \code{top20_boundary_entropy_*},
+#'   \code{nn_diff_sd_*}.
+#'   \item Stopping diagnostics: \code{diagnostics_pass},
+#'   \code{diagnostics_divergences_pass}, \code{diagnostics_rhat_pass},
+#'   \code{diagnostics_ess_pass}, \code{divergences},
+#'   \code{divergences_max_allowed}, \code{max_rhat},
+#'   \code{max_rhat_allowed}, \code{min_ess_bulk},
+#'   \code{ess_bulk_required}, \code{near_stop_active},
+#'   \code{reliability_EAP}, \code{eap_reliability_min}, \code{eap_pass},
+#'   \code{theta_sd_eap}, \code{rho_theta}, \code{lag_eligible},
+#'   \code{theta_corr_min}, \code{theta_corr_pass}, \code{delta_sd_theta},
+#'   \code{theta_sd_rel_change_max}, \code{delta_sd_theta_pass},
+#'   \code{rho_rank}, \code{rank_spearman_min}, \code{rho_rank_pass}.
+#'   \item Refit execution metadata: \code{mcmc_chains},
+#'   \code{mcmc_parallel_chains}, \code{mcmc_core_fraction},
+#'   \code{mcmc_cores_detected_physical}, \code{mcmc_cores_detected_logical},
+#'   \code{mcmc_threads_per_chain}, \code{mcmc_cmdstanr_version}.
+#'   \item Stop output: \code{stop_decision}, \code{stop_reason}.
+#' }
 #'
 #' @param state Adaptive state.
 #'
@@ -630,9 +694,9 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
 
   header <- paste0(
     "REFIT #",
-    sprintf("%04d", as.integer(row$round_id)),
-    "  round_id=",
-    row$round_id,
+    sprintf("%04d", as.integer(row$refit_id)),
+    "  round_id_at_refit=",
+    row$round_id_at_refit,
     "  step_id_at_refit=",
     row$step_id_at_refit,
     "  model_variant=",
@@ -806,9 +870,11 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
 
   report_only <- c(
     "Report-only metrics (not used for stopping):",
-    paste0("  uncertainty_concentration=", row$uncertainty_concentration),
-    paste0("  top_boundary_uncertainty=", row$top_boundary_uncertainty),
-    paste0("  adjacent_separation_uncertainty=", row$adjacent_separation_uncertainty)
+    paste0("  ci95_theta_width_mean=", row$ci95_theta_width_mean),
+    paste0("  near_tie_adj_frac=", row$near_tie_adj_frac),
+    paste0("  cov_trace_theta=", row$cov_trace_theta),
+    paste0("  top20_boundary_entropy_mean=", row$top20_boundary_entropy_mean),
+    paste0("  nn_diff_sd_mean=", row$nn_diff_sd_mean)
   )
 
   mcmc <- c(
