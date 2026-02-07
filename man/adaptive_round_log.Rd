@@ -21,6 +21,48 @@ pairing workflow.
 Each row summarizes one Bayesian BTL refit and includes
 diagnostics, reliability, and stopping-gate fields used to justify stop
 decisions.
+
+Core columns:
+\itemize{
+\item Refit identity/state: \code{refit_id}, \code{round_id_at_refit},
+\code{step_id_at_refit}, \code{timestamp}, \code{model_variant},
+\code{n_items}, \code{total_pairs_done}, \code{new_pairs_since_last_refit},
+\code{n_unique_pairs_seen}.
+\item Candidate health: \code{proposed_pairs_mode},
+\code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
+\code{fallback_used_mode}, \code{starvation_reason_mode}.
+\item Coverage/imbalance: \code{mean_degree}, \code{min_degree},
+\code{pos_balance_sd}, \code{star_cap_rejects_since_last_refit},
+\code{star_cap_reject_rate_since_last_refit},
+\code{recent_deg_median_since_last_refit},
+\code{recent_deg_max_since_last_refit}.
+\item Posterior parameter summaries:
+\code{epsilon_mean}/percentiles and \code{b_mean}/percentiles.
+\item Audit diagnostics: \code{ts_sigma_mean}, \code{ts_sigma_max},
+\code{ts_degree_sigma_corr}, \code{ts_btl_theta_corr},
+\code{ts_btl_rank_spearman}, \code{ci95_theta_width_*},
+\code{near_tie_adj_frac}, \code{near_tie_adj_count}, \code{p_adj_median},
+\code{cov_trace_theta}, \code{cov_logdet_diag_theta},
+\code{post_sd_theta_p10}, \code{post_sd_theta_p50},
+\code{post_sd_theta_p90}, \code{top20_boundary_entropy_*},
+\code{nn_diff_sd_*}.
+\item Stopping diagnostics: \code{diagnostics_pass},
+\code{diagnostics_divergences_pass}, \code{diagnostics_rhat_pass},
+\code{diagnostics_ess_pass}, \code{divergences},
+\code{divergences_max_allowed}, \code{max_rhat},
+\code{max_rhat_allowed}, \code{min_ess_bulk},
+\code{ess_bulk_required}, \code{near_stop_active},
+\code{reliability_EAP}, \code{eap_reliability_min}, \code{eap_pass},
+\code{theta_sd_eap}, \code{rho_theta}, \code{lag_eligible},
+\code{theta_corr_min}, \code{theta_corr_pass}, \code{delta_sd_theta},
+\code{theta_sd_rel_change_max}, \code{delta_sd_theta_pass},
+\code{rho_rank}, \code{rank_spearman_min}, \code{rho_rank_pass}.
+\item Refit execution metadata: \code{mcmc_chains},
+\code{mcmc_parallel_chains}, \code{mcmc_core_fraction},
+\code{mcmc_cores_detected_physical}, \code{mcmc_cores_detected_logical},
+\code{mcmc_threads_per_chain}, \code{mcmc_cmdstanr_version}.
+\item Stop output: \code{stop_decision}, \code{stop_reason}.
+}
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)

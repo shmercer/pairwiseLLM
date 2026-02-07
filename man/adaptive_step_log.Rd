@@ -20,6 +20,28 @@ Adaptive step log accessor.
 workflow. It records candidate pipeline outcomes, selected pair/order, and
 commit status. A step with invalid judge response keeps committed fields
 as \code{NA} and must not update model state.
+
+Core columns:
+\itemize{
+\item Identity/outcome: \code{step_id}, \code{timestamp}, \code{pair_id},
+\code{i}, \code{j}, \code{A}, \code{B}, \code{Y}, \code{status}.
+\item Routing/scheduling: \code{round_id}, \code{round_stage},
+\code{pair_type}, \code{stage_committed_so_far}, \code{stage_quota}.
+\item Exposure/strata: \code{used_in_round_i}, \code{used_in_round_j},
+\code{is_anchor_i}, \code{is_anchor_j}, \code{stratum_i},
+\code{stratum_j}, \code{dist_stratum}.
+\item Candidate health: \code{is_explore_step}, \code{explore_mode},
+\code{explore_reason}, \code{candidate_starved}, \code{fallback_used},
+\code{fallback_path}, \code{starvation_reason}.
+\item Candidate counts: \code{n_candidates_generated},
+\code{n_candidates_after_hard_filters}, \code{n_candidates_after_duplicates},
+\code{n_candidates_after_star_caps}, \code{n_candidates_scored}.
+\item Endpoint diagnostics: \code{deg_i}, \code{deg_j},
+\code{recent_deg_i}, \code{recent_deg_j}, \code{mu_i}, \code{mu_j},
+\code{sigma_i}, \code{sigma_j}, \code{p_ij}, \code{U0_ij}.
+\item Star-cap diagnostics: \code{star_cap_rejects},
+\code{star_cap_reject_items}.
+}
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
