@@ -47,6 +47,18 @@
   as.integer(refit_pairs_target)
 }
 
+.adaptive_refit_eligibility <- function(total_committed, last_refit_committed, refit_pairs_target) {
+  total_committed <- as.integer(total_committed %||% 0L)
+  last_refit_committed <- as.integer(last_refit_committed %||% 0L)
+  refit_pairs_target <- as.integer(refit_pairs_target %||% 0L)
+  new_pairs_since_last_refit <- as.integer(total_committed - last_refit_committed)
+  eligible <- new_pairs_since_last_refit >= refit_pairs_target
+  list(
+    eligible = isTRUE(eligible),
+    new_pairs_since_last_refit = as.integer(new_pairs_since_last_refit)
+  )
+}
+
 .adaptive_results_from_step_log <- function(state) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   if (nrow(step_log) == 0L) {
@@ -215,6 +227,9 @@
   near_tie_adj_frac <- NA_real_
   near_tie_adj_count <- NA_integer_
   p_adj_median <- NA_real_
+  uncertainty_concentration <- NA_real_
+  top_boundary_uncertainty <- NA_real_
+  adjacent_separation_uncertainty <- NA_real_
 
   trueskill_state <- state$trueskill_state %||% NULL
   defaults <- adaptive_defaults(length(ids))
@@ -288,6 +303,13 @@
     ci_width_median <- stats::median(ci_widths)
     ci_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
     ci_width_max <- max(ci_widths)
+    ci_width_total <- sum(ci_widths)
+    if (is.finite(ci_width_total) && ci_width_total > 0) {
+      top_k <- max(1L, ceiling(length(ci_widths) * 0.20))
+      top_idx <- seq_len(top_k)
+      ordered <- sort(ci_widths, decreasing = TRUE)
+      uncertainty_concentration <- sum(ordered[top_idx]) / ci_width_total
+    }
 
     if (!is.null(theta_mean) && length(theta_mean) == length(ids) && length(ids) >= 2L) {
       rank_order <- order(-theta_mean, ids)
@@ -302,8 +324,14 @@
       near_tie_adj_frac <- mean(near_tie)
       near_tie_adj_count <- sum(near_tie)
       p_adj_median <- stats::median(p_adj)
+      # Report-only uncertainty diagnostics. These never affect stop decisions.
+      adjacent_separation_uncertainty <- mean(pmin(p_adj, 1 - p_adj))
+      top_boundary_p <- p_adj[[1L]]
+      top_boundary_uncertainty <- min(top_boundary_p, 1 - top_boundary_p)
     }
   }
+
+  mcmc_config_used <- fit$mcmc_config_used %||% list()
 
   row <- list(
     round_id = as.integer(nrow(state$round_log) + 1L),
@@ -349,19 +377,41 @@
     near_tie_adj_frac = as.double(near_tie_adj_frac),
     near_tie_adj_count = as.integer(near_tie_adj_count),
     p_adj_median = as.double(p_adj_median),
+    uncertainty_concentration = as.double(uncertainty_concentration),
+    top_boundary_uncertainty = as.double(top_boundary_uncertainty),
+    adjacent_separation_uncertainty = as.double(adjacent_separation_uncertainty),
     diagnostics_pass = as.logical(metrics$diagnostics_pass %||% NA),
+    diagnostics_divergences_pass = as.logical(metrics$diagnostics_divergences_pass %||% NA),
+    diagnostics_rhat_pass = as.logical(metrics$diagnostics_rhat_pass %||% NA),
+    diagnostics_ess_pass = as.logical(metrics$diagnostics_ess_pass %||% NA),
     divergences = as.integer(metrics$divergences %||% NA_integer_),
+    divergences_max_allowed = as.integer(metrics$divergences_max_allowed %||% NA_integer_),
     max_rhat = as.double(metrics$max_rhat %||% NA_real_),
+    max_rhat_allowed = as.double(metrics$max_rhat_allowed %||% NA_real_),
     min_ess_bulk = as.double(metrics$min_ess_bulk %||% NA_real_),
     ess_bulk_required = as.double(metrics$ess_bulk_required %||% NA_real_),
+    near_stop_active = as.logical(metrics$near_stop_active %||% NA),
     reliability_EAP = as.double(metrics$reliability_EAP %||% NA_real_),
+    eap_reliability_min = as.double(metrics$eap_reliability_min %||% NA_real_),
+    eap_pass = as.logical(metrics$eap_pass %||% NA),
     theta_sd_eap = as.double(metrics$theta_sd_eap %||% NA_real_),
     rho_theta = as.double(metrics$rho_theta %||% NA_real_),
+    lag_eligible = as.logical(metrics$lag_eligible %||% NA),
+    theta_corr_min = as.double(metrics$theta_corr_min %||% NA_real_),
     theta_corr_pass = as.logical(metrics$theta_corr_pass %||% NA),
     delta_sd_theta = as.double(metrics$delta_sd_theta %||% NA_real_),
+    theta_sd_rel_change_max = as.double(metrics$theta_sd_rel_change_max %||% NA_real_),
     delta_sd_theta_pass = as.logical(metrics$delta_sd_theta_pass %||% NA),
     rho_rank = as.double(metrics$rho_rank %||% NA_real_),
+    rank_spearman_min = as.double(metrics$rank_spearman_min %||% NA_real_),
     rho_rank_pass = as.logical(metrics$rho_rank_pass %||% NA),
+    mcmc_chains = as.integer(mcmc_config_used$chains %||% NA_integer_),
+    mcmc_parallel_chains = as.integer(mcmc_config_used$parallel_chains %||% NA_integer_),
+    mcmc_core_fraction = as.double(mcmc_config_used$core_fraction %||% NA_real_),
+    mcmc_cores_detected_physical = as.integer(mcmc_config_used$cores_detected_physical %||% NA_integer_),
+    mcmc_cores_detected_logical = as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_),
+    mcmc_threads_per_chain = as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_),
+    mcmc_cmdstanr_version = as.character(mcmc_config_used$cmdstanr_version %||% NA_character_),
     stop_decision = as.logical(stop_decision),
     stop_reason = if (isTRUE(stop_decision)) as.character(stop_reason) else NA_character_
   )
@@ -407,8 +457,12 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
 
   refit_pairs_target <- .adaptive_refit_pairs_target(state, config)
   config$refit_pairs_target <- refit_pairs_target
-  eligible <- (M_done - last_refit_M_done) >= refit_pairs_target
-  if (!isTRUE(eligible)) {
+  eligibility <- .adaptive_refit_eligibility(
+    total_committed = M_done,
+    last_refit_committed = last_refit_M_done,
+    refit_pairs_target = refit_pairs_target
+  )
+  if (!isTRUE(eligibility$eligible)) {
     return(list(
       state = state,
       refit_performed = FALSE,
@@ -475,8 +529,9 @@ compute_stop_metrics <- function(state, config) {
   divergences <- as.integer(diagnostics$divergences %||% NA_integer_)
   max_rhat <- as.double(diagnostics$max_rhat %||% NA_real_)
   min_ess_bulk <- as.double(diagnostics$min_ess_bulk %||% NA_real_)
+  near_stop_active <- isTRUE(state$refit_meta$near_stop)
 
-  ess_bulk_required <- if (isTRUE(state$refit_meta$near_stop)) {
+  ess_bulk_required <- if (isTRUE(near_stop_active)) {
     as.double(config$ess_bulk_min_near_stop)
   } else {
     as.double(config$ess_bulk_min)
@@ -484,11 +539,13 @@ compute_stop_metrics <- function(state, config) {
 
   max_rhat_allowed <- as.double(config$max_rhat)
   divergences_max <- as.integer(config$divergences_max)
+  diagnostics_divergences_pass <- !is.na(divergences) && divergences <= divergences_max
+  diagnostics_rhat_pass <- !is.na(max_rhat) && max_rhat <= max_rhat_allowed
+  diagnostics_ess_pass <- !is.na(min_ess_bulk) && !is.na(ess_bulk_required) && min_ess_bulk >= ess_bulk_required
 
-  diagnostics_pass <- !any(is.na(c(divergences, max_rhat, min_ess_bulk, ess_bulk_required))) &&
-    divergences <= divergences_max &&
-    max_rhat <= max_rhat_allowed &&
-    min_ess_bulk >= ess_bulk_required
+  diagnostics_pass <- isTRUE(diagnostics_divergences_pass) &&
+    isTRUE(diagnostics_rhat_pass) &&
+    isTRUE(diagnostics_ess_pass)
 
   eap_min <- as.double(config$eap_reliability_min)
   eap_pass <- isTRUE(diagnostics_pass) &&
@@ -540,18 +597,28 @@ compute_stop_metrics <- function(state, config) {
 
   list(
     diagnostics_pass = diagnostics_pass,
+    diagnostics_divergences_pass = diagnostics_divergences_pass,
+    diagnostics_rhat_pass = diagnostics_rhat_pass,
+    diagnostics_ess_pass = diagnostics_ess_pass,
     divergences = divergences,
+    divergences_max_allowed = divergences_max,
     max_rhat = max_rhat,
+    max_rhat_allowed = max_rhat_allowed,
     min_ess_bulk = min_ess_bulk,
     ess_bulk_required = ess_bulk_required,
+    near_stop_active = as.logical(near_stop_active),
     reliability_EAP = reliability_EAP,
+    eap_reliability_min = eap_min,
     eap_pass = eap_pass,
     theta_sd_eap = theta_sd_eap,
     rho_theta = rho_theta,
+    theta_corr_min = as.double(config$theta_corr_min),
     theta_corr_pass = theta_corr_pass,
     delta_sd_theta = delta_sd_theta,
+    theta_sd_rel_change_max = as.double(config$theta_sd_rel_change_max),
     delta_sd_theta_pass = delta_sd_theta_pass,
     rho_rank = rho_rank,
+    rank_spearman_min = as.double(config$rank_spearman_min),
     rho_rank_pass = rho_rank_pass,
     lag_eligible = lag_eligible
   )
