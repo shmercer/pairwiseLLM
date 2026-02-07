@@ -46,12 +46,12 @@ as_pairs_tbl <- function(...) {
 
 .adaptive_fallback_used_levels <- function() {
   c(
-    "base_window",
-    "expand_2x",
-    "expand_4x",
+    "base",
+    "expand_locality",
     "uncertainty_pool",
     "dup_relax",
     "global_safe",
+    "warm_start",
     "FAILED"
   )
 }
