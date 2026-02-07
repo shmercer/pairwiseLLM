@@ -7,7 +7,7 @@ test_that("selector falls back when base window has no candidates", {
   out <- pairwiseLLM:::select_next_pair(state, candidates = empty_candidates)
 
   expect_false(out$candidate_starved)
-  expect_equal(out$fallback_used, "expand_2x")
+  expect_equal(out$fallback_used, "expand_locality")
   expect_false(is.na(out$i))
   expect_false(is.na(out$j))
 })

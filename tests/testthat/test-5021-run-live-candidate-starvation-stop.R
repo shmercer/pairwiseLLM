@@ -15,9 +15,10 @@ test_that("adaptive_rank_run_live stops on candidate starvation", {
   out <- adaptive_rank_run_live(state, judge, n_steps = 5L, progress = "none")
 
   expect_equal(calls, 0L)
-  expect_equal(nrow(out$step_log), 1L)
-  expect_equal(out$step_log$status[[1L]], "starved")
-  expect_true(is.na(out$step_log$pair_id[[1L]]))
+  expect_true(nrow(out$step_log) >= 1L)
+  expect_true(all(out$step_log$status == "starved"))
+  expect_true(all(is.na(out$step_log$pair_id)))
+  expect_equal(tail(out$step_log$round_stage, 1L), "local_link")
   expect_true(isTRUE(out$meta$stop_decision))
   expect_equal(out$meta$stop_reason, "candidate_starvation")
   expect_equal(nrow(out$round_log), 0L)

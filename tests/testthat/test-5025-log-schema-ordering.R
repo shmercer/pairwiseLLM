@@ -1,6 +1,8 @@
 test_that("canonical log schemas follow the expected column order", {
   expected_step <- c(
     "step_id", "timestamp", "pair_id", "i", "j", "A", "B", "Y", "status",
+    "round_id", "round_stage", "stage_quota", "stage_committed_before",
+    "stage_committed_after", "round_committed_before", "round_committed_after",
     "is_explore_step", "explore_mode", "explore_reason", "candidate_starved",
     "fallback_used", "fallback_path", "starvation_reason",
     "n_candidates_generated", "n_candidates_after_hard_filters",
