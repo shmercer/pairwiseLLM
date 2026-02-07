@@ -11,6 +11,35 @@ adaptive_rank_resume(session_dir, ...)
 
 \item{...}{Reserved for future extensions; currently unused.}
 }
-\description{
-Resume an adaptive session from disk.
+\value{
+An \code{adaptive_state} object restored from disk.
 }
+\description{
+Resume a previously persisted adaptive pairing session.
+}
+\details{
+This is a thin wrapper around \code{\link[=load_adaptive_session]{load_adaptive_session()}} and performs schema
+and log-shape checks during load. Returned state preserves canonical
+\code{step_log}, \code{round_log}, and \code{item_log} contents used for
+adaptive auditability.
+}
+\examples{
+dir <- tempfile("pwllm-session-")
+state <- adaptive_rank_start(c("a", "b", "c"), seed = 3)
+save_adaptive_session(state, dir, overwrite = TRUE)
+restored <- adaptive_rank_resume(dir)
+summarize_adaptive(restored)
+
+}
+\seealso{
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}}
+
+Other adaptive ranking: 
+\code{\link{adaptive_rank}()},
+\code{\link{adaptive_rank_run_live}()},
+\code{\link{adaptive_rank_start}()},
+\code{\link{make_adaptive_judge_llm}()},
+\code{\link{summarize_adaptive}()}
+}
+\concept{adaptive ranking}

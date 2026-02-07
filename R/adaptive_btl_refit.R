@@ -84,13 +84,35 @@
   if (!is.list(fit)) {
     rlang::abort("`fit` must be a list.")
   }
-  if (!"theta_draws" %in% names(fit)) {
-    rlang::abort("`fit` must include `theta_draws`.")
-  }
   adaptive_fit <- fit
-  adaptive_fit$btl_posterior_draws <- adaptive_fit$theta_draws
-  adaptive_fit$theta_draws <- NULL
+  if (!"btl_posterior_draws" %in% names(adaptive_fit)) {
+    if (!"theta_draws" %in% names(adaptive_fit)) {
+      rlang::abort("`fit` must include `btl_posterior_draws` or `theta_draws`.")
+    }
+    adaptive_fit$btl_posterior_draws <- adaptive_fit$theta_draws
+  }
+  if ("theta_draws" %in% names(adaptive_fit)) {
+    adaptive_fit$theta_draws <- NULL
+  }
   adaptive_fit
+}
+
+.adaptive_btl_extract_fit_contract <- function(fit_out) {
+  fit_contract <- NULL
+  if (is.list(fit_out) && "fit" %in% names(fit_out)) {
+    fit_contract <- fit_out[["fit"]]
+  }
+  if (!is.null(fit_contract)) {
+    return(fit_contract)
+  }
+  fits <- NULL
+  if (is.list(fit_out) && "fits" %in% names(fit_out)) {
+    fits <- fit_out[["fits"]]
+  }
+  if (is.list(fits) && length(fits) >= 1L) {
+    return(fits[[length(fits)]])
+  }
+  fit_out
 }
 
 .adaptive_btl_fit_theta_mean <- function(fit) {
@@ -359,12 +381,14 @@ default_btl_fit_fn <- function(state, config) {
     rlang::abort("BTL refit requires at least one committed comparison.")
   }
 
-  fit_contract <- fit_bayes_btl_mcmc(
+  fit_out <- fit_bayes_btl_mcmc(
     results = results,
     ids = as.character(state$item_ids),
     model_variant = config$model_variant %||% "btl_e_b",
     cmdstan = config$cmdstan %||% list()
   )
+
+  fit_contract <- .adaptive_btl_extract_fit_contract(fit_out)
 
   .adaptive_btl_adapt_fit(fit_contract)
 }

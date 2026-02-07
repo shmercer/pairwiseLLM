@@ -152,8 +152,26 @@ read_log <- function(path) {
 
 #' Validate an adaptive session directory.
 #'
+#' @details
+#' Verifies that required session artifacts exist and that serialized logs match
+#' canonical schemas for \code{step_log} and \code{round_log}. This check is
+#' intended as a preflight for [load_adaptive_session()] and enforces the
+#' current Adaptive v2 session schema version.
+#'
 #' @param session_dir Directory containing session artifacts.
 #'
+#' @return A metadata list containing at least \code{schema_version},
+#'   \code{package_version}, and \code{n_items}.
+#'
+#' @examples
+#' dir <- tempfile("pwllm-session-")
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' save_adaptive_session(state, dir, overwrite = TRUE)
+#' validate_session_dir(dir)
+#'
+#' @seealso [save_adaptive_session()], [load_adaptive_session()]
+#'
+#' @family adaptive persistence
 #' @export
 validate_session_dir <- function(session_dir) {
   if (!is.character(session_dir) || length(session_dir) != 1L || is.na(session_dir)) {
@@ -185,10 +203,27 @@ validate_session_dir <- function(session_dir) {
 
 #' Save an adaptive session to disk.
 #'
+#' @details
+#' Saves canonical Adaptive artifacts under \code{session_dir}:
+#' \code{state.rds}, \code{step_log.rds}, \code{round_log.rds},
+#' \code{metadata.rds}, optional \code{btl_fit.rds}, and optional per-refit item
+#' log files when \code{state$config$persist_item_log} is \code{TRUE}. Writes
+#' are atomic at file level to reduce partial-write risk.
+#'
 #' @param state Adaptive state.
 #' @param session_dir Directory to write session artifacts.
 #' @param overwrite Logical; overwrite existing artifacts.
 #'
+#' @return The \code{session_dir} path, invisibly.
+#'
+#' @examples
+#' dir <- tempfile("pwllm-session-")
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' save_adaptive_session(state, dir, overwrite = TRUE)
+#'
+#' @seealso [validate_session_dir()], [load_adaptive_session()]
+#'
+#' @family adaptive persistence
 #' @export
 save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
   if (!inherits(state, "adaptive_state")) {
@@ -246,8 +281,26 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 
 #' Load an adaptive session from disk.
 #'
+#' @details
+#' Restores a persisted Adaptive state and revalidates basic invariants such
+#' as schema version, required state fields, and index ranges in
+#' \code{step_log}. If per-refit item logs are found on disk, they are loaded
+#' into \code{state$item_log} and persistence is marked as enabled.
+#'
 #' @param session_dir Directory containing session artifacts.
 #'
+#' @return An \code{adaptive_state} object ready for resume.
+#'
+#' @examples
+#' dir <- tempfile("pwllm-session-")
+#' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
+#' save_adaptive_session(state, dir, overwrite = TRUE)
+#' restored <- load_adaptive_session(dir)
+#' summarize_adaptive(restored)
+#'
+#' @seealso [save_adaptive_session()], [validate_session_dir()], [adaptive_rank_resume()]
+#'
+#' @family adaptive persistence
 #' @export
 load_adaptive_session <- function(session_dir) {
   metadata <- validate_session_dir(session_dir)

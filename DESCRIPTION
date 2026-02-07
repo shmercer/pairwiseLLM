@@ -70,6 +70,7 @@ Collate:
     'adaptive_logs.R'
     'adaptive_persist.R'
     'adaptive_print.R'
+    'adaptive_rank.R'
     'adaptive_run.R'
     'adaptive_schemas.R'
     'adaptive_select.R'

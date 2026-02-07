@@ -26,12 +26,37 @@ adaptive_rank_run_live(
 list with \code{is_valid = TRUE} and \code{Y} in \code{0/1}, or \code{is_valid = FALSE} with
 \code{invalid_reason}.}
 
-\item{n_steps}{Number of steps to execute.}
+\item{n_steps}{Maximum number of attempted adaptive steps to execute in this
+call. The run may terminate earlier if candidate starvation is encountered
+or if BTL stopping criteria are met at a refit. Each attempted step counts
+toward this budget, including invalid judge responses.}
 
 \item{fit_fn}{Optional BTL fit function for deterministic testing; defaults
 to \code{default_btl_fit_fn()} when a refit is due.}
 
-\item{btl_config}{Optional list overriding BTL refit/stop defaults.}
+\item{btl_config}{Optional named list overriding BTL refit cadence, stopping
+thresholds, and selected round-log diagnostics. Supported fields:
+\describe{
+\item{\code{refit_pairs_target}}{Minimum new committed comparisons required
+before the next BTL refit.}
+\item{\code{model_variant}}{BTL MCMC variant: \code{"btl"}, \code{"btl_e"}, \code{"btl_b"},
+or \code{"btl_e_b"}.}
+\item{\code{ess_bulk_min}}{Minimum bulk ESS required for diagnostics to pass.}
+\item{\code{ess_bulk_min_near_stop}}{Stricter ESS requirement when a run is
+close to stopping.}
+\item{\code{max_rhat}}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.}
+\item{\code{divergences_max}}{Maximum allowed divergent transitions.}
+\item{\code{eap_reliability_min}}{Minimum EAP reliability to allow stopping.}
+\item{\code{stability_lag}}{Lag (in refits) used for stability checks.}
+\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means.}
+\item{\code{theta_sd_rel_change_max}}{Maximum relative change in posterior SD
+allowed by stability checks.}
+\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation.}
+\item{\code{near_tie_p_low}, \code{near_tie_p_high}}{Probability band used only for
+near-tie diagnostics in round logging (not used for stopping decisions).}
+}
+Defaults are resolved from the current item count, then merged with user
+overrides.}
 
 \item{session_dir}{Optional directory for saving session artifacts.}
 
@@ -47,6 +72,222 @@ to \code{default_btl_fit_fn()} when a refit is due.}
 
 \item{...}{Additional arguments passed through to \code{judge()}.}
 }
-\description{
-Executes adaptive ranking steps using an injected judge function.
+\value{
+An updated \code{adaptive_state}. The returned state includes
+appended \code{step_log} rows for attempted steps and, when refits occur,
+appended \code{round_log} and \code{item_log} entries.
 }
+\description{
+Execute stepwise adaptive ranking with a user-supplied judge.
+}
+\details{
+Each iteration attempts at most one pair evaluation ("one-pair step"), then
+applies transactional updates if and only if the judge response is valid.
+Invalid responses produce a logged step with
+\code{pair_id = NA} and must not update committed-comparison state.
+
+Pair selection is TrueSkill-based and does not use BTL posterior draws.
+Utility is based on
+\deqn{U_0 = p_{ij}(1 - p_{ij})} with exploration/exploitation routing and
+fallback handling recorded in \code{step_log}.
+
+Bayesian BTL refits are triggered on step-based cadence and evaluated with
+diagnostics gates (including ESS thresholds), reliability, and lagged
+stability criteria. Refit-level outcomes are
+appended to \code{round_log}; per-item posterior summaries are appended to
+\code{item_log}.
+}
+\examples{
+# ------------------------------------------------------------------
+# Offline end-to-end workflow (fast, deterministic, CRAN-safe)
+# ------------------------------------------------------------------
+data("example_writing_samples", package = "pairwiseLLM")
+
+items <- dplyr::rename(
+  example_writing_samples[1:8, c("ID", "text", "quality_score")],
+  item_id = ID
+)
+
+# Use the package defaults for trait and prompt template.
+trait <- trait_description("overall_quality")
+prompt_template <- set_prompt_template()
+
+# Deterministic local judge based on fixture quality scores.
+sim_judge <- function(A, B, state, ...) {
+  y <- as.integer(A$quality_score[[1]] >= B$quality_score[[1]])
+  list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+}
+
+session_dir <- tempfile("pwllm-adaptive-session-")
+
+state <- adaptive_rank_start(
+  items = items,
+  seed = 42,
+  session_dir = session_dir,
+  persist_item_log = TRUE
+)
+
+state <- adaptive_rank_run_live(
+  state = state,
+  judge = sim_judge,
+  n_steps = 6,
+  btl_config = list(
+    # Keep examples lightweight while showing custom stop config inputs.
+    refit_pairs_target = 50L,
+    ess_bulk_min = 400,
+    eap_reliability_min = 0.90
+  ),
+  progress = "steps",
+  progress_redraw_every = 1L,
+  progress_show_events = TRUE,
+  progress_errors = TRUE
+)
+
+# Print and inspect run outputs.
+print(state)
+run_summary <- summarize_adaptive(state)
+step_view <- adaptive_step_log(state)
+logs <- adaptive_get_logs(state)
+
+run_summary
+head(step_view)
+names(logs)
+
+# Resume from disk and continue.
+resumed <- adaptive_rank_resume(session_dir)
+resumed <- adaptive_rank_run_live(
+  state = resumed,
+  judge = sim_judge,
+  n_steps = 4,
+  progress = "none"
+)
+summarize_adaptive(resumed)
+
+# ------------------------------------------------------------------
+# Live OpenAI workflow via backend-agnostic llm_compare_pair()
+# ------------------------------------------------------------------
+\dontrun{
+# Requires network + OPENAI_API_KEY. This incurs API cost.
+# check_llm_api_keys() is a quick preflight.
+check_llm_api_keys()
+
+data("example_writing_samples", package = "pairwiseLLM")
+live_items <- dplyr::rename(
+  example_writing_samples[1:12, c("ID", "text")],
+  item_id = ID
+)
+
+# Default trait/template setup used by the backend-agnostic runner.
+trait <- trait_description("overall_quality")
+prompt_template <- set_prompt_template()
+
+live_session_dir <- file.path(tempdir(), "pwllm-adaptive-openai")
+
+judge_openai <- function(A, B, state, ...) {
+  res <- llm_compare_pair(
+    ID1 = A$item_id[[1]],
+    text1 = A$text[[1]],
+    ID2 = B$item_id[[1]],
+    text2 = B$text[[1]],
+    model = "gpt-5.1",
+    trait_name = trait$name,
+    trait_description = trait$description,
+    prompt_template = prompt_template,
+    backend = "openai",
+    endpoint = "responses",
+    reasoning = "low",
+    service_tier = "flex",
+    include_thoughts = FALSE,
+    temperature = NULL,
+    top_p = NULL,
+    logprobs = NULL
+  )
+
+  better_id <- res$better_id[[1]]
+  ok_ids <- c(A$item_id[[1]], B$item_id[[1]])
+  if (is.na(better_id) || !(better_id \%in\% ok_ids)) {
+    return(list(
+      is_valid = FALSE,
+      Y = NA_integer_,
+      invalid_reason = "model_response_invalid"
+    ))
+  }
+
+  list(
+    is_valid = TRUE,
+    Y = as.integer(identical(better_id, A$item_id[[1]])),
+    invalid_reason = NA_character_
+  )
+}
+
+state_live <- adaptive_rank_start(
+  items = live_items,
+  seed = 2026,
+  session_dir = live_session_dir,
+  persist_item_log = TRUE
+)
+
+state_live <- adaptive_rank_run_live(
+  state = state_live,
+  judge = judge_openai,
+  n_steps = 120L,
+  btl_config = list(
+    refit_pairs_target = 20L,
+    ess_bulk_min = 500,
+    ess_bulk_min_near_stop = 1200,
+    max_rhat = 1.01,
+    divergences_max = 0L,
+    eap_reliability_min = 0.92,
+    stability_lag = 2L,
+    theta_corr_min = 0.97,
+    theta_sd_rel_change_max = 0.08,
+    rank_spearman_min = 0.97
+  ),
+  progress = "all",
+  progress_redraw_every = 1L,
+  progress_show_events = TRUE,
+  progress_errors = TRUE
+)
+
+# Reporting outputs for end users.
+print(state_live)
+run_summary <- summarize_adaptive(state_live)
+refit_summary <- summarize_refits(state_live)
+item_summary <- summarize_items(state_live)
+logs <- adaptive_get_logs(state_live)
+
+# Store outputs for audit/reproducibility.
+saveRDS(
+  list(
+    run_summary = run_summary,
+    refit_summary = refit_summary,
+    item_summary = item_summary,
+    logs = logs
+  ),
+  file.path(live_session_dir, "adaptive_outputs.rds")
+)
+
+# Resume from stored state and continue sampling.
+state_live <- adaptive_rank_resume(live_session_dir)
+state_live <- adaptive_rank_run_live(
+  state = state_live,
+  judge = judge_openai,
+  n_steps = 40L,
+  progress = "refits"
+)
+print(summarize_adaptive(state_live))
+}
+
+}
+\seealso{
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
+
+Other adaptive ranking: 
+\code{\link{adaptive_rank}()},
+\code{\link{adaptive_rank_resume}()},
+\code{\link{adaptive_rank_start}()},
+\code{\link{make_adaptive_judge_llm}()},
+\code{\link{summarize_adaptive}()}
+}
+\concept{adaptive ranking}
