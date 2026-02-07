@@ -221,15 +221,22 @@
   ts_degree_sigma_corr <- NA_real_
   ts_btl_theta_corr <- NA_real_
   ts_btl_rank_spearman <- NA_real_
-  ci_width_median <- NA_real_
-  ci_width_p90 <- NA_real_
-  ci_width_max <- NA_real_
+  ci95_theta_width_mean <- NA_real_
+  ci95_theta_width_median <- NA_real_
+  ci95_theta_width_p90 <- NA_real_
+  ci95_theta_width_max <- NA_real_
   near_tie_adj_frac <- NA_real_
   near_tie_adj_count <- NA_integer_
   p_adj_median <- NA_real_
-  uncertainty_concentration <- NA_real_
-  top_boundary_uncertainty <- NA_real_
-  adjacent_separation_uncertainty <- NA_real_
+  cov_trace_theta <- NA_real_
+  cov_logdet_diag_theta <- NA_real_
+  post_sd_theta_p10 <- NA_real_
+  post_sd_theta_p50 <- NA_real_
+  post_sd_theta_p90 <- NA_real_
+  top20_boundary_entropy_mean <- NA_real_
+  top20_boundary_entropy_p90 <- NA_real_
+  nn_diff_sd_mean <- NA_real_
+  nn_diff_sd_p90 <- NA_real_
 
   trueskill_state <- state$trueskill_state %||% NULL
   defaults <- adaptive_defaults(length(ids))
@@ -300,15 +307,32 @@
       names = FALSE
     )
     ci_widths <- ci_bounds[2L, ] - ci_bounds[1L, ]
-    ci_width_median <- stats::median(ci_widths)
-    ci_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
-    ci_width_max <- max(ci_widths)
-    ci_width_total <- sum(ci_widths)
-    if (is.finite(ci_width_total) && ci_width_total > 0) {
-      top_k <- max(1L, ceiling(length(ci_widths) * 0.20))
-      top_idx <- seq_len(top_k)
-      ordered <- sort(ci_widths, decreasing = TRUE)
-      uncertainty_concentration <- sum(ordered[top_idx]) / ci_width_total
+    ci95_theta_width_mean <- mean(ci_widths)
+    ci95_theta_width_median <- stats::median(ci_widths)
+    ci95_theta_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
+    ci95_theta_width_max <- max(ci_widths)
+
+    cov_theta <- stats::cov(draws)
+    cov_diag <- diag(cov_theta)
+    cov_trace_theta <- sum(cov_diag)
+    cov_logdet_diag_theta <- sum(log(pmax(cov_diag, .Machine$double.eps)))
+    post_sd <- sqrt(pmax(cov_diag, 0))
+    post_sd_theta_p10 <- stats::quantile(post_sd, probs = 0.10, names = FALSE)
+    post_sd_theta_p50 <- stats::quantile(post_sd, probs = 0.50, names = FALSE)
+    post_sd_theta_p90 <- stats::quantile(post_sd, probs = 0.90, names = FALSE)
+
+    rank_draws <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
+    top_k <- min(20L, ncol(rank_draws))
+    if (top_k >= 1L) {
+      in_top <- rank_draws <= top_k
+      p_top <- colMeans(in_top)
+      entropy <- -(p_top * log(pmax(p_top, .Machine$double.eps)) +
+        (1 - p_top) * log(pmax(1 - p_top, .Machine$double.eps)))
+      boundary_lo <- max(1L, top_k - 2L)
+      boundary_hi <- min(length(entropy), top_k + 2L)
+      boundary_idx <- boundary_lo:boundary_hi
+      top20_boundary_entropy_mean <- mean(entropy[boundary_idx])
+      top20_boundary_entropy_p90 <- stats::quantile(entropy[boundary_idx], probs = 0.90, names = FALSE)
     }
 
     if (!is.null(theta_mean) && length(theta_mean) == length(ids) && length(ids) >= 2L) {
@@ -324,17 +348,31 @@
       near_tie_adj_frac <- mean(near_tie)
       near_tie_adj_count <- sum(near_tie)
       p_adj_median <- stats::median(p_adj)
-      # Report-only uncertainty diagnostics. These never affect stop decisions.
-      adjacent_separation_uncertainty <- mean(pmin(p_adj, 1 - p_adj))
-      top_boundary_p <- p_adj[[1L]]
-      top_boundary_uncertainty <- min(top_boundary_p, 1 - top_boundary_p)
+
+      nn_diff_draws <- draws[, rank_order[-length(rank_order)], drop = FALSE] -
+        draws[, rank_order[-1L], drop = FALSE]
+      nn_diff_sd <- apply(nn_diff_draws, 2, stats::sd)
+      nn_diff_sd_mean <- mean(nn_diff_sd)
+      nn_diff_sd_p90 <- stats::quantile(nn_diff_sd, probs = 0.90, names = FALSE)
     }
   }
 
   mcmc_config_used <- fit$mcmc_config_used %||% list()
 
+  round_id_current <- as.integer(state$round$round_id %||% NA_integer_)
+  round_committed <- as.integer(state$round$round_committed %||% NA_integer_)
+  round_id_at_refit <- if (!is.na(round_id_current) &&
+    !is.na(round_committed) &&
+    round_committed == 0L &&
+    total_pairs_done > 0L) {
+    as.integer(max(1L, round_id_current - 1L))
+  } else {
+    as.integer(round_id_current)
+  }
+
   row <- list(
-    round_id = as.integer(nrow(state$round_log) + 1L),
+    refit_id = as.integer(nrow(state$round_log) + 1L),
+    round_id_at_refit = round_id_at_refit,
     step_id_at_refit = as.integer(step_id_at_refit),
     timestamp = refit_context$timestamp,
     model_variant = as.character(model_variant),
@@ -371,15 +409,22 @@
     star_cap_reject_rate_since_last_refit = as.double(star_cap_reject_rate),
     recent_deg_median_since_last_refit = as.double(recent_deg_median),
     recent_deg_max_since_last_refit = as.integer(recent_deg_max),
-    ci_width_median = as.double(ci_width_median),
-    ci_width_p90 = as.double(ci_width_p90),
-    ci_width_max = as.double(ci_width_max),
+    ci95_theta_width_mean = as.double(ci95_theta_width_mean),
+    ci95_theta_width_median = as.double(ci95_theta_width_median),
+    ci95_theta_width_p90 = as.double(ci95_theta_width_p90),
+    ci95_theta_width_max = as.double(ci95_theta_width_max),
     near_tie_adj_frac = as.double(near_tie_adj_frac),
     near_tie_adj_count = as.integer(near_tie_adj_count),
     p_adj_median = as.double(p_adj_median),
-    uncertainty_concentration = as.double(uncertainty_concentration),
-    top_boundary_uncertainty = as.double(top_boundary_uncertainty),
-    adjacent_separation_uncertainty = as.double(adjacent_separation_uncertainty),
+    cov_trace_theta = as.double(cov_trace_theta),
+    cov_logdet_diag_theta = as.double(cov_logdet_diag_theta),
+    post_sd_theta_p10 = as.double(post_sd_theta_p10),
+    post_sd_theta_p50 = as.double(post_sd_theta_p50),
+    post_sd_theta_p90 = as.double(post_sd_theta_p90),
+    top20_boundary_entropy_mean = as.double(top20_boundary_entropy_mean),
+    top20_boundary_entropy_p90 = as.double(top20_boundary_entropy_p90),
+    nn_diff_sd_mean = as.double(nn_diff_sd_mean),
+    nn_diff_sd_p90 = as.double(nn_diff_sd_p90),
     diagnostics_pass = as.logical(metrics$diagnostics_pass %||% NA),
     diagnostics_divergences_pass = as.logical(metrics$diagnostics_divergences_pass %||% NA),
     diagnostics_rhat_pass = as.logical(metrics$diagnostics_rhat_pass %||% NA),
