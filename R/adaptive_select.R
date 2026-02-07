@@ -38,7 +38,7 @@ adaptive_defaults <- function(N) {
     refit_pairs_target = as.integer(refit_pairs_target),
     round_pairs_target = round_pairs_target,
     W_cap = as.integer(W_cap),
-    repeat_in_round_budget = 2L,
+    repeat_in_round_budget = 3L,
     anchor_frac_early = 0.30,
     anchor_frac_late = 0.20,
     anchor_rounds_early = 4L,
@@ -47,9 +47,20 @@ adaptive_defaults <- function(N) {
     long_rounds_early = 4L,
     mid_frac = 0.10,
     k_base = as.integer(k_base),
+    top_band_frac = 0.20,
+    top_band_strata = 2L,
+    anchor_frac_total = 0.10,
+    anchor_count_min = 1L,
+    anchor_top_weight = 0.34,
+    anchor_mid_weight = 0.33,
+    anchor_bottom_weight = 0.33,
+    anchor_refresh_on_round = FALSE,
     long_min_dist = as.integer(ceiling(0.5 * k_base)),
     mid_min_dist = 2L,
-    mid_max_dist = as.integer(min(4L, k_base - 1L))
+    mid_max_dist = as.integer(min(4L, k_base - 1L)),
+    local_max_dist = 1L,
+    local_expand_max_dist = 2L,
+    exposure_underrep_q = 0.20
   )
 }
 
@@ -344,6 +355,7 @@ adaptive_defaults <- function(N) {
   stage,
   state,
   config,
+  round,
   history,
   counts,
   step_id,
@@ -351,20 +363,7 @@ adaptive_defaults <- function(N) {
   candidates = NULL
 ) {
   ids <- as.character(state$trueskill_state$items$item_id)
-  seed_base <- as.integer(seed_base %||% 1L)
-  stage_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx)
-
-  W_used <- stage$W_used
-  if (is.null(candidates)) {
-    candidates <- generate_candidate_pairs_from_state(
-      state,
-      W_used = W_used,
-      C_max = config$C_max,
-      seed = stage_seed
-    )
-  } else {
-    candidates <- tibble::as_tibble(candidates)
-  }
+  candidates <- tibble::as_tibble(candidates %||% tibble::tibble(i = character(), j = character()))
 
   n_generated <- nrow(candidates)
   if (n_generated == 0L) {
@@ -406,6 +405,7 @@ adaptive_defaults <- function(N) {
 
   cap_count <- ceiling(config$cap_frac * config$W_cap)
   recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
+  candidates <- .adaptive_round_exposure_filter(candidates, round = round, recent_deg = recent_deg, defaults = config)
   u0_quantile <- NULL
   if (nrow(candidates) > 0L) {
     star_filtered <- .adaptive_star_cap_filter(candidates, recent_deg, cap_count)
@@ -476,6 +476,11 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   seed_base <- as.integer(state$meta$seed %||% 1L)
   round <- state$round %||% list()
   round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
+  generation_stage <- if (identical(round_stage, "warm_start")) {
+    if (length(ids) <= 2L) "anchor_link" else "local_link"
+  } else {
+    round_stage
+  }
   stage_quota <- NA_integer_
   stage_committed_before <- NA_integer_
   round_committed_before <- NA_integer_
@@ -514,26 +519,20 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     stage_candidates <- if (idx == 1L && !is.null(candidates)) {
       tibble::as_tibble(candidates)
     } else {
-      generate_candidate_pairs_from_state(
-        state,
-        W_used = as.integer(stage$W_used),
+      generate_stage_candidates_from_state(
+        state = state,
+        stage_name = generation_stage,
+        fallback_name = stage$name,
         C_max = defaults$C_max,
         seed = stage_seed
       )
     }
-    rank_index <- .adaptive_rank_index(state)
-    stage_candidates <- .adaptive_stage_candidate_filter(
-      candidates = stage_candidates,
-      stage_name = round_stage,
-      fallback_name = stage$name,
-      rank_index = rank_index,
-      defaults = defaults
-    )
 
     stage_out <- .adaptive_select_stage(
       stage = stage,
       state = state,
       config = defaults,
+      round = round,
       history = history,
       counts = counts,
       step_id = step_id,

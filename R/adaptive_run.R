@@ -102,11 +102,21 @@
   ids <- out$item_ids
   if (!is.na(A) && A >= 1L && A <= length(ids)) {
     a_id <- as.character(ids[[A]])
+    a_prev <- as.integer(round$per_round_item_uses[[a_id]] %||% 0L)
     round$per_round_item_uses[[a_id]] <- as.integer((round$per_round_item_uses[[a_id]] %||% 0L) + 1L)
+  } else {
+    a_prev <- 0L
   }
   if (!is.na(B) && B >= 1L && B <= length(ids)) {
     b_id <- as.character(ids[[B]])
+    b_prev <- as.integer(round$per_round_item_uses[[b_id]] %||% 0L)
     round$per_round_item_uses[[b_id]] <- as.integer((round$per_round_item_uses[[b_id]] %||% 0L) + 1L)
+  } else {
+    b_prev <- 0L
+  }
+
+  if (a_prev > 0L || b_prev > 0L) {
+    round$repeat_in_round_used <- as.integer((round$repeat_in_round_used %||% 0L) + 1L)
   }
 
   quota <- as.integer(round$stage_quotas[[stage]] %||% 0L)

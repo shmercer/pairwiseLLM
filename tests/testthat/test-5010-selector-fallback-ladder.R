@@ -8,6 +8,7 @@ test_that("selector falls back when base window has no candidates", {
 
   expect_false(out$candidate_starved)
   expect_equal(out$fallback_used, "expand_locality")
+  expect_equal(out$fallback_path, "base>expand_locality")
   expect_false(is.na(out$i))
   expect_false(is.na(out$j))
 })

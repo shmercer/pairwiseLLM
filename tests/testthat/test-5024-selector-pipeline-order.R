@@ -28,6 +28,7 @@ test_that("selector stage scores before hard-filter feasibility checks", {
       stage = stage,
       state = state,
       config = config,
+      round = state$round,
       history = tibble::tibble(A_id = character(), B_id = character()),
       counts = counts,
       step_id = 1L,
