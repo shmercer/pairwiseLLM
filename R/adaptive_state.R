@@ -39,6 +39,85 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_stage_order <- function() {
+  c("anchor_link", "long_link", "mid_link", "local_link")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_round_compute_quotas <- function(round_id, n_items) {
+  round_id <- as.integer(round_id %||% 1L)
+  defaults <- adaptive_defaults(n_items)
+  round_pairs_target <- as.integer(defaults$round_pairs_target)
+
+  anchor_frac <- if (round_id <= defaults$anchor_rounds_early) {
+    defaults$anchor_frac_early
+  } else {
+    defaults$anchor_frac_late
+  }
+  long_frac <- if (round_id <= defaults$long_rounds_early) {
+    defaults$long_frac_early
+  } else {
+    defaults$long_frac_late
+  }
+  mid_frac <- defaults$mid_frac
+
+  anchor_quota <- as.integer(ceiling(anchor_frac * round_pairs_target))
+  long_quota <- as.integer(ceiling(long_frac * round_pairs_target))
+  mid_quota <- as.integer(ceiling(mid_frac * round_pairs_target))
+  local_quota <- as.integer(round_pairs_target - (anchor_quota + long_quota + mid_quota))
+
+  quotas <- c(
+    anchor_link = anchor_quota,
+    long_link = long_quota,
+    mid_link = mid_quota,
+    local_link = local_quota
+  )
+
+  # Ensure exact target sum deterministically when rounding overshoots.
+  while (sum(quotas) > round_pairs_target) {
+    for (name in c("mid_link", "long_link", "anchor_link", "local_link")) {
+      if (sum(quotas) <= round_pairs_target) {
+        break
+      }
+      if (quotas[[name]] > 0L) {
+        quotas[[name]] <- quotas[[name]] - 1L
+      }
+    }
+  }
+
+  quotas
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_new_round_state <- function(item_ids, round_id = 1L, staged_active = FALSE) {
+  ids <- as.character(item_ids)
+  round_id <- as.integer(round_id %||% 1L)
+  defaults <- adaptive_defaults(length(ids))
+  stage_order <- .adaptive_stage_order()
+  stage_quotas <- .adaptive_round_compute_quotas(round_id = round_id, n_items = length(ids))
+  stage_committed <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+
+  list(
+    round_id = round_id,
+    staged_active = isTRUE(staged_active),
+    stage_order = stage_order,
+    stage_index = 1L,
+    stage_quotas = stage_quotas,
+    stage_committed = stage_committed,
+    stage_shortfalls = stats::setNames(rep.int(0L, length(stage_order)), stage_order),
+    round_pairs_target = as.integer(defaults$round_pairs_target),
+    round_committed = 0L,
+    per_round_item_uses = stats::setNames(rep.int(0L, length(ids)), ids),
+    repeat_in_round_budget = as.integer(defaults$repeat_in_round_budget),
+    repeat_in_round_used = 0L,
+    committed_total = 0L
+  )
+}
+
+#' @keywords internal
+#' @noRd
 new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
   force(now_fn)
   if (!is.function(now_fn)) {
@@ -67,6 +146,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       warm_start_pairs = tibble::tibble(i_id = character(), j_id = character()),
       warm_start_idx = 1L,
       warm_start_done = TRUE,
+      round = .adaptive_new_round_state(item_ids, round_id = 1L, staged_active = FALSE),
       btl_fit = NULL,
       stop_metrics = NULL,
       refit_meta = list(
