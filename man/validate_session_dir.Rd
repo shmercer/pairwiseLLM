@@ -20,7 +20,7 @@ Validate an adaptive session directory.
 Verifies that required session artifacts exist and that serialized logs match
 canonical schemas for \code{step_log} and \code{round_log}. This check is
 intended as a preflight for \code{\link[=load_adaptive_session]{load_adaptive_session()}} and enforces the
-current Adaptive v2 session schema version.
+canonical adaptive session metadata shape.
 }
 \examples{
 dir <- tempfile("pwllm-session-")
