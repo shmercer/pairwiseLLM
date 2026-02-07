@@ -486,7 +486,7 @@ print.adaptive_state <- function(x, ...) {
   starved <- sum(subset$candidate_starved %in% TRUE, na.rm = TRUE)
   invalid <- sum(subset$status == "invalid", na.rm = TRUE)
   fallback_rate <- if (nrow(subset) > 0L) {
-    mean(subset$fallback_used != "base_window", na.rm = TRUE)
+    mean(!subset$fallback_used %in% c("base", "warm_start"), na.rm = TRUE)
   } else {
     NA_real_
   }
@@ -602,18 +602,21 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     return(NULL)
   }
   step_id <- step_row$step_id[[1L]]
+  stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
+  stage_txt <- if (!is.na(stage) && stage != "") paste0(" stage=", stage) else ""
   if (isTRUE(step_row$candidate_starved[[1L]])) {
-    return(paste0("step ", step_id, ": candidate_starved=TRUE; pair_id=NA"))
+    return(paste0("step ", step_id, ":", stage_txt, " candidate_starved=TRUE; pair_id=NA"))
   }
   if (identical(step_row$status[[1L]], "invalid") && isTRUE(cfg$progress_errors)) {
     reason <- step_row$starvation_reason[[1L]]
     if (is.na(reason) || reason == "") {
       reason <- "invalid"
     }
-    return(paste0("step ", step_id, ": invalid judge (", reason, "); pair_id=NA"))
+    return(paste0("step ", step_id, ":", stage_txt, " invalid judge (", reason, "); pair_id=NA"))
   }
-  if (!is.na(step_row$fallback_used[[1L]]) && step_row$fallback_used[[1L]] != "base_window") {
-    return(paste0("step ", step_id, ": fallback_used=", step_row$fallback_used[[1L]]))
+  if (!is.na(step_row$fallback_used[[1L]]) &&
+    !step_row$fallback_used[[1L]] %in% c("base", "warm_start")) {
+    return(paste0("step ", step_id, ":", stage_txt, " fallback_used=", step_row$fallback_used[[1L]]))
   }
   NULL
 }
