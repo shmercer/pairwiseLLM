@@ -185,7 +185,7 @@
     NA_real_
   }
   fallback_rate <- if (nrow(step_subset) > 0L) {
-    mean(step_subset$fallback_used != "base_window", na.rm = TRUE)
+    mean(!step_subset$fallback_used %in% c("base", "warm_start"), na.rm = TRUE)
   } else {
     NA_real_
   }

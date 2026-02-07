@@ -14,6 +14,154 @@
   tibble::tibble(i_id = i_ids, j_id = j_ids)
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_round_activate_if_ready <- function(state) {
+  out <- state
+  if (is.null(out$round) || !is.list(out$round)) {
+    out$round <- .adaptive_new_round_state(out$item_ids, round_id = 1L, staged_active = FALSE)
+  }
+  if (isTRUE(out$warm_start_done)) {
+    out$round$staged_active <- TRUE
+    if ((out$round$round_committed %||% 0L) >= (out$round$round_pairs_target %||% 0L)) {
+      out <- .adaptive_round_start_next(out)
+    }
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_round_active_stage <- function(state) {
+  round <- state$round %||% NULL
+  if (is.null(round) || !isTRUE(round$staged_active)) {
+    return("warm_start")
+  }
+  idx <- as.integer(round$stage_index %||% 1L)
+  order <- as.character(round$stage_order %||% .adaptive_stage_order())
+  if (idx < 1L || idx > length(order)) {
+    return(NA_character_)
+  }
+  order[[idx]]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_round_advance_stage <- function(state, shortfall = 0L) {
+  out <- state
+  round <- out$round
+  idx <- as.integer(round$stage_index %||% 1L)
+  order <- as.character(round$stage_order %||% .adaptive_stage_order())
+  if (idx < 1L || idx > length(order)) {
+    return(out)
+  }
+  stage <- order[[idx]]
+  round$stage_shortfalls[[stage]] <- as.integer(
+    (round$stage_shortfalls[[stage]] %||% 0L) + as.integer(shortfall %||% 0L)
+  )
+  round$stage_index <- as.integer(idx + 1L)
+  out$round <- round
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_round_start_next <- function(state) {
+  out <- state
+  prior <- out$round %||% list(round_id = 0L, committed_total = 0L)
+  next_id <- as.integer((prior$round_id %||% 0L) + 1L)
+  next_round <- .adaptive_new_round_state(
+    item_ids = out$item_ids,
+    round_id = next_id,
+    staged_active = TRUE
+  )
+  next_round$committed_total <- as.integer(prior$committed_total %||% 0L)
+  out$round <- next_round
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_round_commit <- function(state, step_row) {
+  out <- state
+  round <- out$round %||% NULL
+  if (is.null(round) || !isTRUE(round$staged_active)) {
+    return(out)
+  }
+
+  stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
+  if (is.na(stage) || !stage %in% round$stage_order) {
+    return(out)
+  }
+  round$committed_total <- as.integer((round$committed_total %||% 0L) + 1L)
+  round$round_committed <- as.integer((round$round_committed %||% 0L) + 1L)
+  round$stage_committed[[stage]] <- as.integer((round$stage_committed[[stage]] %||% 0L) + 1L)
+
+  A <- as.integer(step_row$A[[1L]] %||% NA_integer_)
+  B <- as.integer(step_row$B[[1L]] %||% NA_integer_)
+  ids <- out$item_ids
+  if (!is.na(A) && A >= 1L && A <= length(ids)) {
+    a_id <- as.character(ids[[A]])
+    round$per_round_item_uses[[a_id]] <- as.integer((round$per_round_item_uses[[a_id]] %||% 0L) + 1L)
+  }
+  if (!is.na(B) && B >= 1L && B <= length(ids)) {
+    b_id <- as.character(ids[[B]])
+    round$per_round_item_uses[[b_id]] <- as.integer((round$per_round_item_uses[[b_id]] %||% 0L) + 1L)
+  }
+
+  quota <- as.integer(round$stage_quotas[[stage]] %||% 0L)
+  done <- as.integer(round$stage_committed[[stage]] %||% 0L)
+  if (done >= quota) {
+    out$round <- round
+    out <- .adaptive_round_advance_stage(out, shortfall = 0L)
+    round <- out$round
+  } else {
+    out$round <- round
+  }
+
+  stage_count <- length(round$stage_order %||% .adaptive_stage_order())
+  if ((round$stage_index %||% 1L) > stage_count ||
+    (round$round_committed %||% 0L) >= (round$round_pairs_target %||% 0L)) {
+    out <- .adaptive_round_start_next(out)
+  }
+
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_round_commit_warm_start <- function(state) {
+  out <- state
+  round <- out$round %||% NULL
+  if (is.null(round)) {
+    return(out)
+  }
+  round$committed_total <- as.integer((round$committed_total %||% 0L) + 1L)
+  round$round_committed <- as.integer((round$round_committed %||% 0L) + 1L)
+  out$round <- round
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_round_starvation <- function(state, step_row) {
+  out <- state
+  round <- out$round %||% NULL
+  if (is.null(round) || !isTRUE(round$staged_active)) {
+    return(list(state = out, exhausted = TRUE))
+  }
+  stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
+  if (is.na(stage) || !stage %in% round$stage_order) {
+    return(list(state = out, exhausted = TRUE))
+  }
+  shortfall <- max(0L, as.integer(round$stage_quotas[[stage]] %||% 0L) -
+    as.integer(round$stage_committed[[stage]] %||% 0L))
+  out <- .adaptive_round_advance_stage(out, shortfall = shortfall)
+  stage_count <- length(out$round$stage_order %||% .adaptive_stage_order())
+  exhausted <- (out$round$stage_index %||% 1L) > stage_count
+  list(state = out, exhausted = exhausted)
+}
+
 #' Adaptive ranking
 #'
 #' @description
@@ -96,6 +244,11 @@ adaptive_rank_start <- function(items,
   state$warm_start_pairs <- .adaptive_build_warm_start_pairs(state$item_ids, seed)
   state$warm_start_idx <- 1L
   state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
+  state$round <- .adaptive_new_round_state(
+    item_ids = state$item_ids,
+    round_id = 1L,
+    staged_active = isTRUE(state$warm_start_done)
+  )
   state$config$session_dir <- session_dir %||% NULL
   state$config$persist_item_log <- isTRUE(persist_item_log)
   if (!is.null(session_dir)) {
@@ -411,13 +564,32 @@ adaptive_rank_run_live <- function(state,
 
   remaining <- n_steps
   while (remaining > 0L) {
+    state <- .adaptive_round_activate_if_ready(state)
     state <- run_one_step(state, judge, ...)
     step_row <- tibble::as_tibble(state$step_log)[nrow(state$step_log), , drop = FALSE]
     event <- adaptive_progress_step_event(step_row, cfg)
     if (!is.null(event)) {
       cli::cli_inform(event)
     }
-    if (isTRUE(step_row$candidate_starved[[1L]])) {
+    if (isTRUE(step_row$status[[1L]] == "ok")) {
+      if (identical(step_row$round_stage[[1L]], "warm_start")) {
+        state <- .adaptive_round_commit_warm_start(state)
+      } else {
+        state <- .adaptive_round_commit(state, step_row)
+      }
+    } else if (isTRUE(step_row$candidate_starved[[1L]]) &&
+      !identical(step_row$round_stage[[1L]], "warm_start")) {
+      starve <- .adaptive_round_starvation(state, step_row)
+      state <- starve$state
+      if (isTRUE(starve$exhausted)) {
+        state$meta$stop_decision <- TRUE
+        state$meta$stop_reason <- "candidate_starvation"
+        if (!is.null(state$config$session_dir)) {
+          save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+        }
+        return(state)
+      }
+    } else if (isTRUE(step_row$candidate_starved[[1L]])) {
       state$meta$stop_decision <- TRUE
       state$meta$stop_reason <- "candidate_starvation"
       if (!is.null(state$config$session_dir)) {

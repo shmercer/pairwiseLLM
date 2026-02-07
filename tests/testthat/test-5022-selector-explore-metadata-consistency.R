@@ -23,7 +23,7 @@ test_that("select_next_pair does not leak explore metadata across fallback stage
     .env = asNamespace("pairwiseLLM")
   )
 
-  expect_equal(out$fallback_used, "expand_2x")
+  expect_equal(out$fallback_used, "expand_locality")
   expect_false(isTRUE(out$is_explore_step))
   expect_true(is.na(out$explore_mode))
   expect_true(is.na(out$explore_reason))

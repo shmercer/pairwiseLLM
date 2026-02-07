@@ -12,6 +12,16 @@ adaptive_defaults <- function(N) {
   explore_rate <- .btl_mcmc_clamp(0.10, 0.25, 0.20 - 0.02 * log10(N))
   refit_pairs_target <- .btl_mcmc_clamp(100L, 5000L, as.integer(ceiling(N / 2)))
   W_cap <- max(200L, min(2000L, refit_pairs_target))
+  round_pairs_target <- as.integer(ceiling(refit_pairs_target / 2))
+  k_base <- if (N < 60L) {
+    5L
+  } else if (N < 150L) {
+    10L
+  } else if (N < 400L) {
+    12L
+  } else {
+    20L
+  }
 
   list(
     W = as.integer(W),
@@ -26,7 +36,20 @@ adaptive_defaults <- function(N) {
     dup_max_obs_relaxed = 3L,
     q = 0.90,
     refit_pairs_target = as.integer(refit_pairs_target),
-    W_cap = as.integer(W_cap)
+    round_pairs_target = round_pairs_target,
+    W_cap = as.integer(W_cap),
+    repeat_in_round_budget = 2L,
+    anchor_frac_early = 0.30,
+    anchor_frac_late = 0.20,
+    anchor_rounds_early = 4L,
+    long_frac_early = 0.10,
+    long_frac_late = 0.05,
+    long_rounds_early = 4L,
+    mid_frac = 0.10,
+    k_base = as.integer(k_base),
+    long_min_dist = as.integer(ceiling(0.5 * k_base)),
+    mid_min_dist = 2L,
+    mid_max_dist = as.integer(min(4L, k_base - 1L))
   )
 }
 
@@ -125,6 +148,86 @@ adaptive_defaults <- function(N) {
   if (length(recent_deg) == 0L) return(character())
   cutoff <- stats::quantile(recent_deg, probs = 0.2, names = FALSE)
   names(recent_deg)[recent_deg <= cutoff]
+}
+
+.adaptive_rank_index <- function(state) {
+  mu <- state$trueskill_state$items$mu
+  ids <- as.character(state$trueskill_state$items$item_id)
+  ord <- order(-mu, ids)
+  stats::setNames(seq_along(ids), ids[ord])
+}
+
+.adaptive_strata_index <- function(rank_index, k_base) {
+  ids <- names(rank_index)
+  n <- length(ids)
+  k_base <- max(1L, min(as.integer(k_base), n))
+  breaks <- floor((seq_len(n) - 1L) * k_base / n) + 1L
+  stats::setNames(as.integer(breaks), ids)
+}
+
+.adaptive_anchor_ids <- function(rank_index) {
+  ids <- names(rank_index)
+  n <- length(ids)
+  n_anchor <- max(1L, as.integer(round(0.10 * n)))
+  n_anchor <- min(n_anchor, n - 1L)
+  if (n_anchor < 1L) {
+    return(character())
+  }
+  ordered <- names(sort(rank_index))
+  as.character(ordered[seq_len(n_anchor)])
+}
+
+.adaptive_stage_candidate_filter <- function(candidates, stage_name, fallback_name, rank_index, defaults) {
+  cand <- tibble::as_tibble(candidates)
+  if (nrow(cand) == 0L) {
+    return(cand)
+  }
+  strata <- .adaptive_strata_index(rank_index, defaults$k_base)
+  anchor_ids <- .adaptive_anchor_ids(rank_index)
+  i_ids <- as.character(cand$i)
+  j_ids <- as.character(cand$j)
+  dist <- abs(strata[i_ids] - strata[j_ids])
+
+  if (identical(stage_name, "anchor_link")) {
+    keep <- (i_ids %in% anchor_ids & !j_ids %in% anchor_ids) |
+      (j_ids %in% anchor_ids & !i_ids %in% anchor_ids)
+    return(cand[keep, , drop = FALSE])
+  }
+
+  non_anchor <- !i_ids %in% anchor_ids & !j_ids %in% anchor_ids
+  if (identical(stage_name, "long_link")) {
+    min_dist <- defaults$long_min_dist
+    if (identical(fallback_name, "expand_locality")) {
+      min_dist <- max(1L, min_dist - 1L)
+    } else if (identical(fallback_name, "global_safe")) {
+      min_dist <- 1L
+    }
+    keep <- non_anchor & dist >= min_dist
+    return(cand[keep, , drop = FALSE])
+  }
+
+  if (identical(stage_name, "mid_link")) {
+    min_dist <- defaults$mid_min_dist
+    max_dist <- defaults$mid_max_dist
+    if (identical(fallback_name, "expand_locality")) {
+      min_dist <- max(1L, min_dist - 1L)
+      max_dist <- min(defaults$k_base - 1L, max_dist + 1L)
+    } else if (identical(fallback_name, "global_safe")) {
+      min_dist <- 1L
+      max_dist <- max(1L, defaults$k_base - 1L)
+    }
+    keep <- non_anchor & dist >= min_dist & dist <= max_dist
+    return(cand[keep, , drop = FALSE])
+  }
+
+  # local_link
+  max_dist <- 1L
+  if (identical(fallback_name, "expand_locality")) {
+    max_dist <- 2L
+  } else if (identical(fallback_name, "global_safe")) {
+    max_dist <- max(1L, defaults$k_base - 1L)
+  }
+  cand[dist <= max_dist, , drop = FALSE]
 }
 
 .adaptive_star_cap_filter <- function(candidates, recent_deg, cap_count) {
@@ -371,12 +474,20 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     rlang::abort("`step_id` must be a positive integer.")
   }
   seed_base <- as.integer(state$meta$seed %||% 1L)
+  round <- state$round %||% list()
+  round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
+  stage_quota <- NA_integer_
+  stage_committed_before <- NA_integer_
+  round_committed_before <- NA_integer_
+  if (!identical(round_stage, "warm_start")) {
+    stage_quota <- as.integer(round$stage_quotas[[round_stage]] %||% NA_integer_)
+    stage_committed_before <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
+    round_committed_before <- as.integer(round$round_committed %||% 0L)
+  }
 
   stage_defs <- list(
-    list(name = "base_window", W_used = defaults$W, dup_policy = "default", explore_boost = 1),
-    list(name = "expand_2x", W_used = min(2L * defaults$W, length(ids) - 1L),
-      dup_policy = "default", explore_boost = 1),
-    list(name = "expand_4x", W_used = min(4L * defaults$W, length(ids) - 1L),
+    list(name = "base", W_used = defaults$W, dup_policy = "default", explore_boost = 1),
+    list(name = "expand_locality", W_used = min(2L * defaults$W, length(ids) - 1L),
       dup_policy = "default", explore_boost = 1),
     list(name = "uncertainty_pool", W_used = defaults$W,
       dup_policy = "default", explore_boost = 2),
@@ -399,6 +510,25 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     stage <- stage_defs[[idx]]
     stage$idx <- idx
     fallback_path <- c(fallback_path, stage$name)
+    stage_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 11L)
+    stage_candidates <- if (idx == 1L && !is.null(candidates)) {
+      tibble::as_tibble(candidates)
+    } else {
+      generate_candidate_pairs_from_state(
+        state,
+        W_used = as.integer(stage$W_used),
+        C_max = defaults$C_max,
+        seed = stage_seed
+      )
+    }
+    rank_index <- .adaptive_rank_index(state)
+    stage_candidates <- .adaptive_stage_candidate_filter(
+      candidates = stage_candidates,
+      stage_name = round_stage,
+      fallback_name = stage$name,
+      rank_index = rank_index,
+      defaults = defaults
+    )
 
     stage_out <- .adaptive_select_stage(
       stage = stage,
@@ -408,7 +538,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       counts = counts,
       step_id = step_id,
       seed_base = seed_base,
-      candidates = if (idx == 1L) candidates else NULL
+      candidates = stage_candidates
     )
     last_counts <- stage_out$counts
     last_star_caps <- stage_out$star_caps
@@ -512,6 +642,13 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       fallback_used = "global_safe",
       fallback_path = paste(fallback_path, collapse = ">"),
       starvation_reason = "few_candidates_generated",
+      round_id = as.integer(round$round_id %||% NA_integer_),
+      round_stage = as.character(round_stage),
+      stage_quota = stage_quota,
+      stage_committed_before = stage_committed_before,
+      stage_committed_after = stage_committed_before,
+      round_committed_before = round_committed_before,
+      round_committed_after = round_committed_before,
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
       n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
       n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
@@ -559,6 +696,13 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     fallback_used = selected_stage$name,
     fallback_path = paste(fallback_path, collapse = ">"),
     starvation_reason = NA_character_,
+    round_id = as.integer(round$round_id %||% NA_integer_),
+    round_stage = as.character(round_stage),
+    stage_quota = stage_quota,
+    stage_committed_before = stage_committed_before,
+    stage_committed_after = stage_committed_before,
+    round_committed_before = round_committed_before,
+    round_committed_after = round_committed_before,
     n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
     n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
     n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,

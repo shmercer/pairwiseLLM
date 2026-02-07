@@ -112,9 +112,16 @@ validate_judge_result <- function(result, A_id, B_id) {
     explore_mode = NA_character_,
     explore_reason = NA_character_,
     candidate_starved = FALSE,
-    fallback_used = "base_window",
-    fallback_path = "base_window",
+    fallback_used = "warm_start",
+    fallback_path = "warm_start",
     starvation_reason = NA_character_,
+    round_id = as.integer(state$round$round_id %||% NA_integer_),
+    round_stage = "warm_start",
+    stage_quota = NA_integer_,
+    stage_committed_before = NA_integer_,
+    stage_committed_after = NA_integer_,
+    round_committed_before = as.integer(state$round$round_committed %||% NA_integer_),
+    round_committed_after = as.integer(state$round$round_committed %||% NA_integer_),
     n_candidates_generated = NA_integer_,
     n_candidates_after_hard_filters = NA_integer_,
     n_candidates_after_duplicates = NA_integer_,
@@ -241,6 +248,23 @@ run_one_step <- function(state, judge, ...) {
     B = selection$B,
     Y = if (isTRUE(is_valid)) Y else NA_integer_,
     status = status,
+    round_id = selection$round_id,
+    round_stage = selection$round_stage,
+    stage_quota = selection$stage_quota,
+    stage_committed_before = selection$stage_committed_before,
+    stage_committed_after = if (isTRUE(is_valid) &&
+      !is.na(selection$stage_committed_before)) {
+      as.integer(selection$stage_committed_before + 1L)
+    } else {
+      as.integer(selection$stage_committed_after %||% selection$stage_committed_before)
+    },
+    round_committed_before = selection$round_committed_before,
+    round_committed_after = if (isTRUE(is_valid) &&
+      !is.na(selection$round_committed_before)) {
+      as.integer(selection$round_committed_before + 1L)
+    } else {
+      as.integer(selection$round_committed_after %||% selection$round_committed_before)
+    },
     is_explore_step = selection$is_explore_step,
     explore_mode = selection$explore_mode,
     explore_reason = selection$explore_reason,

@@ -11,9 +11,8 @@ test_that("select_next_pair returns one valid pair", {
   expect_false(is.na(out$j))
   expect_true(out$i != out$j)
   expect_true(out$fallback_used %in% c(
-    "base_window",
-    "expand_2x",
-    "expand_4x",
+    "base",
+    "expand_locality",
     "uncertainty_pool",
     "dup_relax",
     "global_safe"
