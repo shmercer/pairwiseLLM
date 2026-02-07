@@ -117,3 +117,104 @@ test_that("generate_candidate_pairs validates inputs", {
     "non-empty"
   )
 })
+
+test_that("rolling anchors refresh from trueskill and refit sources deterministically", {
+  items <- make_test_items(10)
+  trueskill_state <- make_test_trueskill_state(
+    items,
+    mu = seq(10, 1)
+  )
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+
+  state_1 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+  anchors_1 <- state_1$round$anchor_ids
+  expect_true(length(anchors_1) >= 1L)
+  expect_equal(state_1$round$anchor_refresh_source, "trueskill_mu")
+
+  state_1$btl_fit <- list(
+    theta_mean = stats::setNames(seq(1, 10), as.character(items$item_id))
+  )
+  state_1$refit_meta$last_refit_round_id <- 1L
+  state_2 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_1)
+
+  expect_equal(state_2$round$anchor_refresh_source, "refit_theta_mean")
+  expect_false(identical(state_2$round$anchor_ids, anchors_1))
+  expect_equal(state_2$round$anchor_refit_round_id, 1L)
+})
+
+test_that("strata assignment uses deterministic ranking and top-band refinement", {
+  scores <- stats::setNames(c(9, 9, 8, 7, 6, 5, 4, 3), as.character(1:8))
+  defaults <- pairwiseLLM:::adaptive_defaults(8L)
+  strata <- pairwiseLLM:::.adaptive_assign_strata(scores, defaults)
+  rank_index <- strata$rank_index
+
+  expect_equal(rank_index[["1"]], 1L)
+  expect_equal(rank_index[["2"]], 2L)
+  expect_true(all(diff(unname(rank_index[names(sort(rank_index))])) >= 0L))
+  expect_true(length(strata$top_band_ids) >= 1L)
+  expect_true(all(strata$top_band_ids %in% names(scores)))
+})
+
+test_that("stage candidate generators enforce stage admissibility", {
+  items <- make_test_items(12)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(12, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+  anchors <- state$round$anchor_ids
+
+  anchor_cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "anchor_link", "base", C_max = 5000L, seed = 1L
+  )
+  expect_true(nrow(anchor_cand) > 0L)
+  expect_true(all(xor(anchor_cand$i %in% anchors, anchor_cand$j %in% anchors)))
+
+  long_cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "long_link", "base", C_max = 5000L, seed = 1L
+  )
+  mid_cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "mid_link", "base", C_max = 5000L, seed = 1L
+  )
+  local_cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "local_link", "base", C_max = 5000L, seed = 1L
+  )
+
+  expect_true(all(!long_cand$i %in% anchors & !long_cand$j %in% anchors))
+  expect_true(all(!mid_cand$i %in% anchors & !mid_cand$j %in% anchors))
+  expect_true(nrow(local_cand) > 0L)
+})
+
+test_that("defaults formulas are deterministic across representative N", {
+  d_small <- pairwiseLLM:::adaptive_defaults(30L)
+  d_med <- pairwiseLLM:::adaptive_defaults(120L)
+  d_large <- pairwiseLLM:::adaptive_defaults(1000L)
+
+  expect_true(d_small$W <= d_med$W)
+  expect_true(d_med$W <= d_large$W)
+  expect_true(d_small$long_min_dist <= d_small$k_base)
+  expect_true(d_med$mid_min_dist <= d_med$mid_max_dist)
+  expect_true(d_large$C_max >= 1L)
+  expect_true(d_large$explore_rate >= 0 && d_large$explore_rate <= 1)
+})
+
+test_that("stage candidate subsampling is deterministic by seed", {
+  items <- make_test_items(25)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(25, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+
+  c1 <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "local_link", "global_safe", C_max = 20L, seed = 21L
+  )
+  c2 <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "local_link", "global_safe", C_max = 20L, seed = 21L
+  )
+  c3 <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "local_link", "global_safe", C_max = 20L, seed = 22L
+  )
+
+  expect_equal(nrow(c1), 20L)
+  expect_equal(c1, c2)
+  expect_false(identical(c1, c3))
+})
