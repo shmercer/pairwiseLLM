@@ -21,7 +21,12 @@ test_that("round_log includes required stopping and star-cap audit fields", {
     "star_cap_rejects_since_last_refit",
     "star_cap_reject_rate_since_last_refit",
     "recent_deg_median_since_last_refit",
-    "recent_deg_max_since_last_refit"
+    "recent_deg_max_since_last_refit",
+    "uncertainty_concentration",
+    "top_boundary_uncertainty",
+    "adjacent_separation_uncertainty",
+    "mcmc_chains",
+    "mcmc_parallel_chains"
   )
   expect_true(all(required %in% names(round_log)))
 
@@ -34,6 +39,11 @@ test_that("round_log includes required stopping and star-cap audit fields", {
   expect_true(is.double(round_log$star_cap_reject_rate_since_last_refit))
   expect_true(is.double(round_log$recent_deg_median_since_last_refit))
   expect_true(is.integer(round_log$recent_deg_max_since_last_refit))
+  expect_true(is.double(round_log$uncertainty_concentration))
+  expect_true(is.double(round_log$top_boundary_uncertainty))
+  expect_true(is.double(round_log$adjacent_separation_uncertainty))
+  expect_true(is.integer(round_log$mcmc_chains))
+  expect_true(is.integer(round_log$mcmc_parallel_chains))
   reject_rate <- round_log$star_cap_reject_rate_since_last_refit
   reject_rate <- reject_rate[!is.na(reject_rate)]
   expect_true(all(reject_rate >= 0))

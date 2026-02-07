@@ -79,7 +79,11 @@ snapshot_state_core <- function(state) {
   )]
 }
 
-make_test_btl_fit <- function(ids, draws = NULL, diagnostics = NULL, model_variant = "btl_e_b") {
+make_test_btl_fit <- function(ids,
+                              draws = NULL,
+                              diagnostics = NULL,
+                              model_variant = "btl_e_b",
+                              mcmc_config_used = NULL) {
   ids <- as.character(ids)
   if (is.null(draws)) {
     draws <- matrix(rep(seq_along(ids), each = 10L), nrow = 10L)
@@ -110,7 +114,8 @@ make_test_btl_fit <- function(ids, draws = NULL, diagnostics = NULL, model_varia
     beta_p5 = NA_real_,
     beta_p50 = NA_real_,
     beta_p95 = NA_real_,
-    beta_p97.5 = NA_real_
+    beta_p97.5 = NA_real_,
+    mcmc_config_used = mcmc_config_used
   )
 }
 

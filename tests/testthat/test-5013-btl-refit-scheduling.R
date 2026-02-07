@@ -1,4 +1,4 @@
-test_that("maybe_refit_btl follows step-based cadence", {
+test_that("maybe_refit_btl follows committed-pair cadence", {
   items <- make_test_items(6)
   state <- pairwiseLLM:::new_adaptive_state(items)
   judge <- make_deterministic_judge("i_wins")
@@ -21,6 +21,35 @@ test_that("maybe_refit_btl follows step-based cadence", {
   expect_equal(stub$get_calls(), 3L)
   expect_equal(state$refit_meta$last_refit_M_done, 9L)
   expect_equal(state$refit_meta$last_refit_step, 9L)
+})
+
+test_that("invalid steps do not advance refit eligibility", {
+  items <- make_test_items(6)
+  state <- pairwiseLLM:::new_adaptive_state(items)
+  judge <- make_deterministic_judge("i_wins")
+  judge_invalid <- make_deterministic_judge("invalid")
+  stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(1)
+  state <- pairwiseLLM:::run_one_step(state, judge)
+  state <- pairwiseLLM:::run_one_step(state, judge_invalid)
+  refit_1 <- pairwiseLLM:::maybe_refit_btl(
+    state,
+    config = list(refit_pairs_target = 2L),
+    fit_fn = stub$fit_fn
+  )
+  expect_false(refit_1$refit_performed)
+  expect_equal(stub$get_calls(), 0L)
+
+  state <- pairwiseLLM:::run_one_step(state, judge)
+  refit_2 <- pairwiseLLM:::maybe_refit_btl(
+    state,
+    config = list(refit_pairs_target = 2L),
+    fit_fn = stub$fit_fn
+  )
+  expect_true(refit_2$refit_performed)
+  expect_equal(stub$get_calls(), 1L)
+  expect_equal(refit_2$state$refit_meta$last_refit_M_done, 2L)
 })
 
 test_that(".adaptive_btl_extract_fit_contract handles wrapped fit outputs", {
