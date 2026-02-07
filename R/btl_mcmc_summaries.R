@@ -133,27 +133,40 @@
 
   required <- c(
     "round_id",
+    "step_id_at_refit",
     "iter_at_refit",
+    "new_pairs_since_last_refit",
     "new_pairs",
     "divergences",
     "max_rhat",
     "min_ess_bulk",
+    "ess_bulk_required",
     "epsilon_mean",
     "reliability_EAP",
     "theta_sd_eap",
+    "rho_theta",
     "rho_theta_lag",
+    "delta_sd_theta",
     "delta_sd_theta_lag",
+    "rho_rank",
     "rho_rank_lag",
     "hard_cap_threshold",
     "n_unique_pairs_seen",
+    "theta_corr_pass",
+    "delta_sd_theta_pass",
+    "rho_rank_pass",
     "rank_stability_pass",
     "diagnostics_pass",
     "lag_eligible",
     "stop_decision",
     "stop_reason",
+    "mcmc_chains",
+    "mcmc_parallel_chains",
+    "mcmc_threads_per_chain",
     "mode"
   )
-  schema[, required, drop = FALSE]
+  keep <- intersect(required, names(schema))
+  schema[, keep, drop = FALSE]
 }
 
 .adaptive_item_log_schema <- function(include_optional = TRUE) {
@@ -342,19 +355,28 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   if (!isTRUE(include_optional)) {
     required <- c(
       "round_id",
+      "step_id_at_refit",
       "iter_at_refit",
+      "new_pairs_since_last_refit",
       "new_pairs",
       "divergences",
       "max_rhat",
       "min_ess_bulk",
+      "ess_bulk_required",
       "epsilon_mean",
       "reliability_EAP",
       "theta_sd_eap",
+      "rho_theta",
       "rho_theta_lag",
+      "delta_sd_theta",
       "delta_sd_theta_lag",
+      "rho_rank",
       "rho_rank_lag",
       "hard_cap_threshold",
       "n_unique_pairs_seen",
+      "theta_corr_pass",
+      "delta_sd_theta_pass",
+      "rho_rank_pass",
       "rank_stability_pass",
       "diagnostics_pass",
       "lag_eligible",

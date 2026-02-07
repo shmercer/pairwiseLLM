@@ -35,6 +35,13 @@ test_that("adaptive_rank_run_live can stop early via BTL refit", {
   expect_true(all(c(
     "ts_sigma_mean",
     "ci_width_median",
-    "near_tie_adj_frac"
+    "near_tie_adj_frac",
+    "uncertainty_concentration",
+    "top_boundary_uncertainty",
+    "adjacent_separation_uncertainty",
+    "diagnostics_ess_pass",
+    "lag_eligible",
+    "mcmc_chains",
+    "mcmc_parallel_chains"
   ) %in% names(out$round_log)))
 })

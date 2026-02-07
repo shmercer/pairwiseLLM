@@ -24,10 +24,18 @@ test_that("canonical log schemas follow the expected column order", {
     "recent_deg_median_since_last_refit", "recent_deg_max_since_last_refit",
     "ci_width_median", "ci_width_p90", "ci_width_max",
     "near_tie_adj_frac", "near_tie_adj_count", "p_adj_median",
-    "diagnostics_pass", "divergences", "max_rhat", "min_ess_bulk", "ess_bulk_required",
-    "reliability_EAP", "theta_sd_eap",
-    "rho_theta", "theta_corr_pass", "delta_sd_theta", "delta_sd_theta_pass",
-    "rho_rank", "rho_rank_pass", "stop_decision", "stop_reason"
+    "uncertainty_concentration", "top_boundary_uncertainty", "adjacent_separation_uncertainty",
+    "diagnostics_pass", "diagnostics_divergences_pass", "diagnostics_rhat_pass", "diagnostics_ess_pass",
+    "divergences", "divergences_max_allowed",
+    "max_rhat", "max_rhat_allowed", "min_ess_bulk", "ess_bulk_required", "near_stop_active",
+    "reliability_EAP", "eap_reliability_min", "eap_pass", "theta_sd_eap",
+    "rho_theta", "lag_eligible", "theta_corr_min", "theta_corr_pass",
+    "delta_sd_theta", "theta_sd_rel_change_max", "delta_sd_theta_pass",
+    "rho_rank", "rank_spearman_min", "rho_rank_pass",
+    "mcmc_chains", "mcmc_parallel_chains", "mcmc_core_fraction",
+    "mcmc_cores_detected_physical", "mcmc_cores_detected_logical",
+    "mcmc_threads_per_chain", "mcmc_cmdstanr_version",
+    "stop_decision", "stop_reason"
   )
   expected_item <- c(
     "refit_id", "item_id", "theta_mean", "theta_p2.5", "theta_p5", "theta_p50",
