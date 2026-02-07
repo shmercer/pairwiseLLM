@@ -196,6 +196,7 @@ run_one_step <- function(state, judge, ...) {
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
+    state <- .adaptive_refresh_round_anchors(state)
     selection <- select_next_pair(state, step_id = step_id)
   }
 
