@@ -69,7 +69,9 @@ read_log <- function(path) {
     rlang::abort(paste0("`", name, "` must be a data frame."))
   }
   log_tbl <- tibble::as_tibble(log_tbl)
-  missing <- setdiff(names(schema), names(log_tbl))
+  schema_names <- names(schema)
+  missing <- setdiff(schema_names, names(log_tbl))
+  extra <- setdiff(names(log_tbl), schema_names)
   if (length(missing) > 0L) {
     rlang::abort(paste0(
       "`",
@@ -78,6 +80,38 @@ read_log <- function(path) {
       paste(missing, collapse = ", "),
       "."
     ))
+  }
+  if (length(extra) > 0L) {
+    rlang::abort(paste0(
+      "`",
+      name,
+      "` has unexpected columns: ",
+      paste(extra, collapse = ", "),
+      "."
+    ))
+  }
+  if (!identical(names(log_tbl), schema_names)) {
+    rlang::abort(paste0("`", name, "` column order does not match canonical schema."))
+  }
+
+  for (col in schema_names) {
+    type <- schema[[col]]
+    value <- log_tbl[[col]]
+    is_ok <- FALSE
+    if (identical(type, "POSIXct")) {
+      is_ok <- inherits(value, "POSIXct")
+    } else if (identical(type, "integer")) {
+      is_ok <- is.integer(value)
+    } else if (identical(type, "double")) {
+      is_ok <- is.double(value)
+    } else if (identical(type, "logical")) {
+      is_ok <- is.logical(value)
+    } else if (identical(type, "character")) {
+      is_ok <- is.character(value)
+    }
+    if (!isTRUE(is_ok)) {
+      rlang::abort(paste0("`", name, "$", col, "` does not match canonical type `", type, "`."))
+    }
   }
   log_tbl
 }
@@ -207,6 +241,31 @@ validate_session_dir <- function(session_dir) {
   round_log <- read_log(paths$round_log)
   .adaptive_validate_log_schema(step_log, schema_step_log, "step_log")
   .adaptive_validate_log_schema(round_log, schema_round_log, "round_log")
+  item_log_list <- .adaptive_read_item_log_files(paths$item_log_dir)
+  if (length(item_log_list) > 0L) {
+    item_schema <- c(
+      refit_id = "integer",
+      item_id = "character",
+      theta_mean = "double",
+      `theta_p2.5` = "double",
+      `theta_p5` = "double",
+      `theta_p50` = "double",
+      `theta_p95` = "double",
+      `theta_p97.5` = "double",
+      theta_sd = "double",
+      rank_mean = "double",
+      degree = "integer",
+      pos_count_A = "integer",
+      pos_count_B = "integer"
+    )
+    for (idx in seq_along(item_log_list)) {
+      .adaptive_validate_log_schema(
+        item_log_list[[idx]],
+        item_schema,
+        paste0("item_log[[", idx, "]]")
+      )
+    }
+  }
 
   metadata
 }

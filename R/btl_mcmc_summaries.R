@@ -283,24 +283,26 @@
 #' quantities or stop metrics.
 #'
 #' @details
-#' The round log is the canonical stop-audit trail and groups fields by
-#' identity/cadence, run-scale counts, design knobs, coverage/imbalance,
-#' posterior percentiles, diagnostics, stop quality metrics,
-#' stop decision, candidate health, and MCMC configuration. Run-scale counts
-#' include \code{total_pairs} (\eqn{N(N-1)/2}), \code{hard_cap_threshold}
-#' (\eqn{\lceil0.40 * total\_pairs\rceil}), \code{n_unique_pairs_seen} (unique
-#' unordered pairs with \code{pair_count >= 1}), \code{scheduled_pairs},
-#' \code{completed_pairs}, \code{backlog_unjudged} (scheduled minus completed),
-#' \code{new_pairs} (newly completed since the previous refit), and
-#' \code{proposed_pairs} (candidate unordered pairs evaluated at refit).
-#' Percentile columns are fixed (e.g.,
-#' \code{epsilon_p2.5}, \code{epsilon_p50}, \code{epsilon_p97.5}) and remain
-#' present with \code{NA} values when a parameter is not part of a model
-#' variant. Stopping metrics report posterior quality (e.g.,
-#' \code{reliability_EAP}) and stability checks (e.g.,
-#' \code{rank_stability_pass}) without recomputation. See
-#' \code{adaptive_rank_start()} for the full \code{round_log} column
-#' definitions.
+#' The round log is the canonical stop-audit trail. This summary is a direct
+#' view over \code{round_log} with no recomputation.
+#'
+#' Key fields include:
+#' \itemize{
+#'   \item identity: \code{refit_id}, \code{round_id_at_refit},
+#'   \code{step_id_at_refit}
+#'   \item run scale: \code{total_pairs_done}, \code{new_pairs_since_last_refit},
+#'   \code{n_unique_pairs_seen}
+#'   \item candidate health: \code{proposed_pairs_mode},
+#'   \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
+#'   \code{fallback_used_mode}, \code{starvation_reason_mode}
+#'   \item diagnostics/stopping: \code{diagnostics_pass}, \code{divergences},
+#'   \code{max_rhat}, \code{min_ess_bulk}, \code{ess_bulk_required},
+#'   \code{reliability_EAP}, \code{rho_theta}, \code{delta_sd_theta},
+#'   \code{rho_rank}, \code{stop_decision}, \code{stop_reason}
+#'   \item report-only uncertainty metrics: \code{ci95_theta_width_*},
+#'   \code{near_tie_adj_*}, \code{cov_trace_theta},
+#'   \code{top20_boundary_entropy_*}, \code{nn_diff_sd_*}
+#' }
 #'
 #' @param state An \code{adaptive_state} or list containing adaptive logs.
 #' @param last_n Optional positive integer; return only the last \code{n} rows.
@@ -310,16 +312,16 @@
 #' # These summaries work on either an adaptive_state or a plain list of logs.
 #' logs <- list(
 #'   round_log = tibble::tibble(
-#'     round_id = 1:2,
-#'     iter_at_refit = c(10L, 20L),
-#'     new_pairs = c(50L, 50L),
-#'     completed_pairs = c(50L, 100L),
+#'     refit_id = 1:2,
+#'     round_id_at_refit = c(1L, 2L),
+#'     step_id_at_refit = c(10L, 20L),
+#'     new_pairs_since_last_refit = c(50L, 50L),
+#'     total_pairs_done = c(50L, 100L),
 #'     divergences = c(0L, 0L),
 #'     max_rhat = c(1.01, 1.00),
 #'     min_ess_bulk = c(800, 900),
 #'     stop_decision = c(NA, TRUE),
-#'     stop_reason = c(NA_character_, "quality_threshold_met"),
-#'     mode = "live"
+#'     stop_reason = c(NA_character_, "btl_converged")
 #'   )
 #' )
 #'
@@ -354,35 +356,35 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 
   if (!isTRUE(include_optional)) {
     required <- c(
-      "round_id",
+      "refit_id",
+      "round_id_at_refit",
       "step_id_at_refit",
-      "iter_at_refit",
+      "model_variant",
+      "n_items",
+      "total_pairs_done",
       "new_pairs_since_last_refit",
-      "new_pairs",
+      "n_unique_pairs_seen",
       "divergences",
       "max_rhat",
       "min_ess_bulk",
       "ess_bulk_required",
       "epsilon_mean",
+      "b_mean",
       "reliability_EAP",
       "theta_sd_eap",
       "rho_theta",
-      "rho_theta_lag",
       "delta_sd_theta",
-      "delta_sd_theta_lag",
       "rho_rank",
-      "rho_rank_lag",
-      "hard_cap_threshold",
-      "n_unique_pairs_seen",
       "theta_corr_pass",
       "delta_sd_theta_pass",
       "rho_rank_pass",
-      "rank_stability_pass",
       "diagnostics_pass",
       "lag_eligible",
       "stop_decision",
       "stop_reason",
-      "mode"
+      "mcmc_chains",
+      "mcmc_parallel_chains",
+      "mcmc_threads_per_chain"
     )
     log <- log |> dplyr::select(dplyr::any_of(required))
   }

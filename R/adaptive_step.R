@@ -117,11 +117,16 @@ validate_judge_result <- function(result, A_id, B_id) {
     starvation_reason = NA_character_,
     round_id = as.integer(state$round$round_id %||% NA_integer_),
     round_stage = "warm_start",
+    pair_type = "warm_start",
+    used_in_round_i = NA_integer_,
+    used_in_round_j = NA_integer_,
+    is_anchor_i = NA,
+    is_anchor_j = NA,
+    stratum_i = NA_integer_,
+    stratum_j = NA_integer_,
+    dist_stratum = NA_integer_,
+    stage_committed_so_far = NA_integer_,
     stage_quota = NA_integer_,
-    stage_committed_before = NA_integer_,
-    stage_committed_after = NA_integer_,
-    round_committed_before = as.integer(state$round$round_committed %||% NA_integer_),
-    round_committed_after = as.integer(state$round$round_committed %||% NA_integer_),
     n_candidates_generated = NA_integer_,
     n_candidates_after_hard_filters = NA_integer_,
     n_candidates_after_duplicates = NA_integer_,
@@ -251,21 +256,16 @@ run_one_step <- function(state, judge, ...) {
     status = status,
     round_id = selection$round_id,
     round_stage = selection$round_stage,
+    pair_type = selection$pair_type,
+    used_in_round_i = selection$used_in_round_i,
+    used_in_round_j = selection$used_in_round_j,
+    is_anchor_i = selection$is_anchor_i,
+    is_anchor_j = selection$is_anchor_j,
+    stratum_i = selection$stratum_i,
+    stratum_j = selection$stratum_j,
+    dist_stratum = selection$dist_stratum,
+    stage_committed_so_far = selection$stage_committed_so_far,
     stage_quota = selection$stage_quota,
-    stage_committed_before = selection$stage_committed_before,
-    stage_committed_after = if (isTRUE(is_valid) &&
-      !is.na(selection$stage_committed_before)) {
-      as.integer(selection$stage_committed_before + 1L)
-    } else {
-      as.integer(selection$stage_committed_after %||% selection$stage_committed_before)
-    },
-    round_committed_before = selection$round_committed_before,
-    round_committed_after = if (isTRUE(is_valid) &&
-      !is.na(selection$round_committed_before)) {
-      as.integer(selection$round_committed_before + 1L)
-    } else {
-      as.integer(selection$round_committed_after %||% selection$round_committed_before)
-    },
     is_explore_step = selection$is_explore_step,
     explore_mode = selection$explore_mode,
     explore_reason = selection$explore_reason,

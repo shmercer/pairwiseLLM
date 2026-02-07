@@ -34,11 +34,11 @@ test_that("adaptive_rank_run_live can stop early via BTL refit", {
   expect_true(!is.na(out$round_log$stop_reason[[2L]]))
   expect_true(all(c(
     "ts_sigma_mean",
-    "ci_width_median",
+    "ci95_theta_width_median",
     "near_tie_adj_frac",
-    "uncertainty_concentration",
-    "top_boundary_uncertainty",
-    "adjacent_separation_uncertainty",
+    "cov_trace_theta",
+    "top20_boundary_entropy_mean",
+    "nn_diff_sd_mean",
     "diagnostics_ess_pass",
     "lag_eligible",
     "mcmc_chains",

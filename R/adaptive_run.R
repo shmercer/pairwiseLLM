@@ -629,7 +629,7 @@ adaptive_rank_run_live <- function(state,
       state$round_log <- append_round_log(state$round_log, round_row)
       item_log_tbl <- .adaptive_build_item_log_refit(
         state,
-        refit_id = round_row$round_id
+        refit_id = round_row$refit_id
       )
       state <- .adaptive_append_item_log(state, item_log_tbl)
       if (!is.null(state$config$session_dir) &&
