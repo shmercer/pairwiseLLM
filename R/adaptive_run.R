@@ -115,8 +115,9 @@
     b_prev <- 0L
   }
 
-  if (a_prev > 0L || b_prev > 0L) {
-    round$repeat_in_round_used <- as.integer((round$repeat_in_round_used %||% 0L) + 1L)
+  repeat_item_uses <- as.integer((a_prev > 0L) + (b_prev > 0L))
+  if (repeat_item_uses > 0L) {
+    round$repeat_in_round_used <- as.integer((round$repeat_in_round_used %||% 0L) + repeat_item_uses)
   }
 
   quota <- as.integer(round$stage_quotas[[stage]] %||% 0L)
