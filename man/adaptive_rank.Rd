@@ -156,6 +156,33 @@ all key controls from \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_liv
 \code{n_steps}, \code{fit_fn}, \code{btl_config}, \code{progress}, \code{progress_redraw_every},
 \code{progress_show_events}, \code{progress_errors}, \code{session_dir}, and
 \code{persist_item_log}.
+
+Selection semantics:
+pair selection is TrueSkill-driven in one-pair transactional steps.
+Rolling anchors are refreshed from current score proxies and anchor-link
+routing compares exactly one anchor endpoint with one non-anchor endpoint.
+Long/mid-link routing excludes anchor-anchor and anchor-non-anchor pairs,
+while local-link routing admits same-stratum pairs and anchor-involving
+pairs according to stage bounds.
+
+Wrapper-visible defaults include top-band refinement
+(\code{top_band_pct = 0.10}, \code{top_band_bins = 5}) with top-band size computed as
+\code{ceiling(top_band_pct * N)}.
+
+Exposure and repeat routing:
+under-represented routing is degree-based (\code{deg <= D_min + 1}), while
+repeat-pressure gating is based on recent exposure (bottom-quantile
+\code{recent_deg} with quantile default \code{0.25}) and per-endpoint repeat slot
+accounting.
+
+Inference separation:
+BTL refits are used for posterior inference, diagnostics, and stopping only.
+They are not used to choose the next pair.
+
+Resume behavior:
+when \code{resume = TRUE} and \code{session_dir} already contains adaptive artifacts,
+failed session loads abort with an actionable error instead of starting a
+fresh run silently.
 }
 \examples{
 data("example_writing_samples", package = "pairwiseLLM")
