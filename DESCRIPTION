@@ -64,6 +64,7 @@ Depends:
     R (>= 4.1)
 VignetteBuilder: knitr
 Collate: 
+    'adaptive_benchmark_metrics.R'
     'adaptive_btl_refit.R'
     'adaptive_candidates.R'
     'adaptive_constraints.R'
@@ -75,6 +76,7 @@ Collate:
     'adaptive_run.R'
     'adaptive_schemas.R'
     'adaptive_select.R'
+    'adaptive_simulation_harness.R'
     'adaptive_state.R'
     'adaptive_step.R'
     'adaptive_trueskill.R'
