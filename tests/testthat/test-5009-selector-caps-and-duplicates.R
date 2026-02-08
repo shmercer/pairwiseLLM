@@ -71,7 +71,7 @@ test_that("selector blocks repeats while non-repeat candidates are available", {
   expect_false(out$j %in% c(1L))
 })
 
-test_that("repeat exposure is only opened when non-repeat candidates are exhausted", {
+test_that("repeat exposure can still starve when repeated endpoints are not recent-underrepresented", {
   items <- make_test_items(6)
   trueskill_state <- make_test_trueskill_state(items)
   state <- make_test_state(
@@ -89,8 +89,88 @@ test_that("repeat exposure is only opened when non-repeat candidates are exhaust
 
   out <- pairwiseLLM:::select_next_pair(state, step_id = 3L)
 
-  expect_false(out$candidate_starved)
-  expect_true(out$i %in% c(1L, 6L) || out$j %in% c(1L, 6L))
+  expect_true(out$candidate_starved)
+  expect_true(is.na(out$i))
+  expect_true(is.na(out$j))
+})
+
+test_that("repeat exposure filter enforces repeat slots per repeated endpoint", {
+  round <- list(
+    per_round_item_uses = c("1" = 1L, "2" = 1L, "3" = 0L, "4" = 0L),
+    repeat_in_round_budget = 2L,
+    repeat_in_round_used = 1L
+  )
+  defaults <- pairwiseLLM:::adaptive_defaults(4L)
+  recent_deg <- c("1" = 0, "2" = 0, "3" = 0, "4" = 0)
+  candidates <- tibble::tibble(
+    i = c("1", "1", "3"),
+    j = c("2", "3", "4")
+  )
+
+  out <- pairwiseLLM:::.adaptive_round_exposure_filter(
+    candidates = candidates,
+    round = round,
+    recent_deg = recent_deg,
+    defaults = defaults,
+    allow_repeat_pressure = TRUE
+  )
+
+  expect_true(any(out$i == "3" & out$j == "4"))
+  expect_true(any(out$i == "1" & out$j == "3"))
+  expect_false(any(out$i == "1" & out$j == "2"))
+})
+
+test_that("repeat exposure filter requires repeated endpoints to be recent-underrepresented", {
+  round <- list(
+    per_round_item_uses = c("1" = 1L, "2" = 0L, "3" = 0L, "4" = 0L),
+    repeat_in_round_budget = 2L,
+    repeat_in_round_used = 0L
+  )
+  defaults <- pairwiseLLM:::adaptive_defaults(4L)
+  candidates <- tibble::tibble(i = "1", j = "2")
+  recent_deg <- c("1" = 10, "2" = 0, "3" = 0, "4" = 0)
+
+  out <- pairwiseLLM:::.adaptive_round_exposure_filter(
+    candidates = candidates,
+    round = round,
+    recent_deg = recent_deg,
+    defaults = defaults,
+    allow_repeat_pressure = TRUE
+  )
+
+  expect_equal(nrow(out), 0L)
+})
+
+test_that("repeat exposure filter uses configured underrepresentation quantile", {
+  round <- list(
+    per_round_item_uses = c("1" = 1L, "2" = 0L, "3" = 0L, "4" = 0L),
+    repeat_in_round_budget = 2L,
+    repeat_in_round_used = 0L
+  )
+  candidates <- tibble::tibble(i = "1", j = "2")
+  recent_deg <- c("1" = 5, "2" = 0, "3" = 0, "4" = 0)
+
+  defaults_low <- pairwiseLLM:::adaptive_defaults(4L)
+  defaults_low$exposure_underrep_q <- 0.25
+  out_low <- pairwiseLLM:::.adaptive_round_exposure_filter(
+    candidates = candidates,
+    round = round,
+    recent_deg = recent_deg,
+    defaults = defaults_low,
+    allow_repeat_pressure = TRUE
+  )
+  expect_equal(nrow(out_low), 0L)
+
+  defaults_high <- pairwiseLLM:::adaptive_defaults(4L)
+  defaults_high$exposure_underrep_q <- 1
+  out_high <- pairwiseLLM:::.adaptive_round_exposure_filter(
+    candidates = candidates,
+    round = round,
+    recent_deg = recent_deg,
+    defaults = defaults_high,
+    allow_repeat_pressure = TRUE
+  )
+  expect_equal(nrow(out_high), 1L)
 })
 
 test_that("underrepresented set follows min-degree plus one rule", {
