@@ -91,6 +91,25 @@ Utility is based on
 \deqn{U_0 = p_{ij}(1 - p_{ij})} with exploration/exploitation routing and
 fallback handling recorded in \code{step_log}.
 
+Round scheduling uses stage-specific admissibility:
+\itemize{
+\item rolling-anchor links compare one anchor and one non-anchor endpoint;
+\item long/mid links exclude anchor endpoints and enforce stratum-distance
+bounds;
+\item local-link routing admits same-stratum pairs and anchor-involving
+pairs within local stage bounds.
+}
+
+Exposure and repeat handling are soft, stage-local constraints:
+under-represented exploration uses degree set \code{deg <= D_min + 1}, while
+repeat-pressure gating uses bottom-quantile \code{recent_deg} (default quantile
+\code{0.25}) and per-endpoint repeat-slot accounting against
+\code{repeat_in_round_budget}.
+
+Top-band defaults for stratum construction are
+\code{top_band_pct = 0.10} and \code{top_band_bins = 5}, with top-band size
+\code{ceiling(top_band_pct * N)}.
+
 Bayesian BTL refits are triggered on step-based cadence and evaluated with
 diagnostics gates (including ESS thresholds), reliability, and lagged
 stability criteria. Refit-level outcomes are

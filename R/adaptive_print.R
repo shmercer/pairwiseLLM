@@ -206,10 +206,17 @@ adaptive_get_logs <- function(state) {
   if (is.null(state$item_log)) {
     rlang::abort("`state$item_log` is missing.")
   }
+  item_log <- if (length(state$item_log) == 0L) {
+    list()
+  } else {
+    lapply(seq_along(state$item_log), function(idx) {
+      .adaptive_canonicalize_item_log(state$item_log[[idx]], state, refit_id = idx)
+    })
+  }
   list(
     step_log = tibble::as_tibble(state$step_log),
     round_log = tibble::as_tibble(state$round_log),
-    item_log = state$item_log
+    item_log = item_log
   )
 }
 

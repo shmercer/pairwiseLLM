@@ -270,6 +270,33 @@ make_adaptive_judge_llm <- function(
 #' `progress_show_events`, `progress_errors`, `session_dir`, and
 #' `persist_item_log`.
 #'
+#' Selection semantics:
+#' pair selection is TrueSkill-driven in one-pair transactional steps.
+#' Rolling anchors are refreshed from current score proxies and anchor-link
+#' routing compares exactly one anchor endpoint with one non-anchor endpoint.
+#' Long/mid-link routing excludes anchor-anchor and anchor-non-anchor pairs,
+#' while local-link routing admits same-stratum pairs and anchor-involving
+#' pairs according to stage bounds.
+#'
+#' Wrapper-visible defaults include top-band refinement
+#' (`top_band_pct = 0.10`, `top_band_bins = 5`) with top-band size computed as
+#' `ceiling(top_band_pct * N)`.
+#'
+#' Exposure and repeat routing:
+#' under-represented routing is degree-based (`deg <= D_min + 1`), while
+#' repeat-pressure gating is based on recent exposure (bottom-quantile
+#' `recent_deg` with quantile default `0.25`) and per-endpoint repeat slot
+#' accounting.
+#'
+#' Inference separation:
+#' BTL refits are used for posterior inference, diagnostics, and stopping only.
+#' They are not used to choose the next pair.
+#'
+#' Resume behavior:
+#' when `resume = TRUE` and `session_dir` already contains adaptive artifacts,
+#' failed session loads abort with an actionable error instead of starting a
+#' fresh run silently.
+#'
 #' @param data Data source: a data frame/tibble, a file path (`.csv`, `.tsv`,
 #'   `.txt`, `.rds`), or a directory containing `.txt` files.
 #' @param id_col ID column selector for tabular inputs. Passed to
@@ -464,10 +491,29 @@ adaptive_rank <- function(
 
   loaded_state <- NULL
   if (isTRUE(resume) && !is.null(session_dir) && dir.exists(session_dir)) {
-    loaded_state <- tryCatch(
-      adaptive_rank_resume(session_dir),
-      error = function(e) NULL
-    )
+    paths <- .adaptive_session_paths(session_dir)
+    has_saved_artifacts <- any(file.exists(c(
+      paths$state,
+      paths$step_log,
+      paths$round_log,
+      paths$metadata,
+      paths$btl_fit
+    ))) || dir.exists(paths$item_log_dir)
+
+    if (isTRUE(has_saved_artifacts)) {
+      loaded_state <- tryCatch(
+        adaptive_rank_resume(session_dir),
+        error = function(e) {
+          rlang::abort(
+            c(
+              "Failed to resume adaptive session from `session_dir`.",
+              i = "Set `resume = FALSE` to initialize a new session explicitly.",
+              x = conditionMessage(e)
+            )
+          )
+        }
+      )
+    }
   }
 
   state <- loaded_state

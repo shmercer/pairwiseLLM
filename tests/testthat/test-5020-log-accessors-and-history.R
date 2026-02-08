@@ -18,6 +18,30 @@ test_that("adaptive log accessors and history return canonical shapes", {
   expect_true(all(c("step_log", "round_log", "item_log") %in% names(logs)))
   expect_true(tibble::is_tibble(logs$step_log))
   expect_true(tibble::is_tibble(logs$round_log))
+  expect_true(is.list(logs$item_log))
+  if (length(logs$item_log) > 0L) {
+    expected_item_cols <- c(
+      "refit_id",
+      "item_id",
+      "theta_mean",
+      "theta_p2.5",
+      "theta_p5",
+      "theta_p50",
+      "theta_p95",
+      "theta_p97.5",
+      "theta_sd",
+      "rank_mean",
+      "degree",
+      "pos_count_A",
+      "pos_count_B"
+    )
+    expect_true(all(vapply(logs$item_log, tibble::is_tibble, logical(1))))
+    expect_true(all(vapply(
+      logs$item_log,
+      function(tbl) identical(names(tbl), expected_item_cols),
+      logical(1)
+    )))
+  }
 
   step_log <- adaptive_step_log(state)
   round_log <- adaptive_round_log(state)
