@@ -53,8 +53,11 @@
   ids_sorted <- names(sort(rank_index))
   n <- length(ids_sorted)
 
-  n_anchor <- as.integer(round(defaults$anchor_frac_total * n))
-  n_anchor <- max(defaults$anchor_count_min, n_anchor)
+  if (n < 10L) {
+    n_anchor <- max(1L, as.integer(round(defaults$anchor_frac_total * n)))
+  } else {
+    n_anchor <- .btl_mcmc_clamp(10L, 40L, as.integer(round(defaults$anchor_frac_total * n)))
+  }
   n_anchor <- min(max(1L, n - 1L), n_anchor)
 
   bucket_n <- .adaptive_bucket_counts(
@@ -201,7 +204,7 @@
   } else if (identical(fallback_name, "global_safe")) {
     max_gap <- .Machine$integer.max
   }
-  list(min = 1L, max = max_gap)
+  list(min = 0L, max = max_gap)
 }
 
 .adaptive_uniform_subsample_pairs <- function(candidates, C_max, seed) {
@@ -252,8 +255,10 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
       if (identical(stage_name, "anchor_link")) {
         keep <- xor(i_anchor, j_anchor)
       } else {
-        if (i_anchor || j_anchor) {
-          next
+        if (identical(stage_name, "long_link") || identical(stage_name, "mid_link")) {
+          if (i_anchor || j_anchor) {
+            next
+          }
         }
         dist <- abs(as.integer(stratum_map[[i_id]]) - as.integer(stratum_map[[j_id]]))
         keep <- dist >= bounds$min && dist <= bounds$max
@@ -277,7 +282,7 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
 
 #' @keywords internal
 #' @noRd
-.adaptive_round_exposure_filter <- function(candidates, round, recent_deg, defaults) {
+.adaptive_round_exposure_filter <- function(candidates, round, deg, defaults, allow_repeat_pressure = FALSE) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) == 0L) {
     return(cand)
@@ -297,12 +302,16 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
   i_used[is.na(i_used)] <- 0L
   j_used[is.na(j_used)] <- 0L
   base_keep <- (i_used == 0L) & (j_used == 0L)
+
+  if (!isTRUE(allow_repeat_pressure)) {
+    return(cand[base_keep, , drop = FALSE])
+  }
+
   if (repeat_remaining <= 0L) {
     return(cand[base_keep, , drop = FALSE])
   }
 
-  cutoff <- stats::quantile(recent_deg, probs = defaults$exposure_underrep_q, names = FALSE, type = 7)
-  underrep <- names(recent_deg)[recent_deg <= cutoff]
+  underrep <- .adaptive_underrep_set(deg)
   allow_repeat <- (i_ids %in% underrep) | (j_ids %in% underrep)
   keep <- base_keep | allow_repeat
   cand[keep, , drop = FALSE]

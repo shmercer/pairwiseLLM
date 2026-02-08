@@ -38,7 +38,7 @@ adaptive_defaults <- function(N) {
     refit_pairs_target = as.integer(refit_pairs_target),
     round_pairs_target = round_pairs_target,
     W_cap = as.integer(W_cap),
-    repeat_in_round_budget = 3L,
+    repeat_in_round_budget = 2L,
     anchor_frac_early = 0.30,
     anchor_frac_late = 0.20,
     anchor_rounds_early = 4L,
@@ -50,10 +50,10 @@ adaptive_defaults <- function(N) {
     top_band_frac = 0.20,
     top_band_strata = 2L,
     anchor_frac_total = 0.10,
-    anchor_count_min = 1L,
-    anchor_top_weight = 0.34,
-    anchor_mid_weight = 0.33,
-    anchor_bottom_weight = 0.33,
+    anchor_count_min = 10L,
+    anchor_top_weight = 0.30,
+    anchor_mid_weight = 0.40,
+    anchor_bottom_weight = 0.30,
     anchor_refresh_on_round = FALSE,
     long_min_dist = as.integer(ceiling(0.5 * k_base)),
     mid_min_dist = 2L,
@@ -155,10 +155,15 @@ adaptive_defaults <- function(N) {
   names(deg)[deg == min_deg]
 }
 
-.adaptive_underrep_set <- function(recent_deg) {
-  if (length(recent_deg) == 0L) return(character())
-  cutoff <- stats::quantile(recent_deg, probs = 0.2, names = FALSE)
-  names(recent_deg)[recent_deg <= cutoff]
+.adaptive_underrep_set <- function(deg) {
+  if (length(deg) == 0L) return(character())
+  d_min <- min(deg)
+  out <- names(deg)[deg <= (d_min + 1L)]
+  if (length(out) == 0L) {
+    names(deg)
+  } else {
+    out
+  }
 }
 
 .adaptive_rank_index <- function(state) {
@@ -405,33 +410,64 @@ adaptive_defaults <- function(N) {
 
   cap_count <- ceiling(config$cap_frac * config$W_cap)
   recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
-  candidates <- .adaptive_round_exposure_filter(candidates, round = round, recent_deg = recent_deg, defaults = config)
-  u0_quantile <- NULL
-  if (nrow(candidates) > 0L) {
-    star_filtered <- .adaptive_star_cap_filter(candidates, recent_deg, cap_count)
-    if (nrow(star_filtered$candidates) > 0L) {
-      u0_quantile <- stats::quantile(star_filtered$candidates$u0,
-        probs = config$q, names = FALSE, type = 7
-      )
+  allow_repeats <- identical(stage$dup_policy, "relaxed")
+
+  .apply_downstream_filters <- function(candidates_in) {
+    u0_quantile <- NULL
+    if (nrow(candidates_in) > 0L) {
+      star_filtered_local <- .adaptive_star_cap_filter(candidates_in, recent_deg, cap_count)
+      if (nrow(star_filtered_local$candidates) > 0L) {
+        u0_quantile <- stats::quantile(star_filtered_local$candidates$u0,
+          probs = config$q, names = FALSE, type = 7
+        )
+      }
     }
+
+    after_dup <- .adaptive_duplicate_filter(
+      candidates = candidates_in,
+      pair_count = counts$pair_count,
+      dup_max_obs = if (allow_repeats) config$dup_max_obs_relaxed else config$dup_max_obs,
+      allow_repeats = allow_repeats,
+      dup_max_obs_default = config$dup_max_obs,
+      dup_p_margin = config$dup_p_margin,
+      p_vals = candidates_in$p,
+      u0_vals = candidates_in$u0,
+      u0_quantile = u0_quantile
+    )
+
+    star_filtered_local <- .adaptive_star_cap_filter(after_dup, recent_deg, cap_count)
+    list(
+      candidates = star_filtered_local$candidates,
+      n_after_dup = nrow(after_dup),
+      star_filtered = star_filtered_local
+    )
   }
 
-  allow_repeats <- identical(stage$dup_policy, "relaxed")
-  candidates <- .adaptive_duplicate_filter(
-    candidates = candidates,
-    pair_count = counts$pair_count,
-    dup_max_obs = if (allow_repeats) config$dup_max_obs_relaxed else config$dup_max_obs,
-    allow_repeats = allow_repeats,
-    dup_max_obs_default = config$dup_max_obs,
-    dup_p_margin = config$dup_p_margin,
-    p_vals = candidates$p,
-    u0_vals = candidates$u0,
-    u0_quantile = u0_quantile
+  candidates_hard <- candidates
+  candidates_base <- .adaptive_round_exposure_filter(candidates_hard,
+    round = round,
+    deg = counts$deg,
+    defaults = config,
+    allow_repeat_pressure = FALSE
   )
-  n_after_dup <- nrow(candidates)
+  filtered <- .apply_downstream_filters(candidates_base)
+  candidates <- filtered$candidates
+  n_after_dup <- filtered$n_after_dup
+  star_filtered <- filtered$star_filtered
 
-  star_filtered <- .adaptive_star_cap_filter(candidates, recent_deg, cap_count)
-  candidates <- star_filtered$candidates
+  if (nrow(candidates) == 0L) {
+    candidates_repeat <- .adaptive_round_exposure_filter(candidates_hard,
+      round = round,
+      deg = counts$deg,
+      defaults = config,
+      allow_repeat_pressure = TRUE
+    )
+    filtered_repeat <- .apply_downstream_filters(candidates_repeat)
+    candidates <- filtered_repeat$candidates
+    n_after_dup <- filtered_repeat$n_after_dup
+    star_filtered <- filtered_repeat$star_filtered
+  }
+
   n_after_star <- nrow(candidates)
 
   candidates$u <- candidates$u0
@@ -578,7 +614,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     }
 
     if (stage_is_explore) {
-      underrep <- .adaptive_underrep_set(recent_deg)
+      underrep <- .adaptive_underrep_set(counts$deg)
       if (length(underrep) == 0L) {
         underrep <- ids
       }

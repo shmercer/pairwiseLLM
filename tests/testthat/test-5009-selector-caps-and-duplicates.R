@@ -48,7 +48,7 @@ test_that("selector excludes items already used in round by default", {
   expect_false(out$j %in% c(1L, 2L))
 })
 
-test_that("selector allows limited repeats for underrepresented items within budget", {
+test_that("selector blocks repeats while non-repeat candidates are available", {
   items <- make_test_items(6)
   trueskill_state <- make_test_trueskill_state(items)
   state <- make_test_state(
@@ -67,6 +67,62 @@ test_that("selector allows limited repeats for underrepresented items within bud
   out <- pairwiseLLM:::select_next_pair(state, step_id = 2L)
 
   expect_false(out$candidate_starved)
-  expect_true(out$i %in% seq_len(6))
-  expect_true(out$j %in% seq_len(6))
+  expect_false(out$i %in% c(1L))
+  expect_false(out$j %in% c(1L))
+})
+
+test_that("repeat exposure is only opened when non-repeat candidates are exhausted", {
+  items <- make_test_items(6)
+  trueskill_state <- make_test_trueskill_state(items)
+  state <- make_test_state(
+    items,
+    trueskill_state,
+    history = tibble::tibble(
+      A_id = c("2", "2", "2", "3", "3", "4"),
+      B_id = c("3", "4", "5", "4", "5", "5")
+    )
+  )
+  state$round$staged_active <- TRUE
+  state$round$repeat_in_round_used <- 0L
+  state$round$repeat_in_round_budget <- 2L
+  state$round$per_round_item_uses[] <- 1L
+
+  out <- pairwiseLLM:::select_next_pair(state, step_id = 3L)
+
+  expect_false(out$candidate_starved)
+  expect_true(out$i %in% c(1L, 6L) || out$j %in% c(1L, 6L))
+})
+
+test_that("underrepresented set follows min-degree plus one rule", {
+  deg <- c("1" = 0L, "2" = 1L, "3" = 2L, "4" = 4L)
+  out <- pairwiseLLM:::.adaptive_underrep_set(deg)
+
+  expect_equal(sort(out), c("1", "2"))
+})
+
+test_that("repeat fallback is available when base candidates are later filtered out", {
+  items <- make_test_items(4)
+  trueskill_state <- make_test_trueskill_state(items)
+  state <- make_test_state(
+    items,
+    trueskill_state,
+    history = tibble::tibble(
+      A_id = c("2", "3", "2", "4", "3", "4"),
+      B_id = c("3", "2", "4", "2", "4", "3")
+    )
+  )
+  state$round$staged_active <- TRUE
+  state$round$per_round_item_uses[["1"]] <- 1L
+  state$round$repeat_in_round_budget <- 2L
+  state$round$repeat_in_round_used <- 0L
+  state$round$stage_index <- 4L
+
+  cand <- tibble::tibble(
+    i = c("1", "1", "1", "2", "2", "3"),
+    j = c("2", "3", "4", "3", "4", "4")
+  )
+  out <- pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand)
+
+  expect_false(out$candidate_starved)
+  expect_true(out$i == 1L || out$j == 1L)
 })
