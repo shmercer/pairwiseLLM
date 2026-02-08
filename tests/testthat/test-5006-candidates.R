@@ -247,6 +247,21 @@ test_that("defaults formulas are deterministic across representative N", {
   expect_true(d_med$mid_min_dist <= d_med$mid_max_dist)
   expect_true(d_large$C_max >= 1L)
   expect_true(d_large$explore_rate >= 0 && d_large$explore_rate <= 1)
+  expect_equal(d_small$top_band_pct, 0.10)
+  expect_equal(d_small$top_band_bins, 5L)
+  expect_equal(d_med$top_band_pct, 0.10)
+  expect_equal(d_med$top_band_bins, 5L)
+  expect_equal(d_small$exposure_underrep_q, 0.25)
+  expect_equal(d_med$exposure_underrep_q, 0.25)
+})
+
+test_that("top-band size uses ceiling rule", {
+  scores <- stats::setNames(seq(15, 1), as.character(1:15))
+  defaults <- pairwiseLLM:::adaptive_defaults(15L)
+  strata <- pairwiseLLM:::.adaptive_assign_strata(scores, defaults)
+
+  # ceil(0.10 * 15) = 2
+  expect_equal(length(strata$top_band_ids), 2L)
 })
 
 test_that("stage candidate subsampling is deterministic by seed", {

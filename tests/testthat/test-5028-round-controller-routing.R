@@ -63,6 +63,23 @@ test_that("committed stage steps advance stage counters and round totals", {
   expect_equal(out$round$round_committed, 1L)
 })
 
+test_that("round repeat budget tracks repeated item-uses per endpoint", {
+  state <- pairwiseLLM:::new_adaptive_state(make_test_items(4))
+  state$round$staged_active <- TRUE
+  state$round$per_round_item_uses[["1"]] <- 1L
+  state$round$per_round_item_uses[["2"]] <- 1L
+
+  step_row <- tibble::tibble(
+    round_stage = "anchor_link",
+    A = 1L,
+    B = 2L
+  )
+
+  out <- pairwiseLLM:::.adaptive_round_commit(state, step_row)
+
+  expect_equal(out$round$repeat_in_round_used, 2L)
+})
+
 test_that("warm-start committed pairs count toward round committed totals", {
   items <- make_test_items(5)
   state <- adaptive_rank_start(items, seed = 7)

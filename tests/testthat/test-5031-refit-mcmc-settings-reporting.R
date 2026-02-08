@@ -1,6 +1,6 @@
 test_that("refit round_log records MCMC chain settings from fit output", {
   items <- make_test_items(4)
-  state <- pairwiseLLM:::new_adaptive_state(items)
+  state <- adaptive_rank_start(items, seed = 11)
   judge <- make_deterministic_judge("i_wins")
 
   fit <- make_test_btl_fit(
