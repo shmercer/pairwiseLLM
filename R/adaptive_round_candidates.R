@@ -96,13 +96,15 @@
   ids_sorted <- names(sort(rank_index))
   n <- length(ids_sorted)
 
-  top_band_n <- as.integer(round(defaults$top_band_frac * n))
+  top_band_pct <- as.double(defaults$top_band_pct %||% 0.10)
+  top_band_bins <- as.integer(defaults$top_band_bins %||% 5L)
+  top_band_n <- as.integer(ceiling(top_band_pct * n))
   top_band_n <- max(1L, min(n, top_band_n))
   top_band_ids <- ids_sorted[seq_len(top_band_n)]
   rest_ids <- ids_sorted[(top_band_n + 1L):n]
   rest_ids <- rest_ids[!is.na(rest_ids)]
 
-  top_k <- max(1L, min(defaults$top_band_strata, top_band_n))
+  top_k <- max(1L, min(top_band_bins, top_band_n))
   top_seq <- seq_len(top_band_n)
   top_strata <- floor((top_seq - 1L) * top_k / top_band_n) + 1L
 
@@ -282,7 +284,11 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
 
 #' @keywords internal
 #' @noRd
-.adaptive_round_exposure_filter <- function(candidates, round, deg, defaults, allow_repeat_pressure = FALSE) {
+.adaptive_round_exposure_filter <- function(candidates,
+                                            round,
+                                            recent_deg,
+                                            defaults,
+                                            allow_repeat_pressure = FALSE) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) == 0L) {
     return(cand)
@@ -311,8 +317,35 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
     return(cand[base_keep, , drop = FALSE])
   }
 
-  underrep <- .adaptive_underrep_set(deg)
-  allow_repeat <- (i_ids %in% underrep) | (j_ids %in% underrep)
+  recent <- as.double(recent_deg)
+  names(recent) <- names(recent_deg)
+  if (length(recent) == 0L || all(is.na(recent))) {
+    return(cand[base_keep, , drop = FALSE])
+  }
+
+  underrep_q <- as.double(defaults$exposure_underrep_q %||% 0.25)
+  underrep_q <- min(max(underrep_q, 0), 1)
+  underrep_threshold <- stats::quantile(recent,
+    probs = underrep_q,
+    names = FALSE,
+    type = 7,
+    na.rm = TRUE
+  )
+
+  i_recent <- recent[i_ids]
+  j_recent <- recent[j_ids]
+  i_underrep <- !is.na(i_recent) & i_recent <= underrep_threshold
+  j_underrep <- !is.na(j_recent) & j_recent <= underrep_threshold
+
+  i_repeat <- i_used > 0L
+  j_repeat <- j_used > 0L
+  repeat_slots_needed <- as.integer(i_repeat) + as.integer(j_repeat)
+  repeated_endpoint_ok <- (!i_repeat | i_underrep) & (!j_repeat | j_underrep)
+
+  allow_repeat <- repeat_slots_needed > 0L &
+    repeat_slots_needed <= repeat_remaining &
+    repeated_endpoint_ok
+
   keep <- base_keep | allow_repeat
   cand[keep, , drop = FALSE]
 }
