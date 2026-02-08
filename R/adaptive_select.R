@@ -47,8 +47,8 @@ adaptive_defaults <- function(N) {
     long_rounds_early = 4L,
     mid_frac = 0.10,
     k_base = as.integer(k_base),
-    top_band_frac = 0.20,
-    top_band_strata = 2L,
+    top_band_pct = 0.10,
+    top_band_bins = 5L,
     anchor_frac_total = 0.10,
     anchor_count_min = 10L,
     anchor_top_weight = 0.30,
@@ -60,7 +60,7 @@ adaptive_defaults <- function(N) {
     mid_max_dist = as.integer(min(4L, k_base - 1L)),
     local_max_dist = 1L,
     local_expand_max_dist = 2L,
-    exposure_underrep_q = 0.20
+    exposure_underrep_q = 0.25
   )
 }
 
@@ -446,7 +446,7 @@ adaptive_defaults <- function(N) {
   candidates_hard <- candidates
   candidates_base <- .adaptive_round_exposure_filter(candidates_hard,
     round = round,
-    deg = counts$deg,
+    recent_deg = recent_deg,
     defaults = config,
     allow_repeat_pressure = FALSE
   )
@@ -458,7 +458,7 @@ adaptive_defaults <- function(N) {
   if (nrow(candidates) == 0L) {
     candidates_repeat <- .adaptive_round_exposure_filter(candidates_hard,
       round = round,
-      deg = counts$deg,
+      recent_deg = recent_deg,
       defaults = config,
       allow_repeat_pressure = TRUE
     )
