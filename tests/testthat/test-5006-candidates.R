@@ -143,6 +143,48 @@ test_that("rolling anchors refresh from trueskill and refit sources deterministi
   expect_equal(state_2$round$anchor_refit_round_id, 1L)
 })
 
+test_that("rolling anchor count follows clamped default", {
+  scores_small <- stats::setNames(seq(9, 1), as.character(1:9))
+  scores_mid <- stats::setNames(seq(30, 1), as.character(1:30))
+  scores_large <- stats::setNames(seq(1000, 1), as.character(1:1000))
+  defaults <- pairwiseLLM:::adaptive_defaults(1000L)
+
+  anchors_small <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores_small, defaults)
+  anchors_mid <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores_mid, defaults)
+  anchors_large <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores_large, defaults)
+
+  expect_equal(length(anchors_small), 1L)
+  expect_equal(length(anchors_mid), 10L)
+  expect_equal(length(anchors_large), 40L)
+})
+
+test_that("rolling anchor composition follows 30/40/30 buckets", {
+  scores <- stats::setNames(seq(200, 1), as.character(1:200))
+  defaults <- pairwiseLLM:::adaptive_defaults(200L)
+  anchors <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores, defaults)
+
+  rank_index <- pairwiseLLM:::.adaptive_rank_index_from_scores(scores)
+  ids_sorted <- names(sort(rank_index))
+  n <- length(ids_sorted)
+  n_anchor <- 20L
+  n_top <- 6L
+  n_mid <- 8L
+  n_bottom <- 6L
+
+  top_ids <- ids_sorted[seq_len(n_top)]
+  bottom_ids <- rev(ids_sorted)[seq_len(n_bottom)]
+  center <- floor((n + 1L) / 2L)
+  mid_radius <- floor((n_mid - 1L) / 2L)
+  mid_start <- max(1L, center - mid_radius)
+  mid_end <- min(n, mid_start + n_mid - 1L)
+  mid_ids <- ids_sorted[mid_start:mid_end]
+
+  expect_equal(length(anchors), n_anchor)
+  expect_equal(sum(anchors %in% top_ids), n_top)
+  expect_equal(sum(anchors %in% mid_ids), n_mid)
+  expect_equal(sum(anchors %in% bottom_ids), n_bottom)
+})
+
 test_that("strata assignment uses deterministic ranking and top-band refinement", {
   scores <- stats::setNames(c(9, 9, 8, 7, 6, 5, 4, 3), as.character(1:8))
   defaults <- pairwiseLLM:::adaptive_defaults(8L)
@@ -183,6 +225,15 @@ test_that("stage candidate generators enforce stage admissibility", {
   expect_true(all(!long_cand$i %in% anchors & !long_cand$j %in% anchors))
   expect_true(all(!mid_cand$i %in% anchors & !mid_cand$j %in% anchors))
   expect_true(nrow(local_cand) > 0L)
+
+  defaults <- pairwiseLLM:::adaptive_defaults(nrow(items))
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+  strata <- pairwiseLLM:::.adaptive_assign_strata(proxy$scores, defaults)
+  dist_local <- abs(
+    as.integer(strata$stratum_map[local_cand$i]) - as.integer(strata$stratum_map[local_cand$j])
+  )
+  expect_true(any(local_cand$i %in% anchors | local_cand$j %in% anchors))
+  expect_true(any(dist_local == 0L))
 })
 
 test_that("defaults formulas are deterministic across representative N", {

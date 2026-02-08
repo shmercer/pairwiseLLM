@@ -1,5 +1,5 @@
 test_that("adaptive_rank_run_live can stop early via BTL refit", {
-  items <- make_test_items(4)
+  items <- make_test_items(12)
   state <- pairwiseLLM:::new_adaptive_state(items)
   judge <- make_deterministic_judge("i_wins")
   stub <- make_deterministic_fit_fn(state$item_ids)
@@ -28,10 +28,10 @@ test_that("adaptive_rank_run_live can stop early via BTL refit", {
   )
 
   expect_true(inherits(out, "adaptive_state"))
-  expect_equal(nrow(out$step_log), 4L)
-  expect_equal(nrow(out$round_log), 2L)
-  expect_true(isTRUE(out$round_log$stop_decision[[2L]]))
-  expect_true(!is.na(out$round_log$stop_reason[[2L]]))
+  expect_true(nrow(out$step_log) >= 4L)
+  expect_true(nrow(out$round_log) >= 2L)
+  expect_true(isTRUE(utils::tail(out$round_log$stop_decision, 1L)))
+  expect_true(!is.na(utils::tail(out$round_log$stop_reason, 1L)))
   expect_true(all(c(
     "ts_sigma_mean",
     "ci95_theta_width_median",

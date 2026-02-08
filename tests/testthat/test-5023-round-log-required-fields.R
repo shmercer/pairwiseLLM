@@ -137,3 +137,26 @@ test_that("step_log stage counters and quotas are reconstructable from logs", {
   stable_quota <- vapply(quota_by_group, function(x) length(unique(x[!is.na(x)])) <= 1L, logical(1))
   expect_true(all(stable_quota))
 })
+
+test_that("round_id_at_refit matches the scheduling round of the triggering step", {
+  items <- make_test_items(8)
+  state <- adaptive_rank_start(items, seed = 9L)
+  judge <- make_deterministic_judge("i_wins")
+  stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(3)
+  out <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 20L,
+    fit_fn = stub$fit_fn,
+    btl_config = list(refit_pairs_target = 4L, stability_lag = 1L),
+    progress = "none"
+  )
+
+  step_log <- adaptive_step_log(out)
+  round_log <- adaptive_round_log(out)
+  step_round <- step_log$round_id[as.integer(round_log$step_id_at_refit)]
+
+  expect_equal(as.integer(round_log$round_id_at_refit), as.integer(step_round))
+})
