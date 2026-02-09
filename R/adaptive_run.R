@@ -18,8 +18,14 @@
 #' @noRd
 .adaptive_round_activate_if_ready <- function(state) {
   out <- state
+  out$controller <- .adaptive_controller_resolve(out)
   if (is.null(out$round) || !is.list(out$round)) {
-    out$round <- .adaptive_new_round_state(out$item_ids, round_id = 1L, staged_active = FALSE)
+    out$round <- .adaptive_new_round_state(
+      out$item_ids,
+      round_id = 1L,
+      staged_active = FALSE,
+      controller = out$controller
+    )
   }
   if (isTRUE(out$warm_start_done)) {
     out$round$staged_active <- TRUE
@@ -68,12 +74,23 @@
 #' @noRd
 .adaptive_round_start_next <- function(state) {
   out <- state
+  out$controller <- .adaptive_controller_resolve(out)
   prior <- out$round %||% list(round_id = 0L, committed_total = 0L)
+  out$refit_meta$last_completed_round_summary <- list(
+    round_id = as.integer(prior$round_id %||% NA_integer_),
+    global_identified = as.logical(prior$global_identified %||% NA),
+    long_quota_raw = as.integer(prior$long_quota_raw %||% NA_integer_),
+    long_quota_effective = as.integer(prior$long_quota_effective %||% NA_integer_),
+    long_quota_removed = as.integer(prior$long_quota_removed %||% NA_integer_),
+    realloc_to_mid = as.integer(prior$realloc_to_mid %||% NA_integer_),
+    realloc_to_local = as.integer(prior$realloc_to_local %||% NA_integer_)
+  )
   next_id <- as.integer((prior$round_id %||% 0L) + 1L)
   next_round <- .adaptive_new_round_state(
     item_ids = out$item_ids,
     round_id = next_id,
-    staged_active = TRUE
+    staged_active = TRUE,
+    controller = out$controller
   )
   next_round$committed_total <- as.integer(prior$committed_total %||% 0L)
   out$round <- next_round
@@ -118,6 +135,13 @@
   repeat_item_uses <- as.integer((a_prev > 0L) + (b_prev > 0L))
   if (repeat_item_uses > 0L) {
     round$repeat_in_round_used <- as.integer((round$repeat_in_round_used %||% 0L) + repeat_item_uses)
+  }
+  star_override_used <- FALSE
+  if ("star_override_used" %in% names(step_row)) {
+    star_override_used <- isTRUE(step_row$star_override_used[[1L]] %||% FALSE)
+  }
+  if (isTRUE(star_override_used)) {
+    round$star_override_used <- as.integer((round$star_override_used %||% 0L) + 1L)
   }
 
   quota <- as.integer(round$stage_quotas[[stage]] %||% 0L)
@@ -255,10 +279,12 @@ adaptive_rank_start <- function(items,
   state$warm_start_pairs <- .adaptive_build_warm_start_pairs(state$item_ids, seed)
   state$warm_start_idx <- 1L
   state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
+  state$controller <- .adaptive_controller_resolve(state)
   state$round <- .adaptive_new_round_state(
     item_ids = state$item_ids,
     round_id = 1L,
-    staged_active = isTRUE(state$warm_start_done)
+    staged_active = isTRUE(state$warm_start_done),
+    controller = state$controller
   )
   state$config$session_dir <- session_dir %||% NULL
   state$config$persist_item_log <- isTRUE(persist_item_log)
