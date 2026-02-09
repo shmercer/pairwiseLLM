@@ -458,6 +458,7 @@ test_that("adaptive_rank resume preserves adaptive controller config", {
 
 test_that("adaptive_rank logs include documented adaptive step and refit fields", {
   samples <- make_test_samples_df(6L)
+  fit_override <- make_deterministic_fit_fn(ids = as.character(samples$ID))
   judge <- function(A, B, state, ...) {
     y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
@@ -469,6 +470,7 @@ test_that("adaptive_rank logs include documented adaptive step and refit fields"
     text_col = "text",
     judge = judge,
     n_steps = 4L,
+    fit_fn = fit_override$fit_fn,
     adaptive_config = list(
       global_identified_reliability_min = 0.10,
       global_identified_rank_corr_min = 0.10
