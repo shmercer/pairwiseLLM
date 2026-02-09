@@ -176,55 +176,59 @@
     rlang::abort("`n_steps` must be an integer >= 1.")
   }
 
-  state <- adaptive_rank_start(items = items, seed = run_seed)
-  state <- .adaptive_simulation_apply_scenario(state, scenario = scenario)
-  judge <- .adaptive_simulation_judge(items = items, judge_seed = judge_seed)
-  if (is.null(btl_config)) {
-    btl_config <- list(refit_pairs_target = as.integer(max(5000L, n_steps + 1L)))
-  }
-
-  anchor_trace <- tibble::tibble(
-    step_id = integer(),
-    round_id = integer(),
-    anchor_signature = character(),
-    anchor_refresh_source = character(),
-    anchor_refit_round_id = integer()
-  )
-
-  for (idx in seq_len(n_steps)) {
-    state <- adaptive_rank_run_live(
-      state = state,
-      judge = judge,
-      n_steps = 1L,
-      fit_fn = fit_fn,
-      btl_config = btl_config,
-      progress = "none"
-    )
-    round <- state$round %||% list()
-    step_id <- as.integer(nrow(state$step_log))
-    signature <- paste(sort(as.character(round$anchor_ids %||% character())), collapse = "|")
-    row <- tibble::tibble(
-      step_id = step_id,
-      round_id = as.integer(round$round_id %||% NA_integer_),
-      anchor_signature = as.character(signature),
-      anchor_refresh_source = as.character(round$anchor_refresh_source %||% NA_character_),
-      anchor_refit_round_id = as.integer(round$anchor_refit_round_id %||% NA_integer_)
-    )
-    anchor_trace <- dplyr::bind_rows(anchor_trace, row)
-    if (isTRUE(state$meta$stop_decision %||% FALSE)) {
-      break
+  sim <- withr::with_seed(run_seed, {
+    state <- adaptive_rank_start(items = items, seed = run_seed)
+    state <- .adaptive_simulation_apply_scenario(state, scenario = scenario)
+    judge <- .adaptive_simulation_judge(items = items, judge_seed = judge_seed)
+    if (is.null(btl_config)) {
+      btl_config <- list(refit_pairs_target = as.integer(max(5000L, n_steps + 1L)))
     }
-  }
+
+    anchor_trace <- tibble::tibble(
+      step_id = integer(),
+      round_id = integer(),
+      anchor_signature = character(),
+      anchor_refresh_source = character(),
+      anchor_refit_round_id = integer()
+    )
+
+    for (idx in seq_len(n_steps)) {
+      state <- adaptive_rank_run_live(
+        state = state,
+        judge = judge,
+        n_steps = 1L,
+        fit_fn = fit_fn,
+        btl_config = btl_config,
+        progress = "none"
+      )
+      round <- state$round %||% list()
+      step_id <- as.integer(nrow(state$step_log))
+      signature <- paste(sort(as.character(round$anchor_ids %||% character())), collapse = "|")
+      row <- tibble::tibble(
+        step_id = step_id,
+        round_id = as.integer(round$round_id %||% NA_integer_),
+        anchor_signature = as.character(signature),
+        anchor_refresh_source = as.character(round$anchor_refresh_source %||% NA_character_),
+        anchor_refit_round_id = as.integer(round$anchor_refit_round_id %||% NA_integer_)
+      )
+      anchor_trace <- dplyr::bind_rows(anchor_trace, row)
+      if (isTRUE(state$meta$stop_decision %||% FALSE)) {
+        break
+      }
+    }
+
+    list(state = state, anchor_trace = anchor_trace)
+  })
 
   list(
     scenario = scenario,
     run_seed = run_seed,
     judge_seed = judge_seed,
-    state = state,
-    step_log = adaptive_step_log(state),
-    round_log = adaptive_round_log(state),
-    item_log = adaptive_item_log(state, stack = TRUE),
-    anchor_trace = anchor_trace
+    state = sim$state,
+    step_log = adaptive_step_log(sim$state),
+    round_log = adaptive_round_log(sim$state),
+    item_log = adaptive_item_log(sim$state, stack = TRUE),
+    anchor_trace = sim$anchor_trace
   )
 }
 
