@@ -21,6 +21,7 @@ adaptive_rank(
   judge_call_args = list(),
   n_steps = 1L,
   fit_fn = NULL,
+  adaptive_config = NULL,
   btl_config = NULL,
   session_dir = NULL,
   persist_item_log = FALSE,
@@ -77,6 +78,16 @@ call. The run may return earlier due to candidate starvation or BTL stop
 criteria. Attempted invalid steps also count toward this limit.}
 
 \item{fit_fn}{Optional fit override passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
+
+\item{adaptive_config}{Optional named list passed to
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}} and \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} to control adaptive
+controller behavior. Supported fields:
+\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min},
+\code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
+\code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
+\code{boundary_frac}, \code{p_star_override_margin}, and
+\code{star_override_budget_per_round}. Unknown fields and invalid values abort
+with actionable errors.}
 
 \item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 to control BTL refit cadence, stopping diagnostics, and selected
@@ -153,9 +164,11 @@ controls such as \code{reasoning}, \code{service_tier}, \code{temperature}, \cod
 
 Adaptive options:
 all key controls from \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} are available directly:
-\code{n_steps}, \code{fit_fn}, \code{btl_config}, \code{progress}, \code{progress_redraw_every},
-\code{progress_show_events}, \code{progress_errors}, \code{session_dir}, and
-\code{persist_item_log}.
+\code{n_steps}, \code{fit_fn}, \code{adaptive_config}, \code{btl_config}, \code{progress},
+\code{progress_redraw_every}, \code{progress_show_events}, \code{progress_errors},
+\code{session_dir}, and \code{persist_item_log}.
+Use \code{adaptive_config} for identifiability-gated controller behavior and
+\code{btl_config} for inference/diagnostics cadence only.
 
 Selection semantics:
 pair selection is TrueSkill-driven in one-pair transactional steps.
@@ -219,6 +232,10 @@ live <- adaptive_rank(
     refit_pairs_target = 20L,
     ess_bulk_min = 500,
     eap_reliability_min = 0.92
+  ),
+  adaptive_config = list(
+    explore_taper_mult = 0.40,
+    star_override_budget_per_round = 2L
   ),
   n_steps = 120,
   session_dir = file.path(tempdir(), "adaptive-live"),

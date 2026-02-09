@@ -19,7 +19,9 @@ Load an adaptive session from disk.
 Restores a persisted Adaptive state and revalidates basic invariants such
 as schema version, required state fields, and index ranges in
 \code{step_log}. If per-refit item logs are found on disk, they are loaded
-into \code{state$item_log} and persistence is marked as enabled.
+into \code{state$item_log} and persistence is marked as enabled. Resume uses
+strict schema validation for canonical logs; incompatible saved schemas abort
+with explicit errors.
 }
 \examples{
 dir <- tempfile("pwllm-session-")

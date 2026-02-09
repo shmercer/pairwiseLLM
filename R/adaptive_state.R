@@ -69,6 +69,162 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_controller_public_keys <- function() {
+  c(
+    "global_identified_reliability_min",
+    "global_identified_rank_corr_min",
+    "p_long_low",
+    "p_long_high",
+    "long_taper_mult",
+    "long_frac_floor",
+    "mid_bonus_frac",
+    "explore_taper_mult",
+    "boundary_k",
+    "boundary_window",
+    "boundary_frac",
+    "p_star_override_margin",
+    "star_override_budget_per_round"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_validate_controller_config <- function(adaptive_config, n_items) {
+  if (is.null(adaptive_config)) {
+    return(list())
+  }
+  if (!is.list(adaptive_config)) {
+    rlang::abort("`adaptive_config` must be a named list when provided.")
+  }
+  cfg_names <- names(adaptive_config)
+  if (length(adaptive_config) > 0L && (is.null(cfg_names) || any(cfg_names == ""))) {
+    rlang::abort("`adaptive_config` must be a named list with non-empty names.")
+  }
+
+  allowed <- .adaptive_controller_public_keys()
+  unknown <- setdiff(cfg_names, allowed)
+  if (length(unknown) > 0L) {
+    rlang::abort(c(
+      "Unknown `adaptive_config` field(s).",
+      x = paste(unknown, collapse = ", "),
+      i = paste("Allowed fields:", paste(allowed, collapse = ", "))
+    ))
+  }
+
+  out <- adaptive_config
+  read_double <- function(name, lower = -Inf, upper = Inf) {
+    value <- out[[name]]
+    if (is.null(value)) {
+      return(NULL)
+    }
+    if (!is.numeric(value) || length(value) != 1L || is.na(value)) {
+      rlang::abort(paste0("`adaptive_config$", name, "` must be a single numeric value."))
+    }
+    value <- as.double(value)
+    if (value < lower || value > upper) {
+      rlang::abort(paste0(
+        "`adaptive_config$", name, "` must be in [",
+        format(lower, scientific = FALSE),
+        ", ",
+        format(upper, scientific = FALSE),
+        "]."
+      ))
+    }
+    value
+  }
+  read_integer <- function(name, lower = -Inf, upper = Inf) {
+    value <- out[[name]]
+    if (is.null(value)) {
+      return(NULL)
+    }
+    if (!.adaptive_is_integerish(value) || length(value) != 1L || is.na(value)) {
+      rlang::abort(paste0("`adaptive_config$", name, "` must be a single integer value."))
+    }
+    value <- as.integer(value)
+    if (value < lower || value > upper) {
+      rlang::abort(paste0(
+        "`adaptive_config$", name, "` must be in [",
+        format(lower, scientific = FALSE),
+        ", ",
+        format(upper, scientific = FALSE),
+        "]."
+      ))
+    }
+    value
+  }
+
+  out$global_identified_reliability_min <- read_double("global_identified_reliability_min", 0, 1)
+  out$global_identified_rank_corr_min <- read_double("global_identified_rank_corr_min", 0, 1)
+  out$p_long_low <- read_double("p_long_low", 0, 1)
+  out$p_long_high <- read_double("p_long_high", 0, 1)
+  out$long_taper_mult <- read_double("long_taper_mult", 0, 1)
+  out$long_frac_floor <- read_double("long_frac_floor", 0, 1)
+  out$mid_bonus_frac <- read_double("mid_bonus_frac", 0, 1)
+  out$explore_taper_mult <- read_double("explore_taper_mult", 0, 1)
+  out$boundary_k <- read_integer("boundary_k", 1L, as.integer(n_items))
+  out$boundary_window <- read_integer("boundary_window", 1L, as.integer(n_items))
+  out$boundary_frac <- read_double("boundary_frac", 0, 1)
+  out$p_star_override_margin <- read_double("p_star_override_margin", 0, 0.5)
+  out$star_override_budget_per_round <- read_integer("star_override_budget_per_round", 0L, Inf)
+
+  if (!is.null(out$p_long_low) &&
+    !is.null(out$p_long_high) &&
+    out$p_long_low >= out$p_long_high) {
+    rlang::abort("`adaptive_config$p_long_low` must be strictly less than `adaptive_config$p_long_high`.")
+  }
+
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_sync_round_controller <- function(state) {
+  out <- state
+  round <- out$round %||% NULL
+  if (is.null(round) || !is.list(round)) {
+    return(out)
+  }
+  controller <- .adaptive_controller_resolve(out)
+  round$star_override_budget_per_round <- as.integer(controller$star_override_budget_per_round)
+
+  can_refresh_quotas <- as.integer(round$round_committed %||% 0L) == 0L &&
+    as.integer(round$stage_index %||% 1L) == 1L &&
+    all(as.integer(round$stage_committed %||% integer()) == 0L)
+
+  if (isTRUE(can_refresh_quotas)) {
+    stage_quotas <- .adaptive_round_compute_quotas(
+      round_id = as.integer(round$round_id %||% 1L),
+      n_items = as.integer(out$n_items),
+      controller = controller
+    )
+    quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
+    round$stage_quotas <- stage_quotas
+    round$global_identified <- isTRUE(quota_meta$global_identified %||% FALSE)
+    round$long_quota_raw <- as.integer(quota_meta$long_quota_raw %||% NA_integer_)
+    round$long_quota_effective <- as.integer(quota_meta$long_quota_effective %||% NA_integer_)
+    round$long_quota_removed <- as.integer(quota_meta$long_quota_removed %||% NA_integer_)
+    round$realloc_to_mid <- as.integer(quota_meta$realloc_to_mid %||% NA_integer_)
+    round$realloc_to_local <- as.integer(quota_meta$realloc_to_local %||% NA_integer_)
+  }
+
+  out$round <- round
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_apply_controller_config <- function(state, adaptive_config = NULL) {
+  out <- state
+  overrides <- .adaptive_validate_controller_config(adaptive_config, n_items = out$n_items)
+  if (length(overrides) == 0L) {
+    return(out)
+  }
+  out$controller <- utils::modifyList(.adaptive_controller_resolve(out), overrides)
+  .adaptive_sync_round_controller(out)
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_controller_resolve <- function(state_or_n_items) {
   if (inherits(state_or_n_items, "adaptive_state")) {
     n_items <- as.integer(state_or_n_items$n_items)

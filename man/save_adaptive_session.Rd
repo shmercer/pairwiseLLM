@@ -24,7 +24,9 @@ Saves canonical Adaptive artifacts under \code{session_dir}:
 \code{state.rds}, \code{step_log.rds}, \code{round_log.rds},
 \code{metadata.rds}, optional \code{btl_fit.rds}, and optional per-refit item
 log files when \code{state$config$persist_item_log} is \code{TRUE}. Writes
-are atomic at file level to reduce partial-write risk.
+are atomic at file level to reduce partial-write risk. Persisted
+\code{step_log}/\code{round_log} files keep the full canonical schemas, so
+resume preserves expanded audit fields without recomputation.
 }
 \examples{
 dir <- tempfile("pwllm-session-")

@@ -190,7 +190,9 @@ read_log <- function(path) {
 #' Verifies that required session artifacts exist and that serialized logs match
 #' canonical schemas for \code{step_log} and \code{round_log}. This check is
 #' intended as a preflight for [load_adaptive_session()] and enforces the
-#' canonical adaptive session metadata shape.
+#' canonical adaptive session metadata shape. Validation is strict:
+#' added/removed/reordered columns in persisted logs are treated as schema
+#' incompatibilities and abort resume.
 #'
 #' @param session_dir Directory containing session artifacts.
 #'
@@ -277,7 +279,9 @@ validate_session_dir <- function(session_dir) {
 #' \code{state.rds}, \code{step_log.rds}, \code{round_log.rds},
 #' \code{metadata.rds}, optional \code{btl_fit.rds}, and optional per-refit item
 #' log files when \code{state$config$persist_item_log} is \code{TRUE}. Writes
-#' are atomic at file level to reduce partial-write risk.
+#' are atomic at file level to reduce partial-write risk. Persisted
+#' \code{step_log}/\code{round_log} files keep the full canonical schemas, so
+#' resume preserves expanded audit fields without recomputation.
 #'
 #' @param state Adaptive state.
 #' @param session_dir Directory to write session artifacts.
@@ -354,7 +358,9 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 #' Restores a persisted Adaptive state and revalidates basic invariants such
 #' as schema version, required state fields, and index ranges in
 #' \code{step_log}. If per-refit item logs are found on disk, they are loaded
-#' into \code{state$item_log} and persistence is marked as enabled.
+#' into \code{state$item_log} and persistence is marked as enabled. Resume uses
+#' strict schema validation for canonical logs; incompatible saved schemas abort
+#' with explicit errors.
 #'
 #' @param session_dir Directory containing session artifacts.
 #'

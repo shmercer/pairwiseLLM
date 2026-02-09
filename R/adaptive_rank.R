@@ -266,9 +266,11 @@ make_adaptive_judge_llm <- function(
 #'
 #' Adaptive options:
 #' all key controls from [adaptive_rank_run_live()] are available directly:
-#' `n_steps`, `fit_fn`, `btl_config`, `progress`, `progress_redraw_every`,
-#' `progress_show_events`, `progress_errors`, `session_dir`, and
-#' `persist_item_log`.
+#' `n_steps`, `fit_fn`, `adaptive_config`, `btl_config`, `progress`,
+#' `progress_redraw_every`, `progress_show_events`, `progress_errors`,
+#' `session_dir`, and `persist_item_log`.
+#' Use `adaptive_config` for identifiability-gated controller behavior and
+#' `btl_config` for inference/diagnostics cadence only.
 #'
 #' Selection semantics:
 #' pair selection is TrueSkill-driven in one-pair transactional steps.
@@ -323,6 +325,15 @@ make_adaptive_judge_llm <- function(
 #'   call. The run may return earlier due to candidate starvation or BTL stop
 #'   criteria. Attempted invalid steps also count toward this limit.
 #' @param fit_fn Optional fit override passed to [adaptive_rank_run_live()].
+#' @param adaptive_config Optional named list passed to
+#'   [adaptive_rank_start()] and [adaptive_rank_run_live()] to control adaptive
+#'   controller behavior. Supported fields:
+#'   `global_identified_reliability_min`, `global_identified_rank_corr_min`,
+#'   `p_long_low`, `p_long_high`, `long_taper_mult`, `long_frac_floor`,
+#'   `mid_bonus_frac`, `explore_taper_mult`, `boundary_k`, `boundary_window`,
+#'   `boundary_frac`, `p_star_override_margin`, and
+#'   `star_override_budget_per_round`. Unknown fields and invalid values abort
+#'   with actionable errors.
 #' @param btl_config Optional named list passed to [adaptive_rank_run_live()]
 #'   to control BTL refit cadence, stopping diagnostics, and selected
 #'   round-log diagnostics. Supported fields:
@@ -397,6 +408,10 @@ make_adaptive_judge_llm <- function(
 #'     ess_bulk_min = 500,
 #'     eap_reliability_min = 0.92
 #'   ),
+#'   adaptive_config = list(
+#'     explore_taper_mult = 0.40,
+#'     star_override_budget_per_round = 2L
+#'   ),
 #'   n_steps = 120,
 #'   session_dir = file.path(tempdir(), "adaptive-live"),
 #'   persist_item_log = TRUE,
@@ -431,6 +446,7 @@ adaptive_rank <- function(
     judge_call_args = list(),
     n_steps = 1L,
     fit_fn = NULL,
+    adaptive_config = NULL,
     btl_config = NULL,
     session_dir = NULL,
     persist_item_log = FALSE,
@@ -521,6 +537,7 @@ adaptive_rank <- function(
     state <- adaptive_rank_start(
       items = items,
       seed = seed,
+      adaptive_config = adaptive_config,
       session_dir = session_dir,
       persist_item_log = persist_item_log
     )
@@ -553,6 +570,7 @@ adaptive_rank <- function(
     judge = judge,
     n_steps = n_steps,
     fit_fn = fit_fn,
+    adaptive_config = adaptive_config,
     btl_config = btl_config,
     session_dir = session_dir,
     persist_item_log = persist_item_log,
