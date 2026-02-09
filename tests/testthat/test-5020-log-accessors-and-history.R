@@ -113,3 +113,51 @@ test_that("invalid-step rows keep committed-only fields as NA", {
   expect_true(is.na(step_row$p_ij[[1L]]))
   expect_true(is.na(step_row$U0_ij[[1L]]))
 })
+
+test_that("star_override_used follows commit and no-selection semantics", {
+  committed_state <- adaptive_rank_start(make_test_items(3))
+  judge_ok <- make_deterministic_judge("i_wins")
+
+  withr::local_seed(1)
+  committed_state <- adaptive_rank_run_live(
+    committed_state,
+    judge_ok,
+    n_steps = 1L,
+    progress = "none"
+  )
+  committed_row <- adaptive_step_log(committed_state)[1L, , drop = FALSE]
+  expect_false(is.na(committed_row$pair_id[[1L]]))
+  expect_identical(committed_row$star_override_used[[1L]], FALSE)
+
+  invalid_state <- adaptive_rank_start(make_test_items(3))
+  judge_invalid <- make_deterministic_judge("invalid")
+
+  withr::local_seed(1)
+  invalid_state <- adaptive_rank_run_live(
+    invalid_state,
+    judge_invalid,
+    n_steps = 1L,
+    progress = "none"
+  )
+  invalid_row <- adaptive_step_log(invalid_state)[1L, , drop = FALSE]
+  expect_true(is.na(invalid_row$pair_id[[1L]]))
+  expect_false(isTRUE(invalid_row$candidate_starved[[1L]]))
+  expect_identical(invalid_row$star_override_used[[1L]], FALSE)
+
+  starved_state <- pairwiseLLM:::new_adaptive_state(make_test_items(2))
+  starved_state$history_pairs <- tibble::tibble(
+    A_id = c("1", "1", "1"),
+    B_id = c("2", "2", "2")
+  )
+
+  starved_out <- adaptive_rank_run_live(
+    starved_state,
+    judge_ok,
+    n_steps = 1L,
+    progress = "none"
+  )
+  starved_row <- adaptive_step_log(starved_out)[1L, , drop = FALSE]
+  expect_true(is.na(starved_row$pair_id[[1L]]))
+  expect_true(isTRUE(starved_row$candidate_starved[[1L]]))
+  expect_true(is.na(starved_row$star_override_used[[1L]]))
+})
