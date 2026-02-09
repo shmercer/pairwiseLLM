@@ -60,7 +60,20 @@ adaptive_defaults <- function(N) {
     mid_max_dist = as.integer(min(4L, k_base - 1L)),
     local_max_dist = 1L,
     local_expand_max_dist = 2L,
-    exposure_underrep_q = 0.25
+    exposure_underrep_q = 0.25,
+    global_identified_reliability_min = 0.80,
+    global_identified_rank_corr_min = 0.90,
+    long_taper_mult = 0.25,
+    long_frac_floor = 0.02,
+    mid_bonus_frac = 0.20,
+    p_long_low = 0.10,
+    p_long_high = 0.90,
+    explore_taper_mult = 0.50,
+    boundary_k = 20L,
+    boundary_window = as.integer(max(10L, ceiling(0.05 * N))),
+    boundary_frac = 0.15,
+    p_star_override_margin = 0.05,
+    star_override_budget_per_round = 1L
   )
 }
 
@@ -150,9 +163,7 @@ adaptive_defaults <- function(N) {
 }
 
 .adaptive_low_degree_set <- function(deg) {
-  if (length(deg) == 0L) return(character())
-  min_deg <- min(deg)
-  names(deg)[deg == min_deg]
+  .adaptive_underrep_set(deg)
 }
 
 .adaptive_underrep_set <- function(deg) {
@@ -305,6 +316,87 @@ adaptive_defaults <- function(N) {
   candidates[keep | allow_repeat, , drop = FALSE]
 }
 
+.adaptive_resolve_controller <- function(state, defaults) {
+  controller <- state$controller %||% list()
+  list(
+    global_identified = isTRUE(controller$global_identified %||% FALSE),
+    global_identified_reliability_min = as.double(
+      controller$global_identified_reliability_min %||%
+        defaults$global_identified_reliability_min
+    ),
+    global_identified_rank_corr_min = as.double(
+      controller$global_identified_rank_corr_min %||%
+        defaults$global_identified_rank_corr_min
+    ),
+    p_long_low = as.double(controller$p_long_low %||% defaults$p_long_low),
+    p_long_high = as.double(controller$p_long_high %||% defaults$p_long_high),
+    explore_taper_mult = as.double(controller$explore_taper_mult %||% defaults$explore_taper_mult),
+    boundary_k = as.integer(controller$boundary_k %||% defaults$boundary_k),
+    boundary_window = as.integer(controller$boundary_window %||% defaults$boundary_window),
+    boundary_frac = as.double(controller$boundary_frac %||% defaults$boundary_frac),
+    p_star_override_margin = as.double(
+      controller$p_star_override_margin %||%
+        defaults$p_star_override_margin
+    ),
+    star_override_budget_per_round = as.integer(
+      controller$star_override_budget_per_round %||%
+        defaults$star_override_budget_per_round
+    )
+  )
+}
+
+.adaptive_posterior_pair_prob <- function(state, i_id, j_id) {
+  fit <- state$btl_fit %||% NULL
+  draws <- fit$btl_posterior_draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L) {
+    return(NA_real_)
+  }
+  draw_names <- colnames(draws)
+  if (is.null(draw_names)) {
+    return(NA_real_)
+  }
+  i_col <- match(as.character(i_id), draw_names)
+  j_col <- match(as.character(j_id), draw_names)
+  if (is.na(i_col) || is.na(j_col)) {
+    return(NA_real_)
+  }
+  as.double(mean(draws[, i_col] > draws[, j_col]))
+}
+
+.adaptive_local_priority_select <- function(cand, state, round, stage_committed_so_far, stage_quota, defaults) {
+  if (nrow(cand) == 0L) {
+    return(list(candidates = cand, mode = "standard"))
+  }
+
+  proxy <- .adaptive_rank_proxy(state)
+  rank_index <- .adaptive_rank_index_from_scores(proxy$scores)
+  n_items <- length(rank_index)
+  boundary_k <- max(1L, min(as.integer(defaults$boundary_k), n_items))
+  boundary_window <- max(1L, min(as.integer(defaults$boundary_window), n_items))
+  half_window <- as.integer(floor(boundary_window / 2))
+  boundary_lo <- max(1L, boundary_k - half_window)
+  boundary_hi <- min(n_items, boundary_k + half_window)
+
+  i_rank <- as.integer(rank_index[as.character(cand$i)])
+  j_rank <- as.integer(rank_index[as.character(cand$j)])
+  is_boundary <- (i_rank >= boundary_lo & i_rank <= boundary_hi) |
+    (j_rank >= boundary_lo & j_rank <= boundary_hi)
+
+  boundary_target <- max(1L, as.integer(ceiling(as.double(defaults$boundary_frac) * max(1L, stage_quota))))
+  use_boundary <- is.finite(stage_committed_so_far) &&
+    stage_committed_so_far < boundary_target &&
+    any(is_boundary, na.rm = TRUE)
+
+  if (isTRUE(use_boundary)) {
+    boundary_cand <- cand[is_boundary %in% TRUE, , drop = FALSE]
+    ord <- order(abs(boundary_cand$p - 0.5), -boundary_cand$u0, boundary_cand$i, boundary_cand$j)
+    return(list(candidates = boundary_cand[ord, , drop = FALSE], mode = "boundary"))
+  }
+
+  ord <- order(abs(cand$p - 0.5), -cand$u0, cand$i, cand$j)
+  list(candidates = cand[ord, , drop = FALSE], mode = "near_tie")
+}
+
 .adaptive_select_partner <- function(candidates, i_id, mu, recent_deg, mode, rank_index = NULL) {
   cand <- candidates[candidates$i == i_id | candidates$j == i_id, , drop = FALSE]
   if (nrow(cand) == 0L) return(NULL)
@@ -360,6 +452,8 @@ adaptive_defaults <- function(N) {
   stage,
   state,
   config,
+  controller,
+  generation_stage = NULL,
   round,
   history,
   counts,
@@ -367,10 +461,15 @@ adaptive_defaults <- function(N) {
   seed_base,
   candidates = NULL
 ) {
+  generation_stage <- as.character(generation_stage %||% .adaptive_round_active_stage(state) %||% "warm_start")
   ids <- as.character(state$trueskill_state$items$item_id)
   candidates <- tibble::as_tibble(candidates %||% tibble::tibble(i = character(), j = character()))
 
   n_generated <- nrow(candidates)
+  long_gate_pass <- NA
+  long_gate_reason <- NA_character_
+  star_override_used <- FALSE
+  star_override_reason <- NA_character_
   if (n_generated == 0L) {
     return(list(
       selected = NULL,
@@ -381,7 +480,11 @@ adaptive_defaults <- function(N) {
         n_candidates_after_star_caps = 0L,
         n_candidates_scored = 0L
       ),
-      star_caps = list(rejects = 0L, reject_items = character(), reject_items_count = 0L)
+      star_caps = list(rejects = 0L, reject_items = character(), reject_items_count = 0L),
+      long_gate_pass = long_gate_pass,
+      long_gate_reason = long_gate_reason,
+      star_override_used = star_override_used,
+      star_override_reason = star_override_reason
     ))
   }
 
@@ -406,6 +509,26 @@ adaptive_defaults <- function(N) {
     }, logical(1L))
     candidates <- candidates[has_order, , drop = FALSE]
   }
+
+  gate_active <- identical(generation_stage, "long_link") && isTRUE(controller$global_identified)
+  if (isTRUE(gate_active) && nrow(candidates) > 0L) {
+    p_long_low <- as.double(controller$p_long_low)
+    p_long_high <- as.double(controller$p_long_high)
+    p_gate <- vapply(seq_len(nrow(candidates)), function(idx) {
+      .adaptive_posterior_pair_prob(state, candidates$i[[idx]], candidates$j[[idx]])
+    }, numeric(1L))
+    posterior_available <- is.finite(p_gate)
+    if (!all(posterior_available)) {
+      p_gate[!posterior_available] <- candidates$p[!posterior_available]
+      long_gate_reason <- "posterior_unavailable"
+    }
+    keep <- p_gate >= p_long_low & p_gate <= p_long_high
+    if (!any(keep)) {
+      long_gate_reason <- if (all(posterior_available)) "posterior_extreme" else "posterior_unavailable"
+    }
+    long_gate_pass <- any(keep)
+    candidates <- candidates[keep, , drop = FALSE]
+  }
   n_after_hard <- nrow(candidates)
 
   cap_count <- ceiling(config$cap_frac * config$W_cap)
@@ -413,6 +536,8 @@ adaptive_defaults <- function(N) {
   allow_repeats <- identical(stage$dup_policy, "relaxed")
 
   .apply_downstream_filters <- function(candidates_in) {
+    star_override_used_local <- FALSE
+    star_override_reason_local <- NA_character_
     u0_quantile <- NULL
     if (nrow(candidates_in) > 0L) {
       star_filtered_local <- .adaptive_star_cap_filter(candidates_in, recent_deg, cap_count)
@@ -436,10 +561,56 @@ adaptive_defaults <- function(N) {
     )
 
     star_filtered_local <- .adaptive_star_cap_filter(after_dup, recent_deg, cap_count)
+
+    if (nrow(star_filtered_local$candidates) == 0L &&
+      nrow(after_dup) > 0L &&
+      isTRUE(controller$global_identified) &&
+      generation_stage %in% c("local_link", "mid_link")) {
+      budget <- as.integer(round$star_override_budget_per_round %||% controller$star_override_budget_per_round)
+      used <- as.integer(round$star_override_used %||% 0L)
+      remaining <- max(0L, budget - used)
+
+      if (remaining > 0L) {
+        i_ids <- as.character(after_dup$i)
+        j_ids <- as.character(after_dup$j)
+        i_excess <- recent_deg[i_ids] > cap_count
+        j_excess <- recent_deg[j_ids] > cap_count
+        rejected <- after_dup[i_excess | j_excess, , drop = FALSE]
+
+        if (nrow(rejected) > 0L) {
+          near_mask <- abs(rejected$p - 0.5) <= as.double(controller$p_star_override_margin)
+          if (any(near_mask)) {
+            near_tie <- rejected[near_mask, , drop = FALSE]
+            deg_vals <- as.double(counts$deg)
+            deg_extreme_cutoff <- if (length(deg_vals) > 0L) {
+              stats::quantile(deg_vals, probs = 0.90, names = FALSE, type = 7)
+            } else {
+              Inf
+            }
+            i_deg <- as.double(counts$deg[as.character(near_tie$i)])
+            j_deg <- as.double(counts$deg[as.character(near_tie$j)])
+            keep_deg <- (i_deg <= deg_extreme_cutoff) & (j_deg <= deg_extreme_cutoff)
+            if (any(keep_deg)) {
+              override_cand <- near_tie[keep_deg, , drop = FALSE]
+              star_filtered_local$candidates <- override_cand
+              star_override_used_local <- TRUE
+              star_override_reason_local <- "near_tie_override"
+            } else {
+              star_override_reason_local <- "deg_extreme"
+            }
+          }
+        }
+      } else {
+        star_override_reason_local <- "budget_exhausted"
+      }
+    }
+
     list(
       candidates = star_filtered_local$candidates,
       n_after_dup = nrow(after_dup),
-      star_filtered = star_filtered_local
+      star_filtered = star_filtered_local,
+      star_override_used = star_override_used_local,
+      star_override_reason = star_override_reason_local
     )
   }
 
@@ -454,6 +625,8 @@ adaptive_defaults <- function(N) {
   candidates <- filtered$candidates
   n_after_dup <- filtered$n_after_dup
   star_filtered <- filtered$star_filtered
+  star_override_used <- filtered$star_override_used %||% FALSE
+  star_override_reason <- filtered$star_override_reason %||% NA_character_
 
   if (nrow(candidates) == 0L) {
     candidates_repeat <- .adaptive_round_exposure_filter(candidates_hard,
@@ -466,6 +639,8 @@ adaptive_defaults <- function(N) {
     candidates <- filtered_repeat$candidates
     n_after_dup <- filtered_repeat$n_after_dup
     star_filtered <- filtered_repeat$star_filtered
+    star_override_used <- filtered_repeat$star_override_used %||% FALSE
+    star_override_reason <- filtered_repeat$star_override_reason %||% NA_character_
   }
 
   n_after_star <- nrow(candidates)
@@ -486,7 +661,11 @@ adaptive_defaults <- function(N) {
       reject_items = star_filtered$reject_items,
       reject_items_count = as.integer(star_filtered$reject_items_count)
     ),
-    recent_deg = recent_deg
+    recent_deg = recent_deg,
+    long_gate_pass = long_gate_pass,
+    long_gate_reason = long_gate_reason,
+    star_override_used = star_override_used,
+    star_override_reason = star_override_reason
   )
 }
 
@@ -503,6 +682,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
 
   ids <- as.character(state$trueskill_state$items$item_id)
   defaults <- adaptive_defaults(length(ids))
+  controller <- .adaptive_resolve_controller(state, defaults)
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, ids)
   step_id <- as.integer(step_id %||% (nrow(state$step_log) + 1L))
@@ -538,10 +718,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   fallback_path <- character()
   last_counts <- NULL
   last_star_caps <- list(rejects = 0L, reject_items = character(), reject_items_count = 0L)
+  last_long_gate_pass <- NA
+  last_long_gate_reason <- NA_character_
+  last_star_override_used <- FALSE
+  last_star_override_reason <- NA_character_
   selected_pair <- NULL
   selected_stage <- NULL
   explore_mode <- NA_character_
   explore_reason <- NA_character_
+  explore_rate_used <- as.double(defaults$explore_rate)
+  local_priority_mode <- NA_character_
   is_explore_step <- FALSE
   recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
 
@@ -566,6 +752,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       stage = stage,
       state = state,
       config = defaults,
+      controller = controller,
+      generation_stage = generation_stage,
       round = round,
       history = history,
       counts = counts,
@@ -575,17 +763,29 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     )
     last_counts <- stage_out$counts
     last_star_caps <- stage_out$star_caps
+    if (!is.na(stage_out$long_gate_pass %||% NA)) {
+      last_long_gate_pass <- stage_out$long_gate_pass
+    }
+    if (!is.na(stage_out$long_gate_reason %||% NA_character_)) {
+      last_long_gate_reason <- stage_out$long_gate_reason
+    }
+    last_star_override_used <- isTRUE(stage_out$star_override_used)
+    last_star_override_reason <- stage_out$star_override_reason
     recent_deg <- stage_out$recent_deg %||% recent_deg
 
     cand <- stage_out$selected
     if (is.null(cand) || nrow(cand) == 0L) next
 
     explore_rate <- defaults$explore_rate
+    if (isTRUE(controller$global_identified)) {
+      explore_rate <- explore_rate * as.double(controller$explore_taper_mult)
+    }
     if (stage$explore_boost > 1) {
       explore_rate <- min(0.50, explore_rate * stage$explore_boost)
     }
+    explore_rate_used <- as.double(explore_rate)
 
-    low_degree_set <- .adaptive_low_degree_set(counts$deg)
+    underrep_set <- .adaptive_underrep_set(counts$deg)
     min_degree <- min(counts$deg)
     quota_active <- min_degree < 2L
     quota_eps <- defaults$quota_eps
@@ -600,7 +800,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     stage_explore_reason <- NA_character_
 
     if (quota_pick) {
-      eligible <- cand[cand$i %in% low_degree_set | cand$j %in% low_degree_set, , drop = FALSE]
+      eligible <- cand[cand$i %in% underrep_set | cand$j %in% underrep_set, , drop = FALSE]
       if (nrow(eligible) == 0L) next
       cand <- eligible
       stage_is_explore <- TRUE
@@ -651,6 +851,22 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       if (is.null(selected)) next
       selected_pair <- selected
     } else {
+      if (identical(generation_stage, "local_link") && isTRUE(controller$global_identified)) {
+        prioritized <- .adaptive_local_priority_select(
+          cand = cand,
+          state = state,
+          round = round,
+          stage_committed_so_far = stage_committed_so_far %||% 0L,
+          stage_quota = stage_quota %||% nrow(cand),
+          defaults = controller
+        )
+        cand <- prioritized$candidates
+        local_priority_mode <- prioritized$mode
+      } else if (identical(generation_stage, "local_link")) {
+        local_priority_mode <- "standard"
+      } else {
+        local_priority_mode <- NA_character_
+      }
       order_idx <- order(-cand$u0, cand$i, cand$j)
       selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
     }
@@ -678,6 +894,12 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       round_id = as.integer(round$round_id %||% NA_integer_),
       round_stage = as.character(round_stage),
       pair_type = as.character(round_stage),
+      explore_rate_used = as.double(explore_rate_used),
+      local_priority_mode = as.character(local_priority_mode),
+      long_gate_pass = last_long_gate_pass,
+      long_gate_reason = as.character(last_long_gate_reason),
+      star_override_used = NA,
+      star_override_reason = as.character(last_star_override_reason),
       used_in_round_i = NA_integer_,
       used_in_round_j = NA_integer_,
       is_anchor_i = NA,
@@ -751,6 +973,12 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     round_id = as.integer(round$round_id %||% NA_integer_),
     round_stage = as.character(round_stage),
     pair_type = as.character(round_stage),
+    explore_rate_used = as.double(explore_rate_used),
+    local_priority_mode = as.character(local_priority_mode),
+    long_gate_pass = last_long_gate_pass,
+    long_gate_reason = as.character(last_long_gate_reason),
+    star_override_used = as.logical(last_star_override_used),
+    star_override_reason = as.character(last_star_override_reason),
     used_in_round_i = as.integer(per_round_uses[[i_id]] %||% 0L),
     used_in_round_j = as.integer(per_round_uses[[j_id]] %||% 0L),
     is_anchor_i = as.logical(i_id %in% anchor_ids),

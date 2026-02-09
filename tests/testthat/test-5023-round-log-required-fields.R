@@ -26,6 +26,14 @@ test_that("round_log includes required stopping and star-cap audit fields", {
     "cov_trace_theta",
     "top20_boundary_entropy_mean",
     "nn_diff_sd_mean",
+    "global_identified",
+    "global_identified_reliability_min",
+    "global_identified_rank_corr_min",
+    "long_quota_raw",
+    "long_quota_effective",
+    "long_quota_removed",
+    "realloc_to_mid",
+    "realloc_to_local",
     "refit_id",
     "round_id_at_refit",
     "mcmc_chains",
@@ -46,6 +54,14 @@ test_that("round_log includes required stopping and star-cap audit fields", {
   expect_true(is.double(round_log$cov_trace_theta))
   expect_true(is.double(round_log$top20_boundary_entropy_mean))
   expect_true(is.double(round_log$nn_diff_sd_mean))
+  expect_true(is.logical(round_log$global_identified))
+  expect_true(is.double(round_log$global_identified_reliability_min))
+  expect_true(is.double(round_log$global_identified_rank_corr_min))
+  expect_true(is.integer(round_log$long_quota_raw))
+  expect_true(is.integer(round_log$long_quota_effective))
+  expect_true(is.integer(round_log$long_quota_removed))
+  expect_true(is.integer(round_log$realloc_to_mid))
+  expect_true(is.integer(round_log$realloc_to_local))
   expect_true(is.integer(round_log$refit_id))
   expect_true(is.integer(round_log$round_id_at_refit))
   expect_true(is.integer(round_log$mcmc_chains))

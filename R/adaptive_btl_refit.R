@@ -23,7 +23,9 @@
     theta_sd_rel_change_max = 0.10,
     rank_spearman_min = 0.95,
     near_tie_p_low = 0.40,
-    near_tie_p_high = 0.60
+    near_tie_p_high = 0.60,
+    global_identified_reliability_min = 0.80,
+    global_identified_rank_corr_min = 0.90
   )
 }
 
@@ -142,6 +144,56 @@
     theta_mean <- colMeans(draws)
   }
   theta_mean
+}
+
+.adaptive_ts_btl_rank_spearman <- function(state, theta_mean) {
+  if (is.null(state$trueskill_state) ||
+    is.null(state$trueskill_state$items) ||
+    !is.data.frame(state$trueskill_state$items)) {
+    return(NA_real_)
+  }
+  ids <- as.character(state$item_ids)
+  theta_names <- names(theta_mean)
+  theta_mean <- as.double(theta_mean)
+  names(theta_mean) <- theta_names
+  if (is.null(theta_names) || !all(ids %in% theta_names)) {
+    return(NA_real_)
+  }
+  theta_vals <- theta_mean[ids]
+  ts_ids <- as.character(state$trueskill_state$items$item_id)
+  ts_mu <- as.double(state$trueskill_state$items$mu[match(ids, ts_ids)])
+  if (any(!is.finite(theta_vals)) || any(!is.finite(ts_mu))) {
+    return(NA_real_)
+  }
+  rank_theta <- rank(theta_vals, ties.method = "average")
+  rank_mu <- rank(ts_mu, ties.method = "average")
+  as.double(stats::cor(rank_mu, rank_theta, method = "spearman", use = "pairwise.complete.obs"))
+}
+
+.adaptive_update_identifiability_state <- function(state, config) {
+  out <- state
+  controller <- .adaptive_controller_resolve(out)
+  if (!is.null(config$global_identified_reliability_min)) {
+    controller$global_identified_reliability_min <- as.double(config$global_identified_reliability_min)
+  }
+  if (!is.null(config$global_identified_rank_corr_min)) {
+    controller$global_identified_rank_corr_min <- as.double(config$global_identified_rank_corr_min)
+  }
+
+  draws <- out$btl_fit$btl_posterior_draws %||% NULL
+  theta_mean <- .adaptive_btl_fit_theta_mean(out$btl_fit %||% list())
+  reliability <- compute_reliability_EAP(draws)
+  rho_rank <- .adaptive_ts_btl_rank_spearman(out, theta_mean)
+
+  controller$reliability_EAP <- as.double(reliability)
+  controller$ts_btl_rank_spearman <- as.double(rho_rank)
+  controller$global_identified <- is.finite(reliability) &&
+    is.finite(rho_rank) &&
+    reliability >= as.double(controller$global_identified_reliability_min) &&
+    rho_rank >= as.double(controller$global_identified_rank_corr_min)
+
+  out$controller <- controller
+  out
 }
 
 .adaptive_mode_value <- function(x) {
@@ -369,6 +421,14 @@
   } else {
     as.integer(round_id_current)
   }
+  controller <- .adaptive_controller_resolve(state)
+  round_summary <- state$refit_meta$last_completed_round_summary %||% list()
+  if (!is.na(round_id_at_refit) && !is.na(round_summary$round_id %||% NA_integer_) &&
+    as.integer(round_summary$round_id) == round_id_at_refit) {
+    quota_source <- round_summary
+  } else {
+    quota_source <- state$round %||% list()
+  }
 
   row <- list(
     refit_id = as.integer(nrow(state$round_log) + 1L),
@@ -385,6 +445,14 @@
     fallback_rate_since_last_refit = as.double(fallback_rate),
     fallback_used_mode = as.character(fallback_used_mode),
     starvation_reason_mode = as.character(starvation_reason_mode),
+    global_identified = as.logical(controller$global_identified %||% FALSE),
+    global_identified_reliability_min = as.double(controller$global_identified_reliability_min %||% NA_real_),
+    global_identified_rank_corr_min = as.double(controller$global_identified_rank_corr_min %||% NA_real_),
+    long_quota_raw = as.integer(quota_source$long_quota_raw %||% NA_integer_),
+    long_quota_effective = as.integer(quota_source$long_quota_effective %||% NA_integer_),
+    long_quota_removed = as.integer(quota_source$long_quota_removed %||% NA_integer_),
+    realloc_to_mid = as.integer(quota_source$realloc_to_mid %||% NA_integer_),
+    realloc_to_local = as.integer(quota_source$realloc_to_local %||% NA_integer_),
     mean_degree = as.double(mean_degree),
     min_degree = as.integer(min_degree),
     pos_balance_sd = as.double(pos_balance_sd),
@@ -535,6 +603,7 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
   state$refit_meta$last_refit_M_done <- M_done
   state$refit_meta$last_refit_step <- refit_context$step_id_at_refit
   state$refit_meta$last_refit_round_id <- as.integer(nrow(state$round_log) + 1L)
+  state <- .adaptive_update_identifiability_state(state, config)
 
   list(
     state = state,
