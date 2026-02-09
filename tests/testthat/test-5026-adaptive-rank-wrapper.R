@@ -348,3 +348,155 @@ test_that("adaptive_rank ignores endpoint for non-openai backends", {
     .env = asNamespace("pairwiseLLM")
   )
 })
+
+test_that("adaptive_rank_run_live applies adaptive_config overrides", {
+  samples <- make_test_samples_df(5L)
+  items <- dplyr::rename(samples, item_id = ID)
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  state <- pairwiseLLM::adaptive_rank_start(items = items, seed = 11L)
+  out <- pairwiseLLM::adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 1L,
+    adaptive_config = list(
+      explore_taper_mult = 0.35,
+      boundary_frac = 0.20,
+      star_override_budget_per_round = 3L
+    ),
+    progress = "none"
+  )
+
+  expect_equal(out$controller$explore_taper_mult, 0.35)
+  expect_equal(out$controller$boundary_frac, 0.20)
+  expect_equal(out$controller$star_override_budget_per_round, 3L)
+  expect_equal(out$round$star_override_budget_per_round, 3L)
+})
+
+test_that("adaptive_rank forwards adaptive_config and rejects unknown keys", {
+  samples <- make_test_samples_df(5L)
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    n_steps = 1L,
+    adaptive_config = list(
+      global_identified_reliability_min = 0.85,
+      p_long_low = 0.20,
+      p_long_high = 0.80
+    ),
+    progress = "none"
+  )
+
+  expect_equal(out$state$controller$global_identified_reliability_min, 0.85)
+  expect_equal(out$state$controller$p_long_low, 0.20)
+  expect_equal(out$state$controller$p_long_high, 0.80)
+
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = samples,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      adaptive_config = list(bad_key = 1),
+      progress = "none"
+    ),
+    "Unknown `adaptive_config` field"
+  )
+})
+
+test_that("adaptive_rank resume preserves adaptive controller config", {
+  samples <- make_test_samples_df(5L)
+  session_dir <- tempfile("adaptive-controller-session-")
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  first <- pairwiseLLM::adaptive_rank(
+    data = samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    n_steps = 1L,
+    adaptive_config = list(
+      explore_taper_mult = 0.42,
+      star_override_budget_per_round = 2L
+    ),
+    btl_config = list(refit_pairs_target = 1000L),
+    session_dir = session_dir,
+    resume = FALSE,
+    progress = "none"
+  )
+
+  second <- pairwiseLLM::adaptive_rank(
+    data = samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    n_steps = 1L,
+    btl_config = list(refit_pairs_target = 1000L),
+    session_dir = session_dir,
+    resume = TRUE,
+    progress = "none"
+  )
+
+  expect_equal(second$state$controller$explore_taper_mult, 0.42)
+  expect_equal(second$state$controller$star_override_budget_per_round, 2L)
+  expect_equal(nrow(second$state$step_log), nrow(first$state$step_log) + 1L)
+})
+
+test_that("adaptive_rank logs include documented adaptive step and refit fields", {
+  samples <- make_test_samples_df(6L)
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    n_steps = 4L,
+    adaptive_config = list(
+      global_identified_reliability_min = 0.10,
+      global_identified_rank_corr_min = 0.10
+    ),
+    btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+    progress = "none",
+    seed = 5L
+  )
+
+  step_cols <- c(
+    "explore_rate_used",
+    "local_priority_mode",
+    "long_gate_pass",
+    "long_gate_reason",
+    "star_override_used",
+    "star_override_reason"
+  )
+  round_cols <- c(
+    "global_identified",
+    "global_identified_reliability_min",
+    "global_identified_rank_corr_min",
+    "long_quota_raw",
+    "long_quota_effective",
+    "long_quota_removed",
+    "realloc_to_mid",
+    "realloc_to_local"
+  )
+
+  expect_true(all(step_cols %in% names(out$logs$step_log)))
+  expect_true(all(round_cols %in% names(out$logs$round_log)))
+})
