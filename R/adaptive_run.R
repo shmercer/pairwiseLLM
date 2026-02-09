@@ -228,6 +228,22 @@
 #'   use integer indices derived from these IDs.
 #' @param seed Integer seed used for deterministic warm-start shuffling and
 #'   selection randomness.
+#' @param adaptive_config Optional named list overriding adaptive controller
+#'   behavior. Supported fields:
+#'   \describe{
+#'   \item{`global_identified_reliability_min`, `global_identified_rank_corr_min`}{Thresholds
+#'   used to mark global identifiability after each refit.}
+#'   \item{`p_long_low`, `p_long_high`}{Posterior probability gate used for
+#'   long-link eligibility once globally identified.}
+#'   \item{`long_taper_mult`, `long_frac_floor`, `mid_bonus_frac`}{Late-stage
+#'   long-link taper and quota reallocation controls.}
+#'   \item{`explore_taper_mult`}{Late-stage exploration taper multiplier.}
+#'   \item{`boundary_k`, `boundary_window`, `boundary_frac`}{Local-stage
+#'   boundary-priority controls after global identifiability.}
+#'   \item{`p_star_override_margin`, `star_override_budget_per_round`}{Near-tie
+#'   star-cap override controls.}
+#'   }
+#'   Unknown fields and invalid values abort with an actionable error.
 #' @param session_dir Optional directory for saving session artifacts.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #' @param ... Internal/testing only. Supply `now_fn` to override the clock used
@@ -251,7 +267,8 @@ adaptive_rank_start <- function(items,
                                 seed = 1L,
                                 session_dir = NULL,
                                 persist_item_log = FALSE,
-                                ...) {
+                                ...,
+                                adaptive_config = NULL) {
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
@@ -279,6 +296,7 @@ adaptive_rank_start <- function(items,
   state$warm_start_pairs <- .adaptive_build_warm_start_pairs(state$item_ids, seed)
   state$warm_start_idx <- 1L
   state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
+  state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state$controller <- .adaptive_controller_resolve(state)
   state$round <- .adaptive_new_round_state(
     item_ids = state$item_ids,
@@ -333,7 +351,9 @@ adaptive_rank_start <- function(items,
 #' diagnostics gates (including ESS thresholds), reliability, and lagged
 #' stability criteria. Refit-level outcomes are
 #' appended to \code{round_log}; per-item posterior summaries are appended to
-#' \code{item_log}.
+#' \code{item_log}. Controller behavior can change after refits via
+#' identifiability-gated settings in \code{adaptive_config}; those controls
+#' affect pair routing and quotas, while BTL remains inference-only.
 #'
 #' @param state An adaptive state object created by [adaptive_rank_start()].
 #' @param judge A function called as `judge(A, B, state, ...)` that returns a
@@ -345,6 +365,14 @@ adaptive_rank_start <- function(items,
 #'   toward this budget, including invalid judge responses.
 #' @param fit_fn Optional BTL fit function for deterministic testing; defaults
 #'   to `default_btl_fit_fn()` when a refit is due.
+#' @param adaptive_config Optional named list overriding adaptive controller
+#'   behavior. Supported fields:
+#'   `global_identified_reliability_min`, `global_identified_rank_corr_min`,
+#'   `p_long_low`, `p_long_high`, `long_taper_mult`, `long_frac_floor`,
+#'   `mid_bonus_frac`, `explore_taper_mult`, `boundary_k`, `boundary_window`,
+#'   `boundary_frac`, `p_star_override_margin`, and
+#'   `star_override_budget_per_round`. Unknown fields and invalid values abort
+#'   with an actionable error.
 #' @param btl_config Optional named list overriding BTL refit cadence, stopping
 #'   thresholds, and selected round-log diagnostics. Supported fields:
 #'   \describe{
@@ -406,6 +434,10 @@ adaptive_rank_start <- function(items,
 #' state <- adaptive_rank_start(
 #'   items = items,
 #'   seed = 42,
+#'   adaptive_config = list(
+#'     global_identified_reliability_min = 0.85,
+#'     star_override_budget_per_round = 2L
+#'   ),
 #'   session_dir = session_dir,
 #'   persist_item_log = TRUE
 #' )
@@ -419,6 +451,10 @@ adaptive_rank_start <- function(items,
 #'     refit_pairs_target = 50L,
 #'     ess_bulk_min = 400,
 #'     eap_reliability_min = 0.90
+#'   ),
+#'   adaptive_config = list(
+#'     explore_taper_mult = 0.40,
+#'     boundary_frac = 0.20
 #'   ),
 #'   progress = "steps",
 #'   progress_redraw_every = 1L,
@@ -570,6 +606,7 @@ adaptive_rank_run_live <- function(state,
                                    judge,
                                    n_steps = 1L,
                                    fit_fn = NULL,
+                                   adaptive_config = NULL,
                                    btl_config = NULL,
                                    session_dir = NULL,
                                    persist_item_log = NULL,
@@ -603,6 +640,7 @@ adaptive_rank_run_live <- function(state,
   if (!is.null(persist_item_log)) {
     state$config$persist_item_log <- isTRUE(persist_item_log)
   }
+  state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
 
   cfg <- .adaptive_progress_config(
     progress = progress,
