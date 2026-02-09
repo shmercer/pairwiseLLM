@@ -102,6 +102,7 @@ validate_judge_result <- function(result, A_id, B_id) {
 
   idx_map <- state$item_index %||% stats::setNames(seq_along(state$item_ids), state$item_ids)
   recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
+  defaults <- adaptive_defaults(length(state$item_ids))
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -111,6 +112,12 @@ validate_judge_result <- function(result, A_id, B_id) {
     is_explore_step = FALSE,
     explore_mode = NA_character_,
     explore_reason = NA_character_,
+    explore_rate_used = as.double(defaults$explore_rate),
+    local_priority_mode = NA_character_,
+    long_gate_pass = NA,
+    long_gate_reason = NA_character_,
+    star_override_used = FALSE,
+    star_override_reason = NA_character_,
     candidate_starved = FALSE,
     fallback_used = "warm_start",
     fallback_path = "warm_start",
@@ -269,6 +276,12 @@ run_one_step <- function(state, judge, ...) {
     is_explore_step = selection$is_explore_step,
     explore_mode = selection$explore_mode,
     explore_reason = selection$explore_reason,
+    explore_rate_used = selection$explore_rate_used,
+    local_priority_mode = selection$local_priority_mode,
+    long_gate_pass = selection$long_gate_pass,
+    long_gate_reason = selection$long_gate_reason,
+    star_override_used = selection$star_override_used,
+    star_override_reason = selection$star_override_reason,
     candidate_starved = selection$candidate_starved,
     fallback_used = selection$fallback_used,
     fallback_path = selection$fallback_path,
