@@ -31,8 +31,11 @@ Core columns:
 \code{is_anchor_i}, \code{is_anchor_j}, \code{stratum_i},
 \code{stratum_j}, \code{dist_stratum}.
 \item Candidate health: \code{is_explore_step}, \code{explore_mode},
-\code{explore_reason}, \code{candidate_starved}, \code{fallback_used},
-\code{fallback_path}, \code{starvation_reason}.
+\code{explore_reason}, \code{explore_rate_used},
+\code{local_priority_mode}, \code{long_gate_pass},
+\code{long_gate_reason}, \code{star_override_used},
+\code{star_override_reason}, \code{candidate_starved},
+\code{fallback_used}, \code{fallback_path}, \code{starvation_reason}.
 \item Candidate counts: \code{n_candidates_generated},
 \code{n_candidates_after_hard_filters}, \code{n_candidates_after_duplicates},
 \code{n_candidates_after_star_caps}, \code{n_candidates_scored}.

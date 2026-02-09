@@ -295,6 +295,11 @@
 #'   \item candidate health: \code{proposed_pairs_mode},
 #'   \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
 #'   \code{fallback_used_mode}, \code{starvation_reason_mode}
+#'   \item identifiability/quota adaptation: \code{global_identified},
+#'   \code{global_identified_reliability_min},
+#'   \code{global_identified_rank_corr_min}, \code{long_quota_raw},
+#'   \code{long_quota_effective}, \code{long_quota_removed},
+#'   \code{realloc_to_mid}, \code{realloc_to_local}
 #'   \item diagnostics/stopping: \code{diagnostics_pass}, \code{divergences},
 #'   \code{max_rhat}, \code{min_ess_bulk}, \code{ess_bulk_required},
 #'   \code{reliability_EAP}, \code{rho_theta}, \code{delta_sd_theta},

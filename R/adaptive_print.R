@@ -238,8 +238,11 @@ adaptive_get_logs <- function(state) {
 #'   \code{is_anchor_i}, \code{is_anchor_j}, \code{stratum_i},
 #'   \code{stratum_j}, \code{dist_stratum}.
 #'   \item Candidate health: \code{is_explore_step}, \code{explore_mode},
-#'   \code{explore_reason}, \code{candidate_starved}, \code{fallback_used},
-#'   \code{fallback_path}, \code{starvation_reason}.
+#'   \code{explore_reason}, \code{explore_rate_used},
+#'   \code{local_priority_mode}, \code{long_gate_pass},
+#'   \code{long_gate_reason}, \code{star_override_used},
+#'   \code{star_override_reason}, \code{candidate_starved},
+#'   \code{fallback_used}, \code{fallback_path}, \code{starvation_reason}.
 #'   \item Candidate counts: \code{n_candidates_generated},
 #'   \code{n_candidates_after_hard_filters}, \code{n_candidates_after_duplicates},
 #'   \code{n_candidates_after_star_caps}, \code{n_candidates_scored}.
@@ -287,6 +290,11 @@ adaptive_step_log <- function(state) {
 #'   \item Candidate health: \code{proposed_pairs_mode},
 #'   \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
 #'   \code{fallback_used_mode}, \code{starvation_reason_mode}.
+#'   \item Identifiability/quota adaptation: \code{global_identified},
+#'   \code{global_identified_reliability_min},
+#'   \code{global_identified_rank_corr_min}, \code{long_quota_raw},
+#'   \code{long_quota_effective}, \code{long_quota_removed},
+#'   \code{realloc_to_mid}, \code{realloc_to_local}.
 #'   \item Coverage/imbalance: \code{mean_degree}, \code{min_degree},
 #'   \code{pos_balance_sd}, \code{star_cap_rejects_since_last_refit},
 #'   \code{star_cap_reject_rate_since_last_refit},

@@ -91,3 +91,59 @@ test_that("load_adaptive_session rejects step rows with partial item indices", {
     "incomplete item indices"
   )
 })
+
+test_that("validate_session_dir rejects step_log schema drift (missing/extra/order)", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items)
+
+  session_missing <- withr::local_tempdir()
+  save_adaptive_session(state, session_missing)
+  step_path <- file.path(session_missing, "step_log.rds")
+  step_log <- readRDS(step_path)
+  step_log$explore_rate_used <- NULL
+  saveRDS(step_log, step_path)
+  expect_error(
+    validate_session_dir(session_missing),
+    "missing required columns"
+  )
+
+  session_extra <- withr::local_tempdir()
+  save_adaptive_session(state, session_extra)
+  step_path <- file.path(session_extra, "step_log.rds")
+  step_log <- readRDS(step_path)
+  step_log$unexpected_col <- 1L
+  saveRDS(step_log, step_path)
+  expect_error(
+    validate_session_dir(session_extra),
+    "unexpected columns"
+  )
+
+  session_order <- withr::local_tempdir()
+  save_adaptive_session(state, session_order)
+  step_path <- file.path(session_order, "step_log.rds")
+  step_log <- readRDS(step_path)
+  reordered <- c(names(step_log)[2L], names(step_log)[1L], names(step_log)[-c(1L, 2L)])
+  step_log <- step_log[, reordered, drop = FALSE]
+  saveRDS(step_log, step_path)
+  expect_error(
+    validate_session_dir(session_order),
+    "column order does not match canonical schema"
+  )
+})
+
+test_that("validate_session_dir rejects round_log schema drift for quota fields", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items)
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  round_path <- file.path(session_dir, "round_log.rds")
+  round_log <- readRDS(round_path)
+  round_log$long_quota_raw <- NULL
+  saveRDS(round_log, round_path)
+
+  expect_error(
+    validate_session_dir(session_dir),
+    "missing required columns"
+  )
+})

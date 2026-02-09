@@ -31,6 +31,11 @@ Core columns:
 \item Candidate health: \code{proposed_pairs_mode},
 \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
 \code{fallback_used_mode}, \code{starvation_reason_mode}.
+\item Identifiability/quota adaptation: \code{global_identified},
+\code{global_identified_reliability_min},
+\code{global_identified_rank_corr_min}, \code{long_quota_raw},
+\code{long_quota_effective}, \code{long_quota_removed},
+\code{realloc_to_mid}, \code{realloc_to_local}.
 \item Coverage/imbalance: \code{mean_degree}, \code{min_degree},
 \code{pos_balance_sd}, \code{star_cap_rejects_since_last_refit},
 \code{star_cap_reject_rate_since_last_refit},
