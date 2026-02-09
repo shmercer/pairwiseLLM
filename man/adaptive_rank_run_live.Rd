@@ -9,6 +9,7 @@ adaptive_rank_run_live(
   judge,
   n_steps = 1L,
   fit_fn = NULL,
+  adaptive_config = NULL,
   btl_config = NULL,
   session_dir = NULL,
   persist_item_log = NULL,
@@ -33,6 +34,15 @@ toward this budget, including invalid judge responses.}
 
 \item{fit_fn}{Optional BTL fit function for deterministic testing; defaults
 to \code{default_btl_fit_fn()} when a refit is due.}
+
+\item{adaptive_config}{Optional named list overriding adaptive controller
+behavior. Supported fields:
+\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min},
+\code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
+\code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
+\code{boundary_frac}, \code{p_star_override_margin}, and
+\code{star_override_budget_per_round}. Unknown fields and invalid values abort
+with an actionable error.}
 
 \item{btl_config}{Optional named list overriding BTL refit cadence, stopping
 thresholds, and selected round-log diagnostics. Supported fields:
@@ -114,7 +124,9 @@ Bayesian BTL refits are triggered on step-based cadence and evaluated with
 diagnostics gates (including ESS thresholds), reliability, and lagged
 stability criteria. Refit-level outcomes are
 appended to \code{round_log}; per-item posterior summaries are appended to
-\code{item_log}.
+\code{item_log}. Controller behavior can change after refits via
+identifiability-gated settings in \code{adaptive_config}; those controls
+affect pair routing and quotas, while BTL remains inference-only.
 }
 \examples{
 # ------------------------------------------------------------------
@@ -142,6 +154,10 @@ session_dir <- tempfile("pwllm-adaptive-session-")
 state <- adaptive_rank_start(
   items = items,
   seed = 42,
+  adaptive_config = list(
+    global_identified_reliability_min = 0.85,
+    star_override_budget_per_round = 2L
+  ),
   session_dir = session_dir,
   persist_item_log = TRUE
 )
@@ -155,6 +171,10 @@ state <- adaptive_rank_run_live(
     refit_pairs_target = 50L,
     ess_bulk_min = 400,
     eap_reliability_min = 0.90
+  ),
+  adaptive_config = list(
+    explore_taper_mult = 0.40,
+    boundary_frac = 0.20
   ),
   progress = "steps",
   progress_redraw_every = 1L,

@@ -9,7 +9,8 @@ adaptive_rank_start(
   seed = 1L,
   session_dir = NULL,
   persist_item_log = FALSE,
-  ...
+  ...,
+  adaptive_config = NULL
 )
 }
 \arguments{
@@ -26,6 +27,23 @@ selection randomness.}
 
 \item{...}{Internal/testing only. Supply \code{now_fn} to override the clock used
 for timestamps.}
+
+\item{adaptive_config}{Optional named list overriding adaptive controller
+behavior. Supported fields:
+\describe{
+\item{\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min}}{Thresholds
+used to mark global identifiability after each refit.}
+\item{\code{p_long_low}, \code{p_long_high}}{Posterior probability gate used for
+long-link eligibility once globally identified.}
+\item{\code{long_taper_mult}, \code{long_frac_floor}, \code{mid_bonus_frac}}{Late-stage
+long-link taper and quota reallocation controls.}
+\item{\code{explore_taper_mult}}{Late-stage exploration taper multiplier.}
+\item{\code{boundary_k}, \code{boundary_window}, \code{boundary_frac}}{Local-stage
+boundary-priority controls after global identifiability.}
+\item{\code{p_star_override_margin}, \code{star_override_budget_per_round}}{Near-tie
+star-cap override controls.}
+}
+Unknown fields and invalid values abort with an actionable error.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
