@@ -23,9 +23,7 @@
     theta_sd_rel_change_max = 0.10,
     rank_spearman_min = 0.95,
     near_tie_p_low = 0.40,
-    near_tie_p_high = 0.60,
-    global_identified_reliability_min = 0.80,
-    global_identified_rank_corr_min = 0.90
+    near_tie_p_high = 0.60
   )
 }
 
