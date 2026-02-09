@@ -621,6 +621,7 @@ adaptive_defaults <- function(N) {
     defaults = config,
     allow_repeat_pressure = FALSE
   )
+  n_after_hard <- nrow(candidates_base)
   filtered <- .apply_downstream_filters(candidates_base)
   candidates <- filtered$candidates
   n_after_dup <- filtered$n_after_dup
@@ -635,6 +636,7 @@ adaptive_defaults <- function(N) {
       defaults = config,
       allow_repeat_pressure = TRUE
     )
+    n_after_hard <- nrow(candidates_repeat)
     filtered_repeat <- .apply_downstream_filters(candidates_repeat)
     candidates <- filtered_repeat$candidates
     n_after_dup <- filtered_repeat$n_after_dup
