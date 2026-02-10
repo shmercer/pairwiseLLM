@@ -288,12 +288,12 @@ head(step_view)
 #> # A tibble: 6 × 51
 #>   step_id timestamp           pair_id     i     j     A     B     Y status
 #>     <int> <dttm>                <int> <int> <int> <int> <int> <int> <chr> 
-#> 1       1 2026-02-10 23:43:44       1     1     5     1     5     0 ok    
-#> 2       2 2026-02-10 23:43:44       2     5     8     5     8     0 ok    
-#> 3       3 2026-02-10 23:43:44       3     8     6     8     6     1 ok    
-#> 4       4 2026-02-10 23:43:44       4     6     2     6     2     1 ok    
-#> 5       5 2026-02-10 23:43:44       5     2     4     2     4     0 ok    
-#> 6       6 2026-02-10 23:43:44       6     4     3     4     3     1 ok    
+#> 1       1 2026-02-10 23:47:15       1     1     5     1     5     0 ok    
+#> 2       2 2026-02-10 23:47:15       2     5     8     5     8     0 ok    
+#> 3       3 2026-02-10 23:47:15       3     8     6     8     6     1 ok    
+#> 4       4 2026-02-10 23:47:15       4     6     2     6     2     1 ok    
+#> 5       5 2026-02-10 23:47:15       5     2     4     2     4     0 ok    
+#> 6       6 2026-02-10 23:47:15       6     4     3     4     3     1 ok    
 #> # ℹ 42 more variables: round_id <int>, round_stage <chr>, pair_type <chr>,
 #> #   used_in_round_i <int>, used_in_round_j <int>, is_anchor_i <lgl>,
 #> #   is_anchor_j <lgl>, stratum_i <int>, stratum_j <int>, dist_stratum <int>,
