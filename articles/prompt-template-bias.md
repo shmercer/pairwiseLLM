@@ -1401,7 +1401,7 @@ are strong candidates for production scoring pipelines in `pairwiseLLM`.
 
 ## 12. Citation
 
-> Mercer, S. (2025). *Prompt template positional bias testing* \[R
+> Mercer, S. H. (2025). *Prompt template positional bias testing* \[R
 > package vignette\]. In *pairwiseLLM: Pairwise comparison tools for
 > large language model-based writing evaluation*.
 > <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

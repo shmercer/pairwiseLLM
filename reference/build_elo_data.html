@@ -65,8 +65,9 @@ one for the loser of each trial.</p>
 
 
 <dl><dt id="arg-results">results<a class="anchor" aria-label="anchor" href="#arg-results"></a></dt>
-<dd><p>A data frame or tibble with columns <code>ID1</code>,
-<code>ID2</code>, and <code>better_id</code>.</p></dd>
+<dd><p>A data frame or tibble with either
+<code>ID1</code>/<code>ID2</code>/<code>better_id</code> or
+<code>A_id</code>/<code>B_id</code>/<code>better_id</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -77,9 +78,9 @@ one for the loser of each trial.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>It assumes that the input contains columns <code>ID1</code>, <code>ID2</code>, and
-<code>better_id</code>, where <code>better_id</code> is the ID of the better sample.
-Rows where <code>better_id</code> does not match either <code>ID1</code> or <code>ID2</code>
+    <p>It accepts either:</p><ul><li><p>legacy columns <code>ID1</code>, <code>ID2</code>, <code>better_id</code>, or</p></li>
+<li><p>canonical columns <code>A_id</code>, <code>B_id</code>, <code>better_id</code>.</p></li>
+</ul><p>Rows where <code>better_id</code> does not match either side of the pair
 (including <code>NA</code>) are excluded.</p>
     </div>
 

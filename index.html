@@ -72,16 +72,18 @@ pairwiseLLM banner
 </h1></div>
 <!-- badges: start -->
 
-<p><code>pairwiseLLM</code> is a R package that provides a unified, extensible framework for generating, submitting, and modeling <strong>pairwise comparisons of writing quality</strong> using large language models (LLMs).</p>
+<p><code>pairwiseLLM</code> is a R package that provides a unified, extensible framework for generating, submitting, and modeling pairwise comparisons of writing quality using large language models (LLMs).</p>
 <p>It includes:</p>
 <ul>
-<li>Unified <strong>live</strong> and <strong>batch</strong> APIs across OpenAI, Anthropic, and Gemini<br>
+<li>Unified live and batch APIs across OpenAI, Anthropic, and Gemini<br>
 </li>
-<li>A prompt template registry with <strong>tested templates</strong> designed to reduce positional bias<br>
+<li>An adaptive pairing workflow to run optimal pairs of writing samples until reliability targets are met<br>
+</li>
+<li>A prompt template registry with tested templates designed to reduce positional bias<br>
 </li>
 <li>Positional-bias diagnostics (forward vs reverse design)<br>
 </li>
-<li>Bradley–Terry (BT) and Elo modeling<br>
+<li>Bradley–Terry (BT), Bayesian BT, and Elo modeling<br>
 </li>
 <li>Consistent data structures for all providers</li>
 </ul>
@@ -677,22 +679,176 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <h3 id="bradleyterry-bt">Bradley–Terry (BT)<a class="anchor" aria-label="anchor" href="#bradleyterry-bt"></a>
 </h3>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># res_list: output from submit_llm_pairs() </span></span>
-<span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
-<span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># Using the example writing pairs (fully offline; no LLM calls)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_pairs"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># build_bt_data() converts (ID1, ID2, better_id) into the 0/1 format.</span></span>
+<span><span class="va">bt_ex</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">example_writing_pairs</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Result has:</span></span>
+<span><span class="co"># - object1: ID of the first item</span></span>
+<span><span class="co"># - object2: ID of the second item</span></span>
+<span><span class="co"># - result : 1 if object1 wins, 0 if object2 wins</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">bt_ex</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_ex</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="elo-modeling">Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
 </h3>
 <div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># res_list: output from submit_llm_pairs() </span></span>
-<span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_pairs"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">example_writing_pairs</span><span class="op">)</span></span>
 <span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">elo_fit</span><span class="op">$</span><span class="va">elo</span></span>
 <span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability</span></span>
 <span><span class="va">elo_fit</span><span class="op">$</span><span class="va">reliability_weighted</span></span></code></pre></div>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="bayesian-bradleyterryluce-btl-models">Bayesian Bradley–Terry–Luce (BTL) models<a class="anchor" aria-label="anchor" href="#bayesian-bradleyterryluce-btl-models"></a>
+</h2>
+<p><code>pairwiseLLM</code> fits rankings using Bayesian Bradley–Terry–Luce (BTL) models. These models estimate a latent quality parameter for each item based on pairwise comparison outcomes, while providing uncertainty estimates and principled stopping diagnostics.</p>
+<p>The package supports four closely related BTL variants, differing in how they model LLM judge behavior.</p>
+<hr>
+<div class="section level3">
+<h3 id="model-variants">Model variants<a class="anchor" aria-label="anchor" href="#model-variants"></a>
+</h3>
+<p>All models estimate one latent quality parameter per item. They differ only in whether they include:</p>
+<ul>
+<li>a <strong>lapse (random-response) rate</strong>
+</li>
+<li>a <strong>position (order) bias</strong>
+</li>
+</ul>
+<table class="table">
+<thead><tr class="header">
+<th>Model</th>
+<th>Lapse</th>
+<th>Position bias</th>
+<th>Description</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>btl</code></td>
+<td>✗</td>
+<td>✗</td>
+<td>Standard Bradley–Terry–Luce</td>
+</tr>
+<tr class="even">
+<td><code>btl_e</code></td>
+<td>✓</td>
+<td>✗</td>
+<td>BTL with lapse (random responding)</td>
+</tr>
+<tr class="odd">
+<td><code>btl_b</code></td>
+<td>✗</td>
+<td>✓</td>
+<td>BTL with position bias</td>
+</tr>
+<tr class="even">
+<td><code>btl_e_b</code></td>
+<td>✓</td>
+<td>✓</td>
+<td>BTL with both lapse and position bias (default)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Recommended default:</strong> <code>btl_e_b</code> This is the most robust option when the judge is an LLM or other noisy rater.</p>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="when-should-you-include-lapse-or-position-bias">When should you include lapse or position bias?<a class="anchor" aria-label="anchor" href="#when-should-you-include-lapse-or-position-bias"></a>
+</h3>
+<ul>
+<li><p><strong>Lapse (<code>ε</code>)</strong> Useful when judgments occasionally appear random or inconsistent. The lapse parameter absorbs these errors without distorting item-level quality estimates.</p></li>
+<li><p><strong>Position bias (<code>b</code>)</strong> Useful when the judge systematically prefers the first or second item presented. This is especially important when prompts present items in a fixed order.</p></li>
+</ul>
+<p>If you are confident that neither effect is present, you can use the simpler <code>btl</code> model.</p>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="fitting-a-bayesian-btl-model">Fitting a Bayesian BTL model<a class="anchor" aria-label="anchor" href="#fitting-a-bayesian-btl-model"></a>
+</h3>
+<p>You can fit a Bayesian BTL model directly from pairwise comparison data, without using adaptive pairing.</p>
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_results"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Generate a vector of all unique sample IDs</span></span>
+<span><span class="va">ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">example_writing_results</span><span class="op">$</span><span class="va">A_id</span>, <span class="va">example_writing_results</span><span class="op">$</span><span class="va">B_id</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc</a></span><span class="op">(</span></span>
+<span>  results <span class="op">=</span> <span class="va">example_writing_results</span>,</span>
+<span>  ids <span class="op">=</span> <span class="va">ids</span>,</span>
+<span>  model_variant <span class="op">=</span> <span class="st">"btl_e_b"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>This fits the model using MCMC via <code>cmdstanr</code> and returns posterior samples and summaries.</p>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="inspecting-model-results">Inspecting model results<a class="anchor" aria-label="anchor" href="#inspecting-model-results"></a>
+</h3>
+<p>Posterior summaries for items can be extracted using helper functions:</p>
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">item_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/summarize_items.html">summarize_items</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">item_summary</span><span class="op">)</span></span></code></pre></div>
+<p>Typical outputs include:</p>
+<ul>
+<li>posterior mean latent quality,</li>
+<li>credible intervals,</li>
+<li>induced ranks,</li>
+<li>uncertainty measures.</li>
+</ul>
+<p>You can also inspect convergence and diagnostics:</p>
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/summarize_refits.html">summarize_refits</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></code></pre></div>
+<p>This reports:</p>
+<ul>
+<li>R-hat,</li>
+<li>effective sample sizes,</li>
+<li>divergence counts,</li>
+<li>reliability metrics.</li>
+</ul>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="relationship-to-adaptive-pairing">Relationship to adaptive pairing<a class="anchor" aria-label="anchor" href="#relationship-to-adaptive-pairing"></a>
+</h3>
+<p>When using adaptive pairing (<code><a href="reference/adaptive_rank.html">adaptive_rank()</a></code>), the same Bayesian BTL models are fit intermittently during the run:</p>
+<ul>
+<li><p>Pair selection is guided by the fast TrueSkill model.</p></li>
+<li>
+<p>Bayesian BTL refits provide:</p>
+<ul>
+<li>uncertainty estimates,</li>
+<li>diagnostics,</li>
+<li>stopping decisions,</li>
+<li>and late-stage adaptation signals.</li>
+</ul>
+</li>
+</ul>
+<p>You can therefore:</p>
+<ul>
+<li>fit Bayesian BTL models standalone for analysis,</li>
+<li>or use them as part of an adaptive ranking workflow.</li>
+</ul>
+<p>For a full tutorial on adaptive pairing, see:</p>
+<ul>
+<li>
+<strong>Adaptive Pairing &amp; Ranking</strong> <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html" class="uri">https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html</a>
+</li>
+</ul>
+<p>For a detailed technical specification of the Bayesian and adaptive algorithms, see:</p>
+<ul>
+<li>
+<strong>Bayesian BTL + Adaptive Pairing Design (v3.1)</strong> <a href="https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html" class="uri">https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html</a>
+</li>
+</ul>
 <hr>
 </div>
 </div>
@@ -755,7 +911,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <ol style="list-style-type: decimal">
 <li>
 <p>Run:</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">session_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </li>
 <li>

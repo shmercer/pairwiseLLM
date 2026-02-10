@@ -427,3 +427,10 @@ matters most. While overall reliability metrics may be slightly lower
 than with random pairing, adaptive designs typically produce tighter
 credible intervals and more decision-relevant rankings, making them well
 suited for writing quality evaluation and similar tasks.
+
+## Citation
+
+> Mercer, S. H. (2026). *Adaptive pairing and ranking in pairwiseLLM*
+> \[R package vignette\]. In *pairwiseLLM: Pairwise comparison tools for
+> large language model-based writing evaluation*.
+> <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

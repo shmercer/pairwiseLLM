@@ -31,7 +31,8 @@ fit_bayes_btl_mcmc(
 
   Canonical `results_tbl` with `A_id`, `B_id`, and `better_id` (plus the
   standard adaptive results columns). See `validate_results_tbl()` for
-  required structure.
+  required structure. For legacy `ID1`/`ID2`/`better_id` data, first use
+  [`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md).
 
 - ids:
 

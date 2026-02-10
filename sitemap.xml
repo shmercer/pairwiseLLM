@@ -28,6 +28,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/anthropic_poll_batch_until_complete.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_gemini_batch_requests.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.html</loc></url>
@@ -42,6 +43,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/estimate_llm_pairs_cost.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_openai_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_pairs.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_results.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples1000.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.html</loc></url>

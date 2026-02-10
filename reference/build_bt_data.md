@@ -15,7 +15,8 @@ build_bt_data(results)
 
 - results:
 
-  A data frame or tibble with columns `ID1`, `ID2`, and `better_id`.
+  A data frame or tibble with either `ID1`/`ID2`/`better_id` or
+  `A_id`/`B_id`/`better_id`.
 
 ## Value
 
@@ -32,10 +33,14 @@ Rows with invalid or missing `better_id` are dropped.
 
 ## Details
 
-It assumes that the input contains columns `ID1`, `ID2`, and
-`better_id`, where `better_id` is the ID of the better sample. Rows
-where `better_id` does not match either `ID1` or `ID2` (including `NA`)
-are excluded.
+It accepts either:
+
+- legacy columns `ID1`, `ID2`, `better_id`, or
+
+- canonical columns `A_id`, `B_id`, `better_id`.
+
+Rows where `better_id` does not match either side of the pair (including
+`NA`) are excluded.
 
 ## Examples
 

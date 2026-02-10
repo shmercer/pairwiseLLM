@@ -2131,3 +2131,10 @@ When the algorithm stops:
   meaning/interpretation of key output columns. A user should be able to
   understand what each logged value means without inspecting
   implementation code.
+
+### 13. Citation
+
+> Mercer, S. H. (2026). *Bayesian BTL adaptive pairing design* \[R
+> package vignette\]. In *pairwiseLLM: Pairwise comparison tools for
+> large language model-based writing evaluation*.
+> <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

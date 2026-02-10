@@ -525,7 +525,7 @@ for a full example).
 
 ## 13. Citation
 
-> Mercer, S. (2025). *Getting started with pairwiseLLM* \[R package
+> Mercer, S. H. (2025). *Getting started with pairwiseLLM* \[R package
 > vignette\]. In *pairwiseLLM: Pairwise comparison tools for large
 > language model-based writing evaluation*.
 > <https://doi.org/10.32614/CRAN.package.pairwiseLLM>
