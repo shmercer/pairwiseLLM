@@ -26,17 +26,18 @@ developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.re
 <!-- badges: end -->
 
 `pairwiseLLM` is a R package that provides a unified, extensible
-framework for generating, submitting, and modeling **pairwise
-comparisons of writing quality** using large language models (LLMs).
+framework for generating, submitting, and modeling pairwise comparisons
+of writing quality using large language models (LLMs).
 
 It includes:
 
-- Unified **live** and **batch** APIs across OpenAI, Anthropic, and
-  Gemini  
-- A prompt template registry with **tested templates** designed to
-  reduce positional bias  
+- Unified live and batch APIs across OpenAI, Anthropic, and Gemini  
+- An adaptive pairing workflow to run optimal pairs of writing samples
+  until reliability targets are met  
+- A prompt template registry with tested templates designed to reduce
+  positional bias  
 - Positional-bias diagnostics (forward vs reverse design)  
-- Bradley–Terry (BT) and Elo modeling  
+- Bradley–Terry (BT), Bayesian BT, and Elo modeling  
 - Consistent data structures for all providers
 
 ------------------------------------------------------------------------
@@ -593,23 +594,167 @@ providers. Complete details are presented in a vignette:
 ### Bradley–Terry (BT)
 
 ``` r
-# res_list: output from submit_llm_pairs() 
-bt_data <- build_bt_data(res_list$results)
-bt_fit <- fit_bt_model(bt_data)
+# Using the example writing pairs (fully offline; no LLM calls)
+data("example_writing_pairs")
+
+# build_bt_data() converts (ID1, ID2, better_id) into the 0/1 format.
+bt_ex <- build_bt_data(example_writing_pairs)
+
+# Result has:
+# - object1: ID of the first item
+# - object2: ID of the second item
+# - result : 1 if object1 wins, 0 if object2 wins
+head(bt_ex)
+
+bt_fit <- fit_bt_model(bt_ex)
 summarize_bt_fit(bt_fit)
 ```
 
 ### Elo Modeling
 
 ``` r
-# res_list: output from submit_llm_pairs() 
-elo_data <- build_elo_data(res_list$results)
+data("example_writing_pairs")
+
+elo_data <- build_elo_data(example_writing_pairs)
 elo_fit <- fit_elo_model(elo_data, runs = 5)
 
 elo_fit$elo
 elo_fit$reliability
 elo_fit$reliability_weighted
 ```
+
+------------------------------------------------------------------------
+
+## Bayesian Bradley–Terry–Luce (BTL) models
+
+`pairwiseLLM` fits rankings using Bayesian Bradley–Terry–Luce (BTL)
+models. These models estimate a latent quality parameter for each item
+based on pairwise comparison outcomes, while providing uncertainty
+estimates and principled stopping diagnostics.
+
+The package supports four closely related BTL variants, differing in how
+they model LLM judge behavior.
+
+------------------------------------------------------------------------
+
+### Model variants
+
+All models estimate one latent quality parameter per item. They differ
+only in whether they include:
+
+- a **lapse (random-response) rate**
+- a **position (order) bias**
+
+| Model | Lapse | Position bias | Description |
+|----|----|----|----|
+| `btl` | ✗ | ✗ | Standard Bradley–Terry–Luce |
+| `btl_e` | ✓ | ✗ | BTL with lapse (random responding) |
+| `btl_b` | ✗ | ✓ | BTL with position bias |
+| `btl_e_b` | ✓ | ✓ | BTL with both lapse and position bias (default) |
+
+**Recommended default:** `btl_e_b` This is the most robust option when
+the judge is an LLM or other noisy rater.
+
+------------------------------------------------------------------------
+
+### When should you include lapse or position bias?
+
+- **Lapse (`ε`)** Useful when judgments occasionally appear random or
+  inconsistent. The lapse parameter absorbs these errors without
+  distorting item-level quality estimates.
+
+- **Position bias (`b`)** Useful when the judge systematically prefers
+  the first or second item presented. This is especially important when
+  prompts present items in a fixed order.
+
+If you are confident that neither effect is present, you can use the
+simpler `btl` model.
+
+------------------------------------------------------------------------
+
+### Fitting a Bayesian BTL model
+
+You can fit a Bayesian BTL model directly from pairwise comparison data,
+without using adaptive pairing.
+
+``` r
+data("example_writing_results")
+
+# Generate a vector of all unique sample IDs
+ids <- sort(unique(c(example_writing_results$A_id, example_writing_results$B_id)))
+
+fit <- fit_bayes_btl_mcmc(
+  results = example_writing_results,
+  ids = ids,
+  model_variant = "btl_e_b"
+)
+```
+
+This fits the model using MCMC via `cmdstanr` and returns posterior
+samples and summaries.
+
+------------------------------------------------------------------------
+
+### Inspecting model results
+
+Posterior summaries for items can be extracted using helper functions:
+
+``` r
+item_summary <- summarize_items(fit)
+head(item_summary)
+```
+
+Typical outputs include:
+
+- posterior mean latent quality,
+- credible intervals,
+- induced ranks,
+- uncertainty measures.
+
+You can also inspect convergence and diagnostics:
+
+``` r
+summarize_refits(fit)
+```
+
+This reports:
+
+- R-hat,
+- effective sample sizes,
+- divergence counts,
+- reliability metrics.
+
+------------------------------------------------------------------------
+
+### Relationship to adaptive pairing
+
+When using adaptive pairing (`adaptive_rank()`), the same Bayesian BTL
+models are fit intermittently during the run:
+
+- Pair selection is guided by the fast TrueSkill model.
+
+- Bayesian BTL refits provide:
+
+  - uncertainty estimates,
+  - diagnostics,
+  - stopping decisions,
+  - and late-stage adaptation signals.
+
+You can therefore:
+
+- fit Bayesian BTL models standalone for analysis,
+- or use them as part of an adaptive ranking workflow.
+
+For a full tutorial on adaptive pairing, see:
+
+- **Adaptive Pairing & Ranking**
+  <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
+
+For a detailed technical specification of the Bayesian and adaptive
+algorithms, see:
+
+- **Bayesian BTL + Adaptive Pairing Design (v3.1)**
+  <https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html>
 
 ------------------------------------------------------------------------
 

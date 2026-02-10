@@ -2008,3 +2008,9 @@ When the algorithm stops:
 - Defaults scale with N
 - Diagnostics first, always
 - **User-facing documentation:** All exported functions and outputs must include detailed Roxygen documentation describing argument options (including model variants and stopping parameters), defaults, and the meaning/interpretation of key output columns. A user should be able to understand what each logged value means without inspecting implementation code.
+
+## 13. Citation
+
+> Mercer, S. H. (2026). *Bayesian BTL adaptive pairing design* [R package vignette]. 
+In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*. 
+https://doi.org/10.32614/CRAN.package.pairwiseLLM

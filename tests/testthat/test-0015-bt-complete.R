@@ -58,7 +58,7 @@ test_that("build_bt_data errors when required columns are missing", {
 
   expect_error(
     build_bt_data(bad),
-    "must contain columns"
+    "must contain either"
   )
 })
 
@@ -70,6 +70,17 @@ test_that("build_bt_data works on example_writing_pairs", {
   expect_s3_class(bt, "tbl_df")
   expect_identical(names(bt), c("object1", "object2", "result"))
   expect_equal(nrow(bt), nrow(example_writing_pairs))
+  expect_true(all(bt$result %in% c(0, 1)))
+})
+
+test_that("build_bt_data accepts canonical A_id/B_id schema", {
+  data("example_writing_results", package = "pairwiseLLM")
+
+  bt <- build_bt_data(example_writing_results)
+
+  expect_s3_class(bt, "tbl_df")
+  expect_identical(names(bt), c("object1", "object2", "result"))
+  expect_equal(nrow(bt), nrow(example_writing_results))
   expect_true(all(bt$result %in% c(0, 1)))
 })
 

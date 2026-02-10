@@ -52,6 +52,151 @@
   as.integer(seed)
 }
 
+#' Build canonical `results_tbl` data for Bayesian BTL MCMC
+#'
+#' Converts non-adaptive pairwise outcomes (for example, rows like
+#' \code{example_writing_pairs} with \code{ID1}, \code{ID2}, \code{better_id})
+#' into the canonical \code{results_tbl} schema required by
+#' [fit_bayes_btl_mcmc()].
+#'
+#' The output is deterministic and schema-valid:
+#' \itemize{
+#'   \item stable \code{unordered_key} / \code{ordered_key} values,
+#'   \item deterministic \code{pair_uid} as \code{"<unordered_key>#<occurrence>"},
+#'   \item deterministic \code{iter} and \code{received_at} sequences.
+#' }
+#'
+#' @param results A data frame or tibble containing columns \code{ID1},
+#'   \code{ID2}, and \code{better_id}.
+#' @param phase Length-1 phase label for all rows. Must be one of
+#'   \code{"phase1"}, \code{"phase2"}, or \code{"phase3"}. Defaults to
+#'   \code{"phase2"}.
+#' @param backend Length-1 backend label to record in output metadata.
+#' @param model Length-1 model label to record in output metadata.
+#' @param iter_start Integer starting value for \code{iter}. Defaults to
+#'   \code{1L}.
+#' @param received_at_start Length-1 \code{POSIXct} timestamp for the first
+#'   row. Subsequent rows increment by one second.
+#'
+#' @return A tibble in canonical \code{results_tbl} format with columns:
+#'   \code{pair_uid}, \code{unordered_key}, \code{ordered_key}, \code{A_id},
+#'   \code{B_id}, \code{better_id}, \code{winner_pos}, \code{phase},
+#'   \code{iter}, \code{received_at}, \code{backend}, \code{model}.
+#'
+#' @examples
+#' data("example_writing_pairs", package = "pairwiseLLM")
+#'
+#' results_tbl <- build_btl_results_data(example_writing_pairs)
+#' head(results_tbl)
+#'
+#' ids <- sort(unique(c(results_tbl$A_id, results_tbl$B_id)))
+#' ids
+#'
+#' @export
+build_btl_results_data <- function(
+    results,
+    phase = "phase2",
+    backend = "non_adaptive_import",
+    model = "unknown",
+    iter_start = 1L,
+    received_at_start = as.POSIXct("1970-01-01 00:00:00", tz = "UTC")
+) {
+  if (!is.data.frame(results)) {
+    rlang::abort("`results` must be a data frame or tibble.")
+  }
+  results <- tibble::as_tibble(results)
+
+  required_cols <- c("ID1", "ID2", "better_id")
+  .adaptive_required_cols(results, "results", required_cols)
+
+  if (!is.character(phase) || length(phase) != 1L || is.na(phase) || !nzchar(phase)) {
+    rlang::abort("`phase` must be a non-empty length-1 character value.")
+  }
+  .adaptive_check_phase(rep(phase, nrow(results)), "phase")
+
+  if (!is.character(backend) || length(backend) != 1L || is.na(backend) || !nzchar(backend)) {
+    rlang::abort("`backend` must be a non-empty length-1 character value.")
+  }
+  if (!is.character(model) || length(model) != 1L || is.na(model) || !nzchar(model)) {
+    rlang::abort("`model` must be a non-empty length-1 character value.")
+  }
+
+  if (!is.numeric(iter_start) || length(iter_start) != 1L || is.na(iter_start)) {
+    rlang::abort("`iter_start` must be a length-1 numeric value.")
+  }
+  iter_start <- as.integer(iter_start)
+
+  if (!inherits(received_at_start, "POSIXct") || length(received_at_start) != 1L || is.na(received_at_start)) {
+    rlang::abort("`received_at_start` must be a non-missing length-1 POSIXct value.")
+  }
+
+  A_id <- as.character(results$ID1)
+  B_id <- as.character(results$ID2)
+  better_id <- as.character(results$better_id)
+
+  if (any(is.na(A_id) | A_id == "")) {
+    rlang::abort("`results$ID1` must not contain missing or empty values.")
+  }
+  if (any(is.na(B_id) | B_id == "")) {
+    rlang::abort("`results$ID2` must not contain missing or empty values.")
+  }
+  if (any(A_id == B_id)) {
+    rlang::abort("`results` must not contain self-pairs (`ID1 == ID2`).")
+  }
+  if (any(is.na(better_id) | better_id == "")) {
+    rlang::abort("`results$better_id` must not contain missing or empty values.")
+  }
+
+  invalid_winner <- !(better_id == A_id | better_id == B_id)
+  if (any(invalid_winner)) {
+    rlang::abort("`results$better_id` must match `ID1` or `ID2` for every row.")
+  }
+
+  n <- nrow(results)
+  unordered_key <- make_unordered_key(A_id, B_id)
+  ordered_key <- make_ordered_key(A_id, B_id)
+
+  occurrence <- if (n == 0L) {
+    integer()
+  } else {
+    dplyr::tibble(unordered_key = unordered_key) |>
+      dplyr::group_by(.data$unordered_key) |>
+      dplyr::mutate(occurrence = dplyr::row_number()) |>
+      dplyr::ungroup() |>
+      dplyr::pull(.data$occurrence)
+  }
+
+  iter <- if (n == 0L) {
+    integer()
+  } else {
+    as.integer(iter_start + seq_len(n) - 1L)
+  }
+
+  received_at <- if (n == 0L) {
+    as.POSIXct(character(), tz = attr(received_at_start, "tzone", exact = TRUE) %||% "UTC")
+  } else {
+    received_at_start + as.difftime(seq_len(n) - 1L, units = "secs")
+  }
+
+  out <- tibble::tibble(
+    pair_uid = paste0(unordered_key, "#", occurrence),
+    unordered_key = unordered_key,
+    ordered_key = ordered_key,
+    A_id = A_id,
+    B_id = B_id,
+    better_id = better_id,
+    winner_pos = as.integer(ifelse(better_id == A_id, 1L, 2L)),
+    phase = rep(phase, n),
+    iter = iter,
+    received_at = received_at,
+    backend = rep(backend, n),
+    model = rep(model, n)
+  )
+
+  validate_results_tbl(out)
+  out
+}
+
 # Build summary counts from observed results without relying on the legacy
 # scaffold state constructor.
 .btl_mcmc_summary_counts <- function(results, ids) {
@@ -164,7 +309,9 @@
 #'
 #' @param results Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
 #'   \code{better_id} (plus the standard adaptive results columns). See
-#'   \code{validate_results_tbl()} for required structure.
+#'   \code{validate_results_tbl()} for required structure. For legacy
+#'   \code{ID1}/\code{ID2}/\code{better_id} data, first use
+#'   [build_btl_results_data()].
 #' @param ids Character vector of all sample ids (length \code{N}).
 #' @param model_variant Model variant label: \code{"btl"}, \code{"btl_e"},
 #'   \code{"btl_b"}, or \code{"btl_e_b"}. Defaults to \code{"btl_e_b"}.

@@ -46,7 +46,7 @@ test_that("build_elo_data errors when required columns are missing", {
 
   expect_error(
     build_elo_data(bad),
-    "must contain columns",
+    "must contain either",
     fixed = FALSE
   )
 })
@@ -66,6 +66,16 @@ test_that("build_elo_data works on example_writing_pairs", {
   all_ids <- unique(c(example_writing_pairs$ID1, example_writing_pairs$ID2))
   expect_true(all(elo$winner %in% all_ids))
   expect_true(all(elo$loser %in% all_ids))
+})
+
+test_that("build_elo_data accepts canonical A_id/B_id schema", {
+  data("example_writing_results", package = "pairwiseLLM")
+
+  elo <- build_elo_data(example_writing_results)
+
+  expect_s3_class(elo, "tbl_df")
+  expect_identical(names(elo), c("winner", "loser"))
+  expect_equal(nrow(elo), nrow(example_writing_results))
 })
 
 # -------------------------------------------------------------------------

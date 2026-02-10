@@ -8,101 +8,147 @@
 \description{
 \code{pairwiseLLM} supports (1) constructing paired-comparison designs over items,
 (2) collecting binary judgments from LLMs (live or via provider batch APIs),
-and (3) fitting ranking models (Elo, Bradley–Terry) including an adaptive pairing
-Bayesian BTL workflow.
+and (3) fitting ranking models (Elo, Bradley–Terry) including an adaptive,
+Bayesian BTL (MCMC) workflow.
 }
 \details{
-\subsection{Typical workflow}{
+\subsection{Typical workflow (most users)}{
 \enumerate{
-\item \strong{Load items} (the things you want to rank) using \code{\link[=read_samples_df]{read_samples_df()}} or
-\code{\link[=read_samples_dir]{read_samples_dir()}}.
-\item \strong{Create a pairing design} with \code{\link[=make_pairs]{make_pairs()}} / \code{\link[=sample_pairs]{sample_pairs()}} (and
-optional reverse pairs via \code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}).
-\item \strong{Build prompts} using \code{\link[=build_prompt]{build_prompt()}} and a template managed via
-\code{\link[=list_prompt_templates]{list_prompt_templates()}}, \code{\link[=set_prompt_template]{set_prompt_template()}}, \code{\link[=get_prompt_template]{get_prompt_template()}},
-\code{\link[=register_prompt_template]{register_prompt_template()}}, and \code{\link[=remove_prompt_template]{remove_prompt_template()}}.
+\item \strong{Load items} using \code{\link[=read_samples_df]{read_samples_df()}} or \code{\link[=read_samples_dir]{read_samples_dir()}}.
+\item \strong{Create a pairing design} with \code{\link[=make_pairs]{make_pairs()}} or \code{\link[=sample_pairs]{sample_pairs()}},
+optionally adding reversals via \code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}.
+\item \strong{(Optional) Control ordering / bias} with \code{\link[=randomize_pair_order]{randomize_pair_order()}},
+\code{\link[=alternate_pair_order]{alternate_pair_order()}}, and diagnostics like \code{\link[=check_positional_bias]{check_positional_bias()}}
+or reversal agreement via \code{\link[=compute_reverse_consistency]{compute_reverse_consistency()}}.
+\item \strong{Build prompts} with \code{\link[=build_prompt]{build_prompt()}} + \code{\link[=trait_description]{trait_description()}}, using
+templates managed by \code{\link[=list_prompt_templates]{list_prompt_templates()}}, \code{\link[=get_prompt_template]{get_prompt_template()}},
+\code{\link[=set_prompt_template]{set_prompt_template()}}, \code{\link[=register_prompt_template]{register_prompt_template()}}, and
+\code{\link[=remove_prompt_template]{remove_prompt_template()}}.
 \item \strong{Collect judgments}:
 \itemize{
-\item Live: \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}, \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
-\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}, \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
-\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}.
-\item Batch: \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}}, \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}},
-\code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}, plus provider helpers and parsers.
+\item Live: \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} or provider wrappers like
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}.
+\item Batch (recommended for scale): \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
+\code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}}, \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}.
 }
-\item \strong{Assemble modeling data} with \code{\link[=build_bt_data]{build_bt_data()}} or \code{\link[=build_elo_data]{build_elo_data()}}.
+\item \strong{Assemble modeling data} with \code{\link[=build_bt_data]{build_bt_data()}} or \code{\link[=build_elo_data]{build_elo_data()}}
+(and for some pipelines, \code{\link[=build_btl_results_data]{build_btl_results_data()}}).
 \item \strong{Fit / summarize}:
 \itemize{
 \item Elo: \code{\link[=fit_elo_model]{fit_elo_model()}}
 \item Bradley–Terry: \code{\link[=fit_bt_model]{fit_bt_model()}}
 \item Bayesian BTL (MCMC): \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}}
-\item Summaries: \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}, \code{\link[=summarize_items]{summarize_items()}},
-\code{\link[=summarize_refits]{summarize_refits()}}
+\item Summaries: \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}, \code{\link[=summarize_items]{summarize_items()}}, \code{\link[=summarize_refits]{summarize_refits()}}
 }
 }
 }
 
-\subsection{Package organization}{
+\subsection{Adaptive Bayesian pairing + ranking (end-to-end loop)}{
 
-The exported functions are intended to be read as a set of modules:
-\subsection{1) Samples / items}{
+If you want the package to both \strong{choose pairs} and \strong{fit Bayesian BTL}
+in an auditable loop, use the adaptive workflow:
+\itemize{
+\item Start a session with \code{\link[=adaptive_rank_start]{adaptive_rank_start()}} (or use the wrapper \code{\link[=adaptive_rank]{adaptive_rank()}}).
+\item Run live rounds with \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.
+\item Resume an existing run with \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}.
+\item Persist / reload sessions with \code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}},
+and validate directories with \code{\link[=validate_session_dir]{validate_session_dir()}}.
+}
+}
+
+\subsection{Exported functions by task}{
+\subsection{1) Read / define items to rank}{
 \itemize{
 \item \code{\link[=read_samples_df]{read_samples_df()}}, \code{\link[=read_samples_dir]{read_samples_dir()}}
 }
 }
 
-\subsection{2) Pair construction and ordering}{
+\subsection{2) Create pair designs and manage ordering}{
 \itemize{
-\item \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=sample_pairs]{sample_pairs()}}, \code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}
+\item Pair construction: \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=sample_pairs]{sample_pairs()}}, \code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}
 \item Order helpers: \code{\link[=randomize_pair_order]{randomize_pair_order()}}, \code{\link[=alternate_pair_order]{alternate_pair_order()}}
-\item Consistency checks: \code{\link[=compute_reverse_consistency]{compute_reverse_consistency()}}
+\item Consistency / bias: \code{\link[=compute_reverse_consistency]{compute_reverse_consistency()}}, \code{\link[=check_positional_bias]{check_positional_bias()}}
 }
 }
 
-\subsection{3) Prompt templates}{
+\subsection{3) Prompts and template registry}{
 \itemize{
-\item \code{\link[=build_prompt]{build_prompt()}}, \code{\link[=trait_description]{trait_description()}}
-\item Template registry: \code{\link[=list_prompt_templates]{list_prompt_templates()}}, \code{\link[=get_prompt_template]{get_prompt_template()}},
-\code{\link[=set_prompt_template]{set_prompt_template()}}, \code{\link[=register_prompt_template]{register_prompt_template()}},
-\code{\link[=remove_prompt_template]{remove_prompt_template()}}
+\item Prompt building: \code{\link[=build_prompt]{build_prompt()}}, \code{\link[=trait_description]{trait_description()}}
+\item Templates: \code{\link[=list_prompt_templates]{list_prompt_templates()}}, \code{\link[=get_prompt_template]{get_prompt_template()}},
+\code{\link[=set_prompt_template]{set_prompt_template()}}, \code{\link[=register_prompt_template]{register_prompt_template()}}, \code{\link[=remove_prompt_template]{remove_prompt_template()}}
 }
 }
 
-\subsection{4) LLM submission (live + batch)}{
+\subsection{4) LLM judging (provider-agnostic core)}{
 \itemize{
-\item Provider-agnostic: \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}},
-\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}, \code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
-\code{\link[=llm_download_batch_results]{llm_download_batch_results()}}, \code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}}
-\item OpenAI batch: \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}}, \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}},
-\code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}}, \code{\link[=write_openai_batch_file]{write_openai_batch_file()}},
-\code{\link[=openai_create_batch]{openai_create_batch()}}, \code{\link[=openai_get_batch]{openai_get_batch()}},
-\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}}, \code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
-\code{\link[=parse_openai_batch_output]{parse_openai_batch_output()}}
-\item Anthropic batch: \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}},
-\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}}, \code{\link[=anthropic_create_batch]{anthropic_create_batch()}},
-\code{\link[=anthropic_get_batch]{anthropic_get_batch()}}, \code{\link[=anthropic_poll_batch_until_complete]{anthropic_poll_batch_until_complete()}},
-\code{\link[=anthropic_download_batch_results]{anthropic_download_batch_results()}}, \code{\link[=parse_anthropic_batch_output]{parse_anthropic_batch_output()}}
-\item Gemini batch: \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}, \code{\link[=build_gemini_batch_requests]{build_gemini_batch_requests()}},
-\code{\link[=gemini_create_batch]{gemini_create_batch()}}, \code{\link[=gemini_get_batch]{gemini_get_batch()}},
-\code{\link[=gemini_poll_batch_until_complete]{gemini_poll_batch_until_complete()}}, \code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}},
+\item Utilities: \code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=estimate_llm_pairs_cost]{estimate_llm_pairs_cost()}}
+\item Live submission: \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+\item Batch orchestration (generic): \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
+\code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}}, \code{\link[=llm_download_batch_results]{llm_download_batch_results()}},
+\code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}}
+}
+}
+
+\subsection{5) Provider-specific: live helpers}{
+\itemize{
+\item OpenAI: \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
+\item Anthropic: \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}, \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}}
+\item Gemini: \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}
+\item Ollama: \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}, \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=ensure_only_ollama_model_loaded]{ensure_only_ollama_model_loaded()}}
+\item Together: \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}
+}
+}
+
+\subsection{6) Provider-specific: batch pipelines + low-level batch helpers}{
+\itemize{
+\item OpenAI pipeline: \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}}
+\itemize{
+\item Build / write / upload: \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}},
+\code{\link[=write_openai_batch_file]{write_openai_batch_file()}}, \code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}}
+\item Manage jobs: \code{\link[=openai_create_batch]{openai_create_batch()}}, \code{\link[=openai_get_batch]{openai_get_batch()}},
+\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}}
+\item Download / parse: \code{\link[=openai_download_batch_output]{openai_download_batch_output()}}, \code{\link[=parse_openai_batch_output]{parse_openai_batch_output()}}
+}
+\item Anthropic pipeline: \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}}
+\itemize{
+\item Build: \code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}}
+\item Manage jobs: \code{\link[=anthropic_create_batch]{anthropic_create_batch()}}, \code{\link[=anthropic_get_batch]{anthropic_get_batch()}},
+\code{\link[=anthropic_poll_batch_until_complete]{anthropic_poll_batch_until_complete()}}
+\item Download / parse: \code{\link[=anthropic_download_batch_results]{anthropic_download_batch_results()}},
+\code{\link[=parse_anthropic_batch_output]{parse_anthropic_batch_output()}}
+}
+\item Gemini pipeline: \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}
+\itemize{
+\item Build: \code{\link[=build_gemini_batch_requests]{build_gemini_batch_requests()}}
+\item Manage jobs: \code{\link[=gemini_create_batch]{gemini_create_batch()}}, \code{\link[=gemini_get_batch]{gemini_get_batch()}},
+\code{\link[=gemini_poll_batch_until_complete]{gemini_poll_batch_until_complete()}}
+\item Download / parse: \code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}},
 \code{\link[=parse_gemini_batch_output]{parse_gemini_batch_output()}}
-\item Live provider helpers: \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
-\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}}, \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
-\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}, \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}
+}
 }
 }
 
-\subsection{5) Modeling utilities and diagnostics}{
+\subsection{7) Modeling: build data, fit models, summarize}{
 \itemize{
-\item Data builders: \code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=build_elo_data]{build_elo_data()}}
+\item Data builders: \code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=build_elo_data]{build_elo_data()}}, \code{\link[=build_btl_results_data]{build_btl_results_data()}}
 \item Fits: \code{\link[=fit_bt_model]{fit_bt_model()}}, \code{\link[=fit_elo_model]{fit_elo_model()}}, \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}}
-\item Diagnostics: \code{\link[=check_positional_bias]{check_positional_bias()}}
+\item Summaries: \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}, \code{\link[=summarize_items]{summarize_items()}}, \code{\link[=summarize_refits]{summarize_refits()}}
 }
 }
 
-\subsection{6) Adaptive Bayesian pairing + ranking loop}{
+\subsection{8) Adaptive workflow: run control, persistence, and summaries}{
 \itemize{
-\item Entry / control: \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
+\item Control: \code{\link[=adaptive_rank]{adaptive_rank()}}, \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}
+\item Session IO: \code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}}, \code{\link[=validate_session_dir]{validate_session_dir()}}
+\item Adaptive summaries: \code{\link[=summarize_adaptive]{summarize_adaptive()}}
+\item Logging accessors (for audit / analysis): \code{\link[=adaptive_get_logs]{adaptive_get_logs()}},
+\code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}},
+\code{\link[=adaptive_results_history]{adaptive_results_history()}}
+\item Advanced: \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}
 }
 }
 
@@ -112,27 +158,18 @@ The exported functions are intended to be read as a set of modules:
 
 The adaptive design targets stable, auditable rankings using Bayesian
 Bradley–Terry–Luce inference with MCMC, supports position bias and lapse-rate
-variants, and is intended to be robust for noisy LLM judges. The recommended
-default model includes both global position bias and lapse rate.
+variants, and is intended to be robust for noisy LLM judges.
 
-The adaptive loop enforces hard invariants such as connectivity, duplicate
-control with order reversal for repeated unordered pairs, and approximate
-50/50 position balance across items.
-
-Adaptive decision-making is gated on strict MCMC diagnostics.
-
-When candidate generation is starved by constraints, the design specifies a
-deterministic fallback ladder (expanding windows, alternative anchor pools,
-controlled duplicate relaxation, and a global backstop).
-
-Stopping and refits are logged so that stop decisions are reproducible from the
+The adaptive loop enforces connectivity, duplicate control with order reversal
+for repeated unordered pairs, and approximate 50/50 position balance across items.
+Stopping and refits are logged so stop decisions are reproducible from the
 \code{round_log} fields (an explicit stop audit trail).
 }
 }
 \seealso{
 \itemize{
-\item For interactive exploration: start with \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} or
-\code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}}.
+\item For end-to-end adaptive ranking: \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} or \code{\link[=adaptive_rank]{adaptive_rank()}}.
+\item For large-scale provider batching: \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}}.
 }
 }
 \author{

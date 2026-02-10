@@ -23,14 +23,17 @@
 #' column contains the comparison result (1 for a win of the
 #' first object, 0 for a win of the second).
 #'
-#' It assumes that the input contains columns \code{ID1},
-#' \code{ID2}, and \code{better_id}, where \code{better_id}
-#' is the ID of the better sample. Rows where \code{better_id}
-#' does not match either \code{ID1} or \code{ID2} (including
-#' \code{NA}) are excluded.
+#' It accepts either:
+#' \itemize{
+#'   \item legacy columns \code{ID1}, \code{ID2}, \code{better_id}, or
+#'   \item canonical columns \code{A_id}, \code{B_id}, \code{better_id}.
+#' }
+#' Rows where \code{better_id} does not match either side of the pair
+#' (including \code{NA}) are excluded.
 #'
-#' @param results A data frame or tibble with columns \code{ID1},
-#'   \code{ID2}, and \code{better_id}.
+#' @param results A data frame or tibble with either
+#'   \code{ID1}/\code{ID2}/\code{better_id} or
+#'   \code{A_id}/\code{B_id}/\code{better_id}.
 #'
 #' @return A tibble with three columns:
 #'   \itemize{
@@ -60,28 +63,28 @@
 build_bt_data <- function(results) {
   results <- tibble::as_tibble(results)
 
-  required_cols <- c("ID1", "ID2", "better_id")
-  if (!all(required_cols %in% names(results))) {
-    stop(
-      "`results` must contain columns: ",
-      paste(required_cols, collapse = ", "),
-      call. = FALSE
+  has_legacy <- all(c("ID1", "ID2", "better_id") %in% names(results))
+  has_canonical <- all(c("A_id", "B_id", "better_id") %in% names(results))
+  if (!has_legacy && !has_canonical) {
+    rlang::abort(
+      "`results` must contain either `ID1`, `ID2`, `better_id` or `A_id`, `B_id`, `better_id`."
     )
   }
 
-  # Ensure character IDs (avoid factors / labelled types)
-  results <- dplyr::mutate(
-    results,
-    ID1 = as.character(.data$ID1),
-    ID2 = as.character(.data$ID2),
-    better_id = as.character(.data$better_id)
-  )
+  if (has_legacy) {
+    id1 <- as.character(results$ID1)
+    id2 <- as.character(results$ID2)
+  } else {
+    id1 <- as.character(results$A_id)
+    id2 <- as.character(results$B_id)
+  }
+  better_id <- as.character(results$better_id)
 
   out <- dplyr::mutate(
-    results,
+    tibble::tibble(id1 = id1, id2 = id2, better_id = better_id),
     result = dplyr::case_when(
-      .data$better_id == .data$ID1 ~ 1L,
-      .data$better_id == .data$ID2 ~ 0L,
+      .data$better_id == .data$id1 ~ 1L,
+      .data$better_id == .data$id2 ~ 0L,
       TRUE ~ NA_integer_
     )
   )
@@ -90,8 +93,8 @@ build_bt_data <- function(results) {
 
   out <- dplyr::transmute(
     out,
-    object1 = .data$ID1,
-    object2 = .data$ID2,
+    object1 = .data$id1,
+    object2 = .data$id2,
     result  = as.numeric(.data$result) # sirt::btm is happiest with numeric 0/1
   )
 
