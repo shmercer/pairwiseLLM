@@ -2,13 +2,20 @@ url: https://shmercer.github.io/pairwiseLLM/
 
 template:
   bootstrap: 5
+  bootswatch: flatly
+  bslib:
+    base_font: {google: "Inter"}
+    heading_font: {google: "Inter"}
+    code_font: {google: "JetBrains Mono"}
 
 navbar:
   structure:
-    left: [home, reference, usage_guides, template_positional_bias, changelog]
+    left: [home, reference, usage_guides, adaptive_pairing, template_positional_bias, changelog]
+    right: [search, github]
 
   components:
     home:
+      icon: fa-home
       text: Home
       href: index.html
 
@@ -24,6 +31,14 @@ navbar:
         - text: "Advanced: Submitting and Polling Multiple Batches"
           href: articles/advanced-batch-workflows.html
 
+    adaptive_pairing:
+      text: "Adaptive Pairing"
+      menu:
+        - text: "⭐ Adaptive Pairing & Ranking (Tutorial)"
+          href: articles/adaptive-pairing.html
+        - text: "Design: Bayesian BTL + Adaptive Pairing (v3.1)"
+          href: articles/bayesian-btl-adaptive-pairing-design.html
+
     template_positional_bias:
       text: "Template Positional Bias"
       href: articles/prompt-template-bias.html
@@ -32,11 +47,21 @@ navbar:
       text: Changelog
       href: news/index.html
 
+    github:
+      icon: fa-github
+      href: https://github.com/shmercer/pairwiseLLM
+      aria-label: GitHub
+
 articles:
   - title: "Usage Guides"
     contents:
       - getting-started
       - advanced-batch-workflows
+
+  - title: "Adaptive Pairing"
+    contents:
+      - adaptive-pairing
+      - bayesian-btl-adaptive-pairing-design
 
   - title: "Template Positional Bias"
     contents:

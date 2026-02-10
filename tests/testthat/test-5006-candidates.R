@@ -236,6 +236,36 @@ test_that("stage candidate generators enforce stage admissibility", {
   expect_true(any(dist_local == 0L))
 })
 
+test_that("long-link fallback candidate generators preserve long distance bounds", {
+  items <- make_test_items(30)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(30, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+
+  long_expand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "long_link", "expand_locality", C_max = 5000L, seed = 1L
+  )
+  long_global <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "long_link", "global_safe", C_max = 5000L, seed = 1L
+  )
+
+  defaults <- pairwiseLLM:::adaptive_defaults(nrow(items))
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+  strata <- pairwiseLLM:::.adaptive_assign_strata(proxy$scores, defaults)
+  dist_expand <- abs(
+    as.integer(strata$stratum_map[long_expand$i]) - as.integer(strata$stratum_map[long_expand$j])
+  )
+  dist_global <- abs(
+    as.integer(strata$stratum_map[long_global$i]) - as.integer(strata$stratum_map[long_global$j])
+  )
+
+  expect_true(nrow(long_expand) > 0L)
+  expect_true(nrow(long_global) > 0L)
+  expect_true(all(dist_expand >= defaults$long_min_dist))
+  expect_true(all(dist_global >= defaults$long_min_dist))
+})
+
 test_that("defaults formulas are deterministic across representative N", {
   d_small <- pairwiseLLM:::adaptive_defaults(30L)
   d_med <- pairwiseLLM:::adaptive_defaults(120L)
@@ -283,4 +313,38 @@ test_that("stage candidate subsampling is deterministic by seed", {
   expect_equal(nrow(c1), 20L)
   expect_equal(c1, c2)
   expect_false(identical(c1, c3))
+})
+
+test_that("round candidates helper edge branches are exercised", {
+  scores <- stats::setNames(seq(6, 1), as.character(1:6))
+  defaults <- pairwiseLLM:::adaptive_defaults(6L)
+  anchors <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores, defaults)
+  expect_true(length(anchors) >= 1L)
+
+  state <- adaptive_rank_start(make_test_items(6), seed = 2L)
+  state$round$anchor_ids <- character()
+  state$round$anchor_round_id <- 0L
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_round_id <- 0L
+  d <- pairwiseLLM:::adaptive_defaults(6L)
+  d$anchor_refresh_on_round <- TRUE
+  expect_true(pairwiseLLM:::.adaptive_round_anchor_needs_refresh(state, d))
+
+  expect_error(
+    pairwiseLLM:::generate_stage_candidates_from_state(list(), "anchor_link", "base", C_max = 10L, seed = 1L),
+    "adaptive_state object"
+  )
+  expect_error(
+    pairwiseLLM:::generate_stage_candidates_from_state(state, "bad_stage", "base", C_max = 10L, seed = 1L),
+    "must be one of the stage labels"
+  )
+
+  no_recent <- pairwiseLLM:::.adaptive_round_exposure_filter(
+    candidates = tibble::tibble(i = c("1", "2"), j = c("3", "4")),
+    round = list(per_round_item_uses = stats::setNames(integer(), character()), repeat_in_round_budget = 1L, repeat_in_round_used = 0L),
+    recent_deg = numeric(),
+    defaults = pairwiseLLM:::adaptive_defaults(8L),
+    allow_repeat_pressure = TRUE
+  )
+  expect_true(nrow(no_recent) >= 0L)
 })

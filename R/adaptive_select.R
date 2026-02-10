@@ -224,11 +224,7 @@ adaptive_defaults <- function(N) {
   non_anchor <- !i_ids %in% anchor_ids & !j_ids %in% anchor_ids
   if (identical(stage_name, "long_link")) {
     min_dist <- defaults$long_min_dist
-    if (identical(fallback_name, "expand_locality")) {
-      min_dist <- max(1L, min_dist - 1L)
-    } else if (identical(fallback_name, "global_safe")) {
-      min_dist <- 1L
-    }
+    # Keep long-link semantics strict across all fallback stages.
     keep <- non_anchor & dist >= min_dist
     return(cand[keep, , drop = FALSE])
   }
@@ -523,7 +519,11 @@ adaptive_defaults <- function(N) {
       long_gate_reason <- "posterior_unavailable"
     }
     keep <- p_gate >= p_long_low & p_gate <= p_long_high
-    if (!any(keep)) {
+    if (any(keep)) {
+      if (all(posterior_available)) {
+        long_gate_reason <- NA_character_
+      }
+    } else {
       long_gate_reason <- if (all(posterior_available)) "posterior_extreme" else "posterior_unavailable"
     }
     long_gate_pass <- any(keep)
@@ -767,9 +767,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     last_star_caps <- stage_out$star_caps
     if (!is.na(stage_out$long_gate_pass %||% NA)) {
       last_long_gate_pass <- stage_out$long_gate_pass
-    }
-    if (!is.na(stage_out$long_gate_reason %||% NA_character_)) {
-      last_long_gate_reason <- stage_out$long_gate_reason
+      last_long_gate_reason <- stage_out$long_gate_reason %||% NA_character_
     }
     last_star_override_used <- isTRUE(stage_out$star_override_used)
     last_star_override_reason <- stage_out$star_override_reason

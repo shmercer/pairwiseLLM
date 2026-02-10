@@ -35,3 +35,14 @@ test_that("trueskill_win_probability errors on invalid input", {
     "present"
   )
 })
+
+test_that("trueskill update validates ids and updates remain finite", {
+  state <- pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("1", "2"), mu = c(0, 0), sigma = c(1, 1)))
+  expect_error(pairwiseLLM:::update_trueskill_state(state, c("1", "2"), "2"), "length-1")
+  expect_error(pairwiseLLM:::update_trueskill_state(state, "1", "1"), "distinct")
+  expect_error(pairwiseLLM:::update_trueskill_state(state, "1", "3"), "must be present")
+
+  updated <- pairwiseLLM:::update_trueskill_state(state, "1", "2")
+  expect_true(all(is.finite(updated$items$mu)))
+  expect_true(all(updated$items$sigma > 0))
+})

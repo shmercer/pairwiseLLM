@@ -27,3 +27,32 @@ test_that("new_trueskill_state validates item ids and sigmas", {
     "sigma"
   )
 })
+
+test_that("new_trueskill_state and validators exercise optional-field branches", {
+  items <- tibble::tibble(item_id = c("a", "b"), mu = c(1, 2), sigma = c(1, 2))
+  st <- pairwiseLLM:::new_trueskill_state(items)
+  expect_true(inherits(st, "trueskill_state"))
+
+  expect_error(
+    pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), mu = c("x", "y"))),
+    "must be numeric"
+  )
+  expect_error(
+    pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), mu = c(Inf, 1))),
+    "must be finite"
+  )
+  expect_error(
+    pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), sigma = c("x", "y"))),
+    "must be numeric"
+  )
+  expect_error(
+    pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), sigma = c(Inf, 1))),
+    "must be finite"
+  )
+  expect_error(pairwiseLLM:::new_trueskill_state(c("a", "b"), sigma0 = 0), "must be > 0")
+  expect_error(pairwiseLLM:::new_trueskill_state(c("a", "b"), beta = 0), "must be > 0")
+
+  bad <- st
+  bad$items$item_id <- c("a", "a")
+  expect_error(pairwiseLLM:::validate_trueskill_state(bad), "must be unique")
+})

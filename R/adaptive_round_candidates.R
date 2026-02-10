@@ -178,9 +178,9 @@
   if (identical(stage_name, "long_link")) {
     min_gap <- as.integer(defaults$long_min_dist)
     if (identical(fallback_name, "expand_locality")) {
-      min_gap <- max(1L, min_gap - 1L)
+      min_gap <- as.integer(defaults$long_min_dist)
     } else if (identical(fallback_name, "global_safe")) {
-      min_gap <- 1L
+      min_gap <- as.integer(defaults$long_min_dist)
     }
     return(list(min = min_gap, max = .Machine$integer.max))
   }
