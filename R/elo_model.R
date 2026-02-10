@@ -4,13 +4,17 @@
 #' format used by the \pkg{EloChoice} package: one column for the winner and
 #' one for the loser of each trial.
 #'
-#' It assumes that the input contains columns \code{ID1}, \code{ID2}, and
-#' \code{better_id}, where \code{better_id} is the ID of the better sample.
-#' Rows where \code{better_id} does not match either \code{ID1} or \code{ID2}
+#' It accepts either:
+#' \itemize{
+#'   \item legacy columns \code{ID1}, \code{ID2}, \code{better_id}, or
+#'   \item canonical columns \code{A_id}, \code{B_id}, \code{better_id}.
+#' }
+#' Rows where \code{better_id} does not match either side of the pair
 #' (including \code{NA}) are excluded.
 #'
-#' @param results A data frame or tibble with columns \code{ID1},
-#'   \code{ID2}, and \code{better_id}.
+#' @param results A data frame or tibble with either
+#'   \code{ID1}/\code{ID2}/\code{better_id} or
+#'   \code{A_id}/\code{B_id}/\code{better_id}.
 #'
 #' @return A tibble with two columns:
 #'   \itemize{
@@ -33,28 +37,32 @@
 build_elo_data <- function(results) {
   results <- tibble::as_tibble(results)
 
-  required_cols <- c("ID1", "ID2", "better_id")
-  if (!all(required_cols %in% names(results))) {
-    stop(
-      "`results` must contain columns: ",
-      paste(required_cols, collapse = ", "),
-      call. = FALSE
+  has_legacy <- all(c("ID1", "ID2", "better_id") %in% names(results))
+  has_canonical <- all(c("A_id", "B_id", "better_id") %in% names(results))
+  if (!has_legacy && !has_canonical) {
+    rlang::abort(
+      "`results` must contain either `ID1`, `ID2`, `better_id` or `A_id`, `B_id`, `better_id`."
     )
   }
 
   # Coerce to character to avoid factor level-set comparison errors
-  ID1 <- as.character(results$ID1)
-  ID2 <- as.character(results$ID2)
+  if (has_legacy) {
+    id1 <- as.character(results$ID1)
+    id2 <- as.character(results$ID2)
+  } else {
+    id1 <- as.character(results$A_id)
+    id2 <- as.character(results$B_id)
+  }
   better <- as.character(results$better_id)
 
   winner <- dplyr::if_else(
-    better == ID1, ID1,
-    dplyr::if_else(better == ID2, ID2, NA_character_)
+    better == id1, id1,
+    dplyr::if_else(better == id2, id2, NA_character_)
   )
 
   loser <- dplyr::if_else(
-    better == ID1, ID2,
-    dplyr::if_else(better == ID2, ID1, NA_character_)
+    better == id1, id2,
+    dplyr::if_else(better == id2, id1, NA_character_)
   )
 
   keep <- !is.na(winner) & !is.na(loser)

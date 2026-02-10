@@ -7,8 +7,9 @@
 build_bt_data(results)
 }
 \arguments{
-\item{results}{A data frame or tibble with columns \code{ID1},
-\code{ID2}, and \code{better_id}.}
+\item{results}{A data frame or tibble with either
+\code{ID1}/\code{ID2}/\code{better_id} or
+\code{A_id}/\code{B_id}/\code{better_id}.}
 }
 \value{
 A tibble with three columns:
@@ -28,11 +29,13 @@ column contains the comparison result (1 for a win of the
 first object, 0 for a win of the second).
 }
 \details{
-It assumes that the input contains columns \code{ID1},
-\code{ID2}, and \code{better_id}, where \code{better_id}
-is the ID of the better sample. Rows where \code{better_id}
-does not match either \code{ID1} or \code{ID2} (including
-\code{NA}) are excluded.
+It accepts either:
+\itemize{
+\item legacy columns \code{ID1}, \code{ID2}, \code{better_id}, or
+\item canonical columns \code{A_id}, \code{B_id}, \code{better_id}.
+}
+Rows where \code{better_id} does not match either side of the pair
+(including \code{NA}) are excluded.
 }
 \examples{
 results <- tibble::tibble(

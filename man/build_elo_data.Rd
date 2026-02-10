@@ -7,8 +7,9 @@
 build_elo_data(results)
 }
 \arguments{
-\item{results}{A data frame or tibble with columns \code{ID1},
-\code{ID2}, and \code{better_id}.}
+\item{results}{A data frame or tibble with either
+\code{ID1}/\code{ID2}/\code{better_id} or
+\code{A_id}/\code{B_id}/\code{better_id}.}
 }
 \value{
 A tibble with two columns:
@@ -24,9 +25,12 @@ format used by the \pkg{EloChoice} package: one column for the winner and
 one for the loser of each trial.
 }
 \details{
-It assumes that the input contains columns \code{ID1}, \code{ID2}, and
-\code{better_id}, where \code{better_id} is the ID of the better sample.
-Rows where \code{better_id} does not match either \code{ID1} or \code{ID2}
+It accepts either:
+\itemize{
+\item legacy columns \code{ID1}, \code{ID2}, \code{better_id}, or
+\item canonical columns \code{A_id}, \code{B_id}, \code{better_id}.
+}
+Rows where \code{better_id} does not match either side of the pair
 (including \code{NA}) are excluded.
 }
 \examples{

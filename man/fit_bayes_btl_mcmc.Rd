@@ -18,7 +18,9 @@ fit_bayes_btl_mcmc(
 \arguments{
 \item{results}{Canonical \code{results_tbl} with \code{A_id}, \code{B_id}, and
 \code{better_id} (plus the standard adaptive results columns). See
-\code{validate_results_tbl()} for required structure.}
+\code{validate_results_tbl()} for required structure. For legacy
+\code{ID1}/\code{ID2}/\code{better_id} data, first use
+\code{\link[=build_btl_results_data]{build_btl_results_data()}}.}
 
 \item{ids}{Character vector of all sample ids (length \code{N}).}
 
