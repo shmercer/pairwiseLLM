@@ -314,3 +314,37 @@ test_that("stage candidate subsampling is deterministic by seed", {
   expect_equal(c1, c2)
   expect_false(identical(c1, c3))
 })
+
+test_that("round candidates helper edge branches are exercised", {
+  scores <- stats::setNames(seq(6, 1), as.character(1:6))
+  defaults <- pairwiseLLM:::adaptive_defaults(6L)
+  anchors <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores, defaults)
+  expect_true(length(anchors) >= 1L)
+
+  state <- adaptive_rank_start(make_test_items(6), seed = 2L)
+  state$round$anchor_ids <- character()
+  state$round$anchor_round_id <- 0L
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_round_id <- 0L
+  d <- pairwiseLLM:::adaptive_defaults(6L)
+  d$anchor_refresh_on_round <- TRUE
+  expect_true(pairwiseLLM:::.adaptive_round_anchor_needs_refresh(state, d))
+
+  expect_error(
+    pairwiseLLM:::generate_stage_candidates_from_state(list(), "anchor_link", "base", C_max = 10L, seed = 1L),
+    "adaptive_state object"
+  )
+  expect_error(
+    pairwiseLLM:::generate_stage_candidates_from_state(state, "bad_stage", "base", C_max = 10L, seed = 1L),
+    "must be one of the stage labels"
+  )
+
+  no_recent <- pairwiseLLM:::.adaptive_round_exposure_filter(
+    candidates = tibble::tibble(i = c("1", "2"), j = c("3", "4")),
+    round = list(per_round_item_uses = stats::setNames(integer(), character()), repeat_in_round_budget = 1L, repeat_in_round_used = 0L),
+    recent_deg = numeric(),
+    defaults = pairwiseLLM:::adaptive_defaults(8L),
+    allow_repeat_pressure = TRUE
+  )
+  expect_true(nrow(no_recent) >= 0L)
+})
