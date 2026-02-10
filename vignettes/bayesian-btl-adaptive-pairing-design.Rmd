@@ -50,7 +50,7 @@ By explicitly budgeting comparisons that promote global linking while retaining 
 
 For a practical tutorial using `adaptive_rank()`, see:
 
-`vignette("adaptive-pairing-and-ranking", package = "pairwiseLLM")`
+- [Adaptive Pairing & Ranking](adaptive-pairing.html)
 
 ---
 

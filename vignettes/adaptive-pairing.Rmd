@@ -395,7 +395,7 @@ For a complete technical specification of the adaptive algorithm, including:
 
 see the companion vignette:
 
-`vignette("bayesian-btl-adaptive-pairing-design", package = "pairwiseLLM")`
+- [Bayesian BTL Adaptive Pairing Design](bayesian-btl-adaptive-pairing-design.html)
 
 ---
 
