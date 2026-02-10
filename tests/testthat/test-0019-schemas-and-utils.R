@@ -94,3 +94,19 @@ test_that("adaptive_with_seed preserves RNG state", {
   expect_equal(pre, baseline_pre)
   expect_equal(post, baseline_post)
 })
+
+test_that("adaptive_with_seed executes in parent frame when seed is NULL", {
+  withr::local_seed(2)
+  baseline_pre <- stats::runif(2)
+  baseline_mid <- stats::runif(1)
+  baseline_post <- stats::runif(2)
+
+  withr::local_seed(2)
+  pre <- stats::runif(2)
+  mid <- pairwiseLLM:::.adaptive_with_seed(NULL, stats::runif(1))
+  post <- stats::runif(2)
+
+  expect_equal(pre, baseline_pre)
+  expect_equal(mid, baseline_mid)
+  expect_equal(post, baseline_post)
+})
