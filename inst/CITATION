@@ -8,5 +8,5 @@ utils::bibentry(
   note         = "R package version 1.3.0",
   url          = "https://doi.org/10.32614/CRAN.package.pairwiseLLM",
   organization = "Comprehensive R Archive Network",
-  textVersion  = "Mercer, S. H. (2025). *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation* (Version 1.2.0) [R package; Computer software]. Comprehensive R Archive Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM"
+  textVersion  = "Mercer, S. H. (2026). *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation* (Version 1.3.0) [R package; Computer software]. Comprehensive R Archive Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM"
 )
