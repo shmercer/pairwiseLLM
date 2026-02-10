@@ -14,3 +14,11 @@
 ^cran-comments\.md$
 ^CRAN-SUBMISSION$
 ^codemeta\.json$
+^tests/testthat/bad\.csv$
+^agents\.md$
+^dev-checklists$
+^\.lintr$
+^inst/stan/btl_e_b\.exe$
+^inst/stan/btl_e_b$
+^codex$
+^scripts$

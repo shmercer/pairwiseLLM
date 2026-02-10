@@ -46,13 +46,15 @@ standard models (deterministic). Must be \code{NULL} for reasoning models
 
 \item{logprobs}{Optional logprobs parameter.}
 
-\item{reasoning}{Optional reasoning effort for \code{gpt-5.1/5.2} when using
-the \code{/v1/responses} endpoint. Typically \code{"none"}, \code{"low"},
+\item{reasoning}{Optional reasoning effort for GPT-5 series when using
+the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
+\code{"gpt-5-mini"}, \code{"none"} is normalized to \code{"minimal"}.
+For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
 \code{"medium"}, or \code{"high"}.}
 
 \item{include_thoughts}{Logical; if TRUE and using \code{responses} endpoint
-with reasoning, requests a summary. Defaults \code{reasoning} to \code{"low"}
-for gpt-5.1/5.2 if not specified.}
+with reasoning, requests a summary. Defaults \code{reasoning} to
+\code{"low"} for GPT-5 series models if not specified.}
 
 \item{request_id_prefix}{String prefix for \code{custom_id}; the full
 ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.}
@@ -73,10 +75,6 @@ suitable for use with the OpenAI batch API. It supports both
 \code{/v1/chat/completions} and \code{/v1/responses} endpoints.
 }
 \examples{
-\dontrun{
-# Requires OPENAI_API_KEY and network access.
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
@@ -99,7 +97,7 @@ batch_tbl_chat <- build_openai_batch_requests(
 )
 
 # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
-batch_resp <- build_openai_batch_requests(
+batch_tbl_resp <- build_openai_batch_requests(
   pairs = pairs,
   model = "gpt-5.2-2025-12-11",
   trait_name = td$name,
@@ -109,8 +107,8 @@ batch_resp <- build_openai_batch_requests(
   include_thoughts = TRUE, # implies reasoning="low" if not set
   reasoning = "medium"
 )
+
 batch_tbl_chat
 batch_tbl_resp
-}
 
 }

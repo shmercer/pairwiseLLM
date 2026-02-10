@@ -1,6 +1,6 @@
 Package: pairwiseLLM
 Title: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
-Version: 1.2.0
+Version: 1.3.0
 Authors@R: 
     person("Sterett H.", "Mercer", , "sterett.mercer@ubc.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7940-4221"))
@@ -11,17 +11,22 @@ Description: Provides a unified framework for generating, submitting, and
     'Together AI', and locally-hosted 'Ollama' models), includes bias-tested 
     prompt templates and a flexible template registry, and offers tools
     for constructing forward and reversed comparison sets to analyze
-    consistency and positional bias. Results can be modeled using 
-    Bradley–Terry (1952) <doi:10.2307/2334029> or Elo rating methods to derive 
-    writing quality scores. For information on the method of pairwise 
-    comparisons, see Thurstone (1927) <doi:10.1037/h0070288> and Heldsinger & 
-    Humphry (2010) <doi:10.1007/BF03216919>. For information on Elo ratings, see
-    Clark et al. (2018) <doi:10.1371/journal.pone.0190393>.
+    consistency and positional bias. The package additionally supports
+    adaptive pairing workflows that iteratively select comparisons based on
+    model uncertainty to improve ranking efficiency. Results can be modeled
+    using frequentist or Bayesian Bradley–Terry–Luce models
+    (Bradley & Terry, 1952 <doi:10.2307/2334029>; see also
+    Caron & Doucet, 2012 <doi:10.1080/10618600.2012.638220>) or Elo rating methods (see
+    Clark et al., 2018 <doi:10.1371/journal.pone.0190393>) to derive 
+    writing quality scores. For information on pairwise comparisons and
+    comparitive judgement, see Thurstone (1927) <doi:10.1037/h0070288> 
+    and Heldsinger & Humphry (2010) <doi:10.1007/BF03216919>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
+    cli,
     curl,
     dplyr,
     httr2,
@@ -34,11 +39,13 @@ Imports:
     utils
 Suggests:
     BradleyTerry2,
+    cmdstanr,
     EloChoice,
     future,
     future.apply,
     knitr,
     mockery,
+    pkgload,
     purrr,
     readr,
     rmarkdown,
@@ -46,10 +53,74 @@ Suggests:
     stringr,
     testthat (>= 3.0.0),
     tidyr,
+    vctrs,
     withr
+Remotes:
+    stan-dev/cmdstanr
 Config/testthat/edition: 3
 URL: https://github.com/shmercer/pairwiseLLM, https://shmercer.github.io/pairwiseLLM/
 BugReports: https://github.com/shmercer/pairwiseLLM/issues
 Depends: 
     R (>= 4.1)
 VignetteBuilder: knitr
+Collate: 
+    'adaptive_benchmark_metrics.R'
+    'adaptive_btl_refit.R'
+    'adaptive_candidates.R'
+    'adaptive_constraints.R'
+    'adaptive_logs.R'
+    'adaptive_persist.R'
+    'adaptive_print.R'
+    'adaptive_rank.R'
+    'adaptive_round_candidates.R'
+    'adaptive_state.R'
+    'adaptive_run.R'
+    'adaptive_schemas.R'
+    'adaptive_select.R'
+    'adaptive_simulation_harness.R'
+    'adaptive_step.R'
+    'adaptive_trueskill.R'
+    'adaptive_utility.R'
+    'anthropic_batch_api.R'
+    'anthropic_live.R'
+    'api_keys.R'
+    'bayes_btl_mcmc.R'
+    'bayes_btl_mcmc_adaptive.R'
+    'bayes_btl_summarize.R'
+    'bt_helpers.R'
+    'bt_model.R'
+    'btl_mcmc_constraints.R'
+    'btl_mcmc_contracts.R'
+    'btl_mcmc_fit_contracts.R'
+    'btl_mcmc_ingest.R'
+    'btl_mcmc_model_variant.R'
+    'btl_mcmc_state.R'
+    'btl_mcmc_stopping.R'
+    'btl_mcmc_summaries.R'
+    'btl_mcmc_theta_summary_stubs.R'
+    'core_budget.R'
+    'cost_estimator.R'
+    'custom_id.R'
+    'data-example_writing.R'
+    'data_import.R'
+    'draws_sanitize.R'
+    'elo_model.R'
+    'gemini_batch_api.R'
+    'gemini_live.R'
+    'httr2_retry.R'
+    'llm_backends.R'
+    'llm_batch.R'
+    'llm_multi_batch.R'
+    'normalize_results.R'
+    'ollama_live.R'
+    'openai_batch_api.R'
+    'openai_live.R'
+    'openai_params.R'
+    'pairing.R'
+    'pairwiseLLM-package.R'
+    'prompt_template.R'
+    'reverse_consistency.R'
+    'seed_helpers.R'
+    'together_live.R'
+    'traits.R'
+    'utils-null-coalesce.R'

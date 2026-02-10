@@ -67,13 +67,12 @@ summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
   # - ensure atomic double
   theta_num <- theta$theta
   theta_num <- unname(theta_num) # removes names attribute (important for fit2)
-  theta_num <- as.double(theta_num) # ensures plain numeric
 
   # If something ever sneaks in as character, coerce (quietly if verbose=FALSE)
   if (!is.numeric(theta_num)) {
     theta_num <- if (isTRUE(verbose)) as.numeric(theta_num) else suppressWarnings(as.numeric(theta_num))
-    theta_num <- as.double(unname(theta_num))
   }
+  theta_num <- as.double(unname(theta_num)) # ensures plain numeric
 
   # Order and rank (quietly if verbose = FALSE)
   ord <- if (isTRUE(verbose)) {

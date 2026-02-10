@@ -252,7 +252,7 @@ submit_one_run <- function(template_id, prompt_template, provider, model, thinki
 
   if (identical(provider, "openai")) {
     # Only request thoughts for models that support them in this workflow
-    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5\.1", model)
+    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5\\.1", model)
     extra_args$include_raw      <- TRUE
   } else if (identical(provider, "anthropic")) {
     extra_args$reasoning        <- if (is_thinking) "enabled" else "none"

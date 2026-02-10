@@ -26,8 +26,9 @@ through where supported.}
 
 \item{model}{Character scalar model name to use for the batch job.
 \itemize{
-\item For \code{"openai"}, use models like \code{"gpt-4.1"}, \code{"gpt-5.1"}, or \code{"gpt-5.2"}
-(including date-stamped versions like \code{"gpt-5.2-2025-12-11"}).
+\item For \code{"openai"}, use models like \code{"gpt-4.1"}, \code{"gpt-5"}, \code{"gpt-5-mini"},
+\code{"gpt-5.1"}, or \code{"gpt-5.2"} (including date-stamped versions like
+\code{"gpt-5.2-2025-12-11"}).
 \item For \code{"anthropic"}, use provider names like \code{"claude-4-5-sonnet"}
 or date-stamped versions like \code{"claude-sonnet-4-5-20250929"}.
 \item For \code{"gemini"}, use names like \code{"gemini-3-pro-preview"}.
@@ -44,7 +45,7 @@ or a compatible character scalar.}
 \item{include_thoughts}{Logical; whether to request and parse model
 "thoughts" (where supported).
 \itemize{
-\item For OpenAI GPT-5.1/5.2, setting this to \code{TRUE} defaults to the
+\item For OpenAI GPT-5 series, setting this to \code{TRUE} defaults to the
 \code{responses} endpoint.
 \item For Anthropic, setting this to \code{TRUE} implies \code{reasoning = "enabled"}
 (unless overridden) and sets \code{temperature = 1}.
@@ -57,7 +58,7 @@ result (where supported by backends).}
 \verb{run_*_batch_pipeline()} functions. This can include provider-specific
 options such as temperature or batch configuration fields. For OpenAI,
 this may include \code{endpoint}, \code{temperature}, \code{top_p}, \code{logprobs},
-\code{reasoning}, etc. For Anthropic, this may include \code{reasoning},
+\code{reasoning}, \code{service_tier}, etc. For Anthropic, this may include \code{reasoning},
 \code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}.}
 }
 \value{
@@ -69,6 +70,8 @@ A list of class \code{"pairwiseLLM_batch"} containing at least:
 \item \code{batch}: provider-specific batch object (e.g., job metadata),
 \item \code{results}: a tibble of parsed comparison results in the standard
 pairwiseLLM schema.
+\item \code{failed_attempts}: a tibble of failed attempts captured during
+normalization (empty when no failures are observed).
 }
 
 Additional fields returned by the backend-specific pipeline functions are
@@ -88,10 +91,10 @@ For OpenAI, this helper will by default:
 \item Use the \code{chat.completions} batch style for most models, and
 \item Automatically switch to the \code{responses} style endpoint when:
 \itemize{
-\item \code{model} starts with \code{"gpt-5.1"} or \code{"gpt-5.2"} (including date-stamped
-versions like \code{"gpt-5.2-2025-12-11"}) and
-\item either \code{include_thoughts = TRUE} \strong{or} a non-\code{"none"} \code{reasoning}
-effort is supplied in \code{...}.
+\item \code{model} is in the GPT-5 series (including \code{gpt-5}, \code{gpt-5-mini}, and
+date-stamped \code{gpt-5.1/5.2} variants), and
+\item either \code{include_thoughts = TRUE} \strong{or} a \code{reasoning} effort is supplied
+in \code{...} (for GPT-5, \code{reasoning = "none"} maps to \code{"minimal"}).
 }
 }
 
@@ -99,9 +102,9 @@ effort is supplied in \code{...}.
 For OpenAI, if \code{temperature} is not specified in \code{...}:
 \itemize{
 \item It defaults to \code{0} (deterministic) for standard models or when reasoning is
-disabled (\code{reasoning = "none"}) on supported models (5.1/5.2).
-\item It remains \code{NULL} (API default) when reasoning is enabled, as the API
-does not support temperature with reasoning.
+disabled (\code{reasoning = "none"}) on supported GPT-5.1/5.2 models.
+\item It remains \code{NULL} (API default) when reasoning is enabled, or for GPT-5
+minimal reasoning (which ignores temperature).
 }
 
 For Anthropic, standard and date-stamped model names
@@ -153,11 +156,12 @@ tmpl <- set_prompt_template()
 batch_openai <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "openai",
-  model             = "gpt-4.1",
+  model             = "gpt-5-mini",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  include_thoughts  = FALSE
+  include_thoughts  = FALSE,
+  service_tier      = "flex"
 )
 res_openai <- llm_download_batch_results(batch_openai)
 

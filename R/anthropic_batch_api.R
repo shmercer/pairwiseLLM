@@ -39,6 +39,14 @@ NULL
   )
 }
 
+.anthropic_now <- function() {
+  Sys.time()
+}
+
+.anthropic_sleep <- function(seconds) {
+  Sys.sleep(seconds)
+}
+
 # Internal: parse a single Anthropic "message" object (from Messages API)
 # into the standard pairwiseLLM schema (without custom_id / status_code).
 .parse_anthropic_pair_message <- function(
@@ -192,10 +200,6 @@ NULL
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' # Requires ANTHROPIC_API_KEY and network access.
-#' library(pairwiseLLM)
-#'
 #' data("example_writing_samples", package = "pairwiseLLM")
 #'
 #' pairs <- example_writing_samples |>
@@ -229,7 +233,6 @@ NULL
 #' )
 #'
 #' reqs_reason
-#' }
 #'
 #' @export
 build_anthropic_batch_requests <- function(
@@ -360,7 +363,11 @@ build_anthropic_batch_requests <- function(
     text1 <- as.character(pairs$text1[i])
     text2 <- as.character(pairs$text2[i])
 
-    custom_id <- sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
+    custom_id <- if ("pair_uid" %in% names(pairs)) {
+      as.character(pairs$pair_uid[i])
+    } else {
+      sprintf("%s_%s_vs_%s", custom_id_prefix, ID1, ID2)
+    }
     params <- get_body_for_pair(ID1, text1, ID2, text2)
 
     out[[i]] <- list(custom_id = custom_id, params = params)
@@ -545,7 +552,7 @@ anthropic_poll_batch_until_complete <- function(
   anthropic_version = "2023-06-01",
   verbose = TRUE
 ) {
-  start_time <- Sys.time()
+  start_time <- .anthropic_now()
   last_batch <- NULL
 
   repeat {
@@ -577,18 +584,18 @@ anthropic_poll_batch_until_complete <- function(
       break
     }
 
-    elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    elapsed <- as.numeric(difftime(.anthropic_now(), start_time, units = "secs"))
     if (!is.infinite(timeout_seconds) && elapsed > timeout_seconds) {
       if (verbose) {
-        warning(
+        rlang::warn(paste0(
           "Timeout reached while waiting for Anthropic batch to complete. ",
           "Returning the last retrieved batch object."
-        )
+        ))
       }
       break
     }
 
-    Sys.sleep(interval_seconds)
+    .anthropic_sleep(interval_seconds)
   }
 
   last_batch
@@ -636,11 +643,10 @@ anthropic_download_batch_results <- function(
 
   results_url <- batch$results_url %||% ""
   if (!nzchar(results_url)) {
-    stop(
+    rlang::abort(paste0(
       "Batch has no `results_url` yet. ",
-      "Ensure that `processing_status` is 'ended' before downloading results.",
-      call. = FALSE
-    )
+      "Ensure that `processing_status` is 'ended' before downloading results."
+    ))
   }
 
   # Build a fresh request using the full results URL

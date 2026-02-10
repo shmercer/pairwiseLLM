@@ -1,0 +1,566 @@
+# -------------------------------------------------------------------------
+# BTL MCMC summary helpers for diagnostics and inspection.
+# -------------------------------------------------------------------------
+
+.adaptive_summary_empty_value <- function(type) {
+  if (identical(type, "integer")) {
+    return(integer())
+  }
+  if (identical(type, "double")) {
+    return(double())
+  }
+  if (identical(type, "logical")) {
+    return(logical())
+  }
+  if (identical(type, "character")) {
+    return(character())
+  }
+  if (identical(type, "posixct")) {
+    return(as.POSIXct(character(), tz = "UTC"))
+  }
+  rlang::abort("Unknown summary column type.")
+}
+
+.adaptive_summary_extract_source <- function(state) {
+  if (inherits(state, "adaptive_state")) {
+    is_canonical_runtime <- !is.null(state$item_ids) &&
+      !is.null(state$step_log) &&
+      !is.null(state$round_log)
+    if (isTRUE(is_canonical_runtime)) {
+      return(list(
+        round_log = state$round_log %||% tibble::tibble(),
+        item_log_list = state$item_log %||% NULL
+      ))
+    }
+    return(list(
+      round_log = state$config$round_log %||% tibble::tibble(),
+      item_log_list = state$logs$item_log_list %||% NULL
+    ))
+  }
+  if (is.list(state) && inherits(state$state, "adaptive_state")) {
+    return(.adaptive_summary_extract_source(state$state))
+  }
+  if (is.list(state) && any(c("round_log", "item_log_list") %in% names(state))) {
+    return(list(
+      round_log = state$round_log %||% tibble::tibble(),
+      item_log_list = state$item_log_list %||% NULL
+    ))
+  }
+  rlang::abort("`state` must be an adaptive_state or list with adaptive logs.")
+}
+
+.adaptive_summary_col <- function(log, name, default, n) {
+  if (!is.null(log) && name %in% names(log)) {
+    value <- log[[name]]
+    if (length(value) == n) {
+      return(value)
+    }
+    return(rep_len(value, n))
+  }
+  rep_len(default, n)
+}
+
+.adaptive_summary_validate_last_n <- function(last_n) {
+  if (is.null(last_n)) {
+    return(NULL)
+  }
+  if (!is.numeric(last_n) || length(last_n) != 1L || is.na(last_n)) {
+    rlang::abort("`last_n` must be a single positive number or NULL.")
+  }
+  last_n <- as.integer(last_n)
+  if (last_n < 1L) {
+    rlang::abort("`last_n` must be a single positive number or NULL.")
+  }
+  last_n
+}
+
+.adaptive_compute_scheduled_exposure <- function(state) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state.")
+  }
+
+  ids <- as.character(state$ids %||% character())
+  if (length(ids) == 0L) {
+    return(list(
+      deg_scheduled = integer(),
+      posA_scheduled = integer(),
+      pos_balance_sd_scheduled = NA_real_,
+      mean_degree_scheduled = NA_real_,
+      min_degree_scheduled = NA_integer_
+    ))
+  }
+
+  deg <- stats::setNames(rep.int(0L, length(ids)), ids)
+  posA <- stats::setNames(rep.int(0L, length(ids)), ids)
+  pairs <- state$history_pairs
+
+  if (is.data.frame(pairs) && nrow(pairs) > 0L) {
+    idx_A <- match(as.character(pairs$A_id), ids)
+    idx_B <- match(as.character(pairs$B_id), ids)
+    if (any(is.na(idx_A) | is.na(idx_B))) {
+      rlang::abort("`state$history_pairs` must reference valid ids.")
+    }
+
+    count_A <- tabulate(idx_A, nbins = length(ids))
+    count_B <- tabulate(idx_B, nbins = length(ids))
+    deg <- as.integer(count_A + count_B)
+    posA <- as.integer(count_A)
+    names(deg) <- ids
+    names(posA) <- ids
+  }
+
+  pos_balance <- as.double(posA) / pmax(as.double(deg), 1)
+  pos_balance_sd <- if (length(pos_balance) == 0L) {
+    NA_real_
+  } else {
+    stats::sd(pos_balance)
+  }
+
+  list(
+    deg_scheduled = deg,
+    posA_scheduled = posA,
+    pos_balance_sd_scheduled = as.double(pos_balance_sd),
+    mean_degree_scheduled = as.double(mean(as.double(deg))),
+    min_degree_scheduled = as.integer(min(deg))
+  )
+}
+
+.adaptive_refit_summary_schema <- function(include_optional = TRUE) {
+  schema <- round_log_schema()
+  if (isTRUE(include_optional)) {
+    return(schema)
+  }
+
+  required <- c(
+    "round_id",
+    "step_id_at_refit",
+    "iter_at_refit",
+    "new_pairs_since_last_refit",
+    "new_pairs",
+    "divergences",
+    "max_rhat",
+    "min_ess_bulk",
+    "ess_bulk_required",
+    "epsilon_mean",
+    "reliability_EAP",
+    "theta_sd_eap",
+    "rho_theta",
+    "rho_theta_lag",
+    "delta_sd_theta",
+    "delta_sd_theta_lag",
+    "rho_rank",
+    "rho_rank_lag",
+    "hard_cap_threshold",
+    "n_unique_pairs_seen",
+    "theta_corr_pass",
+    "delta_sd_theta_pass",
+    "rho_rank_pass",
+    "rank_stability_pass",
+    "diagnostics_pass",
+    "lag_eligible",
+    "stop_decision",
+    "stop_reason",
+    "mcmc_chains",
+    "mcmc_parallel_chains",
+    "mcmc_threads_per_chain",
+    "mode"
+  )
+  keep <- intersect(required, names(schema))
+  schema[, keep, drop = FALSE]
+}
+
+.adaptive_item_log_schema <- function(include_optional = TRUE) {
+  required <- tibble::tibble(
+    refit_id = .adaptive_summary_empty_value("integer"),
+    ID = .adaptive_summary_empty_value("character"),
+    deg = .adaptive_summary_empty_value("integer"),
+    posA_prop = .adaptive_summary_empty_value("double"),
+    theta_mean = .adaptive_summary_empty_value("double"),
+    theta_p2.5 = .adaptive_summary_empty_value("double"),
+    theta_p5 = .adaptive_summary_empty_value("double"),
+    theta_p50 = .adaptive_summary_empty_value("double"),
+    theta_p95 = .adaptive_summary_empty_value("double"),
+    theta_p97.5 = .adaptive_summary_empty_value("double"),
+    theta_sd = .adaptive_summary_empty_value("double"),
+    rank_mean = .adaptive_summary_empty_value("double"),
+    rank_p2.5 = .adaptive_summary_empty_value("double"),
+    rank_p5 = .adaptive_summary_empty_value("double"),
+    rank_p50 = .adaptive_summary_empty_value("double"),
+    rank_p95 = .adaptive_summary_empty_value("double"),
+    rank_p97.5 = .adaptive_summary_empty_value("double"),
+    rank_sd = .adaptive_summary_empty_value("double")
+  )
+  if (!isTRUE(include_optional)) {
+    return(required)
+  }
+
+  optional <- tibble::tibble(
+    repeated_pairs = .adaptive_summary_empty_value("integer"),
+    adjacent_prev_prob = .adaptive_summary_empty_value("double"),
+    adjacent_next_prob = .adaptive_summary_empty_value("double")
+  )
+  dplyr::bind_cols(required, optional)
+}
+
+.adaptive_extract_theta_draws <- function(posterior, ids) {
+  if (is.matrix(posterior) && is.numeric(posterior)) {
+    return(posterior)
+  }
+  if (!is.list(posterior)) {
+    return(NULL)
+  }
+  if (!is.null(posterior$theta_draws)) {
+    return(posterior$theta_draws)
+  }
+  if (!is.null(posterior$draws)) {
+    return(tryCatch(
+      .btl_mcmc_theta_draws(posterior$draws, item_id = ids),
+      error = function(e) NULL
+    ))
+  }
+  NULL
+}
+
+.adaptive_repeated_pairs_by_item <- function(state) {
+  ids <- as.character(state$ids %||% character())
+  if (length(ids) == 0L) {
+    return(integer())
+  }
+  pair_count <- state$pair_count %||% integer()
+  if (length(pair_count) == 0L || is.null(names(pair_count))) {
+    return(stats::setNames(rep_len(NA_integer_, length(ids)), ids))
+  }
+  repeats <- pmax(as.integer(pair_count) - 1L, 0L)
+  names(repeats) <- names(pair_count)
+  if (all(repeats == 0L)) {
+    return(stats::setNames(rep.int(0L, length(ids)), ids))
+  }
+
+  keys <- names(repeats)
+  parts <- strsplit(keys, ":", fixed = TRUE)
+  left <- vapply(parts, `[[`, character(1L), 1L)
+  right <- vapply(parts, `[[`, character(1L), 2L)
+  out <- stats::setNames(rep.int(0L, length(ids)), ids)
+  for (idx in seq_along(repeats)) {
+    if (repeats[[idx]] > 0L) {
+      out[[left[[idx]]]] <- out[[left[[idx]]]] + repeats[[idx]]
+      out[[right[[idx]]]] <- out[[right[[idx]]]] + repeats[[idx]]
+    }
+  }
+  out
+}
+
+.adaptive_apply_sort_and_top_n <- function(summary, sort_by, top_n) {
+  top_n <- .adaptive_summary_validate_last_n(top_n)
+  descending <- sort_by %in% c("theta_mean", "theta_sd", "degree", "pos_A_rate")
+
+  summary <- summary |>
+    dplyr::mutate(
+      .sort_value = dplyr::if_else(
+        is.na(.data[[sort_by]]),
+        if (descending) -Inf else Inf,
+        .data[[sort_by]]
+      )
+    )
+
+  if (descending) {
+    summary <- summary |> dplyr::arrange(dplyr::desc(.data[[".sort_value"]]))
+  } else {
+    summary <- summary |> dplyr::arrange(.data[[".sort_value"]])
+  }
+
+  summary <- summary |> dplyr::select(-dplyr::all_of(".sort_value"))
+  if (!is.null(top_n)) {
+    summary <- summary |> dplyr::slice_head(n = top_n)
+  }
+  summary
+}
+
+#' Summarize adaptive refits
+#'
+#' Build a thin per-refit diagnostics summary from the adaptive round log. This is
+#' a pure view over \code{round_log} and does not recompute posterior
+#' quantities or stop metrics.
+#'
+#' @details
+#' The round log is the canonical stop-audit trail. This summary is a direct
+#' view over \code{round_log} with no recomputation.
+#'
+#' Key fields include:
+#' \itemize{
+#'   \item identity: \code{refit_id}, \code{round_id_at_refit},
+#'   \code{step_id_at_refit}
+#'   \item run scale: \code{total_pairs_done}, \code{new_pairs_since_last_refit},
+#'   \code{n_unique_pairs_seen}
+#'   \item candidate health: \code{proposed_pairs_mode},
+#'   \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
+#'   \code{fallback_used_mode}, \code{starvation_reason_mode}
+#'   \item identifiability/quota adaptation: \code{global_identified},
+#'   \code{global_identified_reliability_min},
+#'   \code{global_identified_rank_corr_min}, \code{long_quota_raw},
+#'   \code{long_quota_effective}, \code{long_quota_removed},
+#'   \code{realloc_to_mid}, \code{realloc_to_local}
+#'   \item diagnostics/stopping: \code{diagnostics_pass}, \code{divergences},
+#'   \code{max_rhat}, \code{min_ess_bulk}, \code{ess_bulk_required},
+#'   \code{reliability_EAP}, \code{rho_theta}, \code{delta_sd_theta},
+#'   \code{rho_rank}, \code{stop_decision}, \code{stop_reason}
+#'   \item report-only uncertainty metrics: \code{ci95_theta_width_*},
+#'   \code{near_tie_adj_*}, \code{cov_trace_theta},
+#'   \code{top20_boundary_entropy_*}, \code{nn_diff_sd_*}
+#' }
+#'
+#' @param state An \code{adaptive_state} or list containing adaptive logs.
+#' @param last_n Optional positive integer; return only the last \code{n} rows.
+#' @param include_optional Logical; include optional diagnostic columns.
+#' @return A tibble with one row per refit (canonical \code{round_log} schema).
+#' @examples
+#' # These summaries work on either an adaptive_state or a plain list of logs.
+#' logs <- list(
+#'   round_log = tibble::tibble(
+#'     refit_id = 1:2,
+#'     round_id_at_refit = c(1L, 2L),
+#'     step_id_at_refit = c(10L, 20L),
+#'     new_pairs_since_last_refit = c(50L, 50L),
+#'     total_pairs_done = c(50L, 100L),
+#'     divergences = c(0L, 0L),
+#'     max_rhat = c(1.01, 1.00),
+#'     min_ess_bulk = c(800, 900),
+#'     stop_decision = c(NA, TRUE),
+#'     stop_reason = c(NA_character_, "btl_converged")
+#'   )
+#' )
+#'
+#' # Full per-refit view:
+#' summarize_refits(logs)
+#'
+#' # Only the most recent refit row:
+#' summarize_refits(logs, last_n = 1)
+#'
+#' # Drop optional diagnostics if you want a compact core summary:
+#' summarize_refits(logs, include_optional = FALSE)
+#'
+#' @export
+summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
+  last_n <- .adaptive_summary_validate_last_n(last_n)
+  if (!is.logical(include_optional) ||
+    length(include_optional) != 1L ||
+    is.na(include_optional)) {
+    rlang::abort("`include_optional` must be TRUE or FALSE.")
+  }
+
+  source <- .adaptive_summary_extract_source(state)
+  log <- source$round_log %||% tibble::tibble()
+  if (!is.data.frame(log)) {
+    log <- tibble::tibble()
+  }
+  log <- tibble::as_tibble(log)
+
+  if (!is.null(last_n)) {
+    log <- utils::tail(log, last_n)
+  }
+
+  if (!isTRUE(include_optional)) {
+    required <- c(
+      "refit_id",
+      "round_id_at_refit",
+      "step_id_at_refit",
+      "model_variant",
+      "n_items",
+      "total_pairs_done",
+      "new_pairs_since_last_refit",
+      "n_unique_pairs_seen",
+      "divergences",
+      "max_rhat",
+      "min_ess_bulk",
+      "ess_bulk_required",
+      "epsilon_mean",
+      "b_mean",
+      "reliability_EAP",
+      "theta_sd_eap",
+      "rho_theta",
+      "delta_sd_theta",
+      "rho_rank",
+      "theta_corr_pass",
+      "delta_sd_theta_pass",
+      "rho_rank_pass",
+      "diagnostics_pass",
+      "lag_eligible",
+      "stop_decision",
+      "stop_reason",
+      "mcmc_chains",
+      "mcmc_parallel_chains",
+      "mcmc_threads_per_chain"
+    )
+    log <- log |> dplyr::select(dplyr::any_of(required))
+  }
+
+  log
+}
+
+#' Summarize adaptive items
+#'
+#' Build an item-level diagnostics summary from the canonical item logs. This
+#' is a pure view and does not recompute posterior quantities or exposure
+#' metrics.
+#'
+#' @details
+#' Rank percentiles are computed from the per-draw induced ranks (lower is
+#' better). Rank uncertainty grows when draws disagree on the ordering. Degree
+#' and position exposure metrics summarize how frequently each item was shown
+#' and whether it appeared as the first option (A position). When
+#' \code{refit = NULL}, the most recent refit is returned; when
+#' \code{refit = k}, the \code{k}-th refit is returned. When \code{bind = TRUE},
+#' all refits are stacked into a single table and \code{refit} must be
+#' \code{NULL}.
+#'
+#' @param state An \code{adaptive_state} or list containing adaptive logs.
+#' @param posterior Optional \code{item_log_list} (list of item log tables) or
+#'   an item log table. When \code{NULL}, uses \code{state$logs$item_log_list}
+#'   when available.
+#' @param refit Optional refit index. When \code{NULL}, the most recent refit is
+#'   returned; when set, the \code{k}-th refit is returned.
+#' @param bind Logical; when \code{TRUE}, stack all refits into a single table.
+#' @param top_n Optional positive integer; return only the top \code{n} rows
+#'   after sorting.
+#' @param sort_by Column used for sorting. Defaults to \code{"rank_mean"}.
+#' @param include_optional Logical; include optional diagnostic columns.
+#' @return A tibble with one row per item per refit. Columns reflect the
+#'   canonical item log schema (for example \code{refit_id}, \code{ID},
+#'   \code{theta_mean}, \code{rank_mean}, \code{deg}, and \code{posA_prop}).
+#'   Rank percentiles summarize per-draw induced ranks (lower is better). When
+#'   \code{include_optional = FALSE}, optional columns such as repeated-pair or
+#'   adjacency diagnostics are dropped if present.
+#'
+#' @examples
+#' # summarize_items() expects an item_log_list (list of per-refit item tables).
+#' # This example constructs a minimal logs object that matches what adaptive runs emit.
+#'
+#' item_log_1 <- tibble::tibble(
+#'   refit_id = 1L,
+#'   ID = c("A", "B", "C"),
+#'   theta_mean = c(0.4, 0.1, -0.2),
+#'   theta_sd = c(0.2, 0.3, 0.25),
+#'   rank_mean = c(1.2, 2.1, 2.7),
+#'   degree = c(10L, 9L, 8L),
+#'   pos_A_rate = c(0.55, 0.50, 0.48)
+#' )
+#'
+#' item_log_2 <- dplyr::mutate(
+#'   item_log_1,
+#'   refit_id = 2L,
+#'   theta_mean = theta_mean + c(0.1, 0.05, 0.02),
+#'   rank_mean = rank_mean + c(-0.1, 0.0, 0.1)
+#' )
+#'
+#' logs <- list(item_log_list = list(item_log_1, item_log_2))
+#'
+#' # Default returns the most recent refit:
+#' summarize_items(logs)
+#'
+#' # Select a specific refit:
+#' summarize_items(logs, refit = 1)
+#'
+#' # Stack all refits into one table:
+#' summarize_items(logs, bind = TRUE)
+#'
+#' # Sort and take the top rows:
+#' summarize_items(logs, sort_by = "rank_mean", top_n = 2)
+#'
+#' @export
+summarize_items <- function(state,
+    posterior = NULL,
+    refit = NULL,
+    bind = FALSE,
+    top_n = NULL,
+    sort_by = c("rank_mean", "theta_mean", "theta_sd", "degree", "pos_A_rate"),
+    include_optional = TRUE) {
+  if (!is.logical(include_optional) ||
+    length(include_optional) != 1L ||
+    is.na(include_optional)) {
+    rlang::abort("`include_optional` must be TRUE or FALSE.")
+  }
+  if (!is.logical(bind) || length(bind) != 1L || is.na(bind)) {
+    rlang::abort("`bind` must be TRUE or FALSE.")
+  }
+
+  top_n <- .adaptive_summary_validate_last_n(top_n)
+  sort_by <- match.arg(sort_by)
+  source <- .adaptive_summary_extract_source(state)
+
+  item_log_list <- NULL
+  if (!is.null(posterior)) {
+    if (is.data.frame(posterior)) {
+      item_log_list <- list(posterior)
+    } else if (is.list(posterior) && is.list(posterior$item_log_list)) {
+      item_log_list <- posterior$item_log_list
+    }
+  }
+  item_log_list <- item_log_list %||% source$item_log_list %||% NULL
+  if (is.null(item_log_list) || !is.list(item_log_list) || length(item_log_list) == 0L) {
+    if (!is.null(posterior)) {
+      rlang::warn("`posterior` must be an item log list; returning an empty view.")
+    }
+    return(tibble::tibble())
+  }
+  if (!is.null(refit)) {
+    if (!is.numeric(refit) || length(refit) != 1L || is.na(refit)) {
+      rlang::abort("`refit` must be a single positive integer or NULL.")
+    }
+    refit <- as.integer(refit)
+    if (refit < 1L) {
+      rlang::abort("`refit` must be a single positive integer or NULL.")
+    }
+  }
+  if (isTRUE(bind) && !is.null(refit)) {
+    rlang::abort("`refit` must be NULL when `bind` is TRUE.")
+  }
+
+  if (isTRUE(bind)) {
+    first <- item_log_list[[1L]]
+    if (!is.data.frame(first)) {
+      rlang::abort("`item_log_list` entries must be data frames.")
+    }
+    expected_names <- names(first)
+    for (item_log in item_log_list) {
+      if (!is.data.frame(item_log)) {
+        rlang::abort("`item_log_list` entries must be data frames.")
+      }
+      if (!identical(names(item_log), expected_names)) {
+        rlang::abort("`item_log_list` entries must have identical columns when `bind = TRUE`.")
+      }
+    }
+    item_log <- dplyr::bind_rows(lapply(item_log_list, tibble::as_tibble))
+  } else {
+    idx <- refit %||% length(item_log_list)
+    if (idx < 1L || idx > length(item_log_list)) {
+      rlang::abort(paste0(
+        "Requested refit ",
+        idx,
+        ", but only ",
+        length(item_log_list),
+        " refits are available."
+      ))
+    }
+    item_log <- item_log_list[[idx]]
+    if (!is.data.frame(item_log)) {
+      rlang::abort("`item_log_list` entries must be data frames.")
+    }
+    item_log <- tibble::as_tibble(item_log)
+  }
+
+  if (!isTRUE(include_optional)) {
+    optional <- c("repeated_pairs", "adjacent_prev_prob", "adjacent_next_prob")
+    item_log <- item_log |> dplyr::select(-dplyr::any_of(optional))
+  }
+
+  if (!sort_by %in% names(item_log)) {
+    rlang::abort("`sort_by` must be a column in the item log.")
+  }
+
+  item_log <- .adaptive_apply_sort_and_top_n(
+    item_log,
+    sort_by = sort_by,
+    top_n = top_n
+  )
+  item_log
+}

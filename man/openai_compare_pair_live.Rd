@@ -51,7 +51,10 @@ openai_compare_pair_live(
 
 \item{...}{Additional OpenAI parameters, for example
 \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-and (optionally) \code{include_thoughts}. The same validation rules for
+\code{service_tier}, \code{pair_uid}, and (optionally)
+\code{include_thoughts}. When
+\code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
+The same validation rules for
 gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
 When using the Responses endpoint with reasoning models, you can request
 reasoning summaries in the \code{thoughts} column by setting
@@ -61,7 +64,8 @@ reasoning summaries in the \code{thoughts} column by setting
 \value{
 A tibble with one row and columns:
 \describe{
-\item{custom_id}{ID string of the form \code{"LIVE_<ID1>_vs_<ID2>"}.}
+\item{custom_id}{Stable ID for the pair (\code{pair_uid} if supplied via
+\code{...}; otherwise \code{"LIVE_<ID1>_vs_<ID2>"}).}
 \item{ID1, ID2}{The sample IDs you supplied.}
 \item{model}{Model name reported by the API.}
 \item{object_type}{OpenAI object type (for example "chat.completion" or
@@ -134,7 +138,8 @@ res_reasoning <- openai_compare_pair_live(
   trait_description = "Which text is clearer?",
   endpoint = "responses",
   include_thoughts = TRUE,
-  reasoning = "high"
+  reasoning = "high",
+  service_tier = "flex"
 )
 print(res_reasoning$thoughts)
 }

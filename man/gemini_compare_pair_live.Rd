@@ -14,7 +14,7 @@ gemini_compare_pair_live(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = "low",
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -22,6 +22,7 @@ gemini_compare_pair_live(
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
+  pair_uid = NULL,
   ...
 )
 }
@@ -34,8 +35,8 @@ gemini_compare_pair_live(
 
 \item{text2}{Character containing the second sample text.}
 
-\item{model}{Gemini model identifier (for example \code{"gemini-3-pro-preview"}).
-The value is interpolated into the path
+\item{model}{Gemini model identifier (for example \code{"gemini-3-pro-preview"} or
+\code{"gemini-3-flash-preview"}). The value is interpolated into the path
 \code{"/{api_version}/models/<model>:generateContent"}.}
 
 \item{trait_name}{Short label for the trait (e.g. \code{"Overall Quality"}).}
@@ -48,11 +49,18 @@ The value is interpolated into the path
 \item{api_key}{Optional Gemini API key (defaults to
 \code{Sys.getenv("GEMINI_API_KEY")}).}
 
-\item{thinking_level}{One of \code{"low"}, \code{"medium"}, or \code{"high"}. This controls
-the maximum depth of internal reasoning for Gemini 3 Pro. For pairwise
-scoring, \code{"low"} is used by default to reduce latency and cost. Currently,
-the Gemini REST API only supports \code{"Low"} and \code{"High"} values; \code{"medium"}
-is mapped internally to \code{"High"} with a warning.}
+\item{thinking_level}{One of \code{"minimal"}, \code{"low"}, \code{"medium"}, or \code{"high"}.
+This controls the maximum depth of internal reasoning.
+
+\itemize{
+\item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
+\code{"minimal"} is supported and is passed through as \code{"minimal"}.
+\item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+\code{"minimal"} is not supported.
+\item For backward compatibility with earlier Gemini 3 Pro usage,
+\code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"} map to \code{"high"}.
+"Medium" currently behaves like "High".
+}}
 
 \item{temperature}{Optional numeric temperature. If \code{NULL} (default), the
 parameter is omitted and Gemini uses its own default (currently 1.0).}
@@ -76,6 +84,10 @@ first text part as \code{thoughts}, with subsequent parts collapsed into
 \code{content}. If \code{FALSE} (default), all text parts are collapsed into
 \code{content} and \code{thoughts} is \code{NA}.}
 
+\item{pair_uid}{Optional stable per-pair identifier; when supplied, this
+value is used verbatim as \code{custom_id} (otherwise \code{custom_id} defaults to
+\code{"LIVE_<ID1>_vs_<ID2>"}).}
+
 \item{...}{Reserved for future extensions. Any \code{thinking_budget} entry in
 \code{...} is ignored (and a warning is emitted) because Gemini 3 does not allow
 \code{thinking_budget} and \code{thinking_level} to be used together.}
@@ -83,7 +95,7 @@ first text part as \code{thoughts}, with subsequent parts collapsed into
 \value{
 A tibble with one row and columns:
 \itemize{
-\item \code{custom_id} - \code{"LIVE_<ID1>_vs_<ID2>"}.
+\item \code{custom_id} - stable ID for the pair (\code{pair_uid} if supplied).
 \item \code{ID1}, \code{ID2} - provided sample IDs.
 \item \code{model} - model name returned by the API (or the requested model).
 \item \code{object_type} - \code{"generateContent"} on success, otherwise \code{NA}.
@@ -102,7 +114,7 @@ reported by the API, otherwise \code{NA_real_}.
 }
 \description{
 This function sends a single pairwise comparison prompt to the Google Gemini
-Generative Language API (Gemini 3 Pro) and parses the result into a one-row
+Generative Language API (Gemini 3 Pro / Flash) and parses the result into a one-row
 tibble that mirrors the structure used for OpenAI / Anthropic live calls.
 }
 \details{
@@ -117,7 +129,7 @@ or
 <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 
 If \code{include_thoughts = TRUE}, the function additionally requests Gemini's
-explicit chain-of-thought style reasoning (\"thoughts\") via the
+explicit chain-of-thought style reasoning ("thoughts") via the
 \code{thinkingConfig} block and stores it in a separate \code{thoughts} column, while
 still using the final answer content to detect the \verb{<BETTER_SAMPLE>} tag.
 }
@@ -130,6 +142,7 @@ still using the final answer content to detect the \verb{<BETTER_SAMPLE>} tag.
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
+# Gemini 3 Pro example (existing behavior)
 res <- gemini_compare_pair_live(
   ID1               = "S01",
   text1             = "Text 1",
@@ -146,6 +159,23 @@ res <- gemini_compare_pair_live(
 
 res
 res$better_id
+
+# Gemini 3 Flash example (minimal thinking)
+res_flash <- gemini_compare_pair_live(
+  ID1               = "S01",
+  text1             = "Text 1",
+  ID2               = "S02",
+  text2             = "Text 2",
+  model             = "gemini-3-flash-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "minimal",
+  include_thoughts  = FALSE,
+  include_raw       = FALSE
+)
+
+res_flash
 }
 
 }
