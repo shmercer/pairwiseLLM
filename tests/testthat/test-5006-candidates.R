@@ -236,6 +236,36 @@ test_that("stage candidate generators enforce stage admissibility", {
   expect_true(any(dist_local == 0L))
 })
 
+test_that("long-link fallback candidate generators preserve long distance bounds", {
+  items <- make_test_items(30)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(30, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+
+  long_expand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "long_link", "expand_locality", C_max = 5000L, seed = 1L
+  )
+  long_global <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state, "long_link", "global_safe", C_max = 5000L, seed = 1L
+  )
+
+  defaults <- pairwiseLLM:::adaptive_defaults(nrow(items))
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+  strata <- pairwiseLLM:::.adaptive_assign_strata(proxy$scores, defaults)
+  dist_expand <- abs(
+    as.integer(strata$stratum_map[long_expand$i]) - as.integer(strata$stratum_map[long_expand$j])
+  )
+  dist_global <- abs(
+    as.integer(strata$stratum_map[long_global$i]) - as.integer(strata$stratum_map[long_global$j])
+  )
+
+  expect_true(nrow(long_expand) > 0L)
+  expect_true(nrow(long_global) > 0L)
+  expect_true(all(dist_expand >= defaults$long_min_dist))
+  expect_true(all(dist_global >= defaults$long_min_dist))
+})
+
 test_that("defaults formulas are deterministic across representative N", {
   d_small <- pairwiseLLM:::adaptive_defaults(30L)
   d_med <- pairwiseLLM:::adaptive_defaults(120L)

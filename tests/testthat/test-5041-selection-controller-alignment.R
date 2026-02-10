@@ -78,6 +78,44 @@ test_that("long-link posterior gate activates only after identifiability", {
   expect_identical(out$long_gate_reason, "posterior_extreme")
 })
 
+test_that("long-link gate reason reflects selected fallback attempt", {
+  items <- make_test_items(4)
+  trueskill_state <- make_test_trueskill_state(items, mu = c(25, 24, 23, 22))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 2L
+  state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
+  state$controller$global_identified <- TRUE
+
+  draws <- rbind(
+    c(5, 0, 4, 3),
+    c(5, 0, 3, 4),
+    c(5, 0, 4, 3),
+    c(5, 0, 3, 4)
+  )
+  colnames(draws) <- state$item_ids
+  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws)
+
+  calls <- 0L
+  out <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed) {
+      calls <<- calls + 1L
+      ids <- as.character(state$item_ids)
+      if (calls == 1L) {
+        return(tibble::tibble(i = ids[[1L]], j = ids[[2L]]))
+      }
+      tibble::tibble(i = ids[[3L]], j = ids[[4L]])
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_false(isTRUE(out$candidate_starved))
+  expect_identical(out$fallback_used, "expand_locality")
+  expect_identical(out$long_gate_pass, TRUE)
+  expect_true(is.na(out$long_gate_reason))
+})
+
 test_that("explore_rate_used applies identifiability taper", {
   items <- make_test_items(6)
   trueskill_state <- make_test_trueskill_state(items)
