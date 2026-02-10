@@ -58,6 +58,40 @@ NULL
 #' @name example_writing_pairs
 NULL
 
+#' Example canonical results table for writing comparisons
+#'
+#' Canonical \code{results_tbl} representation of
+#' \code{\link{example_writing_pairs}}, intended for direct use with
+#' \code{\link{fit_bayes_btl_mcmc}} and other functions that require adaptive
+#' schema-compatible results input.
+#'
+#' @format A tibble with 190 rows and 12 variables:
+#' \describe{
+#'   \item{pair_uid}{Deterministic pair attempt ID.}
+#'   \item{unordered_key}{Unordered pair key (\code{"min:max"}).}
+#'   \item{ordered_key}{Ordered pair key (\code{"A_id:B_id"}).}
+#'   \item{A_id}{Character ID in first position.}
+#'   \item{B_id}{Character ID in second position.}
+#'   \item{better_id}{Character ID judged better in this comparison.}
+#'   \item{winner_pos}{Integer winner position (\code{1L} or \code{2L}).}
+#'   \item{phase}{Phase label.}
+#'   \item{iter}{Integer step index.}
+#'   \item{received_at}{\code{POSIXct} timestamp in UTC.}
+#'   \item{backend}{Backend label for provenance.}
+#'   \item{model}{Model label for provenance.}
+#' }
+#'
+#' @usage data("example_writing_results")
+#'
+#' @examples
+#' data("example_writing_results")
+#' head(example_writing_results)
+#'
+#' @docType data
+#' @keywords datasets
+#' @name example_writing_results
+NULL
+
 #' Example OpenAI Batch output (JSONL lines)
 #'
 #' A small character vector containing three example lines from an

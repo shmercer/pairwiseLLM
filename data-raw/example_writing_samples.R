@@ -139,6 +139,33 @@ example_writing_pairs <- tibble::tibble(
   ) |>
   dplyr::select(ID1, ID2, better_id)
 
+# 2b) Canonical results_tbl representation for Bayesian BTL workflows
+example_writing_results <- example_writing_pairs |>
+  dplyr::mutate(
+    A_id = as.character(.data$ID1),
+    B_id = as.character(.data$ID2),
+    unordered_key = paste(pmin(.data$A_id, .data$B_id), pmax(.data$A_id, .data$B_id), sep = ":"),
+    ordered_key = paste(.data$A_id, .data$B_id, sep = ":")
+  ) |>
+  dplyr::group_by(.data$unordered_key) |>
+  dplyr::mutate(unordered_occurrence_index = dplyr::row_number()) |>
+  dplyr::ungroup() |>
+  dplyr::transmute(
+    pair_uid = paste0(.data$unordered_key, "#", .data$unordered_occurrence_index),
+    unordered_key = .data$unordered_key,
+    ordered_key = .data$ordered_key,
+    A_id = .data$A_id,
+    B_id = .data$B_id,
+    better_id = as.character(.data$better_id),
+    winner_pos = as.integer(ifelse(.data$better_id == .data$A_id, 1L, 2L)),
+    phase = "phase2",
+    iter = as.integer(dplyr::row_number()),
+    received_at = as.POSIXct("1970-01-01 00:00:00", tz = "UTC") +
+      as.difftime(dplyr::row_number() - 1L, units = "secs"),
+    backend = "non_adaptive_import",
+    model = "unknown"
+  )
+
 
 # 3) Example OpenAI Batch output lines (JSONL format)
 # Keeping a small representative sample (3 lines) to demonstrate structure.
@@ -180,4 +207,5 @@ example_openai_batch_output <- c(
 # Save datasets into the package
 usethis::use_data(example_writing_samples, overwrite = TRUE)
 usethis::use_data(example_writing_pairs, overwrite = TRUE)
+usethis::use_data(example_writing_results, overwrite = TRUE)
 usethis::use_data(example_openai_batch_output, overwrite = TRUE)
