@@ -34,9 +34,9 @@ navbar:
     adaptive_pairing:
       text: "Adaptive Pairing"
       menu:
-        - text: "⭐ Adaptive Pairing & Ranking (Tutorial)"
+        - text: "Adaptive Pairing & Ranking"
           href: articles/adaptive-pairing.html
-        - text: "Design: Bayesian BTL + Adaptive Pairing (v3.1)"
+        - text: "Design: Bayesian BTL Adaptive Pairing"
           href: articles/bayesian-btl-adaptive-pairing-design.html
 
     template_positional_bias:
