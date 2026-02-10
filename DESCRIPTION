@@ -16,7 +16,7 @@ Description: Provides a unified framework for generating, submitting, and
     model uncertainty to improve ranking efficiency. Results can be modeled
     using frequentist or Bayesian Bradley–Terry–Luce models
     (Bradley & Terry, 1952 <doi:10.2307/2334029>; see also
-    Caron & Doucet, 2012 <doi:10.1214/12-AOS1006>) or Elo rating methods (see
+    Caron & Doucet, 2012 <doi:10.1080/10618600.2012.638220>) or Elo rating methods (see
     Clark et al., 2018 <doi:10.1371/journal.pone.0190393>) to derive 
     writing quality scores. For information on pairwise comparisons and
     comparitive judgement, see Thurstone (1927) <doi:10.1037/h0070288> 
