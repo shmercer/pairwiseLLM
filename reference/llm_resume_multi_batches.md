@@ -130,13 +130,16 @@ llm_resume_multi_batches(
 
 ## Value
 
-A list with two elements: `jobs`, the updated jobs list with each
-element containing parsed results and a `done` flag, and `combined`, a
+A list with four elements: `jobs`, the updated jobs list with each
+element containing parsed results and a `done` flag; `combined`, a
 tibble obtained by binding all completed results (`NULL` if no batches
-completed). If `write_results_csv` is `TRUE`, the combined tibble is
-still returned in memory. If `write_combined_csv` is `TRUE`, the
-combined tibble is also written to a CSV file on disk (see
-`combined_csv_path` for details) but is still returned in memory.
+completed); `failed_attempts`, a tibble of failed attempts captured
+during normalization; and `batch_failures`, a tibble describing batches
+that reached a terminal non-success status. If `write_results_csv` is
+`TRUE`, the combined tibble is still returned in memory. If
+`write_combined_csv` is `TRUE`, the combined tibble is also written to a
+CSV file on disk (see `combined_csv_path` for details) but is still
+returned in memory.
 
 ## Examples
 

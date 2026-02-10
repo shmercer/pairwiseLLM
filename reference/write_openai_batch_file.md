@@ -39,23 +39,33 @@ The input can either:
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-# Requires OPENAI_API_KEY and network access.
-data("example_writing_samples")
-pairs_all <- make_pairs(example_writing_samples)
-pairs_small <- sample_pairs(pairs_all, n_pairs = 5, seed = 1)
-
-td <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-batch_tbl <- build_openai_batch_requests(
-  pairs             = pairs_small,
-  model             = "gpt-4.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl
+# Construct a minimal batch request tibble
+requests <- tibble::tibble(
+  custom_id = c("req1", "req2"),
+  method = "POST",
+  url = "/v1/chat/completions",
+  body = list(
+    list(
+      model = "gpt-4o-mini",
+      messages = list(
+        list(role = "user", content = "Hello")
+      )
+    ),
+    list(
+      model = "gpt-4o-mini",
+      messages = list(
+        list(role = "user", content = "Goodbye")
+      )
+    )
+  )
 )
 
-write_openai_batch_file(batch_tbl, "batch_forward.jsonl")
-} # }
+# Write to a temporary JSONL file
+path <- tempfile(fileext = ".jsonl")
+write_openai_batch_file(requests, path)
+
+# Inspect the file contents
+readLines(path)
+#> [1] "{\"custom_id\":\"req1\",\"method\":\"POST\",\"url\":\"/v1/chat/completions\",\"body\":{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}}"  
+#> [2] "{\"custom_id\":\"req2\",\"method\":\"POST\",\"url\":\"/v1/chat/completions\",\"body\":{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Goodbye\"}]}}"
 ```

@@ -18,21 +18,22 @@ For OpenAI, this helper will by default:
 
 - Automatically switch to the `responses` style endpoint when:
 
-  - `model` starts with `"gpt-5.1"` or `"gpt-5.2"` (including
-    date-stamped versions like `"gpt-5.2-2025-12-11"`) and
+  - `model` is in the GPT-5 series (including `gpt-5`, `gpt-5-mini`, and
+    date-stamped `gpt-5.1/5.2` variants), and
 
-  - either `include_thoughts = TRUE` **or** a non-`"none"` `reasoning`
-    effort is supplied in `...`.
+  - either `include_thoughts = TRUE` **or** a `reasoning` effort is
+    supplied in `...` (for GPT-5, `reasoning = "none"` maps to
+    `"minimal"`).
 
 **Temperature Defaults:** For OpenAI, if `temperature` is not specified
 in `...`:
 
 - It defaults to `0` (deterministic) for standard models or when
-  reasoning is disabled (`reasoning = "none"`) on supported models
-  (5.1/5.2).
+  reasoning is disabled (`reasoning = "none"`) on supported GPT-5.1/5.2
+  models.
 
-- It remains `NULL` (API default) when reasoning is enabled, as the API
-  does not support temperature with reasoning.
+- It remains `NULL` (API default) when reasoning is enabled, or for
+  GPT-5 minimal reasoning (which ignores temperature).
 
 For Anthropic, standard and date-stamped model names (e.g.
 `"claude-sonnet-4-5-20250929"`) are supported. This helper delegates
@@ -103,9 +104,9 @@ llm_submit_pairs_batch(
 
   Character scalar model name to use for the batch job.
 
-  - For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5.1"`, or
-    `"gpt-5.2"` (including date-stamped versions like
-    `"gpt-5.2-2025-12-11"`).
+  - For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5"`,
+    `"gpt-5-mini"`, `"gpt-5.1"`, or `"gpt-5.2"` (including date-stamped
+    versions like `"gpt-5.2-2025-12-11"`).
 
   - For `"anthropic"`, use provider names like `"claude-4-5-sonnet"` or
     date-stamped versions like `"claude-sonnet-4-5-20250929"`.
@@ -131,7 +132,7 @@ llm_submit_pairs_batch(
   Logical; whether to request and parse model "thoughts" (where
   supported).
 
-  - For OpenAI GPT-5.1/5.2, setting this to `TRUE` defaults to the
+  - For OpenAI GPT-5 series, setting this to `TRUE` defaults to the
     `responses` endpoint.
 
   - For Anthropic, setting this to `TRUE` implies
@@ -149,8 +150,8 @@ llm_submit_pairs_batch(
   `run_*_batch_pipeline()` functions. This can include provider-specific
   options such as temperature or batch configuration fields. For OpenAI,
   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
-  `reasoning`, etc. For Anthropic, this may include `reasoning`,
-  `max_tokens`, `temperature`, or `thinking_budget_tokens`.
+  `reasoning`, `service_tier`, etc. For Anthropic, this may include
+  `reasoning`, `max_tokens`, `temperature`, or `thinking_budget_tokens`.
 
 ## Value
 
@@ -167,6 +168,9 @@ A list of class `"pairwiseLLM_batch"` containing at least:
 
 - `results`: a tibble of parsed comparison results in the standard
   pairwiseLLM schema.
+
+- `failed_attempts`: a tibble of failed attempts captured during
+  normalization (empty when no failures are observed).
 
 Additional fields returned by the backend-specific pipeline functions
 are preserved.
@@ -194,11 +198,12 @@ tmpl <- set_prompt_template()
 batch_openai <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "openai",
-  model             = "gpt-4.1",
+  model             = "gpt-5-mini",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  include_thoughts  = FALSE
+  include_thoughts  = FALSE,
+  service_tier      = "flex"
 )
 res_openai <- llm_download_batch_results(batch_openai)
 

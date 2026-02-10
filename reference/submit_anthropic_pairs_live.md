@@ -126,10 +126,12 @@ submit_anthropic_pairs_live(
   Additional Anthropic parameters (for example `temperature`, `top_p`,
   `max_tokens`) passed on to
   [`anthropic_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md).
+  When `pair_uid` is supplied via `...`, it is used verbatim as
+  `custom_id`.
 
 ## Value
 
-A list containing two elements:
+A list containing three elements:
 
 - results:
 
@@ -139,6 +141,11 @@ A list containing two elements:
 
   A tibble containing the rows from `pairs` that failed to process (due
   to API errors or timeouts), along with an `error_message` column.
+
+- failed_attempts:
+
+  A tibble of attempt-level failures (retries, timeouts, parse errors,
+  invalid winners), separate from observed outcomes.
 
 ## Details
 

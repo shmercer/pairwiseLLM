@@ -85,8 +85,10 @@ openai_compare_pair_live(
 - ...:
 
   Additional OpenAI parameters, for example `temperature`, `top_p`,
-  `logprobs`, `reasoning`, and (optionally) `include_thoughts`. The same
-  validation rules for gpt-5 models are applied as in
+  `logprobs`, `reasoning`, `service_tier`, `pair_uid`, and (optionally)
+  `include_thoughts`. When `pair_uid` is supplied, it is used verbatim
+  as `custom_id`. The same validation rules for gpt-5 models are applied
+  as in
   [`build_openai_batch_requests`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md).
   When using the Responses endpoint with reasoning models, you can
   request reasoning summaries in the `thoughts` column by setting
@@ -99,7 +101,8 @@ A tibble with one row and columns:
 
 - custom_id:
 
-  ID string of the form `"LIVE_<ID1>_vs_<ID2>"`.
+  Stable ID for the pair (`pair_uid` if supplied via `...`; otherwise
+  `"LIVE_<ID1>_vs_<ID2>"`).
 
 - ID1, ID2:
 
@@ -201,7 +204,8 @@ res_reasoning <- openai_compare_pair_live(
   trait_description = "Which text is clearer?",
   endpoint = "responses",
   include_thoughts = TRUE,
-  reasoning = "high"
+  reasoning = "high",
+  service_tier = "flex"
 )
 print(res_reasoning$thoughts)
 } # }

@@ -15,7 +15,7 @@ submit_gemini_pairs_live(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = "low",
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -41,7 +41,8 @@ submit_gemini_pairs_live(
 
 - model:
 
-  Gemini model name (e.g. `"gemini-3-pro-preview"`).
+  Gemini model name (e.g. `"gemini-3-pro-preview"` or
+  `"gemini-3-flash-preview"`).
 
 - trait_name:
 
@@ -64,6 +65,8 @@ submit_gemini_pairs_live(
 
   Default `"low"`; see
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md).
+  For Gemini 3 Flash models, `"minimal"` is also supported (e.g.,
+  `thinking_level = "minimal"` with `model = "gemini-3-flash-preview"`).
 
 - temperature:
 
@@ -141,7 +144,7 @@ submit_gemini_pairs_live(
 
 ## Value
 
-A list containing two elements:
+A list containing three elements:
 
 - results:
 
@@ -151,6 +154,11 @@ A list containing two elements:
 
   A tibble containing the rows from `pairs` that failed to process (due
   to API errors or timeouts), along with an `error_message` column.
+
+- failed_attempts:
+
+  A tibble of attempt-level failures (retries, timeouts, parse errors,
+  invalid winners), separate from observed outcomes.
 
 ## Details
 
@@ -206,6 +214,17 @@ res_par <- submit_gemini_pairs_live(
   save_path         = "results_gemini_par.csv",
   parallel          = TRUE,
   workers           = 4
+)
+
+# 3. Gemini 3 Flash example (minimal thinking)
+res_flash <- submit_gemini_pairs_live(
+  pairs             = pairs,
+  model             = "gemini-3-flash-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "minimal",
+  save_path         = "results_gemini_flash.csv"
 )
 
 # Inspect results

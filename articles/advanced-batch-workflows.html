@@ -8,7 +8,9 @@
 <title>Advanced: Submitting and Polling Multiple Batches • pairwiseLLM</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/Inter-0.4.10/font.css" rel="stylesheet">
+<link href="../deps/JetBrains_Mono-0.4.10/font.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Advanced: Submitting and Polling Multiple Batches">
 </head>
@@ -16,11 +18,11 @@
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
-    <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
+    <nav class="navbar navbar-expand-lg fixed-top bg-primary" data-bs-theme="dark" aria-label="Site navigation"><div class="container">
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -29,13 +31,20 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="../index.html">Home</a></li>
+<li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-usage-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Usage Guides</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-usage-guides">
 <li><a class="dropdown-item" href="../articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+  </ul>
+</li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-adaptive-pairing" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Adaptive Pairing</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-adaptive-pairing">
+<li><a class="dropdown-item" href="../articles/adaptive-pairing.html">⭐ Adaptive Pairing &amp; Ranking (Tutorial)</a></li>
+    <li><a class="dropdown-item" href="../articles/bayesian-btl-adaptive-pairing-design.html">Design: Bayesian BTL + Adaptive Pairing (v3.1)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../articles/prompt-template-bias.html">Template Positional Bias</a></li>
@@ -45,7 +54,7 @@
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json">
 </form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/shmercer/pairwiseLLM/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/shmercer/pairwiseLLM" aria-label="GitHub"><span class="fa fa-github"></span></a></li>
       </ul>
 </div>
 
@@ -402,71 +411,72 @@ the example below we:</p>
 <li>Ask providers to include raw outputs in addition to parsed tags
 (helpful for debugging)</li>
 </ul>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>submit_one_run <span class="ot">&lt;-</span> <span class="cf">function</span>(template_id, prompt_template, provider, model, thinking, direction, run_dir) {</span>
-<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  pairs_use   <span class="ot">&lt;-</span> <span class="fu">get_pairs_for_direction</span>(direction)</span>
-<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  is_thinking <span class="ot">&lt;-</span> <span class="fu">identical</span>(thinking, <span class="st">"with_thinking"</span>)</span>
-<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a></span>
-<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="co"># Provider-specific knobs (passed through via ...)</span></span>
-<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>  extra_args <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
-<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a></span>
-<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">identical</span>(provider, <span class="st">"openai"</span>)) {</span>
-<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>    <span class="co"># Only request thoughts for models that support them in this workflow</span></span>
-<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_thoughts <span class="ot">&lt;-</span> is_thinking <span class="sc">&amp;&amp;</span> <span class="fu">grepl</span>(<span class="st">"^gpt-5\.1"</span>, model)</span>
-<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_raw      <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
-<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  } <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">identical</span>(provider, <span class="st">"anthropic"</span>)) {</span>
-<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>    extra_args<span class="sc">$</span>reasoning        <span class="ot">&lt;-</span> <span class="cf">if</span> (is_thinking) <span class="st">"enabled"</span> <span class="cf">else</span> <span class="st">"none"</span></span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_thoughts <span class="ot">&lt;-</span> is_thinking</span>
-<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_raw      <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
-<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
-<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
-<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a>    <span class="cf">if</span> (<span class="sc">!</span>is_thinking) extra_args<span class="sc">$</span>temperature <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a>  } <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">identical</span>(provider, <span class="st">"gemini"</span>)) {</span>
-<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_thoughts <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
-<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a>    extra_args<span class="sc">$</span>thinking_level   <span class="ot">&lt;-</span> <span class="st">"low"</span>   <span class="co"># example</span></span>
-<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a>    extra_args<span class="sc">$</span>include_raw      <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
-<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a>  }</span>
-<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a></span>
-<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a>  <span class="fu">message</span>(</span>
-<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a>    <span class="st">"Submitting: "</span>, template_id, <span class="st">" | "</span>, provider, <span class="st">" / "</span>, model,</span>
-<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a>    <span class="st">" / "</span>, thinking, <span class="st">" / "</span>, direction</span>
-<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a>  )</span>
-<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a></span>
-<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a>  <span class="co"># Split strategy:</span></span>
-<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a>  <span class="co"># - For real jobs, use batch_size (e.g., 500–5000) or n_segments (e.g., 10–50)</span></span>
-<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a>  <span class="co"># - Here we keep it simple and submit a single segment per run</span></span>
-<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a>  <span class="fu">do.call</span>(</span>
-<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a>    llm_submit_pairs_multi_batch,</span>
-<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a>    <span class="fu">c</span>(</span>
-<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a>      <span class="fu">list</span>(</span>
-<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a>        <span class="at">pairs             =</span> pairs_use,</span>
-<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a>        <span class="at">backend           =</span> provider,</span>
-<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a>        <span class="at">model             =</span> model,</span>
-<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a>        <span class="at">trait_name        =</span> td<span class="sc">$</span>name,</span>
-<span id="cb9-41"><a href="#cb9-41" tabindex="-1"></a>        <span class="at">trait_description =</span> td<span class="sc">$</span>description,</span>
-<span id="cb9-42"><a href="#cb9-42" tabindex="-1"></a>        <span class="at">prompt_template   =</span> prompt_template,</span>
-<span id="cb9-43"><a href="#cb9-43" tabindex="-1"></a>        <span class="at">n_segments        =</span> <span class="dv">1</span><span class="dt">L</span>,</span>
-<span id="cb9-44"><a href="#cb9-44" tabindex="-1"></a>        <span class="at">output_dir        =</span> run_dir,</span>
-<span id="cb9-45"><a href="#cb9-45" tabindex="-1"></a>        <span class="at">write_registry    =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb9-46"><a href="#cb9-46" tabindex="-1"></a>        <span class="at">verbose           =</span> <span class="cn">TRUE</span></span>
-<span id="cb9-47"><a href="#cb9-47" tabindex="-1"></a>      ),</span>
-<span id="cb9-48"><a href="#cb9-48" tabindex="-1"></a>      extra_args</span>
-<span id="cb9-49"><a href="#cb9-49" tabindex="-1"></a>    )</span>
-<span id="cb9-50"><a href="#cb9-50" tabindex="-1"></a>  )</span>
-<span id="cb9-51"><a href="#cb9-51" tabindex="-1"></a>}</span>
-<span id="cb9-52"><a href="#cb9-52" tabindex="-1"></a></span>
-<span id="cb9-53"><a href="#cb9-53" tabindex="-1"></a>run_results <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">pmap</span>(</span>
-<span id="cb9-54"><a href="#cb9-54" tabindex="-1"></a>  run_plan,</span>
-<span id="cb9-55"><a href="#cb9-55" tabindex="-1"></a>  submit_one_run</span>
-<span id="cb9-56"><a href="#cb9-56" tabindex="-1"></a>)</span>
-<span id="cb9-57"><a href="#cb9-57" tabindex="-1"></a></span>
-<span id="cb9-58"><a href="#cb9-58" tabindex="-1"></a><span class="co"># Store a lightweight manifest so you can resume later without rebuilding run_plan</span></span>
-<span id="cb9-59"><a href="#cb9-59" tabindex="-1"></a>manifest <span class="ot">&lt;-</span> run_plan <span class="sc">|&gt;</span></span>
-<span id="cb9-60"><a href="#cb9-60" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">registry_path =</span> <span class="fu">file.path</span>(run_dir, <span class="st">"jobs_registry.csv"</span>))</span>
-<span id="cb9-61"><a href="#cb9-61" tabindex="-1"></a></span>
-<span id="cb9-62"><a href="#cb9-62" tabindex="-1"></a>manifest_path <span class="ot">&lt;-</span> <span class="fu">file.path</span>(out_root, <span class="st">"run_manifest.csv"</span>)</span>
-<span id="cb9-63"><a href="#cb9-63" tabindex="-1"></a>readr<span class="sc">::</span><span class="fu">write_csv</span>(manifest, manifest_path)</span>
-<span id="cb9-64"><a href="#cb9-64" tabindex="-1"></a></span>
-<span id="cb9-65"><a href="#cb9-65" tabindex="-1"></a>manifest_path</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">submit_one_run</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">template_id</span>, <span class="va">prompt_template</span>, <span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>, <span class="va">run_dir</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">pairs_use</span>   <span class="op">&lt;-</span> <span class="fu">get_pairs_for_direction</span><span class="op">(</span><span class="va">direction</span><span class="op">)</span></span>
+<span>  <span class="va">is_thinking</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">thinking</span>, <span class="st">"with_thinking"</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="co"># Provider-specific knobs (passed through via ...)</span></span>
+<span>  <span class="va">extra_args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"openai"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="co"># Only request thoughts for models that support them in this workflow</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_thoughts</span> <span class="op">&lt;-</span> <span class="va">is_thinking</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"^gpt-5\\.1"</span>, <span class="va">model</span><span class="op">)</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_raw</span>      <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
+<span>  <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"anthropic"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">reasoning</span>        <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">is_thinking</span><span class="op">)</span> <span class="st">"enabled"</span> <span class="kw">else</span> <span class="st">"none"</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_thoughts</span> <span class="op">&lt;-</span> <span class="va">is_thinking</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_raw</span>      <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
+<span>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
+<span>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
+<span>    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="va">is_thinking</span><span class="op">)</span> <span class="va">extra_args</span><span class="op">$</span><span class="va">temperature</span> <span class="op">&lt;-</span> <span class="fl">0</span></span>
+<span>  <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"gemini"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_thoughts</span> <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">thinking_level</span>   <span class="op">&lt;-</span> <span class="st">"low"</span>   <span class="co"># example</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_raw</span>      <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span></span>
+<span>    <span class="st">"Submitting: "</span>, <span class="va">template_id</span>, <span class="st">" | "</span>, <span class="va">provider</span>, <span class="st">" / "</span>, <span class="va">model</span>,</span>
+<span>    <span class="st">" / "</span>, <span class="va">thinking</span>, <span class="st">" / "</span>, <span class="va">direction</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="co"># Split strategy:</span></span>
+<span>  <span class="co"># - For real jobs, use batch_size (e.g., 500–5000) or n_segments (e.g., 10–50)</span></span>
+<span>  <span class="co"># - Here we keep it simple and submit a single segment per run</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span></span>
+<span>    <span class="va">llm_submit_pairs_multi_batch</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>        pairs             <span class="op">=</span> <span class="va">pairs_use</span>,</span>
+<span>        backend           <span class="op">=</span> <span class="va">provider</span>,</span>
+<span>        model             <span class="op">=</span> <span class="va">model</span>,</span>
+<span>        trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>        trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>        prompt_template   <span class="op">=</span> <span class="va">prompt_template</span>,</span>
+<span>        n_segments        <span class="op">=</span> <span class="fl">1L</span>,</span>
+<span>        output_dir        <span class="op">=</span> <span class="va">run_dir</span>,</span>
+<span>        write_registry    <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>        verbose           <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>      <span class="op">)</span>,</span>
+<span>      <span class="va">extra_args</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">run_results</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/pmap.html" class="external-link">pmap</a></span><span class="op">(</span></span>
+<span>  <span class="va">run_plan</span>,</span>
+<span>  <span class="va">submit_one_run</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Store a lightweight manifest so you can resume later without rebuilding run_plan</span></span>
+<span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="va">run_plan</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>registry_path <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">run_dir</span>, <span class="st">"jobs_registry.csv"</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">manifest_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"run_manifest.csv"</span><span class="op">)</span></span>
+<span><span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/write_delim.html" class="external-link">write_csv</a></span><span class="op">(</span><span class="va">manifest</span>, <span class="va">manifest_path</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">manifest_path</span></span></code></pre></div>
 <p>At this point, each run directory contains:</p>
 <ul>
 <li>JSONL input/output placeholders (one per segment)</li>

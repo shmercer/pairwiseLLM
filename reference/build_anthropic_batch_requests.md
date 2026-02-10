@@ -114,10 +114,6 @@ requirement of `temperature = 1` is enforced for all batch requests.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-# Requires ANTHROPIC_API_KEY and network access.
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
@@ -139,6 +135,12 @@ reqs_none <- build_anthropic_batch_requests(
 )
 
 reqs_none
+#> # A tibble: 3 × 2
+#>   custom_id       params          
+#>   <chr>           <list>          
+#> 1 ANTH_S17_vs_S12 <named list [4]>
+#> 2 ANTH_S19_vs_S15 <named list [4]>
+#> 3 ANTH_S01_vs_S15 <named list [4]>
 
 # Batch requests with extended thinking
 reqs_reason <- build_anthropic_batch_requests(
@@ -151,5 +153,10 @@ reqs_reason <- build_anthropic_batch_requests(
 )
 
 reqs_reason
-} # }
+#> # A tibble: 3 × 2
+#>   custom_id       params          
+#>   <chr>           <list>          
+#> 1 ANTH_S17_vs_S12 <named list [5]>
+#> 2 ANTH_S19_vs_S15 <named list [5]>
+#> 3 ANTH_S01_vs_S15 <named list [5]>
 ```

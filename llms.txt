@@ -1,5 +1,8 @@
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
+pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
+Writing Evaluation ================
+
 ![pairwiseLLM
 banner](https://www.dropbox.com/scl/fi/dn51r1q7bkythiz5e6jdj/pairwiseLLM_logo.jpeg?rlkey=qlpe8xyda35wriryxqa87a1v8&st=tu8hmsp6&raw=1)
 
@@ -55,6 +58,7 @@ Other similar models may work, but have not been fully tested.
 | **[Anthropic](https://console.anthropic.com/)**      | claude-haiku-4-5              | ✅ Yes          |
 | **[Anthropic](https://console.anthropic.com/)**      | claude-opus-4-5               | ✅ Yes          |
 | **[Google/Gemini](https://aistudio.google.com/)**    | gemini-3-pro-preview          | ✅ Yes          |
+| **[Google/Gemini](https://aistudio.google.com/)**    | gemini-3-flash-preview        | ✅ Yes          |
 | **[DeepSeek-AI](https://www.deepseek.com/en)₁**      | DeepSeek-R1                   | ✅ Yes          |
 | **[DeepSeek-AI](https://www.deepseek.com/en)₁**      | DeepSeek-V3                   | ❌ No           |
 | **[Moonshot-AI](https://www.moonshot.ai/)₁**         | Kimi-K2-Instruct-0905         | ❌ No           |
@@ -187,6 +191,31 @@ The package provides helpers for each step.
 
 ------------------------------------------------------------------------
 
+## Adaptive pairing & ranking (overview)
+
+`pairwiseLLM` includes an adaptive pairing workflow for efficiently
+ranking writing samples using pairwise comparisons. Instead of
+allocating comparisons uniformly at random, adaptive pairing selects
+pairs where additional judgments are most informative, concentrating
+effort on ambiguous regions (near-ties) to reduce posterior uncertainty
+in latent quality estimates and rankings.
+
+In practice, compared to random pairing designs:
+
+- Overall Bayesian EAP reliability can be slightly lower (because
+  comparisons are not spread uniformly),
+- but credible/confidence intervals around latent quality scores and
+  rankings are typically tighter.
+
+To get started, see:
+
+- **Tutorial:** Adaptive Pairing & Ranking  
+  <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
+- **Design spec:** Bayesian BTL + Adaptive Pairing Design  
+  <https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html>
+
+------------------------------------------------------------------------
+
 ## Prompt Templates & Registry
 
 `pairwiseLLM` includes:
@@ -299,8 +328,10 @@ Key Features:
   command again will automatically skip pairs already present in the
   file.
 - Robust Output: Returns a list containing `$results` (successful
-  comparisons) and `$failed_pairs` (errors), ensuring one bad request
-  doesn’t crash the whole job.
+  comparisons) and `$failed_pairs` (scheduled pairs with no observed
+  outcome) plus `$failed_attempts` (attempt-level failures, including
+  retry/timeout/parse issues), ensuring one bad request doesn’t crash
+  the whole job.
 
 Example:
 
@@ -334,6 +365,11 @@ head(res_list$results)
 # Inspect failures (if any)
 if (nrow(res_list$failed_pairs) > 0) {
   print(res_list$failed_pairs)
+}
+
+# Inspect attempt-level failures (if any)
+if (nrow(res_list$failed_attempts) > 0) {
+  print(res_list$failed_attempts)
 }
 ```
 
@@ -636,14 +672,32 @@ MIT License. See `LICENSE`.
 
 ## Citation
 
-> Mercer, S. H. (2025). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.2.0) \[R package;
+> Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
+> comparisons with large language models* (Version 1.3.0) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>
 
 # Package index
 
 ## All functions
 
+- [`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md)
+  : Retrieve canonical adaptive logs.
+- [`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md)
+  : Adaptive item log accessor.
+- [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
+  : Run adaptive ranking end-to-end from data and model settings
+- [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md)
+  : Adaptive ranking resume
+- [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md)
+  : Adaptive ranking live runner
+- [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md)
+  : Adaptive ranking
+- [`adaptive_results_history()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_results_history.md)
+  : Adaptive results history in build_bt_data() format.
+- [`adaptive_round_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_round_log.md)
+  : Adaptive round log accessor.
+- [`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md)
+  : Adaptive step log accessor.
 - [`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md)
   : Deterministically alternate sample order in pairs
 - [`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md)
@@ -684,6 +738,10 @@ MIT License. See `LICENSE`.
   : Example dataset of paired comparisons for writing samples
 - [`example_writing_samples`](https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples.md)
   : Example dataset of writing samples
+- [`example_writing_samples1000`](https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples1000.md)
+  : Synthetic Writing Samples with Controlled Quality Levels (N = 1000)
+- [`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
+  : Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 - [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
   : Fit a Bradley–Terry model with sirt and fallback to BradleyTerry2
 - [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md)
@@ -712,6 +770,10 @@ MIT License. See `LICENSE`.
   : Submit pairs to an LLM backend via batch API
 - [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
   : Multi‑batch submission and polling wrappers
+- [`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md)
+  : Load an adaptive session from disk.
+- [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md)
+  : Build an LLM judge function for adaptive ranking
 - [`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md)
   : Create all unordered pairs of writing samples
 - [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
@@ -734,6 +796,8 @@ MIT License. See `LICENSE`.
   : Parse Gemini batch JSONL output into a tibble of pairwise results
 - [`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md)
   : Parse an OpenAI Batch output JSONL file
+- [`print(`*`<adaptive_state>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/print.adaptive_state.md)
+  : Print an adaptive state summary.
 - [`print(`*`<pairwiseLLM_cost_estimate>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/print.pairwiseLLM_cost_estimate.md)
   : Print a pairwiseLLM cost estimate
 - [`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md)
@@ -756,6 +820,8 @@ MIT License. See `LICENSE`.
   : Randomly sample pairs of writing samples
 - [`sample_reverse_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.md)
   : Sample reversed versions of a subset of pairs
+- [`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md)
+  : Save an adaptive session to disk.
 - [`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
   : Get or set a prompt template for pairwise comparisons
 - [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md)
@@ -770,12 +836,20 @@ MIT License. See `LICENSE`.
   : Live OpenAI comparisons for a tibble of pairs
 - [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
   : Live Together.ai comparisons for a tibble of pairs
+- [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+  : Summarize an adaptive state.
 - [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
   : Summarize a Bradley–Terry model fit
+- [`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md)
+  : Summarize adaptive items
+- [`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
+  : Summarize adaptive refits
 - [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
   : Live Together.ai comparison for a single pair of samples
 - [`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md)
   : Get a trait name and description for prompts
+- [`validate_session_dir()`](https://shmercer.github.io/pairwiseLLM/reference/validate_session_dir.md)
+  : Validate an adaptive session directory.
 - [`write_openai_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/write_openai_batch_file.md)
   : Write an OpenAI batch table to a JSONL file
 
@@ -787,6 +861,13 @@ MIT License. See `LICENSE`.
   pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.md):
 - [Advanced: Submitting and Polling Multiple
   Batches](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.md):
+
+### Adaptive Pairing
+
+- [Adaptive Pairing and Ranking in
+  pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md):
+- [Bayesian BTL Adaptive Pairing
+  Design](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.md):
 
 ### Template Positional Bias
 

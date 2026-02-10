@@ -105,11 +105,11 @@ submit_openai_pairs_live(
 - ...:
 
   Additional OpenAI parameters (temperature, top_p, logprobs, reasoning,
-  and so on) passed on to `openai_compare_pair_live`.
+  service_tier, and so on) passed on to `openai_compare_pair_live`.
 
 ## Value
 
-A list containing two elements:
+A list containing three elements:
 
 - results:
 
@@ -123,6 +123,11 @@ A list containing two elements:
   A tibble containing the rows from `pairs` that failed to process (due
   to API errors or timeouts), along with an `error_message` column.
   These can be easily re-submitted.
+
+- failed_attempts:
+
+  A tibble of attempt-level failures (retries, timeouts, parse errors,
+  invalid winners), separate from observed outcomes.
 
 ## Details
 
@@ -186,5 +191,16 @@ if (nrow(res_par$failed_pairs) > 0) {
   message("Some pairs failed:")
   print(res_par$failed_pairs)
 }
+
+# 3. GPT-5 live run with service tier (Responses endpoint)
+res_gpt5 <- submit_openai_pairs_live(
+  pairs             = pairs,
+  model             = "gpt-5",
+  trait_name        = td$name,
+  trait_description = td$description,
+  endpoint          = "responses",
+  reasoning         = "none",
+  service_tier      = "priority"
+)
 } # }
 ```

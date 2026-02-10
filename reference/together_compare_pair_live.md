@@ -91,7 +91,8 @@ together_compare_pair_live(
   `top_p`, and provider-specific options. These are passed through to
   the JSON request body as top-level fields. If `temperature` is
   omitted, the function uses backend defaults (0.6 for
-  `"deepseek-ai/DeepSeek-R1"`, 0 for all other models).
+  `"deepseek-ai/DeepSeek-R1"`, 0 for all other models). When `pair_uid`
+  is supplied via `...`, it is used verbatim as `custom_id`.
 
 ## Value
 
@@ -99,7 +100,8 @@ A tibble with one row and columns:
 
 - custom_id:
 
-  ID string of the form `"LIVE_<ID1>_vs_<ID2>"`.
+  Stable ID for the pair (`pair_uid` if supplied via `...`; otherwise
+  `"LIVE_<ID1>_vs_<ID2>"`).
 
 - ID1, ID2:
 

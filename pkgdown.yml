@@ -2,10 +2,12 @@ pandoc: 3.1.11
 pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
+  adaptive-pairing: adaptive-pairing.html
   advanced-batch-workflows: advanced-batch-workflows.html
+  bayesian-btl-adaptive-pairing-design: bayesian-btl-adaptive-pairing-design.html
   getting-started: getting-started.html
   prompt-template-bias: prompt-template-bias.html
-last_built: 2026-01-16T02:42Z
+last_built: 2026-02-10T21:09Z
 urls:
   reference: https://shmercer.github.io/pairwiseLLM/reference
   article: https://shmercer.github.io/pairwiseLLM/articles

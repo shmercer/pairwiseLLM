@@ -8,7 +8,9 @@
 <title>Page not found (404) • pairwiseLLM</title>
 <script src="https://shmercer.github.io/pairwiseLLM/deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="https://shmercer.github.io/pairwiseLLM/deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="https://shmercer.github.io/pairwiseLLM/deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="https://shmercer.github.io/pairwiseLLM/deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<script src="https://shmercer.github.io/pairwiseLLM/deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="https://shmercer.github.io/pairwiseLLM/deps/Inter-0.4.10/font.css" rel="stylesheet">
+<link href="https://shmercer.github.io/pairwiseLLM/deps/JetBrains_Mono-0.4.10/font.css" rel="stylesheet">
+<link href="https://shmercer.github.io/pairwiseLLM/deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="https://shmercer.github.io/pairwiseLLM/deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="https://shmercer.github.io/pairwiseLLM/deps/headroom-0.11.0/headroom.min.js"></script><script src="https://shmercer.github.io/pairwiseLLM/deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="https://shmercer.github.io/pairwiseLLM/deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="https://shmercer.github.io/pairwiseLLM/deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="https://shmercer.github.io/pairwiseLLM/deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="https://shmercer.github.io/pairwiseLLM/deps/search-1.0.0/fuse.min.js"></script><script src="https://shmercer.github.io/pairwiseLLM/deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="https://shmercer.github.io/pairwiseLLM/pkgdown.js"></script><meta property="og:title" content="Page not found (404)">
 </head>
@@ -16,11 +18,11 @@
     <a href="https://shmercer.github.io/pairwiseLLM/#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
-    <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
+    <nav class="navbar navbar-expand-lg fixed-top bg-primary" data-bs-theme="dark" aria-label="Site navigation"><div class="container">
 
     <a class="navbar-brand me-2" href="https://shmercer.github.io/pairwiseLLM/index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -29,13 +31,20 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="https://shmercer.github.io/pairwiseLLM/index.html">Home</a></li>
+<li class="nav-item"><a class="nav-link" href="https://shmercer.github.io/pairwiseLLM/index.html"><span class="fa fa-home"></span> Home</a></li>
 <li class="nav-item"><a class="nav-link" href="https://shmercer.github.io/pairwiseLLM/reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-usage-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Usage Guides</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-usage-guides">
 <li><a class="dropdown-item" href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
     <li><a class="dropdown-item" href="https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+  </ul>
+</li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-adaptive-pairing" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Adaptive Pairing</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-adaptive-pairing">
+<li><a class="dropdown-item" href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">⭐ Adaptive Pairing &amp; Ranking (Tutorial)</a></li>
+    <li><a class="dropdown-item" href="https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html">Design: Bayesian BTL + Adaptive Pairing (v3.1)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html">Template Positional Bias</a></li>
@@ -45,7 +54,7 @@
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="search.json">
 </form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/shmercer/pairwiseLLM/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/shmercer/pairwiseLLM" aria-label="GitHub"><span class="fa fa-github"></span></a></li>
       </ul>
 </div>
 

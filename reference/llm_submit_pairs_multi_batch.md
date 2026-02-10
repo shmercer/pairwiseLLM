@@ -135,9 +135,9 @@ A list with two elements: `jobs`, a list of per‑batch metadata (similar
 to the example in the advanced vignette), and `registry`, a tibble
 summarising all jobs. The `registry` contains columns `segment_index`,
 `provider`, `model`, `batch_id`, `batch_input_path`,
-`batch_output_path`, `csv_path`, `done`, and `results` (initialized to
-`NULL`). If `write_registry` is `TRUE`, the tibble is also written to
-disk as `jobs_registry.csv`.
+`batch_output_path`, `csv_path`, `pairs_path`, `done`, and `results`
+(initialized to `NULL`). If `write_registry` is `TRUE`, the tibble is
+also written to disk as `jobs_registry.csv`.
 
 ## `llm_submit_pairs_multi_batch()`
 

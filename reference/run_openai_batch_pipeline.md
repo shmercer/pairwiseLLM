@@ -165,9 +165,10 @@ more control (or testing), you can call the components directly.
 
 When `endpoint` is not specified, it is chosen automatically:
 
-- if `include_thoughts = TRUE`, the `"responses"` endpoint is used and,
-  for `"gpt-5.1"`, a default reasoning effort of `"low"` is applied
-  (unless overridden via `reasoning`).
+- if `include_thoughts = TRUE` or GPT-5 reasoning is requested, the
+  `"responses"` endpoint is used and a default reasoning effort of
+  `"low"` is applied for GPT-5 series models unless overridden via
+  `reasoning`.
 
 - otherwise, `"chat.completions"` is used.
 

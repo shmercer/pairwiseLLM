@@ -140,7 +140,8 @@ A tibble with one row and columns:
 
 - custom_id:
 
-  ID string of the form `"LIVE_<ID1>_vs_<ID2>"`.
+  Stable ID for the pair (`pair_uid` if supplied via `...`; otherwise
+  `"LIVE_<ID1>_vs_<ID2>"`).
 
 - ID1, ID2:
 

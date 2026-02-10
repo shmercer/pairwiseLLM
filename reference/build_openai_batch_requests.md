@@ -70,15 +70,16 @@ build_openai_batch_requests(
 
 - reasoning:
 
-  Optional reasoning effort for `gpt-5.1/5.2` when using the
-  `/v1/responses` endpoint. Typically `"none"`, `"low"`, `"medium"`, or
-  `"high"`.
+  Optional reasoning effort for GPT-5 series when using the
+  `/v1/responses` endpoint. For `"gpt-5"` and `"gpt-5-mini"`, `"none"`
+  is normalized to `"minimal"`. For `"gpt-5.1/5.2"`, use `"none"`,
+  `"low"`, `"medium"`, or `"high"`.
 
 - include_thoughts:
 
   Logical; if TRUE and using `responses` endpoint with reasoning,
-  requests a summary. Defaults `reasoning` to `"low"` for gpt-5.1/5.2 if
-  not specified.
+  requests a summary. Defaults `reasoning` to `"low"` for GPT-5 series
+  models if not specified.
 
 - request_id_prefix:
 
@@ -100,10 +101,6 @@ A tibble with one row per pair and columns:
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-# Requires OPENAI_API_KEY and network access.
-library(pairwiseLLM)
-
 data("example_writing_samples", package = "pairwiseLLM")
 
 pairs <- example_writing_samples |>
@@ -126,7 +123,7 @@ batch_tbl_chat <- build_openai_batch_requests(
 )
 
 # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
-batch_resp <- build_openai_batch_requests(
+batch_tbl_resp <- build_openai_batch_requests(
   pairs = pairs,
   model = "gpt-5.2-2025-12-11",
   trait_name = td$name,
@@ -136,7 +133,19 @@ batch_resp <- build_openai_batch_requests(
   include_thoughts = TRUE, # implies reasoning="low" if not set
   reasoning = "medium"
 )
+
 batch_tbl_chat
+#> # A tibble: 3 × 4
+#>   custom_id      method url                  body            
+#>   <chr>          <chr>  <chr>                <list>          
+#> 1 EXP_S17_vs_S12 POST   /v1/chat/completions <named list [3]>
+#> 2 EXP_S19_vs_S15 POST   /v1/chat/completions <named list [3]>
+#> 3 EXP_S01_vs_S15 POST   /v1/chat/completions <named list [3]>
 batch_tbl_resp
-} # }
+#> # A tibble: 3 × 4
+#>   custom_id      method url           body            
+#>   <chr>          <chr>  <chr>         <list>          
+#> 1 EXP_S17_vs_S12 POST   /v1/responses <named list [3]>
+#> 2 EXP_S19_vs_S15 POST   /v1/responses <named list [3]>
+#> 3 EXP_S01_vs_S15 POST   /v1/responses <named list [3]>
 ```

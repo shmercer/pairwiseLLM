@@ -18,8 +18,8 @@ https://doi.org/10.32614/CRAN.package.pairwiseLLM
     @Manual{,
       title = {pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation},
       author = {Sterett H. Mercer},
-      year = {2025},
-      note = {R package version 1.2.0},
+      year = {2026},
+      note = {R package version 1.3.0},
       url = {https://doi.org/10.32614/CRAN.package.pairwiseLLM},
       organization = {Comprehensive R Archive Network},
     }

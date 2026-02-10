@@ -8,21 +8,23 @@
 <title>Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation • pairwiseLLM</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/Inter-0.4.10/font.css" rel="stylesheet">
+<link href="deps/JetBrains_Mono-0.4.10/font.css" rel="stylesheet">
+<link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation">
-<meta name="description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry (1952) &lt;doi:10.2307/2334029&gt; or Elo rating methods to derive writing quality scores. For information on the method of pairwise comparisons, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;. For information on Elo ratings, see Clark et al. (2018) &lt;doi:10.1371/journal.pone.0190393&gt;.">
-<meta property="og:description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. Results can be modeled using Bradley–Terry (1952) &lt;doi:10.2307/2334029&gt; or Elo rating methods to derive writing quality scores. For information on the method of pairwise comparisons, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;. For information on Elo ratings, see Clark et al. (2018) &lt;doi:10.1371/journal.pone.0190393&gt;.">
+<meta name="description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley &amp; Terry, 1952 &lt;doi:10.2307/2334029&gt;; see also Caron &amp; Doucet, 2012 &lt;doi:10.1080/10618600.2012.638220&gt;) or Elo rating methods (see Clark et al., 2018 &lt;doi:10.1371/journal.pone.0190393&gt;) to derive writing quality scores. For information on pairwise comparisons and comparitive judgement, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;.">
+<meta property="og:description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley &amp; Terry, 1952 &lt;doi:10.2307/2334029&gt;; see also Caron &amp; Doucet, 2012 &lt;doi:10.1080/10618600.2012.638220&gt;) or Elo rating methods (see Clark et al., 2018 &lt;doi:10.1371/journal.pone.0190393&gt;) to derive writing quality scores. For information on pairwise comparisons and comparitive judgement, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
-    <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
+    <nav class="navbar navbar-expand-lg fixed-top bg-primary" data-bs-theme="dark" aria-label="Site navigation"><div class="container">
 
     <a class="navbar-brand me-2" href="index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -31,13 +33,20 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="active nav-item"><a class="nav-link" href="index.html">Home</a></li>
+<li class="active nav-item"><a class="nav-link" href="index.html"><span class="fa fa-home"></span> Home</a></li>
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-usage-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Usage Guides</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-usage-guides">
 <li><a class="dropdown-item" href="articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
     <li><a class="dropdown-item" href="articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+  </ul>
+</li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-adaptive-pairing" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Adaptive Pairing</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-adaptive-pairing">
+<li><a class="dropdown-item" href="articles/adaptive-pairing.html">⭐ Adaptive Pairing &amp; Ranking (Tutorial)</a></li>
+    <li><a class="dropdown-item" href="articles/bayesian-btl-adaptive-pairing-design.html">Design: Bayesian BTL + Adaptive Pairing (v3.1)</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="articles/prompt-template-bias.html">Template Positional Bias</a></li>
@@ -47,7 +56,7 @@
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="search.json">
 </form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/shmercer/pairwiseLLM/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/shmercer/pairwiseLLM" aria-label="GitHub"><span class="fa fa-github"></span></a></li>
       </ul>
 </div>
 
@@ -55,10 +64,10 @@
   </div>
 </nav><div class="container template-home">
 <div class="row">
-  <main id="main" class="col-md-9"><div class="float">
-<img src="https://www.dropbox.com/scl/fi/dn51r1q7bkythiz5e6jdj/pairwiseLLM_logo.jpeg?rlkey=qlpe8xyda35wriryxqa87a1v8&amp;st=tu8hmsp6&amp;raw=1" alt="pairwiseLLM banner"><div class="figcaption">pairwiseLLM banner</div>
-</div>
-<div class="section level1">
+  <main id="main" class="col-md-9"><p>pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation ================</p>
+<figure><img src="https://www.dropbox.com/scl/fi/dn51r1q7bkythiz5e6jdj/pairwiseLLM_logo.jpeg?rlkey=qlpe8xyda35wriryxqa87a1v8&amp;st=tu8hmsp6&amp;raw=1" alt="pairwiseLLM banner"><figcaption aria-hidden="true">
+pairwiseLLM banner
+</figcaption></figure><div class="section level1">
 <div class="page-header"><h1 id="pairwisellm-pairwise-comparison-tools-for-large-language-model-based-writing-evaluation">pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation<a class="anchor" aria-label="anchor" href="#pairwisellm-pairwise-comparison-tools-for-large-language-model-based-writing-evaluation"></a>
 </h1></div>
 <!-- badges: start -->
@@ -152,36 +161,41 @@
 <td>✅ Yes</td>
 </tr>
 <tr class="odd">
+<td><strong><a href="https://aistudio.google.com/" class="external-link">Google/Gemini</a></strong></td>
+<td>gemini-3-flash-preview</td>
+<td>✅ Yes</td>
+</tr>
+<tr class="even">
 <td><strong><a href="https://www.deepseek.com/en" class="external-link">DeepSeek-AI</a><sub>1</sub></strong></td>
 <td>DeepSeek-R1</td>
 <td>✅ Yes</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><strong><a href="https://www.deepseek.com/en" class="external-link">DeepSeek-AI</a><sub>1</sub></strong></td>
 <td>DeepSeek-V3</td>
 <td>❌ No</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><strong><a href="https://www.moonshot.ai/" class="external-link">Moonshot-AI</a><sub>1</sub></strong></td>
 <td>Kimi-K2-Instruct-0905</td>
 <td>❌ No</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><strong><a href="https://qwen.ai/home" class="external-link">Qwen</a><sub>1</sub></strong></td>
 <td>Qwen3-235B-A22B-Instruct-2507</td>
 <td>❌ No</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><strong><a href="https://qwen.ai/home" class="external-link">Qwen</a><sub>2</sub></strong></td>
 <td>qwen3:32b</td>
 <td>✅ Yes</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><strong><a href="https://deepmind.google/models/gemma/" class="external-link">Google</a><sub>2</sub></strong></td>
 <td>gemma3:27b</td>
 <td>❌ No</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><strong><a href="https://mistral.ai/" class="external-link">Mistral</a><sub>2</sub></strong></td>
 <td>mistral-small3.2:24b</td>
 <td>❌ No</td>
@@ -317,6 +331,26 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <hr>
 </div>
 <div class="section level2">
+<h2 id="adaptive-pairing--ranking-overview">Adaptive pairing &amp; ranking (overview)<a class="anchor" aria-label="anchor" href="#adaptive-pairing--ranking-overview"></a>
+</h2>
+<p><code>pairwiseLLM</code> includes an adaptive pairing workflow for efficiently ranking writing samples using pairwise comparisons. Instead of allocating comparisons uniformly at random, adaptive pairing selects pairs where additional judgments are most informative, concentrating effort on ambiguous regions (near-ties) to reduce posterior uncertainty in latent quality estimates and rankings.</p>
+<p>In practice, compared to random pairing designs:</p>
+<ul>
+<li>Overall Bayesian EAP reliability can be slightly lower (because comparisons are not spread uniformly),</li>
+<li>but credible/confidence intervals around latent quality scores and rankings are typically tighter.</li>
+</ul>
+<p>To get started, see:</p>
+<ul>
+<li>
+<strong>Tutorial:</strong> Adaptive Pairing &amp; Ranking<br><a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html" class="uri">https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html</a>
+</li>
+<li>
+<strong>Design spec:</strong> Bayesian BTL + Adaptive Pairing Design<br><a href="https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html" class="uri">https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html</a>
+</li>
+</ul>
+<hr>
+</div>
+<div class="section level2">
 <h2 id="prompt-templates--registry">Prompt Templates &amp; Registry<a class="anchor" aria-label="anchor" href="#prompt-templates--registry"></a>
 </h2>
 <p><code>pairwiseLLM</code> includes:</p>
@@ -416,7 +450,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <ul>
 <li>Parallel Execution: Set <code>parallel = TRUE</code> and <code>workers = n</code> to speed up processing.</li>
 <li>Resume Capability: Provide a <code>save_path</code> (e.g., <code>"results.csv"</code>). The function writes results as they finish. If interrupted, running the command again will automatically skip pairs already present in the file.</li>
-<li>Robust Output: Returns a list containing <code>$results</code> (successful comparisons) and <code>$failed_pairs</code> (errors), ensuring one bad request doesn’t crash the whole job.</li>
+<li>Robust Output: Returns a list containing <code>$results</code> (successful comparisons) and <code>$failed_pairs</code> (scheduled pairs with no observed outcome) plus <code>$failed_attempts</code> (attempt-level failures, including retry/timeout/parse issues), ensuring one bad request doesn’t crash the whole job.</li>
 </ul>
 <p>Example:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
@@ -449,6 +483,11 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="co"># Inspect failures (if any)</span></span>
 <span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_pairs</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_pairs</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co"># Inspect attempt-level failures (if any)</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_attempts</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_attempts</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <hr>
 </div>
@@ -755,7 +794,7 @@ Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&a
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2025). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.2.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.3.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
 </div>

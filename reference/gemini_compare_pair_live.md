@@ -1,9 +1,9 @@
 # Live Google Gemini comparison for a single pair of samples
 
 This function sends a single pairwise comparison prompt to the Google
-Gemini Generative Language API (Gemini 3 Pro) and parses the result into
-a one-row tibble that mirrors the structure used for OpenAI / Anthropic
-live calls.
+Gemini Generative Language API (Gemini 3 Pro / Flash) and parses the
+result into a one-row tibble that mirrors the structure used for OpenAI
+/ Anthropic live calls.
 
 ## Usage
 
@@ -18,7 +18,7 @@ gemini_compare_pair_live(
   trait_description,
   prompt_template = set_prompt_template(),
   api_key = NULL,
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = "low",
   temperature = NULL,
   top_p = NULL,
   top_k = NULL,
@@ -26,6 +26,7 @@ gemini_compare_pair_live(
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
+  pair_uid = NULL,
   ...
 )
 ```
@@ -50,8 +51,8 @@ gemini_compare_pair_live(
 
 - model:
 
-  Gemini model identifier (for example `"gemini-3-pro-preview"`). The
-  value is interpolated into the path
+  Gemini model identifier (for example `"gemini-3-pro-preview"` or
+  `"gemini-3-flash-preview"`). The value is interpolated into the path
   `"/{api_version}/models/<model>:generateContent"`.
 
 - trait_name:
@@ -74,11 +75,18 @@ gemini_compare_pair_live(
 
 - thinking_level:
 
-  One of `"low"`, `"medium"`, or `"high"`. This controls the maximum
-  depth of internal reasoning for Gemini 3 Pro. For pairwise scoring,
-  `"low"` is used by default to reduce latency and cost. Currently, the
-  Gemini REST API only supports `"Low"` and `"High"` values; `"medium"`
-  is mapped internally to `"High"` with a warning.
+  One of `"minimal"`, `"low"`, `"medium"`, or `"high"`. This controls
+  the maximum depth of internal reasoning.
+
+  - For Gemini 3 Flash models (for example `"gemini-3-flash-preview"`),
+    `"minimal"` is supported and is passed through as `"minimal"`.
+
+  - For non-Flash Gemini 3 models (for example
+    `"gemini-3-pro-preview"`), `"minimal"` is not supported.
+
+  - For backward compatibility with earlier Gemini 3 Pro usage, `"low"`
+    maps to `"low"` and both `"medium"` and `"high"` map to `"high"`.
+    "Medium" currently behaves like "High".
 
 - temperature:
 
@@ -115,6 +123,12 @@ gemini_compare_pair_live(
   (default), all text parts are collapsed into `content` and `thoughts`
   is `NA`.
 
+- pair_uid:
+
+  Optional stable per-pair identifier; when supplied, this value is used
+  verbatim as `custom_id` (otherwise `custom_id` defaults to
+  `"LIVE_<ID1>_vs_<ID2>"`).
+
 - ...:
 
   Reserved for future extensions. Any `thinking_budget` entry in `...`
@@ -125,7 +139,7 @@ gemini_compare_pair_live(
 
 A tibble with one row and columns:
 
-- `custom_id` - `"LIVE_<ID1>_vs_<ID2>"`.
+- `custom_id` - stable ID for the pair (`pair_uid` if supplied).
 
 - `ID1`, `ID2` - provided sample IDs.
 
@@ -164,9 +178,9 @@ or
 \<BETTER_SAMPLE\>SAMPLE_2\</BETTER_SAMPLE\>
 
 If `include_thoughts = TRUE`, the function additionally requests
-Gemini's explicit chain-of-thought style reasoning (\\thoughts\\) via
-the `thinkingConfig` block and stores it in a separate `thoughts`
-column, while still using the final answer content to detect the
+Gemini's explicit chain-of-thought style reasoning ("thoughts") via the
+`thinkingConfig` block and stores it in a separate `thoughts` column,
+while still using the final answer content to detect the
 `<BETTER_SAMPLE>` tag.
 
 ## Examples
@@ -180,6 +194,7 @@ if (FALSE) { # \dontrun{
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
+# Gemini 3 Pro example (existing behavior)
 res <- gemini_compare_pair_live(
   ID1               = "S01",
   text1             = "Text 1",
@@ -196,5 +211,22 @@ res <- gemini_compare_pair_live(
 
 res
 res$better_id
+
+# Gemini 3 Flash example (minimal thinking)
+res_flash <- gemini_compare_pair_live(
+  ID1               = "S01",
+  text1             = "Text 1",
+  ID2               = "S02",
+  text2             = "Text 2",
+  model             = "gemini-3-flash-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "minimal",
+  include_thoughts  = FALSE,
+  include_raw       = FALSE
+)
+
+res_flash
 } # }
 ```

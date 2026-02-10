@@ -188,8 +188,12 @@ Ollama.**
 
 It supports **parallel processing** and **incremental output file
 saving** (resume capability) for **all** supported backends. The
-function returns a list containing `$results` (successful comparisons)
-and `$failed_pairs` (errors).
+function returns a list containing:
+
+- `$results`: observed outcomes only (canonical schema)
+- `$failed_pairs`: scheduled pairs with no observed outcome
+- `$failed_attempts`: attempt-level failures (retries, timeouts, parse
+  errors, invalid winners)
 
 ``` r
 # Example using parallel processing and incremental saving
@@ -217,12 +221,19 @@ dplyr::slice_head(res_list$results, 5)
 if (nrow(res_list$failed_pairs) > 0) {
   print(res_list$failed_pairs)
 }
+
+# Attempt-level failures (if any) are in $failed_attempts
+if (nrow(res_list$failed_attempts) > 0) {
+  print(res_list$failed_attempts)
+}
 ```
 
-Each row in `$results` includes: - `custom_id`
-(e.g. `LIVE_S01_vs_S02`) - `ID1`, `ID2` - parsed `<BETTER_SAMPLE>` tag →
-`better_sample` and `better_id` - thoughts (reasoning text, if
-available) and content (final answer)
+Each row in `$results` includes: - `custom_id` (uses `pair_uid` if
+supplied; otherwise defaults to `LIVE_<ID1>_vs_<ID2>`) - `ID1`, `ID2` -
+parsed `<BETTER_SAMPLE>` tag → `better_sample` and `better_id` -
+canonical aliases/keys: `A_id`, `B_id`, `winner_pos`, `ordered_key`,
+`unordered_key`, `pair_uid`, `received_at`, `backend`, `model` -
+thoughts (reasoning text, if available) and content (final answer)
 
 ------------------------------------------------------------------------
 

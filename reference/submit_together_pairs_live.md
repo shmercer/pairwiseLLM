@@ -112,7 +112,7 @@ submit_together_pairs_live(
 
 ## Value
 
-A list containing two elements:
+A list containing three elements:
 
 - results:
 
@@ -124,6 +124,11 @@ A list containing two elements:
   A tibble containing the rows from `pairs` that failed to process (due
   to API errors or timeouts), along with an `error_message` column.
   These can be easily re-submitted.
+
+- failed_attempts:
+
+  A tibble of attempt-level failures (retries, timeouts, parse errors,
+  invalid winners), separate from observed outcomes.
 
 ## Details
 

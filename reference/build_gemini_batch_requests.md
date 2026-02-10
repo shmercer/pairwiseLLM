@@ -13,7 +13,7 @@ build_gemini_batch_requests(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = "low",
   custom_id_prefix = "GEM",
   temperature = NULL,
   top_p = NULL,
@@ -59,10 +59,19 @@ build_gemini_batch_requests(
 
 - thinking_level:
 
-  One of `"low"`, `"medium"`, or `"high"`. This is mapped to Gemini's
-  `thinkingConfig.thinkingLevel`, where `"low"` maps to "Low" and both
-  `"medium"` and `"high"` map to "High". "Medium" currently behaves like
-  "High".
+  One of `"minimal"`, `"low"`, `"medium"`, or `"high"`.
+
+  This is mapped to Gemini's `thinkingConfig.thinkingLevel`.
+
+  - For Gemini 3 Flash models (for example `"gemini-3-flash-preview"`),
+    `"minimal"` is supported and is passed through as `"minimal"`.
+
+  - For non-Flash Gemini 3 models (for example
+    `"gemini-3-pro-preview"`), `"minimal"` is not supported.
+
+  - For backward compatibility with earlier Gemini 3 Pro usage, `"low"`
+    maps to `"low"` and both `"medium"` and `"high"` map to `"high"`.
+    "Medium" currently behaves like "High".
 
 - custom_id_prefix:
 
@@ -95,7 +104,7 @@ build_gemini_batch_requests(
 - ...:
 
   Reserved for future extensions. Any `thinking_budget` entries are
-  ignored (Gemini 3 Pro does not support thinking budgets).
+  ignored (Gemini 3 does not support thinking budgets).
 
 ## Value
 
@@ -129,6 +138,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
+# Gemini 3 Pro example (existing behavior)
 reqs <- build_gemini_batch_requests(
   pairs             = pairs,
   model             = "gemini-3-pro-preview",
@@ -140,6 +150,25 @@ reqs <- build_gemini_batch_requests(
 )
 
 reqs
+#> # A tibble: 3 × 4
+#>   custom_id      ID1   ID2   request         
+#>   <chr>          <chr> <chr> <list>          
+#> 1 GEM_S17_vs_S12 S17   S12   <named list [2]>
+#> 2 GEM_S19_vs_S15 S19   S15   <named list [2]>
+#> 3 GEM_S01_vs_S15 S01   S15   <named list [2]>
+
+# Gemini 3 Flash example (minimal thinking)
+reqs_flash <- build_gemini_batch_requests(
+  pairs             = pairs,
+  model             = "gemini-3-flash-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "minimal",
+  include_thoughts  = FALSE
+)
+
+reqs_flash
 #> # A tibble: 3 × 4
 #>   custom_id      ID1   ID2   request         
 #>   <chr>          <chr> <chr> <list>          

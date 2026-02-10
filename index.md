@@ -1,5 +1,8 @@
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
+pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
+Writing Evaluation ================
+
 ![pairwiseLLM
 banner](https://www.dropbox.com/scl/fi/dn51r1q7bkythiz5e6jdj/pairwiseLLM_logo.jpeg?rlkey=qlpe8xyda35wriryxqa87a1v8&st=tu8hmsp6&raw=1)
 
@@ -55,6 +58,7 @@ Other similar models may work, but have not been fully tested.
 | **[Anthropic](https://console.anthropic.com/)**      | claude-haiku-4-5              | ✅ Yes          |
 | **[Anthropic](https://console.anthropic.com/)**      | claude-opus-4-5               | ✅ Yes          |
 | **[Google/Gemini](https://aistudio.google.com/)**    | gemini-3-pro-preview          | ✅ Yes          |
+| **[Google/Gemini](https://aistudio.google.com/)**    | gemini-3-flash-preview        | ✅ Yes          |
 | **[DeepSeek-AI](https://www.deepseek.com/en)₁**      | DeepSeek-R1                   | ✅ Yes          |
 | **[DeepSeek-AI](https://www.deepseek.com/en)₁**      | DeepSeek-V3                   | ❌ No           |
 | **[Moonshot-AI](https://www.moonshot.ai/)₁**         | Kimi-K2-Instruct-0905         | ❌ No           |
@@ -187,6 +191,31 @@ The package provides helpers for each step.
 
 ------------------------------------------------------------------------
 
+## Adaptive pairing & ranking (overview)
+
+`pairwiseLLM` includes an adaptive pairing workflow for efficiently
+ranking writing samples using pairwise comparisons. Instead of
+allocating comparisons uniformly at random, adaptive pairing selects
+pairs where additional judgments are most informative, concentrating
+effort on ambiguous regions (near-ties) to reduce posterior uncertainty
+in latent quality estimates and rankings.
+
+In practice, compared to random pairing designs:
+
+- Overall Bayesian EAP reliability can be slightly lower (because
+  comparisons are not spread uniformly),
+- but credible/confidence intervals around latent quality scores and
+  rankings are typically tighter.
+
+To get started, see:
+
+- **Tutorial:** Adaptive Pairing & Ranking  
+  <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
+- **Design spec:** Bayesian BTL + Adaptive Pairing Design  
+  <https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html>
+
+------------------------------------------------------------------------
+
 ## Prompt Templates & Registry
 
 `pairwiseLLM` includes:
@@ -299,8 +328,10 @@ Key Features:
   command again will automatically skip pairs already present in the
   file.
 - Robust Output: Returns a list containing `$results` (successful
-  comparisons) and `$failed_pairs` (errors), ensuring one bad request
-  doesn’t crash the whole job.
+  comparisons) and `$failed_pairs` (scheduled pairs with no observed
+  outcome) plus `$failed_attempts` (attempt-level failures, including
+  retry/timeout/parse issues), ensuring one bad request doesn’t crash
+  the whole job.
 
 Example:
 
@@ -334,6 +365,11 @@ head(res_list$results)
 # Inspect failures (if any)
 if (nrow(res_list$failed_pairs) > 0) {
   print(res_list$failed_pairs)
+}
+
+# Inspect attempt-level failures (if any)
+if (nrow(res_list$failed_attempts) > 0) {
+  print(res_list$failed_attempts)
 }
 ```
 
@@ -636,6 +672,6 @@ MIT License. See `LICENSE`.
 
 ## Citation
 
-> Mercer, S. H. (2025). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.2.0) \[R package;
+> Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
+> comparisons with large language models* (Version 1.3.0) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>

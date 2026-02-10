@@ -31,9 +31,20 @@ A tibble with columns:
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-# Suppose the working directory contains S1.txt and S2.txt
-samples <- read_samples_dir(path = ".", pattern = "\\\\.txt$")
+# Create a temporary directory with sample text files
+samples_dir <- tempfile()
+dir.create(samples_dir)
+
+writeLines("This is sample A.", file.path(samples_dir, "A.txt"))
+writeLines("This is sample B.", file.path(samples_dir, "B.txt"))
+
+# Read samples into a tibble
+samples <- read_samples_dir(samples_dir)
+
 samples
-} # }
+#> # A tibble: 2 × 2
+#>   ID    text             
+#>   <chr> <chr>            
+#> 1 A     This is sample A.
+#> 2 B     This is sample B.
 ```

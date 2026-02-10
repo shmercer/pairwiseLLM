@@ -2,6 +2,24 @@
 
 ## All functions
 
+- [`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md)
+  : Retrieve canonical adaptive logs.
+- [`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md)
+  : Adaptive item log accessor.
+- [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
+  : Run adaptive ranking end-to-end from data and model settings
+- [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md)
+  : Adaptive ranking resume
+- [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md)
+  : Adaptive ranking live runner
+- [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md)
+  : Adaptive ranking
+- [`adaptive_results_history()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_results_history.md)
+  : Adaptive results history in build_bt_data() format.
+- [`adaptive_round_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_round_log.md)
+  : Adaptive round log accessor.
+- [`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md)
+  : Adaptive step log accessor.
 - [`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md)
   : Deterministically alternate sample order in pairs
 - [`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md)
@@ -42,6 +60,10 @@
   : Example dataset of paired comparisons for writing samples
 - [`example_writing_samples`](https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples.md)
   : Example dataset of writing samples
+- [`example_writing_samples1000`](https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples1000.md)
+  : Synthetic Writing Samples with Controlled Quality Levels (N = 1000)
+- [`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
+  : Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 - [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
   : Fit a Bradley–Terry model with sirt and fallback to BradleyTerry2
 - [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md)
@@ -70,6 +92,10 @@
   : Submit pairs to an LLM backend via batch API
 - [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
   : Multi‑batch submission and polling wrappers
+- [`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md)
+  : Load an adaptive session from disk.
+- [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md)
+  : Build an LLM judge function for adaptive ranking
 - [`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md)
   : Create all unordered pairs of writing samples
 - [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
@@ -92,6 +118,8 @@
   : Parse Gemini batch JSONL output into a tibble of pairwise results
 - [`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md)
   : Parse an OpenAI Batch output JSONL file
+- [`print(`*`<adaptive_state>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/print.adaptive_state.md)
+  : Print an adaptive state summary.
 - [`print(`*`<pairwiseLLM_cost_estimate>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/print.pairwiseLLM_cost_estimate.md)
   : Print a pairwiseLLM cost estimate
 - [`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md)
@@ -114,6 +142,8 @@
   : Randomly sample pairs of writing samples
 - [`sample_reverse_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.md)
   : Sample reversed versions of a subset of pairs
+- [`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md)
+  : Save an adaptive session to disk.
 - [`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
   : Get or set a prompt template for pairwise comparisons
 - [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md)
@@ -128,11 +158,19 @@
   : Live OpenAI comparisons for a tibble of pairs
 - [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
   : Live Together.ai comparisons for a tibble of pairs
+- [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+  : Summarize an adaptive state.
 - [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
   : Summarize a Bradley–Terry model fit
+- [`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md)
+  : Summarize adaptive items
+- [`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
+  : Summarize adaptive refits
 - [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
   : Live Together.ai comparison for a single pair of samples
 - [`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md)
   : Get a trait name and description for prompts
+- [`validate_session_dir()`](https://shmercer.github.io/pairwiseLLM/reference/validate_session_dir.md)
+  : Validate an adaptive session directory.
 - [`write_openai_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/write_openai_batch_file.md)
   : Write an OpenAI batch table to a JSONL file

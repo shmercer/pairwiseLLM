@@ -21,7 +21,7 @@ run_gemini_batch_pipeline(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  thinking_level = c("low", "medium", "high"),
+  thinking_level = "low",
   batch_input_path = tempfile(pattern = "gemini-batch-input-", fileext = ".json"),
   batch_output_path = tempfile(pattern = "gemini-batch-output-", fileext = ".jsonl"),
   poll = TRUE,
@@ -43,7 +43,8 @@ run_gemini_batch_pipeline(
 
 - model:
 
-  Gemini model name, for example `"gemini-3-pro-preview"`.
+  Gemini model name, for example `"gemini-3-pro-preview"` or
+  `"gemini-3-flash-preview"`.
 
 - trait_name:
 
@@ -59,7 +60,20 @@ run_gemini_batch_pipeline(
 
 - thinking_level:
 
-  One of `"low"`, `"medium"`, or `"high"`.
+  One of `"minimal"`, `"low"`, `"medium"`, or `"high"`.
+
+  This controls the maximum depth of internal reasoning for Gemini batch
+  requests via `generationConfig$thinkingConfig$thinkingLevel`.
+
+  - For Gemini 3 Flash models (for example `"gemini-3-flash-preview"`),
+    `"minimal"` is supported and is passed through as `"minimal"`.
+
+  - For non-Flash Gemini 3 models (for example
+    `"gemini-3-pro-preview"`), `"minimal"` is not supported.
+
+  - For backward compatibility with earlier Gemini 3 Pro usage, `"low"`
+    maps to `"low"` and both `"medium"` and `"high"` map to `"high"`.
+    "Medium" currently behaves like "High".
 
 - batch_input_path:
 
@@ -160,7 +174,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Run the full Gemini batch pipeline
+# Run the full Gemini batch pipeline (Gemini 3 Pro example)
 res <- run_gemini_batch_pipeline(
   pairs             = pairs,
   model             = "gemini-3-pro-preview",
@@ -181,5 +195,19 @@ res$batch
 # Paths to saved input/output files
 res$batch_input_path
 res$batch_output_path
+
+# Gemini 3 Flash example (minimal thinking)
+res_flash <- run_gemini_batch_pipeline(
+  pairs             = pairs,
+  model             = "gemini-3-flash-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  thinking_level    = "minimal",
+  poll              = TRUE,
+  include_thoughts  = FALSE
+)
+
+res_flash$results
 } # }
 ```

@@ -97,13 +97,15 @@ ollama_compare_pair_live(
 
 - ...:
 
-  Reserved for future extensions.
+  Reserved for future extensions. When `pair_uid` is supplied via `...`,
+  it is used verbatim as `custom_id`.
 
 ## Value
 
 A tibble with one row and columns:
 
-- `custom_id` – ID string of the form `"LIVE_<ID1>_vs_<ID2>"`.
+- `custom_id` – stable ID for the pair (`pair_uid` if supplied via
+  `...`; otherwise `"LIVE_<ID1>_vs_<ID2>"`).
 
 - `ID1`, `ID2` – the sample IDs supplied to the function.
 
