@@ -664,11 +664,29 @@ test_that("fit_bayes_btl_mcmc and adaptive fit entrypoints cover input guard rai
 
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("A", "B"))
   cfg <- pairwiseLLM:::btl_mcmc_config(2L, list(model_variant = "btl_e_b"))
-  expect_error(pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = "bad"), "`config` must be a list")
+  expect_error(
+    testthat::with_mocked_bindings(
+      .btl_mcmc_require_cmdstanr = function() invisible(TRUE),
+      .package = "pairwiseLLM",
+      {
+        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = "bad")
+      }
+    ),
+    "`config` must be a list"
+  )
 
   cfg_bad_cmdstan <- cfg
   cfg_bad_cmdstan$cmdstan <- "bad"
-  expect_error(pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = cfg_bad_cmdstan), "must be a list")
+  expect_error(
+    testthat::with_mocked_bindings(
+      .btl_mcmc_require_cmdstanr = function() invisible(TRUE),
+      .package = "pairwiseLLM",
+      {
+        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = cfg_bad_cmdstan)
+      }
+    ),
+    "must be a list"
+  )
 
   cfg_bad_thin <- cfg
   cfg_bad_thin$thin_draws <- 0L
