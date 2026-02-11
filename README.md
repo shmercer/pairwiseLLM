@@ -8,7 +8,7 @@ alt="pairwiseLLM banner" />
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
 <!-- badges: start -->
-![Dev version](https://img.shields.io/badge/dynamic/yaml?label=dev%20version&query=Version&url=https://raw.githubusercontent.com/shmercer/pairwiseLLM/master/DESCRIPTION)
+[![Dev version](https://img.shields.io/badge/dynamic/raw?label=dev%20version&color=green&query=^Version:\\s*(.*)$&url=https://raw.githubusercontent.com/shmercer/pairwiseLLM/master/DESCRIPTION)](https://github.com/shmercer/pairwiseLLM)
 [![CRAN
 status](https://www.r-pkg.org/badges/version/pairwiseLLM)](https://CRAN.R-project.org/package=pairwiseLLM)
 [![R-CMD-check](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml)
