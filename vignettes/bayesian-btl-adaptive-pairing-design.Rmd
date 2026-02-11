@@ -144,10 +144,7 @@ $$
 #### Model B — BTL + lapse ($\epsilon$ )
 
 $$
-p_k
-= (1-\epsilon)\,\text{logit}^{-1}(\theta_{A[k]} - \theta_{B[k]})
-
-+ \epsilon \cdot 0.5
+p_k = (1-\epsilon)\,\text{logit}^{-1}(\theta_{A[k]} - \theta_{B[k]}) + \epsilon \cdot 0.5
 $$
 
 $$
@@ -179,10 +176,7 @@ $$
 #### Model D — BTL + position bias + lapse ($b, \epsilon$) (**default**)
 
 $$
-p_k
-= (1-\epsilon)\,\text{logit}^{-1}(\theta_{A[k]} - \theta_{B[k]} + b)
-
-+ \epsilon \cdot 0.5
+p_k = (1-\epsilon)\,\text{logit}^{-1}(\theta_{A[k]} - \theta_{B[k]} + b) + \epsilon \cdot 0.5
 $$
 
 $$
