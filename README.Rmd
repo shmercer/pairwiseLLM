@@ -10,7 +10,7 @@ editor_options:
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
 <!-- badges: start -->
-[![Dev version](https://img.shields.io/badge/dynamic/raw?label=dev%20version&color=green&query=^Version:\\s*(.*)$&url=https://raw.githubusercontent.com/shmercer/pairwiseLLM/master/DESCRIPTION)](https://github.com/shmercer/pairwiseLLM)
+[![Dev version](https://img.shields.io/badge/dynamic/regex?label=dev%20version&color=green&url=https%3A%2F%2Fraw.githubusercontent.com%2Fshmercer%2FpairwiseLLM%2Fmaster%2FDESCRIPTION&search=%5EVersion%3A%5Cs*(.*)%24&replace=%241&flags=m)](https://github.com/shmercer/pairwiseLLM)
 [![CRAN status](https://www.r-pkg.org/badges/version/pairwiseLLM)](https://CRAN.R-project.org/package=pairwiseLLM)
 [![R-CMD-check](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml)
 [![Codecov test coverage](https://codecov.io/gh/shmercer/pairwiseLLM/graph/badge.svg)](https://app.codecov.io/gh/shmercer/pairwiseLLM)
