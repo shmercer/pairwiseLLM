@@ -282,10 +282,9 @@ variation.</p>
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>ϵ</mi><annotation encoding="application/x-tex">\epsilon</annotation></semantics></math>
 )<a class="anchor" aria-label="anchor" href="#model-b-btl-lapse-epsilon"></a>
 </h5>
-<p>$$ p_k = (1-),^{-1}(<em>{A[k]} - </em>{B[k]})</p>
-<ul>
-<li>$$</li>
-</ul>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>p</mi><mi>k</mi></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>−</mo><mi>ϵ</mi><mo stretchy="true" form="postfix">)</mo></mrow><mspace width="0.167em"></mspace><msup><mtext mathvariant="normal">logit</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>θ</mi><mrow><mi>A</mi><mrow><mo stretchy="true" form="prefix">[</mo><mi>k</mi><mo stretchy="true" form="postfix">]</mo></mrow></mrow></msub><mo>−</mo><msub><mi>θ</mi><mrow><mi>B</mi><mrow><mo stretchy="true" form="prefix">[</mo><mi>k</mi><mo stretchy="true" form="postfix">]</mo></mrow></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mo>+</mo><mi>ϵ</mi><mo>⋅</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">
+p_k = (1-\epsilon)\,\text{logit}^{-1}(\theta_{A[k]} - \theta_{B[k]}) + \epsilon \cdot 0.5
+</annotation></semantics></math></p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Y</mi><mi>k</mi></msub><mo>∼</mo><mtext mathvariant="normal">Bernoulli</mtext><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>p</mi><mi>k</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">
 Y_k \sim \text{Bernoulli}(p_k)
 </annotation></semantics></math></p>
@@ -326,10 +325,9 @@ no position preference</li>
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi><mo>,</mo><mi>ϵ</mi></mrow><annotation encoding="application/x-tex">b, \epsilon</annotation></semantics></math>)
 (<strong>default</strong>)<a class="anchor" aria-label="anchor" href="#model-d-btl-position-bias-lapse-b-epsilon-default"></a>
 </h5>
-<p>$$ p_k = (1-),^{-1}(<em>{A[k]} - </em>{B[k]} + b)</p>
-<ul>
-<li>$$</li>
-</ul>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>p</mi><mi>k</mi></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>−</mo><mi>ϵ</mi><mo stretchy="true" form="postfix">)</mo></mrow><mspace width="0.167em"></mspace><msup><mtext mathvariant="normal">logit</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>θ</mi><mrow><mi>A</mi><mrow><mo stretchy="true" form="prefix">[</mo><mi>k</mi><mo stretchy="true" form="postfix">]</mo></mrow></mrow></msub><mo>−</mo><msub><mi>θ</mi><mrow><mi>B</mi><mrow><mo stretchy="true" form="prefix">[</mo><mi>k</mi><mo stretchy="true" form="postfix">]</mo></mrow></mrow></msub><mo>+</mo><mi>b</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>+</mo><mi>ϵ</mi><mo>⋅</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">
+p_k = (1-\epsilon)\,\text{logit}^{-1}(\theta_{A[k]} - \theta_{B[k]} + b) + \epsilon \cdot 0.5
+</annotation></semantics></math></p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Y</mi><mi>k</mi></msub><mo>∼</mo><mtext mathvariant="normal">Bernoulli</mtext><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>p</mi><mi>k</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">
 Y_k \sim \text{Bernoulli}(p_k)
 </annotation></semantics></math></p>

@@ -163,9 +163,7 @@ quality difference; all randomness is “ordinary” Bernoulli variation.
 
 ##### Model B — BTL + lapse ($\epsilon$ )
 
-\$\$ p_k = (1-),^{-1}(*{A\[k\]} -* {B\[k\]})
-
-- \$\$
+$$p_{k} = (1 - \epsilon)\,\text{logit}^{- 1}\left( \theta_{A{\lbrack k\rbrack}} - \theta_{B{\lbrack k\rbrack}} \right) + \epsilon \cdot 0.5$$
 
 $$Y_{k} \sim \text{Bernoulli}\left( p_{k} \right)$$
 
@@ -192,9 +190,7 @@ $$Y_{k} \sim \text{Bernoulli}\left( p_{k} \right)$$
 
 ##### Model D — BTL + position bias + lapse ($b,\epsilon$) (**default**)
 
-\$\$ p_k = (1-),^{-1}(*{A\[k\]} -* {B\[k\]} + b)
-
-- \$\$
+$$p_{k} = (1 - \epsilon)\,\text{logit}^{- 1}\left( \theta_{A{\lbrack k\rbrack}} - \theta_{B{\lbrack k\rbrack}} + b \right) + \epsilon \cdot 0.5$$
 
 $$Y_{k} \sim \text{Bernoulli}\left( p_{k} \right)$$
 
