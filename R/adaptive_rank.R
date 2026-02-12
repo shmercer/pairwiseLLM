@@ -332,8 +332,14 @@ make_adaptive_judge_llm <- function(
 #'   `p_long_low`, `p_long_high`, `long_taper_mult`, `long_frac_floor`,
 #'   `mid_bonus_frac`, `explore_taper_mult`, `boundary_k`, `boundary_window`,
 #'   `boundary_frac`, `p_star_override_margin`, and
-#'   `star_override_budget_per_round`. Unknown fields and invalid values abort
-#'   with actionable errors.
+#'   `star_override_budget_per_round`, linking controls (`run_mode`, `hub_id`,
+#'   `link_transform_mode`, `link_refit_mode`, `judge_param_mode`,
+#'   `hub_lock_mode`, `hub_lock_kappa`), and Phase A controls
+#'   (`phase_a_mode`, `phase_a_import_failure_policy`,
+#'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
+#'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`,
+#'   `phase_a_set_source`). Unknown fields and invalid values abort with
+#'   actionable errors.
 #' @param btl_config Optional named list passed to [adaptive_rank_run_live()]
 #'   to control BTL refit cadence, stopping diagnostics, and selected
 #'   round-log diagnostics. Supported fields:
@@ -514,7 +520,7 @@ adaptive_rank <- function(
       paths$round_log,
       paths$metadata,
       paths$btl_fit
-    ))) || dir.exists(paths$item_log_dir)
+    ))) || dir.exists(paths$item_log_dir) || dir.exists(paths$phase_a_artifact_dir)
 
     if (isTRUE(has_saved_artifacts)) {
       loaded_state <- tryCatch(

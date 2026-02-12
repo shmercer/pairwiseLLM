@@ -51,7 +51,11 @@ behavior. Supported fields:
 \code{link_transform_escalation_is_one_way},
 \code{spoke_quantile_coverage_bins},
 \code{spoke_quantile_coverage_min_per_bin_per_refit}, \code{multi_spoke_mode},
-\code{min_cross_set_pairs_per_spoke_per_refit}, and \code{cross_set_utility}.
+\code{min_cross_set_pairs_per_spoke_per_refit}, \code{cross_set_utility},
+\code{phase_a_mode}, \code{phase_a_import_failure_policy},
+\code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
+\code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts}, and
+\code{phase_a_set_source}.
 Unknown fields and invalid values abort with an actionable error.}
 
 \item{btl_config}{Optional named list overriding BTL refit cadence, stopping

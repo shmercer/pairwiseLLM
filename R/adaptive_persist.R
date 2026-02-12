@@ -9,7 +9,8 @@
     round_log = file.path(session_dir, "round_log.rds"),
     metadata = file.path(session_dir, "metadata.rds"),
     btl_fit = file.path(session_dir, "btl_fit.rds"),
-    item_log_dir = file.path(session_dir, "item_log")
+    item_log_dir = file.path(session_dir, "item_log"),
+    phase_a_artifact_dir = file.path(session_dir, "phase_a_artifacts")
   )
 }
 
@@ -368,7 +369,8 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
       paths$round_log,
       paths$metadata,
       paths$btl_fit,
-      paths$item_log_dir
+      paths$item_log_dir,
+      paths$phase_a_artifact_dir
     ))
   } else {
     if (is.null(state$btl_fit) && file.exists(paths$btl_fit)) {
@@ -376,6 +378,9 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     }
     if (dir.exists(paths$item_log_dir)) {
       unlink(paths$item_log_dir, recursive = TRUE, force = TRUE)
+    }
+    if (dir.exists(paths$phase_a_artifact_dir)) {
+      unlink(paths$phase_a_artifact_dir, recursive = TRUE, force = TRUE)
     }
   }
 
@@ -397,6 +402,8 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
   if (isTRUE(state$config$persist_item_log)) {
     .adaptive_write_item_log_files(state$item_log, paths$item_log_dir)
   }
+  phase_a_artifacts <- state$linking$phase_a$artifacts %||% list()
+  .adaptive_write_phase_a_artifacts(phase_a_artifacts, paths$phase_a_artifact_dir)
 
   invisible(session_dir)
 }
@@ -453,6 +460,17 @@ load_adaptive_session <- function(session_dir) {
     state$item_log <- item_log_list
     state$config$persist_item_log <- TRUE
   }
+  phase_a_artifacts <- .adaptive_read_phase_a_artifacts(paths$phase_a_artifact_dir)
+  if (length(phase_a_artifacts) > 0L) {
+    state$linking <- state$linking %||% list()
+    state$linking$phase_a <- state$linking$phase_a %||% list(
+      set_status = .adaptive_phase_a_empty_state(unique(as.integer(state$items$set_id))),
+      artifacts = list(),
+      ready_for_phase_b = FALSE,
+      phase = "phase_a"
+    )
+    state$linking$phase_a$artifacts <- phase_a_artifacts
+  }
 
   ids <- as.character(state$item_ids %||% character())
   if (length(ids) == 0L) {
@@ -481,5 +499,6 @@ load_adaptive_session <- function(session_dir) {
   }
 
   state$config$session_dir <- session_dir
+  state <- .adaptive_phase_a_prepare(state)
   state
 }
