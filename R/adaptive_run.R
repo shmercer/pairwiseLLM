@@ -253,7 +253,11 @@
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,
 #'   `spoke_quantile_coverage_min_per_bin_per_refit`, `multi_spoke_mode`,
-#'   `min_cross_set_pairs_per_spoke_per_refit`, `cross_set_utility`}{Linking
+#'   `min_cross_set_pairs_per_spoke_per_refit`, `cross_set_utility`,
+#'   `phase_a_mode`, `phase_a_import_failure_policy`,
+#'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
+#'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`,
+#'   `phase_a_set_source`}{Linking
 #'   threshold and control placeholders validated for future linking workflows.}
 #'   }
 #'   Unknown fields and invalid values abort with an actionable error.
@@ -311,6 +315,7 @@ adaptive_rank_start <- function(items,
   state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state$controller <- .adaptive_controller_resolve(state)
+  state <- .adaptive_phase_a_prepare(state)
   state$round <- .adaptive_new_round_state(
     item_ids = state$item_ids,
     round_id = 1L,
@@ -394,7 +399,11 @@ adaptive_rank_start <- function(items,
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,
 #'   `spoke_quantile_coverage_min_per_bin_per_refit`, `multi_spoke_mode`,
-#'   `min_cross_set_pairs_per_spoke_per_refit`, and `cross_set_utility`.
+#'   `min_cross_set_pairs_per_spoke_per_refit`, `cross_set_utility`,
+#'   `phase_a_mode`, `phase_a_import_failure_policy`,
+#'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
+#'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`, and
+#'   `phase_a_set_source`.
 #'   Unknown fields and invalid values abort with an actionable error.
 #' @param btl_config Optional named list overriding BTL refit cadence, stopping
 #'   thresholds, and selected round-log diagnostics. Supported fields:
@@ -664,6 +673,8 @@ adaptive_rank_run_live <- function(state,
     state$config$persist_item_log <- isTRUE(persist_item_log)
   }
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
+  state <- .adaptive_phase_a_prepare(state)
+  .adaptive_phase_a_gate_or_abort(state)
 
   cfg <- .adaptive_progress_config(
     progress = progress,
