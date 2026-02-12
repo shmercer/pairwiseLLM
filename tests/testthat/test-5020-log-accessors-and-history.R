@@ -20,21 +20,7 @@ test_that("adaptive log accessors and history return canonical shapes", {
   expect_true(tibble::is_tibble(logs$round_log))
   expect_true(is.list(logs$item_log))
   if (length(logs$item_log) > 0L) {
-    expected_item_cols <- c(
-      "refit_id",
-      "item_id",
-      "theta_mean",
-      "theta_p2.5",
-      "theta_p5",
-      "theta_p50",
-      "theta_p95",
-      "theta_p97.5",
-      "theta_sd",
-      "rank_mean",
-      "degree",
-      "pos_count_A",
-      "pos_count_B"
-    )
+    expected_item_cols <- pairwiseLLM:::.adaptive_item_log_columns()
     expect_true(all(vapply(logs$item_log, tibble::is_tibble, logical(1))))
     expect_true(all(vapply(
       logs$item_log,
@@ -49,21 +35,7 @@ test_that("adaptive log accessors and history return canonical shapes", {
   expect_true(all(c("refit_id", "round_id_at_refit", "step_id_at_refit") %in% names(round_log)))
 
   item_log <- adaptive_item_log(state)
-  required_cols <- c(
-    "refit_id",
-    "item_id",
-    "theta_mean",
-    "theta_p2.5",
-    "theta_p5",
-    "theta_p50",
-    "theta_p95",
-    "theta_p97.5",
-    "theta_sd",
-    "rank_mean",
-    "degree",
-    "pos_count_A",
-    "pos_count_B"
-  )
+  required_cols <- pairwiseLLM:::.adaptive_item_log_columns()
   expect_true(all(required_cols %in% names(item_log)))
   expect_equal(nrow(item_log), state$n_items)
   expect_equal(sort(unique(item_log$item_id)), sort(as.character(state$item_ids)))

@@ -556,8 +556,64 @@ test_that("adaptive state and trueskill validators cover additional edge branche
     pairwiseLLM:::.adaptive_validate_controller_config(list(p_long_low = 0.8, p_long_high = 0.2), 5L),
     "strictly less"
   )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(run_mode = "bad_mode"),
+      5L
+    ),
+    "must be one of"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(link_transform_mode = "bad_mode"),
+      5L
+    ),
+    "must be one of"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(cross_set_utility = "entropy"),
+      5L
+    ),
+    "must be one of"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(run_mode = "link_multi_spoke"),
+      5L,
+      set_ids = c(1L, 1L, 1L)
+    ),
+    "require multi-set input"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(run_mode = "link_multi_spoke", multi_spoke_mode = "concurrent", hub_lock_mode = "free"),
+      5L,
+      set_ids = c(1L, 2L, 2L)
+    ),
+    "must be `hard_lock` or `soft_lock`"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(run_mode = "link_one_spoke", hub_id = 1L),
+      5L,
+      set_ids = c(1L, 2L, 3L)
+    ),
+    "exactly one spoke set"
+  )
   cfg_ok <- pairwiseLLM:::.adaptive_validate_controller_config(list(boundary_k = 3L, p_long_low = 0.1, p_long_high = 0.9), 5L)
   expect_identical(cfg_ok$boundary_k, 3L)
+  cfg_link_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
+    list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      hub_lock_mode = "soft_lock"
+    ),
+    5L,
+    set_ids = c(1L, 2L, 3L)
+  )
+  expect_identical(cfg_link_ok$hub_id, 1L)
 
   resolved_num <- pairwiseLLM:::.adaptive_controller_resolve(5L)
   expect_true(is.list(resolved_num))
@@ -705,4 +761,20 @@ test_that("adaptive state/trueskill additional scalar and validator branches", {
   expect_error(pairwiseLLM:::update_trueskill_state("x", "a", "b"), "must inherit")
   expect_error(pairwiseLLM:::.validate_trueskill_scalar("x", "mu0", TRUE), "finite numeric")
   expect_error(pairwiseLLM:::.validate_trueskill_scalar(0, "sigma0", FALSE), "must be > 0")
+})
+
+test_that("adaptive_rank_start remains deterministic with multi-set identifiers", {
+  items <- tibble::tibble(
+    item_id = c("a", "b", "c", "d"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("ga", "gb", "gc", "gd")
+  )
+  withr::local_seed(99)
+  s1 <- pairwiseLLM::adaptive_rank_start(items, seed = 123L)
+  withr::local_seed(99)
+  s2 <- pairwiseLLM::adaptive_rank_start(items, seed = 123L)
+
+  expect_equal(s1$warm_start_pairs, s2$warm_start_pairs)
+  expect_equal(s1$set_ids, s2$set_ids)
+  expect_equal(s1$global_item_ids, s2$global_item_ids)
 })
