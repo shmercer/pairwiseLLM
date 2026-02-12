@@ -320,3 +320,46 @@ test_that("phase A helper branch guards and edge paths are exercised", {
   .adaptive_write_phase_a_artifacts(list(`x` = list(set_id = NA_integer_)), artifact_dir)
   expect_equal(length(list.files(artifact_dir, full.names = TRUE)), 0L)
 })
+
+test_that("resume preserves persisted phase A artifacts for linking gate", {
+  state <- make_phase_a_ready_state()
+  judge <- make_deterministic_judge("i_wins")
+
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("built_in_run", "built_in_run"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = art1, `2` = art2),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b"
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir = session_dir, overwrite = TRUE)
+  restored <- load_adaptive_session(session_dir)
+  restored$btl_fit <- NULL
+
+  expect_no_error(
+    adaptive_rank_run_live(
+      restored,
+      judge,
+      n_steps = 1L,
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        phase_a_mode = "import",
+        phase_a_artifacts = list()
+      ),
+      progress = "none"
+    )
+  )
+})

@@ -337,7 +337,24 @@
   out <- state
   controller <- .adaptive_controller_resolve(out)
   set_ids <- as.integer(sort(unique(out$items$set_id)))
+  persisted_map <- list()
+  persisted_raw <- out$linking$phase_a$artifacts %||% list()
+  if (is.list(persisted_raw) && length(persisted_raw) > 0L) {
+    for (nm in names(persisted_raw)) {
+      art <- persisted_raw[[nm]]
+      set_id <- as.integer(art$set_id %||% suppressWarnings(as.integer(nm)))
+      if (!is.na(set_id)) {
+        persisted_map[[as.character(set_id)]] <- art
+      }
+    }
+  }
+
   import_map <- .adaptive_phase_a_collect_import_map(controller)
+  for (set_key in names(persisted_map)) {
+    if (is.null(import_map[[set_key]])) {
+      import_map[[set_key]] <- persisted_map[[set_key]]
+    }
+  }
   sources <- .adaptive_phase_a_resolve_set_sources(controller, set_ids = set_ids, import_map = import_map)
   policy <- as.character(controller$phase_a_import_failure_policy %||% "fail_fast")
 
@@ -351,8 +368,32 @@
 
     status <- "pending"
     message <- NA_character_
+    persisted <- persisted_map[[set_key]] %||% NULL
 
-    if (identical(source, "import")) {
+    if (!is.null(persisted)) {
+      persisted_ok <- tryCatch(
+        {
+          .adaptive_phase_a_validate_imported_artifact(
+            persisted,
+            out,
+            set_id = set_id,
+            controller = controller
+          )
+          TRUE
+        },
+        error = function(e) {
+          message <<- paste0("persisted_invalid: ", conditionMessage(e))
+          FALSE
+        }
+      )
+      if (isTRUE(persisted_ok)) {
+        artifacts[[set_key]] <- persisted
+        status <- "ready"
+        message <- "persisted"
+      }
+    }
+
+    if (identical(source, "import") && !identical(status, "ready")) {
       artifact <- import_map[[set_key]] %||% NULL
       if (is.null(artifact)) {
         status <- "failed"
