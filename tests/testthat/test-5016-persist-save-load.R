@@ -147,3 +147,74 @@ test_that("validate_session_dir rejects round_log schema drift for quota fields"
     "missing required columns"
   )
 })
+
+test_that("load_adaptive_session accepts persisted item logs with current schema", {
+  items <- make_test_items(6)
+  state <- adaptive_rank_start(items, persist_item_log = TRUE)
+  judge <- make_deterministic_judge("i_wins")
+  stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 4L,
+    fit_fn = stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L),
+    progress = "none"
+  )
+  expect_gte(length(state$item_log), 1L)
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  restored <- load_adaptive_session(session_dir)
+  expect_true(isTRUE(restored$config$persist_item_log))
+  expect_gte(length(restored$item_log), 1L)
+  expect_equal(
+    names(adaptive_item_log(restored, refit_id = 1L)),
+    pairwiseLLM:::.adaptive_item_log_columns()
+  )
+})
+
+test_that("validate_session_dir accepts legacy item log schema for resume", {
+  items <- make_test_items(6)
+  state <- adaptive_rank_start(items, persist_item_log = TRUE)
+  judge <- make_deterministic_judge("i_wins")
+  stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 4L,
+    fit_fn = stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L),
+    progress = "none"
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  legacy_cols <- c(
+    "refit_id",
+    "item_id",
+    "theta_mean",
+    "theta_p2.5",
+    "theta_p5",
+    "theta_p50",
+    "theta_p95",
+    "theta_p97.5",
+    "theta_sd",
+    "rank_mean",
+    "degree",
+    "pos_count_A",
+    "pos_count_B"
+  )
+  item_path <- file.path(session_dir, "item_log", "refit_0001.rds")
+  legacy_item <- readRDS(item_path)
+  legacy_item <- legacy_item[, legacy_cols, drop = FALSE]
+  saveRDS(legacy_item, item_path)
+
+  expect_silent(validate_session_dir(session_dir))
+})
