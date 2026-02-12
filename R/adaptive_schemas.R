@@ -490,7 +490,13 @@ validate_state <- function(state) {
     run_mode = "within_set",
     hub_id = 1L,
     spoke_ids = setdiff(unique(as.integer(items$set_id)), 1L),
-    is_multi_set = length(unique(as.integer(items$set_id))) > 1L
+    is_multi_set = length(unique(as.integer(items$set_id))) > 1L,
+    phase_a = list(
+      set_status = .adaptive_phase_a_empty_state(unique(as.integer(items$set_id))),
+      artifacts = list(),
+      ready_for_phase_b = FALSE,
+      phase = "phase_a"
+    )
   )
   if (!is.list(linking)) {
     rlang::abort("`state$linking` must be a list.")
@@ -529,6 +535,20 @@ validate_state <- function(state) {
   }
   if (!is.data.frame(state$history_pairs)) {
     rlang::abort("`state$history_pairs` must be a data frame.")
+  }
+  phase_a <- linking$phase_a %||% list()
+  if (!is.list(phase_a)) {
+    rlang::abort("`state$linking$phase_a` must be a list.")
+  }
+  if (!is.data.frame(phase_a$set_status %||% tibble::tibble())) {
+    rlang::abort("`state$linking$phase_a$set_status` must be a data frame.")
+  }
+  if (!is.list(phase_a$artifacts %||% list())) {
+    rlang::abort("`state$linking$phase_a$artifacts` must be a list.")
+  }
+  phase_val <- as.character(phase_a$phase %||% "phase_a")
+  if (!phase_val %in% c("phase_a", "phase_b")) {
+    rlang::abort("`state$linking$phase_a$phase` must be phase_a or phase_b.")
   }
 
   invisible(state)

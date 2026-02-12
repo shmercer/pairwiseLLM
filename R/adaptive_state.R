@@ -109,6 +109,13 @@
     multi_spoke_mode = "independent",
     min_cross_set_pairs_per_spoke_per_refit = 5L,
     cross_set_utility = "p_times_1_minus_p",
+    phase_a_mode = "run",
+    phase_a_import_failure_policy = "fail_fast",
+    phase_a_required_reliability_min = 0.80,
+    phase_a_compatible_model_ids = "btl_e_b",
+    phase_a_compatible_config_hashes = character(),
+    phase_a_artifacts = list(),
+    phase_a_set_source = character(),
     reliability_EAP = NA_real_,
     ts_btl_rank_spearman = NA_real_
   )
@@ -152,7 +159,14 @@
     "spoke_quantile_coverage_min_per_bin_per_refit",
     "multi_spoke_mode",
     "min_cross_set_pairs_per_spoke_per_refit",
-    "cross_set_utility"
+    "cross_set_utility",
+    "phase_a_mode",
+    "phase_a_import_failure_policy",
+    "phase_a_required_reliability_min",
+    "phase_a_compatible_model_ids",
+    "phase_a_compatible_config_hashes",
+    "phase_a_artifacts",
+    "phase_a_set_source"
   )
 }
 
@@ -296,6 +310,38 @@
     Inf
   )
   out$cross_set_utility <- read_choice("cross_set_utility", "p_times_1_minus_p")
+  out$phase_a_mode <- read_choice("phase_a_mode", c("run", "import", "mixed"))
+  out$phase_a_import_failure_policy <- read_choice(
+    "phase_a_import_failure_policy",
+    c("fail_fast", "fallback_to_run")
+  )
+  out$phase_a_required_reliability_min <- read_double("phase_a_required_reliability_min", 0, 1)
+
+  if (!is.null(out$phase_a_compatible_model_ids)) {
+    if (!is.character(out$phase_a_compatible_model_ids) ||
+      any(is.na(out$phase_a_compatible_model_ids) | out$phase_a_compatible_model_ids == "")) {
+      rlang::abort("`adaptive_config$phase_a_compatible_model_ids` must be a non-empty character vector.")
+    }
+  }
+  if (!is.null(out$phase_a_compatible_config_hashes)) {
+    if (!is.character(out$phase_a_compatible_config_hashes) ||
+      any(is.na(out$phase_a_compatible_config_hashes) | out$phase_a_compatible_config_hashes == "")) {
+      rlang::abort("`adaptive_config$phase_a_compatible_config_hashes` must be a character vector.")
+    }
+  }
+  if (!is.null(out$phase_a_artifacts) && !is.list(out$phase_a_artifacts)) {
+    rlang::abort("`adaptive_config$phase_a_artifacts` must be a named list.")
+  }
+  if (!is.null(out$phase_a_set_source)) {
+    if (!is.character(out$phase_a_set_source) || is.null(names(out$phase_a_set_source)) ||
+      any(names(out$phase_a_set_source) == "")) {
+      rlang::abort("`adaptive_config$phase_a_set_source` must be a named character vector.")
+    }
+    allowed_sources <- c("run", "import")
+    if (!all(out$phase_a_set_source %in% allowed_sources)) {
+      rlang::abort("`adaptive_config$phase_a_set_source` values must be `run` or `import`.")
+    }
+  }
 
   if (!is.null(out$p_long_low) &&
     !is.null(out$p_long_high) &&
@@ -378,7 +424,13 @@
     run_mode = as.character(controller$run_mode),
     hub_id = hub_id,
     spoke_ids = as.integer(spoke_ids),
-    is_multi_set = length(set_ids) > 1L
+    is_multi_set = length(set_ids) > 1L,
+    phase_a = out$linking$phase_a %||% list(
+      set_status = .adaptive_phase_a_empty_state(set_ids),
+      artifacts = list(),
+      ready_for_phase_b = FALSE,
+      phase = "phase_a"
+    )
   )
   out
 }
@@ -601,7 +653,13 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         run_mode = "within_set",
         hub_id = 1L,
         spoke_ids = integer(),
-        is_multi_set = length(unique(set_ids)) > 1L
+        is_multi_set = length(unique(set_ids)) > 1L,
+        phase_a = list(
+          set_status = .adaptive_phase_a_empty_state(unique(set_ids)),
+          artifacts = list(),
+          ready_for_phase_b = FALSE,
+          phase = "phase_a"
+        )
       ),
       meta = list(
         schema_version = "adaptive-session",
