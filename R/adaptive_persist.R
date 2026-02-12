@@ -116,6 +116,71 @@ read_log <- function(path) {
   log_tbl
 }
 
+.adaptive_item_log_current_schema <- function() {
+  cols <- .adaptive_item_log_columns()
+  int_cols <- c("refit_id", "set_id", "rank_global_eap", "degree", "pos_count_A", "pos_count_B")
+  lgl_cols <- c("is_hub_item", "is_spoke_item")
+  types <- vapply(
+    cols,
+    function(col) {
+      if (col %in% int_cols) {
+        return("integer")
+      }
+      if (identical(col, "item_id")) {
+        return("character")
+      }
+      if (col %in% lgl_cols) {
+        return("logical")
+      }
+      "double"
+    },
+    character(1)
+  )
+  stats::setNames(unname(types), cols)
+}
+
+.adaptive_item_log_legacy_schema <- function() {
+  c(
+    refit_id = "integer",
+    item_id = "character",
+    theta_mean = "double",
+    `theta_p2.5` = "double",
+    `theta_p5` = "double",
+    `theta_p50` = "double",
+    `theta_p95` = "double",
+    `theta_p97.5` = "double",
+    theta_sd = "double",
+    rank_mean = "double",
+    degree = "integer",
+    pos_count_A = "integer",
+    pos_count_B = "integer"
+  )
+}
+
+.adaptive_validate_item_log_resume_schema <- function(item_log, name) {
+  schemas <- list(
+    .adaptive_item_log_current_schema(),
+    .adaptive_item_log_legacy_schema()
+  )
+  for (schema in schemas) {
+    ok <- tryCatch(
+      {
+        .adaptive_validate_log_schema(item_log, schema, name)
+        TRUE
+      },
+      error = function(e) FALSE
+    )
+    if (isTRUE(ok)) {
+      return(invisible(NULL))
+    }
+  }
+  rlang::abort(paste0(
+    "`",
+    name,
+    "` does not match a supported item log schema for resume."
+  ))
+}
+
 .adaptive_validate_state_for_resume <- function(state) {
   required <- c(
     "item_ids",
@@ -245,25 +310,9 @@ validate_session_dir <- function(session_dir) {
   .adaptive_validate_log_schema(round_log, schema_round_log, "round_log")
   item_log_list <- .adaptive_read_item_log_files(paths$item_log_dir)
   if (length(item_log_list) > 0L) {
-    item_schema <- c(
-      refit_id = "integer",
-      item_id = "character",
-      theta_mean = "double",
-      `theta_p2.5` = "double",
-      `theta_p5` = "double",
-      `theta_p50` = "double",
-      `theta_p95` = "double",
-      `theta_p97.5` = "double",
-      theta_sd = "double",
-      rank_mean = "double",
-      degree = "integer",
-      pos_count_A = "integer",
-      pos_count_B = "integer"
-    )
     for (idx in seq_along(item_log_list)) {
-      .adaptive_validate_log_schema(
+      .adaptive_validate_item_log_resume_schema(
         item_log_list[[idx]],
-        item_schema,
         paste0("item_log[[", idx, "]]")
       )
     }
