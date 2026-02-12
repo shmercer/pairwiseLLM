@@ -68,6 +68,7 @@ Collate:
     'adaptive_btl_refit.R'
     'adaptive_candidates.R'
     'adaptive_constraints.R'
+    'adaptive_linking_phase_a.R'
     'adaptive_logs.R'
     'adaptive_persist.R'
     'adaptive_print.R'
