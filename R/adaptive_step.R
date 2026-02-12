@@ -158,6 +158,13 @@ validate_judge_result <- function(result, A_id, B_id) {
 #' @noRd
 apply_step_update <- function(state, step) {
   out <- state
+  if (!all(names(schema_step_log) %in% names(out$step_log))) {
+    missing <- setdiff(names(schema_step_log), names(out$step_log))
+    for (col in missing) {
+      out$step_log[[col]] <- rep_len(.adaptive_schema_typed_na(schema_step_log[[col]]), nrow(out$step_log))
+    }
+    out$step_log <- out$step_log[, names(schema_step_log), drop = FALSE]
+  }
   out$step_log <- append_step_log(out$step_log, step$row)
 
   if (!isTRUE(step$is_valid)) {
@@ -251,6 +258,50 @@ run_one_step <- function(state, judge, ...) {
     NA_integer_
   }
 
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  link_transform_mode <- as.character(controller$link_transform_mode %||% NA_character_)
+  utility_mode <- as.character(controller$cross_set_utility %||% NA_character_)
+  hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
+  hub_lock_kappa <- as.double(controller$hub_lock_kappa %||% NA_real_)
+  set_i <- if (!is.na(selection$i)) {
+    as.integer(state$items$set_id[[selection$i]])
+  } else {
+    NA_integer_
+  }
+  set_j <- if (!is.na(selection$j)) {
+    as.integer(state$items$set_id[[selection$j]])
+  } else {
+    NA_integer_
+  }
+  is_cross_set <- if (!is.na(set_i) && !is.na(set_j)) {
+    isTRUE(set_i != set_j)
+  } else {
+    NA
+  }
+  link_spoke_id <- if (isTRUE(is_cross_set) && !is.na(hub_id)) {
+    if (identical(set_i, hub_id)) {
+      set_j
+    } else if (identical(set_j, hub_id)) {
+      set_i
+    } else {
+      NA_integer_
+    }
+  } else {
+    NA_integer_
+  }
+  link_stage <- if (selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link")) {
+    selection$round_stage
+  } else {
+    NA_character_
+  }
+  cross_set_utility_pre <- if (isTRUE(is_cross_set)) {
+    as.double(selection$U0_ij %||% NA_real_)
+  } else {
+    NA_real_
+  }
+
   step_row <- list(
     step_id = step_id,
     timestamp = timestamp,
@@ -302,7 +353,24 @@ run_one_step <- function(state, judge, ...) {
     p_ij = if (isTRUE(is_valid)) selection$p_ij else NA_real_,
     U0_ij = if (isTRUE(is_valid)) selection$U0_ij else NA_real_,
     star_cap_rejects = selection$star_cap_rejects,
-    star_cap_reject_items = selection$star_cap_reject_items
+    star_cap_reject_items = selection$star_cap_reject_items,
+    set_i = set_i,
+    set_j = set_j,
+    is_cross_set = is_cross_set,
+    link_spoke_id = link_spoke_id,
+    run_mode = run_mode,
+    link_stage = link_stage,
+    delta_spoke_estimate_pre = NA_real_,
+    delta_spoke_sd_pre = NA_real_,
+    dist_stratum_global = NA_integer_,
+    posterior_win_prob_pre = as.double(selection$p_ij %||% NA_real_),
+    link_transform_mode = link_transform_mode,
+    cross_set_utility_pre = cross_set_utility_pre,
+    utility_mode = utility_mode,
+    log_alpha_spoke_estimate_pre = NA_real_,
+    log_alpha_spoke_sd_pre = NA_real_,
+    hub_lock_mode = hub_lock_mode,
+    hub_lock_kappa = hub_lock_kappa
   )
 
   out <- apply_step_update(state, list(
