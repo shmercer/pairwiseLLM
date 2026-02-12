@@ -8,6 +8,8 @@ test_that("new_adaptive_state builds a stable adaptive scaffold", {
   expect_equal(state$meta$schema_version, "adaptive-session")
   expect_equal(state$meta$now_fn(), now_fn())
   expect_equal(state$item_ids, as.character(items$item_id))
+  expect_equal(state$items$set_id, rep(1L, nrow(items)))
+  expect_equal(state$items$global_item_id, as.character(items$item_id))
   expect_equal(state$n_items, 3L)
   expect_true(tibble::is_tibble(state$history_pairs))
   expect_true(inherits(state$trueskill_state, "trueskill_state"))
@@ -34,4 +36,35 @@ test_that("new_adaptive_state accepts character item_id values", {
   state <- pairwiseLLM:::new_adaptive_state(items)
   expect_equal(state$item_ids, c("S01", "S02"))
   expect_equal(unname(state$item_index), c(1L, 2L))
+})
+
+test_that("new_adaptive_state keeps multi-set identifiers", {
+  items <- tibble::tibble(
+    item_id = c("a", "b", "c", "d"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("g_a", "g_b", "g_c", "g_d")
+  )
+  state <- pairwiseLLM:::new_adaptive_state(items)
+  expect_equal(state$items$set_id, c(1L, 1L, 2L, 2L))
+  expect_equal(state$items$global_item_id, c("g_a", "g_b", "g_c", "g_d"))
+})
+
+test_that("adaptive_rank_start stores linking run metadata", {
+  items <- tibble::tibble(
+    item_id = c("a", "b", "c", "d"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("g_a", "g_b", "g_c", "g_d")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 1L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L
+    )
+  )
+  expect_equal(state$linking$run_mode, "link_one_spoke")
+  expect_equal(state$linking$hub_id, 1L)
+  expect_equal(state$linking$spoke_ids, 2L)
+  expect_true(state$linking$is_multi_set)
 })

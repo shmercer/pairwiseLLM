@@ -87,7 +87,6 @@ test_that("fit_elo_model errors helpfully when EloChoice is not installed", {
   skip_if_not_installed("withr")
 
   # Force the missing-package branch regardless of local installation.
-  withr::local_package("pairwiseLLM")
   mockery::stub(fit_elo_model, "requireNamespace", function(...) FALSE)
 
   data("example_writing_pairs", package = "pairwiseLLM")
@@ -245,8 +244,6 @@ test_that("fit_elo_model errors if EloChoice output lacks a valid ratmat matrix"
   elo_data <- build_elo_data(example_writing_pairs)
 
   # Stub EloChoice::elochoice() to return an object with invalid ratmat
-  withr::local_package("pairwiseLLM")
-
   mockery::stub(
     where = fit_elo_model,
     what  = "EloChoice::elochoice",

@@ -34,6 +34,31 @@
   }
   items$item_id <- item_id
 
+  if (!"set_id" %in% names(items)) {
+    items$set_id <- rep.int(1L, nrow(items))
+  }
+  if (!.adaptive_is_integerish(items$set_id) || any(is.na(items$set_id))) {
+    rlang::abort("`items$set_id` must be non-missing integer-like values.")
+  }
+  items$set_id <- as.integer(items$set_id)
+  if (any(items$set_id < 1L)) {
+    rlang::abort("`items$set_id` must be >= 1.")
+  }
+
+  if (!"global_item_id" %in% names(items)) {
+    items$global_item_id <- as.character(items$item_id)
+  }
+  global_item_id <- as.character(items$global_item_id)
+  if (any(is.na(global_item_id) | global_item_id == "")) {
+    rlang::abort("`items$global_item_id` must be non-missing.")
+  }
+  if (anyDuplicated(global_item_id)) {
+    rlang::abort("`items$global_item_id` must be unique.")
+  }
+  items$global_item_id <- global_item_id
+
+  items <- dplyr::relocate(items, "set_id", "global_item_id", .after = "item_id")
+
   items
 }
 
@@ -62,6 +87,28 @@
     boundary_frac = as.double(defaults$boundary_frac),
     p_star_override_margin = as.double(defaults$p_star_override_margin),
     star_override_budget_per_round = as.integer(defaults$star_override_budget_per_round),
+    run_mode = "within_set",
+    hub_id = 1L,
+    link_transform_mode = "auto",
+    link_refit_mode = "shift_only",
+    judge_param_mode = "global_shared",
+    hub_lock_mode = "soft_lock",
+    hub_lock_kappa = 0.75,
+    link_identified_reliability_min = 0.80,
+    link_stop_reliability_min = 0.90,
+    link_rank_corr_min = 0.90,
+    delta_sd_max = 0.10,
+    delta_change_max = 0.05,
+    log_alpha_sd_max = 0.10,
+    log_alpha_change_max = 0.05,
+    cross_set_ppc_mae_max = 0.07,
+    link_transform_escalation_refits_required = 2L,
+    link_transform_escalation_is_one_way = TRUE,
+    spoke_quantile_coverage_bins = 3L,
+    spoke_quantile_coverage_min_per_bin_per_refit = 1L,
+    multi_spoke_mode = "independent",
+    min_cross_set_pairs_per_spoke_per_refit = 5L,
+    cross_set_utility = "p_times_1_minus_p",
     reliability_EAP = NA_real_,
     ts_btl_rank_spearman = NA_real_
   )
@@ -83,13 +130,35 @@
     "boundary_window",
     "boundary_frac",
     "p_star_override_margin",
-    "star_override_budget_per_round"
+    "star_override_budget_per_round",
+    "run_mode",
+    "hub_id",
+    "link_transform_mode",
+    "link_refit_mode",
+    "judge_param_mode",
+    "hub_lock_mode",
+    "hub_lock_kappa",
+    "link_identified_reliability_min",
+    "link_stop_reliability_min",
+    "link_rank_corr_min",
+    "delta_sd_max",
+    "delta_change_max",
+    "log_alpha_sd_max",
+    "log_alpha_change_max",
+    "cross_set_ppc_mae_max",
+    "link_transform_escalation_refits_required",
+    "link_transform_escalation_is_one_way",
+    "spoke_quantile_coverage_bins",
+    "spoke_quantile_coverage_min_per_bin_per_refit",
+    "multi_spoke_mode",
+    "min_cross_set_pairs_per_spoke_per_refit",
+    "cross_set_utility"
   )
 }
 
 #' @keywords internal
 #' @noRd
-.adaptive_validate_controller_config <- function(adaptive_config, n_items) {
+.adaptive_validate_controller_config <- function(adaptive_config, n_items, set_ids = NULL) {
   if (is.null(adaptive_config)) {
     return(list())
   }
@@ -152,6 +221,33 @@
     }
     value
   }
+  read_logical <- function(name) {
+    value <- out[[name]]
+    if (is.null(value)) {
+      return(NULL)
+    }
+    if (!is.logical(value) || length(value) != 1L || is.na(value)) {
+      rlang::abort(paste0("`adaptive_config$", name, "` must be TRUE or FALSE."))
+    }
+    isTRUE(value)
+  }
+  read_choice <- function(name, choices) {
+    value <- out[[name]]
+    if (is.null(value)) {
+      return(NULL)
+    }
+    if (!is.character(value) || length(value) != 1L || is.na(value) || value == "") {
+      rlang::abort(paste0("`adaptive_config$", name, "` must be a single string value."))
+    }
+    if (!value %in% choices) {
+      rlang::abort(paste0(
+        "`adaptive_config$", name, "` must be one of: ",
+        paste(choices, collapse = ", "),
+        "."
+      ))
+    }
+    value
+  }
 
   out$global_identified_reliability_min <- read_double("global_identified_reliability_min", 0, 1)
   out$global_identified_rank_corr_min <- read_double("global_identified_rank_corr_min", 0, 1)
@@ -166,6 +262,40 @@
   out$boundary_frac <- read_double("boundary_frac", 0, 1)
   out$p_star_override_margin <- read_double("p_star_override_margin", 0, 0.5)
   out$star_override_budget_per_round <- read_integer("star_override_budget_per_round", 0L, Inf)
+  out$run_mode <- read_choice("run_mode", c("within_set", "link_one_spoke", "link_multi_spoke"))
+  out$hub_id <- read_integer("hub_id", 1L, Inf)
+  out$link_transform_mode <- read_choice("link_transform_mode", c("auto", "shift_only", "shift_scale"))
+  out$link_refit_mode <- read_choice("link_refit_mode", c("shift_only", "joint_refit"))
+  out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
+  out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock", "free"))
+  out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
+  out$link_identified_reliability_min <- read_double("link_identified_reliability_min", 0, 1)
+  out$link_stop_reliability_min <- read_double("link_stop_reliability_min", 0, 1)
+  out$link_rank_corr_min <- read_double("link_rank_corr_min", 0, 1)
+  out$delta_sd_max <- read_double("delta_sd_max", 0, Inf)
+  out$delta_change_max <- read_double("delta_change_max", 0, Inf)
+  out$log_alpha_sd_max <- read_double("log_alpha_sd_max", 0, Inf)
+  out$log_alpha_change_max <- read_double("log_alpha_change_max", 0, Inf)
+  out$cross_set_ppc_mae_max <- read_double("cross_set_ppc_mae_max", 0, 1)
+  out$link_transform_escalation_refits_required <- read_integer(
+    "link_transform_escalation_refits_required",
+    1L,
+    Inf
+  )
+  out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
+  out$spoke_quantile_coverage_bins <- read_integer("spoke_quantile_coverage_bins", 1L, Inf)
+  out$spoke_quantile_coverage_min_per_bin_per_refit <- read_integer(
+    "spoke_quantile_coverage_min_per_bin_per_refit",
+    1L,
+    Inf
+  )
+  out$multi_spoke_mode <- read_choice("multi_spoke_mode", c("independent", "concurrent"))
+  out$min_cross_set_pairs_per_spoke_per_refit <- read_integer(
+    "min_cross_set_pairs_per_spoke_per_refit",
+    1L,
+    Inf
+  )
+  out$cross_set_utility <- read_choice("cross_set_utility", "p_times_1_minus_p")
 
   if (!is.null(out$p_long_low) &&
     !is.null(out$p_long_high) &&
@@ -173,6 +303,31 @@
     rlang::abort("`adaptive_config$p_long_low` must be strictly less than `adaptive_config$p_long_high`.")
   }
 
+  resolved <- utils::modifyList(.adaptive_controller_defaults(n_items), out)
+  run_mode <- resolved$run_mode
+  set_ids <- as.integer(set_ids %||% 1L)
+  n_sets <- length(unique(set_ids))
+  is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  if (isTRUE(is_link_mode) && n_sets < 2L) {
+    rlang::abort("Linking run modes require multi-set input (`items$set_id` with at least two sets).")
+  }
+  if (isTRUE(is_link_mode) && !resolved$hub_id %in% unique(set_ids)) {
+    rlang::abort("`adaptive_config$hub_id` must match one observed `items$set_id` in linking mode.")
+  }
+  if (isTRUE(is_link_mode) && run_mode == "link_one_spoke") {
+    spoke_ids <- setdiff(unique(set_ids), resolved$hub_id)
+    if (length(spoke_ids) != 1L) {
+      rlang::abort("`run_mode = \"link_one_spoke\"` requires exactly one spoke set.")
+    }
+  }
+  if (isTRUE(is_link_mode) &&
+    identical(resolved$multi_spoke_mode, "concurrent") &&
+    !resolved$hub_lock_mode %in% c("hard_lock", "soft_lock")) {
+    rlang::abort(paste0(
+      "`adaptive_config$hub_lock_mode` must be `hard_lock` or `soft_lock` ",
+      "when `adaptive_config$multi_spoke_mode = \"concurrent\"`."
+    ))
+  }
   out
 }
 
@@ -213,14 +368,36 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_sync_linking_meta <- function(state) {
+  out <- state
+  controller <- .adaptive_controller_resolve(out)
+  set_ids <- sort(unique(as.integer(out$items$set_id)))
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  spoke_ids <- setdiff(set_ids, hub_id)
+  out$linking <- list(
+    run_mode = as.character(controller$run_mode),
+    hub_id = hub_id,
+    spoke_ids = as.integer(spoke_ids),
+    is_multi_set = length(set_ids) > 1L
+  )
+  out
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_apply_controller_config <- function(state, adaptive_config = NULL) {
   out <- state
-  overrides <- .adaptive_validate_controller_config(adaptive_config, n_items = out$n_items)
+  overrides <- .adaptive_validate_controller_config(
+    adaptive_config,
+    n_items = out$n_items,
+    set_ids = out$items$set_id
+  )
   if (length(overrides) == 0L) {
-    return(out)
+    return(.adaptive_sync_linking_meta(out))
   }
   out$controller <- utils::modifyList(.adaptive_controller_resolve(out), overrides)
-  .adaptive_sync_round_controller(out)
+  out <- .adaptive_sync_round_controller(out)
+  .adaptive_sync_linking_meta(out)
 }
 
 #' @keywords internal
@@ -369,6 +546,8 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
   }
   items <- .adaptive_state_normalize_items(items)
   item_ids <- as.character(items$item_id)
+  set_ids <- as.integer(items$set_id)
+  global_item_ids <- as.character(items$global_item_id)
   item_index <- stats::setNames(seq_along(item_ids), item_ids)
   history_pairs <- tibble::tibble(
     A_id = character(),
@@ -378,6 +557,8 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
   state <- structure(
     list(
       item_ids = item_ids,
+      global_item_ids = global_item_ids,
+      set_ids = set_ids,
       item_index = item_index,
       n_items = as.integer(length(item_ids)),
       items = items,
@@ -416,6 +597,12 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         )
       ),
       config = list(),
+      linking = list(
+        run_mode = "within_set",
+        hub_id = 1L,
+        spoke_ids = integer(),
+        is_multi_set = length(unique(set_ids)) > 1L
+      ),
       meta = list(
         schema_version = "adaptive-session",
         now_fn = now_fn,

@@ -12,7 +12,12 @@ test_that("canonical log schemas follow the expected column order", {
     "n_candidates_after_duplicates", "n_candidates_after_star_caps", "n_candidates_scored",
     "deg_i", "deg_j", "recent_deg_i", "recent_deg_j",
     "mu_i", "mu_j", "sigma_i", "sigma_j", "p_ij", "U0_ij",
-    "star_cap_rejects", "star_cap_reject_items"
+    "star_cap_rejects", "star_cap_reject_items",
+    "set_i", "set_j", "is_cross_set", "link_spoke_id", "run_mode", "link_stage",
+    "delta_spoke_estimate_pre", "delta_spoke_sd_pre", "dist_stratum_global",
+    "posterior_win_prob_pre", "link_transform_mode", "cross_set_utility_pre",
+    "utility_mode", "log_alpha_spoke_estimate_pre", "log_alpha_spoke_sd_pre",
+    "hub_lock_mode", "hub_lock_kappa"
   )
   expected_round <- c(
     "refit_id", "round_id_at_refit", "step_id_at_refit", "timestamp", "model_variant", "n_items",
@@ -47,7 +52,9 @@ test_that("canonical log schemas follow the expected column order", {
     "stop_decision", "stop_reason"
   )
   expected_item <- c(
-    "refit_id", "item_id", "theta_mean", "theta_p2.5", "theta_p5", "theta_p50",
+    "refit_id", "item_id", "set_id", "theta_raw_eap", "theta_global_eap", "theta_global_sd",
+    "rank_global_eap", "is_hub_item", "is_spoke_item",
+    "theta_mean", "theta_p2.5", "theta_p5", "theta_p50",
     "theta_p95", "theta_p97.5", "theta_sd", "rank_mean", "degree", "pos_count_A", "pos_count_B"
   )
   expected_item_step <- c("step_id", "timestamp", "item_id", "mu", "sigma", "degree")

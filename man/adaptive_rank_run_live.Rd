@@ -40,9 +40,19 @@ behavior. Supported fields:
 \code{global_identified_reliability_min}, \code{global_identified_rank_corr_min},
 \code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
 \code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
-\code{boundary_frac}, \code{p_star_override_margin}, and
-\code{star_override_budget_per_round}. Unknown fields and invalid values abort
-with an actionable error.}
+\code{boundary_frac}, \code{p_star_override_margin},
+\code{star_override_budget_per_round}, and linking scaffolding fields:
+\code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
+\code{judge_param_mode}, \code{hub_lock_mode}, \code{hub_lock_kappa},
+\code{link_identified_reliability_min}, \code{link_stop_reliability_min},
+\code{link_rank_corr_min}, \code{delta_sd_max}, \code{delta_change_max},
+\code{log_alpha_sd_max}, \code{log_alpha_change_max}, \code{cross_set_ppc_mae_max},
+\code{link_transform_escalation_refits_required},
+\code{link_transform_escalation_is_one_way},
+\code{spoke_quantile_coverage_bins},
+\code{spoke_quantile_coverage_min_per_bin_per_refit}, \code{multi_spoke_mode},
+\code{min_cross_set_pairs_per_spoke_per_refit}, and \code{cross_set_utility}.
+Unknown fields and invalid values abort with an actionable error.}
 
 \item{btl_config}{Optional named list overriding BTL refit cadence, stopping
 thresholds, and selected round-log diagnostics. Supported fields:

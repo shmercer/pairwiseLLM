@@ -242,6 +242,19 @@
 #'   boundary-priority controls after global identifiability.}
 #'   \item{`p_star_override_margin`, `star_override_budget_per_round`}{Near-tie
 #'   star-cap override controls.}
+#'   \item{`run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
+#'   `judge_param_mode`, `hub_lock_mode`, `hub_lock_kappa`}{Linking mode
+#'   scaffolding controls. Linking modes require multi-set inputs and valid hub
+#'   assignment.}
+#'   \item{`link_identified_reliability_min`, `link_stop_reliability_min`,
+#'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
+#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_mae_max`,
+#'   `link_transform_escalation_refits_required`,
+#'   `link_transform_escalation_is_one_way`,
+#'   `spoke_quantile_coverage_bins`,
+#'   `spoke_quantile_coverage_min_per_bin_per_refit`, `multi_spoke_mode`,
+#'   `min_cross_set_pairs_per_spoke_per_refit`, `cross_set_utility`}{Linking
+#'   threshold and control placeholders validated for future linking workflows.}
 #'   }
 #'   Unknown fields and invalid values abort with an actionable error.
 #' @param session_dir Optional directory for saving session artifacts.
@@ -370,9 +383,19 @@ adaptive_rank_start <- function(items,
 #'   `global_identified_reliability_min`, `global_identified_rank_corr_min`,
 #'   `p_long_low`, `p_long_high`, `long_taper_mult`, `long_frac_floor`,
 #'   `mid_bonus_frac`, `explore_taper_mult`, `boundary_k`, `boundary_window`,
-#'   `boundary_frac`, `p_star_override_margin`, and
-#'   `star_override_budget_per_round`. Unknown fields and invalid values abort
-#'   with an actionable error.
+#'   `boundary_frac`, `p_star_override_margin`,
+#'   `star_override_budget_per_round`, and linking scaffolding fields:
+#'   `run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
+#'   `judge_param_mode`, `hub_lock_mode`, `hub_lock_kappa`,
+#'   `link_identified_reliability_min`, `link_stop_reliability_min`,
+#'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
+#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_mae_max`,
+#'   `link_transform_escalation_refits_required`,
+#'   `link_transform_escalation_is_one_way`,
+#'   `spoke_quantile_coverage_bins`,
+#'   `spoke_quantile_coverage_min_per_bin_per_refit`, `multi_spoke_mode`,
+#'   `min_cross_set_pairs_per_spoke_per_refit`, and `cross_set_utility`.
+#'   Unknown fields and invalid values abort with an actionable error.
 #' @param btl_config Optional named list overriding BTL refit cadence, stopping
 #'   thresholds, and selected round-log diagnostics. Supported fields:
 #'   \describe{

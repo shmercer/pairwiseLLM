@@ -454,6 +454,76 @@ validate_state <- function(state) {
   if (!is.data.frame(state$items)) {
     rlang::abort("`state$items` must be a data frame.")
   }
+  items <- tibble::as_tibble(state$items)
+  req_item_cols <- c("item_id", "set_id", "global_item_id")
+  missing_item_cols <- setdiff(req_item_cols, names(items))
+  if (length(missing_item_cols) > 0L) {
+    rlang::abort(paste0(
+      "`state$items` must include columns: ",
+      paste(req_item_cols, collapse = ", "),
+      ". Missing: ",
+      paste(missing_item_cols, collapse = ", "),
+      "."
+    ))
+  }
+  if (!is.character(items$item_id)) {
+    rlang::abort("`state$items$item_id` must be character.")
+  }
+  if (!.adaptive_is_integerish(items$set_id) || any(is.na(items$set_id))) {
+    rlang::abort("`state$items$set_id` must be non-missing integer-like values.")
+  }
+  if (!is.character(items$global_item_id) || any(is.na(items$global_item_id) | items$global_item_id == "")) {
+    rlang::abort("`state$items$global_item_id` must be non-missing character values.")
+  }
+  if (anyDuplicated(items$global_item_id)) {
+    rlang::abort("`state$items$global_item_id` must be unique.")
+  }
+  global_item_ids <- state$global_item_ids %||% as.character(items$global_item_id)
+  if (!is.character(global_item_ids) || length(global_item_ids) != length(state$item_ids)) {
+    rlang::abort("`state$global_item_ids` must be character with one value per item.")
+  }
+  set_ids_state <- state$set_ids %||% as.integer(items$set_id)
+  if (!.adaptive_is_integerish(set_ids_state) || length(set_ids_state) != length(state$item_ids)) {
+    rlang::abort("`state$set_ids` must be integer with one value per item.")
+  }
+  linking <- state$linking %||% list(
+    run_mode = "within_set",
+    hub_id = 1L,
+    spoke_ids = setdiff(unique(as.integer(items$set_id)), 1L),
+    is_multi_set = length(unique(as.integer(items$set_id))) > 1L
+  )
+  if (!is.list(linking)) {
+    rlang::abort("`state$linking` must be a list.")
+  }
+  run_mode <- as.character(linking$run_mode %||% NA_character_)
+  if (!run_mode %in% c("within_set", "link_one_spoke", "link_multi_spoke")) {
+    rlang::abort("`state$linking$run_mode` must be within_set, link_one_spoke, or link_multi_spoke.")
+  }
+  if (!.adaptive_is_integerish(linking$hub_id) || length(linking$hub_id) != 1L || is.na(linking$hub_id)) {
+    rlang::abort("`state$linking$hub_id` must be a non-missing integer value.")
+  }
+  set_ids <- unique(as.integer(items$set_id))
+  is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  if (isTRUE(is_link_mode) && length(set_ids) < 2L) {
+    rlang::abort("Linking run modes require at least two unique `set_id` values.")
+  }
+  if (isTRUE(is_link_mode) && !as.integer(linking$hub_id) %in% set_ids) {
+    rlang::abort("`state$linking$hub_id` must match one observed `state$items$set_id` in linking mode.")
+  }
+  if (identical(run_mode, "link_one_spoke")) {
+    spoke_ids <- setdiff(set_ids, as.integer(linking$hub_id))
+    if (length(spoke_ids) != 1L) {
+      rlang::abort("`state$linking$run_mode = \"link_one_spoke\"` requires exactly one spoke set.")
+    }
+  }
+  controller <- .adaptive_controller_resolve(state)
+  if (isTRUE(is_link_mode) &&
+    identical(controller$multi_spoke_mode, "concurrent") &&
+    !controller$hub_lock_mode %in% c("hard_lock", "soft_lock")) {
+    rlang::abort(
+      "`state$controller$hub_lock_mode` must be hard_lock or soft_lock when multi_spoke_mode is concurrent."
+    )
+  }
   if (!is.null(state$trueskill_state)) {
     validate_trueskill_state(state$trueskill_state)
   }

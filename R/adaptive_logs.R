@@ -53,7 +53,24 @@ schema_step_log <- c(
   p_ij = "double",
   U0_ij = "double",
   star_cap_rejects = "integer",
-  star_cap_reject_items = "integer"
+  star_cap_reject_items = "integer",
+  set_i = "integer",
+  set_j = "integer",
+  is_cross_set = "logical",
+  link_spoke_id = "integer",
+  run_mode = "character",
+  link_stage = "character",
+  delta_spoke_estimate_pre = "double",
+  delta_spoke_sd_pre = "double",
+  dist_stratum_global = "integer",
+  posterior_win_prob_pre = "double",
+  link_transform_mode = "character",
+  cross_set_utility_pre = "double",
+  utility_mode = "character",
+  log_alpha_spoke_estimate_pre = "double",
+  log_alpha_spoke_sd_pre = "double",
+  hub_lock_mode = "character",
+  hub_lock_kappa = "double"
 )
 
 schema_round_log <- c(
@@ -236,8 +253,13 @@ append_canonical_row <- function(log_tbl, row, schema, allow_multirow = FALSE) {
   }
   missing_cols <- setdiff(schema_names, names(log_tbl))
   extra_cols <- setdiff(names(log_tbl), schema_names)
-  if (length(missing_cols) > 0L || length(extra_cols) > 0L) {
-    rlang::abort("`log_tbl` must have exactly the canonical columns.")
+  if (length(extra_cols) > 0L) {
+    rlang::abort("`log_tbl` must not include non-canonical columns.")
+  }
+  if (length(missing_cols) > 0L) {
+    for (col in missing_cols) {
+      log_tbl[[col]] <- rep_len(.adaptive_schema_typed_na(schema[[col]]), nrow(log_tbl))
+    }
   }
   log_tbl <- log_tbl[, schema_names, drop = FALSE]
 

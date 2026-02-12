@@ -42,6 +42,19 @@ long-link taper and quota reallocation controls.}
 boundary-priority controls after global identifiability.}
 \item{\code{p_star_override_margin}, \code{star_override_budget_per_round}}{Near-tie
 star-cap override controls.}
+\item{\code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
+\code{judge_param_mode}, \code{hub_lock_mode}, \code{hub_lock_kappa}}{Linking mode
+scaffolding controls. Linking modes require multi-set inputs and valid hub
+assignment.}
+\item{\code{link_identified_reliability_min}, \code{link_stop_reliability_min},
+\code{link_rank_corr_min}, \code{delta_sd_max}, \code{delta_change_max},
+\code{log_alpha_sd_max}, \code{log_alpha_change_max}, \code{cross_set_ppc_mae_max},
+\code{link_transform_escalation_refits_required},
+\code{link_transform_escalation_is_one_way},
+\code{spoke_quantile_coverage_bins},
+\code{spoke_quantile_coverage_min_per_bin_per_refit}, \code{multi_spoke_mode},
+\code{min_cross_set_pairs_per_spoke_per_refit}, \code{cross_set_utility}}{Linking
+threshold and control placeholders validated for future linking workflows.}
 }
 Unknown fields and invalid values abort with an actionable error.}
 }

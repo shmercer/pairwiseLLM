@@ -398,3 +398,49 @@ test_that("validate_state rejects non-adaptive and too-short canonical ids", {
   bad_ids$n_items <- 1L
   expect_error(pairwiseLLM:::validate_state(bad_ids), "at least two item ids")
 })
+
+test_that("validate_state enforces linking identifiers and mode guards", {
+  items <- tibble::tibble(
+    item_id = c("a", "b", "c", "d"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("ga", "gb", "gc", "gd")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 1L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L
+    )
+  )
+  expect_no_error(pairwiseLLM:::validate_state(state))
+
+  bad_global <- state
+  bad_global$items$global_item_id[[1]] <- bad_global$items$global_item_id[[2]]
+  expect_error(pairwiseLLM:::validate_state(bad_global), "global_item_id")
+
+  bad_link <- state
+  bad_link$linking$hub_id <- 99L
+  expect_error(pairwiseLLM:::validate_state(bad_link), "must match one observed")
+
+  bad_run_mode <- state
+  bad_run_mode$linking$run_mode <- "invalid"
+  expect_error(pairwiseLLM:::validate_state(bad_run_mode), "must be within_set, link_one_spoke, or link_multi_spoke")
+
+  bad_items_cols <- state
+  bad_items_cols$items <- dplyr::select(bad_items_cols$items, -set_id)
+  expect_error(pairwiseLLM:::validate_state(bad_items_cols), "must include columns")
+
+  bad_global_ids <- state
+  bad_global_ids$global_item_ids <- "only_one"
+  expect_error(pairwiseLLM:::validate_state(bad_global_ids), "one value per item")
+
+  bad_link_list <- state
+  bad_link_list$linking <- "oops"
+  expect_error(pairwiseLLM:::validate_state(bad_link_list), "must be a list")
+
+  bad_concurrent <- state
+  bad_concurrent$controller$multi_spoke_mode <- "concurrent"
+  bad_concurrent$controller$hub_lock_mode <- "free"
+  expect_error(pairwiseLLM:::validate_state(bad_concurrent), "must be hard_lock or soft_lock")
+})

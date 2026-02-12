@@ -6,6 +6,13 @@
   c(
     "refit_id",
     "item_id",
+    "set_id",
+    "theta_raw_eap",
+    "theta_global_eap",
+    "theta_global_sd",
+    "rank_global_eap",
+    "is_hub_item",
+    "is_spoke_item",
     "theta_mean",
     "theta_p2.5",
     "theta_p5",
@@ -24,6 +31,13 @@
   tibble::tibble(
     refit_id = integer(),
     item_id = character(),
+    set_id = integer(),
+    theta_raw_eap = double(),
+    theta_global_eap = double(),
+    theta_global_sd = double(),
+    rank_global_eap = integer(),
+    is_hub_item = logical(),
+    is_spoke_item = logical(),
     theta_mean = double(),
     theta_p2.5 = double(),
     theta_p5 = double(),
@@ -39,11 +53,14 @@
 }
 
 .adaptive_item_log_na_value <- function(col) {
-  if (col %in% c("refit_id", "degree", "pos_count_A", "pos_count_B")) {
+  if (col %in% c("refit_id", "set_id", "rank_global_eap", "degree", "pos_count_A", "pos_count_B")) {
     return(NA_integer_)
   }
   if (identical(col, "item_id")) {
     return(NA_character_)
+  }
+  if (col %in% c("is_hub_item", "is_spoke_item")) {
+    return(NA)
   }
   NA_real_
 }
@@ -56,6 +73,7 @@
   }
 
   ids <- as.character(state$item_ids)
+  set_id <- as.integer(state$items$set_id[match(ids, as.character(state$items$item_id))])
   if (is.null(colnames(draws))) {
     colnames(draws) <- ids
   }
@@ -74,6 +92,10 @@
   rank_mat <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- ids
   rank_mean <- as.double(colMeans(rank_mat))
+  rank_global_eap <- as.integer(rank(-theta_mean, ties.method = "first"))
+  hub_id <- as.integer((state$linking %||% list())$hub_id %||% 1L)
+  is_hub_item <- as.logical(set_id == hub_id)
+  is_spoke_item <- as.logical(set_id != hub_id)
 
   counts <- .adaptive_pair_counts(.adaptive_history_tbl(state), ids)
   degree <- as.integer(counts$deg[ids])
@@ -83,6 +105,13 @@
   tibble::tibble(
     refit_id = as.integer(refit_id),
     item_id = as.character(ids),
+    set_id = as.integer(set_id),
+    theta_raw_eap = as.double(theta_mean),
+    theta_global_eap = as.double(theta_mean),
+    theta_global_sd = as.double(theta_sd),
+    rank_global_eap = as.integer(rank_global_eap),
+    is_hub_item = as.logical(is_hub_item),
+    is_spoke_item = as.logical(is_spoke_item),
     theta_mean = as.double(theta_mean),
     theta_p2.5 = as.double(theta_quantiles[1L, ]),
     theta_p5 = as.double(theta_quantiles[2L, ]),
@@ -118,6 +147,10 @@
   ids <- as.character(state$item_ids)
   counts <- .adaptive_pair_counts(.adaptive_history_tbl(state), ids)
   idx <- match(as.character(item_log$item_id), ids)
+  if (!"set_id" %in% names(item_log)) {
+    state_set <- state$items$set_id[match(ids, as.character(state$items$item_id))]
+    item_log$set_id <- as.integer(state_set[idx])
+  }
   if (!"pos_count_A" %in% names(item_log)) {
     item_log$pos_count_A <- as.integer(counts$posA[idx])
   }
@@ -138,6 +171,13 @@
   item_log <- item_log[, .adaptive_item_log_columns(), drop = FALSE]
   item_log$refit_id <- as.integer(item_log$refit_id)
   item_log$item_id <- as.character(item_log$item_id)
+  item_log$set_id <- as.integer(item_log$set_id)
+  item_log$theta_raw_eap <- as.double(item_log$theta_raw_eap)
+  item_log$theta_global_eap <- as.double(item_log$theta_global_eap)
+  item_log$theta_global_sd <- as.double(item_log$theta_global_sd)
+  item_log$rank_global_eap <- as.integer(item_log$rank_global_eap)
+  item_log$is_hub_item <- as.logical(item_log$is_hub_item)
+  item_log$is_spoke_item <- as.logical(item_log$is_spoke_item)
   item_log$theta_mean <- as.double(item_log$theta_mean)
   item_log$theta_p2.5 <- as.double(item_log$theta_p2.5)
   item_log$theta_p5 <- as.double(item_log$theta_p5)
