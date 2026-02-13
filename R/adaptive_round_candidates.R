@@ -231,6 +231,40 @@
   if (length(spoke_ids) < 1L) {
     return(NA_integer_)
   }
+  mode <- as.character(controller$run_mode %||% "within_set")
+  if (!identical(mode, "link_multi_spoke")) {
+    current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
+    if (!is.na(current) && current %in% spoke_ids) {
+      return(as.integer(current))
+    }
+    return(as.integer(sort(spoke_ids)[[1L]]))
+  }
+
+  # In multi-spoke mode, balance routing deterministically across spokes.
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
+  if (nrow(step_log) > 0L && all(required %in% names(step_log))) {
+    eligible <- !is.na(step_log$pair_id) &
+      step_log$is_cross_set %in% TRUE &
+      as.integer(step_log$link_spoke_id) %in% as.integer(spoke_ids)
+    step_subset <- step_log[eligible, , drop = FALSE]
+    if (identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
+      last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+      step_subset <- step_subset[as.integer(step_subset$step_id) > last_refit_step, , drop = FALSE]
+    }
+    if (nrow(step_subset) > 0L) {
+      counts <- table(factor(
+        as.integer(step_subset$link_spoke_id),
+        levels = as.integer(sort(spoke_ids))
+      ))
+      min_count <- min(as.integer(counts))
+      choice <- as.integer(names(counts)[as.integer(counts) == min_count][[1L]])
+      if (!is.na(choice) && choice %in% spoke_ids) {
+        return(as.integer(choice))
+      }
+    }
+  }
+
   current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
   if (!is.na(current) && current %in% spoke_ids) {
     return(as.integer(current))

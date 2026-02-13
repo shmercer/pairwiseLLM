@@ -44,9 +44,8 @@ boundary-priority controls after global identifiability.}
 star-cap override controls.}
 \item{\code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
 \code{shift_only_theta_treatment}, \code{judge_param_mode}, \code{hub_lock_mode},
-\code{hub_lock_kappa}}{Linking mode
-scaffolding controls. Linking modes require multi-set inputs and valid hub
-assignment.}
+\code{hub_lock_kappa}}{Linking mode controls. Linking modes require multi-set
+inputs and valid hub assignment.}
 \item{\code{link_identified_reliability_min}, \code{link_stop_reliability_min},
 \code{link_rank_corr_min}, \code{delta_sd_max}, \code{delta_change_max},
 \code{log_alpha_sd_max}, \code{log_alpha_change_max}, \code{cross_set_ppc_mae_max},
@@ -58,8 +57,9 @@ assignment.}
 \code{phase_a_mode}, \code{phase_a_import_failure_policy},
 \code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
 \code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts},
-\code{phase_a_set_source}}{Linking
-threshold and control placeholders validated for future linking workflows.}
+\code{phase_a_set_source}}{Linking thresholds and workflow controls used for
+Phase A artifact validation, cross-set calibration, and linking stop
+diagnostics.}
 }
 Unknown fields and invalid values abort with an actionable error.}
 }

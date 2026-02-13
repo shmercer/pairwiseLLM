@@ -244,9 +244,8 @@
 #'   star-cap override controls.}
 #'   \item{`run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
 #'   `shift_only_theta_treatment`, `judge_param_mode`, `hub_lock_mode`,
-#'   `hub_lock_kappa`}{Linking mode
-#'   scaffolding controls. Linking modes require multi-set inputs and valid hub
-#'   assignment.}
+#'   `hub_lock_kappa`}{Linking mode controls. Linking modes require multi-set
+#'   inputs and valid hub assignment.}
 #'   \item{`link_identified_reliability_min`, `link_stop_reliability_min`,
 #'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
 #'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_mae_max`,
@@ -258,8 +257,9 @@
 #'   `phase_a_mode`, `phase_a_import_failure_policy`,
 #'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
 #'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`,
-#'   `phase_a_set_source`}{Linking
-#'   threshold and control placeholders validated for future linking workflows.}
+#'   `phase_a_set_source`}{Linking thresholds and workflow controls used for
+#'   Phase A artifact validation, cross-set calibration, and linking stop
+#'   diagnostics.}
 #'   }
 #'   Unknown fields and invalid values abort with an actionable error.
 #' @param session_dir Optional directory for saving session artifacts.
@@ -390,7 +390,7 @@ adaptive_rank_start <- function(items,
 #'   `p_long_low`, `p_long_high`, `long_taper_mult`, `long_frac_floor`,
 #'   `mid_bonus_frac`, `explore_taper_mult`, `boundary_k`, `boundary_window`,
 #'   `boundary_frac`, `p_star_override_margin`,
-#'   `star_override_budget_per_round`, and linking scaffolding fields:
+#'   `star_override_budget_per_round`, and linking fields:
 #'   `run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
 #'   `shift_only_theta_treatment`, `judge_param_mode`, `hub_lock_mode`,
 #'   `hub_lock_kappa`,

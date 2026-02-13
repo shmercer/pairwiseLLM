@@ -231,10 +231,12 @@
   hub_active_cross <- character()
   if (nrow(step_log) > 0L &&
     all(c("pair_id", "is_cross_set", "link_spoke_id", "set_i", "set_j", "i", "j") %in% names(step_log))) {
+    link_spoke <- as.integer(step_log$link_spoke_id)
     cumulative <- step_log[
       !is.na(step_log$pair_id) &
         step_log$is_cross_set %in% TRUE &
-        as.integer(step_log$link_spoke_id) == as.integer(spoke_id),
+        !is.na(link_spoke) &
+        link_spoke == as.integer(spoke_id),
       ,
       drop = FALSE
     ]
@@ -470,10 +472,12 @@
   }
   hub_id <- as.integer(.adaptive_controller_resolve(state)$hub_id %||% 1L)
   set_by_item <- stats::setNames(as.integer(state$set_ids), as.character(state$item_ids))
+  link_spoke <- as.integer(step_log$link_spoke_id)
   cross <- step_log[
     !is.na(step_log$pair_id) &
       step_log$is_cross_set %in% TRUE &
-      as.integer(step_log$link_spoke_id) == as.integer(spoke_id),
+      !is.na(link_spoke) &
+      link_spoke == as.integer(spoke_id),
     ,
     drop = FALSE
   ]
@@ -916,9 +920,11 @@
 
     is_cross <- rep(FALSE, nrow(step_log))
     if (nrow(step_log) > 0L && all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
+      link_spoke <- as.integer(step_log$link_spoke_id)
       is_cross <- !is.na(step_log$pair_id) &
         step_log$is_cross_set %in% TRUE &
-        as.integer(step_log$link_spoke_id) == spoke_id
+        !is.na(link_spoke) &
+        link_spoke == spoke_id
     }
     cumulative <- step_log[is_cross, , drop = FALSE]
     since_last <- cumulative
