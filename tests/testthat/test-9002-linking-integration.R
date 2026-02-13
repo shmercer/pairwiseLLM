@@ -134,6 +134,77 @@ test_that("three-set linking remains hub-spoke only and rotates across spokes", 
   expect_true(any(link_rows$spoke_id == 3L))
 })
 
+test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 21L)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.4, h2 = 0.1, h3 = 0.8,
+    s21 = -0.3, s22 = 0.2, s23 = 0.9
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 8L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run"
+    ),
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none"
+  )
+
+  expect_true(length(out$linking$phase_a$artifacts) >= 2L)
+  expect_true(isTRUE(out$linking$phase_a$ready_for_phase_b))
+  expect_true(any(out$step_log$is_cross_set %in% TRUE))
+  first_cross <- which(out$step_log$is_cross_set %in% TRUE)[[1L]]
+  phase_a_rows <- out$step_log[seq_len(max(1L, first_cross - 1L)), , drop = FALSE]
+  phase_a_rows <- phase_a_rows[!is.na(phase_a_rows$pair_id), , drop = FALSE]
+  expect_true(nrow(phase_a_rows) >= 1L)
+  expect_true(all(phase_a_rows$is_cross_set %in% FALSE))
+})
+
+test_that("mixed run/import mode combines imported and in-run artifacts by set", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 22L)
+  import_artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.2, h2 = 0.2, h3 = 0.7,
+    s21 = -0.4, s22 = 0.3, s23 = 1.1
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 8L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "mixed",
+      phase_a_set_source = c(`1` = "import", `2` = "run"),
+      phase_a_artifacts = list(`1` = import_artifacts[["1"]]),
+      phase_a_compatible_config_hashes = import_artifacts[["1"]]$fit_config_hash
+    ),
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none"
+  )
+
+  status <- tibble::as_tibble(out$linking$phase_a$set_status)
+  expect_equal(status$source[match(1L, status$set_id)], "import")
+  expect_equal(status$source[match(2L, status$set_id)], "run")
+  expect_true(all(status$status == "ready"))
+  expect_true(all(c("1", "2") %in% names(out$linking$phase_a$artifacts)))
+})
+
 test_that("independent and concurrent multi-spoke modes both execute and log mode-specific fields", {
   withr::local_seed(20260213)
 
