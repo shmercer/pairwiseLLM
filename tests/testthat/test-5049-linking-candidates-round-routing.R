@@ -45,22 +45,100 @@ test_that("linking candidates are hub-spoke only by default", {
   expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
 })
 
-test_that("linking round quotas use fixed defaults and long taper floor rule", {
+test_that("linking long-link taper applies only to the active spoke and respects floor", {
   q_base <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = 1L,
     n_items = 100L,
-    controller = list(run_mode = "link_one_spoke", linking_identified = FALSE)
+    controller = list(
+      run_mode = "link_one_spoke",
+      current_link_spoke_id = 2L,
+      linking_identified_by_spoke = list(`2` = FALSE)
+    )
   )
   q_taper <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = 1L,
     n_items = 100L,
-    controller = list(run_mode = "link_one_spoke", linking_identified = TRUE)
+    controller = list(
+      run_mode = "link_one_spoke",
+      current_link_spoke_id = 2L,
+      linking_identified_by_spoke = list(`2` = TRUE)
+    )
+  )
+  q_other_spoke <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = 100L,
+    controller = list(
+      run_mode = "link_one_spoke",
+      current_link_spoke_id = 3L,
+      linking_identified_by_spoke = list(`2` = TRUE)
+    )
   )
 
   expect_identical(unname(q_base[c("anchor_link", "long_link", "mid_link", "local_link")]), c(6L, 8L, 6L, 6L))
   expect_identical(unname(q_taper[c("anchor_link", "mid_link", "local_link")]), c(6L, 6L, 6L))
   expect_true(q_taper[["long_link"]] == 4L)
   expect_true(q_taper[["long_link"]] >= 2L)
+  expect_identical(q_other_spoke[["long_link"]], 8L)
+})
+
+test_that("phase A linking scheduling uses within-set round defaults", {
+  items <- tibble::tibble(
+    item_id = as.character(1:8),
+    set_id = c(rep(1L, 4L), rep(2L, 4L)),
+    global_item_id = paste0("g", 1:8)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 99L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  q_within <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = nrow(items),
+    controller = list(run_mode = "within_set")
+  )
+  expect_identical(state$linking$phase_a$phase, "phase_a")
+  expect_equal(sum(state$round$stage_quotas), sum(q_within))
+  expect_equal(as.integer(state$round$stage_quotas[["anchor_link"]]), as.integer(q_within[["anchor_link"]]))
+})
+
+test_that("link stage rows carry per-spoke per-refit quota totals and committed counts", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23", "gs31", "gs32", "gs33")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 19L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, multi_spoke_mode = "independent")
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  judge <- make_deterministic_judge("i_wins")
+  state <- pairwiseLLM:::run_one_step(state, judge)
+  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
+  state <- pairwiseLLM:::run_one_step(state, judge)
+  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
+  state <- pairwiseLLM:::run_one_step(state, judge)
+  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
+  state$round_log <- pairwiseLLM:::append_round_log(state$round_log, list(refit_id = 1L, diagnostics_pass = TRUE))
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(), `3` = list())
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row2 <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  row3 <- rows[rows$spoke_id == 3L, , drop = FALSE]
+  expect_true(nrow(row2) == 1L)
+  expect_true(nrow(row3) == 1L)
+  expect_identical(row2$quota_anchor_link[[1L]], 6L)
+  expect_identical(row2$quota_long_link[[1L]], 8L)
+  expect_true(row2$committed_anchor_link[[1L]] + row2$committed_long_link[[1L]] +
+    row2$committed_mid_link[[1L]] + row2$committed_local_link[[1L]] >= 1L)
+  expect_true(row3$committed_anchor_link[[1L]] + row3$committed_long_link[[1L]] +
+    row3$committed_mid_link[[1L]] + row3$committed_local_link[[1L]] >= 1L)
 })
 
 test_that("linking spoke quantile bins dynamically fall back for small spokes", {

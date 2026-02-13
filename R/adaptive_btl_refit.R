@@ -1255,6 +1255,38 @@
 
     n_pairs_done <- as.integer(nrow(cumulative))
     n_pairs_since <- as.integer(nrow(since_last))
+    quota_controller <- controller
+    quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+    stage_quotas <- .adaptive_round_compute_quotas(
+      round_id = as.integer(state$round$round_id %||% 1L),
+      n_items = as.integer(state$n_items),
+      controller = quota_controller
+    )
+    stage_order <- .adaptive_stage_order()
+    committed_stage <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+    refit_step_end <- if ("step_id" %in% names(step_log) && nrow(step_log) > 0L) {
+      as.integer(max(as.integer(step_log$step_id), na.rm = TRUE))
+    } else {
+      0L
+    }
+    refit_step_start <- as.integer(refit_context$last_refit_step %||% 0L)
+    if (nrow(step_log) > 0L && all(c("pair_id", "round_stage", "step_id", "link_spoke_id", "is_cross_set") %in%
+      names(step_log))) {
+      stage_rows <- step_log[
+        !is.na(step_log$pair_id) &
+          step_log$is_cross_set %in% TRUE &
+          as.integer(step_log$step_id) > refit_step_start &
+          as.integer(step_log$step_id) <= refit_step_end &
+          as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
+          as.character(step_log$round_stage) %in% stage_order,
+        ,
+        drop = FALSE
+      ]
+      if (nrow(stage_rows) > 0L) {
+        tab_stage <- table(factor(as.character(stage_rows$round_stage), levels = stage_order))
+        committed_stage[names(tab_stage)] <- as.integer(tab_stage)
+      }
+    }
     n_unique <- 0L
     if (nrow(cumulative) > 0L && all(c("A", "B") %in% names(cumulative))) {
       ids <- as.character(state$item_ids)
@@ -1325,6 +1357,14 @@
       n_pairs_cross_set_done = as.integer(n_pairs_done),
       n_unique_cross_pairs_seen = as.integer(n_unique),
       n_cross_edges_since_last_refit = as.integer(n_pairs_since),
+      quota_anchor_link = as.integer(stage_quotas[["anchor_link"]] %||% NA_integer_),
+      quota_long_link = as.integer(stage_quotas[["long_link"]] %||% NA_integer_),
+      quota_mid_link = as.integer(stage_quotas[["mid_link"]] %||% NA_integer_),
+      quota_local_link = as.integer(stage_quotas[["local_link"]] %||% NA_integer_),
+      committed_anchor_link = as.integer(committed_stage[["anchor_link"]] %||% 0L),
+      committed_long_link = as.integer(committed_stage[["long_link"]] %||% 0L),
+      committed_mid_link = as.integer(committed_stage[["mid_link"]] %||% 0L),
+      committed_local_link = as.integer(committed_stage[["local_link"]] %||% 0L),
       concurrent_target_pairs = as.integer(stats_row$concurrent_target_pairs %||% NA_integer_),
       concurrent_floor_pairs = as.integer(stats_row$concurrent_floor_pairs %||% NA_integer_),
       concurrent_floor_met = as.logical(stats_row$concurrent_floor_met %||% NA),

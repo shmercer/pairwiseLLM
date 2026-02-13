@@ -664,7 +664,37 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   }
   seed_base <- as.integer(state$meta$seed %||% 1L)
   round <- state$round %||% list()
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  link_phase_b <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
+  active_link_spoke <- as.integer(NA_integer_)
+  link_progress <- NULL
   round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
+  if (isTRUE(link_phase_b)) {
+    eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    active_link_spoke <- .adaptive_link_active_spoke(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = eligible_spokes
+    )
+    if (!is.na(active_link_spoke)) {
+      refit_id <- .adaptive_link_refit_window_id(state)
+      quota_controller <- controller
+      quota_controller$current_link_spoke_id <- as.integer(active_link_spoke)
+      stage_quotas <- .adaptive_round_compute_quotas(
+        round_id = as.integer(round$round_id %||% 1L),
+        n_items = as.integer(state$n_items),
+        controller = quota_controller
+      )
+      link_progress <- .adaptive_link_stage_progress(
+        state = state,
+        spoke_id = as.integer(active_link_spoke),
+        stage_quotas = stage_quotas,
+        stage_order = round$stage_order %||% .adaptive_stage_order(),
+        refit_id = refit_id
+      )
+      round_stage <- as.character(link_progress$active_stage %||% round_stage)
+    }
+  }
   is_link_mode <- .adaptive_link_mode(state)
   generation_stage <- if (identical(round_stage, "warm_start")) {
     if (length(ids) <= 2L) "anchor_link" else "local_link"
@@ -674,8 +704,13 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   stage_quota <- NA_integer_
   stage_committed_so_far <- NA_integer_
   if (!identical(round_stage, "warm_start")) {
-    stage_quota <- as.integer(round$stage_quotas[[round_stage]] %||% NA_integer_)
-    stage_committed_so_far <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
+    if (isTRUE(link_phase_b) && !is.null(link_progress)) {
+      stage_quota <- as.integer(link_progress$stage_quotas[[round_stage]] %||% NA_integer_)
+      stage_committed_so_far <- as.integer(link_progress$stage_committed[[round_stage]] %||% 0L)
+    } else {
+      stage_quota <- as.integer(round$stage_quotas[[round_stage]] %||% NA_integer_)
+      stage_committed_so_far <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
+    }
   }
 
   stage_defs <- list(
@@ -888,7 +923,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       dist_stratum_global = NA_integer_,
       coverage_bins_used = NA_integer_,
       coverage_source = NA_character_,
-      link_spoke_id_selected = NA_integer_,
+      link_spoke_id_selected = as.integer(active_link_spoke %||% NA_integer_),
       stage_committed_so_far = stage_committed_so_far,
       stage_quota = stage_quota,
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,

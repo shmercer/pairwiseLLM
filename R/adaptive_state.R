@@ -402,6 +402,9 @@
     return(out)
   }
   controller <- .adaptive_controller_resolve(out)
+  phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  controller_for_quota <- controller
+  controller_for_quota$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
   round$star_override_budget_per_round <- as.integer(controller$star_override_budget_per_round)
 
   can_refresh_quotas <- as.integer(round$round_committed %||% 0L) == 0L &&
@@ -412,7 +415,7 @@
     stage_quotas <- .adaptive_round_compute_quotas(
       round_id = as.integer(round$round_id %||% 1L),
       n_items = as.integer(out$n_items),
-      controller = controller
+      controller = controller_for_quota
     )
     quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
     round$stage_quotas <- stage_quotas
@@ -498,12 +501,9 @@
     link_spoke <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
     link_key <- as.character(link_spoke)
     identified_by_spoke <- controller$linking_identified_by_spoke %||% list()
-    linking_identified <- FALSE
-    if (!is.na(link_spoke) && !is.null(identified_by_spoke[[link_key]])) {
-      linking_identified <- isTRUE(identified_by_spoke[[link_key]])
-    } else {
-      linking_identified <- isTRUE(controller$linking_identified %||% controller$global_identified)
-    }
+    linking_identified <- !is.na(link_spoke) &&
+      !is.null(identified_by_spoke[[link_key]]) &&
+      isTRUE(identified_by_spoke[[link_key]])
     long_quota_effective <- if (isTRUE(linking_identified)) {
       max(2L, as.integer(ceiling(0.5 * long_quota_raw)))
     } else {
@@ -602,10 +602,16 @@
   defaults <- adaptive_defaults(length(ids))
   controller <- utils::modifyList(.adaptive_controller_defaults(length(ids)), controller %||% list())
   stage_order <- .adaptive_stage_order()
+  mode <- as.character(controller$run_mode %||% "within_set")
+  phase <- as.character(controller$link_phase %||% "phase_a")
+  quota_controller <- controller
+  if (mode %in% c("link_one_spoke", "link_multi_spoke") && !identical(phase, "phase_b")) {
+    quota_controller$run_mode <- "within_set"
+  }
   stage_quotas <- .adaptive_round_compute_quotas(
     round_id = round_id,
     n_items = length(ids),
-    controller = controller
+    controller = quota_controller
   )
   quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
   stage_committed <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
@@ -641,7 +647,9 @@
     long_quota_effective = as.integer(quota_meta$long_quota_effective %||% NA_integer_),
     long_quota_removed = as.integer(quota_meta$long_quota_removed %||% NA_integer_),
     realloc_to_mid = as.integer(quota_meta$realloc_to_mid %||% NA_integer_),
-    realloc_to_local = as.integer(quota_meta$realloc_to_local %||% NA_integer_)
+    realloc_to_local = as.integer(quota_meta$realloc_to_local %||% NA_integer_),
+    link_stage_shortfalls_by_refit_spoke = list(),
+    link_stage_exhausted_by_refit_spoke = list()
   )
 }
 
@@ -695,6 +703,8 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         last_refit_round_id = 0L,
         theta_mean_history = list(),
         near_stop = FALSE,
+        link_stage_shortfalls_by_refit_spoke = list(),
+        link_stage_exhausted_by_refit_spoke = list(),
         last_completed_round_summary = list(
           round_id = NA_integer_,
           global_identified = NA,

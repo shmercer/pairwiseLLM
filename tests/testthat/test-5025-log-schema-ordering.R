@@ -68,7 +68,10 @@ test_that("canonical log schemas follow the expected column order", {
     "lag_eligible", "rank_stability_lagged", "rank_stability_pass",
     "link_stop_eligible", "link_stop_pass", "ts_btl_rank_spearman", "ppc_mae_cross",
     "escalated_this_refit", "n_pairs_cross_set_done", "n_unique_cross_pairs_seen",
-    "n_cross_edges_since_last_refit", "concurrent_target_pairs",
+    "n_cross_edges_since_last_refit",
+    "quota_anchor_link", "quota_long_link", "quota_mid_link", "quota_local_link",
+    "committed_anchor_link", "committed_long_link", "committed_mid_link", "committed_local_link",
+    "concurrent_target_pairs",
     "concurrent_floor_pairs", "concurrent_floor_met", "concurrent_target_met",
     "active_item_count_hub", "active_item_count_spoke", "coverage_bins_used",
     "coverage_source"
