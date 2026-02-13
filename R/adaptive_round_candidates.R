@@ -6,11 +6,12 @@
   ids <- as.character(state$trueskill_state$items$item_id)
   mu <- as.double(state$trueskill_state$items$mu)
   names(mu) <- ids
+  refit_id <- as.integer(state$refit_meta$last_refit_round_id %||% 0L)
 
   list(
     scores = mu[ids],
     source = "trueskill_mu",
-    refit_id = 0L
+    refit_id = refit_id
   )
 }
 

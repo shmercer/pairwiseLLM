@@ -140,7 +140,11 @@ test_that("rolling anchors refresh deterministically from trueskill", {
 
   expect_equal(state_2$round$anchor_refresh_source, "trueskill_mu")
   expect_identical(state_2$round$anchor_ids, anchors_1)
-  expect_equal(state_2$round$anchor_refit_round_id, 0L)
+  expect_equal(state_2$round$anchor_refit_round_id, 1L)
+
+  state_3 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_2)
+  expect_identical(state_3$round$anchor_ids, state_2$round$anchor_ids)
+  expect_equal(state_3$round$anchor_refit_round_id, 1L)
 })
 
 test_that("rolling anchor count follows clamped default", {
