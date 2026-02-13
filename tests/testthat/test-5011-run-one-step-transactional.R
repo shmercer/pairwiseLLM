@@ -107,12 +107,48 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_true(isTRUE(row$is_cross_set[[1L]]))
   expect_equal(row$link_spoke_id[[1L]], 2L)
   expect_equal(row$run_mode[[1L]], "link_one_spoke")
-  expect_equal(row$link_transform_mode[[1L]], "auto")
+  expect_equal(row$link_transform_mode[[1L]], "shift_only")
   expect_equal(row$utility_mode[[1L]], "p_times_1_minus_p")
   expect_equal(row$hub_lock_mode[[1L]], "soft_lock")
   expect_equal(row$hub_lock_kappa[[1L]], 0.75)
   expect_false(is.na(row$posterior_win_prob_pre[[1L]]))
   expect_false(is.na(row$cross_set_utility_pre[[1L]]))
+})
+
+test_that("run_one_step logs linking pre-step transform estimates when available", {
+  items <- tibble::tibble(
+    item_id = c("a", "b"),
+    set_id = c(1L, 2L),
+    global_item_id = c("ga", "gb")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 17L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_transform_mode = "auto"
+    )
+  )
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_mode = "shift_scale",
+      delta_spoke_mean = 0.12,
+      delta_spoke_sd = 0.03,
+      log_alpha_spoke_mean = 0.04,
+      log_alpha_spoke_sd = 0.02
+    )
+  )
+  judge_ok <- make_deterministic_judge("i_wins")
+
+  out <- pairwiseLLM:::run_one_step(state, judge_ok)
+  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
+
+  expect_equal(row$link_transform_mode[[1L]], "shift_scale")
+  expect_equal(row$delta_spoke_estimate_pre[[1L]], 0.12, tolerance = 1e-12)
+  expect_equal(row$delta_spoke_sd_pre[[1L]], 0.03, tolerance = 1e-12)
+  expect_equal(row$log_alpha_spoke_estimate_pre[[1L]], 0.04, tolerance = 1e-12)
+  expect_equal(row$log_alpha_spoke_sd_pre[[1L]], 0.02, tolerance = 1e-12)
 })
 
 test_that("invalid linking step does not mutate controller link routing state", {
