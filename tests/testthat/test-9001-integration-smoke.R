@@ -1,4 +1,4 @@
-test_that("adaptive v2 integration smoke: deterministic run, resume, and invariants", {
+test_that("adaptive integration smoke: deterministic run, resume, and invariants", {
   withr::local_seed(123)
 
   items <- make_test_items(8)
