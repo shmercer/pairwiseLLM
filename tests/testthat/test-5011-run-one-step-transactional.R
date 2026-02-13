@@ -115,6 +115,33 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_false(is.na(row$cross_set_utility_pre[[1L]]))
 })
 
+test_that("invalid linking step does not mutate controller link routing state", {
+  items <- tibble::tibble(
+    item_id = c("a", "b"),
+    set_id = c(1L, 2L),
+    global_item_id = c("ga", "gb")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 8L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L
+    )
+  )
+  state$controller$current_link_spoke_id <- 99L
+  state$controller$link_stage_coverage_bins_used <- list(`99` = 3L)
+  state$controller$link_stage_coverage_source <- list(`99` = "seed")
+  judge_bad <- make_deterministic_judge("invalid")
+
+  out <- pairwiseLLM:::run_one_step(state, judge_bad)
+
+  expect_equal(out$step_log$status[[1L]], "invalid")
+  expect_identical(out$controller$current_link_spoke_id, 99L)
+  expect_identical(out$controller$link_stage_coverage_bins_used, list(`99` = 3L))
+  expect_identical(out$controller$link_stage_coverage_source, list(`99` = "seed"))
+})
+
 test_that("run_one_step handles starved selections with NA linking endpoints", {
   items <- make_test_items(2)
   state <- adaptive_rank_start(items, seed = 2L)
