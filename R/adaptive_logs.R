@@ -188,8 +188,15 @@ schema_link_stage_log <- c(
   log_alpha_change_lagged = "double",
   delta_change_pass = "logical",
   log_alpha_change_pass = "logical",
+  delta_sd_max_used = "double",
+  delta_sd_pass = "logical",
+  log_alpha_sd_pass = "logical",
   reliability_EAP_link = "double",
+  reliability_stop_pass = "logical",
   linking_identified = "logical",
+  lag_eligible = "logical",
+  rank_stability_lagged = "double",
+  rank_stability_pass = "logical",
   link_stop_eligible = "logical",
   link_stop_pass = "logical",
   ts_btl_rank_spearman = "double",
@@ -198,9 +205,14 @@ schema_link_stage_log <- c(
   n_pairs_cross_set_done = "integer",
   n_unique_cross_pairs_seen = "integer",
   n_cross_edges_since_last_refit = "integer",
+  concurrent_target_pairs = "integer",
+  concurrent_floor_pairs = "integer",
+  concurrent_floor_met = "logical",
+  concurrent_target_met = "logical",
   active_item_count_hub = "integer",
   active_item_count_spoke = "integer",
-  coverage_bins_used = "integer"
+  coverage_bins_used = "integer",
+  coverage_source = "character"
 )
 
 schema_item_step_log <- c(
