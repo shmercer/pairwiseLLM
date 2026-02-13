@@ -7,6 +7,7 @@
     state = file.path(session_dir, "state.rds"),
     step_log = file.path(session_dir, "step_log.rds"),
     round_log = file.path(session_dir, "round_log.rds"),
+    link_stage_log = file.path(session_dir, "link_stage_log.rds"),
     metadata = file.path(session_dir, "metadata.rds"),
     btl_fit = file.path(session_dir, "btl_fit.rds"),
     item_log_dir = file.path(session_dir, "item_log"),
@@ -191,6 +192,7 @@ read_log <- function(path) {
     "history_pairs",
     "step_log",
     "round_log",
+    "link_stage_log",
     "item_log",
     "item_step_log",
     "trueskill_state",
@@ -307,8 +309,14 @@ validate_session_dir <- function(session_dir) {
 
   step_log <- read_log(paths$step_log)
   round_log <- read_log(paths$round_log)
+  link_stage_log <- if (file.exists(paths$link_stage_log)) {
+    read_log(paths$link_stage_log)
+  } else {
+    new_link_stage_log()
+  }
   .adaptive_validate_log_schema(step_log, schema_step_log, "step_log")
   .adaptive_validate_log_schema(round_log, schema_round_log, "round_log")
+  .adaptive_validate_log_schema(link_stage_log, schema_link_stage_log, "link_stage_log")
   item_log_list <- .adaptive_read_item_log_files(paths$item_log_dir)
   if (length(item_log_list) > 0L) {
     for (idx in seq_along(item_log_list)) {
@@ -367,6 +375,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
       paths$state,
       paths$step_log,
       paths$round_log,
+      paths$link_stage_log,
       paths$metadata,
       paths$btl_fit,
       paths$item_log_dir,
@@ -392,6 +401,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 
   write_log(tibble::as_tibble(state$step_log), paths$step_log)
   write_log(tibble::as_tibble(state$round_log), paths$round_log)
+  write_log(tibble::as_tibble(state$link_stage_log %||% new_link_stage_log()), paths$link_stage_log)
   .adaptive_write_atomic(metadata, paths$metadata)
   .adaptive_write_atomic(state, paths$state)
 
@@ -447,9 +457,15 @@ load_adaptive_session <- function(session_dir) {
 
   step_log <- read_log(paths$step_log)
   round_log <- read_log(paths$round_log)
+  link_stage_log <- if (file.exists(paths$link_stage_log)) {
+    read_log(paths$link_stage_log)
+  } else {
+    new_link_stage_log()
+  }
 
   state$step_log <- tibble::as_tibble(step_log)
   state$round_log <- tibble::as_tibble(round_log)
+  state$link_stage_log <- tibble::as_tibble(link_stage_log)
 
   if (file.exists(paths$btl_fit)) {
     state$btl_fit <- readRDS(paths$btl_fit)

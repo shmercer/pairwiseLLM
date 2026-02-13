@@ -15,6 +15,8 @@ A named list with three elements:
 \item{step_log}{A tibble with one row per attempted step.}
 \item{round_log}{A tibble with one row per BTL refit round.}
 \item{item_log}{A list of per-refit item tibbles.}
+\item{link_stage_log}{A tibble with one row per \code{(refit_id, spoke_id)}
+linking summary when linking mode is active.}
 }
 }
 \description{

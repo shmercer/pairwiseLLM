@@ -222,6 +222,8 @@
 #'   \item{step_log}{A tibble with one row per attempted step.}
 #'   \item{round_log}{A tibble with one row per BTL refit round.}
 #'   \item{item_log}{A list of per-refit item tibbles.}
+#'   \item{link_stage_log}{A tibble with one row per \code{(refit_id, spoke_id)}
+#'   linking summary when linking mode is active.}
 #' }
 #'
 #' @examples
@@ -256,7 +258,8 @@ adaptive_get_logs <- function(state) {
   list(
     step_log = tibble::as_tibble(state$step_log),
     round_log = tibble::as_tibble(state$round_log),
-    item_log = item_log
+    item_log = item_log,
+    link_stage_log = tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
   )
 }
 

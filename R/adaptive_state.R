@@ -117,7 +117,12 @@
     phase_a_artifacts = list(),
     phase_a_set_source = character(),
     reliability_EAP = NA_real_,
-    ts_btl_rank_spearman = NA_real_
+    ts_btl_rank_spearman = NA_real_,
+    current_link_spoke_id = NA_integer_,
+    linking_identified = FALSE,
+    linking_identified_by_spoke = list(),
+    link_stage_coverage_bins_used = list(),
+    link_stage_coverage_source = list()
   )
 }
 
@@ -475,7 +480,41 @@
     .adaptive_controller_defaults(n_items),
     controller %||% list()
   )
+  is_link_mode <- as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")
   round_pairs_target <- as.integer(defaults$round_pairs_target)
+  if (isTRUE(is_link_mode)) {
+    long_quota_raw <- 8L
+    link_spoke <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
+    link_key <- as.character(link_spoke)
+    identified_by_spoke <- controller$linking_identified_by_spoke %||% list()
+    linking_identified <- FALSE
+    if (!is.na(link_spoke) && !is.null(identified_by_spoke[[link_key]])) {
+      linking_identified <- isTRUE(identified_by_spoke[[link_key]])
+    } else {
+      linking_identified <- isTRUE(controller$linking_identified %||% controller$global_identified)
+    }
+    long_quota_effective <- if (isTRUE(linking_identified)) {
+      max(2L, as.integer(ceiling(0.5 * long_quota_raw)))
+    } else {
+      long_quota_raw
+    }
+    quotas <- c(
+      anchor_link = 6L,
+      long_link = as.integer(long_quota_effective),
+      mid_link = 6L,
+      local_link = 6L
+    )
+    attr(quotas, "quota_meta") <- list(
+      global_identified = isTRUE(controller$global_identified),
+      linking_identified = isTRUE(linking_identified),
+      long_quota_raw = as.integer(long_quota_raw),
+      long_quota_effective = as.integer(long_quota_effective),
+      long_quota_removed = as.integer(max(0L, long_quota_raw - long_quota_effective)),
+      realloc_to_mid = 0L,
+      realloc_to_local = 0L
+    )
+    return(quotas)
+  }
 
   anchor_frac <- if (round_id <= defaults$anchor_rounds_early) {
     defaults$anchor_frac_early
@@ -559,6 +598,12 @@
   )
   quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
   stage_committed <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+  round_pairs_target <- if (isTRUE(as.character(controller$run_mode %||% "within_set") %in%
+    c("link_one_spoke", "link_multi_spoke"))) {
+    as.integer(sum(stage_quotas))
+  } else {
+    as.integer(defaults$round_pairs_target)
+  }
 
   list(
     round_id = round_id,
@@ -568,7 +613,7 @@
     stage_quotas = stage_quotas,
     stage_committed = stage_committed,
     stage_shortfalls = stats::setNames(rep.int(0L, length(stage_order)), stage_order),
-    round_pairs_target = as.integer(defaults$round_pairs_target),
+    round_pairs_target = round_pairs_target,
     round_committed = 0L,
     per_round_item_uses = stats::setNames(rep.int(0L, length(ids)), ids),
     repeat_in_round_budget = as.integer(defaults$repeat_in_round_budget),
@@ -618,6 +663,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       step_log = new_step_log(now_fn = now_fn),
       round_log = new_round_log(),
       item_log = list(),
+      link_stage_log = new_link_stage_log(),
       item_step_log = new_item_step_log(items),
       trueskill_state = new_trueskill_state(items),
       warm_start_pairs = tibble::tibble(i_id = character(), j_id = character()),

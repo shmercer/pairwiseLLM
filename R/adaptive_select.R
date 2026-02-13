@@ -694,6 +694,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   seed_base <- as.integer(state$meta$seed %||% 1L)
   round <- state$round %||% list()
   round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
+  is_link_mode <- .adaptive_link_mode(state)
   generation_stage <- if (identical(round_stage, "warm_start")) {
     if (length(ids) <= 2L) "anchor_link" else "local_link"
   } else {
@@ -851,7 +852,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       if (is.null(selected)) next
       selected_pair <- selected
     } else {
-      if (identical(generation_stage, "local_link") && isTRUE(controller$global_identified)) {
+      if (!isTRUE(is_link_mode) &&
+        identical(generation_stage, "local_link") &&
+        isTRUE(controller$global_identified)) {
         prioritized <- .adaptive_local_priority_select(
           cand = cand,
           state = state,
@@ -862,12 +865,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         )
         cand <- prioritized$candidates
         local_priority_mode <- prioritized$mode
-      } else if (identical(generation_stage, "local_link")) {
+      } else if (!isTRUE(is_link_mode) && identical(generation_stage, "local_link")) {
         local_priority_mode <- "standard"
       } else {
         local_priority_mode <- NA_character_
       }
-      order_idx <- order(-cand$u0, cand$i, cand$j)
+      if (isTRUE(is_link_mode)) {
+        order_idx <- .adaptive_linking_selection_order(cand)
+      } else {
+        order_idx <- order(-cand$u0, cand$i, cand$j)
+      }
       selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
     }
 
@@ -907,6 +914,10 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       stratum_i = NA_integer_,
       stratum_j = NA_integer_,
       dist_stratum = NA_integer_,
+      dist_stratum_global = NA_integer_,
+      coverage_bins_used = NA_integer_,
+      coverage_source = NA_character_,
+      link_spoke_id_selected = NA_integer_,
       stage_committed_so_far = stage_committed_so_far,
       stage_quota = stage_quota,
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
@@ -957,6 +968,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   } else {
     NA_integer_
   }
+  dist_stratum_global <- .adaptive_selected_dist_stratum_global(selected_pair)
+  coverage_meta <- .adaptive_selected_coverage_meta(selected_pair)
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -986,6 +999,10 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     stratum_i = stratum_i,
     stratum_j = stratum_j,
     dist_stratum = dist_stratum,
+    dist_stratum_global = as.integer(dist_stratum_global),
+    coverage_bins_used = as.integer(coverage_meta$coverage_bins_used),
+    coverage_source = as.character(coverage_meta$coverage_source),
+    link_spoke_id_selected = as.integer(coverage_meta$link_spoke_id),
     stage_committed_so_far = stage_committed_so_far,
     stage_quota = stage_quota,
     n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
