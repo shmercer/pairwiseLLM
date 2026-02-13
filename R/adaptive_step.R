@@ -291,6 +291,13 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_integer_
   }
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  spoke_key <- as.character(link_spoke_id)
+  spoke_stats <- if (!is.na(link_spoke_id)) link_stats[[spoke_key]] %||% list() else list()
+  if (!is.na(link_spoke_id)) {
+    link_transform_mode <- as.character(spoke_stats$link_transform_mode %||%
+      .adaptive_link_transform_mode_for_spoke(controller, link_spoke_id))
+  }
   link_stage <- if (selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link")) {
     selection$round_stage
   } else {
@@ -360,15 +367,15 @@ run_one_step <- function(state, judge, ...) {
     link_spoke_id = link_spoke_id,
     run_mode = run_mode,
     link_stage = link_stage,
-    delta_spoke_estimate_pre = NA_real_,
-    delta_spoke_sd_pre = NA_real_,
+    delta_spoke_estimate_pre = as.double(spoke_stats$delta_spoke_mean %||% NA_real_),
+    delta_spoke_sd_pre = as.double(spoke_stats$delta_spoke_sd %||% NA_real_),
     dist_stratum_global = as.integer(selection$dist_stratum_global %||% NA_integer_),
     posterior_win_prob_pre = as.double(selection$p_ij %||% NA_real_),
     link_transform_mode = link_transform_mode,
     cross_set_utility_pre = cross_set_utility_pre,
     utility_mode = utility_mode,
-    log_alpha_spoke_estimate_pre = NA_real_,
-    log_alpha_spoke_sd_pre = NA_real_,
+    log_alpha_spoke_estimate_pre = as.double(spoke_stats$log_alpha_spoke_mean %||% NA_real_),
+    log_alpha_spoke_sd_pre = as.double(spoke_stats$log_alpha_spoke_sd %||% NA_real_),
     hub_lock_mode = hub_lock_mode,
     hub_lock_kappa = hub_lock_kappa
   )

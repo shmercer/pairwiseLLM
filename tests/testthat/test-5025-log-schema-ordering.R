@@ -58,9 +58,21 @@ test_that("canonical log schemas follow the expected column order", {
     "theta_p95", "theta_p97.5", "theta_sd", "rank_mean", "degree", "pos_count_A", "pos_count_B"
   )
   expected_item_step <- c("step_id", "timestamp", "item_id", "mu", "sigma", "degree")
+  expected_link_stage <- c(
+    "refit_id", "spoke_id", "hub_id", "link_transform_mode", "link_refit_mode",
+    "hub_lock_mode", "hub_lock_kappa", "delta_spoke_mean", "delta_spoke_sd",
+    "log_alpha_spoke_mean", "log_alpha_spoke_sd", "delta_change_lagged",
+    "log_alpha_change_lagged", "delta_change_pass", "log_alpha_change_pass",
+    "reliability_EAP_link", "linking_identified", "link_stop_eligible",
+    "link_stop_pass", "ts_btl_rank_spearman", "ppc_mae_cross",
+    "escalated_this_refit", "n_pairs_cross_set_done", "n_unique_cross_pairs_seen",
+    "n_cross_edges_since_last_refit", "active_item_count_hub",
+    "active_item_count_spoke", "coverage_bins_used"
+  )
 
   expect_equal(names(pairwiseLLM:::schema_step_log), expected_step)
   expect_equal(names(pairwiseLLM:::schema_round_log), expected_round)
+  expect_equal(names(pairwiseLLM:::schema_link_stage_log), expected_link_stage)
   expect_equal(pairwiseLLM:::.adaptive_item_log_columns(), expected_item)
   expect_equal(names(pairwiseLLM:::schema_item_step_log), expected_item_step)
 })

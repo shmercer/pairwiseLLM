@@ -313,6 +313,226 @@ test_that("concurrent allocation uses uncertainty weights and enforces floor", {
   expect_true(stats3$concurrent_target_pairs >= 2L)
 })
 
+test_that("active linking reliability is computed on active hub-spoke items only", {
+  state <- make_linking_refit_state()
+  state$round$anchor_ids <- character()
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s22", "h2", 0L, spoke_id = 2L)
+
+  active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
+  rel_active <- pairwiseLLM:::.adaptive_link_reliability_active(state, active$active_all)
+  draws <- state$btl_fit$btl_posterior_draws
+  rel_manual <- pairwiseLLM:::compute_reliability_EAP(draws[, active$active_all, drop = FALSE])
+  rel_all <- pairwiseLLM:::compute_reliability_EAP(draws)
+
+  expect_equal(rel_active, rel_manual, tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(rel_active, rel_all, tolerance = 1e-12)))
+})
+
+test_that("link stop gating enforces diagnostics and lag eligibility", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0.1,
+      delta_spoke_sd = 0.02,
+      delta_change_lagged = 0.01,
+      delta_change_pass = TRUE,
+      log_alpha_change_pass = NA,
+      delta_sd_pass = TRUE,
+      log_alpha_sd_pass = NA,
+      link_reliability = 0.95,
+      link_reliability_stop_pass = TRUE,
+      ts_btl_rank_spearman_active = 0.94,
+      lag_eligible = FALSE,
+      rank_stability_lagged = NA_real_,
+      rank_stability_pass = FALSE,
+      link_identified = TRUE,
+      active_item_count_hub = 1L,
+      active_item_count_spoke = 2L
+    )
+  )
+  state$controller$linking_identified_by_spoke <- list(`2` = TRUE)
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(refit_id = 1L, diagnostics_pass = TRUE)
+  )
+
+  rows_lag <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_lag <- rows_lag[rows_lag$spoke_id == 2L, , drop = FALSE]
+  expect_false(isTRUE(row_lag$link_stop_eligible[[1L]]))
+  expect_false(isTRUE(row_lag$link_stop_pass[[1L]]))
+
+  state$controller$link_refit_stats_by_spoke[["2"]]$lag_eligible <- TRUE
+  state$controller$link_refit_stats_by_spoke[["2"]]$rank_stability_lagged <- 0.99
+  state$controller$link_refit_stats_by_spoke[["2"]]$rank_stability_pass <- TRUE
+  state$round_log$diagnostics_pass[[nrow(state$round_log)]] <- FALSE
+  rows_diag <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_diag <- rows_diag[rows_diag$spoke_id == 2L, , drop = FALSE]
+  expect_true(isTRUE(row_diag$link_stop_eligible[[1L]]))
+  expect_false(isTRUE(row_diag$link_stop_pass[[1L]]))
+})
+
+test_that("link stop decision is reproducible from link_stage_log fields", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_mode = "shift_scale",
+      delta_spoke_mean = 0.1,
+      delta_spoke_sd = 0.01,
+      log_alpha_spoke_mean = 0.02,
+      log_alpha_spoke_sd = 0.03,
+      delta_change_lagged = 0.01,
+      log_alpha_change_lagged = 0.01,
+      delta_change_pass = TRUE,
+      log_alpha_change_pass = TRUE,
+      delta_sd_pass = TRUE,
+      log_alpha_sd_pass = TRUE,
+      link_reliability = 0.95,
+      link_reliability_stop_pass = TRUE,
+      ts_btl_rank_spearman_active = 0.95,
+      lag_eligible = TRUE,
+      rank_stability_lagged = 0.99,
+      rank_stability_pass = TRUE,
+      link_identified = TRUE,
+      active_item_count_hub = 1L,
+      active_item_count_spoke = 2L,
+      delta_sd_max_used = 0.05
+    )
+  )
+  state$controller$linking_identified_by_spoke <- list(`2` = TRUE)
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(refit_id = 1L, diagnostics_pass = TRUE)
+  )
+
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  hub_ids <- as.character(state$items$item_id[state$items$set_id == 1L])
+  hub_theta <- as.double(state$btl_fit$theta_mean[hub_ids])
+  reconstructed <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = stats::sd(hub_theta),
+    controller = state$controller
+  )
+  expect_identical(row$link_stop_pass[[1L]], reconstructed)
+})
+
+test_that("lagged rank stability gate uses Spearman threshold of at least 0.98", {
+  state <- make_linking_refit_state()
+  ids <- c("h1", "h2", "s21", "s22")
+  base <- c(h1 = 4, h2 = 3, s21 = 2, s22 = 1)
+  same <- c(h1 = 3.9, h2 = 2.9, s21 = 2.1, s22 = 1.1)
+  swapped <- c(h1 = 1, h2 = 4, s21 = 2, s22 = 3)
+  state$refit_meta$theta_mean_history <- list(base, same, swapped)
+
+  pass <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
+    state = state,
+    active_ids = ids,
+    stability_lag = 1L
+  )
+  expect_true(isTRUE(pass$lag_eligible))
+  expect_false(is.na(pass$rho_rank_lagged))
+  expect_false(isTRUE(pass$rho_rank_lagged_pass))
+
+  state$refit_meta$theta_mean_history <- list(base, same)
+  pass2 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
+    state = state,
+    active_ids = ids,
+    stability_lag = 1L
+  )
+  expect_true(isTRUE(pass2$lag_eligible))
+  expect_true(isTRUE(pass2$rho_rank_lagged_pass))
+  expect_true(pass2$rho_rank_lagged >= 0.98)
+})
+
+test_that("single-set mode does not emit linking stage rows", {
+  state <- adaptive_rank_start(make_test_items(4), seed = 21L)
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  expect_equal(nrow(rows), 0L)
+})
+
+test_that("linking active-domain helper guard branches return typed NA outputs", {
+  state <- make_linking_refit_state()
+
+  mode <- pairwiseLLM:::.adaptive_link_transform_mode_for_spoke(
+    controller = list(link_transform_mode = "auto", link_transform_mode_by_spoke = list(`2` = "bad")),
+    spoke_id = 2L
+  )
+  expect_identical(mode, "shift_only")
+
+  bad_draws <- state
+  bad_draws$btl_fit$btl_posterior_draws <- NULL
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_reliability_active(bad_draws, c("h1", "h2"))))
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_reliability_active(state, c("missing_a", "missing_b"))))
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_reliability_active(state, c("h1"))))
+
+  no_ts <- state
+  no_ts$trueskill_state <- NULL
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_ts_btl_rank_spearman_active(no_ts, c("h1", "h2"))))
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_ts_btl_rank_spearman_active(state, c("missing_a", "missing_b"))))
+  expect_true(is.na(
+    pairwiseLLM:::.adaptive_link_ts_btl_rank_spearman_active(state, c("h1", "h2"), theta_mean = c(1, 2))
+  ))
+  theta_nonfinite <- setNames(c(NA_real_, 1), c("h1", "h2"))
+  expect_true(is.na(
+    pairwiseLLM:::.adaptive_link_ts_btl_rank_spearman_active(state, c("h1", "h2"), theta_mean = theta_nonfinite)
+  ))
+  theta_tied <- setNames(c(1, 1), c("h1", "h2"))
+  state$trueskill_state$items$mu[state$trueskill_state$items$item_id %in% c("h1", "h2")] <- 1
+  expect_true(is.na(
+    pairwiseLLM:::.adaptive_link_ts_btl_rank_spearman_active(state, c("h1", "h2"), theta_mean = theta_tied)
+  ))
+
+  no_hist <- state
+  no_hist$refit_meta$theta_mean_history <- list()
+  lag_none <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(no_hist, c("h1", "h2"), stability_lag = 2L)
+  expect_false(isTRUE(lag_none$lag_eligible))
+  expect_true(is.na(lag_none$rho_rank_lagged))
+
+  bad_hist <- state
+  bad_hist$refit_meta$theta_mean_history <- list(c(h1 = 1, h2 = 2), c(h1 = NA_real_, h2 = 3), c(h1 = 2, h2 = 1))
+  lag_bad <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(bad_hist, c("h1", "h2"), stability_lag = 1L)
+  expect_true(isTRUE(lag_bad$lag_eligible))
+  expect_false(isTRUE(lag_bad$rho_rank_lagged_pass))
+  bad_hist2 <- state
+  bad_hist2$refit_meta$theta_mean_history <- list(c(h1 = 1, h2 = 2), "bad", c(h1 = 2, h2 = 1))
+  lag_bad2 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(bad_hist2, c("h1", "h2"), stability_lag = 1L)
+  expect_true(isTRUE(lag_bad2$lag_eligible))
+  expect_false(isTRUE(lag_bad2$rho_rank_lagged_pass))
+  bad_hist3 <- state
+  bad_hist3$refit_meta$theta_mean_history <- list(c(h1 = 1, h2 = 2), c(h1 = 2, h2 = 1))
+  lag_bad3 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(bad_hist3, c("h1", "missing"), stability_lag = 1L)
+  expect_true(isTRUE(lag_bad3$lag_eligible))
+  expect_false(isTRUE(lag_bad3$rho_rank_lagged_pass))
+
+  short_hub <- state
+  short_hub$btl_fit$theta_mean <- c(h1 = 1)
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_delta_sd_max_derived(short_hub, hub_id = 1L, delta_sd_mult = 0.1)))
+  unnamed_hub <- state
+  unnamed_hub$btl_fit$theta_mean <- c(1, 2)
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_delta_sd_max_derived(unnamed_hub, hub_id = 1L, delta_sd_mult = 0.1)))
+})
+
 test_that("adaptive_state validation branches for linking controls are covered", {
   expect_error(
     pairwiseLLM:::.adaptive_state_normalize_items(tibble::tibble(item_id = "a", set_id = "x")),
