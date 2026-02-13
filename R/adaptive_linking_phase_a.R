@@ -565,9 +565,7 @@
           message <- "pending_finalization: within-set stop criteria not yet met"
         } else if (isTRUE(.adaptive_phase_a_run_stop_passed(built, controller = controller))) {
           status <- "ready"
-          if (is.na(message) || message == "") {
-            message <- "built_in_run"
-          }
+          message <- "built_in_run"
         } else {
           status <- "pending_finalization"
           message <- "pending_finalization: within-set stop criteria not yet met"
