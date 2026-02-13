@@ -26,6 +26,14 @@ Adaptive item log accessor.
 The underlying state stores a list of refit tables; this
 accessor can return one refit table (default: most recent) or stack all
 refits into a single tibble.
+
+In linking mode, raw and global summaries are kept separate:
+\itemize{
+\item \code{theta_raw_eap}: within-set scale summary (from Phase A artifacts
+when available).
+\item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
+summaries after spoke transform application.
+}
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)

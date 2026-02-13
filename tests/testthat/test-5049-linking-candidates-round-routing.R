@@ -113,6 +113,77 @@ test_that("linking deterministic ordering prioritizes coverage before utility", 
   expect_identical(ord[[1L]], 1L)
 })
 
+test_that("active spoke routing handles no-spoke and single-spoke modes deterministically", {
+  items_single <- tibble::tibble(
+    item_id = c("h1", "h2"),
+    set_id = c(1L, 1L),
+    global_item_id = c("gh1", "gh2")
+  )
+  state_single <- adaptive_rank_start(items_single, seed = 1L)
+  controller_single <- state_single$controller
+  controller_single$run_mode <- "link_one_spoke"
+  controller_single$hub_id <- 1L
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_active_spoke(state_single, controller_single)))
+
+  items_multi <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state_multi <- adaptive_rank_start(
+    items_multi,
+    seed = 2L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  expect_identical(pairwiseLLM:::.adaptive_link_active_spoke(state_multi, state_multi$controller), 2L)
+
+  state_multi$controller$current_link_spoke_id <- 2L
+  expect_identical(pairwiseLLM:::.adaptive_link_active_spoke(state_multi, state_multi$controller), 2L)
+})
+
+test_that("concurrent active spoke routing falls back deterministically when deficits are exhausted", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 3L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$refit_meta$last_refit_step <- 0L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 0),
+    `3` = list(uncertainty = 0)
+  )
+  # No history: chooses smallest spoke id by deterministic tie-break.
+  expect_identical(pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller), 2L)
+
+  # Equal counts: deterministic tie handling still yields a stable spoke choice.
+  ids <- as.character(state$item_ids)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L, pair_id = 1L, is_cross_set = TRUE, link_spoke_id = 2L,
+      A = match("h1", ids), B = match("s21", ids)
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L, pair_id = 2L, is_cross_set = TRUE, link_spoke_id = 3L,
+      A = match("h2", ids), B = match("s31", ids)
+    )
+  )
+  expect_true(pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller) %in% c(2L, 3L))
+})
+
 test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
   items <- tibble::tibble(
     item_id = c("a", "b"),

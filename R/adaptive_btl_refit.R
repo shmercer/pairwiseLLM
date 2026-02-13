@@ -411,6 +411,25 @@
   if (!isTRUE(diagnostics_pass)) {
     return(FALSE)
   }
+  # Prefer log-level pass flags when available so stop can be reconstructed from
+  # canonical logs without external controller parameters.
+  if ("reliability_stop_pass" %in% names(row) &&
+    "delta_sd_pass" %in% names(row) &&
+    "log_alpha_sd_pass" %in% names(row) &&
+    "rank_stability_pass" %in% names(row)) {
+    rel_gate <- isTRUE(row$reliability_stop_pass[[1L]])
+    delta_sd_gate <- isTRUE(row$delta_sd_pass[[1L]])
+    log_alpha_sd_gate <- is.na(row$log_alpha_sd_pass[[1L]]) || isTRUE(row$log_alpha_sd_pass[[1L]])
+    delta_change_gate <- isTRUE(row$delta_change_pass[[1L]])
+    log_alpha_change_gate <- is.na(row$log_alpha_change_pass[[1L]]) || isTRUE(row$log_alpha_change_pass[[1L]])
+    rank_gate <- isTRUE(row$rank_stability_pass[[1L]])
+    return(isTRUE(rel_gate) &&
+      isTRUE(delta_sd_gate) &&
+      isTRUE(log_alpha_sd_gate) &&
+      isTRUE(delta_change_gate) &&
+      isTRUE(log_alpha_change_gate) &&
+      isTRUE(rank_gate))
+  }
   rel_gate <- is.finite(row$reliability_EAP_link[[1L]]) &&
     row$reliability_EAP_link[[1L]] >= as.double(controller$link_stop_reliability_min %||% 0.90)
   delta_max <- as.double(controller$delta_sd_max %||% 0.10) * as.double(hub_theta_sd)
@@ -838,6 +857,8 @@
   last_delta <- controller$link_transform_last_delta_by_spoke %||% list()
   last_log_alpha <- controller$link_transform_last_log_alpha_by_spoke %||% list()
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
+  coverage_bins_map <- controller$link_stage_coverage_bins_used %||% list()
+  coverage_source_map <- controller$link_stage_coverage_source %||% list()
   last_step <- as.integer(refit_context$last_refit_step %||% 0L)
   current_refit_id <- as.integer(nrow(out$round_log) + 1L)
   link_stage_hist <- tibble::as_tibble(out$link_stage_log %||% new_link_stage_log())
@@ -1076,6 +1097,8 @@
       fit_contract = fit$fit_contract %||% list(),
       escalated_this_refit = as.logical(escalated_this_refit),
       n_cross_edges_since_last_refit = as.integer(nrow(cross_since)),
+      coverage_bins_used = as.integer(coverage_bins_map[[key]] %||% NA_integer_),
+      coverage_source = as.character(coverage_source_map[[key]] %||% NA_character_),
       active_item_count_hub = as.integer(length(active$active_hub)),
       active_item_count_spoke = as.integer(length(active$active_spoke)),
       uncertainty = as.double(fit$delta_sd + if (is.finite(fit$log_alpha_sd)) fit$log_alpha_sd else 0)
@@ -1096,6 +1119,7 @@
       obs <- as.integer(stats_row$n_cross_edges_since_last_refit %||% 0L)
       tgt <- as.integer(targets[[key]])
       stats_row$concurrent_target_pairs <- tgt
+      stats_row$concurrent_floor_pairs <- floor_pairs
       stats_row$concurrent_floor_met <- obs >= floor_pairs
       stats_row$concurrent_target_met <- obs >= tgt
       link_stats[[key]] <- stats_row
@@ -1219,19 +1243,31 @@
       log_alpha_change_lagged = as.double(stats_row$log_alpha_change_lagged %||% NA_real_),
       delta_change_pass = as.logical(stats_row$delta_change_pass %||% NA),
       log_alpha_change_pass = as.logical(stats_row$log_alpha_change_pass %||% NA),
+      delta_sd_max_used = as.double(stats_row$delta_sd_max_used %||% NA_real_),
+      delta_sd_pass = as.logical(stats_row$delta_sd_pass %||% NA),
+      log_alpha_sd_pass = as.logical(stats_row$log_alpha_sd_pass %||% NA),
       reliability_EAP_link = as.double(stats_row$link_reliability %||% NA_real_),
+      reliability_stop_pass = as.logical(stats_row$link_reliability_stop_pass %||% NA),
       linking_identified = as.logical(linking_identified),
+      lag_eligible = as.logical(stats_row$lag_eligible %||% FALSE),
+      rank_stability_lagged = as.double(stats_row$rank_stability_lagged %||% NA_real_),
+      rank_stability_pass = as.logical(stats_row$rank_stability_pass %||% FALSE),
       link_stop_eligible = as.logical(link_stop_eligible),
       link_stop_pass = as.logical(link_stop_pass),
-      ts_btl_rank_spearman = as.double(stats_row$rank_stability_lagged %||% NA_real_),
+      ts_btl_rank_spearman = as.double(stats_row$ts_btl_rank_spearman_active %||% NA_real_),
       ppc_mae_cross = as.double(stats_row$ppc_mae_cross %||% NA_real_),
       escalated_this_refit = as.logical(stats_row$escalated_this_refit %||% FALSE),
       n_pairs_cross_set_done = as.integer(n_pairs_done),
       n_unique_cross_pairs_seen = as.integer(n_unique),
       n_cross_edges_since_last_refit = as.integer(n_pairs_since),
+      concurrent_target_pairs = as.integer(stats_row$concurrent_target_pairs %||% NA_integer_),
+      concurrent_floor_pairs = as.integer(stats_row$concurrent_floor_pairs %||% NA_integer_),
+      concurrent_floor_met = as.logical(stats_row$concurrent_floor_met %||% NA),
+      concurrent_target_met = as.logical(stats_row$concurrent_target_met %||% NA),
       active_item_count_hub = as.integer(stats_row$active_item_count_hub %||% NA_integer_),
       active_item_count_spoke = as.integer(stats_row$active_item_count_spoke %||% NA_integer_),
-      coverage_bins_used = as.integer(coverage$bins_used %||% NA_integer_)
+      coverage_bins_used = as.integer(stats_row$coverage_bins_used %||% coverage$bins_used %||% NA_integer_),
+      coverage_source = as.character(stats_row$coverage_source %||% coverage$source %||% NA_character_)
     )
   }
 
