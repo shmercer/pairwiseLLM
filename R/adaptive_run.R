@@ -677,6 +677,12 @@ adaptive_rank_run_live <- function(state,
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state <- .adaptive_phase_a_prepare(state)
   .adaptive_phase_a_gate_or_abort(state)
+  if (as.character(state$controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke") &&
+    !isTRUE(state$warm_start_done)) {
+    state$warm_start_done <- TRUE
+    state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+    state$warm_start_idx <- 1L
+  }
 
   cfg <- .adaptive_progress_config(
     progress = progress,
@@ -694,6 +700,14 @@ adaptive_rank_run_live <- function(state,
 
   remaining <- n_steps
   while (remaining > 0L) {
+    state <- .adaptive_phase_a_prepare(state)
+    .adaptive_phase_a_gate_or_abort(state)
+    if (as.character(state$controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke") &&
+      !isTRUE(state$warm_start_done)) {
+      state$warm_start_done <- TRUE
+      state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+      state$warm_start_idx <- 1L
+    }
     state <- .adaptive_round_activate_if_ready(state)
     state <- run_one_step(state, judge, ...)
     step_row <- tibble::as_tibble(state$step_log)[nrow(state$step_log), , drop = FALSE]
@@ -790,6 +804,8 @@ adaptive_rank_run_live <- function(state,
         return(state)
       }
     }
+    state <- .adaptive_phase_a_prepare(state)
+    .adaptive_phase_a_gate_or_abort(state)
     if (!is.null(state$config$session_dir)) {
       save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
     }

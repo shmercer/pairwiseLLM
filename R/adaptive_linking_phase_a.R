@@ -13,6 +13,98 @@
   )
 }
 
+.adaptive_phase_a_status_tbl <- function(state) {
+  phase_a <- state$linking$phase_a %||% list()
+  tibble::as_tibble(phase_a$set_status %||% tibble::tibble())
+}
+
+.adaptive_phase_a_ready_sets <- function(state) {
+  status_tbl <- .adaptive_phase_a_status_tbl(state)
+  ready_sets <- integer()
+  if (nrow(status_tbl) > 0L) {
+    ready_sets <- as.integer(status_tbl$set_id[status_tbl$status == "ready"])
+    ready_sets <- ready_sets[!is.na(ready_sets)]
+  }
+  if (length(ready_sets) < 1L) {
+    phase_a <- state$linking$phase_a %||% list()
+    artifacts <- phase_a$artifacts %||% list()
+    if (is.list(artifacts) && length(artifacts) > 0L) {
+      set_ids <- vapply(names(artifacts), function(x) suppressWarnings(as.integer(x)), integer(1L))
+      ready_sets <- set_ids[!is.na(set_ids)]
+    }
+  }
+  as.integer(sort(unique(ready_sets)))
+}
+
+.adaptive_phase_a_pending_run_sets <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (!as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(integer())
+  }
+  status_tbl <- .adaptive_phase_a_status_tbl(state)
+  if (nrow(status_tbl) < 1L) {
+    return(integer())
+  }
+  keep <- !is.na(status_tbl$set_id) &
+    status_tbl$source %in% "run" &
+    status_tbl$status != "ready"
+  as.integer(status_tbl$set_id[keep])
+}
+
+.adaptive_phase_a_ready_spokes <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  status_tbl <- .adaptive_phase_a_status_tbl(state)
+  if (nrow(status_tbl) < 1L) {
+    return(integer())
+  }
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  ready_sets <- as.integer(status_tbl$set_id[status_tbl$status == "ready"])
+  if (!hub_id %in% ready_sets) {
+    return(integer())
+  }
+  spokes <- setdiff(unique(as.integer(state$items$set_id)), hub_id)
+  as.integer(sort(intersect(spokes, ready_sets)))
+}
+
+.adaptive_link_phase_context <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  mode <- as.character(controller$run_mode %||% "within_set")
+  if (!mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(list(
+      phase = "phase_a",
+      pending_run_sets = integer(),
+      ready_spokes = integer(),
+      active_phase_a_set = NA_integer_
+    ))
+  }
+
+  pending_run_sets <- .adaptive_phase_a_pending_run_sets(state, controller = controller)
+  ready_spokes <- .adaptive_phase_a_ready_spokes(state, controller = controller)
+  pending_run_sets <- as.integer(pending_run_sets[!is.na(pending_run_sets)])
+  active_set <- if (length(pending_run_sets) > 0L) {
+    as.integer(sort(unique(pending_run_sets))[[1L]])
+  } else {
+    NA_integer_
+  }
+  status_tbl <- .adaptive_phase_a_status_tbl(state)
+  unresolved_phase_state <- nrow(status_tbl) > 0L &&
+    all(is.na(status_tbl$status)) &&
+    all(is.na(status_tbl$source))
+  phase <- if (length(pending_run_sets) > 0L) {
+    "phase_a"
+  } else if (length(ready_spokes) > 0L || nrow(status_tbl) < 1L || unresolved_phase_state) {
+    "phase_b"
+  } else {
+    "phase_a"
+  }
+  list(
+    phase = as.character(phase),
+    pending_run_sets = as.integer(pending_run_sets),
+    ready_spokes = as.integer(ready_spokes),
+    active_phase_a_set = as.integer(active_set)
+  )
+}
+
 .adaptive_phase_a_hash_object <- function(x) {
   tmp <- tempfile("phase_a_hash_", fileext = ".rds")
   on.exit(unlink(tmp), add = TRUE)
@@ -435,7 +527,15 @@
       )
 
       if (is.null(built)) {
-        status <- "failed"
+        if (is.character(message) &&
+          grepl("Within-set summaries are unavailable", message, fixed = TRUE)) {
+          status <- "pending"
+          if (is.na(message) || message == "") {
+            message <- "awaiting_within_set_finalization"
+          }
+        } else {
+          status <- "failed"
+        }
       } else {
         artifacts[[set_key]] <- built
         status <- "ready"
@@ -453,14 +553,39 @@
   run_mode <- as.character(controller$run_mode %||% "within_set")
   is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
   ready_for_phase_b <- isTRUE(all(statuses$status == "ready"))
-  phase <- if (isTRUE(is_link_mode) && isTRUE(ready_for_phase_b)) "phase_b" else "phase_a"
+  ready_spokes <- integer()
+  active_phase_a_set <- NA_integer_
+  pending_run <- integer()
+  if (isTRUE(is_link_mode)) {
+    status_tbl <- tibble::as_tibble(statuses)
+    hub_id <- as.integer(controller$hub_id %||% 1L)
+    ready_sets <- as.integer(status_tbl$set_id[status_tbl$status == "ready"])
+    spokes <- setdiff(unique(as.integer(out$items$set_id)), hub_id)
+    ready_spokes <- if (hub_id %in% ready_sets) {
+      as.integer(sort(intersect(spokes, ready_sets)))
+    } else {
+      integer()
+    }
+    pending_run <- as.integer(status_tbl$set_id[status_tbl$source == "run" & status_tbl$status != "ready"])
+    if (length(pending_run) > 0L) {
+      active_phase_a_set <- as.integer(sort(pending_run)[[1L]])
+    }
+  }
+  phase <- if (isTRUE(is_link_mode) && length(pending_run) == 0L &&
+    (isTRUE(ready_for_phase_b) || length(ready_spokes) > 0L)) {
+    "phase_b"
+  } else {
+    "phase_a"
+  }
 
   out$linking <- out$linking %||% list()
   out$linking$phase_a <- list(
     set_status = statuses,
     artifacts = artifacts,
     ready_for_phase_b = ready_for_phase_b,
-    phase = phase
+    phase = phase,
+    ready_spokes = as.integer(ready_spokes),
+    active_phase_a_set = as.integer(active_phase_a_set)
   )
 
   out
@@ -475,12 +600,29 @@
   }
 
   phase_a <- state$linking$phase_a %||% list()
-  ready <- isTRUE(phase_a$ready_for_phase_b)
-  if (isTRUE(ready)) {
+  status_tbl <- tibble::as_tibble(phase_a$set_status %||% tibble::tibble())
+  if (nrow(status_tbl) > 0L && any(status_tbl$status == "failed")) {
+    blocked <- status_tbl[status_tbl$status == "failed", , drop = FALSE]
+    blocked_msg <- paste0(
+      "set ",
+      blocked$set_id,
+      " [",
+      blocked$source,
+      "]: ",
+      blocked$validation_message
+    )
+    blocked_msg <- paste(blocked_msg, collapse = "; ")
+    rlang::abort(paste0(
+      "Phase B linking cannot start until valid Phase A artifacts exist for hub and spoke sets. ",
+      blocked_msg
+    ))
+  }
+
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (identical(phase_ctx$phase, "phase_b") || length(phase_ctx$pending_run_sets) > 0L) {
     return(invisible(state))
   }
 
-  status_tbl <- tibble::as_tibble(phase_a$set_status %||% tibble::tibble())
   blocked <- status_tbl
   if (nrow(blocked) > 0L) {
     blocked <- blocked[blocked$status != "ready", , drop = FALSE]
