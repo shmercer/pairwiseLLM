@@ -432,10 +432,11 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
   link_phase_b_active <- isTRUE(is_link_mode) && identical(phase_ctx$phase, "phase_b")
 
   if (isTRUE(link_phase_b_active)) {
-    eligible_spokes <- if (length(phase_ctx$ready_spokes) > 0L) {
-      as.integer(phase_ctx$ready_spokes)
-    } else {
-      NULL
+    eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    if (length(eligible_spokes) < 1L) {
+      rlang::abort(
+        "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are eligible."
+      )
     }
     spoke_id <- .adaptive_link_active_spoke(
       state,
@@ -443,7 +444,9 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
       eligible_spoke_ids = eligible_spokes
     )
     if (is.na(spoke_id)) {
-      return(tibble::tibble(i = character(), j = character()))
+      rlang::abort(
+        "Phase metadata and routing mode disagree: no active spoke could be selected for phase_b."
+      )
     }
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
     spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
