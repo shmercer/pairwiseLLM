@@ -210,10 +210,13 @@
   as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")
 }
 
-.adaptive_link_active_spoke <- function(state, controller) {
+.adaptive_link_active_spoke <- function(state, controller, eligible_spoke_ids = NULL) {
   set_ids <- unique(as.integer(state$items$set_id))
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- setdiff(set_ids, hub_id)
+  if (!is.null(eligible_spoke_ids)) {
+    spoke_ids <- intersect(spoke_ids, as.integer(eligible_spoke_ids))
+  }
   if (length(spoke_ids) < 1L) {
     return(NA_integer_)
   }
@@ -425,9 +428,23 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
   controller <- .adaptive_controller_resolve(state)
   is_link_mode <- .adaptive_link_mode_active(controller)
   hub_id <- as.integer(controller$hub_id %||% 1L)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  link_phase_b_active <- isTRUE(is_link_mode) && identical(phase_ctx$phase, "phase_b")
 
-  if (isTRUE(is_link_mode)) {
-    spoke_id <- .adaptive_link_active_spoke(state, controller)
+  if (isTRUE(link_phase_b_active)) {
+    eligible_spokes <- if (length(phase_ctx$ready_spokes) > 0L) {
+      as.integer(phase_ctx$ready_spokes)
+    } else {
+      NULL
+    }
+    spoke_id <- .adaptive_link_active_spoke(
+      state,
+      controller,
+      eligible_spoke_ids = eligible_spokes
+    )
+    if (is.na(spoke_id)) {
+      return(tibble::tibble(i = character(), j = character()))
+    }
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
     spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
     active_ids <- unique(c(hub_ids, spoke_ids))
@@ -452,6 +469,21 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
       spoke_ids = spoke_ids,
       proxy_scores = active_scores
     )
+  } else if (isTRUE(is_link_mode)) {
+    active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+    if (is.na(active_set)) {
+      return(tibble::tibble(i = character(), j = character()))
+    }
+    active_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == active_set])
+    if (length(active_ids) < 2L) {
+      return(tibble::tibble(i = character(), j = character()))
+    }
+    active_scores <- proxy$scores[active_ids]
+    strata <- .adaptive_assign_strata(active_scores, defaults)
+    rank_index <- strata$rank_index
+    stratum_map <- strata$stratum_map
+    ids <- names(sort(rank_index))
+    anchor_ids <- .adaptive_select_rolling_anchors(active_scores, defaults)
   } else {
     strata <- .adaptive_assign_strata(proxy$scores, defaults)
     rank_index <- strata$rank_index
@@ -480,7 +512,7 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
       keep <- FALSE
       dist <- abs(as.integer(stratum_map[[i_id]]) - as.integer(stratum_map[[j_id]]))
 
-      if (isTRUE(is_link_mode)) {
+      if (isTRUE(link_phase_b_active)) {
         i_hub <- i_id %in% hub_ids
         j_hub <- j_id %in% hub_ids
         if (!isTRUE(xor(i_hub, j_hub))) {
@@ -512,7 +544,7 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
         i_vals <- c(i_vals, i_id)
         j_vals <- c(j_vals, j_id)
         dist_vals <- c(dist_vals, as.integer(dist))
-        if (isTRUE(is_link_mode)) {
+        if (isTRUE(link_phase_b_active)) {
           spoke_item <- if (i_id %in% spoke_ids) i_id else j_id
           spoke_bin <- as.integer(coverage$bin_map[[spoke_item]] %||% NA_integer_)
           priority <- as.integer(!is.na(spoke_bin) && spoke_bin %in% coverage$bins_undercovered)
@@ -532,7 +564,7 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
 
   cand <- tibble::tibble(i = as.character(i_vals), j = as.character(j_vals))
   cand$dist_stratum_global <- as.integer(dist_vals)
-  if (isTRUE(is_link_mode)) {
+  if (isTRUE(link_phase_b_active)) {
     cand$coverage_priority <- as.integer(coverage_priority)
     cand$coverage_bin_spoke <- as.integer(coverage_bin)
     cand$link_spoke_id <- as.integer(link_spoke_id)
@@ -590,7 +622,12 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
 #' @keywords internal
 #' @noRd
 .adaptive_link_mode <- function(state) {
-  .adaptive_link_mode_active(.adaptive_controller_resolve(state))
+  controller <- .adaptive_controller_resolve(state)
+  if (!.adaptive_link_mode_active(controller)) {
+    return(FALSE)
+  }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  identical(phase_ctx$phase, "phase_b")
 }
 
 #' @keywords internal

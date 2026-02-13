@@ -82,14 +82,21 @@
   phase_b_ready <- isTRUE(phase_a$ready_for_phase_b %||% FALSE)
   has_cross <- "is_cross_set" %in% names(step_log)
   is_cross <- if (isTRUE(has_cross)) step_log$is_cross_set %in% TRUE else rep(FALSE, nrow(step_log))
+  phase_is_b <- rep(FALSE, nrow(step_log))
+  if (isTRUE(is_link_mode) && isTRUE(has_cross)) {
+    # Use the first committed cross-set row as the observable phase boundary.
+    phase_is_b <- cumsum(is_cross) > 0L
+  } else if (isTRUE(is_link_mode) && isTRUE(phase_b_ready)) {
+    phase_is_b <- rep(TRUE, nrow(step_log))
+  }
   phase <- rep("phase2", nrow(step_log))
-  if (isTRUE(is_link_mode) && isTRUE(phase_b_ready) && isTRUE(has_cross)) {
-    phase <- ifelse(is_cross, "phase3", "phase2")
+  if (isTRUE(is_link_mode)) {
+    phase <- ifelse(phase_is_b, "phase3", "phase2")
   }
   judge_mode <- as.character(controller$judge_param_mode %||% "global_shared")
   judge_scope <- rep("shared", nrow(step_log))
   if (identical(judge_mode, "phase_specific")) {
-    judge_scope <- ifelse(is_cross, "link", "within")
+    judge_scope <- ifelse(phase_is_b, "link", "within")
   }
 
   tibble::tibble(
@@ -880,8 +887,15 @@
   if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
     return(out)
   }
+  phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  if (!identical(phase_ctx$phase, "phase_b")) {
+    return(out)
+  }
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- .adaptive_link_spoke_ids(out, hub_id)
+  if (length(phase_ctx$ready_spokes) > 0L) {
+    spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
+  }
   if (length(spoke_ids) < 1L) {
     return(out)
   }
@@ -1177,9 +1191,16 @@
   if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
     return(tibble::as_tibble(new_link_stage_log()))
   }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!identical(phase_ctx$phase, "phase_b")) {
+    return(tibble::as_tibble(new_link_stage_log()))
+  }
 
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- .adaptive_link_spoke_ids(state, hub_id = hub_id)
+  if (length(phase_ctx$ready_spokes) > 0L) {
+    spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
+  }
   if (length(spoke_ids) < 1L) {
     return(tibble::as_tibble(new_link_stage_log()))
   }

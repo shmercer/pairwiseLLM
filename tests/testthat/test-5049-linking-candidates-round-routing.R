@@ -1,3 +1,20 @@
+mark_link_phase_b_ready <- function(state, source = "import") {
+  set_ids <- sort(unique(as.integer(state$items$set_id)))
+  if (is.null(state$linking$phase_a)) {
+    state$linking$phase_a <- list()
+  }
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = as.integer(set_ids),
+    source = rep(as.character(source), length(set_ids)),
+    status = rep("ready", length(set_ids)),
+    validation_message = rep("ready", length(set_ids)),
+    artifact_path = rep(NA_character_, length(set_ids))
+  )
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$phase <- "phase_b"
+  state
+}
+
 test_that("linking candidates are hub-spoke only by default", {
   items <- tibble::tibble(
     item_id = as.character(1:9),
@@ -11,6 +28,7 @@ test_that("linking candidates are hub-spoke only by default", {
   )
   state$warm_start_done <- TRUE
   state$controller$current_link_spoke_id <- 2L
+  state <- mark_link_phase_b_ready(state)
 
   cand <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
@@ -81,6 +99,7 @@ test_that("early linking sparsity falls back to Phase A rank summaries for bins"
     adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
   state$linking$phase_a$artifacts <- list(
     `2` = list(
       set_id = 2L,
@@ -218,6 +237,7 @@ test_that("linking candidates and step log carry global distance strata", {
   )
   state$round$staged_active <- TRUE
   state$round$stage_index <- 2L
+  state <- mark_link_phase_b_ready(state)
 
   cand <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
@@ -247,6 +267,7 @@ test_that("link stage log is appended per refit and spoke in linking mode", {
     seed = 2L,
     adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
   )
+  state <- mark_link_phase_b_ready(state)
   judge <- make_deterministic_judge("i_wins")
   state <- pairwiseLLM:::run_one_step(state, judge)
   refit_context <- list(last_refit_step = 0L)
@@ -259,4 +280,54 @@ test_that("link stage log is appended per refit and spoke in linking mode", {
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(state$link_stage_log, rows)
   expect_true(nrow(state$link_stage_log) >= 1L)
   expect_true(all(c("refit_id", "spoke_id", "coverage_bins_used") %in% names(state$link_stage_log)))
+})
+
+test_that("round candidate helper branches are exercised for anchor/phase-a paths", {
+  scores <- stats::setNames(c(5, 4, 3, 2, 1), as.character(1:5))
+  defaults <- adaptive_defaults(5)
+  anchors <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores, defaults)
+  expect_true(length(anchors) >= 1L)
+
+  state <- adaptive_rank_start(
+    tibble::tibble(
+      item_id = as.character(1:6),
+      set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
+      global_item_id = paste0("g", 1:6)
+    ),
+    seed = 4L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$round$anchor_ids <- as.character(state$item_ids[1:2])
+  state$round$anchor_round_id <- 1L
+  state$round$round_id <- 2L
+  expect_true(pairwiseLLM:::.adaptive_round_anchor_needs_refresh(
+    state,
+    utils::modifyList(adaptive_defaults(6), list(anchor_refresh_on_round = TRUE))
+  ))
+
+  # In Phase A (pending run sets), generation falls back to within-set candidates.
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("pending", "pending"),
+      validation_message = c("x", "y"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 1L
+  )
+  cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "local_link",
+    fallback_name = "expand_locality",
+    C_max = 200L,
+    seed = 11L
+  )
+  expect_true(nrow(cand) > 0L)
+  set_map <- stats::setNames(state$items$set_id, state$items$item_id)
+  expect_true(all(set_map[cand$i] == 1L & set_map[cand$j] == 1L))
 })

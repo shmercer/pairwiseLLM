@@ -151,24 +151,43 @@ test_that("phase A import fallback policy switches to run mode when configured",
   expect_match(status$validation_message[match(1L, status$set_id)], "import_failed_fallback_to_run")
 })
 
-test_that("Phase B cannot start without valid Phase A artifacts", {
+test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
   state <- adaptive_rank_start(make_multiset_items(), seed = 1L)
   judge <- make_deterministic_judge("i_wins")
 
-  expect_error(
-    adaptive_rank_run_live(
-      state,
-      judge,
-      n_steps = 1L,
-      adaptive_config = list(
-        run_mode = "link_one_spoke",
-        hub_id = 1L,
-        phase_a_mode = "run"
-      ),
-      progress = "none"
+  out <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 1L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run"
     ),
-    "Phase B linking cannot start"
+    progress = "none"
   )
+
+  expect_equal(nrow(out$step_log), 1L)
+  expect_true(all(out$step_log$is_cross_set %in% FALSE))
+  expect_true(all(out$step_log$set_i == out$step_log$set_j))
+})
+
+test_that("phase A gate allows pending run sets and blocks failed imports", {
+  state <- adaptive_rank_start(make_multiset_items(), seed = 1L)
+  state <- .adaptive_apply_controller_config(state, adaptive_config = list(
+    run_mode = "link_one_spoke",
+    hub_id = 1L,
+    phase_a_mode = "run"
+  ))
+  state <- .adaptive_phase_a_prepare(state)
+  expect_no_error(.adaptive_phase_a_gate_or_abort(state))
+
+  status_tbl <- tibble::as_tibble(state$linking$phase_a$set_status)
+  status_tbl$status[] <- "failed"
+  status_tbl$source[] <- "import"
+  status_tbl$validation_message[] <- "bad"
+  state$linking$phase_a$set_status <- status_tbl
+  expect_error(.adaptive_phase_a_gate_or_abort(state), "cannot start until valid Phase A artifacts")
 })
 
 test_that("phase_specific judge mode respects Phase A to Phase B boundary gating", {
@@ -309,7 +328,7 @@ test_that("phase A helper branch guards and edge paths are exercised", {
     phase = "phase_a"
   )
   state <- .adaptive_apply_controller_config(state, adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L))
-  expect_error(.adaptive_phase_a_gate_or_abort(state), "phase_a_artifacts_missing")
+  expect_no_error(.adaptive_phase_a_gate_or_abort(state))
 
   empty_dir <- withr::local_tempdir()
   empty_child <- file.path(empty_dir, "child")
@@ -362,4 +381,109 @@ test_that("resume preserves persisted phase A artifacts for linking gate", {
       progress = "none"
     )
   )
+})
+
+test_that("phase A helper utilities cover fallback and phase-context branches", {
+  state <- adaptive_rank_start(make_multiset_items(), seed = 9L)
+  controller <- .adaptive_controller_resolve(state)
+
+  # ready set fallback uses artifact names when set_status has no ready rows.
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("import", "import"),
+      status = c("pending", "pending"),
+      validation_message = c("x", "y"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`2` = list(set_id = 2L))
+  )
+  expect_identical(.adaptive_phase_a_ready_sets(state), 2L)
+
+  # Non-link mode has no pending run sets.
+  expect_identical(
+    .adaptive_phase_a_pending_run_sets(
+      state,
+      controller = utils::modifyList(controller, list(run_mode = "within_set"))
+    ),
+    integer()
+  )
+
+  # Unresolved (all NA status/source) remains in phase_a until artifacts are prepared.
+  state$linking$phase_a$set_status <- .adaptive_phase_a_empty_state(c(1L, 2L))
+  ctx <- .adaptive_link_phase_context(
+    state,
+    controller = utils::modifyList(controller, list(run_mode = "link_one_spoke", hub_id = 1L))
+  )
+  expect_identical(ctx$phase, "phase_a")
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  expect_error(.adaptive_phase_a_gate_or_abort(state), "cannot start until valid Phase A artifacts")
+
+  # collect_import_map handles NULL and read_import_artifact reads existing .rds files.
+  expect_equal(.adaptive_phase_a_collect_import_map(list(phase_a_artifacts = NULL)), list())
+  path <- file.path(withr::local_tempdir(), "art.rds")
+  write_log(list(set_id = 1L), path)
+  expect_identical(.adaptive_phase_a_read_import_artifact(path)$set_id, 1L)
+
+  # Additional validation failures.
+  valid <- .adaptive_phase_a_build_artifact(make_phase_a_ready_state(), set_id = 1L)
+  bad_identity <- valid
+  bad_identity$items$global_item_id[[1L]] <- NA_character_
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      bad_identity,
+      make_phase_a_ready_state(),
+      1L,
+      .adaptive_controller_resolve(make_phase_a_ready_state())
+    ),
+    "item identity failure"
+  )
+  bad_missing <- valid
+  bad_missing$items$theta_raw_mean[[1L]] <- NA_real_
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      bad_missing,
+      make_phase_a_ready_state(),
+      1L,
+      .adaptive_controller_resolve(make_phase_a_ready_state())
+    ),
+    "completeness failure"
+  )
+
+  # Import mode with missing artifacts marks failed rows.
+  state2 <- make_phase_a_ready_state()
+  state2 <- .adaptive_apply_controller_config(
+    state2,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import"
+    )
+  )
+  prepared <- .adaptive_phase_a_prepare(state2)
+  status <- tibble::as_tibble(prepared$linking$phase_a$set_status)
+  expect_true(all(status$status == "failed"))
+
+  # Gate emits missing-artifact message when not ready and no pending run sets.
+  state3 <- state
+  state3 <- .adaptive_apply_controller_config(
+    state3,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state3$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("import", "import"),
+      status = c("pending", "pending"),
+      validation_message = c("missing", "missing"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a"
+  )
+  expect_error(.adaptive_phase_a_gate_or_abort(state3), "cannot start until valid Phase A artifacts")
 })
