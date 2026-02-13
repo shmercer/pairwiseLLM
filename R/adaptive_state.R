@@ -91,6 +91,7 @@
     hub_id = 1L,
     link_transform_mode = "auto",
     link_refit_mode = "shift_only",
+    shift_only_theta_treatment = "fixed_eap",
     judge_param_mode = "global_shared",
     hub_lock_mode = "soft_lock",
     hub_lock_kappa = 0.75,
@@ -121,6 +122,11 @@
     current_link_spoke_id = NA_integer_,
     linking_identified = FALSE,
     linking_identified_by_spoke = list(),
+    link_transform_mode_by_spoke = list(),
+    link_transform_bad_refits_by_spoke = list(),
+    link_transform_last_delta_by_spoke = list(),
+    link_transform_last_log_alpha_by_spoke = list(),
+    link_refit_stats_by_spoke = list(),
     link_stage_coverage_bins_used = list(),
     link_stage_coverage_source = list()
   )
@@ -147,6 +153,7 @@
     "hub_id",
     "link_transform_mode",
     "link_refit_mode",
+    "shift_only_theta_treatment",
     "judge_param_mode",
     "hub_lock_mode",
     "hub_lock_kappa",
@@ -285,6 +292,10 @@
   out$hub_id <- read_integer("hub_id", 1L, Inf)
   out$link_transform_mode <- read_choice("link_transform_mode", c("auto", "shift_only", "shift_scale"))
   out$link_refit_mode <- read_choice("link_refit_mode", c("shift_only", "joint_refit"))
+  out$shift_only_theta_treatment <- read_choice(
+    "shift_only_theta_treatment",
+    c("fixed_eap", "normal_prior")
+  )
   out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
   out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock", "free"))
   out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
