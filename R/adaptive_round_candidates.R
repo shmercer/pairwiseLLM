@@ -6,26 +6,12 @@
   ids <- as.character(state$trueskill_state$items$item_id)
   mu <- as.double(state$trueskill_state$items$mu)
   names(mu) <- ids
-
-  theta <- state$btl_fit$theta_mean %||% NULL
   refit_id <- as.integer(state$refit_meta$last_refit_round_id %||% 0L)
-  if (is.numeric(theta) && length(theta) > 0L && refit_id > 0L) {
-    theta_names <- as.character(names(theta))
-    theta <- as.double(theta)
-    names(theta) <- theta_names
-    if (all(ids %in% names(theta))) {
-      return(list(
-        scores = theta[ids],
-        source = "refit_theta_mean",
-        refit_id = refit_id
-      ))
-    }
-  }
 
   list(
     scores = mu[ids],
     source = "trueskill_mu",
-    refit_id = 0L
+    refit_id = refit_id
   )
 }
 

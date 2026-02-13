@@ -341,24 +341,6 @@ adaptive_defaults <- function(N) {
   )
 }
 
-.adaptive_posterior_pair_prob <- function(state, i_id, j_id) {
-  fit <- state$btl_fit %||% NULL
-  draws <- fit$btl_posterior_draws %||% NULL
-  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L) {
-    return(NA_real_)
-  }
-  draw_names <- colnames(draws)
-  if (is.null(draw_names)) {
-    return(NA_real_)
-  }
-  i_col <- match(as.character(i_id), draw_names)
-  j_col <- match(as.character(j_id), draw_names)
-  if (is.na(i_col) || is.na(j_col)) {
-    return(NA_real_)
-  }
-  as.double(mean(draws[, i_col] > draws[, j_col]))
-}
-
 .adaptive_local_priority_select <- function(cand, state, round, stage_committed_so_far, stage_quota, defaults) {
   if (nrow(cand) == 0L) {
     return(list(candidates = cand, mode = "standard"))
@@ -510,21 +492,10 @@ adaptive_defaults <- function(N) {
   if (isTRUE(gate_active) && nrow(candidates) > 0L) {
     p_long_low <- as.double(controller$p_long_low)
     p_long_high <- as.double(controller$p_long_high)
-    p_gate <- vapply(seq_len(nrow(candidates)), function(idx) {
-      .adaptive_posterior_pair_prob(state, candidates$i[[idx]], candidates$j[[idx]])
-    }, numeric(1L))
-    posterior_available <- is.finite(p_gate)
-    if (!all(posterior_available)) {
-      p_gate[!posterior_available] <- candidates$p[!posterior_available]
-      long_gate_reason <- "posterior_unavailable"
-    }
+    p_gate <- as.double(candidates$p)
     keep <- p_gate >= p_long_low & p_gate <= p_long_high
-    if (any(keep)) {
-      if (all(posterior_available)) {
-        long_gate_reason <- NA_character_
-      }
-    } else {
-      long_gate_reason <- if (all(posterior_available)) "posterior_extreme" else "posterior_unavailable"
+    if (!any(keep)) {
+      long_gate_reason <- "trueskill_extreme"
     }
     long_gate_pass <- any(keep)
     candidates <- candidates[keep, , drop = FALSE]

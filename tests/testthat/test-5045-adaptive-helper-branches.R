@@ -529,13 +529,7 @@ test_that("adaptive select helpers cover history, strata, and duplicate branches
   )
   expect_true(nrow(relaxed_meta) >= nrow(relaxed_no_meta))
 
-  p_na <- pairwiseLLM:::.adaptive_posterior_pair_prob(list(), "a", "b")
-  expect_true(is.na(p_na))
-  p_ok <- pairwiseLLM:::.adaptive_posterior_pair_prob(
-    list(btl_fit = list(btl_posterior_draws = `colnames<-`(matrix(c(1, 2, 3, 0), nrow = 2), c("a", "b")))),
-    "a", "b"
-  )
-  expect_true(is.finite(p_ok))
+  expect_true(is.list(pairwiseLLM:::.adaptive_resolve_controller(state, defaults)))
 })
 
 test_that("adaptive state and trueskill validators cover additional edge branches", {
@@ -690,16 +684,22 @@ test_that("adaptive selector branch guards and validation errors are exercised",
   )
   expect_equal(nrow(dup), nrow(cand))
 
-  p_no_cols <- pairwiseLLM:::.adaptive_posterior_pair_prob(
-    list(btl_fit = list(btl_posterior_draws = matrix(1, nrow = 1, ncol = 2))),
-    "a", "b"
+  state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
+  state$controller$global_identified <- TRUE
+  state$controller$p_long_low <- 0.45
+  state$controller$p_long_high <- 0.55
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 2L
+  out_gate <- testthat::with_mocked_bindings(
+    trueskill_win_probability = function(i_id, j_id, state) 0.99,
+    pairwiseLLM:::select_next_pair(
+      state,
+      step_id = 1L,
+      candidates = tibble::tibble(i = "a", j = "b")
+    ),
+    .package = "pairwiseLLM"
   )
-  expect_true(is.na(p_no_cols))
-  p_missing <- pairwiseLLM:::.adaptive_posterior_pair_prob(
-    list(btl_fit = list(btl_posterior_draws = `colnames<-`(matrix(1, nrow = 1, ncol = 2), c("a", "b")))),
-    "a", "x"
-  )
-  expect_true(is.na(p_missing))
+  expect_identical(out_gate$long_gate_reason, "trueskill_extreme")
 
   lp <- pairwiseLLM:::.adaptive_local_priority_select(tibble::tibble(), state, state$round, 0L, 1L, defaults)
   expect_identical(lp$mode, "standard")

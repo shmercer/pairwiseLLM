@@ -118,7 +118,7 @@ test_that("generate_candidate_pairs validates inputs", {
   )
 })
 
-test_that("rolling anchors refresh from trueskill and refit sources deterministically", {
+test_that("rolling anchors refresh deterministically from trueskill", {
   items <- make_test_items(10)
   trueskill_state <- make_test_trueskill_state(
     items,
@@ -138,9 +138,13 @@ test_that("rolling anchors refresh from trueskill and refit sources deterministi
   state_1$refit_meta$last_refit_round_id <- 1L
   state_2 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_1)
 
-  expect_equal(state_2$round$anchor_refresh_source, "refit_theta_mean")
-  expect_false(identical(state_2$round$anchor_ids, anchors_1))
+  expect_equal(state_2$round$anchor_refresh_source, "trueskill_mu")
+  expect_identical(state_2$round$anchor_ids, anchors_1)
   expect_equal(state_2$round$anchor_refit_round_id, 1L)
+
+  state_3 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_2)
+  expect_identical(state_3$round$anchor_ids, state_2$round$anchor_ids)
+  expect_equal(state_3$round$anchor_refit_round_id, 1L)
 })
 
 test_that("rolling anchor count follows clamped default", {

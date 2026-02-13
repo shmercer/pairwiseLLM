@@ -33,7 +33,7 @@ behavior. Supported fields:
 \describe{
 \item{\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min}}{Thresholds
 used to mark global identifiability after each refit.}
-\item{\code{p_long_low}, \code{p_long_high}}{Posterior probability gate used for
+\item{\code{p_long_low}, \code{p_long_high}}{TrueSkill win-probability gate used for
 long-link eligibility once globally identified.}
 \item{\code{long_taper_mult}, \code{long_frac_floor}, \code{mid_bonus_frac}}{Late-stage
 long-link taper and quota reallocation controls.}
