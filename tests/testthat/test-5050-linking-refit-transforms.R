@@ -449,6 +449,31 @@ test_that("concurrent allocation uses uncertainty weights and enforces floor", {
   expect_true(stats3$concurrent_target_pairs >= 2L)
 })
 
+test_that("concurrent spoke routing enforces floor before uncertainty targets", {
+  state <- make_linking_refit_state(
+    list(
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 2L
+    )
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state$refit_meta$last_refit_step <- 0L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 0.01),
+    `3` = list(uncertainty = 10)
+  )
+
+  # Spoke 3 is below floor while spoke 2 already has one edge.
+  pick <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
+  expect_identical(pick, 3L)
+
+  state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
+  state <- append_cross_step(state, 3L, "s32", "h2", 1L, spoke_id = 3L)
+  # Both spokes satisfy floor now; routing should follow uncertainty target deficit.
+  pick2 <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
+  expect_identical(pick2, 2L)
+})
+
 test_that("active linking reliability is computed on active hub-spoke items only", {
   state <- make_linking_refit_state()
   state$round$anchor_ids <- character()
@@ -567,6 +592,176 @@ test_that("link stop decision is reproducible from link_stage_log fields", {
     controller = state$controller
   )
   expect_identical(row$link_stop_pass[[1L]], reconstructed)
+})
+
+test_that("link stage log stores active TS-BTL correlation separately from lagged rank stability", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0.1,
+      delta_spoke_sd = 0.02,
+      delta_change_lagged = 0.01,
+      delta_change_pass = TRUE,
+      delta_sd_max_used = 0.05,
+      delta_sd_pass = TRUE,
+      log_alpha_sd_pass = NA,
+      log_alpha_change_pass = NA,
+      link_reliability = 0.91,
+      link_reliability_stop_pass = TRUE,
+      ts_btl_rank_spearman_active = 0.93,
+      lag_eligible = TRUE,
+      rank_stability_lagged = 0.99,
+      rank_stability_pass = TRUE
+    )
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(refit_id = 1L, diagnostics_pass = TRUE)
+  )
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_equal(row$ts_btl_rank_spearman[[1L]], 0.93, tolerance = 1e-12)
+  expect_equal(row$rank_stability_lagged[[1L]], 0.99, tolerance = 1e-12)
+})
+
+test_that("link stop reconstruction can use link-stage pass flags only", {
+  row <- tibble::tibble(
+    link_stop_eligible = TRUE,
+    reliability_stop_pass = TRUE,
+    delta_sd_pass = TRUE,
+    log_alpha_sd_pass = NA,
+    delta_change_pass = TRUE,
+    log_alpha_change_pass = NA,
+    rank_stability_pass = TRUE
+  )
+  out <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = NA_real_,
+    controller = list()
+  )
+  expect_true(isTRUE(out))
+
+  row$rank_stability_pass <- FALSE
+  out2 <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = NA_real_,
+    controller = list()
+  )
+  expect_false(isTRUE(out2))
+})
+
+test_that("link stop reconstruction fallback path honors numeric gates", {
+  controller <- list(
+    link_stop_reliability_min = 0.90,
+    delta_sd_max = 0.10,
+    log_alpha_sd_max = 0.10,
+    delta_change_max = 0.05,
+    log_alpha_change_max = 0.05
+  )
+  row_shift <- tibble::tibble(
+    link_stop_eligible = TRUE,
+    reliability_EAP_link = 0.95,
+    delta_spoke_sd = 0.01,
+    link_transform_mode = "shift_only",
+    log_alpha_spoke_sd = NA_real_,
+    delta_change_lagged = 0.01,
+    log_alpha_change_lagged = NA_real_,
+    delta_change_pass = TRUE,
+    log_alpha_change_pass = NA,
+    ts_btl_rank_spearman = 0.99
+  )
+  pass_shift <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row_shift,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = 0.5,
+    controller = controller
+  )
+  expect_true(isTRUE(pass_shift))
+
+  row_scale <- tibble::tibble(
+    link_stop_eligible = TRUE,
+    reliability_EAP_link = 0.95,
+    delta_spoke_sd = 0.01,
+    link_transform_mode = "shift_scale",
+    log_alpha_spoke_sd = 0.03,
+    delta_change_lagged = 0.01,
+    log_alpha_change_lagged = 0.01,
+    delta_change_pass = TRUE,
+    log_alpha_change_pass = TRUE,
+    ts_btl_rank_spearman = 0.99
+  )
+  pass_scale <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row_scale,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = 0.5,
+    controller = controller
+  )
+  expect_true(isTRUE(pass_scale))
+
+  row_scale$log_alpha_change_lagged <- 0.25
+  row_scale$log_alpha_change_pass <- FALSE
+  fail_scale <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row_scale,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = 0.5,
+    controller = controller
+  )
+  expect_false(isTRUE(fail_scale))
+})
+
+test_that("linking refit stats carry latest coverage metadata for link-stage log rows", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state$controller$link_stage_coverage_bins_used <- list(`2` = 3L)
+  state$controller$link_stage_coverage_source <- list(`2` = "phase_a_rank_mu_raw")
+
+  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_identical(row$coverage_bins_used[[1L]], 3L)
+  expect_identical(row$coverage_source[[1L]], "phase_a_rank_mu_raw")
+})
+
+test_that("item log keeps raw summaries separate from transformed global summaries in linking mode", {
+  state <- make_linking_refit_state(
+    list(link_transform_mode = "shift_scale", multi_spoke_mode = "independent")
+  )
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_mode = "shift_scale",
+      delta_spoke_mean = 0.3,
+      log_alpha_spoke_mean = log(1.2)
+    ),
+    `3` = list(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = -0.2,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+
+  item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
+  row_s2 <- item_log[item_log$item_id == "s21", , drop = FALSE]
+  row_s3 <- item_log[item_log$item_id == "s31", , drop = FALSE]
+  row_h <- item_log[item_log$item_id == "h1", , drop = FALSE]
+
+  expect_equal(row_s2$theta_raw_eap[[1L]], -0.30, tolerance = 1e-12)
+  expect_equal(row_s2$theta_global_eap[[1L]], 0.3 + 1.2 * (-0.30), tolerance = 1e-12)
+  expect_equal(row_s3$theta_raw_eap[[1L]], 0.15, tolerance = 1e-12)
+  expect_equal(row_s3$theta_global_eap[[1L]], -0.2 + 0.15, tolerance = 1e-12)
+  expect_equal(row_h$theta_raw_eap[[1L]], 0.80, tolerance = 1e-12)
+  expect_equal(row_h$theta_global_eap[[1L]], 0.80, tolerance = 1e-12)
 })
 
 test_that("lagged rank stability gate uses Spearman threshold of at least 0.98", {

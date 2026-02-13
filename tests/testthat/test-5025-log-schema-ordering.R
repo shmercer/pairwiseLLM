@@ -63,11 +63,15 @@ test_that("canonical log schemas follow the expected column order", {
     "hub_lock_mode", "hub_lock_kappa", "delta_spoke_mean", "delta_spoke_sd",
     "log_alpha_spoke_mean", "log_alpha_spoke_sd", "delta_change_lagged",
     "log_alpha_change_lagged", "delta_change_pass", "log_alpha_change_pass",
-    "reliability_EAP_link", "linking_identified", "link_stop_eligible",
-    "link_stop_pass", "ts_btl_rank_spearman", "ppc_mae_cross",
+    "delta_sd_max_used", "delta_sd_pass", "log_alpha_sd_pass",
+    "reliability_EAP_link", "reliability_stop_pass", "linking_identified",
+    "lag_eligible", "rank_stability_lagged", "rank_stability_pass",
+    "link_stop_eligible", "link_stop_pass", "ts_btl_rank_spearman", "ppc_mae_cross",
     "escalated_this_refit", "n_pairs_cross_set_done", "n_unique_cross_pairs_seen",
-    "n_cross_edges_since_last_refit", "active_item_count_hub",
-    "active_item_count_spoke", "coverage_bins_used"
+    "n_cross_edges_since_last_refit", "concurrent_target_pairs",
+    "concurrent_floor_pairs", "concurrent_floor_met", "concurrent_target_met",
+    "active_item_count_hub", "active_item_count_spoke", "coverage_bins_used",
+    "coverage_source"
   )
 
   expect_equal(names(pairwiseLLM:::schema_step_log), expected_step)
