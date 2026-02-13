@@ -240,28 +240,76 @@
     return(as.integer(sort(spoke_ids)[[1L]]))
   }
 
-  # In multi-spoke mode, balance routing deterministically across spokes.
+  # In multi-spoke mode, route deterministically across spokes.
+  spoke_ids <- as.integer(sort(spoke_ids))
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
+  step_subset <- tibble::tibble()
   if (nrow(step_log) > 0L && all(required %in% names(step_log))) {
     eligible <- !is.na(step_log$pair_id) &
       step_log$is_cross_set %in% TRUE &
-      as.integer(step_log$link_spoke_id) %in% as.integer(spoke_ids)
+      as.integer(step_log$link_spoke_id) %in% spoke_ids
     step_subset <- step_log[eligible, , drop = FALSE]
-    if (identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
+  }
+
+  if (identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
+    if (nrow(step_subset) > 0L) {
       last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
       step_subset <- step_subset[as.integer(step_subset$step_id) > last_refit_step, , drop = FALSE]
     }
+    counts <- rep.int(0L, length(spoke_ids))
+    names(counts) <- as.character(spoke_ids)
     if (nrow(step_subset) > 0L) {
-      counts <- table(factor(
+      tab <- table(factor(
         as.integer(step_subset$link_spoke_id),
-        levels = as.integer(sort(spoke_ids))
+        levels = spoke_ids
       ))
-      min_count <- min(as.integer(counts))
-      choice <- as.integer(names(counts)[as.integer(counts) == min_count][[1L]])
-      if (!is.na(choice) && choice %in% spoke_ids) {
-        return(as.integer(choice))
-      }
+      counts[names(tab)] <- as.integer(tab)
+    }
+
+    floor_pairs <- as.integer(controller$min_cross_set_pairs_per_spoke_per_refit %||% 5L)
+    floor_pairs <- max(0L, floor_pairs)
+    floor_deficit <- pmax(0L, floor_pairs - counts)
+    if (any(floor_deficit > 0L)) {
+      ord_floor <- order(-floor_deficit, counts, as.integer(names(counts)))
+      return(as.integer(names(counts)[ord_floor[[1L]]]))
+    }
+
+    # Route by uncertainty-weighted target deficit for the next committed step.
+    link_stats <- controller$link_refit_stats_by_spoke %||% list()
+    spoke_stats <- lapply(as.character(spoke_ids), function(key) {
+      link_stats[[key]] %||% list(uncertainty = 0)
+    })
+    names(spoke_stats) <- as.character(spoke_ids)
+    projected_total <- as.integer(sum(counts) + 1L)
+    projected_total <- max(projected_total, as.integer(length(spoke_ids) * floor_pairs))
+    targets <- .adaptive_link_concurrent_targets(
+      spoke_stats = spoke_stats,
+      total_pairs = projected_total,
+      floor_pairs = floor_pairs
+    )
+    target_deficit <- as.integer(targets[names(counts)] - counts)
+    target_deficit[!is.finite(target_deficit)] <- 0L
+    if (any(target_deficit > 0L)) {
+      weights <- vapply(spoke_stats, function(x) as.double(x$uncertainty %||% 0), numeric(1L))
+      weights[!is.finite(weights)] <- 0
+      ord_deficit <- order(-target_deficit, -weights, counts, as.integer(names(counts)))
+      return(as.integer(names(counts)[ord_deficit[[1L]]]))
+    }
+
+    ord_counts <- order(counts, as.integer(names(counts)))
+    return(as.integer(names(counts)[ord_counts[[1L]]]))
+  }
+
+  if (nrow(step_subset) > 0L) {
+    counts <- table(factor(
+      as.integer(step_subset$link_spoke_id),
+      levels = spoke_ids
+    ))
+    min_count <- min(as.integer(counts))
+    choice <- as.integer(names(counts)[as.integer(counts) == min_count][[1L]])
+    if (!is.na(choice) && choice %in% spoke_ids) {
+      return(as.integer(choice))
     }
   }
 
