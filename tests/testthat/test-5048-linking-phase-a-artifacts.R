@@ -394,7 +394,12 @@ test_that("resume preserves Phase A pending/ready semantics and warm-start state
 
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run",
+      phase_a_required_reliability_min = 0
+    )
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -547,6 +552,48 @@ test_that("phase_a_mode=run does not mark set ready before within-set finalizati
   expect_true(all(status$status == "pending_finalization"))
   expect_true(all(grepl("pending_finalization", status$validation_message)))
   expect_false(isTRUE(prepared$linking$phase_a$ready_for_phase_b))
+})
+
+test_that("run set transition to ready overwrites stale pending_finalization message", {
+  state <- make_phase_a_ready_state()
+  state$round_log <- tibble::tibble(
+    diagnostics_pass = TRUE,
+    ts_btl_rank_spearman = 0.95
+  )
+  state$history_pairs <- tibble::tibble(
+    A_id = c("a1", "b1"),
+    B_id = c("a2", "b2")
+  )
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art1$n_pairs_committed <- 0L
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art2$n_pairs_committed <- 0L
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("pending_finalization", "pending_finalization"),
+      validation_message = c(
+        "pending_finalization: within-set stop criteria not yet met",
+        "pending_finalization: within-set stop criteria not yet met"
+      ),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = art1, `2` = art2),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 1L
+  )
+
+  prepared <- .adaptive_phase_a_prepare(state)
+  status <- tibble::as_tibble(prepared$linking$phase_a$set_status)
+  expect_true(all(status$validation_message[status$status == "ready"] == "built_in_run"))
 })
 
 test_that("phase B gate aborts when hub/spoke artifacts are missing", {
