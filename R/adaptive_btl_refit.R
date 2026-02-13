@@ -492,6 +492,39 @@
       log_alpha_mean = fit$log_alpha_mean
     )
 
+    escalated_this_refit <- FALSE
+    if (identical(as.character(controller$link_transform_mode %||% "auto"), "auto")) {
+      if (identical(transform_mode, "shift_only")) {
+        bad <- as.integer(bad_refits[[key]] %||% 0L)
+        if (is.finite(ppc_mae) && ppc_mae > as.double(controller$cross_set_ppc_mae_max %||% 0.07)) {
+          bad <- bad + 1L
+        } else {
+          bad <- 0L
+        }
+        need <- as.integer(controller$link_transform_escalation_refits_required %||% 2L)
+        if (bad >= need) {
+          mode_map[[key]] <- "shift_scale"
+          transform_mode <- "shift_scale"
+          escalated_this_refit <- TRUE
+          # Escalation takes effect in the current refit: recompute transform
+          # fit and PPC using shift+scale parameters before gating/logging.
+          fit <- .adaptive_link_fit_transform(cross_all, hub_theta, spoke_theta, transform_mode = transform_mode)
+          ppc_mae <- .adaptive_link_ppc_mae_cross(
+            cross_since,
+            hub_theta = hub_theta,
+            spoke_theta = spoke_theta,
+            delta_mean = fit$delta_mean,
+            log_alpha_mean = fit$log_alpha_mean
+          )
+        }
+        bad_refits[[key]] <- bad
+      }
+      if (identical(transform_mode, "shift_scale") &&
+        isTRUE(controller$link_transform_escalation_is_one_way %||% TRUE)) {
+        mode_map[[key]] <- "shift_scale"
+      }
+    }
+
     delta_prev <- as.double(last_delta[[key]] %||% NA_real_)
     log_alpha_prev <- as.double(last_log_alpha[[key]] %||% NA_real_)
     delta_change <- if (is.finite(delta_prev)) abs(fit$delta_mean - delta_prev) else NA_real_
@@ -517,29 +550,6 @@
       is.finite(fit$log_alpha_sd) && fit$log_alpha_sd <= as.double(controller$log_alpha_sd_max %||% 0.10)
     } else {
       TRUE
-    }
-
-    escalated_this_refit <- FALSE
-    if (identical(as.character(controller$link_transform_mode %||% "auto"), "auto")) {
-      if (identical(transform_mode, "shift_only")) {
-        bad <- as.integer(bad_refits[[key]] %||% 0L)
-        if (is.finite(ppc_mae) && ppc_mae > as.double(controller$cross_set_ppc_mae_max %||% 0.07)) {
-          bad <- bad + 1L
-        } else {
-          bad <- 0L
-        }
-        need <- as.integer(controller$link_transform_escalation_refits_required %||% 2L)
-        if (bad >= need) {
-          mode_map[[key]] <- "shift_scale"
-          transform_mode <- "shift_scale"
-          escalated_this_refit <- TRUE
-        }
-        bad_refits[[key]] <- bad
-      }
-      if (identical(transform_mode, "shift_scale") &&
-        isTRUE(controller$link_transform_escalation_is_one_way %||% TRUE)) {
-        mode_map[[key]] <- "shift_scale"
-      }
     }
 
     if (identical(transform_mode, "shift_scale") && !is.finite(fit$log_alpha_mean)) {

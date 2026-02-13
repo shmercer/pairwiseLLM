@@ -180,6 +180,40 @@ test_that("auto escalation triggers after consecutive PPC failures and is one-wa
   expect_identical(state$controller$link_transform_mode_by_spoke[["2"]], "shift_scale")
 })
 
+test_that("auto escalation refits shift_scale parameters in the same refit", {
+  state <- make_linking_refit_state(
+    list(
+      link_transform_mode = "auto",
+      link_refit_mode = "shift_only",
+      cross_set_ppc_mae_max = 0.01,
+      link_transform_escalation_refits_required = 1L
+    )
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  modes <- character()
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+      modes <<- c(modes, as.character(transform_mode))
+      if (identical(transform_mode, "shift_scale")) {
+        return(list(delta_mean = 0.1, delta_sd = 0.05, log_alpha_mean = 0.33, log_alpha_sd = 0.04))
+      }
+      list(delta_mean = 0.1, delta_sd = 0.05, log_alpha_mean = NA_real_, log_alpha_sd = NA_real_)
+    },
+    .adaptive_link_ppc_mae_cross = function(...) 0.5,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_identical(modes[[1L]], "shift_only")
+  expect_true(any(modes == "shift_scale"))
+  expect_identical(stats$link_transform_mode, "shift_scale")
+  expect_equal(stats$log_alpha_spoke_mean, 0.33, tolerance = 1e-12)
+})
+
 test_that("invalid linking mode combinations fail validation", {
   defaults <- pairwiseLLM:::.adaptive_controller_defaults(8L)
   expect_identical(defaults$shift_only_theta_treatment, "fixed_eap")
