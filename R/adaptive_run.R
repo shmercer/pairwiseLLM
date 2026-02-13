@@ -745,6 +745,17 @@ adaptive_rank_run_live <- function(state,
         config = refit_out$config
       )
       state$round_log <- append_round_log(state$round_log, round_row)
+      link_rows <- .adaptive_link_stage_refit_rows(
+        state = state,
+        refit_id = as.integer(round_row$refit_id),
+        refit_context = refit_out$refit_context
+      )
+      if (nrow(link_rows) > 0L) {
+        state$link_stage_log <- append_link_stage_log(
+          state$link_stage_log %||% new_link_stage_log(),
+          link_rows
+        )
+      }
       item_log_tbl <- .adaptive_build_item_log_refit(
         state,
         refit_id = round_row$refit_id
