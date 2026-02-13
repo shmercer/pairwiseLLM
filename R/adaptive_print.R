@@ -65,6 +65,85 @@
   NA_real_
 }
 
+.adaptive_link_item_raw_global_summaries <- function(state, ids, set_id, theta_mean, theta_sd) {
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+
+  raw_mean <- as.double(theta_mean)
+  raw_sd <- as.double(theta_sd)
+  global_mean <- as.double(theta_mean)
+  global_sd <- as.double(theta_sd)
+
+  if (!isTRUE(is_link_mode)) {
+    return(list(
+      theta_raw_eap = raw_mean,
+      theta_raw_sd = raw_sd,
+      theta_global_eap = global_mean,
+      theta_global_sd = global_sd
+    ))
+  }
+
+  items <- state$items
+  item_key <- as.character(items$item_id)
+  global_key <- as.character(items$global_item_id)
+  item_to_global <- stats::setNames(global_key, item_key)
+  id_global <- as.character(item_to_global[ids])
+
+  artifacts <- (state$linking$phase_a %||% list())$artifacts %||% list()
+  for (spoke_key in names(artifacts)) {
+    artifact <- artifacts[[spoke_key]] %||% NULL
+    items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())
+    if (nrow(items_tbl) < 1L ||
+      !all(c("global_item_id", "theta_raw_mean", "theta_raw_sd") %in% names(items_tbl))) {
+      next
+    }
+    map_mean <- stats::setNames(as.double(items_tbl$theta_raw_mean), as.character(items_tbl$global_item_id))
+    map_sd <- stats::setNames(as.double(items_tbl$theta_raw_sd), as.character(items_tbl$global_item_id))
+    idx <- match(id_global, names(map_mean))
+    keep <- !is.na(idx)
+    if (any(keep)) {
+      matched <- id_global[keep]
+      raw_mean[keep] <- as.double(map_mean[matched])
+      raw_sd[keep] <- as.double(map_sd[matched])
+    }
+  }
+  raw_sd[!is.finite(raw_sd) | raw_sd < 0] <- theta_sd[!is.finite(raw_sd) | raw_sd < 0]
+  global_mean <- as.double(raw_mean)
+  global_sd <- as.double(raw_sd)
+
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  spoke_ids <- sort(unique(as.integer(set_id[as.integer(set_id) != hub_id])))
+  for (spoke_id in spoke_ids) {
+    spoke_idx <- which(as.integer(set_id) == as.integer(spoke_id))
+    if (length(spoke_idx) < 1L) {
+      next
+    }
+    stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
+    mode <- as.character(stats_row$link_transform_mode %||%
+      .adaptive_link_transform_mode_for_spoke(controller, spoke_id))
+    delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+    if (!is.finite(delta)) {
+      delta <- 0
+    }
+    alpha <- 1
+    if (identical(mode, "shift_scale")) {
+      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% 0)
+      alpha <- if (is.finite(log_alpha)) exp(log_alpha) else 1
+    }
+    global_mean[spoke_idx] <- as.double(delta + alpha * raw_mean[spoke_idx])
+    global_sd[spoke_idx] <- as.double(abs(alpha) * raw_sd[spoke_idx])
+  }
+
+  list(
+    theta_raw_eap = as.double(raw_mean),
+    theta_raw_sd = as.double(raw_sd),
+    theta_global_eap = as.double(global_mean),
+    theta_global_sd = as.double(global_sd)
+  )
+}
+
 .adaptive_build_item_log_refit <- function(state, refit_id) {
   fit <- state$btl_fit %||% list()
   draws <- fit$btl_posterior_draws %||% NULL
@@ -92,8 +171,15 @@
   rank_mat <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- ids
   rank_mean <- as.double(colMeans(rank_mat))
-  rank_global_eap <- as.integer(rank(-theta_mean, ties.method = "first"))
-  hub_id <- as.integer((state$linking %||% list())$hub_id %||% 1L)
+  link_summary <- .adaptive_link_item_raw_global_summaries(
+    state = state,
+    ids = ids,
+    set_id = set_id,
+    theta_mean = theta_mean,
+    theta_sd = theta_sd
+  )
+  rank_global_eap <- as.integer(rank(-as.double(link_summary$theta_global_eap), ties.method = "first"))
+  hub_id <- as.integer((.adaptive_controller_resolve(state) %||% list())$hub_id %||% 1L)
   is_hub_item <- as.logical(set_id == hub_id)
   is_spoke_item <- as.logical(set_id != hub_id)
 
@@ -106,9 +192,9 @@
     refit_id = as.integer(refit_id),
     item_id = as.character(ids),
     set_id = as.integer(set_id),
-    theta_raw_eap = as.double(theta_mean),
-    theta_global_eap = as.double(theta_mean),
-    theta_global_sd = as.double(theta_sd),
+    theta_raw_eap = as.double(link_summary$theta_raw_eap),
+    theta_global_eap = as.double(link_summary$theta_global_eap),
+    theta_global_sd = as.double(link_summary$theta_global_sd),
     rank_global_eap = as.integer(rank_global_eap),
     is_hub_item = as.logical(is_hub_item),
     is_spoke_item = as.logical(is_spoke_item),
@@ -397,6 +483,14 @@ adaptive_round_log <- function(state) {
 #' The underlying state stores a list of refit tables; this
 #' accessor can return one refit table (default: most recent) or stack all
 #' refits into a single tibble.
+#'
+#' In linking mode, raw and global summaries are kept separate:
+#' \itemize{
+#'   \item \code{theta_raw_eap}: within-set scale summary (from Phase A artifacts
+#'   when available).
+#'   \item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
+#'   summaries after spoke transform application.
+#' }
 #'
 #' @param state Adaptive state.
 #' @param refit_id Optional refit index.
