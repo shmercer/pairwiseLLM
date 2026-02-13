@@ -169,6 +169,58 @@ test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking"
   expect_true(all(phase_a_rows$is_cross_set %in% FALSE))
 })
 
+test_that("linking run keeps warm-start during Phase A and bypasses warm-start in Phase B", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 24L)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.1, h3 = 0.7,
+    s21 = -0.4, s22 = 0.2, s23 = 0.9
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 20L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run"
+    ),
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none"
+  )
+
+  expect_true(any(out$step_log$is_cross_set %in% TRUE))
+  first_cross <- which(out$step_log$is_cross_set %in% TRUE)[[1L]]
+  phase_a_rows <- out$step_log[seq_len(max(1L, first_cross - 1L)), , drop = FALSE]
+  phase_a_rows <- phase_a_rows[!is.na(phase_a_rows$pair_id), , drop = FALSE]
+  expect_true(any(phase_a_rows$round_stage == "warm_start"))
+
+  phase_b_rows <- out$step_log[first_cross:nrow(out$step_log), , drop = FALSE]
+  phase_b_rows <- phase_b_rows[!is.na(phase_b_rows$pair_id), , drop = FALSE]
+  expect_true(nrow(phase_b_rows) >= 1L)
+  expect_false(any(phase_b_rows$round_stage == "warm_start"))
+})
+
+test_that("non-linking runs preserve warm-start behavior", {
+  state <- adaptive_rank_start(make_linking_items_two_set(), seed = 31L)
+  judge <- make_deterministic_judge("i_wins")
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 1L,
+    adaptive_config = list(run_mode = "within_set"),
+    progress = "none"
+  )
+
+  expect_equal(out$step_log$round_stage[[1L]], "warm_start")
+})
+
 test_that("mixed run/import mode combines imported and in-run artifacts by set", {
   withr::local_seed(20260213)
 

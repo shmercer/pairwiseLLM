@@ -25,14 +25,6 @@
     ready_sets <- as.integer(status_tbl$set_id[status_tbl$status == "ready"])
     ready_sets <- ready_sets[!is.na(ready_sets)]
   }
-  if (length(ready_sets) < 1L) {
-    phase_a <- state$linking$phase_a %||% list()
-    artifacts <- phase_a$artifacts %||% list()
-    if (is.list(artifacts) && length(artifacts) > 0L) {
-      set_ids <- vapply(names(artifacts), function(x) suppressWarnings(as.integer(x)), integer(1L))
-      ready_sets <- set_ids[!is.na(set_ids)]
-    }
-  }
   as.integer(sort(unique(ready_sets)))
 }
 
@@ -89,7 +81,7 @@
   status_tbl <- .adaptive_phase_a_status_tbl(state)
   phase <- if (length(pending_run_sets) > 0L) {
     "phase_a"
-  } else if (length(ready_spokes) > 0L || nrow(status_tbl) < 1L) {
+  } else if (length(ready_spokes) > 0L) {
     "phase_b"
   } else {
     "phase_a"
@@ -118,6 +110,19 @@
     model_variant = as.character(fit$model_variant %||% "btl_e_b")
   )
   .adaptive_phase_a_hash_object(payload)
+}
+
+.adaptive_phase_a_run_stop_passed <- function(artifact, controller) {
+  diagnostics <- artifact$diagnostics %||% list()
+  diagnostics_pass <- isTRUE(diagnostics$diagnostics_pass %||% FALSE)
+  reliability <- .adaptive_phase_a_extract_reliability(artifact)
+  reliability_min <- as.double(controller$phase_a_required_reliability_min %||% 0.80)
+  n_pairs_committed <- as.integer(artifact$n_pairs_committed %||% 0L)
+
+  isTRUE(diagnostics_pass) &&
+    is.finite(reliability) &&
+    reliability >= reliability_min &&
+    n_pairs_committed > 0L
 }
 
 .adaptive_phase_a_extract_set_draws <- function(state, set_id) {
@@ -426,6 +431,11 @@
   out <- state
   controller <- .adaptive_controller_resolve(out)
   set_ids <- as.integer(sort(unique(out$items$set_id)))
+  persisted_status_tbl <- tibble::as_tibble(out$linking$phase_a$set_status %||% tibble::tibble())
+  status_cols <- c("set_id", "source", "status", "validation_message")
+  if (!all(status_cols %in% names(persisted_status_tbl))) {
+    persisted_status_tbl <- tibble::tibble()
+  }
   persisted_map <- list()
   persisted_raw <- out$linking$phase_a$artifacts %||% list()
   if (is.list(persisted_raw) && length(persisted_raw) > 0L) {
@@ -454,8 +464,14 @@
     set_id <- as.integer(set_ids[[idx]])
     set_key <- as.character(set_id)
     source <- as.character(sources[[set_key]] %||% "run")
+    persisted_row <- persisted_status_tbl[persisted_status_tbl$set_id == set_id, , drop = FALSE]
+    prior_status <- if (nrow(persisted_row) > 0L) {
+      as.character(persisted_row$status[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
+    }
 
-    status <- "pending"
+    status <- "pending_finalization"
     message <- NA_character_
     persisted <- persisted_map[[set_key]] %||% NULL
 
@@ -477,8 +493,13 @@
       )
       if (isTRUE(persisted_ok)) {
         artifacts[[set_key]] <- persisted
-        status <- "ready"
-        message <- "persisted"
+        if (identical(source, "run") && identical(prior_status, "pending_finalization")) {
+          status <- "pending_finalization"
+          message <- "pending_finalization: within-set stop criteria not yet met"
+        } else {
+          status <- "ready"
+          message <- "persisted"
+        }
       }
     }
 
@@ -526,18 +547,28 @@
       if (is.null(built)) {
         if (is.character(message) &&
           grepl("Within-set summaries are unavailable", message, fixed = TRUE)) {
-          status <- "pending"
-          if (is.na(message) || message == "") {
-            message <- "awaiting_within_set_finalization"
-          }
+          status <- "pending_finalization"
+          message <- "pending_finalization: awaiting_within_set_finalization"
         } else {
           status <- "failed"
         }
       } else {
         artifacts[[set_key]] <- built
-        status <- "ready"
-        if (is.na(message) || message == "") {
+        prior_pairs <- as.integer(persisted$n_pairs_committed %||% NA_integer_)
+        built_pairs <- as.integer(built$n_pairs_committed %||% NA_integer_)
+        hold_pending <- identical(prior_status, "pending_finalization") &&
+          is.finite(prior_pairs) &&
+          is.finite(built_pairs) &&
+          built_pairs <= prior_pairs
+        if (isTRUE(hold_pending)) {
+          status <- "pending_finalization"
+          message <- "pending_finalization: within-set stop criteria not yet met"
+        } else if (isTRUE(.adaptive_phase_a_run_stop_passed(built, controller = controller))) {
+          status <- "ready"
           message <- "built_in_run"
+        } else {
+          status <- "pending_finalization"
+          message <- "pending_finalization: within-set stop criteria not yet met"
         }
       }
     }
@@ -616,7 +647,49 @@
   }
 
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
-  if (identical(phase_ctx$phase, "phase_b") || length(phase_ctx$pending_run_sets) > 0L) {
+  if (length(phase_ctx$pending_run_sets) > 0L) {
+    return(invisible(state))
+  }
+  if (identical(phase_ctx$phase, "phase_b")) {
+    if (length(phase_ctx$ready_spokes) < 1L) {
+      rlang::abort(
+        paste0(
+          "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are available."
+        )
+      )
+    }
+    required_sets <- as.integer(unique(c(as.integer(controller$hub_id %||% 1L), phase_ctx$ready_spokes)))
+    artifacts <- phase_a$artifacts %||% list()
+    missing_sets <- required_sets[!as.character(required_sets) %in% names(artifacts)]
+    if (length(missing_sets) > 0L) {
+      rlang::abort(
+        paste0(
+          "Phase B linking cannot start until valid Phase A artifacts exist for hub and spoke sets. ",
+          "missing artifacts for set_id: ",
+          paste(missing_sets, collapse = ", "),
+          "."
+        )
+      )
+    }
+    for (set_id in required_sets) {
+      artifact <- artifacts[[as.character(set_id)]] %||% NULL
+      if (is.null(artifact)) {
+        rlang::abort(
+          paste0(
+            "Phase B linking cannot start until valid Phase A artifacts exist for hub and spoke sets. ",
+            "missing artifact for set_id: ",
+            as.integer(set_id),
+            "."
+          )
+        )
+      }
+      .adaptive_phase_a_validate_imported_artifact(
+        artifact = artifact,
+        state = state,
+        set_id = as.integer(set_id),
+        controller = controller
+      )
+    }
     return(invisible(state))
   }
 
