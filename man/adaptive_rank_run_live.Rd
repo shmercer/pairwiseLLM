@@ -43,7 +43,8 @@ behavior. Supported fields:
 \code{boundary_frac}, \code{p_star_override_margin},
 \code{star_override_budget_per_round}, and linking scaffolding fields:
 \code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
-\code{judge_param_mode}, \code{hub_lock_mode}, \code{hub_lock_kappa},
+\code{shift_only_theta_treatment}, \code{judge_param_mode}, \code{hub_lock_mode},
+\code{hub_lock_kappa},
 \code{link_identified_reliability_min}, \code{link_stop_reliability_min},
 \code{link_rank_corr_min}, \code{delta_sd_max}, \code{delta_change_max},
 \code{log_alpha_sd_max}, \code{log_alpha_change_max}, \code{cross_set_ppc_mae_max},

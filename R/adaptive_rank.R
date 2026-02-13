@@ -333,8 +333,8 @@ make_adaptive_judge_llm <- function(
 #'   `mid_bonus_frac`, `explore_taper_mult`, `boundary_k`, `boundary_window`,
 #'   `boundary_frac`, `p_star_override_margin`, and
 #'   `star_override_budget_per_round`, linking controls (`run_mode`, `hub_id`,
-#'   `link_transform_mode`, `link_refit_mode`, `judge_param_mode`,
-#'   `hub_lock_mode`, `hub_lock_kappa`), and Phase A controls
+#'   `link_transform_mode`, `link_refit_mode`, `shift_only_theta_treatment`,
+#'   `judge_param_mode`, `hub_lock_mode`, `hub_lock_kappa`), and Phase A controls
 #'   (`phase_a_mode`, `phase_a_import_failure_policy`,
 #'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
 #'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`,
