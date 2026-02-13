@@ -84,6 +84,53 @@ test_that("adaptive results extraction handles empty and committed-only logs", {
   expect_identical(out$winner_pos[[1L]], 2L)
 })
 
+test_that("adaptive results extraction maps linking phase and judge scope", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1"),
+    set_id = c(1L, 1L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 3L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      judge_param_mode = "phase_specific"
+    )
+  )
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$phase <- "phase_b"
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      A = 1L,
+      B = 2L,
+      Y = 1L,
+      is_cross_set = FALSE
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:01:00", tz = "UTC"),
+      pair_id = 2L,
+      A = 3L,
+      B = 1L,
+      Y = 1L,
+      is_cross_set = TRUE
+    )
+  )
+
+  out <- pairwiseLLM:::.adaptive_results_from_step_log(state)
+  expect_identical(out$phase, c("phase2", "phase3"))
+  expect_identical(out$judge_scope, c("within", "link"))
+})
+
 test_that("ts-btl rank spearman returns NA for invalid inputs and finite value otherwise", {
   items <- make_test_items(3)
   state <- pairwiseLLM:::new_adaptive_state(items)

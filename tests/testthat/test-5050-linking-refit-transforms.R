@@ -115,6 +115,14 @@ test_that("linking refit contract fields follow transform mode", {
   row_scale <- rows_scale[rows_scale$spoke_id == 2L, , drop = FALSE]
   expect_true(is.finite(row_scale$delta_spoke_mean[[1L]]))
   expect_true(is.finite(row_scale$log_alpha_spoke_mean[[1L]]))
+
+  c_shift <- state_shift$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_identical(c_shift$parameters, c("delta_s"))
+  expect_identical(c_shift$link_transform_mode, "shift_only")
+
+  c_scale <- state_scale$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_identical(c_scale$parameters, c("delta_s", "log_alpha_s"))
+  expect_identical(c_scale$link_transform_mode, "shift_scale")
 })
 
 test_that("hub lock boundary kappa=0 matches hard lock in joint refit", {
@@ -151,6 +159,45 @@ test_that("hub lock boundary kappa=0 matches hard lock in joint refit", {
 
   expect_equal(d_hard, d_soft0, tolerance = 1e-10)
   expect_false(isTRUE(all.equal(d_hard, d_free, tolerance = 1e-10)))
+})
+
+test_that("soft lock uses artifact uncertainty and kappa strength", {
+  base <- make_linking_refit_state(
+    list(link_refit_mode = "joint_refit", link_transform_mode = "shift_only")
+  )
+  base <- append_cross_step(base, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  base <- append_cross_step(base, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  arts <- base$linking$phase_a$artifacts
+  arts[["1"]]$items$theta_raw_sd <- c(0.02, 0.02, 0.02)
+  base$linking$phase_a$artifacts <- arts
+
+  soft_high <- pairwiseLLM:::.adaptive_apply_controller_config(
+    base,
+    list(hub_lock_mode = "soft_lock", hub_lock_kappa = 1)
+  )
+  soft_low <- pairwiseLLM:::.adaptive_apply_controller_config(
+    base,
+    list(hub_lock_mode = "soft_lock", hub_lock_kappa = 0.1)
+  )
+
+  out_high <- pairwiseLLM:::.adaptive_linking_refit_update_state(soft_high, list(last_refit_step = 0L))
+  out_low <- pairwiseLLM:::.adaptive_linking_refit_update_state(soft_low, list(last_refit_step = 0L))
+
+  sd_high <- out_high$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_sd
+  sd_low <- out_low$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_sd
+  expect_true(is.finite(sd_high))
+  expect_true(is.finite(sd_low))
+  c_high <- out_high$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  c_low <- out_low$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_identical(c_high$lock$hub_lock_mode, "soft_lock")
+  expect_equal(c_high$lock$hub_lock_kappa, 1, tolerance = 1e-12)
+  expect_equal(c_low$lock$hub_lock_kappa, 0.1, tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(
+    out_high$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean,
+    out_low$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean,
+    tolerance = 1e-10
+  )))
 })
 
 test_that("auto escalation triggers after consecutive PPC failures and is one-way", {
@@ -212,6 +259,62 @@ test_that("auto escalation refits shift_scale parameters in the same refit", {
   expect_true(any(modes == "shift_scale"))
   expect_identical(stats$link_transform_mode, "shift_scale")
   expect_equal(stats$log_alpha_spoke_mean, 0.33, tolerance = 1e-12)
+})
+
+test_that("judge parameter mode controls linking judge scope in fit contract", {
+  state <- make_linking_refit_state(
+    list(link_transform_mode = "shift_only", link_refit_mode = "shift_only", judge_param_mode = "phase_specific")
+  )
+  state$btl_fit$beta_mean <- 0.01
+  state$btl_fit$epsilon_mean <- 0.02
+  state$btl_fit$beta_link_mean <- 0.15
+  state$btl_fit$epsilon_link_mean <- 0.25
+  state$btl_fit$beta_within_mean <- -0.1
+  state$btl_fit$epsilon_within_mean <- 0.05
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  contract <- state$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_identical(contract$judge$mode, "phase_specific")
+  expect_identical(contract$judge$scope, "link")
+  expect_equal(contract$judge$beta, 0.15, tolerance = 1e-12)
+  expect_equal(contract$judge$epsilon, 0.25, tolerance = 1e-12)
+})
+
+test_that("shift_only theta treatment normal_prior propagates uncertainty", {
+  fixed <- make_linking_refit_state(
+    list(
+      link_transform_mode = "shift_only",
+      link_refit_mode = "shift_only",
+      shift_only_theta_treatment = "fixed_eap"
+    )
+  )
+  normal <- make_linking_refit_state(
+    list(
+      link_transform_mode = "shift_only",
+      link_refit_mode = "shift_only",
+      shift_only_theta_treatment = "normal_prior"
+    )
+  )
+
+  fixed <- append_cross_step(fixed, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  fixed <- append_cross_step(fixed, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  normal <- append_cross_step(normal, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  normal <- append_cross_step(normal, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  out_fixed <- pairwiseLLM:::.adaptive_linking_refit_update_state(fixed, list(last_refit_step = 0L))
+  out_normal <- pairwiseLLM:::.adaptive_linking_refit_update_state(normal, list(last_refit_step = 0L))
+
+  sd_fixed <- out_fixed$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_sd
+  sd_normal <- out_normal$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_sd
+  expect_true(is.finite(sd_fixed))
+  expect_true(is.finite(sd_normal))
+  c_fixed <- out_fixed$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  c_normal <- out_normal$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_identical(c_fixed$theta_treatment, "fixed_eap")
+  expect_identical(c_normal$theta_treatment, "normal_prior")
+  expect_false(isTRUE(all.equal(sd_normal, sd_fixed, tolerance = 1e-10)))
 })
 
 test_that("invalid linking mode combinations fail validation", {
