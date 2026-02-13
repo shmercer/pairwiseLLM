@@ -197,6 +197,16 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   stats_con <- out_con$controller$link_refit_stats_by_spoke
   expect_true(length(stats_con) >= 2L)
   expect_true(all(vapply(stats_con, function(x) !is.null(x$concurrent_target_pairs), logical(1L))))
+
+  committed_con <- out_con$step_log[
+    !is.na(out_con$step_log$pair_id) & out_con$step_log$is_cross_set %in% TRUE,
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(committed_con) > 0L)
+  is_hub_i <- committed_con$set_i == 1L
+  is_hub_j <- committed_con$set_j == 1L
+  expect_true(all(xor(is_hub_i, is_hub_j)))
 })
 
 test_that("linking starvation paths in tiny domains are logged with fallback metadata", {
@@ -307,4 +317,65 @@ test_that("single-set runs remain behaviorally equivalent when linking controls 
 
   cols <- c("status", "i", "j", "A", "B", "pair_id", "round_stage")
   expect_equal(out_a$step_log[, cols, drop = FALSE], out_b$step_log[, cols, drop = FALSE])
+})
+
+test_that("independent mode ignores concurrent allocation controls under seeded runs", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_three_set()
+  state_base <- adaptive_rank_start(items, seed = 31L)
+  state_base$warm_start_done <- TRUE
+  state_base$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts_base <- make_phase_a_import_artifacts(state_base, spoke_shift = -1)
+  fit_base <- make_deterministic_fit_fn(as.character(state_base$item_ids))
+
+  judge <- make_score_judge(c(
+    h1 = -0.7, h2 = 0.0, h3 = 0.9,
+    s21 = -0.1, s22 = 0.5, s23 = 1.2,
+    s31 = -0.3, s32 = 0.2, s33 = 1.0
+  ))
+
+  withr::local_seed(31)
+  out_base <- adaptive_rank_run_live(
+    state = state_base,
+    judge = judge,
+    n_steps = 24L,
+    fit_fn = fit_base$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "independent",
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts_base
+    ),
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none"
+  )
+
+  state_tuned <- adaptive_rank_start(items, seed = 31L)
+  state_tuned$warm_start_done <- TRUE
+  state_tuned$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts_tuned <- make_phase_a_import_artifacts(state_tuned, spoke_shift = -1)
+  fit_tuned <- make_deterministic_fit_fn(as.character(state_tuned$item_ids))
+
+  withr::local_seed(31)
+  out_tuned <- adaptive_rank_run_live(
+    state = state_tuned,
+    judge = judge,
+    n_steps = 24L,
+    fit_fn = fit_tuned$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "independent",
+      min_cross_set_pairs_per_spoke_per_refit = 50L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts_tuned
+    ),
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none"
+  )
+
+  cols <- c("status", "i", "j", "A", "B", "pair_id", "round_stage", "link_spoke_id")
+  expect_equal(out_base$step_log[, cols, drop = FALSE], out_tuned$step_log[, cols, drop = FALSE])
 })
