@@ -536,6 +536,13 @@ validate_state <- function(state) {
   if (!is.data.frame(state$history_pairs)) {
     rlang::abort("`state$history_pairs` must be a data frame.")
   }
+  if (!is.null(state$link_stage_log)) {
+    .adaptive_validate_log_schema(
+      tibble::as_tibble(state$link_stage_log),
+      schema_link_stage_log,
+      "state$link_stage_log"
+    )
+  }
   phase_a <- linking$phase_a %||% list()
   if (!is.list(phase_a)) {
     rlang::abort("`state$linking$phase_a` must be a list.")
