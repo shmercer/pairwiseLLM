@@ -233,7 +233,7 @@
 #'   \describe{
 #'   \item{`global_identified_reliability_min`, `global_identified_rank_corr_min`}{Thresholds
 #'   used to mark global identifiability after each refit.}
-#'   \item{`p_long_low`, `p_long_high`}{Posterior probability gate used for
+#'   \item{`p_long_low`, `p_long_high`}{TrueSkill win-probability gate used for
 #'   long-link eligibility once globally identified.}
 #'   \item{`long_taper_mult`, `long_frac_floor`, `mid_bonus_frac`}{Late-stage
 #'   long-link taper and quota reallocation controls.}
