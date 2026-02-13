@@ -507,3 +507,55 @@ test_that("adaptive rank start and warm-start starvation save branch validations
   expect_identical(out$meta$stop_reason, "candidate_starvation")
   expect_gte(tracker$save_called, 1L)
 })
+
+test_that("phase B stage exhaustion persists across round rollover within refit window", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 31L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ready", "ready"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b"
+  )
+  state$controller$current_link_spoke_id <- 2L
+
+  starve <- pairwiseLLM:::.adaptive_round_starvation(
+    state,
+    tibble::tibble(round_stage = "anchor_link", link_spoke_id = 2L)
+  )
+  expect_false(isTRUE(starve$exhausted))
+
+  rolled <- pairwiseLLM:::.adaptive_round_start_next(starve$state)
+  refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(rolled)
+  stage_quotas <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = as.integer(rolled$round$round_id),
+    n_items = as.integer(rolled$n_items),
+    controller = utils::modifyList(rolled$controller, list(current_link_spoke_id = 2L))
+  )
+  progress <- pairwiseLLM:::.adaptive_link_stage_progress(
+    state = rolled,
+    spoke_id = 2L,
+    stage_quotas = stage_quotas,
+    stage_order = pairwiseLLM:::.adaptive_stage_order(),
+    refit_id = refit_id
+  )
+
+  expect_identical(progress$stage_committed[["anchor_link"]], progress$stage_quotas[["anchor_link"]])
+  expect_identical(progress$active_stage, "long_link")
+})

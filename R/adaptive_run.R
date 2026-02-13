@@ -115,6 +115,34 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_refit_shortfalls_map <- function(state) {
+  primary <- state$refit_meta$link_stage_shortfalls_by_refit_spoke %||% NULL
+  if (is.list(primary)) {
+    return(primary)
+  }
+  legacy <- state$round$link_stage_shortfalls_by_refit_spoke %||% NULL
+  if (is.list(legacy)) {
+    return(legacy)
+  }
+  list()
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_exhausted_map <- function(state) {
+  primary <- state$refit_meta$link_stage_exhausted_by_refit_spoke %||% NULL
+  if (is.list(primary)) {
+    return(primary)
+  }
+  legacy <- state$round$link_stage_exhausted_by_refit_spoke %||% NULL
+  if (is.list(legacy)) {
+    return(legacy)
+  }
+  list()
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_stage_progress <- function(state, spoke_id, stage_quotas, stage_order, refit_id = NULL) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   stage_order <- as.character(stage_order %||% .adaptive_stage_order())
@@ -140,7 +168,7 @@
     }
   }
 
-  exhausted_map <- state$round$link_stage_exhausted_by_refit_spoke %||% list()
+  exhausted_map <- .adaptive_link_refit_exhausted_map(state)
   key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
   exhausted_stage <- exhausted_map[[key]] %||% list()
   for (stage in stage_order) {
@@ -409,17 +437,17 @@
           as.integer(progress$stage_committed[[stage]] %||% 0L)
       )
       key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
-      shortfalls <- round$link_stage_shortfalls_by_refit_spoke %||% list()
+      shortfalls <- .adaptive_link_refit_shortfalls_map(out)
       existing_shortfall <- shortfalls[[key]] %||% list()
       existing_shortfall[[stage]] <- as.integer((existing_shortfall[[stage]] %||% 0L) + shortfall)
       shortfalls[[key]] <- existing_shortfall
-      round$link_stage_shortfalls_by_refit_spoke <- shortfalls
+      out$refit_meta$link_stage_shortfalls_by_refit_spoke <- shortfalls
 
-      exhausted_map <- round$link_stage_exhausted_by_refit_spoke %||% list()
+      exhausted_map <- .adaptive_link_refit_exhausted_map(out)
       existing_exhausted <- exhausted_map[[key]] %||% list()
       existing_exhausted[[stage]] <- TRUE
       exhausted_map[[key]] <- existing_exhausted
-      round$link_stage_exhausted_by_refit_spoke <- exhausted_map
+      out$refit_meta$link_stage_exhausted_by_refit_spoke <- exhausted_map
       out$round <- round
       return(list(state = out, exhausted = FALSE))
     }
