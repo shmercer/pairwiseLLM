@@ -409,13 +409,18 @@ test_that("phase A helper utilities cover fallback and phase-context branches", 
     integer()
   )
 
-  # Unresolved (all NA status/source) defaults phase context to phase_b.
+  # Unresolved (all NA status/source) remains in phase_a until artifacts are prepared.
   state$linking$phase_a$set_status <- .adaptive_phase_a_empty_state(c(1L, 2L))
   ctx <- .adaptive_link_phase_context(
     state,
     controller = utils::modifyList(controller, list(run_mode = "link_one_spoke", hub_id = 1L))
   )
-  expect_identical(ctx$phase, "phase_b")
+  expect_identical(ctx$phase, "phase_a")
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  expect_error(.adaptive_phase_a_gate_or_abort(state), "cannot start until valid Phase A artifacts")
 
   # collect_import_map handles NULL and read_import_artifact reads existing .rds files.
   expect_equal(.adaptive_phase_a_collect_import_map(list(phase_a_artifacts = NULL)), list())

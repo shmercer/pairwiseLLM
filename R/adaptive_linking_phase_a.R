@@ -87,12 +87,9 @@
     NA_integer_
   }
   status_tbl <- .adaptive_phase_a_status_tbl(state)
-  unresolved_phase_state <- nrow(status_tbl) > 0L &&
-    all(is.na(status_tbl$status)) &&
-    all(is.na(status_tbl$source))
   phase <- if (length(pending_run_sets) > 0L) {
     "phase_a"
-  } else if (length(ready_spokes) > 0L || nrow(status_tbl) < 1L || unresolved_phase_state) {
+  } else if (length(ready_spokes) > 0L || nrow(status_tbl) < 1L) {
     "phase_b"
   } else {
     "phase_a"
@@ -601,8 +598,8 @@
 
   phase_a <- state$linking$phase_a %||% list()
   status_tbl <- tibble::as_tibble(phase_a$set_status %||% tibble::tibble())
-  if (nrow(status_tbl) > 0L && any(status_tbl$status == "failed")) {
-    blocked <- status_tbl[status_tbl$status == "failed", , drop = FALSE]
+  if (nrow(status_tbl) > 0L && any(status_tbl$status %in% "failed")) {
+    blocked <- status_tbl[status_tbl$status %in% "failed", , drop = FALSE]
     blocked_msg <- paste0(
       "set ",
       blocked$set_id,
