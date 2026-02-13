@@ -210,14 +210,14 @@
 #' Retrieve canonical adaptive logs.
 #'
 #' @details
-#' Returns the three canonical Adaptive logs as currently held in memory:
-#' \code{step_log}, \code{round_log}, and \code{item_log}. These correspond to
-#' step attempts, posterior refit rounds, and item-level refit summaries
-#' respectively.
+#' Returns the canonical adaptive logs as currently held in memory:
+#' \code{step_log}, \code{round_log}, \code{item_log}, and
+#' \code{link_stage_log}. These correspond to step attempts, posterior refit
+#' rounds, item-level refit summaries, and per-refit linking summaries.
 #'
 #' @param state Adaptive state.
 #'
-#' @return A named list with three elements:
+#' @return A named list with four elements:
 #' \describe{
 #'   \item{step_log}{A tibble with one row per attempted step.}
 #'   \item{round_log}{A tibble with one row per BTL refit round.}

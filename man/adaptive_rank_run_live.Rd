@@ -41,7 +41,7 @@ behavior. Supported fields:
 \code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
 \code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
 \code{boundary_frac}, \code{p_star_override_margin},
-\code{star_override_budget_per_round}, and linking scaffolding fields:
+\code{star_override_budget_per_round}, and linking fields:
 \code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
 \code{shift_only_theta_treatment}, \code{judge_param_mode}, \code{hub_lock_mode},
 \code{hub_lock_kappa},
