@@ -172,6 +172,37 @@ schema_round_log <- c(
   stop_reason = "character"
 )
 
+schema_link_stage_log <- c(
+  refit_id = "integer",
+  spoke_id = "integer",
+  hub_id = "integer",
+  link_transform_mode = "character",
+  link_refit_mode = "character",
+  hub_lock_mode = "character",
+  hub_lock_kappa = "double",
+  delta_spoke_mean = "double",
+  delta_spoke_sd = "double",
+  log_alpha_spoke_mean = "double",
+  log_alpha_spoke_sd = "double",
+  delta_change_lagged = "double",
+  log_alpha_change_lagged = "double",
+  delta_change_pass = "logical",
+  log_alpha_change_pass = "logical",
+  reliability_EAP_link = "double",
+  linking_identified = "logical",
+  link_stop_eligible = "logical",
+  link_stop_pass = "logical",
+  ts_btl_rank_spearman = "double",
+  ppc_mae_cross = "double",
+  escalated_this_refit = "logical",
+  n_pairs_cross_set_done = "integer",
+  n_unique_cross_pairs_seen = "integer",
+  n_cross_edges_since_last_refit = "integer",
+  active_item_count_hub = "integer",
+  active_item_count_spoke = "integer",
+  coverage_bins_used = "integer"
+)
+
 schema_item_step_log <- c(
   step_id = "integer",
   timestamp = "POSIXct",
@@ -359,6 +390,18 @@ new_round_log <- function() {
 #' @noRd
 append_round_log <- function(round_log, row) {
   append_canonical_row(round_log, row, schema_round_log, allow_multirow = FALSE)
+}
+
+#' @keywords internal
+#' @noRd
+new_link_stage_log <- function() {
+  .adaptive_schema_empty_tbl(schema_link_stage_log)
+}
+
+#' @keywords internal
+#' @noRd
+append_link_stage_log <- function(link_stage_log, rows) {
+  append_canonical_row(link_stage_log, rows, schema_link_stage_log, allow_multirow = TRUE)
 }
 
 #' @keywords internal
