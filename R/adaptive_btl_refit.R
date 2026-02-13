@@ -203,6 +203,120 @@
   names(tab)[[which.max(tab)]]
 }
 
+.adaptive_link_stage_refit_rows <- function(state, refit_id, refit_context) {
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(tibble::as_tibble(new_link_stage_log()))
+  }
+
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  spoke_ids <- setdiff(unique(as.integer(state$items$set_id)), hub_id)
+  if (length(spoke_ids) < 1L) {
+    return(tibble::as_tibble(new_link_stage_log()))
+  }
+
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  rows <- vector("list", length(spoke_ids))
+  link_identified_map <- controller$linking_identified_by_spoke %||% list()
+  defaults <- adaptive_defaults(length(state$item_ids))
+  proxy <- .adaptive_rank_proxy(state)
+
+  for (idx in seq_along(spoke_ids)) {
+    spoke_id <- as.integer(spoke_ids[[idx]])
+    key <- as.character(spoke_id)
+    linking_identified <- if (!is.null(link_identified_map[[key]])) {
+      isTRUE(link_identified_map[[key]])
+    } else {
+      isTRUE(controller$linking_identified %||% FALSE)
+    }
+
+    is_cross <- rep(FALSE, nrow(step_log))
+    if (nrow(step_log) > 0L && all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
+      is_cross <- !is.na(step_log$pair_id) &
+        step_log$is_cross_set %in% TRUE &
+        as.integer(step_log$link_spoke_id) == spoke_id
+    }
+    cumulative <- step_log[is_cross, , drop = FALSE]
+    since_last <- cumulative
+    if (nrow(cumulative) > 0L && "step_id" %in% names(cumulative)) {
+      since_last <- cumulative[cumulative$step_id > as.integer(refit_context$last_refit_step %||% 0L), , drop = FALSE]
+    }
+
+    n_pairs_done <- as.integer(nrow(cumulative))
+    n_pairs_since <- as.integer(nrow(since_last))
+    n_unique <- 0L
+    if (nrow(cumulative) > 0L && all(c("A", "B") %in% names(cumulative))) {
+      ids <- as.character(state$item_ids)
+      a_id <- ids[as.integer(cumulative$A)]
+      b_id <- ids[as.integer(cumulative$B)]
+      n_unique <- as.integer(length(unique(make_unordered_key(a_id, b_id))))
+    }
+
+    hub_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
+    spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
+    hub_active_cross <- character()
+    if (nrow(cumulative) > 0L && all(c("A", "B", "set_i", "set_j", "i", "j") %in% names(cumulative))) {
+      hub_active_cross <- unique(vapply(seq_len(nrow(cumulative)), function(k) {
+        if (as.integer(cumulative$set_i[[k]]) == hub_id) {
+          state$item_ids[[as.integer(cumulative$i[[k]])]]
+        } else if (as.integer(cumulative$set_j[[k]]) == hub_id) {
+          state$item_ids[[as.integer(cumulative$j[[k]])]]
+        } else {
+          NA_character_
+        }
+      }, character(1L)))
+      hub_active_cross <- hub_active_cross[!is.na(hub_active_cross)]
+    }
+    hub_anchor <- as.character(state$round$anchor_ids %||% character())
+    hub_anchor <- hub_anchor[hub_anchor %in% hub_items]
+    active_hub <- unique(c(hub_active_cross, hub_anchor))
+
+    spoke_scores <- proxy$scores[spoke_items]
+    coverage <- .adaptive_link_spoke_coverage(
+      state = state,
+      controller = controller,
+      spoke_id = spoke_id,
+      spoke_ids = spoke_items,
+      proxy_scores = spoke_scores
+    )
+
+    rows[[idx]] <- list(
+      refit_id = as.integer(refit_id),
+      spoke_id = as.integer(spoke_id),
+      hub_id = as.integer(hub_id),
+      link_transform_mode = as.character(controller$link_transform_mode %||% NA_character_),
+      link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
+      hub_lock_mode = as.character(controller$hub_lock_mode %||% NA_character_),
+      hub_lock_kappa = as.double(controller$hub_lock_kappa %||% NA_real_),
+      delta_spoke_mean = NA_real_,
+      delta_spoke_sd = NA_real_,
+      log_alpha_spoke_mean = NA_real_,
+      log_alpha_spoke_sd = NA_real_,
+      delta_change_lagged = NA_real_,
+      log_alpha_change_lagged = NA_real_,
+      delta_change_pass = NA,
+      log_alpha_change_pass = NA,
+      reliability_EAP_link = as.double(controller$reliability_EAP %||% NA_real_),
+      linking_identified = as.logical(linking_identified),
+      link_stop_eligible = NA,
+      link_stop_pass = NA,
+      ts_btl_rank_spearman = as.double(controller$ts_btl_rank_spearman %||% NA_real_),
+      ppc_mae_cross = NA_real_,
+      escalated_this_refit = FALSE,
+      n_pairs_cross_set_done = as.integer(n_pairs_done),
+      n_unique_cross_pairs_seen = as.integer(n_unique),
+      n_cross_edges_since_last_refit = as.integer(n_pairs_since),
+      active_item_count_hub = as.integer(length(active_hub)),
+      active_item_count_spoke = as.integer(length(spoke_items)),
+      coverage_bins_used = as.integer(coverage$bins_used %||% NA_integer_)
+    )
+  }
+
+  rows_tbl <- dplyr::bind_rows(rows)
+  append_link_stage_log(new_link_stage_log(), rows_tbl)
+}
+
 .adaptive_btl_refit_context <- function(state, last_refit_M_done, last_refit_step) {
   step_id_at_refit <- as.integer(nrow(state$step_log))
   list(
