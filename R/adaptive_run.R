@@ -243,7 +243,8 @@
 #'   \item{`p_star_override_margin`, `star_override_budget_per_round`}{Near-tie
 #'   star-cap override controls.}
 #'   \item{`run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
-#'   `judge_param_mode`, `hub_lock_mode`, `hub_lock_kappa`}{Linking mode
+#'   `shift_only_theta_treatment`, `judge_param_mode`, `hub_lock_mode`,
+#'   `hub_lock_kappa`}{Linking mode
 #'   scaffolding controls. Linking modes require multi-set inputs and valid hub
 #'   assignment.}
 #'   \item{`link_identified_reliability_min`, `link_stop_reliability_min`,
@@ -391,7 +392,8 @@ adaptive_rank_start <- function(items,
 #'   `boundary_frac`, `p_star_override_margin`,
 #'   `star_override_budget_per_round`, and linking scaffolding fields:
 #'   `run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
-#'   `judge_param_mode`, `hub_lock_mode`, `hub_lock_kappa`,
+#'   `shift_only_theta_treatment`, `judge_param_mode`, `hub_lock_mode`,
+#'   `hub_lock_kappa`,
 #'   `link_identified_reliability_min`, `link_stop_reliability_min`,
 #'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
 #'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_mae_max`,
@@ -729,6 +731,10 @@ adaptive_rank_run_live <- function(state,
     refit_out <- maybe_refit_btl(state, config = btl_cfg, fit_fn = fit_fn)
     state <- refit_out$state
     if (isTRUE(refit_out$refit_performed)) {
+      state <- .adaptive_linking_refit_update_state(
+        state = state,
+        refit_context = refit_out$refit_context
+      )
       cfg$stop_thresholds <- refit_out$config
       metrics <- compute_stop_metrics(state, config = refit_out$config)
       state$stop_metrics <- metrics

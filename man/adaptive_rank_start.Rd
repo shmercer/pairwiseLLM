@@ -43,7 +43,8 @@ boundary-priority controls after global identifiability.}
 \item{\code{p_star_override_margin}, \code{star_override_budget_per_round}}{Near-tie
 star-cap override controls.}
 \item{\code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
-\code{judge_param_mode}, \code{hub_lock_mode}, \code{hub_lock_kappa}}{Linking mode
+\code{shift_only_theta_treatment}, \code{judge_param_mode}, \code{hub_lock_mode},
+\code{hub_lock_kappa}}{Linking mode
 scaffolding controls. Linking modes require multi-set inputs and valid hub
 assignment.}
 \item{\code{link_identified_reliability_min}, \code{link_stop_reliability_min},
