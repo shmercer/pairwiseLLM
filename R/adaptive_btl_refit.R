@@ -891,13 +891,18 @@
   if (!identical(phase_ctx$phase, "phase_b")) {
     return(out)
   }
+  if (length(phase_ctx$ready_spokes) < 1L) {
+    rlang::abort(
+      "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are available."
+    )
+  }
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- .adaptive_link_spoke_ids(out, hub_id)
-  if (length(phase_ctx$ready_spokes) > 0L) {
-    spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
-  }
+  spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
   if (length(spoke_ids) < 1L) {
-    return(out)
+    rlang::abort(
+      "Phase B linking cannot continue: no ready spoke has valid Phase A artifact eligibility."
+    )
   }
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   bad_refits <- controller$link_transform_bad_refits_by_spoke %||% list()
@@ -1195,14 +1200,19 @@
   if (!identical(phase_ctx$phase, "phase_b")) {
     return(tibble::as_tibble(new_link_stage_log()))
   }
+  if (length(phase_ctx$ready_spokes) < 1L) {
+    rlang::abort(
+      "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are available."
+    )
+  }
 
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- .adaptive_link_spoke_ids(state, hub_id = hub_id)
-  if (length(phase_ctx$ready_spokes) > 0L) {
-    spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
-  }
+  spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
   if (length(spoke_ids) < 1L) {
-    return(tibble::as_tibble(new_link_stage_log()))
+    rlang::abort(
+      "Phase B link-stage logging cannot proceed: no ready spoke has valid Phase A artifact eligibility."
+    )
   }
 
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
