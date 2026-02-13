@@ -800,6 +800,45 @@ test_that("link stop reconstruction fallback path honors numeric gates", {
     controller = controller
   )
   expect_false(isTRUE(fail_scale))
+
+  row_rank <- row_shift
+  row_rank$rank_stability_lagged <- 0.90
+  row_rank$ts_btl_rank_spearman <- 0.99
+  fail_rank <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row_rank,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = 0.5,
+    controller = controller
+  )
+  expect_false(isTRUE(fail_rank))
+})
+
+test_that("linking identified state is reconstructable from canonical link-stage fields", {
+  row <- tibble::tibble(
+    link_transform_mode = "shift_scale",
+    reliability_EAP_link = 0.92,
+    ts_btl_rank_spearman = 0.93,
+    delta_sd_pass = TRUE,
+    log_alpha_sd_pass = TRUE
+  )
+  identified <- pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
+    link_row = row,
+    controller = list(
+      link_identified_reliability_min = 0.80,
+      link_rank_corr_min = 0.90
+    )
+  )
+  expect_true(isTRUE(identified))
+
+  row$ts_btl_rank_spearman <- 0.85
+  identified_fail <- pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
+    link_row = row,
+    controller = list(
+      link_identified_reliability_min = 0.80,
+      link_rank_corr_min = 0.90
+    )
+  )
+  expect_false(isTRUE(identified_fail))
 })
 
 test_that("linking refit stats carry latest coverage metadata for link-stage log rows", {
@@ -847,6 +886,60 @@ test_that("item log keeps raw summaries separate from transformed global summari
   expect_equal(row_s3$theta_global_eap[[1L]], -0.2 + 0.15, tolerance = 1e-12)
   expect_equal(row_h$theta_raw_eap[[1L]], 0.80, tolerance = 1e-12)
   expect_equal(row_h$theta_global_eap[[1L]], 0.80, tolerance = 1e-12)
+})
+
+test_that("item log uses typed NA global summaries when spoke transform parameters are unavailable", {
+  state <- make_linking_refit_state(
+    list(link_transform_mode = "shift_scale", multi_spoke_mode = "independent")
+  )
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_mode = "shift_scale",
+      delta_spoke_mean = 0.25,
+      log_alpha_spoke_mean = NA_real_
+    ),
+    `3` = list(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = NA_real_
+    )
+  )
+
+  item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
+  row_s2 <- item_log[item_log$item_id == "s21", , drop = FALSE]
+  row_s3 <- item_log[item_log$item_id == "s31", , drop = FALSE]
+  row_h <- item_log[item_log$item_id == "h1", , drop = FALSE]
+
+  expect_true(is.na(row_s2$theta_global_eap[[1L]]))
+  expect_true(is.na(row_s2$theta_global_sd[[1L]]))
+  expect_true(is.na(row_s3$theta_global_eap[[1L]]))
+  expect_true(is.na(row_s3$theta_global_sd[[1L]]))
+  expect_true(is.finite(row_h$theta_global_eap[[1L]]))
+  expect_true(is.finite(row_h$theta_global_sd[[1L]]))
+})
+
+test_that("non-linking item log keeps current raw/global behavior under seeded setup", {
+  state <- adaptive_rank_start(make_test_items(5), seed = 15L)
+  ids <- as.character(state$item_ids)
+  draws <- matrix(
+    c(
+      0.9, 0.5, 0.2, -0.2, -0.6,
+      0.8, 0.6, 0.1, -0.1, -0.7,
+      1.0, 0.4, 0.3, -0.3, -0.5,
+      0.7, 0.3, 0.0, -0.4, -0.8
+    ),
+    nrow = 4,
+    byrow = TRUE
+  )
+  colnames(draws) <- ids
+  state$btl_fit <- make_test_btl_fit(ids, draws = draws, model_variant = "btl_e_b")
+
+  item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
+  expect_equal(item_log$theta_raw_eap, item_log$theta_global_eap, tolerance = 1e-12)
+  expect_equal(item_log$theta_global_sd, item_log$theta_sd, tolerance = 1e-12)
+  expect_identical(
+    item_log$rank_global_eap,
+    as.integer(rank(-as.double(item_log$theta_global_eap), ties.method = "first"))
+  )
 })
 
 test_that("lagged rank stability gate uses Spearman threshold of at least 0.98", {
@@ -947,6 +1040,28 @@ test_that("linking active-domain helper guard branches return typed NA outputs",
   unnamed_hub <- state
   unnamed_hub$btl_fit$theta_mean <- c(1, 2)
   expect_true(is.na(pairwiseLLM:::.adaptive_link_delta_sd_max_derived(unnamed_hub, hub_id = 1L, delta_sd_mult = 0.1)))
+})
+
+test_that("active-domain TS-BTL correlation is computed on active items only", {
+  state <- make_linking_refit_state()
+  ts <- state$trueskill_state$items
+  ts$mu[match(c("h1", "h2", "s21", "s22", "s31", "s32"), ts$item_id)] <- c(6, 5, 4, 3, 2, 1)
+  state$trueskill_state$items <- ts
+
+  theta <- c(h1 = 0.1, h2 = 0.2, s21 = 0.9, s22 = 1.0, s31 = 0.8, s32 = 0.7)
+  active_ids <- c("h1", "h2", "s21", "s22")
+  rho_active <- pairwiseLLM:::.adaptive_link_ts_btl_rank_spearman_active(
+    state = state,
+    active_ids = active_ids,
+    theta_mean = theta
+  )
+  rho_full <- pairwiseLLM:::.adaptive_link_ts_btl_rank_spearman_active(
+    state = state,
+    active_ids = names(theta),
+    theta_mean = theta
+  )
+  expect_equal(rho_active, -1, tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(rho_active, rho_full, tolerance = 1e-12)))
 })
 
 test_that("adaptive_state validation branches for linking controls are covered", {
