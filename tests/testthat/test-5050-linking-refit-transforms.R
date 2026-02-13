@@ -474,6 +474,91 @@ test_that("concurrent spoke routing enforces floor before uncertainty targets", 
   expect_identical(pick2, 2L)
 })
 
+test_that("concurrent routing uses uncertainty-weighted deficit, not least-used balancing", {
+  state <- make_linking_refit_state(
+    list(
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$refit_meta$last_refit_step <- 0L
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
+  state <- append_cross_step(state, 3L, "s32", "h2", 1L, spoke_id = 3L)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 0.01),
+    `3` = list(uncertainty = 100)
+  )
+
+  # Least-used balancing would pick spoke 2 (1 vs 2), but target-deficit routing picks spoke 3.
+  pick <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
+  expect_identical(pick, 3L)
+})
+
+test_that("concurrent floor is enforced as a routing floor when feasible", {
+  state <- make_linking_refit_state(
+    list(
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 2L
+    )
+  )
+  state$refit_meta$last_refit_step <- 0L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 1),
+    `3` = list(uncertainty = 1)
+  )
+
+  for (step_id in 1:4) {
+    spoke <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
+    if (identical(spoke, 2L)) {
+      state <- append_cross_step(state, step_id, "s21", "h1", 1L, spoke_id = 2L)
+    } else {
+      state <- append_cross_step(state, step_id, "s31", "h1", 1L, spoke_id = 3L)
+    }
+  }
+
+  step_subset <- state$step_log[
+    !is.na(state$step_log$pair_id) &
+      state$step_log$is_cross_set %in% TRUE &
+      as.integer(state$step_log$step_id) > 0L,
+    ,
+    drop = FALSE
+  ]
+  counts <- table(factor(as.integer(step_subset$link_spoke_id), levels = c(2L, 3L)))
+  expect_true(all(as.integer(counts) >= 2L))
+})
+
+test_that("concurrent sparse-domain fallback is deterministic when floors cannot be met", {
+  state <- make_linking_refit_state(
+    list(
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 5L
+    )
+  )
+  state$refit_meta$last_refit_step <- 0L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 0),
+    `3` = list(uncertainty = 0)
+  )
+  # One observed pair per spoke leaves equal floor deficits that cannot be satisfied quickly;
+  # tie-breaks must be deterministic.
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
+
+  picks <- integer()
+  for (idx in 1:4) {
+    spoke <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
+    picks <- c(picks, as.integer(spoke))
+    if (identical(spoke, 2L)) {
+      state <- append_cross_step(state, idx + 2L, "s21", "h1", 1L, spoke_id = 2L)
+    } else {
+      state <- append_cross_step(state, idx + 2L, "s31", "h1", 1L, spoke_id = 3L)
+    }
+  }
+
+  expect_identical(picks, c(2L, 3L, 2L, 3L))
+})
+
 test_that("active linking reliability is computed on active hub-spoke items only", {
   state <- make_linking_refit_state()
   state$round$anchor_ids <- character()
