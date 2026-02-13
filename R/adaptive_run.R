@@ -16,6 +16,71 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_sync_warm_start <- function(state) {
+  out <- state
+  controller <- .adaptive_controller_resolve(out)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(out)
+  }
+
+  phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  out$linking <- out$linking %||% list()
+  out$linking$phase_a <- out$linking$phase_a %||% list()
+
+  if (identical(phase_ctx$phase, "phase_b")) {
+    if (!isTRUE(out$warm_start_done)) {
+      out$warm_start_done <- TRUE
+      out$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+      out$warm_start_idx <- 1L
+    }
+    out$linking$phase_a$warm_start_scope_set <- NA_integer_
+    return(out)
+  }
+
+  active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+  if (is.na(active_set)) {
+    return(out)
+  }
+
+  current_scope <- as.integer(out$linking$phase_a$warm_start_scope_set %||% NA_integer_)
+  if (!identical(current_scope, active_set)) {
+    ids <- as.character(out$items$item_id[as.integer(out$items$set_id) == active_set])
+    seed <- as.integer(out$meta$seed %||% 1L)
+    out$warm_start_pairs <- .adaptive_build_warm_start_pairs(
+      item_ids = ids,
+      seed = as.integer(seed + (active_set * 1009L))
+    )
+    out$warm_start_idx <- 1L
+    out$warm_start_done <- nrow(out$warm_start_pairs) == 0L
+    out$linking$phase_a$warm_start_scope_set <- as.integer(active_set)
+    return(out)
+  }
+
+  pairs <- out$warm_start_pairs %||% tibble::tibble(i_id = character(), j_id = character())
+  if (nrow(pairs) > 0L) {
+    set_map <- stats::setNames(as.integer(out$items$set_id), as.character(out$items$item_id))
+    set_i <- as.integer(set_map[as.character(pairs$i_id)])
+    set_j <- as.integer(set_map[as.character(pairs$j_id)])
+    keep <- !is.na(set_i) & !is.na(set_j) & set_i == active_set & set_j == active_set
+    if (any(!keep)) {
+      pairs <- pairs[keep, , drop = FALSE]
+      out$warm_start_pairs <- pairs
+      if (nrow(pairs) < 1L) {
+        out$warm_start_done <- TRUE
+        out$warm_start_idx <- 1L
+      } else {
+        out$warm_start_idx <- min(as.integer(out$warm_start_idx %||% 1L), nrow(pairs))
+        out$warm_start_done <- as.integer(out$warm_start_idx) > nrow(pairs)
+      }
+    }
+  }
+
+  out
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_round_activate_if_ready <- function(state) {
   out <- state
   out$controller <- .adaptive_controller_resolve(out)
@@ -677,12 +742,7 @@ adaptive_rank_run_live <- function(state,
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state <- .adaptive_phase_a_prepare(state)
   .adaptive_phase_a_gate_or_abort(state)
-  if (as.character(state$controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke") &&
-    !isTRUE(state$warm_start_done)) {
-    state$warm_start_done <- TRUE
-    state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
-    state$warm_start_idx <- 1L
-  }
+  state <- .adaptive_link_sync_warm_start(state)
 
   cfg <- .adaptive_progress_config(
     progress = progress,
@@ -702,12 +762,7 @@ adaptive_rank_run_live <- function(state,
   while (remaining > 0L) {
     state <- .adaptive_phase_a_prepare(state)
     .adaptive_phase_a_gate_or_abort(state)
-    if (as.character(state$controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke") &&
-      !isTRUE(state$warm_start_done)) {
-      state$warm_start_done <- TRUE
-      state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
-      state$warm_start_idx <- 1L
-    }
+    state <- .adaptive_link_sync_warm_start(state)
     state <- .adaptive_round_activate_if_ready(state)
     state <- run_one_step(state, judge, ...)
     step_row <- tibble::as_tibble(state$step_log)[nrow(state$step_log), , drop = FALSE]
