@@ -103,7 +103,111 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_refit_window_id <- function(state) {
+  as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_spoke_key <- function(refit_id, spoke_id) {
+  paste0(as.integer(refit_id), "::", as.integer(spoke_id))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_progress <- function(state, spoke_id, stage_quotas, stage_order, refit_id = NULL) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  stage_order <- as.character(stage_order %||% .adaptive_stage_order())
+  stage_quotas <- as.integer(stage_quotas[stage_order])
+  names(stage_quotas) <- stage_order
+  committed <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+  refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+  if (nrow(step_log) > 0L &&
+    all(c("pair_id", "round_stage", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
+    rows <- step_log[
+      !is.na(step_log$pair_id) &
+        step_log$is_cross_set %in% TRUE &
+        as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
+        as.integer(step_log$step_id) > last_refit_step &
+        as.character(step_log$round_stage) %in% stage_order,
+      ,
+      drop = FALSE
+    ]
+    if (nrow(rows) > 0L) {
+      tab <- table(factor(as.character(rows$round_stage), levels = stage_order))
+      committed[names(tab)] <- as.integer(tab)
+    }
+  }
+
+  exhausted_map <- state$round$link_stage_exhausted_by_refit_spoke %||% list()
+  key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
+  exhausted_stage <- exhausted_map[[key]] %||% list()
+  for (stage in stage_order) {
+    if (isTRUE(exhausted_stage[[stage]])) {
+      committed[[stage]] <- max(committed[[stage]], stage_quotas[[stage]])
+    }
+  }
+
+  deficits <- pmax(0L, stage_quotas - committed)
+  active_stage <- if (any(deficits > 0L)) {
+    stage_order[[which(deficits > 0L)[[1L]]]]
+  } else {
+    stage_order[[length(stage_order)]]
+  }
+
+  list(
+    active_stage = as.character(active_stage),
+    stage_committed = committed,
+    stage_quotas = stage_quotas
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_round_active_stage <- function(state) {
+  if (!inherits(state, "adaptive_state")) {
+    round <- state$round %||% NULL
+    if (is.null(round) || !isTRUE(round$staged_active)) {
+      return("warm_start")
+    }
+    idx <- as.integer(round$stage_index %||% 1L)
+    order <- as.character(round$stage_order %||% .adaptive_stage_order())
+    if (idx < 1L || idx > length(order)) {
+      return(NA_character_)
+    }
+    return(order[[idx]])
+  }
+
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    spoke_id <- .adaptive_link_active_spoke(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = eligible_spokes
+    )
+    if (!is.na(spoke_id)) {
+      refit_id <- .adaptive_link_refit_window_id(state)
+      quota_controller <- controller
+      quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+      stage_quotas <- .adaptive_round_compute_quotas(
+        round_id = as.integer(state$round$round_id %||% 1L),
+        n_items = as.integer(state$n_items),
+        controller = quota_controller
+      )
+      progress <- .adaptive_link_stage_progress(
+        state = state,
+        spoke_id = spoke_id,
+        stage_quotas = stage_quotas,
+        stage_order = .adaptive_stage_order(),
+        refit_id = refit_id
+      )
+      return(as.character(progress$active_stage))
+    }
+  }
+
   round <- state$round %||% NULL
   if (is.null(round) || !isTRUE(round$staged_active)) {
     return("warm_start")
@@ -140,6 +244,8 @@
 .adaptive_round_start_next <- function(state) {
   out <- state
   out$controller <- .adaptive_controller_resolve(out)
+  phase_ctx <- .adaptive_link_phase_context(out, controller = out$controller)
+  out$controller$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
   prior <- out$round %||% list(round_id = 0L, committed_total = 0L)
   out$refit_meta$last_completed_round_summary <- list(
     round_id = as.integer(prior$round_id %||% NA_integer_),
@@ -170,6 +276,14 @@
   if (is.null(round) || !isTRUE(round$staged_active)) {
     return(out)
   }
+  is_adaptive <- inherits(out, "adaptive_state")
+  if (isTRUE(is_adaptive)) {
+    controller <- .adaptive_controller_resolve(out)
+    phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  } else {
+    controller <- list(run_mode = "within_set")
+    phase_ctx <- list(phase = "phase_a")
+  }
 
   stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
   if (is.na(stage) || !stage %in% round$stage_order) {
@@ -177,7 +291,9 @@
   }
   round$committed_total <- as.integer((round$committed_total %||% 0L) + 1L)
   round$round_committed <- as.integer((round$round_committed %||% 0L) + 1L)
-  round$stage_committed[[stage]] <- as.integer((round$stage_committed[[stage]] %||% 0L) + 1L)
+  if (!(.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b"))) {
+    round$stage_committed[[stage]] <- as.integer((round$stage_committed[[stage]] %||% 0L) + 1L)
+  }
 
   A <- as.integer(step_row$A[[1L]] %||% NA_integer_)
   B <- as.integer(step_row$B[[1L]] %||% NA_integer_)
@@ -207,6 +323,11 @@
   }
   if (isTRUE(star_override_used)) {
     round$star_override_used <- as.integer((round$star_override_used %||% 0L) + 1L)
+  }
+
+  if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    out$round <- round
+    return(out)
   }
 
   quota <- as.integer(round$stage_quotas[[stage]] %||% 0L)
@@ -254,6 +375,56 @@
   if (is.na(stage) || !stage %in% round$stage_order) {
     return(list(state = out, exhausted = TRUE))
   }
+  is_adaptive <- inherits(out, "adaptive_state")
+  controller <- if (isTRUE(is_adaptive)) .adaptive_controller_resolve(out) else list(run_mode = "within_set")
+  phase_ctx <- if (isTRUE(is_adaptive)) {
+    .adaptive_link_phase_context(out, controller = controller)
+  } else {
+    list(phase = "phase_a")
+  }
+  if (isTRUE(is_adaptive) && .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    spoke_id <- as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
+    if (is.na(spoke_id)) {
+      spoke_id <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
+    }
+    if (!is.na(spoke_id)) {
+      refit_id <- .adaptive_link_refit_window_id(out)
+      quota_controller <- controller
+      quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+      stage_quotas <- .adaptive_round_compute_quotas(
+        round_id = as.integer(round$round_id %||% 1L),
+        n_items = as.integer(out$n_items),
+        controller = quota_controller
+      )
+      progress <- .adaptive_link_stage_progress(
+        state = out,
+        spoke_id = spoke_id,
+        stage_quotas = stage_quotas,
+        stage_order = round$stage_order %||% .adaptive_stage_order(),
+        refit_id = refit_id
+      )
+      shortfall <- max(
+        0L,
+        as.integer(progress$stage_quotas[[stage]] %||% 0L) -
+          as.integer(progress$stage_committed[[stage]] %||% 0L)
+      )
+      key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
+      shortfalls <- round$link_stage_shortfalls_by_refit_spoke %||% list()
+      existing_shortfall <- shortfalls[[key]] %||% list()
+      existing_shortfall[[stage]] <- as.integer((existing_shortfall[[stage]] %||% 0L) + shortfall)
+      shortfalls[[key]] <- existing_shortfall
+      round$link_stage_shortfalls_by_refit_spoke <- shortfalls
+
+      exhausted_map <- round$link_stage_exhausted_by_refit_spoke %||% list()
+      existing_exhausted <- exhausted_map[[key]] %||% list()
+      existing_exhausted[[stage]] <- TRUE
+      exhausted_map[[key]] <- existing_exhausted
+      round$link_stage_exhausted_by_refit_spoke <- exhausted_map
+      out$round <- round
+      return(list(state = out, exhausted = FALSE))
+    }
+  }
+
   shortfall <- max(0L, as.integer(round$stage_quotas[[stage]] %||% 0L) -
     as.integer(round$stage_committed[[stage]] %||% 0L))
   out <- .adaptive_round_advance_stage(out, shortfall = shortfall)
@@ -382,6 +553,8 @@ adaptive_rank_start <- function(items,
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state$controller <- .adaptive_controller_resolve(state)
   state <- .adaptive_phase_a_prepare(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = state$controller)
+  state$controller$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
   state$round <- .adaptive_new_round_state(
     item_ids = state$item_ids,
     round_id = 1L,
