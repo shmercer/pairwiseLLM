@@ -538,11 +538,23 @@
 .adaptive_link_cross_edges <- function(state, spoke_id, last_refit_step = NULL) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   if (nrow(step_log) < 1L) {
-    return(tibble::tibble(spoke_item = character(), hub_item = character(), y_spoke = integer(), step_id = integer()))
+    return(tibble::tibble(
+      spoke_item = character(),
+      hub_item = character(),
+      y_spoke = integer(),
+      step_id = integer(),
+      spoke_in_A = logical()
+    ))
   }
   required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id", "A", "B", "Y")
   if (!all(required %in% names(step_log))) {
-    return(tibble::tibble(spoke_item = character(), hub_item = character(), y_spoke = integer(), step_id = integer()))
+    return(tibble::tibble(
+      spoke_item = character(),
+      hub_item = character(),
+      y_spoke = integer(),
+      step_id = integer(),
+      spoke_in_A = logical()
+    ))
   }
   hub_id <- as.integer(.adaptive_controller_resolve(state)$hub_id %||% 1L)
   set_by_item <- stats::setNames(as.integer(state$set_ids), as.character(state$item_ids))
@@ -559,7 +571,13 @@
     cross <- cross[as.integer(cross$step_id) > as.integer(last_refit_step), , drop = FALSE]
   }
   if (nrow(cross) < 1L) {
-    return(tibble::tibble(spoke_item = character(), hub_item = character(), y_spoke = integer(), step_id = integer()))
+    return(tibble::tibble(
+      spoke_item = character(),
+      hub_item = character(),
+      y_spoke = integer(),
+      step_id = integer(),
+      spoke_in_A = logical()
+    ))
   }
   ids <- as.character(state$item_ids)
   A_id <- ids[as.integer(cross$A)]
@@ -571,7 +589,13 @@
   spoke_is_B <- B_set == as.integer(spoke_id) & A_set == hub_id
   keep <- spoke_is_A | spoke_is_B
   if (!any(keep)) {
-    return(tibble::tibble(spoke_item = character(), hub_item = character(), y_spoke = integer(), step_id = integer()))
+    return(tibble::tibble(
+      spoke_item = character(),
+      hub_item = character(),
+      y_spoke = integer(),
+      step_id = integer(),
+      spoke_in_A = logical()
+    ))
   }
   cross <- cross[keep, , drop = FALSE]
   A_id <- A_id[keep]
@@ -582,7 +606,8 @@
     spoke_item = ifelse(spoke_is_A, A_id, B_id),
     hub_item = ifelse(spoke_is_A, B_id, A_id),
     y_spoke = as.integer(ifelse(spoke_is_A, y, 1L - y)),
-    step_id = as.integer(cross$step_id)
+    step_id = as.integer(cross$step_id),
+    spoke_in_A = as.logical(spoke_is_A)
   )
 }
 
@@ -633,10 +658,13 @@
   s <- as.double(spoke_theta[as.character(edges$spoke_item)])
   hub_sd <- as.double(hub_sd_map[as.character(edges$hub_item)])
   spoke_sd <- as.double(spoke_sd_map[as.character(edges$spoke_item)])
+  spoke_in_A <- as.logical(edges$spoke_in_A %||% rep(TRUE, nrow(edges)))
+  beta_sign <- ifelse(spoke_in_A, 1, -1)
+  beta_signed <- beta * as.double(beta_sign)
   hub_sd[!is.finite(hub_sd) | hub_sd < 0] <- 0
   spoke_sd[!is.finite(spoke_sd) | spoke_sd < 0] <- 0
   y <- as.integer(edges$y_spoke)
-  keep <- is.finite(h) & is.finite(s) & y %in% c(0L, 1L)
+  keep <- is.finite(h) & is.finite(s) & y %in% c(0L, 1L) & is.finite(beta_signed)
   if (!any(keep)) {
     empty <- list(
       delta_mean = 0,
@@ -658,12 +686,13 @@
   s <- s[keep]
   hub_sd <- hub_sd[keep]
   spoke_sd <- spoke_sd[keep]
+  beta_signed <- beta_signed[keep]
   y <- y[keep]
   nlp <- function(par) {
     delta <- par[[1L]]
     log_alpha <- if (isTRUE(use_scale)) par[[2L]] else 0
     alpha <- exp(log_alpha)
-    eta <- delta + alpha * s - h + beta
+    eta <- delta + alpha * s - h + beta_signed
     p_base <- stats::plogis(eta)
     p <- (1 - epsilon) * p_base + epsilon * 0.5
     p <- pmax(1e-10, pmin(1 - 1e-10, p))
@@ -746,13 +775,16 @@
   }
   h <- as.double(hub_theta[as.character(edges$hub_item)])
   s <- as.double(spoke_theta[as.character(edges$spoke_item)])
+  spoke_in_A <- as.logical(edges$spoke_in_A %||% rep(TRUE, nrow(edges)))
+  beta_sign <- ifelse(spoke_in_A, 1, -1)
+  beta_signed <- beta * as.double(beta_sign)
   y <- as.integer(edges$y_spoke)
-  keep <- is.finite(h) & is.finite(s) & y %in% c(0L, 1L)
+  keep <- is.finite(h) & is.finite(s) & y %in% c(0L, 1L) & is.finite(beta_signed)
   if (!any(keep)) {
     return(NA_real_)
   }
   alpha <- if (is.finite(log_alpha_mean)) exp(log_alpha_mean) else 1
-  eta <- as.double(delta_mean) + alpha * s[keep] - h[keep] + beta
+  eta <- as.double(delta_mean) + alpha * s[keep] - h[keep] + beta_signed[keep]
   p_base <- stats::plogis(eta)
   p <- (1 - epsilon) * p_base + epsilon * 0.5
   as.double(mean(abs(as.double(y[keep]) - p)))

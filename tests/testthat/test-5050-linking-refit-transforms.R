@@ -282,6 +282,39 @@ test_that("judge parameter mode controls linking judge scope in fit contract", {
   expect_equal(contract$judge$epsilon, 0.25, tolerance = 1e-12)
 })
 
+test_that("link likelihood applies signed beta by original presentation side", {
+  edges_mixed <- tibble::tibble(
+    spoke_item = c("s1", "s1"),
+    hub_item = c("h1", "h1"),
+    y_spoke = c(1L, 0L),
+    step_id = c(1L, 2L),
+    spoke_in_A = c(TRUE, FALSE)
+  )
+  edges_all_a <- edges_mixed
+  edges_all_a$spoke_in_A <- c(TRUE, TRUE)
+  attr(edges_mixed, "judge_params") <- list(beta = 1, epsilon = 0, mode = "phase_specific", scope = "link")
+  attr(edges_all_a, "judge_params") <- list(beta = 1, epsilon = 0, mode = "phase_specific", scope = "link")
+
+  hub_theta <- c(h1 = 0)
+  spoke_theta <- c(s1 = 0)
+
+  fit_mixed <- pairwiseLLM:::.adaptive_link_fit_transform(
+    edges_mixed,
+    hub_theta,
+    spoke_theta,
+    transform_mode = "shift_only"
+  )
+  fit_all_a <- pairwiseLLM:::.adaptive_link_fit_transform(
+    edges_all_a,
+    hub_theta,
+    spoke_theta,
+    transform_mode = "shift_only"
+  )
+
+  expect_equal(fit_mixed$delta_mean, 0, tolerance = 1e-8)
+  expect_true(fit_all_a$delta_mean < -0.1)
+})
+
 test_that("shift_only theta treatment normal_prior propagates uncertainty", {
   fixed <- make_linking_refit_state(
     list(
