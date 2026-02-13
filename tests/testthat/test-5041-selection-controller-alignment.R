@@ -58,7 +58,7 @@ test_that("identifiability state is recomputed from reliability and rank correla
   expect_equal(hi$controller$global_identified_rank_corr_min, 0.80)
 })
 
-test_that("long-link posterior gate activates only after identifiability", {
+test_that("long-link trueskill gate activates only after identifiability", {
   items <- make_test_items(2)
   trueskill_state <- make_test_trueskill_state(items, mu = c(25, 25))
   state <- make_test_state(items, trueskill_state)
@@ -66,16 +66,19 @@ test_that("long-link posterior gate activates only after identifiability", {
   state$round$stage_index <- 2L
   state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
   state$controller$global_identified <- TRUE
-  draws <- matrix(c(1, -1, 1, -1, 1, -1), nrow = 3, byrow = TRUE)
-  colnames(draws) <- state$item_ids
-  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws)
+  state$controller$p_long_low <- 0.45
+  state$controller$p_long_high <- 0.55
 
   cand <- tibble::tibble(i = "1", j = "2")
-  out <- pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand)
+  out <- testthat::with_mocked_bindings(
+    trueskill_win_probability = function(i_id, j_id, state) 0.99,
+    pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
+    .package = "pairwiseLLM"
+  )
 
   expect_true(out$candidate_starved)
   expect_identical(out$long_gate_pass, FALSE)
-  expect_identical(out$long_gate_reason, "posterior_extreme")
+  expect_identical(out$long_gate_reason, "trueskill_extreme")
 })
 
 test_that("long-link gate reason reflects selected fallback attempt", {
@@ -86,18 +89,15 @@ test_that("long-link gate reason reflects selected fallback attempt", {
   state$round$stage_index <- 2L
   state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
   state$controller$global_identified <- TRUE
-
-  draws <- rbind(
-    c(5, 0, 4, 3),
-    c(5, 0, 3, 4),
-    c(5, 0, 4, 3),
-    c(5, 0, 3, 4)
-  )
-  colnames(draws) <- state$item_ids
-  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws)
+  state$controller$p_long_low <- 0.45
+  state$controller$p_long_high <- 0.55
 
   calls <- 0L
   out <- testthat::with_mocked_bindings(
+    trueskill_win_probability = function(i_id, j_id, state) {
+      ids <- sort(c(as.character(i_id), as.character(j_id)))
+      if (identical(ids, c("1", "2"))) 0.99 else 0.50
+    },
     generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed) {
       calls <<- calls + 1L
       ids <- as.character(state$item_ids)
