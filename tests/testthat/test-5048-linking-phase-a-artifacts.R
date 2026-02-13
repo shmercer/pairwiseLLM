@@ -120,7 +120,8 @@ test_that("phase A mixed mode supports import and run per set", {
   prepared <- .adaptive_phase_a_prepare(state)
   status <- tibble::as_tibble(prepared$linking$phase_a$set_status)
 
-  expect_true(all(status$status == "ready"))
+  expect_equal(status$status[match(1L, status$set_id)], "ready")
+  expect_equal(status$status[match(2L, status$set_id)], "pending_finalization")
   expect_equal(status$source[match(1L, status$set_id)], "import")
   expect_equal(status$source[match(2L, status$set_id)], "run")
   expect_true(all(c("1", "2") %in% names(prepared$linking$phase_a$artifacts)))
@@ -146,9 +147,10 @@ test_that("phase A import fallback policy switches to run mode when configured",
   prepared <- .adaptive_phase_a_prepare(state)
   status <- tibble::as_tibble(prepared$linking$phase_a$set_status)
 
-  expect_true(all(status$status == "ready"))
+  expect_equal(status$status[match(1L, status$set_id)], "pending_finalization")
+  expect_equal(status$status[match(2L, status$set_id)], "ready")
   expect_equal(status$source[match(1L, status$set_id)], "run")
-  expect_match(status$validation_message[match(1L, status$set_id)], "import_failed_fallback_to_run")
+  expect_match(status$validation_message[match(1L, status$set_id)], "pending_finalization")
 })
 
 test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
@@ -328,7 +330,7 @@ test_that("phase A helper branch guards and edge paths are exercised", {
     phase = "phase_a"
   )
   state <- .adaptive_apply_controller_config(state, adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L))
-  expect_no_error(.adaptive_phase_a_gate_or_abort(state))
+  expect_error(.adaptive_phase_a_gate_or_abort(state), "cannot start until valid Phase A artifacts")
 
   empty_dir <- withr::local_tempdir()
   empty_child <- file.path(empty_dir, "child")
@@ -383,6 +385,50 @@ test_that("resume preserves persisted phase A artifacts for linking gate", {
   )
 })
 
+test_that("resume preserves Phase A pending/ready semantics and warm-start state", {
+  state <- make_phase_a_ready_state()
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "import"),
+      status = c("pending_finalization", "ready"),
+      validation_message = c(
+        "pending_finalization: within-set stop criteria not yet met",
+        "imported"
+      ),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = art1, `2` = art2),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 1L
+  )
+  state$warm_start_done <- FALSE
+  state$warm_start_pairs <- tibble::tibble(i_id = c("a1"), j_id = c("a2"))
+  state$warm_start_idx <- 1L
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir = session_dir, overwrite = TRUE)
+  restored <- load_adaptive_session(session_dir)
+
+  status <- tibble::as_tibble(restored$linking$phase_a$set_status)
+  expect_equal(status$status[match(1L, status$set_id)], "pending_finalization")
+  expect_equal(status$status[match(2L, status$set_id)], "ready")
+  expect_false(isTRUE(restored$linking$phase_a$ready_for_phase_b))
+  expect_false(isTRUE(restored$warm_start_done))
+  expect_equal(nrow(restored$warm_start_pairs), 1L)
+})
+
 test_that("phase A helper utilities cover fallback and phase-context branches", {
   state <- adaptive_rank_start(make_multiset_items(), seed = 9L)
   controller <- .adaptive_controller_resolve(state)
@@ -398,7 +444,7 @@ test_that("phase A helper utilities cover fallback and phase-context branches", 
     ),
     artifacts = list(`2` = list(set_id = 2L))
   )
-  expect_identical(.adaptive_phase_a_ready_sets(state), 2L)
+  expect_identical(.adaptive_phase_a_ready_sets(state), integer())
 
   # Non-link mode has no pending run sets.
   expect_identical(
@@ -486,4 +532,116 @@ test_that("phase A helper utilities cover fallback and phase-context branches", 
     phase = "phase_a"
   )
   expect_error(.adaptive_phase_a_gate_or_abort(state3), "cannot start until valid Phase A artifacts")
+})
+
+test_that("phase_a_mode=run does not mark set ready before within-set finalization", {
+  state <- make_phase_a_ready_state()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+
+  prepared <- .adaptive_phase_a_prepare(state)
+  status <- tibble::as_tibble(prepared$linking$phase_a$set_status)
+  expect_true(all(status$source == "run"))
+  expect_true(all(status$status == "pending_finalization"))
+  expect_true(all(grepl("pending_finalization", status$validation_message)))
+  expect_false(isTRUE(prepared$linking$phase_a$ready_for_phase_b))
+})
+
+test_that("phase B gate aborts when hub/spoke artifacts are missing", {
+  state <- make_phase_a_ready_state()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("import", "import"),
+      status = c("ready", "ready"),
+      validation_message = c("imported", "imported"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = list(set_id = 1L)),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_
+  )
+  expect_error(
+    .adaptive_phase_a_gate_or_abort(state),
+    "missing artifacts for set_id"
+  )
+})
+
+test_that("linking warm-start sync helper covers phase and scope transitions", {
+  state <- adaptive_rank_start(make_multiset_items(), seed = 5L)
+
+  # Non-link mode is a no-op.
+  no_link <- pairwiseLLM:::.adaptive_link_sync_warm_start(state)
+  expect_identical(no_link$warm_start_done, state$warm_start_done)
+
+  # Build valid import artifacts for phase_b branch checks.
+  ready <- make_phase_a_ready_state()
+  art1 <- .adaptive_phase_a_build_artifact(ready, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(ready, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+  ready <- .adaptive_apply_controller_config(
+    ready,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import")
+  )
+  ready$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("import", "import"),
+      status = c("ready", "ready"),
+      validation_message = c("imported", "imported"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = art1, `2` = art2),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_
+  )
+  ready$warm_start_done <- FALSE
+  ready$warm_start_pairs <- tibble::tibble(i_id = "a1", j_id = "a2")
+  out_b <- pairwiseLLM:::.adaptive_link_sync_warm_start(ready)
+  expect_true(isTRUE(out_b$warm_start_done))
+  expect_equal(nrow(out_b$warm_start_pairs), 0L)
+  expect_true(is.na(out_b$linking$phase_a$warm_start_scope_set))
+
+  # Phase_a branch should scope warm-start to active set.
+  phase_a <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  phase_a$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("pending_finalization", "pending_finalization"),
+      validation_message = c("x", "y"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 1L
+  )
+  phase_a$warm_start_done <- FALSE
+  phase_a$warm_start_pairs <- tibble::tibble(i_id = c("a1", "b1"), j_id = c("a2", "b2"))
+  phase_a$linking$phase_a$warm_start_scope_set <- 1L
+  out_a <- pairwiseLLM:::.adaptive_link_sync_warm_start(phase_a)
+  expect_true(all(out_a$warm_start_pairs$i_id %in% c("a1", "a2")))
+  expect_true(all(out_a$warm_start_pairs$j_id %in% c("a1", "a2")))
+
+  # Switching active set reseeds and resets warm-start queue to that set.
+  phase_a$linking$phase_a$warm_start_scope_set <- 2L
+  switched <- pairwiseLLM:::.adaptive_link_sync_warm_start(phase_a)
+  expect_identical(switched$linking$phase_a$warm_start_scope_set, 1L)
+  expect_equal(switched$warm_start_idx, 1L)
 })
