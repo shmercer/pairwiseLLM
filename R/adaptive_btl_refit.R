@@ -449,14 +449,48 @@
   } else {
     TRUE
   }
-  rank_gate <- is.finite(row$ts_btl_rank_spearman[[1L]]) &&
-    row$ts_btl_rank_spearman[[1L]] >= 0.98
+  rank_metric <- NA_real_
+  if ("rank_stability_lagged" %in% names(row)) {
+    rank_metric <- as.double(row$rank_stability_lagged[[1L]] %||% NA_real_)
+  }
+  if (!is.finite(rank_metric) && "ts_btl_rank_spearman" %in% names(row)) {
+    rank_metric <- as.double(row$ts_btl_rank_spearman[[1L]] %||% NA_real_)
+  }
+  rank_gate <- is.finite(rank_metric) && rank_metric >= 0.98
   isTRUE(rel_gate) &&
     isTRUE(delta_sd_gate) &&
     isTRUE(alpha_sd_gate) &&
     isTRUE(delta_change_gate) &&
     isTRUE(alpha_change_gate) &&
     isTRUE(rank_gate)
+}
+
+.adaptive_link_reconstruct_identified_from_logs <- function(link_row, controller) {
+  row <- tibble::as_tibble(link_row)
+  if (nrow(row) != 1L) {
+    rlang::abort("`link_row` must have exactly one row.")
+  }
+  controller <- utils::modifyList(.adaptive_controller_defaults(2L), controller %||% list())
+  rel_gate <- is.finite(row$reliability_EAP_link[[1L]]) &&
+    row$reliability_EAP_link[[1L]] >= as.double(controller$link_identified_reliability_min %||% 0.80)
+  rank_gate <- is.finite(row$ts_btl_rank_spearman[[1L]]) &&
+    row$ts_btl_rank_spearman[[1L]] >= as.double(controller$link_rank_corr_min %||% 0.90)
+  delta_sd_gate <- if ("delta_sd_pass" %in% names(row)) {
+    isTRUE(row$delta_sd_pass[[1L]])
+  } else {
+    FALSE
+  }
+  mode <- as.character(row$link_transform_mode[[1L]] %||% "shift_only")
+  alpha_sd_gate <- if (identical(mode, "shift_scale")) {
+    if ("log_alpha_sd_pass" %in% names(row)) {
+      isTRUE(row$log_alpha_sd_pass[[1L]])
+    } else {
+      FALSE
+    }
+  } else {
+    TRUE
+  }
+  isTRUE(rel_gate) && isTRUE(rank_gate) && isTRUE(delta_sd_gate) && isTRUE(alpha_sd_gate)
 }
 
 .adaptive_link_phase_a_theta_map <- function(state, set_id, field) {
