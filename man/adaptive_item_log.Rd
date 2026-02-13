@@ -32,7 +32,8 @@ In linking mode, raw and global summaries are kept separate:
 \item \code{theta_raw_eap}: within-set scale summary (from Phase A artifacts
 when available).
 \item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
-summaries after spoke transform application.
+summaries after spoke transform application. These are typed \code{NA}
+when required spoke transform parameters are unavailable at that refit.
 }
 }
 \examples{

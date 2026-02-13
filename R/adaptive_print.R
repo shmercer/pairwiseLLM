@@ -123,14 +123,26 @@
     stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
     mode <- as.character(stats_row$link_transform_mode %||%
       .adaptive_link_transform_mode_for_spoke(controller, spoke_id))
-    delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+    if (!mode %in% c("shift_only", "shift_scale")) {
+      global_mean[spoke_idx] <- NA_real_
+      global_sd[spoke_idx] <- NA_real_
+      next
+    }
+    delta <- as.double(stats_row$delta_spoke_mean %||% NA_real_)
     if (!is.finite(delta)) {
-      delta <- 0
+      global_mean[spoke_idx] <- NA_real_
+      global_sd[spoke_idx] <- NA_real_
+      next
     }
     alpha <- 1
     if (identical(mode, "shift_scale")) {
-      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% 0)
-      alpha <- if (is.finite(log_alpha)) exp(log_alpha) else 1
+      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
+      if (!is.finite(log_alpha)) {
+        global_mean[spoke_idx] <- NA_real_
+        global_sd[spoke_idx] <- NA_real_
+        next
+      }
+      alpha <- exp(log_alpha)
     }
     global_mean[spoke_idx] <- as.double(delta + alpha * raw_mean[spoke_idx])
     global_sd[spoke_idx] <- as.double(abs(alpha) * raw_sd[spoke_idx])
@@ -489,7 +501,8 @@ adaptive_round_log <- function(state) {
 #'   \item \code{theta_raw_eap}: within-set scale summary (from Phase A artifacts
 #'   when available).
 #'   \item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
-#'   summaries after spoke transform application.
+#'   summaries after spoke transform application. These are typed \code{NA}
+#'   when required spoke transform parameters are unavailable at that refit.
 #' }
 #'
 #' @param state Adaptive state.
