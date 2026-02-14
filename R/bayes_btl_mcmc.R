@@ -310,14 +310,19 @@ build_btl_results_data <- function(
   }
 
   judge_scope_levels <- inference_contract$judge_scope_levels %||% NULL
+  inferred_scope_from_results <- FALSE
   if (is.null(judge_scope_levels) && "judge_scope" %in% names(results)) {
     judge_scope_levels <- as.character(results$judge_scope)
+    inferred_scope_from_results <- TRUE
   }
   judge_scope_levels <- as.character(judge_scope_levels %||% character())
   judge_scope_levels <- unique(judge_scope_levels[!is.na(judge_scope_levels) & judge_scope_levels != ""])
   bad_scope <- setdiff(judge_scope_levels, c("shared", "within", "link"))
-  if (length(bad_scope) > 0L) {
+  if (length(bad_scope) > 0L && !isTRUE(inferred_scope_from_results)) {
     rlang::abort("`inference_contract$judge_scope_levels` must be shared, within, or link.")
+  }
+  if (length(bad_scope) > 0L && isTRUE(inferred_scope_from_results)) {
+    judge_scope_levels <- setdiff(judge_scope_levels, bad_scope)
   }
 
   judge_param_mode <- inference_contract$judge_param_mode %||% NULL

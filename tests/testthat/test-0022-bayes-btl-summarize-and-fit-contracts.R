@@ -223,6 +223,11 @@ test_that("inference contract metadata resolves from results and overrides", {
   )
   expect_identical(overridden$judge_param_mode, "global_shared")
   expect_false(isTRUE(overridden$phase_boundary_detected))
+
+  results_unknown <- results
+  results_unknown$judge_scope <- c("legacy_scope", "link")
+  tolerant <- pairwiseLLM:::.btl_mcmc_inference_contract_from_results(results_unknown)
+  expect_identical(tolerant$judge_scope_levels, "link")
 })
 
 test_that("fit contract builders and validators enforce schema", {
