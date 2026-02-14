@@ -93,3 +93,45 @@ test_that("warm-start committed pairs count toward round committed totals", {
   expect_true(out$round$committed_total >= warm_steps)
   expect_true(out$round$round_committed >= warm_steps)
 })
+
+test_that("concurrent all-spoke infeasible starvation marks stage exhaustion per eligible spoke", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 901L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent"
+    )
+  )
+  state$warm_start_done <- TRUE
+  set_ids <- sort(unique(as.integer(state$items$set_id)))
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = as.integer(set_ids),
+      source = rep("import", length(set_ids)),
+      status = rep("ready", length(set_ids)),
+      validation_message = rep("ready", length(set_ids)),
+      artifact_path = rep(NA_character_, length(set_ids))
+    ),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b"
+  )
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 1L
+
+  step_row <- tibble::tibble(
+    round_stage = "anchor_link",
+    link_spoke_id = NA_integer_,
+    starvation_reason = "all_eligible_spokes_infeasible"
+  )
+  out <- pairwiseLLM:::.adaptive_round_starvation(state, step_row)
+  exhausted_map <- out$state$refit_meta$link_stage_exhausted_by_refit_spoke
+  expect_true(isTRUE(exhausted_map[["1::2"]][["anchor_link"]]))
+  expect_true(isTRUE(exhausted_map[["1::3"]][["anchor_link"]]))
+})

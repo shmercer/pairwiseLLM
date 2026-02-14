@@ -281,6 +281,143 @@ test_that("concurrent active spoke routing falls back deterministically when def
   expect_true(pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller) %in% c(2L, 3L))
 })
 
+test_that("concurrent selector falls back to next eligible spoke in same step when primary is infeasible", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 77L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  state$controller$global_identified <- TRUE
+  state$controller$explore_taper_mult <- 0
+  state$refit_meta$last_refit_step <- 0L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 0),
+    `3` = list(uncertainty = 0)
+  )
+  phase_ctx <- pairwiseLLM:::.adaptive_link_phase_context(state, controller = state$controller)
+  expect_identical(phase_ctx$phase, "phase_b")
+  expect_identical(sort(phase_ctx$ready_spokes), c(2L, 3L))
+
+  out <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
+                                                    link_spoke_id = NA_integer_) {
+      if (is.na(link_spoke_id) || as.integer(link_spoke_id) == 2L) {
+        return(tibble::tibble(i = character(), j = character()))
+      }
+      tibble::tibble(i = "h1", j = "s31")
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_false(isTRUE(out$candidate_starved))
+  expect_identical(out$link_spoke_id_selected, 3L)
+  set_i <- as.integer(state$items$set_id[[out$i]])
+  set_j <- as.integer(state$items$set_id[[out$j]])
+  expect_true(xor(set_i == 1L, set_j == 1L))
+})
+
+test_that("concurrent selector starves only after all eligible spokes are infeasible", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 78L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  state$controller$global_identified <- TRUE
+  state$controller$explore_taper_mult <- 0
+  state$refit_meta$last_refit_step <- 0L
+  phase_ctx <- pairwiseLLM:::.adaptive_link_phase_context(state, controller = state$controller)
+  expect_identical(phase_ctx$phase, "phase_b")
+  expect_identical(sort(phase_ctx$ready_spokes), c(2L, 3L))
+
+  out <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
+                                                    link_spoke_id = NA_integer_) {
+      tibble::tibble(i = character(), j = character())
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(isTRUE(out$candidate_starved))
+  expect_identical(out$starvation_reason, "all_eligible_spokes_infeasible")
+  expect_true(is.na(out$link_spoke_id_selected))
+})
+
+test_that("concurrent fallback ordering is deterministic under fixed state and seed", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 79L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  state$controller$global_identified <- TRUE
+  state$controller$explore_taper_mult <- 0
+  state$refit_meta$last_refit_step <- 0L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 0),
+    `3` = list(uncertainty = 0)
+  )
+
+  draw_once <- function() {
+    testthat::with_mocked_bindings(
+      generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
+                                                      link_spoke_id = NA_integer_) {
+        if (is.na(link_spoke_id) || as.integer(link_spoke_id) == 2L) {
+          return(tibble::tibble(i = character(), j = character()))
+        }
+        tibble::tibble(i = "h1", j = "s31")
+      },
+      pairwiseLLM:::select_next_pair(state, step_id = 5L),
+      .package = "pairwiseLLM"
+    )
+  }
+
+  out1 <- draw_once()
+  out2 <- draw_once()
+  expect_identical(out1$link_spoke_id_selected, out2$link_spoke_id_selected)
+  expect_identical(out1$i, out2$i)
+  expect_identical(out1$j, out2$j)
+})
+
 test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
   items <- tibble::tibble(
     item_id = c("a", "b"),
