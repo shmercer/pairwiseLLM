@@ -777,6 +777,48 @@ test_that("linking predictive utility applies signed position bias by (A,B) orie
   expect_equal(out$link_u[[2L]], p_sh * (1 - p_sh), tolerance = 1e-12)
 })
 
+test_that("cross-set logged predictive probability uses final A/B orientation", {
+  items <- tibble::tibble(
+    item_id = c("h1", "s1"),
+    set_id = c(1L, 2L),
+    global_item_id = c("gh1", "gs1")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 121L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 2L
+  state$round$stage_order <- pairwiseLLM:::.adaptive_stage_order()
+  state$round$stage_quotas <- as.list(stats::setNames(rep.int(2L, 4L), state$round$stage_order))
+  state$round$stage_committed <- as.list(stats::setNames(rep.int(0L, 4L), state$round$stage_order))
+
+  cand <- tibble::tibble(i = "h1", j = "s1", link_spoke_id = 2L)
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_attach_predictive_utility = function(candidates, state, controller, spoke_id) {
+      candidates$link_p <- 0.9
+      candidates$link_u <- 0.09
+      candidates
+    },
+    .adaptive_assign_order = function(pair, posA, posB, pair_last_order) {
+      c(A_id = "s1", B_id = "h1")
+    },
+    .adaptive_link_predictive_prob_oriented = function(state, controller, spoke_id, A_id, B_id) {
+      if (identical(A_id, "s1") && identical(B_id, "h1")) 0.2 else 0.8
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
+    .package = "pairwiseLLM"
+  )
+
+  expect_equal(out$A, 2L)
+  expect_equal(out$B, 1L)
+  expect_equal(out$p_ij, 0.2, tolerance = 1e-12)
+  expect_equal(out$U0_ij, 0.16, tolerance = 1e-12)
+})
+
 test_that("active linking hub domain uses the same hub-only anchors as phase-B routing", {
   items <- tibble::tibble(
     item_id = c(
