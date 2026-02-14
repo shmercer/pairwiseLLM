@@ -111,10 +111,13 @@ applies transactional updates if and only if the judge response is valid.
 Invalid responses produce a logged step with
 \code{pair_id = NA} and must not update committed-comparison state.
 
-Pair selection is TrueSkill-based and does not use BTL posterior draws.
-Utility is based on
-\deqn{U_0 = p_{ij}(1 - p_{ij})} with exploration/exploitation routing and
-fallback handling recorded in \code{step_log}.
+Pair selection does not use BTL posterior draws.
+Within-set routing is TrueSkill-based with utility
+\deqn{U_0 = p_{ij}(1 - p_{ij})}.
+Linking Phase B cross-set routing uses model-implied predictive utility under
+the current transform and judge parameters.
+Exploration/exploitation routing and fallback handling are recorded in
+\code{step_log}.
 
 Round scheduling uses stage-specific admissibility:
 \itemize{
