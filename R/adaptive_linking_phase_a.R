@@ -104,10 +104,16 @@
 .adaptive_phase_a_required_config_hash <- function(state, set_id) {
   controller <- .adaptive_controller_resolve(state)
   fit <- state$btl_fit %||% list()
+  mcmc_cfg <- fit$mcmc_config_used %||% list()
   payload <- list(
     set_id = as.integer(set_id),
     judge_param_mode = as.character(controller$judge_param_mode %||% NA_character_),
-    model_variant = as.character(fit$model_variant %||% "btl_e_b")
+    model_variant = as.character(fit$model_variant %||% "btl_e_b"),
+    mcmc = list(
+      chains = as.integer(mcmc_cfg$chains %||% NA_integer_),
+      parallel_chains = as.integer(mcmc_cfg$parallel_chains %||% NA_integer_),
+      threads_per_chain = as.integer(mcmc_cfg$threads_per_chain %||% NA_integer_)
+    )
   )
   .adaptive_phase_a_hash_object(payload)
 }
@@ -302,7 +308,15 @@
     rlang::abort(paste0("Phase A artifact missing fit_config_hash for set ", set_id, "."))
   }
   if (!identical(fit_config_hash, required_hash) && !fit_config_hash %in% compatible_hashes) {
-    rlang::abort(paste0("Phase A artifact config hash incompatibility for set ", set_id, "."))
+    rlang::abort(paste0(
+      "Phase A artifact config hash incompatibility for set ",
+      set_id,
+      ": artifact hash `",
+      fit_config_hash,
+      "` did not match required hash `",
+      required_hash,
+      "` and was not found in `adaptive_config$phase_a_compatible_config_hashes`."
+    ))
   }
 
   items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())
