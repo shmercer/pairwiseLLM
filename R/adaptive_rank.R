@@ -338,7 +338,13 @@ make_adaptive_judge_llm <- function(
 #'   (`phase_a_mode`, `phase_a_import_failure_policy`,
 #'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
 #'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`,
-#'   `phase_a_set_source`). Unknown fields and invalid values abort with
+#'   `phase_a_set_source`). In linking Phase B with
+#'   `judge_param_mode = "phase_specific"`, startup can use deterministic
+#'   within/shared judge fallback before link-specific estimates exist; once
+#'   expected, malformed link-specific estimates abort. `link_refit_mode =
+#'   "joint_refit"` jointly estimates active hub+spoke item abilities and
+#'   transform parameters, and `hub_lock_mode`/`hub_lock_kappa` control hub
+#'   locking in that joint refit. Unknown fields and invalid values abort with
 #'   actionable errors.
 #' @param btl_config Optional named list passed to [adaptive_rank_run_live()]
 #'   to control BTL refit cadence, stopping diagnostics, and selected

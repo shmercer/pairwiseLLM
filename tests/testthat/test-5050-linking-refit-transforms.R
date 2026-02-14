@@ -157,6 +157,9 @@ test_that("hub lock boundary kappa=0 matches hard lock in joint refit", {
   d_soft0 <- soft0$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
   d_free <- free$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
 
+  hard_contract <- hard$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_equal(hard_contract$joint_refit$n_hub_items_estimated, 0L)
+
   expect_equal(d_hard, d_soft0, tolerance = 1e-10)
   expect_false(isTRUE(all.equal(d_hard, d_free, tolerance = 1e-10)))
 })
@@ -198,6 +201,23 @@ test_that("soft lock uses artifact uncertainty and kappa strength", {
     out_low$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean,
     tolerance = 1e-10
   )))
+})
+
+test_that("joint_refit fit contract records joint theta estimation", {
+  state <- make_linking_refit_state(
+    list(link_refit_mode = "joint_refit", link_transform_mode = "shift_only")
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  out <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  contract <- out$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+
+  expect_identical(contract$link_refit_mode, "joint_refit")
+  expect_true(all(c("theta_hub", "theta_spoke", "delta_s") %in% contract$parameters))
+  expect_true(isTRUE(contract$joint_refit$used))
+  expect_true(contract$joint_refit$n_hub_items_estimated >= 1L)
+  expect_true(contract$joint_refit$n_spoke_items_estimated >= 1L)
 })
 
 test_that("auto escalation triggers after consecutive PPC failures and is one-way", {
@@ -282,20 +302,89 @@ test_that("judge parameter mode controls linking judge scope in fit contract", {
   expect_equal(contract$judge$epsilon, 0.25, tolerance = 1e-12)
 })
 
-test_that("phase-specific judge mode aborts when link parameters are missing", {
+test_that("phase-specific judge mode allows startup fallback but aborts after startup when link params are missing", {
   state <- make_linking_refit_state(
     list(link_transform_mode = "shift_only", link_refit_mode = "shift_only", judge_param_mode = "phase_specific")
   )
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
-
+  state$btl_fit$beta_within_mean <- 0.03
+  state$btl_fit$epsilon_within_mean <- 0.02
   state$btl_fit$beta_link_mean <- NULL
   state$btl_fit$epsilon_link_mean <- NULL
 
+  out_startup <- expect_no_error(
+    pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  )
+  expect_true(isTRUE(
+    out_startup$controller$link_refit_stats_by_spoke[["2"]]$fit_contract$judge$cold_start_fallback_used
+  ))
+
+  out_startup$btl_fit$beta_link_mean <- NULL
+  out_startup$btl_fit$epsilon_link_mean <- NULL
+  out_startup <- append_cross_step(out_startup, 3L, "s21", "h3", 1L, spoke_id = 2L)
+
   expect_error(
-    pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
+    pairwiseLLM:::.adaptive_linking_refit_update_state(out_startup, list(last_refit_step = 2L)),
     "Phase-specific judge mode requires `beta_link_mean`"
   )
+})
+
+test_that("startup-gap helper and edge extractors cover fallback edge paths", {
+  state <- make_linking_refit_state()
+
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_phase_b_startup_gap_for_spoke(state, 2L)))
+  expect_equal(nrow(pairwiseLLM:::.adaptive_link_cross_edges(state, spoke_id = 2L)), 0L)
+  expect_equal(nrow(pairwiseLLM:::.adaptive_link_within_edges(state, set_id = 1L)), 0L)
+
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(delta_spoke_mean = 0))
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_phase_b_startup_gap_for_spoke(state, 2L)))
+})
+
+test_that("joint shift_scale fit consumes within-set edges and records lock/joint fields", {
+  edges <- tibble::tibble(
+    spoke_item = c("s1", "s2"),
+    hub_item = c("h1", "h2"),
+    y_spoke = c(1L, 0L),
+    step_id = c(1L, 2L),
+    spoke_in_A = c(TRUE, FALSE)
+  )
+  attr(edges, "judge_params") <- list(beta = 0.1, epsilon = 0.05, mode = "phase_specific", scope = "link")
+  attr(edges, "refit_contract") <- list(
+    link_refit_mode = "joint_refit",
+    hub_lock_mode = "hard_like",
+    hub_lock_kappa = 0.5
+  )
+  attr(edges, "within_hub_edges") <- tibble::tibble(
+    A_item = c("h1", "h2"),
+    B_item = c("h2", "h1"),
+    y_A = c(1L, 0L),
+    step_id = c(3L, 4L)
+  )
+  attr(edges, "within_spoke_edges") <- tibble::tibble(
+    A_item = c("s1", "s2"),
+    B_item = c("s2", "s1"),
+    y_A = c(1L, 0L),
+    step_id = c(5L, 6L)
+  )
+
+  hub_theta <- c(h1 = 0.4, h2 = -0.1)
+  spoke_theta <- c(s1 = -0.3, s2 = 0.2)
+  attr(hub_theta, "theta_sd") <- c(h1 = 0.1, h2 = 0.1)
+  attr(spoke_theta, "theta_sd") <- c(s1 = 0.2, s2 = 0.2)
+
+  fit <- pairwiseLLM:::.adaptive_link_fit_transform(
+    edges,
+    hub_theta = hub_theta,
+    spoke_theta = spoke_theta,
+    transform_mode = "shift_scale"
+  )
+  expect_true(is.finite(fit$delta_mean))
+  expect_true(is.finite(fit$log_alpha_mean))
+  expect_equal(length(fit$theta_hub_post), 2L)
+  expect_equal(length(fit$theta_spoke_post), 2L)
+  expect_identical(fit$fit_contract$link_refit_mode, "joint_refit")
+  expect_true(isTRUE(fit$fit_contract$joint_refit$used))
 })
 
 test_that("link likelihood applies signed beta by original presentation side", {

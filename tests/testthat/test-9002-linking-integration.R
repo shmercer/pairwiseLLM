@@ -87,6 +87,50 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
   expect_true(rows$delta_spoke_mean[[nrow(rows)]] > -2)
 })
 
+test_that("joint_refit integration records joint mode and soft-lock runtime fields", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 11L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1.2)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.1, h3 = 0.7,
+    s21 = -0.2, s22 = 0.3, s23 = 0.9
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 18L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_refit_mode = "joint_refit",
+      hub_lock_mode = "soft_lock",
+      hub_lock_kappa = 0.75,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts
+    ),
+    btl_config = list(refit_pairs_target = 2L),
+    progress = "none"
+  )
+
+  expect_true(nrow(out$link_stage_log) >= 1L)
+  rows <- out$link_stage_log[out$link_stage_log$spoke_id == 2L, , drop = FALSE]
+  expect_true(nrow(rows) >= 1L)
+  expect_true(all(rows$link_refit_mode == "joint_refit"))
+  expect_true(all(rows$hub_lock_mode == "soft_lock"))
+  expect_true(is.finite(rows$delta_spoke_mean[[nrow(rows)]]))
+
+  contract <- out$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_true(isTRUE(contract$joint_refit$used))
+  expect_true(all(c("theta_hub", "theta_spoke", "delta_s") %in% contract$parameters))
+})
+
 test_that("three-set linking remains hub-spoke only and rotates across spokes", {
   withr::local_seed(20260213)
 
