@@ -1310,18 +1310,14 @@
   if (!identical(phase_ctx$phase, "phase_b")) {
     return(out)
   }
-  if (length(phase_ctx$ready_spokes) < 1L) {
-    rlang::abort(
-      "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are available."
-    )
+  if (length(phase_ctx$active_spokes %||% integer()) < 1L) {
+    return(out)
   }
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- .adaptive_link_spoke_ids(out, hub_id)
-  spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
+  spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$active_spokes))
   if (length(spoke_ids) < 1L) {
-    rlang::abort(
-      "Phase B linking cannot continue: no ready spoke has valid Phase A artifact eligibility."
-    )
+    return(out)
   }
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   bad_refits <- controller$link_transform_bad_refits_by_spoke %||% list()
@@ -1670,19 +1666,15 @@
   if (!identical(phase_ctx$phase, "phase_b")) {
     return(tibble::as_tibble(new_link_stage_log()))
   }
-  if (length(phase_ctx$ready_spokes) < 1L) {
-    rlang::abort(
-      "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are available."
-    )
+  if (length(phase_ctx$active_spokes %||% integer()) < 1L) {
+    return(tibble::as_tibble(new_link_stage_log()))
   }
 
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- .adaptive_link_spoke_ids(state, hub_id = hub_id)
-  spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$ready_spokes))
+  spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$active_spokes))
   if (length(spoke_ids) < 1L) {
-    rlang::abort(
-      "Phase B link-stage logging cannot proceed: no ready spoke has valid Phase A artifact eligibility."
-    )
+    return(tibble::as_tibble(new_link_stage_log()))
   }
 
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
@@ -1812,7 +1804,11 @@
         .adaptive_link_transform_mode_for_spoke(controller, spoke_id)),
       link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
       hub_lock_mode = as.character(controller$hub_lock_mode %||% NA_character_),
-      hub_lock_kappa = as.double(controller$hub_lock_kappa %||% NA_real_),
+      hub_lock_kappa = if (identical(as.character(controller$hub_lock_mode %||% NA_character_), "soft_lock")) {
+        as.double(controller$hub_lock_kappa %||% NA_real_)
+      } else {
+        NA_real_
+      },
       delta_spoke_mean = as.double(stats_row$delta_spoke_mean %||% NA_real_),
       delta_spoke_sd = as.double(stats_row$delta_spoke_sd %||% NA_real_),
       log_alpha_spoke_mean = as.double(stats_row$log_alpha_spoke_mean %||% NA_real_),

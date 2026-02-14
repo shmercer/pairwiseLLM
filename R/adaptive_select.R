@@ -472,8 +472,12 @@ adaptive_defaults <- function(N) {
     expected_link_params = !isTRUE(startup_gap)
   )
   epsilon <- as.double(judge_params$epsilon %||% 0)
+  beta <- as.double(judge_params$beta %||% 0)
   if (!is.finite(epsilon)) {
     epsilon <- 0
+  }
+  if (!is.finite(beta)) {
+    beta <- 0
   }
   epsilon <- max(0, min(1, epsilon))
 
@@ -485,7 +489,7 @@ adaptive_defaults <- function(N) {
     if (!is.finite(theta_i) || !is.finite(theta_j)) {
       return(NA_real_)
     }
-    p_base <- stats::plogis(theta_i - theta_j)
+    p_base <- stats::plogis(theta_i - theta_j + beta)
     as.double((1 - epsilon) * p_base + epsilon * 0.5)
   }, numeric(1L))
   cand$link_p <- as.double(p_link)
@@ -769,7 +773,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   link_progress <- NULL
   round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
   if (isTRUE(link_phase_b)) {
-    eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    eligible_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
     ranked_link_spokes <- .adaptive_link_ranked_spokes(
       state = state,
       controller = controller,

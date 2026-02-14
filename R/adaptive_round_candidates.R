@@ -448,7 +448,7 @@ generate_stage_candidates_from_state <- function(state,
   link_phase_b_active <- isTRUE(is_link_mode) && identical(phase_ctx$phase, "phase_b")
 
   if (isTRUE(link_phase_b_active)) {
-    eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    eligible_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
     if (length(eligible_spokes) < 1L) {
       rlang::abort(
         "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are eligible."
@@ -640,11 +640,7 @@ generate_stage_candidates_from_state <- function(state,
       idx <- coverage_idx
     }
   }
-  utility <- if ("link_u" %in% names(cand)) {
-    as.double(cand$link_u[idx])
-  } else {
-    as.double(cand$u0[idx])
-  }
+  utility <- as.double(cand$u0[idx])
   utility[!is.finite(utility)] <- -Inf
   idx[order(-utility, cand$i[idx], cand$j[idx])]
 }

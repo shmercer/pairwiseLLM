@@ -66,6 +66,8 @@
       phase = "phase_a",
       pending_run_sets = integer(),
       ready_spokes = integer(),
+      active_spokes = integer(),
+      stopped_spokes = integer(),
       active_phase_a_set = NA_integer_
     ))
   }
@@ -78,7 +80,14 @@
   } else {
     NA_integer_
   }
-  status_tbl <- .adaptive_phase_a_status_tbl(state)
+  stopped_map <- controller$link_stopped_by_spoke %||% list()
+  stopped_spokes <- integer()
+  if (length(ready_spokes) > 0L) {
+    stopped_spokes <- as.integer(ready_spokes[vapply(as.character(ready_spokes), function(key) {
+      isTRUE(stopped_map[[key]])
+    }, logical(1L))])
+  }
+  active_spokes <- as.integer(setdiff(ready_spokes, stopped_spokes))
   phase <- if (length(pending_run_sets) > 0L) {
     "phase_a"
   } else if (length(ready_spokes) > 0L) {
@@ -90,6 +99,8 @@
     phase = as.character(phase),
     pending_run_sets = as.integer(pending_run_sets),
     ready_spokes = as.integer(ready_spokes),
+    active_spokes = as.integer(sort(unique(active_spokes))),
+    stopped_spokes = as.integer(sort(unique(stopped_spokes))),
     active_phase_a_set = as.integer(active_set)
   )
 }
@@ -104,10 +115,21 @@
 .adaptive_phase_a_required_config_hash <- function(state, set_id) {
   controller <- .adaptive_controller_resolve(state)
   fit <- state$btl_fit %||% list()
+  hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
+  hub_lock_kappa <- as.double(controller$hub_lock_kappa %||% NA_real_)
+  if (!identical(hub_lock_mode, "soft_lock")) {
+    hub_lock_kappa <- NA_real_
+  }
   payload <- list(
     set_id = as.integer(set_id),
     judge_param_mode = as.character(controller$judge_param_mode %||% NA_character_),
-    model_variant = as.character(fit$model_variant %||% "btl_e_b")
+    model_variant = as.character(fit$model_variant %||% "btl_e_b"),
+    link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
+    shift_only_theta_treatment = as.character(controller$shift_only_theta_treatment %||% NA_character_),
+    link_transform_mode = as.character(controller$link_transform_mode %||% NA_character_),
+    hub_lock_mode = hub_lock_mode,
+    hub_lock_kappa = hub_lock_kappa,
+    cross_set_utility = as.character(controller$cross_set_utility %||% NA_character_)
   )
   .adaptive_phase_a_hash_object(payload)
 }

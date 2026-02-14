@@ -127,6 +127,9 @@
     link_transform_last_delta_by_spoke = list(),
     link_transform_last_log_alpha_by_spoke = list(),
     link_refit_stats_by_spoke = list(),
+    link_stopped_by_spoke = list(),
+    link_stop_refit_id_by_spoke = list(),
+    link_stop_reason_by_spoke = list(),
     link_stage_coverage_bins_used = list(),
     link_stage_coverage_source = list()
   )
