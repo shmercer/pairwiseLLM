@@ -53,7 +53,7 @@ inputs and valid hub assignment.}
 \code{link_transform_escalation_is_one_way},
 \code{spoke_quantile_coverage_bins},
 \code{spoke_quantile_coverage_min_per_bin_per_refit}, \code{multi_spoke_mode},
-\code{min_cross_set_pairs_per_spoke_per_refit}, \code{cross_set_utility},
+\code{min_cross_set_pairs_per_spoke_per_refit},
 \code{phase_a_mode}, \code{phase_a_import_failure_policy},
 \code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
 \code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts},
@@ -82,9 +82,10 @@ Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set routing uses TrueSkill base utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 win probability for pair \eqn{\{i, j\}}.
-In linking Phase B, pair choice remains TrueSkill-based and never uses BTL
-posterior quantities. Model-implied predictive probabilities/utility are
-logged for diagnostics only and do not affect selection.
+In linking Phase B, eligible cross-set candidates are ranked by
+\eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
+parameters. Linking inference parameters are used for
+inference/diagnostics/stopping, not as direct selection objectives.
 When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 step may use deterministic fallback from available within/shared judge
 estimates if link-specific estimates are not yet available; once link-specific

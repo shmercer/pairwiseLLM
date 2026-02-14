@@ -628,7 +628,8 @@ generate_stage_candidates_from_state <- function(state,
 
 #' @keywords internal
 #' @noRd
-.adaptive_linking_selection_order <- function(candidates) {
+.adaptive_linking_selection_order <- function(candidates,
+                                              utility_mode = "linking_cross_set_p_times_1_minus_p") {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) == 0L) {
     return(integer())
@@ -640,12 +641,21 @@ generate_stage_candidates_from_state <- function(state,
       idx <- coverage_idx
     }
   }
-  # Linking ordering priority is predictive cross-set utility; candidate
-  # generation/filtering invariants remain upstream in the canonical pipeline.
-  utility <- if ("link_u" %in% names(cand)) {
-    as.double(cand$link_u[idx])
+  # Linking ordering priority is resolver-selected utility. If all values are
+  # non-finite, fall back deterministically to U0, then lexical tie-break.
+  utility_col <- .adaptive_resolve_selection_column(utility_mode)
+  utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
+    as.double(cand[[utility_col]][idx])
   } else {
-    as.double(cand$u0[idx])
+    rep_len(NA_real_, length(idx))
+  }
+  if (!any(is.finite(utility))) {
+    fallback <- if ("u0" %in% names(cand)) as.double(cand$u0[idx]) else rep_len(NA_real_, length(idx))
+    if (!any(is.finite(fallback))) {
+      return(idx[order(cand$i[idx], cand$j[idx])])
+    }
+    fallback[!is.finite(fallback)] <- -Inf
+    return(idx[order(-fallback, cand$i[idx], cand$j[idx])])
   }
   utility[!is.finite(utility)] <- -Inf
   idx[order(-utility, cand$i[idx], cand$j[idx])]

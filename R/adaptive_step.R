@@ -103,6 +103,16 @@ validate_judge_result <- function(result, A_id, B_id) {
   idx_map <- state$item_index %||% stats::setNames(seq_along(state$item_ids), state$item_ids)
   recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
   defaults <- adaptive_defaults(length(state$item_ids))
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  set_i <- as.integer(state$items$set_id[[idx_map[[i_id]]]])
+  set_j <- as.integer(state$items$set_id[[idx_map[[j_id]]]])
+  is_cross_set <- !is.na(set_i) && !is.na(set_j) && set_i != set_j
+  utility_mode <- .adaptive_selection_utility_mode(
+    run_mode = run_mode,
+    has_regularization = FALSE,
+    is_cross_set = isTRUE(is_cross_set)
+  )
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -149,6 +159,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     sigma_j = as.double(sigma_vals[[j_id]]),
     p_ij = as.double(p_ij),
     U0_ij = as.double(u0_ij),
+    utility_mode = as.character(utility_mode),
     star_cap_rejects = 0L,
     star_cap_reject_items = 0L
   )
@@ -214,12 +225,34 @@ validate_judge_result <- function(result, A_id, B_id) {
       "."
     ))
   }
+  valid_utility_modes <- c(
+    "pairing_trueskill_u0",
+    "pairing_trueskill_u",
+    "linking_cross_set_p_times_1_minus_p"
+  )
+  utility_mode <- if ("utility_mode" %in% names(row)) {
+    as.character(row$utility_mode[[1L]] %||% NA_character_)
+  } else {
+    NA_character_
+  }
+  if (!is.na(utility_mode) && !utility_mode %in% valid_utility_modes) {
+    rlang::abort(
+      paste0(
+        "step_log append completeness failure: `utility_mode` must be one of: ",
+        paste(valid_utility_modes, collapse = ", "),
+        ", or NA."
+      )
+    )
+  }
+  run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
+  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
 
   is_cross <- row$is_cross_set[[1L]]
   if (isTRUE(is_cross)) {
-    required_cross <- c(
-      "set_i", "set_j", "link_spoke_id", "run_mode", "posterior_win_prob_pre", "cross_set_utility_pre"
-    )
+    required_cross <- c("set_i", "set_j", "link_spoke_id", "run_mode", "posterior_win_prob_pre")
+    if (isTRUE(is_link_run_mode)) {
+      required_cross <- c(required_cross, "cross_set_utility_pre")
+    }
     bad <- required_cross[vapply(required_cross, function(col) is.na(row[[col]][[1L]]), logical(1L))]
     if (length(bad) > 0L) {
       rlang::abort(paste0(
@@ -232,6 +265,14 @@ validate_judge_result <- function(result, A_id, B_id) {
     if (stage %in% .adaptive_stage_order() && is.na(row$link_stage[[1L]])) {
       rlang::abort(
         "step_log append completeness failure for cross-set row: `link_stage` must be populated for stage-routed steps."
+      )
+    }
+    if (isTRUE(is_link_run_mode) && !identical(utility_mode, "linking_cross_set_p_times_1_minus_p")) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set row: ",
+          "`utility_mode` must be linking_cross_set_p_times_1_minus_p."
+        )
       )
     }
   } else if (isFALSE(is_cross)) {
@@ -247,7 +288,6 @@ validate_judge_result <- function(result, A_id, B_id) {
       "posterior_win_prob_pre",
       "link_transform_mode",
       "cross_set_utility_pre",
-      "utility_mode",
       "log_alpha_spoke_estimate_pre",
       "log_alpha_spoke_sd_pre",
       "hub_lock_mode",
@@ -260,6 +300,13 @@ validate_judge_result <- function(result, A_id, B_id) {
         paste(bad, collapse = ", "),
         "."
       ))
+    }
+    if (isTRUE(is_link_run_mode) &&
+      !is.na(utility_mode) &&
+      !utility_mode %in% c("pairing_trueskill_u0", "pairing_trueskill_u")) {
+      rlang::abort(
+        "step_log append completeness failure: non-cross-set rows in linking runs must use pairing utility mode or NA."
+      )
     }
   }
 
@@ -376,7 +423,7 @@ run_one_step <- function(state, judge, ...) {
   run_mode <- as.character(controller$run_mode %||% "within_set")
   hub_id <- as.integer(controller$hub_id %||% 1L)
   link_transform_mode <- as.character(controller$link_transform_mode %||% NA_character_)
-  utility_mode <- as.character(controller$cross_set_utility %||% NA_character_)
+  utility_mode <- as.character(selection$utility_mode %||% NA_character_)
   hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
   hub_lock_kappa <- as.double(controller$hub_lock_kappa %||% NA_real_)
   set_i <- if (!is.na(selection$i)) {
@@ -418,7 +465,10 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_character_
   }
-  cross_set_utility_pre <- if (isTRUE(is_cross_set)) {
+  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
+    isTRUE(is_link_run_mode) &&
+    identical(utility_mode, "linking_cross_set_p_times_1_minus_p")) {
     as.double(selection$U0_ij %||% NA_real_)
   } else {
     NA_real_
@@ -443,10 +493,8 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_character_
   }
-  utility_mode <- if (isTRUE(is_cross_set)) {
-    utility_mode
-  } else {
-    NA_character_
+  if (!is.character(utility_mode) || length(utility_mode) != 1L || is.na(utility_mode) || utility_mode == "") {
+    utility_mode <- NA_character_
   }
   log_alpha_spoke_estimate_pre <- if (isTRUE(is_cross_set)) {
     as.double(spoke_stats$log_alpha_spoke_mean %||% NA_real_)

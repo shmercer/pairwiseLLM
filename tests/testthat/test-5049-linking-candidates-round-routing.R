@@ -659,7 +659,7 @@ test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
   expected <- row$posterior_win_prob_pre[[1L]] * (1 - row$posterior_win_prob_pre[[1L]])
 
-  expect_equal(row$utility_mode[[1L]], "p_times_1_minus_p")
+  expect_equal(row$utility_mode[[1L]], "linking_cross_set_p_times_1_minus_p")
   expect_equal(row$cross_set_utility_pre[[1L]], expected, tolerance = 1e-12)
 })
 
@@ -672,6 +672,38 @@ test_that("cross-set ordering uses linking utility when predictive utility diffe
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
   expect_identical(ord[[1L]], 2L)
+})
+
+test_that("pairing ordering ignores linking utility fields", {
+  cand <- tibble::tibble(
+    i = c("a", "b"),
+    j = c("c", "d"),
+    u0 = c(0.24, 0.26),
+    u = c(0.24, 0.26),
+    link_u = c(0.90, 0.10)
+  )
+  utility_mode <- pairwiseLLM:::.adaptive_selection_utility_mode(
+    run_mode = "within_set",
+    has_regularization = FALSE,
+    is_cross_set = FALSE
+  )
+  utility_col <- pairwiseLLM:::.adaptive_resolve_selection_column(utility_mode)
+  ord <- order(-as.double(cand[[utility_col]]), cand$i, cand$j)
+  expect_identical(ord[[1L]], 2L)
+})
+
+test_that("linking deterministic ordering falls back when linking utility is fully non-finite", {
+  cand <- tibble::tibble(
+    i = c("a", "b", "c"),
+    j = c("d", "e", "f"),
+    u0 = c(0.20, 0.30, 0.30),
+    link_u = c(NA_real_, NaN, Inf)
+  )
+  ord <- pairwiseLLM:::.adaptive_linking_selection_order(
+    cand,
+    utility_mode = "linking_cross_set_p_times_1_minus_p"
+  )
+  expect_identical(ord, c(2L, 3L, 1L))
 })
 
 test_that("stopped spokes are excluded from phase B routing/candidate generation", {
@@ -703,6 +735,55 @@ test_that("stopped spokes are excluded from phase B routing/candidate generation
 
   expect_true(nrow(cand) > 0L)
   expect_true(all(spoke_set == 3L))
+})
+
+test_that("independent spoke stage progress is computed per spoke without shared coupling", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
+    global_item_id = paste0("g", seq_len(9L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 303L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, multi_spoke_mode = "independent")
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  judge <- make_deterministic_judge("i_wins")
+
+  for (idx in seq_len(4L)) {
+    state <- pairwiseLLM:::run_one_step(state, judge)
+    state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
+  }
+
+  quotas_2 <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = nrow(items),
+    controller = utils::modifyList(state$controller, list(current_link_spoke_id = 2L))
+  )
+  quotas_3 <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = nrow(items),
+    controller = utils::modifyList(state$controller, list(current_link_spoke_id = 3L))
+  )
+  p3_before <- pairwiseLLM:::.adaptive_link_stage_progress(state, 3L, quotas_3, pairwiseLLM:::.adaptive_stage_order())
+  state2 <- state
+  state2$step_log <- dplyr::bind_rows(
+    state2$step_log,
+    tibble::tibble(
+      pair_id = 999L,
+      step_id = as.integer(max(as.integer(state2$step_log$step_id), na.rm = TRUE) + 1L),
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      round_stage = "anchor_link"
+    )
+  )
+  p3_after <- pairwiseLLM:::.adaptive_link_stage_progress(state2, 3L, quotas_3, pairwiseLLM:::.adaptive_stage_order())
+  p2_after <- pairwiseLLM:::.adaptive_link_stage_progress(state2, 2L, quotas_2, pairwiseLLM:::.adaptive_stage_order())
+
+  expect_identical(p3_before$stage_committed, p3_after$stage_committed)
+  expect_true(any(p2_after$stage_committed >= 0L))
 })
 
 test_that("link stop rows update per-spoke stop state in controller metadata", {

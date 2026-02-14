@@ -278,7 +278,7 @@ test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
   expect_true(all(is.na(out$step_log$posterior_win_prob_pre)))
   expect_true(all(is.na(out$step_log$link_transform_mode)))
   expect_true(all(is.na(out$step_log$cross_set_utility_pre)))
-  expect_true(all(is.na(out$step_log$utility_mode)))
+  expect_true(all(out$step_log$utility_mode %in% c("pairing_trueskill_u0", "pairing_trueskill_u")))
   expect_true(all(is.na(out$step_log$log_alpha_spoke_estimate_pre)))
   expect_true(all(is.na(out$step_log$log_alpha_spoke_sd_pre)))
   expect_true(all(is.na(out$step_log$hub_lock_mode)))

@@ -349,6 +349,35 @@ adaptive_defaults <- function(N) {
   )
 }
 
+.adaptive_selection_mode_is_linking <- function(run_mode, is_cross_set = FALSE) {
+  as.character(run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke") &&
+    isTRUE(is_cross_set)
+}
+
+.adaptive_selection_utility_mode <- function(run_mode, has_regularization = FALSE, is_cross_set = FALSE) {
+  if (.adaptive_selection_mode_is_linking(run_mode = run_mode, is_cross_set = is_cross_set)) {
+    return("linking_cross_set_p_times_1_minus_p")
+  }
+  if (isTRUE(has_regularization)) {
+    return("pairing_trueskill_u")
+  }
+  "pairing_trueskill_u0"
+}
+
+.adaptive_resolve_selection_column <- function(utility_mode) {
+  mode <- as.character(utility_mode %||% NA_character_)
+  if (identical(mode, "pairing_trueskill_u0")) {
+    return("u0")
+  }
+  if (identical(mode, "pairing_trueskill_u")) {
+    return("u")
+  }
+  if (identical(mode, "linking_cross_set_p_times_1_minus_p")) {
+    return("link_u")
+  }
+  NA_character_
+}
+
 .adaptive_local_priority_select <- function(cand, state, round, stage_committed_so_far, stage_quota, defaults) {
   if (nrow(cand) == 0L) {
     return(list(candidates = cand, mode = "standard"))
@@ -1143,13 +1172,46 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         } else {
           stage_local_priority_mode <- NA_character_
         }
-        if (isTRUE(is_link_mode)) {
+        has_regularized_utility <- "u" %in% names(cand) &&
+          "u0" %in% names(cand) &&
+          any(
+            is.finite(as.double(cand$u)) &
+              is.finite(as.double(cand$u0)) &
+              abs(as.double(cand$u) - as.double(cand$u0)) > sqrt(.Machine$double.eps),
+            na.rm = TRUE
+          )
+        selected_utility_mode <- .adaptive_selection_utility_mode(
+          run_mode = controller$run_mode,
+          has_regularization = isTRUE(has_regularized_utility),
+          is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b)
+        )
+        if (isTRUE(is_link_mode) && isTRUE(link_phase_b)) {
           # Linking mode keeps canonical candidate generation/filtering via
           # TrueSkill and hard invariants; this call only applies the
           # linking-specific final ordering priority.
-          order_idx <- .adaptive_linking_selection_order(cand)
+          order_idx <- .adaptive_linking_selection_order(
+            cand,
+            utility_mode = selected_utility_mode
+          )
         } else {
-          order_idx <- order(-cand$u0, cand$i, cand$j)
+          utility_col <- .adaptive_resolve_selection_column(selected_utility_mode)
+          utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
+            as.double(cand[[utility_col]])
+          } else {
+            rep_len(NA_real_, nrow(cand))
+          }
+          if (!any(is.finite(utility))) {
+            tie_utility <- if ("u0" %in% names(cand)) as.double(cand$u0) else rep_len(NA_real_, nrow(cand))
+            if (any(is.finite(tie_utility))) {
+              tie_utility[!is.finite(tie_utility)] <- -Inf
+              order_idx <- order(-tie_utility, cand$i, cand$j)
+            } else {
+              order_idx <- order(cand$i, cand$j)
+            }
+          } else {
+            utility[!is.finite(utility)] <- -Inf
+            order_idx <- order(-utility, cand$i, cand$j)
+          }
         }
         selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
       }
@@ -1263,10 +1325,32 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (is.na(selected_spoke_id) && !is.na(selected_link_spoke_attempt)) {
     selected_spoke_id <- as.integer(selected_link_spoke_attempt)
   }
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  set_i_selected <- as.integer(set_map[[i_id]] %||% NA_integer_)
+  set_j_selected <- as.integer(set_map[[j_id]] %||% NA_integer_)
+  selected_is_cross_set <- !is.na(set_i_selected) && !is.na(set_j_selected) && set_i_selected != set_j_selected
+  if (isTRUE(selected_is_cross_set) && is.na(selected_spoke_id) && isTRUE(is_link_mode)) {
+    hub_id <- as.integer(link_controller$hub_id %||% 1L)
+    if (identical(set_i_selected, hub_id)) {
+      selected_spoke_id <- set_j_selected
+    } else if (identical(set_j_selected, hub_id)) {
+      selected_spoke_id <- set_i_selected
+    }
+  }
   A_id <- as.character(order_vals[["A_id"]] %||% NA_character_)
   B_id <- as.character(order_vals[["B_id"]] %||% NA_character_)
   p_ij_ts <- trueskill_win_probability(A_id, B_id, state$trueskill_state)
   p_ij <- as.double(p_ij_ts)
+  has_regularized_utility <- "u" %in% names(selected_pair) &&
+    "u0" %in% names(selected_pair) &&
+    is.finite(as.double(selected_pair$u[[1L]])) &&
+    is.finite(as.double(selected_pair$u0[[1L]])) &&
+    abs(as.double(selected_pair$u[[1L]]) - as.double(selected_pair$u0[[1L]])) > sqrt(.Machine$double.eps)
+  utility_mode <- .adaptive_selection_utility_mode(
+    run_mode = controller$run_mode,
+    has_regularization = isTRUE(has_regularized_utility),
+    is_cross_set = isTRUE(selected_is_cross_set)
+  )
   if (isTRUE(is_link_mode) && !is.na(selected_spoke_id)) {
     p_link_oriented <- .adaptive_link_predictive_prob_oriented(
       state = state,
@@ -1330,6 +1414,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     sigma_j = as.double(sigma_vals[[j_id]]),
     p_ij = as.double(p_ij),
     U0_ij = as.double(u0_ij),
+    utility_mode = as.character(utility_mode),
     star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
     star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)
   )

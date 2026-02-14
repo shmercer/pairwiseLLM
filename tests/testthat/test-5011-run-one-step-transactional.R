@@ -11,6 +11,7 @@ test_that("run_one_step commits valid results transactionally", {
 
   expect_equal(nrow(out$step_log), 1L)
   expect_equal(out$step_log$status[[1L]], "ok")
+  expect_equal(out$step_log$utility_mode[[1L]], "pairing_trueskill_u0")
   expect_false(is.na(out$step_log$pair_id[[1L]]))
   expect_equal(out$step_log$Y[[1L]], 1L)
   expect_false(isTRUE(all.equal(before_mu, out$trueskill_state$items$mu)))
@@ -108,7 +109,7 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_equal(row$link_spoke_id[[1L]], 2L)
   expect_equal(row$run_mode[[1L]], "link_one_spoke")
   expect_equal(row$link_transform_mode[[1L]], "shift_only")
-  expect_equal(row$utility_mode[[1L]], "p_times_1_minus_p")
+  expect_equal(row$utility_mode[[1L]], "linking_cross_set_p_times_1_minus_p")
   expect_equal(row$hub_lock_mode[[1L]], "soft_lock")
   expect_equal(row$hub_lock_kappa[[1L]], 0.75)
   expect_false(is.na(row$posterior_win_prob_pre[[1L]]))
