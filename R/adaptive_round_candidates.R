@@ -633,10 +633,20 @@ generate_stage_candidates_from_state <- function(state,
   if (nrow(cand) == 0L) {
     return(integer())
   }
+  idx <- seq_len(nrow(cand))
   if ("coverage_priority" %in% names(cand)) {
-    return(order(-as.integer(cand$coverage_priority), -cand$u0, cand$i, cand$j))
+    coverage_idx <- idx[as.integer(cand$coverage_priority[idx]) > 0L]
+    if (length(coverage_idx) > 0L) {
+      idx <- coverage_idx
+    }
   }
-  order(-cand$u0, cand$i, cand$j)
+  utility <- if ("link_u" %in% names(cand)) {
+    as.double(cand$link_u[idx])
+  } else {
+    as.double(cand$u0[idx])
+  }
+  utility[!is.finite(utility)] <- -Inf
+  idx[order(-utility, cand$i[idx], cand$j[idx])]
 }
 
 #' @keywords internal
