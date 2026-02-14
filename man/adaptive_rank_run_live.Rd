@@ -116,6 +116,14 @@ Within-set routing is TrueSkill-based with utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})}.
 Linking Phase B cross-set routing uses model-implied predictive utility under
 the current transform and judge parameters.
+When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
+fallback from within/shared judge estimates only until link-specific estimates
+are expected, after which malformed link estimates abort.
+In linking \code{joint_refit} mode, hub+spoke item abilities and transform
+parameters are estimated together for the active hub+spoke graph, with hub
+behavior controlled by \code{hub_lock_mode} (\code{hard_lock},
+\code{soft_lock}, or \code{free}); \code{soft_lock} uses
+\code{hub_lock_kappa}-scaled regularization to Phase A hub summaries.
 Exploration/exploitation routing and fallback handling are recorded in
 \code{step_log}.
 

@@ -92,7 +92,12 @@ controller behavior. Supported fields:
 (\code{phase_a_mode}, \code{phase_a_import_failure_policy},
 \code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
 \code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts},
-\code{phase_a_set_source}). Unknown fields and invalid values abort with
+\code{phase_a_set_source}). In linking Phase B with
+\code{judge_param_mode = "phase_specific"}, startup can use deterministic
+within/shared judge fallback before link-specific estimates exist; once
+expected, malformed link-specific estimates abort. \code{link_refit_mode = "joint_refit"} jointly estimates active hub+spoke item abilities and
+transform parameters, and \code{hub_lock_mode}/\code{hub_lock_kappa} control hub
+locking in that joint refit. Unknown fields and invalid values abort with
 actionable errors.}
 
 \item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
