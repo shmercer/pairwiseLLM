@@ -335,7 +335,7 @@ test_that("linking deterministic ordering prioritizes coverage before utility", 
   expect_identical(ord[[1L]], 1L)
 })
 
-test_that("linking deterministic ordering ranks by TrueSkill utility with stable ties", {
+test_that("linking deterministic ordering ranks by linking utility with stable ties", {
   cand <- tibble::tibble(
     i = c("a", "b", "c"),
     j = c("d", "e", "f"),
@@ -343,7 +343,7 @@ test_that("linking deterministic ordering ranks by TrueSkill utility with stable
     link_u = c(0.10, 0.30, 0.30)
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
-  expect_identical(ord, c(1L, 2L, 3L))
+  expect_identical(ord, c(2L, 3L, 1L))
 })
 
 test_that("predictive utility scoring receives full linking controller fields", {
@@ -663,7 +663,7 @@ test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
   expect_equal(row$cross_set_utility_pre[[1L]], expected, tolerance = 1e-12)
 })
 
-test_that("cross-set ordering remains TrueSkill-based when predictive utility differs", {
+test_that("cross-set ordering uses linking utility when predictive utility differs", {
   cand <- tibble::tibble(
     i = c("h1", "h2"),
     j = c("s1", "s2"),
@@ -671,7 +671,7 @@ test_that("cross-set ordering remains TrueSkill-based when predictive utility di
     link_u = c(0.20, 0.28)
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
-  expect_identical(ord[[1L]], 1L)
+  expect_identical(ord[[1L]], 2L)
 })
 
 test_that("stopped spokes are excluded from phase B routing/candidate generation", {

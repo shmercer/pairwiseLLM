@@ -1444,7 +1444,7 @@
         bad <- as.integer(bad_refits[[key]] %||% 0L)
         if (is.finite(ppc_mae) && ppc_mae > as.double(controller$cross_set_ppc_mae_max %||% 0.07)) {
           bad <- bad + 1L
-        } else {
+        } else if (is.finite(ppc_mae)) {
           bad <- 0L
         }
         need <- as.integer(controller$link_transform_escalation_refits_required %||% 2L)
