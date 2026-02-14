@@ -102,6 +102,57 @@ test_that("phase A import validation rejects each required failure mode", {
   )
 })
 
+test_that("phase A import hash rejects inference-setting mismatch and supports allowlisted compatibility", {
+  state <- make_phase_a_ready_state()
+  artifact <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  artifact$quality_gate_accepted <- TRUE
+
+  state_joint <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(judge_param_mode = "phase_specific")
+  )
+  controller_joint <- .adaptive_controller_resolve(state_joint)
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      artifact,
+      state_joint,
+      set_id = 1L,
+      controller = controller_joint
+    ),
+    "did not match required hash"
+  )
+
+  controller_allow <- controller_joint
+  controller_allow$phase_a_compatible_config_hashes <- artifact$fit_config_hash
+  expect_no_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      artifact,
+      state_joint,
+      set_id = 1L,
+      controller = controller_allow
+    )
+  )
+})
+
+test_that("phase A import hash is stable for fresh sessions without local btl_fit", {
+  state_built <- make_phase_a_ready_state()
+  artifact <- .adaptive_phase_a_build_artifact(state_built, set_id = 1L)
+  artifact$quality_gate_accepted <- TRUE
+
+  state_fresh <- adaptive_rank_start(make_multiset_items(), seed = 11L)
+  state_fresh$btl_fit <- NULL
+  controller_fresh <- .adaptive_controller_resolve(state_fresh)
+
+  expect_no_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      artifact,
+      state_fresh,
+      set_id = 1L,
+      controller = controller_fresh
+    )
+  )
+})
+
 test_that("phase A mixed mode supports import and run per set", {
   state <- make_phase_a_ready_state()
   import_set1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
@@ -172,6 +223,17 @@ test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
   expect_equal(nrow(out$step_log), 1L)
   expect_true(all(out$step_log$is_cross_set %in% FALSE))
   expect_true(all(out$step_log$set_i == out$step_log$set_j))
+  expect_true(all(is.na(out$step_log$link_stage)))
+  expect_true(all(is.na(out$step_log$delta_spoke_estimate_pre)))
+  expect_true(all(is.na(out$step_log$delta_spoke_sd_pre)))
+  expect_true(all(is.na(out$step_log$posterior_win_prob_pre)))
+  expect_true(all(is.na(out$step_log$link_transform_mode)))
+  expect_true(all(is.na(out$step_log$cross_set_utility_pre)))
+  expect_true(all(is.na(out$step_log$utility_mode)))
+  expect_true(all(is.na(out$step_log$log_alpha_spoke_estimate_pre)))
+  expect_true(all(is.na(out$step_log$log_alpha_spoke_sd_pre)))
+  expect_true(all(is.na(out$step_log$hub_lock_mode)))
+  expect_true(all(is.na(out$step_log$hub_lock_kappa)))
 })
 
 test_that("phase A gate allows pending run sets and blocks failed imports", {
@@ -254,6 +316,7 @@ test_that("phase_specific Phase B startup falls back deterministically without l
   expect_true(isTRUE(row$is_cross_set[[1L]]))
   expect_true(is.finite(row$posterior_win_prob_pre[[1L]]))
   expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
+  expect_true(is.character(row$link_stage))
   expect_identical(as.character(row$link_stage[[1L]]), as.character(row$round_stage[[1L]]))
   expect_true(is.integer(out$step_log$link_spoke_id))
 })

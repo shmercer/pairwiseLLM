@@ -302,7 +302,15 @@
     rlang::abort(paste0("Phase A artifact missing fit_config_hash for set ", set_id, "."))
   }
   if (!identical(fit_config_hash, required_hash) && !fit_config_hash %in% compatible_hashes) {
-    rlang::abort(paste0("Phase A artifact config hash incompatibility for set ", set_id, "."))
+    rlang::abort(paste0(
+      "Phase A artifact config hash incompatibility for set ",
+      set_id,
+      ": artifact hash `",
+      fit_config_hash,
+      "` did not match required hash `",
+      required_hash,
+      "` and was not found in `adaptive_config$phase_a_compatible_config_hashes`."
+    ))
   }
 
   items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())

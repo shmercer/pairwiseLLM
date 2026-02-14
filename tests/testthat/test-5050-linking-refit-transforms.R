@@ -220,6 +220,75 @@ test_that("joint_refit fit contract records joint theta estimation", {
   expect_true(contract$joint_refit$n_spoke_items_estimated >= 1L)
 })
 
+test_that("joint_refit utility uses current theta state rather than Phase A summaries", {
+  state <- make_linking_refit_state(list(link_refit_mode = "joint_refit"))
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      delta_spoke_mean = 0,
+      log_alpha_spoke_mean = NA_real_,
+      link_transform_mode = "shift_only"
+    )
+  )
+  cand <- tibble::tibble(i = "h1", j = "s21")
+
+  out_joint <- pairwiseLLM:::.adaptive_link_attach_predictive_utility(
+    candidates = cand,
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L
+  )
+
+  state_shift <- pairwiseLLM:::.adaptive_apply_controller_config(state, list(link_refit_mode = "shift_only"))
+  out_shift <- pairwiseLLM:::.adaptive_link_attach_predictive_utility(
+    candidates = cand,
+    state = state_shift,
+    controller = state_shift$controller,
+    spoke_id = 2L
+  )
+
+  theta_cur <- state$btl_fit$theta_mean
+  expected_joint <- stats::plogis(theta_cur[["h1"]] - theta_cur[["s21"]])
+
+  expect_true(is.finite(out_joint$link_p[[1L]]))
+  expect_equal(out_joint$link_p[[1L]], expected_joint, tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(out_joint$link_p[[1L]], out_shift$link_p[[1L]], tolerance = 1e-12)))
+})
+
+test_that("soft-lock joint refit keeps Phase A prior center and uses current theta only for initialization", {
+  state <- make_linking_refit_state(list(link_refit_mode = "joint_refit", hub_lock_mode = "soft_lock"))
+  state$btl_fit$theta_mean[c("h1", "h2", "h3")] <- c(10, 9, 8)
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+
+  captured <- list()
+  testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+      captured$hub_theta <<- hub_theta
+      captured$spoke_theta <<- spoke_theta
+      list(
+        delta_mean = 0,
+        delta_sd = 1,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_
+      )
+    },
+    .adaptive_link_ppc_mae_cross = function(...) 0,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+    }
+  )
+
+  hub_prior_center <- attr(captured$hub_theta, "theta_prior_center", exact = TRUE)
+  hub_init <- attr(captured$hub_theta, "theta_init", exact = TRUE)
+  expect_true(length(hub_prior_center) > 0L)
+  expect_true(length(hub_init) > 0L)
+
+  phase_a_hub <- state$linking$phase_a$artifacts[["1"]]$items
+  phase_center_map <- stats::setNames(as.double(phase_a_hub$theta_raw_mean), c("h1", "h2", "h3"))
+  expect_equal(unname(hub_prior_center[c("h1", "h2", "h3")]), unname(phase_center_map[c("h1", "h2", "h3")]))
+  expect_equal(unname(hub_init[c("h1", "h2", "h3")]), c(10, 9, 8))
+})
+
 test_that("auto escalation triggers after consecutive PPC failures and is one-way", {
   state <- make_linking_refit_state(
     list(

@@ -408,12 +408,18 @@ adaptive_defaults <- function(N) {
   cand[order_idx[[1L]], , drop = FALSE]
 }
 
-.adaptive_link_safe_theta_map <- function(state, set_id) {
+.adaptive_link_safe_theta_map <- function(state, set_id, prefer_current = FALSE) {
+  current_map <- .adaptive_link_theta_mean_map(state, set_id = set_id)
   phase_map <- tryCatch(
     .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = "theta_raw_mean"),
     error = function(e) stats::setNames(numeric(), character())
   )
-  current_map <- .adaptive_link_theta_mean_map(state, set_id = set_id)
+  if (isTRUE(prefer_current)) {
+    if (length(current_map) > 0L) {
+      return(current_map)
+    }
+    return(phase_map)
+  }
   if (length(phase_map) > 0L) {
     return(phase_map)
   }
@@ -436,8 +442,17 @@ adaptive_defaults <- function(N) {
   log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
   alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
 
-  hub_theta <- .adaptive_link_safe_theta_map(state, set_id = hub_id)
-  spoke_theta <- .adaptive_link_safe_theta_map(state, set_id = spoke_id)
+  prefer_current_theta <- identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  hub_theta <- .adaptive_link_safe_theta_map(
+    state,
+    set_id = hub_id,
+    prefer_current = prefer_current_theta
+  )
+  spoke_theta <- .adaptive_link_safe_theta_map(
+    state,
+    set_id = spoke_id,
+    prefer_current = prefer_current_theta
+  )
   if (length(hub_theta) < 1L || length(spoke_theta) < 1L) {
     cand$link_p <- NA_real_
     cand$link_u <- NA_real_
