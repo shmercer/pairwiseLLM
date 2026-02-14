@@ -157,6 +157,9 @@ test_that("hub lock boundary kappa=0 matches hard lock in joint refit", {
   d_soft0 <- soft0$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
   d_free <- free$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
 
+  hard_contract <- hard$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_equal(hard_contract$joint_refit$n_hub_items_estimated, 0L)
+
   expect_equal(d_hard, d_soft0, tolerance = 1e-10)
   expect_false(isTRUE(all.equal(d_hard, d_free, tolerance = 1e-10)))
 })

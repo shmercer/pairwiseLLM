@@ -1021,12 +1021,16 @@
   theta_hub_post <- hub_ref
   theta_spoke_post <- spoke_ref
   joint_used <- identical(link_refit_mode, "joint_refit")
+  n_hub_items_estimated <- 0L
+  n_spoke_items_estimated <- 0L
 
   if (isTRUE(joint_used)) {
     within_hub <- tibble::as_tibble(edge_attrs$within_hub_edges %||% tibble::tibble())
     within_spoke <- tibble::as_tibble(edge_attrs$within_spoke_edges %||% tibble::tibble())
     fit_hub_idx <- if (identical(lock_mode, "hard_lock") || isTRUE(lock_kappa == 0)) integer() else seq_along(hub_ref)
     fit_spoke_idx <- seq_along(spoke_ref)
+    n_hub_items_estimated <- as.integer(length(fit_hub_idx))
+    n_spoke_items_estimated <- as.integer(length(fit_spoke_idx))
     n_h <- length(fit_hub_idx)
     n_s <- length(fit_spoke_idx)
     idx_delta <- n_h + n_s + 1L
@@ -1201,8 +1205,8 @@
     theta_treatment = as.character(refit_contract_ctx$shift_only_theta_treatment %||% NA_character_),
     joint_refit = list(
       used = as.logical(joint_used),
-      n_hub_items_estimated = as.integer(length(theta_hub_post)),
-      n_spoke_items_estimated = as.integer(length(theta_spoke_post))
+      n_hub_items_estimated = as.integer(n_hub_items_estimated),
+      n_spoke_items_estimated = as.integer(n_spoke_items_estimated)
     )
   )
 
