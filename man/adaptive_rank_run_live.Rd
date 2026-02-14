@@ -114,8 +114,8 @@ Invalid responses produce a logged step with
 Pair selection does not use BTL posterior draws.
 Within-set routing is TrueSkill-based with utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})}.
-Linking Phase B cross-set routing uses model-implied predictive utility under
-the current transform and judge parameters.
+Linking Phase B cross-set routing is also TrueSkill-based; model-implied
+predictive probabilities/utility are recorded for diagnostics only.
 When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
 fallback from within/shared judge estimates only until link-specific estimates
 are expected, after which malformed link estimates abort.

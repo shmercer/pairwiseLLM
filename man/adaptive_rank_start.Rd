@@ -82,8 +82,9 @@ Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set routing uses TrueSkill base utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 win probability for pair \eqn{\{i, j\}}.
-In linking Phase B, cross-set candidates are ranked using model-implied
-predictive utility under the current transform and judge parameters.
+In linking Phase B, pair choice remains TrueSkill-based and never uses BTL
+posterior quantities. Model-implied predictive probabilities/utility are
+logged for diagnostics only and do not affect selection.
 When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 step may use deterministic fallback from available within/shared judge
 estimates if link-specific estimates are not yet available; once link-specific
