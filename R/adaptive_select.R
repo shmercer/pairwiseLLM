@@ -455,42 +455,65 @@ adaptive_defaults <- function(N) {
   current_map
 }
 
+.adaptive_link_theta_global_map_for_items <- function(state, controller, item_ids) {
+  ids <- unique(as.character(item_ids))
+  ids <- ids[!is.na(ids)]
+  if (length(ids) < 1L) {
+    return(stats::setNames(numeric(), character()))
+  }
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  prefer_current_theta <- identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  set_by_item <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  set_ids <- unique(as.integer(set_by_item[ids]))
+  set_ids <- set_ids[!is.na(set_ids)]
+  if (length(set_ids) < 1L) {
+    return(stats::setNames(numeric(), character()))
+  }
+
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  theta_global <- stats::setNames(numeric(), character())
+  for (set_id in set_ids) {
+    theta_map <- .adaptive_link_safe_theta_map(
+      state,
+      set_id = as.integer(set_id),
+      prefer_current = prefer_current_theta
+    )
+    if (length(theta_map) < 1L) {
+      next
+    }
+    if (!identical(as.integer(set_id), hub_id)) {
+      stats_row <- link_stats[[as.character(set_id)]] %||% list()
+      transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, as.integer(set_id))
+      delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+      if (!is.finite(delta)) {
+        delta <- 0
+      }
+      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
+      alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+      theta_vals <- delta + alpha * as.double(theta_map)
+      names(theta_vals) <- names(theta_map)
+      theta_map <- theta_vals
+    }
+    theta_global <- c(theta_global, theta_map)
+  }
+  theta_global[!duplicated(names(theta_global))]
+}
+
 .adaptive_link_attach_predictive_utility <- function(candidates, state, controller, spoke_id) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L || is.na(spoke_id)) {
     return(cand)
   }
-  hub_id <- as.integer(controller$hub_id %||% 1L)
-  transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, spoke_id)
-  link_stats <- controller$link_refit_stats_by_spoke %||% list()
-  stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
-  delta <- as.double(stats_row$delta_spoke_mean %||% 0)
-  if (!is.finite(delta)) {
-    delta <- 0
-  }
-  log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
-  alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
-
-  prefer_current_theta <- identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
-  hub_theta <- .adaptive_link_safe_theta_map(
-    state,
-    set_id = hub_id,
-    prefer_current = prefer_current_theta
+  theta_global <- .adaptive_link_theta_global_map_for_items(
+    state = state,
+    controller = controller,
+    item_ids = c(as.character(cand$i), as.character(cand$j))
   )
-  spoke_theta <- .adaptive_link_safe_theta_map(
-    state,
-    set_id = spoke_id,
-    prefer_current = prefer_current_theta
-  )
-  if (length(hub_theta) < 1L || length(spoke_theta) < 1L) {
+  if (length(theta_global) < 2L) {
     cand$link_p <- NA_real_
     cand$link_u <- NA_real_
     return(cand)
   }
-  spoke_theta_global <- delta + alpha * as.double(spoke_theta)
-  names(spoke_theta_global) <- names(spoke_theta)
-  theta_global <- c(hub_theta, spoke_theta_global)
-  theta_global <- theta_global[!duplicated(names(theta_global))]
 
   startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
   judge_params <- .adaptive_link_judge_params(
@@ -530,35 +553,14 @@ adaptive_defaults <- function(N) {
   if (is.na(spoke_id) || is.na(A_id) || is.na(B_id)) {
     return(NA_real_)
   }
-  hub_id <- as.integer(controller$hub_id %||% 1L)
-  transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, spoke_id)
-  link_stats <- controller$link_refit_stats_by_spoke %||% list()
-  stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
-  delta <- as.double(stats_row$delta_spoke_mean %||% 0)
-  if (!is.finite(delta)) {
-    delta <- 0
-  }
-  log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
-  alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
-
-  prefer_current_theta <- identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
-  hub_theta <- .adaptive_link_safe_theta_map(
-    state,
-    set_id = hub_id,
-    prefer_current = prefer_current_theta
+  theta_global <- .adaptive_link_theta_global_map_for_items(
+    state = state,
+    controller = controller,
+    item_ids = c(as.character(A_id), as.character(B_id))
   )
-  spoke_theta <- .adaptive_link_safe_theta_map(
-    state,
-    set_id = spoke_id,
-    prefer_current = prefer_current_theta
-  )
-  if (length(hub_theta) < 1L || length(spoke_theta) < 1L) {
+  if (length(theta_global) < 2L) {
     return(NA_real_)
   }
-  spoke_theta_global <- delta + alpha * as.double(spoke_theta)
-  names(spoke_theta_global) <- names(spoke_theta)
-  theta_global <- c(hub_theta, spoke_theta_global)
-  theta_global <- theta_global[!duplicated(names(theta_global))]
 
   startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
   judge_params <- .adaptive_link_judge_params(

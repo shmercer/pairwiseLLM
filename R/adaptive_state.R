@@ -107,6 +107,7 @@
     link_transform_escalation_is_one_way = TRUE,
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
+    allow_spoke_spoke_cross_set = FALSE,
     multi_spoke_mode = "independent",
     min_cross_set_pairs_per_spoke_per_refit = 5L,
     cross_set_utility = "linking_cross_set_p_times_1_minus_p",
@@ -172,6 +173,7 @@
     "link_transform_escalation_is_one_way",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
+    "allow_spoke_spoke_cross_set",
     "multi_spoke_mode",
     "min_cross_set_pairs_per_spoke_per_refit",
     "cross_set_utility",
@@ -322,6 +324,7 @@
     1L,
     Inf
   )
+  out$allow_spoke_spoke_cross_set <- read_logical("allow_spoke_spoke_cross_set")
   out$multi_spoke_mode <- read_choice("multi_spoke_mode", c("independent", "concurrent"))
   out$min_cross_set_pairs_per_spoke_per_refit <- read_integer(
     "min_cross_set_pairs_per_spoke_per_refit",

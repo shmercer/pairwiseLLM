@@ -840,6 +840,17 @@ test_that("link stop gating enforces diagnostics and lag eligibility", {
   row_diag <- rows_diag[rows_diag$spoke_id == 2L, , drop = FALSE]
   expect_true(isTRUE(row_diag$link_stop_eligible[[1L]]))
   expect_false(isTRUE(row_diag$link_stop_pass[[1L]]))
+
+  state$controller$link_refit_stats_by_spoke[["2"]]$delta_change_pass <- NA
+  state$round_log$diagnostics_pass[[nrow(state$round_log)]] <- TRUE
+  rows_missing <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_missing <- rows_missing[rows_missing$spoke_id == 2L, , drop = FALSE]
+  expect_false(isTRUE(row_missing$link_stop_eligible[[1L]]))
+  expect_false(isTRUE(row_missing$link_stop_pass[[1L]]))
 })
 
 test_that("runtime linking_identified uses active TS-BTL rank threshold and not lagged rank stability", {

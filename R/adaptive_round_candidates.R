@@ -480,8 +480,10 @@ generate_stage_candidates_from_state <- function(state,
         "Phase metadata and routing mode disagree: no active spoke could be selected for phase_b."
       )
     }
+    allow_spoke_spoke <- isTRUE(controller$allow_spoke_spoke_cross_set %||% FALSE)
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
     spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
+    active_spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) %in% eligible_spokes])
     if (length(hub_ids) < 1L) {
       rlang::abort(
         paste0(
@@ -501,7 +503,11 @@ generate_stage_candidates_from_state <- function(state,
         )
       )
     }
-    active_ids <- unique(c(hub_ids, spoke_ids))
+    active_ids <- if (isTRUE(allow_spoke_spoke)) {
+      unique(c(hub_ids, active_spoke_ids))
+    } else {
+      unique(c(hub_ids, spoke_ids))
+    }
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
     }
@@ -555,6 +561,7 @@ generate_stage_candidates_from_state <- function(state,
   link_spoke_id <- integer()
   coverage_bins_used <- integer()
   coverage_source <- character()
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
 
   for (a in seq_len(length(ids) - 1L)) {
     i_id <- ids[[a]]
@@ -564,9 +571,17 @@ generate_stage_candidates_from_state <- function(state,
       dist <- abs(as.integer(stratum_map[[i_id]]) - as.integer(stratum_map[[j_id]]))
 
       if (isTRUE(link_phase_b_active)) {
+        i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
+        j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
+        if (is.na(i_set) || is.na(j_set) || i_set == j_set) {
+          next
+        }
         i_hub <- i_id %in% hub_ids
         j_hub <- j_id %in% hub_ids
-        if (!isTRUE(xor(i_hub, j_hub))) {
+        if (!isTRUE(allow_spoke_spoke) && !isTRUE(xor(i_hub, j_hub))) {
+          next
+        }
+        if (isTRUE(allow_spoke_spoke) && !isTRUE(i_set == spoke_id || j_set == spoke_id)) {
           next
         }
         i_anchor <- i_id %in% hub_anchor_ids
@@ -596,7 +611,13 @@ generate_stage_candidates_from_state <- function(state,
         j_vals <- c(j_vals, j_id)
         dist_vals <- c(dist_vals, as.integer(dist))
         if (isTRUE(link_phase_b_active)) {
-          spoke_item <- if (i_id %in% spoke_ids) i_id else j_id
+          spoke_item <- if (as.integer(set_map[[i_id]] %||% NA_integer_) == spoke_id) {
+            i_id
+          } else if (as.integer(set_map[[j_id]] %||% NA_integer_) == spoke_id) {
+            j_id
+          } else {
+            NA_character_
+          }
           spoke_bin <- as.integer(coverage$bin_map[[spoke_item]] %||% NA_integer_)
           priority <- as.integer(!is.na(spoke_bin) && spoke_bin %in% coverage$bins_undercovered)
           coverage_priority <- c(coverage_priority, priority)

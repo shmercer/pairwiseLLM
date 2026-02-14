@@ -573,6 +573,13 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
+      list(allow_spoke_spoke_cross_set = "yes"),
+      5L
+    ),
+    "must be TRUE or FALSE"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
       list(run_mode = "link_multi_spoke"),
       5L,
       set_ids = c(1L, 1L, 1L)
@@ -608,6 +615,16 @@ test_that("adaptive state and trueskill validators cover additional edge branche
     set_ids = c(1L, 2L, 3L)
   )
   expect_identical(cfg_link_ok$hub_id, 1L)
+  cfg_spoke_spoke <- pairwiseLLM:::.adaptive_validate_controller_config(
+    list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      allow_spoke_spoke_cross_set = TRUE
+    ),
+    5L,
+    set_ids = c(1L, 2L, 3L)
+  )
+  expect_true(isTRUE(cfg_spoke_spoke$allow_spoke_spoke_cross_set))
 
   resolved_num <- pairwiseLLM:::.adaptive_controller_resolve(5L)
   expect_true(is.list(resolved_num))
