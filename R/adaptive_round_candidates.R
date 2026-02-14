@@ -483,12 +483,9 @@ generate_stage_candidates_from_state <- function(state,
     rank_index <- strata$rank_index
     stratum_map <- strata$stratum_map
     ids <- names(sort(rank_index))
-    hub_anchor_ids <- as.character(state$round$anchor_ids %||% character())
+    # In linking Phase B, hub anchors must be derived from hub-only ranks.
+    hub_anchor_ids <- .adaptive_select_rolling_anchors(active_scores[hub_ids], defaults)
     hub_anchor_ids <- hub_anchor_ids[hub_anchor_ids %in% hub_ids]
-    if (length(hub_anchor_ids) == 0L) {
-      hub_anchor_ids <- .adaptive_select_rolling_anchors(active_scores[hub_ids], defaults)
-      hub_anchor_ids <- hub_anchor_ids[hub_anchor_ids %in% hub_ids]
-    }
     coverage <- .adaptive_link_spoke_coverage(
       state = state,
       controller = controller,
