@@ -1009,6 +1009,18 @@
   names(hub_ref) <- as.character(hub_theta_names)
   spoke_ref <- as.double(spoke_theta)
   names(spoke_ref) <- as.character(spoke_theta_names)
+  hub_prior_center_raw <- attr(hub_theta, "theta_prior_center", exact = TRUE) %||% hub_ref
+  hub_init_raw <- attr(hub_theta, "theta_init", exact = TRUE) %||% hub_ref
+  spoke_init_raw <- attr(spoke_theta, "theta_init", exact = TRUE) %||% spoke_ref
+  hub_prior_center <- as.double(hub_prior_center_raw[hub_theta_names])
+  names(hub_prior_center) <- as.character(hub_theta_names)
+  hub_prior_center[!is.finite(hub_prior_center)] <- hub_ref[!is.finite(hub_prior_center)]
+  hub_init <- as.double(hub_init_raw[hub_theta_names])
+  names(hub_init) <- as.character(hub_theta_names)
+  hub_init[!is.finite(hub_init)] <- hub_ref[!is.finite(hub_init)]
+  spoke_init <- as.double(spoke_init_raw[spoke_theta_names])
+  names(spoke_init) <- as.character(spoke_theta_names)
+  spoke_init[!is.finite(spoke_init)] <- spoke_ref[!is.finite(spoke_init)]
   hub_ref_sd <- as.double(hub_sd_map[hub_theta_names])
   spoke_ref_sd <- as.double(spoke_sd_map[spoke_theta_names])
   hub_ref_sd[!is.finite(hub_ref_sd) | hub_ref_sd <= 0] <- 1
@@ -1037,10 +1049,10 @@
     idx_log_alpha <- if (isTRUE(use_scale)) idx_delta + 1L else NA_integer_
     start <- rep(0, n_h + n_s + 1L + ifelse(isTRUE(use_scale), 1L, 0L))
     if (n_h > 0L) {
-      start[seq_len(n_h)] <- hub_ref[fit_hub_idx]
+      start[seq_len(n_h)] <- hub_init[fit_hub_idx]
     }
     if (n_s > 0L) {
-      start[n_h + seq_len(n_s)] <- spoke_ref[fit_spoke_idx]
+      start[n_h + seq_len(n_s)] <- spoke_init[fit_spoke_idx]
     }
     hub_lut <- stats::setNames(seq_along(hub_ref), names(hub_ref))
     spoke_lut <- stats::setNames(seq_along(spoke_ref), names(spoke_ref))
@@ -1094,7 +1106,7 @@
         if (identical(lock_mode, "soft_lock")) {
           sd_soft <- hub_ref_sd[fit_hub_idx] / max(lock_kappa, 1e-8)
           prior <- prior + sum(
-            0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / pmax(sd_soft, 1e-8))^2
+            0.5 * ((hub_val[fit_hub_idx] - hub_prior_center[fit_hub_idx]) / pmax(sd_soft, 1e-8))^2
           )
         } else if (identical(lock_mode, "free")) {
           prior <- prior + sum(0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / 3)^2)
@@ -1345,20 +1357,8 @@
         hub_theta <- hub_phase
         hub_theta_sd <- stats::setNames(rep(0, length(hub_theta)), names(hub_theta))
       } else if (identical(lock_mode, "soft_lock")) {
-        ids <- intersect(names(hub_phase), names(hub_current))
         hub_theta <- hub_phase
         hub_theta_sd <- hub_phase_sd
-        if (length(ids) > 0L) {
-          prior_sd <- as.double(hub_phase_sd[ids]) / max(kappa, 1e-8)
-          prior_var <- prior_sd^2
-          current_sd <- as.double(hub_current_sd[ids])
-          current_sd[!is.finite(current_sd) | current_sd <= 0] <- 1
-          current_var <- current_sd^2
-          w_prior <- 1 / pmax(prior_var, 1e-8)
-          w_current <- 1 / pmax(current_var, 1e-8)
-          hub_theta[ids] <- (w_prior * hub_phase[ids] + w_current * hub_current[ids]) / (w_prior + w_current)
-          hub_theta_sd[ids] <- sqrt(1 / (w_prior + w_current))
-        }
       } else {
         hub_theta <- if (length(hub_current) > 0L) hub_current else hub_phase
         hub_theta_sd <- if (length(hub_current_sd) > 0L) hub_current_sd else hub_phase_sd
@@ -1410,8 +1410,27 @@
       hub_lock_kappa = kappa,
       shift_only_theta_treatment = theta_treatment
     )
+    hub_theta_init <- if (identical(refit_mode, "joint_refit") && length(hub_current) > 0L) {
+      hub_current
+    } else {
+      hub_theta
+    }
+    spoke_theta_init <- if (identical(refit_mode, "joint_refit") && length(spoke_current) > 0L) {
+      spoke_current
+    } else {
+      spoke_theta
+    }
+    hub_theta_prior_center <- if (identical(refit_mode, "joint_refit") &&
+      identical(lock_mode, "soft_lock")) {
+      hub_phase
+    } else {
+      hub_theta
+    }
     attr(hub_theta, "theta_sd") <- hub_theta_sd
+    attr(hub_theta, "theta_init") <- hub_theta_init
+    attr(hub_theta, "theta_prior_center") <- hub_theta_prior_center
     attr(spoke_theta, "theta_sd") <- spoke_theta_sd
+    attr(spoke_theta, "theta_init") <- spoke_theta_init
     fit <- .adaptive_link_fit_transform(cross_all, hub_theta, spoke_theta, transform_mode = transform_mode)
     ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
     ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
