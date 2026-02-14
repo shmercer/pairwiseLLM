@@ -575,16 +575,27 @@ test_that("concurrent sparse-domain fallback is deterministic when floors cannot
   expect_identical(picks, c(2L, 3L, 2L, 3L))
 })
 
-test_that("active linking reliability is computed on active hub-spoke items only", {
+test_that("active linking transformed reliability is computed on active hub-spoke items only", {
   state <- make_linking_refit_state()
   state$round$anchor_ids <- character()
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state <- append_cross_step(state, 2L, "s22", "h2", 0L, spoke_id = 2L)
 
   active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
-  rel_active <- pairwiseLLM:::.adaptive_link_reliability_active(state, active$active_all)
+  rel_active <- pairwiseLLM:::.adaptive_link_reliability_transformed_active(
+    state = state,
+    active_ids = active$active_all,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_scale",
+    delta_mean = 0.25,
+    log_alpha_mean = log(1.3)
+  )
   draws <- state$btl_fit$btl_posterior_draws
-  rel_manual <- pairwiseLLM:::compute_reliability_EAP(draws[, active$active_all, drop = FALSE])
+  active_draws <- draws[, active$active_all, drop = FALSE]
+  spoke_cols <- colnames(active_draws) %in% c("s21", "s22")
+  active_draws[, spoke_cols] <- 0.25 + 1.3 * active_draws[, spoke_cols, drop = FALSE]
+  rel_manual <- pairwiseLLM:::compute_reliability_EAP(active_draws)
   rel_all <- pairwiseLLM:::compute_reliability_EAP(draws)
 
   expect_equal(rel_active, rel_manual, tolerance = 1e-12)
@@ -777,7 +788,7 @@ test_that("link stop reconstruction fallback path honors numeric gates", {
     log_alpha_change_lagged = NA_real_,
     delta_change_pass = TRUE,
     log_alpha_change_pass = NA,
-    ts_btl_rank_spearman = 0.99
+    rank_stability_lagged = 0.99
   )
   pass_shift <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     link_row = row_shift,
@@ -797,7 +808,7 @@ test_that("link stop reconstruction fallback path honors numeric gates", {
     log_alpha_change_lagged = 0.01,
     delta_change_pass = TRUE,
     log_alpha_change_pass = TRUE,
-    ts_btl_rank_spearman = 0.99
+    rank_stability_lagged = 0.99
   )
   pass_scale <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     link_row = row_scale,
@@ -819,7 +830,6 @@ test_that("link stop reconstruction fallback path honors numeric gates", {
 
   row_rank <- row_shift
   row_rank$rank_stability_lagged <- 0.90
-  row_rank$ts_btl_rank_spearman <- 0.99
   fail_rank <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     link_row = row_rank,
     diagnostics_pass = TRUE,
@@ -833,7 +843,8 @@ test_that("linking identified state is reconstructable from canonical link-stage
   row <- tibble::tibble(
     link_transform_mode = "shift_scale",
     reliability_EAP_link = 0.92,
-    ts_btl_rank_spearman = 0.93,
+    lag_eligible = TRUE,
+    rank_stability_pass = TRUE,
     delta_sd_pass = TRUE,
     log_alpha_sd_pass = TRUE
   )
@@ -846,7 +857,7 @@ test_that("linking identified state is reconstructable from canonical link-stage
   )
   expect_true(isTRUE(identified))
 
-  row$ts_btl_rank_spearman <- 0.85
+  row$rank_stability_pass <- FALSE
   identified_fail <- pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = row,
     controller = list(
@@ -969,7 +980,17 @@ test_that("lagged rank stability gate uses Spearman threshold of at least 0.98",
   pass <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
     state = state,
     active_ids = ids,
-    stability_lag = 1L
+    stability_lag = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    lag_row = tibble::tibble(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0,
+      log_alpha_spoke_mean = NA_real_
+    )
   )
   expect_true(isTRUE(pass$lag_eligible))
   expect_false(is.na(pass$rho_rank_lagged))
@@ -979,7 +1000,17 @@ test_that("lagged rank stability gate uses Spearman threshold of at least 0.98",
   pass2 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
     state = state,
     active_ids = ids,
-    stability_lag = 1L
+    stability_lag = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    lag_row = tibble::tibble(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0,
+      log_alpha_spoke_mean = NA_real_
+    )
   )
   expect_true(isTRUE(pass2$lag_eligible))
   expect_true(isTRUE(pass2$rho_rank_lagged_pass))
@@ -1030,23 +1061,75 @@ test_that("linking active-domain helper guard branches return typed NA outputs",
 
   no_hist <- state
   no_hist$refit_meta$theta_mean_history <- list()
-  lag_none <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(no_hist, c("h1", "h2"), stability_lag = 2L)
+  lag_none <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
+    no_hist,
+    c("h1", "h2"),
+    stability_lag = 2L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    lag_row = tibble::tibble()
+  )
   expect_false(isTRUE(lag_none$lag_eligible))
   expect_true(is.na(lag_none$rho_rank_lagged))
 
   bad_hist <- state
   bad_hist$refit_meta$theta_mean_history <- list(c(h1 = 1, h2 = 2), c(h1 = NA_real_, h2 = 3), c(h1 = 2, h2 = 1))
-  lag_bad <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(bad_hist, c("h1", "h2"), stability_lag = 1L)
+  lag_bad <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
+    bad_hist,
+    c("h1", "h2"),
+    stability_lag = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    lag_row = tibble::tibble(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
   expect_true(isTRUE(lag_bad$lag_eligible))
   expect_false(isTRUE(lag_bad$rho_rank_lagged_pass))
   bad_hist2 <- state
   bad_hist2$refit_meta$theta_mean_history <- list(c(h1 = 1, h2 = 2), "bad", c(h1 = 2, h2 = 1))
-  lag_bad2 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(bad_hist2, c("h1", "h2"), stability_lag = 1L)
+  lag_bad2 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
+    bad_hist2,
+    c("h1", "h2"),
+    stability_lag = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    lag_row = tibble::tibble(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
   expect_true(isTRUE(lag_bad2$lag_eligible))
   expect_false(isTRUE(lag_bad2$rho_rank_lagged_pass))
   bad_hist3 <- state
   bad_hist3$refit_meta$theta_mean_history <- list(c(h1 = 1, h2 = 2), c(h1 = 2, h2 = 1))
-  lag_bad3 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(bad_hist3, c("h1", "missing"), stability_lag = 1L)
+  lag_bad3 <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
+    bad_hist3,
+    c("h1", "missing"),
+    stability_lag = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    lag_row = tibble::tibble(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
   expect_true(isTRUE(lag_bad3$lag_eligible))
   expect_false(isTRUE(lag_bad3$rho_rank_lagged_pass))
 
@@ -1078,6 +1161,152 @@ test_that("active-domain TS-BTL correlation is computed on active items only", {
   )
   expect_equal(rho_active, -1, tolerance = 1e-12)
   expect_false(isTRUE(all.equal(rho_active, rho_full, tolerance = 1e-12)))
+})
+
+test_that("transformed-domain helper and reconstruction guard branches are covered", {
+  state <- make_linking_refit_state()
+
+  empty_theta <- pairwiseLLM:::.adaptive_link_transform_theta_mean_for_spoke(
+    state = state,
+    theta_mean = c(1, 2),
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0.2
+  )
+  expect_identical(length(empty_theta), 0L)
+
+  theta <- c(h1 = 1, s21 = 2, s31 = 3)
+  transformed_bad_mode <- pairwiseLLM:::.adaptive_link_transform_theta_mean_for_spoke(
+    state = state,
+    theta_mean = theta,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "bad_mode",
+    delta_mean = 0.2
+  )
+  expect_equal(transformed_bad_mode[["h1"]], 1, tolerance = 1e-12)
+  expect_equal(transformed_bad_mode[["s21"]], 2.2, tolerance = 1e-12)
+  expect_false("s31" %in% names(transformed_bad_mode))
+
+  transformed_bad_alpha <- pairwiseLLM:::.adaptive_link_transform_theta_mean_for_spoke(
+    state = state,
+    theta_mean = theta,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_scale",
+    delta_mean = 0.2,
+    log_alpha_mean = NA_real_
+  )
+  expect_true(all(is.na(transformed_bad_alpha)))
+
+  active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
+  rel_bad_mode <- pairwiseLLM:::.adaptive_link_reliability_transformed_active(
+    state = state,
+    active_ids = active$active_all,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "bad_mode",
+    delta_mean = 0.1
+  )
+  expect_true(is.finite(rel_bad_mode))
+  rel_bad_delta <- pairwiseLLM:::.adaptive_link_reliability_transformed_active(
+    state = state,
+    active_ids = active$active_all,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = NA_real_
+  )
+  expect_true(is.na(rel_bad_delta))
+  rel_bad_alpha <- pairwiseLLM:::.adaptive_link_reliability_transformed_active(
+    state = state,
+    active_ids = active$active_all,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_scale",
+    delta_mean = 0.1,
+    log_alpha_mean = NA_real_
+  )
+  expect_true(is.na(rel_bad_alpha))
+
+  lag_state <- state
+  lag_state$refit_meta$theta_mean_history <- list(c(h1 = 1, h2 = 2), "bad")
+  lag <- pairwiseLLM:::.adaptive_link_rank_stability_lagged(
+    state = lag_state,
+    active_ids = c("h1", "h2"),
+    stability_lag = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    transform_mode = "shift_only",
+    delta_mean = 0.1,
+    lag_row = tibble::tibble(
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0.1,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+  expect_true(isTRUE(lag$lag_eligible))
+  expect_false(isTRUE(lag$rho_rank_lagged_pass))
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+      link_row = tibble::tibble(link_stop_eligible = c(TRUE, TRUE)),
+      diagnostics_pass = TRUE,
+      hub_theta_sd = 1,
+      controller = list()
+    ),
+    "exactly one row"
+  )
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = tibble::tibble(link_stop_eligible = FALSE),
+    diagnostics_pass = TRUE,
+    hub_theta_sd = 1,
+    controller = list()
+  )))
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = tibble::tibble(link_stop_eligible = TRUE),
+    diagnostics_pass = FALSE,
+    hub_theta_sd = 1,
+    controller = list()
+  )))
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
+      link_row = tibble::tibble(link_transform_mode = c("shift_only", "shift_only")),
+      controller = list()
+    ),
+    "exactly one row"
+  )
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
+    link_row = tibble::tibble(
+      link_transform_mode = "shift_scale",
+      reliability_EAP_link = 0.95,
+      lag_eligible = TRUE,
+      rank_stability_pass = TRUE
+    ),
+    controller = list(link_identified_reliability_min = 0.80)
+  )))
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
+    link_row = tibble::tibble(
+      link_transform_mode = "shift_scale",
+      reliability_EAP_link = 0.95,
+      lag_eligible = TRUE,
+      rank_stability_pass = TRUE,
+      delta_sd_pass = TRUE
+    ),
+    controller = list(link_identified_reliability_min = 0.80)
+  )))
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
+    link_row = tibble::tibble(
+      link_transform_mode = "shift_only",
+      reliability_EAP_link = 0.95,
+      lag_eligible = TRUE,
+      rank_stability_pass = TRUE,
+      delta_sd_pass = TRUE
+    ),
+    controller = list(link_identified_reliability_min = 0.80)
+  )))
 })
 
 test_that("adaptive_state validation branches for linking controls are covered", {
