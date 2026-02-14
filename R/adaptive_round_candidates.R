@@ -457,11 +457,36 @@
     bins_used <- bins_used - 1L
   }
 
-  source <- as.character(score_source %||% "linking_global_score")
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  cumulative_cross_count <- 0L
+  if (nrow(step_log) > 0L && all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
+    cumulative_cross_count <- as.integer(sum(
+      !is.na(step_log$pair_id) &
+        step_log$is_cross_set %in% TRUE &
+        as.integer(step_log$link_spoke_id) == spoke_id,
+      na.rm = TRUE
+    ))
+  }
 
+  source <- as.character(score_source %||% "linking_global_score")
   spoke_scores <- as.double(routing_scores[spoke_ids])
   names(spoke_scores) <- as.character(spoke_ids)
+
+  if (cumulative_cross_count < 10L) {
+    phase_a_rank <- tryCatch(
+      .adaptive_link_phase_a_theta_map(state, set_id = spoke_id, field = "rank_mu_raw"),
+      error = function(e) stats::setNames(numeric(), character())
+    )
+    phase_a_rank <- as.double(phase_a_rank[spoke_ids])
+    names(phase_a_rank) <- as.character(spoke_ids)
+
+    if (all(is.finite(phase_a_rank))) {
+      # Lower rank is better; convert to descending score for quantile binning.
+      spoke_scores <- -phase_a_rank
+      source <- "phase_a_rank_mu_raw"
+    }
+  }
+
   if (any(!is.finite(spoke_scores))) {
     rlang::abort("Linking coverage invariant failed: routing scores must be finite for spoke items.")
   }

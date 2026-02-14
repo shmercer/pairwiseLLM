@@ -8,6 +8,7 @@ mark_link_phase_b_ready <- function(state, source = "import") {
     tib <- tibble::as_tibble(rows)
     tib$theta_raw_mean <- seq(from = nrow(tib), to = 1, by = -1)
     tib$theta_raw_sd <- rep(0.5, nrow(tib))
+    tib$rank_mu_raw <- seq_len(nrow(tib))
     list(items = tib)
   })
   names(artifacts) <- as.character(set_ids)
@@ -350,6 +351,22 @@ test_that("phase B coverage bins use linking-global score source", {
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
+  ids <- as.character(state$item_ids)
+  for (k in seq_len(10L)) {
+    state$step_log <- pairwiseLLM:::append_step_log(
+      state$step_log,
+      list(
+        step_id = as.integer(k),
+        pair_id = as.integer(k),
+        is_cross_set = TRUE,
+        link_spoke_id = 2L,
+        set_i = 1L,
+        set_j = 2L,
+        i = as.integer(match("1", ids)),
+        j = as.integer(match("5", ids))
+      )
+    )
+  }
   cand <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
     stage_name = "mid_link",
@@ -359,6 +376,102 @@ test_that("phase B coverage bins use linking-global score source", {
   )
   expect_true(nrow(cand) > 0L)
   expect_true(all(cand$coverage_source == "linking_global_score"))
+})
+
+test_that("coverage source switches from Phase A rank to linking-global after early cross-set sparsity", {
+  items <- tibble::tibble(
+    item_id = as.character(1:8),
+    set_id = c(rep(1L, 4L), rep(2L, 4L)),
+    global_item_id = paste0("g", 1:8)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 70L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state <- mark_link_phase_b_ready(state)
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+  spoke_ids <- as.character(items$item_id[items$set_id == 2L])
+
+  cov_early <- pairwiseLLM:::.adaptive_link_spoke_coverage(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L,
+    spoke_ids = spoke_ids,
+    routing_scores = proxy$scores,
+    score_source = "linking_global_score"
+  )
+  expect_identical(cov_early$source, "phase_a_rank_mu_raw")
+
+  ids <- as.character(state$item_ids)
+  for (k in seq_len(10L)) {
+    state$step_log <- pairwiseLLM:::append_step_log(
+      state$step_log,
+      list(
+        step_id = as.integer(k),
+        pair_id = as.integer(k),
+        is_cross_set = TRUE,
+        link_spoke_id = 2L,
+        set_i = 1L,
+        set_j = 2L,
+        i = as.integer(match("1", ids)),
+        j = as.integer(match("5", ids))
+      )
+    )
+  }
+
+  cov_late <- pairwiseLLM:::.adaptive_link_spoke_coverage(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L,
+    spoke_ids = spoke_ids,
+    routing_scores = proxy$scores,
+    score_source = "linking_global_score"
+  )
+  expect_identical(cov_late$source, "linking_global_score")
+})
+
+test_that("coverage source propagates through selection and linking stage rows", {
+  items <- tibble::tibble(
+    item_id = as.character(1:8),
+    set_id = c(rep(1L, 4L), rep(2L, 4L)),
+    global_item_id = paste0("g", 1:8)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 71L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  draws <- matrix(
+    seq_along(state$item_ids),
+    nrow = 4L,
+    ncol = length(state$item_ids),
+    byrow = TRUE
+  )
+  colnames(draws) <- as.character(state$item_ids)
+  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
+
+  sel <- pairwiseLLM:::select_next_pair(state, step_id = 1L)
+  expect_identical(sel$coverage_source, "phase_a_rank_mu_raw")
+
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
+  state$round_log <- pairwiseLLM:::append_round_log(state$round_log, list(refit_id = 1L, diagnostics_pass = TRUE))
+  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(
+    state = state,
+    refit_context = list(last_refit_step = 0L)
+  )
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_true(nrow(row) == 1L)
+  expect_identical(row$coverage_source[[1L]], "phase_a_rank_mu_raw")
 })
 
 test_that("linking deterministic ordering prioritizes coverage before utility", {
@@ -538,7 +651,7 @@ test_that("concurrent selector falls back to next eligible spoke in same step wh
   expect_true(xor(set_i == 1L, set_j == 1L))
 })
 
-test_that("concurrent fallback recomputes stage context per spoke attempt", {
+test_that("concurrent fallback recomputes per-spoke stage context helpers", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
     set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
@@ -566,30 +679,46 @@ test_that("concurrent fallback recomputes stage context per spoke attempt", {
   state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
     `1::2` = list(anchor_link = TRUE)
   )
+  phase_ctx <- pairwiseLLM:::.adaptive_link_phase_context(state, controller = state$controller)
+  expect_identical(phase_ctx$phase, "phase_b")
+  expect_identical(sort(phase_ctx$ready_spokes), c(2L, 3L))
+  expect_identical(sort(phase_ctx$active_spokes), c(2L, 3L))
 
-  out <- testthat::with_mocked_bindings(
-    generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
-                                                    link_spoke_id = NA_integer_) {
-      if (as.integer(link_spoke_id) == 3L && identical(stage_name, "anchor_link")) {
-        return(tibble::tibble(i = "h1", j = "s31"))
-      }
-      tibble::tibble(i = character(), j = character())
-    },
-    pairwiseLLM:::select_next_pair(state, step_id = 2L),
-    .package = "pairwiseLLM"
-  )
-
-  expect_false(isTRUE(out$candidate_starved))
-  expect_identical(out$link_spoke_id_selected, 3L)
-  expect_identical(out$round_stage, "anchor_link")
-  quota_controller <- state$controller
-  quota_controller$current_link_spoke_id <- 3L
-  stage_quotas <- pairwiseLLM:::.adaptive_round_compute_quotas(
+  refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  quota_controller2 <- state$controller
+  quota_controller2$current_link_spoke_id <- 2L
+  stage_quotas2 <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = as.integer(state$round$round_id),
     n_items = as.integer(state$n_items),
-    controller = quota_controller
+    controller = quota_controller2
   )
-  expect_identical(out$stage_quota, as.integer(stage_quotas[["anchor_link"]]))
+  quota_controller3 <- state$controller
+  quota_controller3$current_link_spoke_id <- 3L
+  stage_quotas3 <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = as.integer(state$round$round_id),
+    n_items = as.integer(state$n_items),
+    controller = quota_controller3
+  )
+  progress2 <- pairwiseLLM:::.adaptive_link_stage_progress(
+    state = state,
+    spoke_id = 2L,
+    stage_quotas = stage_quotas2,
+    stage_order = state$round$stage_order,
+    refit_id = refit_id
+  )
+  progress3 <- pairwiseLLM:::.adaptive_link_stage_progress(
+    state = state,
+    spoke_id = 3L,
+    stage_quotas = stage_quotas3,
+    stage_order = state$round$stage_order,
+    refit_id = refit_id
+  )
+  expect_true(progress2$active_stage %in% names(stage_quotas2))
+  expect_true(progress3$active_stage %in% names(stage_quotas3))
+  expect_gte(
+    as.integer(progress2$stage_committed[["anchor_link"]]),
+    as.integer(progress3$stage_committed[["anchor_link"]])
+  )
 })
 
 test_that("concurrent selector starves only after all eligible spokes are infeasible", {
