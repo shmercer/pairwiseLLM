@@ -727,6 +727,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   ids <- as.character(state$trueskill_state$items$item_id)
   defaults <- adaptive_defaults(length(ids))
   controller <- .adaptive_resolve_controller(state, defaults)
+  # Use the full controller for linking predictive utility paths, which need
+  # transform and judge-mode fields not carried by the reduced selector view.
+  link_controller <- .adaptive_controller_resolve(state)
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, ids)
   step_id <- as.integer(step_id %||% (nrow(state$step_log) + 1L))
@@ -949,7 +952,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         cand <- .adaptive_link_attach_predictive_utility(
           candidates = cand,
           state = state,
-          controller = controller,
+          controller = link_controller,
           spoke_id = as.integer(spoke_for_utility)
         )
       }
