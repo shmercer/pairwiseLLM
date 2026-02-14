@@ -330,6 +330,60 @@ test_that("concurrent selector falls back to next eligible spoke in same step wh
   expect_true(xor(set_i == 1L, set_j == 1L))
 })
 
+test_that("concurrent fallback recomputes stage context per spoke attempt", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 80L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  state$refit_meta$last_refit_step <- 0L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(uncertainty = 0),
+    `3` = list(uncertainty = 0)
+  )
+  # Force spoke 2 to advance past anchor stage while spoke 3 remains at anchor.
+  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
+    `1::2` = list(anchor_link = TRUE)
+  )
+
+  out <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
+                                                    link_spoke_id = NA_integer_) {
+      if (as.integer(link_spoke_id) == 3L && identical(stage_name, "anchor_link")) {
+        return(tibble::tibble(i = "h1", j = "s31"))
+      }
+      tibble::tibble(i = character(), j = character())
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 2L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_false(isTRUE(out$candidate_starved))
+  expect_identical(out$link_spoke_id_selected, 3L)
+  expect_identical(out$round_stage, "anchor_link")
+  quota_controller <- state$controller
+  quota_controller$current_link_spoke_id <- 3L
+  stage_quotas <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = as.integer(state$round$round_id),
+    n_items = as.integer(state$n_items),
+    controller = quota_controller
+  )
+  expect_identical(out$stage_quota, as.integer(stage_quotas[["anchor_link"]]))
+})
+
 test_that("concurrent selector starves only after all eligible spokes are infeasible", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),

@@ -726,6 +726,49 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       stage_committed_so_far <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
     }
   }
+  .resolve_link_stage_context <- function(spoke_id = NA_integer_) {
+    ctx_round_stage <- round_stage
+    ctx_generation_stage <- generation_stage
+    ctx_stage_quota <- stage_quota
+    ctx_stage_committed <- stage_committed_so_far
+    if (!(isTRUE(link_phase_b) && !is.na(as.integer(spoke_id)))) {
+      return(list(
+        round_stage = as.character(ctx_round_stage),
+        generation_stage = as.character(ctx_generation_stage),
+        stage_quota = as.integer(ctx_stage_quota),
+        stage_committed_so_far = as.integer(ctx_stage_committed)
+      ))
+    }
+    refit_id <- .adaptive_link_refit_window_id(state)
+    quota_controller <- controller
+    quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+    stage_quotas <- .adaptive_round_compute_quotas(
+      round_id = as.integer(round$round_id %||% 1L),
+      n_items = as.integer(state$n_items),
+      controller = quota_controller
+    )
+    progress <- .adaptive_link_stage_progress(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = round$stage_order %||% .adaptive_stage_order(),
+      refit_id = refit_id
+    )
+    ctx_round_stage <- as.character(progress$active_stage %||% ctx_round_stage)
+    if (identical(ctx_round_stage, "warm_start")) {
+      ctx_generation_stage <- if (length(ids) <= 2L) "anchor_link" else "local_link"
+    } else {
+      ctx_generation_stage <- as.character(ctx_round_stage)
+    }
+    ctx_stage_quota <- as.integer(progress$stage_quotas[[ctx_round_stage]] %||% NA_integer_)
+    ctx_stage_committed <- as.integer(progress$stage_committed[[ctx_round_stage]] %||% 0L)
+    list(
+      round_stage = as.character(ctx_round_stage),
+      generation_stage = as.character(ctx_generation_stage),
+      stage_quota = as.integer(ctx_stage_quota),
+      stage_committed_so_far = as.integer(ctx_stage_committed)
+    )
+  }
 
   stage_defs <- list(
     list(name = "base", W_used = defaults$W, dup_policy = "default", explore_boost = 1),
@@ -753,6 +796,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   local_priority_mode <- NA_character_
   is_explore_step <- FALSE
   selected_link_spoke_attempt <- as.integer(NA_integer_)
+  selected_round_stage <- as.character(round_stage)
+  selected_stage_quota <- as.integer(stage_quota)
+  selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
   recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
 
   for (idx in seq_along(stage_defs)) {
@@ -768,6 +814,15 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     stage_selected <- FALSE
 
     for (spoke_attempt in attempt_spokes) {
+      stage_ctx <- if (isTRUE(link_phase_b_concurrent) && !is.na(spoke_attempt)) {
+        .resolve_link_stage_context(spoke_id = as.integer(spoke_attempt))
+      } else {
+        .resolve_link_stage_context(spoke_id = NA_integer_)
+      }
+      attempt_round_stage <- as.character(stage_ctx$round_stage)
+      attempt_generation_stage <- as.character(stage_ctx$generation_stage)
+      attempt_stage_quota <- as.integer(stage_ctx$stage_quota)
+      attempt_stage_committed_so_far <- as.integer(stage_ctx$stage_committed_so_far)
       stage_seed <- .adaptive_stage_seed(
         seed_base,
         step_id,
@@ -779,7 +834,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       } else if (isTRUE(link_phase_b_concurrent)) {
         generate_stage_candidates_from_state(
           state = state,
-          stage_name = generation_stage,
+          stage_name = attempt_generation_stage,
           fallback_name = stage$name,
           C_max = defaults$C_max,
           seed = stage_seed,
@@ -788,7 +843,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       } else {
         generate_stage_candidates_from_state(
           state = state,
-          stage_name = generation_stage,
+          stage_name = attempt_generation_stage,
           fallback_name = stage$name,
           C_max = defaults$C_max,
           seed = stage_seed
@@ -800,7 +855,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         state = state,
         config = defaults,
         controller = controller,
-        generation_stage = generation_stage,
+        generation_stage = attempt_generation_stage,
         round = round,
         history = history,
         counts = counts,
@@ -904,19 +959,19 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         selected_pair <- selected
       } else {
         if (!isTRUE(is_link_mode) &&
-          identical(generation_stage, "local_link") &&
+          identical(attempt_generation_stage, "local_link") &&
           isTRUE(controller$global_identified)) {
           prioritized <- .adaptive_local_priority_select(
             cand = cand,
             state = state,
             round = round,
-            stage_committed_so_far = stage_committed_so_far %||% 0L,
-            stage_quota = stage_quota %||% nrow(cand),
+            stage_committed_so_far = attempt_stage_committed_so_far %||% 0L,
+            stage_quota = attempt_stage_quota %||% nrow(cand),
             defaults = controller
           )
           cand <- prioritized$candidates
           stage_local_priority_mode <- prioritized$mode
-        } else if (!isTRUE(is_link_mode) && identical(generation_stage, "local_link")) {
+        } else if (!isTRUE(is_link_mode) && identical(attempt_generation_stage, "local_link")) {
           stage_local_priority_mode <- "standard"
         } else {
           stage_local_priority_mode <- NA_character_
@@ -935,6 +990,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       local_priority_mode <- stage_local_priority_mode
       selected_stage <- stage
       selected_link_spoke_attempt <- as.integer(spoke_attempt %||% NA_integer_)
+      selected_round_stage <- as.character(attempt_round_stage)
+      selected_stage_quota <- as.integer(attempt_stage_quota)
+      selected_stage_committed_so_far <- as.integer(attempt_stage_committed_so_far)
       stage_selected <- TRUE
       break
     }
@@ -963,8 +1021,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       fallback_path = paste(fallback_path, collapse = ">"),
       starvation_reason = starvation_reason,
       round_id = as.integer(round$round_id %||% NA_integer_),
-      round_stage = as.character(round_stage),
-      pair_type = as.character(round_stage),
+      round_stage = as.character(selected_round_stage),
+      pair_type = as.character(selected_round_stage),
       explore_rate_used = as.double(explore_rate_used),
       local_priority_mode = as.character(local_priority_mode),
       long_gate_pass = last_long_gate_pass,
@@ -982,8 +1040,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       coverage_bins_used = NA_integer_,
       coverage_source = NA_character_,
       link_spoke_id_selected = NA_integer_,
-      stage_committed_so_far = stage_committed_so_far,
-      stage_quota = stage_quota,
+      stage_committed_so_far = as.integer(selected_stage_committed_so_far),
+      stage_quota = as.integer(selected_stage_quota),
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
       n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
       n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
@@ -1038,25 +1096,6 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (is.na(selected_spoke_id) && !is.na(selected_link_spoke_attempt)) {
     selected_spoke_id <- as.integer(selected_link_spoke_attempt)
   }
-  if (isTRUE(link_phase_b_concurrent) && !is.na(selected_spoke_id)) {
-    refit_id <- .adaptive_link_refit_window_id(state)
-    quota_controller <- controller
-    quota_controller$current_link_spoke_id <- as.integer(selected_spoke_id)
-    stage_quotas <- .adaptive_round_compute_quotas(
-      round_id = as.integer(round$round_id %||% 1L),
-      n_items = as.integer(state$n_items),
-      controller = quota_controller
-    )
-    selected_progress <- .adaptive_link_stage_progress(
-      state = state,
-      spoke_id = as.integer(selected_spoke_id),
-      stage_quotas = stage_quotas,
-      stage_order = round$stage_order %||% .adaptive_stage_order(),
-      refit_id = refit_id
-    )
-    stage_quota <- as.integer(selected_progress$stage_quotas[[round_stage]] %||% stage_quota)
-    stage_committed_so_far <- as.integer(selected_progress$stage_committed[[round_stage]] %||% stage_committed_so_far)
-  }
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -1071,8 +1110,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     fallback_path = paste(fallback_path, collapse = ">"),
     starvation_reason = NA_character_,
     round_id = as.integer(round$round_id %||% NA_integer_),
-    round_stage = as.character(round_stage),
-    pair_type = as.character(round_stage),
+    round_stage = as.character(selected_round_stage),
+    pair_type = as.character(selected_round_stage),
     explore_rate_used = as.double(explore_rate_used),
     local_priority_mode = as.character(local_priority_mode),
     long_gate_pass = last_long_gate_pass,
@@ -1090,8 +1129,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     coverage_bins_used = as.integer(coverage_meta$coverage_bins_used),
     coverage_source = as.character(coverage_meta$coverage_source),
     link_spoke_id_selected = as.integer(selected_spoke_id),
-    stage_committed_so_far = stage_committed_so_far,
-    stage_quota = stage_quota,
+    stage_committed_so_far = as.integer(selected_stage_committed_so_far),
+    stage_quota = as.integer(selected_stage_quota),
     n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
     n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
     n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
