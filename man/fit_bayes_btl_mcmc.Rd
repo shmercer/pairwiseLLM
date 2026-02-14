@@ -12,7 +12,8 @@ fit_bayes_btl_mcmc(
     0.8),
   pair_counts = NULL,
   subset_method = c("first", "sample"),
-  seed = NULL
+  seed = NULL,
+  inference_contract = NULL
 )
 }
 \arguments{
@@ -51,6 +52,10 @@ the first \code{n} rows of that permutation for each refit.}
 \item{seed}{Optional integer seed for deterministic subset selection when
 \code{subset_method = "sample"}. When \code{NULL}, falls back to
 \code{cmdstan$seed} if provided.}
+
+\item{inference_contract}{Optional list of inference-routing semantics to
+attach to each fit contract. When omitted, values are inferred from
+\code{results$phase} and optional \code{results$judge_scope}.}
 }
 \value{
 A list with:

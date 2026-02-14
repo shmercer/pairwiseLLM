@@ -485,6 +485,34 @@ test_that("fit contract validator covers additional scalar and diagnostics branc
   bad_diag_list <- fit
   bad_diag_list$diagnostics <- 1L
   expect_error(pairwiseLLM:::validate_btl_fit_contract(bad_diag_list, ids = c("A", "B")), "must be a list")
+
+  bad_inference_contract <- fit
+  bad_inference_contract$inference_contract <- "bad"
+  expect_error(
+    pairwiseLLM:::validate_btl_fit_contract(bad_inference_contract, ids = c("A", "B")),
+    "inference_contract"
+  )
+})
+
+test_that("fit contract inference metadata helper validates allowed values", {
+  inferred <- pairwiseLLM:::.btl_contract_inference_contract(list(
+    judge_param_mode = "phase_specific",
+    phase_levels = c("phase2", "phase3"),
+    judge_scope_levels = c("within", "link"),
+    phase_boundary_detected = TRUE
+  ))
+  expect_identical(inferred$judge_param_mode, "phase_specific")
+  expect_identical(sort(inferred$judge_scope_levels), c("link", "within"))
+  expect_true(isTRUE(inferred$phase_boundary_detected))
+
+  expect_error(
+    pairwiseLLM:::.btl_contract_inference_contract(list(judge_param_mode = "bad")),
+    "judge_param_mode"
+  )
+  expect_error(
+    pairwiseLLM:::.btl_contract_inference_contract(list(judge_scope_levels = "bad")),
+    "judge_scope_levels"
+  )
 })
 
 test_that("build_item_log covers draw-matrix colname fallback branch", {

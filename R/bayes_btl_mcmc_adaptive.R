@@ -194,12 +194,26 @@
   }
 
   Y <- as.integer(results$better_id == results$A_id)
+  phase <- if ("phase" %in% names(results)) {
+    as.character(results[["phase"]])
+  } else {
+    rep(NA_character_, nrow(results))
+  }
+  judge_scope <- if ("judge_scope" %in% names(results)) {
+    as.character(results[["judge_scope"]])
+  } else {
+    rep(NA_character_, nrow(results))
+  }
+  judge_scope[!judge_scope %in% c("shared", "within", "link")] <- NA_character_
+
   list(
     A = as.integer(A_idx),
     B = as.integer(B_idx),
     Y = Y,
     N = as.integer(length(ids)),
-    item_id = as.character(ids)
+    item_id = as.character(ids),
+    phase = phase,
+    judge_scope = judge_scope
   )
 }
 

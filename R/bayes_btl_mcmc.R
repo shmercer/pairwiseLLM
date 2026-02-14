@@ -290,6 +290,72 @@ build_btl_results_data <- function(
   )
 }
 
+.btl_mcmc_inference_contract_from_results <- function(results, inference_contract = NULL) {
+  if (is.null(inference_contract)) {
+    inference_contract <- list()
+  }
+  if (!is.list(inference_contract)) {
+    rlang::abort("`inference_contract` must be a list or NULL.")
+  }
+  results <- tibble::as_tibble(results)
+
+  phase_levels <- inference_contract$phase_levels %||% NULL
+  if (is.null(phase_levels) && "phase" %in% names(results)) {
+    phase_levels <- as.character(results$phase)
+  }
+  phase_levels <- as.character(phase_levels %||% character())
+  phase_levels <- unique(phase_levels[!is.na(phase_levels) & phase_levels != ""])
+  if (length(phase_levels) > 0L) {
+    .adaptive_check_phase(phase_levels, "inference_contract$phase_levels")
+  }
+
+  judge_scope_levels <- inference_contract$judge_scope_levels %||% NULL
+  inferred_scope_from_results <- FALSE
+  if (is.null(judge_scope_levels) && "judge_scope" %in% names(results)) {
+    judge_scope_levels <- as.character(results$judge_scope)
+    inferred_scope_from_results <- TRUE
+  }
+  judge_scope_levels <- as.character(judge_scope_levels %||% character())
+  judge_scope_levels <- unique(judge_scope_levels[!is.na(judge_scope_levels) & judge_scope_levels != ""])
+  bad_scope <- setdiff(judge_scope_levels, c("shared", "within", "link"))
+  if (length(bad_scope) > 0L && !isTRUE(inferred_scope_from_results)) {
+    rlang::abort("`inference_contract$judge_scope_levels` must be shared, within, or link.")
+  }
+  if (length(bad_scope) > 0L && isTRUE(inferred_scope_from_results)) {
+    judge_scope_levels <- setdiff(judge_scope_levels, bad_scope)
+  }
+
+  judge_param_mode <- inference_contract$judge_param_mode %||% NULL
+  if (is.null(judge_param_mode)) {
+    if (length(judge_scope_levels) == 0L || identical(judge_scope_levels, "shared")) {
+      judge_param_mode <- "global_shared"
+    } else {
+      judge_param_mode <- "phase_specific"
+    }
+  }
+  judge_param_mode <- as.character(judge_param_mode)
+  if (length(judge_param_mode) != 1L || is.na(judge_param_mode) ||
+    !judge_param_mode %in% c("global_shared", "phase_specific")) {
+    rlang::abort("`inference_contract$judge_param_mode` must be global_shared or phase_specific.")
+  }
+
+  phase_boundary_detected <- inference_contract$phase_boundary_detected %||% NULL
+  if (is.null(phase_boundary_detected)) {
+    phase_boundary_detected <- any(phase_levels %in% c("phase3"))
+  }
+  phase_boundary_detected <- as.logical(phase_boundary_detected)
+  if (length(phase_boundary_detected) != 1L || is.na(phase_boundary_detected)) {
+    rlang::abort("`inference_contract$phase_boundary_detected` must be TRUE or FALSE.")
+  }
+
+  list(
+    judge_param_mode = judge_param_mode,
+    phase_levels = phase_levels,
+    judge_scope_levels = judge_scope_levels,
+    phase_boundary_detected = phase_boundary_detected
+  )
+}
+
 #' Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 #'
 #' Runs full Bayesian posterior inference for a Bradley–Terry–Luce (BTL) style
@@ -336,6 +402,9 @@ build_btl_results_data <- function(
 #' @param seed Optional integer seed for deterministic subset selection when
 #'   \code{subset_method = "sample"}. When \code{NULL}, falls back to
 #'   \code{cmdstan$seed} if provided.
+#' @param inference_contract Optional list of inference-routing semantics to
+#'   attach to each fit contract. When omitted, values are inferred from
+#'   \code{results$phase} and optional \code{results$judge_scope}.
 #'
 #' @return A list with:
 #' \describe{
@@ -392,7 +461,8 @@ fit_bayes_btl_mcmc <- function(
     ),
     pair_counts = NULL,
     subset_method = c("first", "sample"),
-    seed = NULL
+    seed = NULL,
+    inference_contract = NULL
 ) {
   if (is.list(model_variant) && !is.character(model_variant)) {
     cmdstan <- model_variant
@@ -452,7 +522,13 @@ fit_bayes_btl_mcmc <- function(
     ))
 
     mcmc_fit <- .fit_bayes_btl_mcmc_adaptive(bt_data, config = mcmc_config, seed = mcmc_seed)
+    contract_meta <- .btl_mcmc_inference_contract_from_results(
+      results_subset,
+      inference_contract = inference_contract
+    )
     fit_contract <- as_btl_fit_contract_from_mcmc(mcmc_fit, ids = ids)
+    fit_contract$inference_contract <- contract_meta
+    validate_btl_fit_contract(fit_contract, ids = ids)
     fits[[idx]] <- fit_contract
 
     state <- .btl_mcmc_summary_state(

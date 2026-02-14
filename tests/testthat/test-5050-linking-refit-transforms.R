@@ -282,6 +282,22 @@ test_that("judge parameter mode controls linking judge scope in fit contract", {
   expect_equal(contract$judge$epsilon, 0.25, tolerance = 1e-12)
 })
 
+test_that("phase-specific judge mode aborts when link parameters are missing", {
+  state <- make_linking_refit_state(
+    list(link_transform_mode = "shift_only", link_refit_mode = "shift_only", judge_param_mode = "phase_specific")
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  state$btl_fit$beta_link_mean <- NULL
+  state$btl_fit$epsilon_link_mean <- NULL
+
+  expect_error(
+    pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
+    "Phase-specific judge mode requires `beta_link_mean`"
+  )
+})
+
 test_that("link likelihood applies signed beta by original presentation side", {
   edges_mixed <- tibble::tibble(
     spoke_item = c("s1", "s1"),

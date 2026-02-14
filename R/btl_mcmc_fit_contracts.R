@@ -22,6 +22,8 @@
 #' @param mcmc_config_used List with the MCMC configuration snapshot.
 #' @param diagnostics_pass Optional logical scalar indicating diagnostics gate
 #'   status, or \code{NA}.
+#' @param inference_contract Optional list describing inference-routing
+#'   semantics (for example phase levels and judge parameter scope).
 #'
 #' @return A validated list containing draws, summaries, diagnostics, and
 #'   metadata for BTL MCMC consumers.
@@ -34,7 +36,8 @@ build_btl_fit_contract <- function(theta_draws,
     diagnostics = NULL,
     model_variant = NA_character_,
     mcmc_config_used = NULL,
-    diagnostics_pass = NA) {
+    diagnostics_pass = NA,
+    inference_contract = NULL) {
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   ids <- colnames(theta_draws)
   if (is.null(ids) || anyNA(ids) || any(ids == "")) {
@@ -61,6 +64,7 @@ build_btl_fit_contract <- function(theta_draws,
   diagnostics <- .btl_contract_diagnostics_defaults(diagnostics)
   diagnostics_pass <- .btl_contract_diagnostics_pass(diagnostics_pass)
   mcmc_config_used <- .btl_contract_mcmc_defaults(mcmc_config_used)
+  inference_contract <- .btl_contract_inference_contract(inference_contract)
 
   model_variant <- if (is.na(model_variant %||% NA_character_)) {
     NA_character_
@@ -88,6 +92,7 @@ build_btl_fit_contract <- function(theta_draws,
     beta_p97.5 = beta_summary$p97.5,
     diagnostics = diagnostics,
     diagnostics_pass = diagnostics_pass,
+    inference_contract = inference_contract,
     n_items = as.integer(ncol(theta_draws)),
     n_draws = as.integer(nrow(theta_draws)),
     model_variant = as.character(model_variant),
@@ -195,6 +200,55 @@ na_param_summary <- function() {
   )
 }
 
+.btl_contract_inference_contract <- function(inference_contract) {
+  if (is.null(inference_contract)) {
+    return(list())
+  }
+  if (!is.list(inference_contract)) {
+    rlang::abort("`inference_contract` must be a list or NULL.")
+  }
+
+  mode <- inference_contract$judge_param_mode %||% NULL
+  if (!is.null(mode)) {
+    mode <- as.character(mode)
+    if (length(mode) != 1L || is.na(mode) || !mode %in% c("global_shared", "phase_specific")) {
+      rlang::abort("`inference_contract$judge_param_mode` must be global_shared or phase_specific.")
+    }
+    inference_contract$judge_param_mode <- mode
+  }
+
+  phase_levels <- inference_contract$phase_levels %||% NULL
+  if (!is.null(phase_levels)) {
+    phase_levels <- as.character(phase_levels)
+    phase_levels <- unique(phase_levels[!is.na(phase_levels) & phase_levels != ""])
+    if (length(phase_levels) > 0L) {
+      .adaptive_check_phase(phase_levels, "inference_contract$phase_levels")
+    }
+    inference_contract$phase_levels <- phase_levels
+  }
+
+  judge_scope_levels <- inference_contract$judge_scope_levels %||% NULL
+  if (!is.null(judge_scope_levels)) {
+    judge_scope_levels <- as.character(judge_scope_levels)
+    judge_scope_levels <- unique(judge_scope_levels[!is.na(judge_scope_levels) & judge_scope_levels != ""])
+    bad <- setdiff(judge_scope_levels, c("shared", "within", "link"))
+    if (length(bad) > 0L) {
+      rlang::abort("`inference_contract$judge_scope_levels` must be shared, within, or link.")
+    }
+    inference_contract$judge_scope_levels <- judge_scope_levels
+  }
+
+  boundary <- inference_contract$phase_boundary_detected %||% NULL
+  if (!is.null(boundary)) {
+    if (!is.logical(boundary) || length(boundary) != 1L || is.na(boundary)) {
+      rlang::abort("`inference_contract$phase_boundary_detected` must be TRUE or FALSE when provided.")
+    }
+    inference_contract$phase_boundary_detected <- boundary
+  }
+
+  inference_contract
+}
+
 #' @keywords internal
 #' @noRd
 reorder_theta_draws <- function(theta_draws, ids) {
@@ -237,7 +291,7 @@ validate_btl_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
     "epsilon_draws", "beta_draws",
     "epsilon_mean", "epsilon_p2.5", "epsilon_p5", "epsilon_p50", "epsilon_p95", "epsilon_p97.5",
     "beta_mean", "beta_p2.5", "beta_p5", "beta_p50", "beta_p95", "beta_p97.5",
-    "diagnostics", "diagnostics_pass",
+    "diagnostics", "diagnostics_pass", "inference_contract",
     "n_items", "n_draws", "model_variant", "mcmc_config_used"
   )
   missing <- setdiff(required, names(fit))
@@ -375,6 +429,11 @@ validate_btl_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
   if (!is.logical(fit$diagnostics_pass) || length(fit$diagnostics_pass) != 1L) {
     rlang::abort("`fit$diagnostics_pass` must be TRUE, FALSE, or NA.", call = where)
   }
+  inference_contract <- fit$inference_contract %||% NULL
+  if (is.null(inference_contract) || !is.list(inference_contract)) {
+    rlang::abort("`fit$inference_contract` must be a list.", call = where)
+  }
+  .btl_contract_inference_contract(inference_contract)
 
   model_variant <- fit$model_variant
   if (!is.character(model_variant) || length(model_variant) != 1L) {
