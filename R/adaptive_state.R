@@ -518,6 +518,8 @@
     attr(quotas, "quota_meta") <- list(
       global_identified = isTRUE(controller$global_identified),
       linking_identified = isTRUE(linking_identified),
+      link_spoke_id = as.integer(link_spoke),
+      taper_applied = isTRUE(linking_identified),
       long_quota_raw = as.integer(long_quota_raw),
       long_quota_effective = as.integer(long_quota_effective),
       long_quota_removed = as.integer(max(0L, long_quota_raw - long_quota_effective)),
