@@ -80,11 +80,15 @@
   is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
   phase_a <- state$linking$phase_a %||% list()
   phase_b_ready <- isTRUE(phase_a$ready_for_phase_b %||% FALSE)
+  phase_b_start_step <- as.integer(phase_a$phase_b_started_at_step %||% NA_integer_)
   has_cross <- "is_cross_set" %in% names(step_log)
   is_cross <- if (isTRUE(has_cross)) step_log$is_cross_set %in% TRUE else rep(FALSE, nrow(step_log))
   phase_is_b <- rep(FALSE, nrow(step_log))
-  if (isTRUE(is_link_mode) && isTRUE(has_cross)) {
-    # Use the first committed cross-set row as the observable phase boundary.
+  if (isTRUE(is_link_mode) && isTRUE(has_cross) && is.finite(phase_b_start_step)) {
+    # Prefer explicit phase metadata when available.
+    phase_is_b <- as.integer(step_log$step_id) >= phase_b_start_step
+  } else if (isTRUE(is_link_mode) && isTRUE(has_cross)) {
+    # Guarded legacy fallback for resumed sessions without explicit boundary metadata.
     phase_is_b <- cumsum(is_cross) > 0L
   } else if (isTRUE(is_link_mode) && isTRUE(phase_b_ready)) {
     phase_is_b <- rep(TRUE, nrow(step_log))
@@ -278,8 +282,10 @@
     }
   }
 
-  hub_anchor <- as.character(state$round$anchor_ids %||% character())
-  hub_anchor <- hub_anchor[hub_anchor %in% hub_items]
+  proxy <- .adaptive_rank_proxy(state)
+  defaults <- adaptive_defaults(length(state$item_ids))
+  hub_anchor <- .adaptive_select_rolling_anchors(proxy$scores[hub_items], defaults)
+  hub_anchor <- as.character(hub_anchor[hub_anchor %in% hub_items])
   active_hub <- unique(c(hub_active_cross, hub_anchor))
   active_all <- unique(c(spoke_items, active_hub))
 
@@ -619,7 +625,8 @@
   controller <- utils::modifyList(.adaptive_controller_defaults(2L), controller %||% list())
   rel_gate <- is.finite(row$reliability_EAP_link[[1L]]) &&
     row$reliability_EAP_link[[1L]] >= as.double(controller$link_identified_reliability_min %||% 0.80)
-  rank_gate <- isTRUE(row$lag_eligible[[1L]]) && isTRUE(row$rank_stability_pass[[1L]])
+  rank_gate <- is.finite(row$ts_btl_rank_spearman[[1L]]) &&
+    row$ts_btl_rank_spearman[[1L]] >= as.double(controller$link_rank_corr_min %||% 0.90)
   delta_sd_gate <- if ("delta_sd_pass" %in% names(row)) {
     isTRUE(row$delta_sd_pass[[1L]])
   } else {
@@ -1292,8 +1299,8 @@
 
     link_identified <- is.finite(reliability_active) &&
       reliability_active >= as.double(controller$link_identified_reliability_min %||% 0.80) &&
-      isTRUE(rank_stability$lag_eligible %||% FALSE) &&
-      isTRUE(rank_stability$rho_rank_lagged_pass %||% FALSE) &&
+      is.finite(ts_btl_rank_active) &&
+      ts_btl_rank_active >= as.double(controller$link_rank_corr_min %||% 0.90) &&
       isTRUE(delta_sd_pass) &&
       (identical(transform_mode, "shift_only") || isTRUE(log_alpha_sd_pass))
     link_identified_map[[key]] <- isTRUE(link_identified)
@@ -1324,8 +1331,8 @@
       ),
       ts_btl_rank_spearman_active = as.double(ts_btl_rank_active),
       link_rank_corr_pass = as.logical(
-        isTRUE(rank_stability$lag_eligible %||% FALSE) &&
-          isTRUE(rank_stability$rho_rank_lagged_pass %||% FALSE)
+        is.finite(ts_btl_rank_active) &&
+          ts_btl_rank_active >= as.double(controller$link_rank_corr_min %||% 0.90)
       ),
       lag_eligible = as.logical(rank_stability$lag_eligible %||% FALSE),
       rank_stability_lagged = as.double(rank_stability$rho_rank_lagged %||% NA_real_),
