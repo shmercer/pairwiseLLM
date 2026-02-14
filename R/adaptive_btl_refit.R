@@ -1421,7 +1421,7 @@
     } else if (!is.null(link_identified_map[[key]])) {
       isTRUE(link_identified_map[[key]])
     } else {
-      isTRUE(controller$linking_identified %||% FALSE)
+      FALSE
     }
 
     is_cross <- rep(FALSE, nrow(step_log))
@@ -1447,6 +1447,17 @@
       n_items = as.integer(state$n_items),
       controller = quota_controller
     )
+    quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
+    quota_long_link_raw <- as.integer(quota_meta$long_quota_raw %||% NA_integer_)
+    quota_long_link_effective <- as.integer(quota_meta$long_quota_effective %||%
+      stage_quotas[["long_link"]] %||% NA_integer_)
+    quota_long_link_removed <- as.integer(quota_meta$long_quota_removed %||% NA_integer_)
+    quota_taper_applied <- if (!is.na(quota_long_link_raw) && !is.na(quota_long_link_effective)) {
+      as.logical(quota_long_link_effective < quota_long_link_raw)
+    } else {
+      as.logical(quota_meta$taper_applied %||% FALSE)
+    }
+    quota_taper_spoke_id <- as.integer(quota_meta$link_spoke_id %||% spoke_id)
     stage_order <- .adaptive_stage_order()
     committed_stage <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
     refit_step_end <- if ("step_id" %in% names(step_log) && nrow(step_log) > 0L) {
@@ -1546,6 +1557,11 @@
       quota_long_link = as.integer(stage_quotas[["long_link"]] %||% NA_integer_),
       quota_mid_link = as.integer(stage_quotas[["mid_link"]] %||% NA_integer_),
       quota_local_link = as.integer(stage_quotas[["local_link"]] %||% NA_integer_),
+      quota_long_link_raw = as.integer(quota_long_link_raw),
+      quota_long_link_effective = as.integer(quota_long_link_effective),
+      quota_long_link_removed = as.integer(quota_long_link_removed),
+      quota_taper_applied = as.logical(quota_taper_applied),
+      quota_taper_spoke_id = as.integer(quota_taper_spoke_id),
       committed_anchor_link = as.integer(committed_stage[["anchor_link"]] %||% 0L),
       committed_long_link = as.integer(committed_stage[["long_link"]] %||% 0L),
       committed_mid_link = as.integer(committed_stage[["mid_link"]] %||% 0L),

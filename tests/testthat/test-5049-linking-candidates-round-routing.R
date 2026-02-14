@@ -45,6 +45,38 @@ test_that("linking candidates are hub-spoke only by default", {
   expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
 })
 
+test_that("phase B routing invariants hold across anchor/long/mid/local stages", {
+  items <- tibble::tibble(
+    item_id = as.character(1:9),
+    set_id = c(rep(1L, 3L), rep(2L, 3L), rep(3L, 3L)),
+    global_item_id = paste0("g", 1:9)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 1234L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$controller$current_link_spoke_id <- 2L
+  state <- mark_link_phase_b_ready(state)
+
+  set_map <- stats::setNames(items$set_id, items$item_id)
+  stages <- c("anchor_link", "long_link", "mid_link", "local_link")
+  for (stage in stages) {
+    cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+      state,
+      stage_name = stage,
+      fallback_name = "base",
+      C_max = 10000L,
+      seed = 4L
+    )
+    expect_true(nrow(cand) > 0L)
+    set_i <- as.integer(set_map[cand$i])
+    set_j <- as.integer(set_map[cand$j])
+    expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
+  }
+})
+
 test_that("linking long-link taper applies only to the active spoke and respects floor", {
   q_base <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = 1L,
@@ -79,6 +111,89 @@ test_that("linking long-link taper applies only to the active spoke and respects
   expect_true(q_taper[["long_link"]] == 4L)
   expect_true(q_taper[["long_link"]] >= 2L)
   expect_identical(q_other_spoke[["long_link"]], 8L)
+})
+
+test_that("phase B hub-anchor candidates are derived from hub-only scores", {
+  items <- tibble::tibble(
+    item_id = c(
+      "h1", "h2", "h3", "h4", "h5", "h6", "h7", "h8",
+      "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"
+    ),
+    set_id = c(rep(1L, 8L), rep(2L, 8L)),
+    global_item_id = paste0("g", seq_len(16L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 88L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+
+  ids <- as.character(state$trueskill_state$items$item_id)
+  mu <- rep(0, length(ids))
+  names(mu) <- ids
+  mu[paste0("h", 1:8)] <- c(20, 18, 16, 14, 12, 10, 8, 6)
+  mu[paste0("s", 1:8)] <- c(80, 79, 78, 77, -20, -21, -22, -23)
+  state$trueskill_state$items$mu <- as.double(mu[ids])
+  cand_a <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "anchor_link",
+    fallback_name = "base",
+    C_max = 10000L,
+    seed = 1L
+  )
+
+  mu[paste0("s", 1:8)] <- c(-80, -79, -78, -77, 40, 39, 38, 37)
+  state$trueskill_state$items$mu <- as.double(mu[ids])
+  cand_b <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "anchor_link",
+    fallback_name = "base",
+    C_max = 10000L,
+    seed = 1L
+  )
+
+  set_map <- stats::setNames(items$set_id, items$item_id)
+  hub_anchor_a <- sort(unique(c(
+    cand_a$i[set_map[cand_a$i] == 1L],
+    cand_a$j[set_map[cand_a$j] == 1L]
+  )))
+  hub_anchor_b <- sort(unique(c(
+    cand_b$i[set_map[cand_b$i] == 1L],
+    cand_b$j[set_map[cand_b$j] == 1L]
+  )))
+
+  expect_true(length(hub_anchor_a) > 0L)
+  expect_identical(hub_anchor_a, hub_anchor_b)
+})
+
+test_that("multi-spoke long-link taper remains isolated to identified spoke", {
+  q_spoke_2 <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = 100L,
+    controller = list(
+      run_mode = "link_multi_spoke",
+      current_link_spoke_id = 2L,
+      linking_identified_by_spoke = list(`2` = TRUE, `3` = FALSE)
+    )
+  )
+  q_spoke_3 <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = 100L,
+    controller = list(
+      run_mode = "link_multi_spoke",
+      current_link_spoke_id = 3L,
+      linking_identified_by_spoke = list(`2` = TRUE, `3` = FALSE)
+    )
+  )
+  meta_2 <- attr(q_spoke_2, "quota_meta")
+  meta_3 <- attr(q_spoke_3, "quota_meta")
+
+  expect_identical(q_spoke_2[["long_link"]], 4L)
+  expect_identical(q_spoke_3[["long_link"]], 8L)
+  expect_true(isTRUE(meta_2$taper_applied))
+  expect_false(isTRUE(meta_3$taper_applied))
 })
 
 test_that("phase A linking scheduling uses within-set round defaults", {
@@ -139,6 +254,16 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
     row2$committed_mid_link[[1L]] + row2$committed_local_link[[1L]] >= 1L)
   expect_true(row3$committed_anchor_link[[1L]] + row3$committed_long_link[[1L]] +
     row3$committed_mid_link[[1L]] + row3$committed_local_link[[1L]] >= 1L)
+  expect_identical(row2$quota_long_link_raw[[1L]], 8L)
+  expect_identical(row2$quota_long_link_effective[[1L]], 8L)
+  expect_identical(row2$quota_long_link_removed[[1L]], 0L)
+  expect_false(isTRUE(row2$quota_taper_applied[[1L]]))
+  expect_identical(row2$quota_taper_spoke_id[[1L]], 2L)
+  expect_identical(row3$quota_long_link_raw[[1L]], 8L)
+  expect_identical(row3$quota_long_link_effective[[1L]], 8L)
+  expect_identical(row3$quota_long_link_removed[[1L]], 0L)
+  expect_false(isTRUE(row3$quota_taper_applied[[1L]]))
+  expect_identical(row3$quota_taper_spoke_id[[1L]], 3L)
 })
 
 test_that("linking spoke quantile bins dynamically fall back for small spokes", {
@@ -549,6 +674,34 @@ test_that("link stage log is appended per refit and spoke in linking mode", {
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(state$link_stage_log, rows)
   expect_true(nrow(state$link_stage_log) >= 1L)
   expect_true(all(c("refit_id", "spoke_id", "coverage_bins_used") %in% names(state$link_stage_log)))
+})
+
+test_that("per-spoke link stage rows do not inherit global identified fallback", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 25L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round_log <- pairwiseLLM:::append_round_log(state$round_log, list(refit_id = 1L, diagnostics_pass = TRUE))
+  state$controller$linking_identified <- TRUE
+  state$controller$linking_identified_by_spoke <- list()
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(), `3` = list())
+
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+
+  expect_true(nrow(rows) == 2L)
+  expect_true(all(rows$linking_identified %in% FALSE))
 })
 
 test_that("round candidate helper branches are exercised for anchor/phase-a paths", {
