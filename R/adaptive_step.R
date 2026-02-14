@@ -452,6 +452,12 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_integer_
   }
+  if (isTRUE(is_cross_set) && is.na(link_spoke_id)) {
+    selected_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
+    if (!is.na(selected_spoke_id) && selected_spoke_id %in% c(set_i, set_j)) {
+      link_spoke_id <- selected_spoke_id
+    }
+  }
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   spoke_key <- as.character(link_spoke_id)
   spoke_stats <- if (!is.na(link_spoke_id)) link_stats[[spoke_key]] %||% list() else list()

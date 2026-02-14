@@ -1785,29 +1785,41 @@
       proxy_scores = spoke_scores
     )
 
-    reliability_stop_pass <- isTRUE(stats_row$link_reliability_stop_pass %||% FALSE)
-    delta_sd_pass <- isTRUE(stats_row$delta_sd_pass %||% FALSE)
-    log_alpha_sd_pass <- is.na(stats_row$log_alpha_sd_pass %||% NA) || isTRUE(stats_row$log_alpha_sd_pass)
+    transform_mode <- as.character(stats_row$link_transform_mode %||%
+      .adaptive_link_transform_mode_for_spoke(controller, spoke_id))
+    reliability_stop_pass <- as.logical(stats_row$link_reliability_stop_pass %||% NA)
+    delta_sd_pass <- as.logical(stats_row$delta_sd_pass %||% NA)
+    log_alpha_sd_pass <- as.logical(stats_row$log_alpha_sd_pass %||% NA)
     lag_eligible <- isTRUE(stats_row$lag_eligible %||% FALSE)
-    delta_change_pass <- isTRUE(stats_row$delta_change_pass %||% FALSE)
-    log_alpha_change_pass <- is.na(stats_row$log_alpha_change_pass %||% NA) || isTRUE(stats_row$log_alpha_change_pass)
-    rank_stability_pass <- isTRUE(stats_row$rank_stability_pass %||% FALSE)
-    link_stop_eligible <- isTRUE(lag_eligible) && !is.na(diagnostics_pass)
+    delta_change_pass <- as.logical(stats_row$delta_change_pass %||% NA)
+    log_alpha_change_pass <- as.logical(stats_row$log_alpha_change_pass %||% NA)
+    rank_stability_pass <- as.logical(stats_row$rank_stability_pass %||% NA)
+    required_defined <- !is.na(diagnostics_pass) &&
+      !is.na(reliability_stop_pass) &&
+      !is.na(delta_sd_pass) &&
+      !is.na(delta_change_pass) &&
+      !is.na(rank_stability_pass)
+    if (identical(transform_mode, "shift_scale")) {
+      required_defined <- isTRUE(required_defined) &&
+        !is.na(log_alpha_sd_pass) &&
+        !is.na(log_alpha_change_pass)
+    }
+    # Eligibility means all required stop gates are defined at this refit.
+    link_stop_eligible <- isTRUE(lag_eligible) && isTRUE(required_defined)
     link_stop_pass <- isTRUE(link_stop_eligible) &&
       isTRUE(diagnostics_pass) &&
       isTRUE(reliability_stop_pass) &&
       isTRUE(delta_sd_pass) &&
-      isTRUE(log_alpha_sd_pass) &&
+      (isTRUE(log_alpha_sd_pass) || identical(transform_mode, "shift_only")) &&
       isTRUE(delta_change_pass) &&
-      isTRUE(log_alpha_change_pass) &&
+      (isTRUE(log_alpha_change_pass) || identical(transform_mode, "shift_only")) &&
       isTRUE(rank_stability_pass)
 
     rows[[idx]] <- list(
       refit_id = as.integer(refit_id),
       spoke_id = as.integer(spoke_id),
       hub_id = as.integer(hub_id),
-      link_transform_mode = as.character(stats_row$link_transform_mode %||%
-        .adaptive_link_transform_mode_for_spoke(controller, spoke_id)),
+      link_transform_mode = as.character(transform_mode),
       link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
       hub_lock_mode = as.character(controller$hub_lock_mode %||% NA_character_),
       hub_lock_kappa = if (identical(as.character(controller$hub_lock_mode %||% NA_character_), "soft_lock")) {

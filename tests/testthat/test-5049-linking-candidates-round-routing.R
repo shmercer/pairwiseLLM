@@ -45,6 +45,43 @@ test_that("linking candidates are hub-spoke only by default", {
   expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
 })
 
+test_that("linking candidates allow selected-spoke to other-spoke edges when enabled", {
+  items <- tibble::tibble(
+    item_id = as.character(1:9),
+    set_id = c(rep(1L, 3L), rep(2L, 3L), rep(3L, 3L)),
+    global_item_id = paste0("g", 1:9)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 124L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      allow_spoke_spoke_cross_set = TRUE
+    )
+  )
+  state$warm_start_done <- TRUE
+  state$controller$current_link_spoke_id <- 2L
+  state <- mark_link_phase_b_ready(state)
+
+  cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "long_link",
+    fallback_name = "base",
+    C_max = 10000L,
+    seed = 2L
+  )
+  set_map <- stats::setNames(items$set_id, items$item_id)
+  set_i <- as.integer(set_map[cand$i])
+  set_j <- as.integer(set_map[cand$j])
+  spoke_spoke <- (set_i == 2L & set_j == 3L) | (set_i == 3L & set_j == 2L)
+
+  expect_true(nrow(cand) > 0L)
+  expect_true(all(set_i != set_j))
+  expect_true(all(set_i == 2L | set_j == 2L))
+  expect_true(any(spoke_spoke))
+})
+
 test_that("phase B routing invariants hold across anchor/long/mid/local stages", {
   items <- tibble::tibble(
     item_id = as.character(1:9),

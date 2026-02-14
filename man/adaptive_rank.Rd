@@ -88,7 +88,8 @@ controller behavior. Supported fields:
 \code{boundary_frac}, \code{p_star_override_margin}, and
 \code{star_override_budget_per_round}, linking controls (\code{run_mode}, \code{hub_id},
 \code{link_transform_mode}, \code{link_refit_mode}, \code{shift_only_theta_treatment},
-\code{judge_param_mode}, \code{hub_lock_mode}, \code{hub_lock_kappa}), and Phase A controls
+\code{judge_param_mode}, \code{hub_lock_mode}, \code{hub_lock_kappa},
+\code{allow_spoke_spoke_cross_set}), and Phase A controls
 (\code{phase_a_mode}, \code{phase_a_import_failure_policy},
 \code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
 \code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts},
