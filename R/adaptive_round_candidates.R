@@ -334,7 +334,103 @@
   stats::setNames(as.integer(idx), sorted)
 }
 
-.adaptive_link_spoke_coverage <- function(state, controller, spoke_id, spoke_ids, proxy_scores) {
+.adaptive_link_phase_b_routing_scores <- function(state, controller, active_ids, hub_id) {
+  active_ids <- as.character(active_ids)
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  proxy_scores <- .adaptive_rank_proxy(state)$scores
+  active_sets <- sort(unique(as.integer(set_map[active_ids])))
+  active_sets <- active_sets[!is.na(active_sets)]
+  if (length(active_sets) < 1L) {
+    return(stats::setNames(numeric(), character()))
+  }
+
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  scores <- stats::setNames(rep(NA_real_, length(active_ids)), active_ids)
+  for (set_id in active_sets) {
+    set_items <- active_ids[as.integer(set_map[active_ids]) == as.integer(set_id)]
+    raw_theta <- tryCatch(
+      .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = "theta_raw_mean"),
+      error = function(e) stats::setNames(numeric(), character())
+    )
+    raw_theta <- as.double(raw_theta[set_items])
+    names(raw_theta) <- as.character(set_items)
+    missing_raw <- !is.finite(raw_theta)
+    if (any(missing_raw)) {
+      raw_theta[missing_raw] <- as.double(proxy_scores[names(raw_theta)[missing_raw]])
+    }
+    if (any(!is.finite(raw_theta))) {
+      rlang::abort("Linking routing score invariant failed: non-finite routing scores in phase_b.")
+    }
+
+    if (as.integer(set_id) == as.integer(hub_id)) {
+      scores[set_items] <- as.double(raw_theta)
+      next
+    }
+
+    mode <- .adaptive_link_transform_mode_for_spoke(controller, spoke_id = as.integer(set_id))
+    stats_row <- link_stats[[as.character(set_id)]] %||% list()
+    delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+    if (!is.finite(delta)) {
+      delta <- 0
+    }
+    alpha <- 1
+    if (identical(mode, "shift_scale")) {
+      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% 0)
+      if (!is.finite(log_alpha)) {
+        log_alpha <- 0
+      }
+      alpha <- exp(log_alpha)
+    }
+    scores[set_items] <- as.double(delta + alpha * raw_theta)
+  }
+
+  if (any(!is.finite(scores[active_ids]))) {
+    rlang::abort("Linking routing score invariant failed: non-finite routing scores in phase_b.")
+  }
+  out <- as.double(scores[active_ids])
+  names(out) <- as.character(active_ids)
+  out
+}
+
+.adaptive_link_phase_b_hub_anchors <- function(state, hub_ids, hub_scores, defaults) {
+  hub_ids <- as.character(hub_ids)
+  hub_scores <- as.double(hub_scores[hub_ids])
+  names(hub_scores) <- hub_ids
+  anchors <- .adaptive_select_rolling_anchors(hub_scores, defaults)
+  anchors <- as.character(anchors[anchors %in% hub_ids])
+  if (length(anchors) < 1L) {
+    return(character())
+  }
+
+  uses <- as.integer((state$round %||% list())$per_round_item_uses %||% integer())
+  names(uses) <- names((state$round %||% list())$per_round_item_uses %||% uses)
+  ranked <- names(sort(.adaptive_rank_index_from_scores(hub_scores)))
+  ranked <- ranked[ranked %in% hub_ids]
+  if (length(ranked) < 1L) {
+    return(anchors)
+  }
+  ranked_use <- uses[ranked]
+  ranked_use[is.na(ranked_use)] <- 0L
+  ranked_unused <- ranked[ranked_use == 0L]
+  if (length(ranked_unused) < 1L) {
+    return(anchors)
+  }
+
+  n_anchor <- length(anchors)
+  primary <- ranked_unused[seq_len(min(length(ranked_unused), n_anchor))]
+  if (length(primary) < n_anchor) {
+    fill <- ranked[!ranked %in% primary]
+    primary <- c(primary, fill[seq_len(min(length(fill), n_anchor - length(primary)))])
+  }
+  as.character(primary)
+}
+
+.adaptive_link_spoke_coverage <- function(state,
+                                          controller,
+                                          spoke_id,
+                                          spoke_ids,
+                                          routing_scores,
+                                          score_source = "linking_global_score") {
   spoke_id <- as.integer(spoke_id)
   bins_target <- as.integer(controller$spoke_quantile_coverage_bins %||% 3L)
   bins_used <- max(1L, bins_target)
@@ -343,41 +439,13 @@
     bins_used <- bins_used - 1L
   }
 
-  source <- "global_rank"
+  source <- as.character(score_source %||% "linking_global_score")
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  if (nrow(step_log) > 0L && all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
-    spoke_done <- sum(
-      !is.na(step_log$pair_id) &
-        step_log$is_cross_set %in% TRUE &
-        as.integer(step_log$link_spoke_id) == spoke_id,
-      na.rm = TRUE
-    )
-  } else {
-    spoke_done <- 0L
-  }
 
-  spoke_scores <- proxy_scores[spoke_ids]
-  if (spoke_done < 10L) {
-    phase_a <- state$linking$phase_a %||% list()
-    artifact <- (phase_a$artifacts %||% list())[[as.character(spoke_id)]] %||% NULL
-    items_tbl <- artifact$items %||% NULL
-    if (is.data.frame(items_tbl) && "global_item_id" %in% names(items_tbl) &&
-      "rank_mu_raw" %in% names(items_tbl)) {
-      state_map <- stats::setNames(
-        as.character(state$items$item_id),
-        as.character(state$items$global_item_id)
-      )
-      ids <- state_map[as.character(items_tbl$global_item_id)]
-      keep <- !is.na(ids) & ids %in% spoke_ids
-      if (any(keep)) {
-        rank_raw <- as.double(items_tbl$rank_mu_raw[keep])
-        ids <- as.character(ids[keep])
-        if (all(is.finite(rank_raw)) && length(ids) > 0L) {
-          spoke_scores <- stats::setNames(-rank_raw, ids)
-          source <- "phase_a_rank_mu_raw"
-        }
-      }
-    }
+  spoke_scores <- as.double(routing_scores[spoke_ids])
+  names(spoke_scores) <- as.character(spoke_ids)
+  if (any(!is.finite(spoke_scores))) {
+    rlang::abort("Linking coverage invariant failed: routing scores must be finite for spoke items.")
   }
 
   bin_map <- .adaptive_link_spoke_bins(spoke_ids, spoke_scores, bins = bins_used)
@@ -511,20 +579,30 @@ generate_stage_candidates_from_state <- function(state,
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
     }
-    active_scores <- proxy$scores[active_ids]
+    active_scores <- .adaptive_link_phase_b_routing_scores(
+      state = state,
+      controller = controller,
+      active_ids = active_ids,
+      hub_id = hub_id
+    )
     strata <- .adaptive_assign_strata(active_scores, defaults)
     rank_index <- strata$rank_index
     stratum_map <- strata$stratum_map
     ids <- names(sort(rank_index))
-    # In linking Phase B, hub anchors must be derived from hub-only ranks.
-    hub_anchor_ids <- .adaptive_select_rolling_anchors(active_scores[hub_ids], defaults)
-    hub_anchor_ids <- hub_anchor_ids[hub_anchor_ids %in% hub_ids]
+    # In linking Phase B, hub anchors are derived from hub-only ranks.
+    hub_anchor_ids <- .adaptive_link_phase_b_hub_anchors(
+      state = state,
+      hub_ids = hub_ids,
+      hub_scores = active_scores,
+      defaults = defaults
+    )
     coverage <- .adaptive_link_spoke_coverage(
       state = state,
       controller = controller,
       spoke_id = spoke_id,
       spoke_ids = spoke_ids,
-      proxy_scores = active_scores
+      routing_scores = active_scores,
+      score_source = "linking_global_score"
     )
   } else if (isTRUE(is_link_mode)) {
     active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)

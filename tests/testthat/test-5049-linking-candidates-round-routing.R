@@ -322,12 +322,13 @@ test_that("linking spoke quantile bins dynamically fall back for small spokes", 
     controller = state$controller,
     spoke_id = 2L,
     spoke_ids = spoke_ids,
-    proxy_scores = proxy$scores
+    routing_scores = proxy$scores,
+    score_source = "linking_global_score"
   )
   expect_identical(cov$bins_used, 2L)
 })
 
-test_that("early linking sparsity falls back to Phase A rank summaries for bins", {
+test_that("phase B coverage bins use linking-global score source", {
   items <- tibble::tibble(
     item_id = as.character(1:8),
     set_id = c(rep(1L, 4L), rep(2L, 4L)),
@@ -340,16 +341,6 @@ test_that("early linking sparsity falls back to Phase A rank summaries for bins"
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
-  state$linking$phase_a$artifacts <- list(
-    `2` = list(
-      set_id = 2L,
-      items = tibble::tibble(
-        global_item_id = paste0("g", 5:8),
-        rank_mu_raw = c(4, 3, 2, 1)
-      )
-    )
-  )
-
   cand <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
     stage_name = "mid_link",
@@ -358,7 +349,7 @@ test_that("early linking sparsity falls back to Phase A rank summaries for bins"
     seed = 99L
   )
   expect_true(nrow(cand) > 0L)
-  expect_true(all(cand$coverage_source == "phase_a_rank_mu_raw"))
+  expect_true(all(cand$coverage_source == "linking_global_score"))
 })
 
 test_that("linking deterministic ordering prioritizes coverage before utility", {
@@ -953,14 +944,111 @@ test_that("active linking hub domain uses the same hub-only anchors as phase-B r
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
-  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
   defaults <- adaptive_defaults(length(state$item_ids))
   hub_ids <- as.character(state$items$item_id[state$items$set_id == 1L])
-  expected_anchor <- sort(pairwiseLLM:::.adaptive_select_rolling_anchors(proxy$scores[hub_ids], defaults))
+  routing_scores <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = controller,
+    active_ids = c(hub_ids, as.character(state$items$item_id[state$items$set_id == 2L])),
+    hub_id = 1L
+  )
+  expected_anchor <- sort(pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+    state = state,
+    hub_ids = hub_ids,
+    hub_scores = routing_scores,
+    defaults = defaults
+  ))
 
   active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
   got_anchor <- sort(intersect(active$active_hub, hub_ids))
   expect_identical(got_anchor, expected_anchor)
+})
+
+test_that("phase-B routing helpers enforce finite inputs and anchor fallback rules", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 901L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
+
+  empty_scores <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = controller,
+    active_ids = "missing_item_id",
+    hub_id = 1L
+  )
+  expect_identical(empty_scores, stats::setNames(numeric(), character()))
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_rank_proxy = function(state) list(scores = c(h1 = NA_real_)),
+      .adaptive_link_phase_a_theta_map = function(state, set_id, field) c(h1 = NA_real_),
+      pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+        state = state,
+        controller = controller,
+        active_ids = "h1",
+        hub_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "non-finite routing scores"
+  )
+
+  controller_scale <- utils::modifyList(
+    controller,
+    list(
+      link_transform_mode_by_spoke = list(`2` = "shift_scale"),
+      link_refit_stats_by_spoke = list(`2` = list(delta_spoke_mean = NA_real_, log_alpha_spoke_mean = NA_real_))
+    )
+  )
+  scale_scores <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_a_theta_map = function(state, set_id, field) {
+      if (set_id == 1L) c(h1 = 0.1, h2 = 0.2) else c(s1 = 1.5, s2 = -1.5)
+    },
+    pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+      state = state,
+      controller = controller_scale,
+      active_ids = c("h1", "s1"),
+      hub_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_equal(scale_scores[["s1"]], 1.5, tolerance = 1e-12)
+
+  defaults <- adaptive_defaults(length(state$item_ids))
+  state$round$per_round_item_uses <- c(h1 = 0L, h2 = 1L, h3 = 1L)
+  anchor_fill <- testthat::with_mocked_bindings(
+    .adaptive_select_rolling_anchors = function(scores, defaults) c("h1", "h2"),
+    .adaptive_rank_index_from_scores = function(scores) c(h1 = 1L, h2 = 2L, h3 = 3L),
+    pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+      state = state,
+      hub_ids = c("h1", "h2", "h3"),
+      hub_scores = c(h1 = 3, h2 = 2, h3 = 1),
+      defaults = defaults
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(anchor_fill, c("h1", "h2"))
+
+  anchor_rank_fallback <- testthat::with_mocked_bindings(
+    .adaptive_select_rolling_anchors = function(scores, defaults) c("h1"),
+    .adaptive_rank_index_from_scores = function(scores) integer(),
+    pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+      state = state,
+      hub_ids = c("h1", "h2"),
+      hub_scores = c(h1 = 2, h2 = 1),
+      defaults = defaults
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(anchor_rank_fallback, "h1")
 })
 
 test_that("linking candidates and step log carry global distance strata", {
