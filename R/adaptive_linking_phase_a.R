@@ -104,16 +104,10 @@
 .adaptive_phase_a_required_config_hash <- function(state, set_id) {
   controller <- .adaptive_controller_resolve(state)
   fit <- state$btl_fit %||% list()
-  mcmc_cfg <- fit$mcmc_config_used %||% list()
   payload <- list(
     set_id = as.integer(set_id),
     judge_param_mode = as.character(controller$judge_param_mode %||% NA_character_),
-    model_variant = as.character(fit$model_variant %||% "btl_e_b"),
-    mcmc = list(
-      chains = as.integer(mcmc_cfg$chains %||% NA_integer_),
-      parallel_chains = as.integer(mcmc_cfg$parallel_chains %||% NA_integer_),
-      threads_per_chain = as.integer(mcmc_cfg$threads_per_chain %||% NA_integer_)
-    )
+    model_variant = as.character(fit$model_variant %||% "btl_e_b")
   )
   .adaptive_phase_a_hash_object(payload)
 }

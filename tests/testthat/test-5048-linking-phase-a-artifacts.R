@@ -107,8 +107,10 @@ test_that("phase A import hash rejects inference-setting mismatch and supports a
   artifact <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   artifact$quality_gate_accepted <- TRUE
 
-  state_joint <- state
-  state_joint$btl_fit$mcmc_config_used <- list(chains = 4L, parallel_chains = 4L, threads_per_chain = 2L)
+  state_joint <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(judge_param_mode = "phase_specific")
+  )
   controller_joint <- .adaptive_controller_resolve(state_joint)
   expect_error(
     .adaptive_phase_a_validate_imported_artifact(
@@ -128,6 +130,25 @@ test_that("phase A import hash rejects inference-setting mismatch and supports a
       state_joint,
       set_id = 1L,
       controller = controller_allow
+    )
+  )
+})
+
+test_that("phase A import hash is stable for fresh sessions without local btl_fit", {
+  state_built <- make_phase_a_ready_state()
+  artifact <- .adaptive_phase_a_build_artifact(state_built, set_id = 1L)
+  artifact$quality_gate_accepted <- TRUE
+
+  state_fresh <- adaptive_rank_start(make_multiset_items(), seed = 11L)
+  state_fresh$btl_fit <- NULL
+  controller_fresh <- .adaptive_controller_resolve(state_fresh)
+
+  expect_no_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      artifact,
+      state_fresh,
+      set_id = 1L,
+      controller = controller_fresh
     )
   )
 })
