@@ -139,6 +139,8 @@ test_that("bayes_btl_mcmc_adaptive helper validators and unpackers work", {
   )
   prep <- pairwiseLLM:::.btl_mcmc_prepare_bt_data(results, ids = c("A", "B"))
   expect_identical(prep$Y[[1L]], 1L)
+  expect_identical(prep$phase[[1L]], "phase2")
+  expect_true("judge_scope" %in% names(prep))
 
   expect_error(pairwiseLLM:::.btl_mcmc_unpack_draws(list(theta = 1:3), model_variant = "btl"), "numeric matrix")
 
@@ -182,6 +184,7 @@ test_that("summarize_draws and fit-contract conversion return canonical structur
   fit <- pairwiseLLM:::as_btl_fit_contract_from_mcmc(mcmc_fit, ids = c("A", "B"))
   expect_true(is.matrix(fit$theta_draws))
   expect_identical(colnames(fit$theta_draws), c("A", "B"))
+  expect_true(is.list(fit$inference_contract))
 
   expect_error(pairwiseLLM:::as_btl_fit_contract_from_mcmc(list(draws = list(theta = theta)), ids = c("A", "A")), "unique")
   expect_error(
@@ -191,6 +194,35 @@ test_that("summarize_draws and fit-contract conversion return canonical structur
     ),
     "epsilon"
   )
+})
+
+test_that("inference contract metadata resolves from results and overrides", {
+  results <- tibble::tibble(
+    pair_uid = c("A:B#1", "A:B#2"),
+    unordered_key = c("A:B", "A:B"),
+    ordered_key = c("A:B", "A:B"),
+    A_id = c("A", "A"),
+    B_id = c("B", "B"),
+    better_id = c("A", "B"),
+    winner_pos = c(1L, 2L),
+    phase = c("phase2", "phase3"),
+    judge_scope = c("within", "link"),
+    iter = c(1L, 2L),
+    received_at = as.POSIXct("2026-01-01 00:00:00", tz = "UTC") + c(0, 1),
+    backend = c("adaptive", "adaptive"),
+    model = c("adaptive", "adaptive")
+  )
+
+  inferred <- pairwiseLLM:::.btl_mcmc_inference_contract_from_results(results)
+  expect_identical(inferred$judge_param_mode, "phase_specific")
+  expect_true(isTRUE(inferred$phase_boundary_detected))
+
+  overridden <- pairwiseLLM:::.btl_mcmc_inference_contract_from_results(
+    results,
+    inference_contract = list(judge_param_mode = "global_shared", phase_boundary_detected = FALSE)
+  )
+  expect_identical(overridden$judge_param_mode, "global_shared")
+  expect_false(isTRUE(overridden$phase_boundary_detected))
 })
 
 test_that("fit contract builders and validators enforce schema", {
