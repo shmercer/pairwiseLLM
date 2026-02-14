@@ -70,6 +70,8 @@ test_that("canonical log schemas follow the expected column order", {
     "escalated_this_refit", "n_pairs_cross_set_done", "n_unique_cross_pairs_seen",
     "n_cross_edges_since_last_refit",
     "quota_anchor_link", "quota_long_link", "quota_mid_link", "quota_local_link",
+    "quota_long_link_raw", "quota_long_link_effective", "quota_long_link_removed",
+    "quota_taper_applied", "quota_taper_spoke_id",
     "committed_anchor_link", "committed_long_link", "committed_mid_link", "committed_local_link",
     "concurrent_target_pairs",
     "concurrent_floor_pairs", "concurrent_floor_met", "concurrent_target_met",
