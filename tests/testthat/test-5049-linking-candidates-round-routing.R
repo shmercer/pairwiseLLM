@@ -335,6 +335,17 @@ test_that("linking deterministic ordering prioritizes coverage before utility", 
   expect_identical(ord[[1L]], 1L)
 })
 
+test_that("linking deterministic ordering ranks by predictive utility and uses stable ties", {
+  cand <- tibble::tibble(
+    i = c("a", "b", "c"),
+    j = c("d", "e", "f"),
+    u0 = c(0.49, 0.48, 0.47),
+    link_u = c(0.10, 0.30, 0.30)
+  )
+  ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
+  expect_identical(ord, c(2L, 3L, 1L))
+})
+
 test_that("active spoke routing handles no-spoke and single-spoke modes deterministically", {
   items_single <- tibble::tibble(
     item_id = c("h1", "h2"),
@@ -615,6 +626,43 @@ test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
 
   expect_equal(row$utility_mode[[1L]], "p_times_1_minus_p")
   expect_equal(row$cross_set_utility_pre[[1L]], expected, tolerance = 1e-12)
+})
+
+test_that("cross-set ordering uses predictive utility when it differs from TrueSkill proxy", {
+  cand <- tibble::tibble(
+    i = c("h1", "h2"),
+    j = c("s1", "s2"),
+    u0 = c(0.26, 0.24),
+    link_u = c(0.20, 0.28)
+  )
+  ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
+  expect_identical(ord[[1L]], 2L)
+})
+
+test_that("active linking hub domain uses the same hub-only anchors as phase-B routing", {
+  items <- tibble::tibble(
+    item_id = c(
+      "h1", "h2", "h3", "h4", "h5", "h6", "h7", "h8",
+      "s1", "s2", "s3", "s4"
+    ),
+    set_id = c(rep(1L, 8L), rep(2L, 4L)),
+    global_item_id = paste0("g", seq_len(12L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 13L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+  defaults <- adaptive_defaults(length(state$item_ids))
+  hub_ids <- as.character(state$items$item_id[state$items$set_id == 1L])
+  expected_anchor <- sort(pairwiseLLM:::.adaptive_select_rolling_anchors(proxy$scores[hub_ids], defaults))
+
+  active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
+  got_anchor <- sort(intersect(active$active_hub, hub_ids))
+  expect_identical(got_anchor, expected_anchor)
 })
 
 test_that("linking candidates and step log carry global distance strata", {
