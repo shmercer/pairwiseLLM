@@ -156,6 +156,97 @@ validate_judge_result <- function(result, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_assert_step_entry_invariants <- function(state, controller = NULL, phase_ctx = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  phase_ctx <- phase_ctx %||% .adaptive_link_phase_context(state, controller = controller)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  if (!isTRUE(is_link_mode)) {
+    if (identical(phase_ctx$phase, "phase_b")) {
+      rlang::abort(
+        paste0(
+          "Phase metadata and routing mode disagree: non-link run_mode cannot use phase_b routing."
+        )
+      )
+    }
+    return(invisible(TRUE))
+  }
+
+  if (identical(phase_ctx$phase, "phase_b")) {
+    ready_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    ready_spokes <- ready_spokes[!is.na(ready_spokes)]
+    if (length(ready_spokes) < 1L) {
+      rlang::abort(
+        paste0(
+          "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are available."
+        )
+      )
+    }
+    pending <- as.integer(phase_ctx$pending_run_sets %||% integer())
+    pending <- pending[!is.na(pending)]
+    if (length(pending) > 0L) {
+      rlang::abort(
+        paste0(
+          "Phase metadata and routing mode disagree: phase marked phase_b while pending Phase A run sets remain: ",
+          paste(sort(unique(pending)), collapse = ", "),
+          "."
+        )
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_assert_step_row_linking_completeness <- function(step_row) {
+  row <- tibble::as_tibble(step_row)
+  if (nrow(row) != 1L) {
+    rlang::abort("`step_row` completeness validation expects exactly one row.")
+  }
+  required <- c("run_mode", "is_cross_set", "set_i", "set_j", "link_spoke_id", "round_stage", "link_stage")
+  missing <- setdiff(required, names(row))
+  if (length(missing) > 0L) {
+    rlang::abort(paste0(
+      "step_log append completeness failure: missing required linking columns: ",
+      paste(missing, collapse = ", "),
+      "."
+    ))
+  }
+
+  is_cross <- row$is_cross_set[[1L]]
+  if (isTRUE(is_cross)) {
+    required_cross <- c(
+      "set_i", "set_j", "link_spoke_id", "run_mode", "posterior_win_prob_pre", "cross_set_utility_pre"
+    )
+    bad <- required_cross[vapply(required_cross, function(col) is.na(row[[col]][[1L]]), logical(1L))]
+    if (length(bad) > 0L) {
+      rlang::abort(paste0(
+        "step_log append completeness failure for cross-set row: required non-NA columns missing: ",
+        paste(bad, collapse = ", "),
+        "."
+      ))
+    }
+    stage <- as.character(row$round_stage[[1L]] %||% NA_character_)
+    if (stage %in% .adaptive_stage_order() && is.na(row$link_stage[[1L]])) {
+      rlang::abort(
+        "step_log append completeness failure for cross-set row: `link_stage` must be populated for stage-routed steps."
+      )
+    }
+  } else if (isFALSE(is_cross)) {
+    if (!is.na(row$link_spoke_id[[1L]])) {
+      rlang::abort(
+        "step_log append completeness failure: non-cross-set rows must set `link_spoke_id = NA`."
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
 apply_step_update <- function(state, step) {
   out <- state
   if (!all(names(schema_step_log) %in% names(out$step_log))) {
@@ -211,6 +302,9 @@ run_one_step <- function(state, judge, ...) {
   now_fn <- state$meta$now_fn %||% function() Sys.time()
   step_id <- as.integer(nrow(state$step_log) + 1L)
   timestamp <- now_fn()
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
 
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
@@ -258,7 +352,6 @@ run_one_step <- function(state, judge, ...) {
     NA_integer_
   }
 
-  controller <- .adaptive_controller_resolve(state)
   run_mode <- as.character(controller$run_mode %||% "within_set")
   hub_id <- as.integer(controller$hub_id %||% 1L)
   link_transform_mode <- as.character(controller$link_transform_mode %||% NA_character_)
@@ -379,6 +472,7 @@ run_one_step <- function(state, judge, ...) {
     hub_lock_mode = hub_lock_mode,
     hub_lock_kappa = hub_lock_kappa
   )
+  .adaptive_assert_step_row_linking_completeness(step_row)
 
   out <- apply_step_update(state, list(
     row = step_row,

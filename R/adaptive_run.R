@@ -1043,6 +1043,7 @@ adaptive_rank_run_live <- function(state,
         refit_context = refit_out$refit_context
       )
       if (nrow(link_rows) > 0L) {
+        .adaptive_assert_link_stage_rows_completeness(link_rows)
         state$link_stage_log <- append_link_stage_log(
           state$link_stage_log %||% new_link_stage_log(),
           link_rows

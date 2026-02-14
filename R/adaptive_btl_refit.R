@@ -1581,6 +1581,72 @@
   append_link_stage_log(new_link_stage_log(), rows_tbl)
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_assert_link_stage_rows_completeness <- function(link_rows) {
+  rows <- tibble::as_tibble(link_rows)
+  if (nrow(rows) < 1L) {
+    return(invisible(TRUE))
+  }
+  required <- c(
+    "refit_id", "spoke_id", "hub_id", "link_transform_mode", "link_refit_mode",
+    "hub_lock_mode", "reliability_EAP_link", "linking_identified", "link_stop_eligible", "link_stop_pass",
+    "n_pairs_cross_set_done", "n_unique_cross_pairs_seen", "n_cross_edges_since_last_refit", "coverage_bins_used"
+  )
+  missing <- setdiff(required, names(rows))
+  if (length(missing) > 0L) {
+    rlang::abort(paste0(
+      "link_stage_log append completeness failure: missing required columns: ",
+      paste(missing, collapse = ", "),
+      "."
+    ))
+  }
+
+  key_na <- rows[is.na(rows$refit_id) | is.na(rows$spoke_id) | is.na(rows$hub_id), , drop = FALSE]
+  if (nrow(key_na) > 0L) {
+    rlang::abort("link_stage_log append completeness failure: key fields refit_id/spoke_id/hub_id must be non-NA.")
+  }
+  mode_na <- rows[
+    is.na(rows$link_transform_mode) | is.na(rows$link_refit_mode) | is.na(rows$hub_lock_mode),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(mode_na) > 0L) {
+    rlang::abort(
+      "link_stage_log append completeness failure: mode fields must be populated for linking rows."
+    )
+  }
+  if (any(is.na(rows$linking_identified)) || any(is.na(rows$link_stop_eligible)) || any(is.na(rows$link_stop_pass))) {
+    rlang::abort(
+      paste0(
+        "link_stage_log append completeness failure: ",
+        "linking_identified/link_stop_eligible/link_stop_pass must be populated."
+      )
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_reconstruct_taper_from_logs <- function(link_row) {
+  row <- tibble::as_tibble(link_row)
+  if (nrow(row) < 1L) {
+    return(NA)
+  }
+  if ("quota_taper_applied" %in% names(row) &&
+    !is.na(row$quota_taper_applied[[1L]])) {
+    return(as.logical(row$quota_taper_applied[[1L]]))
+  }
+  raw <- as.integer(row$quota_long_link_raw[[1L]] %||% NA_integer_)
+  eff <- as.integer(row$quota_long_link_effective[[1L]] %||% NA_integer_)
+  if (is.na(raw) || is.na(eff)) {
+    return(NA)
+  }
+  as.logical(eff < raw)
+}
+
 .adaptive_btl_refit_context <- function(state, last_refit_M_done, last_refit_step) {
   step_id_at_refit <- as.integer(nrow(state$step_log))
   list(

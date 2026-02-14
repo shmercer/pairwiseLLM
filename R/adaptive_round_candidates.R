@@ -465,7 +465,15 @@ generate_stage_candidates_from_state <- function(state,
       )
     }
     if (!spoke_id %in% eligible_spokes) {
-      return(tibble::tibble(i = character(), j = character()))
+      rlang::abort(
+        paste0(
+          "Cross-set candidate generation invariant failed: requested spoke_id=",
+          as.integer(spoke_id),
+          " is not eligible in phase_b (eligible: ",
+          paste(sort(unique(eligible_spokes)), collapse = ", "),
+          ")."
+        )
+      )
     }
     if (is.na(spoke_id)) {
       rlang::abort(
@@ -474,6 +482,25 @@ generate_stage_candidates_from_state <- function(state,
     }
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
     spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
+    if (length(hub_ids) < 1L) {
+      rlang::abort(
+        paste0(
+          "Cross-set candidate generation invariant failed: ",
+          "no hub items found for hub_id=",
+          as.integer(hub_id),
+          "."
+        )
+      )
+    }
+    if (length(spoke_ids) < 1L) {
+      rlang::abort(
+        paste0(
+          "Cross-set candidate generation invariant failed: no spoke items found for spoke_id=",
+          as.integer(spoke_id),
+          "."
+        )
+      )
+    }
     active_ids <- unique(c(hub_ids, spoke_ids))
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
