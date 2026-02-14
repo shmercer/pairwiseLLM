@@ -210,7 +210,7 @@
   as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")
 }
 
-.adaptive_link_active_spoke <- function(state, controller, eligible_spoke_ids = NULL) {
+.adaptive_link_ranked_spokes <- function(state, controller, eligible_spoke_ids = NULL) {
   set_ids <- unique(as.integer(state$items$set_id))
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- setdiff(set_ids, hub_id)
@@ -218,15 +218,16 @@
     spoke_ids <- intersect(spoke_ids, as.integer(eligible_spoke_ids))
   }
   if (length(spoke_ids) < 1L) {
-    return(NA_integer_)
+    return(integer())
   }
   mode <- as.character(controller$run_mode %||% "within_set")
   if (!identical(mode, "link_multi_spoke")) {
     current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
     if (!is.na(current) && current %in% spoke_ids) {
-      return(as.integer(current))
+      tail_ids <- as.integer(sort(setdiff(spoke_ids, current)))
+      return(as.integer(c(current, tail_ids)))
     }
-    return(as.integer(sort(spoke_ids)[[1L]]))
+    return(as.integer(sort(spoke_ids)))
   }
 
   # In multi-spoke mode, route deterministically across spokes.
@@ -261,7 +262,7 @@
     floor_deficit <- pmax(0L, floor_pairs - counts)
     if (any(floor_deficit > 0L)) {
       ord_floor <- order(-floor_deficit, counts, as.integer(names(counts)))
-      return(as.integer(names(counts)[ord_floor[[1L]]]))
+      return(as.integer(names(counts)[ord_floor]))
     }
 
     # Route by uncertainty-weighted target deficit for the next committed step.
@@ -283,11 +284,11 @@
       weights <- vapply(spoke_stats, function(x) as.double(x$uncertainty %||% 0), numeric(1L))
       weights[!is.finite(weights)] <- 0
       ord_deficit <- order(-target_deficit, -weights, counts, as.integer(names(counts)))
-      return(as.integer(names(counts)[ord_deficit[[1L]]]))
+      return(as.integer(names(counts)[ord_deficit]))
     }
 
     ord_counts <- order(counts, as.integer(names(counts)))
-    return(as.integer(names(counts)[ord_counts[[1L]]]))
+    return(as.integer(names(counts)[ord_counts]))
   }
 
   if (nrow(step_subset) > 0L) {
@@ -295,18 +296,28 @@
       as.integer(step_subset$link_spoke_id),
       levels = spoke_ids
     ))
-    min_count <- min(as.integer(counts))
-    choice <- as.integer(names(counts)[as.integer(counts) == min_count][[1L]])
-    if (!is.na(choice) && choice %in% spoke_ids) {
-      return(as.integer(choice))
-    }
+    ord_counts <- order(as.integer(counts), as.integer(names(counts)))
+    return(as.integer(names(counts)[ord_counts]))
   }
 
   current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
   if (!is.na(current) && current %in% spoke_ids) {
-    return(as.integer(current))
+    tail_ids <- as.integer(sort(setdiff(spoke_ids, current)))
+    return(as.integer(c(current, tail_ids)))
   }
-  as.integer(sort(spoke_ids)[[1L]])
+  as.integer(sort(spoke_ids))
+}
+
+.adaptive_link_active_spoke <- function(state, controller, eligible_spoke_ids = NULL) {
+  ranked <- .adaptive_link_ranked_spokes(
+    state = state,
+    controller = controller,
+    eligible_spoke_ids = eligible_spoke_ids
+  )
+  if (length(ranked) < 1L) {
+    return(NA_integer_)
+  }
+  as.integer(ranked[[1L]])
 }
 
 .adaptive_link_spoke_bins <- function(spoke_ids, scores, bins) {
@@ -414,7 +425,12 @@
 
 #' @keywords internal
 #' @noRd
-generate_stage_candidates_from_state <- function(state, stage_name, fallback_name, C_max, seed) {
+generate_stage_candidates_from_state <- function(state,
+                                                 stage_name,
+                                                 fallback_name,
+                                                 C_max,
+                                                 seed,
+                                                 link_spoke_id = NA_integer_) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
@@ -438,11 +454,19 @@ generate_stage_candidates_from_state <- function(state, stage_name, fallback_nam
         "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are eligible."
       )
     }
-    spoke_id <- .adaptive_link_active_spoke(
-      state,
-      controller,
-      eligible_spoke_ids = eligible_spokes
-    )
+    requested_spoke <- as.integer(link_spoke_id %||% NA_integer_)
+    spoke_id <- if (!is.na(requested_spoke)) {
+      requested_spoke
+    } else {
+      .adaptive_link_active_spoke(
+        state,
+        controller,
+        eligible_spoke_ids = eligible_spokes
+      )
+    }
+    if (!spoke_id %in% eligible_spokes) {
+      return(tibble::tibble(i = character(), j = character()))
+    }
     if (is.na(spoke_id)) {
       rlang::abort(
         "Phase metadata and routing mode disagree: no active spoke could be selected for phase_b."

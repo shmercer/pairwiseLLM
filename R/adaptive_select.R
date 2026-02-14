@@ -315,6 +315,14 @@ adaptive_defaults <- function(N) {
 .adaptive_resolve_controller <- function(state, defaults) {
   controller <- state$controller %||% list()
   list(
+    run_mode = as.character(controller$run_mode %||% "within_set"),
+    hub_id = as.integer(controller$hub_id %||% 1L),
+    multi_spoke_mode = as.character(controller$multi_spoke_mode %||% "independent"),
+    min_cross_set_pairs_per_spoke_per_refit = as.integer(
+      controller$min_cross_set_pairs_per_spoke_per_refit %||% 5L
+    ),
+    current_link_spoke_id = as.integer(controller$current_link_spoke_id %||% NA_integer_),
+    link_refit_stats_by_spoke = controller$link_refit_stats_by_spoke %||% list(),
     global_identified = isTRUE(controller$global_identified %||% FALSE),
     global_identified_reliability_min = as.double(
       controller$global_identified_reliability_min %||%
@@ -666,16 +674,22 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   round <- state$round %||% list()
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   link_phase_b <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
+  link_phase_b_concurrent <- isTRUE(link_phase_b) &&
+    identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   active_link_spoke <- as.integer(NA_integer_)
+  ranked_link_spokes <- integer()
   link_progress <- NULL
   round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
   if (isTRUE(link_phase_b)) {
     eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
-    active_link_spoke <- .adaptive_link_active_spoke(
+    ranked_link_spokes <- .adaptive_link_ranked_spokes(
       state = state,
       controller = controller,
       eligible_spoke_ids = eligible_spokes
     )
+    if (length(ranked_link_spokes) > 0L) {
+      active_link_spoke <- as.integer(ranked_link_spokes[[1L]])
+    }
     if (!is.na(active_link_spoke)) {
       refit_id <- .adaptive_link_refit_window_id(state)
       quota_controller <- controller
@@ -712,6 +726,49 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       stage_committed_so_far <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
     }
   }
+  .resolve_link_stage_context <- function(spoke_id = NA_integer_) {
+    ctx_round_stage <- round_stage
+    ctx_generation_stage <- generation_stage
+    ctx_stage_quota <- stage_quota
+    ctx_stage_committed <- stage_committed_so_far
+    if (!(isTRUE(link_phase_b) && !is.na(as.integer(spoke_id)))) {
+      return(list(
+        round_stage = as.character(ctx_round_stage),
+        generation_stage = as.character(ctx_generation_stage),
+        stage_quota = as.integer(ctx_stage_quota),
+        stage_committed_so_far = as.integer(ctx_stage_committed)
+      ))
+    }
+    refit_id <- .adaptive_link_refit_window_id(state)
+    quota_controller <- controller
+    quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+    stage_quotas <- .adaptive_round_compute_quotas(
+      round_id = as.integer(round$round_id %||% 1L),
+      n_items = as.integer(state$n_items),
+      controller = quota_controller
+    )
+    progress <- .adaptive_link_stage_progress(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = round$stage_order %||% .adaptive_stage_order(),
+      refit_id = refit_id
+    )
+    ctx_round_stage <- as.character(progress$active_stage %||% ctx_round_stage)
+    if (identical(ctx_round_stage, "warm_start")) {
+      ctx_generation_stage <- if (length(ids) <= 2L) "anchor_link" else "local_link"
+    } else {
+      ctx_generation_stage <- as.character(ctx_round_stage)
+    }
+    ctx_stage_quota <- as.integer(progress$stage_quotas[[ctx_round_stage]] %||% NA_integer_)
+    ctx_stage_committed <- as.integer(progress$stage_committed[[ctx_round_stage]] %||% 0L)
+    list(
+      round_stage = as.character(ctx_round_stage),
+      generation_stage = as.character(ctx_generation_stage),
+      stage_quota = as.integer(ctx_stage_quota),
+      stage_committed_so_far = as.integer(ctx_stage_committed)
+    )
+  }
 
   stage_defs <- list(
     list(name = "base", W_used = defaults$W, dup_policy = "default", explore_boost = 1),
@@ -738,160 +795,219 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   explore_rate_used <- as.double(defaults$explore_rate)
   local_priority_mode <- NA_character_
   is_explore_step <- FALSE
+  selected_link_spoke_attempt <- as.integer(NA_integer_)
+  selected_round_stage <- as.character(round_stage)
+  selected_stage_quota <- as.integer(stage_quota)
+  selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
   recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
 
   for (idx in seq_along(stage_defs)) {
     stage <- stage_defs[[idx]]
     stage$idx <- idx
     fallback_path <- c(fallback_path, stage$name)
-    stage_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 11L)
-    stage_candidates <- if (idx == 1L && !is.null(candidates)) {
-      tibble::as_tibble(candidates)
+    attempt_spokes <- if (isTRUE(link_phase_b_concurrent) && length(ranked_link_spokes) > 0L &&
+      !(idx == 1L && !is.null(candidates))) {
+      as.integer(ranked_link_spokes)
     } else {
-      generate_stage_candidates_from_state(
-        state = state,
-        stage_name = generation_stage,
-        fallback_name = stage$name,
-        C_max = defaults$C_max,
-        seed = stage_seed
-      )
+      as.integer(NA_integer_)
     }
+    stage_selected <- FALSE
 
-    stage_out <- .adaptive_select_stage(
-      stage = stage,
-      state = state,
-      config = defaults,
-      controller = controller,
-      generation_stage = generation_stage,
-      round = round,
-      history = history,
-      counts = counts,
-      step_id = step_id,
-      seed_base = seed_base,
-      candidates = stage_candidates
-    )
-    last_counts <- stage_out$counts
-    last_star_caps <- stage_out$star_caps
-    if (!is.na(stage_out$long_gate_pass %||% NA)) {
-      last_long_gate_pass <- stage_out$long_gate_pass
-      last_long_gate_reason <- stage_out$long_gate_reason %||% NA_character_
-    }
-    last_star_override_used <- isTRUE(stage_out$star_override_used)
-    last_star_override_reason <- stage_out$star_override_reason
-    recent_deg <- stage_out$recent_deg %||% recent_deg
-
-    cand <- stage_out$selected
-    if (is.null(cand) || nrow(cand) == 0L) next
-
-    explore_rate <- defaults$explore_rate
-    if (isTRUE(controller$global_identified)) {
-      explore_rate <- explore_rate * as.double(controller$explore_taper_mult)
-    }
-    if (stage$explore_boost > 1) {
-      explore_rate <- min(0.50, explore_rate * stage$explore_boost)
-    }
-    explore_rate_used <- as.double(explore_rate)
-
-    underrep_set <- .adaptive_underrep_set(counts$deg)
-    min_degree <- min(counts$deg)
-    quota_active <- min_degree < 2L
-    quota_eps <- defaults$quota_eps
-    quota_pick <- FALSE
-    if (quota_active) {
-      quota_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 1L)
-      quota_pick <- .adaptive_with_seed(quota_seed, stats::runif(1) < quota_eps)
-    }
-
-    stage_is_explore <- FALSE
-    stage_explore_mode <- NA_character_
-    stage_explore_reason <- NA_character_
-
-    if (quota_pick) {
-      eligible <- cand[cand$i %in% underrep_set | cand$j %in% underrep_set, , drop = FALSE]
-      if (nrow(eligible) == 0L) next
-      cand <- eligible
-      stage_is_explore <- TRUE
-      stage_explore_reason <- "coverage_quota_override"
-    } else {
-      explore_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 2L)
-      stage_is_explore <- .adaptive_with_seed(explore_seed, stats::runif(1) < explore_rate)
-      if (stage_is_explore) {
-        stage_explore_reason <- "probabilistic"
+    for (spoke_attempt in attempt_spokes) {
+      stage_ctx <- if (isTRUE(link_phase_b_concurrent) && !is.na(spoke_attempt)) {
+        .resolve_link_stage_context(spoke_id = as.integer(spoke_attempt))
+      } else {
+        .resolve_link_stage_context(spoke_id = NA_integer_)
       }
-    }
-
-    if (stage_is_explore) {
-      underrep <- .adaptive_underrep_set(counts$deg)
-      if (length(underrep) == 0L) {
-        underrep <- ids
-      }
-
-      nonlocal_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 3L)
-      explore_nonlocal <- .adaptive_with_seed(
-        nonlocal_seed,
-        stats::runif(1) < defaults$explore_nonlocal_rate
+      attempt_round_stage <- as.character(stage_ctx$round_stage)
+      attempt_generation_stage <- as.character(stage_ctx$generation_stage)
+      attempt_stage_quota <- as.integer(stage_ctx$stage_quota)
+      attempt_stage_committed_so_far <- as.integer(stage_ctx$stage_committed_so_far)
+      stage_seed <- .adaptive_stage_seed(
+        seed_base,
+        step_id,
+        stage$idx,
+        offset = 11L + ifelse(is.na(spoke_attempt), 0L, as.integer(spoke_attempt))
       )
-      stage_explore_mode <- if (explore_nonlocal) "nonlocal" else "local"
-
-      mu_vals <- state$trueskill_state$items$mu
-      names(mu_vals) <- as.character(state$trueskill_state$items$item_id)
-      rank_order <- order(-mu_vals, names(mu_vals))
-      rank_index <- stats::setNames(seq_along(rank_order), names(mu_vals)[rank_order])
-
-      selected <- NULL
-      for (attempt in seq_len(defaults$explore_resample_max)) {
-        attempt_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 100L + attempt)
-        i_id <- .adaptive_with_seed(attempt_seed, sample(underrep, size = 1L))
-        candidate <- .adaptive_select_partner(
-          cand,
-          i_id,
-          mu_vals,
-          recent_deg,
-          stage_explore_mode,
-          rank_index
+      stage_candidates <- if (idx == 1L && !is.null(candidates)) {
+        tibble::as_tibble(candidates)
+      } else if (isTRUE(link_phase_b_concurrent)) {
+        generate_stage_candidates_from_state(
+          state = state,
+          stage_name = attempt_generation_stage,
+          fallback_name = stage$name,
+          C_max = defaults$C_max,
+          seed = stage_seed,
+          link_spoke_id = ifelse(is.na(spoke_attempt), NA_integer_, as.integer(spoke_attempt))
         )
-        if (!is.null(candidate)) {
-          selected <- candidate
-          break
+      } else {
+        generate_stage_candidates_from_state(
+          state = state,
+          stage_name = attempt_generation_stage,
+          fallback_name = stage$name,
+          C_max = defaults$C_max,
+          seed = stage_seed
+        )
+      }
+
+      stage_out <- .adaptive_select_stage(
+        stage = stage,
+        state = state,
+        config = defaults,
+        controller = controller,
+        generation_stage = attempt_generation_stage,
+        round = round,
+        history = history,
+        counts = counts,
+        step_id = step_id,
+        seed_base = seed_base,
+        candidates = stage_candidates
+      )
+      last_counts <- stage_out$counts
+      last_star_caps <- stage_out$star_caps
+      if (!is.na(stage_out$long_gate_pass %||% NA)) {
+        last_long_gate_pass <- stage_out$long_gate_pass
+        last_long_gate_reason <- stage_out$long_gate_reason %||% NA_character_
+      }
+      last_star_override_used <- isTRUE(stage_out$star_override_used)
+      last_star_override_reason <- stage_out$star_override_reason
+      recent_deg <- stage_out$recent_deg %||% recent_deg
+
+      cand <- stage_out$selected
+      if (is.null(cand) || nrow(cand) == 0L) {
+        next
+      }
+
+      explore_rate <- defaults$explore_rate
+      if (isTRUE(controller$global_identified)) {
+        explore_rate <- explore_rate * as.double(controller$explore_taper_mult)
+      }
+      if (stage$explore_boost > 1) {
+        explore_rate <- min(0.50, explore_rate * stage$explore_boost)
+      }
+      explore_rate_used <- as.double(explore_rate)
+
+      underrep_set <- .adaptive_underrep_set(counts$deg)
+      min_degree <- min(counts$deg)
+      quota_active <- min_degree < 2L
+      quota_eps <- defaults$quota_eps
+      quota_pick <- FALSE
+      if (quota_active) {
+        quota_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 1L)
+        quota_pick <- .adaptive_with_seed(quota_seed, stats::runif(1) < quota_eps)
+      }
+
+      stage_is_explore <- FALSE
+      stage_explore_mode <- NA_character_
+      stage_explore_reason <- NA_character_
+      stage_local_priority_mode <- NA_character_
+
+      if (quota_pick) {
+        eligible <- cand[cand$i %in% underrep_set | cand$j %in% underrep_set, , drop = FALSE]
+        if (nrow(eligible) == 0L) {
+          next
+        }
+        cand <- eligible
+        stage_is_explore <- TRUE
+        stage_explore_reason <- "coverage_quota_override"
+      } else {
+        explore_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 2L)
+        stage_is_explore <- .adaptive_with_seed(explore_seed, stats::runif(1) < explore_rate)
+        if (stage_is_explore) {
+          stage_explore_reason <- "probabilistic"
         }
       }
-      if (is.null(selected)) next
-      selected_pair <- selected
-    } else {
-      if (!isTRUE(is_link_mode) &&
-        identical(generation_stage, "local_link") &&
-        isTRUE(controller$global_identified)) {
-        prioritized <- .adaptive_local_priority_select(
-          cand = cand,
-          state = state,
-          round = round,
-          stage_committed_so_far = stage_committed_so_far %||% 0L,
-          stage_quota = stage_quota %||% nrow(cand),
-          defaults = controller
+
+      if (stage_is_explore) {
+        underrep <- .adaptive_underrep_set(counts$deg)
+        if (length(underrep) == 0L) {
+          underrep <- ids
+        }
+
+        nonlocal_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 3L)
+        explore_nonlocal <- .adaptive_with_seed(
+          nonlocal_seed,
+          stats::runif(1) < defaults$explore_nonlocal_rate
         )
-        cand <- prioritized$candidates
-        local_priority_mode <- prioritized$mode
-      } else if (!isTRUE(is_link_mode) && identical(generation_stage, "local_link")) {
-        local_priority_mode <- "standard"
+        stage_explore_mode <- if (explore_nonlocal) "nonlocal" else "local"
+
+        mu_vals <- state$trueskill_state$items$mu
+        names(mu_vals) <- as.character(state$trueskill_state$items$item_id)
+        rank_order <- order(-mu_vals, names(mu_vals))
+        rank_index <- stats::setNames(seq_along(rank_order), names(mu_vals)[rank_order])
+
+        selected <- NULL
+        for (attempt in seq_len(defaults$explore_resample_max)) {
+          attempt_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 100L + attempt)
+          i_id <- .adaptive_with_seed(attempt_seed, sample(underrep, size = 1L))
+          candidate <- .adaptive_select_partner(
+            cand,
+            i_id,
+            mu_vals,
+            recent_deg,
+            stage_explore_mode,
+            rank_index
+          )
+          if (!is.null(candidate)) {
+            selected <- candidate
+            break
+          }
+        }
+        if (is.null(selected)) {
+          next
+        }
+        selected_pair <- selected
       } else {
-        local_priority_mode <- NA_character_
+        if (!isTRUE(is_link_mode) &&
+          identical(attempt_generation_stage, "local_link") &&
+          isTRUE(controller$global_identified)) {
+          prioritized <- .adaptive_local_priority_select(
+            cand = cand,
+            state = state,
+            round = round,
+            stage_committed_so_far = attempt_stage_committed_so_far %||% 0L,
+            stage_quota = attempt_stage_quota %||% nrow(cand),
+            defaults = controller
+          )
+          cand <- prioritized$candidates
+          stage_local_priority_mode <- prioritized$mode
+        } else if (!isTRUE(is_link_mode) && identical(attempt_generation_stage, "local_link")) {
+          stage_local_priority_mode <- "standard"
+        } else {
+          stage_local_priority_mode <- NA_character_
+        }
+        if (isTRUE(is_link_mode)) {
+          order_idx <- .adaptive_linking_selection_order(cand)
+        } else {
+          order_idx <- order(-cand$u0, cand$i, cand$j)
+        }
+        selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
       }
-      if (isTRUE(is_link_mode)) {
-        order_idx <- .adaptive_linking_selection_order(cand)
-      } else {
-        order_idx <- order(-cand$u0, cand$i, cand$j)
-      }
-      selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
+
+      is_explore_step <- stage_is_explore
+      explore_mode <- stage_explore_mode
+      explore_reason <- stage_explore_reason
+      local_priority_mode <- stage_local_priority_mode
+      selected_stage <- stage
+      selected_link_spoke_attempt <- as.integer(spoke_attempt %||% NA_integer_)
+      selected_round_stage <- as.character(attempt_round_stage)
+      selected_stage_quota <- as.integer(attempt_stage_quota)
+      selected_stage_committed_so_far <- as.integer(attempt_stage_committed_so_far)
+      stage_selected <- TRUE
+      break
     }
 
-    is_explore_step <- stage_is_explore
-    explore_mode <- stage_explore_mode
-    explore_reason <- stage_explore_reason
-    selected_stage <- stage
-    break
+    if (isTRUE(stage_selected)) {
+      break
+    }
   }
 
   if (is.null(selected_pair) || nrow(selected_pair) == 0L) {
+    starvation_reason <- if (isTRUE(link_phase_b_concurrent) && length(ranked_link_spokes) > 0L) {
+      "all_eligible_spokes_infeasible"
+    } else {
+      "few_candidates_generated"
+    }
     return(list(
       i = NA_integer_,
       j = NA_integer_,
@@ -903,10 +1019,10 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       candidate_starved = TRUE,
       fallback_used = "global_safe",
       fallback_path = paste(fallback_path, collapse = ">"),
-      starvation_reason = "few_candidates_generated",
+      starvation_reason = starvation_reason,
       round_id = as.integer(round$round_id %||% NA_integer_),
-      round_stage = as.character(round_stage),
-      pair_type = as.character(round_stage),
+      round_stage = as.character(selected_round_stage),
+      pair_type = as.character(selected_round_stage),
       explore_rate_used = as.double(explore_rate_used),
       local_priority_mode = as.character(local_priority_mode),
       long_gate_pass = last_long_gate_pass,
@@ -923,9 +1039,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       dist_stratum_global = NA_integer_,
       coverage_bins_used = NA_integer_,
       coverage_source = NA_character_,
-      link_spoke_id_selected = as.integer(active_link_spoke %||% NA_integer_),
-      stage_committed_so_far = stage_committed_so_far,
-      stage_quota = stage_quota,
+      link_spoke_id_selected = NA_integer_,
+      stage_committed_so_far = as.integer(selected_stage_committed_so_far),
+      stage_quota = as.integer(selected_stage_quota),
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
       n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
       n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
@@ -976,6 +1092,10 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   }
   dist_stratum_global <- .adaptive_selected_dist_stratum_global(selected_pair)
   coverage_meta <- .adaptive_selected_coverage_meta(selected_pair)
+  selected_spoke_id <- as.integer(coverage_meta$link_spoke_id %||% NA_integer_)
+  if (is.na(selected_spoke_id) && !is.na(selected_link_spoke_attempt)) {
+    selected_spoke_id <- as.integer(selected_link_spoke_attempt)
+  }
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -990,8 +1110,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     fallback_path = paste(fallback_path, collapse = ">"),
     starvation_reason = NA_character_,
     round_id = as.integer(round$round_id %||% NA_integer_),
-    round_stage = as.character(round_stage),
-    pair_type = as.character(round_stage),
+    round_stage = as.character(selected_round_stage),
+    pair_type = as.character(selected_round_stage),
     explore_rate_used = as.double(explore_rate_used),
     local_priority_mode = as.character(local_priority_mode),
     long_gate_pass = last_long_gate_pass,
@@ -1008,9 +1128,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     dist_stratum_global = as.integer(dist_stratum_global),
     coverage_bins_used = as.integer(coverage_meta$coverage_bins_used),
     coverage_source = as.character(coverage_meta$coverage_source),
-    link_spoke_id_selected = as.integer(coverage_meta$link_spoke_id),
-    stage_committed_so_far = stage_committed_so_far,
-    stage_quota = stage_quota,
+    link_spoke_id_selected = as.integer(selected_spoke_id),
+    stage_committed_so_far = as.integer(selected_stage_committed_so_far),
+    stage_quota = as.integer(selected_stage_quota),
     n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
     n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
     n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
