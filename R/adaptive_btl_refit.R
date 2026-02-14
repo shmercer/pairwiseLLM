@@ -1120,15 +1120,21 @@
 
 .adaptive_link_refit_seed <- function(cross_edges, transform_mode, link_refit_mode) {
   edges <- tibble::as_tibble(cross_edges)
-  step_id <- as.integer(edges$step_id %||% seq_len(nrow(edges)))
-  step_id[!is.finite(step_id)] <- 0L
+  step_id <- suppressWarnings(as.numeric(edges$step_id %||% seq_len(nrow(edges))))
+  step_id[!is.finite(step_id)] <- 0
+  step_id <- floor(abs(step_id))
   y <- as.integer(edges$y_spoke %||% integer())
   y[!y %in% c(0L, 1L)] <- 0L
-  mode_code <- if (identical(transform_mode, "shift_scale")) 31L else 17L
-  refit_code <- if (identical(link_refit_mode, "joint_refit")) 53L else 19L
-  raw <- as.integer(sum(step_id * 131L + y * 17L) + mode_code + refit_code)
-  seed <- as.integer(abs(raw) %% .Machine$integer.max)
-  if (seed < 1L) {
+  mode_code <- if (identical(transform_mode, "shift_scale")) 31 else 17
+  refit_code <- if (identical(link_refit_mode, "joint_refit")) 53 else 19
+  modulus <- as.double(.Machine$integer.max - 1L)
+  acc <- 0
+  for (idx in seq_along(step_id)) {
+    acc <- (acc * 131 + step_id[[idx]] + as.double(y[[idx]]) * 17) %% modulus
+  }
+  acc <- (acc + mode_code + refit_code) %% modulus
+  seed <- as.integer(acc) + 1L
+  if (!is.finite(seed) || is.na(seed) || seed < 1L) {
     seed <- 1L
   }
   seed

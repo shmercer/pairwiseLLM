@@ -3,6 +3,14 @@ mark_link_phase_b_ready <- function(state, source = "import") {
   if (is.null(state$linking$phase_a)) {
     state$linking$phase_a <- list()
   }
+  artifacts <- lapply(set_ids, function(set_id) {
+    rows <- state$items[state$items$set_id == as.integer(set_id), , drop = FALSE]
+    tib <- tibble::as_tibble(rows)
+    tib$theta_raw_mean <- seq(from = nrow(tib), to = 1, by = -1)
+    tib$theta_raw_sd <- rep(0.5, nrow(tib))
+    list(items = tib)
+  })
+  names(artifacts) <- as.character(set_ids)
   state$linking$phase_a$set_status <- tibble::tibble(
     set_id = as.integer(set_ids),
     source = rep(as.character(source), length(set_ids)),
@@ -10,6 +18,7 @@ mark_link_phase_b_ready <- function(state, source = "import") {
     validation_message = rep("ready", length(set_ids)),
     artifact_path = rep(NA_character_, length(set_ids))
   )
+  state$linking$phase_a$artifacts <- artifacts
   state$linking$phase_a$ready_for_phase_b <- TRUE
   state$linking$phase_a$phase <- "phase_b"
   state
@@ -988,17 +997,32 @@ test_that("phase-B routing helpers enforce finite inputs and anchor fallback rul
 
   expect_error(
     testthat::with_mocked_bindings(
-      .adaptive_rank_proxy = function(state) list(scores = c(h1 = NA_real_)),
       .adaptive_link_phase_a_theta_map = function(state, set_id, field) c(h1 = NA_real_),
       pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
         state = state,
         controller = controller,
-        active_ids = "h1",
+        active_ids = "s1",
         hub_id = 1L
       ),
       .package = "pairwiseLLM"
     ),
-    "non-finite routing scores"
+    "Phase A theta_raw_mean missing/non-finite"
+  )
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_phase_a_theta_map = function(state, set_id, field) {
+        rlang::abort("broken artifact")
+      },
+      pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+        state = state,
+        controller = controller,
+        active_ids = "s1",
+        hub_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "Phase A theta_raw_mean unavailable"
   )
 
   controller_scale <- utils::modifyList(

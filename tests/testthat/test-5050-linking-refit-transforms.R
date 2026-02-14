@@ -1791,4 +1791,15 @@ test_that("linking MCMC sampling and refit seed are stable under fixed inputs", 
   seed2 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
   expect_true(seed1 >= 1L)
   expect_identical(seed1, seed2)
+
+  edges_large <- tibble::tibble(
+    step_id = c(1e12, 1e15, 3e15 + 9),
+    y_spoke = c(0L, 1L, 1L)
+  )
+  seed_large_a <- pairwiseLLM:::.adaptive_link_refit_seed(edges_large, "shift_scale", "joint_refit")
+  seed_large_b <- pairwiseLLM:::.adaptive_link_refit_seed(edges_large, "shift_scale", "joint_refit")
+  expect_true(is.finite(seed_large_a))
+  expect_false(is.na(seed_large_a))
+  expect_true(seed_large_a >= 1L)
+  expect_identical(seed_large_a, seed_large_b)
 })
