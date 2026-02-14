@@ -572,11 +572,27 @@
   epsilon <- epsilon_shared
   if (identical(mode, "phase_specific")) {
     if (identical(scope, "link")) {
-      beta <- as.double(fit$beta_link_mean %||% beta_shared)
-      epsilon <- as.double(fit$epsilon_link_mean %||% epsilon_shared)
+      beta <- as.double(fit$beta_link_mean %||% NA_real_)
+      epsilon <- as.double(fit$epsilon_link_mean %||% NA_real_)
+      if (!is.finite(beta) || !is.finite(epsilon)) {
+        rlang::abort(
+          paste0(
+            "Phase-specific judge mode requires `beta_link_mean` and ",
+            "`epsilon_link_mean` in `state$btl_fit`."
+          )
+        )
+      }
     } else {
-      beta <- as.double(fit$beta_within_mean %||% beta_shared)
-      epsilon <- as.double(fit$epsilon_within_mean %||% epsilon_shared)
+      beta <- as.double(fit$beta_within_mean %||% NA_real_)
+      epsilon <- as.double(fit$epsilon_within_mean %||% NA_real_)
+      if (!is.finite(beta) || !is.finite(epsilon)) {
+        rlang::abort(
+          paste0(
+            "Phase-specific judge mode requires `beta_within_mean` and ",
+            "`epsilon_within_mean` in `state$btl_fit`."
+          )
+        )
+      }
     }
   }
   if (!is.finite(beta)) {
