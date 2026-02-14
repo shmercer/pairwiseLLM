@@ -411,42 +411,58 @@
     list(phase = "phase_a")
   }
   if (isTRUE(is_adaptive) && .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
-    spoke_id <- as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
-    if (is.na(spoke_id)) {
-      spoke_id <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
+    starvation_reason <- if ("starvation_reason" %in% names(step_row)) {
+      as.character(step_row$starvation_reason[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
     }
-    if (!is.na(spoke_id)) {
+    concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+    spokes_to_mark <- as.integer()
+    if (isTRUE(concurrent_mode) && identical(starvation_reason, "all_eligible_spokes_infeasible")) {
+      spokes_to_mark <- as.integer(phase_ctx$ready_spokes %||% integer())
+    } else {
+      spoke_id <- as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
+      if (is.na(spoke_id)) {
+        spoke_id <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
+      }
+      if (!is.na(spoke_id)) {
+        spokes_to_mark <- as.integer(spoke_id)
+      }
+    }
+    if (length(spokes_to_mark) > 0L) {
       refit_id <- .adaptive_link_refit_window_id(out)
-      quota_controller <- controller
-      quota_controller$current_link_spoke_id <- as.integer(spoke_id)
-      stage_quotas <- .adaptive_round_compute_quotas(
-        round_id = as.integer(round$round_id %||% 1L),
-        n_items = as.integer(out$n_items),
-        controller = quota_controller
-      )
-      progress <- .adaptive_link_stage_progress(
-        state = out,
-        spoke_id = spoke_id,
-        stage_quotas = stage_quotas,
-        stage_order = round$stage_order %||% .adaptive_stage_order(),
-        refit_id = refit_id
-      )
-      shortfall <- max(
-        0L,
-        as.integer(progress$stage_quotas[[stage]] %||% 0L) -
-          as.integer(progress$stage_committed[[stage]] %||% 0L)
-      )
-      key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
       shortfalls <- .adaptive_link_refit_shortfalls_map(out)
-      existing_shortfall <- shortfalls[[key]] %||% list()
-      existing_shortfall[[stage]] <- as.integer((existing_shortfall[[stage]] %||% 0L) + shortfall)
-      shortfalls[[key]] <- existing_shortfall
-      out$refit_meta$link_stage_shortfalls_by_refit_spoke <- shortfalls
-
       exhausted_map <- .adaptive_link_refit_exhausted_map(out)
-      existing_exhausted <- exhausted_map[[key]] %||% list()
-      existing_exhausted[[stage]] <- TRUE
-      exhausted_map[[key]] <- existing_exhausted
+      for (spoke_id in unique(as.integer(spokes_to_mark))) {
+        quota_controller <- controller
+        quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+        stage_quotas <- .adaptive_round_compute_quotas(
+          round_id = as.integer(round$round_id %||% 1L),
+          n_items = as.integer(out$n_items),
+          controller = quota_controller
+        )
+        progress <- .adaptive_link_stage_progress(
+          state = out,
+          spoke_id = as.integer(spoke_id),
+          stage_quotas = stage_quotas,
+          stage_order = round$stage_order %||% .adaptive_stage_order(),
+          refit_id = refit_id
+        )
+        shortfall <- max(
+          0L,
+          as.integer(progress$stage_quotas[[stage]] %||% 0L) -
+            as.integer(progress$stage_committed[[stage]] %||% 0L)
+        )
+        key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
+        existing_shortfall <- shortfalls[[key]] %||% list()
+        existing_shortfall[[stage]] <- as.integer((existing_shortfall[[stage]] %||% 0L) + shortfall)
+        shortfalls[[key]] <- existing_shortfall
+
+        existing_exhausted <- exhausted_map[[key]] %||% list()
+        existing_exhausted[[stage]] <- TRUE
+        exhausted_map[[key]] <- existing_exhausted
+      }
+      out$refit_meta$link_stage_shortfalls_by_refit_spoke <- shortfalls
       out$refit_meta$link_stage_exhausted_by_refit_spoke <- exhausted_map
       out$round <- round
       return(list(state = out, exhausted = FALSE))
