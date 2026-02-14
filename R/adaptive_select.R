@@ -1144,6 +1144,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
           stage_local_priority_mode <- NA_character_
         }
         if (isTRUE(is_link_mode)) {
+          # Linking mode keeps canonical candidate generation/filtering via
+          # TrueSkill and hard invariants; this call only applies the
+          # linking-specific final ordering priority.
           order_idx <- .adaptive_linking_selection_order(cand)
         } else {
           order_idx <- order(-cand$u0, cand$i, cand$j)

@@ -369,6 +369,20 @@
   if (any(is.na(theta_mean)) || any(is.na(theta_sd))) {
     rlang::abort(paste0("Phase A artifact completeness failure for set ", set_id, "."))
   }
+  if (any(!is.finite(theta_sd))) {
+    rlang::abort(paste0(
+      "Phase A artifact field validation failure for set ",
+      set_id,
+      ": `theta_raw_sd` must be finite for all items."
+    ))
+  }
+  if (any(theta_sd < 0)) {
+    rlang::abort(paste0(
+      "Phase A artifact field validation failure for set ",
+      set_id,
+      ": `theta_raw_sd` must be non-negative for all items."
+    ))
+  }
 
   if ("item_id" %in% names(items_tbl)) {
     imported_item_ids <- as.character(items_tbl$item_id[by_global])

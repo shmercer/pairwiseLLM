@@ -350,6 +350,35 @@ test_that("auto escalation refits shift_scale parameters in the same refit", {
   expect_equal(stats$log_alpha_spoke_mean, 0.33, tolerance = 1e-12)
 })
 
+test_that("auto escalation streak is preserved across NA PPC windows", {
+  state <- make_linking_refit_state(
+    list(
+      link_transform_mode = "auto",
+      link_refit_mode = "shift_only",
+      cross_set_ppc_mae_max = 0.01,
+      link_transform_escalation_refits_required = 2L
+    )
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+
+  ppc_vals <- c(0.5, NA_real_, 0.5)
+  ppc_idx <- 0L
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_ppc_mae_cross = function(...) {
+      ppc_idx <<- ppc_idx + 1L
+      ppc_vals[[min(ppc_idx, length(ppc_vals))]]
+    },
+    .package = "pairwiseLLM",
+    {
+      s1 <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+      s2 <- pairwiseLLM:::.adaptive_linking_refit_update_state(s1, list(last_refit_step = 0L))
+      pairwiseLLM:::.adaptive_linking_refit_update_state(s2, list(last_refit_step = 0L))
+    }
+  )
+
+  expect_identical(out$controller$link_transform_mode_by_spoke[["2"]], "shift_scale")
+})
+
 test_that("judge parameter mode controls linking judge scope in fit contract", {
   state <- make_linking_refit_state(
     list(link_transform_mode = "shift_only", link_refit_mode = "shift_only", judge_param_mode = "phase_specific")

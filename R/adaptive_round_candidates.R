@@ -640,7 +640,13 @@ generate_stage_candidates_from_state <- function(state,
       idx <- coverage_idx
     }
   }
-  utility <- as.double(cand$u0[idx])
+  # Linking ordering priority is predictive cross-set utility; candidate
+  # generation/filtering invariants remain upstream in the canonical pipeline.
+  utility <- if ("link_u" %in% names(cand)) {
+    as.double(cand$link_u[idx])
+  } else {
+    as.double(cand$u0[idx])
+  }
   utility[!is.finite(utility)] <- -Inf
   idx[order(-utility, cand$i[idx], cand$j[idx])]
 }

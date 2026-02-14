@@ -100,6 +100,34 @@ test_that("phase A import validation rejects each required failure mode", {
     .adaptive_phase_a_validate_imported_artifact(bad_hash, state, set_id = 1L, controller = controller),
     "config hash incompatibility"
   )
+
+  bad_sd_negative <- valid
+  bad_sd_negative$items$theta_raw_sd[[1L]] <- -0.01
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_sd_negative, state, set_id = 1L, controller = controller),
+    "theta_raw_sd.*non-negative"
+  )
+
+  bad_sd_na <- valid
+  bad_sd_na$items$theta_raw_sd[[1L]] <- NA_real_
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_sd_na, state, set_id = 1L, controller = controller),
+    "completeness failure"
+  )
+
+  bad_sd_nan <- valid
+  bad_sd_nan$items$theta_raw_sd[[1L]] <- NaN
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_sd_nan, state, set_id = 1L, controller = controller),
+    "(completeness failure|theta_raw_sd.*finite)"
+  )
+
+  bad_sd_inf <- valid
+  bad_sd_inf$items$theta_raw_sd[[1L]] <- Inf
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_sd_inf, state, set_id = 1L, controller = controller),
+    "theta_raw_sd.*finite"
+  )
 })
 
 test_that("phase A import hash rejects inference-setting mismatch and supports allowlisted compatibility", {
