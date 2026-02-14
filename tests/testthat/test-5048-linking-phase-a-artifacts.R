@@ -221,6 +221,43 @@ test_that("phase_specific judge mode respects Phase A to Phase B boundary gating
   expect_equal(nrow(out$step_log), 1L)
 })
 
+test_that("phase_specific Phase B startup falls back deterministically without link judge estimates", {
+  state <- make_phase_a_ready_state()
+  judge <- make_deterministic_judge("i_wins")
+
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+
+  state$btl_fit$beta_link_mean <- NULL
+  state$btl_fit$epsilon_link_mean <- NULL
+  state$btl_fit$beta_within_mean <- 0.05
+  state$btl_fit$epsilon_within_mean <- 0.02
+
+  out <- expect_no_error(adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 1L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      judge_param_mode = "phase_specific",
+      phase_a_mode = "import",
+      phase_a_artifacts = list(`1` = art1, `2` = art2),
+      phase_a_compatible_config_hashes = c(art1$fit_config_hash, art2$fit_config_hash)
+    ),
+    progress = "none"
+  ))
+
+  row <- out$step_log[1L, , drop = FALSE]
+  expect_true(isTRUE(row$is_cross_set[[1L]]))
+  expect_true(is.finite(row$posterior_win_prob_pre[[1L]]))
+  expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
+  expect_identical(as.character(row$link_stage[[1L]]), as.character(row$round_stage[[1L]]))
+  expect_true(is.integer(out$step_log$link_spoke_id))
+})
+
 test_that("phase A helper branch guards and edge paths are exercised", {
   state <- make_phase_a_ready_state()
 
