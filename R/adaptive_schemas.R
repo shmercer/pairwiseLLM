@@ -495,7 +495,8 @@ validate_state <- function(state) {
       set_status = .adaptive_phase_a_empty_state(unique(as.integer(items$set_id))),
       artifacts = list(),
       ready_for_phase_b = FALSE,
-      phase = "phase_a"
+      phase = "phase_a",
+      phase_b_started_at_step = NA_integer_
     )
   )
   if (!is.list(linking)) {
@@ -556,6 +557,10 @@ validate_state <- function(state) {
   phase_val <- as.character(phase_a$phase %||% "phase_a")
   if (!phase_val %in% c("phase_a", "phase_b")) {
     rlang::abort("`state$linking$phase_a$phase` must be phase_a or phase_b.")
+  }
+  phase_b_step <- phase_a$phase_b_started_at_step %||% NA_integer_
+  if (!.adaptive_is_integerish(phase_b_step) || length(phase_b_step) != 1L) {
+    rlang::abort("`state$linking$phase_a$phase_b_started_at_step` must be integer-like length 1.")
   }
 
   invisible(state)

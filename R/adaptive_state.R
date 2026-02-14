@@ -448,7 +448,8 @@
       set_status = .adaptive_phase_a_empty_state(set_ids),
       artifacts = list(),
       ready_for_phase_b = FALSE,
-      phase = "phase_a"
+      phase = "phase_a",
+      phase_b_started_at_step = NA_integer_
     )
   )
   out
@@ -727,7 +728,8 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
           set_status = .adaptive_phase_a_empty_state(unique(set_ids)),
           artifacts = list(),
           ready_for_phase_b = FALSE,
-          phase = "phase_a"
+          phase = "phase_a",
+          phase_b_started_at_step = NA_integer_
         )
       ),
       meta = list(
