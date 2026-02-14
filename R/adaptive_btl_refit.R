@@ -933,6 +933,8 @@
                                          hub_theta,
                                          spoke_theta,
                                          transform_mode) {
+  # Linking transform parameters are estimated via MAP optimization with
+  # Hessian-based (Laplace-style) uncertainty approximation.
   use_scale <- identical(transform_mode, "shift_scale")
   edge_attrs <- attributes(cross_edges)
   refit_contract_ctx <- edge_attrs$refit_contract %||% list()
@@ -967,6 +969,8 @@
     )
     empty$fit_contract <- list(
       contract_type = "link_refit",
+      estimation_method = "map_optim",
+      uncertainty_approximation = "hessian_laplace",
       link_refit_mode = as.character(link_refit_mode),
       link_transform_mode = as.character(transform_mode),
       parameters = if (isTRUE(use_scale)) c("delta_s", "log_alpha_s") else c("delta_s"),
@@ -1191,6 +1195,8 @@
 
   fit_contract <- list(
     contract_type = "link_refit",
+    estimation_method = "map_optim",
+    uncertainty_approximation = "hessian_laplace",
     link_refit_mode = as.character(link_refit_mode),
     link_transform_mode = as.character(transform_mode),
     parameters = if (isTRUE(joint_used)) {

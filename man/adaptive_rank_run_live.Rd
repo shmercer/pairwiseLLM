@@ -52,7 +52,7 @@ behavior. Supported fields:
 \code{link_transform_escalation_is_one_way},
 \code{spoke_quantile_coverage_bins},
 \code{spoke_quantile_coverage_min_per_bin_per_refit}, \code{multi_spoke_mode},
-\code{min_cross_set_pairs_per_spoke_per_refit}, \code{cross_set_utility},
+\code{min_cross_set_pairs_per_spoke_per_refit},
 \code{phase_a_mode}, \code{phase_a_import_failure_policy},
 \code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
 \code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts}, and
@@ -114,8 +114,10 @@ Invalid responses produce a logged step with
 Pair selection does not use BTL posterior draws.
 Within-set routing is TrueSkill-based with utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})}.
-Linking Phase B cross-set routing is also TrueSkill-based; model-implied
-predictive probabilities/utility are recorded for diagnostics only.
+Linking Phase B routing ranks eligible cross-set candidates by
+\eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
+parameters. Linking inference parameters remain inference-only
+(diagnostics and stopping) and are not direct pair-selection objectives.
 When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
 fallback from within/shared judge estimates only until link-specific estimates
 are expected, after which malformed link estimates abort.

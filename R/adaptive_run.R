@@ -548,9 +548,10 @@
 #' Within-set routing uses TrueSkill base utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 #' win probability for pair \eqn{\{i, j\}}.
-#' In linking Phase B, pair choice remains TrueSkill-based and never uses BTL
-#' posterior quantities. Model-implied predictive probabilities/utility are
-#' logged for diagnostics only and do not affect selection.
+#' In linking Phase B, eligible cross-set candidates are ranked by
+#' \eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
+#' parameters. Linking inference parameters are used for
+#' inference/diagnostics/stopping, not as direct selection objectives.
 #' When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 #' step may use deterministic fallback from available within/shared judge
 #' estimates if link-specific estimates are not yet available; once link-specific
@@ -597,7 +598,7 @@
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,
 #'   `spoke_quantile_coverage_min_per_bin_per_refit`, `multi_spoke_mode`,
-#'   `min_cross_set_pairs_per_spoke_per_refit`, `cross_set_utility`,
+#'   `min_cross_set_pairs_per_spoke_per_refit`,
 #'   `phase_a_mode`, `phase_a_import_failure_policy`,
 #'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
 #'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`,
@@ -691,8 +692,10 @@ adaptive_rank_start <- function(items,
 #' Pair selection does not use BTL posterior draws.
 #' Within-set routing is TrueSkill-based with utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})}.
-#' Linking Phase B cross-set routing is also TrueSkill-based; model-implied
-#' predictive probabilities/utility are recorded for diagnostics only.
+#' Linking Phase B routing ranks eligible cross-set candidates by
+#' \eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
+#' parameters. Linking inference parameters remain inference-only
+#' (diagnostics and stopping) and are not direct pair-selection objectives.
 #' When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
 #' fallback from within/shared judge estimates only until link-specific estimates
 #' are expected, after which malformed link estimates abort.
@@ -758,7 +761,7 @@ adaptive_rank_start <- function(items,
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,
 #'   `spoke_quantile_coverage_min_per_bin_per_refit`, `multi_spoke_mode`,
-#'   `min_cross_set_pairs_per_spoke_per_refit`, `cross_set_utility`,
+#'   `min_cross_set_pairs_per_spoke_per_refit`,
 #'   `phase_a_mode`, `phase_a_import_failure_policy`,
 #'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
 #'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`, and
