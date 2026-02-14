@@ -448,7 +448,14 @@ adaptive_defaults <- function(N) {
   theta_global <- c(hub_theta, spoke_theta_global)
   theta_global <- theta_global[!duplicated(names(theta_global))]
 
-  judge_params <- .adaptive_link_judge_params(state, controller, scope = "link")
+  startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
+  judge_params <- .adaptive_link_judge_params(
+    state,
+    controller,
+    scope = "link",
+    allow_cold_start_fallback = isTRUE(startup_gap),
+    expected_link_params = !isTRUE(startup_gap)
+  )
   epsilon <- as.double(judge_params$epsilon %||% 0)
   if (!is.finite(epsilon)) {
     epsilon <- 0
