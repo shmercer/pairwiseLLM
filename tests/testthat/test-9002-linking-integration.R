@@ -113,7 +113,10 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
       hub_lock_mode = "soft_lock",
       hub_lock_kappa = 0.75,
       phase_a_mode = "import",
-      phase_a_artifacts = artifacts
+      phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L))
     ),
     btl_config = list(refit_pairs_target = 2L),
     progress = "none"
@@ -545,4 +548,37 @@ test_that("independent mode ignores concurrent allocation controls under seeded 
 
   cols <- c("status", "i", "j", "A", "B", "pair_id", "round_stage", "link_spoke_id")
   expect_equal(out_base$step_log[, cols, drop = FALSE], out_tuned$step_log[, cols, drop = FALSE])
+})
+
+test_that("all spokes stopped exits linking run cleanly", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 33L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
+  state$controller$link_stopped_by_spoke <- list(`2` = TRUE)
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.0, h3 = 0.7,
+    s21 = -0.2, s22 = 0.3, s23 = 1.1
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 5L,
+    session_dir = withr::local_tempdir(),
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts
+    ),
+    progress = "none"
+  )
+
+  expect_true(isTRUE(out$meta$stop_decision))
+  expect_identical(out$meta$stop_reason, "all_spokes_stopped")
+  expect_identical(nrow(out$step_log), 0L)
 })
