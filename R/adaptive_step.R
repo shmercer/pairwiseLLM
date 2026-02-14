@@ -240,6 +240,27 @@ validate_judge_result <- function(result, A_id, B_id) {
         "step_log append completeness failure: non-cross-set rows must set `link_spoke_id = NA`."
       )
     }
+    link_only_cols <- c(
+      "link_stage",
+      "delta_spoke_estimate_pre",
+      "delta_spoke_sd_pre",
+      "posterior_win_prob_pre",
+      "link_transform_mode",
+      "cross_set_utility_pre",
+      "utility_mode",
+      "log_alpha_spoke_estimate_pre",
+      "log_alpha_spoke_sd_pre",
+      "hub_lock_mode",
+      "hub_lock_kappa"
+    )
+    bad <- link_only_cols[vapply(link_only_cols, function(col) !is.na(row[[col]][[1L]]), logical(1L))]
+    if (length(bad) > 0L) {
+      rlang::abort(paste0(
+        "step_log append completeness failure: non-cross-set rows must set link-only columns to NA: ",
+        paste(bad, collapse = ", "),
+        "."
+      ))
+    }
   }
 
   invisible(TRUE)
@@ -391,13 +412,59 @@ run_one_step <- function(state, judge, ...) {
     link_transform_mode <- as.character(spoke_stats$link_transform_mode %||%
       .adaptive_link_transform_mode_for_spoke(controller, link_spoke_id))
   }
-  link_stage <- if (selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link")) {
+  link_stage <- if (isTRUE(is_cross_set) &&
+    selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link")) {
     selection$round_stage
   } else {
     NA_character_
   }
   cross_set_utility_pre <- if (isTRUE(is_cross_set)) {
     as.double(selection$U0_ij %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  delta_spoke_estimate_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$delta_spoke_mean %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  delta_spoke_sd_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$delta_spoke_sd %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  posterior_win_prob_pre <- if (isTRUE(is_cross_set)) {
+    as.double(selection$p_ij %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  link_transform_mode <- if (isTRUE(is_cross_set)) {
+    link_transform_mode
+  } else {
+    NA_character_
+  }
+  utility_mode <- if (isTRUE(is_cross_set)) {
+    utility_mode
+  } else {
+    NA_character_
+  }
+  log_alpha_spoke_estimate_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$log_alpha_spoke_mean %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  log_alpha_spoke_sd_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$log_alpha_spoke_sd %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  hub_lock_mode <- if (isTRUE(is_cross_set)) {
+    hub_lock_mode
+  } else {
+    NA_character_
+  }
+  hub_lock_kappa <- if (isTRUE(is_cross_set)) {
+    hub_lock_kappa
   } else {
     NA_real_
   }
@@ -460,15 +527,15 @@ run_one_step <- function(state, judge, ...) {
     link_spoke_id = link_spoke_id,
     run_mode = run_mode,
     link_stage = link_stage,
-    delta_spoke_estimate_pre = as.double(spoke_stats$delta_spoke_mean %||% NA_real_),
-    delta_spoke_sd_pre = as.double(spoke_stats$delta_spoke_sd %||% NA_real_),
+    delta_spoke_estimate_pre = delta_spoke_estimate_pre,
+    delta_spoke_sd_pre = delta_spoke_sd_pre,
     dist_stratum_global = as.integer(selection$dist_stratum_global %||% NA_integer_),
-    posterior_win_prob_pre = as.double(selection$p_ij %||% NA_real_),
+    posterior_win_prob_pre = posterior_win_prob_pre,
     link_transform_mode = link_transform_mode,
     cross_set_utility_pre = cross_set_utility_pre,
     utility_mode = utility_mode,
-    log_alpha_spoke_estimate_pre = as.double(spoke_stats$log_alpha_spoke_mean %||% NA_real_),
-    log_alpha_spoke_sd_pre = as.double(spoke_stats$log_alpha_spoke_sd %||% NA_real_),
+    log_alpha_spoke_estimate_pre = log_alpha_spoke_estimate_pre,
+    log_alpha_spoke_sd_pre = log_alpha_spoke_sd_pre,
     hub_lock_mode = hub_lock_mode,
     hub_lock_kappa = hub_lock_kappa
   )
