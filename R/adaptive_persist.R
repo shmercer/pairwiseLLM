@@ -483,7 +483,8 @@ load_adaptive_session <- function(session_dir) {
       set_status = .adaptive_phase_a_empty_state(unique(as.integer(state$items$set_id))),
       artifacts = list(),
       ready_for_phase_b = FALSE,
-      phase = "phase_a"
+      phase = "phase_a",
+      phase_b_started_at_step = NA_integer_
     )
     state$linking$phase_a$artifacts <- phase_a_artifacts
   }

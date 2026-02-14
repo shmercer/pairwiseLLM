@@ -488,11 +488,14 @@
 #' follows the shuffled chain design, which guarantees a connected comparison
 #' graph after \eqn{N - 1} committed comparisons.
 #'
-#' Pair selection in this framework is TrueSkill-driven and uses base utility
+#' Pair selection in this framework is stepwise and uncertainty-aware.
+#' Within-set routing uses TrueSkill base utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
-#' win probability for pair \eqn{\{i, j\}}. Bayesian
-#' BTL posterior draws are not used for pair selection; they are used for
-#' posterior inference, diagnostics, and stopping at refit rounds.
+#' win probability for pair \eqn{\{i, j\}}.
+#' In linking Phase B, cross-set candidates are ranked using model-implied
+#' predictive utility under the current transform and judge parameters.
+#' Bayesian BTL posterior draws are not used for pair selection; they are used
+#' for posterior inference, diagnostics, and stopping at refit rounds.
 #'
 #' The returned state contains canonical logs:
 #' \itemize{
@@ -624,10 +627,13 @@ adaptive_rank_start <- function(items,
 #' Invalid responses produce a logged step with
 #' \code{pair_id = NA} and must not update committed-comparison state.
 #'
-#' Pair selection is TrueSkill-based and does not use BTL posterior draws.
-#' Utility is based on
-#' \deqn{U_0 = p_{ij}(1 - p_{ij})} with exploration/exploitation routing and
-#' fallback handling recorded in \code{step_log}.
+#' Pair selection does not use BTL posterior draws.
+#' Within-set routing is TrueSkill-based with utility
+#' \deqn{U_0 = p_{ij}(1 - p_{ij})}.
+#' Linking Phase B cross-set routing uses model-implied predictive utility under
+#' the current transform and judge parameters.
+#' Exploration/exploitation routing and fallback handling are recorded in
+#' \code{step_log}.
 #'
 #' Round scheduling uses stage-specific admissibility:
 #' \itemize{

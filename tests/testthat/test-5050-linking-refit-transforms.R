@@ -655,6 +655,45 @@ test_that("link stop gating enforces diagnostics and lag eligibility", {
   expect_false(isTRUE(row_diag$link_stop_pass[[1L]]))
 })
 
+test_that("runtime linking_identified uses active TS-BTL rank threshold and not lagged rank stability", {
+  base_state <- make_linking_refit_state(
+    list(
+      link_identified_reliability_min = 0.80,
+      link_rank_corr_min = 0.90,
+      delta_sd_max = 100
+    )
+  )
+  base_state <- append_cross_step(base_state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  base_state <- append_cross_step(base_state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  out_pass <- testthat::with_mocked_bindings(
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(lag_eligible = FALSE, rho_rank_lagged = NA_real_, rho_rank_lagged_pass = FALSE)
+    },
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.94,
+    .adaptive_link_reliability_transformed_active = function(...) 0.95,
+    .adaptive_linking_refit_update_state(base_state, list(last_refit_step = 0L)),
+    .package = "pairwiseLLM"
+  )
+  stats_pass <- out_pass$controller$link_refit_stats_by_spoke[["2"]]
+  expect_false(isTRUE(stats_pass$lag_eligible))
+  expect_true(isTRUE(stats_pass$link_rank_corr_pass))
+  expect_true(isTRUE(stats_pass$link_identified))
+
+  out_fail <- testthat::with_mocked_bindings(
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(lag_eligible = FALSE, rho_rank_lagged = NA_real_, rho_rank_lagged_pass = FALSE)
+    },
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.40,
+    .adaptive_link_reliability_transformed_active = function(...) 0.95,
+    .adaptive_linking_refit_update_state(base_state, list(last_refit_step = 0L)),
+    .package = "pairwiseLLM"
+  )
+  stats_fail <- out_fail$controller$link_refit_stats_by_spoke[["2"]]
+  expect_false(isTRUE(stats_fail$link_rank_corr_pass))
+  expect_false(isTRUE(stats_fail$link_identified))
+})
+
 test_that("link stop decision is reproducible from link_stage_log fields", {
   state <- make_linking_refit_state()
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
@@ -843,8 +882,7 @@ test_that("linking identified state is reconstructable from canonical link-stage
   row <- tibble::tibble(
     link_transform_mode = "shift_scale",
     reliability_EAP_link = 0.92,
-    lag_eligible = TRUE,
-    rank_stability_pass = TRUE,
+    ts_btl_rank_spearman = 0.93,
     delta_sd_pass = TRUE,
     log_alpha_sd_pass = TRUE
   )
@@ -857,7 +895,7 @@ test_that("linking identified state is reconstructable from canonical link-stage
   )
   expect_true(isTRUE(identified))
 
-  row$rank_stability_pass <- FALSE
+  row$ts_btl_rank_spearman <- 0.85
   identified_fail <- pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = row,
     controller = list(
@@ -1304,31 +1342,60 @@ test_that("transformed-domain helper and reconstruction guard branches are cover
     link_row = tibble::tibble(
       link_transform_mode = "shift_scale",
       reliability_EAP_link = 0.95,
-      lag_eligible = TRUE,
-      rank_stability_pass = TRUE
+      ts_btl_rank_spearman = 0.95
     ),
-    controller = list(link_identified_reliability_min = 0.80)
+    controller = list(link_identified_reliability_min = 0.80, link_rank_corr_min = 0.90)
   )))
   expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
       link_transform_mode = "shift_scale",
       reliability_EAP_link = 0.95,
-      lag_eligible = TRUE,
-      rank_stability_pass = TRUE,
+      ts_btl_rank_spearman = 0.95,
       delta_sd_pass = TRUE
     ),
-    controller = list(link_identified_reliability_min = 0.80)
+    controller = list(link_identified_reliability_min = 0.80, link_rank_corr_min = 0.90)
   )))
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
       link_transform_mode = "shift_only",
       reliability_EAP_link = 0.95,
-      lag_eligible = TRUE,
-      rank_stability_pass = TRUE,
+      ts_btl_rank_spearman = 0.95,
       delta_sd_pass = TRUE
     ),
-    controller = list(link_identified_reliability_min = 0.80)
+    controller = list(link_identified_reliability_min = 0.80, link_rank_corr_min = 0.90)
   )))
+})
+
+test_that("phase-specific judge scope uses explicit phase boundary metadata before first cross-set row", {
+  state <- make_linking_refit_state(
+    list(run_mode = "link_multi_spoke", hub_id = 1L, judge_param_mode = "phase_specific")
+  )
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$phase_b_started_at_step <- 1L
+
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      pair_id = 1L,
+      i = 1L,
+      j = 2L,
+      A = 1L,
+      B = 2L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 1L,
+      is_cross_set = FALSE,
+      link_spoke_id = NA_integer_,
+      run_mode = "link_one_spoke",
+      link_stage = "local_link"
+    )
+  )
+
+  results <- pairwiseLLM:::.adaptive_results_from_step_log(state)
+  expect_true(nrow(results) == 1L)
+  expect_identical(results$phase[[1L]], "phase3")
+  expect_identical(results$judge_scope[[1L]], "link")
 })
 
 test_that("adaptive_state validation branches for linking controls are covered", {

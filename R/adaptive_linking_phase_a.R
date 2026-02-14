@@ -605,6 +605,12 @@
   } else {
     "phase_a"
   }
+  prior_phase <- as.character((out$linking$phase_a %||% list())$phase %||% "phase_a")
+  prior_phase_b_start <- as.integer((out$linking$phase_a %||% list())$phase_b_started_at_step %||% NA_integer_)
+  phase_b_start <- prior_phase_b_start
+  if (!identical(prior_phase, "phase_b") && identical(phase, "phase_b") && !is.finite(phase_b_start)) {
+    phase_b_start <- as.integer(nrow(out$step_log %||% tibble::tibble()) + 1L)
+  }
 
   out$linking <- out$linking %||% list()
   out$linking$phase_a <- list(
@@ -613,7 +619,8 @@
     ready_for_phase_b = ready_for_phase_b,
     phase = phase,
     ready_spokes = as.integer(ready_spokes),
-    active_phase_a_set = as.integer(active_phase_a_set)
+    active_phase_a_set = as.integer(active_phase_a_set),
+    phase_b_started_at_step = as.integer(phase_b_start)
   )
 
   out
