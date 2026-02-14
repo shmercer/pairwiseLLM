@@ -464,7 +464,11 @@ run_one_step <- function(state, judge, ...) {
     NA_character_
   }
   hub_lock_kappa <- if (isTRUE(is_cross_set)) {
-    hub_lock_kappa
+    if (identical(hub_lock_mode, "soft_lock")) {
+      hub_lock_kappa
+    } else {
+      NA_real_
+    }
   } else {
     NA_real_
   }

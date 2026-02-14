@@ -143,6 +143,62 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_apply_stop_state <- function(state, link_rows) {
+  out <- state
+  rows <- tibble::as_tibble(link_rows %||% tibble::tibble())
+  if (nrow(rows) < 1L) {
+    return(out)
+  }
+  if (!all(c("spoke_id", "link_stop_pass", "refit_id") %in% names(rows))) {
+    return(out)
+  }
+
+  controller <- .adaptive_controller_resolve(out)
+  stopped_map <- controller$link_stopped_by_spoke %||% list()
+  stop_refit_map <- controller$link_stop_refit_id_by_spoke %||% list()
+  stop_reason_map <- controller$link_stop_reason_by_spoke %||% list()
+
+  for (idx in seq_len(nrow(rows))) {
+    spoke_id <- as.integer(rows$spoke_id[[idx]] %||% NA_integer_)
+    if (is.na(spoke_id)) {
+      next
+    }
+    key <- as.character(spoke_id)
+    if (isTRUE(rows$link_stop_pass[[idx]])) {
+      stopped_map[[key]] <- TRUE
+      stop_refit_map[[key]] <- as.integer(rows$refit_id[[idx]] %||% NA_integer_)
+      stop_reason_map[[key]] <- "link_stop_pass"
+    } else if (is.null(stopped_map[[key]])) {
+      stopped_map[[key]] <- FALSE
+    }
+  }
+
+  controller$link_stopped_by_spoke <- stopped_map
+  controller$link_stop_refit_id_by_spoke <- stop_refit_map
+  controller$link_stop_reason_by_spoke <- stop_reason_map
+  out$controller <- controller
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_all_spokes_stopped <- function(state) {
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(FALSE)
+  }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!identical(phase_ctx$phase, "phase_b")) {
+    return(FALSE)
+  }
+  ready_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+  active_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
+  length(ready_spokes) > 0L && length(active_spokes) < 1L
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_stage_progress <- function(state, spoke_id, stage_quotas, stage_order, refit_id = NULL) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   stage_order <- as.character(stage_order %||% .adaptive_stage_order())
@@ -210,7 +266,7 @@
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
-    eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    eligible_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
     spoke_id <- .adaptive_link_active_spoke(
       state = state,
       controller = controller,
@@ -419,7 +475,7 @@
     concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
     spokes_to_mark <- as.integer()
     if (isTRUE(concurrent_mode) && identical(starvation_reason, "all_eligible_spokes_infeasible")) {
-      spokes_to_mark <- as.integer(phase_ctx$ready_spokes %||% integer())
+      spokes_to_mark <- as.integer(phase_ctx$active_spokes %||% integer())
     } else {
       spoke_id <- as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
       if (is.na(spoke_id)) {
@@ -492,8 +548,9 @@
 #' Within-set routing uses TrueSkill base utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 #' win probability for pair \eqn{\{i, j\}}.
-#' In linking Phase B, cross-set candidates are ranked using model-implied
-#' predictive utility under the current transform and judge parameters.
+#' In linking Phase B, pair choice remains TrueSkill-based and never uses BTL
+#' posterior quantities. Model-implied predictive probabilities/utility are
+#' logged for diagnostics only and do not affect selection.
 #' When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 #' step may use deterministic fallback from available within/shared judge
 #' estimates if link-specific estimates are not yet available; once link-specific
@@ -634,8 +691,8 @@ adaptive_rank_start <- function(items,
 #' Pair selection does not use BTL posterior draws.
 #' Within-set routing is TrueSkill-based with utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})}.
-#' Linking Phase B cross-set routing uses model-implied predictive utility under
-#' the current transform and judge parameters.
+#' Linking Phase B cross-set routing is also TrueSkill-based; model-implied
+#' predictive probabilities/utility are recorded for diagnostics only.
 #' When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
 #' fallback from within/shared judge estimates only until link-specific estimates
 #' are expected, after which malformed link estimates abort.
@@ -997,6 +1054,14 @@ adaptive_rank_run_live <- function(state,
   while (remaining > 0L) {
     state <- .adaptive_phase_a_prepare(state)
     .adaptive_phase_a_gate_or_abort(state)
+    if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
+      state$meta$stop_decision <- TRUE
+      state$meta$stop_reason <- "all_spokes_stopped"
+      if (!is.null(state$config$session_dir)) {
+        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+      }
+      return(state)
+    }
     state <- .adaptive_link_sync_warm_start(state)
     state <- .adaptive_round_activate_if_ready(state)
     state <- run_one_step(state, judge, ...)
@@ -1066,6 +1131,7 @@ adaptive_rank_run_live <- function(state,
           state$link_stage_log %||% new_link_stage_log(),
           link_rows
         )
+        state <- .adaptive_link_apply_stop_state(state, link_rows)
       }
       item_log_tbl <- .adaptive_build_item_log_refit(
         state,
@@ -1089,6 +1155,14 @@ adaptive_rank_run_live <- function(state,
       if (isTRUE(stop_decision)) {
         state$meta$stop_decision <- TRUE
         state$meta$stop_reason <- stop_reason
+        if (!is.null(state$config$session_dir)) {
+          save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+        }
+        return(state)
+      }
+      if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
+        state$meta$stop_decision <- TRUE
+        state$meta$stop_reason <- "all_spokes_stopped"
         if (!is.null(state$config$session_dir)) {
           save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
         }

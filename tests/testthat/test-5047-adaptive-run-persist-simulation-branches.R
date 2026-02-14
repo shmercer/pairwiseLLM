@@ -559,3 +559,94 @@ test_that("phase B stage exhaustion persists across round rollover within refit 
   expect_identical(progress$stage_committed[["anchor_link"]], progress$stage_quotas[["anchor_link"]])
   expect_identical(progress$active_stage, "long_link")
 })
+
+test_that("adaptive run helper branches for linking stop/routing utilities are covered", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 41L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+
+  state$linking$phase_a$set_status <- pairwiseLLM:::.adaptive_phase_a_empty_state(c(1L, 2L))
+  expect_identical(pairwiseLLM:::.adaptive_link_sync_warm_start(state), state)
+
+  state_scope <- state
+  state_scope$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("pending_finalization", "pending_finalization"),
+    validation_message = c("x", "y"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+  state_scope$linking$phase_a$warm_start_scope_set <- 1L
+  state_scope$warm_start_pairs <- tibble::tibble(i_id = "s21", j_id = "s22")
+  state_scope$warm_start_done <- FALSE
+  state_scope$warm_start_idx <- 2L
+  synced <- pairwiseLLM:::.adaptive_link_sync_warm_start(state_scope)
+  expect_true(isTRUE(synced$warm_start_done))
+  expect_identical(synced$warm_start_idx, 1L)
+
+  legacy_state <- list(
+    refit_meta = list(link_stage_shortfalls_by_refit_spoke = NULL, link_stage_exhausted_by_refit_spoke = NULL),
+    round = list(
+      link_stage_shortfalls_by_refit_spoke = list(a = 1L),
+      link_stage_exhausted_by_refit_spoke = list(b = 2L)
+    )
+  )
+  expect_identical(pairwiseLLM:::.adaptive_link_refit_shortfalls_map(legacy_state), list(a = 1L))
+  expect_identical(pairwiseLLM:::.adaptive_link_refit_exhausted_map(legacy_state), list(b = 2L))
+
+  no_rows <- pairwiseLLM:::.adaptive_link_apply_stop_state(state, tibble::tibble())
+  expect_identical(no_rows$controller$link_stopped_by_spoke, state$controller$link_stopped_by_spoke)
+  missing_cols <- pairwiseLLM:::.adaptive_link_apply_stop_state(state, tibble::tibble(spoke_id = 2L))
+  expect_identical(missing_cols$controller$link_stopped_by_spoke, state$controller$link_stopped_by_spoke)
+  na_row <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    state,
+    tibble::tibble(refit_id = 1L, spoke_id = NA_integer_, link_stop_pass = TRUE)
+  )
+  expect_true(length(na_row$controller$link_stopped_by_spoke) == 0L)
+
+  non_adaptive_stage <- pairwiseLLM:::.adaptive_round_active_stage(
+    list(round = list(staged_active = TRUE, stage_index = 1L, stage_order = c("anchor_link")))
+  )
+  expect_identical(non_adaptive_stage, "anchor_link")
+
+  bad_idx_state <- pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 4L)
+  bad_idx_state$warm_start_done <- TRUE
+  bad_idx_state$round$staged_active <- TRUE
+  bad_idx_state$round$stage_index <- 99L
+  expect_true(is.na(pairwiseLLM:::.adaptive_round_active_stage(bad_idx_state)))
+
+  commit_state <- pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 5L)
+  commit_state$warm_start_done <- TRUE
+  commit_state$round$staged_active <- TRUE
+  commit_state$round$round_pairs_target <- 1L
+  commit_state$round$round_committed <- 0L
+  commit_state$round$stage_order <- pairwiseLLM:::.adaptive_stage_order()
+  commit_state$round$stage_index <- 1L
+  commit_state$round$stage_quotas <- as.list(stats::setNames(rep.int(10L, 4L), commit_state$round$stage_order))
+  commit_state$round$stage_committed <- as.list(stats::setNames(rep.int(0L, 4L), commit_state$round$stage_order))
+  step_row <- tibble::tibble(round_stage = "anchor_link", A = 1L, B = 2L)
+  committed <- pairwiseLLM:::.adaptive_round_commit(commit_state, step_row)
+  expect_true(as.integer(committed$round$round_id) >= 2L)
+
+  plain_starve <- pairwiseLLM:::.adaptive_round_starvation(
+    list(
+      round = list(
+        staged_active = TRUE,
+        stage_order = c("anchor_link"),
+        stage_quotas = list(anchor_link = 1L),
+        stage_committed = list(anchor_link = 0L),
+        stage_index = 1L,
+        stage_shortfalls = list(anchor_link = 0L)
+      )
+    ),
+    tibble::tibble(round_stage = "anchor_link")
+  )
+  expect_true(is.list(plain_starve$state$round))
+})

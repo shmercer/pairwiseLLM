@@ -472,8 +472,12 @@ adaptive_defaults <- function(N) {
     expected_link_params = !isTRUE(startup_gap)
   )
   epsilon <- as.double(judge_params$epsilon %||% 0)
+  beta <- as.double(judge_params$beta %||% 0)
   if (!is.finite(epsilon)) {
     epsilon <- 0
+  }
+  if (!is.finite(beta)) {
+    beta <- 0
   }
   epsilon <- max(0, min(1, epsilon))
 
@@ -485,12 +489,74 @@ adaptive_defaults <- function(N) {
     if (!is.finite(theta_i) || !is.finite(theta_j)) {
       return(NA_real_)
     }
-    p_base <- stats::plogis(theta_i - theta_j)
+    p_base <- stats::plogis(theta_i - theta_j + beta)
     as.double((1 - epsilon) * p_base + epsilon * 0.5)
   }, numeric(1L))
   cand$link_p <- as.double(p_link)
   cand$link_u <- as.double(p_link * (1 - p_link))
   cand
+}
+
+.adaptive_link_predictive_prob_oriented <- function(state, controller, spoke_id, A_id, B_id) {
+  if (is.na(spoke_id) || is.na(A_id) || is.na(B_id)) {
+    return(NA_real_)
+  }
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, spoke_id)
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
+  delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+  if (!is.finite(delta)) {
+    delta <- 0
+  }
+  log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
+  alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+
+  prefer_current_theta <- identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  hub_theta <- .adaptive_link_safe_theta_map(
+    state,
+    set_id = hub_id,
+    prefer_current = prefer_current_theta
+  )
+  spoke_theta <- .adaptive_link_safe_theta_map(
+    state,
+    set_id = spoke_id,
+    prefer_current = prefer_current_theta
+  )
+  if (length(hub_theta) < 1L || length(spoke_theta) < 1L) {
+    return(NA_real_)
+  }
+  spoke_theta_global <- delta + alpha * as.double(spoke_theta)
+  names(spoke_theta_global) <- names(spoke_theta)
+  theta_global <- c(hub_theta, spoke_theta_global)
+  theta_global <- theta_global[!duplicated(names(theta_global))]
+
+  startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
+  judge_params <- .adaptive_link_judge_params(
+    state,
+    controller,
+    scope = "link",
+    allow_cold_start_fallback = isTRUE(startup_gap),
+    expected_link_params = !isTRUE(startup_gap)
+  )
+  epsilon <- as.double(judge_params$epsilon %||% 0)
+  beta <- as.double(judge_params$beta %||% 0)
+  if (!is.finite(epsilon)) {
+    epsilon <- 0
+  }
+  if (!is.finite(beta)) {
+    beta <- 0
+  }
+  epsilon <- max(0, min(1, epsilon))
+
+  theta_A <- as.double(theta_global[[as.character(A_id)]] %||% NA_real_)
+  theta_B <- as.double(theta_global[[as.character(B_id)]] %||% NA_real_)
+  if (!is.finite(theta_A) || !is.finite(theta_B)) {
+    return(NA_real_)
+  }
+
+  p_base <- stats::plogis(theta_A - theta_B + beta)
+  as.double((1 - epsilon) * p_base + epsilon * 0.5)
 }
 
 .adaptive_assign_order <- function(pair, posA, posB, pair_last_order) {
@@ -769,7 +835,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   link_progress <- NULL
   round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
   if (isTRUE(link_phase_b)) {
-    eligible_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    eligible_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
     ranked_link_spokes <- .adaptive_link_ranked_spokes(
       state = state,
       controller = controller,
@@ -1173,20 +1239,6 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   names(mu_vals) <- as.character(state$trueskill_state$items$item_id)
   names(sigma_vals) <- as.character(state$trueskill_state$items$item_id)
 
-  p_ij_ts <- trueskill_win_probability(i_id, j_id, state$trueskill_state)
-  p_ij <- if ("link_p" %in% names(selected_pair) &&
-    is.finite(as.double(selected_pair$link_p[[1L]] %||% NA_real_))) {
-    as.double(selected_pair$link_p[[1L]])
-  } else {
-    as.double(p_ij_ts)
-  }
-  u0_ij <- if ("link_u" %in% names(selected_pair) &&
-    is.finite(as.double(selected_pair$link_u[[1L]] %||% NA_real_))) {
-    as.double(selected_pair$link_u[[1L]])
-  } else {
-    as.double(p_ij * (1 - p_ij))
-  }
-
   idx_map <- state$item_index %||% stats::setNames(seq_along(ids), ids)
   per_round_uses <- round$per_round_item_uses %||% integer()
   per_round_uses <- as.integer(per_round_uses)
@@ -1208,6 +1260,23 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (is.na(selected_spoke_id) && !is.na(selected_link_spoke_attempt)) {
     selected_spoke_id <- as.integer(selected_link_spoke_attempt)
   }
+  A_id <- as.character(order_vals[["A_id"]] %||% NA_character_)
+  B_id <- as.character(order_vals[["B_id"]] %||% NA_character_)
+  p_ij_ts <- trueskill_win_probability(A_id, B_id, state$trueskill_state)
+  p_ij <- as.double(p_ij_ts)
+  if (isTRUE(is_link_mode) && !is.na(selected_spoke_id)) {
+    p_link_oriented <- .adaptive_link_predictive_prob_oriented(
+      state = state,
+      controller = link_controller,
+      spoke_id = as.integer(selected_spoke_id),
+      A_id = as.character(A_id),
+      B_id = as.character(B_id)
+    )
+    if (is.finite(p_link_oriented)) {
+      p_ij <- as.double(p_link_oriented)
+    }
+  }
+  u0_ij <- as.double(p_ij * (1 - p_ij))
 
   list(
     i = as.integer(idx_map[[i_id]]),

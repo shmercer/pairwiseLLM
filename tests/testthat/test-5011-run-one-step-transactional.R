@@ -115,6 +115,30 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_false(is.na(row$cross_set_utility_pre[[1L]]))
 })
 
+test_that("run_one_step logs hub_lock_kappa as NA unless hub_lock_mode is soft_lock", {
+  items <- tibble::tibble(
+    item_id = c("a", "b"),
+    set_id = c(1L, 2L),
+    global_item_id = c("ga", "gb")
+  )
+  judge_ok <- make_deterministic_judge("i_wins")
+
+  state_free <- adaptive_rank_start(
+    items,
+    seed = 8L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      hub_lock_mode = "free",
+      hub_lock_kappa = 0.75
+    )
+  )
+  out_free <- pairwiseLLM:::run_one_step(state_free, judge_ok)
+  row_free <- out_free$step_log[nrow(out_free$step_log), , drop = FALSE]
+  expect_equal(row_free$hub_lock_mode[[1L]], "free")
+  expect_true(is.na(row_free$hub_lock_kappa[[1L]]))
+})
+
 test_that("run_one_step logs linking pre-step transform estimates when available", {
   items <- tibble::tibble(
     item_id = c("a", "b"),

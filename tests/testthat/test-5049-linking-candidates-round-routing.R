@@ -335,7 +335,7 @@ test_that("linking deterministic ordering prioritizes coverage before utility", 
   expect_identical(ord[[1L]], 1L)
 })
 
-test_that("linking deterministic ordering ranks by predictive utility and uses stable ties", {
+test_that("linking deterministic ordering ranks by TrueSkill utility with stable ties", {
   cand <- tibble::tibble(
     i = c("a", "b", "c"),
     j = c("d", "e", "f"),
@@ -343,7 +343,7 @@ test_that("linking deterministic ordering ranks by predictive utility and uses s
     link_u = c(0.10, 0.30, 0.30)
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
-  expect_identical(ord, c(2L, 3L, 1L))
+  expect_identical(ord, c(1L, 2L, 3L))
 })
 
 test_that("predictive utility scoring receives full linking controller fields", {
@@ -663,7 +663,7 @@ test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
   expect_equal(row$cross_set_utility_pre[[1L]], expected, tolerance = 1e-12)
 })
 
-test_that("cross-set ordering uses predictive utility when it differs from TrueSkill proxy", {
+test_that("cross-set ordering remains TrueSkill-based when predictive utility differs", {
   cand <- tibble::tibble(
     i = c("h1", "h2"),
     j = c("s1", "s2"),
@@ -671,7 +671,152 @@ test_that("cross-set ordering uses predictive utility when it differs from TrueS
     link_u = c(0.20, 0.28)
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
-  expect_identical(ord[[1L]], 2L)
+  expect_identical(ord[[1L]], 1L)
+})
+
+test_that("stopped spokes are excluded from phase B routing/candidate generation", {
+  items <- tibble::tibble(
+    item_id = as.character(1:9),
+    set_id = c(rep(1L, 3L), rep(2L, 3L), rep(3L, 3L)),
+    global_item_id = paste0("g", 1:9)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 101L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$controller$link_stopped_by_spoke <- list(`2` = TRUE)
+
+  cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "long_link",
+    fallback_name = "base",
+    C_max = 10000L,
+    seed = 1L
+  )
+  set_map <- stats::setNames(items$set_id, items$item_id)
+  set_i <- as.integer(set_map[cand$i])
+  set_j <- as.integer(set_map[cand$j])
+  spoke_set <- ifelse(set_i == 1L, set_j, set_i)
+
+  expect_true(nrow(cand) > 0L)
+  expect_true(all(spoke_set == 3L))
+})
+
+test_that("link stop rows update per-spoke stop state in controller metadata", {
+  items <- tibble::tibble(
+    item_id = as.character(1:9),
+    set_id = c(rep(1L, 3L), rep(2L, 3L), rep(3L, 3L)),
+    global_item_id = paste0("g", 1:9)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 202L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state <- mark_link_phase_b_ready(state)
+  rows <- tibble::tibble(
+    refit_id = c(1L, 1L),
+    spoke_id = c(2L, 3L),
+    link_stop_pass = c(TRUE, FALSE)
+  )
+  out <- pairwiseLLM:::.adaptive_link_apply_stop_state(state, rows)
+  phase_ctx <- pairwiseLLM:::.adaptive_link_phase_context(out, controller = out$controller)
+
+  expect_true(isTRUE(out$controller$link_stopped_by_spoke[["2"]]))
+  expect_true(isFALSE(out$controller$link_stopped_by_spoke[["3"]]))
+  expect_identical(out$controller$link_stop_refit_id_by_spoke[["2"]], 1L)
+  expect_true(all(sort(phase_ctx$active_spokes) == 3L))
+})
+
+test_that("linking predictive utility applies signed position bias by (A,B) orientation", {
+  items <- tibble::tibble(
+    item_id = c("h1", "s1"),
+    set_id = c(1L, 2L),
+    global_item_id = c("gh1", "gs1")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 17L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  cand <- tibble::tibble(
+    i = c("h1", "s1"),
+    j = c("s1", "h1")
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_transform_mode_for_spoke = function(controller, spoke_id) "shift_only",
+    .adaptive_link_safe_theta_map = function(state, set_id, prefer_current = FALSE) {
+      if (identical(as.integer(set_id), 1L)) {
+        stats::setNames(0.4, "h1")
+      } else {
+        stats::setNames(-0.2, "s1")
+      }
+    },
+    .adaptive_link_phase_b_startup_gap_for_spoke = function(state, spoke_id) FALSE,
+    .adaptive_link_judge_params = function(state, controller, scope, allow_cold_start_fallback, expected_link_params) {
+      list(beta = 0.3, epsilon = 0.1, scope = "link")
+    },
+    pairwiseLLM:::.adaptive_link_attach_predictive_utility(
+      candidates = cand,
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  p_hs <- (1 - 0.1) * stats::plogis(0.4 - (-0.2) + 0.3) + 0.1 * 0.5
+  p_sh <- (1 - 0.1) * stats::plogis(-0.2 - 0.4 + 0.3) + 0.1 * 0.5
+  expect_equal(out$link_p[[1L]], p_hs, tolerance = 1e-12)
+  expect_equal(out$link_p[[2L]], p_sh, tolerance = 1e-12)
+  expect_equal(out$link_u[[1L]], p_hs * (1 - p_hs), tolerance = 1e-12)
+  expect_equal(out$link_u[[2L]], p_sh * (1 - p_sh), tolerance = 1e-12)
+})
+
+test_that("cross-set logged predictive probability uses final A/B orientation", {
+  items <- tibble::tibble(
+    item_id = c("h1", "s1"),
+    set_id = c(1L, 2L),
+    global_item_id = c("gh1", "gs1")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 121L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 2L
+  state$round$stage_order <- pairwiseLLM:::.adaptive_stage_order()
+  state$round$stage_quotas <- as.list(stats::setNames(rep.int(2L, 4L), state$round$stage_order))
+  state$round$stage_committed <- as.list(stats::setNames(rep.int(0L, 4L), state$round$stage_order))
+
+  cand <- tibble::tibble(i = "h1", j = "s1", link_spoke_id = 2L)
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_attach_predictive_utility = function(candidates, state, controller, spoke_id) {
+      candidates$link_p <- 0.9
+      candidates$link_u <- 0.09
+      candidates
+    },
+    .adaptive_assign_order = function(pair, posA, posB, pair_last_order) {
+      c(A_id = "s1", B_id = "h1")
+    },
+    .adaptive_link_predictive_prob_oriented = function(state, controller, spoke_id, A_id, B_id) {
+      if (identical(A_id, "s1") && identical(B_id, "h1")) 0.2 else 0.8
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
+    .package = "pairwiseLLM"
+  )
+
+  expect_equal(out$A, 2L)
+  expect_equal(out$B, 1L)
+  expect_equal(out$p_ij, 0.2, tolerance = 1e-12)
+  expect_equal(out$U0_ij, 0.16, tolerance = 1e-12)
 })
 
 test_that("active linking hub domain uses the same hub-only anchors as phase-B routing", {
@@ -757,6 +902,31 @@ test_that("link stage log is appended per refit and spoke in linking mode", {
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(state$link_stage_log, rows)
   expect_true(nrow(state$link_stage_log) >= 1L)
   expect_true(all(c("refit_id", "spoke_id", "coverage_bins_used") %in% names(state$link_stage_log)))
+})
+
+test_that("link stage log uses NA hub_lock_kappa when lock mode is not soft_lock", {
+  items <- tibble::tibble(
+    item_id = as.character(1:8),
+    set_id = c(rep(1L, 4L), rep(2L, 4L)),
+    global_item_id = paste0("g", 1:8)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 4L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, hub_lock_mode = "free")
+  )
+  state <- mark_link_phase_b_ready(state)
+  judge <- make_deterministic_judge("i_wins")
+  state <- pairwiseLLM:::run_one_step(state, judge)
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+
+  expect_true(nrow(rows) >= 1L)
+  expect_equal(rows$hub_lock_mode[[1L]], "free")
+  expect_true(is.na(rows$hub_lock_kappa[[1L]]))
 })
 
 test_that("per-spoke link stage rows do not inherit global identified fallback", {
