@@ -885,6 +885,28 @@ test_that("linking refit stats carry latest coverage metadata for link-stage log
   expect_identical(row$coverage_source[[1L]], "phase_a_rank_mu_raw")
 })
 
+test_that("taper decisions are reconstructable from canonical link-stage quota fields", {
+  row_raw <- tibble::tibble(
+    quota_taper_applied = NA,
+    quota_long_link_raw = 8L,
+    quota_long_link_effective = 4L
+  )
+  row_notaper <- tibble::tibble(
+    quota_taper_applied = NA,
+    quota_long_link_raw = 8L,
+    quota_long_link_effective = 8L
+  )
+  row_explicit <- tibble::tibble(
+    quota_taper_applied = TRUE,
+    quota_long_link_raw = 8L,
+    quota_long_link_effective = 8L
+  )
+
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_taper_from_logs(row_raw)))
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_taper_from_logs(row_notaper)))
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_taper_from_logs(row_explicit)))
+})
+
 test_that("item log keeps raw summaries separate from transformed global summaries in linking mode", {
   state <- make_linking_refit_state(
     list(link_transform_mode = "shift_scale", multi_spoke_mode = "independent")

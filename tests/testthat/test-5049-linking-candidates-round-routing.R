@@ -753,3 +753,34 @@ test_that("round candidate helper branches are exercised for anchor/phase-a path
   set_map <- stats::setNames(state$items$set_id, state$items$item_id)
   expect_true(all(set_map[cand$i] == 1L & set_map[cand$j] == 1L))
 })
+
+test_that("cross-set candidate generation aborts when requested spoke is not phase-b eligible", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 66L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  # Only spoke 2 is eligible; spoke 3 must fail loudly.
+  status <- state$linking$phase_a$set_status
+  status$status[status$set_id == 3L] <- "pending_finalization"
+  state$linking$phase_a$set_status <- status
+
+  expect_error(
+    pairwiseLLM:::generate_stage_candidates_from_state(
+      state = state,
+      stage_name = "anchor_link",
+      fallback_name = "base",
+      C_max = 1000L,
+      seed = 1L,
+      link_spoke_id = 3L
+    ),
+    "requested spoke_id=3 is not eligible"
+  )
+})
