@@ -282,10 +282,20 @@
     }
   }
 
-  proxy <- .adaptive_rank_proxy(state)
+  routing_ids <- unique(c(hub_items, spoke_items))
+  routing_scores <- .adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = .adaptive_controller_resolve(state),
+    active_ids = routing_ids,
+    hub_id = hub_id
+  )
   defaults <- adaptive_defaults(length(state$item_ids))
-  hub_anchor <- .adaptive_select_rolling_anchors(proxy$scores[hub_items], defaults)
-  hub_anchor <- as.character(hub_anchor[hub_anchor %in% hub_items])
+  hub_anchor <- .adaptive_link_phase_b_hub_anchors(
+    state = state,
+    hub_ids = hub_items,
+    hub_scores = routing_scores,
+    defaults = defaults
+  )
   active_hub <- unique(c(hub_active_cross, hub_anchor))
   active_all <- unique(c(spoke_items, active_hub))
 
@@ -929,12 +939,211 @@
   )
 }
 
+.adaptive_mcmc_rhat <- function(chains) {
+  mat <- as.matrix(chains)
+  n <- nrow(mat)
+  m <- ncol(mat)
+  if (n < 2L || m < 2L) {
+    return(NA_real_)
+  }
+  chain_means <- colMeans(mat)
+  w <- mean(apply(mat, 2L, stats::var))
+  if (!is.finite(w) || w <= 0) {
+    return(NA_real_)
+  }
+  b <- n * stats::var(chain_means)
+  var_hat <- ((n - 1) / n) * w + (b / n)
+  as.double(sqrt(var_hat / w))
+}
+
+.adaptive_mcmc_ess_bulk <- function(chains) {
+  mat <- as.matrix(chains)
+  n <- nrow(mat)
+  m <- ncol(mat)
+  if (n < 3L || m < 1L) {
+    return(NA_real_)
+  }
+  ess_sum <- 0
+  for (j in seq_len(m)) {
+    x <- as.double(mat[, j])
+    if (!all(is.finite(x)) || stats::sd(x) == 0) {
+      next
+    }
+    max_lag <- min(100L, n - 1L)
+    acf_vals <- stats::acf(x, lag.max = max_lag, plot = FALSE)$acf[-1L]
+    acf_vals[!is.finite(acf_vals)] <- 0
+    if (length(acf_vals) >= 2L) {
+      odd <- acf_vals[seq.int(1L, length(acf_vals), by = 2L)]
+      even <- acf_vals[seq.int(2L, length(acf_vals), by = 2L)]
+      n_pair <- min(length(odd), length(even))
+      pair_sums <- if (n_pair > 0L) {
+        odd[seq_len(n_pair)] + even[seq_len(n_pair)]
+      } else {
+        numeric()
+      }
+      if (length(pair_sums) > 0L && any(is.finite(pair_sums))) {
+        first_bad <- which(pair_sums < 0)[1L]
+        if (!is.na(first_bad)) {
+          pair_sums <- pair_sums[seq_len(max(0L, first_bad - 1L))]
+        }
+      }
+      tau <- 1 + 2 * sum(pair_sums[pair_sums > 0], na.rm = TRUE)
+    } else {
+      tau <- 1
+    }
+    tau <- max(1, tau)
+    ess_sum <- ess_sum + (n / tau)
+  }
+  as.double(ess_sum)
+}
+
+.adaptive_link_mcmc_diagnostics <- function(chain_draws, param_names) {
+  arr <- array(chain_draws, dim = dim(chain_draws), dimnames = dimnames(chain_draws))
+  if (length(dim(arr)) != 3L) {
+    return(list(
+      divergences = NA_integer_,
+      max_rhat = NA_real_,
+      min_ess_bulk = NA_real_,
+      diagnostics_divergences_pass = NA,
+      diagnostics_rhat_pass = NA,
+      diagnostics_ess_pass = NA
+    ))
+  }
+  n_par <- dim(arr)[3L]
+  rhat <- rep(NA_real_, n_par)
+  ess <- rep(NA_real_, n_par)
+  for (k in seq_len(n_par)) {
+    mat <- arr[, , k, drop = TRUE]
+    rhat[[k]] <- .adaptive_mcmc_rhat(mat)
+    ess[[k]] <- .adaptive_mcmc_ess_bulk(mat)
+  }
+  max_rhat <- max(rhat, na.rm = TRUE)
+  min_ess <- min(ess, na.rm = TRUE)
+  if (!is.finite(max_rhat)) {
+    max_rhat <- NA_real_
+  }
+  if (!is.finite(min_ess)) {
+    min_ess <- NA_real_
+  }
+  list(
+    param_names = as.character(param_names),
+    rhat = as.double(rhat),
+    ess_bulk = as.double(ess),
+    divergences = NA_integer_,
+    max_rhat = as.double(max_rhat),
+    min_ess_bulk = as.double(min_ess),
+    diagnostics_divergences_pass = NA,
+    diagnostics_rhat_pass = if (is.finite(max_rhat)) max_rhat <= 1.05 else NA,
+    diagnostics_ess_pass = if (is.finite(min_ess)) min_ess >= 100 else NA
+  )
+}
+
+.adaptive_link_mcmc_sample <- function(log_post_fn,
+                                       init,
+                                       seed,
+                                       n_chains = 4L,
+                                       n_warmup = 120L,
+                                       n_samples = 180L) {
+  init <- as.double(init)
+  n_param <- length(init)
+  if (n_param < 1L) {
+    rlang::abort("Linking Bayesian refit requires at least one parameter.")
+  }
+  n_chains <- max(2L, as.integer(n_chains))
+  n_warmup <- max(0L, as.integer(n_warmup))
+  n_samples <- max(20L, as.integer(n_samples))
+  total_iter <- as.integer(n_warmup + n_samples)
+  chain_draws <- array(
+    NA_real_,
+    dim = c(n_samples, n_chains, n_param),
+    dimnames = list(NULL, paste0("chain_", seq_len(n_chains)), NULL)
+  )
+  accept_rates <- rep(NA_real_, n_chains)
+
+  for (chain in seq_len(n_chains)) {
+    chain_seed <- as.integer((seed + chain * 101L) %% .Machine$integer.max)
+    res <- withr::with_seed(chain_seed, {
+      cur <- init + stats::rnorm(n_param, sd = 0.05)
+      cur_lp <- as.double(log_post_fn(cur))
+      tries <- 0L
+      while ((!is.finite(cur_lp)) && tries < 200L) {
+        tries <- tries + 1L
+        cur <- init + stats::rnorm(n_param, sd = 0.25)
+        cur_lp <- as.double(log_post_fn(cur))
+      }
+      if (!is.finite(cur_lp)) {
+        rlang::abort("Linking Bayesian refit failed to initialize a finite posterior state.")
+      }
+
+      step_sd <- rep(0.08, n_param)
+      accepted <- 0L
+      accept_window <- 0L
+      draws <- matrix(NA_real_, nrow = n_samples, ncol = n_param)
+      keep_idx <- 0L
+      for (iter in seq_len(total_iter)) {
+        prop <- cur + stats::rnorm(n_param, sd = step_sd)
+        prop_lp <- as.double(log_post_fn(prop))
+        accept <- is.finite(prop_lp) &&
+          log(stats::runif(1L)) < (prop_lp - cur_lp)
+        if (isTRUE(accept)) {
+          cur <- prop
+          cur_lp <- prop_lp
+          accepted <- accepted + 1L
+          accept_window <- accept_window + 1L
+        }
+        if (iter <= n_warmup && (iter %% 20L) == 0L) {
+          rate <- accept_window / 20
+          if (rate > 0.35) {
+            step_sd <- step_sd * 1.15
+          } else if (rate < 0.20) {
+            step_sd <- step_sd * 0.85
+          }
+          accept_window <- 0L
+        }
+        if (iter > n_warmup) {
+          keep_idx <- keep_idx + 1L
+          draws[keep_idx, ] <- cur
+        }
+      }
+      list(draws = draws, accept_rate = accepted / total_iter)
+    })
+    chain_draws[, chain, ] <- res$draws
+    accept_rates[[chain]] <- res$accept_rate
+  }
+
+  list(
+    chain_draws = chain_draws,
+    draws = matrix(chain_draws, ncol = n_param),
+    accept_rate = as.double(mean(accept_rates))
+  )
+}
+
+.adaptive_link_refit_seed <- function(cross_edges, transform_mode, link_refit_mode) {
+  edges <- tibble::as_tibble(cross_edges)
+  step_id <- suppressWarnings(as.numeric(edges$step_id %||% seq_len(nrow(edges))))
+  step_id[!is.finite(step_id)] <- 0
+  step_id <- floor(abs(step_id))
+  y <- as.integer(edges$y_spoke %||% integer())
+  y[!y %in% c(0L, 1L)] <- 0L
+  mode_code <- if (identical(transform_mode, "shift_scale")) 31 else 17
+  refit_code <- if (identical(link_refit_mode, "joint_refit")) 53 else 19
+  modulus <- as.double(.Machine$integer.max - 1L)
+  acc <- 0
+  for (idx in seq_along(step_id)) {
+    acc <- (acc * 131 + step_id[[idx]] + as.double(y[[idx]]) * 17) %% modulus
+  }
+  acc <- (acc + mode_code + refit_code) %% modulus
+  seed <- as.integer(acc) + 1L
+  if (!is.finite(seed) || is.na(seed) || seed < 1L) {
+    seed <- 1L
+  }
+  seed
+}
+
 .adaptive_link_fit_transform <- function(cross_edges,
                                          hub_theta,
                                          spoke_theta,
                                          transform_mode) {
-  # Linking transform parameters are estimated via MAP optimization with
-  # Hessian-based (Laplace-style) uncertainty approximation.
   use_scale <- identical(transform_mode, "shift_scale")
   edge_attrs <- attributes(cross_edges)
   refit_contract_ctx <- edge_attrs$refit_contract %||% list()
@@ -960,6 +1169,7 @@
   hub_sd_map <- attr(hub_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   spoke_sd_map <- attr(spoke_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   edges <- tibble::as_tibble(cross_edges)
+
   empty_result <- function() {
     empty <- list(
       delta_mean = 0,
@@ -969,8 +1179,8 @@
     )
     empty$fit_contract <- list(
       contract_type = "link_refit",
-      estimation_method = "map_optim",
-      uncertainty_approximation = "hessian_laplace",
+      estimation_method = "bayesian_mcmc",
+      uncertainty_approximation = "posterior_draws",
       link_refit_mode = as.character(link_refit_mode),
       link_transform_mode = as.character(transform_mode),
       parameters = if (isTRUE(use_scale)) c("delta_s", "log_alpha_s") else c("delta_s"),
@@ -982,13 +1192,30 @@
       lock_mode = lock_mode,
       hub_lock_kappa = as.double(lock_kappa)
     )
+    empty$diagnostics <- list(
+      divergences = NA_integer_,
+      max_rhat = NA_real_,
+      min_ess_bulk = NA_real_,
+      diagnostics_divergences_pass = NA,
+      diagnostics_rhat_pass = NA,
+      diagnostics_ess_pass = NA
+    )
+    empty$posterior_draws <- list(delta = numeric(), log_alpha = numeric())
     empty
   }
   if (nrow(edges) < 1L) {
     return(empty_result())
   }
-  h <- as.double(hub_theta[as.character(edges$hub_item)])
-  s <- as.double(spoke_theta[as.character(edges$spoke_item)])
+
+  hub_theta_names <- as.character(names(hub_theta))
+  spoke_theta_names <- as.character(names(spoke_theta))
+  hub_ref <- as.double(hub_theta)
+  spoke_ref <- as.double(spoke_theta)
+  names(hub_ref) <- hub_theta_names
+  names(spoke_ref) <- spoke_theta_names
+
+  h <- as.double(hub_ref[as.character(edges$hub_item)])
+  s <- as.double(spoke_ref[as.character(edges$spoke_item)])
   hub_sd <- as.double(hub_sd_map[as.character(edges$hub_item)])
   spoke_sd <- as.double(spoke_sd_map[as.character(edges$spoke_item)])
   spoke_in_A <- as.logical(edges$spoke_in_A %||% rep(TRUE, nrow(edges)))
@@ -1001,49 +1228,52 @@
   if (!any(keep)) {
     return(empty_result())
   }
+  edges_obs <- edges[keep, , drop = FALSE]
   h <- h[keep]
   s <- s[keep]
   hub_sd <- hub_sd[keep]
   spoke_sd <- spoke_sd[keep]
   beta_signed <- beta_signed[keep]
   y <- y[keep]
-  hub_theta_names <- names(hub_theta)
-  spoke_theta_names <- names(spoke_theta)
-  hub_ref <- as.double(hub_theta)
-  names(hub_ref) <- as.character(hub_theta_names)
-  spoke_ref <- as.double(spoke_theta)
-  names(spoke_ref) <- as.character(spoke_theta_names)
+
   hub_prior_center_raw <- attr(hub_theta, "theta_prior_center", exact = TRUE) %||% hub_ref
   hub_init_raw <- attr(hub_theta, "theta_init", exact = TRUE) %||% hub_ref
   spoke_init_raw <- attr(spoke_theta, "theta_init", exact = TRUE) %||% spoke_ref
   hub_prior_center <- as.double(hub_prior_center_raw[hub_theta_names])
-  names(hub_prior_center) <- as.character(hub_theta_names)
+  names(hub_prior_center) <- hub_theta_names
   hub_prior_center[!is.finite(hub_prior_center)] <- hub_ref[!is.finite(hub_prior_center)]
   hub_init <- as.double(hub_init_raw[hub_theta_names])
-  names(hub_init) <- as.character(hub_theta_names)
+  names(hub_init) <- hub_theta_names
   hub_init[!is.finite(hub_init)] <- hub_ref[!is.finite(hub_init)]
   spoke_init <- as.double(spoke_init_raw[spoke_theta_names])
-  names(spoke_init) <- as.character(spoke_theta_names)
+  names(spoke_init) <- spoke_theta_names
   spoke_init[!is.finite(spoke_init)] <- spoke_ref[!is.finite(spoke_init)]
   hub_ref_sd <- as.double(hub_sd_map[hub_theta_names])
   spoke_ref_sd <- as.double(spoke_sd_map[spoke_theta_names])
   hub_ref_sd[!is.finite(hub_ref_sd) | hub_ref_sd <= 0] <- 1
   spoke_ref_sd[!is.finite(spoke_ref_sd) | spoke_ref_sd <= 0] <- 1
 
-  delta_mean <- NA_real_
-  delta_sd <- 1
-  log_alpha_mean <- if (isTRUE(use_scale)) NA_real_ else NA_real_
-  log_alpha_sd <- if (isTRUE(use_scale)) 0.2 else NA_real_
   theta_hub_post <- hub_ref
   theta_spoke_post <- spoke_ref
   joint_used <- identical(link_refit_mode, "joint_refit")
   n_hub_items_estimated <- 0L
   n_spoke_items_estimated <- 0L
 
+  param_names <- character()
+  start <- numeric()
+  log_post <- NULL
+  idx_delta <- NA_integer_
+  idx_log_alpha <- NA_integer_
+  fit_hub_idx <- integer()
+  fit_spoke_idx <- integer()
+  within_hub <- tibble::as_tibble(edge_attrs$within_hub_edges %||% tibble::tibble())
+  within_spoke <- tibble::as_tibble(edge_attrs$within_spoke_edges %||% tibble::tibble())
   if (isTRUE(joint_used)) {
-    within_hub <- tibble::as_tibble(edge_attrs$within_hub_edges %||% tibble::tibble())
-    within_spoke <- tibble::as_tibble(edge_attrs$within_spoke_edges %||% tibble::tibble())
-    fit_hub_idx <- if (identical(lock_mode, "hard_lock") || isTRUE(lock_kappa == 0)) integer() else seq_along(hub_ref)
+    fit_hub_idx <- if (identical(lock_mode, "hard_lock") || isTRUE(lock_kappa == 0)) {
+      integer()
+    } else {
+      seq_along(hub_ref)
+    }
     fit_spoke_idx <- seq_along(spoke_ref)
     n_hub_items_estimated <- as.integer(length(fit_hub_idx))
     n_spoke_items_estimated <- as.integer(length(fit_spoke_idx))
@@ -1051,16 +1281,23 @@
     n_s <- length(fit_spoke_idx)
     idx_delta <- n_h + n_s + 1L
     idx_log_alpha <- if (isTRUE(use_scale)) idx_delta + 1L else NA_integer_
-    start <- rep(0, n_h + n_s + 1L + ifelse(isTRUE(use_scale), 1L, 0L))
+    n_par <- n_h + n_s + 1L + ifelse(isTRUE(use_scale), 1L, 0L)
+    start <- rep(0, n_par)
     if (n_h > 0L) {
       start[seq_len(n_h)] <- hub_init[fit_hub_idx]
     }
     if (n_s > 0L) {
       start[n_h + seq_len(n_s)] <- spoke_init[fit_spoke_idx]
     }
+    param_names <- c(
+      if (n_h > 0L) paste0("theta_hub_", seq_len(n_h)) else character(),
+      if (n_s > 0L) paste0("theta_spoke_", seq_len(n_s)) else character(),
+      "delta",
+      if (isTRUE(use_scale)) "log_alpha" else character()
+    )
     hub_lut <- stats::setNames(seq_along(hub_ref), names(hub_ref))
     spoke_lut <- stats::setNames(seq_along(spoke_ref), names(spoke_ref))
-    nlp_joint <- function(par) {
+    log_post <- function(par) {
       hub_val <- hub_ref
       if (n_h > 0L) {
         hub_val[fit_hub_idx] <- par[seq_len(n_h)]
@@ -1072,117 +1309,146 @@
       delta <- par[[idx_delta]]
       log_alpha <- if (isTRUE(use_scale)) par[[idx_log_alpha]] else 0
       alpha <- exp(log_alpha)
-      ll <- 0
-      eta_cross <- delta + alpha * spoke_val[as.character(edges$spoke_item[keep])] -
-        hub_val[as.character(edges$hub_item[keep])] + beta_signed
+      eta_cross <- delta +
+        alpha * spoke_val[as.character(edges_obs$spoke_item)] -
+        hub_val[as.character(edges_obs$hub_item)] +
+        beta_signed
       p_cross <- (1 - epsilon) * stats::plogis(eta_cross) + epsilon * 0.5
       p_cross <- pmax(1e-10, pmin(1 - 1e-10, p_cross))
-      ll <- ll + sum(stats::dbinom(y, size = 1L, prob = p_cross, log = TRUE))
+      ll <- sum(stats::dbinom(y, size = 1L, prob = p_cross, log = TRUE))
+
       if (nrow(within_hub) > 0L) {
-        idx_A <- hub_lut[as.character(within_hub$A_item)]
-        idx_B <- hub_lut[as.character(within_hub$B_item)]
-        y_A <- as.integer(within_hub$y_A)
-        keep_h <- !is.na(idx_A) & !is.na(idx_B) & y_A %in% c(0L, 1L)
+        idx_a <- hub_lut[as.character(within_hub$A_item)]
+        idx_b <- hub_lut[as.character(within_hub$B_item)]
+        y_a <- as.integer(within_hub$y_A)
+        keep_h <- !is.na(idx_a) & !is.na(idx_b) & y_a %in% c(0L, 1L)
         if (any(keep_h)) {
-          eta_h <- hub_val[idx_A[keep_h]] - hub_val[idx_B[keep_h]] + beta
+          eta_h <- hub_val[idx_a[keep_h]] - hub_val[idx_b[keep_h]] + beta
           p_h <- (1 - epsilon) * stats::plogis(eta_h) + epsilon * 0.5
           p_h <- pmax(1e-10, pmin(1 - 1e-10, p_h))
-          ll <- ll + sum(stats::dbinom(y_A[keep_h], size = 1L, prob = p_h, log = TRUE))
+          ll <- ll + sum(stats::dbinom(y_a[keep_h], size = 1L, prob = p_h, log = TRUE))
         }
       }
       if (nrow(within_spoke) > 0L) {
-        idx_A <- spoke_lut[as.character(within_spoke$A_item)]
-        idx_B <- spoke_lut[as.character(within_spoke$B_item)]
-        y_A <- as.integer(within_spoke$y_A)
-        keep_s <- !is.na(idx_A) & !is.na(idx_B) & y_A %in% c(0L, 1L)
+        idx_a <- spoke_lut[as.character(within_spoke$A_item)]
+        idx_b <- spoke_lut[as.character(within_spoke$B_item)]
+        y_a <- as.integer(within_spoke$y_A)
+        keep_s <- !is.na(idx_a) & !is.na(idx_b) & y_a %in% c(0L, 1L)
         if (any(keep_s)) {
-          eta_s <- alpha * (spoke_val[idx_A[keep_s]] - spoke_val[idx_B[keep_s]]) + beta
+          eta_s <- alpha * (spoke_val[idx_a[keep_s]] - spoke_val[idx_b[keep_s]]) + beta
           p_s <- (1 - epsilon) * stats::plogis(eta_s) + epsilon * 0.5
           p_s <- pmax(1e-10, pmin(1 - 1e-10, p_s))
-          ll <- ll + sum(stats::dbinom(y_A[keep_s], size = 1L, prob = p_s, log = TRUE))
+          ll <- ll + sum(stats::dbinom(y_a[keep_s], size = 1L, prob = p_s, log = TRUE))
         }
       }
-      prior <- 0.5 * (delta / 1)^2
+
+      prior_pen <- 0.5 * (delta / 1)^2
       if (isTRUE(use_scale)) {
-        prior <- prior + 0.5 * (log_alpha / 0.2)^2
+        prior_pen <- prior_pen + 0.5 * (log_alpha / 0.2)^2
       }
       if (n_h > 0L) {
         if (identical(lock_mode, "soft_lock")) {
           sd_soft <- hub_ref_sd[fit_hub_idx] / max(lock_kappa, 1e-8)
-          prior <- prior + sum(
+          prior_pen <- prior_pen + sum(
             0.5 * ((hub_val[fit_hub_idx] - hub_prior_center[fit_hub_idx]) / pmax(sd_soft, 1e-8))^2
           )
         } else if (identical(lock_mode, "free")) {
-          prior <- prior + sum(0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / 3)^2)
+          prior_pen <- prior_pen + sum(0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / 3)^2)
         } else {
-          prior <- prior + sum(
+          prior_pen <- prior_pen + sum(
             0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / pmax(hub_ref_sd[fit_hub_idx], 1e-8))^2
           )
         }
       }
       if (n_s > 0L) {
-        prior <- prior + sum(
+        prior_pen <- prior_pen + sum(
           0.5 * ((spoke_val[fit_spoke_idx] - spoke_ref[fit_spoke_idx]) / pmax(spoke_ref_sd[fit_spoke_idx], 1e-8))^2
         )
       }
-      -ll + prior
-    }
-    opt <- stats::optim(start, nlp_joint, method = "BFGS", hessian = TRUE)
-    par <- opt$par
-    if (n_h > 0L) {
-      theta_hub_post[fit_hub_idx] <- par[seq_len(n_h)]
-    }
-    if (n_s > 0L) {
-      theta_spoke_post[fit_spoke_idx] <- par[n_h + seq_len(n_s)]
-    }
-    delta_mean <- as.double(par[[idx_delta]])
-    if (isTRUE(use_scale)) {
-      log_alpha_mean <- as.double(par[[idx_log_alpha]])
-    }
-    vcov <- suppressWarnings(tryCatch(solve(opt$hessian), error = function(e) NULL))
-    if (is.matrix(vcov) &&
-      nrow(vcov) >= idx_delta &&
-      is.finite(vcov[idx_delta, idx_delta]) &&
-      vcov[idx_delta, idx_delta] >= 0) {
-      delta_sd <- sqrt(vcov[idx_delta, idx_delta])
-    }
-    if (isTRUE(use_scale) &&
-      is.matrix(vcov) &&
-      nrow(vcov) >= idx_log_alpha &&
-      is.finite(vcov[idx_log_alpha, idx_log_alpha]) &&
-      vcov[idx_log_alpha, idx_log_alpha] >= 0) {
-      log_alpha_sd <- sqrt(vcov[idx_log_alpha, idx_log_alpha])
+      as.double(ll - prior_pen)
     }
   } else {
-    nlp <- function(par) {
-      delta <- par[[1L]]
-      log_alpha <- if (isTRUE(use_scale)) par[[2L]] else 0
+    idx_delta <- 1L
+    idx_log_alpha <- if (isTRUE(use_scale)) 2L else NA_integer_
+    start <- if (isTRUE(use_scale)) c(0, 0) else c(0)
+    param_names <- c("delta", if (isTRUE(use_scale)) "log_alpha" else character())
+    log_post <- function(par) {
+      delta <- par[[idx_delta]]
+      log_alpha <- if (isTRUE(use_scale)) par[[idx_log_alpha]] else 0
       alpha <- exp(log_alpha)
       eta <- delta + alpha * s - h + beta_signed
-      p_base <- stats::plogis(eta)
-      p <- (1 - epsilon) * p_base + epsilon * 0.5
+      p <- (1 - epsilon) * stats::plogis(eta) + epsilon * 0.5
       p <- pmax(1e-10, pmin(1 - 1e-10, p))
       ll <- sum(stats::dbinom(y, size = 1L, prob = p, log = TRUE))
-      prior <- 0.5 * (delta / 1)^2
+      prior_pen <- 0.5 * (delta / 1)^2
       if (isTRUE(use_scale)) {
-        prior <- prior + 0.5 * (log_alpha / 0.2)^2
+        prior_pen <- prior_pen + 0.5 * (log_alpha / 0.2)^2
       }
-      -ll + prior
+      as.double(ll - prior_pen)
     }
-    start <- if (isTRUE(use_scale)) c(0, 0) else c(0)
-    opt <- stats::optim(start, nlp, method = "BFGS", hessian = TRUE)
-    par <- opt$par
-    delta_mean <- as.double(par[[1L]])
-    if (isTRUE(use_scale)) {
-      log_alpha_mean <- as.double(par[[2L]])
+  }
+
+  seed <- .adaptive_link_refit_seed(
+    cross_edges = edges_obs,
+    transform_mode = transform_mode,
+    link_refit_mode = link_refit_mode
+  )
+  mcmc <- .adaptive_link_mcmc_sample(
+    log_post_fn = log_post,
+    init = start,
+    seed = seed
+  )
+  draws <- as.matrix(mcmc$draws)
+  colnames(draws) <- param_names
+  diagnostics <- .adaptive_link_mcmc_diagnostics(mcmc$chain_draws, param_names = param_names)
+
+  delta_draws <- as.double(draws[, idx_delta])
+  delta_mean <- as.double(mean(delta_draws))
+  delta_sd <- as.double(stats::sd(delta_draws))
+  if (!is.finite(delta_sd)) {
+    delta_sd <- 0
+  }
+  if (isTRUE(use_scale)) {
+    log_alpha_draws <- as.double(draws[, idx_log_alpha])
+    log_alpha_mean <- as.double(mean(log_alpha_draws))
+    log_alpha_sd <- as.double(stats::sd(log_alpha_draws))
+    if (!is.finite(log_alpha_sd)) {
+      log_alpha_sd <- 0
     }
-    vcov <- suppressWarnings(tryCatch(solve(opt$hessian), error = function(e) NULL))
-    if (is.matrix(vcov) && nrow(vcov) >= 1L && is.finite(vcov[1, 1]) && vcov[1, 1] >= 0) {
-      delta_sd <- sqrt(vcov[1, 1])
-    }
-    if (isTRUE(use_scale) && is.matrix(vcov) && nrow(vcov) >= 2L && is.finite(vcov[2, 2]) && vcov[2, 2] >= 0) {
-      log_alpha_sd <- sqrt(vcov[2, 2])
-    }
+  } else {
+    log_alpha_draws <- rep(NA_real_, length(delta_draws))
+    log_alpha_mean <- NA_real_
+    log_alpha_sd <- NA_real_
+  }
+
+  if (isTRUE(joint_used) && length(fit_hub_idx) > 0L) {
+    hub_cols <- seq_along(fit_hub_idx)
+    theta_hub_post[fit_hub_idx] <- colMeans(draws[, hub_cols, drop = FALSE])
+  }
+  if (isTRUE(joint_used) && length(fit_spoke_idx) > 0L) {
+    spoke_cols <- length(fit_hub_idx) + seq_along(fit_spoke_idx)
+    theta_spoke_post[fit_spoke_idx] <- colMeans(draws[, spoke_cols, drop = FALSE])
+  }
+
+  theta_hub_draws <- matrix(
+    rep(theta_hub_post, each = nrow(draws)),
+    nrow = nrow(draws),
+    byrow = FALSE,
+    dimnames = list(NULL, names(theta_hub_post))
+  )
+  theta_spoke_draws <- matrix(
+    rep(theta_spoke_post, each = nrow(draws)),
+    nrow = nrow(draws),
+    byrow = FALSE,
+    dimnames = list(NULL, names(theta_spoke_post))
+  )
+  if (isTRUE(joint_used) && length(fit_hub_idx) > 0L) {
+    hub_cols <- seq_along(fit_hub_idx)
+    theta_hub_draws[, fit_hub_idx] <- draws[, hub_cols, drop = FALSE]
+  }
+  if (isTRUE(joint_used) && length(fit_spoke_idx) > 0L) {
+    spoke_cols <- length(fit_hub_idx) + seq_along(fit_spoke_idx)
+    theta_spoke_draws[, fit_spoke_idx] <- draws[, spoke_cols, drop = FALSE]
   }
 
   prop_var <- mean(hub_sd^2 + spoke_sd^2, na.rm = TRUE)
@@ -1195,8 +1461,8 @@
 
   fit_contract <- list(
     contract_type = "link_refit",
-    estimation_method = "map_optim",
-    uncertainty_approximation = "hessian_laplace",
+    estimation_method = "bayesian_mcmc",
+    uncertainty_approximation = "posterior_draws",
     link_refit_mode = as.character(link_refit_mode),
     link_transform_mode = as.character(transform_mode),
     parameters = if (isTRUE(joint_used)) {
@@ -1225,6 +1491,17 @@
       used = as.logical(joint_used),
       n_hub_items_estimated = as.integer(n_hub_items_estimated),
       n_spoke_items_estimated = as.integer(n_spoke_items_estimated)
+    ),
+    diagnostics = list(
+      max_rhat = as.double(diagnostics$max_rhat %||% NA_real_),
+      min_ess_bulk = as.double(diagnostics$min_ess_bulk %||% NA_real_),
+      divergences = as.integer(diagnostics$divergences %||% NA_integer_)
+    ),
+    mcmc = list(
+      chains = as.integer(dim(mcmc$chain_draws)[2L] %||% NA_integer_),
+      warmup = 120L,
+      samples = as.integer(dim(mcmc$chain_draws)[1L] %||% NA_integer_),
+      mean_accept_rate = as.double(mcmc$accept_rate %||% NA_real_)
     )
   )
 
@@ -1235,7 +1512,14 @@
     log_alpha_sd = as.double(log_alpha_sd),
     fit_contract = fit_contract,
     theta_hub_post = theta_hub_post,
-    theta_spoke_post = theta_spoke_post
+    theta_spoke_post = theta_spoke_post,
+    posterior_draws = list(
+      delta = as.double(delta_draws),
+      log_alpha = as.double(log_alpha_draws),
+      theta_hub = theta_hub_draws,
+      theta_spoke = theta_spoke_draws
+    ),
+    diagnostics = diagnostics
   )
 }
 
@@ -1243,7 +1527,8 @@
                                          hub_theta,
                                          spoke_theta,
                                          delta_mean,
-                                         log_alpha_mean = NA_real_) {
+                                         log_alpha_mean = NA_real_,
+                                         posterior_draws = NULL) {
   judge_params <- attr(cross_edges, "judge_params", exact = TRUE) %||% list(beta = 0, epsilon = 0)
   beta <- as.double(judge_params$beta %||% 0)
   epsilon <- as.double(judge_params$epsilon %||% 0)
@@ -1268,11 +1553,58 @@
   if (!any(keep)) {
     return(NA_real_)
   }
+  h <- h[keep]
+  s <- s[keep]
+  y <- y[keep]
+  beta_signed <- beta_signed[keep]
+  edges_keep <- edges[keep, , drop = FALSE]
+
+  draws <- posterior_draws %||% list()
+  delta_draws <- as.double(draws$delta %||% numeric())
+  if (length(delta_draws) > 0L) {
+    log_alpha_draws <- as.double(draws$log_alpha %||% rep(NA_real_, length(delta_draws)))
+    if (length(log_alpha_draws) != length(delta_draws)) {
+      log_alpha_draws <- rep(NA_real_, length(delta_draws))
+    }
+    hub_draws <- as.matrix(draws$theta_hub %||% matrix(numeric(), nrow = 0, ncol = 0))
+    spoke_draws <- as.matrix(draws$theta_spoke %||% matrix(numeric(), nrow = 0, ncol = 0))
+    n_draws <- length(delta_draws)
+    draw_idx <- seq_len(n_draws)
+    if (n_draws > 200L) {
+      draw_idx <- unique(as.integer(round(seq(1, n_draws, length.out = 200L))))
+    }
+    mae <- rep(NA_real_, length(draw_idx))
+    for (k in seq_along(draw_idx)) {
+      d <- draw_idx[[k]]
+      h_k <- h
+      s_k <- s
+      if (nrow(hub_draws) >= d && ncol(hub_draws) > 0L && !is.null(colnames(hub_draws))) {
+        h_map <- as.double(hub_draws[d, as.character(edges_keep$hub_item), drop = TRUE])
+        if (all(is.finite(h_map))) {
+          h_k <- h_map
+        }
+      }
+      if (nrow(spoke_draws) >= d && ncol(spoke_draws) > 0L && !is.null(colnames(spoke_draws))) {
+        s_map <- as.double(spoke_draws[d, as.character(edges_keep$spoke_item), drop = TRUE])
+        if (all(is.finite(s_map))) {
+          s_k <- s_map
+        }
+      }
+      alpha <- if (is.finite(log_alpha_draws[[d]])) exp(log_alpha_draws[[d]]) else 1
+      eta <- delta_draws[[d]] + alpha * s_k - h_k + beta_signed
+      p <- (1 - epsilon) * stats::plogis(eta) + epsilon * 0.5
+      mae[[k]] <- mean(abs(as.double(y) - p))
+    }
+    out <- mean(mae[is.finite(mae)])
+    if (is.finite(out)) {
+      return(as.double(out))
+    }
+  }
+
   alpha <- if (is.finite(log_alpha_mean)) exp(log_alpha_mean) else 1
-  eta <- as.double(delta_mean) + alpha * s[keep] - h[keep] + beta_signed[keep]
-  p_base <- stats::plogis(eta)
-  p <- (1 - epsilon) * p_base + epsilon * 0.5
-  as.double(mean(abs(as.double(y[keep]) - p)))
+  eta <- as.double(delta_mean) + alpha * s - h + beta_signed
+  p <- (1 - epsilon) * stats::plogis(eta) + epsilon * 0.5
+  as.double(mean(abs(as.double(y) - p)))
 }
 
 .adaptive_link_concurrent_targets <- function(spoke_stats, total_pairs, floor_pairs) {
@@ -1441,7 +1773,8 @@
       hub_theta = ppc_hub_theta,
       spoke_theta = ppc_spoke_theta,
       delta_mean = fit$delta_mean,
-      log_alpha_mean = fit$log_alpha_mean
+      log_alpha_mean = fit$log_alpha_mean,
+      posterior_draws = fit$posterior_draws
     )
 
     escalated_this_refit <- FALSE
@@ -1468,7 +1801,8 @@
             hub_theta = ppc_hub_theta,
             spoke_theta = ppc_spoke_theta,
             delta_mean = fit$delta_mean,
-            log_alpha_mean = fit$log_alpha_mean
+            log_alpha_mean = fit$log_alpha_mean,
+            posterior_draws = fit$posterior_draws
           )
         }
         bad_refits[[key]] <- bad
@@ -1576,6 +1910,7 @@
       log_alpha_mean = fit$log_alpha_mean,
       lag_row = lag_row
     )
+    fit_diag <- fit$diagnostics %||% list()
 
     link_identified <- is.finite(reliability_active) &&
       reliability_active >= as.double(controller$link_identified_reliability_min %||% 0.80) &&
@@ -1620,6 +1955,12 @@
       link_identified = as.logical(link_identified),
       ppc_mae_cross = as.double(ppc_mae),
       fit_contract = fit$fit_contract %||% list(),
+      link_diagnostics_divergences = as.integer(fit_diag$divergences %||% NA_integer_),
+      link_diagnostics_max_rhat = as.double(fit_diag$max_rhat %||% NA_real_),
+      link_diagnostics_min_ess_bulk = as.double(fit_diag$min_ess_bulk %||% NA_real_),
+      link_diagnostics_divergences_pass = as.logical(fit_diag$diagnostics_divergences_pass %||% NA),
+      link_diagnostics_rhat_pass = as.logical(fit_diag$diagnostics_rhat_pass %||% NA),
+      link_diagnostics_ess_pass = as.logical(fit_diag$diagnostics_ess_pass %||% NA),
       escalated_this_refit = as.logical(escalated_this_refit),
       n_cross_edges_since_last_refit = as.integer(nrow(cross_since)),
       coverage_bins_used = as.integer(coverage_bins_map[[key]] %||% NA_integer_),
@@ -1693,7 +2034,6 @@
   rows <- vector("list", length(spoke_ids))
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
-  proxy <- .adaptive_rank_proxy(state)
 
   for (idx in seq_along(spoke_ids)) {
     spoke_id <- as.integer(spoke_ids[[idx]])
@@ -1776,13 +2116,21 @@
 
     spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
 
-    spoke_scores <- proxy$scores[spoke_items]
+    hub_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
+    coverage_ids <- unique(c(hub_items, spoke_items))
+    coverage_scores <- .adaptive_link_phase_b_routing_scores(
+      state = state,
+      controller = controller,
+      active_ids = coverage_ids,
+      hub_id = hub_id
+    )
     coverage <- .adaptive_link_spoke_coverage(
       state = state,
       controller = controller,
       spoke_id = spoke_id,
       spoke_ids = spoke_items,
-      proxy_scores = spoke_scores
+      routing_scores = coverage_scores,
+      score_source = "linking_global_score"
     )
 
     transform_mode <- as.character(stats_row$link_transform_mode %||%
@@ -1848,6 +2196,12 @@
       link_stop_pass = as.logical(link_stop_pass),
       ts_btl_rank_spearman = as.double(stats_row$ts_btl_rank_spearman_active %||% NA_real_),
       ppc_mae_cross = as.double(stats_row$ppc_mae_cross %||% NA_real_),
+      link_diagnostics_divergences = as.integer(stats_row$link_diagnostics_divergences %||% NA_integer_),
+      link_diagnostics_max_rhat = as.double(stats_row$link_diagnostics_max_rhat %||% NA_real_),
+      link_diagnostics_min_ess_bulk = as.double(stats_row$link_diagnostics_min_ess_bulk %||% NA_real_),
+      link_diagnostics_divergences_pass = as.logical(stats_row$link_diagnostics_divergences_pass %||% NA),
+      link_diagnostics_rhat_pass = as.logical(stats_row$link_diagnostics_rhat_pass %||% NA),
+      link_diagnostics_ess_pass = as.logical(stats_row$link_diagnostics_ess_pass %||% NA),
       escalated_this_refit = as.logical(stats_row$escalated_this_refit %||% FALSE),
       n_pairs_cross_set_done = as.integer(n_pairs_done),
       n_unique_cross_pairs_seen = as.integer(n_unique),

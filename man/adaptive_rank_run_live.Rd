@@ -115,6 +115,8 @@ Invalid responses produce a logged step with
 Pair selection does not use BTL posterior draws.
 Within-set routing is TrueSkill-based with utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})}.
+In linking Phase B, anchor/strata routing uses linking-global scores built
+from Phase A raw summaries and the current spoke transform.
 Linking Phase B routing ranks eligible cross-set candidates by
 \eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
 parameters. Linking inference parameters remain inference-only

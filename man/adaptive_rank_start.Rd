@@ -82,7 +82,9 @@ graph after \eqn{N - 1} committed comparisons.
 Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set routing uses TrueSkill base utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
-win probability for pair \eqn{\{i, j\}}.
+win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
+routing uses a linking-global score derived from Phase A raw summaries plus
+the current spoke transform (\eqn{\delta_s}, optional \eqn{\log \alpha_s}).
 In linking Phase B, eligible cross-set candidates are ranked by
 \eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
 parameters. Linking inference parameters are used for
@@ -93,6 +95,8 @@ estimates if link-specific estimates are not yet available; once link-specific
 estimates are expected, missing/non-finite values abort.
 Bayesian BTL posterior draws are not used for pair selection; they are used
 for posterior inference, diagnostics, and stopping at refit rounds.
+Linking transform refits use Bayesian posterior estimation and posterior
+summaries/diagnostics are logged per spoke at each linking refit.
 
 The returned state contains canonical logs:
 \itemize{

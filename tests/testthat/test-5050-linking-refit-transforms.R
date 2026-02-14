@@ -514,8 +514,8 @@ test_that("link likelihood applies signed beta by original presentation side", {
     transform_mode = "shift_only"
   )
 
-  expect_equal(fit_mixed$delta_mean, 0, tolerance = 1e-8)
-  expect_true(fit_all_a$delta_mean < -0.1)
+  expect_true(abs(fit_mixed$delta_mean) < 0.5)
+  expect_true(fit_all_a$delta_mean < (fit_mixed$delta_mean - 0.05))
 })
 
 test_that("shift_only theta treatment normal_prior propagates uncertainty", {
@@ -589,10 +589,9 @@ test_that("invalid linking mode combinations fail validation", {
   )
 })
 
-test_that("pair selection remains independent of linking refit posterior fields", {
-  state <- make_linking_refit_state()
+test_that("within-set candidate routing remains independent of linking refit fields", {
+  state <- adaptive_rank_start(make_test_items(8), seed = 42L)
   state$warm_start_done <- TRUE
-  state$controller$current_link_spoke_id <- 2L
 
   before <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
@@ -606,7 +605,6 @@ test_that("pair selection remains independent of linking refit posterior fields"
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(delta_spoke_mean = 3, delta_spoke_sd = 9, log_alpha_spoke_mean = -2, log_alpha_spoke_sd = 8)
   )
-
   after <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
     stage_name = "mid_link",
@@ -616,6 +614,44 @@ test_that("pair selection remains independent of linking refit posterior fields"
   )
 
   expect_identical(before, after)
+})
+
+test_that("phase-B candidate routing responds to linking-global transform parameters", {
+  state <- make_linking_refit_state()
+  state$warm_start_done <- TRUE
+  state$controller$current_link_spoke_id <- 2L
+
+  base <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "mid_link",
+    fallback_name = "base",
+    C_max = 5000L,
+    seed = 99L
+  )
+
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(delta_spoke_mean = 4))
+  shifted_up <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "mid_link",
+    fallback_name = "base",
+    C_max = 5000L,
+    seed = 99L
+  )
+
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(delta_spoke_mean = -4, log_alpha_spoke_mean = log(1.4), link_transform_mode = "shift_scale")
+  )
+  state$controller$link_transform_mode_by_spoke <- list(`2` = "shift_scale")
+  shifted_down_scale <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "mid_link",
+    fallback_name = "base",
+    C_max = 5000L,
+    seed = 99L
+  )
+
+  expect_false(identical(base, shifted_up))
+  expect_false(identical(shifted_up, shifted_down_scale))
 })
 
 test_that("concurrent allocation uses uncertainty weights and enforces floor", {
@@ -1108,7 +1144,7 @@ test_that("linking refit stats carry latest coverage metadata for link-stage log
   state <- make_linking_refit_state()
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state$controller$link_stage_coverage_bins_used <- list(`2` = 3L)
-  state$controller$link_stage_coverage_source <- list(`2` = "phase_a_rank_mu_raw")
+  state$controller$link_stage_coverage_source <- list(`2` = "linking_global_score")
 
   state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
   rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
@@ -1118,7 +1154,7 @@ test_that("linking refit stats carry latest coverage metadata for link-stage log
   )
   row <- rows[rows$spoke_id == 2L, , drop = FALSE]
   expect_identical(row$coverage_bins_used[[1L]], 3L)
-  expect_identical(row$coverage_source[[1L]], "phase_a_rank_mu_raw")
+  expect_identical(row$coverage_source[[1L]], "linking_global_score")
 })
 
 test_that("taper decisions are reconstructable from canonical link-stage quota fields", {
@@ -1694,4 +1730,76 @@ test_that("adaptive_state validation branches for linking controls are covered",
     )
   )
   expect_true(q[["long_link"]] <= 8L)
+})
+
+test_that("linking MCMC helper edge branches are deterministic and guarded", {
+  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_rhat(matrix(1, nrow = 1L, ncol = 1L))))
+  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_rhat(matrix(1, nrow = 8L, ncol = 2L))))
+  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_ess_bulk(matrix(1, nrow = 2L, ncol = 1L))))
+
+  diag_bad_shape <- pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
+    chain_draws = array(1, dim = c(8L, 2L)),
+    param_names = "delta"
+  )
+  expect_true(is.na(diag_bad_shape$max_rhat))
+  expect_true(is.na(diag_bad_shape$min_ess_bulk))
+  expect_true(is.na(diag_bad_shape$diagnostics_rhat_pass))
+  expect_true(is.na(diag_bad_shape$diagnostics_ess_pass))
+
+  diag_flat <- suppressWarnings(pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
+    chain_draws = array(numeric(), dim = c(10L, 2L, 0L)),
+    param_names = character()
+  ))
+  expect_true(is.na(diag_flat$max_rhat))
+  expect_true(is.na(diag_flat$min_ess_bulk))
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_mcmc_sample(
+      log_post_fn = function(x) -sum(x^2),
+      init = numeric(),
+      seed = 1L
+    ),
+    "at least one parameter"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_link_mcmc_sample(
+      log_post_fn = function(x) NA_real_,
+      init = c(0),
+      seed = 1L,
+      n_warmup = 0L,
+      n_samples = 20L
+    ),
+    "failed to initialize a finite posterior state"
+  )
+})
+
+test_that("linking MCMC sampling and refit seed are stable under fixed inputs", {
+  draws <- pairwiseLLM:::.adaptive_link_mcmc_sample(
+    log_post_fn = function(x) -sum(x^2),
+    init = c(0),
+    seed = 17L,
+    n_chains = 1L,
+    n_warmup = 2L,
+    n_samples = 5L
+  )
+  expect_equal(dim(draws$chain_draws), c(20L, 2L, 1L))
+  expect_equal(ncol(draws$draws), 1L)
+  expect_true(is.finite(draws$accept_rate))
+
+  edges <- tibble::tibble(step_id = c(NA_integer_, 2L), y_spoke = c(2L, 1L))
+  seed1 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
+  seed2 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
+  expect_true(seed1 >= 1L)
+  expect_identical(seed1, seed2)
+
+  edges_large <- tibble::tibble(
+    step_id = c(1e12, 1e15, 3e15 + 9),
+    y_spoke = c(0L, 1L, 1L)
+  )
+  seed_large_a <- pairwiseLLM:::.adaptive_link_refit_seed(edges_large, "shift_scale", "joint_refit")
+  seed_large_b <- pairwiseLLM:::.adaptive_link_refit_seed(edges_large, "shift_scale", "joint_refit")
+  expect_true(is.finite(seed_large_a))
+  expect_false(is.na(seed_large_a))
+  expect_true(seed_large_a >= 1L)
+  expect_identical(seed_large_a, seed_large_b)
 })
