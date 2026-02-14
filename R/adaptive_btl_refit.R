@@ -699,7 +699,11 @@
   theta[is.finite(theta) & theta >= 0]
 }
 
-.adaptive_link_judge_params <- function(state, controller, scope = c("link", "within")) {
+.adaptive_link_judge_params <- function(state,
+                                       controller,
+                                       scope = c("link", "within"),
+                                       allow_cold_start_fallback = FALSE,
+                                       expected_link_params = TRUE) {
   scope <- match.arg(scope)
   fit <- state$btl_fit %||% list()
   mode <- as.character(controller$judge_param_mode %||% "global_shared")
@@ -719,7 +723,23 @@
     if (identical(scope, "link")) {
       beta <- as.double(fit$beta_link_mean %||% NA_real_)
       epsilon <- as.double(fit$epsilon_link_mean %||% NA_real_)
-      if (!is.finite(beta) || !is.finite(epsilon)) {
+      has_beta <- !is.null(fit$beta_link_mean)
+      has_epsilon <- !is.null(fit$epsilon_link_mean)
+      if (is.finite(beta) && is.finite(epsilon)) {
+        # keep parsed values
+      } else if (isTRUE(allow_cold_start_fallback) &&
+        !isTRUE(expected_link_params) &&
+        !xor(has_beta, has_epsilon)) {
+        beta_within <- as.double(fit$beta_within_mean %||% NA_real_)
+        epsilon_within <- as.double(fit$epsilon_within_mean %||% NA_real_)
+        if (is.finite(beta_within) && is.finite(epsilon_within)) {
+          beta <- beta_within
+          epsilon <- epsilon_within
+        } else {
+          beta <- beta_shared
+          epsilon <- epsilon_shared
+        }
+      } else {
         rlang::abort(
           paste0(
             "Phase-specific judge mode requires `beta_link_mean` and ",
@@ -752,8 +772,50 @@
     mode = mode,
     scope = as.character(scope),
     beta = as.double(beta),
-    epsilon = as.double(epsilon)
+    epsilon = as.double(epsilon),
+    cold_start_fallback_used = as.logical(
+      isTRUE(identical(mode, "phase_specific")) &&
+        isTRUE(identical(scope, "link")) &&
+        isTRUE(allow_cold_start_fallback) &&
+        !isTRUE(expected_link_params) &&
+        (!is.finite(as.double(fit$beta_link_mean %||% NA_real_)) ||
+          !is.finite(as.double(fit$epsilon_link_mean %||% NA_real_)))
+    )
   )
+}
+
+.adaptive_link_phase_b_startup_gap_for_spoke <- function(state, spoke_id) {
+  controller <- .adaptive_controller_resolve(state)
+  if (!.adaptive_link_mode_active(controller)) {
+    return(FALSE)
+  }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!identical(phase_ctx$phase, "phase_b")) {
+    return(FALSE)
+  }
+  stats_by_spoke <- controller$link_refit_stats_by_spoke %||% list()
+  if (!is.null(stats_by_spoke[[as.character(spoke_id)]])) {
+    return(FALSE)
+  }
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (nrow(step_log) < 1L || !all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
+    return(TRUE)
+  }
+  has_cross_spoke <- any(
+    !is.na(step_log$pair_id) &
+      step_log$is_cross_set %in% TRUE &
+      as.integer(step_log$link_spoke_id) == as.integer(spoke_id),
+    na.rm = TRUE
+  )
+  if (!isTRUE(has_cross_spoke)) {
+    return(TRUE)
+  }
+  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
+  if (nrow(link_stage_log) < 1L || !"spoke_id" %in% names(link_stage_log)) {
+    return(TRUE)
+  }
+  has_refit_row <- any(as.integer(link_stage_log$spoke_id) == as.integer(spoke_id), na.rm = TRUE)
+  !isTRUE(has_refit_row)
 }
 
 .adaptive_link_cross_edges <- function(state, spoke_id, last_refit_step = NULL) {
@@ -832,6 +894,41 @@
   )
 }
 
+.adaptive_link_within_edges <- function(state, set_id) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (nrow(step_log) < 1L) {
+    return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
+  }
+  required <- c("pair_id", "A", "B", "Y", "set_i", "set_j", "step_id")
+  if (!all(required %in% names(step_log))) {
+    return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
+  }
+  rows <- step_log[
+    !is.na(step_log$pair_id) &
+      as.integer(step_log$set_i) == as.integer(set_id) &
+      as.integer(step_log$set_j) == as.integer(set_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(rows) < 1L) {
+    return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
+  }
+  ids <- as.character(state$item_ids)
+  A_item <- ids[as.integer(rows$A)]
+  B_item <- ids[as.integer(rows$B)]
+  y_A <- as.integer(rows$Y)
+  keep <- !is.na(A_item) & !is.na(B_item) & y_A %in% c(0L, 1L)
+  if (!any(keep)) {
+    return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
+  }
+  tibble::tibble(
+    A_item = as.character(A_item[keep]),
+    B_item = as.character(B_item[keep]),
+    y_A = as.integer(y_A[keep]),
+    step_id = as.integer(rows$step_id[keep])
+  )
+}
+
 .adaptive_link_fit_transform <- function(cross_edges,
                                          hub_theta,
                                          spoke_theta,
@@ -855,10 +952,13 @@
   }
   epsilon <- max(0, min(1, epsilon))
 
+  link_refit_mode <- as.character(refit_contract_ctx$link_refit_mode %||% "shift_only")
+  lock_mode <- as.character(refit_contract_ctx$hub_lock_mode %||% NA_character_)
+  lock_kappa <- as.double(refit_contract_ctx$hub_lock_kappa %||% NA_real_)
   hub_sd_map <- attr(hub_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   spoke_sd_map <- attr(spoke_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   edges <- tibble::as_tibble(cross_edges)
-  if (nrow(edges) < 1L) {
+  empty_result <- function() {
     empty <- list(
       delta_mean = 0,
       delta_sd = 1,
@@ -867,13 +967,21 @@
     )
     empty$fit_contract <- list(
       contract_type = "link_refit",
-      link_refit_mode = as.character(refit_contract_ctx$link_refit_mode %||% "shift_only"),
+      link_refit_mode = as.character(link_refit_mode),
       link_transform_mode = as.character(transform_mode),
       parameters = if (isTRUE(use_scale)) c("delta_s", "log_alpha_s") else c("delta_s"),
       priors = list(delta_sd = 1, log_alpha_sd = if (isTRUE(use_scale)) 0.2 else NA_real_),
       judge = list(mode = as.character(judge_params$mode), scope = as.character(judge_params$scope))
     )
-    return(empty)
+    empty$joint_refit <- list(
+      used = FALSE,
+      lock_mode = lock_mode,
+      hub_lock_kappa = as.double(lock_kappa)
+    )
+    empty
+  }
+  if (nrow(edges) < 1L) {
+    return(empty_result())
   }
   h <- as.double(hub_theta[as.character(edges$hub_item)])
   s <- as.double(spoke_theta[as.character(edges$spoke_item)])
@@ -887,21 +995,7 @@
   y <- as.integer(edges$y_spoke)
   keep <- is.finite(h) & is.finite(s) & y %in% c(0L, 1L) & is.finite(beta_signed)
   if (!any(keep)) {
-    empty <- list(
-      delta_mean = 0,
-      delta_sd = 1,
-      log_alpha_mean = if (isTRUE(use_scale)) 0 else NA_real_,
-      log_alpha_sd = if (isTRUE(use_scale)) 0.2 else NA_real_
-    )
-    empty$fit_contract <- list(
-      contract_type = "link_refit",
-      link_refit_mode = as.character(refit_contract_ctx$link_refit_mode %||% "shift_only"),
-      link_transform_mode = as.character(transform_mode),
-      parameters = if (isTRUE(use_scale)) c("delta_s", "log_alpha_s") else c("delta_s"),
-      priors = list(delta_sd = 1, log_alpha_sd = if (isTRUE(use_scale)) 0.2 else NA_real_),
-      judge = list(mode = as.character(judge_params$mode), scope = as.character(judge_params$scope))
-    )
-    return(empty)
+    return(empty_result())
   }
   h <- h[keep]
   s <- s[keep]
@@ -909,32 +1003,164 @@
   spoke_sd <- spoke_sd[keep]
   beta_signed <- beta_signed[keep]
   y <- y[keep]
-  nlp <- function(par) {
-    delta <- par[[1L]]
-    log_alpha <- if (isTRUE(use_scale)) par[[2L]] else 0
-    alpha <- exp(log_alpha)
-    eta <- delta + alpha * s - h + beta_signed
-    p_base <- stats::plogis(eta)
-    p <- (1 - epsilon) * p_base + epsilon * 0.5
-    p <- pmax(1e-10, pmin(1 - 1e-10, p))
-    ll <- sum(stats::dbinom(y, size = 1L, prob = p, log = TRUE))
-    prior <- 0.5 * (delta / 1)^2
-    if (isTRUE(use_scale)) {
-      prior <- prior + 0.5 * (log_alpha / 0.2)^2
-    }
-    -ll + prior
-  }
-  start <- if (isTRUE(use_scale)) c(0, 0) else c(0)
-  opt <- stats::optim(start, nlp, method = "BFGS", hessian = TRUE)
-  par <- opt$par
-  vcov <- suppressWarnings(tryCatch(solve(opt$hessian), error = function(e) NULL))
+  hub_theta_names <- names(hub_theta)
+  spoke_theta_names <- names(spoke_theta)
+  hub_ref <- as.double(hub_theta)
+  names(hub_ref) <- as.character(hub_theta_names)
+  spoke_ref <- as.double(spoke_theta)
+  names(spoke_ref) <- as.character(spoke_theta_names)
+  hub_ref_sd <- as.double(hub_sd_map[hub_theta_names])
+  spoke_ref_sd <- as.double(spoke_sd_map[spoke_theta_names])
+  hub_ref_sd[!is.finite(hub_ref_sd) | hub_ref_sd <= 0] <- 1
+  spoke_ref_sd[!is.finite(spoke_ref_sd) | spoke_ref_sd <= 0] <- 1
+
+  delta_mean <- NA_real_
   delta_sd <- 1
+  log_alpha_mean <- if (isTRUE(use_scale)) NA_real_ else NA_real_
   log_alpha_sd <- if (isTRUE(use_scale)) 0.2 else NA_real_
-  if (is.matrix(vcov) && nrow(vcov) >= 1L) {
-    if (is.finite(vcov[1, 1]) && vcov[1, 1] >= 0) {
+  theta_hub_post <- hub_ref
+  theta_spoke_post <- spoke_ref
+  joint_used <- identical(link_refit_mode, "joint_refit")
+
+  if (isTRUE(joint_used)) {
+    within_hub <- tibble::as_tibble(edge_attrs$within_hub_edges %||% tibble::tibble())
+    within_spoke <- tibble::as_tibble(edge_attrs$within_spoke_edges %||% tibble::tibble())
+    fit_hub_idx <- if (identical(lock_mode, "hard_lock") || isTRUE(lock_kappa == 0)) integer() else seq_along(hub_ref)
+    fit_spoke_idx <- seq_along(spoke_ref)
+    n_h <- length(fit_hub_idx)
+    n_s <- length(fit_spoke_idx)
+    idx_delta <- n_h + n_s + 1L
+    idx_log_alpha <- if (isTRUE(use_scale)) idx_delta + 1L else NA_integer_
+    start <- rep(0, n_h + n_s + 1L + ifelse(isTRUE(use_scale), 1L, 0L))
+    if (n_h > 0L) {
+      start[seq_len(n_h)] <- hub_ref[fit_hub_idx]
+    }
+    if (n_s > 0L) {
+      start[n_h + seq_len(n_s)] <- spoke_ref[fit_spoke_idx]
+    }
+    hub_lut <- stats::setNames(seq_along(hub_ref), names(hub_ref))
+    spoke_lut <- stats::setNames(seq_along(spoke_ref), names(spoke_ref))
+    nlp_joint <- function(par) {
+      hub_val <- hub_ref
+      if (n_h > 0L) {
+        hub_val[fit_hub_idx] <- par[seq_len(n_h)]
+      }
+      spoke_val <- spoke_ref
+      if (n_s > 0L) {
+        spoke_val[fit_spoke_idx] <- par[n_h + seq_len(n_s)]
+      }
+      delta <- par[[idx_delta]]
+      log_alpha <- if (isTRUE(use_scale)) par[[idx_log_alpha]] else 0
+      alpha <- exp(log_alpha)
+      ll <- 0
+      eta_cross <- delta + alpha * spoke_val[as.character(edges$spoke_item[keep])] -
+        hub_val[as.character(edges$hub_item[keep])] + beta_signed
+      p_cross <- (1 - epsilon) * stats::plogis(eta_cross) + epsilon * 0.5
+      p_cross <- pmax(1e-10, pmin(1 - 1e-10, p_cross))
+      ll <- ll + sum(stats::dbinom(y, size = 1L, prob = p_cross, log = TRUE))
+      if (nrow(within_hub) > 0L) {
+        idx_A <- hub_lut[as.character(within_hub$A_item)]
+        idx_B <- hub_lut[as.character(within_hub$B_item)]
+        y_A <- as.integer(within_hub$y_A)
+        keep_h <- !is.na(idx_A) & !is.na(idx_B) & y_A %in% c(0L, 1L)
+        if (any(keep_h)) {
+          eta_h <- hub_val[idx_A[keep_h]] - hub_val[idx_B[keep_h]] + beta
+          p_h <- (1 - epsilon) * stats::plogis(eta_h) + epsilon * 0.5
+          p_h <- pmax(1e-10, pmin(1 - 1e-10, p_h))
+          ll <- ll + sum(stats::dbinom(y_A[keep_h], size = 1L, prob = p_h, log = TRUE))
+        }
+      }
+      if (nrow(within_spoke) > 0L) {
+        idx_A <- spoke_lut[as.character(within_spoke$A_item)]
+        idx_B <- spoke_lut[as.character(within_spoke$B_item)]
+        y_A <- as.integer(within_spoke$y_A)
+        keep_s <- !is.na(idx_A) & !is.na(idx_B) & y_A %in% c(0L, 1L)
+        if (any(keep_s)) {
+          eta_s <- alpha * (spoke_val[idx_A[keep_s]] - spoke_val[idx_B[keep_s]]) + beta
+          p_s <- (1 - epsilon) * stats::plogis(eta_s) + epsilon * 0.5
+          p_s <- pmax(1e-10, pmin(1 - 1e-10, p_s))
+          ll <- ll + sum(stats::dbinom(y_A[keep_s], size = 1L, prob = p_s, log = TRUE))
+        }
+      }
+      prior <- 0.5 * (delta / 1)^2
+      if (isTRUE(use_scale)) {
+        prior <- prior + 0.5 * (log_alpha / 0.2)^2
+      }
+      if (n_h > 0L) {
+        if (identical(lock_mode, "soft_lock")) {
+          sd_soft <- hub_ref_sd[fit_hub_idx] / max(lock_kappa, 1e-8)
+          prior <- prior + sum(
+            0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / pmax(sd_soft, 1e-8))^2
+          )
+        } else if (identical(lock_mode, "free")) {
+          prior <- prior + sum(0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / 3)^2)
+        } else {
+          prior <- prior + sum(
+            0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / pmax(hub_ref_sd[fit_hub_idx], 1e-8))^2
+          )
+        }
+      }
+      if (n_s > 0L) {
+        prior <- prior + sum(
+          0.5 * ((spoke_val[fit_spoke_idx] - spoke_ref[fit_spoke_idx]) / pmax(spoke_ref_sd[fit_spoke_idx], 1e-8))^2
+        )
+      }
+      -ll + prior
+    }
+    opt <- stats::optim(start, nlp_joint, method = "BFGS", hessian = TRUE)
+    par <- opt$par
+    if (n_h > 0L) {
+      theta_hub_post[fit_hub_idx] <- par[seq_len(n_h)]
+    }
+    if (n_s > 0L) {
+      theta_spoke_post[fit_spoke_idx] <- par[n_h + seq_len(n_s)]
+    }
+    delta_mean <- as.double(par[[idx_delta]])
+    if (isTRUE(use_scale)) {
+      log_alpha_mean <- as.double(par[[idx_log_alpha]])
+    }
+    vcov <- suppressWarnings(tryCatch(solve(opt$hessian), error = function(e) NULL))
+    if (is.matrix(vcov) &&
+      nrow(vcov) >= idx_delta &&
+      is.finite(vcov[idx_delta, idx_delta]) &&
+      vcov[idx_delta, idx_delta] >= 0) {
+      delta_sd <- sqrt(vcov[idx_delta, idx_delta])
+    }
+    if (isTRUE(use_scale) &&
+      is.matrix(vcov) &&
+      nrow(vcov) >= idx_log_alpha &&
+      is.finite(vcov[idx_log_alpha, idx_log_alpha]) &&
+      vcov[idx_log_alpha, idx_log_alpha] >= 0) {
+      log_alpha_sd <- sqrt(vcov[idx_log_alpha, idx_log_alpha])
+    }
+  } else {
+    nlp <- function(par) {
+      delta <- par[[1L]]
+      log_alpha <- if (isTRUE(use_scale)) par[[2L]] else 0
+      alpha <- exp(log_alpha)
+      eta <- delta + alpha * s - h + beta_signed
+      p_base <- stats::plogis(eta)
+      p <- (1 - epsilon) * p_base + epsilon * 0.5
+      p <- pmax(1e-10, pmin(1 - 1e-10, p))
+      ll <- sum(stats::dbinom(y, size = 1L, prob = p, log = TRUE))
+      prior <- 0.5 * (delta / 1)^2
+      if (isTRUE(use_scale)) {
+        prior <- prior + 0.5 * (log_alpha / 0.2)^2
+      }
+      -ll + prior
+    }
+    start <- if (isTRUE(use_scale)) c(0, 0) else c(0)
+    opt <- stats::optim(start, nlp, method = "BFGS", hessian = TRUE)
+    par <- opt$par
+    delta_mean <- as.double(par[[1L]])
+    if (isTRUE(use_scale)) {
+      log_alpha_mean <- as.double(par[[2L]])
+    }
+    vcov <- suppressWarnings(tryCatch(solve(opt$hessian), error = function(e) NULL))
+    if (is.matrix(vcov) && nrow(vcov) >= 1L && is.finite(vcov[1, 1]) && vcov[1, 1] >= 0) {
       delta_sd <- sqrt(vcov[1, 1])
     }
-    if (isTRUE(use_scale) && nrow(vcov) >= 2L && is.finite(vcov[2, 2]) && vcov[2, 2] >= 0) {
+    if (isTRUE(use_scale) && is.matrix(vcov) && nrow(vcov) >= 2L && is.finite(vcov[2, 2]) && vcov[2, 2] >= 0) {
       log_alpha_sd <- sqrt(vcov[2, 2])
     }
   }
@@ -949,29 +1175,45 @@
 
   fit_contract <- list(
     contract_type = "link_refit",
-    link_refit_mode = as.character(refit_contract_ctx$link_refit_mode %||% "shift_only"),
+    link_refit_mode = as.character(link_refit_mode),
     link_transform_mode = as.character(transform_mode),
-    parameters = if (isTRUE(use_scale)) c("delta_s", "log_alpha_s") else c("delta_s"),
+    parameters = if (isTRUE(joint_used)) {
+      if (isTRUE(use_scale)) {
+        c("theta_hub", "theta_spoke", "delta_s", "log_alpha_s")
+      } else {
+        c("theta_hub", "theta_spoke", "delta_s")
+      }
+    } else {
+      if (isTRUE(use_scale)) c("delta_s", "log_alpha_s") else c("delta_s")
+    },
     priors = list(delta_sd = 1, log_alpha_sd = if (isTRUE(use_scale)) 0.2 else NA_real_),
     judge = list(
       mode = as.character(judge_params$mode %||% "global_shared"),
       scope = as.character(judge_params$scope %||% "link"),
       beta = as.double(beta),
-      epsilon = as.double(epsilon)
+      epsilon = as.double(epsilon),
+      cold_start_fallback_used = as.logical(judge_params$cold_start_fallback_used %||% FALSE)
     ),
     lock = list(
-      hub_lock_mode = as.character(refit_contract_ctx$hub_lock_mode %||% NA_character_),
-      hub_lock_kappa = as.double(refit_contract_ctx$hub_lock_kappa %||% NA_real_)
+      hub_lock_mode = as.character(lock_mode),
+      hub_lock_kappa = as.double(lock_kappa)
     ),
-    theta_treatment = as.character(refit_contract_ctx$shift_only_theta_treatment %||% NA_character_)
+    theta_treatment = as.character(refit_contract_ctx$shift_only_theta_treatment %||% NA_character_),
+    joint_refit = list(
+      used = as.logical(joint_used),
+      n_hub_items_estimated = as.integer(length(theta_hub_post)),
+      n_spoke_items_estimated = as.integer(length(theta_spoke_post))
+    )
   )
 
   list(
-    delta_mean = as.double(par[[1L]]),
+    delta_mean = as.double(delta_mean),
     delta_sd = as.double(delta_sd),
-    log_alpha_mean = if (isTRUE(use_scale)) as.double(par[[2L]]) else NA_real_,
+    log_alpha_mean = if (isTRUE(use_scale)) as.double(log_alpha_mean) else NA_real_,
     log_alpha_sd = as.double(log_alpha_sd),
-    fit_contract = fit_contract
+    fit_contract = fit_contract,
+    theta_hub_post = theta_hub_post,
+    theta_spoke_post = theta_spoke_post
   )
 }
 
@@ -1146,9 +1388,18 @@
 
     cross_all <- .adaptive_link_cross_edges(out, spoke_id = spoke_id, last_refit_step = NULL)
     cross_since <- .adaptive_link_cross_edges(out, spoke_id = spoke_id, last_refit_step = last_step)
-    judge_params <- .adaptive_link_judge_params(out, controller, scope = "link")
+    startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(out, spoke_id = spoke_id)
+    judge_params <- .adaptive_link_judge_params(
+      out,
+      controller,
+      scope = "link",
+      allow_cold_start_fallback = isTRUE(startup_gap),
+      expected_link_params = !isTRUE(startup_gap)
+    )
     attr(cross_all, "judge_params") <- judge_params
     attr(cross_since, "judge_params") <- judge_params
+    attr(cross_all, "within_hub_edges") <- .adaptive_link_within_edges(out, set_id = hub_id)
+    attr(cross_all, "within_spoke_edges") <- .adaptive_link_within_edges(out, set_id = spoke_id)
     attr(cross_all, "refit_contract") <- list(
       link_refit_mode = refit_mode,
       hub_lock_mode = lock_mode,
@@ -1158,10 +1409,12 @@
     attr(hub_theta, "theta_sd") <- hub_theta_sd
     attr(spoke_theta, "theta_sd") <- spoke_theta_sd
     fit <- .adaptive_link_fit_transform(cross_all, hub_theta, spoke_theta, transform_mode = transform_mode)
+    ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
+    ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
     ppc_mae <- .adaptive_link_ppc_mae_cross(
       cross_since,
-      hub_theta = hub_theta,
-      spoke_theta = spoke_theta,
+      hub_theta = ppc_hub_theta,
+      spoke_theta = ppc_spoke_theta,
       delta_mean = fit$delta_mean,
       log_alpha_mean = fit$log_alpha_mean
     )
@@ -1183,10 +1436,12 @@
           # Escalation takes effect in the current refit: recompute transform
           # fit and PPC using shift+scale parameters before gating/logging.
           fit <- .adaptive_link_fit_transform(cross_all, hub_theta, spoke_theta, transform_mode = transform_mode)
+          ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
+          ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
           ppc_mae <- .adaptive_link_ppc_mae_cross(
             cross_since,
-            hub_theta = hub_theta,
-            spoke_theta = spoke_theta,
+            hub_theta = ppc_hub_theta,
+            spoke_theta = ppc_spoke_theta,
             delta_mean = fit$delta_mean,
             log_alpha_mean = fit$log_alpha_mean
           )
