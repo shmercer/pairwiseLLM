@@ -10,7 +10,7 @@ adaptive_defaults <- function(N) {
 
   W <- .btl_mcmc_clamp(5L, 60L, as.integer(round(2 * sqrt(N))))
   explore_rate <- .btl_mcmc_clamp(0.10, 0.25, 0.20 - 0.02 * log10(N))
-  refit_pairs_target <- .btl_mcmc_clamp(100L, 5000L, as.integer(ceiling(N / 2)))
+  refit_pairs_target <- .btl_mcmc_clamp(20L, 5000L, as.integer(ceiling(N / 2)))
   W_cap <- max(200L, min(2000L, refit_pairs_target))
   round_pairs_target <- as.integer(ceiling(refit_pairs_target / 2))
   k_base <- if (N < 60L) {

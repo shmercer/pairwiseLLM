@@ -40,7 +40,7 @@
 
 .adaptive_refit_pairs_target <- function(state, config) {
   refit_pairs_target <- config$refit_pairs_target %||% .btl_mcmc_clamp(
-    100L,
+    20L,
     5000L,
     as.integer(ceiling(state$n_items / 2))
   )
