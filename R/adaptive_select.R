@@ -590,7 +590,7 @@ adaptive_defaults <- function(N) {
   as.double((1 - epsilon) * p_base + epsilon * 0.5)
 }
 
-.adaptive_assign_order <- function(pair, posA, posB, pair_last_order) {
+.adaptive_assign_order <- function(pair, posA, posB, pair_last_order, seed_base = 1L) {
   i_id <- as.character(pair$i)
   j_id <- as.character(pair$j)
   key <- make_unordered_key(i_id, j_id)
@@ -612,7 +612,8 @@ adaptive_defaults <- function(N) {
     return(c(A_id = j_id, B_id = i_id))
   }
 
-  ordered <- sort(c(i_id, j_id))
+  seed <- .adaptive_pair_seed(seed_base = seed_base, unordered_key = key, offset = 0L)
+  ordered <- withr::with_seed(seed, sample(c(i_id, j_id), size = 2L, replace = FALSE))
   c(A_id = ordered[[1L]], B_id = ordered[[2L]])
 }
 
@@ -1311,7 +1312,13 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   }
 
   selected_pair <- tibble::as_tibble(selected_pair)
-  order_vals <- .adaptive_assign_order(selected_pair, counts$posA, counts$posB, counts$pair_last_order)
+  order_vals <- .adaptive_assign_order(
+    selected_pair,
+    counts$posA,
+    counts$posB,
+    counts$pair_last_order,
+    seed_base = seed_base
+  )
   i_id <- as.character(selected_pair$i[[1L]])
   j_id <- as.character(selected_pair$j[[1L]])
 

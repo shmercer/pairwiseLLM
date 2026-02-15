@@ -124,6 +124,12 @@
   set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
   scope_ids <- as.character(ids[as.integer(set_map[ids]) == set_id])
   if (length(scope_ids) < 2L) {
+    rlang::warn(paste0(
+      "Phase A scoped refit could not resolve at least two items for active set ",
+      set_id,
+      "; falling back to global scope. Check `state$items$set_id` mapping and ",
+      "`state$linking$phase_a$active_phase_a_set`."
+    ))
     return(list(
       phase_scope = "global",
       phase_scope_set_id = NA_integer_,
@@ -149,7 +155,7 @@
   )
 }
 
-.adaptive_results_from_step_log <- function(state) {
+.adaptive_results_from_step_log <- function(state, scope_ids = NULL) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   if (nrow(step_log) == 0L) {
     return(tibble::tibble())
@@ -163,6 +169,16 @@
   ids <- as.character(state$item_ids)
   A_id <- ids[step_log$A]
   B_id <- ids[step_log$B]
+  if (!is.null(scope_ids)) {
+    scope_ids <- as.character(scope_ids)
+    in_scope <- A_id %in% scope_ids & B_id %in% scope_ids
+    step_log <- step_log[in_scope, , drop = FALSE]
+    A_id <- A_id[in_scope]
+    B_id <- B_id[in_scope]
+    if (nrow(step_log) == 0L) {
+      return(tibble::tibble())
+    }
+  }
   winner_pos <- ifelse(step_log$Y == 1L, 1L, 2L)
   better_id <- ifelse(step_log$Y == 1L, A_id, B_id)
   controller <- .adaptive_controller_resolve(state)
@@ -2744,14 +2760,16 @@ default_btl_fit_fn <- function(state, config) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
   config <- .adaptive_btl_resolve_config(state, config)
-  results <- .adaptive_results_from_step_log(state)
+  scope <- .adaptive_stop_metric_scope(state, ids = state$item_ids)
+  ids_fit <- as.character(scope$scope_ids %||% state$item_ids)
+  results <- .adaptive_results_from_step_log(state, scope_ids = ids_fit)
   if (nrow(results) < 1L) {
     rlang::abort("BTL refit requires at least one committed comparison.")
   }
 
   fit_out <- fit_bayes_btl_mcmc(
     results = results,
-    ids = as.character(state$item_ids),
+    ids = ids_fit,
     model_variant = config$model_variant %||% "btl_e_b",
     cmdstan = config$cmdstan %||% list()
   )

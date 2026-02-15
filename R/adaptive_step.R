@@ -83,12 +83,14 @@ validate_judge_result <- function(result, A_id, B_id) {
   j_id <- as.character(pair$j_id[[1L]])
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, state$item_ids)
+  seed_base <- as.integer(state$meta$seed %||% 1L)
 
   order_vals <- .adaptive_assign_order(
     tibble::tibble(i = i_id, j = j_id),
     counts$posA,
     counts$posB,
-    counts$pair_last_order
+    counts$pair_last_order,
+    seed_base = seed_base
   )
 
   trueskill_state <- state$trueskill_state

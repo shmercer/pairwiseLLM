@@ -1077,7 +1077,7 @@ test_that("cross-set logged predictive probability uses final A/B orientation", 
       candidates$link_u <- 0.09
       candidates
     },
-    .adaptive_assign_order = function(pair, posA, posB, pair_last_order) {
+    .adaptive_assign_order = function(pair, posA, posB, pair_last_order, seed_base = 1L) {
       c(A_id = "s1", B_id = "h1")
     },
     .adaptive_link_predictive_prob_oriented = function(state, controller, spoke_id, A_id, B_id) {
