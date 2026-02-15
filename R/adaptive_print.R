@@ -10,6 +10,10 @@
     "theta_raw_eap",
     "theta_global_eap",
     "theta_global_sd",
+    "in_phase_scope",
+    "theta_scope_eap",
+    "theta_scope_sd",
+    "rank_scope_eap",
     "rank_global_eap",
     "is_hub_item",
     "is_spoke_item",
@@ -35,6 +39,10 @@
     theta_raw_eap = double(),
     theta_global_eap = double(),
     theta_global_sd = double(),
+    in_phase_scope = logical(),
+    theta_scope_eap = double(),
+    theta_scope_sd = double(),
+    rank_scope_eap = integer(),
     rank_global_eap = integer(),
     is_hub_item = logical(),
     is_spoke_item = logical(),
@@ -53,13 +61,13 @@
 }
 
 .adaptive_item_log_na_value <- function(col) {
-  if (col %in% c("refit_id", "set_id", "rank_global_eap", "degree", "pos_count_A", "pos_count_B")) {
+  if (col %in% c("refit_id", "set_id", "rank_global_eap", "rank_scope_eap", "degree", "pos_count_A", "pos_count_B")) {
     return(NA_integer_)
   }
   if (identical(col, "item_id")) {
     return(NA_character_)
   }
-  if (col %in% c("is_hub_item", "is_spoke_item")) {
+  if (col %in% c("is_hub_item", "is_spoke_item", "in_phase_scope")) {
     return(NA)
   }
   NA_real_
@@ -230,6 +238,27 @@
   rank_mat <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- ids
   rank_mean <- as.double(colMeans(rank_mat))
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  is_link_phase_a <- run_mode %in% c("link_one_spoke", "link_multi_spoke") &&
+    !identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
+  active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+  in_phase_scope <- rep_len(TRUE, length(ids))
+  if (isTRUE(is_link_phase_a) && is.finite(active_set)) {
+    in_phase_scope <- as.integer(set_id) == active_set
+  }
+  theta_scope_eap <- rep_len(NA_real_, length(ids))
+  theta_scope_sd <- rep_len(NA_real_, length(ids))
+  theta_scope_eap[in_phase_scope] <- theta_mean[in_phase_scope]
+  theta_scope_sd[in_phase_scope] <- theta_sd[in_phase_scope]
+  rank_scope_eap <- rep_len(NA_integer_, length(ids))
+  if (sum(in_phase_scope, na.rm = TRUE) > 0L) {
+    scoped_order <- order(-theta_scope_eap[in_phase_scope], ids[in_phase_scope], na.last = NA)
+    scoped_rank <- integer(sum(in_phase_scope, na.rm = TRUE))
+    scoped_rank[scoped_order] <- seq_along(scoped_order)
+    rank_scope_eap[in_phase_scope] <- as.integer(scoped_rank)
+  }
   link_summary <- .adaptive_link_item_raw_global_summaries(
     state = state,
     ids = ids,
@@ -238,7 +267,7 @@
     theta_sd = theta_sd
   )
   rank_global_eap <- as.integer(rank(-as.double(link_summary$theta_global_eap), ties.method = "first"))
-  hub_id <- as.integer((.adaptive_controller_resolve(state) %||% list())$hub_id %||% 1L)
+  hub_id <- as.integer((controller %||% list())$hub_id %||% 1L)
   is_hub_item <- as.logical(set_id == hub_id)
   is_spoke_item <- as.logical(set_id != hub_id)
 
@@ -254,6 +283,10 @@
     theta_raw_eap = as.double(link_summary$theta_raw_eap),
     theta_global_eap = as.double(link_summary$theta_global_eap),
     theta_global_sd = as.double(link_summary$theta_global_sd),
+    in_phase_scope = as.logical(in_phase_scope),
+    theta_scope_eap = as.double(theta_scope_eap),
+    theta_scope_sd = as.double(theta_scope_sd),
+    rank_scope_eap = as.integer(rank_scope_eap),
     rank_global_eap = as.integer(rank_global_eap),
     is_hub_item = as.logical(is_hub_item),
     is_spoke_item = as.logical(is_spoke_item),
@@ -320,6 +353,10 @@
   item_log$theta_raw_eap <- as.double(item_log$theta_raw_eap)
   item_log$theta_global_eap <- as.double(item_log$theta_global_eap)
   item_log$theta_global_sd <- as.double(item_log$theta_global_sd)
+  item_log$in_phase_scope <- as.logical(item_log$in_phase_scope)
+  item_log$theta_scope_eap <- as.double(item_log$theta_scope_eap)
+  item_log$theta_scope_sd <- as.double(item_log$theta_scope_sd)
+  item_log$rank_scope_eap <- as.integer(item_log$rank_scope_eap)
   item_log$rank_global_eap <- as.integer(item_log$rank_global_eap)
   item_log$is_hub_item <- as.logical(item_log$is_hub_item)
   item_log$is_spoke_item <- as.logical(item_log$is_spoke_item)
@@ -494,8 +531,10 @@ adaptive_step_log <- function(state) {
 #'   \code{global_identified_reliability_min},
 #'   \code{global_identified_rank_corr_min}, \code{long_quota_raw},
 #'   \code{long_quota_effective}, \code{long_quota_removed},
-#'   \code{realloc_to_mid}, \code{realloc_to_local}.
+#'   \code{realloc_to_mid}, \code{realloc_to_local},
+#'   \code{phase_scope}, \code{phase_scope_set_id}, \code{phase_scope_n_items}.
 #'   \item Coverage/imbalance: \code{mean_degree}, \code{min_degree},
+#'   \code{mean_degree_scope}, \code{min_degree_scope},
 #'   \code{pos_balance_sd}, \code{star_cap_rejects_since_last_refit},
 #'   \code{star_cap_reject_rate_since_last_refit},
 #'   \code{recent_deg_median_since_last_refit},
@@ -516,11 +555,16 @@ adaptive_step_log <- function(state) {
 #'   \code{divergences_max_allowed}, \code{max_rhat},
 #'   \code{max_rhat_allowed}, \code{min_ess_bulk},
 #'   \code{ess_bulk_required}, \code{near_stop_active},
-#'   \code{reliability_EAP}, \code{eap_reliability_min}, \code{eap_pass},
-#'   \code{theta_sd_eap}, \code{rho_theta}, \code{lag_eligible},
-#'   \code{theta_corr_min}, \code{theta_corr_pass}, \code{delta_sd_theta},
+#'   \code{reliability_EAP}, \code{reliability_EAP_scope},
+#'   \code{eap_reliability_min}, \code{eap_pass}, \code{eap_pass_scope},
+#'   \code{theta_sd_eap}, \code{theta_sd_eap_scope},
+#'   \code{rho_theta}, \code{rho_theta_scope},
+#'   \code{lag_eligible}, \code{lag_eligible_scope},
+#'   \code{theta_corr_min}, \code{theta_corr_pass}, \code{theta_corr_pass_scope},
+#'   \code{delta_sd_theta}, \code{delta_sd_theta_scope},
 #'   \code{theta_sd_rel_change_max}, \code{delta_sd_theta_pass},
-#'   \code{rho_rank}, \code{rank_spearman_min}, \code{rho_rank_pass}.
+#'   \code{delta_sd_theta_pass_scope}, \code{rho_rank}, \code{rho_rank_scope},
+#'   \code{rank_spearman_min}, \code{rho_rank_pass}, \code{rho_rank_pass_scope}.
 #'   \item Refit execution metadata: \code{mcmc_chains},
 #'   \code{mcmc_parallel_chains}, \code{mcmc_core_fraction},
 #'   \code{mcmc_cores_detected_physical}, \code{mcmc_cores_detected_logical},
@@ -562,6 +606,9 @@ adaptive_round_log <- function(state) {
 #'   \item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
 #'   summaries after spoke transform application. These are typed \code{NA}
 #'   when required spoke transform parameters are unavailable at that refit.
+#'   \item \code{in_phase_scope}, \code{theta_scope_eap}, \code{theta_scope_sd},
+#'   \code{rank_scope_eap}: scoped summaries for the currently optimized item
+#'   domain (active set during linking Phase A; all items otherwise).
 #' }
 #'
 #' @param state Adaptive state.
@@ -939,6 +986,10 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   }
   row <- round_row[1L, , drop = FALSE]
   thresholds <- cfg$stop_thresholds %||% list()
+  phase_scope <- as.character(row$phase_scope %||% "global")
+  use_scope_metrics <- identical(phase_scope, "phase_a_set")
+  scope_set_id <- as.integer(row$phase_scope_set_id %||% NA_integer_)
+  scope_n_items <- as.integer(row$phase_scope_n_items %||% row$n_items)
 
   header <- paste0(
     "REFIT #",
@@ -952,6 +1003,15 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     "  n_items=",
     row$n_items
   )
+  if (isTRUE(use_scope_metrics)) {
+    header <- paste0(
+      header,
+      "  phase_scope=phase_a_set",
+      if (is.finite(scope_set_id)) paste0("(set_id=", scope_set_id, ")") else "",
+      "  scope_n_items=",
+      scope_n_items
+    )
+  }
 
   pairs <- paste0(
     "Pairs: total_pairs_done=",
@@ -971,9 +1031,19 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     paste0("  starvation_reason_mode=", row$starvation_reason_mode)
   )
 
+  mean_degree_show <- if (isTRUE(use_scope_metrics)) {
+    row$mean_degree_scope %||% row$mean_degree
+  } else {
+    row$mean_degree
+  }
+  min_degree_show <- if (isTRUE(use_scope_metrics)) {
+    row$min_degree_scope %||% row$min_degree
+  } else {
+    row$min_degree
+  }
   coverage <- c(
     "Coverage / balance:",
-    paste0("  mean_degree=", row$mean_degree, "  min_degree=", row$min_degree),
+    paste0("  mean_degree=", mean_degree_show, "  min_degree=", min_degree_show),
     paste0("  pos_balance_sd=", row$pos_balance_sd)
   )
 
@@ -1049,14 +1119,21 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   )
 
   eap_min <- row$eap_reliability_min %||% thresholds$eap_reliability_min %||% NA_real_
-  eap_pass <- .adaptive_meets_threshold(row$reliability_EAP, eap_min, "ge")
+  reliability_val <- if (isTRUE(use_scope_metrics)) {
+    row$reliability_EAP_scope %||% row$reliability_EAP
+  } else {
+    row$reliability_EAP
+  }
+  eap_pass <- .adaptive_meets_threshold(reliability_val, eap_min, "ge")
+  reliability_label <- if (isTRUE(use_scope_metrics)) "reliability_EAP_scope" else "reliability_EAP"
   stop_table <- c(
     stop_table,
     paste0(
       "  ",
       if (isTRUE(eap_pass)) "[x] " else "[ ] ",
-      "reliability_EAP >= eap_reliability_min  value=",
-      row$reliability_EAP,
+      reliability_label,
+      " >= eap_reliability_min  value=",
+      reliability_val,
       " (need >= ",
       eap_min,
       ")"
@@ -1064,14 +1141,21 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   )
 
   rho_rank_min <- row$rank_spearman_min %||% thresholds$rank_spearman_min %||% NA_real_
-  rho_rank_pass <- .adaptive_meets_threshold(row$rho_rank, rho_rank_min, "ge")
+  rho_rank_val <- if (isTRUE(use_scope_metrics)) {
+    row$rho_rank_scope %||% row$rho_rank
+  } else {
+    row$rho_rank
+  }
+  rho_rank_pass <- .adaptive_meets_threshold(rho_rank_val, rho_rank_min, "ge")
+  rho_rank_label <- if (isTRUE(use_scope_metrics)) "rho_rank_scope" else "rho_rank"
   stop_table <- c(
     stop_table,
     paste0(
       "  ",
       if (isTRUE(rho_rank_pass)) "[x] " else "[ ] ",
-      "rho_rank >= rank_spearman_min  value=",
-      row$rho_rank,
+      rho_rank_label,
+      " >= rank_spearman_min  value=",
+      rho_rank_val,
       " (need >= ",
       rho_rank_min,
       ")"
@@ -1079,14 +1163,21 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   )
 
   theta_min <- row$theta_corr_min %||% thresholds$theta_corr_min %||% NA_real_
-  theta_pass <- .adaptive_meets_threshold(row$rho_theta, theta_min, "ge")
+  rho_theta_val <- if (isTRUE(use_scope_metrics)) {
+    row$rho_theta_scope %||% row$rho_theta
+  } else {
+    row$rho_theta
+  }
+  theta_pass <- .adaptive_meets_threshold(rho_theta_val, theta_min, "ge")
+  rho_theta_label <- if (isTRUE(use_scope_metrics)) "rho_theta_scope" else "rho_theta"
   stop_table <- c(
     stop_table,
     paste0(
       "  ",
       if (isTRUE(theta_pass)) "[x] " else "[ ] ",
-      "rho_theta >= theta_corr_min  value=",
-      row$rho_theta,
+      rho_theta_label,
+      " >= theta_corr_min  value=",
+      rho_theta_val,
       " (need >= ",
       theta_min,
       ")"
@@ -1094,25 +1185,37 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   )
 
   sd_max <- row$theta_sd_rel_change_max %||% thresholds$theta_sd_rel_change_max %||% NA_real_
-  sd_pass <- .adaptive_meets_threshold(row$delta_sd_theta, sd_max, "le")
+  delta_sd_val <- if (isTRUE(use_scope_metrics)) {
+    row$delta_sd_theta_scope %||% row$delta_sd_theta
+  } else {
+    row$delta_sd_theta
+  }
+  sd_pass <- .adaptive_meets_threshold(delta_sd_val, sd_max, "le")
+  delta_sd_label <- if (isTRUE(use_scope_metrics)) "delta_sd_theta_scope" else "delta_sd_theta"
   stop_table <- c(
     stop_table,
     paste0(
       "  ",
       if (isTRUE(sd_pass)) "[x] " else "[ ] ",
-      "delta_sd_theta <= theta_sd_rel_change_max  value=",
-      row$delta_sd_theta,
+      delta_sd_label,
+      " <= theta_sd_rel_change_max  value=",
+      delta_sd_val,
       " (need <= ",
       sd_max,
       ")"
     )
   )
+  lag_eligible_val <- if (isTRUE(use_scope_metrics)) {
+    row$lag_eligible_scope %||% row$lag_eligible
+  } else {
+    row$lag_eligible
+  }
   stop_table <- c(
     stop_table,
     paste0(
       "  ",
-      if (isTRUE(row$lag_eligible)) "[x] " else "[ ] ",
-      "lag_eligible"
+      if (isTRUE(lag_eligible_val)) "[x] " else "[ ] ",
+      if (isTRUE(use_scope_metrics)) "lag_eligible_scope" else "lag_eligible"
     )
   )
 

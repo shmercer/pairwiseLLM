@@ -1263,6 +1263,36 @@ test_that("non-linking item log keeps current raw/global behavior under seeded s
   )
 })
 
+test_that("item log exposes scoped theta summaries during linking Phase A", {
+  state <- make_linking_refit_state(
+    list(link_transform_mode = "shift_scale", multi_spoke_mode = "independent")
+  )
+  state$linking$phase_a$ready_for_phase_b <- FALSE
+  state$linking$phase_a$phase <- "phase_a"
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L, 3L),
+    source = c("run", "run", "run"),
+    status = c("ready", "pending_finalization", "ready"),
+    validation_message = c("ok", "pending_finalization: within-set stop criteria not yet met", "ok"),
+    artifact_path = c(NA_character_, NA_character_, NA_character_)
+  )
+
+  item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
+  in_scope <- item_log[item_log$in_phase_scope %in% TRUE, , drop = FALSE]
+  out_scope <- item_log[!item_log$in_phase_scope %in% TRUE, , drop = FALSE]
+
+  expect_true(nrow(in_scope) > 0L)
+  expect_true(all(in_scope$set_id == 2L))
+  expect_true(all(is.finite(in_scope$theta_scope_eap)))
+  expect_true(all(is.finite(in_scope$theta_scope_sd)))
+  expect_true(all(is.finite(in_scope$rank_scope_eap)))
+
+  expect_true(nrow(out_scope) > 0L)
+  expect_true(all(is.na(out_scope$theta_scope_eap)))
+  expect_true(all(is.na(out_scope$theta_scope_sd)))
+  expect_true(all(is.na(out_scope$rank_scope_eap)))
+})
+
 test_that("lagged rank stability gate uses Spearman threshold of at least 0.98", {
   state <- make_linking_refit_state()
   ids <- c("h1", "h2", "s21", "s22")

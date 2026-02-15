@@ -27,7 +27,8 @@ test_that("canonical log schemas follow the expected column order", {
     "global_identified", "global_identified_reliability_min", "global_identified_rank_corr_min",
     "long_quota_raw", "long_quota_effective", "long_quota_removed",
     "realloc_to_mid", "realloc_to_local",
-    "mean_degree", "min_degree", "pos_balance_sd",
+    "phase_scope", "phase_scope_set_id", "phase_scope_n_items",
+    "mean_degree", "min_degree", "mean_degree_scope", "min_degree_scope", "pos_balance_sd",
     "epsilon_mean", "epsilon_p2.5", "epsilon_p5", "epsilon_p50", "epsilon_p95", "epsilon_p97.5",
     "b_mean", "b_p2.5", "b_p5", "b_p50", "b_p95", "b_p97.5",
     "ts_sigma_mean", "ts_sigma_max", "ts_degree_sigma_corr", "ts_btl_theta_corr", "ts_btl_rank_spearman",
@@ -42,10 +43,12 @@ test_that("canonical log schemas follow the expected column order", {
     "diagnostics_pass", "diagnostics_divergences_pass", "diagnostics_rhat_pass", "diagnostics_ess_pass",
     "divergences", "divergences_max_allowed",
     "max_rhat", "max_rhat_allowed", "min_ess_bulk", "ess_bulk_required", "near_stop_active",
-    "reliability_EAP", "eap_reliability_min", "eap_pass", "theta_sd_eap",
-    "rho_theta", "lag_eligible", "theta_corr_min", "theta_corr_pass",
-    "delta_sd_theta", "theta_sd_rel_change_max", "delta_sd_theta_pass",
-    "rho_rank", "rank_spearman_min", "rho_rank_pass",
+    "reliability_EAP", "reliability_EAP_scope", "eap_reliability_min", "eap_pass", "eap_pass_scope", "theta_sd_eap",
+    "theta_sd_eap_scope", "rho_theta", "rho_theta_scope", "lag_eligible", "lag_eligible_scope",
+    "theta_corr_min", "theta_corr_pass", "theta_corr_pass_scope",
+    "delta_sd_theta", "delta_sd_theta_scope", "theta_sd_rel_change_max", "delta_sd_theta_pass",
+    "delta_sd_theta_pass_scope", "rho_rank", "rho_rank_scope", "rank_spearman_min",
+    "rho_rank_pass", "rho_rank_pass_scope",
     "mcmc_chains", "mcmc_parallel_chains", "mcmc_core_fraction",
     "mcmc_cores_detected_physical", "mcmc_cores_detected_logical",
     "mcmc_threads_per_chain", "mcmc_cmdstanr_version",
@@ -53,7 +56,8 @@ test_that("canonical log schemas follow the expected column order", {
   )
   expected_item <- c(
     "refit_id", "item_id", "set_id", "theta_raw_eap", "theta_global_eap", "theta_global_sd",
-    "rank_global_eap", "is_hub_item", "is_spoke_item",
+    "in_phase_scope", "theta_scope_eap", "theta_scope_sd", "rank_scope_eap", "rank_global_eap",
+    "is_hub_item", "is_spoke_item",
     "theta_mean", "theta_p2.5", "theta_p5", "theta_p50",
     "theta_p95", "theta_p97.5", "theta_sd", "rank_mean", "degree", "pos_count_A", "pos_count_B"
   )

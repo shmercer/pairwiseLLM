@@ -417,8 +417,13 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
     fallback_rate_since_last_refit = 0,
     fallback_used_mode = "base",
     starvation_reason_mode = NA_character_,
+    phase_scope = "phase_a_set",
+    phase_scope_set_id = 2L,
+    phase_scope_n_items = 3L,
     mean_degree = 2,
     min_degree = 1L,
+    mean_degree_scope = 2,
+    min_degree_scope = 1L,
     pos_balance_sd = 0.1,
     epsilon_mean = 0.1,
     epsilon_p2.5 = 0.05,
@@ -438,14 +443,24 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
     min_ess_bulk = 500,
     ess_bulk_required = 300,
     reliability_EAP = 0.99,
+    reliability_EAP_scope = 0.99,
     eap_reliability_min = 0.95,
+    eap_pass_scope = TRUE,
+    theta_sd_eap_scope = 0.1,
     rho_rank = 0.99,
+    rho_rank_scope = 0.99,
     rank_spearman_min = 0.95,
     rho_theta = 0.99,
+    rho_theta_scope = 0.99,
     theta_corr_min = 0.95,
     delta_sd_theta = 0.01,
+    delta_sd_theta_scope = 0.01,
     theta_sd_rel_change_max = 0.05,
     lag_eligible = TRUE,
+    lag_eligible_scope = TRUE,
+    theta_corr_pass_scope = TRUE,
+    delta_sd_theta_pass_scope = TRUE,
+    rho_rank_pass_scope = TRUE,
     ci95_theta_width_mean = 0.1,
     near_tie_adj_frac = 0.1,
     cov_trace_theta = 1.1,
@@ -461,6 +476,9 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
   block <- pairwiseLLM:::adaptive_progress_refit_block(row, cfg = list(stop_thresholds = list()))
   expect_true(any(grepl("Decision: STOP", block)))
   expect_true(any(grepl("Model params", block)))
+  expect_true(any(grepl("phase_scope=phase_a_set", block, fixed = TRUE)))
+  expect_true(any(grepl("reliability_EAP_scope >= eap_reliability_min", block, fixed = TRUE)))
+  expect_true(any(grepl("lag_eligible_scope", block, fixed = TRUE)))
   expect_equal(length(pairwiseLLM:::adaptive_progress_refit_block(tibble::tibble(), cfg = list())), 0L)
 })
 

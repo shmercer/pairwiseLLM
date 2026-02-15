@@ -29,11 +29,26 @@ test_that("round_log includes required stopping and star-cap audit fields", {
     "global_identified",
     "global_identified_reliability_min",
     "global_identified_rank_corr_min",
+    "phase_scope",
+    "phase_scope_set_id",
+    "phase_scope_n_items",
+    "mean_degree_scope",
+    "min_degree_scope",
     "long_quota_raw",
     "long_quota_effective",
     "long_quota_removed",
     "realloc_to_mid",
     "realloc_to_local",
+    "reliability_EAP_scope",
+    "eap_pass_scope",
+    "theta_sd_eap_scope",
+    "rho_theta_scope",
+    "lag_eligible_scope",
+    "theta_corr_pass_scope",
+    "delta_sd_theta_scope",
+    "delta_sd_theta_pass_scope",
+    "rho_rank_scope",
+    "rho_rank_pass_scope",
     "refit_id",
     "round_id_at_refit",
     "mcmc_chains",
@@ -57,11 +72,26 @@ test_that("round_log includes required stopping and star-cap audit fields", {
   expect_true(is.logical(round_log$global_identified))
   expect_true(is.double(round_log$global_identified_reliability_min))
   expect_true(is.double(round_log$global_identified_rank_corr_min))
+  expect_true(is.character(round_log$phase_scope))
+  expect_true(is.integer(round_log$phase_scope_set_id))
+  expect_true(is.integer(round_log$phase_scope_n_items))
+  expect_true(is.double(round_log$mean_degree_scope))
+  expect_true(is.integer(round_log$min_degree_scope))
   expect_true(is.integer(round_log$long_quota_raw))
   expect_true(is.integer(round_log$long_quota_effective))
   expect_true(is.integer(round_log$long_quota_removed))
   expect_true(is.integer(round_log$realloc_to_mid))
   expect_true(is.integer(round_log$realloc_to_local))
+  expect_true(is.double(round_log$reliability_EAP_scope))
+  expect_true(is.logical(round_log$eap_pass_scope))
+  expect_true(is.double(round_log$theta_sd_eap_scope))
+  expect_true(is.double(round_log$rho_theta_scope))
+  expect_true(is.logical(round_log$lag_eligible_scope))
+  expect_true(is.logical(round_log$theta_corr_pass_scope))
+  expect_true(is.double(round_log$delta_sd_theta_scope))
+  expect_true(is.logical(round_log$delta_sd_theta_pass_scope))
+  expect_true(is.double(round_log$rho_rank_scope))
+  expect_true(is.logical(round_log$rho_rank_pass_scope))
   expect_true(is.integer(round_log$refit_id))
   expect_true(is.integer(round_log$round_id_at_refit))
   expect_true(is.integer(round_log$mcmc_chains))

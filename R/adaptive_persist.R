@@ -120,8 +120,11 @@ read_log <- function(path) {
 
 .adaptive_item_log_current_schema <- function() {
   cols <- .adaptive_item_log_columns()
-  int_cols <- c("refit_id", "set_id", "rank_global_eap", "degree", "pos_count_A", "pos_count_B")
-  lgl_cols <- c("is_hub_item", "is_spoke_item")
+  int_cols <- c(
+    "refit_id", "set_id", "rank_scope_eap", "rank_global_eap",
+    "degree", "pos_count_A", "pos_count_B"
+  )
+  lgl_cols <- c("in_phase_scope", "is_hub_item", "is_spoke_item")
   types <- vapply(
     cols,
     function(col) {

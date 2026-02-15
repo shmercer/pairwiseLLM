@@ -131,3 +131,54 @@ test_that("lagged stability metrics are NA when lag ineligible", {
   expect_true(is.na(metrics$delta_sd_theta))
   expect_true(is.na(metrics$rho_rank))
 })
+
+test_that("linking Phase A stop metrics use active set scope", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 33L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  draws <- cbind(
+    h1 = 2 + seq(-0.1, 0.1, length.out = 40L),
+    h2 = -2 + seq(-0.1, 0.1, length.out = 40L),
+    s1 = seq(-2, 2, length.out = 40L),
+    s2 = seq(-2, 2, length.out = 40L) + 0.05
+  )
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = draws,
+    diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
+  )
+  theta_now <- as.double(colMeans(draws))
+  names(theta_now) <- colnames(draws)
+  state$refit_meta$theta_mean_history <- list(theta_now, theta_now)
+
+  cfg <- list(
+    ess_bulk_min = 100,
+    ess_bulk_min_near_stop = 100,
+    max_rhat = 1.01,
+    divergences_max = 0L,
+    eap_reliability_min = 0.90,
+    stability_lag = 1L,
+    theta_corr_min = 0.90,
+    theta_sd_rel_change_max = 0.20,
+    rank_spearman_min = 0.90
+  )
+  metrics <- pairwiseLLM:::compute_stop_metrics(state, config = cfg)
+
+  expect_identical(metrics$phase_scope, "phase_a_set")
+  expect_identical(metrics$phase_scope_set_id, 1L)
+  expect_identical(metrics$phase_scope_n_items, 2L)
+  expect_true(metrics$reliability_EAP_scope > metrics$reliability_EAP)
+
+  cfg$eap_reliability_min <- as.double((metrics$reliability_EAP_scope + metrics$reliability_EAP) / 2)
+  expect_true(isTRUE(pairwiseLLM:::should_stop(metrics, config = cfg)))
+  metrics_global <- metrics
+  metrics_global$phase_scope <- "global"
+  expect_false(isTRUE(pairwiseLLM:::should_stop(metrics_global, config = cfg)))
+})

@@ -110,6 +110,33 @@
   )
 }
 
+.adaptive_stop_metric_scope <- function(state, ids = NULL) {
+  ids <- as.character(ids %||% state$item_ids)
+  phase_scope <- .adaptive_refit_phase_a_scope(state)
+  if (!isTRUE(phase_scope$active)) {
+    return(list(
+      phase_scope = "global",
+      phase_scope_set_id = NA_integer_,
+      scope_ids = as.character(ids)
+    ))
+  }
+  set_id <- as.integer(phase_scope$set_id)
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  scope_ids <- as.character(ids[as.integer(set_map[ids]) == set_id])
+  if (length(scope_ids) < 2L) {
+    return(list(
+      phase_scope = "global",
+      phase_scope_set_id = NA_integer_,
+      scope_ids = as.character(ids)
+    ))
+  }
+  list(
+    phase_scope = "phase_a_set",
+    phase_scope_set_id = as.integer(set_id),
+    scope_ids = as.character(scope_ids)
+  )
+}
+
 .adaptive_refit_eligibility <- function(total_committed, last_refit_committed, refit_pairs_target) {
   total_committed <- as.integer(total_committed %||% 0L)
   last_refit_committed <- as.integer(last_refit_committed %||% 0L)
@@ -2375,12 +2402,17 @@
 
 .adaptive_round_log_row <- function(state, metrics, stop_decision, stop_reason, refit_context, config) {
   ids <- as.character(state$item_ids)
+  scope <- .adaptive_stop_metric_scope(state, ids = ids)
+  scope_ids <- as.character(scope$scope_ids %||% ids)
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, ids)
 
   deg_vals <- as.double(counts$deg[ids])
   mean_degree <- if (length(deg_vals) > 0L) mean(deg_vals) else NA_real_
   min_degree <- if (length(deg_vals) > 0L) min(deg_vals) else NA_integer_
+  deg_vals_scope <- as.double(counts$deg[scope_ids])
+  mean_degree_scope <- if (length(deg_vals_scope) > 0L) mean(deg_vals_scope) else NA_real_
+  min_degree_scope <- if (length(deg_vals_scope) > 0L) min(deg_vals_scope) else NA_integer_
   pos_balance <- as.double(counts$posA[ids] - counts$posB[ids])
   pos_balance_sd <- if (length(pos_balance) > 1L) stats::sd(pos_balance) else 0
 
@@ -2611,8 +2643,13 @@
     long_quota_removed = as.integer(quota_source$long_quota_removed %||% NA_integer_),
     realloc_to_mid = as.integer(quota_source$realloc_to_mid %||% NA_integer_),
     realloc_to_local = as.integer(quota_source$realloc_to_local %||% NA_integer_),
+    phase_scope = as.character(metrics$phase_scope %||% scope$phase_scope %||% "global"),
+    phase_scope_set_id = as.integer(metrics$phase_scope_set_id %||% scope$phase_scope_set_id %||% NA_integer_),
+    phase_scope_n_items = as.integer(metrics$phase_scope_n_items %||% length(scope_ids)),
     mean_degree = as.double(mean_degree),
     min_degree = as.integer(min_degree),
+    mean_degree_scope = as.double(mean_degree_scope),
+    min_degree_scope = as.integer(min_degree_scope),
     pos_balance_sd = as.double(pos_balance_sd),
     epsilon_mean = as.double(fit$epsilon_mean %||% NA_real_),
     epsilon_p2.5 = as.double(fit$epsilon_p2.5 %||% NA_real_),
@@ -2663,19 +2700,29 @@
     ess_bulk_required = as.double(metrics$ess_bulk_required %||% NA_real_),
     near_stop_active = as.logical(metrics$near_stop_active %||% NA),
     reliability_EAP = as.double(metrics$reliability_EAP %||% NA_real_),
+    reliability_EAP_scope = as.double(metrics$reliability_EAP_scope %||% NA_real_),
     eap_reliability_min = as.double(metrics$eap_reliability_min %||% NA_real_),
     eap_pass = as.logical(metrics$eap_pass %||% NA),
+    eap_pass_scope = as.logical(metrics$eap_pass_scope %||% NA),
     theta_sd_eap = as.double(metrics$theta_sd_eap %||% NA_real_),
+    theta_sd_eap_scope = as.double(metrics$theta_sd_eap_scope %||% NA_real_),
     rho_theta = as.double(metrics$rho_theta %||% NA_real_),
+    rho_theta_scope = as.double(metrics$rho_theta_scope %||% NA_real_),
     lag_eligible = as.logical(metrics$lag_eligible %||% NA),
+    lag_eligible_scope = as.logical(metrics$lag_eligible_scope %||% NA),
     theta_corr_min = as.double(metrics$theta_corr_min %||% NA_real_),
     theta_corr_pass = as.logical(metrics$theta_corr_pass %||% NA),
+    theta_corr_pass_scope = as.logical(metrics$theta_corr_pass_scope %||% NA),
     delta_sd_theta = as.double(metrics$delta_sd_theta %||% NA_real_),
+    delta_sd_theta_scope = as.double(metrics$delta_sd_theta_scope %||% NA_real_),
     theta_sd_rel_change_max = as.double(metrics$theta_sd_rel_change_max %||% NA_real_),
     delta_sd_theta_pass = as.logical(metrics$delta_sd_theta_pass %||% NA),
+    delta_sd_theta_pass_scope = as.logical(metrics$delta_sd_theta_pass_scope %||% NA),
     rho_rank = as.double(metrics$rho_rank %||% NA_real_),
+    rho_rank_scope = as.double(metrics$rho_rank_scope %||% NA_real_),
     rank_spearman_min = as.double(metrics$rank_spearman_min %||% NA_real_),
     rho_rank_pass = as.logical(metrics$rho_rank_pass %||% NA),
+    rho_rank_pass_scope = as.logical(metrics$rho_rank_pass_scope %||% NA),
     mcmc_chains = as.integer(mcmc_config_used$chains %||% NA_integer_),
     mcmc_parallel_chains = as.integer(mcmc_config_used$parallel_chains %||% NA_integer_),
     mcmc_core_fraction = as.double(mcmc_config_used$core_fraction %||% NA_real_),
@@ -2804,10 +2851,26 @@ compute_stop_metrics <- function(state, config) {
     rlang::abort("`btl_posterior_draws` must have at least two draws.")
   }
 
-  theta_mean <- .adaptive_btl_fit_theta_mean(fit)
-  theta_mean <- as.double(theta_mean)
+  ids <- as.character(state$item_ids)
+  theta_mean_named <- .adaptive_btl_fit_theta_mean(fit)
+  theta_mean <- as.double(theta_mean_named)
+  names(theta_mean) <- as.character(names(theta_mean_named))
   theta_sd_eap <- stats::sd(theta_mean)
   reliability_EAP <- compute_reliability_EAP(draws)
+
+  scope <- .adaptive_stop_metric_scope(state, ids = ids)
+  scope_ids <- as.character(scope$scope_ids %||% ids)
+  if (!all(scope_ids %in% colnames(draws))) {
+    scope_ids <- as.character(intersect(scope_ids, colnames(draws)))
+  }
+  draws_scope <- if (length(scope_ids) >= 2L) {
+    draws[, scope_ids, drop = FALSE]
+  } else {
+    draws
+  }
+  theta_mean_scope <- as.double(colMeans(draws_scope))
+  theta_sd_eap_scope <- stats::sd(theta_mean_scope)
+  reliability_EAP_scope <- compute_reliability_EAP(draws_scope)
 
   diagnostics <- fit$diagnostics %||% list()
   divergences <- as.integer(diagnostics$divergences %||% NA_integer_)
@@ -2850,11 +2913,22 @@ compute_stop_metrics <- function(state, config) {
   rho_rank <- NA_real_
   rho_rank_pass <- NA
 
+  rho_theta_scope <- NA_real_
+  theta_corr_pass_scope <- NA
+  delta_sd_theta_scope <- NA_real_
+  delta_sd_theta_pass_scope <- NA
+  rho_rank_scope <- NA_real_
+  rho_rank_pass_scope <- NA
+  lag_eligible_scope <- as.logical(lag_eligible)
+
   if (isTRUE(lag_eligible)) {
     lag_idx <- current_refit - stability_lag
     lag_theta <- history[[lag_idx]]
+    lag_theta <- as.double(lag_theta)
     if (length(lag_theta) == length(theta_mean)) {
-      lag_theta <- as.double(lag_theta)
+      names(lag_theta) <- names(theta_mean)
+    }
+    if (length(lag_theta) == length(theta_mean)) {
       rho_theta <- stats::cor(theta_mean, lag_theta, use = "pairwise.complete.obs")
       sd_current <- stats::sd(theta_mean)
       sd_lag <- stats::sd(lag_theta)
@@ -2864,6 +2938,27 @@ compute_stop_metrics <- function(state, config) {
       rank_current <- rank(theta_mean, ties.method = "average")
       rank_lag <- rank(lag_theta, ties.method = "average")
       rho_rank <- stats::cor(rank_current, rank_lag, method = "spearman", use = "pairwise.complete.obs")
+    }
+
+    lag_scope <- NULL
+    if (!is.null(names(lag_theta)) && all(scope_ids %in% names(lag_theta))) {
+      lag_scope <- as.double(lag_theta[scope_ids])
+    } else if (length(lag_theta) == length(ids) && length(scope_ids) >= 2L) {
+      names(lag_theta) <- ids
+      if (all(scope_ids %in% names(lag_theta))) {
+        lag_scope <- as.double(lag_theta[scope_ids])
+      }
+    }
+    if (!is.null(lag_scope) && length(lag_scope) == length(theta_mean_scope) && length(lag_scope) >= 2L) {
+      rho_theta_scope <- stats::cor(theta_mean_scope, lag_scope, use = "pairwise.complete.obs")
+      sd_scope <- stats::sd(theta_mean_scope)
+      sd_scope_lag <- stats::sd(lag_scope)
+      if (is.finite(sd_scope) && is.finite(sd_scope_lag) && sd_scope_lag > 0) {
+        delta_sd_theta_scope <- abs(sd_scope - sd_scope_lag) / sd_scope_lag
+      }
+      rank_scope <- rank(theta_mean_scope, ties.method = "average")
+      rank_scope_lag <- rank(lag_scope, ties.method = "average")
+      rho_rank_scope <- stats::cor(rank_scope, rank_scope_lag, method = "spearman", use = "pairwise.complete.obs")
     }
 
     theta_corr_pass <- if (is.finite(rho_theta)) {
@@ -2877,9 +2972,30 @@ compute_stop_metrics <- function(state, config) {
       NA
     }
     rho_rank_pass <- is.finite(rho_rank) && rho_rank >= as.double(config$rank_spearman_min)
+
+    theta_corr_pass_scope <- if (is.finite(rho_theta_scope)) {
+      rho_theta_scope >= as.double(config$theta_corr_min)
+    } else {
+      NA
+    }
+    delta_sd_theta_pass_scope <- if (is.finite(delta_sd_theta_scope)) {
+      delta_sd_theta_scope <= as.double(config$theta_sd_rel_change_max)
+    } else {
+      NA
+    }
+    rho_rank_pass_scope <- is.finite(rho_rank_scope) &&
+      rho_rank_scope >= as.double(config$rank_spearman_min)
   }
 
+  eap_min <- as.double(config$eap_reliability_min)
+  eap_pass_scope <- isTRUE(diagnostics_pass) &&
+    is.finite(reliability_EAP_scope) &&
+    reliability_EAP_scope >= eap_min
+
   list(
+    phase_scope = as.character(scope$phase_scope %||% "global"),
+    phase_scope_set_id = as.integer(scope$phase_scope_set_id %||% NA_integer_),
+    phase_scope_n_items = as.integer(length(scope_ids)),
     diagnostics_pass = diagnostics_pass,
     diagnostics_divergences_pass = diagnostics_divergences_pass,
     diagnostics_rhat_pass = diagnostics_rhat_pass,
@@ -2892,19 +3008,29 @@ compute_stop_metrics <- function(state, config) {
     ess_bulk_required = ess_bulk_required,
     near_stop_active = as.logical(near_stop_active),
     reliability_EAP = reliability_EAP,
+    reliability_EAP_scope = reliability_EAP_scope,
     eap_reliability_min = eap_min,
     eap_pass = eap_pass,
+    eap_pass_scope = eap_pass_scope,
     theta_sd_eap = theta_sd_eap,
+    theta_sd_eap_scope = theta_sd_eap_scope,
     rho_theta = rho_theta,
+    rho_theta_scope = rho_theta_scope,
     theta_corr_min = as.double(config$theta_corr_min),
     theta_corr_pass = theta_corr_pass,
+    theta_corr_pass_scope = theta_corr_pass_scope,
     delta_sd_theta = delta_sd_theta,
+    delta_sd_theta_scope = delta_sd_theta_scope,
     theta_sd_rel_change_max = as.double(config$theta_sd_rel_change_max),
     delta_sd_theta_pass = delta_sd_theta_pass,
+    delta_sd_theta_pass_scope = delta_sd_theta_pass_scope,
     rho_rank = rho_rank,
+    rho_rank_scope = rho_rank_scope,
     rank_spearman_min = as.double(config$rank_spearman_min),
     rho_rank_pass = rho_rank_pass,
-    lag_eligible = lag_eligible
+    rho_rank_pass_scope = rho_rank_pass_scope,
+    lag_eligible = lag_eligible,
+    lag_eligible_scope = lag_eligible_scope
   )
 }
 
@@ -2918,8 +3044,12 @@ compute_stop_metrics <- function(state, config) {
     return(state)
   }
   eap_min <- as.double(config$eap_reliability_min)
+  reliability_value <- as.double(metrics$reliability_EAP %||% NA_real_)
+  if (identical(as.character(metrics$phase_scope %||% "global"), "phase_a_set")) {
+    reliability_value <- as.double(metrics$reliability_EAP_scope %||% reliability_value)
+  }
   threshold <- eap_min - 0.05
-  if (is.finite(metrics$reliability_EAP) && metrics$reliability_EAP >= threshold) {
+  if (is.finite(reliability_value) && reliability_value >= threshold) {
     state$refit_meta$near_stop <- TRUE
   }
   state
@@ -2938,11 +3068,38 @@ should_stop <- function(metrics, config) {
   if (!isTRUE(metrics$diagnostics_pass)) {
     return(FALSE)
   }
+  use_scope <- identical(as.character(metrics$phase_scope %||% "global"), "phase_a_set")
+  reliability <- as.double(if (isTRUE(use_scope)) {
+    metrics$reliability_EAP_scope %||% metrics$reliability_EAP
+  } else {
+    metrics$reliability_EAP
+  })
+  lag_eligible <- as.logical(if (isTRUE(use_scope)) {
+    metrics$lag_eligible_scope %||% metrics$lag_eligible
+  } else {
+    metrics$lag_eligible
+  })
+  rho_theta <- as.double(if (isTRUE(use_scope)) {
+    metrics$rho_theta_scope %||% metrics$rho_theta
+  } else {
+    metrics$rho_theta
+  })
+  delta_sd_theta <- as.double(if (isTRUE(use_scope)) {
+    metrics$delta_sd_theta_scope %||% metrics$delta_sd_theta
+  } else {
+    metrics$delta_sd_theta
+  })
+  rho_rank <- as.double(if (isTRUE(use_scope)) {
+    metrics$rho_rank_scope %||% metrics$rho_rank
+  } else {
+    metrics$rho_rank
+  })
+
   eap_min <- as.double(config$eap_reliability_min)
-  if (!is.finite(metrics$reliability_EAP) || metrics$reliability_EAP < eap_min) {
+  if (!is.finite(reliability) || reliability < eap_min) {
     return(FALSE)
   }
-  if (!isTRUE(metrics$lag_eligible)) {
+  if (!isTRUE(lag_eligible)) {
     return(FALSE)
   }
 
@@ -2950,13 +3107,13 @@ should_stop <- function(metrics, config) {
   theta_sd_rel_change_max <- as.double(config$theta_sd_rel_change_max)
   rank_spearman_min <- as.double(config$rank_spearman_min)
 
-  if (!is.finite(metrics$rho_theta) || metrics$rho_theta < theta_corr_min) {
+  if (!is.finite(rho_theta) || rho_theta < theta_corr_min) {
     return(FALSE)
   }
-  if (!is.finite(metrics$delta_sd_theta) || metrics$delta_sd_theta > theta_sd_rel_change_max) {
+  if (!is.finite(delta_sd_theta) || delta_sd_theta > theta_sd_rel_change_max) {
     return(FALSE)
   }
-  if (!is.finite(metrics$rho_rank) || metrics$rho_rank < rank_spearman_min) {
+  if (!is.finite(rho_rank) || rho_rank < rank_spearman_min) {
     return(FALSE)
   }
 
