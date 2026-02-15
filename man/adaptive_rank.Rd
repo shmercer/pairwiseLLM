@@ -99,7 +99,9 @@ within/shared judge fallback before link-specific estimates exist; once
 expected, malformed link-specific estimates abort. \code{link_refit_mode = "joint_refit"} jointly estimates active hub+spoke item abilities and
 transform parameters, and \code{hub_lock_mode}/\code{hub_lock_kappa} control hub
 locking in that joint refit. Unknown fields and invalid values abort with
-actionable errors.}
+actionable errors. Wrapper preflight validates linking mode combinations
+against the supplied data and aborts early with clear errors for
+incompatible \code{run_mode}/set structure combinations.}
 
 \item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 to control BTL refit cadence, stopping diagnostics, and selected
@@ -182,6 +184,13 @@ all key controls from \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_liv
 Use \code{adaptive_config} for identifiability-gated controller behavior and
 \code{btl_config} for inference/diagnostics cadence only.
 
+Linking run modes:
+\code{run_mode = "within_set"} is the single-set workflow.
+\code{run_mode = "link_one_spoke"} and \code{run_mode = "link_multi_spoke"} require
+multi-set input (\code{set_id}/\code{global_item_id}), enforce hub↔spoke routing
+defaults, and preserve Phase A artifact gating before Phase B cross-set
+comparisons begin.
+
 Selection semantics:
 pair selection is TrueSkill-driven in one-pair transactional steps.
 Rolling anchors are refreshed from current score proxies and anchor-link
@@ -259,6 +268,30 @@ live <- adaptive_rank(
 
 print(live$state)
 live$summary
+
+# Wrapper-driven linking workflow (hub + one spoke).
+linking_samples <- example_writing_samples[1:12, c("ID", "text")]
+linking_samples$set_id <- rep(c(1L, 2L), each = 6L)
+linking_samples$global_item_id <- paste0("g_", linking_samples$ID)
+
+link_out <- adaptive_rank(
+  data = linking_samples,
+  id_col = "ID",
+  text_col = "text",
+  backend = "openai",
+  model = "gpt-5.1",
+  adaptive_config = list(
+    run_mode = "link_one_spoke",
+    hub_id = 1L,
+    phase_a_mode = "run"
+  ),
+  n_steps = 200,
+  session_dir = file.path(tempdir(), "adaptive-link"),
+  resume = TRUE,
+  progress = "refits"
+)
+
+names(link_out$logs)
 }
 
 }

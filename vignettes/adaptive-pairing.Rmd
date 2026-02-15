@@ -359,6 +359,58 @@ This provides a transparent justification for termination.
 
 ---
 
+### Linking workflows with `adaptive_rank()`
+
+`adaptive_rank()` is also the high-level entry point for linking runs:
+
+* `run_mode = "link_one_spoke"` for one spoke set,
+* `run_mode = "link_multi_spoke"` for multi-spoke runs (`independent` or `concurrent`).
+
+In linking mode:
+
+* Phase B is hub↔spoke by default.
+* Phase B only starts after valid Phase A artifacts are available.
+* Returned logs include `link_stage_log` in addition to `step_log`, `round_log`, and `item_log`.
+
+```{r eval=FALSE}
+# Two-set linking with imported Phase A artifacts
+res_link <- adaptive_rank(
+  data = linking_samples_df,
+  id_col = "ID",
+  text_col = "text",
+  judge = my_judge,
+  n_steps = 300L,
+  adaptive_config = list(
+    run_mode = "link_one_spoke",
+    hub_id = 1L,
+    phase_a_mode = "import",
+    phase_a_artifacts = phase_a_artifacts
+  ),
+  progress = "refits"
+)
+
+# Multi-spoke linking with persistence/resume
+res_multi <- adaptive_rank(
+  data = linking_samples_df,
+  id_col = "ID",
+  text_col = "text",
+  judge = my_judge,
+  n_steps = 600L,
+  session_dir = "adaptive-linking-session",
+  resume = TRUE,
+  adaptive_config = list(
+    run_mode = "link_multi_spoke",
+    hub_id = 1L,
+    multi_spoke_mode = "concurrent",
+    hub_lock_mode = "soft_lock",
+    phase_a_mode = "run"
+  ),
+  progress = "all"
+)
+```
+
+---
+
 ### Downstream analyses
 
 Because all adaptive decisions are logged, you can:

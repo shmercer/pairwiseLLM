@@ -65,6 +65,56 @@
   read_samples_df(parsed, id_col = id_col, text_col = text_col)
 }
 
+.adaptive_rank_validate_linking_config <- function(items, adaptive_config) {
+  if (is.null(adaptive_config)) {
+    return(invisible(NULL))
+  }
+  if (!is.list(adaptive_config)) {
+    rlang::abort("`adaptive_config` must be NULL or a named list.")
+  }
+
+  run_mode <- as.character(adaptive_config$run_mode %||% "within_set")
+  phase_a_mode <- as.character(adaptive_config$phase_a_mode %||% "run")
+  valid_run_modes <- c("within_set", "link_one_spoke", "link_multi_spoke")
+  valid_phase_a_modes <- c("run", "import", "mixed")
+  if (!run_mode %in% valid_run_modes) {
+    rlang::abort("`adaptive_config$run_mode` must be within_set, link_one_spoke, or link_multi_spoke.")
+  }
+  if (!phase_a_mode %in% valid_phase_a_modes) {
+    rlang::abort("`adaptive_config$phase_a_mode` must be run, import, or mixed.")
+  }
+  if (identical(run_mode, "within_set") && !identical(phase_a_mode, "run")) {
+    rlang::abort("`adaptive_config$phase_a_mode` can only be import/mixed when linking run_mode is enabled.")
+  }
+
+  set_ids <- if ("set_id" %in% names(items)) {
+    suppressWarnings(as.integer(items$set_id))
+  } else {
+    rep.int(1L, nrow(items))
+  }
+  set_ids <- unique(set_ids[is.finite(set_ids)])
+  if (run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    if (length(set_ids) < 2L) {
+      rlang::abort(
+        paste0(
+          "Linking run modes require multi-set input. ",
+          "Provide `set_id` with at least two unique sets in `data`."
+        )
+      )
+    }
+    hub_id <- as.integer(adaptive_config$hub_id %||% 1L)
+    if (!hub_id %in% set_ids) {
+      rlang::abort("`adaptive_config$hub_id` must match one observed `set_id` in `data`.")
+    }
+    spoke_ids <- setdiff(set_ids, hub_id)
+    if (identical(run_mode, "link_one_spoke") && length(spoke_ids) != 1L) {
+      rlang::abort("`adaptive_config$run_mode = \"link_one_spoke\"` requires exactly one spoke set.")
+    }
+  }
+
+  invisible(NULL)
+}
+
 #' Build an LLM judge function for adaptive ranking
 #'
 #' @description
@@ -272,6 +322,13 @@ make_adaptive_judge_llm <- function(
 #' Use `adaptive_config` for identifiability-gated controller behavior and
 #' `btl_config` for inference/diagnostics cadence only.
 #'
+#' Linking run modes:
+#' `run_mode = "within_set"` is the single-set workflow.
+#' `run_mode = "link_one_spoke"` and `run_mode = "link_multi_spoke"` require
+#' multi-set input (`set_id`/`global_item_id`), enforce hub↔spoke routing
+#' defaults, and preserve Phase A artifact gating before Phase B cross-set
+#' comparisons begin.
+#'
 #' Selection semantics:
 #' pair selection is TrueSkill-driven in one-pair transactional steps.
 #' Rolling anchors are refreshed from current score proxies and anchor-link
@@ -346,7 +403,9 @@ make_adaptive_judge_llm <- function(
 #'   "joint_refit"` jointly estimates active hub+spoke item abilities and
 #'   transform parameters, and `hub_lock_mode`/`hub_lock_kappa` control hub
 #'   locking in that joint refit. Unknown fields and invalid values abort with
-#'   actionable errors.
+#'   actionable errors. Wrapper preflight validates linking mode combinations
+#'   against the supplied data and aborts early with clear errors for
+#'   incompatible `run_mode`/set structure combinations.
 #' @param btl_config Optional named list passed to [adaptive_rank_run_live()]
 #'   to control BTL refit cadence, stopping diagnostics, and selected
 #'   round-log diagnostics. Supported fields:
@@ -435,6 +494,30 @@ make_adaptive_judge_llm <- function(
 #'
 #' print(live$state)
 #' live$summary
+#'
+#' # Wrapper-driven linking workflow (hub + one spoke).
+#' linking_samples <- example_writing_samples[1:12, c("ID", "text")]
+#' linking_samples$set_id <- rep(c(1L, 2L), each = 6L)
+#' linking_samples$global_item_id <- paste0("g_", linking_samples$ID)
+#'
+#' link_out <- adaptive_rank(
+#'   data = linking_samples,
+#'   id_col = "ID",
+#'   text_col = "text",
+#'   backend = "openai",
+#'   model = "gpt-5.1",
+#'   adaptive_config = list(
+#'     run_mode = "link_one_spoke",
+#'     hub_id = 1L,
+#'     phase_a_mode = "run"
+#'   ),
+#'   n_steps = 200,
+#'   session_dir = file.path(tempdir(), "adaptive-link"),
+#'   resume = TRUE,
+#'   progress = "refits"
+#' )
+#'
+#' names(link_out$logs)
 #' }
 #'
 #' @seealso [make_adaptive_judge_llm()], [adaptive_rank_run_live()],
@@ -517,6 +600,7 @@ adaptive_rank <- function(
   if (!"text" %in% names(items)) {
     rlang::abort("Input data must include a text column after normalization.")
   }
+  .adaptive_rank_validate_linking_config(items = items, adaptive_config = adaptive_config)
 
   loaded_state <- NULL
   if (isTRUE(resume) && !is.null(session_dir) && dir.exists(session_dir)) {

@@ -297,7 +297,7 @@ test_that("adaptive_rank_run_live covers progress event, persistence writes, and
       tracker$write_called <- tracker$write_called + 1L
       invisible(NULL)
     },
-    adaptive_progress_refit_block = function(round_row, cfg) character(),
+    adaptive_progress_refit_block = function(round_row, cfg, ...) character(),
     save_adaptive_session = function(state, session_dir, overwrite = TRUE) {
       tracker$save_called <- tracker$save_called + 1L
       invisible(state)

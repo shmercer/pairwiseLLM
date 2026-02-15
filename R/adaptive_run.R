@@ -1157,7 +1157,8 @@ adaptive_rank_run_live <- function(state,
       if (cfg$progress %in% c("all", "refits")) {
         block <- adaptive_progress_refit_block(
           tibble::as_tibble(round_row),
-          cfg
+          cfg,
+          link_stage_rows = link_rows
         )
         if (length(block) > 0L) {
           cat(paste(block, collapse = "\n"), "\n")
