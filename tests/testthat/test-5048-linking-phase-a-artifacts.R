@@ -868,3 +868,42 @@ test_that("linking warm-start sync helper covers phase and scope transitions", {
   expect_identical(switched$linking$phase_a$warm_start_scope_set, 1L)
   expect_equal(switched$warm_start_idx, 1L)
 })
+
+test_that("phase A prepare preserves warm-start scope metadata", {
+  items <- tibble::tibble(
+    item_id = c("a1", "a2", "a3", "b1", "b2"),
+    text = c("a1", "a2", "a3", "b1", "b2"),
+    set_id = c(1L, 1L, 1L, 2L, 2L),
+    global_item_id = c("g_a1", "g_a2", "g_a3", "g_b1", "g_b2")
+  )
+  state <- adaptive_rank_start(items, seed = 5L)
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("pending_finalization", "pending_finalization"),
+      validation_message = c("x", "y"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 1L,
+    warm_start_scope_set = 1L
+  )
+  state$warm_start_done <- FALSE
+  state$warm_start_pairs <- tibble::tibble(i_id = c("a1", "a2"), j_id = c("a2", "a3"))
+  state$warm_start_idx <- 2L
+
+  prepared <- pairwiseLLM:::.adaptive_phase_a_prepare(state)
+  expect_identical(prepared$linking$phase_a$warm_start_scope_set, 1L)
+
+  synced <- pairwiseLLM:::.adaptive_link_sync_warm_start(prepared)
+  expect_identical(synced$linking$phase_a$warm_start_scope_set, 1L)
+  expect_identical(synced$warm_start_idx, 2L)
+})

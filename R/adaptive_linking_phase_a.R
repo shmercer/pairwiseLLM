@@ -541,6 +541,8 @@
   controller <- .adaptive_controller_resolve(out)
   set_ids <- as.integer(sort(unique(out$items$set_id)))
   persisted_status_tbl <- tibble::as_tibble(out$linking$phase_a$set_status %||% tibble::tibble())
+  prior_phase_a <- out$linking$phase_a %||% list()
+  prior_warm_start_scope_set <- as.integer(prior_phase_a$warm_start_scope_set %||% NA_integer_)
   status_cols <- c("set_id", "source", "status", "validation_message")
   if (!all(status_cols %in% names(persisted_status_tbl))) {
     persisted_status_tbl <- tibble::tibble()
@@ -729,7 +731,8 @@
     phase = phase,
     ready_spokes = as.integer(ready_spokes),
     active_phase_a_set = as.integer(active_phase_a_set),
-    phase_b_started_at_step = as.integer(phase_b_start)
+    phase_b_started_at_step = as.integer(phase_b_start),
+    warm_start_scope_set = prior_warm_start_scope_set
   )
 
   out
