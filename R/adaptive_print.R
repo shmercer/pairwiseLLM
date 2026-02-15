@@ -65,6 +65,53 @@
   NA_real_
 }
 
+.adaptive_log_factor_specs_step <- function() {
+  list(
+    run_mode = c("within_set", "link_one_spoke", "link_multi_spoke"),
+    link_stage = c("anchor_link", "long_link", "mid_link", "local_link"),
+    link_transform_mode = c("auto", "shift_only", "shift_scale"),
+    utility_mode = c("pairing_trueskill_u0", "pairing_trueskill_u", "linking_cross_set_p_times_1_minus_p"),
+    hub_lock_mode = c("hard_lock", "soft_lock", "free")
+  )
+}
+
+.adaptive_log_factor_specs_link_stage <- function() {
+  list(
+    link_transform_mode = c("auto", "shift_only", "shift_scale"),
+    link_refit_mode = c("shift_only", "joint_refit"),
+    hub_lock_mode = c("hard_lock", "soft_lock", "free")
+  )
+}
+
+.adaptive_cast_log_factors <- function(log_tbl, specs, log_name) {
+  out <- tibble::as_tibble(log_tbl)
+  if (!is.list(specs) || length(specs) == 0L) {
+    return(out)
+  }
+  for (col in names(specs)) {
+    if (!col %in% names(out)) {
+      next
+    }
+    allowed <- as.character(specs[[col]])
+    vals <- as.character(out[[col]])
+    invalid <- !is.na(vals) & !vals %in% allowed
+    if (any(invalid)) {
+      bad_vals <- sort(unique(vals[invalid]))
+      rlang::abort(paste0(
+        "`",
+        log_name,
+        "$",
+        col,
+        "` has invalid levels: ",
+        paste(bad_vals, collapse = ", "),
+        "."
+      ))
+    }
+    out[[col]] <- factor(vals, levels = allowed)
+  }
+  out
+}
+
 .adaptive_link_item_raw_global_summaries <- function(state, ids, set_id, theta_mean, theta_sd) {
   controller <- .adaptive_controller_resolve(state)
   run_mode <- as.character(controller$run_mode %||% "within_set")
@@ -354,10 +401,18 @@ adaptive_get_logs <- function(state) {
     })
   }
   list(
-    step_log = tibble::as_tibble(state$step_log),
+    step_log = .adaptive_cast_log_factors(
+      state$step_log,
+      specs = .adaptive_log_factor_specs_step(),
+      log_name = "step_log"
+    ),
     round_log = tibble::as_tibble(state$round_log),
     item_log = item_log,
-    link_stage_log = tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
+    link_stage_log = .adaptive_cast_log_factors(
+      state$link_stage_log %||% new_link_stage_log(),
+      specs = .adaptive_log_factor_specs_link_stage(),
+      log_name = "link_stage_log"
+    )
   )
 }
 
@@ -410,7 +465,11 @@ adaptive_step_log <- function(state) {
   if (is.null(state$step_log)) {
     rlang::abort("`state$step_log` is missing.")
   }
-  tibble::as_tibble(state$step_log)
+  .adaptive_cast_log_factors(
+    state$step_log,
+    specs = .adaptive_log_factor_specs_step(),
+    log_name = "step_log"
+  )
 }
 
 #' Adaptive round log accessor.

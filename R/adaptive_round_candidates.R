@@ -338,6 +338,8 @@
   active_ids <- as.character(active_ids)
   set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
   proxy_scores <- .adaptive_rank_proxy(state)$scores
+  link_refit_mode <- as.character(controller$link_refit_mode %||% "shift_only")
+  use_current_theta <- identical(link_refit_mode, "joint_refit")
   active_sets <- sort(unique(as.integer(set_map[active_ids])))
   active_sets <- active_sets[!is.na(active_sets)]
   if (length(active_sets) < 1L) {
@@ -348,22 +350,39 @@
   scores <- stats::setNames(rep(NA_real_, length(active_ids)), active_ids)
   for (set_id in active_sets) {
     set_items <- active_ids[as.integer(set_map[active_ids]) == as.integer(set_id)]
-    raw_theta <- tryCatch(
-      .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = "theta_raw_mean"),
-      error = function(e) {
-        if (as.integer(set_id) == as.integer(hub_id)) {
-          return(stats::setNames(numeric(), character()))
+    phase_a_theta <- function() {
+      tryCatch(
+        .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = "theta_raw_mean"),
+        error = function(e) {
+          if (as.integer(set_id) == as.integer(hub_id)) {
+            return(stats::setNames(numeric(), character()))
+          }
+          rlang::abort(
+            message = sprintf(
+              "Linking routing invariant failed: Phase A theta_raw_mean unavailable for set_id=%s.",
+              as.integer(set_id)
+            ),
+            parent = e
+          )
         }
-        rlang::abort(
-          message = sprintf(
-            "Linking routing invariant failed: Phase A theta_raw_mean unavailable for set_id=%s.",
-            as.integer(set_id)
-          ),
-          parent = e
-        )
+      )
+    }
+    raw_theta <- if (isTRUE(use_current_theta)) {
+      current_theta <- .adaptive_link_theta_mean_map(state, set_id = set_id)
+      current_vals <- as.double(current_theta[set_items])
+      names(current_vals) <- as.character(set_items)
+      missing_current <- !is.finite(current_vals)
+      if (any(missing_current)) {
+        phase_vals <- as.double(phase_a_theta()[set_items])
+        names(phase_vals) <- as.character(set_items)
+        current_vals[missing_current] <- phase_vals[missing_current]
       }
-    )
-    raw_theta <- as.double(raw_theta[set_items])
+      current_vals
+    } else {
+      phase_vals <- as.double(phase_a_theta()[set_items])
+      names(phase_vals) <- as.character(set_items)
+      phase_vals
+    }
     names(raw_theta) <- as.character(set_items)
     if (as.integer(set_id) == as.integer(hub_id)) {
       missing_raw <- !is.finite(raw_theta)
@@ -372,9 +391,11 @@
       }
     }
     if (any(!is.finite(raw_theta))) {
+      source_label <- if (isTRUE(use_current_theta)) "current theta_mean" else "Phase A theta_raw_mean"
       rlang::abort(
         sprintf(
-          "Linking routing invariant failed: Phase A theta_raw_mean missing/non-finite for set_id=%s.",
+          "Linking routing invariant failed: %s missing/non-finite for set_id=%s.",
+          source_label,
           as.integer(set_id)
         )
       )

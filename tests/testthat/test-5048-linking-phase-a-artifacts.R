@@ -85,6 +85,33 @@ test_that("phase A import validation rejects each required failure mode", {
     .adaptive_phase_a_validate_imported_artifact(bad_complete, state, set_id = 1L, controller = controller),
     "completeness failure"
   )
+  bad_rank <- valid
+  bad_rank$items$rank_mu_raw <- NULL
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_rank, state, set_id = 1L, controller = controller),
+    "missing rank_mu_raw"
+  )
+
+  bad_n_items <- valid
+  bad_n_items$n_items <- bad_n_items$n_items + 1L
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_n_items, state, set_id = 1L, controller = controller),
+    "item-count metadata mismatch"
+  )
+
+  bad_pairs_count <- valid
+  bad_pairs_count$n_pairs_committed <- NULL
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_pairs_count, state, set_id = 1L, controller = controller),
+    "missing `n_pairs_committed`"
+  )
+
+  bad_diag <- valid
+  bad_diag$diagnostics <- list()
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(bad_diag, state, set_id = 1L, controller = controller),
+    "missing diagnostics metadata"
+  )
 
   bad_quality <- valid
   bad_quality$diagnostics$reliability_EAP_within <- NA_real_

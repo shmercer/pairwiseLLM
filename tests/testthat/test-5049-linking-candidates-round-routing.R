@@ -1204,6 +1204,66 @@ test_that("phase-B routing helpers enforce finite inputs and anchor fallback rul
   expect_identical(anchor_rank_fallback, "h1")
 })
 
+test_that("phase-B routing score source switches between Phase A and current theta by refit mode", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 902L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  active_ids <- c("h1", "h2", "s1", "s2")
+  controller_shift <- utils::modifyList(
+    pairwiseLLM:::.adaptive_controller_resolve(state),
+    list(
+      link_refit_mode = "shift_only",
+      link_refit_stats_by_spoke = list(`2` = list(delta_spoke_mean = 0, log_alpha_spoke_mean = 0))
+    )
+  )
+  controller_joint <- utils::modifyList(
+    controller_shift,
+    list(link_refit_mode = "joint_refit")
+  )
+
+  out_shift <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_a_theta_map = function(state, set_id, field) {
+      if (as.integer(set_id) == 1L) c(h1 = 10, h2 = 9) else c(s1 = -2, s2 = -3)
+    },
+    .adaptive_link_theta_mean_map = function(state, set_id) {
+      if (as.integer(set_id) == 1L) c(h1 = 1, h2 = 0.5) else c(s1 = 3, s2 = 2.5)
+    },
+    pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+      state = state,
+      controller = controller_shift,
+      active_ids = active_ids,
+      hub_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+  out_joint <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_a_theta_map = function(state, set_id, field) {
+      if (as.integer(set_id) == 1L) c(h1 = 10, h2 = 9) else c(s1 = -2, s2 = -3)
+    },
+    .adaptive_link_theta_mean_map = function(state, set_id) {
+      if (as.integer(set_id) == 1L) c(h1 = 1, h2 = 0.5) else c(s1 = 3, s2 = 2.5)
+    },
+    pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+      state = state,
+      controller = controller_joint,
+      active_ids = active_ids,
+      hub_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_equal(out_shift[["s1"]], -2, tolerance = 1e-12)
+  expect_equal(out_joint[["s1"]], 3, tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(out_shift[["h1"]], out_joint[["h1"]], tolerance = 1e-12)))
+})
+
 test_that("linking candidates and step log carry global distance strata", {
   items <- tibble::tibble(
     item_id = as.character(1:8),

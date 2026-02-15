@@ -573,6 +573,13 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
+      list(cross_set_utility = "p_times_1_minus_p"),
+      5L
+    ),
+    "must be one of"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
       list(allow_spoke_spoke_cross_set = "yes"),
       5L
     ),
