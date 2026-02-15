@@ -333,11 +333,8 @@
   )
   out$cross_set_utility <- read_choice(
     "cross_set_utility",
-    c("linking_cross_set_p_times_1_minus_p", "p_times_1_minus_p")
+    c("linking_cross_set_p_times_1_minus_p")
   )
-  if (identical(out$cross_set_utility, "p_times_1_minus_p")) {
-    out$cross_set_utility <- "linking_cross_set_p_times_1_minus_p"
-  }
   out$phase_a_mode <- read_choice("phase_a_mode", c("run", "import", "mixed"))
   out$phase_a_import_failure_policy <- read_choice(
     "phase_a_import_failure_policy",

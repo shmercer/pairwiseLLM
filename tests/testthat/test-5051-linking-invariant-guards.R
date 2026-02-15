@@ -99,6 +99,33 @@ test_that("step-entry invariant guard rejects empty ready spokes and pending run
   )
 })
 
+test_that("step-entry invariant guard rejects unsupported linking cross-set utility config", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 16L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_entry_invariants(
+      state = state,
+      controller = list(run_mode = "link_one_spoke", cross_set_utility = "entropy"),
+      phase_ctx = list(
+        phase = "phase_b",
+        pending_run_sets = integer(),
+        ready_spokes = 2L,
+        active_phase_a_set = NA_integer_
+      )
+    ),
+    "cross_set_utility"
+  )
+})
+
 test_that("step row completeness guard validates structure and non-cross-set spoke NA", {
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(tibble::tibble()),

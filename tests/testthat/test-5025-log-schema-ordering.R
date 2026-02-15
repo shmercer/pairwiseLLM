@@ -95,3 +95,101 @@ test_that("log accessors preserve canonical column order", {
   expect_equal(names(adaptive_round_log(state)), names(pairwiseLLM:::schema_round_log))
   expect_equal(names(adaptive_item_log(state)), pairwiseLLM:::.adaptive_item_log_columns())
 })
+
+test_that("public log accessors cast linking categorical fields to constrained factors", {
+  state <- adaptive_rank_start(make_test_items(3))
+  step_log <- adaptive_step_log(state)
+  logs <- adaptive_get_logs(state)
+
+  expect_true(is.factor(step_log$run_mode))
+  expect_true(is.factor(step_log$link_stage))
+  expect_true(is.factor(step_log$link_transform_mode))
+  expect_true(is.factor(step_log$utility_mode))
+  expect_true(is.factor(step_log$hub_lock_mode))
+  expect_identical(levels(step_log$run_mode), c("within_set", "link_one_spoke", "link_multi_spoke"))
+  expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link"))
+  expect_identical(levels(step_log$link_transform_mode), c("auto", "shift_only", "shift_scale"))
+  expect_identical(
+    levels(step_log$utility_mode),
+    c("pairing_trueskill_u0", "pairing_trueskill_u", "linking_cross_set_p_times_1_minus_p")
+  )
+  expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
+
+  expect_true(is.factor(logs$link_stage_log$link_transform_mode))
+  expect_true(is.factor(logs$link_stage_log$link_refit_mode))
+  expect_true(is.factor(logs$link_stage_log$hub_lock_mode))
+  expect_identical(levels(logs$link_stage_log$link_transform_mode), c("auto", "shift_only", "shift_scale"))
+  expect_identical(levels(logs$link_stage_log$link_refit_mode), c("shift_only", "joint_refit"))
+  expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
+})
+
+test_that("public log accessors fail fast on invalid linking categorical values", {
+  state <- adaptive_rank_start(make_test_items(3))
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(step_id = 1L, timestamp = Sys.time(), run_mode = "bad_mode")
+  )
+  expect_error(adaptive_step_log(state), "invalid levels")
+
+  state2 <- adaptive_rank_start(make_test_items(3))
+  state2$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_mode = "bad_mode",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      reliability_EAP_link = 0.9,
+      linking_identified = TRUE,
+      link_stop_eligible = TRUE,
+      link_stop_pass = TRUE,
+      n_pairs_cross_set_done = 1L,
+      n_unique_cross_pairs_seen = 1L,
+      n_cross_edges_since_last_refit = 1L,
+      coverage_bins_used = 3L
+    )
+  )
+  expect_error(adaptive_get_logs(state2), "invalid levels")
+})
+
+test_that("adaptive print helper/accessor guard branches are exercised", {
+  plain <- pairwiseLLM:::.adaptive_cast_log_factors(
+    tibble::tibble(a = "x"),
+    specs = list(),
+    log_name = "dummy"
+  )
+  expect_identical(names(plain), "a")
+
+  no_match <- pairwiseLLM:::.adaptive_cast_log_factors(
+    tibble::tibble(a = "x"),
+    specs = list(run_mode = c("within_set")),
+    log_name = "dummy"
+  )
+  expect_identical(no_match$a, "x")
+
+  state <- adaptive_rank_start(make_test_items(3))
+  state_missing_round <- state
+  state_missing_round$round_log <- NULL
+  expect_error(adaptive_get_logs(state_missing_round), "round_log")
+
+  state_missing_item <- state
+  state_missing_item$item_log <- NULL
+  expect_error(adaptive_get_logs(state_missing_item), "item_log")
+
+  expect_error(pairwiseLLM::summarize_adaptive(list()), "adaptive_state")
+
+  cfg <- pairwiseLLM:::.adaptive_progress_config(
+    progress = "steps",
+    progress_redraw_every = 1L,
+    progress_show_events = FALSE,
+    progress_errors = FALSE
+  )
+  cfg$refit_pairs_target <- NA_integer_
+  handle <- pairwiseLLM:::adaptive_progress_init(state, cfg)
+  expect_true(is.list(handle))
+  cfg$progress <- "none"
+  handle2 <- pairwiseLLM:::adaptive_progress_update(handle, state, cfg)
+  expect_identical(handle2, handle)
+})

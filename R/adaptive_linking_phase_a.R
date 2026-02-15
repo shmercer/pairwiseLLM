@@ -336,7 +336,7 @@
   }
 
   items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())
-  required_cols <- c("global_item_id", "theta_raw_mean", "theta_raw_sd")
+  required_cols <- c("global_item_id", "theta_raw_mean", "theta_raw_sd", "rank_mu_raw")
   missing_cols <- setdiff(required_cols, names(items_tbl))
   if (length(missing_cols) > 0L) {
     rlang::abort(paste0(
@@ -345,6 +345,31 @@
       ": missing ",
       paste(missing_cols, collapse = ", "),
       "."
+    ))
+  }
+
+  n_items <- artifact$n_items %||% NA_integer_
+  if (!.adaptive_is_integerish(n_items) || length(n_items) != 1L || is.na(n_items)) {
+    rlang::abort(paste0("Phase A artifact completeness failure for set ", set_id, ": missing `n_items`."))
+  }
+  n_items <- as.integer(n_items)
+  if (n_items < 1L) {
+    rlang::abort(paste0("Phase A artifact field validation failure for set ", set_id, ": `n_items` must be >= 1."))
+  }
+  n_pairs_committed <- artifact$n_pairs_committed %||% NA_integer_
+  if (!.adaptive_is_integerish(n_pairs_committed) || length(n_pairs_committed) != 1L || is.na(n_pairs_committed)) {
+    rlang::abort(paste0(
+      "Phase A artifact completeness failure for set ",
+      set_id,
+      ": missing `n_pairs_committed`."
+    ))
+  }
+  n_pairs_committed <- as.integer(n_pairs_committed)
+  if (n_pairs_committed < 0L) {
+    rlang::abort(paste0(
+      "Phase A artifact field validation failure for set ",
+      set_id,
+      ": `n_pairs_committed` must be >= 0."
     ))
   }
 
@@ -359,6 +384,14 @@
   state_items <- tibble::as_tibble(state$items)
   state_set_items <- state_items[state_items$set_id == set_id, c("item_id", "global_item_id"), drop = FALSE]
   expected_global <- as.character(state_set_items$global_item_id)
+  expected_n_items <- as.integer(length(expected_global))
+  if (!identical(n_items, expected_n_items) || !identical(nrow(items_tbl), expected_n_items)) {
+    rlang::abort(paste0(
+      "Phase A artifact completeness failure for set ",
+      set_id,
+      ": item-count metadata mismatch."
+    ))
+  }
   if (!setequal(expected_global, as.character(items_tbl$global_item_id))) {
     rlang::abort(paste0("Phase A artifact global_item_id mapping mismatch for set ", set_id, "."))
   }
@@ -366,8 +399,16 @@
   by_global <- match(expected_global, as.character(items_tbl$global_item_id))
   theta_mean <- as.double(items_tbl$theta_raw_mean[by_global])
   theta_sd <- as.double(items_tbl$theta_raw_sd[by_global])
-  if (any(is.na(theta_mean)) || any(is.na(theta_sd))) {
+  rank_mu_raw <- as.double(items_tbl$rank_mu_raw[by_global])
+  if (any(is.na(theta_mean)) || any(is.na(theta_sd)) || any(is.na(rank_mu_raw))) {
     rlang::abort(paste0("Phase A artifact completeness failure for set ", set_id, "."))
+  }
+  if (any(!is.finite(theta_mean))) {
+    rlang::abort(paste0(
+      "Phase A artifact field validation failure for set ",
+      set_id,
+      ": `theta_raw_mean` must be finite for all items."
+    ))
   }
   if (any(!is.finite(theta_sd))) {
     rlang::abort(paste0(
@@ -383,12 +424,36 @@
       ": `theta_raw_sd` must be non-negative for all items."
     ))
   }
+  if (any(!is.finite(rank_mu_raw))) {
+    rlang::abort(paste0(
+      "Phase A artifact field validation failure for set ",
+      set_id,
+      ": `rank_mu_raw` must be finite for all items."
+    ))
+  }
 
   if ("item_id" %in% names(items_tbl)) {
     imported_item_ids <- as.character(items_tbl$item_id[by_global])
     if (any(is.na(imported_item_ids)) || !identical(imported_item_ids, as.character(state_set_items$item_id))) {
       rlang::abort(paste0("Phase A artifact item_id mapping mismatch for set ", set_id, "."))
     }
+  }
+
+  diagnostics <- artifact$diagnostics %||% list()
+  if (!is.list(diagnostics) || !"diagnostics_pass" %in% names(diagnostics)) {
+    rlang::abort(paste0(
+      "Phase A artifact completeness failure for set ",
+      set_id,
+      ": missing diagnostics metadata."
+    ))
+  }
+  diagnostics_pass <- diagnostics$diagnostics_pass
+  if (!is.logical(diagnostics_pass) || length(diagnostics_pass) != 1L) {
+    rlang::abort(paste0(
+      "Phase A artifact field validation failure for set ",
+      set_id,
+      ": `diagnostics$diagnostics_pass` must be TRUE/FALSE/NA."
+    ))
   }
 
   reliability <- .adaptive_phase_a_extract_reliability(artifact)

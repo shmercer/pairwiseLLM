@@ -168,7 +168,14 @@ validate_judge_result <- function(result, A_id, B_id) {
 #' @keywords internal
 #' @noRd
 .adaptive_assert_step_entry_invariants <- function(state, controller = NULL, phase_ctx = NULL) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (is.null(controller)) {
+    controller <- .adaptive_controller_resolve(state)
+  } else {
+    controller <- utils::modifyList(
+      .adaptive_controller_defaults(as.integer(state$n_items %||% length(state$item_ids %||% character()))),
+      controller
+    )
+  }
   phase_ctx <- phase_ctx %||% .adaptive_link_phase_context(state, controller = controller)
   run_mode <- as.character(controller$run_mode %||% "within_set")
   is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
@@ -184,6 +191,15 @@ validate_judge_result <- function(result, A_id, B_id) {
   }
 
   if (identical(phase_ctx$phase, "phase_b")) {
+    configured_cross_set_utility <- as.character(controller$cross_set_utility %||% NA_character_)
+    if (!identical(configured_cross_set_utility, "linking_cross_set_p_times_1_minus_p")) {
+      rlang::abort(
+        paste0(
+          "Linking configuration invariant failed: `adaptive_config$cross_set_utility` must be ",
+          "`linking_cross_set_p_times_1_minus_p`."
+        )
+      )
+    }
     ready_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
     ready_spokes <- ready_spokes[!is.na(ready_spokes)]
     if (length(ready_spokes) < 1L) {
