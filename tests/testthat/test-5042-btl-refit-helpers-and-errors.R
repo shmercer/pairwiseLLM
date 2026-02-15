@@ -353,3 +353,109 @@ test_that("round_log_row handles prior-round attribution and quota source select
   expect_true(is.na(row$ts_btl_theta_corr))
   expect_true(is.na(row$ts_btl_rank_spearman))
 })
+
+test_that("default_btl_fit_fn scopes Phase A linking refits to active set ids", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 13L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("ready", "pending_finalization"),
+    validation_message = c("ok", "pending_finalization"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      A = 1L,
+      B = 2L,
+      Y = 1L,
+      is_cross_set = FALSE
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:01:00", tz = "UTC"),
+      pair_id = 2L,
+      A = 3L,
+      B = 4L,
+      Y = 1L,
+      is_cross_set = FALSE
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 3L,
+      timestamp = as.POSIXct("2026-01-01 00:02:00", tz = "UTC"),
+      pair_id = 3L,
+      A = 1L,
+      B = 3L,
+      Y = 1L,
+      is_cross_set = TRUE
+    )
+  )
+
+  observed <- NULL
+  testthat::with_mocked_bindings(
+    fit_bayes_btl_mcmc = function(results, ids, model_variant, cmdstan) {
+      observed <<- list(results = results, ids = as.character(ids))
+      list(
+        fit = make_test_btl_fit(
+          ids = ids,
+          draws = matrix(c(0.1, -0.1, 0.2, -0.2), nrow = 2L, byrow = TRUE),
+          model_variant = model_variant
+        )
+      )
+    },
+    pairwiseLLM:::default_btl_fit_fn(state, config = list(model_variant = "btl_e_b")),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(observed$ids, c("s1", "s2"))
+  expect_true(nrow(observed$results) >= 1L)
+  expect_true(all(observed$results$A_id %in% observed$ids))
+  expect_true(all(observed$results$B_id %in% observed$ids))
+})
+
+test_that("adaptive stop metric scope warns when Phase A scoped ids fallback to global", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 9L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("ready", "pending_finalization"),
+    validation_message = c("ok", "pending_finalization"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+
+  scope <- NULL
+  expect_warning(
+    scope <- pairwiseLLM:::.adaptive_stop_metric_scope(state, ids = "s1"),
+    "falling back to global scope"
+  )
+  expect_identical(scope$phase_scope, "global")
+  expect_identical(scope$scope_ids, "s1")
+})
