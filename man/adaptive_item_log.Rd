@@ -34,6 +34,9 @@ when available).
 \item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
 summaries after spoke transform application. These are typed \code{NA}
 when required spoke transform parameters are unavailable at that refit.
+\item \code{in_phase_scope}, \code{theta_scope_eap}, \code{theta_scope_sd},
+\code{rank_scope_eap}: scoped summaries for the currently optimized item
+domain (active set during linking Phase A; all items otherwise).
 }
 }
 \examples{

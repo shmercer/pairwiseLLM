@@ -35,8 +35,10 @@ Core columns:
 \code{global_identified_reliability_min},
 \code{global_identified_rank_corr_min}, \code{long_quota_raw},
 \code{long_quota_effective}, \code{long_quota_removed},
-\code{realloc_to_mid}, \code{realloc_to_local}.
+\code{realloc_to_mid}, \code{realloc_to_local},
+\code{phase_scope}, \code{phase_scope_set_id}, \code{phase_scope_n_items}.
 \item Coverage/imbalance: \code{mean_degree}, \code{min_degree},
+\code{mean_degree_scope}, \code{min_degree_scope},
 \code{pos_balance_sd}, \code{star_cap_rejects_since_last_refit},
 \code{star_cap_reject_rate_since_last_refit},
 \code{recent_deg_median_since_last_refit},
@@ -57,11 +59,16 @@ Core columns:
 \code{divergences_max_allowed}, \code{max_rhat},
 \code{max_rhat_allowed}, \code{min_ess_bulk},
 \code{ess_bulk_required}, \code{near_stop_active},
-\code{reliability_EAP}, \code{eap_reliability_min}, \code{eap_pass},
-\code{theta_sd_eap}, \code{rho_theta}, \code{lag_eligible},
-\code{theta_corr_min}, \code{theta_corr_pass}, \code{delta_sd_theta},
+\code{reliability_EAP}, \code{reliability_EAP_scope},
+\code{eap_reliability_min}, \code{eap_pass}, \code{eap_pass_scope},
+\code{theta_sd_eap}, \code{theta_sd_eap_scope},
+\code{rho_theta}, \code{rho_theta_scope},
+\code{lag_eligible}, \code{lag_eligible_scope},
+\code{theta_corr_min}, \code{theta_corr_pass}, \code{theta_corr_pass_scope},
+\code{delta_sd_theta}, \code{delta_sd_theta_scope},
 \code{theta_sd_rel_change_max}, \code{delta_sd_theta_pass},
-\code{rho_rank}, \code{rank_spearman_min}, \code{rho_rank_pass}.
+\code{delta_sd_theta_pass_scope}, \code{rho_rank}, \code{rho_rank_scope},
+\code{rank_spearman_min}, \code{rho_rank_pass}, \code{rho_rank_pass_scope}.
 \item Refit execution metadata: \code{mcmc_chains},
 \code{mcmc_parallel_chains}, \code{mcmc_core_fraction},
 \code{mcmc_cores_detected_physical}, \code{mcmc_cores_detected_logical},
