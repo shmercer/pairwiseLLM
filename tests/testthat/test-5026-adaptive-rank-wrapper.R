@@ -6,6 +6,37 @@ make_test_samples_df <- function(n = 6L) {
   )
 }
 
+make_linking_samples_df <- function() {
+  tibble::tibble(
+    ID = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
+    text = paste("sample", seq_len(9L)),
+    quality_score = c(10, 20, 30, 9, 19, 29, 8, 18, 28),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23", "gs31", "gs32", "gs33")
+  )
+}
+
+make_wrapper_import_artifacts <- function(items) {
+  state <- pairwiseLLM::adaptive_rank_start(items = items, seed = 91L)
+  ids <- as.character(state$item_ids)
+  draws <- matrix(
+    seq_along(ids),
+    nrow = 4L,
+    ncol = length(ids),
+    byrow = TRUE
+  )
+  colnames(draws) <- ids
+  state$btl_fit <- make_test_btl_fit(ids, draws = draws, model_variant = "btl_e_b")
+  set_ids <- sort(unique(as.integer(state$items$set_id)))
+  artifacts <- lapply(set_ids, function(set_id) {
+    art <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = as.integer(set_id))
+    art$quality_gate_accepted <- TRUE
+    art
+  })
+  names(artifacts) <- as.character(set_ids)
+  artifacts
+}
+
 test_that("make_adaptive_judge_llm forwards model options and returns valid contract", {
   calls <- list()
 
@@ -501,4 +532,119 @@ test_that("adaptive_rank logs include documented adaptive step and refit fields"
 
   expect_true(all(step_cols %in% names(out$logs$step_log)))
   expect_true(all(round_cols %in% names(out$logs$round_log)))
+})
+
+test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
+  samples <- make_linking_samples_df()
+  two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
+  items <- dplyr::rename(samples, item_id = ID)
+  artifacts <- make_wrapper_import_artifacts(items)
+  fit_override <- make_deterministic_fit_fn(ids = as.character(two_set$ID))
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 12L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts[c("1", "2")]
+    ),
+    btl_config = list(refit_pairs_target = 2L),
+    progress = "none",
+    seed = 13L
+  )
+
+  cross <- out$logs$step_log[
+    out$logs$step_log$is_cross_set %in% TRUE & !is.na(out$logs$step_log$pair_id),
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(cross) > 0L)
+  expect_true(all(cross$link_spoke_id == 2L))
+  expect_true(nrow(out$logs$link_stage_log) >= 1L)
+})
+
+test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
+  samples <- make_linking_samples_df()
+  items <- dplyr::rename(samples, item_id = ID)
+  artifacts <- make_wrapper_import_artifacts(items)
+  fit_override <- make_deterministic_fit_fn(ids = as.character(samples$ID))
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 24L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      hub_lock_mode = "soft_lock",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts
+    ),
+    btl_config = list(refit_pairs_target = 2L),
+    progress = "none",
+    seed = 17L
+  )
+
+  cross <- out$logs$step_log[
+    out$logs$step_log$is_cross_set %in% TRUE & !is.na(out$logs$step_log$pair_id),
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(cross) > 0L)
+  expect_true(all(sort(unique(cross$link_spoke_id)) == c(2L, 3L)))
+  expect_true(all(xor(cross$set_i == 1L, cross$set_j == 1L)))
+  expect_true(nrow(out$logs$link_stage_log) >= 2L)
+})
+
+test_that("adaptive_rank wrapper emits clear linking preflight errors", {
+  samples <- make_test_samples_df(6L)
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = samples,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L),
+      progress = "none"
+    ),
+    "Linking run modes require multi-set input"
+  )
+
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = samples,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      adaptive_config = list(run_mode = "within_set", phase_a_mode = "import"),
+      progress = "none"
+    ),
+    "phase_a_mode.*only be import/mixed when linking run_mode is enabled"
+  )
 })

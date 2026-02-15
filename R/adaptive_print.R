@@ -892,24 +892,48 @@ adaptive_progress_step_event <- function(step_row, cfg) {
   step_id <- step_row$step_id[[1L]]
   stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
   stage_txt <- if (!is.na(stage) && stage != "") paste0(" stage=", stage) else ""
+  link_txt <- character()
+  if ("is_cross_set" %in% names(step_row) && isTRUE(step_row$is_cross_set[[1L]] %||% FALSE)) {
+    spoke <- as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
+    if (is.finite(spoke)) {
+      link_txt <- c(link_txt, paste0("spoke=", spoke))
+    }
+    if ("link_transform_mode" %in% names(step_row)) {
+      mode <- as.character(step_row$link_transform_mode[[1L]] %||% NA_character_)
+      if (!is.na(mode) && nzchar(mode)) {
+        link_txt <- c(link_txt, paste0("transform=", mode))
+      }
+    }
+  }
+  link_txt <- if (length(link_txt) > 0L) {
+    paste0(" ", paste(link_txt, collapse = " "))
+  } else {
+    ""
+  }
   if (isTRUE(step_row$candidate_starved[[1L]])) {
-    return(paste0("step ", step_id, ":", stage_txt, " candidate_starved=TRUE; pair_id=NA"))
+    return(paste0("step ", step_id, ":", stage_txt, link_txt, " candidate_starved=TRUE; pair_id=NA"))
   }
   if (identical(step_row$status[[1L]], "invalid") && isTRUE(cfg$progress_errors)) {
     reason <- step_row$starvation_reason[[1L]]
     if (is.na(reason) || reason == "") {
       reason <- "invalid"
     }
-    return(paste0("step ", step_id, ":", stage_txt, " invalid judge (", reason, "); pair_id=NA"))
+    return(paste0(
+      "step ", step_id, ":", stage_txt, link_txt,
+      " invalid judge (", reason, "); pair_id=NA"
+    ))
   }
   if (!is.na(step_row$fallback_used[[1L]]) &&
     !step_row$fallback_used[[1L]] %in% c("base", "warm_start")) {
-    return(paste0("step ", step_id, ":", stage_txt, " fallback_used=", step_row$fallback_used[[1L]]))
+    return(paste0(
+      "step ", step_id, ":", stage_txt, link_txt,
+      " fallback_used=", step_row$fallback_used[[1L]]
+    ))
   }
   NULL
 }
 
-adaptive_progress_refit_block <- function(round_row, cfg) {
+adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL) {
   if (nrow(round_row) == 0L) {
     return(character())
   }
@@ -1121,6 +1145,61 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
     row$stop_reason
   )
 
+  link_stage_rows <- tibble::as_tibble(link_stage_rows %||% tibble::tibble())
+  link_block <- character()
+  if (nrow(link_stage_rows) > 0L) {
+    active_spokes <- sort(unique(as.integer(link_stage_rows$spoke_id %||% integer())))
+    transform_modes <- sort(unique(as.character(link_stage_rows$link_transform_mode %||% character())))
+    refit_modes <- sort(unique(as.character(link_stage_rows$link_refit_mode %||% character())))
+    lock_modes <- sort(unique(as.character(link_stage_rows$hub_lock_mode %||% character())))
+    transform_modes <- transform_modes[!is.na(transform_modes) & nzchar(transform_modes)]
+    refit_modes <- refit_modes[!is.na(refit_modes) & nzchar(refit_modes)]
+    lock_modes <- lock_modes[!is.na(lock_modes) & nzchar(lock_modes)]
+
+    link_block <- c(
+      "Linking summary:",
+      paste0("  active_spokes=", paste(active_spokes, collapse = ",")),
+      paste0("  transform_mode=", paste(transform_modes, collapse = ",")),
+      paste0("  link_refit_mode=", paste(refit_modes, collapse = ",")),
+      paste0("  hub_lock_mode=", paste(lock_modes, collapse = ","))
+    )
+
+    rel_values <- as.double(link_stage_rows$reliability_EAP_link %||% rep(NA_real_, nrow(link_stage_rows)))
+    rel_values <- rel_values[is.finite(rel_values)]
+    if (length(rel_values) > 0L) {
+      link_block <- c(link_block, paste0("  reliability_EAP_link[min,max]=", sprintf("%.3f", min(rel_values)), ",",
+        sprintf("%.3f", max(rel_values))))
+    }
+
+    stop_pass <- sum(link_stage_rows$link_stop_pass %in% TRUE, na.rm = TRUE)
+    stop_eligible <- sum(link_stage_rows$link_stop_eligible %in% TRUE, na.rm = TRUE)
+    link_block <- c(
+      link_block,
+      paste0("  link_stop_eligible=", stop_eligible, "/", nrow(link_stage_rows)),
+      paste0("  link_stop_pass=", stop_pass, "/", nrow(link_stage_rows))
+    )
+
+    cross_done <- sum(as.integer(link_stage_rows$n_pairs_cross_set_done %||% 0L), na.rm = TRUE)
+    cross_new <- sum(as.integer(link_stage_rows$n_cross_edges_since_last_refit %||% 0L), na.rm = TRUE)
+    cross_unique <- sum(as.integer(link_stage_rows$n_unique_cross_pairs_seen %||% 0L), na.rm = TRUE)
+    link_block <- c(
+      link_block,
+      paste0("  cross_pairs_done=", cross_done),
+      paste0("  cross_edges_since_last_refit=", cross_new),
+      paste0("  cross_unique_pairs_seen=", cross_unique)
+    )
+
+    if ("escalated_this_refit" %in% names(link_stage_rows)) {
+      n_escalated <- sum(link_stage_rows$escalated_this_refit %in% TRUE, na.rm = TRUE)
+      link_block <- c(link_block, paste0("  escalated_this_refit=", n_escalated, "/", nrow(link_stage_rows)))
+    }
+
+    if ("quota_long_link_removed" %in% names(link_stage_rows)) {
+      tapered <- sum(as.integer(link_stage_rows$quota_long_link_removed %||% 0L), na.rm = TRUE)
+      link_block <- c(link_block, paste0("  long_link_taper_removed_total=", tapered))
+    }
+  }
+
   c(
     strrep("-", 64),
     header,
@@ -1132,6 +1211,7 @@ adaptive_progress_refit_block <- function(round_row, cfg) {
     diagnostics,
     report_only,
     stop_table,
+    link_block,
     stop_summary,
     decision,
     strrep("-", 64)
