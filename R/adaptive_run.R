@@ -16,6 +16,68 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_phase_a_scope <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(list(
+      active_set_id = NA_integer_,
+      active_set_n = NA_integer_
+    ))
+  }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(list(
+      active_set_id = NA_integer_,
+      active_set_n = NA_integer_
+    ))
+  }
+  active_set_id <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+  if (is.na(active_set_id)) {
+    return(list(
+      active_set_id = NA_integer_,
+      active_set_n = NA_integer_
+    ))
+  }
+  active_set_n <- as.integer(sum(as.integer(state$items$set_id) == active_set_id, na.rm = TRUE))
+  if (!is.finite(active_set_n) || active_set_n < 1L) {
+    active_set_n <- NA_integer_
+  }
+  list(
+    active_set_id = as.integer(active_set_id),
+    active_set_n = as.integer(active_set_n)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_controller_with_phase_scope <- function(state, controller = NULL) {
+  out <- controller %||% .adaptive_controller_resolve(state)
+  scope <- .adaptive_link_phase_a_scope(state, controller = out)
+  out$phase_a_active_set_id <- as.integer(scope$active_set_id %||% NA_integer_)
+  out$phase_a_active_n <- as.integer(scope$active_set_n %||% NA_integer_)
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_mark_unresolved <- function(state, set_id, message) {
+  out <- state
+  set_id <- as.integer(set_id %||% NA_integer_)
+  phase_a <- out$linking$phase_a %||% list()
+  status_tbl <- tibble::as_tibble(phase_a$set_status %||% tibble::tibble())
+  if (nrow(status_tbl) > 0L && !is.na(set_id) && set_id %in% as.integer(status_tbl$set_id)) {
+    idx <- which(as.integer(status_tbl$set_id) == set_id)[[1L]]
+    status_tbl$status[[idx]] <- "failed"
+    status_tbl$validation_message[[idx]] <- as.character(message %||% "phase_a_set_unresolved")
+    out$linking$phase_a$set_status <- status_tbl
+  }
+  out$meta$stop_reason_detail <- as.character(message %||% "phase_a_set_unresolved")
+  out
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_sync_warm_start <- function(state) {
   out <- state
   controller <- .adaptive_controller_resolve(out)
@@ -83,7 +145,7 @@
 #' @noRd
 .adaptive_round_activate_if_ready <- function(state) {
   out <- state
-  out$controller <- .adaptive_controller_resolve(out)
+  out$controller <- .adaptive_controller_with_phase_scope(out, controller = .adaptive_controller_resolve(out))
   if (is.null(out$round) || !is.list(out$round)) {
     out$round <- .adaptive_new_round_state(
       out$item_ids,
@@ -327,7 +389,7 @@
 #' @noRd
 .adaptive_round_start_next <- function(state) {
   out <- state
-  out$controller <- .adaptive_controller_resolve(out)
+  out$controller <- .adaptive_controller_with_phase_scope(out, controller = .adaptive_controller_resolve(out))
   phase_ctx <- .adaptive_link_phase_context(out, controller = out$controller)
   out$controller$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
   prior <- out$round %||% list(round_id = 0L, committed_total = 0L)
@@ -665,10 +727,11 @@ adaptive_rank_start <- function(items,
   state$warm_start_idx <- 1L
   state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
-  state$controller <- .adaptive_controller_resolve(state)
+  state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_phase_a_prepare(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = state$controller)
   state$controller$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
+  state$controller <- .adaptive_controller_with_phase_scope(state, controller = state$controller)
   state$round <- .adaptive_new_round_state(
     item_ids = state$item_ids,
     round_id = 1L,
@@ -1043,7 +1106,9 @@ adaptive_rank_run_live <- function(state,
     state$config$persist_item_log <- isTRUE(persist_item_log)
   }
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
+  state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_phase_a_prepare(state)
+  state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   .adaptive_phase_a_gate_or_abort(state)
   state <- .adaptive_link_sync_warm_start(state)
 
@@ -1092,12 +1157,39 @@ adaptive_rank_run_live <- function(state,
       starve <- .adaptive_round_starvation(state, step_row)
       state <- starve$state
       if (isTRUE(starve$exhausted)) {
-        state$meta$stop_decision <- TRUE
-        state$meta$stop_reason <- "candidate_starvation"
-        if (!is.null(state$config$session_dir)) {
-          save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+        controller <- .adaptive_controller_resolve(state)
+        phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+        is_link_phase_a <- .adaptive_link_mode_active(controller) &&
+          !identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
+
+        if (isTRUE(is_link_phase_a)) {
+          round_committed <- as.integer((state$round %||% list())$round_committed %||% 0L)
+          if (round_committed > 0L) {
+            state <- .adaptive_round_start_next(state)
+            state <- .adaptive_link_sync_warm_start(state)
+          } else {
+            active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+            msg <- paste0(
+              "Phase A unresolved for set_id=",
+              ifelse(is.na(active_set), "NA", as.character(active_set)),
+              ": no committed pairs in exhausted round."
+            )
+            state <- .adaptive_phase_a_mark_unresolved(state, set_id = active_set, message = msg)
+            state$meta$stop_decision <- TRUE
+            state$meta$stop_reason <- "phase_a_set_unresolved"
+            if (!is.null(state$config$session_dir)) {
+              save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+            }
+            return(state)
+          }
+        } else {
+          state$meta$stop_decision <- TRUE
+          state$meta$stop_reason <- "candidate_starvation"
+          if (!is.null(state$config$session_dir)) {
+            save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+          }
+          return(state)
         }
-        return(state)
       }
     } else if (isTRUE(step_row$candidate_starved[[1L]])) {
       state$meta$stop_decision <- TRUE
@@ -1182,6 +1274,7 @@ adaptive_rank_run_live <- function(state,
       }
     }
     state <- .adaptive_phase_a_prepare(state)
+    state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
     .adaptive_phase_a_gate_or_abort(state)
     if (!is.null(state$config$session_dir)) {
       save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)

@@ -264,6 +264,33 @@ test_that("phase A linking scheduling uses within-set round defaults", {
   expect_equal(as.integer(state$round$stage_quotas[["anchor_link"]]), as.integer(q_within[["anchor_link"]]))
 })
 
+test_that("phase A linking quotas use active set size, not global multi-set size", {
+  items <- tibble::tibble(
+    item_id = as.character(1:100),
+    set_id = c(rep(1L, 50L), rep(2L, 50L)),
+    global_item_id = paste0("g", 1:100)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 109L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  q_set <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = 50L,
+    controller = list(run_mode = "within_set")
+  )
+  q_global <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = 1L,
+    n_items = 100L,
+    controller = list(run_mode = "within_set")
+  )
+
+  expect_identical(state$linking$phase_a$phase, "phase_a")
+  expect_equal(as.integer(sum(state$round$stage_quotas)), as.integer(sum(q_set)))
+  expect_false(identical(unname(as.integer(state$round$stage_quotas)), unname(as.integer(q_global))))
+})
+
 test_that("link stage rows carry per-spoke per-refit quota totals and committed counts", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),

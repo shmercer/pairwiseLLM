@@ -611,18 +611,25 @@
 .adaptive_new_round_state <- function(item_ids, round_id = 1L, staged_active = FALSE, controller = NULL) {
   ids <- as.character(item_ids)
   round_id <- as.integer(round_id %||% 1L)
-  defaults <- adaptive_defaults(length(ids))
   controller <- utils::modifyList(.adaptive_controller_defaults(length(ids)), controller %||% list())
-  stage_order <- .adaptive_stage_order()
+  effective_n <- as.integer(length(ids))
   mode <- as.character(controller$run_mode %||% "within_set")
   phase <- as.character(controller$link_phase %||% "phase_a")
+  if (mode %in% c("link_one_spoke", "link_multi_spoke") && !identical(phase, "phase_b")) {
+    scoped_n <- as.integer(controller$phase_a_active_n %||% NA_integer_)
+    if (is.finite(scoped_n) && scoped_n >= 2L) {
+      effective_n <- scoped_n
+    }
+  }
+  defaults <- adaptive_defaults(effective_n)
+  stage_order <- .adaptive_stage_order()
   quota_controller <- controller
   if (mode %in% c("link_one_spoke", "link_multi_spoke") && !identical(phase, "phase_b")) {
     quota_controller$run_mode <- "within_set"
   }
   stage_quotas <- .adaptive_round_compute_quotas(
     round_id = round_id,
-    n_items = length(ids),
+    n_items = effective_n,
     controller = quota_controller
   )
   quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
@@ -712,6 +719,8 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       refit_meta = list(
         last_refit_M_done = 0L,
         last_refit_step = 0L,
+        last_refit_M_done_by_phase_a_set = list(),
+        last_refit_step_by_phase_a_set = list(),
         last_refit_round_id = 0L,
         theta_mean_history = list(),
         near_stop = FALSE,

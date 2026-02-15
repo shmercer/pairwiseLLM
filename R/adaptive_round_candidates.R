@@ -571,13 +571,23 @@ generate_stage_candidates_from_state <- function(state,
   }
 
   state <- .adaptive_refresh_round_anchors(state)
-  defaults <- adaptive_defaults(length(state$item_ids))
   proxy <- .adaptive_rank_proxy(state)
   controller <- .adaptive_controller_resolve(state)
   is_link_mode <- .adaptive_link_mode_active(controller)
   hub_id <- as.integer(controller$hub_id %||% 1L)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   link_phase_b_active <- isTRUE(is_link_mode) && identical(phase_ctx$phase, "phase_b")
+  effective_n <- as.integer(length(state$item_ids))
+  if (isTRUE(is_link_mode) && !isTRUE(link_phase_b_active)) {
+    active_set_id <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+    if (!is.na(active_set_id)) {
+      scoped_n <- as.integer(sum(as.integer(state$items$set_id) == active_set_id, na.rm = TRUE))
+      if (is.finite(scoped_n) && scoped_n >= 2L) {
+        effective_n <- scoped_n
+      }
+    }
+  }
+  defaults <- adaptive_defaults(effective_n)
 
   if (isTRUE(link_phase_b_active)) {
     eligible_spokes <- as.integer(phase_ctx$active_spokes %||% integer())

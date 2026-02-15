@@ -39,12 +39,75 @@
 }
 
 .adaptive_refit_pairs_target <- function(state, config) {
+  effective_n <- as.integer(state$n_items)
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  is_link_phase_a <- as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke") &&
+    !identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
+  if (isTRUE(is_link_phase_a)) {
+    active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+    if (!is.na(active_set)) {
+      scoped_n <- as.integer(sum(as.integer(state$items$set_id) == active_set, na.rm = TRUE))
+      if (is.finite(scoped_n) && scoped_n >= 2L) {
+        effective_n <- scoped_n
+      }
+    }
+  }
   refit_pairs_target <- config$refit_pairs_target %||% .btl_mcmc_clamp(
     20L,
     5000L,
-    as.integer(ceiling(state$n_items / 2))
+    as.integer(ceiling(effective_n / 2))
   )
   as.integer(refit_pairs_target)
+}
+
+.adaptive_refit_phase_a_scope <- function(state) {
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(list(active = FALSE, set_id = NA_integer_))
+  }
+  if (identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(list(active = FALSE, set_id = NA_integer_))
+  }
+  set_id <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+  if (is.na(set_id)) {
+    return(list(active = FALSE, set_id = NA_integer_))
+  }
+  list(active = TRUE, set_id = as.integer(set_id))
+}
+
+.adaptive_refit_scope_counts <- function(state) {
+  phase_scope <- .adaptive_refit_phase_a_scope(state)
+  if (!isTRUE(phase_scope$active)) {
+    return(list(
+      M_done = as.integer(nrow(state$history_pairs)),
+      last_refit_M_done = as.integer(state$refit_meta$last_refit_M_done %||% 0L),
+      last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L),
+      scope_set_id = NA_integer_
+    ))
+  }
+
+  set_id <- as.integer(phase_scope$set_id)
+  history <- .adaptive_history_tbl(state)
+  M_done <- 0L
+  if (nrow(history) > 0L) {
+    set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+    a_set <- as.integer(set_map[as.character(history$A_id)])
+    b_set <- as.integer(set_map[as.character(history$B_id)])
+    M_done <- as.integer(sum(a_set == set_id & b_set == set_id, na.rm = TRUE))
+  }
+
+  key <- as.character(set_id)
+  last_refit_M_done_map <- state$refit_meta$last_refit_M_done_by_phase_a_set %||% list()
+  last_refit_step_map <- state$refit_meta$last_refit_step_by_phase_a_set %||% list()
+  list(
+    M_done = as.integer(M_done),
+    last_refit_M_done = as.integer(last_refit_M_done_map[[key]] %||% 0L),
+    last_refit_step = as.integer(last_refit_step_map[[key]] %||% 0L),
+    scope_set_id = as.integer(set_id)
+  )
 }
 
 .adaptive_refit_eligibility <- function(total_committed, last_refit_committed, refit_pairs_target) {
@@ -2659,9 +2722,11 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
   }
   config <- .adaptive_btl_resolve_config(state, config)
 
-  M_done <- as.integer(nrow(state$history_pairs))
-  last_refit_M_done <- state$refit_meta$last_refit_M_done %||% 0L
-  last_refit_step <- state$refit_meta$last_refit_step %||% 0L
+  scope_counts <- .adaptive_refit_scope_counts(state)
+  M_done <- as.integer(scope_counts$M_done)
+  last_refit_M_done <- as.integer(scope_counts$last_refit_M_done)
+  last_refit_step <- as.integer(scope_counts$last_refit_step)
+  scope_set_id <- as.integer(scope_counts$scope_set_id %||% NA_integer_)
 
   refit_pairs_target <- .adaptive_refit_pairs_target(state, config)
   config$refit_pairs_target <- refit_pairs_target
@@ -2695,8 +2760,18 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
   refit_context <- .adaptive_btl_refit_context(state, last_refit_M_done, last_refit_step)
 
   state$btl_fit <- fit
-  state$refit_meta$last_refit_M_done <- M_done
-  state$refit_meta$last_refit_step <- refit_context$step_id_at_refit
+  if (!is.na(scope_set_id)) {
+    key <- as.character(scope_set_id)
+    m_done_map <- state$refit_meta$last_refit_M_done_by_phase_a_set %||% list()
+    step_map <- state$refit_meta$last_refit_step_by_phase_a_set %||% list()
+    m_done_map[[key]] <- as.integer(M_done)
+    step_map[[key]] <- as.integer(refit_context$step_id_at_refit)
+    state$refit_meta$last_refit_M_done_by_phase_a_set <- m_done_map
+    state$refit_meta$last_refit_step_by_phase_a_set <- step_map
+  } else {
+    state$refit_meta$last_refit_M_done <- M_done
+    state$refit_meta$last_refit_step <- refit_context$step_id_at_refit
+  }
   state$refit_meta$last_refit_round_id <- as.integer(nrow(state$round_log) + 1L)
   state <- .adaptive_update_identifiability_state(state, config)
 

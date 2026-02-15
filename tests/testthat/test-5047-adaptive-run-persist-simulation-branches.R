@@ -650,3 +650,114 @@ test_that("adaptive run helper branches for linking stop/routing utilities are c
   )
   expect_true(is.list(plain_starve$state$round))
 })
+
+test_that("linking Phase A stage exhaustion advances to next round when progress exists", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 71L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_committed <- 1L
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("pending_finalization", "pending_finalization"),
+    validation_message = c("pending", "pending"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+
+  out <- testthat::with_mocked_bindings(
+    run_one_step = function(st, judge, ...) {
+      row <- list(
+        step_id = as.integer(nrow(st$step_log) + 1L),
+        timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        status = "starved",
+        candidate_starved = TRUE,
+        round_stage = "anchor_link"
+      )
+      st$step_log <- pairwiseLLM:::append_step_log(st$step_log, row)
+      st
+    },
+    .adaptive_round_starvation = function(state, step_row) list(state = state, exhausted = TRUE),
+    .adaptive_round_start_next = function(state) {
+      state$meta$round_restarted <- TRUE
+      state
+    },
+    maybe_refit_btl = function(state, config, fit_fn = NULL) {
+      list(state = state, refit_performed = FALSE, config = config)
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM::adaptive_rank_run_live(
+        state = state,
+        judge = make_deterministic_judge("invalid"),
+        n_steps = 1L,
+        progress = "none"
+      )
+    }
+  )
+
+  expect_false(isTRUE(out$meta$stop_decision))
+  expect_true(isTRUE(out$meta$round_restarted))
+})
+
+test_that("linking Phase A unresolved exhaustion fails loudly with set-specific reason", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 72L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_committed <- 0L
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("pending_finalization", "pending_finalization"),
+    validation_message = c("pending", "pending"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+
+  out <- testthat::with_mocked_bindings(
+    run_one_step = function(st, judge, ...) {
+      row <- list(
+        step_id = as.integer(nrow(st$step_log) + 1L),
+        timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        status = "starved",
+        candidate_starved = TRUE,
+        round_stage = "anchor_link"
+      )
+      st$step_log <- pairwiseLLM:::append_step_log(st$step_log, row)
+      st
+    },
+    .adaptive_round_starvation = function(state, step_row) list(state = state, exhausted = TRUE),
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM::adaptive_rank_run_live(
+        state = state,
+        judge = make_deterministic_judge("invalid"),
+        n_steps = 1L,
+        progress = "none"
+      )
+    }
+  )
+
+  expect_true(isTRUE(out$meta$stop_decision))
+  expect_identical(out$meta$stop_reason, "phase_a_set_unresolved")
+  status_tbl <- tibble::as_tibble(out$linking$phase_a$set_status)
+  row <- status_tbl[status_tbl$set_id == 1L, , drop = FALSE]
+  expect_identical(as.character(row$status[[1L]]), "failed")
+  expect_match(as.character(row$validation_message[[1L]]), "set_id=1", fixed = TRUE)
+})

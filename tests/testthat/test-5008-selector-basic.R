@@ -31,3 +31,22 @@ test_that("select_next_pair returns one valid pair", {
   expect_equal(out2$A, out3$A)
   expect_equal(out2$B, out3$B)
 })
+
+test_that("selector helper edge branches are covered", {
+  expect_identical(pairwiseLLM:::.adaptive_underrep_set(integer()), character())
+  expect_null(pairwiseLLM:::.adaptive_underrep_set(c(1L, 2L)))
+  expect_identical(pairwiseLLM:::.adaptive_underrep_set(c(a = 1L, b = 5L)), "a")
+  expect_identical(pairwiseLLM:::.adaptive_underrep_set(c(a = 1L, b = 1L)), c("a", "b"))
+
+  empty_cand <- tibble::tibble(i = character(), j = character())
+  rank_index <- stats::setNames(seq_len(3L), c("a", "b", "c"))
+  defaults <- pairwiseLLM:::adaptive_defaults(3L)
+  out_empty <- pairwiseLLM:::.adaptive_stage_candidate_filter(
+    candidates = empty_cand,
+    stage_name = "local_link",
+    fallback_name = "base",
+    rank_index = rank_index,
+    defaults = defaults
+  )
+  expect_identical(nrow(out_empty), 0L)
+})

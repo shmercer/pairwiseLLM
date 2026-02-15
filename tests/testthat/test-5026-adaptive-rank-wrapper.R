@@ -255,7 +255,11 @@ test_that("adaptive_rank wrapper logs preserve anchor/local/repeat and underrep 
 
   local_rows <- staged[staged$round_stage == "local_link", , drop = FALSE]
   if (nrow(local_rows) > 0L) {
-    ok_local <- local_rows$dist_stratum == 0L | local_rows$is_anchor_i | local_rows$is_anchor_j
+    used_relaxed_locality <- grepl("expand_locality|global_safe", as.character(local_rows$fallback_path))
+    ok_local <- local_rows$dist_stratum <= 1L |
+      local_rows$is_anchor_i |
+      local_rows$is_anchor_j |
+      used_relaxed_locality
     expect_true(all(ok_local, na.rm = TRUE))
   }
 

@@ -844,11 +844,25 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   validate_trueskill_state(state$trueskill_state)
 
   ids <- as.character(state$trueskill_state$items$item_id)
-  defaults <- adaptive_defaults(length(ids))
+  controller_full <- .adaptive_controller_resolve(state)
+  phase_ctx_full <- .adaptive_link_phase_context(state, controller = controller_full)
+  effective_n <- as.integer(length(ids))
+  is_link_phase_a <- .adaptive_link_mode_active(controller_full) &&
+    !identical(as.character(phase_ctx_full$phase %||% "phase_a"), "phase_b")
+  if (isTRUE(is_link_phase_a)) {
+    active_set <- as.integer(phase_ctx_full$active_phase_a_set %||% NA_integer_)
+    if (!is.na(active_set)) {
+      scoped_n <- as.integer(sum(as.integer(state$items$set_id) == active_set, na.rm = TRUE))
+      if (is.finite(scoped_n) && scoped_n >= 2L) {
+        effective_n <- scoped_n
+      }
+    }
+  }
+  defaults <- adaptive_defaults(effective_n)
   controller <- .adaptive_resolve_controller(state, defaults)
   # Use the full controller for linking predictive utility paths, which need
   # transform and judge-mode fields not carried by the reduced selector view.
-  link_controller <- .adaptive_controller_resolve(state)
+  link_controller <- controller_full
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, ids)
   step_id <- as.integer(step_id %||% (nrow(state$step_log) + 1L))
