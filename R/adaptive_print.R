@@ -221,23 +221,43 @@
   ids <- as.character(state$item_ids)
   set_id <- as.integer(state$items$set_id[match(ids, as.character(state$items$item_id))])
   if (is.null(colnames(draws))) {
-    colnames(draws) <- ids
+    if (ncol(draws) == length(ids)) {
+      colnames(draws) <- ids
+    }
   }
-  draws <- draws[, ids, drop = FALSE]
-  draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
+  draw_ids <- intersect(ids, as.character(colnames(draws)))
+  theta_mean <- rep_len(NA_real_, length(ids))
+  theta_sd <- rep_len(NA_real_, length(ids))
+  names(theta_mean) <- ids
+  names(theta_sd) <- ids
+  theta_quantiles <- matrix(NA_real_, nrow = 5L, ncol = length(ids))
+  rownames(theta_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
+  colnames(theta_quantiles) <- ids
+  rank_mean <- rep_len(NA_real_, length(ids))
+  names(rank_mean) <- ids
 
-  probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
-  theta_mean <- as.double(colMeans(draws))
-  theta_sd <- as.double(apply(draws, 2, stats::sd))
-  theta_quantiles <- vapply(
-    seq_len(ncol(draws)),
-    function(idx) stats::quantile(draws[, idx], probs = probs, names = FALSE),
-    numeric(length(probs))
-  )
+  if (length(draw_ids) > 0L) {
+    draws <- draws[, draw_ids, drop = FALSE]
+    draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
 
-  rank_mat <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
-  colnames(rank_mat) <- ids
-  rank_mean <- as.double(colMeans(rank_mat))
+    probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
+    theta_mean_vals <- as.double(colMeans(draws))
+    theta_sd_vals <- as.double(apply(draws, 2, stats::sd))
+    theta_quantile_vals <- vapply(
+      seq_len(ncol(draws)),
+      function(idx) stats::quantile(draws[, idx], probs = probs, names = FALSE),
+      numeric(length(probs))
+    )
+
+    rank_mat <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
+    colnames(rank_mat) <- draw_ids
+    rank_mean_vals <- as.double(colMeans(rank_mat))
+
+    theta_mean[draw_ids] <- theta_mean_vals
+    theta_sd[draw_ids] <- theta_sd_vals
+    theta_quantiles[, draw_ids] <- theta_quantile_vals
+    rank_mean[draw_ids] <- rank_mean_vals
+  }
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   run_mode <- as.character(controller$run_mode %||% "within_set")
@@ -250,8 +270,8 @@
   }
   theta_scope_eap <- rep_len(NA_real_, length(ids))
   theta_scope_sd <- rep_len(NA_real_, length(ids))
-  theta_scope_eap[in_phase_scope] <- theta_mean[in_phase_scope]
-  theta_scope_sd[in_phase_scope] <- theta_sd[in_phase_scope]
+  theta_scope_eap[in_phase_scope] <- as.double(theta_mean[in_phase_scope])
+  theta_scope_sd[in_phase_scope] <- as.double(theta_sd[in_phase_scope])
   rank_scope_eap <- rep_len(NA_integer_, length(ids))
   if (sum(in_phase_scope, na.rm = TRUE) > 0L) {
     scoped_order <- order(-theta_scope_eap[in_phase_scope], ids[in_phase_scope], na.last = NA)
@@ -263,8 +283,8 @@
     state = state,
     ids = ids,
     set_id = set_id,
-    theta_mean = theta_mean,
-    theta_sd = theta_sd
+    theta_mean = as.double(theta_mean),
+    theta_sd = as.double(theta_sd)
   )
   rank_global_eap <- as.integer(rank(-as.double(link_summary$theta_global_eap), ties.method = "first"))
   hub_id <- as.integer((controller %||% list())$hub_id %||% 1L)

@@ -2550,13 +2550,21 @@
   }
 
   draws <- fit$btl_posterior_draws %||% NULL
+  draw_ids <- character()
   if (is.matrix(draws) && is.numeric(draws)) {
-    if (is.null(colnames(draws))) {
+    if (is.null(colnames(draws)) && ncol(draws) == length(ids)) {
       colnames(draws) <- ids
     }
-    draws <- draws[, ids, drop = FALSE]
-    draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
+    draw_ids <- intersect(ids, as.character(colnames(draws)))
+    if (length(draw_ids) > 0L) {
+      draws <- draws[, draw_ids, drop = FALSE]
+      draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
+    } else {
+      draws <- NULL
+    }
+  }
 
+  if (is.matrix(draws) && is.numeric(draws) && ncol(draws) > 0L) {
     ci_bounds <- apply(
       draws,
       2,
@@ -2593,8 +2601,13 @@
       top20_boundary_entropy_p90 <- stats::quantile(entropy[boundary_idx], probs = 0.90, names = FALSE)
     }
 
-    if (!is.null(theta_mean) && length(theta_mean) == length(ids) && length(ids) >= 2L) {
-      rank_order <- order(-theta_mean, ids)
+    theta_for_draws <- NULL
+    if (!is.null(theta_mean) && length(theta_mean) == length(ids) && length(draw_ids) == ncol(draws)) {
+      names(theta_mean) <- ids
+      theta_for_draws <- as.double(theta_mean[draw_ids])
+    }
+    if (!is.null(theta_for_draws) && length(theta_for_draws) >= 2L) {
+      rank_order <- order(-theta_for_draws, draw_ids)
       p_adj <- vapply(seq_len(length(rank_order) - 1L), function(k) {
         lhs <- rank_order[[k]]
         rhs <- rank_order[[k + 1L]]
