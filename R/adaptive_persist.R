@@ -121,17 +121,18 @@ read_log <- function(path) {
 .adaptive_item_log_current_schema <- function() {
   cols <- .adaptive_item_log_columns()
   int_cols <- c(
-    "refit_id", "set_id", "rank_scope_eap", "rank_global_eap",
+    "refit_id", "set_id", "phase_scope_set_id", "rank_raw", "rank_link",
     "degree", "pos_count_A", "pos_count_B"
   )
   lgl_cols <- c("in_phase_scope", "is_hub_item", "is_spoke_item")
+  chr_cols <- c("item_id", "phase_scope")
   types <- vapply(
     cols,
     function(col) {
       if (col %in% int_cols) {
         return("integer")
       }
-      if (identical(col, "item_id")) {
+      if (col %in% chr_cols) {
         return("character")
       }
       if (col %in% lgl_cols) {

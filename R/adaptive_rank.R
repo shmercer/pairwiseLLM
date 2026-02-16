@@ -680,11 +680,22 @@ adaptive_rank <- function(
   state <- do.call(adaptive_rank_run_live, run_args)
 
   logs <- adaptive_get_logs(state)
+  item_sort_by <- "rank_raw"
+  if (length(logs$item_log) > 0L && is.data.frame(logs$item_log[[1L]])) {
+    item_cols <- names(logs$item_log[[1L]])
+    if ("rank_link" %in% item_cols) {
+      item_sort_by <- "rank_link"
+    } else if ("rank_raw" %in% item_cols) {
+      item_sort_by <- "rank_raw"
+    } else if ("rank_mean" %in% item_cols) {
+      item_sort_by <- "rank_mean"
+    }
+  }
   out <- list(
     state = state,
     summary = summarize_adaptive(state),
     refits = summarize_refits(list(round_log = logs$round_log)),
-    items = summarize_items(list(item_log_list = logs$item_log)),
+    items = summarize_items(list(item_log_list = logs$item_log), sort_by = item_sort_by),
     logs = logs,
     output_file = NULL
   )

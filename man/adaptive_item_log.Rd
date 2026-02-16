@@ -27,16 +27,16 @@ The underlying state stores a list of refit tables; this
 accessor can return one refit table (default: most recent) or stack all
 refits into a single tibble.
 
-In linking mode, raw and global summaries are kept separate:
+Item-level summaries are domain-explicit:
 \itemize{
-\item \code{theta_raw_eap}: within-set scale summary (from Phase A artifacts
-when available).
-\item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
-summaries after spoke transform application. These are typed \code{NA}
-when required spoke transform parameters are unavailable at that refit.
-\item \code{in_phase_scope}, \code{theta_scope_eap}, \code{theta_scope_sd},
-\code{rank_scope_eap}: scoped summaries for the currently optimized item
-domain (active set during linking Phase A; all items otherwise).
+\item \code{theta_raw_*}: raw/within-set posterior summaries (EAP, fixed
+quantiles, SD, rank) at the current refit.
+\item \code{theta_link_*}: linked/global posterior summaries (EAP, fixed
+quantiles, SD, rank) after transform application.
+\item During linking Phase A (\code{phase_scope = "phase_a_set"}),
+\code{theta_link_*} is typed \code{NA} by design.
+\item \code{phase_scope}, \code{phase_scope_set_id}, and
+\code{in_phase_scope} indicate which item domain is currently optimized.
 }
 }
 \examples{

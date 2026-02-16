@@ -326,7 +326,7 @@ test_that("adaptive print and log accessors cover validation and canonicalizatio
 
   expect_identical(pairwiseLLM:::.adaptive_item_log_na_value("degree"), NA_integer_)
   expect_identical(pairwiseLLM:::.adaptive_item_log_na_value("item_id"), NA_character_)
-  expect_true(is.na(pairwiseLLM:::.adaptive_item_log_na_value("theta_mean")))
+  expect_true(is.na(pairwiseLLM:::.adaptive_item_log_na_value("theta_raw_eap")))
 
   empty_refit <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
   expect_equal(nrow(empty_refit), 0L)
@@ -335,7 +335,7 @@ test_that("adaptive print and log accessors cover validation and canonicalizatio
   state_with_bad$item_log <- 1L
   expect_error(pairwiseLLM:::.adaptive_append_item_log(state_with_bad, tibble::tibble(a = 1L)), "must be a list")
 
-  item_row <- tibble::tibble(ID = "1", deg = 2L, theta_mean = 0.1, rank_mean = 1.0)
+  item_row <- tibble::tibble(ID = "1", deg = 2L, theta_raw_eap = 0.1, rank_raw = 1L)
   canonical <- pairwiseLLM:::.adaptive_canonicalize_item_log(item_row, state, refit_id = 3L)
   expect_true(all(pairwiseLLM:::.adaptive_item_log_columns() %in% names(canonical)))
   expect_identical(canonical$refit_id[[1L]], 3L)

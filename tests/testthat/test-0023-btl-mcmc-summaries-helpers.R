@@ -171,3 +171,35 @@ test_that("summarize_items validates bind/refit and sorting constraints", {
   no_opt <- summarize_items(with_optional, include_optional = FALSE)
   expect_false(any(c("repeated_pairs", "adjacent_prev_prob", "adjacent_next_prob") %in% names(no_opt)))
 })
+
+test_that("summarize_items resolves sort defaults and legacy aliases for new item-log schema", {
+  item_log_new <- tibble::tibble(
+    refit_id = c(1L, 1L),
+    item_id = c("A", "B"),
+    rank_raw = c(2L, 1L),
+    rank_link = c(1L, 2L),
+    theta_raw_eap = c(0.1, 0.3),
+    theta_raw_sd = c(0.2, 0.1)
+  )
+  logs_new <- list(item_log_list = list(item_log_new))
+
+  out_default <- summarize_items(logs_new)
+  expect_identical(out_default$item_id[[1L]], "A")
+
+  out_rank_alias <- summarize_items(logs_new, sort_by = "rank_mean")
+  expect_identical(out_rank_alias$item_id[[1L]], "B")
+
+  out_theta_alias <- summarize_items(logs_new, sort_by = "theta_mean")
+  expect_identical(out_theta_alias$item_id[[1L]], "B")
+
+  out_sd_alias <- summarize_items(logs_new, sort_by = "theta_sd")
+  expect_identical(out_sd_alias$item_id[[1L]], "A")
+
+  expect_error(
+    summarize_items(logs_new, sort_by = 1L),
+    "`sort_by` must be NULL or a single non-empty column name"
+  )
+
+  logs_no_sortable <- list(item_log_list = list(tibble::tibble(refit_id = 1L, item_id = "A", x = 1)))
+  expect_error(summarize_items(logs_no_sortable), "`sort_by` must be a column in the item log")
+})

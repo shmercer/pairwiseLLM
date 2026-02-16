@@ -907,3 +907,76 @@ test_that("phase A prepare preserves warm-start scope metadata", {
   expect_identical(synced$linking$phase_a$warm_start_scope_set, 1L)
   expect_identical(synced$warm_start_idx, 2L)
 })
+
+test_that("phase A helpers cover non-link mode and stale-summary fallback behavior", {
+  state <- make_phase_a_ready_state()
+  expect_identical(pairwiseLLM:::.adaptive_phase_a_pending_run_sets(state), integer())
+
+  stale <- tibble::tibble(
+    item_id = as.character(state$item_ids),
+    theta_raw_eap = c(NA_real_, 0.2, -0.1, 0.1),
+    theta_raw_sd = c(0.1, -0.2, 0.3, 0.4),
+    rank_raw = c(1L, 2L, 3L, 4L)
+  )
+  state$item_log <- list(stale)
+  art <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
+  expect_true(all(is.finite(art$items$theta_raw_mean)))
+  expect_true(all(art$items$theta_raw_sd >= 0))
+})
+
+test_that("phase A validation and gate exercise failure branches for edge completeness", {
+  state <- make_phase_a_ready_state()
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
+  valid <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
+  valid$n_pairs_committed <- -1L
+  expect_error(
+    pairwiseLLM:::.adaptive_phase_a_validate_imported_artifact(valid, state, set_id = 1L, controller = controller),
+    "`n_pairs_committed` must be >= 0"
+  )
+
+  ctl_empty <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
+  ctl_empty$phase_a_artifacts <- NULL
+  expect_identical(pairwiseLLM:::.adaptive_phase_a_collect_import_map(ctl_empty), list())
+
+  state_link <- pairwiseLLM:::.adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state_link$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = pairwiseLLM:::.adaptive_phase_a_build_artifact(state_link, set_id = 1L), `2` = NULL),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b"
+  )
+  state_link$linking$phase_a$artifacts[["1"]]$quality_gate_accepted <- TRUE
+  expect_error(
+    pairwiseLLM:::.adaptive_phase_a_gate_or_abort(state_link),
+    "missing artifact for set_id: 2"
+  )
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_phase_context = function(state, controller = NULL) {
+        list(
+          phase = "phase_b",
+          pending_run_sets = integer(),
+          ready_spokes = integer(),
+          active_spokes = integer(),
+          stopped_spokes = integer(),
+          active_phase_a_set = NA_integer_
+        )
+      },
+      .package = "pairwiseLLM",
+      {
+        pairwiseLLM:::.adaptive_phase_a_gate_or_abort(state_link)
+      }
+    ),
+    "phase marked phase_b but no ready spokes are available"
+  )
+})

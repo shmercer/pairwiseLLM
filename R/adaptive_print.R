@@ -7,24 +7,27 @@
     "refit_id",
     "item_id",
     "set_id",
-    "theta_raw_eap",
-    "theta_global_eap",
-    "theta_global_sd",
+    "phase_scope",
+    "phase_scope_set_id",
     "in_phase_scope",
-    "theta_scope_eap",
-    "theta_scope_sd",
-    "rank_scope_eap",
-    "rank_global_eap",
     "is_hub_item",
     "is_spoke_item",
-    "theta_mean",
-    "theta_p2.5",
-    "theta_p5",
-    "theta_p50",
-    "theta_p95",
-    "theta_p97.5",
-    "theta_sd",
-    "rank_mean",
+    "theta_raw_eap",
+    "theta_raw_p2.5",
+    "theta_raw_p5",
+    "theta_raw_p50",
+    "theta_raw_p95",
+    "theta_raw_p97.5",
+    "theta_raw_sd",
+    "rank_raw",
+    "theta_link_eap",
+    "theta_link_p2.5",
+    "theta_link_p5",
+    "theta_link_p50",
+    "theta_link_p95",
+    "theta_link_p97.5",
+    "theta_link_sd",
+    "rank_link",
     "degree",
     "pos_count_A",
     "pos_count_B"
@@ -36,24 +39,27 @@
     refit_id = integer(),
     item_id = character(),
     set_id = integer(),
-    theta_raw_eap = double(),
-    theta_global_eap = double(),
-    theta_global_sd = double(),
+    phase_scope = character(),
+    phase_scope_set_id = integer(),
     in_phase_scope = logical(),
-    theta_scope_eap = double(),
-    theta_scope_sd = double(),
-    rank_scope_eap = integer(),
-    rank_global_eap = integer(),
     is_hub_item = logical(),
     is_spoke_item = logical(),
-    theta_mean = double(),
-    theta_p2.5 = double(),
-    theta_p5 = double(),
-    theta_p50 = double(),
-    theta_p95 = double(),
-    theta_p97.5 = double(),
-    theta_sd = double(),
-    rank_mean = double(),
+    theta_raw_eap = double(),
+    theta_raw_p2.5 = double(),
+    theta_raw_p5 = double(),
+    theta_raw_p50 = double(),
+    theta_raw_p95 = double(),
+    theta_raw_p97.5 = double(),
+    theta_raw_sd = double(),
+    rank_raw = integer(),
+    theta_link_eap = double(),
+    theta_link_p2.5 = double(),
+    theta_link_p5 = double(),
+    theta_link_p50 = double(),
+    theta_link_p95 = double(),
+    theta_link_p97.5 = double(),
+    theta_link_sd = double(),
+    rank_link = integer(),
     degree = integer(),
     pos_count_A = integer(),
     pos_count_B = integer()
@@ -61,10 +67,14 @@
 }
 
 .adaptive_item_log_na_value <- function(col) {
-  if (col %in% c("refit_id", "set_id", "rank_global_eap", "rank_scope_eap", "degree", "pos_count_A", "pos_count_B")) {
+  int_cols <- c(
+    "refit_id", "set_id", "phase_scope_set_id", "rank_raw", "rank_link",
+    "degree", "pos_count_A", "pos_count_B"
+  )
+  if (col %in% int_cols) {
     return(NA_integer_)
   }
-  if (identical(col, "item_id")) {
+  if (col %in% c("item_id", "phase_scope")) {
     return(NA_character_)
   }
   if (col %in% c("is_hub_item", "is_spoke_item", "in_phase_scope")) {
@@ -120,52 +130,41 @@
   out
 }
 
-.adaptive_link_item_raw_global_summaries <- function(state, ids, set_id, theta_mean, theta_sd) {
+.adaptive_link_item_raw_link_summaries <- function(state,
+                                                   ids,
+                                                   set_id,
+                                                   theta_raw_eap,
+                                                   theta_raw_sd,
+                                                   theta_raw_quantiles,
+                                                   is_link_phase_a = FALSE) {
   controller <- .adaptive_controller_resolve(state)
   run_mode <- as.character(controller$run_mode %||% "within_set")
   is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
 
-  raw_mean <- as.double(theta_mean)
-  raw_sd <- as.double(theta_sd)
-  global_mean <- as.double(theta_mean)
-  global_sd <- as.double(theta_sd)
+  link_eap <- as.double(theta_raw_eap)
+  link_sd <- as.double(theta_raw_sd)
+  link_quantiles <- theta_raw_quantiles
 
   if (!isTRUE(is_link_mode)) {
     return(list(
-      theta_raw_eap = raw_mean,
-      theta_raw_sd = raw_sd,
-      theta_global_eap = global_mean,
-      theta_global_sd = global_sd
+      theta_link_eap = as.double(link_eap),
+      theta_link_sd = as.double(link_sd),
+      theta_link_quantiles = link_quantiles
     ))
   }
 
-  items <- state$items
-  item_key <- as.character(items$item_id)
-  global_key <- as.character(items$global_item_id)
-  item_to_global <- stats::setNames(global_key, item_key)
-  id_global <- as.character(item_to_global[ids])
-
-  artifacts <- (state$linking$phase_a %||% list())$artifacts %||% list()
-  for (spoke_key in names(artifacts)) {
-    artifact <- artifacts[[spoke_key]] %||% NULL
-    items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())
-    if (nrow(items_tbl) < 1L ||
-      !all(c("global_item_id", "theta_raw_mean", "theta_raw_sd") %in% names(items_tbl))) {
-      next
-    }
-    map_mean <- stats::setNames(as.double(items_tbl$theta_raw_mean), as.character(items_tbl$global_item_id))
-    map_sd <- stats::setNames(as.double(items_tbl$theta_raw_sd), as.character(items_tbl$global_item_id))
-    idx <- match(id_global, names(map_mean))
-    keep <- !is.na(idx)
-    if (any(keep)) {
-      matched <- id_global[keep]
-      raw_mean[keep] <- as.double(map_mean[matched])
-      raw_sd[keep] <- as.double(map_sd[matched])
-    }
+  if (isTRUE(is_link_phase_a)) {
+    return(list(
+      theta_link_eap = rep_len(NA_real_, length(ids)),
+      theta_link_sd = rep_len(NA_real_, length(ids)),
+      theta_link_quantiles = matrix(
+        NA_real_,
+        nrow = nrow(theta_raw_quantiles),
+        ncol = ncol(theta_raw_quantiles),
+        dimnames = dimnames(theta_raw_quantiles)
+      )
+    ))
   }
-  raw_sd[!is.finite(raw_sd) | raw_sd < 0] <- theta_sd[!is.finite(raw_sd) | raw_sd < 0]
-  global_mean <- as.double(raw_mean)
-  global_sd <- as.double(raw_sd)
 
   hub_id <- as.integer(controller$hub_id %||% 1L)
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
@@ -179,35 +178,38 @@
     mode <- as.character(stats_row$link_transform_mode %||%
       .adaptive_link_transform_mode_for_spoke(controller, spoke_id))
     if (!mode %in% c("shift_only", "shift_scale")) {
-      global_mean[spoke_idx] <- NA_real_
-      global_sd[spoke_idx] <- NA_real_
+      link_eap[spoke_idx] <- NA_real_
+      link_sd[spoke_idx] <- NA_real_
+      link_quantiles[, spoke_idx] <- NA_real_
       next
     }
     delta <- as.double(stats_row$delta_spoke_mean %||% NA_real_)
     if (!is.finite(delta)) {
-      global_mean[spoke_idx] <- NA_real_
-      global_sd[spoke_idx] <- NA_real_
+      link_eap[spoke_idx] <- NA_real_
+      link_sd[spoke_idx] <- NA_real_
+      link_quantiles[, spoke_idx] <- NA_real_
       next
     }
     alpha <- 1
     if (identical(mode, "shift_scale")) {
       log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
       if (!is.finite(log_alpha)) {
-        global_mean[spoke_idx] <- NA_real_
-        global_sd[spoke_idx] <- NA_real_
+        link_eap[spoke_idx] <- NA_real_
+        link_sd[spoke_idx] <- NA_real_
+        link_quantiles[, spoke_idx] <- NA_real_
         next
       }
       alpha <- exp(log_alpha)
     }
-    global_mean[spoke_idx] <- as.double(delta + alpha * raw_mean[spoke_idx])
-    global_sd[spoke_idx] <- as.double(abs(alpha) * raw_sd[spoke_idx])
+    link_eap[spoke_idx] <- as.double(delta + alpha * theta_raw_eap[spoke_idx])
+    link_sd[spoke_idx] <- as.double(abs(alpha) * theta_raw_sd[spoke_idx])
+    link_quantiles[, spoke_idx] <- as.double(delta + alpha * theta_raw_quantiles[, spoke_idx, drop = FALSE])
   }
 
   list(
-    theta_raw_eap = as.double(raw_mean),
-    theta_raw_sd = as.double(raw_sd),
-    theta_global_eap = as.double(global_mean),
-    theta_global_sd = as.double(global_sd)
+    theta_link_eap = as.double(link_eap),
+    theta_link_sd = as.double(link_sd),
+    theta_link_quantiles = link_quantiles
   )
 }
 
@@ -226,15 +228,13 @@
     }
   }
   draw_ids <- intersect(ids, as.character(colnames(draws)))
-  theta_mean <- rep_len(NA_real_, length(ids))
-  theta_sd <- rep_len(NA_real_, length(ids))
-  names(theta_mean) <- ids
-  names(theta_sd) <- ids
-  theta_quantiles <- matrix(NA_real_, nrow = 5L, ncol = length(ids))
-  rownames(theta_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
-  colnames(theta_quantiles) <- ids
-  rank_mean <- rep_len(NA_real_, length(ids))
-  names(rank_mean) <- ids
+  theta_raw_eap <- rep_len(NA_real_, length(ids))
+  theta_raw_sd <- rep_len(NA_real_, length(ids))
+  names(theta_raw_eap) <- ids
+  names(theta_raw_sd) <- ids
+  theta_raw_quantiles <- matrix(NA_real_, nrow = 5L, ncol = length(ids))
+  rownames(theta_raw_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
+  colnames(theta_raw_quantiles) <- ids
 
   if (length(draw_ids) > 0L) {
     draws <- draws[, draw_ids, drop = FALSE]
@@ -248,45 +248,34 @@
       function(idx) stats::quantile(draws[, idx], probs = probs, names = FALSE),
       numeric(length(probs))
     )
-
-    rank_mat <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
-    colnames(rank_mat) <- draw_ids
-    rank_mean_vals <- as.double(colMeans(rank_mat))
-
-    theta_mean[draw_ids] <- theta_mean_vals
-    theta_sd[draw_ids] <- theta_sd_vals
-    theta_quantiles[, draw_ids] <- theta_quantile_vals
-    rank_mean[draw_ids] <- rank_mean_vals
+    theta_raw_eap[draw_ids] <- theta_mean_vals
+    theta_raw_sd[draw_ids] <- theta_sd_vals
+    theta_raw_quantiles[, draw_ids] <- theta_quantile_vals
   }
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   run_mode <- as.character(controller$run_mode %||% "within_set")
   is_link_phase_a <- run_mode %in% c("link_one_spoke", "link_multi_spoke") &&
     !identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
+  phase_scope <- if (isTRUE(is_link_phase_a)) "phase_a_set" else "global"
   active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
+  phase_scope_set_id <- if (isTRUE(is_link_phase_a) && is.finite(active_set)) active_set else NA_integer_
   in_phase_scope <- rep_len(TRUE, length(ids))
   if (isTRUE(is_link_phase_a) && is.finite(active_set)) {
     in_phase_scope <- as.integer(set_id) == active_set
   }
-  theta_scope_eap <- rep_len(NA_real_, length(ids))
-  theta_scope_sd <- rep_len(NA_real_, length(ids))
-  theta_scope_eap[in_phase_scope] <- as.double(theta_mean[in_phase_scope])
-  theta_scope_sd[in_phase_scope] <- as.double(theta_sd[in_phase_scope])
-  rank_scope_eap <- rep_len(NA_integer_, length(ids))
-  if (sum(in_phase_scope, na.rm = TRUE) > 0L) {
-    scoped_order <- order(-theta_scope_eap[in_phase_scope], ids[in_phase_scope], na.last = NA)
-    scoped_rank <- integer(sum(in_phase_scope, na.rm = TRUE))
-    scoped_rank[scoped_order] <- seq_along(scoped_order)
-    rank_scope_eap[in_phase_scope] <- as.integer(scoped_rank)
-  }
-  link_summary <- .adaptive_link_item_raw_global_summaries(
+
+  link_summary <- .adaptive_link_item_raw_link_summaries(
     state = state,
     ids = ids,
     set_id = set_id,
-    theta_mean = as.double(theta_mean),
-    theta_sd = as.double(theta_sd)
+    theta_raw_eap = as.double(theta_raw_eap),
+    theta_raw_sd = as.double(theta_raw_sd),
+    theta_raw_quantiles = theta_raw_quantiles,
+    is_link_phase_a = is_link_phase_a
   )
-  rank_global_eap <- as.integer(rank(-as.double(link_summary$theta_global_eap), ties.method = "first"))
+  rank_raw <- as.integer(rank(-as.double(theta_raw_eap), ties.method = "first"))
+  rank_link <- as.integer(rank(-as.double(link_summary$theta_link_eap), ties.method = "first"))
   hub_id <- as.integer((controller %||% list())$hub_id %||% 1L)
   is_hub_item <- as.logical(set_id == hub_id)
   is_spoke_item <- as.logical(set_id != hub_id)
@@ -300,24 +289,27 @@
     refit_id = as.integer(refit_id),
     item_id = as.character(ids),
     set_id = as.integer(set_id),
-    theta_raw_eap = as.double(link_summary$theta_raw_eap),
-    theta_global_eap = as.double(link_summary$theta_global_eap),
-    theta_global_sd = as.double(link_summary$theta_global_sd),
+    phase_scope = as.character(phase_scope),
+    phase_scope_set_id = as.integer(phase_scope_set_id),
     in_phase_scope = as.logical(in_phase_scope),
-    theta_scope_eap = as.double(theta_scope_eap),
-    theta_scope_sd = as.double(theta_scope_sd),
-    rank_scope_eap = as.integer(rank_scope_eap),
-    rank_global_eap = as.integer(rank_global_eap),
     is_hub_item = as.logical(is_hub_item),
     is_spoke_item = as.logical(is_spoke_item),
-    theta_mean = as.double(theta_mean),
-    theta_p2.5 = as.double(theta_quantiles[1L, ]),
-    theta_p5 = as.double(theta_quantiles[2L, ]),
-    theta_p50 = as.double(theta_quantiles[3L, ]),
-    theta_p95 = as.double(theta_quantiles[4L, ]),
-    theta_p97.5 = as.double(theta_quantiles[5L, ]),
-    theta_sd = as.double(theta_sd),
-    rank_mean = as.double(rank_mean),
+    theta_raw_eap = as.double(theta_raw_eap),
+    `theta_raw_p2.5` = as.double(theta_raw_quantiles[1L, ]),
+    `theta_raw_p5` = as.double(theta_raw_quantiles[2L, ]),
+    `theta_raw_p50` = as.double(theta_raw_quantiles[3L, ]),
+    `theta_raw_p95` = as.double(theta_raw_quantiles[4L, ]),
+    `theta_raw_p97.5` = as.double(theta_raw_quantiles[5L, ]),
+    theta_raw_sd = as.double(theta_raw_sd),
+    rank_raw = as.integer(rank_raw),
+    theta_link_eap = as.double(link_summary$theta_link_eap),
+    `theta_link_p2.5` = as.double(link_summary$theta_link_quantiles[1L, ]),
+    `theta_link_p5` = as.double(link_summary$theta_link_quantiles[2L, ]),
+    `theta_link_p50` = as.double(link_summary$theta_link_quantiles[3L, ]),
+    `theta_link_p95` = as.double(link_summary$theta_link_quantiles[4L, ]),
+    `theta_link_p97.5` = as.double(link_summary$theta_link_quantiles[5L, ]),
+    theta_link_sd = as.double(link_summary$theta_link_sd),
+    rank_link = as.integer(rank_link),
     degree = as.integer(degree),
     pos_count_A = as.integer(pos_count_A),
     pos_count_B = as.integer(pos_count_B)
@@ -370,24 +362,27 @@
   item_log$refit_id <- as.integer(item_log$refit_id)
   item_log$item_id <- as.character(item_log$item_id)
   item_log$set_id <- as.integer(item_log$set_id)
-  item_log$theta_raw_eap <- as.double(item_log$theta_raw_eap)
-  item_log$theta_global_eap <- as.double(item_log$theta_global_eap)
-  item_log$theta_global_sd <- as.double(item_log$theta_global_sd)
+  item_log$phase_scope <- as.character(item_log$phase_scope)
+  item_log$phase_scope_set_id <- as.integer(item_log$phase_scope_set_id)
   item_log$in_phase_scope <- as.logical(item_log$in_phase_scope)
-  item_log$theta_scope_eap <- as.double(item_log$theta_scope_eap)
-  item_log$theta_scope_sd <- as.double(item_log$theta_scope_sd)
-  item_log$rank_scope_eap <- as.integer(item_log$rank_scope_eap)
-  item_log$rank_global_eap <- as.integer(item_log$rank_global_eap)
   item_log$is_hub_item <- as.logical(item_log$is_hub_item)
   item_log$is_spoke_item <- as.logical(item_log$is_spoke_item)
-  item_log$theta_mean <- as.double(item_log$theta_mean)
-  item_log$theta_p2.5 <- as.double(item_log$theta_p2.5)
-  item_log$theta_p5 <- as.double(item_log$theta_p5)
-  item_log$theta_p50 <- as.double(item_log$theta_p50)
-  item_log$theta_p95 <- as.double(item_log$theta_p95)
-  item_log$theta_p97.5 <- as.double(item_log$theta_p97.5)
-  item_log$theta_sd <- as.double(item_log$theta_sd)
-  item_log$rank_mean <- as.double(item_log$rank_mean)
+  item_log$theta_raw_eap <- as.double(item_log$theta_raw_eap)
+  item_log$`theta_raw_p2.5` <- as.double(item_log$`theta_raw_p2.5`)
+  item_log$`theta_raw_p5` <- as.double(item_log$`theta_raw_p5`)
+  item_log$`theta_raw_p50` <- as.double(item_log$`theta_raw_p50`)
+  item_log$`theta_raw_p95` <- as.double(item_log$`theta_raw_p95`)
+  item_log$`theta_raw_p97.5` <- as.double(item_log$`theta_raw_p97.5`)
+  item_log$theta_raw_sd <- as.double(item_log$theta_raw_sd)
+  item_log$rank_raw <- as.integer(item_log$rank_raw)
+  item_log$theta_link_eap <- as.double(item_log$theta_link_eap)
+  item_log$`theta_link_p2.5` <- as.double(item_log$`theta_link_p2.5`)
+  item_log$`theta_link_p5` <- as.double(item_log$`theta_link_p5`)
+  item_log$`theta_link_p50` <- as.double(item_log$`theta_link_p50`)
+  item_log$`theta_link_p95` <- as.double(item_log$`theta_link_p95`)
+  item_log$`theta_link_p97.5` <- as.double(item_log$`theta_link_p97.5`)
+  item_log$theta_link_sd <- as.double(item_log$theta_link_sd)
+  item_log$rank_link <- as.integer(item_log$rank_link)
   item_log$degree <- as.integer(item_log$degree)
   item_log$pos_count_A <- as.integer(item_log$pos_count_A)
   item_log$pos_count_B <- as.integer(item_log$pos_count_B)
@@ -619,16 +614,16 @@ adaptive_round_log <- function(state) {
 #' accessor can return one refit table (default: most recent) or stack all
 #' refits into a single tibble.
 #'
-#' In linking mode, raw and global summaries are kept separate:
+#' Item-level summaries are domain-explicit:
 #' \itemize{
-#'   \item \code{theta_raw_eap}: within-set scale summary (from Phase A artifacts
-#'   when available).
-#'   \item \code{theta_global_eap} and \code{theta_global_sd}: global-scale
-#'   summaries after spoke transform application. These are typed \code{NA}
-#'   when required spoke transform parameters are unavailable at that refit.
-#'   \item \code{in_phase_scope}, \code{theta_scope_eap}, \code{theta_scope_sd},
-#'   \code{rank_scope_eap}: scoped summaries for the currently optimized item
-#'   domain (active set during linking Phase A; all items otherwise).
+#'   \item \code{theta_raw_*}: raw/within-set posterior summaries (EAP, fixed
+#'   quantiles, SD, rank) at the current refit.
+#'   \item \code{theta_link_*}: linked/global posterior summaries (EAP, fixed
+#'   quantiles, SD, rank) after transform application.
+#'   \item During linking Phase A (\code{phase_scope = "phase_a_set"}),
+#'   \code{theta_link_*} is typed \code{NA} by design.
+#'   \item \code{phase_scope}, \code{phase_scope_set_id}, and
+#'   \code{in_phase_scope} indicate which item domain is currently optimized.
 #' }
 #'
 #' @param state Adaptive state.

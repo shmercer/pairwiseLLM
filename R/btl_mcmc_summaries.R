@@ -252,7 +252,10 @@
 
 .adaptive_apply_sort_and_top_n <- function(summary, sort_by, top_n) {
   top_n <- .adaptive_summary_validate_last_n(top_n)
-  descending <- sort_by %in% c("theta_mean", "theta_sd", "degree", "pos_A_rate")
+  descending <- sort_by %in% c(
+    "theta_mean", "theta_sd", "degree", "pos_A_rate",
+    "theta_raw_eap", "theta_raw_sd", "theta_link_eap", "theta_link_sd"
+  )
 
   summary <- summary |>
     dplyr::mutate(
@@ -422,7 +425,9 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' @param bind Logical; when \code{TRUE}, stack all refits into a single table.
 #' @param top_n Optional positive integer; return only the top \code{n} rows
 #'   after sorting.
-#' @param sort_by Column used for sorting. Defaults to \code{"rank_mean"}.
+#' @param sort_by Column used for sorting. When \code{NULL}, the first available
+#'   column in \code{c("rank_link", "rank_raw", "rank_mean", "theta_link_eap",
+#'   "theta_raw_eap", "theta_mean", "theta_sd", "degree", "pos_A_rate")} is used.
 #' @param include_optional Logical; include optional diagnostic columns.
 #' @return A tibble with one row per item per refit. Columns reflect the
 #'   canonical item log schema (for example \code{refit_id}, \code{ID},
@@ -472,7 +477,7 @@ summarize_items <- function(state,
     refit = NULL,
     bind = FALSE,
     top_n = NULL,
-    sort_by = c("rank_mean", "theta_mean", "theta_sd", "degree", "pos_A_rate"),
+    sort_by = NULL,
     include_optional = TRUE) {
   if (!is.logical(include_optional) ||
     length(include_optional) != 1L ||
@@ -484,7 +489,6 @@ summarize_items <- function(state,
   }
 
   top_n <- .adaptive_summary_validate_last_n(top_n)
-  sort_by <- match.arg(sort_by)
   source <- .adaptive_summary_extract_source(state)
 
   item_log_list <- NULL
@@ -553,8 +557,30 @@ summarize_items <- function(state,
     item_log <- item_log |> dplyr::select(-dplyr::any_of(optional))
   }
 
+  if (is.null(sort_by)) {
+    preferred <- c(
+      "rank_link", "rank_raw", "rank_mean",
+      "theta_link_eap", "theta_raw_eap", "theta_mean",
+      "theta_sd", "degree", "pos_A_rate"
+    )
+    matched <- preferred[preferred %in% names(item_log)]
+    sort_by <- if (length(matched) > 0L) matched[[1L]] else NA_character_
+  } else {
+    if (!is.character(sort_by) || length(sort_by) != 1L || is.na(sort_by) || sort_by == "") {
+      rlang::abort("`sort_by` must be NULL or a single non-empty column name.")
+    }
+  }
+
   if (!sort_by %in% names(item_log)) {
-    rlang::abort("`sort_by` must be a column in the item log.")
+    if (identical(sort_by, "rank_mean") && "rank_raw" %in% names(item_log)) {
+      sort_by <- "rank_raw"
+    } else if (identical(sort_by, "theta_mean") && "theta_raw_eap" %in% names(item_log)) {
+      sort_by <- "theta_raw_eap"
+    } else if (identical(sort_by, "theta_sd") && "theta_raw_sd" %in% names(item_log)) {
+      sort_by <- "theta_raw_sd"
+    } else {
+      rlang::abort("`sort_by` must be a column in the item log.")
+    }
   }
 
   item_log <- .adaptive_apply_sort_and_top_n(
