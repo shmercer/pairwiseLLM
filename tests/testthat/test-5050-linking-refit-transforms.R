@@ -1201,12 +1201,17 @@ test_that("item log keeps raw summaries separate from transformed global summari
   row_s3 <- item_log[item_log$item_id == "s31", , drop = FALSE]
   row_h <- item_log[item_log$item_id == "h1", , drop = FALSE]
 
-  expect_equal(row_s2$theta_raw_eap[[1L]], -0.30, tolerance = 1e-12)
-  expect_equal(row_s2$theta_global_eap[[1L]], 0.3 + 1.2 * (-0.30), tolerance = 1e-12)
-  expect_equal(row_s3$theta_raw_eap[[1L]], 0.15, tolerance = 1e-12)
-  expect_equal(row_s3$theta_global_eap[[1L]], -0.2 + 0.15, tolerance = 1e-12)
-  expect_equal(row_h$theta_raw_eap[[1L]], 0.80, tolerance = 1e-12)
-  expect_equal(row_h$theta_global_eap[[1L]], 0.80, tolerance = 1e-12)
+  expect_equal(
+    row_s2$theta_link_eap[[1L]],
+    0.3 + 1.2 * row_s2$theta_raw_eap[[1L]],
+    tolerance = 1e-12
+  )
+  expect_equal(
+    row_s3$theta_link_eap[[1L]],
+    -0.2 + row_s3$theta_raw_eap[[1L]],
+    tolerance = 1e-12
+  )
+  expect_equal(row_h$theta_link_eap[[1L]], row_h$theta_raw_eap[[1L]], tolerance = 1e-12)
 })
 
 test_that("item log uses typed NA global summaries when spoke transform parameters are unavailable", {
@@ -1230,12 +1235,12 @@ test_that("item log uses typed NA global summaries when spoke transform paramete
   row_s3 <- item_log[item_log$item_id == "s31", , drop = FALSE]
   row_h <- item_log[item_log$item_id == "h1", , drop = FALSE]
 
-  expect_true(is.na(row_s2$theta_global_eap[[1L]]))
-  expect_true(is.na(row_s2$theta_global_sd[[1L]]))
-  expect_true(is.na(row_s3$theta_global_eap[[1L]]))
-  expect_true(is.na(row_s3$theta_global_sd[[1L]]))
-  expect_true(is.finite(row_h$theta_global_eap[[1L]]))
-  expect_true(is.finite(row_h$theta_global_sd[[1L]]))
+  expect_true(is.na(row_s2$theta_link_eap[[1L]]))
+  expect_true(is.na(row_s2$theta_link_sd[[1L]]))
+  expect_true(is.na(row_s3$theta_link_eap[[1L]]))
+  expect_true(is.na(row_s3$theta_link_sd[[1L]]))
+  expect_true(is.finite(row_h$theta_link_eap[[1L]]))
+  expect_true(is.finite(row_h$theta_link_sd[[1L]]))
 })
 
 test_that("non-linking item log keeps current raw/global behavior under seeded setup", {
@@ -1255,15 +1260,15 @@ test_that("non-linking item log keeps current raw/global behavior under seeded s
   state$btl_fit <- make_test_btl_fit(ids, draws = draws, model_variant = "btl_e_b")
 
   item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
-  expect_equal(item_log$theta_raw_eap, item_log$theta_global_eap, tolerance = 1e-12)
-  expect_equal(item_log$theta_global_sd, item_log$theta_sd, tolerance = 1e-12)
+  expect_equal(item_log$theta_raw_eap, item_log$theta_link_eap, tolerance = 1e-12)
+  expect_equal(item_log$theta_link_sd, item_log$theta_raw_sd, tolerance = 1e-12)
   expect_identical(
-    item_log$rank_global_eap,
-    as.integer(rank(-as.double(item_log$theta_global_eap), ties.method = "first"))
+    item_log$rank_link,
+    as.integer(rank(-as.double(item_log$theta_link_eap), ties.method = "first"))
   )
 })
 
-test_that("item log exposes scoped theta summaries during linking Phase A", {
+test_that("item log exposes phase scope and keeps link summaries NA during linking Phase A", {
   state <- make_linking_refit_state(
     list(link_transform_mode = "shift_scale", multi_spoke_mode = "independent")
   )
@@ -1281,16 +1286,19 @@ test_that("item log exposes scoped theta summaries during linking Phase A", {
   in_scope <- item_log[item_log$in_phase_scope %in% TRUE, , drop = FALSE]
   out_scope <- item_log[!item_log$in_phase_scope %in% TRUE, , drop = FALSE]
 
+  expect_true(all(item_log$phase_scope == "phase_a_set"))
+  expect_true(all(item_log$phase_scope_set_id == 2L))
+  expect_true(all(is.na(item_log$theta_link_eap)))
+  expect_true(all(is.na(item_log$theta_link_sd)))
+
   expect_true(nrow(in_scope) > 0L)
   expect_true(all(in_scope$set_id == 2L))
-  expect_true(all(is.finite(in_scope$theta_scope_eap)))
-  expect_true(all(is.finite(in_scope$theta_scope_sd)))
-  expect_true(all(is.finite(in_scope$rank_scope_eap)))
+  expect_true(all(is.finite(in_scope$theta_raw_eap)))
+  expect_true(all(is.finite(in_scope$rank_raw)))
 
   expect_true(nrow(out_scope) > 0L)
-  expect_true(all(is.na(out_scope$theta_scope_eap)))
-  expect_true(all(is.na(out_scope$theta_scope_sd)))
-  expect_true(all(is.na(out_scope$rank_scope_eap)))
+  expect_true(all(is.finite(out_scope$theta_raw_eap)))
+  expect_true(all(is.finite(out_scope$rank_raw)))
 })
 
 test_that("lagged rank stability gate uses Spearman threshold of at least 0.98", {

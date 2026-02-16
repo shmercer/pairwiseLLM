@@ -55,11 +55,13 @@ test_that("canonical log schemas follow the expected column order", {
     "stop_decision", "stop_reason"
   )
   expected_item <- c(
-    "refit_id", "item_id", "set_id", "theta_raw_eap", "theta_global_eap", "theta_global_sd",
-    "in_phase_scope", "theta_scope_eap", "theta_scope_sd", "rank_scope_eap", "rank_global_eap",
-    "is_hub_item", "is_spoke_item",
-    "theta_mean", "theta_p2.5", "theta_p5", "theta_p50",
-    "theta_p95", "theta_p97.5", "theta_sd", "rank_mean", "degree", "pos_count_A", "pos_count_B"
+    "refit_id", "item_id", "set_id",
+    "phase_scope", "phase_scope_set_id", "in_phase_scope", "is_hub_item", "is_spoke_item",
+    "theta_raw_eap", "theta_raw_p2.5", "theta_raw_p5", "theta_raw_p50", "theta_raw_p95", "theta_raw_p97.5",
+    "theta_raw_sd", "rank_raw",
+    "theta_link_eap", "theta_link_p2.5", "theta_link_p5", "theta_link_p50", "theta_link_p95", "theta_link_p97.5",
+    "theta_link_sd", "rank_link",
+    "degree", "pos_count_A", "pos_count_B"
   )
   expected_item_step <- c("step_id", "timestamp", "item_id", "mu", "sigma", "degree")
   expected_link_stage <- c(

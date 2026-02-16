@@ -193,13 +193,13 @@
   rank_mu_raw <- NULL
 
   if (!is.null(latest_item_log) && nrow(latest_item_log) > 0L &&
-    all(c("item_id", "theta_raw_eap", "theta_sd") %in% names(latest_item_log))) {
+    all(c("item_id", "theta_raw_eap", "theta_raw_sd") %in% names(latest_item_log))) {
     idx <- match(ids, as.character(latest_item_log$item_id))
     if (all(!is.na(idx))) {
       theta_mean <- as.double(latest_item_log$theta_raw_eap[idx])
-      theta_sd <- as.double(latest_item_log$theta_sd[idx])
-      if ("rank_scope_eap" %in% names(latest_item_log)) {
-        rank_mu_raw <- as.double(latest_item_log$rank_scope_eap[idx])
+      theta_sd <- as.double(latest_item_log$theta_raw_sd[idx])
+      if ("rank_raw" %in% names(latest_item_log)) {
+        rank_mu_raw <- as.double(latest_item_log$rank_raw[idx])
       }
     }
   }

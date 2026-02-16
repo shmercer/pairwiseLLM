@@ -212,7 +212,22 @@ test_that("validate_session_dir accepts legacy item log schema for resume", {
     "pos_count_B"
   )
   item_path <- file.path(session_dir, "item_log", "refit_0001.rds")
-  legacy_item <- readRDS(item_path)
+  item_new <- readRDS(item_path)
+  legacy_item <- tibble::tibble(
+    refit_id = as.integer(item_new$refit_id),
+    item_id = as.character(item_new$item_id),
+    theta_mean = as.double(item_new$theta_raw_eap),
+    `theta_p2.5` = as.double(item_new$`theta_raw_p2.5`),
+    `theta_p5` = as.double(item_new$`theta_raw_p5`),
+    `theta_p50` = as.double(item_new$`theta_raw_p50`),
+    `theta_p95` = as.double(item_new$`theta_raw_p95`),
+    `theta_p97.5` = as.double(item_new$`theta_raw_p97.5`),
+    theta_sd = as.double(item_new$theta_raw_sd),
+    rank_mean = as.double(item_new$rank_raw),
+    degree = as.integer(item_new$degree),
+    pos_count_A = as.integer(item_new$pos_count_A),
+    pos_count_B = as.integer(item_new$pos_count_B)
+  )
   legacy_item <- legacy_item[, legacy_cols, drop = FALSE]
   saveRDS(legacy_item, item_path)
 

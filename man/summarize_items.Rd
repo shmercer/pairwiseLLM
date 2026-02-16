@@ -10,7 +10,7 @@ summarize_items(
   refit = NULL,
   bind = FALSE,
   top_n = NULL,
-  sort_by = c("rank_mean", "theta_mean", "theta_sd", "degree", "pos_A_rate"),
+  sort_by = NULL,
   include_optional = TRUE
 )
 }
@@ -29,7 +29,9 @@ returned; when set, the \code{k}-th refit is returned.}
 \item{top_n}{Optional positive integer; return only the top \code{n} rows
 after sorting.}
 
-\item{sort_by}{Column used for sorting. Defaults to \code{"rank_mean"}.}
+\item{sort_by}{Column used for sorting. When \code{NULL}, the first available
+column in \code{c("rank_link", "rank_raw", "rank_mean", "theta_link_eap",
+  "theta_raw_eap", "theta_mean", "theta_sd", "degree", "pos_A_rate")} is used.}
 
 \item{include_optional}{Logical; include optional diagnostic columns.}
 }
