@@ -198,10 +198,18 @@
     if (all(!is.na(idx))) {
       theta_mean <- as.double(latest_item_log$theta_raw_eap[idx])
       theta_sd <- as.double(latest_item_log$theta_sd[idx])
-      if ("rank_global_eap" %in% names(latest_item_log)) {
-        rank_mu_raw <- as.double(latest_item_log$rank_global_eap[idx])
+      if ("rank_scope_eap" %in% names(latest_item_log)) {
+        rank_mu_raw <- as.double(latest_item_log$rank_scope_eap[idx])
       }
     }
+  }
+
+  # Ignore stale/non-finite summaries and fall back to set-scoped draws.
+  if (!is.null(theta_mean) && !is.null(theta_sd) &&
+    (any(!is.finite(theta_mean)) || any(!is.finite(theta_sd)) || any(theta_sd < 0))) {
+    theta_mean <- NULL
+    theta_sd <- NULL
+    rank_mu_raw <- NULL
   }
 
   draws <- .adaptive_phase_a_extract_set_draws(state, set_id = set_id)

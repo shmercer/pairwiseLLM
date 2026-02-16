@@ -2420,6 +2420,10 @@
   ids <- as.character(state$item_ids)
   scope <- .adaptive_stop_metric_scope(state, ids = ids)
   scope_ids <- as.character(scope$scope_ids %||% ids)
+  metric_ids <- as.character(scope_ids)
+  if (length(metric_ids) < 1L) {
+    metric_ids <- ids
+  }
   history <- .adaptive_history_tbl(state)
   counts <- .adaptive_pair_counts(history, ids)
 
@@ -2530,22 +2534,30 @@
   }
 
   theta_mean <- .adaptive_btl_fit_theta_mean(fit)
-  if (length(theta_mean) == length(ids)) {
-    theta_mean <- as.double(theta_mean[ids])
-  } else {
-    theta_mean <- NULL
+  theta_map <- NULL
+  if (is.numeric(theta_mean) && length(theta_mean) > 0L) {
+    if (!is.null(names(theta_mean))) {
+      theta_map <- stats::setNames(as.double(theta_mean), as.character(names(theta_mean)))
+    } else if (length(theta_mean) == length(ids)) {
+      theta_map <- stats::setNames(as.double(theta_mean), ids)
+    }
   }
 
-  if (!is.null(theta_mean) && !is.null(trueskill_state)) {
-    ts_mu <- trueskill_state$items$mu[match(ids, trueskill_state$items$item_id)]
-    if (length(ts_mu) == length(theta_mean)) {
-      ts_btl_theta_corr <- stats::cor(ts_mu, theta_mean, use = "pairwise.complete.obs")
-      rank_theta <- rank(theta_mean, ties.method = "average")
-      rank_mu <- rank(ts_mu, ties.method = "average")
-      ts_btl_rank_spearman <- stats::cor(rank_mu, rank_theta,
-        method = "spearman",
-        use = "pairwise.complete.obs"
-      )
+  if (!is.null(theta_map) && !is.null(trueskill_state) && is.data.frame(trueskill_state$items)) {
+    theta_ids <- intersect(metric_ids, names(theta_map))
+    if (length(theta_ids) >= 2L) {
+      ts_ids <- as.character(trueskill_state$items$item_id)
+      ts_mu <- as.double(trueskill_state$items$mu[match(theta_ids, ts_ids)])
+      theta_vals <- as.double(theta_map[theta_ids])
+      if (all(is.finite(ts_mu)) && all(is.finite(theta_vals))) {
+        ts_btl_theta_corr <- stats::cor(ts_mu, theta_vals, use = "pairwise.complete.obs")
+        rank_theta <- rank(theta_vals, ties.method = "average")
+        rank_mu <- rank(ts_mu, ties.method = "average")
+        ts_btl_rank_spearman <- stats::cor(rank_mu, rank_theta,
+          method = "spearman",
+          use = "pairwise.complete.obs"
+        )
+      }
     }
   }
 
@@ -2559,6 +2571,13 @@
     if (length(draw_ids) > 0L) {
       draws <- draws[, draw_ids, drop = FALSE]
       draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
+      draw_metric_ids <- intersect(as.character(colnames(draws)), metric_ids)
+      if (length(draw_metric_ids) > 0L) {
+        draws <- draws[, draw_metric_ids, drop = FALSE]
+        draw_ids <- as.character(colnames(draws))
+      } else {
+        draws <- NULL
+      }
     } else {
       draws <- NULL
     }
@@ -2602,9 +2621,10 @@
     }
 
     theta_for_draws <- NULL
-    if (!is.null(theta_mean) && length(theta_mean) == length(ids) && length(draw_ids) == ncol(draws)) {
-      names(theta_mean) <- ids
-      theta_for_draws <- as.double(theta_mean[draw_ids])
+    if (!is.null(theta_map) && length(draw_ids) == ncol(draws) && all(draw_ids %in% names(theta_map))) {
+      theta_for_draws <- as.double(theta_map[draw_ids])
+    } else if (ncol(draws) >= 1L) {
+      theta_for_draws <- as.double(colMeans(draws))
     }
     if (!is.null(theta_for_draws) && length(theta_for_draws) >= 2L) {
       rank_order <- order(-theta_for_draws, draw_ids)
