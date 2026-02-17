@@ -523,6 +523,155 @@ test_that("linking deterministic ordering ranks by linking utility with stable t
   expect_identical(ord, c(2L, 3L, 1L))
 })
 
+test_that("model D order-averaged probability is symmetric across order swap", {
+  pbar_1 <- pairwiseLLM:::.adaptive_link_model_d_pbar(
+    theta_h = 1.2,
+    theta_x = -0.4,
+    beta = 0.1,
+    epsilon = 0.05
+  )
+  pbar_2 <- pairwiseLLM:::.adaptive_link_model_d_pbar(
+    theta_h = -0.4,
+    theta_x = 1.2,
+    beta = 0.1,
+    epsilon = 0.05
+  )
+  expect_equal(pbar_1, pbar_2, tolerance = 1e-12)
+  expect_true(is.finite(pbar_1))
+  expect_true(pbar_1 >= 0 && pbar_1 <= 1)
+})
+
+test_that("linking information gradient follows transform-mode formulas", {
+  g_shift <- pairwiseLLM:::.adaptive_link_info_gradient(
+    transform_mode = "shift_only",
+    alpha = 1,
+    theta_raw_x = 2
+  )
+  g_scale <- pairwiseLLM:::.adaptive_link_info_gradient(
+    transform_mode = "shift_scale",
+    alpha = 1.5,
+    theta_raw_x = -2
+  )
+  expect_identical(dim(g_shift), c(1L, 1L))
+  expect_equal(as.numeric(g_shift), 1)
+  expect_identical(dim(g_scale), c(2L, 1L))
+  expect_equal(as.numeric(g_scale), c(1, -3), tolerance = 1e-12)
+})
+
+test_that("linking deterministic ordering prioritizes D-opt gain before fallback utility", {
+  cand <- tibble::tibble(
+    i = c("h1", "h2"),
+    j = c("s1", "s2"),
+    u0 = c(0.26, 0.25),
+    link_u = c(0.20, 0.40),
+    link_d_opt_gain = c(0.80, 0.10)
+  )
+  ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
+  expect_identical(ord[[1L]], 1L)
+})
+
+test_that("D-opt helper guards cover non-finite and malformed inputs", {
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_model_d_prob(NA_real_, 0, 0, 0.1)))
+  expect_true(is.finite(pairwiseLLM:::.adaptive_link_model_d_prob(0, 0, NA_real_, NA_real_)))
+
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_model_d_pbar(NA_real_, 0, 0, 0)))
+
+  g_bad <- pairwiseLLM:::.adaptive_link_info_gradient(
+    transform_mode = "shift_scale",
+    alpha = NA_real_,
+    theta_raw_x = NA_real_
+  )
+  expect_equal(as.numeric(g_bad), c(1, 0), tolerance = 1e-12)
+
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_logdet_spd(matrix(c(1, 2, 3), nrow = 1L))))
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_d_opt_gain_logdet(diag(1), diag(2))))
+
+  bad_ctl <- list(
+    link_d_opt_it_by_spoke = list(
+      `1::2` = list(it = matrix(1, nrow = 1L, ncol = 2L), it_n_pairs_accumulated = -1L)
+    )
+  )
+  st <- pairwiseLLM:::.adaptive_link_d_opt_state_get(
+    controller = bad_ctl,
+    refit_id = 1L,
+    spoke_id = 2L,
+    transform_mode = "shift_only"
+  )
+  expect_true(is.matrix(st$it))
+  expect_identical(dim(st$it), c(1L, 1L))
+  expect_identical(st$it_n_pairs_accumulated, 0L)
+  expect_true(is.finite(st$it_logdet_start))
+})
+
+test_that("selection utility helpers cover additional fallback branches", {
+  expect_identical(
+    pairwiseLLM:::.adaptive_selection_utility_mode(
+      run_mode = "within_set",
+      has_regularization = TRUE,
+      is_cross_set = FALSE
+    ),
+    "pairing_trueskill_u"
+  )
+  expect_identical(pairwiseLLM:::.adaptive_resolve_selection_column("pairing_trueskill_u"), "u")
+  expect_true(is.na(pairwiseLLM:::.adaptive_resolve_selection_column("unknown")))
+})
+
+test_that("theta/global and predictive utility helpers handle empty and sparse domains", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 201L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_theta_global_map_for_items(
+      state = state,
+      controller = state$controller,
+      item_ids = character()
+    ),
+    stats::setNames(numeric(), character())
+  )
+
+  sparse_items <- tibble::tibble(
+    item_id = c("h1", "s1"),
+    set_id = c(1L, 2L),
+    global_item_id = c("gh1", "gs1")
+  )
+  sparse_state <- adaptive_rank_start(
+    sparse_items,
+    seed = 202L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  sparse_state$warm_start_done <- TRUE
+  sparse_state <- mark_link_phase_b_ready(sparse_state)
+
+  sparse <- pairwiseLLM:::.adaptive_link_attach_predictive_utility(
+    candidates = tibble::tibble(i = "h1", j = "missing"),
+    state = sparse_state,
+    controller = sparse_state$controller,
+    spoke_id = 2L
+  )
+  expect_true(is.na(sparse$link_p[[1L]]))
+  expect_true(is.na(sparse$link_u[[1L]]))
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_predictive_prob_oriented(
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L,
+      A_id = "missing",
+      B_id = "h1"
+    )
+  )
+})
+
 test_that("predictive utility scoring receives full linking controller fields", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s1", "s2"),
@@ -836,7 +985,7 @@ test_that("concurrent fallback ordering is deterministic under fixed state and s
   expect_identical(out1$j, out2$j)
 })
 
-test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
+test_that("cross_set_utility_pre logs linking utility before commit in linking mode", {
   items <- tibble::tibble(
     item_id = c("a", "b"),
     set_id = c(1L, 2L),
@@ -850,10 +999,10 @@ test_that("cross_set_utility_pre logs p*(1-p) before commit in linking mode", {
   judge <- make_deterministic_judge("i_wins")
   out <- pairwiseLLM:::run_one_step(state, judge)
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
-  expected <- row$posterior_win_prob_pre[[1L]] * (1 - row$posterior_win_prob_pre[[1L]])
 
-  expect_equal(row$utility_mode[[1L]], "linking_cross_set_p_times_1_minus_p")
-  expect_equal(row$cross_set_utility_pre[[1L]], expected, tolerance = 1e-12)
+  expect_equal(row$utility_mode[[1L]], "linking_d_optimal")
+  expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
+  expect_gte(row$cross_set_utility_pre[[1L]], 0)
 })
 
 test_that("cross-set ordering uses linking utility when predictive utility differs", {
@@ -894,7 +1043,7 @@ test_that("linking deterministic ordering falls back when linking utility is ful
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(
     cand,
-    utility_mode = "linking_cross_set_p_times_1_minus_p"
+    utility_mode = "linking_d_optimal"
   )
   expect_identical(ord, c(2L, 3L, 1L))
 })

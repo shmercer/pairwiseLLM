@@ -34,6 +34,72 @@ test_that("step row linking completeness guard rejects missing cross-set fields"
   )
 })
 
+test_that("step row linking completeness guard rejects malformed linking metadata", {
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(
+      list(run_mode = "within_set", is_cross_set = FALSE)
+    ),
+    "missing required linking columns"
+  )
+
+  bad_utility <- list(
+    run_mode = "within_set",
+    is_cross_set = FALSE,
+    set_i = 1L,
+    set_j = 1L,
+    link_spoke_id = NA_integer_,
+    round_stage = "local_link",
+    link_stage = NA_character_,
+    utility_mode = "bad_mode",
+    posterior_win_prob_pre = NA_real_,
+    cross_set_utility_pre = NA_real_
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_utility),
+    "utility_mode` must be one of"
+  )
+
+  bad_cross_utility <- list(
+    run_mode = "link_one_spoke",
+    is_cross_set = TRUE,
+    set_i = 1L,
+    set_j = 2L,
+    link_spoke_id = 2L,
+    round_stage = "anchor_link",
+    link_stage = "anchor_link",
+    utility_mode = "pairing_trueskill_u0",
+    posterior_win_prob_pre = 0.5,
+    cross_set_utility_pre = 0.2
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_cross_utility),
+    "must be linking_d_optimal"
+  )
+
+  bad_non_cross_cols <- list(
+    run_mode = "within_set",
+    is_cross_set = FALSE,
+    set_i = 1L,
+    set_j = 1L,
+    link_spoke_id = NA_integer_,
+    round_stage = "local_link",
+    link_stage = NA_character_,
+    posterior_win_prob_pre = NA_real_,
+    cross_set_utility_pre = NA_real_,
+    delta_spoke_estimate_pre = 0.1,
+    delta_spoke_sd_pre = NA_real_,
+    link_transform_mode = NA_character_,
+    log_alpha_spoke_estimate_pre = NA_real_,
+    log_alpha_spoke_sd_pre = NA_real_,
+    hub_lock_mode = NA_character_,
+    hub_lock_kappa = NA_real_
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_non_cross_cols),
+    "link-only columns to NA"
+  )
+})
+
 test_that("link-stage append completeness guard rejects missing key/mode fields", {
   bad_rows <- tibble::tibble(
     refit_id = 1L,
@@ -176,7 +242,7 @@ test_that("step row completeness accepts link_probe and enforces posterior orien
     link_stage = "anchor_link",
     posterior_win_prob_pre = 0.6,
     cross_set_utility_pre = 0.24,
-    utility_mode = "linking_cross_set_p_times_1_minus_p"
+    utility_mode = "linking_d_optimal"
   )
   expect_silent(pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(ok_probe))
 
@@ -228,4 +294,10 @@ test_that("run_one_step argument guards and warm-start NULL branch are exercised
   expect_error(pairwiseLLM:::run_one_step(list(), make_deterministic_judge("i_wins")), "adaptive_state")
   state <- adaptive_rank_start(make_test_items(3), seed = 12L)
   expect_error(pairwiseLLM:::run_one_step(state, 1L), "`judge` must be a function")
+})
+
+test_that("validate_judge_result catches non-scalar Y branch", {
+  bad <- pairwiseLLM:::validate_judge_result(list(is_valid = TRUE, Y = c(1L, 0L)), "a", "b")
+  expect_false(isTRUE(bad$is_valid))
+  expect_identical(bad$invalid_reason, "invalid_contract")
 })

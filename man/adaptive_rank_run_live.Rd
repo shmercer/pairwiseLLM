@@ -118,8 +118,9 @@ Within-set routing is TrueSkill-based with utility
 In linking Phase B, anchor/strata routing uses linking-global scores built
 from Phase A raw summaries and the current spoke transform.
 Linking Phase B routing ranks eligible cross-set candidates by
-\eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
-parameters. Linking inference parameters remain inference-only
+ridge-stabilized D-optimal log-det information gain on spoke transform
+parameters using order-averaged Model D probabilities. Linking inference
+parameters remain inference-only
 (diagnostics and stopping) and are not direct pair-selection objectives.
 When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
 fallback from within/shared judge estimates only until link-specific estimates

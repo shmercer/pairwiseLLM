@@ -2162,6 +2162,7 @@
   rows <- vector("list", length(spoke_ids))
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
 
   for (idx in seq_along(spoke_ids)) {
     spoke_id <- as.integer(spoke_ids[[idx]])
@@ -2263,6 +2264,24 @@
 
     transform_mode <- as.character(stats_row$link_transform_mode %||%
       .adaptive_link_transform_mode_for_spoke(controller, spoke_id))
+    d_opt_key <- .adaptive_link_d_opt_state_key(refit_id = as.integer(refit_id), spoke_id = as.integer(spoke_id))
+    d_opt_entry <- d_opt_map[[d_opt_key]] %||%
+      .adaptive_link_d_opt_state_get(
+        controller = controller,
+        refit_id = as.integer(refit_id),
+        spoke_id = as.integer(spoke_id),
+        transform_mode = transform_mode
+      )
+    d_opt_dim <- .adaptive_link_d_opt_matrix_dim(transform_mode)
+    d_opt_it <- as.matrix(d_opt_entry$it %||% matrix(0, nrow = d_opt_dim, ncol = d_opt_dim))
+    d_opt_logdet_start <- as.double(d_opt_entry$it_logdet_start %||% NA_real_)
+    d_opt_logdet_end <- .adaptive_link_logdet_spd(d_opt_it, ridge = 1e-6)
+    d_opt_trace_end <- if (is.matrix(d_opt_it) && nrow(d_opt_it) == ncol(d_opt_it)) {
+      as.double(sum(diag(d_opt_it)))
+    } else {
+      NA_real_
+    }
+    d_opt_n_pairs <- as.integer(d_opt_entry$it_n_pairs_accumulated %||% 0L)
     reliability_stop_pass <- as.logical(stats_row$link_reliability_stop_pass %||% NA)
     delta_sd_pass <- as.logical(stats_row$delta_sd_pass %||% NA)
     log_alpha_sd_pass <- as.logical(stats_row$log_alpha_sd_pass %||% NA)
@@ -2353,6 +2372,10 @@
       concurrent_target_met = as.logical(stats_row$concurrent_target_met %||% NA),
       active_item_count_hub = as.integer(stats_row$active_item_count_hub %||% NA_integer_),
       active_item_count_spoke = as.integer(stats_row$active_item_count_spoke %||% NA_integer_),
+      it_logdet_start = as.double(d_opt_logdet_start),
+      it_logdet_end = as.double(d_opt_logdet_end),
+      it_trace_end = as.double(d_opt_trace_end),
+      it_n_pairs_accumulated = as.integer(d_opt_n_pairs),
       coverage_bins_used = as.integer(stats_row$coverage_bins_used %||% coverage$bins_used %||% NA_integer_),
       coverage_source = as.character(stats_row$coverage_source %||% coverage$source %||% NA_character_),
       ppc_calibration_id = as.character(stats_row$ppc_calibration_id %||% NA_character_),

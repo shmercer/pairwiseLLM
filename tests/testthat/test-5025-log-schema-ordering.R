@@ -84,7 +84,9 @@ test_that("canonical log schemas follow the expected column order", {
     "committed_anchor_link", "committed_long_link", "committed_mid_link", "committed_local_link",
     "concurrent_target_pairs",
     "concurrent_floor_pairs", "concurrent_floor_met", "concurrent_target_met",
-    "active_item_count_hub", "active_item_count_spoke", "coverage_bins_used",
+    "active_item_count_hub", "active_item_count_spoke",
+    "it_logdet_start", "it_logdet_end", "it_trace_end", "it_n_pairs_accumulated",
+    "coverage_bins_used",
     "coverage_source", "ppc_calibration_id", "cross_set_ppc_brier_max_used",
     "lag_domain_key", "lag_domain_reset"
   )
@@ -118,7 +120,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_identical(levels(step_log$link_transform_mode), c("auto", "shift_only", "shift_scale"))
   expect_identical(
     levels(step_log$utility_mode),
-    c("pairing_trueskill_u0", "pairing_trueskill_u", "linking_cross_set_p_times_1_minus_p")
+    c("pairing_trueskill_u0", "pairing_trueskill_u", "linking_d_optimal")
   )
   expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 

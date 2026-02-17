@@ -110,7 +110,7 @@
     allow_spoke_spoke_cross_set = FALSE,
     multi_spoke_mode = "independent",
     min_cross_set_pairs_per_spoke_per_refit = 5L,
-    cross_set_utility = "linking_cross_set_p_times_1_minus_p",
+    cross_set_utility = "linking_d_optimal",
     phase_a_mode = "run",
     phase_a_import_failure_policy = "fail_fast",
     phase_a_required_reliability_min = 0.80,
@@ -128,6 +128,7 @@
     link_transform_last_delta_by_spoke = list(),
     link_transform_last_log_alpha_by_spoke = list(),
     link_refit_stats_by_spoke = list(),
+    link_d_opt_it_by_spoke = list(),
     link_stopped_by_spoke = list(),
     link_stop_refit_id_by_spoke = list(),
     link_stop_reason_by_spoke = list(),
@@ -335,7 +336,7 @@
   )
   out$cross_set_utility <- read_choice(
     "cross_set_utility",
-    c("linking_cross_set_p_times_1_minus_p")
+    c("linking_d_optimal")
   )
   out$phase_a_mode <- read_choice("phase_a_mode", c("run", "import", "mixed"))
   out$phase_a_import_failure_policy <- read_choice(

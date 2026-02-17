@@ -1879,3 +1879,92 @@ test_that("linking lag domain metadata resets once per spoke domain and persists
   expect_false(isTRUE(stats2$lag_domain_reset))
   expect_identical(stats2$lag_domain_key, "phase_b_spoke_2")
 })
+
+test_that("D-opt information state accumulates by refit window and logs audit fields", {
+  state <- make_linking_refit_state()
+  id_map <- stats::setNames(seq_along(state$item_ids), as.character(state$item_ids))
+  step_row <- list(
+    i = as.integer(id_map[["h1"]]),
+    j = as.integer(id_map[["s21"]]),
+    is_cross_set = TRUE,
+    run_mode = "link_one_spoke",
+    utility_mode = "linking_d_optimal",
+    link_spoke_id = 2L,
+    is_probe_step = NA,
+    delta_spoke_estimate_pre = 0,
+    log_alpha_spoke_estimate_pre = NA_real_,
+    link_transform_mode = "shift_only"
+  )
+
+  s1 <- pairwiseLLM:::.adaptive_link_d_opt_update_after_commit(
+    state_before = state,
+    state_after = state,
+    step_row = step_row
+  )
+  d_opt_1 <- s1$controller$link_d_opt_it_by_spoke
+  expect_true(length(d_opt_1) >= 1L)
+  expect_true(any(grepl("^1::2$", names(d_opt_1))))
+  entry1 <- d_opt_1[["1::2"]]
+  expect_true(is.matrix(entry1$it))
+  expect_identical(as.integer(entry1$it_n_pairs_accumulated), 1L)
+
+  s1$round_log <- pairwiseLLM:::append_round_log(s1$round_log, list(refit_id = 1L, diagnostics_pass = TRUE))
+  s2 <- pairwiseLLM:::.adaptive_link_d_opt_update_after_commit(
+    state_before = s1,
+    state_after = s1,
+    step_row = step_row
+  )
+  d_opt_2 <- s2$controller$link_d_opt_it_by_spoke
+  expect_true(any(grepl("^2::2$", names(d_opt_2))))
+  expect_false(any(grepl("^1::", names(d_opt_2))))
+  entry2 <- d_opt_2[["2::2"]]
+  expect_identical(as.integer(entry2$it_n_pairs_accumulated), 1L)
+
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = s1,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_true(nrow(row) == 1L)
+  expect_true(is.finite(row$it_logdet_start[[1L]]))
+  expect_true(is.finite(row$it_logdet_end[[1L]]))
+  expect_true(is.finite(row$it_trace_end[[1L]]))
+  expect_identical(as.integer(row$it_n_pairs_accumulated[[1L]]), 1L)
+})
+
+test_that("D-opt updater guard branches return state unchanged when prerequisites fail", {
+  state <- make_linking_refit_state()
+  id_map <- stats::setNames(seq_along(state$item_ids), as.character(state$item_ids))
+
+  base_row <- list(
+    i = as.integer(id_map[["h1"]]),
+    j = as.integer(id_map[["s21"]]),
+    is_cross_set = TRUE,
+    run_mode = "link_one_spoke",
+    utility_mode = "linking_d_optimal",
+    link_spoke_id = 2L,
+    is_probe_step = NA,
+    delta_spoke_estimate_pre = 0,
+    log_alpha_spoke_estimate_pre = NA_real_,
+    link_transform_mode = "shift_only"
+  )
+
+  bad_rows <- list(
+    tibble::tibble(),
+    utils::modifyList(base_row, list(is_cross_set = FALSE)),
+    utils::modifyList(base_row, list(run_mode = "within_set")),
+    utils::modifyList(base_row, list(is_probe_step = TRUE)),
+    utils::modifyList(base_row, list(link_spoke_id = NA_integer_)),
+    utils::modifyList(base_row, list(i = NA_integer_)),
+    utils::modifyList(base_row, list(link_spoke_id = 3L))
+  )
+  for (row in bad_rows) {
+    out <- pairwiseLLM:::.adaptive_link_d_opt_update_after_commit(
+      state_before = state,
+      state_after = state,
+      step_row = row
+    )
+    expect_identical(out$controller$link_d_opt_it_by_spoke, state$controller$link_d_opt_it_by_spoke)
+  }
+})
