@@ -13,7 +13,7 @@ test_that("canonical log schemas follow the expected column order", {
     "deg_i", "deg_j", "recent_deg_i", "recent_deg_j",
     "mu_i", "mu_j", "sigma_i", "sigma_j", "p_ij", "U0_ij",
     "star_cap_rejects", "star_cap_reject_items",
-    "set_i", "set_j", "is_cross_set", "link_spoke_id", "run_mode", "link_stage",
+    "set_i", "set_j", "is_cross_set", "is_probe_step", "link_spoke_id", "run_mode", "link_stage",
     "delta_spoke_estimate_pre", "delta_spoke_sd_pre", "dist_stratum_global",
     "posterior_win_prob_pre", "link_transform_mode", "cross_set_utility_pre",
     "utility_mode", "log_alpha_spoke_estimate_pre", "log_alpha_spoke_sd_pre",
@@ -85,7 +85,8 @@ test_that("canonical log schemas follow the expected column order", {
     "concurrent_target_pairs",
     "concurrent_floor_pairs", "concurrent_floor_met", "concurrent_target_met",
     "active_item_count_hub", "active_item_count_spoke", "coverage_bins_used",
-    "coverage_source"
+    "coverage_source", "ppc_calibration_id", "cross_set_ppc_brier_max_used",
+    "lag_domain_key", "lag_domain_reset"
   )
 
   expect_equal(names(pairwiseLLM:::schema_step_log), expected_step)
@@ -112,7 +113,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_true(is.factor(step_log$link_transform_mode))
   expect_true(is.factor(step_log$utility_mode))
   expect_true(is.factor(step_log$hub_lock_mode))
-  expect_identical(levels(step_log$run_mode), c("within_set", "link_one_spoke", "link_multi_spoke"))
+  expect_identical(levels(step_log$run_mode), c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe"))
   expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link"))
   expect_identical(levels(step_log$link_transform_mode), c("auto", "shift_only", "shift_scale"))
   expect_identical(

@@ -263,7 +263,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     )
   }
   run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
-  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe")
 
   is_cross <- row$is_cross_set[[1L]]
   if (isTRUE(is_cross)) {
@@ -290,6 +290,15 @@ validate_judge_result <- function(result, A_id, B_id) {
         paste0(
           "step_log append completeness failure for cross-set row: ",
           "`utility_mode` must be linking_cross_set_p_times_1_minus_p."
+        )
+      )
+    }
+    posterior_pre <- as.double(row$posterior_win_prob_pre[[1L]] %||% NA_real_)
+    if (!is.finite(posterior_pre) || posterior_pre < 0 || posterior_pre > 1) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set row: ",
+          "`posterior_win_prob_pre` must be finite in [0,1] and represent P(A wins)."
         )
       )
     }
@@ -438,7 +447,7 @@ run_one_step <- function(state, judge, ...) {
     NA_integer_
   }
 
-  run_mode <- as.character(controller$run_mode %||% "within_set")
+  run_mode <- as.character(selection$run_mode %||% controller$run_mode %||% "within_set")
   hub_id <- as.integer(controller$hub_id %||% 1L)
   link_transform_mode <- as.character(controller$link_transform_mode %||% NA_character_)
   utility_mode <- as.character(selection$utility_mode %||% NA_character_)
@@ -489,7 +498,8 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_character_
   }
-  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe")
+  is_probe_step <- if (isTRUE(is_cross_set) && identical(run_mode, "link_probe")) TRUE else NA
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode) &&
     identical(utility_mode, "linking_cross_set_p_times_1_minus_p")) {
@@ -600,6 +610,7 @@ run_one_step <- function(state, judge, ...) {
     set_i = set_i,
     set_j = set_j,
     is_cross_set = is_cross_set,
+    is_probe_step = is_probe_step,
     link_spoke_id = link_spoke_id,
     run_mode = run_mode,
     link_stage = link_stage,

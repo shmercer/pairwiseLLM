@@ -58,6 +58,33 @@
   as.integer(sort(intersect(spokes, ready_sets)))
 }
 
+.adaptive_phase_a_required_sets <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(integer())
+  }
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  spoke_ids <- setdiff(set_ids, hub_id)
+  as.integer(sort(unique(c(hub_id, spoke_ids))))
+}
+
+.adaptive_phase_a_set_stop_passed <- function(artifact, source, controller) {
+  source <- as.character(source %||% NA_character_)
+  if (is.null(artifact) || !is.list(artifact)) {
+    return(FALSE)
+  }
+  if (identical(source, "run")) {
+    return(isTRUE(.adaptive_phase_a_run_stop_passed(artifact, controller = controller)))
+  }
+  if (identical(source, "import")) {
+    return(isTRUE(.adaptive_phase_a_run_stop_passed(artifact, controller = controller)) ||
+      isTRUE(artifact$quality_gate_accepted %||% FALSE))
+  }
+  FALSE
+}
+
 .adaptive_link_phase_context <- function(state, controller = NULL) {
   controller <- controller %||% .adaptive_controller_resolve(state)
   mode <- as.character(controller$run_mode %||% "within_set")
@@ -72,9 +99,30 @@
     ))
   }
 
-  pending_run_sets <- .adaptive_phase_a_pending_run_sets(state, controller = controller)
-  ready_spokes <- .adaptive_phase_a_ready_spokes(state, controller = controller)
-  pending_run_sets <- as.integer(pending_run_sets[!is.na(pending_run_sets)])
+  phase_a <- state$linking$phase_a %||% list()
+  explicit_phase <- as.character(phase_a$phase %||% NA_character_)
+  status_tbl <- .adaptive_phase_a_status_tbl(state)
+  required_sets <- as.integer(
+    phase_a$required_sets %||% .adaptive_phase_a_required_sets(state, controller = controller)
+  )
+  stop_pass_map <- phase_a$set_stop_pass_by_set %||% list()
+  ready_spokes <- as.integer(phase_a$ready_spokes %||% .adaptive_phase_a_ready_spokes(state, controller = controller))
+  ready_spokes <- ready_spokes[!is.na(ready_spokes)]
+  pending_run_sets <- integer()
+  if (nrow(status_tbl) > 0L) {
+    pending <- status_tbl$source %in% "run" & status_tbl$status != "ready"
+    pending_run_sets <- as.integer(sort(unique(as.integer(status_tbl$set_id[pending]))))
+    pending_run_sets <- pending_run_sets[!is.na(pending_run_sets)]
+  }
+  if (identical(explicit_phase, "phase_b") && length(ready_spokes) < 1L) {
+    hub_id <- as.integer(controller$hub_id %||% 1L)
+    if (nrow(status_tbl) > 0L) {
+      ready_sets <- as.integer(status_tbl$set_id[status_tbl$status == "ready"])
+      ready_spokes <- as.integer(sort(unique(setdiff(ready_sets, hub_id))))
+    } else {
+      ready_spokes <- as.integer(sort(unique(setdiff(as.integer(state$items$set_id), hub_id))))
+    }
+  }
   active_set <- if (length(pending_run_sets) > 0L) {
     as.integer(sort(unique(pending_run_sets))[[1L]])
   } else {
@@ -88,9 +136,18 @@
     }, logical(1L))])
   }
   active_spokes <- as.integer(setdiff(ready_spokes, stopped_spokes))
-  phase <- if (length(pending_run_sets) > 0L) {
+  strict_ready <- isTRUE(phase_a$strict_ready_for_phase_b %||% phase_a$ready_for_phase_b %||% FALSE)
+  has_stop_map <- length(stop_pass_map) > 0L
+  has_effective_stop_map <- isTRUE(has_stop_map) && any(vapply(stop_pass_map, isTRUE, logical(1L)))
+  if (isTRUE(has_effective_stop_map) && length(required_sets) > 0L && length(ready_spokes) > 0L) {
+    strict_ready <- strict_ready &&
+      all(vapply(as.character(required_sets), function(key) isTRUE(stop_pass_map[[key]]), logical(1L)))
+  }
+  phase <- if (identical(explicit_phase, "phase_b") && length(pending_run_sets) == 0L) {
+    "phase_b"
+  } else if (length(pending_run_sets) > 0L) {
     "phase_a"
-  } else if (length(ready_spokes) > 0L) {
+  } else if (length(ready_spokes) > 0L && isTRUE(strict_ready)) {
     "phase_b"
   } else {
     "phase_a"
@@ -700,6 +757,24 @@
   run_mode <- as.character(controller$run_mode %||% "within_set")
   is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
   ready_for_phase_b <- isTRUE(all(statuses$status == "ready"))
+  required_sets <- .adaptive_phase_a_required_sets(out, controller = controller)
+  set_stop_pass_map <- list()
+  for (idx in seq_len(nrow(statuses))) {
+    set_id <- as.integer(statuses$set_id[[idx]] %||% NA_integer_)
+    if (is.na(set_id)) {
+      next
+    }
+    set_key <- as.character(set_id)
+    artifact <- artifacts[[set_key]] %||% NULL
+    source <- statuses$source[[idx]] %||% NA_character_
+    set_stop_pass_map[[set_key]] <- isTRUE(.adaptive_phase_a_set_stop_passed(
+      artifact = artifact,
+      source = source,
+      controller = controller
+    ))
+  }
+  strict_ready_for_phase_b <- length(required_sets) > 0L &&
+    all(vapply(as.character(required_sets), function(key) isTRUE(set_stop_pass_map[[key]]), logical(1L)))
   ready_spokes <- integer()
   active_phase_a_set <- NA_integer_
   pending_run <- integer()
@@ -714,12 +789,13 @@
       integer()
     }
     pending_run <- as.integer(status_tbl$set_id[status_tbl$source == "run" & status_tbl$status != "ready"])
+    pending_run <- pending_run[!is.na(pending_run)]
     if (length(pending_run) > 0L) {
       active_phase_a_set <- as.integer(sort(pending_run)[[1L]])
     }
   }
   phase <- if (isTRUE(is_link_mode) && length(pending_run) == 0L &&
-    (isTRUE(ready_for_phase_b) || length(ready_spokes) > 0L)) {
+    isTRUE(strict_ready_for_phase_b) && length(ready_spokes) > 0L) {
     "phase_b"
   } else {
     "phase_a"
@@ -736,6 +812,9 @@
     set_status = statuses,
     artifacts = artifacts,
     ready_for_phase_b = ready_for_phase_b,
+    strict_ready_for_phase_b = as.logical(strict_ready_for_phase_b),
+    required_sets = as.integer(required_sets),
+    set_stop_pass_by_set = set_stop_pass_map,
     phase = phase,
     ready_spokes = as.integer(ready_spokes),
     active_phase_a_set = as.integer(active_phase_a_set),
@@ -743,6 +822,81 @@
     warm_start_scope_set = prior_warm_start_scope_set
   )
 
+  out
+}
+
+.adaptive_phase_a_finalize_if_ready <- function(state) {
+  out <- state
+  controller <- .adaptive_controller_resolve(out)
+  if (!as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(out)
+  }
+  phase_a <- out$linking$phase_a %||% list()
+  status_tbl <- tibble::as_tibble(phase_a$set_status %||% tibble::tibble())
+  artifacts <- phase_a$artifacts %||% list()
+  required_sets <- as.integer(phase_a$required_sets %||% .adaptive_phase_a_required_sets(out, controller = controller))
+  if (length(required_sets) < 1L) {
+    return(out)
+  }
+
+  set_stop_pass_map <- phase_a$set_stop_pass_by_set %||% list()
+  for (set_id in required_sets) {
+    set_key <- as.character(set_id)
+    source <- NA_character_
+    if (nrow(status_tbl) > 0L && set_id %in% as.integer(status_tbl$set_id)) {
+      source <- as.character(status_tbl$source[match(set_id, as.integer(status_tbl$set_id))] %||% NA_character_)
+    }
+    set_stop_pass_map[[set_key]] <- isTRUE(.adaptive_phase_a_set_stop_passed(
+      artifact = artifacts[[set_key]] %||% NULL,
+      source = source,
+      controller = controller
+    ))
+  }
+
+  strict_ready <- all(vapply(as.character(required_sets), function(key) {
+    isTRUE(set_stop_pass_map[[key]])
+  }, logical(1L)))
+  pending_run_sets <- integer()
+  if (nrow(status_tbl) > 0L) {
+    pending_ids <- as.integer(status_tbl$set_id[status_tbl$source == "run" & status_tbl$status != "ready"])
+    pending_ids <- pending_ids[!is.na(pending_ids)]
+    pending_run_sets <- as.integer(sort(unique(pending_ids)))
+  }
+
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  required_spokes <- setdiff(required_sets, hub_id)
+  ready_spokes <- as.integer(required_spokes[vapply(as.character(required_spokes), function(key) {
+    isTRUE(set_stop_pass_map[[key]])
+  }, logical(1L))])
+  phase <- if (length(pending_run_sets) == 0L &&
+    isTRUE(strict_ready) &&
+    length(ready_spokes) > 0L) {
+    "phase_b"
+  } else {
+    "phase_a"
+  }
+
+  prior_phase <- as.character(phase_a$phase %||% "phase_a")
+  phase_b_start <- as.integer(phase_a$phase_b_started_at_step %||% NA_integer_)
+  if (!identical(prior_phase, "phase_b") &&
+    identical(phase, "phase_b") &&
+    !is.finite(phase_b_start)) {
+    phase_b_start <- as.integer(nrow(out$step_log %||% tibble::tibble()) + 1L)
+  }
+
+  out$linking <- out$linking %||% list()
+  out$linking$phase_a <- utils::modifyList(
+    phase_a,
+    list(
+      strict_ready_for_phase_b = as.logical(strict_ready),
+      required_sets = as.integer(required_sets),
+      set_stop_pass_by_set = set_stop_pass_map,
+      ready_spokes = as.integer(sort(unique(ready_spokes))),
+      active_phase_a_set = if (length(pending_run_sets) > 0L) as.integer(pending_run_sets[[1L]]) else NA_integer_,
+      phase = as.character(phase),
+      phase_b_started_at_step = as.integer(phase_b_start)
+    )
+  )
   out
 }
 
@@ -755,6 +909,10 @@
   }
 
   phase_a <- state$linking$phase_a %||% list()
+  required_sets <- as.integer(
+    phase_a$required_sets %||% .adaptive_phase_a_required_sets(state, controller = controller)
+  )
+  stop_pass_map <- phase_a$set_stop_pass_by_set %||% list()
   status_tbl <- tibble::as_tibble(phase_a$set_status %||% tibble::tibble())
   if (nrow(status_tbl) > 0L && any(status_tbl$status %in% "failed")) {
     blocked <- status_tbl[status_tbl$status %in% "failed", , drop = FALSE]
@@ -774,6 +932,32 @@
   }
 
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  artifacts <- phase_a$artifacts %||% list()
+  missing_stop <- required_sets[!vapply(as.character(required_sets), function(key) {
+    if (!is.null(stop_pass_map[[key]])) {
+      return(isTRUE(stop_pass_map[[key]]))
+    }
+    set_id <- as.integer(key)
+    source <- NA_character_
+    if (nrow(status_tbl) > 0L && set_id %in% as.integer(status_tbl$set_id)) {
+      source <- as.character(status_tbl$source[match(set_id, as.integer(status_tbl$set_id))] %||% NA_character_)
+    }
+    isTRUE(.adaptive_phase_a_set_stop_passed(
+      artifact = artifacts[[key]] %||% NULL,
+      source = source,
+      controller = controller
+    ))
+  }, logical(1L))]
+  if (length(missing_stop) > 0L && identical(phase_ctx$phase, "phase_b")) {
+    rlang::abort(
+      paste0(
+        "Phase B linking cannot start until required Phase A stop-pass completion exists for required sets. ",
+        "missing stop-pass set_id: ",
+        paste(sort(unique(missing_stop)), collapse = ", "),
+        "."
+      )
+    )
+  }
   if (length(phase_ctx$pending_run_sets) > 0L) {
     return(invisible(state))
   }
@@ -786,7 +970,6 @@
       )
     }
     required_sets <- as.integer(unique(c(as.integer(controller$hub_id %||% 1L), phase_ctx$ready_spokes)))
-    artifacts <- phase_a$artifacts %||% list()
     missing_sets <- required_sets[!as.character(required_sets) %in% names(artifacts)]
     if (length(missing_sets) > 0L) {
       rlang::abort(
@@ -816,6 +999,20 @@
         set_id = as.integer(set_id),
         controller = controller
       )
+      source <- NA_character_
+      if (nrow(status_tbl) > 0L && set_id %in% as.integer(status_tbl$set_id)) {
+        source <- as.character(status_tbl$source[match(set_id, as.integer(status_tbl$set_id))] %||% NA_character_)
+      }
+      if (!isTRUE(.adaptive_phase_a_set_stop_passed(artifact = artifact, source = source, controller = controller))) {
+        rlang::abort(
+          paste0(
+            "Phase B linking cannot start until required Phase A stop-pass completion exists for required sets. ",
+            "set_id ",
+            as.integer(set_id),
+            " did not satisfy strict stop-pass criteria."
+          )
+        )
+      }
     }
     return(invisible(state))
   }

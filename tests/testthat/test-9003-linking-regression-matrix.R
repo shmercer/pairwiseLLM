@@ -202,3 +202,50 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
   expect_identical(status_mixed$source[match(1L, status_mixed$set_id)], "import")
   expect_identical(status_mixed$source[match(2L, status_mixed$set_id)], "run")
 })
+
+test_that("phase-a scoped lag eligibility resets by active set domain history", {
+  items <- matrix_two_set_items()
+  state <- adaptive_rank_start(
+    items,
+    seed = 121L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  ids <- as.character(state$item_ids)
+  draws <- matrix(
+    c(
+      0.8, 0.5, 0.2, -0.4, -0.6, -0.8,
+      0.9, 0.6, 0.1, -0.3, -0.5, -0.7,
+      0.7, 0.4, 0.3, -0.5, -0.7, -0.9,
+      1.0, 0.7, 0.0, -0.2, -0.4, -0.6
+    ),
+    nrow = 4,
+    byrow = TRUE
+  )
+  colnames(draws) <- ids
+  state$btl_fit <- make_test_btl_fit(ids, draws = draws, model_variant = "btl_e_b")
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("ready", "pending_finalization"),
+    validation_message = c("ok", "pending"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+
+  state$refit_meta$theta_mean_history <- list(
+    stats::setNames(c(0.5, 0.4, 0.3, -0.2, -0.3, -0.4), ids),
+    stats::setNames(c(0.55, 0.45, 0.35, -0.15, -0.25, -0.35), ids),
+    stats::setNames(c(0.6, 0.5, 0.4, -0.1, -0.2, -0.3), ids)
+  )
+  state$refit_meta$theta_mean_history_by_phase_a_set <- list(
+    `2` = list(
+      stats::setNames(c(0.6, 0.5, 0.4, -0.1, -0.2, -0.3), ids)
+    )
+  )
+
+  metrics <- pairwiseLLM:::compute_stop_metrics(
+    state = state,
+    config = list(stability_lag = 1L)
+  )
+  expect_true(isTRUE(metrics$lag_eligible))
+  expect_false(isTRUE(metrics$lag_eligible_scope))
+})

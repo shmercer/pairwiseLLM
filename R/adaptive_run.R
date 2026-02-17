@@ -729,6 +729,7 @@ adaptive_rank_start <- function(items,
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_phase_a_prepare(state)
+  state <- .adaptive_phase_a_finalize_if_ready(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = state$controller)
   state$controller$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = state$controller)
@@ -1108,6 +1109,7 @@ adaptive_rank_run_live <- function(state,
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_phase_a_prepare(state)
+  state <- .adaptive_phase_a_finalize_if_ready(state)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   .adaptive_phase_a_gate_or_abort(state)
   state <- .adaptive_link_sync_warm_start(state)
@@ -1129,6 +1131,7 @@ adaptive_rank_run_live <- function(state,
   remaining <- n_steps
   while (remaining > 0L) {
     state <- .adaptive_phase_a_prepare(state)
+    state <- .adaptive_phase_a_finalize_if_ready(state)
     .adaptive_phase_a_gate_or_abort(state)
     if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
       state$meta$stop_decision <- TRUE
@@ -1274,6 +1277,7 @@ adaptive_rank_run_live <- function(state,
       }
     }
     state <- .adaptive_phase_a_prepare(state)
+    state <- .adaptive_phase_a_finalize_if_ready(state)
     state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
     .adaptive_phase_a_gate_or_abort(state)
     if (!is.null(state$config$session_dir)) {

@@ -57,6 +57,7 @@ schema_step_log <- c(
   set_i = "integer",
   set_j = "integer",
   is_cross_set = "logical",
+  is_probe_step = "logical",
   link_spoke_id = "integer",
   run_mode = "character",
   link_stage = "character",
@@ -246,7 +247,11 @@ schema_link_stage_log <- c(
   active_item_count_hub = "integer",
   active_item_count_spoke = "integer",
   coverage_bins_used = "integer",
-  coverage_source = "character"
+  coverage_source = "character",
+  ppc_calibration_id = "character",
+  cross_set_ppc_brier_max_used = "double",
+  lag_domain_key = "character",
+  lag_domain_reset = "logical"
 )
 
 schema_item_step_log <- c(

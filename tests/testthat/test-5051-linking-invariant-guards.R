@@ -165,6 +165,29 @@ test_that("step row completeness guard validates structure and non-cross-set spo
   )
 })
 
+test_that("step row completeness accepts link_probe and enforces posterior orientation bounds", {
+  ok_probe <- list(
+    run_mode = "link_probe",
+    is_cross_set = TRUE,
+    set_i = 1L,
+    set_j = 2L,
+    link_spoke_id = 2L,
+    round_stage = "anchor_link",
+    link_stage = "anchor_link",
+    posterior_win_prob_pre = 0.6,
+    cross_set_utility_pre = 0.24,
+    utility_mode = "linking_cross_set_p_times_1_minus_p"
+  )
+  expect_silent(pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(ok_probe))
+
+  bad_prob <- ok_probe
+  bad_prob$posterior_win_prob_pre <- 1.2
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_prob),
+    "must be finite in \\[0,1\\]"
+  )
+})
+
 test_that("validate_judge_result and apply_step_update guard branches are exercised", {
   expect_identical(
     pairwiseLLM:::validate_judge_result("bad", "a", "b")$invalid_reason,
