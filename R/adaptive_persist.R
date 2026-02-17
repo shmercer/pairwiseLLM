@@ -118,6 +118,37 @@ read_log <- function(path) {
   log_tbl
 }
 
+.adaptive_align_log_schema_for_resume <- function(log_tbl, schema, name) {
+  if (!is.data.frame(log_tbl)) {
+    rlang::abort(paste0("`", name, "` must be a data frame."))
+  }
+  out <- tibble::as_tibble(log_tbl)
+  schema_names <- names(schema)
+  for (col in schema_names) {
+    if (!col %in% names(out)) {
+      out[[col]] <- rep(.adaptive_schema_typed_na(schema[[col]]), nrow(out))
+    }
+  }
+  out <- out[, schema_names, drop = FALSE]
+
+  for (col in schema_names) {
+    type <- schema[[col]]
+    value <- out[[col]]
+    if (identical(type, "POSIXct")) {
+      out[[col]] <- as.POSIXct(value, tz = "UTC")
+    } else if (identical(type, "integer")) {
+      out[[col]] <- as.integer(value)
+    } else if (identical(type, "double")) {
+      out[[col]] <- as.double(value)
+    } else if (identical(type, "logical")) {
+      out[[col]] <- as.logical(value)
+    } else if (identical(type, "character")) {
+      out[[col]] <- as.character(value)
+    }
+  }
+  out
+}
+
 .adaptive_item_log_current_schema <- function() {
   cols <- .adaptive_item_log_columns()
   int_cols <- c(
@@ -318,6 +349,7 @@ validate_session_dir <- function(session_dir) {
   } else {
     new_link_stage_log()
   }
+  link_stage_log <- .adaptive_align_log_schema_for_resume(link_stage_log, schema_link_stage_log, "link_stage_log")
   .adaptive_validate_log_schema(step_log, schema_step_log, "step_log")
   .adaptive_validate_log_schema(round_log, schema_round_log, "round_log")
   .adaptive_validate_log_schema(link_stage_log, schema_link_stage_log, "link_stage_log")
@@ -466,6 +498,11 @@ load_adaptive_session <- function(session_dir) {
   } else {
     new_link_stage_log()
   }
+
+  .adaptive_validate_log_schema(step_log, schema_step_log, "step_log")
+  .adaptive_validate_log_schema(round_log, schema_round_log, "round_log")
+  link_stage_log <- .adaptive_align_log_schema_for_resume(link_stage_log, schema_link_stage_log, "link_stage_log")
+  .adaptive_validate_log_schema(link_stage_log, schema_link_stage_log, "link_stage_log")
 
   state$step_log <- tibble::as_tibble(step_log)
   state$round_log <- tibble::as_tibble(round_log)

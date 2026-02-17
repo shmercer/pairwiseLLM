@@ -112,9 +112,12 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = TRUE,
+    transform_frozen = FALSE,
     n_pairs_cross_set_done = 1L,
     n_unique_cross_pairs_seen = 1L,
-    n_cross_edges_since_last_refit = 1L,
+    n_cross_edges_active_since_last_refit = 1L,
+    n_cross_edges_probe_since_last_refit = 0L,
+    n_cross_edges_total_since_last_refit = 1L,
     coverage_bins_used = 3L
   )
 

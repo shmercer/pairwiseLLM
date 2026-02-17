@@ -1048,7 +1048,7 @@ test_that("linking deterministic ordering falls back when linking utility is ful
   expect_identical(ord, c(2L, 3L, 1L))
 })
 
-test_that("stopped spokes are excluded from phase B routing/candidate generation", {
+test_that("frozen spokes respect per-refit probe cap in routing", {
   items <- tibble::tibble(
     item_id = as.character(1:9),
     set_id = c(rep(1L, 3L), rep(2L, 3L), rep(3L, 3L)),
@@ -1061,22 +1061,26 @@ test_that("stopped spokes are excluded from phase B routing/candidate generation
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
-  state$controller$link_stopped_by_spoke <- list(`2` = TRUE)
-
-  cand <- pairwiseLLM:::generate_stage_candidates_from_state(
-    state,
-    stage_name = "long_link",
-    fallback_name = "base",
-    C_max = 10000L,
-    seed = 1L
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$probe_pairs_per_refit_per_spoke <- 2L
+  state$step_log <- dplyr::bind_rows(
+    state$step_log,
+    tibble::tibble(
+      pair_id = c(1L, 2L),
+      step_id = c(1L, 2L),
+      is_cross_set = c(TRUE, TRUE),
+      link_spoke_id = c(2L, 2L),
+      run_mode = c("link_probe", "link_probe"),
+      is_probe_step = c(TRUE, TRUE)
+    )
   )
-  set_map <- stats::setNames(items$set_id, items$item_id)
-  set_i <- as.integer(set_map[cand$i])
-  set_j <- as.integer(set_map[cand$j])
-  spoke_set <- ifelse(set_i == 1L, set_j, set_i)
+  ranked <- pairwiseLLM:::.adaptive_link_ranked_spokes(
+    state,
+    controller = state$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
 
-  expect_true(nrow(cand) > 0L)
-  expect_true(all(spoke_set == 3L))
+  expect_identical(ranked, 3L)
 })
 
 test_that("independent spoke stage progress is computed per spoke without shared coupling", {
@@ -1151,7 +1155,38 @@ test_that("link stop rows update per-spoke stop state in controller metadata", {
   expect_true(isTRUE(out$controller$link_stopped_by_spoke[["2"]]))
   expect_true(isFALSE(out$controller$link_stopped_by_spoke[["3"]]))
   expect_identical(out$controller$link_stop_refit_id_by_spoke[["2"]], 1L)
-  expect_true(all(sort(phase_ctx$active_spokes) == 3L))
+  expect_true(isTRUE(out$controller$link_transform_frozen_by_spoke[["2"]]))
+  expect_identical(out$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 1L)
+  expect_true(all(sort(phase_ctx$active_spokes) == c(2L, 3L)))
+})
+
+test_that("frozen spoke cross-set commits are tagged as probe steps", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
+    global_item_id = paste0("g", seq_len(6L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 213L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
+  state$controller$link_transform_mode_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(
+    link_transform_mode = "shift_only",
+    delta_spoke_mean = 0,
+    delta_spoke_sd = 0.1
+  ))
+
+  out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
+  expect_true(isTRUE(row$is_cross_set[[1L]]))
+  expect_identical(as.character(row$run_mode[[1L]]), "link_probe")
+  expect_true(isTRUE(row$is_probe_step[[1L]]))
 })
 
 test_that("linking predictive utility applies signed position bias by (A,B) orientation", {

@@ -219,6 +219,11 @@
   stopped_map <- controller$link_stopped_by_spoke %||% list()
   stop_refit_map <- controller$link_stop_refit_id_by_spoke %||% list()
   stop_reason_map <- controller$link_stop_reason_by_spoke %||% list()
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
+  frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
+  frozen_refit_map <- controller$link_transform_frozen_refit_id_by_spoke %||% list()
+  mode_map <- controller$link_transform_mode_by_spoke %||% list()
 
   for (idx in seq_len(nrow(rows))) {
     spoke_id <- as.integer(rows$spoke_id[[idx]] %||% NA_integer_)
@@ -230,6 +235,32 @@
       stopped_map[[key]] <- TRUE
       stop_refit_map[[key]] <- as.integer(rows$refit_id[[idx]] %||% NA_integer_)
       stop_reason_map[[key]] <- "link_stop_pass"
+      if (!isTRUE(frozen_map[[key]])) {
+        delta_val <- if ("delta_spoke_mean" %in% names(rows)) {
+          as.double(rows$delta_spoke_mean[[idx]] %||% NA_real_)
+        } else {
+          NA_real_
+        }
+        log_alpha_val <- if ("log_alpha_spoke_mean" %in% names(rows)) {
+          as.double(rows$log_alpha_spoke_mean[[idx]] %||% NA_real_)
+        } else {
+          NA_real_
+        }
+        mode_val <- if ("link_transform_mode" %in% names(rows)) {
+          as.character(rows$link_transform_mode[[idx]] %||% NA_character_)
+        } else {
+          NA_character_
+        }
+        frozen_map[[key]] <- TRUE
+        frozen_refit_map[[key]] <- as.integer(rows$refit_id[[idx]] %||% NA_integer_)
+        frozen_delta_map[[key]] <- delta_val
+        frozen_log_alpha_map[[key]] <- log_alpha_val
+        if (is.character(mode_val) && length(mode_val) == 1L && !is.na(mode_val) && mode_val != "") {
+          mode_map[[key]] <- mode_val
+        } else {
+          mode_map[[key]] <- as.character(mode_map[[key]] %||% "shift_only")
+        }
+      }
     } else if (is.null(stopped_map[[key]])) {
       stopped_map[[key]] <- FALSE
     }
@@ -238,6 +269,11 @@
   controller$link_stopped_by_spoke <- stopped_map
   controller$link_stop_refit_id_by_spoke <- stop_refit_map
   controller$link_stop_reason_by_spoke <- stop_reason_map
+  controller$link_transform_frozen_by_spoke <- frozen_map
+  controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
+  controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
+  controller$link_transform_frozen_refit_id_by_spoke <- frozen_refit_map
+  controller$link_transform_mode_by_spoke <- mode_map
   out$controller <- controller
   out
 }
@@ -245,18 +281,7 @@
 #' @keywords internal
 #' @noRd
 .adaptive_link_all_spokes_stopped <- function(state) {
-  controller <- .adaptive_controller_resolve(state)
-  run_mode <- as.character(controller$run_mode %||% "within_set")
-  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
-    return(FALSE)
-  }
-  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
-  if (!identical(phase_ctx$phase, "phase_b")) {
-    return(FALSE)
-  }
-  ready_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
-  active_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
-  length(ready_spokes) > 0L && length(active_spokes) < 1L
+  FALSE
 }
 
 #' @keywords internal
@@ -660,7 +685,8 @@
 #'   inputs and valid hub assignment.}
 #'   \item{`link_identified_reliability_min`, `link_stop_reliability_min`,
 #'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
-#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_mae_max`,
+#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_brier_max`,
+#'   `ppc_calibration_id`, `probe_pairs_per_refit_per_spoke`,
 #'   `link_transform_escalation_refits_required`,
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,
@@ -829,7 +855,8 @@ adaptive_rank_start <- function(items,
 #'   `hub_lock_kappa`,
 #'   `link_identified_reliability_min`, `link_stop_reliability_min`,
 #'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
-#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_mae_max`,
+#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_brier_max`,
+#'   `ppc_calibration_id`, `probe_pairs_per_refit_per_spoke`,
 #'   `link_transform_escalation_refits_required`,
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,

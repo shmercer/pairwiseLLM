@@ -220,6 +220,30 @@
   if (length(spoke_ids) < 1L) {
     return(integer())
   }
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  probe_cap <- as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L)
+  probe_cap <- max(0L, probe_cap)
+  if (nrow(step_log) > 0L &&
+    all(c("pair_id", "step_id", "is_cross_set", "link_spoke_id", "run_mode", "is_probe_step") %in% names(step_log))) {
+    keep_spokes <- vapply(spoke_ids, function(spoke_id) {
+      key <- as.character(spoke_id)
+      if (!isTRUE(frozen_map[[key]])) {
+        return(TRUE)
+      }
+      probe_rows <- !is.na(step_log$pair_id) &
+        as.integer(step_log$step_id) > last_refit_step &
+        step_log$is_cross_set %in% TRUE &
+        as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
+        (as.character(step_log$run_mode) == "link_probe" | step_log$is_probe_step %in% TRUE)
+      sum(probe_rows, na.rm = TRUE) < probe_cap
+    }, logical(1L))
+    spoke_ids <- as.integer(spoke_ids[keep_spokes])
+    if (length(spoke_ids) < 1L) {
+      return(integer())
+    }
+  }
   mode <- as.character(controller$run_mode %||% "within_set")
   if (!identical(mode, "link_multi_spoke")) {
     current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)

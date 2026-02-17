@@ -1298,7 +1298,7 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     )
 
     cross_done <- sum(as.integer(link_stage_rows$n_pairs_cross_set_done %||% 0L), na.rm = TRUE)
-    cross_new <- sum(as.integer(link_stage_rows$n_cross_edges_since_last_refit %||% 0L), na.rm = TRUE)
+    cross_new <- sum(as.integer(link_stage_rows$n_cross_edges_total_since_last_refit %||% 0L), na.rm = TRUE)
     cross_unique <- sum(as.integer(link_stage_rows$n_unique_cross_pairs_seen %||% 0L), na.rm = TRUE)
     link_block <- c(
       link_block,

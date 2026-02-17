@@ -550,7 +550,7 @@ test_that("independent mode ignores concurrent allocation controls under seeded 
   expect_equal(out_base$step_log[, cols, drop = FALSE], out_tuned$step_log[, cols, drop = FALSE])
 })
 
-test_that("all spokes stopped exits linking run cleanly", {
+test_that("linking run no longer short-circuits via all-spokes-stopped gate", {
   withr::local_seed(20260213)
 
   items <- make_linking_items_two_set()
@@ -558,7 +558,6 @@ test_that("all spokes stopped exits linking run cleanly", {
   state$warm_start_done <- TRUE
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
   artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
-  state$controller$link_stopped_by_spoke <- list(`2` = TRUE)
   judge <- make_score_judge(c(
     h1 = -0.5, h2 = 0.0, h3 = 0.7,
     s21 = -0.2, s22 = 0.3, s23 = 1.1
@@ -578,9 +577,8 @@ test_that("all spokes stopped exits linking run cleanly", {
     progress = "none"
   )
 
-  expect_true(isTRUE(out$meta$stop_decision))
-  expect_identical(out$meta$stop_reason, "all_spokes_stopped")
-  expect_identical(nrow(out$step_log), 0L)
+  expect_true(nrow(out$step_log) >= 1L)
+  expect_false(identical(out$meta$stop_reason, "all_spokes_stopped"))
 })
 
 test_that("phase_b aborts when required sets are ready but strict phase_a stop-pass is missing", {

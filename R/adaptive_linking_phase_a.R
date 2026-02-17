@@ -135,7 +135,9 @@
       isTRUE(stopped_map[[key]])
     }, logical(1L))])
   }
-  active_spokes <- as.integer(setdiff(ready_spokes, stopped_spokes))
+  # In linking Variant 2, spokes with link_stop_pass stay eligible for
+  # probe-only sampling until global stop.
+  active_spokes <- as.integer(ready_spokes)
   strict_ready <- isTRUE(phase_a$strict_ready_for_phase_b %||% phase_a$ready_for_phase_b %||% FALSE)
   has_stop_map <- length(stop_pass_map) > 0L
   has_effective_stop_map <- isTRUE(has_stop_map) && any(vapply(stop_pass_map, isTRUE, logical(1L)))

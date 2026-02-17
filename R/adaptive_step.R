@@ -600,6 +600,10 @@ run_one_step <- function(state, judge, ...) {
       link_spoke_id <- selected_spoke_id
     }
   }
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  if (isTRUE(is_cross_set) && !is.na(link_spoke_id) && isTRUE(frozen_map[[as.character(link_spoke_id)]])) {
+    run_mode <- "link_probe"
+  }
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   spoke_key <- as.character(link_spoke_id)
   spoke_stats <- if (!is.na(link_spoke_id)) link_stats[[spoke_key]] %||% list() else list()
@@ -614,7 +618,7 @@ run_one_step <- function(state, judge, ...) {
     NA_character_
   }
   is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe")
-  is_probe_step <- if (isTRUE(is_cross_set) && identical(run_mode, "link_probe")) TRUE else NA
+  is_probe_step <- if (isTRUE(is_cross_set) && identical(run_mode, "link_probe")) TRUE else FALSE
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode) &&
     identical(utility_mode, "linking_d_optimal")) {
