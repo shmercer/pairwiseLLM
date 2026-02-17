@@ -35,7 +35,7 @@ test_that("phase A artifacts round-trip through persistence", {
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
       set_id = c(1L, 2L),
-      source = c("run", "run"),
+      source = c("import", "import"),
       status = c("ready", "ready"),
       validation_message = c("built_in_run", "built_in_run"),
       artifact_path = c(NA_character_, NA_character_)
@@ -530,7 +530,7 @@ test_that("resume preserves persisted phase A artifacts for linking gate", {
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
       set_id = c(1L, 2L),
-      source = c("run", "run"),
+      source = c("import", "import"),
       status = c("ready", "ready"),
       validation_message = c("built_in_run", "built_in_run"),
       artifact_path = c(NA_character_, NA_character_)
@@ -788,6 +788,9 @@ test_that("phase B gate aborts when hub/spoke artifacts are missing", {
     ),
     artifacts = list(`1` = list(set_id = 1L)),
     ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = c(`1` = TRUE, `2` = TRUE),
     phase = "phase_b",
     ready_spokes = 2L,
     active_phase_a_set = NA_integer_
@@ -945,13 +948,16 @@ test_that("phase A validation and gate exercise failure branches for edge comple
   state_link$linking$phase_a <- list(
     set_status = tibble::tibble(
       set_id = c(1L, 2L),
-      source = c("run", "run"),
+      source = c("import", "import"),
       status = c("ready", "ready"),
-      validation_message = c("ok", "ok"),
+      validation_message = c("imported", "imported"),
       artifact_path = c(NA_character_, NA_character_)
     ),
     artifacts = list(`1` = pairwiseLLM:::.adaptive_phase_a_build_artifact(state_link, set_id = 1L), `2` = NULL),
     ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = c(`1` = TRUE, `2` = TRUE),
     phase = "phase_b"
   )
   state_link$linking$phase_a$artifacts[["1"]]$quality_gate_accepted <- TRUE

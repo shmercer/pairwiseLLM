@@ -582,3 +582,35 @@ test_that("all spokes stopped exits linking run cleanly", {
   expect_identical(out$meta$stop_reason, "all_spokes_stopped")
   expect_identical(nrow(out$step_log), 0L)
 })
+
+test_that("phase_b aborts when required sets are ready but strict phase_a stop-pass is missing", {
+  withr::local_seed(20260217)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 41L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1.1)
+  for (nm in names(artifacts)) {
+    artifacts[[nm]]$quality_gate_accepted <- FALSE
+    artifacts[[nm]]$diagnostics$diagnostics_pass <- FALSE
+  }
+
+  expect_error(
+    adaptive_rank_run_live(
+      state = state,
+      judge = make_deterministic_judge("i_wins"),
+      n_steps = 3L,
+      fit_fn = make_deterministic_fit_fn(as.character(state$item_ids))$fit_fn,
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        phase_a_mode = "import",
+        phase_a_artifacts = artifacts
+      ),
+      btl_config = list(refit_pairs_target = 1L),
+      progress = "none"
+    ),
+    "Phase B linking cannot start"
+  )
+})

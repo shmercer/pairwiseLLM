@@ -1841,3 +1841,41 @@ test_that("linking MCMC sampling and refit seed are stable under fixed inputs", 
   expect_true(seed_large_a >= 1L)
   expect_identical(seed_large_a, seed_large_b)
 })
+
+test_that("committed result orientation remains Y=1 => A wins in refit inputs", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "h1", "s21", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  rows <- pairwiseLLM:::.adaptive_results_from_step_log(state)
+  expect_identical(as.character(rows$better_id[[1L]]), as.character(rows$A_id[[1L]]))
+  expect_identical(as.integer(rows$winner_pos[[1L]]), 1L)
+  expect_identical(as.character(rows$better_id[[2L]]), as.character(rows$B_id[[2L]]))
+  expect_identical(as.integer(rows$winner_pos[[2L]]), 2L)
+})
+
+test_that("linking lag domain metadata resets once per spoke domain and persists in stage rows", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+
+  s1 <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  stats1 <- s1$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(stats1$lag_domain_reset))
+  expect_identical(stats1$lag_domain_key, "phase_b_spoke_2")
+  expect_false(isTRUE(stats1$lag_eligible))
+
+  rows1 <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = s1,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row1 <- rows1[rows1$spoke_id == 2L, , drop = FALSE]
+  expect_true(isTRUE(row1$lag_domain_reset[[1L]]))
+  expect_identical(as.character(row1$lag_domain_key[[1L]]), "phase_b_spoke_2")
+
+  s1$link_stage_log <- pairwiseLLM:::append_link_stage_log(s1$link_stage_log, rows1)
+  s2 <- pairwiseLLM:::.adaptive_linking_refit_update_state(s1, list(last_refit_step = 1L))
+  stats2 <- s2$controller$link_refit_stats_by_spoke[["2"]]
+  expect_false(isTRUE(stats2$lag_domain_reset))
+  expect_identical(stats2$lag_domain_key, "phase_b_spoke_2")
+})

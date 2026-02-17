@@ -131,6 +131,8 @@
     link_stopped_by_spoke = list(),
     link_stop_refit_id_by_spoke = list(),
     link_stop_reason_by_spoke = list(),
+    link_lag_domain_key_by_spoke = list(),
+    link_lag_domain_reset_refit_id_by_spoke = list(),
     link_stage_coverage_bins_used = list(),
     link_stage_coverage_source = list()
   )
@@ -457,6 +459,9 @@
       set_status = .adaptive_phase_a_empty_state(set_ids),
       artifacts = list(),
       ready_for_phase_b = FALSE,
+      strict_ready_for_phase_b = FALSE,
+      required_sets = as.integer(sort(unique(set_ids))),
+      set_stop_pass_by_set = list(),
       phase = "phase_a",
       phase_b_started_at_step = NA_integer_
     )
@@ -723,6 +728,9 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         last_refit_step_by_phase_a_set = list(),
         last_refit_round_id = 0L,
         theta_mean_history = list(),
+        theta_mean_history_by_phase_a_set = list(),
+        phase_a_lag_domain_last_set_id = NA_integer_,
+        phase_a_lag_domain_reset_refit_id_by_set = list(),
         near_stop = FALSE,
         link_stage_shortfalls_by_refit_spoke = list(),
         link_stage_exhausted_by_refit_spoke = list(),
@@ -746,6 +754,9 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
           set_status = .adaptive_phase_a_empty_state(unique(set_ids)),
           artifacts = list(),
           ready_for_phase_b = FALSE,
+          strict_ready_for_phase_b = FALSE,
+          required_sets = as.integer(sort(unique(set_ids))),
+          set_stop_pass_by_set = list(),
           phase = "phase_a",
           phase_b_started_at_step = NA_integer_
         )

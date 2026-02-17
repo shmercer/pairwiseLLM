@@ -179,6 +179,12 @@
       return(tibble::tibble())
     }
   }
+  y_vals <- as.integer(step_log$Y)
+  if (any(is.na(y_vals) | !y_vals %in% c(0L, 1L))) {
+    rlang::abort(
+      "Adaptive refit invariant failed: committed step rows must encode Y in {0,1} with Y=1 meaning A wins."
+    )
+  }
   winner_pos <- ifelse(step_log$Y == 1L, 1L, 2L)
   better_id <- ifelse(step_log$Y == 1L, A_id, B_id)
   controller <- .adaptive_controller_resolve(state)
@@ -1771,6 +1777,8 @@
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   coverage_bins_map <- controller$link_stage_coverage_bins_used %||% list()
   coverage_source_map <- controller$link_stage_coverage_source %||% list()
+  lag_domain_key_map <- controller$link_lag_domain_key_by_spoke %||% list()
+  lag_domain_reset_refit_map <- controller$link_lag_domain_reset_refit_id_by_spoke %||% list()
   last_step <- as.integer(refit_context$last_refit_step %||% 0L)
   current_refit_id <- as.integer(nrow(out$round_log) + 1L)
   link_stage_hist <- tibble::as_tibble(out$link_stage_log %||% new_link_stage_log())
@@ -1913,14 +1921,24 @@
         }
         bad_refits[[key]] <- bad
       }
-      if (identical(transform_mode, "shift_scale") &&
+    if (identical(transform_mode, "shift_scale") &&
         isTRUE(controller$link_transform_escalation_is_one_way %||% TRUE)) {
-        mode_map[[key]] <- "shift_scale"
-      }
+      mode_map[[key]] <- "shift_scale"
+    }
+  }
+
+    lag_domain_key <- paste0("phase_b_spoke_", as.integer(spoke_id))
+    lag_domain_reset <- !identical(
+      as.character(lag_domain_key_map[[key]] %||% NA_character_),
+      as.character(lag_domain_key)
+    )
+    lag_domain_key_map[[key]] <- as.character(lag_domain_key)
+    if (isTRUE(lag_domain_reset)) {
+      lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
     }
 
     lag <- as.integer(out$config$btl_config$stability_lag %||% 2L)
-    lag_eligible <- !is.na(lag) && lag >= 1L && current_refit_id > lag
+    lag_eligible <- !isTRUE(lag_domain_reset) && !is.na(lag) && lag >= 1L && current_refit_id > lag
     lag_refit_id <- if (isTRUE(lag_eligible)) as.integer(current_refit_id - lag) else NA_integer_
     lag_row <- tibble::tibble()
     if (isTRUE(lag_eligible) && nrow(link_stage_hist) > 0L) {
@@ -2055,7 +2073,9 @@
         is.finite(ts_btl_rank_active) &&
           ts_btl_rank_active >= as.double(controller$link_rank_corr_min %||% 0.90)
       ),
-      lag_eligible = as.logical(rank_stability$lag_eligible %||% FALSE),
+      lag_domain_key = as.character(lag_domain_key),
+      lag_domain_reset = as.logical(lag_domain_reset),
+      lag_eligible = as.logical(lag_eligible),
       rank_stability_lagged = as.double(rank_stability$rho_rank_lagged %||% NA_real_),
       rank_stability_pass = as.logical(rank_stability$rho_rank_lagged_pass %||% FALSE),
       link_identified = as.logical(link_identified),
@@ -2104,6 +2124,8 @@
   controller$link_transform_last_delta_by_spoke <- last_delta
   controller$link_transform_last_log_alpha_by_spoke <- last_log_alpha
   controller$linking_identified_by_spoke <- link_identified_map
+  controller$link_lag_domain_key_by_spoke <- lag_domain_key_map
+  controller$link_lag_domain_reset_refit_id_by_spoke <- lag_domain_reset_refit_map
   controller$linking_identified <- any(unlist(link_identified_map), na.rm = TRUE)
   out$controller <- controller
   out
@@ -2332,7 +2354,11 @@
       active_item_count_hub = as.integer(stats_row$active_item_count_hub %||% NA_integer_),
       active_item_count_spoke = as.integer(stats_row$active_item_count_spoke %||% NA_integer_),
       coverage_bins_used = as.integer(stats_row$coverage_bins_used %||% coverage$bins_used %||% NA_integer_),
-      coverage_source = as.character(stats_row$coverage_source %||% coverage$source %||% NA_character_)
+      coverage_source = as.character(stats_row$coverage_source %||% coverage$source %||% NA_character_),
+      ppc_calibration_id = as.character(stats_row$ppc_calibration_id %||% NA_character_),
+      cross_set_ppc_brier_max_used = as.double(stats_row$cross_set_ppc_brier_max_used %||% NA_real_),
+      lag_domain_key = as.character(stats_row$lag_domain_key %||% NA_character_),
+      lag_domain_reset = as.logical(stats_row$lag_domain_reset %||% NA)
     )
   }
 
@@ -2854,6 +2880,20 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
   theta_mean <- .adaptive_btl_fit_theta_mean(fit)
   history <- state$refit_meta$theta_mean_history %||% list()
   state$refit_meta$theta_mean_history <- c(history, list(theta_mean))
+  if (!is.na(scope_set_id)) {
+    key <- as.character(scope_set_id)
+    hist_by_set <- state$refit_meta$theta_mean_history_by_phase_a_set %||% list()
+    set_history <- hist_by_set[[key]] %||% list()
+    hist_by_set[[key]] <- c(set_history, list(theta_mean))
+    state$refit_meta$theta_mean_history_by_phase_a_set <- hist_by_set
+    prior_set <- as.integer(state$refit_meta$phase_a_lag_domain_last_set_id %||% NA_integer_)
+    state$refit_meta$phase_a_lag_domain_last_set_id <- as.integer(scope_set_id)
+    if (!identical(prior_set, as.integer(scope_set_id))) {
+      reset_map <- state$refit_meta$phase_a_lag_domain_reset_refit_id_by_set %||% list()
+      reset_map[[key]] <- as.integer(nrow(state$round_log) + 1L)
+      state$refit_meta$phase_a_lag_domain_reset_refit_id_by_set <- reset_map
+    }
+  }
 
   refit_context <- .adaptive_btl_refit_context(state, last_refit_M_done, last_refit_step)
 
@@ -2952,6 +2992,17 @@ compute_stop_metrics <- function(state, config) {
 
   history <- state$refit_meta$theta_mean_history %||% list()
   current_refit <- length(history)
+  use_scope_history <- identical(as.character(scope$phase_scope %||% "global"), "phase_a_set") &&
+    is.finite(as.integer(scope$phase_scope_set_id %||% NA_integer_))
+  history_scope <- history
+  if (isTRUE(use_scope_history)) {
+    scope_key <- as.character(as.integer(scope$phase_scope_set_id))
+    scoped_history <- state$refit_meta$theta_mean_history_by_phase_a_set[[scope_key]] %||% list()
+    if (length(scoped_history) > 0L) {
+      history_scope <- scoped_history
+    }
+  }
+  current_refit_scope <- length(history_scope)
   stability_lag <- as.integer(config$stability_lag)
   lag_eligible <- !is.na(stability_lag) &&
     stability_lag >= 1L &&
@@ -2970,7 +3021,9 @@ compute_stop_metrics <- function(state, config) {
   delta_sd_theta_pass_scope <- NA
   rho_rank_scope <- NA_real_
   rho_rank_pass_scope <- NA
-  lag_eligible_scope <- as.logical(lag_eligible)
+  lag_eligible_scope <- !is.na(stability_lag) &&
+    stability_lag >= 1L &&
+    current_refit_scope > stability_lag
 
   if (isTRUE(lag_eligible)) {
     lag_idx <- current_refit - stability_lag
@@ -2992,12 +3045,17 @@ compute_stop_metrics <- function(state, config) {
     }
 
     lag_scope <- NULL
-    if (!is.null(names(lag_theta)) && all(scope_ids %in% names(lag_theta))) {
-      lag_scope <- as.double(lag_theta[scope_ids])
-    } else if (length(lag_theta) == length(ids) && length(scope_ids) >= 2L) {
-      names(lag_theta) <- ids
-      if (all(scope_ids %in% names(lag_theta))) {
-        lag_scope <- as.double(lag_theta[scope_ids])
+    if (isTRUE(lag_eligible_scope)) {
+      lag_scope_idx <- current_refit_scope - stability_lag
+      lag_scope_theta <- history_scope[[lag_scope_idx]] %||% NULL
+      lag_scope_theta <- as.double(lag_scope_theta)
+      if (!is.null(names(lag_scope_theta)) && all(scope_ids %in% names(lag_scope_theta))) {
+        lag_scope <- as.double(lag_scope_theta[scope_ids])
+      } else if (length(lag_scope_theta) == length(ids) && length(scope_ids) >= 2L) {
+        names(lag_scope_theta) <- ids
+        if (all(scope_ids %in% names(lag_scope_theta))) {
+          lag_scope <- as.double(lag_scope_theta[scope_ids])
+        }
       }
     }
     if (!is.null(lag_scope) && length(lag_scope) == length(theta_mean_scope) && length(lag_scope) >= 2L) {
