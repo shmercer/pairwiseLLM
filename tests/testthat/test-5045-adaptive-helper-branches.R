@@ -650,6 +650,11 @@ test_that("adaptive state and trueskill validators cover additional edge branche
     set_ids = c(1L, 2L, 3L)
   )
   expect_true(isTRUE(cfg_spoke_spoke$allow_spoke_spoke_cross_set))
+  cfg_calibration_null <- pairwiseLLM:::.adaptive_validate_controller_config(
+    list(ppc_calibration_id = NULL),
+    5L
+  )
+  expect_false("ppc_calibration_id" %in% names(cfg_calibration_null))
 
   resolved_num <- pairwiseLLM:::.adaptive_controller_resolve(5L)
   expect_true(is.list(resolved_num))

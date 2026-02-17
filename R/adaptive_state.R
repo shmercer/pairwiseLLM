@@ -102,9 +102,11 @@
     delta_change_max = 0.05,
     log_alpha_sd_max = 0.10,
     log_alpha_change_max = 0.05,
-    cross_set_ppc_mae_max = 0.07,
+    cross_set_ppc_brier_max = 0.20,
+    ppc_calibration_id = "default_p95_brier_active",
     link_transform_escalation_refits_required = 2L,
     link_transform_escalation_is_one_way = TRUE,
+    probe_pairs_per_refit_per_spoke = 2L,
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
     allow_spoke_spoke_cross_set = FALSE,
@@ -127,6 +129,10 @@
     link_transform_bad_refits_by_spoke = list(),
     link_transform_last_delta_by_spoke = list(),
     link_transform_last_log_alpha_by_spoke = list(),
+    link_transform_frozen_by_spoke = list(),
+    link_transform_frozen_delta_by_spoke = list(),
+    link_transform_frozen_log_alpha_by_spoke = list(),
+    link_transform_frozen_refit_id_by_spoke = list(),
     link_refit_stats_by_spoke = list(),
     link_d_opt_it_by_spoke = list(),
     link_stopped_by_spoke = list(),
@@ -171,9 +177,11 @@
     "delta_change_max",
     "log_alpha_sd_max",
     "log_alpha_change_max",
-    "cross_set_ppc_mae_max",
+    "cross_set_ppc_brier_max",
+    "ppc_calibration_id",
     "link_transform_escalation_refits_required",
     "link_transform_escalation_is_one_way",
+    "probe_pairs_per_refit_per_spoke",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
     "allow_spoke_spoke_cross_set",
@@ -314,13 +322,27 @@
   out$delta_change_max <- read_double("delta_change_max", 0, Inf)
   out$log_alpha_sd_max <- read_double("log_alpha_sd_max", 0, Inf)
   out$log_alpha_change_max <- read_double("log_alpha_change_max", 0, Inf)
-  out$cross_set_ppc_mae_max <- read_double("cross_set_ppc_mae_max", 0, 1)
+  out$cross_set_ppc_brier_max <- read_double("cross_set_ppc_brier_max", 0, 1)
+  if ("ppc_calibration_id" %in% names(out)) {
+    if (is.null(out$ppc_calibration_id)) {
+      # Treat explicit NULL as "use default" by removing the override key.
+      out[["ppc_calibration_id"]] <- NULL
+    } else if (!is.character(out$ppc_calibration_id) ||
+      length(out$ppc_calibration_id) != 1L ||
+      is.na(out$ppc_calibration_id) ||
+      out$ppc_calibration_id == "") {
+      rlang::abort("`adaptive_config$ppc_calibration_id` must be a single string value.")
+    } else {
+      out$ppc_calibration_id <- as.character(out$ppc_calibration_id)
+    }
+  }
   out$link_transform_escalation_refits_required <- read_integer(
     "link_transform_escalation_refits_required",
     1L,
     Inf
   )
   out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
+  out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
   out$spoke_quantile_coverage_bins <- read_integer("spoke_quantile_coverage_bins", 1L, Inf)
   out$spoke_quantile_coverage_min_per_bin_per_refit <- read_integer(
     "spoke_quantile_coverage_min_per_bin_per_refit",

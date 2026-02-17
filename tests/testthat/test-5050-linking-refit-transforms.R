@@ -72,7 +72,9 @@ append_cross_step <- function(state, step_id, A_id, B_id, Y, spoke_id) {
       set_i = as.integer(state$set_ids[[A]]),
       set_j = as.integer(state$set_ids[[B]]),
       is_cross_set = TRUE,
-      link_spoke_id = as.integer(spoke_id)
+      link_spoke_id = as.integer(spoke_id),
+      run_mode = "link_multi_spoke",
+      is_probe_step = FALSE
     )
   )
   state
@@ -271,7 +273,7 @@ test_that("soft-lock joint refit keeps Phase A prior center and uses current the
         log_alpha_sd = NA_real_
       )
     },
-    .adaptive_link_ppc_mae_cross = function(...) 0,
+    .adaptive_link_ppc_brier_cross = function(...) 0,
     .package = "pairwiseLLM",
     {
       pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
@@ -294,7 +296,7 @@ test_that("auto escalation triggers after consecutive PPC failures and is one-wa
     list(
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
-      cross_set_ppc_mae_max = 0.01,
+      cross_set_ppc_brier_max = 0.01,
       link_transform_escalation_refits_required = 2L,
       link_transform_escalation_is_one_way = TRUE
     )
@@ -321,7 +323,7 @@ test_that("auto escalation refits shift_scale parameters in the same refit", {
     list(
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
-      cross_set_ppc_mae_max = 0.01,
+      cross_set_ppc_brier_max = 0.01,
       link_transform_escalation_refits_required = 1L
     )
   )
@@ -336,7 +338,7 @@ test_that("auto escalation refits shift_scale parameters in the same refit", {
       }
       list(delta_mean = 0.1, delta_sd = 0.05, log_alpha_mean = NA_real_, log_alpha_sd = NA_real_)
     },
-    .adaptive_link_ppc_mae_cross = function(...) 0.5,
+    .adaptive_link_ppc_brier_cross = function(...) 0.5,
     .package = "pairwiseLLM",
     {
       pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
@@ -355,18 +357,18 @@ test_that("auto escalation streak is preserved across NA PPC windows", {
     list(
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
-      cross_set_ppc_mae_max = 0.01,
+      cross_set_ppc_brier_max = 0.01,
       link_transform_escalation_refits_required = 2L
     )
   )
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
 
-  ppc_vals <- c(0.5, NA_real_, 0.5)
-  ppc_idx <- 0L
   out <- testthat::with_mocked_bindings(
-    .adaptive_link_ppc_mae_cross = function(...) {
-      ppc_idx <<- ppc_idx + 1L
-      ppc_vals[[min(ppc_idx, length(ppc_vals))]]
+    .adaptive_link_ppc_brier_cross = function(cross_edges, ...) {
+      if (nrow(tibble::as_tibble(cross_edges)) < 1L) {
+        return(NA_real_)
+      }
+      0.5
     },
     .package = "pairwiseLLM",
     {
@@ -377,6 +379,93 @@ test_that("auto escalation streak is preserved across NA PPC windows", {
   )
 
   expect_identical(out$controller$link_transform_mode_by_spoke[["2"]], "shift_scale")
+})
+
+test_that("freeze transition is one-way and refit reuses frozen transform parameters", {
+  state <- make_linking_refit_state(
+    list(
+      link_transform_mode = "shift_only",
+      link_refit_mode = "shift_only"
+    )
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state$linking$phase_a$ready_spokes <- 2L
+  state <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    state,
+    tibble::tibble(
+      refit_id = 1L,
+      spoke_id = 2L,
+      link_stop_pass = TRUE,
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0.17,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform = function(...) {
+      rlang::abort("fit should not run for frozen spoke")
+    },
+    .adaptive_link_ppc_brier_cross = function(...) 0.12,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(out$controller$link_transform_frozen_by_spoke[["2"]]))
+  expect_identical(out$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 1L)
+  expect_true(isTRUE(stats$transform_frozen))
+  expect_equal(stats$delta_spoke_mean, 0.17, tolerance = 1e-12)
+})
+
+test_that("escalation path ignores combined/probe Brier when active window is empty", {
+  state <- make_linking_refit_state(
+    list(
+      link_transform_mode = "auto",
+      link_refit_mode = "shift_only",
+      cross_set_ppc_brier_max = 0.01,
+      link_transform_escalation_refits_required = 1L
+    )
+  )
+  ids <- as.character(state$item_ids)
+  A <- match("s21", ids)
+  B <- match("h1", ids)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC") + 1L,
+      pair_id = 1L,
+      i = A,
+      j = B,
+      A = A,
+      B = B,
+      Y = 1L,
+      set_i = as.integer(state$set_ids[[A]]),
+      set_j = as.integer(state$set_ids[[B]]),
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe",
+      is_probe_step = TRUE
+    )
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_ppc_brier_cross = function(cross_edges, ...) {
+      if (nrow(tibble::as_tibble(cross_edges)) < 1L) {
+        return(NA_real_)
+      }
+      0.9
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+    }
+  )
+
+  expect_null(out$controller$link_transform_mode_by_spoke[["2"]])
 })
 
 test_that("judge parameter mode controls linking judge scope in fit contract", {

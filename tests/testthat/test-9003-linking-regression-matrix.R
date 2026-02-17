@@ -249,3 +249,40 @@ test_that("phase-a scoped lag eligibility resets by active set domain history", 
   expect_true(isTRUE(metrics$lag_eligible))
   expect_false(isTRUE(metrics$lag_eligible_scope))
 })
+
+test_that("freeze state in regression matrix remains one-way across subsequent updates", {
+  items <- matrix_two_set_items()
+  state <- adaptive_rank_start(
+    items,
+    seed = 141L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import")
+  )
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_spokes <- 2L
+
+  frozen_once <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    state,
+    tibble::tibble(
+      refit_id = 1L,
+      spoke_id = 2L,
+      link_stop_pass = TRUE,
+      link_transform_mode = "shift_only",
+      delta_spoke_mean = 0.22,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+  frozen_twice <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    frozen_once,
+    tibble::tibble(
+      refit_id = 2L,
+      spoke_id = 2L,
+      link_stop_pass = FALSE
+    )
+  )
+
+  expect_true(isTRUE(frozen_twice$controller$link_transform_frozen_by_spoke[["2"]]))
+  expect_equal(frozen_twice$controller$link_transform_frozen_delta_by_spoke[["2"]], 0.22, tolerance = 1e-12)
+  expect_identical(frozen_twice$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 1L)
+})
