@@ -356,7 +356,7 @@ adaptive_defaults <- function(N) {
 
 .adaptive_selection_utility_mode <- function(run_mode, has_regularization = FALSE, is_cross_set = FALSE) {
   if (.adaptive_selection_mode_is_linking(run_mode = run_mode, is_cross_set = is_cross_set)) {
-    return("linking_cross_set_p_times_1_minus_p")
+    return("linking_d_optimal")
   }
   if (isTRUE(has_regularization)) {
     return("pairing_trueskill_u")
@@ -372,8 +372,8 @@ adaptive_defaults <- function(N) {
   if (identical(mode, "pairing_trueskill_u")) {
     return("u")
   }
-  if (identical(mode, "linking_cross_set_p_times_1_minus_p")) {
-    return("link_u")
+  if (identical(mode, "linking_d_optimal")) {
+    return("link_d_opt_gain")
   }
   NA_character_
 }
@@ -499,6 +499,122 @@ adaptive_defaults <- function(N) {
   theta_global[!duplicated(names(theta_global))]
 }
 
+.adaptive_link_model_d_prob <- function(theta_a, theta_b, beta, epsilon) {
+  theta_a <- as.double(theta_a)
+  theta_b <- as.double(theta_b)
+  beta <- as.double(beta)
+  epsilon <- as.double(epsilon)
+  if (!is.finite(theta_a) || !is.finite(theta_b)) {
+    return(NA_real_)
+  }
+  if (!is.finite(beta)) {
+    beta <- 0
+  }
+  if (!is.finite(epsilon)) {
+    epsilon <- 0
+  }
+  epsilon <- max(0, min(1, epsilon))
+  p_base <- stats::plogis(theta_a - theta_b + beta)
+  as.double((1 - epsilon) * p_base + epsilon * 0.5)
+}
+
+.adaptive_link_model_d_pbar <- function(theta_h, theta_x, beta, epsilon) {
+  p_hx <- .adaptive_link_model_d_prob(theta_a = theta_h, theta_b = theta_x, beta = beta, epsilon = epsilon)
+  p_xh <- .adaptive_link_model_d_prob(theta_a = theta_x, theta_b = theta_h, beta = beta, epsilon = epsilon)
+  if (!is.finite(p_hx) || !is.finite(p_xh)) {
+    return(NA_real_)
+  }
+  as.double(0.5 * p_hx + 0.5 * p_xh)
+}
+
+.adaptive_link_info_gradient <- function(transform_mode, alpha, theta_raw_x) {
+  mode <- as.character(transform_mode %||% "shift_only")
+  if (identical(mode, "shift_scale")) {
+    alpha <- as.double(alpha)
+    theta_raw_x <- as.double(theta_raw_x)
+    if (!is.finite(alpha) || alpha <= 0) {
+      alpha <- 1
+    }
+    if (!is.finite(theta_raw_x)) {
+      theta_raw_x <- 0
+    }
+    return(matrix(c(1, alpha * theta_raw_x), nrow = 2L, ncol = 1L))
+  }
+  matrix(1, nrow = 1L, ncol = 1L)
+}
+
+.adaptive_link_logdet_spd <- function(mat, ridge = 1e-6) {
+  x <- as.matrix(mat)
+  if (!is.numeric(x) || nrow(x) != ncol(x) || nrow(x) < 1L) {
+    return(NA_real_)
+  }
+  x <- (x + t(x)) / 2
+  ridge <- as.double(ridge %||% 1e-6)
+  if (!is.finite(ridge) || ridge <= 0) {
+    ridge <- 1e-6
+  }
+  x <- x + diag(ridge, nrow(x))
+  vals <- tryCatch(
+    eigen(x, symmetric = TRUE, only.values = TRUE)$values,
+    error = function(e) rep(NA_real_, nrow(x))
+  )
+  if (length(vals) != nrow(x) || any(!is.finite(vals)) || any(vals <= 0)) {
+    return(NA_real_)
+  }
+  as.double(sum(log(vals)))
+}
+
+.adaptive_link_d_opt_gain_logdet <- function(it, ipair, ridge = 1e-6) {
+  it <- as.matrix(it)
+  ipair <- as.matrix(ipair)
+  if (nrow(it) != ncol(it) || nrow(ipair) != ncol(ipair) || nrow(it) != nrow(ipair)) {
+    return(NA_real_)
+  }
+  logdet_start <- .adaptive_link_logdet_spd(it, ridge = ridge)
+  logdet_end <- .adaptive_link_logdet_spd(it + ipair, ridge = ridge)
+  if (!is.finite(logdet_start) || !is.finite(logdet_end)) {
+    return(NA_real_)
+  }
+  as.double(logdet_end - logdet_start)
+}
+
+.adaptive_link_d_opt_matrix_dim <- function(transform_mode) {
+  if (identical(as.character(transform_mode %||% "shift_only"), "shift_scale")) {
+    return(2L)
+  }
+  1L
+}
+
+.adaptive_link_d_opt_state_key <- function(refit_id, spoke_id) {
+  paste0(as.integer(refit_id), "::", as.integer(spoke_id))
+}
+
+.adaptive_link_d_opt_state_get <- function(controller, refit_id, spoke_id, transform_mode, ridge = 1e-6) {
+  map <- controller$link_d_opt_it_by_spoke %||% list()
+  key <- .adaptive_link_d_opt_state_key(refit_id = refit_id, spoke_id = spoke_id)
+  dim_n <- .adaptive_link_d_opt_matrix_dim(transform_mode)
+  entry <- map[[key]] %||% list()
+  it <- entry$it %||% matrix(0, nrow = dim_n, ncol = dim_n)
+  if (!is.matrix(it) || nrow(it) != dim_n || ncol(it) != dim_n) {
+    it <- matrix(0, nrow = dim_n, ncol = dim_n)
+  }
+  it <- (it + t(it)) / 2
+  n_pairs <- as.integer(entry$it_n_pairs_accumulated %||% 0L)
+  if (!is.finite(n_pairs) || n_pairs < 0L) {
+    n_pairs <- 0L
+  }
+  logdet_start <- as.double(entry$it_logdet_start %||% NA_real_)
+  if (!is.finite(logdet_start)) {
+    logdet_start <- .adaptive_link_logdet_spd(matrix(0, nrow = dim_n, ncol = dim_n), ridge = ridge)
+  }
+  list(
+    key = key,
+    it = it,
+    it_n_pairs_accumulated = n_pairs,
+    it_logdet_start = as.double(logdet_start)
+  )
+}
+
 .adaptive_link_attach_predictive_utility <- function(candidates, state, controller, spoke_id) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L || is.na(spoke_id)) {
@@ -541,11 +657,77 @@ adaptive_defaults <- function(N) {
     if (!is.finite(theta_i) || !is.finite(theta_j)) {
       return(NA_real_)
     }
-    p_base <- stats::plogis(theta_i - theta_j + beta)
-    as.double((1 - epsilon) * p_base + epsilon * 0.5)
+    .adaptive_link_model_d_prob(theta_a = theta_i, theta_b = theta_j, beta = beta, epsilon = epsilon)
   }, numeric(1L))
   cand$link_p <- as.double(p_link)
   cand$link_u <- as.double(p_link * (1 - p_link))
+  transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
+  delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+  if (!is.finite(delta)) {
+    delta <- 0
+  }
+  log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
+  alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+  refit_id <- .adaptive_link_refit_window_id(state)
+  it_state <- .adaptive_link_d_opt_state_get(
+    controller = controller,
+    refit_id = refit_id,
+    spoke_id = as.integer(spoke_id),
+    transform_mode = transform_mode
+  )
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  theta_hub_map <- .adaptive_link_safe_theta_map(
+    state = state,
+    set_id = hub_id,
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  theta_spoke_raw_map <- .adaptive_link_safe_theta_map(
+    state = state,
+    set_id = as.integer(spoke_id),
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  cand$link_d_opt_gain <- vapply(seq_len(nrow(cand)), function(idx) {
+    i_id <- as.character(cand$i[[idx]])
+    j_id <- as.character(cand$j[[idx]])
+    i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
+    j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
+    hub_item <- if (identical(i_set, hub_id)) i_id else if (identical(j_set, hub_id)) j_id else NA_character_
+    spoke_item <- if (identical(i_set, as.integer(spoke_id))) {
+      i_id
+    } else if (identical(j_set, as.integer(spoke_id))) {
+      j_id
+    } else {
+      NA_character_
+    }
+    theta_h <- as.double(theta_hub_map[[hub_item]] %||% NA_real_)
+    theta_raw_x <- as.double(theta_spoke_raw_map[[spoke_item]] %||% NA_real_)
+    if (!is.finite(theta_h) || !is.finite(theta_raw_x)) {
+      return(NA_real_)
+    }
+    theta_x <- as.double(delta + alpha * theta_raw_x)
+    pbar <- .adaptive_link_model_d_pbar(
+      theta_h = theta_h,
+      theta_x = theta_x,
+      beta = beta,
+      epsilon = epsilon
+    )
+    if (!is.finite(pbar)) {
+      return(NA_real_)
+    }
+    g <- .adaptive_link_info_gradient(
+      transform_mode = transform_mode,
+      alpha = alpha,
+      theta_raw_x = theta_raw_x
+    )
+    info_scale <- as.double(pbar * (1 - pbar))
+    if (!is.finite(info_scale)) {
+      return(NA_real_)
+    }
+    ipair <- as.matrix(info_scale * (g %*% t(g)))
+    .adaptive_link_d_opt_gain_logdet(it = it_state$it, ipair = ipair, ridge = 1e-6)
+  }, numeric(1L))
   cand
 }
 
@@ -586,8 +768,7 @@ adaptive_defaults <- function(N) {
     return(NA_real_)
   }
 
-  p_base <- stats::plogis(theta_A - theta_B + beta)
-  as.double((1 - epsilon) * p_base + epsilon * 0.5)
+  .adaptive_link_model_d_prob(theta_a = theta_A, theta_b = theta_B, beta = beta, epsilon = epsilon)
 }
 
 .adaptive_assign_order <- function(pair, posA, posB, pair_last_order, seed_base = 1L) {
@@ -1387,6 +1568,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     }
   }
   u0_ij <- as.double(p_ij * (1 - p_ij))
+  selected_link_u <- if ("link_u" %in% names(selected_pair)) {
+    as.double(selected_pair$link_u[[1L]] %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  selected_link_d_opt_gain <- if ("link_d_opt_gain" %in% names(selected_pair)) {
+    as.double(selected_pair$link_d_opt_gain[[1L]] %||% NA_real_)
+  } else {
+    NA_real_
+  }
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -1437,6 +1628,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     sigma_j = as.double(sigma_vals[[j_id]]),
     p_ij = as.double(p_ij),
     U0_ij = as.double(u0_ij),
+    link_u = as.double(selected_link_u),
+    link_d_opt_gain = as.double(selected_link_d_opt_gain),
     utility_mode = as.character(utility_mode),
     star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
     star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)

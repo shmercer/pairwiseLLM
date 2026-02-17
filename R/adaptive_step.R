@@ -194,11 +194,11 @@ validate_judge_result <- function(result, A_id, B_id) {
 
   if (identical(phase_ctx$phase, "phase_b")) {
     configured_cross_set_utility <- as.character(controller$cross_set_utility %||% NA_character_)
-    if (!identical(configured_cross_set_utility, "linking_cross_set_p_times_1_minus_p")) {
+    if (!identical(configured_cross_set_utility, "linking_d_optimal")) {
       rlang::abort(
         paste0(
           "Linking configuration invariant failed: `adaptive_config$cross_set_utility` must be ",
-          "`linking_cross_set_p_times_1_minus_p`."
+          "`linking_d_optimal`."
         )
       )
     }
@@ -246,7 +246,7 @@ validate_judge_result <- function(result, A_id, B_id) {
   valid_utility_modes <- c(
     "pairing_trueskill_u0",
     "pairing_trueskill_u",
-    "linking_cross_set_p_times_1_minus_p"
+    "linking_d_optimal"
   )
   utility_mode <- if ("utility_mode" %in% names(row)) {
     as.character(row$utility_mode[[1L]] %||% NA_character_)
@@ -285,11 +285,11 @@ validate_judge_result <- function(result, A_id, B_id) {
         "step_log append completeness failure for cross-set row: `link_stage` must be populated for stage-routed steps."
       )
     }
-    if (isTRUE(is_link_run_mode) && !identical(utility_mode, "linking_cross_set_p_times_1_minus_p")) {
+    if (isTRUE(is_link_run_mode) && !identical(utility_mode, "linking_d_optimal")) {
       rlang::abort(
         paste0(
           "step_log append completeness failure for cross-set row: ",
-          "`utility_mode` must be linking_cross_set_p_times_1_minus_p."
+          "`utility_mode` must be linking_d_optimal."
         )
       )
     }
@@ -338,6 +338,121 @@ validate_judge_result <- function(result, A_id, B_id) {
   }
 
   invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_d_opt_update_after_commit <- function(state_before, state_after, step_row) {
+  row <- tibble::as_tibble(step_row)
+  if (nrow(row) != 1L) {
+    return(state_after)
+  }
+  if (!isTRUE(row$is_cross_set[[1L]] %||% FALSE)) {
+    return(state_after)
+  }
+  run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(state_after)
+  }
+  if (identical(as.character(row$utility_mode[[1L]] %||% NA_character_), "linking_d_optimal") &&
+    isTRUE(row$is_probe_step[[1L]] %||% FALSE)) {
+    return(state_after)
+  }
+  spoke_id <- as.integer(row$link_spoke_id[[1L]] %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    return(state_after)
+  }
+  i_idx <- as.integer(row$i[[1L]] %||% NA_integer_)
+  j_idx <- as.integer(row$j[[1L]] %||% NA_integer_)
+  if (is.na(i_idx) || is.na(j_idx)) {
+    return(state_after)
+  }
+  i_id <- as.character(state_before$item_ids[[i_idx]] %||% NA_character_)
+  j_id <- as.character(state_before$item_ids[[j_idx]] %||% NA_character_)
+  if (is.na(i_id) || is.na(j_id)) {
+    return(state_after)
+  }
+  controller <- .adaptive_controller_resolve(state_after)
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  set_map <- stats::setNames(as.integer(state_before$items$set_id), as.character(state_before$items$item_id))
+  i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
+  j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
+  hub_item <- if (identical(i_set, hub_id)) i_id else if (identical(j_set, hub_id)) j_id else NA_character_
+  spoke_item <- if (identical(i_set, spoke_id)) i_id else if (identical(j_set, spoke_id)) j_id else NA_character_
+  if (is.na(hub_item) || is.na(spoke_item)) {
+    return(state_after)
+  }
+  transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
+  delta <- as.double(row$delta_spoke_estimate_pre[[1L]] %||% stats_row$delta_spoke_mean %||% 0)
+  if (!is.finite(delta)) {
+    delta <- 0
+  }
+  log_alpha <- as.double(row$log_alpha_spoke_estimate_pre[[1L]] %||% stats_row$log_alpha_spoke_mean %||% NA_real_)
+  alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+  theta_hub_map <- .adaptive_link_safe_theta_map(
+    state = state_before,
+    set_id = hub_id,
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  theta_spoke_raw_map <- .adaptive_link_safe_theta_map(
+    state = state_before,
+    set_id = as.integer(spoke_id),
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  theta_h <- as.double(theta_hub_map[as.character(hub_item)] %||% NA_real_)
+  theta_raw_x <- as.double(theta_spoke_raw_map[as.character(spoke_item)] %||% NA_real_)
+  if (!is.finite(theta_h) || !is.finite(theta_raw_x)) {
+    return(state_after)
+  }
+  startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state_before, spoke_id = as.integer(spoke_id))
+  judge_params <- .adaptive_link_judge_params(
+    state_before,
+    controller,
+    scope = "link",
+    allow_cold_start_fallback = isTRUE(startup_gap),
+    expected_link_params = !isTRUE(startup_gap)
+  )
+  pbar <- .adaptive_link_model_d_pbar(
+    theta_h = theta_h,
+    theta_x = as.double(delta + alpha * theta_raw_x),
+    beta = as.double(judge_params$beta %||% 0),
+    epsilon = as.double(judge_params$epsilon %||% 0)
+  )
+  if (!is.finite(pbar)) {
+    return(state_after)
+  }
+  g <- .adaptive_link_info_gradient(
+    transform_mode = transform_mode,
+    alpha = alpha,
+    theta_raw_x = theta_raw_x
+  )
+  ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
+  refit_id <- .adaptive_link_refit_window_id(state_after)
+  d_opt_state <- .adaptive_link_d_opt_state_get(
+    controller = controller,
+    refit_id = refit_id,
+    spoke_id = as.integer(spoke_id),
+    transform_mode = transform_mode
+  )
+  if (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != dim(ipair))) {
+    return(state_after)
+  }
+  d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
+  current_prefix <- paste0(as.integer(refit_id), "::")
+  map_names <- names(d_opt_map)
+  if (is.null(map_names)) {
+    d_opt_map <- list()
+  } else {
+    keep <- startsWith(as.character(map_names), current_prefix)
+    d_opt_map <- d_opt_map[keep]
+  }
+  d_opt_state$it <- as.matrix((d_opt_state$it + ipair + t(d_opt_state$it + ipair)) / 2)
+  d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
+  d_opt_map[[d_opt_state$key]] <- d_opt_state
+  controller$link_d_opt_it_by_spoke <- d_opt_map
+  state_after$controller <- controller
+  state_after
 }
 
 #' @keywords internal
@@ -502,8 +617,14 @@ run_one_step <- function(state, judge, ...) {
   is_probe_step <- if (isTRUE(is_cross_set) && identical(run_mode, "link_probe")) TRUE else NA
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode) &&
-    identical(utility_mode, "linking_cross_set_p_times_1_minus_p")) {
-    as.double(selection$U0_ij %||% NA_real_)
+    identical(utility_mode, "linking_d_optimal")) {
+    as.double(
+      if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {
+        selection$link_d_opt_gain
+      } else {
+        selection$link_u %||% selection$U0_ij %||% NA_real_
+      }
+    )
   } else {
     NA_real_
   }
@@ -636,6 +757,13 @@ run_one_step <- function(state, judge, ...) {
     B_id = B_id,
     Y = Y
   ))
+  if (isTRUE(is_valid)) {
+    out <- .adaptive_link_d_opt_update_after_commit(
+      state_before = state,
+      state_after = out,
+      step_row = step_row
+    )
+  }
 
   if (isTRUE(is_valid) && !is.na(as.integer(selection$link_spoke_id_selected %||% NA_integer_))) {
     out$controller <- .adaptive_controller_resolve(out)

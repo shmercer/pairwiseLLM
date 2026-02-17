@@ -184,6 +184,34 @@ test_that("persist validator checks metadata and btl-fit load branch", {
   expect_no_error(pairwiseLLM::validate_session_dir(session_dir2))
 })
 
+test_that("session persistence round-trips D-opt information matrix state", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 9L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$controller$link_d_opt_it_by_spoke <- list(
+    `1::2` = list(
+      key = "1::2",
+      it = matrix(0.25, nrow = 1L, ncol = 1L),
+      it_n_pairs_accumulated = 3L,
+      it_logdet_start = log(1e-6)
+    )
+  )
+  session_dir <- withr::local_tempdir()
+  pairwiseLLM::save_adaptive_session(state, session_dir, overwrite = TRUE)
+  loaded <- pairwiseLLM::load_adaptive_session(session_dir)
+  entry <- loaded$controller$link_d_opt_it_by_spoke[["1::2"]]
+  expect_true(is.matrix(entry$it))
+  expect_equal(as.numeric(entry$it), 0.25, tolerance = 1e-12)
+  expect_identical(as.integer(entry$it_n_pairs_accumulated), 3L)
+})
+
 test_that("simulation harness helper validations cover error and empty branches", {
   expect_error(pairwiseLLM:::.adaptive_simulation_validate_seed(NA, "run_seed"), "single non-missing integer")
   expect_error(pairwiseLLM:::.adaptive_simulation_default_items(1L), "integer >= 2")

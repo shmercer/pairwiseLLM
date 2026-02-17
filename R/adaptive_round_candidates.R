@@ -802,7 +802,7 @@ generate_stage_candidates_from_state <- function(state,
 #' @keywords internal
 #' @noRd
 .adaptive_linking_selection_order <- function(candidates,
-                                              utility_mode = "linking_cross_set_p_times_1_minus_p") {
+                                              utility_mode = "linking_d_optimal") {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) == 0L) {
     return(integer())
@@ -815,7 +815,7 @@ generate_stage_candidates_from_state <- function(state,
     }
   }
   # Linking ordering priority is resolver-selected utility. If all values are
-  # non-finite, fall back deterministically to U0, then lexical tie-break.
+  # non-finite, fall back deterministically to link_u, then U0, then lexical.
   utility_col <- .adaptive_resolve_selection_column(utility_mode)
   utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
     as.double(cand[[utility_col]][idx])
@@ -823,6 +823,11 @@ generate_stage_candidates_from_state <- function(state,
     rep_len(NA_real_, length(idx))
   }
   if (!any(is.finite(utility))) {
+    fallback_link <- if ("link_u" %in% names(cand)) as.double(cand$link_u[idx]) else rep_len(NA_real_, length(idx))
+    if (any(is.finite(fallback_link))) {
+      fallback_link[!is.finite(fallback_link)] <- -Inf
+      return(idx[order(-fallback_link, cand$i[idx], cand$j[idx])])
+    }
     fallback <- if ("u0" %in% names(cand)) as.double(cand$u0[idx]) else rep_len(NA_real_, length(idx))
     if (!any(is.finite(fallback))) {
       return(idx[order(cand$i[idx], cand$j[idx])])

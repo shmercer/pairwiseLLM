@@ -88,7 +88,7 @@
     run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe"),
     link_stage = c("anchor_link", "long_link", "mid_link", "local_link"),
     link_transform_mode = c("auto", "shift_only", "shift_scale"),
-    utility_mode = c("pairing_trueskill_u0", "pairing_trueskill_u", "linking_cross_set_p_times_1_minus_p"),
+    utility_mode = c("pairing_trueskill_u0", "pairing_trueskill_u", "linking_d_optimal"),
     hub_lock_mode = c("hard_lock", "soft_lock", "free")
   )
 }

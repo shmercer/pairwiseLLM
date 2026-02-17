@@ -86,8 +86,9 @@ win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
 routing uses a linking-global score derived from Phase A raw summaries plus
 the current spoke transform (\eqn{\delta_s}, optional \eqn{\log \alpha_s}).
 In linking Phase B, eligible cross-set candidates are ranked by
-\eqn{p_{hx}(1-p_{hx})} under the current linking transform and judge
-parameters. Linking inference parameters are used for
+ridge-stabilized D-optimal log-det information gain on spoke transform
+parameters using order-averaged Model D probabilities. Linking inference
+parameters are used for
 inference/diagnostics/stopping, not as direct selection objectives.
 When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 step may use deterministic fallback from available within/shared judge

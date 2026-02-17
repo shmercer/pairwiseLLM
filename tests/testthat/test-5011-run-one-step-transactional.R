@@ -109,7 +109,7 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_equal(row$link_spoke_id[[1L]], 2L)
   expect_equal(row$run_mode[[1L]], "link_one_spoke")
   expect_equal(row$link_transform_mode[[1L]], "shift_only")
-  expect_equal(row$utility_mode[[1L]], "linking_cross_set_p_times_1_minus_p")
+  expect_equal(row$utility_mode[[1L]], "linking_d_optimal")
   expect_equal(row$hub_lock_mode[[1L]], "soft_lock")
   expect_equal(row$hub_lock_kappa[[1L]], 0.75)
   expect_false(is.na(row$posterior_win_prob_pre[[1L]]))
@@ -224,4 +224,94 @@ test_that("run_one_step handles starved selections with NA linking endpoints", {
   expect_true(is.na(row$set_j[[1L]]))
   expect_true(is.na(row$is_cross_set[[1L]]))
   expect_true(is.na(row$link_spoke_id[[1L]]))
+})
+
+test_that("run_one_step uses selected spoke fallback for non-hub cross-set rows", {
+  items <- tibble::tibble(
+    item_id = c("h1", "s21", "s31"),
+    set_id = c(1L, 2L, 3L),
+    global_item_id = c("gh1", "gs21", "gs31")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 13L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L, 3L),
+    source = c("run", "run", "run"),
+    status = c("ready", "ready", "ready"),
+    validation_message = c("ok", "ok", "ok"),
+    artifact_path = c(NA_character_, NA_character_, NA_character_)
+  )
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(), `3` = list())
+
+  judge <- make_deterministic_judge("i_wins")
+  mocked <- testthat::with_mocked_bindings(
+    select_next_pair = function(state, step_id = NULL, candidates = NULL) {
+      list(
+        i = 2L,
+        j = 3L,
+        A = 2L,
+        B = 3L,
+        p_ij = 0.5,
+        U0_ij = 0.25,
+        link_u = 0.25,
+        link_d_opt_gain = 0.2,
+        utility_mode = "linking_d_optimal",
+        run_mode = "link_multi_spoke",
+        link_spoke_id_selected = 2L,
+        long_gate_pass = NA,
+        long_gate_reason = NA_character_,
+        star_override_used = FALSE,
+        star_override_reason = NA_character_,
+        is_explore_step = FALSE,
+        explore_mode = NA_character_,
+        explore_reason = NA_character_,
+        explore_rate_used = 0,
+        local_priority_mode = NA_character_,
+        candidate_starved = FALSE,
+        fallback_used = "base",
+        fallback_path = "base",
+        starvation_reason = NA_character_,
+        round_id = 1L,
+        round_stage = "anchor_link",
+        pair_type = "anchor_link",
+        used_in_round_i = 0L,
+        used_in_round_j = 0L,
+        is_anchor_i = FALSE,
+        is_anchor_j = FALSE,
+        stratum_i = 1L,
+        stratum_j = 1L,
+        dist_stratum = 0L,
+        dist_stratum_global = 0L,
+        stage_committed_so_far = 0L,
+        stage_quota = 1L,
+        n_candidates_generated = 1L,
+        n_candidates_after_hard_filters = 1L,
+        n_candidates_after_duplicates = 1L,
+        n_candidates_after_star_caps = 1L,
+        n_candidates_scored = 1L,
+        deg_i = 0L,
+        deg_j = 0L,
+        recent_deg_i = 0L,
+        recent_deg_j = 0L,
+        mu_i = 0,
+        mu_j = 0,
+        sigma_i = 1,
+        sigma_j = 1,
+        star_cap_rejects = 0L,
+        star_cap_reject_items = 0L
+      )
+    },
+    pairwiseLLM:::run_one_step(state, judge),
+    .package = "pairwiseLLM"
+  )
+
+  row <- mocked$step_log[nrow(mocked$step_log), , drop = FALSE]
+  expect_true(isTRUE(row$is_cross_set[[1L]]))
+  expect_identical(row$link_spoke_id[[1L]], 2L)
 })
