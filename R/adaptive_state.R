@@ -323,12 +323,17 @@
   out$log_alpha_sd_max <- read_double("log_alpha_sd_max", 0, Inf)
   out$log_alpha_change_max <- read_double("log_alpha_change_max", 0, Inf)
   out$cross_set_ppc_brier_max <- read_double("cross_set_ppc_brier_max", 0, 1)
-  if (!is.null(out$ppc_calibration_id)) {
-    if (!is.character(out$ppc_calibration_id) ||
+  if ("ppc_calibration_id" %in% names(out)) {
+    if (is.null(out$ppc_calibration_id)) {
+      # Treat explicit NULL as "use default" by removing the override key.
+      out[["ppc_calibration_id"]] <- NULL
+    } else if (!is.character(out$ppc_calibration_id) ||
       length(out$ppc_calibration_id) != 1L ||
       is.na(out$ppc_calibration_id) ||
       out$ppc_calibration_id == "") {
       rlang::abort("`adaptive_config$ppc_calibration_id` must be a single string value.")
+    } else {
+      out$ppc_calibration_id <- as.character(out$ppc_calibration_id)
     }
   }
   out$link_transform_escalation_refits_required <- read_integer(
