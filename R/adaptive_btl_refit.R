@@ -2075,7 +2075,7 @@
       ),
       lag_domain_key = as.character(lag_domain_key),
       lag_domain_reset = as.logical(lag_domain_reset),
-      lag_eligible = as.logical(rank_stability$lag_eligible %||% FALSE),
+      lag_eligible = as.logical(lag_eligible),
       rank_stability_lagged = as.double(rank_stability$rho_rank_lagged %||% NA_real_),
       rank_stability_pass = as.logical(rank_stability$rho_rank_lagged_pass %||% FALSE),
       link_identified = as.logical(link_identified),

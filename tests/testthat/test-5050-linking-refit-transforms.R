@@ -1862,6 +1862,7 @@ test_that("linking lag domain metadata resets once per spoke domain and persists
   stats1 <- s1$controller$link_refit_stats_by_spoke[["2"]]
   expect_true(isTRUE(stats1$lag_domain_reset))
   expect_identical(stats1$lag_domain_key, "phase_b_spoke_2")
+  expect_false(isTRUE(stats1$lag_eligible))
 
   rows1 <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
     state = s1,
