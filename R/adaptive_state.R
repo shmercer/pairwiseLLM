@@ -72,6 +72,7 @@
 #' @noRd
 .adaptive_controller_defaults <- function(n_items) {
   defaults <- adaptive_defaults(n_items)
+  calibration_defaults <- .adaptive_linking_default_calibration()
   list(
     global_identified = FALSE,
     global_identified_reliability_min = as.double(defaults$global_identified_reliability_min),
@@ -102,8 +103,8 @@
     delta_change_max = 0.05,
     log_alpha_sd_max = 0.10,
     log_alpha_change_max = 0.05,
-    cross_set_ppc_brier_max = 0.20,
-    ppc_calibration_id = "default_p95_brier_active",
+    cross_set_ppc_brier_max = as.double(calibration_defaults$cross_set_ppc_brier_max %||% 0.20),
+    ppc_calibration_id = as.character(calibration_defaults$ppc_calibration_id %||% "default_p95_brier_active"),
     link_transform_escalation_refits_required = 2L,
     link_transform_escalation_is_one_way = TRUE,
     probe_pairs_per_refit_per_spoke = 2L,
