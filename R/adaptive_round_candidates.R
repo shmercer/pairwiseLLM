@@ -2,11 +2,31 @@
 # Adaptive stage candidates: anchors, strata, and per-stage generation.
 # -------------------------------------------------------------------------
 
-.adaptive_rank_proxy <- function(state) {
+.adaptive_rank_proxy <- function(state, prefer_btl = FALSE) {
   ids <- as.character(state$trueskill_state$items$item_id)
   mu <- as.double(state$trueskill_state$items$mu)
   names(mu) <- ids
   refit_id <- as.integer(state$refit_meta$last_refit_round_id %||% 0L)
+  if (isTRUE(prefer_btl)) {
+    theta_mean <- tryCatch(
+      .adaptive_btl_fit_theta_mean(state$btl_fit %||% list()),
+      error = function(e) NULL
+    )
+
+    if (is.numeric(theta_mean) && length(theta_mean) > 0L && !is.null(names(theta_mean))) {
+      theta <- as.double(theta_mean)
+      names(theta) <- as.character(names(theta_mean))
+      theta_scores <- as.double(theta[ids])
+      names(theta_scores) <- ids
+      if (length(theta_scores) == length(ids) && all(is.finite(theta_scores))) {
+        return(list(
+          scores = theta_scores,
+          source = "btl_theta_eap",
+          refit_id = refit_id
+        ))
+      }
+    }
+  }
 
   list(
     scores = mu[ids],
@@ -147,7 +167,7 @@
     return(out)
   }
 
-  proxy <- .adaptive_rank_proxy(out)
+  proxy <- .adaptive_rank_proxy(out, prefer_btl = TRUE)
   anchors <- .adaptive_select_rolling_anchors(proxy$scores, defaults)
   out$round$anchor_ids <- as.character(anchors)
   out$round$anchor_refresh_source <- as.character(proxy$source)

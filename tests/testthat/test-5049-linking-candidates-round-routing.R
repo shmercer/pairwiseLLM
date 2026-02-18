@@ -1187,6 +1187,8 @@ test_that("frozen spoke cross-set commits are tagged as probe steps", {
   expect_true(isTRUE(row$is_cross_set[[1L]]))
   expect_identical(as.character(row$run_mode[[1L]]), "link_probe")
   expect_true(isTRUE(row$is_probe_step[[1L]]))
+  expect_true(is.na(row$cross_set_utility_pre[[1L]]))
+  expect_true(is.na(row$utility_mode[[1L]]))
 })
 
 test_that("linking predictive utility applies signed position bias by (A,B) orientation", {

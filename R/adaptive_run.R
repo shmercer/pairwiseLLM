@@ -281,7 +281,31 @@
 #' @keywords internal
 #' @noRd
 .adaptive_link_all_spokes_stopped <- function(state) {
-  FALSE
+  controller <- .adaptive_controller_resolve(state)
+  if (!.adaptive_link_mode_active(controller)) {
+    return(FALSE)
+  }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(FALSE)
+  }
+  spoke_ids <- as.integer(phase_ctx$active_spokes %||% phase_ctx$ready_spokes %||% integer())
+  spoke_ids <- sort(unique(spoke_ids[!is.na(spoke_ids)]))
+  if (length(spoke_ids) < 1L) {
+    return(FALSE)
+  }
+  stopped_map <- controller$link_stopped_by_spoke %||% list()
+  all_stopped <- all(vapply(as.character(spoke_ids), function(key) isTRUE(stopped_map[[key]]), logical(1L)))
+  if (!isTRUE(all_stopped)) {
+    return(FALSE)
+  }
+
+  probe_cap <- as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L)
+  probe_cap <- max(0L, probe_cap)
+  if (probe_cap > 0L) {
+    return(FALSE)
+  }
+  TRUE
 }
 
 #' @keywords internal
