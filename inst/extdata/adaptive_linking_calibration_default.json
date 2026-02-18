@@ -1,6 +1,6 @@
 {
-  "cross_set_ppc_brier_max": 0.2,
-  "ppc_calibration_id": "offline_p95_brier_active_default",
+  "cross_set_ppc_brier_max": 0.1992,
+  "ppc_calibration_id": "c4fcb55a96ebbfa87876d319b1108734",
   "calibration_quantile": 0.95,
-  "notes": "Offline calibration baseline for linking-active Brier threshold defaults."
+  "notes": "Offline calibration 2026-02-18 00:24:31 UTC for linking-active Brier threshold defaults."
 }
