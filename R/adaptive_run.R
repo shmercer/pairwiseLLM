@@ -1284,7 +1284,12 @@ adaptive_rank_run_live <- function(state,
         ) + 1L
         budget_status <- .adaptive_stop_boundary_budget_status(state)
         if (isTRUE(budget_status$exhausted)) {
+          state$meta$stop_decision <- TRUE
           state$meta$stop_reason <- "max_pairs_after_stop_exhausted"
+          if (!is.null(state$config$session_dir)) {
+            save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+          }
+          return(state)
         }
       }
     } else if (isTRUE(step_row$candidate_starved[[1L]]) &&
