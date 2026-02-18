@@ -185,7 +185,9 @@ schema_round_log <- c(
   mcmc_threads_per_chain = "integer",
   mcmc_cmdstanr_version = "character",
   stop_decision = "logical",
-  stop_reason = "character"
+  stop_reason = "character",
+  max_pairs_after_stop = "integer",
+  pairs_committed_after_stop = "integer"
 )
 
 schema_link_stage_log <- c(

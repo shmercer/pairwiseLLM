@@ -592,7 +592,7 @@ test_that("linking run stops via all-spokes-stopped gate when every spoke is sto
     state = out_init,
     judge = judge,
     n_steps = 5L,
-    adaptive_config = NULL,
+    adaptive_config = list(max_pairs_after_stop = 3L),
     progress = "none"
   )
 

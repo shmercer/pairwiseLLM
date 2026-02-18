@@ -149,6 +149,21 @@ read_log <- function(path) {
   out
 }
 
+.adaptive_align_round_log_post_stop_columns <- function(round_log) {
+  out <- tibble::as_tibble(round_log)
+  n <- nrow(out)
+  defaults <- c(
+    max_pairs_after_stop = 0L,
+    pairs_committed_after_stop = 0L
+  )
+  for (col in names(defaults)) {
+    if (!col %in% names(out)) {
+      out[[col]] <- rep.int(as.integer(defaults[[col]]), n)
+    }
+  }
+  out
+}
+
 .adaptive_item_log_current_schema <- function() {
   cols <- .adaptive_item_log_columns()
   int_cols <- c(
@@ -344,6 +359,7 @@ validate_session_dir <- function(session_dir) {
 
   step_log <- read_log(paths$step_log)
   round_log <- read_log(paths$round_log)
+  round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
   link_stage_log <- if (file.exists(paths$link_stage_log)) {
     read_log(paths$link_stage_log)
   } else {
@@ -493,6 +509,7 @@ load_adaptive_session <- function(session_dir) {
 
   step_log <- read_log(paths$step_log)
   round_log <- read_log(paths$round_log)
+  round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
   link_stage_log <- if (file.exists(paths$link_stage_log)) {
     read_log(paths$link_stage_log)
   } else {

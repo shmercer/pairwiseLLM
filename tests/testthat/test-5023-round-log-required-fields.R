@@ -52,7 +52,9 @@ test_that("round_log includes required stopping and star-cap audit fields", {
     "refit_id",
     "round_id_at_refit",
     "mcmc_chains",
-    "mcmc_parallel_chains"
+    "mcmc_parallel_chains",
+    "max_pairs_after_stop",
+    "pairs_committed_after_stop"
   )
   expect_true(all(required %in% names(round_log)))
 
@@ -96,6 +98,10 @@ test_that("round_log includes required stopping and star-cap audit fields", {
   expect_true(is.integer(round_log$round_id_at_refit))
   expect_true(is.integer(round_log$mcmc_chains))
   expect_true(is.integer(round_log$mcmc_parallel_chains))
+  expect_true(is.integer(round_log$max_pairs_after_stop))
+  expect_true(is.integer(round_log$pairs_committed_after_stop))
+  expect_true(all(round_log$max_pairs_after_stop >= 0L))
+  expect_true(all(round_log$pairs_committed_after_stop >= 0L))
   reject_rate <- round_log$star_cap_reject_rate_since_last_refit
   reject_rate <- reject_rate[!is.na(reject_rate)]
   expect_true(all(reject_rate >= 0))

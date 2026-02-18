@@ -2807,6 +2807,14 @@
     as.integer(round_id_current)
   }
   controller <- .adaptive_controller_resolve(state)
+  max_pairs_after_stop <- as.integer(controller$max_pairs_after_stop %||% 0L)
+  if (!is.finite(max_pairs_after_stop) || is.na(max_pairs_after_stop) || max_pairs_after_stop < 0L) {
+    max_pairs_after_stop <- 0L
+  }
+  pairs_committed_after_stop <- as.integer(state$meta$pairs_committed_after_stop %||% 0L)
+  if (!is.finite(pairs_committed_after_stop) || is.na(pairs_committed_after_stop) || pairs_committed_after_stop < 0L) {
+    pairs_committed_after_stop <- 0L
+  }
   round_summary <- state$refit_meta$last_completed_round_summary %||% list()
   if (!is.na(round_id_at_refit) && !is.na(round_summary$round_id %||% NA_integer_) &&
     as.integer(round_summary$round_id) == round_id_at_refit) {
@@ -2926,7 +2934,9 @@
     mcmc_threads_per_chain = as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_),
     mcmc_cmdstanr_version = as.character(mcmc_config_used$cmdstanr_version %||% NA_character_),
     stop_decision = as.logical(stop_decision),
-    stop_reason = if (isTRUE(stop_decision)) as.character(stop_reason) else NA_character_
+    stop_reason = if (isTRUE(stop_decision)) as.character(stop_reason) else NA_character_,
+    max_pairs_after_stop = as.integer(max_pairs_after_stop),
+    pairs_committed_after_stop = as.integer(pairs_committed_after_stop)
   )
 
   row
