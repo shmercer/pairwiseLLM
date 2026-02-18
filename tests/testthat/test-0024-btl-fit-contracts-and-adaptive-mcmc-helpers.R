@@ -65,7 +65,10 @@ test_that("fit contract validator rejects malformed types across scalar and draw
 
   bad_n_items <- fit
   bad_n_items$n_items <- 3L
-  expect_error(pairwiseLLM:::validate_btl_fit_contract(bad_n_items, ids = c("A", "B")), "must match `theta_draws` columns")
+  expect_error(
+    pairwiseLLM:::validate_btl_fit_contract(bad_n_items, ids = c("A", "B")),
+    "must match `theta_draws` columns"
+  )
 
   bad_eps_type <- fit
   bad_eps_type$epsilon_draws <- "x"
@@ -149,7 +152,13 @@ test_that("adaptive mcmc helper functions cover config and diagnostics branches"
 
   draws_mat <- matrix(c(1, 2, 3, 4), nrow = 2)
   colnames(draws_mat) <- c("theta[1]", "theta[2]")
-  expect_error(pairwiseLLM:::.btl_mcmc_unpack_draws(matrix(1, nrow = 1, ncol = 1), model_variant = "btl"), "column names")
+  expect_error(
+    pairwiseLLM:::.btl_mcmc_unpack_draws(
+      matrix(1, nrow = 1, ncol = 1),
+      model_variant = "btl"
+    ),
+    "column names"
+  )
 
   td <- pairwiseLLM:::.btl_mcmc_theta_draws(list(theta = draws_mat), item_id = c("A", "B"))
   expect_identical(colnames(td), c("A", "B"))
@@ -292,11 +301,13 @@ test_that("fit_bayes_btl_mcmc_adaptive succeeds with deterministic model_fn and 
   fake_fit <- list(
     draws = function(variables, format) draws_matrix,
     diagnostic_summary = function() tibble::tibble(num_divergent = c(0L, 1L)),
-    summary = function(variables) tibble::tibble(
-      rhat = c(1.0, 1.01),
-      ess_bulk = c(500, 600),
-      ess_tail = c(400, 500)
-    )
+    summary = function(variables) {
+      tibble::tibble(
+        rhat = c(1.0, 1.01),
+        ess_bulk = c(500, 600),
+        ess_tail = c(400, 500)
+      )
+    }
   )
   fake_model_fn <- function(stan_file, cpp_options) {
     list(sample = function(...) fake_fit)
@@ -722,9 +733,9 @@ test_that("fit_bayes_btl_mcmc and adaptive fit entrypoints cover input guard rai
     testthat::with_mocked_bindings(
       .btl_mcmc_require_cmdstanr = function() invisible(TRUE),
       validate_btl_mcmc_config = function(config) invisible(config),
-      .btl_mcmc_resolve_cmdstan_config = function(cmdstan) list(
-        chains = 1L, parallel_chains = 1L, threads_per_chain = 1L
-      ),
+      .btl_mcmc_resolve_cmdstan_config = function(cmdstan) {
+        list(chains = 1L, parallel_chains = 1L, threads_per_chain = 1L)
+      },
       stan_file_for_variant = function(model_variant) "fake.stan",
       .package = "pairwiseLLM",
       {
@@ -831,7 +842,13 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
       },
       .package = "pairwiseLLM",
       {
-        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = cfg_bad_int, model_fn = function(...) list(sample = function(...) NULL))
+        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
+          bt_data,
+          config = cfg_bad_int,
+          model_fn = function(...) {
+            list(sample = function(...) NULL)
+          }
+        )
       }
     ),
     "positive integers"
@@ -847,13 +864,22 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
       },
       .package = "pairwiseLLM",
       {
-        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = cfg_bad_pc, model_fn = function(...) list(sample = function(...) NULL))
+        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
+          bt_data,
+          config = cfg_bad_pc,
+          model_fn = function(...) {
+            list(sample = function(...) NULL)
+          }
+        )
       }
     ),
     "positive integer"
   )
 
-  cfg_bad_out <- pairwiseLLM:::btl_mcmc_config(2L, list(model_variant = "btl_e_b", cmdstan = list(output_dir = NA_character_)))
+  cfg_bad_out <- pairwiseLLM:::btl_mcmc_config(
+    2L,
+    list(model_variant = "btl_e_b", cmdstan = list(output_dir = NA_character_))
+  )
   expect_error(
     testthat::with_mocked_bindings(
       .btl_mcmc_require_cmdstanr = function() invisible(TRUE),
@@ -867,11 +893,22 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
         pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
           bt_data = bt_data,
           config = cfg_bad_out,
-          model_fn = function(stan_file, cpp_options) list(sample = function(...) list(
-            draws = function(variables, format) cbind(`theta[1]` = c(0.1, 0.2), `theta[2]` = c(0.2, 0.3), epsilon = c(0.1, 0.2), beta = c(0.0, 0.1)),
-            diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
-            summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
-          ))
+          model_fn = function(stan_file, cpp_options) {
+            list(sample = function(...) {
+              list(
+                draws = function(variables, format) {
+                  cbind(
+                    `theta[1]` = c(0.1, 0.2),
+                    `theta[2]` = c(0.2, 0.3),
+                    epsilon = c(0.1, 0.2),
+                    beta = c(0.0, 0.1)
+                  )
+                },
+                diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
+                summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
+              )
+            })
+          }
         )
       }
     ),
@@ -892,11 +929,17 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
         pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
           bt_data = bt_data,
           config = cfg,
-          model_fn = function(stan_file, cpp_options) list(sample = function(...) list(
-            draws = function(variables, format) cbind(epsilon = c(0.1, 0.2), beta = c(0.0, 0.1)),
-            diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
-            summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
-          ))
+          model_fn = function(stan_file, cpp_options) {
+            list(sample = function(...) {
+              list(
+                draws = function(variables, format) {
+                  cbind(epsilon = c(0.1, 0.2), beta = c(0.0, 0.1))
+                },
+                diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
+                summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
+              )
+            })
+          }
         )
       }
     ),
@@ -916,11 +959,20 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
       pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
         bt_data = bt_data,
         config = cfg_btl,
-        model_fn = function(stan_file, cpp_options) list(sample = function(...) list(
-          draws = function(variables, format) cbind(`theta[1]` = c(0.1, 0.2), `theta[2]` = c(0.2, 0.3)),
-          diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
-          summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
-        ))
+        model_fn = function(stan_file, cpp_options) {
+          list(sample = function(...) {
+            list(
+              draws = function(variables, format) {
+                cbind(
+                  `theta[1]` = c(0.1, 0.2),
+                  `theta[2]` = c(0.2, 0.3)
+                )
+              },
+              diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
+              summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
+            )
+          })
+        }
       )
     }
   )

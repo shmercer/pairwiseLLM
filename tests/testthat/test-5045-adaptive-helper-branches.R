@@ -237,13 +237,25 @@ test_that("adaptive rank wrapper and judge constructors cover endpoint fallback 
   )
 
   judge_llm <- pairwiseLLM::make_adaptive_judge_llm(backend = "openai", model = "gpt-test")
-  bad_struct <- judge_llm(A = tibble::tibble(item_id = "A", text = "a")[0, ], B = tibble::tibble(item_id = "B", text = "b"), state = list())
+  bad_struct <- judge_llm(
+    A = tibble::tibble(item_id = "A", text = "a")[0, ],
+    B = tibble::tibble(item_id = "B", text = "b"),
+    state = list()
+  )
   expect_identical(bad_struct$invalid_reason, "invalid_items")
 
-  bad_missing_id <- judge_llm(A = tibble::tibble(text = "a"), B = tibble::tibble(item_id = "B", text = "b"), state = list())
+  bad_missing_id <- judge_llm(
+    A = tibble::tibble(text = "a"),
+    B = tibble::tibble(item_id = "B", text = "b"),
+    state = list()
+  )
   expect_identical(bad_missing_id$invalid_reason, "invalid_items")
 
-  bad_id <- judge_llm(A = tibble::tibble(item_id = NA_character_, text = "a"), B = tibble::tibble(item_id = "B", text = "b"), state = list())
+  bad_id <- judge_llm(
+    A = tibble::tibble(item_id = NA_character_, text = "a"),
+    B = tibble::tibble(item_id = "B", text = "b"),
+    state = list()
+  )
   expect_identical(bad_id$invalid_reason, "invalid_items")
 
   out_err <- testthat::with_mocked_bindings(
@@ -302,7 +314,11 @@ test_that("adaptive run helpers cover warm-start and round-stage edge branches",
   bad_stage <- pairwiseLLM:::.adaptive_round_active_stage(list(round = list(staged_active = TRUE, stage_index = 99L)))
   expect_true(is.na(bad_stage))
 
-  fake_state <- list(round = list(stage_index = 1L, stage_order = c("anchor_link"), stage_shortfalls = list(anchor_link = 0L)))
+  fake_state <- list(round = list(
+    stage_index = 1L,
+    stage_order = c("anchor_link"),
+    stage_shortfalls = list(anchor_link = 0L)
+  ))
   advanced <- pairwiseLLM:::.adaptive_round_advance_stage(fake_state, shortfall = 2L)
   expect_identical(advanced$round$stage_shortfalls$anchor_link, 2L)
 })
@@ -311,10 +327,22 @@ test_that("adaptive_rank_run_live validates inputs", {
   state <- pairwiseLLM::adaptive_rank_start(make_test_items(2), seed = 1L)
   judge_invalid <- make_deterministic_judge("invalid")
 
-  expect_error(pairwiseLLM::adaptive_rank_run_live(list(), judge_invalid, n_steps = 1L, progress = "none"), "adaptive_state")
-  expect_error(pairwiseLLM::adaptive_rank_run_live(state, 1L, n_steps = 1L, progress = "none"), "`judge` must be a function")
-  expect_error(pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 0L, progress = "none"), "positive integer")
-  expect_error(pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, session_dir = 1L, progress = "none"), "single string")
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(list(), judge_invalid, n_steps = 1L, progress = "none"),
+    "adaptive_state"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(state, 1L, n_steps = 1L, progress = "none"),
+    "`judge` must be a function"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 0L, progress = "none"),
+    "positive integer"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, session_dir = 1L, progress = "none"),
+    "single string"
+  )
   expect_error(
     pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, persist_item_log = 1L, progress = "none"),
     "must be TRUE or FALSE"
@@ -401,7 +429,10 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
   msg_fb <- pairwiseLLM:::adaptive_progress_step_event(fallback, cfg)
   expect_match(msg_fb, "fallback_used=global_safe")
 
-  expect_null(pairwiseLLM:::adaptive_progress_step_event(fallback, list(progress_show_events = FALSE, progress_errors = TRUE)))
+  expect_null(pairwiseLLM:::adaptive_progress_step_event(
+    fallback,
+    list(progress_show_events = FALSE, progress_errors = TRUE)
+  ))
 
   row <- tibble::tibble(
     refit_id = 1L,
@@ -533,13 +564,25 @@ test_that("adaptive select helpers cover history, strata, and duplicate branches
   expect_true(nrow(anchor_filtered) >= 0L)
   mid_global <- pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "mid_link", "global_safe", rank_index, defaults)
   expect_true(nrow(mid_global) >= 0L)
-  local_expand <- pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "local_link", "expand_locality", rank_index, defaults)
+  local_expand <- pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "local_link",
+    "expand_locality",
+    rank_index,
+    defaults
+  )
   expect_true(nrow(local_expand) >= 0L)
 
   pair_count <- c("a:b" = 2L, "a:c" = 1L, "b:d" = 0L)
   no_repeat <- pairwiseLLM:::.adaptive_duplicate_filter(cand, pair_count, dup_max_obs = 2L, allow_repeats = FALSE)
   expect_true(nrow(no_repeat) <= nrow(cand))
-  relaxed_no_meta <- pairwiseLLM:::.adaptive_duplicate_filter(cand, pair_count, dup_max_obs = 3L, allow_repeats = TRUE, dup_max_obs_default = 1L)
+  relaxed_no_meta <- pairwiseLLM:::.adaptive_duplicate_filter(
+    cand,
+    pair_count,
+    dup_max_obs = 3L,
+    allow_repeats = TRUE,
+    dup_max_obs_default = 1L
+  )
   expect_true(nrow(relaxed_no_meta) <= nrow(cand))
   relaxed_meta <- pairwiseLLM:::.adaptive_duplicate_filter(
     cand, pair_count, dup_max_obs = 3L, allow_repeats = TRUE, dup_max_obs_default = 1L,
@@ -627,7 +670,10 @@ test_that("adaptive state and trueskill validators cover additional edge branche
     ),
     "exactly one spoke set"
   )
-  cfg_ok <- pairwiseLLM:::.adaptive_validate_controller_config(list(boundary_k = 3L, p_long_low = 0.1, p_long_high = 0.9), 5L)
+  cfg_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
+    list(boundary_k = 3L, p_long_low = 0.1, p_long_high = 0.9),
+    5L
+  )
   expect_identical(cfg_ok$boundary_k, 3L)
   cfg_link_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
     list(
@@ -663,7 +709,10 @@ test_that("adaptive state and trueskill validators cover additional edge branche
 
   ts <- pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), mu = c(25, 26), sigma = c(8, 8)))
   expect_true(inherits(ts, "trueskill_state"))
-  expect_error(pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), sigma = c(1, -1))), "must be > 0")
+  expect_error(
+    pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), sigma = c(1, -1))),
+    "must be > 0"
+  )
   expect_error(pairwiseLLM:::validate_trueskill_state(list()), "must inherit")
   expect_true(is.numeric(pairwiseLLM:::trueskill_win_probability("a", "b", ts)))
   expect_error(pairwiseLLM:::update_trueskill_state(ts, "a", "x"), "must be present")
@@ -719,9 +768,27 @@ test_that("adaptive selector branch guards and validation errors are exercised",
   defaults <- pairwiseLLM:::adaptive_defaults(4L)
   cand <- tibble::tibble(i = c("a", "a"), j = c("b", "c"), p = c(0.5, 0.6), u0 = c(1, 1))
   rank_index <- c(a = 1L, b = 2L, c = 3L, d = 4L)
-  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "long_link", "base", rank_index, defaults)) >= 0L)
-  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "mid_link", "expand_locality", rank_index, defaults)) >= 0L)
-  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "local_link", "global_safe", rank_index, defaults)) >= 0L)
+  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "long_link",
+    "base",
+    rank_index,
+    defaults
+  )) >= 0L)
+  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "mid_link",
+    "expand_locality",
+    rank_index,
+    defaults
+  )) >= 0L)
+  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "local_link",
+    "global_safe",
+    rank_index,
+    defaults
+  )) >= 0L)
 
   dup <- pairwiseLLM:::.adaptive_duplicate_filter(
     candidates = cand,
@@ -750,7 +817,13 @@ test_that("adaptive selector branch guards and validation errors are exercised",
 
   lp <- pairwiseLLM:::.adaptive_local_priority_select(tibble::tibble(), state, state$round, 0L, 1L, defaults)
   expect_identical(lp$mode, "standard")
-  partner <- pairwiseLLM:::.adaptive_select_partner(cand, i_id = "a", mu = c(a = 1, b = 2, c = 3), recent_deg = c(a = 0, b = 0, c = 0), mode = "nonlocal")
+  partner <- pairwiseLLM:::.adaptive_select_partner(
+    cand,
+    i_id = "a",
+    mu = c(a = 1, b = 2, c = 3),
+    recent_deg = c(a = 0, b = 0, c = 0),
+    mode = "nonlocal"
+  )
   expect_true(is.data.frame(partner))
 
   expect_error(pairwiseLLM:::select_next_pair(list()), "adaptive_state object")

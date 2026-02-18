@@ -15,56 +15,27 @@ adaptive_rank_start(
 }
 \arguments{
 \item{items}{A vector or data frame of items. Data frames must include an
-\code{item_id} column (or \code{id}/\code{ID}). Item IDs may be character; internal logs
-use integer indices derived from these IDs.}
+\code{item_id} column (or \code{id}/\code{ID}). For linking run modes, items must also
+include integer \code{set_id} values and globally unique \code{global_item_id}
+values. Item IDs may be character; internal logs use integer indices
+derived from these IDs.}
 
 \item{seed}{Integer seed used for deterministic warm-start shuffling and
-selection randomness.}
+selection randomness. Default is \code{1L}.}
 
-\item{session_dir}{Optional directory for saving session artifacts.}
+\item{session_dir}{Optional directory for saving session artifacts.
+Default is \code{NULL}.}
 
-\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
+\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.
+Default is \code{FALSE}.}
 
 \item{...}{Internal/testing only. Supply \code{now_fn} to override the clock used
 for timestamps.}
 
-\item{adaptive_config}{Optional named list overriding adaptive controller
-behavior. Supported fields:
-\describe{
-\item{\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min}}{Thresholds
-used to mark global identifiability after each refit.}
-\item{\code{p_long_low}, \code{p_long_high}}{TrueSkill win-probability gate used for
-long-link eligibility once globally identified.}
-\item{\code{long_taper_mult}, \code{long_frac_floor}, \code{mid_bonus_frac}}{Late-stage
-long-link taper and quota reallocation controls.}
-\item{\code{explore_taper_mult}}{Late-stage exploration taper multiplier.}
-\item{\code{boundary_k}, \code{boundary_window}, \code{boundary_frac}}{Local-stage
-boundary-priority controls after global identifiability.}
-\item{\code{p_star_override_margin}, \code{star_override_budget_per_round}}{Near-tie
-star-cap override controls.}
-\item{\code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
-\code{shift_only_theta_treatment}, \code{judge_param_mode}, \code{hub_lock_mode},
-\code{hub_lock_kappa}}{Linking mode controls. Linking modes require multi-set
-inputs and valid hub assignment.}
-\item{\code{link_identified_reliability_min}, \code{link_stop_reliability_min},
-\code{link_rank_corr_min}, \code{delta_sd_max}, \code{delta_change_max},
-\code{log_alpha_sd_max}, \code{log_alpha_change_max}, \code{cross_set_ppc_brier_max},
-\code{ppc_calibration_id}, \code{max_pairs_after_stop},
-\code{probe_pairs_per_refit_per_spoke},
-\code{link_transform_escalation_refits_required},
-\code{link_transform_escalation_is_one_way},
-\code{spoke_quantile_coverage_bins},
-\code{spoke_quantile_coverage_min_per_bin_per_refit},
-\code{allow_spoke_spoke_cross_set}, \code{multi_spoke_mode},
-\code{min_cross_set_pairs_per_spoke_per_refit},
-\code{phase_a_mode}, \code{phase_a_import_failure_policy},
-\code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
-\code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts},
-\code{phase_a_set_source}}{Linking thresholds and workflow controls used for
-Phase A artifact validation, cross-set calibration, and linking stop
-diagnostics.}
-}
-Unknown fields and invalid values abort with an actionable error.}
+\item{adaptive_config}{Optional named list of adaptive controller overrides.
+Unknown fields and invalid values abort with an actionable error. See
+\code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed semantics,
+and defaults.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and

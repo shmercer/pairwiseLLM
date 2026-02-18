@@ -19,12 +19,15 @@ make_adaptive_judge_llm(
 )
 }
 \arguments{
-\item{backend}{Backend passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
+\item{backend}{Backend passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Choices are
+\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, and \code{"ollama"}.
+Default is \code{"openai"}.}
 
-\item{model}{Model identifier passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
+\item{model}{Model identifier passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Required.}
 
 \item{trait}{Built-in trait key used when no custom trait is supplied.
-Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
+Ignored when both \code{trait_name} and \code{trait_description} are supplied.
+Default is \code{"overall_quality"}.}
 
 \item{trait_name}{Optional custom trait display name.}
 
@@ -34,18 +37,22 @@ Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{endpoint}{Endpoint family passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.
-Only used when \code{backend = "openai"}; ignored otherwise.}
+Only used when \code{backend = "openai"}; choices are \code{"chat.completions"} and
+\code{"responses"}. Default is \code{"chat.completions"}. Ignored for other
+backends.}
 
 \item{api_key}{Optional API key passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
 
-\item{include_raw}{Logical; forwarded to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
+\item{include_raw}{Logical; forwarded to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Default is
+\code{FALSE}.}
 
-\item{text_col}{Name of the text column expected in adaptive item rows.}
+\item{text_col}{Name of the text column expected in adaptive item rows.
+Default is \code{"text"}.}
 
 \item{judge_args}{Named list of additional fixed arguments forwarded to
 \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Use this for provider-specific controls such as
 \code{reasoning}, \code{service_tier}, \code{temperature}, \code{top_p}, \code{logprobs}, \code{host},
-or \code{include_thoughts}.}
+or \code{include_thoughts}. Default is \code{list()}.}
 }
 \value{
 A function \code{judge(A, B, state, ...)} returning a list with fields

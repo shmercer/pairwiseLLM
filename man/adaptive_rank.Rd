@@ -41,17 +41,21 @@ adaptive_rank(
 \code{.txt}, \code{.rds}), or a directory containing \code{.txt} files.}
 
 \item{id_col}{ID column selector for tabular inputs. Passed to
-\code{\link[=read_samples_df]{read_samples_df()}}.}
+\code{\link[=read_samples_df]{read_samples_df()}}. Default is \code{1}.}
 
 \item{text_col}{Text column selector for tabular inputs. Passed to
-\code{\link[=read_samples_df]{read_samples_df()}}.}
+\code{\link[=read_samples_df]{read_samples_df()}}. Default is \code{2}.}
 
-\item{backend}{Backend passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{backend}{Backend passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}. Choices are
+\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, and \code{"ollama"}.
+Default is \code{"openai"}.}
 
-\item{model}{Model passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{model}{Model passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}. Required when
+\code{judge} is \code{NULL}. Default is \code{NULL}.}
 
 \item{trait}{Built-in trait key used when no custom trait is supplied.
-Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
+Ignored when both \code{trait_name} and \code{trait_description} are supplied.
+Default is \code{"overall_quality"}.}
 
 \item{trait_name}{Optional custom trait display name.}
 
@@ -61,17 +65,21 @@ Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{endpoint}{Endpoint family passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.
-Only used when \code{backend = "openai"}; ignored otherwise.}
+Only used when \code{backend = "openai"}; choices are \code{"chat.completions"} and
+\code{"responses"}. Default is \code{"chat.completions"}. Ignored for other
+backends.}
 
-\item{api_key}{Optional API key passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{api_key}{Optional API key passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.
+Default is \code{NULL}.}
 
-\item{include_raw}{Logical; forwarded to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{include_raw}{Logical; forwarded to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.
+Default is \code{FALSE}.}
 
 \item{judge_args}{Named list of fixed additional arguments forwarded to
-\code{\link[=llm_compare_pair]{llm_compare_pair()}} by the generated judge.}
+\code{\link[=llm_compare_pair]{llm_compare_pair()}} by the generated judge. Default is \code{list()}.}
 
 \item{judge_call_args}{Named list of additional arguments forwarded to the
-judge at run time through \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
+judge at run time through \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}. Default is \code{list()}.}
 
 \item{n_steps}{Maximum number of attempted adaptive steps to execute in this
 call. The run may return earlier due to candidate starvation or BTL stop
@@ -79,50 +87,220 @@ criteria. Attempted invalid steps also count toward this limit.}
 
 \item{fit_fn}{Optional fit override passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
 
-\item{adaptive_config}{Optional named list passed to
-\code{\link[=adaptive_rank_start]{adaptive_rank_start()}} and \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} to control adaptive
-controller behavior. Supported fields mirror
-\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} and include:
-global-identification and quota controls, linking mode controls
-(\code{run_mode}, \code{hub_id}, transform/refit/locking options), linking stop and
-escalation thresholds, Phase A artifact controls, and
-post-stop boundary control (\code{max_pairs_after_stop}).
-\code{max_pairs_after_stop = 0L} preserves immediate stop at the first stop
-boundary; values \verb{> 0L} allow that many additional committed comparisons
-after the first stop boundary before deterministic termination.
-Unknown fields and invalid values abort with actionable errors. Wrapper
-preflight validates linking mode combinations against supplied data and
-aborts early for incompatible \code{run_mode}/set structure combinations.}
+\item{adaptive_config}{Optional named list of adaptive controller overrides.
+Unknown fields and invalid values abort with actionable errors.
+
+Supported keys (with defaults) include:
+\describe{
+\item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
+used to mark the run as globally identified after a refit. Default is
+\code{0.80}.}
+\item{\code{global_identified_rank_corr_min}}{Minimum Spearman correlation
+between the TrueSkill rank proxy and the BTL posterior mean ranks used
+to mark the run as globally identified after a refit. Default is \code{0.90}.}
+\item{\code{p_long_low}}{Lower bound for long-link TrueSkill win probability
+gating after global identifiability. Default is \code{0.10}.}
+\item{\code{p_long_high}}{Upper bound for long-link TrueSkill win probability
+gating after global identifiability. Default is \code{0.90}.}
+\item{\code{long_taper_mult}}{Multiplier controlling long-link quota tapering
+after global identifiability. Default is \code{0.25}.}
+\item{\code{long_frac_floor}}{Floor fraction for long-link quota after tapering.
+Default is \code{0.02}.}
+\item{\code{mid_bonus_frac}}{Fraction of tapered long-link quota reallocated to
+mid-links. Default is \code{0.20}.}
+\item{\code{explore_taper_mult}}{Multiplier controlling exploration tapering
+after global identifiability. Default is \code{0.50}.}
+\item{\code{boundary_k}}{Top/bottom band size used by boundary-priority routing
+after global identifiability. Default is \code{20L}.}
+\item{\code{boundary_window}}{Lookback window (steps) used by boundary-priority
+routing after global identifiability. Default is
+\code{max(10L, ceiling(0.05 * N))} where \code{N} is the number of items.}
+\item{\code{boundary_frac}}{Fraction of local-stage steps eligible for
+boundary-priority routing after global identifiability. Default is \code{0.15}.}
+\item{\code{p_star_override_margin}}{Near-tie probability margin for star-cap
+override consideration. Default is \code{0.05}.}
+\item{\code{star_override_budget_per_round}}{Per-round budget of star-cap
+overrides allowed by the near-tie rule. Default is \code{1L}.}
+
+\item{\code{run_mode}}{Run mode. Choices are \code{"within_set"} (single-set),
+\code{"link_one_spoke"} (hub + one spoke), and \code{"link_multi_spoke"} (hub +
+multiple spokes). Default is \code{"within_set"}. Linking modes require
+multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
+\item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
+\item{\code{link_transform_mode}}{Spoke transform mode. Choices are \code{"auto"}
+(start shift-only then possibly escalate), \code{"shift_only"} (offset only),
+and \code{"shift_scale"} (offset + scale). Default is \code{"auto"}.}
+\item{\code{link_refit_mode}}{Linking refit mode. Choices are \code{"shift_only"}
+(fit transform with within-set abilities treated as fixed inputs) and
+\code{"joint_refit"} (jointly estimate hub/spoke abilities and transform
+parameters). Default is \code{"shift_only"}.}
+\item{\code{shift_only_theta_treatment}}{Only used when
+\code{link_refit_mode = "shift_only"}. Choices are \code{"fixed_eap"} (treat Phase A
+within-set posterior means/SDs as fixed targets) and \code{"normal_prior"}
+(combine Phase A and current within-set summaries as a normal-normal
+update when available). Default is \code{"fixed_eap"}.}
+\item{\code{judge_param_mode}}{How judge-noise parameters are handled across
+phases. Choices are \code{"global_shared"} (single shared judge parameter set)
+and \code{"phase_specific"} (separate within-set and link-phase judge
+parameters). Default is \code{"global_shared"}.}
+\item{\code{hub_lock_mode}}{Only used when \code{link_refit_mode = "joint_refit"}.
+Controls whether the hub is allowed to drift during joint refits.
+Choices are \code{"hard_lock"} (hub anchored to Phase A), \code{"soft_lock"}
+(regularize toward Phase A), and \code{"free"} (no lock). Default is
+\code{"soft_lock"}.}
+\item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
+Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}
+
+\item{\code{link_identified_reliability_min}}{Minimum transformed EAP reliability
+on the linking-active item domain used to mark a spoke as identified.
+Default is \code{0.80}.}
+\item{\code{link_stop_reliability_min}}{Minimum transformed EAP reliability on
+the linking-active item domain used to permit linking stop. Default is
+\code{0.90}.}
+\item{\code{link_rank_corr_min}}{Minimum Spearman rank correlation between
+TrueSkill and transformed BTL posterior mean ranks on the linking-active
+item domain. Default is \code{0.90}.}
+\item{\code{delta_sd_max}}{Maximum allowed posterior SD of the shift parameter
+\eqn{\\delta_s}, expressed as a multiplier of \code{SD(theta_hub_eap)} computed
+from the current hub posterior mean. Default is \code{0.10}.}
+\item{\code{delta_change_max}}{Maximum allowed absolute change in \eqn{\\delta_s}
+over the lag window used for linking stability. Default is \code{0.05}.}
+\item{\code{log_alpha_sd_max}}{Only used for \code{"shift_scale"} spokes. Maximum
+allowed posterior SD of \code{log(alpha_s)}. Default is \code{0.10}.}
+\item{\code{log_alpha_change_max}}{Only used for \code{"shift_scale"} spokes. Maximum
+allowed absolute change in \code{log(alpha_s)} over the lag window used for
+linking stability. Default is \code{0.05}.}
+\item{\code{cross_set_ppc_brier_max}}{Only used when \code{link_transform_mode = "auto"}.
+PPC misfit threshold (Brier score) on linking-active, non-probe,
+non-frozen cross-set steps used to escalate from shift-only to
+shift+scale. Default is \code{0.20} unless overridden by the active
+calibration.}
+\item{\code{ppc_calibration_id}}{Calibration identifier used to resolve
+\code{cross_set_ppc_brier_max} when not explicitly supplied. Default is
+\code{"default_p95_brier_active"}.}
+\item{\code{link_transform_escalation_refits_required}}{Only used when
+\code{link_transform_mode = "auto"}. Number of consecutive refits above
+\code{cross_set_ppc_brier_max} required to escalate. Default is \code{2L}.}
+\item{\code{link_transform_escalation_is_one_way}}{Only used when
+\code{link_transform_mode = "auto"}. When \code{TRUE}, escalation is one-way
+(shift-only can become shift+scale but not revert). Default is \code{TRUE}.}
+
+\item{\code{max_pairs_after_stop}}{Stop-boundary budget: when \code{0L}, the run stops
+immediately after the first refit with \code{stop_decision = TRUE}. Values
+\verb{> 0L} allow that many additional committed comparisons after the first
+stop boundary before deterministic termination. Default is \code{0L}.}
+
+\item{\code{probe_pairs_per_refit_per_spoke}}{When linking stop is reached for a
+spoke, cross-set sampling becomes probe-only for that spoke until global
+stop. This sets the per-refit probe budget per stopped spoke. Default is
+\code{2L}.}
+\item{\code{spoke_quantile_coverage_bins}}{Cross-set coverage control: number of
+quantile bins used to ensure spoke items across the score distribution
+receive cross-set exposure within each refit window. Default is \code{3L}.}
+\item{\code{spoke_quantile_coverage_min_per_bin_per_refit}}{Cross-set coverage
+control: minimum cross-set comparisons per quantile bin per refit
+window. Default is \code{1L}.}
+\item{\code{allow_spoke_spoke_cross_set}}{When \code{TRUE}, allow spoke↔spoke
+cross-set comparisons. Default is \code{FALSE} (hub↔spoke only).}
+\item{\code{multi_spoke_mode}}{Only used when \code{run_mode = "link_multi_spoke"}.
+Choices are \code{"independent"} (fit each spoke separately) and
+\code{"concurrent"} (enforce per-refit spoke budgets and stronger hub locking
+requirements). Default is \code{"independent"}.}
+\item{\code{min_cross_set_pairs_per_spoke_per_refit}}{Only used in concurrent
+multi-spoke linking. Minimum cross-set committed comparisons per spoke
+per refit window. Default is \code{5L}.}
+\item{\code{cross_set_utility}}{Cross-set selection utility. Currently only
+\code{"linking_d_optimal"} is supported. Default is \code{"linking_d_optimal"}.}
+
+\item{\code{phase_a_mode}}{Phase A handling for linking modes. Choices are
+\code{"run"} (compute within-set Phase A artifacts in-run), \code{"import"}
+(require user-supplied artifacts), and \code{"mixed"} (import where provided,
+otherwise run). Default is \code{"run"}.}
+\item{\code{phase_a_import_failure_policy}}{Only used when any set is configured
+for Phase A import. Choices are \code{"fail_fast"} (abort on invalid/missing
+artifacts) and \code{"fallback_to_run"} (switch that set to Phase A run if the
+import fails validation). Default is \code{"fail_fast"}.}
+\item{\code{phase_a_required_reliability_min}}{Minimum within-set EAP reliability
+required for Phase A artifacts to be considered ready (unless an imported
+artifact explicitly marks \code{quality_gate_accepted = TRUE}). Default is
+\code{0.80}.}
+\item{\code{phase_a_compatible_model_ids}}{Character vector of allowed model
+identifiers for imported Phase A artifacts (e.g., \code{"btl_e_b"}). Default is
+\code{"btl_e_b"}.}
+\item{\code{phase_a_compatible_config_hashes}}{Character vector of additional
+accepted Phase A config hashes for imported artifacts. Default is
+\code{character()}.}
+\item{\code{phase_a_artifacts}}{Named list mapping \code{set_id} to an imported Phase A
+artifact (list) or a \code{.rds} path containing one. Default is \code{list()}.}
+\item{\code{phase_a_set_source}}{Optional named character vector mapping \code{set_id}
+to \code{"run"} or \code{"import"} to force the source for specific sets. Default is
+\code{character()}.}
+}
+
+Wrapper preflight validates linking mode combinations against supplied data
+and aborts early for incompatible \code{run_mode}/set structure combinations.}
 
 \item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 to control BTL refit cadence, stopping diagnostics, and selected
 round-log diagnostics. Supported fields:
-\code{refit_pairs_target}, \code{model_variant}, \code{ess_bulk_min},
-\code{ess_bulk_min_near_stop}, \code{max_rhat}, \code{divergences_max},
-\code{eap_reliability_min}, \code{stability_lag}, \code{theta_corr_min},
-\code{theta_sd_rel_change_max}, \code{rank_spearman_min}, \code{near_tie_p_low},
-and \code{near_tie_p_high} (\verb{near_tie_*} affects round logging only, not stop
-decisions). Defaults are resolved from the current item count and merged
-with user overrides.}
+\describe{
+\item{\code{refit_pairs_target}}{Minimum new committed comparisons required
+before the next BTL refit. Default is \code{ceiling(N / 2)} clamped to
+\verb{[20L, 5000L]}. In linking Phase A, \code{N} is the active Phase A set size.}
+\item{\code{model_variant}}{BTL likelihood variant used for inference only.
+Choices are \code{"btl"} (no lapse, no position bias), \code{"btl_e"} (lapse),
+\code{"btl_b"} (position bias), and \code{"btl_e_b"} (lapse + position bias).
+Default is \code{"btl_e_b"}.}
+\item{\code{ess_bulk_min}}{Minimum bulk effective sample size required for
+diagnostics to pass. Default is \code{max(400, round(20 * sqrt(N)))}.}
+\item{\code{ess_bulk_min_near_stop}}{Stricter bulk ESS requirement used when a
+run is close to stopping. Default is \code{max(1000, round(50 * sqrt(N)))}.}
+\item{\code{max_rhat}}{Maximum allowed split-\eqn{\\hat{R}}. Default is \code{1.01}.}
+\item{\code{divergences_max}}{Maximum allowed divergent transitions. Default is
+\code{0L}.}
+\item{\code{eap_reliability_min}}{Minimum EAP reliability required to permit
+stopping. Default is \code{0.90}.}
+\item{\code{stability_lag}}{Lag (in refits) used for stability checks. Default
+is \code{2L}.}
+\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means
+required by stability checks. Default is \code{0.95}.}
+\item{\code{theta_sd_rel_change_max}}{Maximum relative change in posterior SD
+allowed by stability checks. Default is \code{0.10}.}
+\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation
+required by stability checks. Default is \code{0.95}.}
+\item{\code{near_tie_p_low}}{Lower bound of the near-tie probability band used
+for round logging only. Default is \code{0.40}.}
+\item{\code{near_tie_p_high}}{Upper bound of the near-tie probability band used
+for round logging only. Default is \code{0.60}.}
+}
+Defaults depend on the current item count \code{N} and are merged with user
+overrides.}
 
-\item{session_dir}{Optional session directory for persistence/resume.}
+\item{session_dir}{Optional session directory for persistence/resume.
+Default is \code{NULL}.}
 
-\item{persist_item_log}{Logical; write per-refit item logs when \code{TRUE}.}
+\item{persist_item_log}{Logical; write per-refit item logs when \code{TRUE}.
+Default is \code{FALSE}.}
 
 \item{resume}{Logical; when \code{TRUE} and \code{session_dir} contains a valid session,
-resume from disk; otherwise initialize a new state.}
+resume from disk; otherwise initialize a new state.
+Default is \code{TRUE}.}
 
-\item{seed}{Integer seed used when creating a new adaptive state.}
+\item{seed}{Integer seed used when creating a new adaptive state. Default is
+\code{1L}.}
 
-\item{progress}{Progress mode for \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
+\item{progress}{Progress mode for \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}. Choices are
+\code{"all"}, \code{"refits"}, \code{"steps"}, and \code{"none"}. Default is \code{"all"}.}
 
-\item{progress_redraw_every}{Redraw interval for progress output.}
+\item{progress_redraw_every}{Redraw interval for progress output. Default is
+\code{10L}.}
 
-\item{progress_show_events}{Logical; show step events.}
+\item{progress_show_events}{Logical; show step events. Default is \code{TRUE}.}
 
-\item{progress_errors}{Logical; show invalid-step events.}
+\item{progress_errors}{Logical; show invalid-step events. Default is \code{TRUE}.}
 
-\item{save_outputs}{Logical; when \code{TRUE}, save returned outputs as \code{.rds}.}
+\item{save_outputs}{Logical; when \code{TRUE}, save returned outputs as \code{.rds}.
+Default is \code{FALSE}.}
 
 \item{output_file}{Optional output \code{.rds} path. If \code{NULL} and
 \code{save_outputs = TRUE}, defaults to \code{file.path(session_dir, "adaptive_outputs.rds")}

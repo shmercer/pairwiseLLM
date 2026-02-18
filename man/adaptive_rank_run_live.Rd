@@ -36,67 +36,60 @@ toward this budget, including invalid judge responses.}
 to \code{default_btl_fit_fn()} when a refit is due.}
 
 \item{adaptive_config}{Optional named list overriding adaptive controller
-behavior. Supported fields:
-\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min},
-\code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
-\code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
-\code{boundary_frac}, \code{p_star_override_margin},
-\code{star_override_budget_per_round}, and linking fields:
-\code{run_mode}, \code{hub_id}, \code{link_transform_mode}, \code{link_refit_mode},
-\code{shift_only_theta_treatment}, \code{judge_param_mode}, \code{hub_lock_mode},
-\code{hub_lock_kappa},
-\code{link_identified_reliability_min}, \code{link_stop_reliability_min},
-\code{link_rank_corr_min}, \code{delta_sd_max}, \code{delta_change_max},
-\code{log_alpha_sd_max}, \code{log_alpha_change_max}, \code{cross_set_ppc_brier_max},
-\code{ppc_calibration_id}, \code{max_pairs_after_stop},
-\code{probe_pairs_per_refit_per_spoke},
-\code{link_transform_escalation_refits_required},
-\code{link_transform_escalation_is_one_way},
-\code{spoke_quantile_coverage_bins},
-\code{spoke_quantile_coverage_min_per_bin_per_refit},
-\code{allow_spoke_spoke_cross_set}, \code{multi_spoke_mode},
-\code{min_cross_set_pairs_per_spoke_per_refit},
-\code{phase_a_mode}, \code{phase_a_import_failure_policy},
-\code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
-\code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts}, and
-\code{phase_a_set_source}.
-Unknown fields and invalid values abort with an actionable error.}
+behavior. Unknown fields and invalid values abort with an actionable error.
+See \code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed
+semantics, and defaults.}
 
 \item{btl_config}{Optional named list overriding BTL refit cadence, stopping
 thresholds, and selected round-log diagnostics. Supported fields:
 \describe{
 \item{\code{refit_pairs_target}}{Minimum new committed comparisons required
-before the next BTL refit.}
+before the next BTL refit. Default is \code{ceiling(N / 2)} clamped to
+\verb{[20L, 5000L]} (Phase A linking uses the active set size).}
 \item{\code{model_variant}}{BTL MCMC variant: \code{"btl"}, \code{"btl_e"}, \code{"btl_b"},
-or \code{"btl_e_b"}.}
-\item{\code{ess_bulk_min}}{Minimum bulk ESS required for diagnostics to pass.}
+or \code{"btl_e_b"}. Default is \code{"btl_e_b"}.}
+\item{\code{ess_bulk_min}}{Minimum bulk ESS required for diagnostics to pass.
+Default is \code{max(400, round(20 * sqrt(N)))}.}
 \item{\code{ess_bulk_min_near_stop}}{Stricter ESS requirement when a run is
-close to stopping.}
-\item{\code{max_rhat}}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.}
-\item{\code{divergences_max}}{Maximum allowed divergent transitions.}
-\item{\code{eap_reliability_min}}{Minimum EAP reliability to allow stopping.}
-\item{\code{stability_lag}}{Lag (in refits) used for stability checks.}
-\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means.}
+close to stopping. Default is \code{max(1000, round(50 * sqrt(N)))}.}
+\item{\code{max_rhat}}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.
+Default is \code{1.01}.}
+\item{\code{divergences_max}}{Maximum allowed divergent transitions. Default is
+\code{0L}.}
+\item{\code{eap_reliability_min}}{Minimum EAP reliability to allow stopping.
+Default is \code{0.90}.}
+\item{\code{stability_lag}}{Lag (in refits) used for stability checks. Default
+is \code{2L}.}
+\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means.
+Default is \code{0.95}.}
 \item{\code{theta_sd_rel_change_max}}{Maximum relative change in posterior SD
-allowed by stability checks.}
-\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation.}
+allowed by stability checks. Default is \code{0.10}.}
+\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation.
+Default is \code{0.95}.}
 \item{\code{near_tie_p_low}, \code{near_tie_p_high}}{Probability band used only for
-near-tie diagnostics in round logging (not used for stopping decisions).}
+near-tie diagnostics in round logging (not used for stopping decisions).
+Defaults are \code{0.40} and \code{0.60}.}
 }
-Defaults are resolved from the current item count, then merged with user
-overrides.}
+Defaults are resolved from the current item count \code{N}, then merged with
+user overrides.}
 
-\item{session_dir}{Optional directory for saving session artifacts.}
+\item{session_dir}{Optional directory for saving session artifacts.
+If \code{NULL}, uses \code{state$config$session_dir}. Default is \code{NULL}.}
 
-\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
+\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.
+If \code{NULL}, uses \code{state$config$persist_item_log}. Default is \code{NULL}.}
 
-\item{progress}{Progress output: "all", "refits", "steps", or "none".}
+\item{progress}{Progress output: \code{"all"}, \code{"refits"}, \code{"steps"}, or \code{"none"}.
+Default is \code{"all"}.}
 
-\item{progress_redraw_every}{Redraw progress bar every N steps.}
+\item{progress_redraw_every}{Redraw progress bar every N steps. Default is
+\code{10L}.}
 
-\item{progress_show_events}{Logical; when TRUE, print notable step events.}
+\item{progress_show_events}{Logical; when TRUE, print notable step events.
+Default is \code{TRUE}.}
 
-\item{progress_errors}{Logical; when TRUE, include invalid-step events.}
+\item{progress_errors}{Logical; when TRUE, include invalid-step events.
+Default is \code{TRUE}.}
 
 \item{...}{Additional arguments passed through to \code{judge()}.}
 }

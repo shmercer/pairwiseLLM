@@ -359,7 +359,11 @@ test_that("round candidates helper edge branches are exercised", {
 
   no_recent <- pairwiseLLM:::.adaptive_round_exposure_filter(
     candidates = tibble::tibble(i = c("1", "2"), j = c("3", "4")),
-    round = list(per_round_item_uses = stats::setNames(integer(), character()), repeat_in_round_budget = 1L, repeat_in_round_used = 0L),
+    round = list(
+      per_round_item_uses = stats::setNames(integer(), character()),
+      repeat_in_round_budget = 1L,
+      repeat_in_round_used = 0L
+    ),
     recent_deg = numeric(),
     defaults = pairwiseLLM:::adaptive_defaults(8L),
     allow_repeat_pressure = TRUE

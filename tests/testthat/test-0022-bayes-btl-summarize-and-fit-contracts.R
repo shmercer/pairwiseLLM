@@ -186,7 +186,13 @@ test_that("summarize_draws and fit-contract conversion return canonical structur
   expect_identical(colnames(fit$theta_draws), c("A", "B"))
   expect_true(is.list(fit$inference_contract))
 
-  expect_error(pairwiseLLM:::as_btl_fit_contract_from_mcmc(list(draws = list(theta = theta)), ids = c("A", "A")), "unique")
+  expect_error(
+    pairwiseLLM:::as_btl_fit_contract_from_mcmc(
+      list(draws = list(theta = theta)),
+      ids = c("A", "A")
+    ),
+    "unique"
+  )
   expect_error(
     pairwiseLLM:::as_btl_fit_contract_from_mcmc(
       list(model_variant = "btl_e", draws = list(theta = theta)),

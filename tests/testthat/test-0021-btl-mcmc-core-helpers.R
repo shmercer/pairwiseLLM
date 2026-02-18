@@ -171,7 +171,10 @@ test_that("presentation and rollback constraints handle logical and environment 
 
   bad_ordered <- make_legacy_state_fixture()
   bad_ordered$unordered_count <- stats::setNames(1L, "A:B")
-  expect_error(pairwiseLLM:::btl_mcmc_rollback_presentation(bad_ordered, "A", "B"), "missing the requested ordered pair")
+  expect_error(
+    pairwiseLLM:::btl_mcmc_rollback_presentation(bad_ordered, "A", "B"),
+    "missing the requested ordered pair"
+  )
 
   bad_env <- make_legacy_state_fixture()
   bad_env$ordered_seen <- new.env(parent = emptyenv())

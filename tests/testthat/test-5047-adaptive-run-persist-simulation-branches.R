@@ -477,7 +477,10 @@ test_that("adaptive round helper early-return branches are covered directly", {
   invalid_idx_state$round$staged_active <- TRUE
   invalid_idx_state$round$stage_order <- pairwiseLLM:::.adaptive_stage_order()
   invalid_idx_state$round$stage_quotas <- as.list(stats::setNames(rep.int(2L, 4L), invalid_idx_state$round$stage_order))
-  invalid_idx_state$round$stage_committed <- as.list(stats::setNames(rep.int(0L, 4L), invalid_idx_state$round$stage_order))
+  invalid_idx_state$round$stage_committed <- as.list(stats::setNames(
+    rep.int(0L, 4L),
+    invalid_idx_state$round$stage_order
+  ))
   step_invalid_idx <- tibble::tibble(round_stage = "anchor_link", A = 99L, B = 98L)
   out_invalid_idx <- pairwiseLLM:::.adaptive_round_commit(invalid_idx_state, step_invalid_idx)
   expect_true(is.list(out_invalid_idx$round))
@@ -485,7 +488,10 @@ test_that("adaptive round helper early-return branches are covered directly", {
   warm_no_round <- pairwiseLLM:::.adaptive_round_commit_warm_start(list(round = NULL))
   expect_null(warm_no_round$round)
 
-  starve_no_round <- pairwiseLLM:::.adaptive_round_starvation(list(round = NULL), tibble::tibble(round_stage = "anchor_link"))
+  starve_no_round <- pairwiseLLM:::.adaptive_round_starvation(
+    list(round = NULL),
+    tibble::tibble(round_stage = "anchor_link")
+  )
   expect_true(isTRUE(starve_no_round$exhausted))
 })
 

@@ -736,49 +736,20 @@
 #' immediately using [save_adaptive_session()].
 #'
 #' @param items A vector or data frame of items. Data frames must include an
-#'   `item_id` column (or `id`/`ID`). Item IDs may be character; internal logs
-#'   use integer indices derived from these IDs.
+#'   `item_id` column (or `id`/`ID`). For linking run modes, items must also
+#'   include integer `set_id` values and globally unique `global_item_id`
+#'   values. Item IDs may be character; internal logs use integer indices
+#'   derived from these IDs.
 #' @param seed Integer seed used for deterministic warm-start shuffling and
-#'   selection randomness.
-#' @param adaptive_config Optional named list overriding adaptive controller
-#'   behavior. Supported fields:
-#'   \describe{
-#'   \item{`global_identified_reliability_min`, `global_identified_rank_corr_min`}{Thresholds
-#'   used to mark global identifiability after each refit.}
-#'   \item{`p_long_low`, `p_long_high`}{TrueSkill win-probability gate used for
-#'   long-link eligibility once globally identified.}
-#'   \item{`long_taper_mult`, `long_frac_floor`, `mid_bonus_frac`}{Late-stage
-#'   long-link taper and quota reallocation controls.}
-#'   \item{`explore_taper_mult`}{Late-stage exploration taper multiplier.}
-#'   \item{`boundary_k`, `boundary_window`, `boundary_frac`}{Local-stage
-#'   boundary-priority controls after global identifiability.}
-#'   \item{`p_star_override_margin`, `star_override_budget_per_round`}{Near-tie
-#'   star-cap override controls.}
-#'   \item{`run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
-#'   `shift_only_theta_treatment`, `judge_param_mode`, `hub_lock_mode`,
-#'   `hub_lock_kappa`}{Linking mode controls. Linking modes require multi-set
-#'   inputs and valid hub assignment.}
-#'   \item{`link_identified_reliability_min`, `link_stop_reliability_min`,
-#'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
-#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_brier_max`,
-#'   `ppc_calibration_id`, `max_pairs_after_stop`,
-#'   `probe_pairs_per_refit_per_spoke`,
-#'   `link_transform_escalation_refits_required`,
-#'   `link_transform_escalation_is_one_way`,
-#'   `spoke_quantile_coverage_bins`,
-#'   `spoke_quantile_coverage_min_per_bin_per_refit`,
-#'   `allow_spoke_spoke_cross_set`, `multi_spoke_mode`,
-#'   `min_cross_set_pairs_per_spoke_per_refit`,
-#'   `phase_a_mode`, `phase_a_import_failure_policy`,
-#'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
-#'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`,
-#'   `phase_a_set_source`}{Linking thresholds and workflow controls used for
-#'   Phase A artifact validation, cross-set calibration, and linking stop
-#'   diagnostics.}
-#'   }
-#'   Unknown fields and invalid values abort with an actionable error.
+#'   selection randomness. Default is `1L`.
+#' @param adaptive_config Optional named list of adaptive controller overrides.
+#'   Unknown fields and invalid values abort with an actionable error. See
+#'   [adaptive_rank()] for the full list of supported keys, detailed semantics,
+#'   and defaults.
 #' @param session_dir Optional directory for saving session artifacts.
+#'   Default is `NULL`.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
+#'   Default is `FALSE`.
 #' @param ... Internal/testing only. Supply `now_fn` to override the clock used
 #'   for timestamps.
 #'
@@ -925,60 +896,53 @@ adaptive_rank_start <- function(items,
 #' @param fit_fn Optional BTL fit function for deterministic testing; defaults
 #'   to `default_btl_fit_fn()` when a refit is due.
 #' @param adaptive_config Optional named list overriding adaptive controller
-#'   behavior. Supported fields:
-#'   `global_identified_reliability_min`, `global_identified_rank_corr_min`,
-#'   `p_long_low`, `p_long_high`, `long_taper_mult`, `long_frac_floor`,
-#'   `mid_bonus_frac`, `explore_taper_mult`, `boundary_k`, `boundary_window`,
-#'   `boundary_frac`, `p_star_override_margin`,
-#'   `star_override_budget_per_round`, and linking fields:
-#'   `run_mode`, `hub_id`, `link_transform_mode`, `link_refit_mode`,
-#'   `shift_only_theta_treatment`, `judge_param_mode`, `hub_lock_mode`,
-#'   `hub_lock_kappa`,
-#'   `link_identified_reliability_min`, `link_stop_reliability_min`,
-#'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
-#'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_brier_max`,
-#'   `ppc_calibration_id`, `max_pairs_after_stop`,
-#'   `probe_pairs_per_refit_per_spoke`,
-#'   `link_transform_escalation_refits_required`,
-#'   `link_transform_escalation_is_one_way`,
-#'   `spoke_quantile_coverage_bins`,
-#'   `spoke_quantile_coverage_min_per_bin_per_refit`,
-#'   `allow_spoke_spoke_cross_set`, `multi_spoke_mode`,
-#'   `min_cross_set_pairs_per_spoke_per_refit`,
-#'   `phase_a_mode`, `phase_a_import_failure_policy`,
-#'   `phase_a_required_reliability_min`, `phase_a_compatible_model_ids`,
-#'   `phase_a_compatible_config_hashes`, `phase_a_artifacts`, and
-#'   `phase_a_set_source`.
-#'   Unknown fields and invalid values abort with an actionable error.
+#'   behavior. Unknown fields and invalid values abort with an actionable error.
+#'   See [adaptive_rank()] for the full list of supported keys, detailed
+#'   semantics, and defaults.
 #' @param btl_config Optional named list overriding BTL refit cadence, stopping
 #'   thresholds, and selected round-log diagnostics. Supported fields:
 #'   \describe{
 #'   \item{`refit_pairs_target`}{Minimum new committed comparisons required
-#'   before the next BTL refit.}
+#'   before the next BTL refit. Default is `ceiling(N / 2)` clamped to
+#'   `[20L, 5000L]` (Phase A linking uses the active set size).}
 #'   \item{`model_variant`}{BTL MCMC variant: `"btl"`, `"btl_e"`, `"btl_b"`,
-#'   or `"btl_e_b"`.}
-#'   \item{`ess_bulk_min`}{Minimum bulk ESS required for diagnostics to pass.}
+#'   or `"btl_e_b"`. Default is `"btl_e_b"`.}
+#'   \item{`ess_bulk_min`}{Minimum bulk ESS required for diagnostics to pass.
+#'   Default is `max(400, round(20 * sqrt(N)))`.}
 #'   \item{`ess_bulk_min_near_stop`}{Stricter ESS requirement when a run is
-#'   close to stopping.}
-#'   \item{`max_rhat`}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.}
-#'   \item{`divergences_max`}{Maximum allowed divergent transitions.}
-#'   \item{`eap_reliability_min`}{Minimum EAP reliability to allow stopping.}
-#'   \item{`stability_lag`}{Lag (in refits) used for stability checks.}
-#'   \item{`theta_corr_min`}{Minimum lagged correlation of posterior means.}
+#'   close to stopping. Default is `max(1000, round(50 * sqrt(N)))`.}
+#'   \item{`max_rhat`}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.
+#'   Default is `1.01`.}
+#'   \item{`divergences_max`}{Maximum allowed divergent transitions. Default is
+#'   `0L`.}
+#'   \item{`eap_reliability_min`}{Minimum EAP reliability to allow stopping.
+#'   Default is `0.90`.}
+#'   \item{`stability_lag`}{Lag (in refits) used for stability checks. Default
+#'   is `2L`.}
+#'   \item{`theta_corr_min`}{Minimum lagged correlation of posterior means.
+#'   Default is `0.95`.}
 #'   \item{`theta_sd_rel_change_max`}{Maximum relative change in posterior SD
-#'   allowed by stability checks.}
-#'   \item{`rank_spearman_min`}{Minimum lagged Spearman rank correlation.}
+#'   allowed by stability checks. Default is `0.10`.}
+#'   \item{`rank_spearman_min`}{Minimum lagged Spearman rank correlation.
+#'   Default is `0.95`.}
 #'   \item{`near_tie_p_low`, `near_tie_p_high`}{Probability band used only for
-#'   near-tie diagnostics in round logging (not used for stopping decisions).}
+#'   near-tie diagnostics in round logging (not used for stopping decisions).
+#'   Defaults are `0.40` and `0.60`.}
 #'   }
-#'   Defaults are resolved from the current item count, then merged with user
-#'   overrides.
+#'   Defaults are resolved from the current item count `N`, then merged with
+#'   user overrides.
 #' @param session_dir Optional directory for saving session artifacts.
+#'   If `NULL`, uses `state$config$session_dir`. Default is `NULL`.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
-#' @param progress Progress output: "all", "refits", "steps", or "none".
-#' @param progress_redraw_every Redraw progress bar every N steps.
+#'   If `NULL`, uses `state$config$persist_item_log`. Default is `NULL`.
+#' @param progress Progress output: `"all"`, `"refits"`, `"steps"`, or `"none"`.
+#'   Default is `"all"`.
+#' @param progress_redraw_every Redraw progress bar every N steps. Default is
+#'   `10L`.
 #' @param progress_show_events Logical; when TRUE, print notable step events.
+#'   Default is `TRUE`.
 #' @param progress_errors Logical; when TRUE, include invalid-step events.
+#'   Default is `TRUE`.
 #' @param ... Additional arguments passed through to `judge()`.
 #'
 #' @return An updated \code{adaptive_state}. The returned state includes

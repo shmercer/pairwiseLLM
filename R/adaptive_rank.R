@@ -139,23 +139,30 @@
 #' Collectively this supports all `llm_compare_pair()` options, including
 #' backend-specific parameters such as OpenAI `reasoning` and `service_tier`.
 #'
-#' @param backend Backend passed to [llm_compare_pair()].
-#' @param model Model identifier passed to [llm_compare_pair()].
+#' @param backend Backend passed to [llm_compare_pair()]. Choices are
+#'   `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, and `"ollama"`.
+#'   Default is `"openai"`.
+#' @param model Model identifier passed to [llm_compare_pair()]. Required.
 #' @param trait Built-in trait key used when no custom trait is supplied.
 #'   Ignored when both `trait_name` and `trait_description` are supplied.
+#'   Default is `"overall_quality"`.
 #' @param trait_name Optional custom trait display name.
 #' @param trait_description Optional custom trait definition.
 #' @param prompt_template Prompt template string. Defaults to
 #'   [set_prompt_template()].
 #' @param endpoint Endpoint family passed to [llm_compare_pair()].
-#'   Only used when `backend = "openai"`; ignored otherwise.
+#'   Only used when `backend = "openai"`; choices are `"chat.completions"` and
+#'   `"responses"`. Default is `"chat.completions"`. Ignored for other
+#'   backends.
 #' @param api_key Optional API key passed to [llm_compare_pair()].
-#' @param include_raw Logical; forwarded to [llm_compare_pair()].
+#' @param include_raw Logical; forwarded to [llm_compare_pair()]. Default is
+#'   `FALSE`.
 #' @param text_col Name of the text column expected in adaptive item rows.
+#'   Default is `"text"`.
 #' @param judge_args Named list of additional fixed arguments forwarded to
 #'   [llm_compare_pair()]. Use this for provider-specific controls such as
 #'   `reasoning`, `service_tier`, `temperature`, `top_p`, `logprobs`, `host`,
-#'   or `include_thoughts`.
+#'   or `include_thoughts`. Default is `list()`.
 #'
 #' @return A function `judge(A, B, state, ...)` returning a list with fields
 #'   `is_valid`, `Y`, and `invalid_reason`.
@@ -359,63 +366,241 @@ make_adaptive_judge_llm <- function(
 #' @param data Data source: a data frame/tibble, a file path (`.csv`, `.tsv`,
 #'   `.txt`, `.rds`), or a directory containing `.txt` files.
 #' @param id_col ID column selector for tabular inputs. Passed to
-#'   [read_samples_df()].
+#'   [read_samples_df()]. Default is `1`.
 #' @param text_col Text column selector for tabular inputs. Passed to
-#'   [read_samples_df()].
-#' @param backend Backend passed to [make_adaptive_judge_llm()].
-#' @param model Model passed to [make_adaptive_judge_llm()].
+#'   [read_samples_df()]. Default is `2`.
+#' @param backend Backend passed to [make_adaptive_judge_llm()]. Choices are
+#'   `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, and `"ollama"`.
+#'   Default is `"openai"`.
+#' @param model Model passed to [make_adaptive_judge_llm()]. Required when
+#'   `judge` is `NULL`. Default is `NULL`.
 #' @param trait Built-in trait key used when no custom trait is supplied.
 #'   Ignored when both `trait_name` and `trait_description` are supplied.
+#'   Default is `"overall_quality"`.
 #' @param trait_name Optional custom trait display name.
 #' @param trait_description Optional custom trait definition.
 #' @param prompt_template Prompt template string. Defaults to
 #'   [set_prompt_template()].
 #' @param endpoint Endpoint family passed to [make_adaptive_judge_llm()].
-#'   Only used when `backend = "openai"`; ignored otherwise.
+#'   Only used when `backend = "openai"`; choices are `"chat.completions"` and
+#'   `"responses"`. Default is `"chat.completions"`. Ignored for other
+#'   backends.
 #' @param api_key Optional API key passed to [make_adaptive_judge_llm()].
+#'   Default is `NULL`.
 #' @param include_raw Logical; forwarded to [make_adaptive_judge_llm()].
+#'   Default is `FALSE`.
 #' @param judge_args Named list of fixed additional arguments forwarded to
-#'   [llm_compare_pair()] by the generated judge.
+#'   [llm_compare_pair()] by the generated judge. Default is `list()`.
 #' @param judge_call_args Named list of additional arguments forwarded to the
-#'   judge at run time through [adaptive_rank_run_live()].
+#'   judge at run time through [adaptive_rank_run_live()]. Default is `list()`.
 #' @param n_steps Maximum number of attempted adaptive steps to execute in this
 #'   call. The run may return earlier due to candidate starvation or BTL stop
 #'   criteria. Attempted invalid steps also count toward this limit.
 #' @param fit_fn Optional fit override passed to [adaptive_rank_run_live()].
-#' @param adaptive_config Optional named list passed to
-#'   [adaptive_rank_start()] and [adaptive_rank_run_live()] to control adaptive
-#'   controller behavior. Supported fields mirror
-#'   [adaptive_rank_run_live()] and include:
-#'   global-identification and quota controls, linking mode controls
-#'   (`run_mode`, `hub_id`, transform/refit/locking options), linking stop and
-#'   escalation thresholds, Phase A artifact controls, and
-#'   post-stop boundary control (`max_pairs_after_stop`).
-#'   `max_pairs_after_stop = 0L` preserves immediate stop at the first stop
-#'   boundary; values `> 0L` allow that many additional committed comparisons
-#'   after the first stop boundary before deterministic termination.
-#'   Unknown fields and invalid values abort with actionable errors. Wrapper
-#'   preflight validates linking mode combinations against supplied data and
-#'   aborts early for incompatible `run_mode`/set structure combinations.
+#' @param adaptive_config Optional named list of adaptive controller overrides.
+#'   Unknown fields and invalid values abort with actionable errors.
+#'
+#'   Supported keys (with defaults) include:
+#'   \describe{
+#'   \item{`global_identified_reliability_min`}{Global EAP reliability threshold
+#'     used to mark the run as globally identified after a refit. Default is
+#'     `0.80`.}
+#'   \item{`global_identified_rank_corr_min`}{Minimum Spearman correlation
+#'     between the TrueSkill rank proxy and the BTL posterior mean ranks used
+#'     to mark the run as globally identified after a refit. Default is `0.90`.}
+#'   \item{`p_long_low`}{Lower bound for long-link TrueSkill win probability
+#'     gating after global identifiability. Default is `0.10`.}
+#'   \item{`p_long_high`}{Upper bound for long-link TrueSkill win probability
+#'     gating after global identifiability. Default is `0.90`.}
+#'   \item{`long_taper_mult`}{Multiplier controlling long-link quota tapering
+#'     after global identifiability. Default is `0.25`.}
+#'   \item{`long_frac_floor`}{Floor fraction for long-link quota after tapering.
+#'     Default is `0.02`.}
+#'   \item{`mid_bonus_frac`}{Fraction of tapered long-link quota reallocated to
+#'     mid-links. Default is `0.20`.}
+#'   \item{`explore_taper_mult`}{Multiplier controlling exploration tapering
+#'     after global identifiability. Default is `0.50`.}
+#'   \item{`boundary_k`}{Top/bottom band size used by boundary-priority routing
+#'     after global identifiability. Default is `20L`.}
+#'   \item{`boundary_window`}{Lookback window (steps) used by boundary-priority
+#'     routing after global identifiability. Default is
+#'     `max(10L, ceiling(0.05 * N))` where `N` is the number of items.}
+#'   \item{`boundary_frac`}{Fraction of local-stage steps eligible for
+#'     boundary-priority routing after global identifiability. Default is `0.15`.}
+#'   \item{`p_star_override_margin`}{Near-tie probability margin for star-cap
+#'     override consideration. Default is `0.05`.}
+#'   \item{`star_override_budget_per_round`}{Per-round budget of star-cap
+#'     overrides allowed by the near-tie rule. Default is `1L`.}
+#'
+#'   \item{`run_mode`}{Run mode. Choices are `"within_set"` (single-set),
+#'     `"link_one_spoke"` (hub + one spoke), and `"link_multi_spoke"` (hub +
+#'     multiple spokes). Default is `"within_set"`. Linking modes require
+#'     multi-set inputs with `set_id` and `global_item_id` in `data`.}
+#'   \item{`hub_id`}{Hub `set_id` for linking modes. Default is `1L`.}
+#'   \item{`link_transform_mode`}{Spoke transform mode. Choices are `"auto"`
+#'     (start shift-only then possibly escalate), `"shift_only"` (offset only),
+#'     and `"shift_scale"` (offset + scale). Default is `"auto"`.}
+#'   \item{`link_refit_mode`}{Linking refit mode. Choices are `"shift_only"`
+#'     (fit transform with within-set abilities treated as fixed inputs) and
+#'     `"joint_refit"` (jointly estimate hub/spoke abilities and transform
+#'     parameters). Default is `"shift_only"`.}
+#'   \item{`shift_only_theta_treatment`}{Only used when
+#'     `link_refit_mode = "shift_only"`. Choices are `"fixed_eap"` (treat Phase A
+#'     within-set posterior means/SDs as fixed targets) and `"normal_prior"`
+#'     (combine Phase A and current within-set summaries as a normal-normal
+#'     update when available). Default is `"fixed_eap"`.}
+#'   \item{`judge_param_mode`}{How judge-noise parameters are handled across
+#'     phases. Choices are `"global_shared"` (single shared judge parameter set)
+#'     and `"phase_specific"` (separate within-set and link-phase judge
+#'     parameters). Default is `"global_shared"`.}
+#'   \item{`hub_lock_mode`}{Only used when `link_refit_mode = "joint_refit"`.
+#'     Controls whether the hub is allowed to drift during joint refits.
+#'     Choices are `"hard_lock"` (hub anchored to Phase A), `"soft_lock"`
+#'     (regularize toward Phase A), and `"free"` (no lock). Default is
+#'     `"soft_lock"`.}
+#'   \item{`hub_lock_kappa`}{Only used when `hub_lock_mode = "soft_lock"`.
+#'     Regularization strength in `[0,1]`. Default is `0.75`.}
+#'
+#'   \item{`link_identified_reliability_min`}{Minimum transformed EAP reliability
+#'     on the linking-active item domain used to mark a spoke as identified.
+#'     Default is `0.80`.}
+#'   \item{`link_stop_reliability_min`}{Minimum transformed EAP reliability on
+#'     the linking-active item domain used to permit linking stop. Default is
+#'     `0.90`.}
+#'   \item{`link_rank_corr_min`}{Minimum Spearman rank correlation between
+#'     TrueSkill and transformed BTL posterior mean ranks on the linking-active
+#'     item domain. Default is `0.90`.}
+#'   \item{`delta_sd_max`}{Maximum allowed posterior SD of the shift parameter
+#'     \eqn{\\delta_s}, expressed as a multiplier of `SD(theta_hub_eap)` computed
+#'     from the current hub posterior mean. Default is `0.10`.}
+#'   \item{`delta_change_max`}{Maximum allowed absolute change in \eqn{\\delta_s}
+#'     over the lag window used for linking stability. Default is `0.05`.}
+#'   \item{`log_alpha_sd_max`}{Only used for `"shift_scale"` spokes. Maximum
+#'     allowed posterior SD of `log(alpha_s)`. Default is `0.10`.}
+#'   \item{`log_alpha_change_max`}{Only used for `"shift_scale"` spokes. Maximum
+#'     allowed absolute change in `log(alpha_s)` over the lag window used for
+#'     linking stability. Default is `0.05`.}
+#'   \item{`cross_set_ppc_brier_max`}{Only used when `link_transform_mode = "auto"`.
+#'     PPC misfit threshold (Brier score) on linking-active, non-probe,
+#'     non-frozen cross-set steps used to escalate from shift-only to
+#'     shift+scale. Default is `0.20` unless overridden by the active
+#'     calibration.}
+#'   \item{`ppc_calibration_id`}{Calibration identifier used to resolve
+#'     `cross_set_ppc_brier_max` when not explicitly supplied. Default is
+#'     `"default_p95_brier_active"`.}
+#'   \item{`link_transform_escalation_refits_required`}{Only used when
+#'     `link_transform_mode = "auto"`. Number of consecutive refits above
+#'     `cross_set_ppc_brier_max` required to escalate. Default is `2L`.}
+#'   \item{`link_transform_escalation_is_one_way`}{Only used when
+#'     `link_transform_mode = "auto"`. When `TRUE`, escalation is one-way
+#'     (shift-only can become shift+scale but not revert). Default is `TRUE`.}
+#'
+#'   \item{`max_pairs_after_stop`}{Stop-boundary budget: when `0L`, the run stops
+#'     immediately after the first refit with `stop_decision = TRUE`. Values
+#'     `> 0L` allow that many additional committed comparisons after the first
+#'     stop boundary before deterministic termination. Default is `0L`.}
+#'
+#'   \item{`probe_pairs_per_refit_per_spoke`}{When linking stop is reached for a
+#'     spoke, cross-set sampling becomes probe-only for that spoke until global
+#'     stop. This sets the per-refit probe budget per stopped spoke. Default is
+#'     `2L`.}
+#'   \item{`spoke_quantile_coverage_bins`}{Cross-set coverage control: number of
+#'     quantile bins used to ensure spoke items across the score distribution
+#'     receive cross-set exposure within each refit window. Default is `3L`.}
+#'   \item{`spoke_quantile_coverage_min_per_bin_per_refit`}{Cross-set coverage
+#'     control: minimum cross-set comparisons per quantile bin per refit
+#'     window. Default is `1L`.}
+#'   \item{`allow_spoke_spoke_cross_set`}{When `TRUE`, allow spoke↔spoke
+#'     cross-set comparisons. Default is `FALSE` (hub↔spoke only).}
+#'   \item{`multi_spoke_mode`}{Only used when `run_mode = "link_multi_spoke"`.
+#'     Choices are `"independent"` (fit each spoke separately) and
+#'     `"concurrent"` (enforce per-refit spoke budgets and stronger hub locking
+#'     requirements). Default is `"independent"`.}
+#'   \item{`min_cross_set_pairs_per_spoke_per_refit`}{Only used in concurrent
+#'     multi-spoke linking. Minimum cross-set committed comparisons per spoke
+#'     per refit window. Default is `5L`.}
+#'   \item{`cross_set_utility`}{Cross-set selection utility. Currently only
+#'     `"linking_d_optimal"` is supported. Default is `"linking_d_optimal"`.}
+#'
+#'   \item{`phase_a_mode`}{Phase A handling for linking modes. Choices are
+#'     `"run"` (compute within-set Phase A artifacts in-run), `"import"`
+#'     (require user-supplied artifacts), and `"mixed"` (import where provided,
+#'     otherwise run). Default is `"run"`.}
+#'   \item{`phase_a_import_failure_policy`}{Only used when any set is configured
+#'     for Phase A import. Choices are `"fail_fast"` (abort on invalid/missing
+#'     artifacts) and `"fallback_to_run"` (switch that set to Phase A run if the
+#'     import fails validation). Default is `"fail_fast"`.}
+#'   \item{`phase_a_required_reliability_min`}{Minimum within-set EAP reliability
+#'     required for Phase A artifacts to be considered ready (unless an imported
+#'     artifact explicitly marks `quality_gate_accepted = TRUE`). Default is
+#'     `0.80`.}
+#'   \item{`phase_a_compatible_model_ids`}{Character vector of allowed model
+#'     identifiers for imported Phase A artifacts (e.g., `"btl_e_b"`). Default is
+#'     `"btl_e_b"`.}
+#'   \item{`phase_a_compatible_config_hashes`}{Character vector of additional
+#'     accepted Phase A config hashes for imported artifacts. Default is
+#'     `character()`.}
+#'   \item{`phase_a_artifacts`}{Named list mapping `set_id` to an imported Phase A
+#'     artifact (list) or a `.rds` path containing one. Default is `list()`.}
+#'   \item{`phase_a_set_source`}{Optional named character vector mapping `set_id`
+#'     to `"run"` or `"import"` to force the source for specific sets. Default is
+#'     `character()`.}
+#'   }
+#'
+#'   Wrapper preflight validates linking mode combinations against supplied data
+#'   and aborts early for incompatible `run_mode`/set structure combinations.
 #' @param btl_config Optional named list passed to [adaptive_rank_run_live()]
 #'   to control BTL refit cadence, stopping diagnostics, and selected
 #'   round-log diagnostics. Supported fields:
-#'   `refit_pairs_target`, `model_variant`, `ess_bulk_min`,
-#'   `ess_bulk_min_near_stop`, `max_rhat`, `divergences_max`,
-#'   `eap_reliability_min`, `stability_lag`, `theta_corr_min`,
-#'   `theta_sd_rel_change_max`, `rank_spearman_min`, `near_tie_p_low`,
-#'   and `near_tie_p_high` (`near_tie_*` affects round logging only, not stop
-#'   decisions). Defaults are resolved from the current item count and merged
-#'   with user overrides.
+#'   \describe{
+#'   \item{`refit_pairs_target`}{Minimum new committed comparisons required
+#'     before the next BTL refit. Default is `ceiling(N / 2)` clamped to
+#'     `[20L, 5000L]`. In linking Phase A, `N` is the active Phase A set size.}
+#'   \item{`model_variant`}{BTL likelihood variant used for inference only.
+#'     Choices are `"btl"` (no lapse, no position bias), `"btl_e"` (lapse),
+#'     `"btl_b"` (position bias), and `"btl_e_b"` (lapse + position bias).
+#'     Default is `"btl_e_b"`.}
+#'   \item{`ess_bulk_min`}{Minimum bulk effective sample size required for
+#'     diagnostics to pass. Default is `max(400, round(20 * sqrt(N)))`.}
+#'   \item{`ess_bulk_min_near_stop`}{Stricter bulk ESS requirement used when a
+#'     run is close to stopping. Default is `max(1000, round(50 * sqrt(N)))`.}
+#'   \item{`max_rhat`}{Maximum allowed split-\eqn{\\hat{R}}. Default is `1.01`.}
+#'   \item{`divergences_max`}{Maximum allowed divergent transitions. Default is
+#'     `0L`.}
+#'   \item{`eap_reliability_min`}{Minimum EAP reliability required to permit
+#'     stopping. Default is `0.90`.}
+#'   \item{`stability_lag`}{Lag (in refits) used for stability checks. Default
+#'     is `2L`.}
+#'   \item{`theta_corr_min`}{Minimum lagged correlation of posterior means
+#'     required by stability checks. Default is `0.95`.}
+#'   \item{`theta_sd_rel_change_max`}{Maximum relative change in posterior SD
+#'     allowed by stability checks. Default is `0.10`.}
+#'   \item{`rank_spearman_min`}{Minimum lagged Spearman rank correlation
+#'     required by stability checks. Default is `0.95`.}
+#'   \item{`near_tie_p_low`}{Lower bound of the near-tie probability band used
+#'     for round logging only. Default is `0.40`.}
+#'   \item{`near_tie_p_high`}{Upper bound of the near-tie probability band used
+#'     for round logging only. Default is `0.60`.}
+#'   }
+#'   Defaults depend on the current item count `N` and are merged with user
+#'   overrides.
 #' @param session_dir Optional session directory for persistence/resume.
+#'   Default is `NULL`.
 #' @param persist_item_log Logical; write per-refit item logs when `TRUE`.
+#'   Default is `FALSE`.
 #' @param resume Logical; when `TRUE` and `session_dir` contains a valid session,
 #'   resume from disk; otherwise initialize a new state.
-#' @param seed Integer seed used when creating a new adaptive state.
-#' @param progress Progress mode for [adaptive_rank_run_live()].
-#' @param progress_redraw_every Redraw interval for progress output.
-#' @param progress_show_events Logical; show step events.
-#' @param progress_errors Logical; show invalid-step events.
+#'   Default is `TRUE`.
+#' @param seed Integer seed used when creating a new adaptive state. Default is
+#'   `1L`.
+#' @param progress Progress mode for [adaptive_rank_run_live()]. Choices are
+#'   `"all"`, `"refits"`, `"steps"`, and `"none"`. Default is `"all"`.
+#' @param progress_redraw_every Redraw interval for progress output. Default is
+#'   `10L`.
+#' @param progress_show_events Logical; show step events. Default is `TRUE`.
+#' @param progress_errors Logical; show invalid-step events. Default is `TRUE`.
 #' @param save_outputs Logical; when `TRUE`, save returned outputs as `.rds`.
+#'   Default is `FALSE`.
 #' @param output_file Optional output `.rds` path. If `NULL` and
 #'   `save_outputs = TRUE`, defaults to `file.path(session_dir, "adaptive_outputs.rds")`
 #'   when `session_dir` is set, otherwise to a temporary file.
