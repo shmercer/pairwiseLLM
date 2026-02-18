@@ -264,11 +264,12 @@ validate_judge_result <- function(result, A_id, B_id) {
   }
   run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
   is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe")
+  is_probe_run_mode <- identical(run_mode, "link_probe")
 
   is_cross <- row$is_cross_set[[1L]]
   if (isTRUE(is_cross)) {
     required_cross <- c("set_i", "set_j", "link_spoke_id", "run_mode", "posterior_win_prob_pre")
-    if (isTRUE(is_link_run_mode)) {
+    if (isTRUE(is_link_run_mode) && !isTRUE(is_probe_run_mode)) {
       required_cross <- c(required_cross, "cross_set_utility_pre")
     }
     bad <- required_cross[vapply(required_cross, function(col) is.na(row[[col]][[1L]]), logical(1L))]
@@ -285,11 +286,31 @@ validate_judge_result <- function(result, A_id, B_id) {
         "step_log append completeness failure for cross-set row: `link_stage` must be populated for stage-routed steps."
       )
     }
-    if (isTRUE(is_link_run_mode) && !identical(utility_mode, "linking_d_optimal")) {
+    if (isTRUE(is_link_run_mode) &&
+      !isTRUE(is_probe_run_mode) &&
+      !identical(utility_mode, "linking_d_optimal")) {
       rlang::abort(
         paste0(
           "step_log append completeness failure for cross-set row: ",
           "`utility_mode` must be linking_d_optimal."
+        )
+      )
+    }
+    if (isTRUE(is_probe_run_mode) &&
+      identical(utility_mode, "linking_d_optimal")) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set probe row: ",
+          "`utility_mode` must not be linking_d_optimal."
+        )
+      )
+    }
+    if (isTRUE(is_probe_run_mode) &&
+      !is.na(row$cross_set_utility_pre[[1L]])) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set probe row: ",
+          "`cross_set_utility_pre` must be NA."
         )
       )
     }
@@ -621,6 +642,7 @@ run_one_step <- function(state, judge, ...) {
   is_probe_step <- if (isTRUE(is_cross_set) && identical(run_mode, "link_probe")) TRUE else FALSE
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode) &&
+    !isTRUE(is_probe_step) &&
     identical(utility_mode, "linking_d_optimal")) {
     as.double(
       if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {

@@ -133,18 +133,32 @@ test_that("rolling anchors refresh deterministically from trueskill", {
   expect_equal(state_1$round$anchor_refresh_source, "trueskill_mu")
 
   state_1$btl_fit <- list(
-    theta_mean = stats::setNames(seq(1, 10), as.character(items$item_id))
+    theta_mean = stats::setNames(seq(10, 1), as.character(items$item_id))
   )
   state_1$refit_meta$last_refit_round_id <- 1L
   state_2 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_1)
 
-  expect_equal(state_2$round$anchor_refresh_source, "trueskill_mu")
+  expect_equal(state_2$round$anchor_refresh_source, "btl_theta_eap")
   expect_identical(state_2$round$anchor_ids, anchors_1)
   expect_equal(state_2$round$anchor_refit_round_id, 1L)
 
   state_3 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_2)
   expect_identical(state_3$round$anchor_ids, state_2$round$anchor_ids)
   expect_equal(state_3$round$anchor_refit_round_id, 1L)
+})
+
+test_that("rank proxy falls back to trueskill when BTL theta is incomplete", {
+  items <- make_test_items(5)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(5, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$btl_fit <- list(
+    theta_mean = stats::setNames(c(1, 2, 3, 4), as.character(1:4))
+  )
+
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+
+  expect_identical(proxy$source, "trueskill_mu")
+  expect_equal(unname(proxy$scores), as.double(trueskill_state$items$mu))
 })
 
 test_that("rolling anchor count follows clamped default", {

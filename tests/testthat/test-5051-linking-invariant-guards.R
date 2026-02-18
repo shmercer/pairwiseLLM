@@ -244,10 +244,24 @@ test_that("step row completeness accepts link_probe and enforces posterior orien
     round_stage = "anchor_link",
     link_stage = "anchor_link",
     posterior_win_prob_pre = 0.6,
-    cross_set_utility_pre = 0.24,
-    utility_mode = "linking_d_optimal"
+    cross_set_utility_pre = NA_real_,
+    utility_mode = NA_character_
   )
   expect_silent(pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(ok_probe))
+
+  bad_probe_utility <- ok_probe
+  bad_probe_utility$utility_mode <- "linking_d_optimal"
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_probe_utility),
+    "must not be linking_d_optimal"
+  )
+
+  bad_probe_cross_utility <- ok_probe
+  bad_probe_cross_utility$cross_set_utility_pre <- 0.24
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_probe_cross_utility),
+    "cross_set_utility_pre` must be NA"
+  )
 
   bad_prob <- ok_probe
   bad_prob$posterior_win_prob_pre <- 1.2
@@ -303,4 +317,44 @@ test_that("validate_judge_result catches non-scalar Y branch", {
   bad <- pairwiseLLM:::validate_judge_result(list(is_valid = TRUE, Y = c(1L, 0L)), "a", "b")
   expect_false(isTRUE(bad$is_valid))
   expect_identical(bad$invalid_reason, "invalid_contract")
+})
+
+test_that("all-spokes-stopped helper is phase and mode aware", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", seq_len(6L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 77L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+
+  expect_false(pairwiseLLM:::.adaptive_link_all_spokes_stopped(state))
+
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("ready", "ready", "ready"),
+      validation_message = c("ok", "ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L, 3L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE, `3` = TRUE),
+    phase = "phase_b",
+    ready_spokes = c(2L, 3L),
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$controller$link_stopped_by_spoke <- list(`2` = TRUE, `3` = FALSE)
+  expect_false(pairwiseLLM:::.adaptive_link_all_spokes_stopped(state))
+
+  state$controller$probe_pairs_per_refit_per_spoke <- 0L
+  state$controller$link_stopped_by_spoke <- list(`2` = TRUE, `3` = TRUE)
+  expect_true(pairwiseLLM:::.adaptive_link_all_spokes_stopped(state))
 })

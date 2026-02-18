@@ -550,11 +550,15 @@ test_that("independent mode ignores concurrent allocation controls under seeded 
   expect_equal(out_base$step_log[, cols, drop = FALSE], out_tuned$step_log[, cols, drop = FALSE])
 })
 
-test_that("linking run no longer short-circuits via all-spokes-stopped gate", {
+test_that("linking run stops via all-spokes-stopped gate when every spoke is stopped", {
   withr::local_seed(20260213)
 
   items <- make_linking_items_two_set()
-  state <- adaptive_rank_start(items, seed = 33L)
+  state <- adaptive_rank_start(
+    items,
+    seed = 33L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
   state$warm_start_done <- TRUE
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
   artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
@@ -563,10 +567,10 @@ test_that("linking run no longer short-circuits via all-spokes-stopped gate", {
     s21 = -0.2, s22 = 0.3, s23 = 1.1
   ))
 
-  out <- adaptive_rank_run_live(
+  out_init <- adaptive_rank_run_live(
     state = state,
     judge = judge,
-    n_steps = 5L,
+    n_steps = 1L,
     session_dir = withr::local_tempdir(),
     adaptive_config = list(
       run_mode = "link_one_spoke",
@@ -576,9 +580,24 @@ test_that("linking run no longer short-circuits via all-spokes-stopped gate", {
     ),
     progress = "none"
   )
+  out_init$controller$link_stopped_by_spoke <- list(`2` = TRUE)
+  out_init$controller$probe_pairs_per_refit_per_spoke <- 0L
+  out_init$linking$phase_a$phase <- "phase_b"
+  out_init$linking$phase_a$ready_for_phase_b <- TRUE
+  out_init$linking$phase_a$strict_ready_for_phase_b <- TRUE
+  out_init$linking$phase_a$ready_spokes <- 2L
 
-  expect_true(nrow(out$step_log) >= 1L)
-  expect_false(identical(out$meta$stop_reason, "all_spokes_stopped"))
+  n_before <- nrow(out_init$step_log)
+  out <- adaptive_rank_run_live(
+    state = out_init,
+    judge = judge,
+    n_steps = 5L,
+    adaptive_config = NULL,
+    progress = "none"
+  )
+
+  expect_identical(out$meta$stop_reason, "all_spokes_stopped")
+  expect_identical(nrow(out$step_log), n_before)
 })
 
 test_that("phase_b aborts when required sets are ready but strict phase_a stop-pass is missing", {
