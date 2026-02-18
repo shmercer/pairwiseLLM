@@ -81,27 +81,18 @@ criteria. Attempted invalid steps also count toward this limit.}
 
 \item{adaptive_config}{Optional named list passed to
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}} and \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} to control adaptive
-controller behavior. Supported fields:
-\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min},
-\code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
-\code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
-\code{boundary_frac}, \code{p_star_override_margin}, and
-\code{star_override_budget_per_round}, linking controls (\code{run_mode}, \code{hub_id},
-\code{link_transform_mode}, \code{link_refit_mode}, \code{shift_only_theta_treatment},
-\code{judge_param_mode}, \code{hub_lock_mode}, \code{hub_lock_kappa},
-\code{allow_spoke_spoke_cross_set}), and Phase A controls
-(\code{phase_a_mode}, \code{phase_a_import_failure_policy},
-\code{phase_a_required_reliability_min}, \code{phase_a_compatible_model_ids},
-\code{phase_a_compatible_config_hashes}, \code{phase_a_artifacts},
-\code{phase_a_set_source}). In linking Phase B with
-\code{judge_param_mode = "phase_specific"}, startup can use deterministic
-within/shared judge fallback before link-specific estimates exist; once
-expected, malformed link-specific estimates abort. \code{link_refit_mode = "joint_refit"} jointly estimates active hub+spoke item abilities and
-transform parameters, and \code{hub_lock_mode}/\code{hub_lock_kappa} control hub
-locking in that joint refit. Unknown fields and invalid values abort with
-actionable errors. Wrapper preflight validates linking mode combinations
-against the supplied data and aborts early with clear errors for
-incompatible \code{run_mode}/set structure combinations.}
+controller behavior. Supported fields mirror
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} and include:
+global-identification and quota controls, linking mode controls
+(\code{run_mode}, \code{hub_id}, transform/refit/locking options), linking stop and
+escalation thresholds, Phase A artifact controls, and
+post-stop boundary control (\code{max_pairs_after_stop}).
+\code{max_pairs_after_stop = 0L} preserves immediate stop at the first stop
+boundary; values \verb{> 0L} allow that many additional committed comparisons
+after the first stop boundary before deterministic termination.
+Unknown fields and invalid values abort with actionable errors. Wrapper
+preflight validates linking mode combinations against supplied data and
+aborts early for incompatible \code{run_mode}/set structure combinations.}
 
 \item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 to control BTL refit cadence, stopping diagnostics, and selected
@@ -283,7 +274,8 @@ link_out <- adaptive_rank(
   adaptive_config = list(
     run_mode = "link_one_spoke",
     hub_id = 1L,
-    phase_a_mode = "run"
+    phase_a_mode = "run",
+    max_pairs_after_stop = 0L
   ),
   n_steps = 200,
   session_dir = file.path(tempdir(), "adaptive-link"),
