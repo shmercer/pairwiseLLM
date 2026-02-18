@@ -156,7 +156,15 @@ test_that("linking Phase A stop metrics use active set scope", {
   )
   theta_now <- as.double(colMeans(draws))
   names(theta_now) <- colnames(draws)
-  state$refit_meta$theta_mean_history <- list(theta_now, theta_now)
+  theta_lag <- theta_now
+  theta_lag[c("h1", "h2")] <- theta_lag[c("h1", "h2")] + c(-0.02, 0.02)
+  state$refit_meta$theta_mean_history <- list(theta_lag, theta_now)
+  state$refit_meta$theta_mean_history_by_phase_a_set <- list(
+    `1` = list(
+      stats::setNames(as.double(c(theta_lag["h1"], theta_lag["h2"])), c("h1", "h2")),
+      stats::setNames(as.double(c(theta_now["h1"], theta_now["h2"])), c("h1", "h2"))
+    )
+  )
 
   cfg <- list(
     ess_bulk_min = 100,
@@ -175,6 +183,10 @@ test_that("linking Phase A stop metrics use active set scope", {
   expect_identical(metrics$phase_scope_set_id, 1L)
   expect_identical(metrics$phase_scope_n_items, 2L)
   expect_true(metrics$reliability_EAP_scope > metrics$reliability_EAP)
+  expect_true(isTRUE(metrics$lag_eligible_scope))
+  expect_true(is.finite(metrics$rho_theta_scope))
+  expect_true(is.finite(metrics$rho_rank_scope))
+  expect_true(is.finite(metrics$delta_sd_theta_scope))
 
   cfg$eap_reliability_min <- as.double((metrics$reliability_EAP_scope + metrics$reliability_EAP) / 2)
   expect_true(isTRUE(pairwiseLLM:::should_stop(metrics, config = cfg)))

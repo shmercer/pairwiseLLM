@@ -3178,9 +3178,15 @@ compute_stop_metrics <- function(state, config) {
     if (isTRUE(lag_eligible_scope)) {
       lag_scope_idx <- current_refit_scope - stability_lag
       lag_scope_theta <- history_scope[[lag_scope_idx]] %||% NULL
+      lag_scope_theta_names <- names(lag_scope_theta)
       lag_scope_theta <- as.double(lag_scope_theta)
+      if (!is.null(lag_scope_theta_names)) {
+        names(lag_scope_theta) <- as.character(lag_scope_theta_names)
+      }
       if (!is.null(names(lag_scope_theta)) && all(scope_ids %in% names(lag_scope_theta))) {
         lag_scope <- as.double(lag_scope_theta[scope_ids])
+      } else if (length(lag_scope_theta) == length(scope_ids) && length(scope_ids) >= 2L) {
+        lag_scope <- lag_scope_theta
       } else if (length(lag_scope_theta) == length(ids) && length(scope_ids) >= 2L) {
         names(lag_scope_theta) <- ids
         if (all(scope_ids %in% names(lag_scope_theta))) {
