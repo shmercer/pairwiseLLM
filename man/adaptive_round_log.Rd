@@ -73,7 +73,8 @@ Core columns:
 \code{mcmc_parallel_chains}, \code{mcmc_core_fraction},
 \code{mcmc_cores_detected_physical}, \code{mcmc_cores_detected_logical},
 \code{mcmc_threads_per_chain}, \code{mcmc_cmdstanr_version}.
-\item Stop output: \code{stop_decision}, \code{stop_reason}.
+\item Stop output: \code{stop_decision}, \code{stop_reason},
+\code{max_pairs_after_stop}, \code{pairs_committed_after_stop}.
 }
 }
 \examples{

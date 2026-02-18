@@ -107,6 +107,7 @@
     ppc_calibration_id = as.character(calibration_defaults$ppc_calibration_id %||% "default_p95_brier_active"),
     link_transform_escalation_refits_required = 2L,
     link_transform_escalation_is_one_way = TRUE,
+    max_pairs_after_stop = 0L,
     probe_pairs_per_refit_per_spoke = 2L,
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
@@ -182,6 +183,7 @@
     "ppc_calibration_id",
     "link_transform_escalation_refits_required",
     "link_transform_escalation_is_one_way",
+    "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
@@ -343,6 +345,7 @@
     Inf
   )
   out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
+  out$max_pairs_after_stop <- read_integer("max_pairs_after_stop", 0L, Inf)
   out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
   out$spoke_quantile_coverage_bins <- read_integer("spoke_quantile_coverage_bins", 1L, Inf)
   out$spoke_quantile_coverage_min_per_bin_per_refit <- read_integer(
@@ -790,7 +793,10 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         now_fn = now_fn,
         seed = 1L,
         stop_decision = FALSE,
-        stop_reason = NA_character_
+        stop_reason = NA_character_,
+        stop_boundary_refit_id = NA_integer_,
+        stop_boundary_step_id = NA_integer_,
+        pairs_committed_after_stop = 0L
       )
     ),
     class = "adaptive_state"

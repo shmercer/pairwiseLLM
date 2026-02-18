@@ -48,7 +48,8 @@ behavior. Supported fields:
 \code{link_identified_reliability_min}, \code{link_stop_reliability_min},
 \code{link_rank_corr_min}, \code{delta_sd_max}, \code{delta_change_max},
 \code{log_alpha_sd_max}, \code{log_alpha_change_max}, \code{cross_set_ppc_brier_max},
-\code{ppc_calibration_id}, \code{probe_pairs_per_refit_per_spoke},
+\code{ppc_calibration_id}, \code{max_pairs_after_stop},
+\code{probe_pairs_per_refit_per_spoke},
 \code{link_transform_escalation_refits_required},
 \code{link_transform_escalation_is_one_way},
 \code{spoke_quantile_coverage_bins},
@@ -160,6 +161,11 @@ appended to \code{round_log}; per-item posterior summaries are appended to
 \code{item_log}. Controller behavior can change after refits via
 identifiability-gated settings in \code{adaptive_config}; those controls
 affect pair routing and quotas, while BTL remains inference-only.
+If \code{adaptive_config$max_pairs_after_stop > 0}, the run records a stop
+boundary at the first refit with \code{stop_decision = TRUE} and allows at
+most that many additional committed comparisons before deterministic
+termination. Round logs record
+\code{max_pairs_after_stop} and \code{pairs_committed_after_stop}.
 }
 \examples{
 # ------------------------------------------------------------------

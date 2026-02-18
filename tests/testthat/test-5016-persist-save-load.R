@@ -148,6 +148,31 @@ test_that("validate_session_dir rejects round_log schema drift for quota fields"
   )
 })
 
+test_that("load_adaptive_session backfills legacy round_log post-stop columns", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items)
+  judge <- make_deterministic_judge("i_wins")
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(state, judge, n_steps = 2L, progress = "none")
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  round_path <- file.path(session_dir, "round_log.rds")
+  round_log <- readRDS(round_path)
+  round_log$max_pairs_after_stop <- NULL
+  round_log$pairs_committed_after_stop <- NULL
+  saveRDS(round_log, round_path)
+
+  restored <- load_adaptive_session(session_dir)
+  expect_true(all(c("max_pairs_after_stop", "pairs_committed_after_stop") %in% names(restored$round_log)))
+  expect_true(is.integer(restored$round_log$max_pairs_after_stop))
+  expect_true(is.integer(restored$round_log$pairs_committed_after_stop))
+  expect_true(all(restored$round_log$max_pairs_after_stop == 0L))
+  expect_true(all(restored$round_log$pairs_committed_after_stop == 0L))
+})
+
 test_that("load_adaptive_session accepts persisted item logs with current schema", {
   items <- make_test_items(6)
   state <- adaptive_rank_start(items, persist_item_log = TRUE)

@@ -52,7 +52,7 @@ test_that("canonical log schemas follow the expected column order", {
     "mcmc_chains", "mcmc_parallel_chains", "mcmc_core_fraction",
     "mcmc_cores_detected_physical", "mcmc_cores_detected_logical",
     "mcmc_threads_per_chain", "mcmc_cmdstanr_version",
-    "stop_decision", "stop_reason"
+    "stop_decision", "stop_reason", "max_pairs_after_stop", "pairs_committed_after_stop"
   )
   expected_item <- c(
     "refit_id", "item_id", "set_id",

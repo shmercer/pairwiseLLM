@@ -310,6 +310,57 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_stop_boundary_bootstrap <- function(state) {
+  out <- state
+  out$meta <- out$meta %||% list()
+  out$meta$stop_boundary_refit_id <- as.integer(out$meta$stop_boundary_refit_id %||% NA_integer_)
+  out$meta$stop_boundary_step_id <- as.integer(out$meta$stop_boundary_step_id %||% NA_integer_)
+  out$meta$pairs_committed_after_stop <- as.integer(out$meta$pairs_committed_after_stop %||% 0L)
+  if (!is.finite(out$meta$pairs_committed_after_stop) ||
+    is.na(out$meta$pairs_committed_after_stop) ||
+    out$meta$pairs_committed_after_stop < 0L) {
+    out$meta$pairs_committed_after_stop <- 0L
+  }
+
+  boundary_step <- as.integer(out$meta$stop_boundary_step_id %||% NA_integer_)
+  if (!is.na(boundary_step)) {
+    step_log <- tibble::as_tibble(out$step_log %||% tibble::tibble())
+    if (nrow(step_log) > 0L && all(c("step_id", "pair_id") %in% names(step_log))) {
+      after_stop <- as.integer(step_log$step_id) > boundary_step & !is.na(step_log$pair_id)
+      out$meta$pairs_committed_after_stop <- as.integer(sum(after_stop, na.rm = TRUE))
+    } else {
+      out$meta$pairs_committed_after_stop <- 0L
+    }
+  }
+
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_stop_boundary_budget_status <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  max_pairs_after_stop <- as.integer(controller$max_pairs_after_stop %||% 0L)
+  if (!is.finite(max_pairs_after_stop) || is.na(max_pairs_after_stop) || max_pairs_after_stop < 0L) {
+    max_pairs_after_stop <- 0L
+  }
+  boundary_step <- as.integer(state$meta$stop_boundary_step_id %||% NA_integer_)
+  pairs_after_stop <- as.integer(state$meta$pairs_committed_after_stop %||% 0L)
+  if (!is.finite(pairs_after_stop) || is.na(pairs_after_stop) || pairs_after_stop < 0L) {
+    pairs_after_stop <- 0L
+  }
+  active <- !is.na(boundary_step) && !isTRUE(state$meta$stop_decision %||% FALSE)
+  exhausted <- isTRUE(active) && pairs_after_stop >= max_pairs_after_stop
+  list(
+    active = isTRUE(active),
+    exhausted = isTRUE(exhausted),
+    max_pairs_after_stop = as.integer(max_pairs_after_stop),
+    pairs_after_stop = as.integer(pairs_after_stop)
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_stage_progress <- function(state, spoke_id, stage_quotas, stage_order, refit_id = NULL) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   stage_order <- as.character(stage_order %||% .adaptive_stage_order())
@@ -710,7 +761,8 @@
 #'   \item{`link_identified_reliability_min`, `link_stop_reliability_min`,
 #'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
 #'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_brier_max`,
-#'   `ppc_calibration_id`, `probe_pairs_per_refit_per_spoke`,
+#'   `ppc_calibration_id`, `max_pairs_after_stop`,
+#'   `probe_pairs_per_refit_per_spoke`,
 #'   `link_transform_escalation_refits_required`,
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,
@@ -856,6 +908,11 @@ adaptive_rank_start <- function(items,
 #' \code{item_log}. Controller behavior can change after refits via
 #' identifiability-gated settings in \code{adaptive_config}; those controls
 #' affect pair routing and quotas, while BTL remains inference-only.
+#' If \code{adaptive_config$max_pairs_after_stop > 0}, the run records a stop
+#' boundary at the first refit with \code{stop_decision = TRUE} and allows at
+#' most that many additional committed comparisons before deterministic
+#' termination. Round logs record
+#' \code{max_pairs_after_stop} and \code{pairs_committed_after_stop}.
 #'
 #' @param state An adaptive state object created by [adaptive_rank_start()].
 #' @param judge A function called as `judge(A, B, state, ...)` that returns a
@@ -880,7 +937,8 @@ adaptive_rank_start <- function(items,
 #'   `link_identified_reliability_min`, `link_stop_reliability_min`,
 #'   `link_rank_corr_min`, `delta_sd_max`, `delta_change_max`,
 #'   `log_alpha_sd_max`, `log_alpha_change_max`, `cross_set_ppc_brier_max`,
-#'   `ppc_calibration_id`, `probe_pairs_per_refit_per_spoke`,
+#'   `ppc_calibration_id`, `max_pairs_after_stop`,
+#'   `probe_pairs_per_refit_per_spoke`,
 #'   `link_transform_escalation_refits_required`,
 #'   `link_transform_escalation_is_one_way`,
 #'   `spoke_quantile_coverage_bins`,
@@ -1160,6 +1218,7 @@ adaptive_rank_run_live <- function(state,
     state$config$persist_item_log <- isTRUE(persist_item_log)
   }
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
+  state <- .adaptive_stop_boundary_bootstrap(state)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_phase_a_prepare(state)
   state <- .adaptive_phase_a_finalize_if_ready(state)
@@ -1183,12 +1242,22 @@ adaptive_rank_run_live <- function(state,
 
   remaining <- n_steps
   while (remaining > 0L) {
+    state <- .adaptive_stop_boundary_bootstrap(state)
     state <- .adaptive_phase_a_prepare(state)
     state <- .adaptive_phase_a_finalize_if_ready(state)
     .adaptive_phase_a_gate_or_abort(state)
     if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
       state$meta$stop_decision <- TRUE
       state$meta$stop_reason <- "all_spokes_stopped"
+      if (!is.null(state$config$session_dir)) {
+        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+      }
+      return(state)
+    }
+    budget_status <- .adaptive_stop_boundary_budget_status(state)
+    if (isTRUE(budget_status$active) && isTRUE(budget_status$exhausted)) {
+      state$meta$stop_decision <- TRUE
+      state$meta$stop_reason <- "max_pairs_after_stop_exhausted"
       if (!is.null(state$config$session_dir)) {
         save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
       }
@@ -1207,6 +1276,16 @@ adaptive_rank_run_live <- function(state,
         state <- .adaptive_round_commit_warm_start(state)
       } else {
         state <- .adaptive_round_commit(state, step_row)
+      }
+      budget_status <- .adaptive_stop_boundary_budget_status(state)
+      if (isTRUE(budget_status$active)) {
+        state$meta$pairs_committed_after_stop <- as.integer(
+          state$meta$pairs_committed_after_stop %||% 0L
+        ) + 1L
+        budget_status <- .adaptive_stop_boundary_budget_status(state)
+        if (isTRUE(budget_status$exhausted)) {
+          state$meta$stop_reason <- "max_pairs_after_stop_exhausted"
+        }
       }
     } else if (isTRUE(step_row$candidate_starved[[1L]]) &&
       !identical(step_row$round_stage[[1L]], "warm_start")) {
@@ -1313,12 +1392,31 @@ adaptive_rank_run_live <- function(state,
         }
       }
       if (isTRUE(stop_decision)) {
-        state$meta$stop_decision <- TRUE
-        state$meta$stop_reason <- stop_reason
-        if (!is.null(state$config$session_dir)) {
-          save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+        round_row_tbl <- tibble::as_tibble(round_row)
+        boundary_refit_id <- if ("refit_id" %in% names(round_row_tbl)) {
+          as.integer(round_row_tbl$refit_id[[1L]] %||% NA_integer_)
+        } else {
+          NA_integer_
         }
-        return(state)
+        boundary_step_id <- if ("step_id_at_refit" %in% names(round_row_tbl)) {
+          as.integer(round_row_tbl$step_id_at_refit[[1L]] %||% NA_integer_)
+        } else {
+          NA_integer_
+        }
+        if (is.na(as.integer(state$meta$stop_boundary_step_id %||% NA_integer_))) {
+          state$meta$stop_boundary_refit_id <- boundary_refit_id
+          state$meta$stop_boundary_step_id <- boundary_step_id
+          state$meta$pairs_committed_after_stop <- 0L
+        }
+        budget_status <- .adaptive_stop_boundary_budget_status(state)
+        if (budget_status$max_pairs_after_stop <= 0L) {
+          state$meta$stop_decision <- TRUE
+          state$meta$stop_reason <- stop_reason
+          if (!is.null(state$config$session_dir)) {
+            save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+          }
+          return(state)
+        }
       }
       if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
         state$meta$stop_decision <- TRUE
