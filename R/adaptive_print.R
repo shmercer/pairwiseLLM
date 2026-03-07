@@ -90,7 +90,7 @@
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
     utility_mode = c("pairing_trueskill_u0", "linking_d_optimal"),
-    hub_lock_mode = c("hard_lock", "soft_lock", "free")
+    hub_lock_mode = c("hard_lock", "soft_lock")
   )
 }
 
@@ -101,7 +101,7 @@
     link_refit_mode = c("shift_only", "joint_refit"),
     shift_only_theta_treatment = .adaptive_shift_only_theta_treatment_levels(),
     shift_only_theta_treatment_resolved = .adaptive_shift_only_theta_treatment_levels(),
-    hub_lock_mode = c("hard_lock", "soft_lock", "free")
+    hub_lock_mode = c("hard_lock", "soft_lock")
   )
 }
 
@@ -180,7 +180,6 @@
     }
     stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
     mode <- as.character(stats_row$link_transform_state %||%
-      stats_row$link_transform_mode %||%
       .adaptive_link_transform_state_for_spoke(controller, spoke_id))
     if (!mode %in% c("shift_only", "shift_scale")) {
       link_eap[spoke_idx] <- NA_real_

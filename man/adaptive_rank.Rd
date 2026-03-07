@@ -152,8 +152,7 @@ parameters). Default is \code{"global_shared"}.}
 \item{\code{hub_lock_mode}}{Only used when \code{link_refit_mode = "joint_refit"}.
 Controls whether the hub is allowed to drift during joint refits.
 Choices are \code{"hard_lock"} (hub anchored to Phase A), \code{"soft_lock"}
-(regularize toward Phase A), and \code{"free"} (no lock). Default is
-\code{"soft_lock"}.}
+(regularize toward Phase A). Default is \code{"soft_lock"}.}
 \item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
 Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}
 
@@ -176,17 +175,9 @@ allowed posterior SD of \code{log(alpha_s)}. Default is \code{0.10}.}
 \item{\code{log_alpha_change_max}}{Only used for \code{"shift_scale"} spokes. Maximum
 allowed absolute change in \code{log(alpha_s)} over the lag window used for
 linking stability. Default is \code{0.05}.}
-\item{\code{cross_set_ppc_brier_max}}{Only used when \code{link_transform_policy = "auto"}.
-PPC misfit threshold (Brier score) on linking-active, non-probe,
-non-frozen cross-set steps used to escalate from shift-only to
-shift+scale. Default is \code{0.20} unless overridden by the active
-calibration.}
-\item{\code{ppc_calibration_id}}{Calibration identifier used to resolve
-\code{cross_set_ppc_brier_max} when not explicitly supplied. Default is
-\code{"default_p95_brier_active"}.}
 \item{\code{link_transform_escalation_refits_required}}{Only used when
-\code{link_transform_policy = "auto"}. Number of consecutive refits above
-\code{cross_set_ppc_brier_max} required to escalate. Default is \code{2L}.}
+\code{link_transform_policy = "auto"}. Number of consecutive eligible refits
+required for escalation. Default is \code{2L}.}
 \item{\code{link_transform_escalation_is_one_way}}{Only used when
 \code{link_transform_policy = "auto"}. When \code{TRUE}, escalation is one-way
 (shift-only can become shift+scale but not revert). Default is \code{TRUE}.}

@@ -109,7 +109,7 @@ test_that("canonical log schemas follow the expected column order", {
     "reliability_var_mu_epsilon_used", "reliability_total_var_epsilon_used",
     "it_logdet_start", "it_logdet_end", "it_trace_end", "it_n_pairs_accumulated",
     "coverage_bins_used",
-    "coverage_source", "ppc_calibration_id", "cross_set_ppc_brier_max_used",
+    "coverage_source",
     "probe_panel_id", "N_spoke_phase_b_start", "probe_edges_planned", "probe_edges_realized",
     "probe_panel_shortfall", "probe_panel_reallocation_used", "probe_pred_cache_used",
     "probe_brier", "probe_pred_rmse_lagged", "theta_global_rmse_scope",
@@ -157,7 +157,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
     levels(step_log$utility_mode),
     c("pairing_trueskill_u0", "linking_d_optimal")
   )
-  expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
+  expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock"))
 
   expect_true(is.factor(logs$link_stage_log$link_transform_policy))
   expect_true(is.factor(logs$link_stage_log$link_transform_state))
@@ -169,7 +169,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   )
   expect_identical(levels(logs$link_stage_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(levels(logs$link_stage_log$link_refit_mode), c("shift_only", "joint_refit"))
-  expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
+  expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock"))
 })
 
 test_that("public log accessors fail fast on invalid linking categorical values", {

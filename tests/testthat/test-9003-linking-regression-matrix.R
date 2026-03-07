@@ -268,7 +268,7 @@ test_that("freeze state in regression matrix remains one-way across subsequent u
       refit_id = 1L,
       spoke_id = 2L,
       link_stop_pass = TRUE,
-      link_transform_mode = "shift_only",
+      link_transform_state = "shift_only",
       delta_spoke_mean = 0.22,
       log_alpha_spoke_mean = NA_real_
     )

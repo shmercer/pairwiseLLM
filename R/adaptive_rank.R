@@ -463,8 +463,7 @@ make_adaptive_judge_llm <- function(
 #'   \item{`hub_lock_mode`}{Only used when `link_refit_mode = "joint_refit"`.
 #'     Controls whether the hub is allowed to drift during joint refits.
 #'     Choices are `"hard_lock"` (hub anchored to Phase A), `"soft_lock"`
-#'     (regularize toward Phase A), and `"free"` (no lock). Default is
-#'     `"soft_lock"`.}
+#'     (regularize toward Phase A). Default is `"soft_lock"`.}
 #'   \item{`hub_lock_kappa`}{Only used when `hub_lock_mode = "soft_lock"`.
 #'     Regularization strength in `[0,1]`. Default is `0.75`.}
 #'
@@ -487,17 +486,9 @@ make_adaptive_judge_llm <- function(
 #'   \item{`log_alpha_change_max`}{Only used for `"shift_scale"` spokes. Maximum
 #'     allowed absolute change in `log(alpha_s)` over the lag window used for
 #'     linking stability. Default is `0.05`.}
-#'   \item{`cross_set_ppc_brier_max`}{Only used when `link_transform_policy = "auto"`.
-#'     PPC misfit threshold (Brier score) on linking-active, non-probe,
-#'     non-frozen cross-set steps used to escalate from shift-only to
-#'     shift+scale. Default is `0.20` unless overridden by the active
-#'     calibration.}
-#'   \item{`ppc_calibration_id`}{Calibration identifier used to resolve
-#'     `cross_set_ppc_brier_max` when not explicitly supplied. Default is
-#'     `"default_p95_brier_active"`.}
 #'   \item{`link_transform_escalation_refits_required`}{Only used when
-#'     `link_transform_policy = "auto"`. Number of consecutive refits above
-#'     `cross_set_ppc_brier_max` required to escalate. Default is `2L`.}
+#'     `link_transform_policy = "auto"`. Number of consecutive eligible refits
+#'     required for escalation. Default is `2L`.}
 #'   \item{`link_transform_escalation_is_one_way`}{Only used when
 #'     `link_transform_policy = "auto"`. When `TRUE`, escalation is one-way
 #'     (shift-only can become shift+scale but not revert). Default is `TRUE`.}

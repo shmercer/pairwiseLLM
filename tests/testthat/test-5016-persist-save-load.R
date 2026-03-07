@@ -259,6 +259,114 @@ test_that("validate_session_dir accepts legacy item log schema for resume", {
   expect_silent(validate_session_dir(session_dir))
 })
 
+test_that("load_adaptive_session preserves cleaned linking controller state across save/load", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 17L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_transform_policy = "auto"
+    )
+  )
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_scale")
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 3L)
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_policy = "auto",
+      link_transform_state = "shift_scale",
+      link_epoch_id = 4L,
+      transform_frozen = TRUE,
+      link_stop_gate_open = FALSE,
+      link_stop_eligible = FALSE,
+      link_stop_pass = TRUE,
+      escalated_this_refit = FALSE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(restored$controller$link_transform_state_by_spoke[["2"]], "shift_scale")
+  expect_true(isTRUE(restored$controller$link_transform_frozen_by_spoke[["2"]]))
+  expect_identical(restored$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 3L)
+  expect_identical(restored$controller$link_epoch_id_by_spoke[["2"]], 4L)
+  expect_identical(restored$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 1L)
+})
+
+test_that("load_adaptive_session normalizes legacy link_stage_log transform columns on resume", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23")
+  )
+  state <- adaptive_rank_start(items, seed = 19L)
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  link_path <- file.path(session_dir, "link_stage_log.rds")
+  legacy <- pairwiseLLM:::new_link_stage_log()
+  legacy$link_transform_policy <- NULL
+  legacy$link_transform_state <- NULL
+  legacy <- tibble::add_column(legacy, link_transform_mode = character(), .after = "hub_id")
+  legacy <- legacy[, c(
+    "refit_id", "spoke_id", "hub_id", "link_transform_mode",
+    setdiff(names(legacy), c("refit_id", "spoke_id", "hub_id", "link_transform_mode"))
+  )]
+  legacy <- tibble::add_row(
+    legacy,
+    refit_id = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    link_transform_mode = "shift_only",
+    link_refit_mode = "shift_only",
+    hub_lock_mode = "soft_lock",
+    reliability_EAP_link = 0.9,
+    linking_identified = TRUE,
+    link_stop_eligible = FALSE,
+    link_stop_pass = FALSE,
+    transform_frozen = FALSE,
+    n_pairs_cross_set_done = 1L,
+    n_unique_cross_pairs_seen = 1L,
+    n_cross_edges_active_since_last_refit = 1L,
+    n_cross_edges_probe_since_last_refit = 0L,
+    n_cross_edges_total_since_last_refit = 1L,
+    coverage_bins_used = 3L,
+    B_spoke_refit_budget = 1L,
+    B_spoke_refit_budget_source = "fixed_override",
+    stage_target_anchor_link = 1L,
+    stage_target_long_link = 0L,
+    stage_target_mid_link = 0L,
+    stage_target_local_link = 0L,
+    stage_realized_anchor_link = 1L,
+    stage_realized_long_link = 0L,
+    stage_realized_mid_link = 0L,
+    stage_realized_local_link = 0L,
+    stage_shortfall_anchor_link = 0L,
+    stage_shortfall_long_link = 0L,
+    stage_shortfall_mid_link = 0L,
+    stage_shortfall_local_link = 0L,
+    stage_reallocation_used = FALSE,
+    stage_reallocation_rule_used = "none",
+    stage_budget_unfilled = 0L
+  )
+  saveRDS(legacy, link_path)
+
+  restored <- load_adaptive_session(session_dir)
+  expect_false("link_transform_mode" %in% names(restored$link_stage_log))
+  expect_identical(as.character(restored$link_stage_log$link_transform_policy[[1L]]), "fixed_shift_only")
+  expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
+})
+
 test_that("save/load preserves planned probe panels and realized probe bookkeeping", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),

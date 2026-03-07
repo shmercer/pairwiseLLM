@@ -112,7 +112,6 @@ validate_judge_result <- function(result, A_id, B_id) {
   is_cross_set <- !is.na(set_i) && !is.na(set_j) && set_i != set_j
   utility_mode <- .adaptive_selection_utility_mode(
     run_mode = run_mode,
-    has_regularization = FALSE,
     is_cross_set = isTRUE(is_cross_set)
   )
 

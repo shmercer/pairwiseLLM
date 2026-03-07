@@ -173,6 +173,12 @@ read_log <- function(path) {
       }
       out$link_transform_mode <- NULL
     }
+    if ("ppc_calibration_id" %in% names(out)) {
+      out$ppc_calibration_id <- NULL
+    }
+    if ("cross_set_ppc_brier_max_used" %in% names(out)) {
+      out$cross_set_ppc_brier_max_used <- NULL
+    }
   }
   if (!isTRUE(fill_missing)) {
     return(out)

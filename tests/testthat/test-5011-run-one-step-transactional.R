@@ -125,20 +125,20 @@ test_that("run_one_step logs hub_lock_kappa as NA unless hub_lock_mode is soft_l
   )
   judge_ok <- make_deterministic_judge("i_wins")
 
-  state_free <- adaptive_rank_start(
+  state_hard <- adaptive_rank_start(
     items,
     seed = 8L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      hub_lock_mode = "free",
+      hub_lock_mode = "hard_lock",
       hub_lock_kappa = 0.75
     )
   )
-  out_free <- pairwiseLLM:::run_one_step(state_free, judge_ok)
-  row_free <- out_free$step_log[nrow(out_free$step_log), , drop = FALSE]
-  expect_equal(row_free$hub_lock_mode[[1L]], "free")
-  expect_true(is.na(row_free$hub_lock_kappa[[1L]]))
+  out_hard <- pairwiseLLM:::run_one_step(state_hard, judge_ok)
+  row_hard <- out_hard$step_log[nrow(out_hard$step_log), , drop = FALSE]
+  expect_equal(row_hard$hub_lock_mode[[1L]], "hard_lock")
+  expect_true(is.na(row_hard$hub_lock_kappa[[1L]]))
 })
 
 test_that("run_one_step logs linking pre-step transform estimates when available", {
@@ -227,9 +227,9 @@ test_that("run_one_step logs probe rows without linking d-opt utility fields", {
   )
   state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
   state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
-  state$controller$link_transform_mode_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(
-    link_transform_mode = "shift_only",
+    link_transform_state = "shift_only",
     delta_spoke_mean = 0,
     delta_spoke_sd = 0.1
   ))

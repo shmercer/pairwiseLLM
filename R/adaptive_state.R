@@ -224,7 +224,7 @@
     )
   }
   out$link_transform_state_by_spoke <- state_map
-  out$link_transform_mode_by_spoke <- state_map
+  out$link_transform_mode_by_spoke <- NULL
 
   theta_treatment <- out$shift_only_theta_treatment %||% defaults$shift_only_theta_treatment
   if (identical(theta_treatment, "normal_prior")) {
@@ -240,7 +240,8 @@
     )
   }
   out$shift_only_theta_treatment <- theta_treatment
-  out$link_transform_mode <- out$link_transform_policy
+  out$cross_set_ppc_brier_max <- NULL
+  out$ppc_calibration_id <- NULL
 
   out
 }
@@ -249,7 +250,6 @@
 #' @noRd
 .adaptive_controller_defaults <- function(n_items) {
   defaults <- adaptive_defaults(n_items)
-  calibration_defaults <- .adaptive_linking_default_calibration()
   list(
     global_identified = FALSE,
     global_identified_reliability_min = as.double(defaults$global_identified_reliability_min),
@@ -268,7 +268,6 @@
     run_mode = "within_set",
     hub_id = 1L,
     link_transform_policy = "auto",
-    link_transform_mode = "auto",
     link_refit_mode = "shift_only",
     shift_only_theta_treatment = "fixed_eap_plugin_var",
     judge_param_mode = "global_shared",
@@ -281,8 +280,6 @@
     delta_change_max = 0.05,
     log_alpha_sd_max = 0.10,
     log_alpha_change_max = 0.05,
-    cross_set_ppc_brier_max = as.double(calibration_defaults$cross_set_ppc_brier_max %||% 0.20),
-    ppc_calibration_id = as.character(calibration_defaults$ppc_calibration_id %||% "default_p95_brier_active"),
     link_transform_escalation_refits_required = 2L,
     link_transform_escalation_is_one_way = TRUE,
     max_pairs_after_stop = 0L,
@@ -334,7 +331,6 @@
     linking_identified = FALSE,
     linking_identified_by_spoke = list(),
     link_transform_state_by_spoke = list(),
-    link_transform_mode_by_spoke = list(),
     link_transform_bad_refits_by_spoke = list(),
     link_transform_last_delta_by_spoke = list(),
     link_transform_last_log_alpha_by_spoke = list(),
@@ -387,8 +383,6 @@
     "delta_change_max",
     "log_alpha_sd_max",
     "log_alpha_change_max",
-    "cross_set_ppc_brier_max",
-    "ppc_calibration_id",
     "link_transform_escalation_refits_required",
     "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
@@ -570,7 +564,7 @@
     }
   }
   out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
-  out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock", "free"))
+  out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock"))
   out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
   out$link_identified_reliability_min <- read_double("link_identified_reliability_min", 0, 1)
   out$link_stop_reliability_min <- read_double("link_stop_reliability_min", 0, 1)
@@ -579,20 +573,6 @@
   out$delta_change_max <- read_double("delta_change_max", 0, Inf)
   out$log_alpha_sd_max <- read_double("log_alpha_sd_max", 0, Inf)
   out$log_alpha_change_max <- read_double("log_alpha_change_max", 0, Inf)
-  out$cross_set_ppc_brier_max <- read_double("cross_set_ppc_brier_max", 0, 1)
-  if ("ppc_calibration_id" %in% names(out)) {
-    if (is.null(out$ppc_calibration_id)) {
-      # Treat explicit NULL as "use default" by removing the override key.
-      out[["ppc_calibration_id"]] <- NULL
-    } else if (!is.character(out$ppc_calibration_id) ||
-      length(out$ppc_calibration_id) != 1L ||
-      is.na(out$ppc_calibration_id) ||
-      out$ppc_calibration_id == "") {
-      rlang::abort("`adaptive_config$ppc_calibration_id` must be a single string value.")
-    } else {
-      out$ppc_calibration_id <- as.character(out$ppc_calibration_id)
-    }
-  }
   out$link_transform_escalation_refits_required <- read_integer(
     "link_transform_escalation_refits_required",
     1L,

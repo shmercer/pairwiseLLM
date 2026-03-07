@@ -365,12 +365,6 @@
   state
 }
 
-#' @keywords internal
-#' @noRd
-.adaptive_link_transform_mode_for_spoke <- function(controller, spoke_id) {
-  .adaptive_link_transform_state_for_spoke(controller, spoke_id)
-}
-
 .adaptive_link_active_item_ids <- function(state, spoke_id, hub_id) {
   spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
@@ -1021,27 +1015,6 @@
   if (!isTRUE(diagnostics_pass)) {
     return(FALSE)
   }
-  has_normative_cols <- all(c("hub_anchored", "probe_brier", "probe_pred_rmse_lagged", "theta_global_rmse_lagged") %in%
-    names(row))
-  if (!isTRUE(has_normative_cols)) {
-    if ("reliability_stop_pass" %in% names(row) &&
-      "delta_sd_pass" %in% names(row) &&
-      "log_alpha_sd_pass" %in% names(row) &&
-      "rank_stability_pass" %in% names(row)) {
-      rel_gate <- isTRUE(row$reliability_stop_pass[[1L]])
-      delta_sd_gate <- isTRUE(row$delta_sd_pass[[1L]])
-      log_alpha_sd_gate <- is.na(row$log_alpha_sd_pass[[1L]]) || isTRUE(row$log_alpha_sd_pass[[1L]])
-      delta_change_gate <- isTRUE(row$delta_change_pass[[1L]])
-      log_alpha_change_gate <- is.na(row$log_alpha_change_pass[[1L]]) || isTRUE(row$log_alpha_change_pass[[1L]])
-      rank_gate <- isTRUE(row$rank_stability_pass[[1L]])
-      return(isTRUE(rel_gate) &&
-        isTRUE(delta_sd_gate) &&
-        isTRUE(log_alpha_sd_gate) &&
-        isTRUE(delta_change_gate) &&
-        isTRUE(log_alpha_change_gate) &&
-        isTRUE(rank_gate))
-    }
-  }
   rel_gate <- if ("reliability_stop_pass" %in% names(row)) {
     isTRUE(row$reliability_stop_pass[[1L]] %||% FALSE)
   } else if ("reliability_EAP_link" %in% names(row)) {
@@ -1064,15 +1037,15 @@
   probe_rmse_gate <- if ("probe_pred_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$probe_pred_rmse_lagged[[1L]] %||% NA_real_)) &&
       as.double(row$probe_pred_rmse_lagged[[1L]]) <= as.double(controller$probe_pred_rmse_max %||% 0.015)
-  } else {
-    FALSE
-  }
+    } else {
+      FALSE
+    }
   theta_rmse_gate <- if ("theta_global_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$theta_global_rmse_lagged[[1L]] %||% NA_real_)) &&
       as.double(row$theta_global_rmse_lagged[[1L]]) <= as.double(controller$theta_global_rmse_max %||% 0.04)
-  } else {
-    FALSE
-  }
+    } else {
+      FALSE
+    }
   isTRUE(rel_gate) &&
     isTRUE(hub_gate) &&
     isTRUE(probe_gate) &&
@@ -2948,6 +2921,9 @@
       spoke_id = spoke_id,
       epoch_id = link_epoch_id
     )
+    link_diagnostics_pass <- isTRUE(fit_diag$diagnostics_divergences_pass %||% NA) &&
+      isTRUE(fit_diag$diagnostics_rhat_pass %||% NA) &&
+      isTRUE(fit_diag$diagnostics_ess_pass %||% NA)
     probe_brier <- .adaptive_link_probe_brier_for_fit(
       edges = probe_edges_realized_tbl,
       hub_theta = ppc_hub_theta,
@@ -2972,7 +2948,8 @@
     }
     link_lag_eligible <- isTRUE(lag_eligible)
     link_min_refit_eligible <- isTRUE(current_refit_id >= as.integer(controller$min_refits_in_phase_b %||% 3L))
-    link_stop_gate_open <- isTRUE(!is.na(reliability_active)) &&
+    link_stop_gate_open <- isTRUE(link_diagnostics_pass) &&
+      isTRUE(!is.na(reliability_active)) &&
       isTRUE(nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 30L))
     link_stop_eligible <- isTRUE(link_lag_eligible) &&
       isTRUE(link_min_refit_eligible) &&
@@ -3150,8 +3127,6 @@
       ppc_brier_cross_active = as.double(ppc_brier_cross_active),
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
-      ppc_calibration_id = as.character(controller$ppc_calibration_id %||% NA_character_),
-      cross_set_ppc_brier_max_used = as.double(controller$cross_set_ppc_brier_max %||% NA_real_),
       fit_contract = fit$fit_contract %||% list(),
       link_diagnostics_divergences = as.integer(fit_diag$divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(fit_diag$max_rhat %||% NA_real_),
@@ -3221,7 +3196,6 @@
 
   controller$link_refit_stats_by_spoke <- link_stats
   controller$link_transform_state_by_spoke <- state_map
-  controller$link_transform_mode_by_spoke <- state_map
   controller$link_transform_last_delta_by_spoke <- last_delta
   controller$link_transform_last_log_alpha_by_spoke <- last_log_alpha
   controller$link_transform_frozen_by_spoke <- frozen_map
@@ -3644,8 +3618,6 @@
       it_n_pairs_accumulated = as.integer(d_opt_n_pairs),
       coverage_bins_used = as.integer(stats_row$coverage_bins_used %||% coverage$bins_used %||% NA_integer_),
       coverage_source = as.character(stats_row$coverage_source %||% coverage$source %||% NA_character_),
-      ppc_calibration_id = as.character(stats_row$ppc_calibration_id %||% NA_character_),
-      cross_set_ppc_brier_max_used = as.double(stats_row$cross_set_ppc_brier_max_used %||% NA_real_),
       probe_panel_id = as.character(probe_panel_id),
       N_spoke_phase_b_start = as.integer(sum(as.integer(state$items$set_id) == as.integer(spoke_id), na.rm = TRUE)),
       probe_edges_planned = as.integer(probe_edges_planned),
@@ -3758,12 +3730,6 @@
   }
   if (any(is.na(rows$transform_frozen))) {
     rlang::abort("link_stage_log append completeness failure: `transform_frozen` must be populated.")
-  }
-  if (any(is.na(rows$ppc_calibration_id)) || any(rows$ppc_calibration_id == "")) {
-    rlang::abort("link_stage_log append completeness failure: `ppc_calibration_id` must be populated.")
-  }
-  if (any(is.na(rows$cross_set_ppc_brier_max_used))) {
-    rlang::abort("link_stage_log append completeness failure: `cross_set_ppc_brier_max_used` must be populated.")
   }
   .adaptive_assert_link_stage_budget_invariants(rows)
 
