@@ -60,9 +60,7 @@ golden_e2e_run <- function() {
         link_rank_corr_min = 0.0,
         delta_sd_max = 100,
         delta_change_max = 100,
-        probe_pairs_per_refit_per_spoke = 2L,
-        ppc_calibration_id = "golden_fixture_id",
-        cross_set_ppc_brier_max = 0.25
+        probe_pairs_per_refit_per_spoke = 2L
       ),
       btl_config = list(
         refit_pairs_target = 1L,
@@ -80,7 +78,7 @@ golden_e2e_run <- function() {
         refit_id = as.integer(nrow(out_a$round_log) + 1L),
         spoke_id = 2L,
         link_stop_pass = TRUE,
-        link_transform_mode = "shift_only",
+        link_transform_state = "shift_only",
         delta_spoke_mean = 0.0,
         log_alpha_spoke_mean = NA_real_
       )
@@ -100,9 +98,7 @@ golden_e2e_run <- function() {
         link_rank_corr_min = 0.0,
         delta_sd_max = 100,
         delta_change_max = 100,
-        probe_pairs_per_refit_per_spoke = 2L,
-        ppc_calibration_id = "golden_fixture_id",
-        cross_set_ppc_brier_max = 0.25
+        probe_pairs_per_refit_per_spoke = 2L
       ),
       btl_config = list(
         refit_pairs_target = 1L,
@@ -121,7 +117,6 @@ golden_e2e_run <- function() {
   ), drop = FALSE]
   link_focus <- out$link_stage_log[, c(
     "refit_id", "spoke_id", "transform_frozen", "link_stop_eligible", "link_stop_pass",
-    "ppc_calibration_id", "cross_set_ppc_brier_max_used",
     "n_cross_edges_active_since_last_refit", "n_cross_edges_probe_since_last_refit"
   ), drop = FALSE]
 
@@ -142,8 +137,6 @@ test_that("deterministic linking e2e run preserves freeze/probe and golden logs"
 
   link_log <- run$state$link_stage_log
   expect_true(any(link_log$transform_frozen %in% TRUE))
-  expect_true(all(link_log$ppc_calibration_id == "golden_fixture_id"))
-  expect_true(all(is.finite(link_log$cross_set_ppc_brier_max_used)))
 
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))

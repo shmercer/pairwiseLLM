@@ -307,8 +307,6 @@ schema_link_stage_log <- c(
   it_n_pairs_accumulated = "integer",
   coverage_bins_used = "integer",
   coverage_source = "character",
-  ppc_calibration_id = "character",
-  cross_set_ppc_brier_max_used = "double",
   probe_panel_id = "character",
   N_spoke_phase_b_start = "integer",
   probe_edges_planned = "integer",

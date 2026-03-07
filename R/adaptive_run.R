@@ -577,7 +577,6 @@
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
   controller$link_transform_frozen_refit_id_by_spoke <- frozen_refit_map
   controller$link_transform_state_by_spoke <- state_map
-  controller$link_transform_mode_by_spoke <- state_map
   out$controller <- controller
   out
 }
@@ -1184,8 +1183,8 @@ adaptive_rank_start <- function(items,
 #' are expected, after which malformed link estimates abort.
 #' In linking \code{joint_refit} mode, hub+spoke item abilities and transform
 #' parameters are estimated together for the active hub+spoke graph, with hub
-#' behavior controlled by \code{hub_lock_mode} (\code{hard_lock},
-#' \code{soft_lock}, or \code{free}); \code{soft_lock} uses
+#' behavior controlled by \code{hub_lock_mode} (\code{hard_lock}
+#' or \code{soft_lock}); \code{soft_lock} uses
 #' \code{hub_lock_kappa}-scaled regularization to Phase A hub summaries.
 #' Exploration/exploitation routing and fallback handling are recorded in
 #' \code{step_log}.

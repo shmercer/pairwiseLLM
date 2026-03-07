@@ -621,7 +621,6 @@ test_that("selection utility helpers cover additional fallback branches", {
   expect_identical(
     pairwiseLLM:::.adaptive_selection_utility_mode(
       run_mode = "within_set",
-      has_regularization = TRUE,
       is_cross_set = FALSE
     ),
     "pairing_trueskill_u0"
@@ -1035,12 +1034,10 @@ test_that("pairing ordering ignores linking utility fields", {
     i = c("a", "b"),
     j = c("c", "d"),
     u0 = c(0.24, 0.26),
-    u = c(0.24, 0.26),
     link_u = c(0.90, 0.10)
   )
   utility_mode <- pairwiseLLM:::.adaptive_selection_utility_mode(
     run_mode = "within_set",
-    has_regularization = FALSE,
     is_cross_set = FALSE
   )
   utility_col <- pairwiseLLM:::.adaptive_resolve_selection_column(utility_mode)
@@ -1189,9 +1186,9 @@ test_that("frozen spoke cross-set commits are tagged as probe steps", {
   state <- mark_link_phase_b_ready(state)
   state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
   state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
-  state$controller$link_transform_mode_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(
-    link_transform_mode = "shift_only",
+    link_transform_state = "shift_only",
     delta_spoke_mean = 0,
     delta_spoke_sd = 0.1
   ))
@@ -1255,7 +1252,7 @@ test_that("linking predictive utility applies signed position bias by (A,B) orie
   )
 
   out <- testthat::with_mocked_bindings(
-    .adaptive_link_transform_mode_for_spoke = function(controller, spoke_id) "shift_only",
+    .adaptive_link_transform_state_for_spoke = function(controller, spoke_id) "shift_only",
     .adaptive_link_safe_theta_map = function(state, set_id, prefer_current = FALSE) {
       if (identical(as.integer(set_id), 1L)) {
         stats::setNames(0.4, "h1")
@@ -1410,7 +1407,7 @@ test_that("phase-B routing helpers enforce finite inputs and anchor fallback rul
   controller_scale <- utils::modifyList(
     controller,
     list(
-      link_transform_mode_by_spoke = list(`2` = "shift_scale"),
+      link_transform_state_by_spoke = list(`2` = "shift_scale"),
       link_refit_stats_by_spoke = list(`2` = list(delta_spoke_mean = NA_real_, log_alpha_spoke_mean = NA_real_))
     )
   )
@@ -1585,7 +1582,7 @@ test_that("link stage log uses NA hub_lock_kappa when lock mode is not soft_lock
   state <- adaptive_rank_start(
     items,
     seed = 4L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, hub_lock_mode = "free")
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, hub_lock_mode = "hard_lock")
   )
   state <- mark_link_phase_b_ready(state)
   judge <- make_deterministic_judge("i_wins")
@@ -1597,7 +1594,7 @@ test_that("link stage log uses NA hub_lock_kappa when lock mode is not soft_lock
   )
 
   expect_true(nrow(rows) >= 1L)
-  expect_equal(rows$hub_lock_mode[[1L]], "free")
+  expect_equal(rows$hub_lock_mode[[1L]], "hard_lock")
   expect_true(is.na(rows$hub_lock_kappa[[1L]]))
 })
 

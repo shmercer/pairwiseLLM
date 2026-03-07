@@ -149,19 +149,11 @@ test_that("soft lock with kappa=0 is rejected in joint refit", {
     "strictly in \\(0, 1\\]"
   )
 
-  free <- base
-  free <- pairwiseLLM:::.adaptive_apply_controller_config(
-    free,
-    list(hub_lock_mode = "free", hub_lock_kappa = 1)
-  )
-  free <- pairwiseLLM:::.adaptive_linking_refit_update_state(free, list(last_refit_step = 0L))
-
   d_hard <- hard$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
-  d_free <- free$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
 
   hard_contract <- hard$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_equal(hard_contract$joint_refit$n_hub_items_estimated, 0L)
-  expect_false(isTRUE(all.equal(d_hard, d_free, tolerance = 1e-10)))
+  expect_true(is.finite(d_hard))
 })
 
 test_that("soft lock uses artifact uncertainty and kappa strength", {
@@ -226,7 +218,7 @@ test_that("joint_refit utility uses current theta state rather than Phase A summ
     `2` = list(
       delta_spoke_mean = 0,
       log_alpha_spoke_mean = NA_real_,
-      link_transform_mode = "shift_only"
+      link_transform_state = "shift_only"
     )
   )
   cand <- tibble::tibble(i = "h1", j = "s21")
@@ -332,7 +324,7 @@ test_that("auto escalation stays in shift_only before lag and stop eligibility a
     .adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
     .package = "pairwiseLLM"
   )
-  expect_identical(state1$controller$link_transform_mode_by_spoke[["2"]], "shift_only")
+  expect_identical(state1$controller$link_transform_state_by_spoke[["2"]], "shift_only")
   expect_identical(state1$controller$link_refit_stats_by_spoke[["2"]]$escalation_consecutive_pass_count, 0L)
   expect_false(isTRUE(state1$controller$link_refit_stats_by_spoke[["2"]]$link_stop_eligible))
 })
@@ -381,7 +373,7 @@ test_that("auto escalation streak resets when eligibility fails", {
     }
   )
 
-  expect_identical(out$controller$link_transform_mode_by_spoke[["2"]], "shift_only")
+  expect_identical(out$controller$link_transform_state_by_spoke[["2"]], "shift_only")
   expect_identical(out$controller$link_refit_stats_by_spoke[["2"]]$escalation_consecutive_pass_count, 0L)
 })
 
@@ -463,7 +455,7 @@ test_that("escalation path does not evaluate without realized held-out probes", 
     }
   )
 
-  expect_identical(out$controller$link_transform_mode_by_spoke[["2"]], "shift_only")
+  expect_identical(out$controller$link_transform_state_by_spoke[["2"]], "shift_only")
   expect_false(isTRUE(out$controller$link_refit_stats_by_spoke[["2"]]$scale_ready))
 })
 
@@ -644,7 +636,7 @@ test_that("shift_only theta treatment records plugin-var default and fixed-eap f
 test_that("invalid linking mode combinations fail validation", {
   defaults <- pairwiseLLM:::.adaptive_controller_defaults(8L)
   expect_identical(defaults$shift_only_theta_treatment, "fixed_eap_plugin_var")
-  expect_true(is.list(defaults$link_transform_mode_by_spoke))
+  expect_true(is.list(defaults$link_transform_state_by_spoke))
   expect_true(is.list(defaults$link_transform_bad_refits_by_spoke))
   expect_true(is.list(defaults$link_refit_stats_by_spoke))
 
@@ -673,7 +665,7 @@ test_that("invalid linking mode combinations fail validation", {
       n_items = 5L,
       set_ids = c(1L, 2L, 3L)
     ),
-    "must be `hard_lock` or `soft_lock`"
+    "must be one of"
   )
 })
 
@@ -727,9 +719,9 @@ test_that("phase-B candidate routing responds to linking-global transform parame
   )
 
   state$controller$link_refit_stats_by_spoke <- list(
-    `2` = list(delta_spoke_mean = -4, log_alpha_spoke_mean = log(1.4), link_transform_mode = "shift_scale")
+    `2` = list(delta_spoke_mean = -4, log_alpha_spoke_mean = log(1.4), link_transform_state = "shift_scale")
   )
-  state$controller$link_transform_mode_by_spoke <- list(`2` = "shift_scale")
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_scale")
   shifted_down_scale <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
     stage_name = "mid_link",
@@ -1299,12 +1291,12 @@ test_that("item log keeps raw summaries separate from transformed global summari
   )
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
-      link_transform_mode = "shift_scale",
+      link_transform_state = "shift_scale",
       delta_spoke_mean = 0.3,
       log_alpha_spoke_mean = log(1.2)
     ),
     `3` = list(
-      link_transform_mode = "shift_only",
+      link_transform_state = "shift_only",
       delta_spoke_mean = -0.2,
       log_alpha_spoke_mean = NA_real_
     )
@@ -1476,8 +1468,8 @@ test_that("single-set mode does not emit linking stage rows", {
 test_that("linking active-domain helper guard branches return typed NA outputs", {
   state <- make_linking_refit_state()
 
-  mode <- pairwiseLLM:::.adaptive_link_transform_mode_for_spoke(
-    controller = list(link_transform_mode = "auto", link_transform_mode_by_spoke = list(`2` = "bad")),
+  mode <- pairwiseLLM:::.adaptive_link_transform_state_for_spoke(
+    controller = list(link_transform_mode = "auto", link_transform_state_by_spoke = list(`2` = "bad")),
     spoke_id = 2L
   )
   expect_identical(mode, "shift_only")
@@ -1719,14 +1711,14 @@ test_that("transformed-domain helper and reconstruction guard branches are cover
 
   expect_error(
     pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
-      link_row = tibble::tibble(link_transform_mode = c("shift_only", "shift_only")),
+      link_row = tibble::tibble(link_transform_state = c("shift_only", "shift_only")),
       controller = list()
     ),
     "exactly one row"
   )
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
-      link_transform_mode = "shift_scale",
+      link_transform_state = "shift_scale",
       reliability_EAP_link = 0.95,
       ts_btl_rank_spearman = 0.95
     ),
@@ -1734,7 +1726,7 @@ test_that("transformed-domain helper and reconstruction guard branches are cover
   )))
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
-      link_transform_mode = "shift_scale",
+      link_transform_state = "shift_scale",
       reliability_EAP_link = 0.95,
       ts_btl_rank_spearman = 0.95,
       delta_sd_pass = TRUE
@@ -1743,7 +1735,7 @@ test_that("transformed-domain helper and reconstruction guard branches are cover
   )))
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
-      link_transform_mode = "shift_only",
+      link_transform_state = "shift_only",
       reliability_EAP_link = 0.95,
       ts_btl_rank_spearman = 0.95,
       delta_sd_pass = TRUE

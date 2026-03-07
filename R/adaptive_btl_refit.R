@@ -365,12 +365,6 @@
   state
 }
 
-#' @keywords internal
-#' @noRd
-.adaptive_link_transform_mode_for_spoke <- function(controller, spoke_id) {
-  .adaptive_link_transform_state_for_spoke(controller, spoke_id)
-}
-
 .adaptive_link_active_item_ids <- function(state, spoke_id, hub_id) {
   spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
@@ -3150,8 +3144,6 @@
       ppc_brier_cross_active = as.double(ppc_brier_cross_active),
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
-      ppc_calibration_id = as.character(controller$ppc_calibration_id %||% NA_character_),
-      cross_set_ppc_brier_max_used = as.double(controller$cross_set_ppc_brier_max %||% NA_real_),
       fit_contract = fit$fit_contract %||% list(),
       link_diagnostics_divergences = as.integer(fit_diag$divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(fit_diag$max_rhat %||% NA_real_),
@@ -3221,7 +3213,6 @@
 
   controller$link_refit_stats_by_spoke <- link_stats
   controller$link_transform_state_by_spoke <- state_map
-  controller$link_transform_mode_by_spoke <- state_map
   controller$link_transform_last_delta_by_spoke <- last_delta
   controller$link_transform_last_log_alpha_by_spoke <- last_log_alpha
   controller$link_transform_frozen_by_spoke <- frozen_map
@@ -3644,8 +3635,6 @@
       it_n_pairs_accumulated = as.integer(d_opt_n_pairs),
       coverage_bins_used = as.integer(stats_row$coverage_bins_used %||% coverage$bins_used %||% NA_integer_),
       coverage_source = as.character(stats_row$coverage_source %||% coverage$source %||% NA_character_),
-      ppc_calibration_id = as.character(stats_row$ppc_calibration_id %||% NA_character_),
-      cross_set_ppc_brier_max_used = as.double(stats_row$cross_set_ppc_brier_max_used %||% NA_real_),
       probe_panel_id = as.character(probe_panel_id),
       N_spoke_phase_b_start = as.integer(sum(as.integer(state$items$set_id) == as.integer(spoke_id), na.rm = TRUE)),
       probe_edges_planned = as.integer(probe_edges_planned),
@@ -3758,12 +3747,6 @@
   }
   if (any(is.na(rows$transform_frozen))) {
     rlang::abort("link_stage_log append completeness failure: `transform_frozen` must be populated.")
-  }
-  if (any(is.na(rows$ppc_calibration_id)) || any(rows$ppc_calibration_id == "")) {
-    rlang::abort("link_stage_log append completeness failure: `ppc_calibration_id` must be populated.")
-  }
-  if (any(is.na(rows$cross_set_ppc_brier_max_used))) {
-    rlang::abort("link_stage_log append completeness failure: `cross_set_ppc_brier_max_used` must be populated.")
   }
   .adaptive_assert_link_stage_budget_invariants(rows)
 

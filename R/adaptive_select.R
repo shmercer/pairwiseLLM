@@ -357,7 +357,7 @@ adaptive_defaults <- function(N) {
     isTRUE(is_cross_set)
 }
 
-.adaptive_selection_utility_mode <- function(run_mode, has_regularization = FALSE, is_cross_set = FALSE) {
+.adaptive_selection_utility_mode <- function(run_mode, is_cross_set = FALSE) {
   if (.adaptive_selection_mode_is_linking(run_mode = run_mode, is_cross_set = is_cross_set)) {
     return("linking_d_optimal")
   }
@@ -569,7 +569,7 @@ adaptive_defaults <- function(N) {
     }
     if (!identical(as.integer(set_id), hub_id)) {
       stats_row <- link_stats[[as.character(set_id)]] %||% list()
-      transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, as.integer(set_id))
+      transform_mode <- .adaptive_link_transform_state_for_spoke(controller, as.integer(set_id))
       delta <- as.double(stats_row$delta_spoke_mean %||% 0)
       if (!is.finite(delta)) {
         delta <- 0
@@ -747,7 +747,7 @@ adaptive_defaults <- function(N) {
   }, numeric(1L))
   cand$link_p <- as.double(p_link)
   cand$link_u <- as.double(p_link * (1 - p_link))
-  transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, as.integer(spoke_id))
+  transform_mode <- .adaptive_link_transform_state_for_spoke(controller, as.integer(spoke_id))
   stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
   delta <- as.double(stats_row$delta_spoke_mean %||% 0)
   if (!is.finite(delta)) {
@@ -1096,8 +1096,6 @@ adaptive_defaults <- function(N) {
   }
 
   n_after_star <- nrow(candidates)
-
-  candidates$u <- candidates$u0
 
   list(
     selected = candidates,
@@ -1573,17 +1571,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         } else {
           stage_local_priority_mode <- NA_character_
         }
-        has_regularized_utility <- "u" %in% names(cand) &&
-          "u0" %in% names(cand) &&
-          any(
-            is.finite(as.double(cand$u)) &
-              is.finite(as.double(cand$u0)) &
-              abs(as.double(cand$u) - as.double(cand$u0)) > sqrt(.Machine$double.eps),
-            na.rm = TRUE
-          )
         selected_utility_mode <- .adaptive_selection_utility_mode(
           run_mode = if (isTRUE(stage_is_probe_ordering)) "within_set" else controller$run_mode,
-          has_regularization = isTRUE(has_regularized_utility),
           is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b) && !isTRUE(stage_is_probe_ordering)
         )
         if (isTRUE(is_link_mode) && isTRUE(link_phase_b)) {
@@ -1752,14 +1741,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (isTRUE(selected_is_cross_set) && isTRUE(selected_is_probe_ordering)) {
     utility_mode <- NA_character_
   } else {
-    has_regularized_utility <- "u" %in% names(selected_pair) &&
-      "u0" %in% names(selected_pair) &&
-      is.finite(as.double(selected_pair$u[[1L]])) &&
-      is.finite(as.double(selected_pair$u0[[1L]])) &&
-      abs(as.double(selected_pair$u[[1L]]) - as.double(selected_pair$u0[[1L]])) > sqrt(.Machine$double.eps)
     utility_mode <- .adaptive_selection_utility_mode(
       run_mode = controller$run_mode,
-      has_regularization = isTRUE(has_regularized_utility),
       is_cross_set = isTRUE(selected_is_cross_set)
     )
   }

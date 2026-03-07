@@ -64,7 +64,7 @@ make_link_probe_state <- function() {
   state$controller$current_link_spoke_id <- 2L
   state$controller$link_epoch_id_by_spoke <- list(`2` = 3L, `3` = 1L)
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
-  state$controller$link_transform_mode_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
       delta_spoke_mean = 0.25,
@@ -872,7 +872,11 @@ test_that("remaining contract and routing validators cover missing edge branches
 
   no_phase_b <- state
   no_phase_b$linking$phase_a$phase <- "phase_a"
-  ensured <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(no_phase_b, controller = no_phase_b$controller, spoke_ids = 2L)
+  ensured <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+    no_phase_b,
+    controller = no_phase_b$controller,
+    spoke_ids = 2L
+  )
   expect_true(is.list(ensured$linking$probe))
 
   expect_identical(pairwiseLLM:::.adaptive_linking_selection_order(tibble::tibble()), integer())
@@ -949,9 +953,7 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     stage_shortfall_local_link = 0L,
     stage_reallocation_used = FALSE,
     stage_reallocation_rule_used = "none",
-    stage_budget_unfilled = 0L,
-    ppc_calibration_id = "ppc-1",
-    cross_set_ppc_brier_max_used = 0.2
+    stage_budget_unfilled = 0L
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_budget_invariants(bad_realized),
@@ -1021,20 +1023,6 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(frozen_na),
     "`transform_frozen` must be populated"
-  )
-
-  bad_ppc_id <- bad_realized
-  bad_ppc_id$ppc_calibration_id <- ""
-  expect_error(
-    pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(bad_ppc_id),
-    "`ppc_calibration_id` must be populated"
-  )
-
-  bad_ppc_brier <- bad_realized
-  bad_ppc_brier$cross_set_ppc_brier_max_used <- NA_real_
-  expect_error(
-    pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(bad_ppc_brier),
-    "`cross_set_ppc_brier_max_used` must be populated"
   )
 
   legacy_mode <- bad_realized |> dplyr::select(-link_transform_policy, -link_transform_state)

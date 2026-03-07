@@ -453,7 +453,7 @@
       next
     }
 
-    mode <- .adaptive_link_transform_mode_for_spoke(controller, spoke_id = as.integer(set_id))
+    mode <- .adaptive_link_transform_state_for_spoke(controller, spoke_id = as.integer(set_id))
     stats_row <- link_stats[[as.character(set_id)]] %||% list()
     delta <- as.double(stats_row$delta_spoke_mean %||% 0)
     if (!is.finite(delta)) {
