@@ -513,6 +513,14 @@ apply_step_update <- function(state, step) {
   if (!isTRUE(step$is_valid)) {
     return(out)
   }
+
+  new_history <- tibble::tibble(
+    A_id = as.character(step$A_id),
+    B_id = as.character(step$B_id),
+    is_probe_step = as.logical(step$row$is_probe_step %||% FALSE)
+  )
+  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
+
   if (isTRUE(step$row$is_probe_step %||% FALSE)) {
     out <- .adaptive_link_probe_register_commit(out, step$row)
     return(out)
@@ -521,12 +529,6 @@ apply_step_update <- function(state, step) {
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id
   out$trueskill_state <- update_trueskill_state(out$trueskill_state, winner_id, loser_id)
-
-  new_history <- tibble::tibble(
-    A_id = as.character(step$A_id),
-    B_id = as.character(step$B_id)
-  )
-  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
 
   items <- out$trueskill_state$items
   item_ids <- as.character(items$item_id)
@@ -710,6 +712,9 @@ run_one_step <- function(state, judge, ...) {
     "link_probe"
   )
   is_probe_step <- if (isTRUE(is_cross_set) && run_mode %in% c("link_probe_holdout", "link_probe")) TRUE else FALSE
+  if (isTRUE(is_probe_step)) {
+    utility_mode <- NA_character_
+  }
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode) &&
     !isTRUE(is_probe_step) &&

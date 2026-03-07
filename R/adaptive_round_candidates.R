@@ -854,6 +854,9 @@ generate_stage_candidates_from_state <- function(state,
         eligible_spoke_ids = eligible_spokes
       )
     }
+    if (is.na(spoke_id)) {
+      return(tibble::tibble(i = character(), j = character()))
+    }
     if (!spoke_id %in% eligible_spokes) {
       rlang::abort(
         paste0(
@@ -863,11 +866,6 @@ generate_stage_candidates_from_state <- function(state,
           paste(sort(unique(eligible_spokes)), collapse = ", "),
           ")."
         )
-      )
-    }
-    if (is.na(spoke_id)) {
-      rlang::abort(
-        "Phase metadata and routing mode disagree: no active spoke could be selected for phase_b."
       )
     }
     allow_spoke_spoke <- isTRUE(controller$allow_spoke_spoke_cross_set %||% FALSE)

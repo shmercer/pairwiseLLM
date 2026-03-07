@@ -284,7 +284,11 @@
   if (nrow(pending) < 1L) {
     return(NULL)
   }
-  pending <- pending[order(as.integer(pending$planned_rank), pending$hub_item_id, pending$spoke_item_id), , drop = FALSE]
+  pending <- pending[
+    order(as.integer(pending$planned_rank), pending$hub_item_id, pending$spoke_item_id),
+    ,
+    drop = FALSE
+  ]
   pending[1L, , drop = FALSE]
 }
 
