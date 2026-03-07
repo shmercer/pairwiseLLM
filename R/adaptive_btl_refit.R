@@ -2785,7 +2785,7 @@
       n_cross_edges_total_since_last_refit = as.integer(
         stats_row$n_cross_edges_total_since_last_refit %||% n_pairs_since_total
       ),
-      B_spoke_refit_budget = as.integer(budget_info$B_spoke_refit_budget %||% sum(stage_quotas)),
+      B_spoke_refit_budget = as.integer(sum(stage_quotas)),
       B_spoke_refit_budget_source = as.character(
         budget_info$B_spoke_refit_budget_source %||% "single_spoke_default"
       ),
