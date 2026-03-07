@@ -301,37 +301,40 @@
       counts[names(tab)] <- as.integer(tab)
     }
 
-    floor_pairs <- as.integer(controller$min_cross_set_pairs_per_spoke_per_refit %||% 5L)
-    floor_pairs <- max(0L, floor_pairs)
+    budget_map <- .adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = spoke_ids
+    )
+    utility_mass <- vapply(
+      as.character(spoke_ids),
+      function(key) as.double(budget_map[[key]]$concurrent_utility_mass %||% 0),
+      numeric(1L)
+    )
+    floor_pairs <- vapply(
+      as.character(spoke_ids),
+      function(key) as.integer(budget_map[[key]]$concurrent_floor_pairs %||% 0L),
+      integer(1L)
+    )
+    target_pairs <- vapply(
+      as.character(spoke_ids),
+      function(key) as.integer(budget_map[[key]]$B_spoke_refit_budget %||% 0L),
+      integer(1L)
+    )
     floor_deficit <- pmax(0L, floor_pairs - counts)
     if (any(floor_deficit > 0L)) {
-      ord_floor <- order(-floor_deficit, counts, as.integer(names(counts)))
+      ord_floor <- order(-floor_deficit, -utility_mass, counts, as.integer(names(counts)))
       return(as.integer(names(counts)[ord_floor]))
     }
 
-    # Route by uncertainty-weighted target deficit for the next committed step.
-    link_stats <- controller$link_refit_stats_by_spoke %||% list()
-    spoke_stats <- lapply(as.character(spoke_ids), function(key) {
-      link_stats[[key]] %||% list(uncertainty = 0)
-    })
-    names(spoke_stats) <- as.character(spoke_ids)
-    projected_total <- as.integer(sum(counts) + 1L)
-    projected_total <- max(projected_total, as.integer(length(spoke_ids) * floor_pairs))
-    targets <- .adaptive_link_concurrent_targets(
-      spoke_stats = spoke_stats,
-      total_pairs = projected_total,
-      floor_pairs = floor_pairs
-    )
-    target_deficit <- as.integer(targets[names(counts)] - counts)
+    target_deficit <- as.integer(target_pairs[names(counts)] - counts)
     target_deficit[!is.finite(target_deficit)] <- 0L
     if (any(target_deficit > 0L)) {
-      weights <- vapply(spoke_stats, function(x) as.double(x$uncertainty %||% 0), numeric(1L))
-      weights[!is.finite(weights)] <- 0
-      ord_deficit <- order(-target_deficit, -weights, counts, as.integer(names(counts)))
+      ord_deficit <- order(-target_deficit, -utility_mass, counts, as.integer(names(counts)))
       return(as.integer(names(counts)[ord_deficit]))
     }
 
-    ord_counts <- order(counts, as.integer(names(counts)))
+    ord_counts <- order(-utility_mass, counts, as.integer(names(counts)))
     return(as.integer(names(counts)[ord_counts]))
   }
 
@@ -881,6 +884,120 @@ generate_stage_candidates_from_state <- function(state,
   }
   utility[!is.finite(utility)] <- -Inf
   idx[order(-utility, cand$i[idx], cand$j[idx])]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_priority <- function() {
+  c(anchor_link = 1L, long_link = 2L, mid_link = 3L, local_link = 4L)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_candidate_pool <- function(state,
+                                          controller,
+                                          spoke_id,
+                                          include_utility = TRUE,
+                                          C_max = NULL,
+                                          seed = 1L) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  spoke_id <- as.integer(spoke_id %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    return(tibble::tibble())
+  }
+  C_max <- as.integer(C_max %||% adaptive_defaults(as.integer(state$n_items))$C_max)
+  stage_order <- .adaptive_stage_order()
+  pools <- lapply(stage_order, function(stage_name) {
+    cand <- generate_stage_candidates_from_state(
+      state = state,
+      stage_name = stage_name,
+      fallback_name = "base",
+      C_max = C_max,
+      seed = as.integer(seed + match(stage_name, stage_order)),
+      link_spoke_id = as.integer(spoke_id)
+    )
+    if (nrow(cand) < 1L) {
+      return(NULL)
+    }
+    cand$link_stage <- as.character(stage_name)
+    cand
+  })
+  pool <- dplyr::bind_rows(pools)
+  if (nrow(pool) < 1L) {
+    return(pool)
+  }
+  if (isTRUE(include_utility)) {
+    pool <- .adaptive_link_attach_predictive_utility(
+      candidates = pool,
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id)
+    )
+  }
+  pool
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_spoke_utility_mass <- function(state,
+                                              controller,
+                                              spoke_id,
+                                              top_k = NULL,
+                                              C_max = NULL,
+                                              seed = 1L) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  top_k <- as.integer(top_k %||% controller$multi_spoke_budget_top_k %||% 10L)
+  pool <- tryCatch(
+    .adaptive_link_candidate_pool(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      include_utility = TRUE,
+      C_max = C_max,
+      seed = seed
+    ),
+    error = function(e) tibble::tibble()
+  )
+  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+  utility <- if (!is.na(utility_col) && utility_col %in% names(pool)) {
+    as.double(pool[[utility_col]])
+  } else {
+    rep_len(NA_real_, nrow(pool))
+  }
+  utility[!is.finite(utility) | utility < 0] <- 0
+  ordered <- sort(utility, decreasing = TRUE)
+  k_used <- min(top_k, length(ordered))
+  list(
+    utility_mass = as.double(sum(utils::head(ordered, k_used))),
+    top_k_used = as.integer(k_used),
+    candidate_count = as.integer(nrow(pool)),
+    pool = pool
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_backfill_order <- function(candidates, hub_id, set_map) {
+  cand <- tibble::as_tibble(candidates)
+  if (nrow(cand) < 1L) {
+    return(integer())
+  }
+  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+  utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
+    as.double(cand[[utility_col]])
+  } else {
+    rep_len(NA_real_, nrow(cand))
+  }
+  utility[!is.finite(utility)] <- -Inf
+  stage_priority <- .adaptive_link_stage_priority()
+  cand_stage <- if ("link_stage" %in% names(cand)) as.character(cand$link_stage) else rep(NA_character_, nrow(cand))
+  priority <- as.integer(stage_priority[cand_stage])
+  priority[is.na(priority)] <- as.integer(length(stage_priority) + 1L)
+  i_set <- as.integer(set_map[as.character(cand$i)])
+  j_set <- as.integer(set_map[as.character(cand$j)])
+  hub_item <- ifelse(i_set == as.integer(hub_id), as.character(cand$i), as.character(cand$j))
+  spoke_item <- ifelse(i_set == as.integer(hub_id), as.character(cand$j), as.character(cand$i))
+  order(-utility, priority, hub_item, spoke_item)
 }
 
 #' @keywords internal
