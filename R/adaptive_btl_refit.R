@@ -1737,24 +1737,302 @@
   keys <- names(spoke_stats)
   total_pairs <- as.integer(max(0L, total_pairs))
   floor_pairs <- as.integer(max(0L, floor_pairs))
-  n_spokes <- length(spoke_stats)
-  base <- rep.int(floor_pairs, n_spokes)
-  names(base) <- keys
-  rem <- max(0L, total_pairs - sum(base))
-  weights <- vapply(spoke_stats, function(x) as.double(x$uncertainty %||% 0), numeric(1L))
-  weights[!is.finite(weights) | weights < 0] <- 0
+  candidate_count <- vapply(
+    spoke_stats,
+    function(x) as.integer(x$concurrent_candidate_count %||% x$candidate_count %||% NA_integer_),
+    integer(1L)
+  )
+  utility_mass <- vapply(
+    spoke_stats,
+    function(x) as.double(x$concurrent_utility_mass %||% x$utility_mass %||% x$uncertainty %||% 0),
+    numeric(1L)
+  )
+  utility_mass[!is.finite(utility_mass) | utility_mass < 0] <- 0
+  non_starved <- is.na(candidate_count) | candidate_count > 0L
+
+  out <- stats::setNames(rep.int(0L, length(keys)), keys)
+  active_keys <- keys[non_starved]
+  if (length(active_keys) < 1L || total_pairs <= 0L) {
+    return(out)
+  }
+
+  if (total_pairs <= floor_pairs * length(active_keys)) {
+    ord <- order(active_keys)
+    cursor <- 1L
+    while (sum(out) < total_pairs) {
+      key <- active_keys[[ord[[cursor]]]]
+      cap <- candidate_count[[key]]
+      if (is.na(cap) || out[[key]] < cap) {
+        out[[key]] <- out[[key]] + 1L
+      }
+      cursor <- if (cursor >= length(ord)) 1L else cursor + 1L
+    }
+    return(stats::setNames(as.integer(out), keys))
+  }
+
+  out[active_keys] <- floor_pairs
+  capped_keys <- active_keys[!is.na(candidate_count[active_keys])]
+  if (length(capped_keys) > 0L) {
+    out[capped_keys] <- pmin(out[capped_keys], candidate_count[capped_keys])
+  }
+
+  rem <- max(0L, total_pairs - sum(out))
+  weight_keys <- active_keys
+  weights <- utility_mass[weight_keys]
   if (sum(weights) <= 0) {
     weights[] <- 1
   }
   add <- floor(rem * weights / sum(weights))
-  out <- base + as.integer(add)
+  names(add) <- weight_keys
+  out[weight_keys] <- out[weight_keys] + as.integer(add)
   left <- rem - sum(add)
   if (left > 0L) {
-    ord <- order(-weights, keys)
-    out[ord[seq_len(left)]] <- out[ord[seq_len(left)]] + 1L
+    ord <- order(-weights, as.integer(weight_keys))
+    for (key in weight_keys[ord]) {
+      if (left <= 0L) {
+        break
+      }
+      out[[key]] <- out[[key]] + 1L
+      left <- left - 1L
+    }
   }
-  out <- as.integer(out)
-  names(out) <- keys
+
+  redistribute <- TRUE
+  while (isTRUE(redistribute)) {
+    redistribute <- FALSE
+    capped <- keys[!is.na(candidate_count)]
+    over <- capped[out[capped] > candidate_count[capped]]
+    if (length(over) > 0L) {
+      unused <- sum(out[over] - candidate_count[over])
+      out[over] <- candidate_count[over]
+      if (unused > 0L) {
+        receivers <- active_keys[
+          is.na(candidate_count[active_keys]) | out[active_keys] < candidate_count[active_keys]
+        ]
+        if (length(receivers) > 0L) {
+          receiver_weights <- utility_mass[receivers]
+          if (sum(receiver_weights) <= 0) {
+            receiver_weights[] <- 1
+          }
+          ord <- order(-receiver_weights, as.integer(receivers))
+          for (idx in seq_len(unused)) {
+            receiver <- receivers[[ord[[(idx - 1L) %% length(ord) + 1L]]]]
+            cap <- candidate_count[[receiver]]
+            if (is.na(cap) || out[[receiver]] < cap) {
+              out[[receiver]] <- out[[receiver]] + 1L
+            }
+          }
+          redistribute <- TRUE
+        }
+      }
+    }
+  }
+
+  out <- stats::setNames(as.integer(out), keys)
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_assert_link_stage_budget_invariants <- function(link_rows) {
+  rows <- tibble::as_tibble(link_rows)
+  if (nrow(rows) < 1L) {
+    return(invisible(TRUE))
+  }
+  required <- c(
+    "B_spoke_refit_budget",
+    "stage_target_anchor_link",
+    "stage_target_long_link",
+    "stage_target_mid_link",
+    "stage_target_local_link",
+    "stage_realized_anchor_link",
+    "stage_realized_long_link",
+    "stage_realized_mid_link",
+    "stage_realized_local_link",
+    "stage_shortfall_anchor_link",
+    "stage_shortfall_long_link",
+    "stage_shortfall_mid_link",
+    "stage_shortfall_local_link",
+    "stage_reallocation_used",
+    "stage_reallocation_rule_used",
+    "stage_budget_unfilled"
+  )
+  missing <- setdiff(required, names(rows))
+  if (length(missing) > 0L) {
+    rlang::abort(
+      paste0(
+        "link_stage_log budget invariant failure: missing columns: ",
+        paste(missing, collapse = ", "),
+        "."
+      )
+    )
+  }
+
+  target_sum <- rows$stage_target_anchor_link +
+    rows$stage_target_long_link +
+    rows$stage_target_mid_link +
+    rows$stage_target_local_link
+  realized_sum <- rows$stage_realized_anchor_link +
+    rows$stage_realized_long_link +
+    rows$stage_realized_mid_link +
+    rows$stage_realized_local_link
+  if (any(target_sum != rows$B_spoke_refit_budget, na.rm = TRUE)) {
+    rlang::abort("link_stage_log budget invariant failure: targets must sum to the per-spoke budget.")
+  }
+  if (any(realized_sum + rows$stage_budget_unfilled != rows$B_spoke_refit_budget, na.rm = TRUE)) {
+    rlang::abort(
+      paste0(
+        "link_stage_log budget invariant failure: realized counts plus ",
+        "unfilled budget must sum to the per-spoke budget."
+      )
+    )
+  }
+
+  nonneg_cols <- c(
+    "B_spoke_refit_budget",
+    "stage_target_anchor_link",
+    "stage_target_long_link",
+    "stage_target_mid_link",
+    "stage_target_local_link",
+    "stage_realized_anchor_link",
+    "stage_realized_long_link",
+    "stage_realized_mid_link",
+    "stage_realized_local_link",
+    "stage_shortfall_anchor_link",
+    "stage_shortfall_long_link",
+    "stage_shortfall_mid_link",
+    "stage_shortfall_local_link",
+    "stage_budget_unfilled"
+  )
+  for (col in nonneg_cols) {
+    if (any(rows[[col]] < 0L, na.rm = TRUE)) {
+      rlang::abort(
+        paste0("link_stage_log budget invariant failure: `", col, "` must be non-negative.")
+      )
+    }
+  }
+
+  no_backfill <- rows$stage_reallocation_used %in% FALSE
+  if (any(no_backfill, na.rm = TRUE)) {
+    subset <- rows[no_backfill, , drop = FALSE]
+    if (any(subset$stage_realized_anchor_link > subset$stage_target_anchor_link, na.rm = TRUE) ||
+      any(subset$stage_realized_long_link > subset$stage_target_long_link, na.rm = TRUE) ||
+      any(subset$stage_realized_mid_link > subset$stage_target_mid_link, na.rm = TRUE) ||
+      any(subset$stage_realized_local_link > subset$stage_target_local_link, na.rm = TRUE)) {
+      rlang::abort(
+        "link_stage_log budget invariant failure: no-backfill rows cannot exceed stage targets."
+      )
+    }
+    if (any(as.character(subset$stage_reallocation_rule_used) != "none", na.rm = TRUE)) {
+      rlang::abort(
+        "link_stage_log budget invariant failure: no-backfill rows must use reallocation rule `none`."
+      )
+    }
+  }
+
+  backfill <- rows$stage_reallocation_used %in% TRUE
+  if (any(backfill, na.rm = TRUE) &&
+    any(as.character(rows$stage_reallocation_rule_used[backfill]) != "pooled_utility_backfill", na.rm = TRUE)) {
+    rlang::abort(
+      "link_stage_log budget invariant failure: backfill rows must use reallocation rule `pooled_utility_backfill`."
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_budget_map_for_refit <- function(state,
+                                                controller = NULL,
+                                                eligible_spoke_ids = NULL,
+                                                seed = 1L) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+  cached_map <- controller$link_budget_map %||% list()
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  spoke_ids <- as.integer(eligible_spoke_ids %||% phase_ctx$active_spokes %||% integer())
+  spoke_ids <- sort(unique(spoke_ids[!is.na(spoke_ids)]))
+  if (length(spoke_ids) < 1L) {
+    return(list())
+  }
+  if (!is.na(cached_refit_id) &&
+    identical(cached_refit_id, refit_id) &&
+    length(cached_map) > 0L &&
+    all(as.character(spoke_ids) %in% names(cached_map))) {
+    return(cached_map[as.character(spoke_ids)])
+  }
+
+  single_budget <- .adaptive_link_refit_budget_default(as.integer(state$n_items), controller = controller)
+  if (!identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
+    out <- lapply(spoke_ids, function(spoke_id) {
+      list(
+        B_spoke_refit_budget = as.integer(single_budget),
+        B_spoke_refit_budget_source = "single_spoke_default",
+        concurrent_target_pairs = NA_integer_,
+        concurrent_floor_pairs = NA_integer_,
+        concurrent_floor_met = NA,
+        concurrent_target_met = NA,
+        concurrent_utility_mass = NA_real_,
+        concurrent_top_k_used = NA_integer_,
+        concurrent_candidate_count = NA_integer_
+      )
+    })
+    names(out) <- as.character(spoke_ids)
+    return(out)
+  }
+
+  floor_pairs <- as.integer(controller$min_cross_set_pairs_per_spoke_per_refit %||% 5L)
+  top_k <- as.integer(controller$multi_spoke_budget_top_k %||% 10L)
+  spoke_stats <- lapply(spoke_ids, function(spoke_id) {
+    mass <- .adaptive_link_spoke_utility_mass(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      top_k = top_k,
+      seed = as.integer(seed + spoke_id)
+    )
+    list(
+      concurrent_utility_mass = as.double(mass$utility_mass),
+      concurrent_top_k_used = as.integer(mass$top_k_used),
+      concurrent_candidate_count = as.integer(mass$candidate_count)
+    )
+  })
+  names(spoke_stats) <- as.character(spoke_ids)
+  targets <- .adaptive_link_concurrent_targets(
+    spoke_stats = spoke_stats,
+    total_pairs = as.integer(single_budget),
+    floor_pairs = as.integer(floor_pairs)
+  )
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+  out <- lapply(as.character(spoke_ids), function(key) {
+    obs <- 0L
+    if (nrow(step_log) > 0L &&
+      all(c("pair_id", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
+      obs <- as.integer(sum(
+        !is.na(step_log$pair_id) &
+          step_log$is_cross_set %in% TRUE &
+          as.integer(step_log$link_spoke_id) == as.integer(key) &
+          as.integer(step_log$step_id) > last_refit_step,
+        na.rm = TRUE
+      ))
+    }
+    stat <- spoke_stats[[key]] %||% list()
+    list(
+      B_spoke_refit_budget = as.integer(targets[[key]] %||% 0L),
+      B_spoke_refit_budget_source = "concurrent_allocator",
+      concurrent_target_pairs = as.integer(targets[[key]] %||% 0L),
+      concurrent_floor_pairs = as.integer(floor_pairs),
+      concurrent_floor_met = as.logical(obs >= floor_pairs),
+      concurrent_target_met = as.logical(obs >= as.integer(targets[[key]] %||% 0L)),
+      concurrent_utility_mass = as.double(stat$concurrent_utility_mass %||% 0),
+      concurrent_top_k_used = as.integer(stat$concurrent_top_k_used %||% 0L),
+      concurrent_candidate_count = as.integer(stat$concurrent_candidate_count %||% 0L)
+    )
+  })
+  names(out) <- as.character(spoke_ids)
   out
 }
 
@@ -2177,23 +2455,24 @@
     )
   }
 
-  if (identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
-    total_since <- sum(vapply(
-      link_stats,
-      function(x) as.integer(x$n_cross_edges_active_since_last_refit %||% 0L),
-      integer(1L)
-    ))
-    floor_pairs <- as.integer(controller$min_cross_set_pairs_per_spoke_per_refit %||% 5L)
-    targets <- .adaptive_link_concurrent_targets(link_stats, total_pairs = total_since, floor_pairs = floor_pairs)
-    keys <- names(targets)
-    for (key in keys) {
+  budget_map <- .adaptive_link_budget_map_for_refit(
+    state = out,
+    controller = controller,
+    eligible_spoke_ids = spoke_ids
+  )
+  if (length(budget_map) > 0L) {
+    concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+    for (key in names(budget_map)) {
       stats_row <- link_stats[[key]] %||% list()
-      obs <- as.integer(stats_row$n_cross_edges_active_since_last_refit %||% 0L)
-      tgt <- as.integer(targets[[key]])
-      stats_row$concurrent_target_pairs <- tgt
-      stats_row$concurrent_floor_pairs <- floor_pairs
-      stats_row$concurrent_floor_met <- obs >= floor_pairs
-      stats_row$concurrent_target_met <- obs >= tgt
+      budget_row <- budget_map[[key]] %||% list()
+      budget_fields <- if (isTRUE(concurrent_mode)) {
+        .adaptive_link_budget_fields()
+      } else {
+        c("B_spoke_refit_budget", "B_spoke_refit_budget_source")
+      }
+      for (field in budget_fields) {
+        stats_row[[field]] <- budget_row[[field]] %||% stats_row[[field]] %||% NULL
+      }
       link_stats[[key]] <- stats_row
     }
   }
@@ -2247,6 +2526,11 @@
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
+  budget_map <- .adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = controller,
+    eligible_spoke_ids = spoke_ids
+  )
 
   for (idx in seq_along(spoke_ids)) {
     spoke_id <- as.integer(spoke_ids[[idx]])
@@ -2294,8 +2578,16 @@
     n_pairs_since_probe <- as.integer(nrow(since_last_probe))
     n_pairs_since_active <- as.integer(nrow(since_last_active))
     n_pairs_since_total <- as.integer(nrow(since_last))
+    budget_info <- budget_map[[key]] %||% list(
+      B_spoke_refit_budget = .adaptive_link_refit_budget_default(as.integer(state$n_items), controller),
+      B_spoke_refit_budget_source = "single_spoke_default"
+    )
     quota_controller <- controller
     quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+    quota_controller$B_spoke_refit_budget <- as.integer(budget_info$B_spoke_refit_budget %||% NA_integer_)
+    quota_controller$B_spoke_refit_budget_source <- as.character(
+      budget_info$B_spoke_refit_budget_source %||% "single_spoke_default"
+    )
     stage_quotas <- .adaptive_round_compute_quotas(
       round_id = as.integer(state$round$round_id %||% 1L),
       n_items = as.integer(state$n_items),
@@ -2320,20 +2612,21 @@
       0L
     }
     refit_step_start <- as.integer(refit_context$last_refit_step %||% 0L)
-    if (nrow(step_log) > 0L && all(c("pair_id", "round_stage", "step_id", "link_spoke_id", "is_cross_set") %in%
+    if (nrow(step_log) > 0L && all(c("pair_id", "step_id", "link_spoke_id", "is_cross_set") %in%
       names(step_log))) {
+      stage_col <- if ("link_stage" %in% names(step_log)) "link_stage" else "round_stage"
       stage_rows <- step_log[
         !is.na(step_log$pair_id) &
           step_log$is_cross_set %in% TRUE &
           as.integer(step_log$step_id) > refit_step_start &
           as.integer(step_log$step_id) <= refit_step_end &
           as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
-          as.character(step_log$round_stage) %in% stage_order,
+          as.character(step_log[[stage_col]]) %in% stage_order,
         ,
         drop = FALSE
       ]
       if (nrow(stage_rows) > 0L) {
-        tab_stage <- table(factor(as.character(stage_rows$round_stage), levels = stage_order))
+        tab_stage <- table(factor(as.character(stage_rows[[stage_col]]), levels = stage_order))
         committed_stage[names(tab_stage)] <- as.integer(tab_stage)
       }
     }
@@ -2415,6 +2708,8 @@
       isTRUE(rank_stability_pass)
     transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE) || isTRUE(link_stop_pass)
 
+    reallocation_used <- any(committed_stage > stage_quotas, na.rm = TRUE)
+    reallocation_rule <- if (isTRUE(reallocation_used)) "pooled_utility_backfill" else "none"
     rows[[idx]] <- list(
       refit_id = as.integer(refit_id),
       spoke_id = as.integer(spoke_id),
@@ -2490,8 +2785,10 @@
       n_cross_edges_total_since_last_refit = as.integer(
         stats_row$n_cross_edges_total_since_last_refit %||% n_pairs_since_total
       ),
-      B_spoke_refit_budget = as.integer(sum(stage_quotas)),
-      B_spoke_refit_budget_source = as.character("single_spoke_controller"),
+      B_spoke_refit_budget = as.integer(budget_info$B_spoke_refit_budget %||% sum(stage_quotas)),
+      B_spoke_refit_budget_source = as.character(
+        budget_info$B_spoke_refit_budget_source %||% "single_spoke_default"
+      ),
       stage_target_anchor_link = as.integer(stage_quotas[["anchor_link"]] %||% NA_integer_),
       stage_target_long_link = as.integer(stage_quotas[["long_link"]] %||% NA_integer_),
       stage_target_mid_link = as.integer(stage_quotas[["mid_link"]] %||% NA_integer_),
@@ -2501,17 +2798,19 @@
       stage_realized_mid_link = as.integer(committed_stage[["mid_link"]] %||% 0L),
       stage_realized_local_link = as.integer(committed_stage[["local_link"]] %||% 0L),
       stage_shortfall_anchor_link = as.integer(
-        (stage_quotas[["anchor_link"]] %||% 0L) - (committed_stage[["anchor_link"]] %||% 0L)
+        max(0L, (stage_quotas[["anchor_link"]] %||% 0L) - (committed_stage[["anchor_link"]] %||% 0L))
       ),
       stage_shortfall_long_link = as.integer(
-        (stage_quotas[["long_link"]] %||% 0L) - (committed_stage[["long_link"]] %||% 0L)
+        max(0L, (stage_quotas[["long_link"]] %||% 0L) - (committed_stage[["long_link"]] %||% 0L))
       ),
       stage_shortfall_mid_link = as.integer(
-        (stage_quotas[["mid_link"]] %||% 0L) - (committed_stage[["mid_link"]] %||% 0L)
+        max(0L, (stage_quotas[["mid_link"]] %||% 0L) - (committed_stage[["mid_link"]] %||% 0L))
       ),
       stage_shortfall_local_link = as.integer(
-        (stage_quotas[["local_link"]] %||% 0L) - (committed_stage[["local_link"]] %||% 0L)
+        max(0L, (stage_quotas[["local_link"]] %||% 0L) - (committed_stage[["local_link"]] %||% 0L))
       ),
+      stage_reallocation_used = as.logical(reallocation_used),
+      stage_reallocation_rule_used = as.character(reallocation_rule),
       stage_budget_unfilled = as.integer(max(0L, sum(stage_quotas) - sum(committed_stage))),
       quota_anchor_link = as.integer(stage_quotas[["anchor_link"]] %||% NA_integer_),
       quota_long_link = as.integer(stage_quotas[["long_link"]] %||% NA_integer_),
@@ -2522,14 +2821,38 @@
       quota_long_link_removed = as.integer(quota_long_link_removed),
       quota_taper_applied = as.logical(quota_taper_applied),
       quota_taper_spoke_id = as.integer(quota_taper_spoke_id),
+      long_link_taper_applied = as.logical(quota_meta$long_link_taper_applied %||% quota_taper_applied),
+      stage_target_long_link_pre_taper = as.integer(
+        quota_meta$stage_target_long_link_pre_taper %||% quota_long_link_raw
+      ),
+      stage_target_long_link_post_taper = as.integer(
+        quota_meta$stage_target_long_link_post_taper %||% quota_long_link_effective
+      ),
       committed_anchor_link = as.integer(committed_stage[["anchor_link"]] %||% 0L),
       committed_long_link = as.integer(committed_stage[["long_link"]] %||% 0L),
       committed_mid_link = as.integer(committed_stage[["mid_link"]] %||% 0L),
       committed_local_link = as.integer(committed_stage[["local_link"]] %||% 0L),
-      concurrent_target_pairs = as.integer(stats_row$concurrent_target_pairs %||% NA_integer_),
-      concurrent_floor_pairs = as.integer(stats_row$concurrent_floor_pairs %||% NA_integer_),
-      concurrent_floor_met = as.logical(stats_row$concurrent_floor_met %||% NA),
-      concurrent_target_met = as.logical(stats_row$concurrent_target_met %||% NA),
+      concurrent_target_pairs = as.integer(
+        budget_info$concurrent_target_pairs %||% stats_row$concurrent_target_pairs %||% NA_integer_
+      ),
+      concurrent_floor_pairs = as.integer(
+        budget_info$concurrent_floor_pairs %||% stats_row$concurrent_floor_pairs %||% NA_integer_
+      ),
+      concurrent_floor_met = as.logical(
+        budget_info$concurrent_floor_met %||% stats_row$concurrent_floor_met %||% NA
+      ),
+      concurrent_target_met = as.logical(
+        budget_info$concurrent_target_met %||% stats_row$concurrent_target_met %||% NA
+      ),
+      concurrent_utility_mass = as.double(
+        budget_info$concurrent_utility_mass %||% stats_row$concurrent_utility_mass %||% NA_real_
+      ),
+      concurrent_top_k_used = as.integer(
+        budget_info$concurrent_top_k_used %||% stats_row$concurrent_top_k_used %||% NA_integer_
+      ),
+      concurrent_candidate_count = as.integer(
+        budget_info$concurrent_candidate_count %||% stats_row$concurrent_candidate_count %||% NA_integer_
+      ),
       active_item_count_hub = as.integer(stats_row$active_item_count_hub %||% NA_integer_),
       active_item_count_spoke = as.integer(stats_row$active_item_count_spoke %||% NA_integer_),
       active_item_count_total = as.integer(
@@ -2557,6 +2880,7 @@
   }
 
   rows_tbl <- dplyr::bind_rows(rows)
+  .adaptive_assert_link_stage_budget_invariants(rows_tbl)
   append_link_stage_log(new_link_stage_log(), rows_tbl)
 }
 
@@ -2587,7 +2911,13 @@
     "hub_lock_mode", "reliability_EAP_link", "linking_identified", "link_stop_eligible", "link_stop_pass",
     "transform_frozen",
     "n_pairs_cross_set_done", "n_unique_cross_pairs_seen", "n_cross_edges_active_since_last_refit",
-    "n_cross_edges_probe_since_last_refit", "n_cross_edges_total_since_last_refit", "coverage_bins_used"
+    "n_cross_edges_probe_since_last_refit", "n_cross_edges_total_since_last_refit", "coverage_bins_used",
+    "B_spoke_refit_budget", "B_spoke_refit_budget_source",
+    "stage_target_anchor_link", "stage_target_long_link", "stage_target_mid_link", "stage_target_local_link",
+    "stage_realized_anchor_link", "stage_realized_long_link", "stage_realized_mid_link", "stage_realized_local_link",
+    "stage_shortfall_anchor_link", "stage_shortfall_long_link", "stage_shortfall_mid_link",
+    "stage_shortfall_local_link", "stage_reallocation_used", "stage_reallocation_rule_used",
+    "stage_budget_unfilled"
   )
   missing <- setdiff(required, names(rows))
   if (length(missing) > 0L) {
@@ -2630,6 +2960,7 @@
   if (any(is.na(rows$cross_set_ppc_brier_max_used))) {
     rlang::abort("link_stage_log append completeness failure: `cross_set_ppc_brier_max_used` must be populated.")
   }
+  .adaptive_assert_link_stage_budget_invariants(rows)
 
   invisible(TRUE)
 }
