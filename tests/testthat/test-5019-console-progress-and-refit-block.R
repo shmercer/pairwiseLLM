@@ -98,7 +98,7 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   combined <- c(output, messages)
   expect_true(any(grepl("Linking summary:", combined)))
   expect_true(any(grepl("active_spokes=", combined)))
-  expect_true(any(grepl("transform_mode=", combined)))
+  expect_true(any(grepl("transform_state=", combined)))
   expect_true(any(grepl("link_refit_mode=", combined)))
   expect_true(any(grepl("cross_pairs_done=", combined)))
   expect_true(any(grepl("link_stop_pass=", combined)))
