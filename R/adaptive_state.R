@@ -70,6 +70,121 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_transform_policy_levels <- function() {
+  c("auto", "fixed_shift_only", "fixed_shift_scale")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_transform_state_levels <- function() {
+  c("shift_only", "shift_scale")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_shift_only_theta_treatment_levels <- function() {
+  c("fixed_eap_plugin_var", "fixed_eap")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_normalize_link_transform_policy <- function(policy = NULL, legacy_mode = NULL) {
+  value <- policy %||% legacy_mode %||% "auto"
+  if (!is.character(value) || length(value) != 1L || is.na(value) || value == "") {
+    rlang::abort("Link transform policy must be a single non-empty string.")
+  }
+  if (identical(value, "shift_only")) {
+    value <- "fixed_shift_only"
+  } else if (identical(value, "shift_scale")) {
+    value <- "fixed_shift_scale"
+  }
+  if (!value %in% .adaptive_link_transform_policy_levels()) {
+    rlang::abort(
+      paste0(
+        "Link transform policy must be one of: ",
+        paste(.adaptive_link_transform_policy_levels(), collapse = ", "),
+        "."
+      )
+    )
+  }
+  value
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_default_link_transform_state <- function(link_transform_policy) {
+  policy <- .adaptive_normalize_link_transform_policy(link_transform_policy)
+  if (identical(policy, "fixed_shift_scale")) {
+    return("shift_scale")
+  }
+  "shift_only"
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_normalize_link_transform_state <- function(state = NULL, link_transform_policy = "auto") {
+  value <- state %||% .adaptive_default_link_transform_state(link_transform_policy)
+  if (!is.character(value) || length(value) != 1L || is.na(value) || value == "") {
+    rlang::abort("Link transform state must be a single non-empty string.")
+  }
+  if (!value %in% .adaptive_link_transform_state_levels()) {
+    rlang::abort(
+      paste0(
+        "Link transform state must be one of: ",
+        paste(.adaptive_link_transform_state_levels(), collapse = ", "),
+        "."
+      )
+    )
+  }
+  value
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_controller_normalize_legacy_fields <- function(controller, n_items) {
+  out <- controller %||% list()
+  defaults <- .adaptive_controller_defaults(n_items)
+
+  out$link_transform_policy <- .adaptive_normalize_link_transform_policy(
+    policy = out$link_transform_policy %||% NULL,
+    legacy_mode = out$link_transform_mode %||% NULL
+  )
+  out$link_transform_mode <- NULL
+
+  state_map <- out$link_transform_state_by_spoke %||% out$link_transform_mode_by_spoke %||% list()
+  if (!is.list(state_map)) {
+    state_map <- list()
+  }
+  if (length(state_map) > 0L) {
+    state_map <- lapply(
+      state_map,
+      function(value) .adaptive_normalize_link_transform_state(value, out$link_transform_policy)
+    )
+  }
+  out$link_transform_state_by_spoke <- state_map
+  out$link_transform_mode_by_spoke <- state_map
+
+  theta_treatment <- out$shift_only_theta_treatment %||% defaults$shift_only_theta_treatment
+  if (identical(theta_treatment, "normal_prior")) {
+    theta_treatment <- "fixed_eap_plugin_var"
+  }
+  if (!theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
+    rlang::abort(
+      paste0(
+        "`adaptive_config$shift_only_theta_treatment` must be one of: ",
+        paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
+        "."
+      )
+    )
+  }
+  out$shift_only_theta_treatment <- theta_treatment
+  out$link_transform_mode <- out$link_transform_policy
+
+  out
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_controller_defaults <- function(n_items) {
   defaults <- adaptive_defaults(n_items)
   calibration_defaults <- .adaptive_linking_default_calibration()
@@ -90,9 +205,10 @@
     star_override_budget_per_round = as.integer(defaults$star_override_budget_per_round),
     run_mode = "within_set",
     hub_id = 1L,
+    link_transform_policy = "auto",
     link_transform_mode = "auto",
     link_refit_mode = "shift_only",
-    shift_only_theta_treatment = "fixed_eap",
+    shift_only_theta_treatment = "fixed_eap_plugin_var",
     judge_param_mode = "global_shared",
     hub_lock_mode = "soft_lock",
     hub_lock_kappa = 0.75,
@@ -127,6 +243,7 @@
     current_link_spoke_id = NA_integer_,
     linking_identified = FALSE,
     linking_identified_by_spoke = list(),
+    link_transform_state_by_spoke = list(),
     link_transform_mode_by_spoke = list(),
     link_transform_bad_refits_by_spoke = list(),
     link_transform_last_delta_by_spoke = list(),
@@ -166,6 +283,7 @@
     "star_override_budget_per_round",
     "run_mode",
     "hub_id",
+    "link_transform_policy",
     "link_transform_mode",
     "link_refit_mode",
     "shift_only_theta_treatment",
@@ -309,12 +427,30 @@
   out$star_override_budget_per_round <- read_integer("star_override_budget_per_round", 0L, Inf)
   out$run_mode <- read_choice("run_mode", c("within_set", "link_one_spoke", "link_multi_spoke"))
   out$hub_id <- read_integer("hub_id", 1L, Inf)
-  out$link_transform_mode <- read_choice("link_transform_mode", c("auto", "shift_only", "shift_scale"))
+  policy_value <- out$link_transform_policy %||% out$link_transform_mode %||% NULL
+  if (!is.null(policy_value)) {
+    out$link_transform_policy <- .adaptive_normalize_link_transform_policy(policy = policy_value)
+  }
+  out$link_transform_mode <- NULL
   out$link_refit_mode <- read_choice("link_refit_mode", c("shift_only", "joint_refit"))
-  out$shift_only_theta_treatment <- read_choice(
-    "shift_only_theta_treatment",
-    c("fixed_eap", "normal_prior")
-  )
+  if (!is.null(out$shift_only_theta_treatment)) {
+    if (!is.character(out$shift_only_theta_treatment) ||
+      length(out$shift_only_theta_treatment) != 1L ||
+      is.na(out$shift_only_theta_treatment) ||
+      out$shift_only_theta_treatment == "") {
+      rlang::abort("`adaptive_config$shift_only_theta_treatment` must be a single string value.")
+    }
+    if (identical(out$shift_only_theta_treatment, "normal_prior")) {
+      out$shift_only_theta_treatment <- "fixed_eap_plugin_var"
+    }
+    if (!out$shift_only_theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
+      rlang::abort(paste0(
+        "`adaptive_config$shift_only_theta_treatment` must be one of: ",
+        paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
+        "."
+      ))
+    }
+  }
   out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
   out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock", "free"))
   out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
@@ -404,6 +540,7 @@
   }
 
   resolved <- utils::modifyList(.adaptive_controller_defaults(n_items), out)
+  resolved <- .adaptive_controller_normalize_legacy_fields(resolved, n_items = n_items)
   run_mode <- resolved$run_mode
   set_ids <- as.integer(set_ids %||% 1L)
   n_sets <- length(unique(set_ids))
@@ -419,6 +556,12 @@
     if (length(spoke_ids) != 1L) {
       rlang::abort("`run_mode = \"link_one_spoke\"` requires exactly one spoke set.")
     }
+  }
+  if (identical(resolved$hub_lock_mode, "soft_lock") &&
+    (!is.finite(resolved$hub_lock_kappa) || resolved$hub_lock_kappa <= 0 || resolved$hub_lock_kappa > 1)) {
+    rlang::abort(
+      "`adaptive_config$hub_lock_kappa` must be strictly in (0, 1] when `hub_lock_mode = \"soft_lock\"`."
+    )
   }
   if (isTRUE(is_link_mode) &&
     identical(resolved$multi_spoke_mode, "concurrent") &&
@@ -523,6 +666,7 @@
     n_items <- as.integer(state_or_n_items)
     controller <- list()
   }
+  controller <- .adaptive_controller_normalize_legacy_fields(controller, n_items = n_items)
   defaults <- .adaptive_controller_defaults(n_items)
   utils::modifyList(defaults, controller)
 }

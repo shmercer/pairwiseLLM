@@ -108,7 +108,8 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_true(isTRUE(row$is_cross_set[[1L]]))
   expect_equal(row$link_spoke_id[[1L]], 2L)
   expect_equal(row$run_mode[[1L]], "link_one_spoke")
-  expect_equal(row$link_transform_mode[[1L]], "shift_only")
+  expect_equal(row$link_transform_policy[[1L]], "auto")
+  expect_equal(row$link_transform_state[[1L]], "shift_only")
   expect_equal(row$utility_mode[[1L]], "linking_d_optimal")
   expect_equal(row$hub_lock_mode[[1L]], "soft_lock")
   expect_equal(row$hub_lock_kappa[[1L]], 0.75)
@@ -157,7 +158,7 @@ test_that("run_one_step logs linking pre-step transform estimates when available
   )
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
-      link_transform_mode = "shift_scale",
+      link_transform_state = "shift_scale",
       delta_spoke_mean = 0.12,
       delta_spoke_sd = 0.03,
       log_alpha_spoke_mean = 0.04,
@@ -169,7 +170,8 @@ test_that("run_one_step logs linking pre-step transform estimates when available
   out <- pairwiseLLM:::run_one_step(state, judge_ok)
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
 
-  expect_equal(row$link_transform_mode[[1L]], "shift_scale")
+  expect_equal(row$link_transform_policy[[1L]], "auto")
+  expect_equal(row$link_transform_state[[1L]], "shift_scale")
   expect_equal(row$delta_spoke_estimate_pre[[1L]], 0.12, tolerance = 1e-12)
   expect_equal(row$delta_spoke_sd_pre[[1L]], 0.03, tolerance = 1e-12)
   expect_equal(row$log_alpha_spoke_estimate_pre[[1L]], 0.04, tolerance = 1e-12)

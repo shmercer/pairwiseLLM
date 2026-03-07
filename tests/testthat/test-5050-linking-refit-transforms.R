@@ -120,14 +120,14 @@ test_that("linking refit contract fields follow transform mode", {
 
   c_shift <- state_shift$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_identical(c_shift$parameters, c("delta_s"))
-  expect_identical(c_shift$link_transform_mode, "shift_only")
+  expect_identical(c_shift$link_transform_state, "shift_only")
 
   c_scale <- state_scale$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_identical(c_scale$parameters, c("delta_s", "log_alpha_s"))
-  expect_identical(c_scale$link_transform_mode, "shift_scale")
+  expect_identical(c_scale$link_transform_state, "shift_scale")
 })
 
-test_that("hub lock boundary kappa=0 matches hard lock in joint refit", {
+test_that("soft lock with kappa=0 is rejected in joint refit", {
   base <- make_linking_refit_state(
     list(link_refit_mode = "joint_refit", link_transform_mode = "shift_only")
   )
@@ -141,12 +141,13 @@ test_that("hub lock boundary kappa=0 matches hard lock in joint refit", {
   )
   hard <- pairwiseLLM:::.adaptive_linking_refit_update_state(hard, list(last_refit_step = 0L))
 
-  soft0 <- base
-  soft0 <- pairwiseLLM:::.adaptive_apply_controller_config(
-    soft0,
-    list(hub_lock_mode = "soft_lock", hub_lock_kappa = 0)
+  expect_error(
+    pairwiseLLM:::.adaptive_apply_controller_config(
+      base,
+      list(hub_lock_mode = "soft_lock", hub_lock_kappa = 0)
+    ),
+    "strictly in \\(0, 1\\]"
   )
-  soft0 <- pairwiseLLM:::.adaptive_linking_refit_update_state(soft0, list(last_refit_step = 0L))
 
   free <- base
   free <- pairwiseLLM:::.adaptive_apply_controller_config(
@@ -156,13 +157,10 @@ test_that("hub lock boundary kappa=0 matches hard lock in joint refit", {
   free <- pairwiseLLM:::.adaptive_linking_refit_update_state(free, list(last_refit_step = 0L))
 
   d_hard <- hard$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
-  d_soft0 <- soft0$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
   d_free <- free$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
 
   hard_contract <- hard$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_equal(hard_contract$joint_refit$n_hub_items_estimated, 0L)
-
-  expect_equal(d_hard, d_soft0, tolerance = 1e-10)
   expect_false(isTRUE(all.equal(d_hard, d_free, tolerance = 1e-10)))
 })
 
@@ -607,7 +605,7 @@ test_that("link likelihood applies signed beta by original presentation side", {
   expect_true(fit_all_a$delta_mean < (fit_mixed$delta_mean - 0.05))
 })
 
-test_that("shift_only theta treatment normal_prior propagates uncertainty", {
+test_that("shift_only theta treatment records plugin-var default and fixed-eap fallback", {
   fixed <- make_linking_refit_state(
     list(
       link_transform_mode = "shift_only",
@@ -615,36 +613,36 @@ test_that("shift_only theta treatment normal_prior propagates uncertainty", {
       shift_only_theta_treatment = "fixed_eap"
     )
   )
-  normal <- make_linking_refit_state(
+  plugin <- make_linking_refit_state(
     list(
       link_transform_mode = "shift_only",
       link_refit_mode = "shift_only",
-      shift_only_theta_treatment = "normal_prior"
+      shift_only_theta_treatment = "fixed_eap_plugin_var"
     )
   )
 
   fixed <- append_cross_step(fixed, 1L, "s21", "h1", 1L, spoke_id = 2L)
   fixed <- append_cross_step(fixed, 2L, "h2", "s22", 0L, spoke_id = 2L)
-  normal <- append_cross_step(normal, 1L, "s21", "h1", 1L, spoke_id = 2L)
-  normal <- append_cross_step(normal, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  plugin <- append_cross_step(plugin, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  plugin <- append_cross_step(plugin, 2L, "h2", "s22", 0L, spoke_id = 2L)
 
   out_fixed <- pairwiseLLM:::.adaptive_linking_refit_update_state(fixed, list(last_refit_step = 0L))
-  out_normal <- pairwiseLLM:::.adaptive_linking_refit_update_state(normal, list(last_refit_step = 0L))
+  out_plugin <- pairwiseLLM:::.adaptive_linking_refit_update_state(plugin, list(last_refit_step = 0L))
 
   sd_fixed <- out_fixed$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_sd
-  sd_normal <- out_normal$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_sd
+  sd_plugin <- out_plugin$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_sd
   expect_true(is.finite(sd_fixed))
-  expect_true(is.finite(sd_normal))
+  expect_true(is.finite(sd_plugin))
   c_fixed <- out_fixed$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
-  c_normal <- out_normal$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  c_plugin <- out_plugin$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_identical(c_fixed$theta_treatment, "fixed_eap")
-  expect_identical(c_normal$theta_treatment, "normal_prior")
-  expect_false(isTRUE(all.equal(sd_normal, sd_fixed, tolerance = 1e-10)))
+  expect_identical(c_plugin$theta_treatment, "fixed_eap_plugin_var")
+  expect_true(sd_plugin >= sd_fixed)
 })
 
 test_that("invalid linking mode combinations fail validation", {
   defaults <- pairwiseLLM:::.adaptive_controller_defaults(8L)
-  expect_identical(defaults$shift_only_theta_treatment, "fixed_eap")
+  expect_identical(defaults$shift_only_theta_treatment, "fixed_eap_plugin_var")
   expect_true(is.list(defaults$link_transform_mode_by_spoke))
   expect_true(is.list(defaults$link_transform_bad_refits_by_spoke))
   expect_true(is.list(defaults$link_refit_stats_by_spoke))
@@ -653,11 +651,11 @@ test_that("invalid linking mode combinations fail validation", {
   expect_true("shift_only_theta_treatment" %in% keys)
 
   ok <- pairwiseLLM:::.adaptive_validate_controller_config(
-    list(shift_only_theta_treatment = "normal_prior"),
+    list(shift_only_theta_treatment = "fixed_eap_plugin_var"),
     n_items = 5L,
     set_ids = c(1L, 2L)
   )
-  expect_identical(ok$shift_only_theta_treatment, "normal_prior")
+  expect_identical(ok$shift_only_theta_treatment, "fixed_eap_plugin_var")
 
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(

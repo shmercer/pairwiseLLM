@@ -15,7 +15,8 @@ test_that("canonical log schemas follow the expected column order", {
     "star_cap_rejects", "star_cap_reject_items",
     "set_i", "set_j", "is_cross_set", "is_probe_step", "link_spoke_id", "run_mode", "link_stage",
     "delta_spoke_estimate_pre", "delta_spoke_sd_pre", "dist_stratum_global",
-    "posterior_win_prob_pre", "link_transform_mode", "cross_set_utility_pre",
+    "posterior_win_prob_ij_pre", "posterior_win_prob_pre",
+    "link_transform_policy", "link_transform_state", "cross_set_utility_pre",
     "utility_mode", "log_alpha_spoke_estimate_pre", "log_alpha_spoke_sd_pre",
     "hub_lock_mode", "hub_lock_kappa"
   )
@@ -65,33 +66,48 @@ test_that("canonical log schemas follow the expected column order", {
   )
   expected_item_step <- c("step_id", "timestamp", "item_id", "mu", "sigma", "degree")
   expected_link_stage <- c(
-    "refit_id", "spoke_id", "hub_id", "link_transform_mode", "link_refit_mode",
-    "hub_lock_mode", "hub_lock_kappa", "delta_spoke_mean", "delta_spoke_sd",
+    "refit_id", "spoke_id", "hub_id", "link_transform_policy", "link_transform_state",
+    "link_refit_mode", "hub_lock_mode", "hub_lock_kappa",
+    "shift_only_theta_treatment", "shift_only_theta_treatment_resolved",
+    "delta_spoke_mean", "delta_spoke_sd",
     "log_alpha_spoke_mean", "log_alpha_spoke_sd", "delta_change_lagged",
     "log_alpha_change_lagged", "delta_change_pass", "log_alpha_change_pass",
     "delta_sd_max_used", "delta_sd_pass", "log_alpha_sd_pass",
     "reliability_EAP_link", "reliability_stop_pass", "linking_identified",
     "lag_eligible", "rank_stability_lagged", "rank_stability_pass",
-    "link_stop_eligible", "link_stop_pass", "transform_frozen", "ts_btl_rank_spearman",
+    "link_stop_eligible", "link_stop_pass", "transform_frozen",
+    "transform_frozen_refit_id", "link_epoch_id", "ts_btl_rank_spearman",
     "ppc_brier_cross_active", "ppc_brier_cross_probe", "ppc_brier_cross",
+    "hub_anchored", "scale_ready",
     "link_diagnostics_divergences", "link_diagnostics_max_rhat",
     "link_diagnostics_min_ess_bulk", "link_diagnostics_divergences_pass",
     "link_diagnostics_rhat_pass", "link_diagnostics_ess_pass",
-    "escalated_this_refit", "n_pairs_cross_set_done", "n_unique_cross_pairs_seen",
+    "escalation_consecutive_pass_count", "escalated_this_refit",
+    "probe_brier_shift_only", "probe_brier_shift_scale", "probe_brier_delta",
+    "log_alpha_spoke_sd_alt", "n_pairs_cross_set_done", "n_unique_cross_pairs_seen",
     "n_probe_pairs_since_last_refit",
     "n_cross_edges_active_since_last_refit",
     "n_cross_edges_probe_since_last_refit",
     "n_cross_edges_total_since_last_refit",
+    "B_spoke_refit_budget", "B_spoke_refit_budget_source",
+    "stage_target_anchor_link", "stage_target_long_link", "stage_target_mid_link",
+    "stage_target_local_link", "stage_realized_anchor_link", "stage_realized_long_link",
+    "stage_realized_mid_link", "stage_realized_local_link", "stage_shortfall_anchor_link",
+    "stage_shortfall_long_link", "stage_shortfall_mid_link", "stage_shortfall_local_link",
+    "stage_budget_unfilled",
     "quota_anchor_link", "quota_long_link", "quota_mid_link", "quota_local_link",
     "quota_long_link_raw", "quota_long_link_effective", "quota_long_link_removed",
     "quota_taper_applied", "quota_taper_spoke_id",
     "committed_anchor_link", "committed_long_link", "committed_mid_link", "committed_local_link",
     "concurrent_target_pairs",
     "concurrent_floor_pairs", "concurrent_floor_met", "concurrent_target_met",
-    "active_item_count_hub", "active_item_count_spoke",
+    "active_item_count_hub", "active_item_count_spoke", "active_item_count_total",
+    "var_mean_theta_global_active", "mean_var_theta_global_active",
     "it_logdet_start", "it_logdet_end", "it_trace_end", "it_n_pairs_accumulated",
     "coverage_bins_used",
     "coverage_source", "ppc_calibration_id", "cross_set_ppc_brier_max_used",
+    "probe_panel_id", "probe_edges_planned", "probe_edges_realized",
+    "probe_panel_shortfall", "probe_panel_reallocation_used", "probe_pred_cache_used",
     "lag_domain_key", "lag_domain_reset"
   )
 
@@ -116,22 +132,32 @@ test_that("public log accessors cast linking categorical fields to constrained f
 
   expect_true(is.factor(step_log$run_mode))
   expect_true(is.factor(step_log$link_stage))
-  expect_true(is.factor(step_log$link_transform_mode))
+  expect_true(is.factor(step_log$link_transform_policy))
+  expect_true(is.factor(step_log$link_transform_state))
   expect_true(is.factor(step_log$utility_mode))
   expect_true(is.factor(step_log$hub_lock_mode))
-  expect_identical(levels(step_log$run_mode), c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe"))
+  expect_identical(
+    levels(step_log$run_mode),
+    c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe")
+  )
   expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link"))
-  expect_identical(levels(step_log$link_transform_mode), c("auto", "shift_only", "shift_scale"))
+  expect_identical(levels(step_log$link_transform_policy), c("auto", "fixed_shift_only", "fixed_shift_scale"))
+  expect_identical(levels(step_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(
     levels(step_log$utility_mode),
     c("pairing_trueskill_u0", "linking_d_optimal")
   )
   expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 
-  expect_true(is.factor(logs$link_stage_log$link_transform_mode))
+  expect_true(is.factor(logs$link_stage_log$link_transform_policy))
+  expect_true(is.factor(logs$link_stage_log$link_transform_state))
   expect_true(is.factor(logs$link_stage_log$link_refit_mode))
   expect_true(is.factor(logs$link_stage_log$hub_lock_mode))
-  expect_identical(levels(logs$link_stage_log$link_transform_mode), c("auto", "shift_only", "shift_scale"))
+  expect_identical(
+    levels(logs$link_stage_log$link_transform_policy),
+    c("auto", "fixed_shift_only", "fixed_shift_scale")
+  )
+  expect_identical(levels(logs$link_stage_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(levels(logs$link_stage_log$link_refit_mode), c("shift_only", "joint_refit"))
   expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 })
@@ -151,7 +177,8 @@ test_that("public log accessors fail fast on invalid linking categorical values"
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_transform_mode = "bad_mode",
+      link_transform_policy = "bad_mode",
+      link_transform_state = "shift_only",
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
       reliability_EAP_link = 0.9,

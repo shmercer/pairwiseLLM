@@ -185,7 +185,7 @@
     model_variant = as.character(fit$model_variant %||% "btl_e_b"),
     link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
     shift_only_theta_treatment = as.character(controller$shift_only_theta_treatment %||% NA_character_),
-    link_transform_mode = as.character(controller$link_transform_mode %||% NA_character_),
+    link_transform_policy = as.character(controller$link_transform_policy %||% NA_character_),
     hub_lock_mode = hub_lock_mode,
     hub_lock_kappa = hub_lock_kappa,
     cross_set_utility = as.character(controller$cross_set_utility %||% NA_character_)
