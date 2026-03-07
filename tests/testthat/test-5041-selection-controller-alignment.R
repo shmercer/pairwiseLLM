@@ -58,7 +58,7 @@ test_that("identifiability state is recomputed from reliability and rank correla
   expect_equal(hi$controller$global_identified_rank_corr_min, 0.80)
 })
 
-test_that("long-link trueskill gate activates only after identifiability", {
+test_that("long-link gate falls back to trueskill before accepted posterior availability", {
   items <- make_test_items(2)
   trueskill_state <- make_test_trueskill_state(items, mu = c(25, 25))
   state <- make_test_state(items, trueskill_state)
@@ -78,7 +78,7 @@ test_that("long-link trueskill gate activates only after identifiability", {
 
   expect_true(out$candidate_starved)
   expect_identical(out$long_gate_pass, FALSE)
-  expect_identical(out$long_gate_reason, "trueskill_extreme")
+  expect_identical(out$long_gate_reason, "posterior_unavailable_fallback_trueskill_extreme")
 })
 
 test_that("long-link gate reason reflects selected fallback attempt", {
@@ -113,7 +113,81 @@ test_that("long-link gate reason reflects selected fallback attempt", {
   expect_false(isTRUE(out$candidate_starved))
   expect_identical(out$fallback_used, "expand_locality")
   expect_identical(out$long_gate_pass, TRUE)
-  expect_true(is.na(out$long_gate_reason))
+  expect_identical(out$long_gate_reason, "posterior_unavailable_fallback")
+})
+
+test_that("long-link gate uses posterior probability when accepted refit is available", {
+  items <- make_test_items(2)
+  trueskill_state <- make_test_trueskill_state(items, mu = c(25, 25))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 2L
+  state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
+  state$controller$global_identified <- TRUE
+  state$controller$p_long_low <- 0.45
+  state$controller$p_long_high <- 0.55
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = rbind(
+      c(0.01, -0.01),
+      c(0.02, -0.02),
+      c(-0.01, 0.01),
+      c(-0.02, 0.02)
+    )
+  )
+  state$round_log <- tibble::tibble(
+    refit_id = 1L,
+    diagnostics_pass = TRUE,
+    phase_scope = "global",
+    phase_scope_set_id = NA_integer_
+  )
+
+  out <- testthat::with_mocked_bindings(
+    trueskill_win_probability = function(i_id, j_id, state) 0.99,
+    pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = tibble::tibble(i = "1", j = "2")),
+    .package = "pairwiseLLM"
+  )
+
+  expect_false(isTRUE(out$candidate_starved))
+  expect_identical(out$long_gate_pass, TRUE)
+  expect_identical(out$long_gate_reason, "posterior_inside_gate")
+})
+
+test_that("long-link gate rejects posterior-extreme candidate and ignores order-reversal state", {
+  items <- make_test_items(2)
+  trueskill_state <- make_test_trueskill_state(items, mu = c(25, 25))
+  history <- tibble::tibble(A_id = "2", B_id = "1")
+  state <- make_test_state(items, trueskill_state, history = history)
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 2L
+  state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
+  state$controller$global_identified <- TRUE
+  state$controller$p_long_low <- 0.45
+  state$controller$p_long_high <- 0.55
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = rbind(
+      c(3, -3),
+      c(3.1, -3.1),
+      c(2.9, -2.9)
+    )
+  )
+  state$round_log <- tibble::tibble(
+    refit_id = 1L,
+    diagnostics_pass = TRUE,
+    phase_scope = "global",
+    phase_scope_set_id = NA_integer_
+  )
+
+  out <- testthat::with_mocked_bindings(
+    trueskill_win_probability = function(i_id, j_id, state) 0.50,
+    pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = tibble::tibble(i = "1", j = "2")),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(out$candidate_starved)
+  expect_identical(out$long_gate_pass, FALSE)
+  expect_identical(out$long_gate_reason, "posterior_extreme")
 })
 
 test_that("explore_rate_used applies identifiability taper", {

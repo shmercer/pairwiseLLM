@@ -27,6 +27,28 @@ make_phase_a_ready_state <- function() {
 
 test_that("phase A artifacts round-trip through persistence", {
   state <- make_phase_a_ready_state()
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 10L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 1L
+    )
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 2L,
+      round_id_at_refit = 2L,
+      step_id_at_refit = 20L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 2L
+    )
+  )
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
   art1$quality_gate_accepted <- TRUE
@@ -57,6 +79,7 @@ test_that("phase A artifacts round-trip through persistence", {
 
   r1 <- restored$linking$phase_a$artifacts[["1"]]
   expect_equal(as.integer(r1$set_id), 1L)
+  expect_equal(as.integer(r1$refit_id), 1L)
   expect_true(all(c("global_item_id", "theta_raw_mean", "theta_raw_sd") %in% names(r1$items)))
 })
 
@@ -174,7 +197,7 @@ test_that("phase A import hash rejects inference-setting mismatch and supports a
       set_id = 1L,
       controller = controller_joint
     ),
-    "did not match required hash"
+    "judge_param_mode"
   )
 
   controller_allow <- controller_joint
@@ -206,7 +229,59 @@ test_that("phase A import hash rejects linking compatibility mismatch in require
       set_id = 1L,
       controller = controller_joint
     ),
-    "did not match required hash"
+    "link_refit_mode"
+  )
+})
+
+test_that("phase A run artifacts prefer the latest available refit for the set", {
+  state <- make_phase_a_ready_state()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run",
+      phase_a_required_reliability_min = 0
+    )
+  )
+  state$history_pairs <- tibble::tibble(A_id = "a1", B_id = "a2")
+  stale_artifact <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  stale_artifact$refit_id <- 1L
+  stale_artifact$quality_gate_accepted <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "pending_finalization"),
+      validation_message = c("built_in_run_refit_1", "pending_finalization"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = stale_artifact),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    active_phase_a_set = 1L
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 2L,
+      round_id_at_refit = 3L,
+      step_id_at_refit = 12L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 1L
+    )
+  )
+
+  prepared <- .adaptive_phase_a_prepare(state)
+  refreshed <- prepared$linking$phase_a$artifacts[["1"]]
+
+  expect_equal(as.integer(refreshed$refit_id), 2L)
+  expect_match(
+    prepared$linking$phase_a$set_status$validation_message[
+      match(1L, prepared$linking$phase_a$set_status$set_id)
+    ],
+    "built_in_run_refit_2"
   )
 })
 
@@ -305,7 +380,7 @@ test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
   expect_true(all(is.na(out$step_log$posterior_win_prob_pre)))
   expect_true(all(is.na(out$step_log$link_transform_mode)))
   expect_true(all(is.na(out$step_log$cross_set_utility_pre)))
-  expect_true(all(out$step_log$utility_mode %in% c("pairing_trueskill_u0", "pairing_trueskill_u")))
+  expect_true(all(out$step_log$utility_mode %in% c("pairing_trueskill_u0")))
   expect_true(all(is.na(out$step_log$log_alpha_spoke_estimate_pre)))
   expect_true(all(is.na(out$step_log$log_alpha_spoke_sd_pre)))
   expect_true(all(is.na(out$step_log$hub_lock_mode)))
@@ -925,6 +1000,7 @@ test_that("phase A helpers cover non-link mode and stale-summary fallback behavi
   art <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
   expect_true(all(is.finite(art$items$theta_raw_mean)))
   expect_true(all(art$items$theta_raw_sd >= 0))
+  expect_true("fit_config_surface" %in% names(art))
 })
 
 test_that("phase A validation and gate exercise failure branches for edge completeness", {

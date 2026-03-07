@@ -610,9 +610,9 @@ test_that("selection utility helpers cover additional fallback branches", {
       has_regularization = TRUE,
       is_cross_set = FALSE
     ),
-    "pairing_trueskill_u"
+    "pairing_trueskill_u0"
   )
-  expect_identical(pairwiseLLM:::.adaptive_resolve_selection_column("pairing_trueskill_u"), "u")
+  expect_true(is.na(pairwiseLLM:::.adaptive_resolve_selection_column("pairing_trueskill_u")))
   expect_true(is.na(pairwiseLLM:::.adaptive_resolve_selection_column("unknown")))
 })
 

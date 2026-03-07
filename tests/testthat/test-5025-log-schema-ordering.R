@@ -124,7 +124,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_identical(levels(step_log$link_transform_mode), c("auto", "shift_only", "shift_scale"))
   expect_identical(
     levels(step_log$utility_mode),
-    c("pairing_trueskill_u0", "pairing_trueskill_u", "linking_d_optimal")
+    c("pairing_trueskill_u0", "linking_d_optimal")
   )
   expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 
