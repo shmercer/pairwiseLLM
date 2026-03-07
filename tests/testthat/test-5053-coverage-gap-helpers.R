@@ -631,12 +631,12 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
     log_alpha_change_pass = NA,
     rank_stability_pass = TRUE
   )
-  expect_true(pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     old_row,
     diagnostics_pass = TRUE,
     hub_theta_sd = c(h1 = 0.1),
     controller = list()
-  ))
+  )))
 
   edges <- pairwiseLLM:::.adaptive_link_probe_edges_realized(state, spoke_id = 2L, epoch_id = 3L)
   expect_identical(nrow(edges), 2L)

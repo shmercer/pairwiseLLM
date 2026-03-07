@@ -1015,27 +1015,6 @@
   if (!isTRUE(diagnostics_pass)) {
     return(FALSE)
   }
-  has_normative_cols <- all(c("hub_anchored", "probe_brier", "probe_pred_rmse_lagged", "theta_global_rmse_lagged") %in%
-    names(row))
-  if (!isTRUE(has_normative_cols)) {
-    if ("reliability_stop_pass" %in% names(row) &&
-      "delta_sd_pass" %in% names(row) &&
-      "log_alpha_sd_pass" %in% names(row) &&
-      "rank_stability_pass" %in% names(row)) {
-      rel_gate <- isTRUE(row$reliability_stop_pass[[1L]])
-      delta_sd_gate <- isTRUE(row$delta_sd_pass[[1L]])
-      log_alpha_sd_gate <- is.na(row$log_alpha_sd_pass[[1L]]) || isTRUE(row$log_alpha_sd_pass[[1L]])
-      delta_change_gate <- isTRUE(row$delta_change_pass[[1L]])
-      log_alpha_change_gate <- is.na(row$log_alpha_change_pass[[1L]]) || isTRUE(row$log_alpha_change_pass[[1L]])
-      rank_gate <- isTRUE(row$rank_stability_pass[[1L]])
-      return(isTRUE(rel_gate) &&
-        isTRUE(delta_sd_gate) &&
-        isTRUE(log_alpha_sd_gate) &&
-        isTRUE(delta_change_gate) &&
-        isTRUE(log_alpha_change_gate) &&
-        isTRUE(rank_gate))
-    }
-  }
   rel_gate <- if ("reliability_stop_pass" %in% names(row)) {
     isTRUE(row$reliability_stop_pass[[1L]] %||% FALSE)
   } else if ("reliability_EAP_link" %in% names(row)) {
@@ -1058,15 +1037,15 @@
   probe_rmse_gate <- if ("probe_pred_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$probe_pred_rmse_lagged[[1L]] %||% NA_real_)) &&
       as.double(row$probe_pred_rmse_lagged[[1L]]) <= as.double(controller$probe_pred_rmse_max %||% 0.015)
-  } else {
-    FALSE
-  }
+    } else {
+      FALSE
+    }
   theta_rmse_gate <- if ("theta_global_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$theta_global_rmse_lagged[[1L]] %||% NA_real_)) &&
       as.double(row$theta_global_rmse_lagged[[1L]]) <= as.double(controller$theta_global_rmse_max %||% 0.04)
-  } else {
-    FALSE
-  }
+    } else {
+      FALSE
+    }
   isTRUE(rel_gate) &&
     isTRUE(hub_gate) &&
     isTRUE(probe_gate) &&
@@ -2942,6 +2921,9 @@
       spoke_id = spoke_id,
       epoch_id = link_epoch_id
     )
+    link_diagnostics_pass <- isTRUE(fit_diag$diagnostics_divergences_pass %||% NA) &&
+      isTRUE(fit_diag$diagnostics_rhat_pass %||% NA) &&
+      isTRUE(fit_diag$diagnostics_ess_pass %||% NA)
     probe_brier <- .adaptive_link_probe_brier_for_fit(
       edges = probe_edges_realized_tbl,
       hub_theta = ppc_hub_theta,
@@ -2966,7 +2948,8 @@
     }
     link_lag_eligible <- isTRUE(lag_eligible)
     link_min_refit_eligible <- isTRUE(current_refit_id >= as.integer(controller$min_refits_in_phase_b %||% 3L))
-    link_stop_gate_open <- isTRUE(!is.na(reliability_active)) &&
+    link_stop_gate_open <- isTRUE(link_diagnostics_pass) &&
+      isTRUE(!is.na(reliability_active)) &&
       isTRUE(nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 30L))
     link_stop_eligible <- isTRUE(link_lag_eligible) &&
       isTRUE(link_min_refit_eligible) &&

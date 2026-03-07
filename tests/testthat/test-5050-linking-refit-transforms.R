@@ -1044,7 +1044,7 @@ test_that("runtime linking_identified uses active TS-BTL rank threshold and not 
   expect_false(isTRUE(stats_fail$link_identified))
 })
 
-test_that("link stop decision is reproducible from link_stage_log fields", {
+test_that("link stop decision is reproducible from supplement-defined link_stage_log fields", {
   state <- make_linking_refit_state()
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state$controller$link_refit_stats_by_spoke <- list(
@@ -1064,9 +1064,19 @@ test_that("link stop decision is reproducible from link_stage_log fields", {
       link_reliability_stop_pass = TRUE,
       ts_btl_rank_spearman_active = 0.95,
       lag_eligible = TRUE,
+      link_lag_eligible = TRUE,
+      link_min_refit_eligible = TRUE,
+      link_stop_gate_open = TRUE,
+      link_stop_eligible = TRUE,
+      stop_consecutive_pass_count = 2L,
+      link_stop_pass = TRUE,
       rank_stability_lagged = 0.99,
       rank_stability_pass = TRUE,
       link_identified = TRUE,
+      hub_anchored = TRUE,
+      probe_brier = 0.10,
+      probe_pred_rmse_lagged = 0.01,
+      theta_global_rmse_lagged = 0.02,
       active_item_count_hub = 1L,
       active_item_count_spoke = 2L,
       delta_sd_max_used = 0.05
@@ -1131,7 +1141,7 @@ test_that("link stage log stores active TS-BTL correlation separately from lagge
   expect_equal(row$rank_stability_lagged[[1L]], 0.99, tolerance = 1e-12)
 })
 
-test_that("link stop reconstruction can use link-stage pass flags only", {
+test_that("link stop reconstruction rejects legacy pass-only rows without normative probe fields", {
   row <- tibble::tibble(
     link_stop_eligible = TRUE,
     reliability_stop_pass = TRUE,
@@ -1147,7 +1157,7 @@ test_that("link stop reconstruction can use link-stage pass flags only", {
     hub_theta_sd = NA_real_,
     controller = list()
   )
-  expect_true(isTRUE(out))
+  expect_false(isTRUE(out))
 
   row$rank_stability_pass <- FALSE
   out2 <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
@@ -1216,6 +1226,69 @@ test_that("link stop reconstruction fallback path honors numeric gates", {
     controller = controller
   )
   expect_false(isTRUE(fail_rank))
+})
+
+test_that("auto escalation requires diagnostics to pass before any decision opens", {
+  state <- make_linking_refit_state(
+    list(
+      link_transform_policy = "auto",
+      link_refit_mode = "shift_only",
+      link_transform_escalation_refits_required = 1L
+    )
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s22", "h2", 1L, spoke_id = 2L)
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_cross_edges = function(...) {
+      tibble::tibble(
+        spoke_item = rep(c("s21", "s22", "s21"), each = 6L),
+        hub_item = rep(c("h1", "h2", "h3"), times = 6L),
+        y_spoke = rep(c(1L, 0L), length.out = 18L),
+        step_id = seq_len(18L),
+        spoke_in_A = TRUE,
+        run_mode = "link_one_spoke",
+        is_probe_step = FALSE
+      )
+    },
+    .adaptive_link_probe_edges_realized = function(...) {
+      tibble::tibble(
+        hub_item = rep(c("h1", "h2", "h3"), length.out = 30L),
+        spoke_item = rep(c("s21", "s22", "s21"), length.out = 30L),
+        y_spoke = rep(c(1L, 0L), length.out = 30L),
+        spoke_in_A = TRUE,
+        is_probe_step = TRUE
+      )
+    },
+    .adaptive_link_fit_transform_alt_shift_scale = function(...) {
+      list(converged = TRUE, delta_mean = 0.2, log_alpha_mean = 0.3, log_alpha_sd = 0.02)
+    },
+    .adaptive_link_mcmc_diagnostics = function(...) {
+      list(
+        divergences = 0L,
+        max_rhat = 1.20,
+        min_ess_bulk = 50,
+        diagnostics_divergences_pass = TRUE,
+        diagnostics_rhat_pass = FALSE,
+        diagnostics_ess_pass = FALSE
+      )
+    },
+    .adaptive_link_probe_brier_for_fit = function(..., log_alpha_mean = NA_real_) {
+      if (is.finite(log_alpha_mean)) 0.10 else 0.12
+    },
+    .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) 0.01,
+    .adaptive_link_theta_global_rmse_lagged = function(...) 0.02,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_false(isTRUE(stats$link_stop_gate_open))
+  expect_false(isTRUE(stats$link_stop_eligible))
+  expect_false(isTRUE(stats$escalated_this_refit))
+  expect_identical(out$controller$link_transform_state_by_spoke[["2"]], "shift_only")
 })
 
 test_that("linking identified state is reconstructable from canonical link-stage fields", {
