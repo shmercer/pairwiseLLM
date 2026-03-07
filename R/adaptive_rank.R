@@ -442,18 +442,20 @@ make_adaptive_judge_llm <- function(
 #'     multiple spokes). Default is `"within_set"`. Linking modes require
 #'     multi-set inputs with `set_id` and `global_item_id` in `data`.}
 #'   \item{`hub_id`}{Hub `set_id` for linking modes. Default is `1L`.}
-#'   \item{`link_transform_mode`}{Spoke transform mode. Choices are `"auto"`
-#'     (start shift-only then possibly escalate), `"shift_only"` (offset only),
-#'     and `"shift_scale"` (offset + scale). Default is `"auto"`.}
+#'   \item{`link_transform_policy`}{Allowed spoke transform family. Choices are
+#'     `"auto"` (start shift-only then possibly escalate),
+#'     `"fixed_shift_only"` (offset only), and `"fixed_shift_scale"` (offset +
+#'     scale). Default is `"auto"`. Earlier `link_transform_mode` values are
+#'     accepted for compatibility and normalized internally.}
 #'   \item{`link_refit_mode`}{Linking refit mode. Choices are `"shift_only"`
 #'     (fit transform with within-set abilities treated as fixed inputs) and
 #'     `"joint_refit"` (jointly estimate hub/spoke abilities and transform
 #'     parameters). Default is `"shift_only"`.}
 #'   \item{`shift_only_theta_treatment`}{Only used when
-#'     `link_refit_mode = "shift_only"`. Choices are `"fixed_eap"` (treat Phase A
-#'     within-set posterior means/SDs as fixed targets) and `"normal_prior"`
-#'     (combine Phase A and current within-set summaries as a normal-normal
-#'     update when available). Default is `"fixed_eap"`.}
+#'     `link_refit_mode = "shift_only"`. Choices are
+#'     `"fixed_eap_plugin_var"` (treat Phase A means with artifact SD plug-in
+#'     variance when available) and `"fixed_eap"` (fallback when artifact SDs are
+#'     unavailable). Default is `"fixed_eap_plugin_var"`.}
 #'   \item{`judge_param_mode`}{How judge-noise parameters are handled across
 #'     phases. Choices are `"global_shared"` (single shared judge parameter set)
 #'     and `"phase_specific"` (separate within-set and link-phase judge
@@ -485,7 +487,7 @@ make_adaptive_judge_llm <- function(
 #'   \item{`log_alpha_change_max`}{Only used for `"shift_scale"` spokes. Maximum
 #'     allowed absolute change in `log(alpha_s)` over the lag window used for
 #'     linking stability. Default is `0.05`.}
-#'   \item{`cross_set_ppc_brier_max`}{Only used when `link_transform_mode = "auto"`.
+#'   \item{`cross_set_ppc_brier_max`}{Only used when `link_transform_policy = "auto"`.
 #'     PPC misfit threshold (Brier score) on linking-active, non-probe,
 #'     non-frozen cross-set steps used to escalate from shift-only to
 #'     shift+scale. Default is `0.20` unless overridden by the active
@@ -494,10 +496,10 @@ make_adaptive_judge_llm <- function(
 #'     `cross_set_ppc_brier_max` when not explicitly supplied. Default is
 #'     `"default_p95_brier_active"`.}
 #'   \item{`link_transform_escalation_refits_required`}{Only used when
-#'     `link_transform_mode = "auto"`. Number of consecutive refits above
+#'     `link_transform_policy = "auto"`. Number of consecutive refits above
 #'     `cross_set_ppc_brier_max` required to escalate. Default is `2L`.}
 #'   \item{`link_transform_escalation_is_one_way`}{Only used when
-#'     `link_transform_mode = "auto"`. When `TRUE`, escalation is one-way
+#'     `link_transform_policy = "auto"`. When `TRUE`, escalation is one-way
 #'     (shift-only can become shift+scale but not revert). Default is `TRUE`.}
 #'
 #'   \item{`max_pairs_after_stop`}{Stop-boundary budget: when `0L`, the run stops

@@ -118,11 +118,65 @@ read_log <- function(path) {
   log_tbl
 }
 
-.adaptive_align_log_schema_for_resume <- function(log_tbl, schema, name) {
+.adaptive_align_log_schema_for_resume <- function(log_tbl, schema, name, fill_missing = TRUE) {
   if (!is.data.frame(log_tbl)) {
     rlang::abort(paste0("`", name, "` must be a data frame."))
   }
   out <- tibble::as_tibble(log_tbl)
+  normalize_policy_col <- function(x) {
+    vapply(
+      as.character(x),
+      function(value) {
+        if (is.na(value) || value == "") {
+          return(NA_character_)
+        }
+        .adaptive_normalize_link_transform_policy(value)
+      },
+      character(1),
+      USE.NAMES = FALSE
+    )
+  }
+  normalize_state_col <- function(x) {
+    vapply(
+      as.character(x),
+      function(value) {
+        if (is.na(value) || value == "") {
+          return(NA_character_)
+        }
+        .adaptive_normalize_link_transform_state(value)
+      },
+      character(1),
+      USE.NAMES = FALSE
+    )
+  }
+  if (identical(name, "step_log")) {
+    if ("posterior_win_prob_pre" %in% names(out) && !"posterior_win_prob_ij_pre" %in% names(out)) {
+      out$posterior_win_prob_ij_pre <- out$posterior_win_prob_pre
+    }
+    if ("link_transform_mode" %in% names(out)) {
+      if (!"link_transform_policy" %in% names(out)) {
+        out$link_transform_policy <- normalize_policy_col(out$link_transform_mode)
+      }
+      if (!"link_transform_state" %in% names(out)) {
+        out$link_transform_state <- normalize_state_col(out$link_transform_mode)
+      }
+      out$link_transform_mode <- NULL
+    }
+  }
+  if (identical(name, "link_stage_log")) {
+    if ("link_transform_mode" %in% names(out)) {
+      if (!"link_transform_policy" %in% names(out)) {
+        out$link_transform_policy <- normalize_policy_col(out$link_transform_mode)
+      }
+      if (!"link_transform_state" %in% names(out)) {
+        out$link_transform_state <- normalize_state_col(out$link_transform_mode)
+      }
+      out$link_transform_mode <- NULL
+    }
+  }
+  if (!isTRUE(fill_missing)) {
+    return(out)
+  }
   schema_names <- names(schema)
   for (col in schema_names) {
     if (!col %in% names(out)) {
@@ -357,7 +411,12 @@ validate_session_dir <- function(session_dir) {
     rlang::abort("Session metadata `n_items` must be a positive integer.")
   }
 
-  step_log <- read_log(paths$step_log)
+  step_log <- .adaptive_align_log_schema_for_resume(
+    read_log(paths$step_log),
+    schema_step_log,
+    "step_log",
+    fill_missing = FALSE
+  )
   round_log <- read_log(paths$round_log)
   round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
   link_stage_log <- if (file.exists(paths$link_stage_log)) {
@@ -507,7 +566,12 @@ load_adaptive_session <- function(session_dir) {
   state <- .adaptive_validate_state_for_resume(state)
   state$meta$schema_version <- metadata$schema_version
 
-  step_log <- read_log(paths$step_log)
+  step_log <- .adaptive_align_log_schema_for_resume(
+    read_log(paths$step_log),
+    schema_step_log,
+    "step_log",
+    fill_missing = FALSE
+  )
   round_log <- read_log(paths$round_log)
   round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
   link_stage_log <- if (file.exists(paths$link_stage_log)) {

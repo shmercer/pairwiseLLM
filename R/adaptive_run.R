@@ -223,7 +223,7 @@
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
   frozen_refit_map <- controller$link_transform_frozen_refit_id_by_spoke %||% list()
-  mode_map <- controller$link_transform_mode_by_spoke %||% list()
+  state_map <- controller$link_transform_state_by_spoke %||% list()
 
   for (idx in seq_len(nrow(rows))) {
     spoke_id <- as.integer(rows$spoke_id[[idx]] %||% NA_integer_)
@@ -246,8 +246,8 @@
         } else {
           NA_real_
         }
-        mode_val <- if ("link_transform_mode" %in% names(rows)) {
-          as.character(rows$link_transform_mode[[idx]] %||% NA_character_)
+        state_val <- if ("link_transform_state" %in% names(rows)) {
+          as.character(rows$link_transform_state[[idx]] %||% NA_character_)
         } else {
           NA_character_
         }
@@ -255,10 +255,10 @@
         frozen_refit_map[[key]] <- as.integer(rows$refit_id[[idx]] %||% NA_integer_)
         frozen_delta_map[[key]] <- delta_val
         frozen_log_alpha_map[[key]] <- log_alpha_val
-        if (is.character(mode_val) && length(mode_val) == 1L && !is.na(mode_val) && mode_val != "") {
-          mode_map[[key]] <- mode_val
+        if (is.character(state_val) && length(state_val) == 1L && !is.na(state_val) && state_val != "") {
+          state_map[[key]] <- state_val
         } else {
-          mode_map[[key]] <- as.character(mode_map[[key]] %||% "shift_only")
+          state_map[[key]] <- as.character(state_map[[key]] %||% "shift_only")
         }
       }
     } else if (is.null(stopped_map[[key]])) {
@@ -273,7 +273,8 @@
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
   controller$link_transform_frozen_refit_id_by_spoke <- frozen_refit_map
-  controller$link_transform_mode_by_spoke <- mode_map
+  controller$link_transform_state_by_spoke <- state_map
+  controller$link_transform_mode_by_spoke <- state_map
   out$controller <- controller
   out
 }

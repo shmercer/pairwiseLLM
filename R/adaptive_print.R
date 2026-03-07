@@ -85,9 +85,10 @@
 
 .adaptive_log_factor_specs_step <- function() {
   list(
-    run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe"),
+    run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe"),
     link_stage = c("anchor_link", "long_link", "mid_link", "local_link"),
-    link_transform_mode = c("auto", "shift_only", "shift_scale"),
+    link_transform_policy = .adaptive_link_transform_policy_levels(),
+    link_transform_state = .adaptive_link_transform_state_levels(),
     utility_mode = c("pairing_trueskill_u0", "linking_d_optimal"),
     hub_lock_mode = c("hard_lock", "soft_lock", "free")
   )
@@ -95,8 +96,11 @@
 
 .adaptive_log_factor_specs_link_stage <- function() {
   list(
-    link_transform_mode = c("auto", "shift_only", "shift_scale"),
+    link_transform_policy = .adaptive_link_transform_policy_levels(),
+    link_transform_state = .adaptive_link_transform_state_levels(),
     link_refit_mode = c("shift_only", "joint_refit"),
+    shift_only_theta_treatment = .adaptive_shift_only_theta_treatment_levels(),
+    shift_only_theta_treatment_resolved = .adaptive_shift_only_theta_treatment_levels(),
     hub_lock_mode = c("hard_lock", "soft_lock", "free")
   )
 }
@@ -175,8 +179,9 @@
       next
     }
     stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
-    mode <- as.character(stats_row$link_transform_mode %||%
-      .adaptive_link_transform_mode_for_spoke(controller, spoke_id))
+    mode <- as.character(stats_row$link_transform_state %||%
+      stats_row$link_transform_mode %||%
+      .adaptive_link_transform_state_for_spoke(controller, spoke_id))
     if (!mode %in% c("shift_only", "shift_scale")) {
       link_eap[spoke_idx] <- NA_real_
       link_sd[spoke_idx] <- NA_real_
@@ -961,8 +966,8 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     if (is.finite(spoke)) {
       link_txt <- c(link_txt, paste0("spoke=", spoke))
     }
-    if ("link_transform_mode" %in% names(step_row)) {
-      mode <- as.character(step_row$link_transform_mode[[1L]] %||% NA_character_)
+    if ("link_transform_state" %in% names(step_row)) {
+      mode <- as.character(step_row$link_transform_state[[1L]] %||% NA_character_)
       if (!is.na(mode) && nzchar(mode)) {
         link_txt <- c(link_txt, paste0("transform=", mode))
       }
@@ -1268,7 +1273,7 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   link_block <- character()
   if (nrow(link_stage_rows) > 0L) {
     active_spokes <- sort(unique(as.integer(link_stage_rows$spoke_id %||% integer())))
-    transform_modes <- sort(unique(as.character(link_stage_rows$link_transform_mode %||% character())))
+    transform_modes <- sort(unique(as.character(link_stage_rows$link_transform_state %||% character())))
     refit_modes <- sort(unique(as.character(link_stage_rows$link_refit_mode %||% character())))
     lock_modes <- sort(unique(as.character(link_stage_rows$hub_lock_mode %||% character())))
     transform_modes <- transform_modes[!is.na(transform_modes) & nzchar(transform_modes)]
@@ -1278,7 +1283,7 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     link_block <- c(
       "Linking summary:",
       paste0("  active_spokes=", paste(active_spokes, collapse = ",")),
-      paste0("  transform_mode=", paste(transform_modes, collapse = ",")),
+      paste0("  transform_state=", paste(transform_modes, collapse = ",")),
       paste0("  link_refit_mode=", paste(refit_modes, collapse = ",")),
       paste0("  hub_lock_mode=", paste(lock_modes, collapse = ","))
     )

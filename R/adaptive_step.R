@@ -231,6 +231,9 @@ validate_judge_result <- function(result, A_id, B_id) {
 #' @noRd
 .adaptive_assert_step_row_linking_completeness <- function(step_row) {
   row <- tibble::as_tibble(step_row)
+  if (!"posterior_win_prob_ij_pre" %in% names(row) && "posterior_win_prob_pre" %in% names(row)) {
+    row$posterior_win_prob_ij_pre <- row$posterior_win_prob_pre
+  }
   if (nrow(row) != 1L) {
     rlang::abort("`step_row` completeness validation expects exactly one row.")
   }
@@ -262,16 +265,27 @@ validate_judge_result <- function(result, A_id, B_id) {
     )
   }
   run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
-  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe")
-  is_probe_run_mode <- identical(run_mode, "link_probe")
+  is_link_run_mode <- run_mode %in% c(
+    "link_one_spoke",
+    "link_multi_spoke",
+    "link_probe_holdout",
+    "link_probe"
+  )
+  is_probe_run_mode <- run_mode %in% c("link_probe_holdout", "link_probe")
 
   is_cross <- row$is_cross_set[[1L]]
   if (isTRUE(is_cross)) {
-    required_cross <- c("set_i", "set_j", "link_spoke_id", "run_mode", "posterior_win_prob_pre")
+    required_cross <- c("set_i", "set_j", "link_spoke_id", "run_mode", "posterior_win_prob_ij_pre")
     if (isTRUE(is_link_run_mode) && !isTRUE(is_probe_run_mode)) {
       required_cross <- c(required_cross, "cross_set_utility_pre")
     }
-    bad <- required_cross[vapply(required_cross, function(col) is.na(row[[col]][[1L]]), logical(1L))]
+    missing_or_na <- function(col) {
+      if (!col %in% names(row) || length(row[[col]]) < 1L) {
+        return(TRUE)
+      }
+      is.na(row[[col]][[1L]])
+    }
+    bad <- required_cross[vapply(required_cross, missing_or_na, logical(1L))]
     if (length(bad) > 0L) {
       rlang::abort(paste0(
         "step_log append completeness failure for cross-set row: required non-NA columns missing: ",
@@ -313,12 +327,12 @@ validate_judge_result <- function(result, A_id, B_id) {
         )
       )
     }
-    posterior_pre <- as.double(row$posterior_win_prob_pre[[1L]] %||% NA_real_)
+    posterior_pre <- as.double(row$posterior_win_prob_ij_pre[[1L]] %||% NA_real_)
     if (!is.finite(posterior_pre) || posterior_pre < 0 || posterior_pre > 1) {
       rlang::abort(
         paste0(
           "step_log append completeness failure for cross-set row: ",
-          "`posterior_win_prob_pre` must be finite in [0,1] and represent P(A wins)."
+          "`posterior_win_prob_ij_pre` must be finite in [0,1] and represent P(A wins)."
         )
       )
     }
@@ -332,15 +346,23 @@ validate_judge_result <- function(result, A_id, B_id) {
       "link_stage",
       "delta_spoke_estimate_pre",
       "delta_spoke_sd_pre",
+      "posterior_win_prob_ij_pre",
       "posterior_win_prob_pre",
-      "link_transform_mode",
+      "link_transform_policy",
+      "link_transform_state",
       "cross_set_utility_pre",
       "log_alpha_spoke_estimate_pre",
       "log_alpha_spoke_sd_pre",
       "hub_lock_mode",
       "hub_lock_kappa"
     )
-    bad <- link_only_cols[vapply(link_only_cols, function(col) !is.na(row[[col]][[1L]]), logical(1L))]
+    link_col_present <- function(col) {
+      if (!col %in% names(row) || length(row[[col]]) < 1L) {
+        return(FALSE)
+      }
+      !is.na(row[[col]][[1L]])
+    }
+    bad <- link_only_cols[vapply(link_only_cols, link_col_present, logical(1L))]
     if (length(bad) > 0L) {
       rlang::abort(paste0(
         "step_log append completeness failure: non-cross-set rows must set link-only columns to NA: ",
@@ -402,14 +424,14 @@ validate_judge_result <- function(result, A_id, B_id) {
   if (is.na(hub_item) || is.na(spoke_item)) {
     return(state_after)
   }
-  transform_mode <- .adaptive_link_transform_mode_for_spoke(controller, as.integer(spoke_id))
+  transform_state <- .adaptive_link_transform_state_for_spoke(controller, as.integer(spoke_id))
   stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
   delta <- as.double(row$delta_spoke_estimate_pre[[1L]] %||% stats_row$delta_spoke_mean %||% 0)
   if (!is.finite(delta)) {
     delta <- 0
   }
   log_alpha <- as.double(row$log_alpha_spoke_estimate_pre[[1L]] %||% stats_row$log_alpha_spoke_mean %||% NA_real_)
-  alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+  alpha <- if (identical(transform_state, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
   theta_hub_map <- .adaptive_link_safe_theta_map(
     state = state_before,
     set_id = hub_id,
@@ -443,7 +465,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     return(state_after)
   }
   g <- .adaptive_link_info_gradient(
-    transform_mode = transform_mode,
+    transform_mode = transform_state,
     alpha = alpha,
     theta_raw_x = theta_raw_x
   )
@@ -453,7 +475,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     controller = controller,
     refit_id = refit_id,
     spoke_id = as.integer(spoke_id),
-    transform_mode = transform_mode
+    transform_mode = transform_state
   )
   if (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != dim(ipair))) {
     return(state_after)
@@ -584,7 +606,8 @@ run_one_step <- function(state, judge, ...) {
 
   run_mode <- as.character(selection$run_mode %||% controller$run_mode %||% "within_set")
   hub_id <- as.integer(controller$hub_id %||% 1L)
-  link_transform_mode <- as.character(controller$link_transform_mode %||% NA_character_)
+  link_transform_policy <- as.character(controller$link_transform_policy %||% NA_character_)
+  link_transform_state <- .adaptive_default_link_transform_state(link_transform_policy)
   utility_mode <- as.character(selection$utility_mode %||% NA_character_)
   hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
   hub_lock_kappa <- as.double(controller$hub_lock_kappa %||% NA_real_)
@@ -628,8 +651,8 @@ run_one_step <- function(state, judge, ...) {
   spoke_key <- as.character(link_spoke_id)
   spoke_stats <- if (!is.na(link_spoke_id)) link_stats[[spoke_key]] %||% list() else list()
   if (!is.na(link_spoke_id)) {
-    link_transform_mode <- as.character(spoke_stats$link_transform_mode %||%
-      .adaptive_link_transform_mode_for_spoke(controller, link_spoke_id))
+    link_transform_state <- as.character(spoke_stats$link_transform_state %||%
+      .adaptive_link_transform_state_for_spoke(controller, link_spoke_id))
   }
   link_stage <- if (isTRUE(is_cross_set) &&
     selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link")) {
@@ -637,8 +660,13 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_character_
   }
-  is_link_run_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe")
-  is_probe_step <- if (isTRUE(is_cross_set) && identical(run_mode, "link_probe")) TRUE else FALSE
+  is_link_run_mode <- run_mode %in% c(
+    "link_one_spoke",
+    "link_multi_spoke",
+    "link_probe_holdout",
+    "link_probe"
+  )
+  is_probe_step <- if (isTRUE(is_cross_set) && run_mode %in% c("link_probe_holdout", "link_probe")) TRUE else FALSE
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode) &&
     !isTRUE(is_probe_step) &&
@@ -663,13 +691,19 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_real_
   }
-  posterior_win_prob_pre <- if (isTRUE(is_cross_set)) {
+  posterior_win_prob_ij_pre <- if (isTRUE(is_cross_set)) {
     as.double(selection$p_ij %||% NA_real_)
   } else {
     NA_real_
   }
-  link_transform_mode <- if (isTRUE(is_cross_set)) {
-    link_transform_mode
+  posterior_win_prob_pre <- posterior_win_prob_ij_pre
+  link_transform_policy <- if (isTRUE(is_cross_set)) {
+    link_transform_policy
+  } else {
+    NA_character_
+  }
+  link_transform_state <- if (isTRUE(is_cross_set)) {
+    link_transform_state
   } else {
     NA_character_
   }
@@ -763,8 +797,10 @@ run_one_step <- function(state, judge, ...) {
     delta_spoke_estimate_pre = delta_spoke_estimate_pre,
     delta_spoke_sd_pre = delta_spoke_sd_pre,
     dist_stratum_global = as.integer(selection$dist_stratum_global %||% NA_integer_),
+    posterior_win_prob_ij_pre = posterior_win_prob_ij_pre,
     posterior_win_prob_pre = posterior_win_prob_pre,
-    link_transform_mode = link_transform_mode,
+    link_transform_policy = link_transform_policy,
+    link_transform_state = link_transform_state,
     cross_set_utility_pre = cross_set_utility_pre,
     utility_mode = utility_mode,
     log_alpha_spoke_estimate_pre = log_alpha_spoke_estimate_pre,
