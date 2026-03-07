@@ -288,6 +288,20 @@
     max_pairs_after_stop = 0L,
     probe_pairs_per_refit_per_spoke = 2L,
     probe_edges_min_for_stop = 30L,
+    probe_brier_delta_min = 0.005,
+    probe_brier_max = 0.19,
+    probe_pred_rmse_max = 0.015,
+    theta_global_rmse_max = 0.04,
+    theta_global_rmse_scope = "direct_evidence_spoke",
+    min_cross_set_edges_k = 1L,
+    stability_consecutive_k = 2L,
+    min_refits_in_phase_b = 3L,
+    hub_theta_rmse_max = 0.02,
+    logalpha_sd_guardrail = 0.10,
+    shift_scale_min_cross_set_edges = 18L,
+    shift_scale_min_distinct_spoke_items_per_bin = 2L,
+    reliability_var_mu_epsilon = 1e-6,
+    reliability_total_var_epsilon = 1e-6,
     probe_edges_count_toward_active_constraints = FALSE,
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
@@ -380,6 +394,20 @@
     "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
     "probe_edges_min_for_stop",
+    "probe_brier_delta_min",
+    "probe_brier_max",
+    "probe_pred_rmse_max",
+    "theta_global_rmse_max",
+    "theta_global_rmse_scope",
+    "min_cross_set_edges_k",
+    "stability_consecutive_k",
+    "min_refits_in_phase_b",
+    "hub_theta_rmse_max",
+    "logalpha_sd_guardrail",
+    "shift_scale_min_cross_set_edges",
+    "shift_scale_min_distinct_spoke_items_per_bin",
+    "reliability_var_mu_epsilon",
+    "reliability_total_var_epsilon",
     "probe_edges_count_toward_active_constraints",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
@@ -574,6 +602,27 @@
   out$max_pairs_after_stop <- read_integer("max_pairs_after_stop", 0L, Inf)
   out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
   out$probe_edges_min_for_stop <- read_integer("probe_edges_min_for_stop", 1L, Inf)
+  out$probe_brier_delta_min <- read_double("probe_brier_delta_min", 0, 1)
+  out$probe_brier_max <- read_double("probe_brier_max", 0, 1)
+  out$probe_pred_rmse_max <- read_double("probe_pred_rmse_max", 0, Inf)
+  out$theta_global_rmse_max <- read_double("theta_global_rmse_max", 0, Inf)
+  out$theta_global_rmse_scope <- read_choice(
+    "theta_global_rmse_scope",
+    c("direct_evidence_spoke", "all_spoke_items", "min_cross_set_edges_k")
+  )
+  out$min_cross_set_edges_k <- read_integer("min_cross_set_edges_k", 1L, Inf)
+  out$stability_consecutive_k <- read_integer("stability_consecutive_k", 1L, Inf)
+  out$min_refits_in_phase_b <- read_integer("min_refits_in_phase_b", 1L, Inf)
+  out$hub_theta_rmse_max <- read_double("hub_theta_rmse_max", 0, Inf)
+  out$logalpha_sd_guardrail <- read_double("logalpha_sd_guardrail", 0, Inf)
+  out$shift_scale_min_cross_set_edges <- read_integer("shift_scale_min_cross_set_edges", 1L, Inf)
+  out$shift_scale_min_distinct_spoke_items_per_bin <- read_integer(
+    "shift_scale_min_distinct_spoke_items_per_bin",
+    1L,
+    Inf
+  )
+  out$reliability_var_mu_epsilon <- read_double("reliability_var_mu_epsilon", 0, Inf)
+  out$reliability_total_var_epsilon <- read_double("reliability_total_var_epsilon", 0, Inf)
   out$probe_edges_count_toward_active_constraints <- read_logical(
     "probe_edges_count_toward_active_constraints"
   )

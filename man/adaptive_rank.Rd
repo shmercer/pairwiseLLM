@@ -200,6 +200,48 @@ stop boundary before deterministic termination. Default is \code{0L}.}
 spoke, cross-set sampling becomes probe-only for that spoke until global
 stop. This sets the per-refit probe budget per stopped spoke. Default is
 \code{2L}.}
+\item{\code{probe_edges_min_for_stop}}{Minimum realized held-out probe edges
+required before Phase B stop or escalation can be evaluated. Default is
+\code{30L}.}
+\item{\code{probe_brier_delta_min}}{Minimum held-out probe Brier improvement
+required for auto escalation from shift-only to shift-scale. Default is
+\code{0.005}.}
+\item{\code{probe_brier_max}}{Maximum held-out probe Brier score allowed by the
+Phase B stop gate. Default is \code{0.19}.}
+\item{\code{probe_pred_rmse_max}}{Maximum lagged held-out probe prediction RMSE
+allowed by the Phase B stop gate. Default is \code{0.015}.}
+\item{\code{theta_global_rmse_max}}{Maximum lagged transformed-score RMSE on the
+configured spoke scope allowed by the Phase B stop gate. Default is
+\code{0.04}.}
+\item{\code{theta_global_rmse_scope}}{Scope used for transformed-score lagged
+RMSE. Choices are \code{"direct_evidence_spoke"} (default),
+\code{"all_spoke_items"}, and \code{"min_cross_set_edges_k"}.}
+\item{\code{min_cross_set_edges_k}}{Only used when
+\code{theta_global_rmse_scope = "min_cross_set_edges_k"}. Minimum number of
+committed cross-set edges per spoke item required to enter the RMSE
+scope. Default is \code{1L}.}
+\item{\code{stability_consecutive_k}}{Number of consecutive eligible Phase B
+refits required before linking stop or auto escalation triggers. Default
+is \code{2L}.}
+\item{\code{min_refits_in_phase_b}}{Minimum refit index within Phase B before
+linking stop can be evaluated. Default is \code{3L}.}
+\item{\code{hub_theta_rmse_max}}{Maximum lagged hub-theta RMSE allowed for
+\code{hub_lock_mode = "soft_lock"} to count as anchored. Default is \code{0.02}.}
+\item{\code{logalpha_sd_guardrail}}{Maximum temporary alternative-fit
+\code{sd(log(alpha_s))} allowed for auto escalation. Default is \code{0.10}.}
+\item{\code{shift_scale_min_cross_set_edges}}{Minimum realized linking-active
+non-probe cross-set edges within the current epoch required before a
+shift-scale alternative may be considered. Default is \code{18L}.}
+\item{\code{shift_scale_min_distinct_spoke_items_per_bin}}{Minimum number of
+distinct spoke items with realized linking-active exposure required in
+each spoke quantile bin before a shift-scale alternative may be
+considered. Default is \code{2L}.}
+\item{\code{reliability_var_mu_epsilon}}{Degeneracy guard for the active-domain
+variance of posterior transformed-score means used in linking
+reliability. Default is \code{1e-6}.}
+\item{\code{reliability_total_var_epsilon}}{Degeneracy guard for the total
+active-domain transformed-score variance used in linking reliability.
+Default is \code{1e-6}.}
 \item{\code{spoke_quantile_coverage_bins}}{Cross-set coverage control: number of
 quantile bins used to ensure spoke items across the score distribution
 receive cross-set exposure within each refit window. Default is \code{3L}.}

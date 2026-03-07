@@ -231,6 +231,10 @@
 #' @noRd
 .adaptive_link_probe_epoch_for_spoke <- function(state, spoke_id) {
   controller <- .adaptive_controller_resolve(state)
+  epoch_map <- controller$link_epoch_id_by_spoke %||% list()
+  if (!is.null(epoch_map[[as.character(spoke_id)]])) {
+    return(as.integer(epoch_map[[as.character(spoke_id)]] %||% 1L))
+  }
   stats <- controller$link_refit_stats_by_spoke %||% list()
   as.integer(stats[[as.character(spoke_id)]]$link_epoch_id %||% 1L)
 }
