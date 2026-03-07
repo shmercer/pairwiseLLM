@@ -373,8 +373,6 @@
 
 .adaptive_link_active_item_ids <- function(state, spoke_id, hub_id) {
   spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
-  hub_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(hub_id)])
-
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   hub_active_cross <- character()
   if (nrow(step_log) > 0L &&
@@ -401,22 +399,7 @@
       hub_active_cross <- hub_active_cross[!is.na(hub_active_cross)]
     }
   }
-
-  routing_ids <- unique(c(hub_items, spoke_items))
-  routing_scores <- .adaptive_link_phase_b_routing_scores(
-    state = state,
-    controller = .adaptive_controller_resolve(state),
-    active_ids = routing_ids,
-    hub_id = hub_id
-  )
-  defaults <- adaptive_defaults(length(state$item_ids))
-  hub_anchor <- .adaptive_link_phase_b_hub_anchors(
-    state = state,
-    hub_ids = hub_items,
-    hub_scores = routing_scores,
-    defaults = defaults
-  )
-  active_hub <- unique(c(hub_active_cross, hub_anchor))
+  active_hub <- unique(hub_active_cross)
   active_all <- unique(c(spoke_items, active_hub))
 
   list(
@@ -424,24 +407,6 @@
     active_hub = as.character(active_hub),
     active_spoke = as.character(spoke_items)
   )
-}
-
-.adaptive_link_reliability_active <- function(state, active_ids) {
-  fit <- state$btl_fit %||% list()
-  draws <- fit$btl_posterior_draws %||% NULL
-  if (!is.matrix(draws) || !is.numeric(draws) || is.null(colnames(draws))) {
-    return(NA_real_)
-  }
-  ids <- as.character(active_ids)
-  ids <- ids[ids %in% colnames(draws)]
-  if (length(ids) < 2L) {
-    return(NA_real_)
-  }
-  active_draws <- draws[, ids, drop = FALSE]
-  if (ncol(active_draws) < 2L) {
-    return(NA_real_)
-  }
-  as.double(compute_reliability_EAP(active_draws))
 }
 
 .adaptive_link_transform_theta_mean_for_spoke <- function(state,
@@ -486,54 +451,254 @@
   theta
 }
 
-.adaptive_link_reliability_transformed_active <- function(state,
-                                                          active_ids,
-                                                          spoke_id,
-                                                          hub_id,
-                                                          transform_mode,
-                                                          delta_mean,
-                                                          log_alpha_mean = NA_real_) {
+.adaptive_link_reliability_decomposition <- function(mu_vals,
+                                                     var_vals,
+                                                     var_mu_epsilon,
+                                                     total_var_epsilon) {
+  mu_vals <- as.double(mu_vals)
+  var_vals <- as.double(var_vals)
+  keep <- is.finite(mu_vals) & is.finite(var_vals) & var_vals >= 0
+  mu_vals <- mu_vals[keep]
+  var_vals <- var_vals[keep]
+  if (length(mu_vals) < 2L) {
+    return(list(
+      reliability = NA_real_,
+      V_mu = NA_real_,
+      V_post = NA_real_,
+      defined = FALSE
+    ))
+  }
+  V_mu <- as.double(stats::var(mu_vals))
+  V_post <- as.double(mean(var_vals))
+  defined <- is.finite(V_mu) &&
+    is.finite(V_post) &&
+    V_mu >= as.double(var_mu_epsilon) &&
+    (V_mu + V_post) >= as.double(total_var_epsilon)
+  reliability <- if (isTRUE(defined)) {
+    as.double(max(0, min(1, V_mu / (V_mu + V_post))))
+  } else {
+    NA_real_
+  }
+  list(
+    reliability = reliability,
+    V_mu = as.double(V_mu),
+    V_post = as.double(V_post),
+    defined = isTRUE(defined)
+  )
+}
+
+.adaptive_link_reliability_active <- function(state, active_ids) {
   fit <- state$btl_fit %||% list()
   draws <- fit$btl_posterior_draws %||% NULL
   if (!is.matrix(draws) || !is.numeric(draws) || is.null(colnames(draws))) {
     return(NA_real_)
   }
-  ids <- as.character(active_ids)
-  ids <- ids[ids %in% colnames(draws)]
+  ids <- intersect(as.character(active_ids), as.character(colnames(draws)))
   if (length(ids) < 2L) {
     return(NA_real_)
   }
-  active_draws <- draws[, ids, drop = FALSE]
-  if (ncol(active_draws) < 2L) {
-    return(NA_real_)
+  as.double(compute_reliability_EAP(draws[, ids, drop = FALSE]))
+}
+
+.adaptive_link_global_score_stats_active <- function(state,
+                                                     active_ids,
+                                                     spoke_id,
+                                                     hub_id,
+                                                     transform_mode,
+                                                     delta_mean,
+                                                     log_alpha_mean = NA_real_,
+                                                     fit = NULL,
+                                                     refit_mode = "shift_only",
+                                                     hub_lock_mode = "soft_lock",
+                                                     shift_only_theta_treatment = "fixed_eap_plugin_var",
+                                                     var_mu_epsilon = 1e-6,
+                                                     total_var_epsilon = 1e-6) {
+  active_ids <- as.character(active_ids)
+  if (length(active_ids) < 2L) {
+    return(list(
+      reliability = NA_real_,
+      V_mu = NA_real_,
+      V_post = NA_real_,
+      mean_map = stats::setNames(numeric(), character()),
+      var_map = stats::setNames(numeric(), character()),
+      defined = FALSE
+    ))
   }
 
+  fit <- fit %||% list()
+  fit_post <- fit$posterior_draws %||% list()
   mode <- as.character(transform_mode %||% "shift_only")
   if (!mode %in% c("shift_only", "shift_scale")) {
     mode <- "shift_only"
   }
   delta <- as.double(delta_mean %||% NA_real_)
   if (!is.finite(delta)) {
-    return(NA_real_)
+    return(list(
+      reliability = NA_real_,
+      V_mu = NA_real_,
+      V_post = NA_real_,
+      mean_map = stats::setNames(rep(NA_real_, length(active_ids)), active_ids),
+      var_map = stats::setNames(rep(NA_real_, length(active_ids)), active_ids),
+      defined = FALSE
+    ))
   }
   alpha <- 1
   if (identical(mode, "shift_scale")) {
     log_alpha <- as.double(log_alpha_mean %||% NA_real_)
     if (!is.finite(log_alpha)) {
-      return(NA_real_)
+      return(list(
+        reliability = NA_real_,
+        V_mu = NA_real_,
+        V_post = NA_real_,
+        mean_map = stats::setNames(rep(NA_real_, length(active_ids)), active_ids),
+        var_map = stats::setNames(rep(NA_real_, length(active_ids)), active_ids),
+        defined = FALSE
+      ))
     }
     alpha <- exp(log_alpha)
   }
 
-  item_ids <- as.character(state$items$item_id)
-  set_ids <- as.integer(state$items$set_id)
-  set_by_item <- stats::setNames(set_ids, item_ids)
-  spoke_items <- names(set_by_item)[set_by_item == as.integer(spoke_id)]
-  spoke_cols <- colnames(active_draws) %in% spoke_items
-  if (any(spoke_cols)) {
-    active_draws[, spoke_cols] <- delta + alpha * active_draws[, spoke_cols, drop = FALSE]
+  hub_mu <- .adaptive_link_phase_a_theta_map(state, hub_id, "theta_raw_mean")
+  hub_sd <- .adaptive_link_phase_a_theta_map(state, hub_id, "theta_raw_sd")
+  spoke_mu <- .adaptive_link_phase_a_theta_map(state, spoke_id, "theta_raw_mean")
+  spoke_sd <- .adaptive_link_phase_a_theta_map(state, spoke_id, "theta_raw_sd")
+  if (identical(as.character(refit_mode), "joint_refit")) {
+    if (!identical(as.character(hub_lock_mode), "hard_lock")) {
+      hub_mu <- fit$theta_hub_post %||% hub_mu
+      if (is.matrix(fit_post$theta_hub) && !is.null(colnames(fit_post$theta_hub))) {
+        hub_sd_draw <- apply(fit_post$theta_hub, 2L, stats::sd)
+        hub_sd <- as.double(hub_sd_draw)
+        names(hub_sd) <- names(hub_sd_draw)
+      }
+    }
+    spoke_mu <- fit$theta_spoke_post %||% spoke_mu
+    if (is.matrix(fit_post$theta_spoke) && !is.null(colnames(fit_post$theta_spoke))) {
+      spoke_sd_draw <- apply(fit_post$theta_spoke, 2L, stats::sd)
+      spoke_sd <- as.double(spoke_sd_draw)
+      names(spoke_sd) <- names(spoke_sd_draw)
+    }
   }
-  as.double(compute_reliability_EAP(active_draws))
+
+  hub_mu <- as.double(hub_mu)
+  names(hub_mu) <- names(.adaptive_link_phase_a_theta_map(state, hub_id, "theta_raw_mean"))
+  hub_sd <- pmax(0, as.double(hub_sd))
+  names(hub_sd) <- names(.adaptive_link_phase_a_theta_map(state, hub_id, "theta_raw_sd"))
+  spoke_mu <- as.double(spoke_mu)
+  names(spoke_mu) <- names(.adaptive_link_phase_a_theta_map(state, spoke_id, "theta_raw_mean"))
+  spoke_sd <- pmax(0, as.double(spoke_sd))
+  names(spoke_sd) <- names(.adaptive_link_phase_a_theta_map(state, spoke_id, "theta_raw_sd"))
+
+  delta_draws <- as.double(fit_post$delta %||% numeric())
+  if (length(delta_draws) < 1L) {
+    delta_draws <- rep(delta, 1L)
+  }
+  log_alpha_draws <- as.double(fit_post$log_alpha %||% numeric())
+  if (identical(mode, "shift_scale")) {
+    if (length(log_alpha_draws) != length(delta_draws)) {
+      log_alpha_draws <- rep(log_alpha_mean, length(delta_draws))
+    }
+    alpha_draws <- exp(log_alpha_draws)
+  } else {
+    alpha_draws <- rep(1, length(delta_draws))
+  }
+
+  mean_map <- stats::setNames(rep(NA_real_, length(active_ids)), active_ids)
+  var_map <- stats::setNames(rep(NA_real_, length(active_ids)), active_ids)
+  hub_draws <- fit_post$theta_hub %||% NULL
+  spoke_draws <- fit_post$theta_spoke %||% NULL
+
+  for (item_id in active_ids) {
+    if (item_id %in% names(hub_mu)) {
+      mu_i <- as.double(hub_mu[[item_id]])
+      v_i <- as.double((hub_sd[[item_id]] %||% 0)^2)
+      if (identical(as.character(refit_mode), "joint_refit") &&
+        !identical(as.character(hub_lock_mode), "hard_lock") &&
+        is.matrix(hub_draws) &&
+        item_id %in% colnames(hub_draws)) {
+        draws_i <- as.double(hub_draws[, item_id, drop = TRUE])
+        if (sum(is.finite(draws_i)) >= 2L) {
+          mu_i <- as.double(mean(draws_i))
+          v_i <- as.double(stats::var(draws_i))
+        }
+      }
+      mean_map[[item_id]] <- mu_i
+      var_map[[item_id]] <- max(0, v_i)
+      next
+    }
+    if (!item_id %in% names(spoke_mu)) {
+      next
+    }
+    base_mu <- as.double(spoke_mu[[item_id]])
+    plugin_var <- if (identical(as.character(shift_only_theta_treatment), "fixed_eap_plugin_var")) {
+      as.double((spoke_sd[[item_id]] %||% 0)^2)
+    } else {
+      0
+    }
+    if (is.matrix(spoke_draws) && item_id %in% colnames(spoke_draws)) {
+      theta_draws <- as.double(spoke_draws[, item_id, drop = TRUE])
+    } else {
+      theta_draws <- rep(base_mu, length(delta_draws))
+    }
+    if (length(theta_draws) != length(delta_draws)) {
+      theta_draws <- rep(base_mu, length(delta_draws))
+    }
+    score_draws <- delta_draws + alpha_draws * theta_draws
+    mu_i <- as.double(mean(score_draws))
+    v_i <- as.double(stats::var(score_draws))
+    if (!is.finite(v_i)) {
+      v_i <- 0
+    }
+    if (!is.matrix(spoke_draws) && plugin_var > 0) {
+      v_i <- v_i + alpha^2 * plugin_var
+    }
+    mean_map[[item_id]] <- mu_i
+    var_map[[item_id]] <- max(0, v_i)
+  }
+
+  decomp <- .adaptive_link_reliability_decomposition(
+    mu_vals = unname(mean_map),
+    var_vals = unname(var_map),
+    var_mu_epsilon = var_mu_epsilon,
+    total_var_epsilon = total_var_epsilon
+  )
+  c(
+    decomp,
+    list(
+      mean_map = mean_map,
+      var_map = var_map
+    )
+  )
+}
+
+.adaptive_link_reliability_transformed_active <- function(state,
+                                                          active_ids,
+                                                          spoke_id,
+                                                          hub_id,
+                                                          transform_mode,
+                                                          delta_mean,
+                                                          log_alpha_mean = NA_real_,
+                                                          fit = NULL,
+                                                          refit_mode = "shift_only",
+                                                          hub_lock_mode = "soft_lock",
+                                                          shift_only_theta_treatment = "fixed_eap_plugin_var",
+                                                          var_mu_epsilon = 1e-6,
+                                                          total_var_epsilon = 1e-6) {
+  out <- .adaptive_link_global_score_stats_active(
+    state = state,
+    active_ids = active_ids,
+    spoke_id = spoke_id,
+    hub_id = hub_id,
+    transform_mode = transform_mode,
+    delta_mean = delta_mean,
+    log_alpha_mean = log_alpha_mean,
+    fit = fit,
+    refit_mode = refit_mode,
+    hub_lock_mode = hub_lock_mode,
+    shift_only_theta_treatment = shift_only_theta_treatment,
+    var_mu_epsilon = var_mu_epsilon,
+    total_var_epsilon = total_var_epsilon
+  )
+  as.double(out$reliability %||% NA_real_)
 }
 
 .adaptive_link_ts_btl_rank_spearman_active <- function(state, active_ids, theta_mean = NULL) {
@@ -687,6 +852,162 @@
   as.double(delta_sd_mult) * as.double(stats::sd(hub_theta, na.rm = TRUE))
 }
 
+.adaptive_link_probe_metrics_current <- function(state, refit_id, spoke_id) {
+  probe <- .adaptive_link_probe_state(state)
+  cache <- tibble::as_tibble(probe$prediction_cache %||% tibble::tibble())
+  realized <- tibble::as_tibble(probe$realized_edges %||% tibble::tibble())
+  if (nrow(cache) < 1L || nrow(realized) < 1L) {
+    return(list(probe_brier = NA_real_, realized_n = 0L))
+  }
+  current <- cache[
+    as.integer(cache$refit_id) == as.integer(refit_id) &
+      as.integer(cache$spoke_id) == as.integer(spoke_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(current) < 1L) {
+    return(list(probe_brier = NA_real_, realized_n = 0L))
+  }
+  joined <- dplyr::inner_join(
+    current,
+    realized[, c("spoke_id", "link_epoch_id", "pair_key", "Y"), drop = FALSE],
+    by = c("spoke_id", "link_epoch_id", "pair_key")
+  )
+  if (nrow(joined) < 1L) {
+    return(list(probe_brier = NA_real_, realized_n = 0L))
+  }
+  y_spoke <- as.integer(joined$Y)
+  pred_spoke <- 1 - as.double(joined$pred_prob)
+  keep <- y_spoke %in% c(0L, 1L) & is.finite(pred_spoke)
+  if (!any(keep)) {
+    return(list(probe_brier = NA_real_, realized_n = 0L))
+  }
+  list(
+    probe_brier = as.double(mean((y_spoke[keep] - pred_spoke[keep])^2)),
+    realized_n = as.integer(sum(keep))
+  )
+}
+
+.adaptive_link_probe_pred_rmse_lagged <- function(state, refit_id, spoke_id, lag_refit_id, epoch_id) {
+  probe <- .adaptive_link_probe_state(state)
+  cache <- tibble::as_tibble(probe$prediction_cache %||% tibble::tibble())
+  if (nrow(cache) < 1L) {
+    return(NA_real_)
+  }
+  current <- cache[
+    as.integer(cache$refit_id) == as.integer(refit_id) &
+      as.integer(cache$spoke_id) == as.integer(spoke_id) &
+      as.integer(cache$link_epoch_id) == as.integer(epoch_id),
+    ,
+    drop = FALSE
+  ]
+  lagged <- cache[
+    as.integer(cache$refit_id) == as.integer(lag_refit_id) &
+      as.integer(cache$spoke_id) == as.integer(spoke_id) &
+      as.integer(cache$link_epoch_id) == as.integer(epoch_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(current) < 1L || nrow(lagged) < 1L) {
+    return(NA_real_)
+  }
+  joined <- dplyr::inner_join(
+    current[, c("pair_key", "pred_prob"), drop = FALSE],
+    lagged[, c("pair_key", "pred_prob"), drop = FALSE],
+    by = "pair_key",
+    suffix = c("_t", "_lag")
+  )
+  if (nrow(joined) < 1L) {
+    return(NA_real_)
+  }
+  diff <- as.double(joined$pred_prob_t) - as.double(joined$pred_prob_lag)
+  diff <- diff[is.finite(diff)]
+  if (length(diff) < 1L) {
+    return(NA_real_)
+  }
+  sqrt(mean(diff^2))
+}
+
+.adaptive_link_theta_global_scope_ids <- function(state, spoke_id, scope) {
+  scope <- as.character(scope %||% "direct_evidence_spoke")
+  spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
+  cross_all <- .adaptive_link_cross_edges(state, spoke_id = spoke_id, last_refit_step = NULL)
+  active_spoke <- if (nrow(cross_all) > 0L) {
+    as.character(unique(cross_all$spoke_item[!(cross_all$is_probe_step %in% TRUE)]))
+  } else {
+    character()
+  }
+  if (identical(scope, "all_spoke_items")) {
+    return(spoke_items)
+  }
+  if (identical(scope, "min_cross_set_edges_k")) {
+    controller <- .adaptive_controller_resolve(state)
+    k <- as.integer(controller$min_cross_set_edges_k %||% 1L)
+    if (nrow(cross_all) < 1L) {
+      return(character())
+    }
+    active_non_probe <- cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE]
+    counts <- table(as.character(active_non_probe$spoke_item))
+    ids <- names(counts)[as.integer(counts) >= k]
+    return(as.character(ids))
+  }
+  as.character(active_spoke)
+}
+
+.adaptive_link_theta_global_rmse_lagged <- function(state,
+                                                    spoke_id,
+                                                    hub_id,
+                                                    scope_ids,
+                                                    transform_mode,
+                                                    delta_mean,
+                                                    log_alpha_mean,
+                                                    lag_row) {
+  ids <- as.character(scope_ids)
+  if (length(ids) < 2L) {
+    return(NA_real_)
+  }
+  history <- state$refit_meta$theta_mean_history %||% list()
+  current_refit <- length(history)
+  if (current_refit < 1L) {
+    return(NA_real_)
+  }
+  current_raw <- history[[current_refit]]
+  lag_raw <- history[[max(1L, current_refit - 1L)]]
+  if (!is.numeric(current_raw) || !is.numeric(lag_raw) || is.null(names(current_raw)) || is.null(names(lag_raw))) {
+    return(NA_real_)
+  }
+  lag_mode <- as.character(lag_row$link_transform_state[[1L]] %||% "shift_only")
+  lag_delta <- as.double(lag_row$delta_spoke_mean[[1L]] %||% NA_real_)
+  lag_log_alpha <- as.double(lag_row$log_alpha_spoke_mean[[1L]] %||% NA_real_)
+  current_theta <- .adaptive_link_transform_theta_mean_for_spoke(
+    state = state,
+    theta_mean = current_raw,
+    spoke_id = spoke_id,
+    hub_id = hub_id,
+    transform_mode = transform_mode,
+    delta_mean = delta_mean,
+    log_alpha_mean = log_alpha_mean
+  )
+  lag_theta <- .adaptive_link_transform_theta_mean_for_spoke(
+    state = state,
+    theta_mean = lag_raw,
+    spoke_id = spoke_id,
+    hub_id = hub_id,
+    transform_mode = lag_mode,
+    delta_mean = lag_delta,
+    log_alpha_mean = lag_log_alpha
+  )
+  if (!all(ids %in% names(current_theta)) || !all(ids %in% names(lag_theta))) {
+    return(NA_real_)
+  }
+  diff <- as.double(current_theta[ids] - lag_theta[ids])
+  diff <- diff[is.finite(diff)]
+  if (length(diff) < 2L) {
+    return(NA_real_)
+  }
+  sqrt(mean(diff^2))
+}
+
 .adaptive_link_reconstruct_stop_from_logs <- function(link_row, diagnostics_pass, hub_theta_sd, controller) {
   row <- tibble::as_tibble(link_row)
   if (nrow(row) != 1L) {
@@ -700,59 +1021,63 @@
   if (!isTRUE(diagnostics_pass)) {
     return(FALSE)
   }
-  # Prefer log-level pass flags when available so stop can be reconstructed from
-  # canonical logs without external controller parameters.
-  if ("reliability_stop_pass" %in% names(row) &&
-    "delta_sd_pass" %in% names(row) &&
-    "log_alpha_sd_pass" %in% names(row) &&
-    "rank_stability_pass" %in% names(row)) {
-    rel_gate <- isTRUE(row$reliability_stop_pass[[1L]])
-    delta_sd_gate <- isTRUE(row$delta_sd_pass[[1L]])
-    log_alpha_sd_gate <- is.na(row$log_alpha_sd_pass[[1L]]) || isTRUE(row$log_alpha_sd_pass[[1L]])
-    delta_change_gate <- isTRUE(row$delta_change_pass[[1L]])
-    log_alpha_change_gate <- is.na(row$log_alpha_change_pass[[1L]]) || isTRUE(row$log_alpha_change_pass[[1L]])
-    rank_gate <- isTRUE(row$rank_stability_pass[[1L]])
-    return(isTRUE(rel_gate) &&
-      isTRUE(delta_sd_gate) &&
-      isTRUE(log_alpha_sd_gate) &&
-      isTRUE(delta_change_gate) &&
-      isTRUE(log_alpha_change_gate) &&
-      isTRUE(rank_gate))
+  has_normative_cols <- all(c("hub_anchored", "probe_brier", "probe_pred_rmse_lagged", "theta_global_rmse_lagged") %in%
+    names(row))
+  if (!isTRUE(has_normative_cols)) {
+    if ("reliability_stop_pass" %in% names(row) &&
+      "delta_sd_pass" %in% names(row) &&
+      "log_alpha_sd_pass" %in% names(row) &&
+      "rank_stability_pass" %in% names(row)) {
+      rel_gate <- isTRUE(row$reliability_stop_pass[[1L]])
+      delta_sd_gate <- isTRUE(row$delta_sd_pass[[1L]])
+      log_alpha_sd_gate <- is.na(row$log_alpha_sd_pass[[1L]]) || isTRUE(row$log_alpha_sd_pass[[1L]])
+      delta_change_gate <- isTRUE(row$delta_change_pass[[1L]])
+      log_alpha_change_gate <- is.na(row$log_alpha_change_pass[[1L]]) || isTRUE(row$log_alpha_change_pass[[1L]])
+      rank_gate <- isTRUE(row$rank_stability_pass[[1L]])
+      return(isTRUE(rel_gate) &&
+        isTRUE(delta_sd_gate) &&
+        isTRUE(log_alpha_sd_gate) &&
+        isTRUE(delta_change_gate) &&
+        isTRUE(log_alpha_change_gate) &&
+        isTRUE(rank_gate))
+    }
   }
-  rel_gate <- is.finite(row$reliability_EAP_link[[1L]]) &&
-    row$reliability_EAP_link[[1L]] >= as.double(controller$link_stop_reliability_min %||% 0.90)
-  delta_max <- as.double(controller$delta_sd_max %||% 0.10) * as.double(hub_theta_sd)
-  delta_sd_gate <- is.finite(row$delta_spoke_sd[[1L]]) &&
-    is.finite(delta_max) &&
-    row$delta_spoke_sd[[1L]] <= delta_max
-  mode <- if ("link_transform_state" %in% names(row)) {
-    as.character(row$link_transform_state[[1L]] %||% "shift_only")
+  rel_gate <- if ("reliability_stop_pass" %in% names(row)) {
+    isTRUE(row$reliability_stop_pass[[1L]] %||% FALSE)
+  } else if ("reliability_EAP_link" %in% names(row)) {
+    is.finite(row$reliability_EAP_link[[1L]]) &&
+      row$reliability_EAP_link[[1L]] >= as.double(controller$link_stop_reliability_min %||% 0.90)
   } else {
-    as.character(row$link_transform_mode[[1L]] %||% "shift_only")
+    FALSE
   }
-  alpha_sd_gate <- if (identical(mode, "shift_scale")) {
-    is.finite(row$log_alpha_spoke_sd[[1L]]) &&
-      row$log_alpha_spoke_sd[[1L]] <= as.double(controller$log_alpha_sd_max %||% 0.10)
+  hub_gate <- if ("hub_anchored" %in% names(row)) {
+    isTRUE(row$hub_anchored[[1L]] %||% FALSE)
   } else {
-    TRUE
+    FALSE
   }
-  delta_change_gate <- isTRUE(row$delta_change_pass[[1L]])
-  alpha_change_gate <- if (identical(mode, "shift_scale")) {
-    isTRUE(row$log_alpha_change_pass[[1L]])
+  probe_gate <- if ("probe_brier" %in% names(row)) {
+    is.finite(as.double(row$probe_brier[[1L]] %||% NA_real_)) &&
+      as.double(row$probe_brier[[1L]]) <= as.double(controller$probe_brier_max %||% 0.19)
   } else {
-    TRUE
+    FALSE
   }
-  rank_metric <- NA_real_
-  if ("rank_stability_lagged" %in% names(row)) {
-    rank_metric <- as.double(row$rank_stability_lagged[[1L]] %||% NA_real_)
+  probe_rmse_gate <- if ("probe_pred_rmse_lagged" %in% names(row)) {
+    is.finite(as.double(row$probe_pred_rmse_lagged[[1L]] %||% NA_real_)) &&
+      as.double(row$probe_pred_rmse_lagged[[1L]]) <= as.double(controller$probe_pred_rmse_max %||% 0.015)
+  } else {
+    FALSE
   }
-  rank_gate <- is.finite(rank_metric) && rank_metric >= 0.98
+  theta_rmse_gate <- if ("theta_global_rmse_lagged" %in% names(row)) {
+    is.finite(as.double(row$theta_global_rmse_lagged[[1L]] %||% NA_real_)) &&
+      as.double(row$theta_global_rmse_lagged[[1L]]) <= as.double(controller$theta_global_rmse_max %||% 0.04)
+  } else {
+    FALSE
+  }
   isTRUE(rel_gate) &&
-    isTRUE(delta_sd_gate) &&
-    isTRUE(alpha_sd_gate) &&
-    isTRUE(delta_change_gate) &&
-    isTRUE(alpha_change_gate) &&
-    isTRUE(rank_gate)
+    isTRUE(hub_gate) &&
+    isTRUE(probe_gate) &&
+    isTRUE(probe_rmse_gate) &&
+    isTRUE(theta_rmse_gate)
 }
 
 .adaptive_link_reconstruct_identified_from_logs <- function(link_row, controller) {
@@ -765,26 +1090,7 @@
     row$reliability_EAP_link[[1L]] >= as.double(controller$link_identified_reliability_min %||% 0.80)
   rank_gate <- is.finite(row$ts_btl_rank_spearman[[1L]]) &&
     row$ts_btl_rank_spearman[[1L]] >= as.double(controller$link_rank_corr_min %||% 0.90)
-  delta_sd_gate <- if ("delta_sd_pass" %in% names(row)) {
-    isTRUE(row$delta_sd_pass[[1L]])
-  } else {
-    FALSE
-  }
-  mode <- if ("link_transform_state" %in% names(row)) {
-    as.character(row$link_transform_state[[1L]] %||% "shift_only")
-  } else {
-    as.character(row$link_transform_mode[[1L]] %||% "shift_only")
-  }
-  alpha_sd_gate <- if (identical(mode, "shift_scale")) {
-    if ("log_alpha_sd_pass" %in% names(row)) {
-      isTRUE(row$log_alpha_sd_pass[[1L]])
-    } else {
-      FALSE
-    }
-  } else {
-    TRUE
-  }
-  isTRUE(rel_gate) && isTRUE(rank_gate) && isTRUE(delta_sd_gate) && isTRUE(alpha_sd_gate)
+  isTRUE(rel_gate) && isTRUE(rank_gate)
 }
 
 .adaptive_link_phase_a_theta_map <- function(state, set_id, field) {
@@ -1730,6 +2036,182 @@
   as.double(mean((as.double(y) - p)^2))
 }
 
+.adaptive_link_probe_edges_realized <- function(state, spoke_id, epoch_id) {
+  panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
+  if (nrow(panel) < 1L) {
+    return(tibble::tibble())
+  }
+  panel_keys <- as.character(panel$pair_key[panel$realized %in% TRUE])
+  if (length(panel_keys) < 1L) {
+    return(tibble::tibble())
+  }
+  cross <- .adaptive_link_cross_edges(state, spoke_id = spoke_id, last_refit_step = NULL)
+  if (nrow(cross) < 1L) {
+    return(tibble::tibble())
+  }
+  cross <- tibble::as_tibble(cross)
+  cross$pair_key <- make_unordered_key(cross$hub_item, cross$spoke_item)
+  cross[cross$pair_key %in% panel_keys & cross$is_probe_step %in% TRUE, , drop = FALSE]
+}
+
+.adaptive_link_probe_brier_for_fit <- function(edges,
+                                               hub_theta,
+                                               spoke_theta,
+                                               delta_mean,
+                                               log_alpha_mean = NA_real_,
+                                               judge_params = list(beta = 0, epsilon = 0)) {
+  edges <- tibble::as_tibble(edges)
+  if (nrow(edges) < 1L) {
+    return(NA_real_)
+  }
+  p <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = hub_theta,
+    spoke_theta = spoke_theta,
+    delta_mean = delta_mean,
+    log_alpha_mean = log_alpha_mean,
+    judge_params = judge_params
+  )
+  y <- as.integer(edges$y_spoke)
+  keep <- y %in% c(0L, 1L) & is.finite(p)
+  if (!any(keep)) {
+    return(NA_real_)
+  }
+  as.double(mean((y[keep] - p[keep])^2))
+}
+
+.adaptive_link_cross_probabilities <- function(edges,
+                                               hub_theta,
+                                               spoke_theta,
+                                               delta_mean,
+                                               log_alpha_mean = NA_real_,
+                                               judge_params = list(beta = 0, epsilon = 0)) {
+  edges <- tibble::as_tibble(edges)
+  if (nrow(edges) < 1L) {
+    return(numeric())
+  }
+  beta <- as.double(judge_params$beta %||% 0)
+  epsilon <- max(0, min(1, as.double(judge_params$epsilon %||% 0)))
+  alpha <- if (is.finite(log_alpha_mean)) exp(log_alpha_mean) else 1
+  h <- as.double(hub_theta[as.character(edges$hub_item)])
+  s <- as.double(spoke_theta[as.character(edges$spoke_item)])
+  spoke_in_A <- as.logical(edges$spoke_in_A %||% TRUE)
+  beta_signed <- ifelse(spoke_in_A, beta, -beta)
+  eta <- as.double(delta_mean) + alpha * s - h + beta_signed
+  p <- (1 - epsilon) * stats::plogis(eta) + epsilon * 0.5
+  p[!is.finite(h) | !is.finite(s)] <- NA_real_
+  as.double(p)
+}
+
+.adaptive_link_probe_pred_rmse_lagged_for_fit <- function(edges,
+                                                           hub_theta,
+                                                           spoke_theta,
+                                                           delta_mean,
+                                                           log_alpha_mean,
+                                                           lag_delta_mean,
+                                                           lag_log_alpha_mean,
+                                                           judge_params = list(beta = 0, epsilon = 0)) {
+  edges <- tibble::as_tibble(edges)
+  if (nrow(edges) < 1L) {
+    return(NA_real_)
+  }
+  p_now <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = hub_theta,
+    spoke_theta = spoke_theta,
+    delta_mean = delta_mean,
+    log_alpha_mean = log_alpha_mean,
+    judge_params = judge_params
+  )
+  p_lag <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = hub_theta,
+    spoke_theta = spoke_theta,
+    delta_mean = lag_delta_mean,
+    log_alpha_mean = lag_log_alpha_mean,
+    judge_params = judge_params
+  )
+  keep <- is.finite(p_now) & is.finite(p_lag)
+  if (!any(keep)) {
+    return(NA_real_)
+  }
+  sqrt(mean((p_now[keep] - p_lag[keep])^2))
+}
+
+.adaptive_link_fit_transform_alt_shift_scale <- function(cross_edges,
+                                                         hub_theta,
+                                                         spoke_theta,
+                                                         delta_init = 0) {
+  edges <- tibble::as_tibble(cross_edges)
+  judge_params <- attr(edges, "judge_params", exact = TRUE) %||% list(beta = 0, epsilon = 0)
+  if (nrow(edges) < 1L) {
+    return(list(
+      converged = FALSE,
+      delta_mean = NA_real_,
+      log_alpha_mean = NA_real_,
+      log_alpha_sd = NA_real_
+    ))
+  }
+  beta <- as.double(judge_params$beta %||% 0)
+  epsilon <- max(0, min(1, as.double(judge_params$epsilon %||% 0)))
+  h <- as.double(hub_theta[as.character(edges$hub_item)])
+  s <- as.double(spoke_theta[as.character(edges$spoke_item)])
+  y <- as.integer(edges$y_spoke)
+  spoke_in_A <- as.logical(edges$spoke_in_A %||% TRUE)
+  beta_signed <- ifelse(spoke_in_A, beta, -beta)
+  keep <- is.finite(h) & is.finite(s) & y %in% c(0L, 1L)
+  if (!any(keep)) {
+    return(list(
+      converged = FALSE,
+      delta_mean = NA_real_,
+      log_alpha_mean = NA_real_,
+      log_alpha_sd = NA_real_
+    ))
+  }
+  h <- h[keep]
+  s <- s[keep]
+  y <- y[keep]
+  beta_signed <- beta_signed[keep]
+  neg_log_post <- function(par) {
+    delta <- par[[1L]]
+    log_alpha <- par[[2L]]
+    alpha <- exp(log_alpha)
+    eta <- delta + alpha * s - h + beta_signed
+    p <- (1 - epsilon) * stats::plogis(eta) + epsilon * 0.5
+    p <- pmax(1e-10, pmin(1 - 1e-10, p))
+    -sum(stats::dbinom(y, size = 1L, prob = p, log = TRUE)) +
+      0.5 * (delta / 1)^2 +
+      0.5 * (log_alpha / 0.2)^2
+  }
+  opt <- tryCatch(
+    stats::optim(
+      par = c(as.double(delta_init), 0),
+      fn = neg_log_post,
+      method = "BFGS",
+      hessian = TRUE,
+      control = list(maxit = 200, reltol = 1e-10)
+    ),
+    error = function(e) NULL
+  )
+  if (is.null(opt) || !is.list(opt) || opt$convergence != 0L || !all(is.finite(opt$par))) {
+    return(list(
+      converged = FALSE,
+      delta_mean = NA_real_,
+      log_alpha_mean = NA_real_,
+      log_alpha_sd = NA_real_
+    ))
+  }
+  hessian <- opt$hessian %||% matrix(NA_real_, nrow = 2L, ncol = 2L)
+  vcov <- tryCatch(solve(hessian), error = function(e) matrix(NA_real_, nrow = 2L, ncol = 2L))
+  log_alpha_sd <- if (all(is.finite(vcov)) && vcov[2L, 2L] >= 0) sqrt(vcov[2L, 2L]) else NA_real_
+  list(
+    converged = is.finite(log_alpha_sd),
+    delta_mean = as.double(opt$par[[1L]]),
+    log_alpha_mean = as.double(opt$par[[2L]]),
+    log_alpha_sd = as.double(log_alpha_sd)
+  )
+}
+
 .adaptive_link_concurrent_targets <- function(spoke_stats, total_pairs, floor_pairs) {
   if (length(spoke_stats) < 1L) {
     return(integer())
@@ -2101,7 +2583,6 @@
     return(out)
   }
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
-  bad_refits <- controller$link_transform_bad_refits_by_spoke %||% list()
   state_map <- controller$link_transform_state_by_spoke %||% list()
   last_delta <- controller$link_transform_last_delta_by_spoke %||% list()
   last_log_alpha <- controller$link_transform_last_log_alpha_by_spoke %||% list()
@@ -2109,6 +2590,10 @@
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
+  stop_counter_map <- controller$link_stop_consecutive_pass_count_by_spoke %||% list()
+  escalation_counter_map <- controller$link_escalation_consecutive_pass_count_by_spoke %||% list()
+  epoch_id_map <- controller$link_epoch_id_by_spoke %||% list()
+  epoch_signature_map <- controller$link_epoch_signature_by_spoke %||% list()
   coverage_bins_map <- controller$link_stage_coverage_bins_used %||% list()
   coverage_source_map <- controller$link_stage_coverage_source %||% list()
   lag_domain_key_map <- controller$link_lag_domain_key_by_spoke %||% list()
@@ -2262,68 +2747,38 @@
       posterior_draws = fit$posterior_draws
     )
 
-    escalated_this_refit <- FALSE
-    if (!isTRUE(transform_frozen) && identical(transform_policy, "auto")) {
-      if (identical(transform_state, "shift_only")) {
-        bad <- as.integer(bad_refits[[key]] %||% 0L)
-        if (is.finite(ppc_brier_cross_active) &&
-          ppc_brier_cross_active > as.double(controller$cross_set_ppc_brier_max %||% 0.20)) {
-          bad <- bad + 1L
-        } else if (is.finite(ppc_brier_cross_active)) {
-          bad <- 0L
-        }
-        need <- as.integer(controller$link_transform_escalation_refits_required %||% 2L)
-        if (bad >= need) {
-          state_map[[key]] <- "shift_scale"
-          transform_state <- "shift_scale"
-          escalated_this_refit <- TRUE
-          # Escalation takes effect in the current refit: recompute transform
-          # fit and PPC using shift+scale parameters before gating/logging.
-          fit <- .adaptive_link_fit_transform(cross_all, hub_theta, spoke_theta, transform_mode = transform_state)
-          ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
-          ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
-          ppc_brier_cross_active <- .adaptive_link_ppc_brier_cross(
-            cross_since_active,
-            hub_theta = ppc_hub_theta,
-            spoke_theta = ppc_spoke_theta,
-            delta_mean = fit$delta_mean,
-            log_alpha_mean = fit$log_alpha_mean,
-            posterior_draws = fit$posterior_draws
-          )
-          ppc_brier_cross_probe <- .adaptive_link_ppc_brier_cross(
-            cross_since_probe,
-            hub_theta = ppc_hub_theta,
-            spoke_theta = ppc_spoke_theta,
-            delta_mean = fit$delta_mean,
-            log_alpha_mean = fit$log_alpha_mean,
-            posterior_draws = fit$posterior_draws
-          )
-          ppc_brier_cross <- .adaptive_link_ppc_brier_cross(
-            cross_since,
-            hub_theta = ppc_hub_theta,
-            spoke_theta = ppc_spoke_theta,
-            delta_mean = fit$delta_mean,
-            log_alpha_mean = fit$log_alpha_mean,
-            posterior_draws = fit$posterior_draws
-          )
-        }
-        bad_refits[[key]] <- bad
-      }
-      if (identical(transform_state, "shift_scale") &&
-        isTRUE(controller$link_transform_escalation_is_one_way %||% TRUE)) {
-        state_map[[key]] <- "shift_scale"
-      }
+    panel_current <- .adaptive_link_probe_panel_for_spoke(out, spoke_id = spoke_id)
+    probe_panel_id_current <- if (nrow(panel_current) > 0L) {
+      as.character(panel_current$probe_panel_id[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
     }
-
-    lag_domain_key <- paste0("phase_b_spoke_", as.integer(spoke_id))
-    lag_domain_reset <- !identical(
-      as.character(lag_domain_key_map[[key]] %||% NA_character_),
-      as.character(lag_domain_key)
+    hub_art <- out$linking$phase_a$artifacts[[as.character(hub_id)]] %||% list()
+    spoke_art <- out$linking$phase_a$artifacts[[as.character(spoke_id)]] %||% list()
+    epoch_signature <- paste(
+      as.character(transform_state),
+      as.character(refit_mode),
+      as.character(lock_mode),
+      as.integer(hub_art$refit_id %||% NA_integer_),
+      as.integer(spoke_art$refit_id %||% NA_integer_),
+      as.character(hub_art$fit_config_hash %||% NA_character_),
+      as.character(spoke_art$fit_config_hash %||% NA_character_),
+      as.character(probe_panel_id_current),
+      sep = "|"
     )
-    lag_domain_key_map[[key]] <- as.character(lag_domain_key)
+    previous_signature <- as.character(epoch_signature_map[[key]] %||% NA_character_)
+    link_epoch_id <- as.integer(epoch_id_map[[key]] %||% 1L)
+    lag_domain_reset <- !is.na(previous_signature) && !identical(previous_signature, epoch_signature)
     if (isTRUE(lag_domain_reset)) {
+      link_epoch_id <- as.integer(link_epoch_id + 1L)
+      stop_counter_map[[key]] <- 0L
+      escalation_counter_map[[key]] <- 0L
       lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
     }
+    epoch_id_map[[key]] <- as.integer(link_epoch_id)
+    epoch_signature_map[[key]] <- as.character(epoch_signature)
+    lag_domain_key <- as.character(epoch_signature)
+    lag_domain_key_map[[key]] <- as.character(lag_domain_key)
 
     lag <- as.integer(out$config$btl_config$stability_lag %||% 2L)
     lag_eligible <- !isTRUE(lag_domain_reset) && !is.na(lag) && lag >= 1L && current_refit_id > lag
@@ -2332,11 +2787,13 @@
     if (isTRUE(lag_eligible) && nrow(link_stage_hist) > 0L) {
       lag_row <- link_stage_hist[
         as.integer(link_stage_hist$refit_id) == lag_refit_id &
-          as.integer(link_stage_hist$spoke_id) == as.integer(spoke_id),
+          as.integer(link_stage_hist$spoke_id) == as.integer(spoke_id) &
+          as.integer(link_stage_hist$link_epoch_id %||% NA_integer_) == as.integer(link_epoch_id),
         ,
         drop = FALSE
       ]
     }
+    lag_eligible <- isTRUE(lag_eligible) && nrow(lag_row) == 1L
     lag_delta <- if (nrow(lag_row) > 0L) as.double(lag_row$delta_spoke_mean[[1L]]) else NA_real_
     lag_log_alpha <- if (nrow(lag_row) > 0L) as.double(lag_row$log_alpha_spoke_mean[[1L]]) else NA_real_
     delta_change <- if (is.finite(lag_delta)) abs(fit$delta_mean - lag_delta) else NA_real_
@@ -2388,6 +2845,21 @@
     }
 
     active <- .adaptive_link_active_item_ids(out, spoke_id = spoke_id, hub_id = hub_id)
+    reliability_stats <- .adaptive_link_global_score_stats_active(
+      state = out,
+      active_ids = active$active_all,
+      spoke_id = spoke_id,
+      hub_id = hub_id,
+      transform_mode = transform_state,
+      delta_mean = fit$delta_mean,
+      log_alpha_mean = fit$log_alpha_mean,
+      fit = fit,
+      refit_mode = refit_mode,
+      hub_lock_mode = lock_mode,
+      shift_only_theta_treatment = theta_treatment_resolved,
+      var_mu_epsilon = as.double(controller$reliability_var_mu_epsilon %||% 1e-6),
+      total_var_epsilon = as.double(controller$reliability_total_var_epsilon %||% 1e-6)
+    )
     reliability_active <- .adaptive_link_reliability_transformed_active(
       state = out,
       active_ids = active$active_all,
@@ -2395,8 +2867,17 @@
       hub_id = hub_id,
       transform_mode = transform_state,
       delta_mean = fit$delta_mean,
-      log_alpha_mean = fit$log_alpha_mean
+      log_alpha_mean = fit$log_alpha_mean,
+      fit = fit,
+      refit_mode = refit_mode,
+      hub_lock_mode = lock_mode,
+      shift_only_theta_treatment = theta_treatment_resolved,
+      var_mu_epsilon = as.double(controller$reliability_var_mu_epsilon %||% 1e-6),
+      total_var_epsilon = as.double(controller$reliability_total_var_epsilon %||% 1e-6)
     )
+    if (!is.finite(reliability_active)) {
+      reliability_active <- as.double(reliability_stats$reliability %||% NA_real_)
+    }
     theta_mean_transformed <- .adaptive_link_transform_theta_mean_for_spoke(
       state = out,
       theta_mean = .adaptive_btl_fit_theta_mean(out$btl_fit %||% list()),
@@ -2423,14 +2904,198 @@
       lag_row = lag_row
     )
     fit_diag <- fit$diagnostics %||% list()
+    hub_anchored <- if (identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
+      TRUE
+    } else if (identical(lock_mode, "free")) {
+      FALSE
+    } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
+      history <- out$refit_meta$theta_mean_history %||% list()
+      current_raw <- history[[length(history)]] %||% numeric()
+      lag_raw <- history[[max(1L, length(history) - lag)]] %||% numeric()
+      hub_items <- as.character(out$items$item_id[as.integer(out$items$set_id) == as.integer(hub_id)])
+      if (!is.numeric(current_raw) || !is.numeric(lag_raw) || is.null(names(current_raw)) || is.null(names(lag_raw))) {
+        FALSE
+      } else {
+        diff <- as.double(current_raw[hub_items] - lag_raw[hub_items])
+        diff <- diff[is.finite(diff)]
+        length(diff) > 0L &&
+          sqrt(mean(diff^2)) <= as.double(controller$hub_theta_rmse_max %||% 0.02)
+      }
+    } else {
+      FALSE
+    }
+    scope_ids <- .adaptive_link_theta_global_scope_ids(
+      state = out,
+      spoke_id = spoke_id,
+      scope = controller$theta_global_rmse_scope %||% "direct_evidence_spoke"
+    )
+    theta_global_rmse_lagged <- if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
+      .adaptive_link_theta_global_rmse_lagged(
+        state = out,
+        spoke_id = spoke_id,
+        hub_id = hub_id,
+        scope_ids = scope_ids,
+        transform_mode = transform_state,
+        delta_mean = fit$delta_mean,
+        log_alpha_mean = fit$log_alpha_mean,
+        lag_row = lag_row
+      )
+    } else {
+      NA_real_
+    }
+    probe_edges_realized_tbl <- .adaptive_link_probe_edges_realized(
+      state = out,
+      spoke_id = spoke_id,
+      epoch_id = link_epoch_id
+    )
+    probe_brier <- .adaptive_link_probe_brier_for_fit(
+      edges = probe_edges_realized_tbl,
+      hub_theta = ppc_hub_theta,
+      spoke_theta = ppc_spoke_theta,
+      delta_mean = fit$delta_mean,
+      log_alpha_mean = fit$log_alpha_mean,
+      judge_params = judge_params
+    )
+    probe_pred_rmse_lagged <- if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
+      .adaptive_link_probe_pred_rmse_lagged_for_fit(
+        edges = probe_edges_realized_tbl,
+        hub_theta = ppc_hub_theta,
+        spoke_theta = ppc_spoke_theta,
+        delta_mean = fit$delta_mean,
+        log_alpha_mean = fit$log_alpha_mean,
+        lag_delta_mean = lag_delta,
+        lag_log_alpha_mean = lag_log_alpha,
+        judge_params = judge_params
+      )
+    } else {
+      NA_real_
+    }
+    link_lag_eligible <- isTRUE(lag_eligible)
+    link_min_refit_eligible <- isTRUE(current_refit_id >= as.integer(controller$min_refits_in_phase_b %||% 3L))
+    link_stop_gate_open <- isTRUE(!is.na(reliability_active)) &&
+      isTRUE(nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 30L))
+    link_stop_eligible <- isTRUE(link_lag_eligible) &&
+      isTRUE(link_min_refit_eligible) &&
+      isTRUE(link_stop_gate_open)
+    link_stop_pass_now <- isTRUE(link_stop_eligible) &&
+      isTRUE(hub_anchored) &&
+      is.finite(reliability_active) &&
+      reliability_active >= as.double(controller$link_stop_reliability_min %||% 0.90) &&
+      is.finite(probe_brier) &&
+      probe_brier <= as.double(controller$probe_brier_max %||% 0.19) &&
+      is.finite(probe_pred_rmse_lagged) &&
+      probe_pred_rmse_lagged <= as.double(controller$probe_pred_rmse_max %||% 0.015) &&
+      is.finite(theta_global_rmse_lagged) &&
+      theta_global_rmse_lagged <= as.double(controller$theta_global_rmse_max %||% 0.04)
+    stop_counter <- if (isTRUE(link_stop_pass_now)) {
+      as.integer(stop_counter_map[[key]] %||% 0L) + 1L
+    } else {
+      0L
+    }
+    stop_counter_map[[key]] <- as.integer(stop_counter)
+
+    scale_ready <- FALSE
+    if (nrow(cross_all) > 0L) {
+      spoke_item <- hub_item <- NULL
+      active_non_probe_all <- cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE]
+      bins_used <- as.integer(coverage_bins_map[[key]] %||% 3L)
+      score_map <- .adaptive_link_phase_b_routing_scores(
+        state = out,
+        controller = controller,
+        active_ids = active$active_spoke,
+        hub_id = hub_id
+      )
+      spoke_bins <- .adaptive_link_probe_quantile_bins(active$active_spoke, score_map[active$active_spoke], bins_used)
+      spoke_bin_tbl <- tibble::tibble(
+        spoke_item = names(spoke_bins),
+        spoke_bin = as.integer(spoke_bins)
+      )
+      realized_tbl <- tibble::as_tibble(active_non_probe_all) |>
+        dplyr::distinct(spoke_item, hub_item)
+      realized_bins <- dplyr::left_join(realized_tbl, spoke_bin_tbl, by = "spoke_item")
+      per_bin_items <- table(realized_bins$spoke_bin)
+      outer_ok <- all(vapply(c(1L, bins_used), function(bin_id) {
+        rows <- realized_bins[realized_bins$spoke_bin == bin_id, , drop = FALSE]
+        if (nrow(rows) < 1L) {
+          return(FALSE)
+        }
+        any(table(rows$spoke_item) >= 2L)
+      }, logical(1L)))
+      scale_ready <- nrow(active_non_probe_all) >= as.integer(controller$shift_scale_min_cross_set_edges %||% 18L) &&
+        all(vapply(seq_len(max(1L, bins_used)), function(bin_id) {
+          count_bin <- if (as.character(bin_id) %in% names(per_bin_items)) {
+            as.integer(per_bin_items[[as.character(bin_id)]])
+          } else {
+            0L
+          }
+          as.integer(count_bin) >=
+            as.integer(controller$shift_scale_min_distinct_spoke_items_per_bin %||% 2L)
+        }, logical(1L))) &&
+        isTRUE(outer_ok)
+    }
+    alt_fit <- list(converged = FALSE, delta_mean = NA_real_, log_alpha_mean = NA_real_, log_alpha_sd = NA_real_)
+    probe_brier_shift_only <- if (identical(transform_state, "shift_only")) probe_brier else NA_real_
+    probe_brier_shift_scale <- NA_real_
+    probe_brier_delta <- NA_real_
+    escalated_this_refit <- FALSE
+    escalation_counter <- as.integer(escalation_counter_map[[key]] %||% 0L)
+    if (!isTRUE(transform_frozen) &&
+      identical(transform_policy, "auto") &&
+      identical(refit_mode, "shift_only") &&
+      identical(transform_state, "shift_only") &&
+      isTRUE(link_stop_eligible) &&
+      isTRUE(scale_ready) &&
+      nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 30L)) {
+      alt_fit <- .adaptive_link_fit_transform_alt_shift_scale(
+        cross_edges = cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE],
+        hub_theta = hub_theta,
+        spoke_theta = spoke_theta,
+        delta_init = fit$delta_mean
+      )
+      if (isTRUE(alt_fit$converged)) {
+        probe_brier_shift_scale <- .adaptive_link_probe_brier_for_fit(
+          edges = probe_edges_realized_tbl,
+          hub_theta = hub_theta,
+          spoke_theta = spoke_theta,
+          delta_mean = alt_fit$delta_mean,
+          log_alpha_mean = alt_fit$log_alpha_mean,
+          judge_params = judge_params
+        )
+        probe_brier_delta <- as.double(probe_brier_shift_only - probe_brier_shift_scale)
+      }
+      if (isTRUE(alt_fit$converged) &&
+        is.finite(probe_brier_delta) &&
+        probe_brier_delta >= as.double(controller$probe_brier_delta_min %||% 0.005) &&
+        is.finite(alt_fit$log_alpha_sd) &&
+        alt_fit$log_alpha_sd <= as.double(controller$logalpha_sd_guardrail %||% 0.10)) {
+        escalation_counter <- escalation_counter + 1L
+      } else {
+        escalation_counter <- 0L
+      }
+      if (escalation_counter >= as.integer(controller$link_transform_escalation_refits_required %||% 2L)) {
+        escalated_this_refit <- TRUE
+        escalation_counter <- 0L
+        transform_state <- "shift_scale"
+        state_map[[key]] <- "shift_scale"
+        fit$delta_mean <- as.double(alt_fit$delta_mean %||% fit$delta_mean)
+        fit$log_alpha_mean <- as.double(alt_fit$log_alpha_mean %||% 0)
+        fit$log_alpha_sd <- as.double(alt_fit$log_alpha_sd %||% NA_real_)
+        link_epoch_id <- as.integer(link_epoch_id + 1L)
+        epoch_id_map[[key]] <- as.integer(link_epoch_id)
+        stop_counter <- 0L
+        stop_counter_map[[key]] <- 0L
+      }
+    } else {
+      escalation_counter <- 0L
+    }
+    escalation_counter_map[[key]] <- as.integer(escalation_counter)
 
     link_identified <- is.finite(reliability_active) &&
       reliability_active >= as.double(controller$link_identified_reliability_min %||% 0.80) &&
       is.finite(ts_btl_rank_active) &&
-      ts_btl_rank_active >= as.double(controller$link_rank_corr_min %||% 0.90) &&
-      isTRUE(delta_sd_pass) &&
-      (identical(transform_state, "shift_only") || isTRUE(log_alpha_sd_pass))
+      ts_btl_rank_active >= as.double(controller$link_rank_corr_min %||% 0.90)
     link_identified_map[[key]] <- isTRUE(link_identified)
+    state_map[[key]] <- as.character(transform_state)
 
     last_delta[[key]] <- as.double(fit$delta_mean)
     last_log_alpha[[key]] <- as.double(fit$log_alpha_mean %||% NA_real_)
@@ -2453,6 +3118,7 @@
       log_alpha_sd_pass = as.logical(log_alpha_sd_pass),
       delta_sd_max_used = as.double(delta_sd_max_used),
       link_reliability = as.double(reliability_active),
+      reliability_link_global = as.double(reliability_active),
       link_reliability_identified_pass = as.logical(
         is.finite(reliability_active) &&
           reliability_active >= as.double(controller$link_identified_reliability_min %||% 0.80)
@@ -2468,10 +3134,19 @@
       ),
       lag_domain_key = as.character(lag_domain_key),
       lag_domain_reset = as.logical(lag_domain_reset),
+      link_epoch_id = as.integer(link_epoch_id),
       lag_eligible = as.logical(lag_eligible),
+      link_lag_eligible = as.logical(link_lag_eligible),
+      link_min_refit_eligible = as.logical(link_min_refit_eligible),
+      link_stop_gate_open = as.logical(link_stop_gate_open),
       rank_stability_lagged = as.double(rank_stability$rho_rank_lagged %||% NA_real_),
       rank_stability_pass = as.logical(rank_stability$rho_rank_lagged_pass %||% FALSE),
       link_identified = as.logical(link_identified),
+      link_stop_eligible = as.logical(link_stop_eligible),
+      stop_consecutive_pass_count = as.integer(stop_counter),
+      link_stop_pass = as.logical(
+        stop_counter >= as.integer(controller$stability_consecutive_k %||% 2L)
+      ),
       ppc_brier_cross_active = as.double(ppc_brier_cross_active),
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
@@ -2484,7 +3159,27 @@
       link_diagnostics_divergences_pass = as.logical(fit_diag$diagnostics_divergences_pass %||% NA),
       link_diagnostics_rhat_pass = as.logical(fit_diag$diagnostics_rhat_pass %||% NA),
       link_diagnostics_ess_pass = as.logical(fit_diag$diagnostics_ess_pass %||% NA),
+      hub_anchored = as.logical(hub_anchored),
+      scale_ready = as.logical(scale_ready),
+      probe_brier = as.double(probe_brier),
+      probe_pred_rmse_lagged = as.double(probe_pred_rmse_lagged),
+      theta_global_rmse_scope = as.character(controller$theta_global_rmse_scope %||% "direct_evidence_spoke"),
+      theta_global_rmse_lagged = as.double(theta_global_rmse_lagged),
       escalated_this_refit = as.logical(escalated_this_refit),
+      escalation_consecutive_pass_count = as.integer(escalation_counter),
+      probe_brier_shift_only = as.double(probe_brier_shift_only),
+      probe_brier_shift_scale = as.double(probe_brier_shift_scale),
+      probe_brier_delta = as.double(probe_brier_delta),
+      log_alpha_spoke_sd_alt = as.double(alt_fit$log_alpha_sd %||% NA_real_),
+      alt_eval_active_edges = as.integer(nrow(cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE])),
+      alt_eval_converged = as.logical(alt_fit$converged %||% FALSE),
+      alternative_fit_method = "map_laplace",
+      probe_brier_delta_min_used = as.double(controller$probe_brier_delta_min %||% 0.005),
+      logalpha_sd_guardrail_used = as.double(controller$logalpha_sd_guardrail %||% 0.10),
+      probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 30L),
+      link_transform_escalation_refits_required_used = as.integer(
+        controller$link_transform_escalation_refits_required %||% 2L
+      ),
       n_probe_pairs_since_last_refit = as.integer(nrow(cross_since_probe)),
       n_cross_edges_active_since_last_refit = as.integer(nrow(cross_since_active)),
       n_cross_edges_probe_since_last_refit = as.integer(nrow(cross_since_probe)),
@@ -2492,7 +3187,12 @@
       coverage_bins_used = as.integer(coverage_bins_map[[key]] %||% NA_integer_),
       coverage_source = as.character(coverage_source_map[[key]] %||% NA_character_),
       active_item_count_hub = as.integer(length(active$active_hub)),
-      active_item_count_spoke = as.integer(length(active$active_spoke)),
+      active_item_count_spoke = as.integer(length(scope_ids)),
+      active_item_count_total = as.integer(length(active$active_all)),
+      var_mean_theta_global_active = as.double(reliability_stats$V_mu %||% NA_real_),
+      mean_var_theta_global_active = as.double(reliability_stats$V_post %||% NA_real_),
+      reliability_var_mu_epsilon_used = as.double(controller$reliability_var_mu_epsilon %||% 1e-6),
+      reliability_total_var_epsilon_used = as.double(controller$reliability_total_var_epsilon %||% 1e-6),
       uncertainty = as.double(fit$delta_sd + if (is.finite(fit$log_alpha_sd)) fit$log_alpha_sd else 0)
     )
   }
@@ -2520,7 +3220,6 @@
   }
 
   controller$link_refit_stats_by_spoke <- link_stats
-  controller$link_transform_bad_refits_by_spoke <- bad_refits
   controller$link_transform_state_by_spoke <- state_map
   controller$link_transform_mode_by_spoke <- state_map
   controller$link_transform_last_delta_by_spoke <- last_delta
@@ -2529,6 +3228,10 @@
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
   controller$linking_identified_by_spoke <- link_identified_map
+  controller$link_stop_consecutive_pass_count_by_spoke <- stop_counter_map
+  controller$link_escalation_consecutive_pass_count_by_spoke <- escalation_counter_map
+  controller$link_epoch_id_by_spoke <- epoch_id_map
+  controller$link_epoch_signature_by_spoke <- epoch_signature_map
   controller$link_lag_domain_key_by_spoke <- lag_domain_key_map
   controller$link_lag_domain_reset_refit_id_by_spoke <- lag_domain_reset_refit_map
   controller$linking_identified <- any(unlist(link_identified_map), na.rm = TRUE)
@@ -2745,32 +3448,12 @@
     }
     d_opt_n_pairs <- as.integer(d_opt_entry$it_n_pairs_accumulated %||% 0L)
     reliability_stop_pass <- as.logical(stats_row$link_reliability_stop_pass %||% NA)
-    delta_sd_pass <- as.logical(stats_row$delta_sd_pass %||% NA)
-    log_alpha_sd_pass <- as.logical(stats_row$log_alpha_sd_pass %||% NA)
-    lag_eligible <- isTRUE(stats_row$lag_eligible %||% FALSE)
-    delta_change_pass <- as.logical(stats_row$delta_change_pass %||% NA)
-    log_alpha_change_pass <- as.logical(stats_row$log_alpha_change_pass %||% NA)
-    rank_stability_pass <- as.logical(stats_row$rank_stability_pass %||% NA)
-    required_defined <- !is.na(diagnostics_pass) &&
-      !is.na(reliability_stop_pass) &&
-      !is.na(delta_sd_pass) &&
-      !is.na(delta_change_pass) &&
-      !is.na(rank_stability_pass)
-    if (identical(transform_state, "shift_scale")) {
-      required_defined <- isTRUE(required_defined) &&
-        !is.na(log_alpha_sd_pass) &&
-        !is.na(log_alpha_change_pass)
-    }
-    # Eligibility means all required stop gates are defined at this refit.
-    link_stop_eligible <- isTRUE(lag_eligible) && isTRUE(required_defined)
-    link_stop_pass <- isTRUE(link_stop_eligible) &&
-      isTRUE(diagnostics_pass) &&
-      isTRUE(reliability_stop_pass) &&
-      isTRUE(delta_sd_pass) &&
-      (isTRUE(log_alpha_sd_pass) || identical(transform_state, "shift_only")) &&
-      isTRUE(delta_change_pass) &&
-      (isTRUE(log_alpha_change_pass) || identical(transform_state, "shift_only")) &&
-      isTRUE(rank_stability_pass)
+    lag_eligible <- as.logical(stats_row$link_lag_eligible %||% stats_row$lag_eligible %||% FALSE)
+    link_min_refit_eligible <- as.logical(stats_row$link_min_refit_eligible %||% FALSE)
+    link_stop_gate_open <- as.logical(stats_row$link_stop_gate_open %||% FALSE)
+    link_stop_eligible <- as.logical(stats_row$link_stop_eligible %||%
+      (isTRUE(lag_eligible) && isTRUE(link_min_refit_eligible) && isTRUE(link_stop_gate_open)))
+    link_stop_pass <- as.logical(stats_row$link_stop_pass %||% FALSE)
     transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE) || isTRUE(link_stop_pass)
     probe_panel <- .adaptive_link_probe_panel_for_spoke(
       state,
@@ -2829,12 +3512,19 @@
       delta_sd_pass = as.logical(stats_row$delta_sd_pass %||% NA),
       log_alpha_sd_pass = as.logical(stats_row$log_alpha_sd_pass %||% NA),
       reliability_EAP_link = as.double(stats_row$link_reliability %||% NA_real_),
+      reliability_link_global = as.double(
+        stats_row$reliability_link_global %||% stats_row$link_reliability %||% NA_real_
+      ),
       reliability_stop_pass = as.logical(stats_row$link_reliability_stop_pass %||% NA),
       linking_identified = as.logical(linking_identified),
       lag_eligible = as.logical(stats_row$lag_eligible %||% FALSE),
+      link_lag_eligible = as.logical(stats_row$link_lag_eligible %||% stats_row$lag_eligible %||% FALSE),
+      link_min_refit_eligible = as.logical(stats_row$link_min_refit_eligible %||% FALSE),
+      link_stop_gate_open = as.logical(stats_row$link_stop_gate_open %||% FALSE),
       rank_stability_lagged = as.double(stats_row$rank_stability_lagged %||% NA_real_),
       rank_stability_pass = as.logical(stats_row$rank_stability_pass %||% FALSE),
       link_stop_eligible = as.logical(link_stop_eligible),
+      stop_consecutive_pass_count = as.integer(stats_row$stop_consecutive_pass_count %||% 0L),
       link_stop_pass = as.logical(link_stop_pass),
       transform_frozen = as.logical(transform_frozen),
       transform_frozen_refit_id = as.integer(controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
@@ -2844,20 +3534,20 @@
       ppc_brier_cross_active = as.double(stats_row$ppc_brier_cross_active %||% NA_real_),
       ppc_brier_cross_probe = as.double(stats_row$ppc_brier_cross_probe %||% NA_real_),
       ppc_brier_cross = as.double(stats_row$ppc_brier_cross %||% NA_real_),
-      hub_anchored = NA,
-      scale_ready = NA,
+      hub_anchored = as.logical(stats_row$hub_anchored %||% NA),
+      scale_ready = as.logical(stats_row$scale_ready %||% NA),
       link_diagnostics_divergences = as.integer(stats_row$link_diagnostics_divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(stats_row$link_diagnostics_max_rhat %||% NA_real_),
       link_diagnostics_min_ess_bulk = as.double(stats_row$link_diagnostics_min_ess_bulk %||% NA_real_),
       link_diagnostics_divergences_pass = as.logical(stats_row$link_diagnostics_divergences_pass %||% NA),
       link_diagnostics_rhat_pass = as.logical(stats_row$link_diagnostics_rhat_pass %||% NA),
       link_diagnostics_ess_pass = as.logical(stats_row$link_diagnostics_ess_pass %||% NA),
-      escalation_consecutive_pass_count = as.integer(NA_integer_),
+      escalation_consecutive_pass_count = as.integer(stats_row$escalation_consecutive_pass_count %||% 0L),
       escalated_this_refit = as.logical(stats_row$escalated_this_refit %||% FALSE),
-      probe_brier_shift_only = as.double(NA_real_),
-      probe_brier_shift_scale = as.double(NA_real_),
-      probe_brier_delta = as.double(NA_real_),
-      log_alpha_spoke_sd_alt = as.double(NA_real_),
+      probe_brier_shift_only = as.double(stats_row$probe_brier_shift_only %||% NA_real_),
+      probe_brier_shift_scale = as.double(stats_row$probe_brier_shift_scale %||% NA_real_),
+      probe_brier_delta = as.double(stats_row$probe_brier_delta %||% NA_real_),
+      log_alpha_spoke_sd_alt = as.double(stats_row$log_alpha_spoke_sd_alt %||% NA_real_),
       n_pairs_cross_set_done = as.integer(n_pairs_done),
       n_unique_cross_pairs_seen = as.integer(n_unique),
       n_probe_pairs_since_last_refit = as.integer(stats_row$n_probe_pairs_since_last_refit %||% n_pairs_since_probe),
@@ -2941,10 +3631,13 @@
       active_item_count_hub = as.integer(stats_row$active_item_count_hub %||% NA_integer_),
       active_item_count_spoke = as.integer(stats_row$active_item_count_spoke %||% NA_integer_),
       active_item_count_total = as.integer(
-        (stats_row$active_item_count_hub %||% 0L) + (stats_row$active_item_count_spoke %||% 0L)
+        stats_row$active_item_count_total %||%
+          ((stats_row$active_item_count_hub %||% 0L) + (stats_row$active_item_count_spoke %||% 0L))
       ),
-      var_mean_theta_global_active = as.double(NA_real_),
-      mean_var_theta_global_active = as.double(NA_real_),
+      var_mean_theta_global_active = as.double(stats_row$var_mean_theta_global_active %||% NA_real_),
+      mean_var_theta_global_active = as.double(stats_row$mean_var_theta_global_active %||% NA_real_),
+      reliability_var_mu_epsilon_used = as.double(stats_row$reliability_var_mu_epsilon_used %||% NA_real_),
+      reliability_total_var_epsilon_used = as.double(stats_row$reliability_total_var_epsilon_used %||% NA_real_),
       it_logdet_start = as.double(d_opt_logdet_start),
       it_logdet_end = as.double(d_opt_logdet_end),
       it_trace_end = as.double(d_opt_trace_end),
@@ -2960,6 +3653,29 @@
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
       probe_panel_reallocation_used = as.logical(FALSE),
       probe_pred_cache_used = as.logical(probe_pred_cache_used),
+      probe_brier = as.double(stats_row$probe_brier %||% NA_real_),
+      probe_pred_rmse_lagged = as.double(stats_row$probe_pred_rmse_lagged %||% NA_real_),
+      theta_global_rmse_scope = as.character(
+        stats_row$theta_global_rmse_scope %||% controller$theta_global_rmse_scope %||% "direct_evidence_spoke"
+      ),
+      theta_global_rmse_lagged = as.double(stats_row$theta_global_rmse_lagged %||% NA_real_),
+      probe_edges_min_for_stop_used = as.integer(
+        stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 30L
+      ),
+      alternative_fit_method = as.character(stats_row$alternative_fit_method %||% NA_character_),
+      alt_eval_active_edges = as.integer(stats_row$alt_eval_active_edges %||% NA_integer_),
+      alt_eval_converged = as.logical(stats_row$alt_eval_converged %||% NA),
+      probe_brier_delta_min_used = as.double(
+        stats_row$probe_brier_delta_min_used %||% controller$probe_brier_delta_min %||% 0.005
+      ),
+      logalpha_sd_guardrail_used = as.double(
+        stats_row$logalpha_sd_guardrail_used %||% controller$logalpha_sd_guardrail %||% 0.10
+      ),
+      link_transform_escalation_refits_required_used = as.integer(
+        stats_row$link_transform_escalation_refits_required_used %||%
+          controller$link_transform_escalation_refits_required %||%
+          2L
+      ),
       probe_edges_count_toward_active_constraints_used = as.logical(
         controller$probe_edges_count_toward_active_constraints %||% FALSE
       ),

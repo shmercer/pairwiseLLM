@@ -1326,7 +1326,7 @@ test_that("cross-set logged predictive probability uses final A/B orientation", 
   expect_equal(out$U0_ij, 0.16, tolerance = 1e-12)
 })
 
-test_that("active linking hub domain uses the same hub-only anchors as phase-B routing", {
+test_that("active linking hub domain excludes anchor-only hub items before any committed cross-set edge", {
   items <- tibble::tibble(
     item_id = c(
       "h1", "h2", "h3", "h4", "h5", "h6", "h7", "h8",
@@ -1351,16 +1351,9 @@ test_that("active linking hub domain uses the same hub-only anchors as phase-B r
     active_ids = c(hub_ids, as.character(state$items$item_id[state$items$set_id == 2L])),
     hub_id = 1L
   )
-  expected_anchor <- sort(pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
-    state = state,
-    hub_ids = hub_ids,
-    hub_scores = routing_scores,
-    defaults = defaults
-  ))
-
   active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
   got_anchor <- sort(intersect(active$active_hub, hub_ids))
-  expect_identical(got_anchor, expected_anchor)
+  expect_identical(got_anchor, character())
 })
 
 test_that("phase-B routing helpers enforce finite inputs and anchor fallback rules", {
