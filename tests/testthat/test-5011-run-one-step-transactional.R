@@ -243,6 +243,63 @@ test_that("run_one_step logs probe rows without linking d-opt utility fields", {
   expect_true(is.na(row$cross_set_utility_pre[[1L]]))
 })
 
+test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 41L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(items = tibble::tibble(
+        global_item_id = c("gh1", "gh2"),
+        theta_raw_mean = c(0.2, -0.2),
+        theta_raw_sd = c(0.1, 0.1),
+        rank_mu_raw = c(1, 2)
+      )),
+      `2` = list(items = tibble::tibble(
+        global_item_id = c("gs21", "gs22"),
+        theta_raw_mean = c(0.1, -0.1),
+        theta_raw_sd = c(0.1, 0.1),
+        rank_mu_raw = c(1, 2)
+      ))
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$linking$probe$collect_holdout_now_by_spoke <- list(`2` = TRUE)
+
+  out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
+  expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")
+  expect_true(isTRUE(row$is_probe_step[[1L]]))
+  expect_true(is.na(row$utility_mode[[1L]]))
+  expect_true(is.na(row$cross_set_utility_pre[[1L]]))
+  expect_equal(nrow(out$history_pairs), 1L)
+  expect_true(isTRUE(out$history_pairs$is_probe_step[[1L]]))
+  expect_true(is.list(out$linking$probe$panels_by_spoke))
+  expect_true(nrow(out$linking$probe$realized_edges) >= 1L)
+})
+
 test_that("invalid linking step does not mutate controller link routing state", {
   items <- tibble::tibble(
     item_id = c("a", "b"),

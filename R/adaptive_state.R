@@ -64,6 +64,68 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_empty_panel <- function() {
+  tibble::tibble(
+    probe_panel_id = character(),
+    link_epoch_id = integer(),
+    spoke_id = integer(),
+    hub_item_id = character(),
+    spoke_item_id = character(),
+    spoke_bin = integer(),
+    hub_bin = integer(),
+    planned_rank = integer(),
+    pair_key = character(),
+    realized = logical(),
+    realized_step_id = integer(),
+    realized_pair_id = integer(),
+    realized_run_mode = character()
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_empty_cache <- function() {
+  tibble::tibble(
+    refit_id = integer(),
+    spoke_id = integer(),
+    link_epoch_id = integer(),
+    probe_panel_id = character(),
+    hub_item_id = character(),
+    spoke_item_id = character(),
+    pred_prob = double()
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_empty_realized_log <- function() {
+  tibble::tibble(
+    step_id = integer(),
+    pair_id = integer(),
+    run_mode = character(),
+    spoke_id = integer(),
+    link_epoch_id = integer(),
+    probe_panel_id = character(),
+    hub_item_id = character(),
+    spoke_item_id = character(),
+    pair_key = character(),
+    Y = integer()
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_empty_state <- function() {
+  list(
+    panels_by_spoke = list(),
+    prediction_cache = .adaptive_link_probe_empty_cache(),
+    realized_edges = .adaptive_link_probe_empty_realized_log(),
+    collect_holdout_now_by_spoke = list()
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_stage_order <- function() {
   c("anchor_link", "long_link", "mid_link", "local_link")
 }
@@ -225,6 +287,8 @@
     link_transform_escalation_is_one_way = TRUE,
     max_pairs_after_stop = 0L,
     probe_pairs_per_refit_per_spoke = 2L,
+    probe_edges_min_for_stop = 30L,
+    probe_edges_count_toward_active_constraints = FALSE,
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
     allow_spoke_spoke_cross_set = FALSE,
@@ -315,6 +379,8 @@
     "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
+    "probe_edges_min_for_stop",
+    "probe_edges_count_toward_active_constraints",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
     "allow_spoke_spoke_cross_set",
@@ -507,6 +573,10 @@
   out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
   out$max_pairs_after_stop <- read_integer("max_pairs_after_stop", 0L, Inf)
   out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
+  out$probe_edges_min_for_stop <- read_integer("probe_edges_min_for_stop", 1L, Inf)
+  out$probe_edges_count_toward_active_constraints <- read_logical(
+    "probe_edges_count_toward_active_constraints"
+  )
   out$spoke_quantile_coverage_bins <- read_integer("spoke_quantile_coverage_bins", 1L, Inf)
   out$spoke_quantile_coverage_min_per_bin_per_refit <- read_integer(
     "spoke_quantile_coverage_min_per_bin_per_refit",
@@ -1153,6 +1223,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         hub_id = 1L,
         spoke_ids = integer(),
         is_multi_set = length(unique(set_ids)) > 1L,
+        probe = .adaptive_link_probe_empty_state(),
         phase_a = list(
           set_status = .adaptive_phase_a_empty_state(unique(set_ids)),
           artifacts = list(),

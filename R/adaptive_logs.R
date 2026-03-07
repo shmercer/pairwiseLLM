@@ -303,11 +303,13 @@ schema_link_stage_log <- c(
   ppc_calibration_id = "character",
   cross_set_ppc_brier_max_used = "double",
   probe_panel_id = "character",
+  N_spoke_phase_b_start = "integer",
   probe_edges_planned = "integer",
   probe_edges_realized = "integer",
   probe_panel_shortfall = "integer",
   probe_panel_reallocation_used = "logical",
   probe_pred_cache_used = "logical",
+  probe_edges_count_toward_active_constraints_used = "logical",
   lag_domain_key = "character",
   lag_domain_reset = "logical"
 )

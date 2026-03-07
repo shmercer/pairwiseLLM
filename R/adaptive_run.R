@@ -205,6 +205,305 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_state <- function(state) {
+  probe <- state$linking$probe %||% NULL
+  if (!is.list(probe)) {
+    probe <- .adaptive_link_probe_empty_state()
+  }
+  probe$panels_by_spoke <- probe$panels_by_spoke %||% list()
+  probe$prediction_cache <- tibble::as_tibble(
+    probe$prediction_cache %||% .adaptive_link_probe_empty_cache()
+  )
+  probe$realized_edges <- tibble::as_tibble(
+    probe$realized_edges %||% .adaptive_link_probe_empty_realized_log()
+  )
+  probe$collect_holdout_now_by_spoke <- probe$collect_holdout_now_by_spoke %||% list()
+  probe
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_panel_size <- function(n_spoke_items) {
+  .btl_mcmc_clamp(40L, 160L, as.integer(ceiling(0.25 * as.integer(n_spoke_items))))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_epoch_for_spoke <- function(state, spoke_id) {
+  controller <- .adaptive_controller_resolve(state)
+  stats <- controller$link_refit_stats_by_spoke %||% list()
+  as.integer(stats[[as.character(spoke_id)]]$link_epoch_id %||% 1L)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_panel_id <- function(panel_tbl) {
+  panel_tbl <- tibble::as_tibble(panel_tbl)
+  keys <- if (nrow(panel_tbl) > 0L) {
+    paste(panel_tbl$hub_item_id, panel_tbl$spoke_item_id, sep = "::")
+  } else {
+    character()
+  }
+  tmp <- tempfile("probe_panel_", fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+  saveRDS(keys, tmp)
+  unname(tools::md5sum(tmp))[[1L]]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_panel_for_spoke <- function(state, spoke_id, epoch_id = NULL) {
+  probe <- .adaptive_link_probe_state(state)
+  panel <- probe$panels_by_spoke[[as.character(as.integer(spoke_id))]] %||% .adaptive_link_probe_empty_panel()
+  panel <- tibble::as_tibble(panel)
+  if (!is.null(epoch_id)) {
+    panel <- panel[as.integer(panel$link_epoch_id) == as.integer(epoch_id), , drop = FALSE]
+  }
+  panel
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_reserved_keys <- function(state, spoke_id, epoch_id = NULL) {
+  panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
+  unique(as.character(panel$pair_key))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_count <- function(state, spoke_id, epoch_id = NULL) {
+  panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
+  as.integer(sum(panel$realized %in% TRUE, na.rm = TRUE))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_next_pair <- function(state, spoke_id, epoch_id = NULL) {
+  panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
+  pending <- panel[!panel$realized %in% TRUE, , drop = FALSE]
+  if (nrow(pending) < 1L) {
+    return(NULL)
+  }
+  pending <- pending[
+    order(as.integer(pending$planned_rank), pending$hub_item_id, pending$spoke_item_id),
+    ,
+    drop = FALSE
+  ]
+  pending[1L, , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_select_holdout <- function(state, step_id, spoke_id) {
+  probe_row <- .adaptive_link_probe_next_pair(
+    state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = .adaptive_link_probe_epoch_for_spoke(state, spoke_id)
+  )
+  if (is.null(probe_row) || nrow(probe_row) != 1L) {
+    return(NULL)
+  }
+
+  i_id <- as.character(probe_row$hub_item_id[[1L]])
+  j_id <- as.character(probe_row$spoke_item_id[[1L]])
+  history <- .adaptive_history_tbl(state)
+  counts <- .adaptive_pair_counts(history, state$item_ids)
+  recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
+  order_vals <- .adaptive_assign_order(
+    tibble::tibble(i = i_id, j = j_id),
+    counts$posA,
+    counts$posB,
+    counts$pair_last_order,
+    seed_base = as.integer(state$meta$seed %||% 1L)
+  )
+  idx_map <- state$item_index %||% stats::setNames(seq_along(state$item_ids), state$item_ids)
+  trueskill_items <- state$trueskill_state$items
+  mu_vals <- stats::setNames(as.double(trueskill_items$mu), as.character(trueskill_items$item_id))
+  sigma_vals <- stats::setNames(as.double(trueskill_items$sigma), as.character(trueskill_items$item_id))
+  A_id <- as.character(order_vals[["A_id"]])
+  B_id <- as.character(order_vals[["B_id"]])
+  p_ij <- .adaptive_link_predictive_prob_oriented(
+    state = state,
+    controller = .adaptive_controller_resolve(state),
+    spoke_id = as.integer(spoke_id),
+    A_id = A_id,
+    B_id = B_id
+  )
+
+  list(
+    i = as.integer(idx_map[[i_id]]),
+    j = as.integer(idx_map[[j_id]]),
+    A = as.integer(idx_map[[A_id]]),
+    B = as.integer(idx_map[[B_id]]),
+    is_explore_step = FALSE,
+    explore_mode = NA_character_,
+    explore_reason = NA_character_,
+    explore_rate_used = as.double(NA_real_),
+    local_priority_mode = NA_character_,
+    long_gate_pass = NA,
+    long_gate_reason = NA_character_,
+    star_override_used = FALSE,
+    star_override_reason = NA_character_,
+    candidate_starved = FALSE,
+    fallback_used = "probe_panel",
+    fallback_path = "probe_panel",
+    starvation_reason = NA_character_,
+    round_id = as.integer(state$round$round_id %||% NA_integer_),
+    round_stage = "probe_panel",
+    pair_type = "probe_panel",
+    used_in_round_i = NA_integer_,
+    used_in_round_j = NA_integer_,
+    is_anchor_i = NA,
+    is_anchor_j = NA,
+    stratum_i = NA_integer_,
+    stratum_j = NA_integer_,
+    dist_stratum = NA_integer_,
+    stage_committed_so_far = NA_integer_,
+    stage_quota = NA_integer_,
+    n_candidates_generated = 1L,
+    n_candidates_after_hard_filters = 1L,
+    n_candidates_after_duplicates = 1L,
+    n_candidates_after_star_caps = 1L,
+    n_candidates_scored = 1L,
+    deg_i = as.integer(counts$deg[[i_id]]),
+    deg_j = as.integer(counts$deg[[j_id]]),
+    recent_deg_i = as.integer(recent_deg[[i_id]]),
+    recent_deg_j = as.integer(recent_deg[[j_id]]),
+    mu_i = as.double(mu_vals[[i_id]]),
+    mu_j = as.double(mu_vals[[j_id]]),
+    sigma_i = as.double(sigma_vals[[i_id]]),
+    sigma_j = as.double(sigma_vals[[j_id]]),
+    p_ij = as.double(p_ij),
+    U0_ij = as.double(p_ij * (1 - p_ij)),
+    utility_mode = NA_character_,
+    star_cap_rejects = 0L,
+    star_cap_reject_items = 0L,
+    link_spoke_id_selected = as.integer(spoke_id),
+    run_mode = "link_probe_holdout",
+    probe_panel_id = as.character(probe_row$probe_panel_id[[1L]]),
+    link_epoch_id_selected = as.integer(probe_row$link_epoch_id[[1L]])
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_register_commit <- function(state, step_row) {
+  row <- tibble::as_tibble(step_row)
+  if (nrow(row) != 1L || !isTRUE(row$is_probe_step[[1L]] %||% FALSE)) {
+    return(state)
+  }
+  out <- state
+  out$linking <- out$linking %||% list()
+  probe <- .adaptive_link_probe_state(out)
+  spoke_id <- as.integer(row$link_spoke_id[[1L]] %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    out$linking$probe <- probe
+    return(out)
+  }
+
+  ids <- as.character(out$item_ids)
+  A_id <- ids[as.integer(row$A[[1L]] %||% NA_integer_)]
+  B_id <- ids[as.integer(row$B[[1L]] %||% NA_integer_)]
+  set_map <- stats::setNames(as.integer(out$items$set_id), as.character(out$items$item_id))
+  hub_id <- as.integer(.adaptive_controller_resolve(out)$hub_id %||% 1L)
+  hub_item_id <- if (as.integer(set_map[[A_id]] %||% NA_integer_) == hub_id) A_id else B_id
+  spoke_item_id <- if (identical(hub_item_id, A_id)) B_id else A_id
+  pair_key <- make_unordered_key(hub_item_id, spoke_item_id)
+
+  panel_key <- as.character(spoke_id)
+  panel <- probe$panels_by_spoke[[panel_key]] %||% .adaptive_link_probe_empty_panel()
+  panel <- tibble::as_tibble(panel)
+  if (nrow(panel) > 0L) {
+    hit <- which(as.character(panel$pair_key) == pair_key)
+    if (length(hit) > 0L) {
+      idx <- hit[[1L]]
+      panel$realized[[idx]] <- TRUE
+      panel$realized_step_id[[idx]] <- as.integer(row$step_id[[1L]] %||% NA_integer_)
+      panel$realized_pair_id[[idx]] <- as.integer(row$pair_id[[1L]] %||% NA_integer_)
+      panel$realized_run_mode[[idx]] <- as.character(row$run_mode[[1L]] %||% NA_character_)
+    }
+  }
+  probe$panels_by_spoke[[panel_key]] <- panel
+  probe$realized_edges <- append_canonical_row(
+    probe$realized_edges,
+    list(
+      step_id = as.integer(row$step_id[[1L]] %||% NA_integer_),
+      pair_id = as.integer(row$pair_id[[1L]] %||% NA_integer_),
+      run_mode = as.character(row$run_mode[[1L]] %||% NA_character_),
+      spoke_id = as.integer(spoke_id),
+      link_epoch_id = as.integer(
+        .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
+      ),
+      probe_panel_id = if (nrow(panel) > 0L) {
+        as.character(panel$probe_panel_id[[1L]] %||% NA_character_)
+      } else {
+        NA_character_
+      },
+      hub_item_id = as.character(hub_item_id %||% NA_character_),
+      spoke_item_id = as.character(spoke_item_id %||% NA_character_),
+      pair_key = as.character(pair_key),
+      Y = as.integer(row$Y[[1L]] %||% NA_integer_)
+    ),
+    schema = c(
+      step_id = "integer",
+      pair_id = "integer",
+      run_mode = "character",
+      spoke_id = "integer",
+      link_epoch_id = "integer",
+      probe_panel_id = "character",
+      hub_item_id = "character",
+      spoke_item_id = "character",
+      pair_key = "character",
+      Y = "integer"
+    )
+  )
+  out$linking$probe <- probe
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_cache_predictions <- function(state, refit_id, spoke_id) {
+  out <- state
+  probe <- .adaptive_link_probe_state(out)
+  panel <- .adaptive_link_probe_panel_for_spoke(
+    out,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
+  )
+  panel <- panel[panel$realized %in% TRUE, , drop = FALSE]
+  if (nrow(panel) < 1L) {
+    out$linking$probe <- probe
+    return(out)
+  }
+  cache_rows <- lapply(seq_len(nrow(panel)), function(idx) {
+    p <- .adaptive_link_predictive_prob_oriented(
+      state = out,
+      controller = .adaptive_controller_resolve(out),
+      spoke_id = as.integer(spoke_id),
+      A_id = as.character(panel$hub_item_id[[idx]]),
+      B_id = as.character(panel$spoke_item_id[[idx]])
+    )
+    tibble::tibble(
+      refit_id = as.integer(refit_id),
+      spoke_id = as.integer(spoke_id),
+      link_epoch_id = as.integer(panel$link_epoch_id[[idx]] %||% 1L),
+      probe_panel_id = as.character(panel$probe_panel_id[[idx]] %||% NA_character_),
+      hub_item_id = as.character(panel$hub_item_id[[idx]]),
+      spoke_item_id = as.character(panel$spoke_item_id[[idx]]),
+      pred_prob = as.double(p)
+    )
+  })
+  probe$prediction_cache <- dplyr::bind_rows(
+    probe$prediction_cache,
+    dplyr::bind_rows(cache_rows)
+  )
+  out$linking$probe <- probe
+  out
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_apply_stop_state <- function(state, link_rows) {
   out <- state
   rows <- tibble::as_tibble(link_rows %||% tibble::tibble())
@@ -1364,6 +1663,14 @@ adaptive_rank_run_live <- function(state,
         config = refit_out$config
       )
       state$round_log <- append_round_log(state$round_log, round_row)
+      phase_ctx_post_refit <- .adaptive_link_phase_context(state, controller = .adaptive_controller_resolve(state))
+      for (spoke_id in as.integer(phase_ctx_post_refit$active_spokes %||% integer())) {
+        state <- .adaptive_link_probe_cache_predictions(
+          state,
+          refit_id = as.integer(round_row$refit_id),
+          spoke_id = as.integer(spoke_id)
+        )
+      }
       link_rows <- .adaptive_link_stage_refit_rows(
         state = state,
         refit_id = as.integer(round_row$refit_id),

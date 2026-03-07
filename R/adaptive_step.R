@@ -514,15 +514,21 @@ apply_step_update <- function(state, step) {
     return(out)
   }
 
+  new_history <- tibble::tibble(
+    A_id = as.character(step$A_id),
+    B_id = as.character(step$B_id),
+    is_probe_step = as.logical(step$row$is_probe_step %||% FALSE)
+  )
+  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
+
+  if (isTRUE(step$row$is_probe_step %||% FALSE)) {
+    out <- .adaptive_link_probe_register_commit(out, step$row)
+    return(out)
+  }
+
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id
   out$trueskill_state <- update_trueskill_state(out$trueskill_state, winner_id, loser_id)
-
-  new_history <- tibble::tibble(
-    A_id = as.character(step$A_id),
-    B_id = as.character(step$B_id)
-  )
-  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
 
   items <- out$trueskill_state$items
   item_ids <- as.character(items$item_id)
@@ -566,13 +572,37 @@ run_one_step <- function(state, judge, ...) {
       eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
     )
     controller <- state$controller
+    state <- .adaptive_link_probe_ensure_panels(
+      state,
+      controller = controller,
+      spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+    )
   }
 
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
     state <- .adaptive_refresh_round_anchors(state)
-    selection <- select_next_pair(state, step_id = step_id)
+    probe_selection <- NULL
+    if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+      probe_spoke_id <- .adaptive_link_active_spoke(
+        state,
+        controller,
+        eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+      )
+      frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+      probe_flags <- .adaptive_link_probe_state(state)$collect_holdout_now_by_spoke %||% list()
+      if (!is.na(probe_spoke_id) &&
+        isTRUE(probe_flags[[as.character(probe_spoke_id)]]) &&
+        !isTRUE(frozen_map[[as.character(probe_spoke_id)]])) {
+        probe_selection <- .adaptive_link_probe_select_holdout(
+          state,
+          step_id = step_id,
+          spoke_id = probe_spoke_id
+        )
+      }
+    }
+    selection <- probe_selection %||% select_next_pair(state, step_id = step_id)
   }
 
   is_valid <- FALSE
@@ -609,7 +639,8 @@ run_one_step <- function(state, judge, ...) {
   }
 
   pair_id <- if (isTRUE(is_valid)) {
-    as.integer(nrow(state$history_pairs) + 1L)
+    step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+    as.integer(sum(!is.na(step_log$pair_id), na.rm = TRUE) + 1L)
   } else {
     NA_integer_
   }
@@ -657,6 +688,10 @@ run_one_step <- function(state, judge, ...) {
   if (isTRUE(is_cross_set) && !is.na(link_spoke_id) && isTRUE(frozen_map[[as.character(link_spoke_id)]])) {
     run_mode <- "link_probe"
   }
+  if (is.character(selection$run_mode) && length(selection$run_mode) == 1L &&
+    !is.na(selection$run_mode) && selection$run_mode != "") {
+    run_mode <- as.character(selection$run_mode)
+  }
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   spoke_key <- as.character(link_spoke_id)
   spoke_stats <- if (!is.na(link_spoke_id)) link_stats[[spoke_key]] %||% list() else list()
@@ -677,6 +712,9 @@ run_one_step <- function(state, judge, ...) {
     "link_probe"
   )
   is_probe_step <- if (isTRUE(is_cross_set) && run_mode %in% c("link_probe_holdout", "link_probe")) TRUE else FALSE
+  if (isTRUE(is_probe_step)) {
+    utility_mode <- NA_character_
+  }
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode) &&
     !isTRUE(is_probe_step) &&

@@ -108,8 +108,9 @@ test_that("canonical log schemas follow the expected column order", {
     "it_logdet_start", "it_logdet_end", "it_trace_end", "it_n_pairs_accumulated",
     "coverage_bins_used",
     "coverage_source", "ppc_calibration_id", "cross_set_ppc_brier_max_used",
-    "probe_panel_id", "probe_edges_planned", "probe_edges_realized",
+    "probe_panel_id", "N_spoke_phase_b_start", "probe_edges_planned", "probe_edges_realized",
     "probe_panel_shortfall", "probe_panel_reallocation_used", "probe_pred_cache_used",
+    "probe_edges_count_toward_active_constraints_used",
     "lag_domain_key", "lag_domain_reset"
   )
 

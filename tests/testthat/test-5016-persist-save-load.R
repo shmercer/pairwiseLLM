@@ -258,3 +258,62 @@ test_that("validate_session_dir accepts legacy item log schema for resume", {
 
   expect_silent(validate_session_dir(session_dir))
 })
+
+test_that("save/load preserves planned probe panels and realized probe bookkeeping", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 52L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(items = tibble::tibble(
+        global_item_id = c("gh1", "gh2"),
+        theta_raw_mean = c(0.2, -0.2),
+        theta_raw_sd = c(0.1, 0.1),
+        rank_mu_raw = c(1, 2)
+      )),
+      `2` = list(items = tibble::tibble(
+        global_item_id = c("gs21", "gs22"),
+        theta_raw_mean = c(0.1, -0.1),
+        theta_raw_sd = c(0.1, 0.1),
+        rank_mu_raw = c(1, 2)
+      ))
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_equal(
+    restored$linking$probe$panels_by_spoke[["2"]]$pair_key,
+    state$linking$probe$panels_by_spoke[["2"]]$pair_key
+  )
+  expect_equal(
+    restored$linking$probe$realized_edges$pair_key,
+    state$linking$probe$realized_edges$pair_key
+  )
+})

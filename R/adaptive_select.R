@@ -91,6 +91,9 @@ adaptive_defaults <- function(N) {
   }
   history$A_id <- as.character(history$A_id)
   history$B_id <- as.character(history$B_id)
+  if ("is_probe_step" %in% names(history)) {
+    history <- history[!(as.logical(history$is_probe_step) %in% TRUE), , drop = FALSE]
+  }
   history
 }
 
