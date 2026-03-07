@@ -721,8 +721,9 @@
 #' step may use deterministic fallback from available within/shared judge
 #' estimates if link-specific estimates are not yet available; once link-specific
 #' estimates are expected, missing/non-finite values abort.
-#' Bayesian BTL posterior draws are not used for pair selection; they are used
-#' for posterior inference, diagnostics, and stopping at refit rounds.
+#' Bayesian BTL posterior draws are not used as general pair-selection
+#' objectives; within-set pairing remains TrueSkill-routed, with accepted
+#' posterior refits contributing only to the long-link probability gate.
 #' Linking transform refits use Bayesian posterior estimation and posterior
 #' summaries/diagnostics are logged per spoke at each linking refit.
 #'
@@ -832,9 +833,11 @@ adaptive_rank_start <- function(items,
 #' Invalid responses produce a logged step with
 #' \code{pair_id = NA} and must not update committed-comparison state.
 #'
-#' Pair selection does not use BTL posterior draws.
 #' Within-set routing is TrueSkill-based with utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})}.
+#' After an accepted posterior refit is available, the long-link gate uses the
+#' BTL posterior win probability for candidate eligibility; before that it
+#' falls back deterministically to TrueSkill.
 #' In linking Phase B, anchor/strata routing uses linking-global scores built
 #' from Phase A raw summaries and the current spoke transform.
 #' Linking Phase B routing ranks eligible cross-set candidates by

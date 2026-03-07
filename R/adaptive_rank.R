@@ -355,7 +355,8 @@ make_adaptive_judge_llm <- function(
 #' accounting.
 #'
 #' Inference separation:
-#' BTL refits are used for posterior inference, diagnostics, and stopping only.
+#' BTL refits are used for posterior inference, diagnostics, stop logic, and
+#' the long-link posterior gate after an accepted refit is available.
 #' They are not used to choose the next pair.
 #'
 #' Resume behavior:
@@ -408,10 +409,14 @@ make_adaptive_judge_llm <- function(
 #'   \item{`global_identified_rank_corr_min`}{Minimum Spearman correlation
 #'     between the TrueSkill rank proxy and the BTL posterior mean ranks used
 #'     to mark the run as globally identified after a refit. Default is `0.90`.}
-#'   \item{`p_long_low`}{Lower bound for long-link TrueSkill win probability
-#'     gating after global identifiability. Default is `0.10`.}
-#'   \item{`p_long_high`}{Upper bound for long-link TrueSkill win probability
-#'     gating after global identifiability. Default is `0.90`.}
+#'   \item{`p_long_low`}{Lower bound for long-link posterior win probability
+#'     gating after global identifiability when an accepted posterior refit is
+#'     available. Before posterior availability, the gate falls back
+#'     deterministically to TrueSkill. Default is `0.10`.}
+#'   \item{`p_long_high`}{Upper bound for long-link posterior win probability
+#'     gating after global identifiability when an accepted posterior refit is
+#'     available. Before posterior availability, the gate falls back
+#'     deterministically to TrueSkill. Default is `0.90`.}
 #'   \item{`long_taper_mult`}{Multiplier controlling long-link quota tapering
 #'     after global identifiability. Default is `0.25`.}
 #'   \item{`long_frac_floor`}{Floor fraction for long-link quota after tapering.

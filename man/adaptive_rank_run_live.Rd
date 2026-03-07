@@ -107,9 +107,11 @@ applies transactional updates if and only if the judge response is valid.
 Invalid responses produce a logged step with
 \code{pair_id = NA} and must not update committed-comparison state.
 
-Pair selection does not use BTL posterior draws.
 Within-set routing is TrueSkill-based with utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})}.
+After an accepted posterior refit is available, the long-link gate uses the
+BTL posterior win probability for candidate eligibility; before that it
+falls back deterministically to TrueSkill.
 In linking Phase B, anchor/strata routing uses linking-global scores built
 from Phase A raw summaries and the current spoke transform.
 Linking Phase B routing ranks eligible cross-set candidates by

@@ -171,7 +171,7 @@
   as.character(unname(tools::md5sum(tmp)))
 }
 
-.adaptive_phase_a_required_config_hash <- function(state, set_id) {
+.adaptive_phase_a_required_config_surface <- function(state, set_id) {
   controller <- .adaptive_controller_resolve(state)
   fit <- state$btl_fit %||% list()
   hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
@@ -179,7 +179,7 @@
   if (!identical(hub_lock_mode, "soft_lock")) {
     hub_lock_kappa <- NA_real_
   }
-  payload <- list(
+  list(
     set_id = as.integer(set_id),
     judge_param_mode = as.character(controller$judge_param_mode %||% NA_character_),
     model_variant = as.character(fit$model_variant %||% "btl_e_b"),
@@ -190,7 +190,31 @@
     hub_lock_kappa = hub_lock_kappa,
     cross_set_utility = as.character(controller$cross_set_utility %||% NA_character_)
   )
-  .adaptive_phase_a_hash_object(payload)
+}
+
+.adaptive_phase_a_required_config_hash <- function(state, set_id) {
+  .adaptive_phase_a_hash_object(.adaptive_phase_a_required_config_surface(state, set_id = set_id))
+}
+
+.adaptive_phase_a_latest_refit_row <- function(state, set_id) {
+  round_log <- tibble::as_tibble(state$round_log %||% tibble::tibble())
+  if (nrow(round_log) < 1L) {
+    return(NULL)
+  }
+
+  if (all(c("phase_scope", "phase_scope_set_id") %in% names(round_log))) {
+    scoped <- round_log[
+      round_log$phase_scope %in% "phase_a_set" &
+        as.integer(round_log$phase_scope_set_id) == as.integer(set_id),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(scoped) > 0L) {
+      return(scoped[nrow(scoped), , drop = FALSE])
+    }
+  }
+
+  round_log[nrow(round_log), , drop = FALSE]
 }
 
 .adaptive_phase_a_run_stop_passed <- function(artifact, controller) {
@@ -318,14 +342,47 @@
 
   fit <- state$btl_fit %||% list()
   fit_model_id <- as.character(fit$model_variant %||% "btl_e_b")
+  config_surface <- .adaptive_phase_a_required_config_surface(state, set_id = set_id)
   fit_config_hash <- .adaptive_phase_a_required_config_hash(state, set_id = set_id)
+  refit_row <- .adaptive_phase_a_latest_refit_row(state, set_id = set_id)
+  artifact_refit_id <- if (!is.null(refit_row) && "refit_id" %in% names(refit_row)) {
+    as.integer(refit_row$refit_id[[1L]] %||% NA_integer_)
+  } else {
+    NA_integer_
+  }
+  artifact_round_id <- if (!is.null(refit_row) && "round_id_at_refit" %in% names(refit_row)) {
+    as.integer(refit_row$round_id_at_refit[[1L]] %||% NA_integer_)
+  } else {
+    NA_integer_
+  }
+  artifact_step_id <- if (!is.null(refit_row) && "step_id_at_refit" %in% names(refit_row)) {
+    as.integer(refit_row$step_id_at_refit[[1L]] %||% NA_integer_)
+  } else {
+    NA_integer_
+  }
+  artifact_phase_scope <- if (!is.null(refit_row) && "phase_scope" %in% names(refit_row)) {
+    as.character(refit_row$phase_scope[[1L]] %||% NA_character_)
+  } else {
+    NA_character_
+  }
+  artifact_phase_scope_set_id <- if (!is.null(refit_row) && "phase_scope_set_id" %in% names(refit_row)) {
+    as.integer(refit_row$phase_scope_set_id[[1L]] %||% NA_integer_)
+  } else {
+    NA_integer_
+  }
 
   list(
     set_id = set_id,
     fit_model_id = fit_model_id,
+    fit_config_surface = config_surface,
     fit_config_hash = fit_config_hash,
     n_items = as.integer(length(ids)),
     n_pairs_committed = as.integer(n_pairs_committed),
+    refit_id = artifact_refit_id,
+    round_id_at_refit = artifact_round_id,
+    step_id_at_refit = artifact_step_id,
+    phase_scope = artifact_phase_scope,
+    phase_scope_set_id = artifact_phase_scope_set_id,
     items = tibble::tibble(
       item_id = as.character(ids),
       global_item_id = as.character(global_ids),
@@ -386,11 +443,25 @@
 
   fit_config_hash <- as.character(artifact$fit_config_hash %||% NA_character_)
   required_hash <- .adaptive_phase_a_required_config_hash(state, set_id = set_id)
+  required_surface <- .adaptive_phase_a_required_config_surface(state, set_id = set_id)
   compatible_hashes <- as.character(controller$phase_a_compatible_config_hashes %||% character())
   if (is.na(fit_config_hash) || fit_config_hash == "") {
     rlang::abort(paste0("Phase A artifact missing fit_config_hash for set ", set_id, "."))
   }
   if (!identical(fit_config_hash, required_hash) && !fit_config_hash %in% compatible_hashes) {
+    artifact_surface <- artifact$fit_config_surface %||% NULL
+    mismatch_fields <- character()
+    if (is.list(artifact_surface)) {
+      common_fields <- intersect(names(required_surface), names(artifact_surface))
+      mismatch_fields <- common_fields[vapply(common_fields, function(field) {
+        !identical(artifact_surface[[field]], required_surface[[field]])
+      }, logical(1L))]
+    }
+    mismatch_msg <- if (length(mismatch_fields) > 0L) {
+      paste0(" Incompatible settings: ", paste(mismatch_fields, collapse = ", "), ".")
+    } else {
+      ""
+    }
     rlang::abort(paste0(
       "Phase A artifact config hash incompatibility for set ",
       set_id,
@@ -398,7 +469,8 @@
       fit_config_hash,
       "` did not match required hash `",
       required_hash,
-      "` and was not found in `adaptive_config$phase_a_compatible_config_hashes`."
+      "` and was not found in `adaptive_config$phase_a_compatible_config_hashes`.",
+      mismatch_msg
     ))
   }
 
@@ -711,7 +783,7 @@
       }
     }
 
-    if (identical(source, "run") && !identical(status, "ready")) {
+    if (identical(source, "run")) {
       built <- tryCatch(
         {
           .adaptive_phase_a_build_artifact(out, set_id = set_id)
@@ -723,7 +795,9 @@
       )
 
       if (is.null(built)) {
-        if (is.character(message) &&
+        if (identical(status, "ready")) {
+          message <- message %||% "persisted"
+        } else if (is.character(message) &&
           grepl("Within-set summaries are unavailable", message, fixed = TRUE)) {
           status <- "pending_finalization"
           message <- "pending_finalization: awaiting_within_set_finalization"
@@ -731,7 +805,20 @@
           status <- "failed"
         }
       } else {
-        artifacts[[set_key]] <- built
+        built_refit_id <- as.integer(built$refit_id %||% NA_integer_)
+        persisted_refit_id <- as.integer(persisted$refit_id %||% NA_integer_)
+        built_stop_pass <- isTRUE(.adaptive_phase_a_run_stop_passed(built, controller = controller))
+        promote_ready <- built_stop_pass && (
+          is.null(artifacts[[set_key]]) ||
+            !is.finite(persisted_refit_id) ||
+            (is.finite(built_refit_id) && built_refit_id >= persisted_refit_id)
+        )
+        store_built <- is.null(artifacts[[set_key]]) ||
+          !identical(status, "ready") ||
+          isTRUE(promote_ready)
+        if (isTRUE(store_built)) {
+          artifacts[[set_key]] <- built
+        }
         prior_pairs <- as.integer(persisted$n_pairs_committed %||% NA_integer_)
         built_pairs <- as.integer(built$n_pairs_committed %||% NA_integer_)
         hold_pending <- identical(prior_status, "pending_finalization") &&
@@ -741,9 +828,15 @@
         if (isTRUE(hold_pending)) {
           status <- "pending_finalization"
           message <- "pending_finalization: within-set stop criteria not yet met"
-        } else if (isTRUE(.adaptive_phase_a_run_stop_passed(built, controller = controller))) {
+        } else if (isTRUE(promote_ready)) {
           status <- "ready"
-          message <- "built_in_run"
+          message <- if (is.finite(built_refit_id)) {
+            paste0("built_in_run_refit_", built_refit_id)
+          } else {
+            "built_in_run"
+          }
+        } else if (identical(status, "ready")) {
+          message <- message %||% "persisted"
         } else {
           status <- "pending_finalization"
           message <- "pending_finalization: within-set stop criteria not yet met"

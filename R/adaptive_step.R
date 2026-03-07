@@ -245,7 +245,6 @@ validate_judge_result <- function(result, A_id, B_id) {
   }
   valid_utility_modes <- c(
     "pairing_trueskill_u0",
-    "pairing_trueskill_u",
     "linking_d_optimal"
   )
   utility_mode <- if ("utility_mode" %in% names(row)) {
@@ -351,7 +350,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     }
     if (isTRUE(is_link_run_mode) &&
       !is.na(utility_mode) &&
-      !utility_mode %in% c("pairing_trueskill_u0", "pairing_trueskill_u")) {
+      !utility_mode %in% c("pairing_trueskill_u0")) {
       rlang::abort(
         "step_log append completeness failure: non-cross-set rows in linking runs must use pairing utility mode or NA."
       )

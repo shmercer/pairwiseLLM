@@ -358,9 +358,6 @@ adaptive_defaults <- function(N) {
   if (.adaptive_selection_mode_is_linking(run_mode = run_mode, is_cross_set = is_cross_set)) {
     return("linking_d_optimal")
   }
-  if (isTRUE(has_regularization)) {
-    return("pairing_trueskill_u")
-  }
   "pairing_trueskill_u0"
 }
 
@@ -369,13 +366,99 @@ adaptive_defaults <- function(N) {
   if (identical(mode, "pairing_trueskill_u0")) {
     return("u0")
   }
-  if (identical(mode, "pairing_trueskill_u")) {
-    return("u")
-  }
   if (identical(mode, "linking_d_optimal")) {
     return("link_d_opt_gain")
   }
   NA_character_
+}
+
+.adaptive_long_link_gate_has_posterior <- function(state) {
+  fit <- state$btl_fit %||% list()
+  draws <- fit$btl_posterior_draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L || ncol(draws) < 1L) {
+    return(FALSE)
+  }
+
+  round_log <- tibble::as_tibble(state$round_log %||% tibble::tibble())
+  if (nrow(round_log) < 1L || !"diagnostics_pass" %in% names(round_log)) {
+    return(FALSE)
+  }
+
+  accepted <- round_log[round_log$diagnostics_pass %in% TRUE, , drop = FALSE]
+  if (nrow(accepted) < 1L) {
+    return(FALSE)
+  }
+
+  phase_scope <- .adaptive_refit_phase_a_scope(state)
+  if (isTRUE(phase_scope$active) &&
+    all(c("phase_scope", "phase_scope_set_id") %in% names(accepted))) {
+    accepted <- accepted[
+      accepted$phase_scope %in% "phase_a_set" &
+        as.integer(accepted$phase_scope_set_id) == as.integer(phase_scope$set_id),
+      ,
+      drop = FALSE
+    ]
+  }
+
+  nrow(accepted) > 0L
+}
+
+.adaptive_long_link_gate_posterior_prob <- function(state, i_id, j_id) {
+  fit <- state$btl_fit %||% list()
+  draws <- fit$btl_posterior_draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L || ncol(draws) < 1L) {
+    return(NA_real_)
+  }
+  draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
+  if (is.null(colnames(draws))) {
+    item_ids <- as.character(state$item_ids %||% character())
+    if (length(item_ids) != ncol(draws)) {
+      return(NA_real_)
+    }
+    colnames(draws) <- item_ids
+  }
+
+  i_id <- as.character(i_id)
+  j_id <- as.character(j_id)
+  if (!all(c(i_id, j_id) %in% colnames(draws))) {
+    return(NA_real_)
+  }
+
+  theta_i <- as.double(draws[, i_id, drop = TRUE])
+  theta_j <- as.double(draws[, j_id, drop = TRUE])
+  n_draws <- length(theta_i)
+  if (length(theta_j) != n_draws || n_draws < 1L) {
+    return(NA_real_)
+  }
+
+  beta_draws <- fit$beta_draws %||% NULL
+  if (is.null(beta_draws)) {
+    beta_draws <- rep_len(as.double(fit$beta_mean %||% 0), n_draws)
+  }
+  beta_draws <- as.double(beta_draws)
+  if (length(beta_draws) != n_draws) {
+    beta_draws <- rep_len(as.double(fit$beta_mean %||% 0), n_draws)
+  }
+  beta_draws[!is.finite(beta_draws)] <- 0
+
+  epsilon_draws <- fit$epsilon_draws %||% NULL
+  if (is.null(epsilon_draws)) {
+    epsilon_draws <- rep_len(as.double(fit$epsilon_mean %||% 0), n_draws)
+  }
+  epsilon_draws <- as.double(epsilon_draws)
+  if (length(epsilon_draws) != n_draws) {
+    epsilon_draws <- rep_len(as.double(fit$epsilon_mean %||% 0), n_draws)
+  }
+  epsilon_draws[!is.finite(epsilon_draws)] <- 0
+  epsilon_draws <- pmin(pmax(epsilon_draws, 0), 1)
+
+  p_draws <- (1 - epsilon_draws) * stats::plogis(theta_i - theta_j + beta_draws) +
+    epsilon_draws * 0.5
+  p_draws <- p_draws[is.finite(p_draws)]
+  if (length(p_draws) < 1L) {
+    return(NA_real_)
+  }
+  as.double(mean(p_draws))
 }
 
 .adaptive_local_priority_select <- function(cand, state, round, stage_committed_so_far, stage_quota, defaults) {
@@ -864,10 +947,31 @@ adaptive_defaults <- function(N) {
   if (isTRUE(gate_active) && nrow(candidates) > 0L) {
     p_long_low <- as.double(controller$p_long_low)
     p_long_high <- as.double(controller$p_long_high)
-    p_gate <- as.double(candidates$p)
+    posterior_available <- isTRUE(.adaptive_long_link_gate_has_posterior(state))
+    if (isTRUE(posterior_available)) {
+      p_gate <- vapply(seq_len(nrow(candidates)), function(idx) {
+        .adaptive_long_link_gate_posterior_prob(
+          state = state,
+          i_id = as.character(candidates$i[[idx]]),
+          j_id = as.character(candidates$j[[idx]])
+        )
+      }, numeric(1L))
+    } else {
+      p_gate <- as.double(candidates$p)
+    }
+    if (any(!is.finite(p_gate))) {
+      posterior_available <- FALSE
+      p_gate <- as.double(candidates$p)
+    }
     keep <- p_gate >= p_long_low & p_gate <= p_long_high
-    if (!any(keep)) {
-      long_gate_reason <- "trueskill_extreme"
+    if (isTRUE(posterior_available)) {
+      long_gate_reason <- if (any(keep)) "posterior_inside_gate" else "posterior_extreme"
+    } else {
+      long_gate_reason <- if (any(keep)) {
+        "posterior_unavailable_fallback"
+      } else {
+        "posterior_unavailable_fallback_trueskill_extreme"
+      }
     }
     long_gate_pass <- any(keep)
     candidates <- candidates[keep, , drop = FALSE]

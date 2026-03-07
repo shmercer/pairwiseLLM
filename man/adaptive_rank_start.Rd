@@ -67,8 +67,9 @@ When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 step may use deterministic fallback from available within/shared judge
 estimates if link-specific estimates are not yet available; once link-specific
 estimates are expected, missing/non-finite values abort.
-Bayesian BTL posterior draws are not used for pair selection; they are used
-for posterior inference, diagnostics, and stopping at refit rounds.
+Bayesian BTL posterior draws are not used as general pair-selection
+objectives; within-set pairing remains TrueSkill-routed, with accepted
+posterior refits contributing only to the long-link probability gate.
 Linking transform refits use Bayesian posterior estimation and posterior
 summaries/diagnostics are logged per spoke at each linking refit.
 
