@@ -1205,6 +1205,39 @@ test_that("frozen spoke cross-set commits are tagged as probe steps", {
   expect_true(is.na(row$utility_mode[[1L]]))
 })
 
+test_that("planned holdout probe edges are excluded from active linking candidates", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
+    global_item_id = paste0("g", seq_len(6L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 77L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$linking$probe$collect_holdout_now_by_spoke <- list(`2` = TRUE)
+  state <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(state, controller = state$controller, spoke_ids = 2L)
+  panel <- state$linking$probe$panels_by_spoke[["2"]]
+  expect_true(nrow(panel) >= 1L)
+
+  cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state = state,
+    stage_name = "anchor_link",
+    fallback_name = "base",
+    C_max = 100L,
+    seed = 1L,
+    link_spoke_id = 2L
+  )
+  reserved <- unique(as.character(panel$pair_key))
+  cand_keys <- vapply(seq_len(nrow(cand)), function(idx) {
+    pairwiseLLM:::make_unordered_key(cand$i[[idx]], cand$j[[idx]])
+  }, character(1L))
+  expect_false(any(cand_keys %in% reserved))
+})
+
 test_that("linking predictive utility applies signed position bias by (A,B) orientation", {
   items <- tibble::tibble(
     item_id = c("h1", "s1"),
