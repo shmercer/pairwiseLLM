@@ -131,18 +131,20 @@ overrides allowed by the near-tie rule. Default is \code{1L}.}
 multiple spokes). Default is \code{"within_set"}. Linking modes require
 multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
 \item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
-\item{\code{link_transform_mode}}{Spoke transform mode. Choices are \code{"auto"}
-(start shift-only then possibly escalate), \code{"shift_only"} (offset only),
-and \code{"shift_scale"} (offset + scale). Default is \code{"auto"}.}
+\item{\code{link_transform_policy}}{Allowed spoke transform family. Choices are
+\code{"auto"} (start shift-only then possibly escalate),
+\code{"fixed_shift_only"} (offset only), and \code{"fixed_shift_scale"} (offset +
+scale). Default is \code{"auto"}. Earlier \code{link_transform_mode} values are
+accepted for compatibility and normalized internally.}
 \item{\code{link_refit_mode}}{Linking refit mode. Choices are \code{"shift_only"}
 (fit transform with within-set abilities treated as fixed inputs) and
 \code{"joint_refit"} (jointly estimate hub/spoke abilities and transform
 parameters). Default is \code{"shift_only"}.}
 \item{\code{shift_only_theta_treatment}}{Only used when
-\code{link_refit_mode = "shift_only"}. Choices are \code{"fixed_eap"} (treat Phase A
-within-set posterior means/SDs as fixed targets) and \code{"normal_prior"}
-(combine Phase A and current within-set summaries as a normal-normal
-update when available). Default is \code{"fixed_eap"}.}
+\code{link_refit_mode = "shift_only"}. Choices are
+\code{"fixed_eap_plugin_var"} (treat Phase A means with artifact SD plug-in
+variance when available) and \code{"fixed_eap"} (fallback when artifact SDs are
+unavailable). Default is \code{"fixed_eap_plugin_var"}.}
 \item{\code{judge_param_mode}}{How judge-noise parameters are handled across
 phases. Choices are \code{"global_shared"} (single shared judge parameter set)
 and \code{"phase_specific"} (separate within-set and link-phase judge
@@ -174,7 +176,7 @@ allowed posterior SD of \code{log(alpha_s)}. Default is \code{0.10}.}
 \item{\code{log_alpha_change_max}}{Only used for \code{"shift_scale"} spokes. Maximum
 allowed absolute change in \code{log(alpha_s)} over the lag window used for
 linking stability. Default is \code{0.05}.}
-\item{\code{cross_set_ppc_brier_max}}{Only used when \code{link_transform_mode = "auto"}.
+\item{\code{cross_set_ppc_brier_max}}{Only used when \code{link_transform_policy = "auto"}.
 PPC misfit threshold (Brier score) on linking-active, non-probe,
 non-frozen cross-set steps used to escalate from shift-only to
 shift+scale. Default is \code{0.20} unless overridden by the active
@@ -183,10 +185,10 @@ calibration.}
 \code{cross_set_ppc_brier_max} when not explicitly supplied. Default is
 \code{"default_p95_brier_active"}.}
 \item{\code{link_transform_escalation_refits_required}}{Only used when
-\code{link_transform_mode = "auto"}. Number of consecutive refits above
+\code{link_transform_policy = "auto"}. Number of consecutive refits above
 \code{cross_set_ppc_brier_max} required to escalate. Default is \code{2L}.}
 \item{\code{link_transform_escalation_is_one_way}}{Only used when
-\code{link_transform_mode = "auto"}. When \code{TRUE}, escalation is one-way
+\code{link_transform_policy = "auto"}. When \code{TRUE}, escalation is one-way
 (shift-only can become shift+scale but not revert). Default is \code{TRUE}.}
 
 \item{\code{max_pairs_after_stop}}{Stop-boundary budget: when \code{0L}, the run stops
