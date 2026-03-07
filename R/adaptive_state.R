@@ -229,7 +229,19 @@
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
     allow_spoke_spoke_cross_set = FALSE,
     multi_spoke_mode = "independent",
+    multi_spoke_budget_rule = "utility_mass_topk",
+    multi_spoke_budget_top_k = 10L,
     min_cross_set_pairs_per_spoke_per_refit = 5L,
+    stage_quota_frac_anchor_link = 0.25,
+    stage_quota_frac_long_link = 0.35,
+    stage_quota_frac_mid_link = 0.25,
+    stage_quota_frac_local_link = 0.15,
+    stage_quota_floor_anchor_link = 2L,
+    stage_quota_floor_long_link = 2L,
+    stage_quota_floor_mid_link = 1L,
+    stage_quota_floor_local_link = 0L,
+    long_link_taper_multiplier = 0.50,
+    long_link_taper_floor = 2L,
     cross_set_utility = "linking_d_optimal",
     phase_a_mode = "run",
     phase_a_import_failure_policy = "fail_fast",
@@ -307,7 +319,19 @@
     "spoke_quantile_coverage_min_per_bin_per_refit",
     "allow_spoke_spoke_cross_set",
     "multi_spoke_mode",
+    "multi_spoke_budget_rule",
+    "multi_spoke_budget_top_k",
     "min_cross_set_pairs_per_spoke_per_refit",
+    "stage_quota_frac_anchor_link",
+    "stage_quota_frac_long_link",
+    "stage_quota_frac_mid_link",
+    "stage_quota_frac_local_link",
+    "stage_quota_floor_anchor_link",
+    "stage_quota_floor_long_link",
+    "stage_quota_floor_mid_link",
+    "stage_quota_floor_local_link",
+    "long_link_taper_multiplier",
+    "long_link_taper_floor",
     "cross_set_utility",
     "phase_a_mode",
     "phase_a_import_failure_policy",
@@ -491,11 +515,23 @@
   )
   out$allow_spoke_spoke_cross_set <- read_logical("allow_spoke_spoke_cross_set")
   out$multi_spoke_mode <- read_choice("multi_spoke_mode", c("independent", "concurrent"))
+  out$multi_spoke_budget_rule <- read_choice("multi_spoke_budget_rule", c("utility_mass_topk"))
+  out$multi_spoke_budget_top_k <- read_integer("multi_spoke_budget_top_k", 1L, Inf)
   out$min_cross_set_pairs_per_spoke_per_refit <- read_integer(
     "min_cross_set_pairs_per_spoke_per_refit",
     1L,
     Inf
   )
+  out$stage_quota_frac_anchor_link <- read_double("stage_quota_frac_anchor_link", 0, 1)
+  out$stage_quota_frac_long_link <- read_double("stage_quota_frac_long_link", 0, 1)
+  out$stage_quota_frac_mid_link <- read_double("stage_quota_frac_mid_link", 0, 1)
+  out$stage_quota_frac_local_link <- read_double("stage_quota_frac_local_link", 0, 1)
+  out$stage_quota_floor_anchor_link <- read_integer("stage_quota_floor_anchor_link", 0L, Inf)
+  out$stage_quota_floor_long_link <- read_integer("stage_quota_floor_long_link", 0L, Inf)
+  out$stage_quota_floor_mid_link <- read_integer("stage_quota_floor_mid_link", 0L, Inf)
+  out$stage_quota_floor_local_link <- read_integer("stage_quota_floor_local_link", 0L, Inf)
+  out$long_link_taper_multiplier <- read_double("long_link_taper_multiplier", 0, 1)
+  out$long_link_taper_floor <- read_integer("long_link_taper_floor", 0L, Inf)
   out$cross_set_utility <- read_choice(
     "cross_set_utility",
     c("linking_d_optimal")
@@ -541,6 +577,21 @@
 
   resolved <- utils::modifyList(.adaptive_controller_defaults(n_items), out)
   resolved <- .adaptive_controller_normalize_legacy_fields(resolved, n_items = n_items)
+  frac_sum <- sum(c(
+    resolved$stage_quota_frac_anchor_link,
+    resolved$stage_quota_frac_long_link,
+    resolved$stage_quota_frac_mid_link,
+    resolved$stage_quota_frac_local_link
+  ))
+  if (!isTRUE(all.equal(frac_sum, 1, tolerance = 1e-8))) {
+    rlang::abort(
+      paste0(
+        "Linking stage quota fractions must sum to 1.0; got ",
+        format(frac_sum, digits = 8),
+        "."
+      )
+    )
+  }
   run_mode <- resolved$run_mode
   set_ids <- as.integer(set_ids %||% 1L)
   n_sets <- length(unique(set_ids))
@@ -673,6 +724,174 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_budget_fields <- function() {
+  c(
+    "B_spoke_refit_budget",
+    "B_spoke_refit_budget_source",
+    "concurrent_target_pairs",
+    "concurrent_floor_pairs",
+    "concurrent_floor_met",
+    "concurrent_target_met",
+    "concurrent_utility_mass",
+    "concurrent_top_k_used",
+    "concurrent_candidate_count"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_budget_default <- function(n_items, controller = NULL) {
+  controller <- utils::modifyList(.adaptive_controller_defaults(n_items), controller %||% list())
+  budget <- controller$refit_pairs_target %||% adaptive_defaults(n_items)$refit_pairs_target
+  budget <- as.integer(budget %||% NA_integer_)
+  if (!is.finite(budget) || is.na(budget) || budget < 0L) {
+    rlang::abort("Linking budget invariant failed: refit budget must be a non-negative integer.")
+  }
+  budget
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_quota_inputs <- function(controller) {
+  fractions <- c(
+    anchor_link = as.double(controller$stage_quota_frac_anchor_link),
+    long_link = as.double(controller$stage_quota_frac_long_link),
+    mid_link = as.double(controller$stage_quota_frac_mid_link),
+    local_link = as.double(controller$stage_quota_frac_local_link)
+  )
+  floors <- c(
+    anchor_link = as.integer(controller$stage_quota_floor_anchor_link),
+    long_link = as.integer(controller$stage_quota_floor_long_link),
+    mid_link = as.integer(controller$stage_quota_floor_mid_link),
+    local_link = as.integer(controller$stage_quota_floor_local_link)
+  )
+  list(fractions = fractions, floors = floors)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_weighted_largest_remainder <- function(total_units, weights, tie_order) {
+  total_units <- as.integer(total_units %||% 0L)
+  weight_vals <- as.double(weights[tie_order])
+  names(weight_vals) <- tie_order
+  if (total_units <= 0L) {
+    out <- stats::setNames(rep.int(0L, length(tie_order)), tie_order)
+    return(list(add = out, remainders = stats::setNames(weight_vals * 0, tie_order)))
+  }
+  weight_vals[!is.finite(weight_vals) | weight_vals < 0] <- 0
+  weight_sum <- sum(weight_vals)
+  if (weight_sum <= 0) {
+    weight_vals[] <- 1 / length(weight_vals)
+  } else {
+    weight_vals <- weight_vals / weight_sum
+  }
+  names(weight_vals) <- tie_order
+  scaled <- weight_vals * total_units
+  add <- floor(scaled)
+  names(add) <- tie_order
+  remainders <- scaled - add
+  left <- as.integer(total_units - sum(add))
+  if (left > 0L) {
+    ord <- order(-remainders, match(names(remainders), tie_order))
+    add[ord[seq_len(left)]] <- add[ord[seq_len(left)]] + 1L
+  }
+  add <- stats::setNames(as.integer(add), tie_order)
+  remainders <- stats::setNames(as.double(remainders), tie_order)
+  list(add = add, remainders = remainders)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_compute_stage_targets <- function(budget,
+                                                 controller,
+                                                 linking_identified = FALSE) {
+  budget <- as.integer(budget %||% NA_integer_)
+  if (!is.finite(budget) || is.na(budget) || budget < 0L) {
+    rlang::abort(
+      "Linking budget invariant failed: stage target computation requires a non-negative integer budget."
+    )
+  }
+  params <- .adaptive_link_stage_quota_inputs(controller)
+  fractions <- params$fractions
+  floors <- params$floors
+  stage_order <- .adaptive_stage_order()
+  reduce_order <- c("local_link", "mid_link", "long_link", "anchor_link")
+  remainder_order <- c("long_link", "anchor_link", "mid_link", "local_link")
+  taper_redist_order <- c("anchor_link", "mid_link", "local_link")
+
+  targets <- as.integer(floors[stage_order])
+  names(targets) <- stage_order
+  while (sum(targets) > budget) {
+    reduced <- FALSE
+    for (stage in reduce_order) {
+      if (sum(targets) <= budget) {
+        break
+      }
+      if (targets[[stage]] > 0L) {
+        targets[[stage]] <- targets[[stage]] - 1L
+        reduced <- TRUE
+      }
+    }
+    if (!isTRUE(reduced)) {
+      break
+    }
+  }
+
+  remaining <- as.integer(budget - sum(targets))
+  fractional <- fractions * remaining
+  add_floor <- floor(fractional)
+  targets <- targets + as.integer(add_floor[stage_order])
+  leftover <- as.integer(budget - sum(targets))
+  if (leftover > 0L) {
+    remainders <- fractional - add_floor
+    ord <- order(-remainders[remainder_order], seq_along(remainder_order))
+    for (stage in remainder_order[ord][seq_len(leftover)]) {
+      targets[[stage]] <- targets[[stage]] + 1L
+    }
+  }
+
+  long_pre_taper <- as.integer(targets[["long_link"]])
+  long_post_taper <- as.integer(long_pre_taper)
+  taper_applied <- FALSE
+  if (isTRUE(linking_identified) && long_pre_taper > 0L) {
+    taper_applied <- TRUE
+    long_post_taper <- max(
+      as.integer(controller$long_link_taper_floor %||% 2L),
+      as.integer(round(as.double(controller$long_link_taper_multiplier %||% 0.5) * long_pre_taper))
+    )
+    long_post_taper <- min(long_post_taper, long_pre_taper)
+    freed <- as.integer(long_pre_taper - long_post_taper)
+    targets[["long_link"]] <- as.integer(long_post_taper)
+    if (freed > 0L) {
+      redist <- .adaptive_weighted_largest_remainder(
+        total_units = freed,
+        weights = fractions[taper_redist_order],
+        tie_order = taper_redist_order
+      )
+      targets[taper_redist_order] <- targets[taper_redist_order] + redist$add[taper_redist_order]
+    }
+  }
+
+  if (sum(targets) != budget) {
+    rlang::abort("Linking budget invariant failed: stage targets must sum exactly to the budget.")
+  }
+
+  meta <- list(
+    budget = as.integer(budget),
+    stage_target_anchor_link = as.integer(targets[["anchor_link"]]),
+    stage_target_long_link = as.integer(targets[["long_link"]]),
+    stage_target_mid_link = as.integer(targets[["mid_link"]]),
+    stage_target_local_link = as.integer(targets[["local_link"]]),
+    stage_target_long_link_pre_taper = as.integer(long_pre_taper),
+    stage_target_long_link_post_taper = as.integer(long_post_taper),
+    long_link_taper_applied = isTRUE(taper_applied)
+  )
+  attr(targets, "quota_meta") <- meta
+  targets
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_round_compute_quotas <- function(round_id, n_items, controller = NULL) {
   round_id <- as.integer(round_id %||% 1L)
   defaults <- adaptive_defaults(n_items)
@@ -683,34 +902,47 @@
   is_link_mode <- as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")
   round_pairs_target <- as.integer(defaults$round_pairs_target)
   if (isTRUE(is_link_mode)) {
-    long_quota_raw <- 8L
     link_spoke <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
     link_key <- as.character(link_spoke)
     identified_by_spoke <- controller$linking_identified_by_spoke %||% list()
     linking_identified <- !is.na(link_spoke) &&
       !is.null(identified_by_spoke[[link_key]]) &&
       isTRUE(identified_by_spoke[[link_key]])
-    long_quota_effective <- if (isTRUE(linking_identified)) {
-      max(2L, as.integer(ceiling(0.5 * long_quota_raw)))
-    } else {
-      long_quota_raw
+    budget <- as.integer(controller$B_spoke_refit_budget %||% NA_integer_)
+    if (!is.finite(budget) || is.na(budget) || budget < 0L) {
+      budget <- .adaptive_link_refit_budget_default(n_items, controller = controller)
     }
-    quotas <- c(
-      anchor_link = 6L,
-      long_link = as.integer(long_quota_effective),
-      mid_link = 6L,
-      local_link = 6L
+    quotas <- .adaptive_link_compute_stage_targets(
+      budget = as.integer(budget),
+      controller = controller,
+      linking_identified = isTRUE(linking_identified)
     )
+    quota_meta <- attr(quotas, "quota_meta") %||% list()
     attr(quotas, "quota_meta") <- list(
       global_identified = isTRUE(controller$global_identified),
       linking_identified = isTRUE(linking_identified),
       link_spoke_id = as.integer(link_spoke),
-      taper_applied = isTRUE(linking_identified),
-      long_quota_raw = as.integer(long_quota_raw),
-      long_quota_effective = as.integer(long_quota_effective),
-      long_quota_removed = as.integer(max(0L, long_quota_raw - long_quota_effective)),
-      realloc_to_mid = 0L,
-      realloc_to_local = 0L
+      B_spoke_refit_budget = as.integer(budget),
+      B_spoke_refit_budget_source = as.character(
+        controller$B_spoke_refit_budget_source %||% "single_spoke_default"
+      ),
+      taper_applied = isTRUE(quota_meta$long_link_taper_applied %||% FALSE),
+      long_quota_raw = as.integer(quota_meta$stage_target_long_link_pre_taper %||% NA_integer_),
+      long_quota_effective = as.integer(quota_meta$stage_target_long_link_post_taper %||% NA_integer_),
+      long_quota_removed = as.integer(
+        max(
+          0L,
+          as.integer(quota_meta$stage_target_long_link_pre_taper %||% 0L) -
+            as.integer(quota_meta$stage_target_long_link_post_taper %||% 0L)
+        )
+      ),
+      stage_target_long_link_pre_taper = as.integer(
+        quota_meta$stage_target_long_link_pre_taper %||% NA_integer_
+      ),
+      stage_target_long_link_post_taper = as.integer(
+        quota_meta$stage_target_long_link_post_taper %||% NA_integer_
+      ),
+      long_link_taper_applied = as.logical(quota_meta$long_link_taper_applied %||% FALSE)
     )
     return(quotas)
   }

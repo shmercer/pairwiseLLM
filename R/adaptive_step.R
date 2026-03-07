@@ -557,6 +557,16 @@ run_one_step <- function(state, judge, ...) {
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
+  if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    state$controller <- controller
+    state$controller$link_budget_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+    state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = state$controller,
+      eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+    )
+    controller <- state$controller
+  }
 
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
