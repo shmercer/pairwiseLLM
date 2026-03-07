@@ -2772,6 +2772,26 @@
       (isTRUE(log_alpha_change_pass) || identical(transform_state, "shift_only")) &&
       isTRUE(rank_stability_pass)
     transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE) || isTRUE(link_stop_pass)
+    probe_panel <- .adaptive_link_probe_panel_for_spoke(
+      state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
+    )
+    probe_panel_id <- if (nrow(probe_panel) > 0L) {
+      as.character(probe_panel$probe_panel_id[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
+    }
+    probe_edges_planned <- as.integer(nrow(probe_panel))
+    probe_edges_realized <- as.integer(sum(probe_panel$realized %in% TRUE, na.rm = TRUE))
+    probe_panel_shortfall <- as.integer(max(0L, probe_edges_planned - probe_edges_realized))
+    probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
+    probe_pred_cache_used <- nrow(probe_cache[
+      as.integer(probe_cache$refit_id) == as.integer(refit_id) &
+        as.integer(probe_cache$spoke_id) == as.integer(spoke_id),
+      ,
+      drop = FALSE
+    ]) > 0L
 
     reallocation_used <- any(committed_stage > stage_quotas, na.rm = TRUE)
     reallocation_rule <- if (isTRUE(reallocation_used)) "pooled_utility_backfill" else "none"
@@ -2819,7 +2839,7 @@
       transform_frozen = as.logical(transform_frozen),
       transform_frozen_refit_id = as.integer(controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
         if (isTRUE(transform_frozen)) refit_id else NA_integer_),
-      link_epoch_id = as.integer(1L),
+      link_epoch_id = as.integer(.adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)),
       ts_btl_rank_spearman = as.double(stats_row$ts_btl_rank_spearman_active %||% NA_real_),
       ppc_brier_cross_active = as.double(stats_row$ppc_brier_cross_active %||% NA_real_),
       ppc_brier_cross_probe = as.double(stats_row$ppc_brier_cross_probe %||% NA_real_),
@@ -2933,12 +2953,16 @@
       coverage_source = as.character(stats_row$coverage_source %||% coverage$source %||% NA_character_),
       ppc_calibration_id = as.character(stats_row$ppc_calibration_id %||% NA_character_),
       cross_set_ppc_brier_max_used = as.double(stats_row$cross_set_ppc_brier_max_used %||% NA_real_),
-      probe_panel_id = as.character(NA_character_),
-      probe_edges_planned = as.integer(NA_integer_),
-      probe_edges_realized = as.integer(n_pairs_since_probe),
-      probe_panel_shortfall = as.integer(NA_integer_),
-      probe_panel_reallocation_used = as.logical(NA),
-      probe_pred_cache_used = as.logical(NA),
+      probe_panel_id = as.character(probe_panel_id),
+      N_spoke_phase_b_start = as.integer(sum(as.integer(state$items$set_id) == as.integer(spoke_id), na.rm = TRUE)),
+      probe_edges_planned = as.integer(probe_edges_planned),
+      probe_edges_realized = as.integer(probe_edges_realized),
+      probe_panel_shortfall = as.integer(probe_panel_shortfall),
+      probe_panel_reallocation_used = as.logical(FALSE),
+      probe_pred_cache_used = as.logical(probe_pred_cache_used),
+      probe_edges_count_toward_active_constraints_used = as.logical(
+        controller$probe_edges_count_toward_active_constraints %||% FALSE
+      ),
       lag_domain_key = as.character(stats_row$lag_domain_key %||% NA_character_),
       lag_domain_reset = as.logical(stats_row$lag_domain_reset %||% NA)
     )

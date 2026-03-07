@@ -565,6 +565,8 @@ load_adaptive_session <- function(session_dir) {
 
   state <- .adaptive_validate_state_for_resume(state)
   state$meta$schema_version <- metadata$schema_version
+  state$linking <- state$linking %||% list()
+  state$linking$probe <- .adaptive_link_probe_state(state)
 
   step_log <- .adaptive_align_log_schema_for_resume(
     read_log(paths$step_log),
