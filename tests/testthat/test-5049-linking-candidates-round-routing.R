@@ -153,11 +153,11 @@ test_that("linking long-link taper applies only to the active spoke and respects
     )
   )
 
-  expect_identical(unname(q_base[c("anchor_link", "long_link", "mid_link", "local_link")]), c(6L, 8L, 6L, 6L))
-  expect_identical(unname(q_taper[c("anchor_link", "mid_link", "local_link")]), c(6L, 6L, 6L))
-  expect_true(q_taper[["long_link"]] == 4L)
+  expect_identical(unname(q_base[c("anchor_link", "long_link", "mid_link", "local_link")]), c(13L, 18L, 12L, 7L))
+  expect_identical(unname(q_taper[c("anchor_link", "mid_link", "local_link")]), c(17L, 15L, 9L))
+  expect_true(q_taper[["long_link"]] == 9L)
   expect_true(q_taper[["long_link"]] >= 2L)
-  expect_identical(q_other_spoke[["long_link"]], 8L)
+  expect_identical(q_other_spoke[["long_link"]], 18L)
 })
 
 test_that("phase B hub-anchor candidates are derived from hub-only scores", {
@@ -237,8 +237,8 @@ test_that("multi-spoke long-link taper remains isolated to identified spoke", {
   meta_2 <- attr(q_spoke_2, "quota_meta")
   meta_3 <- attr(q_spoke_3, "quota_meta")
 
-  expect_identical(q_spoke_2[["long_link"]], 4L)
-  expect_identical(q_spoke_3[["long_link"]], 8L)
+  expect_identical(q_spoke_2[["long_link"]], 9L)
+  expect_identical(q_spoke_3[["long_link"]], 18L)
   expect_true(isTRUE(meta_2$taper_applied))
   expect_false(isTRUE(meta_3$taper_applied))
 })
@@ -320,22 +320,36 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
   )
   row2 <- rows[rows$spoke_id == 2L, , drop = FALSE]
   row3 <- rows[rows$spoke_id == 3L, , drop = FALSE]
+  expected2 <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = as.integer(state$round$round_id),
+    n_items = as.integer(state$n_items),
+    controller = utils::modifyList(state$controller, list(current_link_spoke_id = 2L))
+  )
+  expected3 <- pairwiseLLM:::.adaptive_round_compute_quotas(
+    round_id = as.integer(state$round$round_id),
+    n_items = as.integer(state$n_items),
+    controller = utils::modifyList(state$controller, list(current_link_spoke_id = 3L))
+  )
+  meta2 <- attr(expected2, "quota_meta")
+  if (is.null(meta2)) meta2 <- list()
+  meta3 <- attr(expected3, "quota_meta")
+  if (is.null(meta3)) meta3 <- list()
   expect_true(nrow(row2) == 1L)
   expect_true(nrow(row3) == 1L)
-  expect_identical(row2$quota_anchor_link[[1L]], 6L)
-  expect_identical(row2$quota_long_link[[1L]], 8L)
+  expect_identical(row2$quota_anchor_link[[1L]], expected2[["anchor_link"]])
+  expect_identical(row2$quota_long_link[[1L]], expected2[["long_link"]])
   expect_true(row2$committed_anchor_link[[1L]] + row2$committed_long_link[[1L]] +
     row2$committed_mid_link[[1L]] + row2$committed_local_link[[1L]] >= 1L)
   expect_true(row3$committed_anchor_link[[1L]] + row3$committed_long_link[[1L]] +
     row3$committed_mid_link[[1L]] + row3$committed_local_link[[1L]] >= 1L)
-  expect_identical(row2$quota_long_link_raw[[1L]], 8L)
-  expect_identical(row2$quota_long_link_effective[[1L]], 8L)
-  expect_identical(row2$quota_long_link_removed[[1L]], 0L)
+  expect_identical(row2$quota_long_link_raw[[1L]], meta2$long_quota_raw)
+  expect_identical(row2$quota_long_link_effective[[1L]], meta2$long_quota_effective)
+  expect_identical(row2$quota_long_link_removed[[1L]], meta2$long_quota_removed)
   expect_false(isTRUE(row2$quota_taper_applied[[1L]]))
   expect_identical(row2$quota_taper_spoke_id[[1L]], 2L)
-  expect_identical(row3$quota_long_link_raw[[1L]], 8L)
-  expect_identical(row3$quota_long_link_effective[[1L]], 8L)
-  expect_identical(row3$quota_long_link_removed[[1L]], 0L)
+  expect_identical(row3$quota_long_link_raw[[1L]], meta3$long_quota_raw)
+  expect_identical(row3$quota_long_link_effective[[1L]], meta3$long_quota_effective)
+  expect_identical(row3$quota_long_link_removed[[1L]], meta3$long_quota_removed)
   expect_false(isTRUE(row3$quota_taper_applied[[1L]]))
   expect_identical(row3$quota_taper_spoke_id[[1L]], 3L)
 })

@@ -741,11 +741,11 @@ test_that("phase-B candidate routing responds to linking-global transform parame
   expect_false(identical(shifted_up, shifted_down_scale))
 })
 
-test_that("concurrent allocation uses uncertainty weights and enforces floor", {
+test_that("concurrent allocation uses utility mass and enforces floor", {
   alloc <- pairwiseLLM:::.adaptive_link_concurrent_targets(
     spoke_stats = list(
-      `2` = list(uncertainty = 0.8),
-      `3` = list(uncertainty = 0.2)
+      `2` = list(utility_mass = 0.8, candidate_count = 99L),
+      `3` = list(utility_mass = 0.2, candidate_count = 99L)
     ),
     total_pairs = 16L,
     floor_pairs = 5L
@@ -773,9 +773,33 @@ test_that("concurrent allocation uses uncertainty weights and enforces floor", {
   expect_false(isTRUE(stats3$concurrent_floor_met))
   expect_true(stats2$concurrent_target_pairs >= 2L)
   expect_true(stats3$concurrent_target_pairs >= 2L)
+  expect_true(is.finite(stats2$concurrent_utility_mass))
+  expect_true(is.finite(stats3$concurrent_utility_mass))
 })
 
-test_that("concurrent spoke routing enforces floor before uncertainty targets", {
+test_that("linking stage targets are deterministic from budget, floors, and taper", {
+  controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
+  q_base <- pairwiseLLM:::.adaptive_link_compute_stage_targets(
+    budget = 10L,
+    controller = controller,
+    linking_identified = FALSE
+  )
+  q_taper <- pairwiseLLM:::.adaptive_link_compute_stage_targets(
+    budget = 10L,
+    controller = controller,
+    linking_identified = TRUE
+  )
+
+  expect_identical(unname(q_base[c("anchor_link", "long_link", "mid_link", "local_link")]), c(3L, 4L, 2L, 1L))
+  expect_identical(unname(q_taper[c("anchor_link", "long_link", "mid_link", "local_link")]), c(4L, 2L, 3L, 1L))
+
+  meta_taper <- attr(q_taper, "quota_meta")
+  expect_true(isTRUE(meta_taper$long_link_taper_applied))
+  expect_identical(meta_taper$stage_target_long_link_pre_taper, 4L)
+  expect_identical(meta_taper$stage_target_long_link_post_taper, 2L)
+})
+
+test_that("concurrent spoke routing enforces floor before budget targets", {
   state <- make_linking_refit_state(
     list(
       multi_spoke_mode = "concurrent",
@@ -784,23 +808,27 @@ test_that("concurrent spoke routing enforces floor before uncertainty targets", 
   )
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state$refit_meta$last_refit_step <- 0L
-  state$controller$link_refit_stats_by_spoke <- list(
-    `2` = list(uncertainty = 0.01),
-    `3` = list(uncertainty = 10)
-  )
-
   # Spoke 3 is below floor while spoke 2 already has one edge.
   pick <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
   expect_identical(pick, 3L)
 
   state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
   state <- append_cross_step(state, 3L, "s32", "h2", 1L, spoke_id = 3L)
-  # Both spokes satisfy floor now; routing should follow uncertainty target deficit.
-  pick2 <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
+  # Both spokes satisfy floor now; routing follows the explicit budget map.
+  pick2 <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(state, controller = NULL, eligible_spoke_ids = NULL, seed = 1L) {
+      list(
+        `2` = list(B_spoke_refit_budget = 4L, concurrent_floor_pairs = 2L, concurrent_utility_mass = 9),
+        `3` = list(B_spoke_refit_budget = 2L, concurrent_floor_pairs = 2L, concurrent_utility_mass = 1)
+      )
+    },
+    pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller),
+    .package = "pairwiseLLM"
+  )
   expect_identical(pick2, 2L)
 })
 
-test_that("concurrent routing uses uncertainty-weighted deficit, not least-used balancing", {
+test_that("concurrent routing uses budget deficit, not least-used balancing", {
   state <- make_linking_refit_state(
     list(
       multi_spoke_mode = "concurrent",
@@ -811,13 +839,17 @@ test_that("concurrent routing uses uncertainty-weighted deficit, not least-used 
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
   state <- append_cross_step(state, 3L, "s32", "h2", 1L, spoke_id = 3L)
-  state$controller$link_refit_stats_by_spoke <- list(
-    `2` = list(uncertainty = 0.01),
-    `3` = list(uncertainty = 100)
+  # Least-used balancing would pick spoke 2 (1 vs 2), but budget-deficit routing picks spoke 3.
+  pick <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(state, controller = NULL, eligible_spoke_ids = NULL, seed = 1L) {
+      list(
+        `2` = list(B_spoke_refit_budget = 1L, concurrent_floor_pairs = 1L, concurrent_utility_mass = 1),
+        `3` = list(B_spoke_refit_budget = 4L, concurrent_floor_pairs = 1L, concurrent_utility_mass = 10)
+      )
+    },
+    pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller),
+    .package = "pairwiseLLM"
   )
-
-  # Least-used balancing would pick spoke 2 (1 vs 2), but target-deficit routing picks spoke 3.
-  pick <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
   expect_identical(pick, 3L)
 })
 

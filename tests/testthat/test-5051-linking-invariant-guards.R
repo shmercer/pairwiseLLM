@@ -123,7 +123,33 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
 
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(bad_rows),
-    "key fields refit_id/spoke_id/hub_id must be non-NA"
+    "missing required columns|key fields refit_id/spoke_id/hub_id must be non-NA"
+  )
+})
+
+test_that("link-stage budget invariant guard rejects target sum mismatches", {
+  bad_rows <- tibble::tibble(
+    B_spoke_refit_budget = 5L,
+    stage_target_anchor_link = 2L,
+    stage_target_long_link = 2L,
+    stage_target_mid_link = 2L,
+    stage_target_local_link = 0L,
+    stage_realized_anchor_link = 1L,
+    stage_realized_long_link = 1L,
+    stage_realized_mid_link = 1L,
+    stage_realized_local_link = 0L,
+    stage_shortfall_anchor_link = 1L,
+    stage_shortfall_long_link = 1L,
+    stage_shortfall_mid_link = 1L,
+    stage_shortfall_local_link = 0L,
+    stage_reallocation_used = FALSE,
+    stage_reallocation_rule_used = "none",
+    stage_budget_unfilled = 2L
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_link_stage_budget_invariants(bad_rows),
+    "targets must sum to the per-spoke budget"
   )
 })
 
