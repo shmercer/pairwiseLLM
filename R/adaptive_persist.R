@@ -153,11 +153,16 @@ read_log <- function(path) {
     if ("posterior_win_prob_pre" %in% names(out) && !"posterior_win_prob_ij_pre" %in% names(out)) {
       out$posterior_win_prob_ij_pre <- out$posterior_win_prob_pre
     }
+    run_mode_chr <- if ("run_mode" %in% names(out)) {
+      as.character(out$run_mode)
+    } else {
+      rep(NA_character_, nrow(out))
+    }
     if (!"is_holdout_probe_step" %in% names(out)) {
-      out$is_holdout_probe_step <- as.logical(as.character(out$run_mode) == "link_probe_holdout")
+      out$is_holdout_probe_step <- as.logical(run_mode_chr == "link_probe_holdout")
     }
     if (!"is_drift_probe_step" %in% names(out)) {
-      out$is_drift_probe_step <- as.logical(as.character(out$run_mode) == "link_probe")
+      out$is_drift_probe_step <- as.logical(run_mode_chr == "link_probe")
     }
     if ("link_transform_mode" %in% names(out)) {
       if (!"link_transform_policy" %in% names(out)) {
