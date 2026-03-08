@@ -632,6 +632,36 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_clear_stale_global_stop_state <- function(state) {
+  out <- state
+  controller <- .adaptive_controller_resolve(out)
+  if (!.adaptive_link_mode_active(controller)) {
+    return(out)
+  }
+  if (isTRUE(.adaptive_global_stop_allowed(out))) {
+    return(out)
+  }
+
+  out$meta <- out$meta %||% list()
+  stop_reason <- as.character(out$meta$stop_reason %||% NA_character_)
+  boundary_refit_id <- as.integer(out$meta$stop_boundary_refit_id %||% NA_integer_)
+  boundary_step_id <- as.integer(out$meta$stop_boundary_step_id %||% NA_integer_)
+  has_boundary <- is.finite(boundary_refit_id) || is.finite(boundary_step_id)
+  stale_btl_stop <- identical(stop_reason, "btl_converged")
+  if (!isTRUE(has_boundary) && !isTRUE(stale_btl_stop)) {
+    return(out)
+  }
+
+  out$meta$stop_decision <- FALSE
+  out$meta$stop_reason <- NA_character_
+  out$meta$stop_boundary_refit_id <- NA_integer_
+  out$meta$stop_boundary_step_id <- NA_integer_
+  out$meta$pairs_committed_after_stop <- 0L
+  out
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_stop_boundary_bootstrap <- function(state) {
   out <- state
   out$meta <- out$meta %||% list()
@@ -1542,6 +1572,7 @@ adaptive_rank_run_live <- function(state,
   state <- .adaptive_phase_a_prepare(state)
   state <- .adaptive_phase_a_finalize_if_ready(state)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
+  state <- .adaptive_clear_stale_global_stop_state(state)
   .adaptive_phase_a_gate_or_abort(state)
   state <- .adaptive_link_sync_warm_start(state)
 
@@ -1567,6 +1598,7 @@ adaptive_rank_run_live <- function(state,
     state <- .adaptive_stop_boundary_bootstrap(state)
     state <- .adaptive_phase_a_prepare(state)
     state <- .adaptive_phase_a_finalize_if_ready(state)
+    state <- .adaptive_clear_stale_global_stop_state(state)
     .adaptive_phase_a_gate_or_abort(state)
     if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
       state$meta$stop_decision <- TRUE
@@ -1766,6 +1798,7 @@ adaptive_rank_run_live <- function(state,
     state <- .adaptive_phase_a_prepare(state)
     state <- .adaptive_phase_a_finalize_if_ready(state)
     state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
+    state <- .adaptive_clear_stale_global_stop_state(state)
     .adaptive_phase_a_gate_or_abort(state)
     if (!is.null(state$config$session_dir)) {
       save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)

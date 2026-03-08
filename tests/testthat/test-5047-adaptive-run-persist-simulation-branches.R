@@ -590,6 +590,47 @@ test_that("global stop allowance respects within-set and linking phase boundarie
   expect_true(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(link_phase_b)))
 })
 
+test_that("stale phase A btl stop state is cleared on resume for linking modes", {
+  state <- pairwiseLLM::adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+      set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+      global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+    ),
+    seed = 9L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("ready", "ready", "pending_finalization"),
+      validation_message = c("ready", "ready", "pending"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    strict_ready_for_phase_b = FALSE,
+    required_sets = c(1L, 2L, 3L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE, `3` = FALSE),
+    phase = "phase_a",
+    ready_spokes = 2L,
+    active_phase_a_set = 3L,
+    phase_b_started_at_step = NA_integer_
+  )
+  state$meta$stop_decision <- TRUE
+  state$meta$stop_reason <- "btl_converged"
+  state$meta$stop_boundary_refit_id <- 52L
+  state$meta$stop_boundary_step_id <- 1335L
+  state$meta$pairs_committed_after_stop <- 668L
+
+  out <- pairwiseLLM:::.adaptive_clear_stale_global_stop_state(state)
+  expect_false(isTRUE(out$meta$stop_decision))
+  expect_true(is.na(out$meta$stop_boundary_refit_id))
+  expect_true(is.na(out$meta$stop_boundary_step_id))
+  expect_identical(out$meta$pairs_committed_after_stop, 0L)
+})
+
 test_that("linking phase A convergence does not terminate the whole run before phase B", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
