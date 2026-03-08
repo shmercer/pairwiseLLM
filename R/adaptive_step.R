@@ -271,6 +271,36 @@ validate_judge_result <- function(result, A_id, B_id) {
     "link_probe"
   )
   is_probe_run_mode <- run_mode %in% c("link_probe_holdout", "link_probe")
+  holdout_flag <- if ("is_holdout_probe_step" %in% names(row)) {
+    as.logical(row$is_holdout_probe_step[[1L]] %||% FALSE)
+  } else {
+    identical(run_mode, "link_probe_holdout")
+  }
+  drift_flag <- if ("is_drift_probe_step" %in% names(row)) {
+    as.logical(row$is_drift_probe_step[[1L]] %||% FALSE)
+  } else {
+    identical(run_mode, "link_probe")
+  }
+  probe_flag <- if ("is_probe_step" %in% names(row)) {
+    as.logical(row$is_probe_step[[1L]] %||% FALSE)
+  } else {
+    is_probe_run_mode
+  }
+  if (!identical(holdout_flag, identical(run_mode, "link_probe_holdout"))) {
+    rlang::abort(
+      "step_log append completeness failure: `is_holdout_probe_step` must match `run_mode`."
+    )
+  }
+  if (!identical(drift_flag, identical(run_mode, "link_probe"))) {
+    rlang::abort(
+      "step_log append completeness failure: `is_drift_probe_step` must match `run_mode`."
+    )
+  }
+  if (!identical(probe_flag, is_probe_run_mode)) {
+    rlang::abort(
+      "step_log append completeness failure: `is_probe_step` must match probe `run_mode`."
+    )
+  }
 
   is_cross <- row$is_cross_set[[1L]]
   if (isTRUE(is_cross)) {
@@ -516,14 +546,15 @@ apply_step_update <- function(state, step) {
   new_history <- tibble::tibble(
     A_id = as.character(step$A_id),
     B_id = as.character(step$B_id),
-    is_probe_step = as.logical(step$row$is_probe_step %||% FALSE)
+    is_probe_step = FALSE
   )
-  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
 
   if (isTRUE(step$row$is_probe_step %||% FALSE)) {
     out <- .adaptive_link_probe_register_commit(out, step$row)
     return(out)
   }
+
+  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
 
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id
@@ -711,6 +742,8 @@ run_one_step <- function(state, judge, ...) {
     "link_probe"
   )
   is_probe_step <- if (isTRUE(is_cross_set) && run_mode %in% c("link_probe_holdout", "link_probe")) TRUE else FALSE
+  is_holdout_probe_step <- isTRUE(is_probe_step) && identical(run_mode, "link_probe_holdout")
+  is_drift_probe_step <- isTRUE(is_probe_step) && identical(run_mode, "link_probe")
   if (isTRUE(is_probe_step)) {
     utility_mode <- NA_character_
   }
@@ -838,6 +871,8 @@ run_one_step <- function(state, judge, ...) {
     set_j = set_j,
     is_cross_set = is_cross_set,
     is_probe_step = is_probe_step,
+    is_holdout_probe_step = is_holdout_probe_step,
+    is_drift_probe_step = is_drift_probe_step,
     link_spoke_id = link_spoke_id,
     run_mode = run_mode,
     link_stage = link_stage,

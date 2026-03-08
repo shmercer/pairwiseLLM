@@ -370,13 +370,17 @@
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   hub_active_cross <- character()
   if (nrow(step_log) > 0L &&
-    all(c("pair_id", "is_cross_set", "link_spoke_id", "set_i", "set_j", "i", "j") %in% names(step_log))) {
+    all(
+      c("pair_id", "is_cross_set", "link_spoke_id", "set_i", "set_j", "i", "j", "is_probe_step") %in%
+        names(step_log)
+    )) {
     link_spoke <- as.integer(step_log$link_spoke_id)
     cumulative <- step_log[
       !is.na(step_log$pair_id) &
         step_log$is_cross_set %in% TRUE &
         !is.na(link_spoke) &
-        link_spoke == as.integer(spoke_id),
+        link_spoke == as.integer(spoke_id) &
+        !(step_log$is_probe_step %in% TRUE),
       ,
       drop = FALSE
     ]
@@ -401,6 +405,42 @@
     active_hub = as.character(active_hub),
     active_spoke = as.character(spoke_items)
   )
+}
+
+.adaptive_link_epoch_start_step_default <- function(state, spoke_id) {
+  phase_a <- state$linking$phase_a %||% list()
+  phase_b_start <- as.integer(phase_a$phase_b_started_at_step %||% NA_integer_)
+  if (is.finite(phase_b_start) && !is.na(phase_b_start) && phase_b_start >= 1L) {
+    return(as.integer(phase_b_start))
+  }
+
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (nrow(step_log) > 0L &&
+    all(c("pair_id", "step_id", "is_cross_set", "link_spoke_id", "is_probe_step") %in% names(step_log))) {
+    rows <- step_log[
+      !is.na(step_log$pair_id) &
+        step_log$is_cross_set %in% TRUE &
+        as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
+        !(step_log$is_probe_step %in% TRUE),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(rows) > 0L) {
+      return(as.integer(min(as.integer(rows$step_id), na.rm = TRUE)))
+    }
+  }
+
+  1L
+}
+
+.adaptive_link_epoch_start_step_for_spoke <- function(state, spoke_id) {
+  controller <- .adaptive_controller_resolve(state)
+  start_map <- controller$link_epoch_start_step_by_spoke %||% list()
+  start_step <- as.integer(start_map[[as.character(spoke_id)]] %||% NA_integer_)
+  if (!is.finite(start_step) || is.na(start_step) || start_step < 1L) {
+    start_step <- .adaptive_link_epoch_start_step_default(state, spoke_id)
+  }
+  as.integer(start_step)
 }
 
 .adaptive_link_transform_theta_mean_for_spoke <- function(state,
@@ -1583,7 +1623,6 @@
       link_transform_policy = as.character(
         .adaptive_normalize_link_transform_policy(refit_contract_ctx$link_transform_policy %||% "auto")
       ),
-      link_transform_mode = as.character(transform_mode),
       link_transform_state = as.character(transform_mode),
       parameters = if (isTRUE(use_scale)) c("delta_s", "log_alpha_s") else c("delta_s"),
       priors = list(delta_sd = 1, log_alpha_sd = if (isTRUE(use_scale)) 0.2 else NA_real_),
@@ -1869,7 +1908,6 @@
     link_transform_policy = as.character(
       .adaptive_normalize_link_transform_policy(refit_contract_ctx$link_transform_policy %||% "auto")
     ),
-    link_transform_mode = as.character(transform_mode),
     link_transform_state = as.character(transform_mode),
     parameters = if (isTRUE(joint_used)) {
       if (isTRUE(use_scale)) {
@@ -2567,6 +2605,7 @@
   escalation_counter_map <- controller$link_escalation_consecutive_pass_count_by_spoke %||% list()
   epoch_id_map <- controller$link_epoch_id_by_spoke %||% list()
   epoch_signature_map <- controller$link_epoch_signature_by_spoke %||% list()
+  epoch_start_step_map <- controller$link_epoch_start_step_by_spoke %||% list()
   coverage_bins_map <- controller$link_stage_coverage_bins_used %||% list()
   coverage_source_map <- controller$link_stage_coverage_source %||% list()
   lag_domain_key_map <- controller$link_lag_domain_key_by_spoke %||% list()
@@ -2577,6 +2616,9 @@
 
   for (spoke_id in spoke_ids) {
     key <- as.character(spoke_id)
+    epoch_start_step_map[[key]] <- as.integer(
+      epoch_start_step_map[[key]] %||% .adaptive_link_epoch_start_step_default(out, spoke_id)
+    )
     transform_frozen <- isTRUE(frozen_map[[key]])
     transform_policy <- .adaptive_normalize_link_transform_policy(
       controller$link_transform_policy %||% "auto"
@@ -2668,6 +2710,7 @@
     attr(hub_theta, "theta_prior_center") <- hub_theta_prior_center
     attr(spoke_theta, "theta_sd") <- spoke_theta_sd
     attr(spoke_theta, "theta_init") <- spoke_theta_init
+    cross_active_all <- cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE]
     fit <- if (isTRUE(transform_frozen)) {
       list(
         delta_mean = as.double(frozen_delta_map[[key]] %||% last_delta[[key]] %||% 0),
@@ -2681,7 +2724,7 @@
         fit_contract = list(contract_type = "link_refit_frozen_reuse")
       )
     } else {
-      .adaptive_link_fit_transform(cross_all, hub_theta, spoke_theta, transform_mode = transform_state)
+      .adaptive_link_fit_transform(cross_active_all, hub_theta, spoke_theta, transform_mode = transform_state)
     }
     ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
     ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
@@ -2747,11 +2790,15 @@
       stop_counter_map[[key]] <- 0L
       escalation_counter_map[[key]] <- 0L
       lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
+      epoch_start_step_map[[key]] <- as.integer(last_step + 1L)
     }
     epoch_id_map[[key]] <- as.integer(link_epoch_id)
     epoch_signature_map[[key]] <- as.character(epoch_signature)
     lag_domain_key <- as.character(epoch_signature)
     lag_domain_key_map[[key]] <- as.character(lag_domain_key)
+    epoch_start_step <- as.integer(
+      epoch_start_step_map[[key]] %||% .adaptive_link_epoch_start_step_default(out, spoke_id)
+    )
 
     lag <- as.integer(out$config$btl_config$stability_lag %||% 2L)
     lag_eligible <- !isTRUE(lag_domain_reset) && !is.na(lag) && lag >= 1L && current_refit_id > lag
@@ -2971,10 +3018,15 @@
     }
     stop_counter_map[[key]] <- as.integer(stop_counter)
 
+    cross_active_epoch <- cross_active_all[0, , drop = FALSE]
     scale_ready <- FALSE
     if (nrow(cross_all) > 0L) {
       spoke_item <- hub_item <- NULL
-      active_non_probe_all <- cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE]
+      cross_active_epoch <- cross_active_all[
+        as.integer(cross_active_all$step_id) >= as.integer(epoch_start_step),
+        ,
+        drop = FALSE
+      ]
       bins_used <- as.integer(coverage_bins_map[[key]] %||% 3L)
       score_map <- .adaptive_link_phase_b_routing_scores(
         state = out,
@@ -2987,7 +3039,7 @@
         spoke_item = names(spoke_bins),
         spoke_bin = as.integer(spoke_bins)
       )
-      realized_tbl <- tibble::as_tibble(active_non_probe_all) |>
+      realized_tbl <- tibble::as_tibble(cross_active_epoch) |>
         dplyr::distinct(spoke_item, hub_item)
       realized_bins <- dplyr::left_join(realized_tbl, spoke_bin_tbl, by = "spoke_item")
       per_bin_items <- table(realized_bins$spoke_bin)
@@ -2996,9 +3048,9 @@
         if (nrow(rows) < 1L) {
           return(FALSE)
         }
-        any(table(rows$spoke_item) >= 2L)
+        length(unique(as.character(rows$hub_item))) >= 2L
       }, logical(1L)))
-      scale_ready <- nrow(active_non_probe_all) >= as.integer(controller$shift_scale_min_cross_set_edges %||% 18L) &&
+      scale_ready <- nrow(cross_active_epoch) >= as.integer(controller$shift_scale_min_cross_set_edges %||% 18L) &&
         all(vapply(seq_len(max(1L, bins_used)), function(bin_id) {
           count_bin <- if (as.character(bin_id) %in% names(per_bin_items)) {
             as.integer(per_bin_items[[as.character(bin_id)]])
@@ -3024,7 +3076,7 @@
       isTRUE(scale_ready) &&
       nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 30L)) {
       alt_fit <- .adaptive_link_fit_transform_alt_shift_scale(
-        cross_edges = cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE],
+        cross_edges = cross_active_epoch,
         hub_theta = hub_theta,
         spoke_theta = spoke_theta,
         delta_init = fit$delta_mean
@@ -3059,6 +3111,36 @@
         fit$log_alpha_sd <- as.double(alt_fit$log_alpha_sd %||% NA_real_)
         link_epoch_id <- as.integer(link_epoch_id + 1L)
         epoch_id_map[[key]] <- as.integer(link_epoch_id)
+        epoch_start_step_map[[key]] <- as.integer(
+          max(c(as.integer(tibble::as_tibble(out$step_log %||% tibble::tibble())$step_id), 0L), na.rm = TRUE) + 1L
+        )
+        epoch_signature <- paste(
+          "shift_scale",
+          as.character(refit_mode),
+          as.character(lock_mode),
+          as.integer(hub_art$refit_id %||% NA_integer_),
+          as.integer(spoke_art$refit_id %||% NA_integer_),
+          as.character(hub_art$fit_config_hash %||% NA_character_),
+          as.character(spoke_art$fit_config_hash %||% NA_character_),
+          as.character(probe_panel_id_current),
+          sep = "|"
+        )
+        epoch_signature_map[[key]] <- as.character(epoch_signature)
+        lag_domain_key <- as.character(epoch_signature)
+        lag_domain_key_map[[key]] <- as.character(lag_domain_key)
+        lag_domain_reset <- TRUE
+        lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
+        scale_ready <- FALSE
+        lag_eligible <- FALSE
+        link_lag_eligible <- FALSE
+        link_stop_eligible <- FALSE
+        probe_pred_rmse_lagged <- NA_real_
+        theta_global_rmse_lagged <- NA_real_
+        rank_stability <- list(
+          lag_eligible = FALSE,
+          rho_rank_lagged = NA_real_,
+          rho_rank_lagged_pass = FALSE
+        )
         stop_counter <- 0L
         stop_counter_map[[key]] <- 0L
       }
@@ -3078,7 +3160,6 @@
     last_log_alpha[[key]] <- as.double(fit$log_alpha_mean %||% NA_real_)
     link_stats[[key]] <- list(
       link_transform_policy = as.character(transform_policy),
-      link_transform_mode = as.character(transform_state),
       link_transform_state = as.character(transform_state),
       shift_only_theta_treatment = as.character(theta_treatment),
       shift_only_theta_treatment_resolved = as.character(theta_treatment_resolved),
@@ -3146,7 +3227,7 @@
       probe_brier_shift_scale = as.double(probe_brier_shift_scale),
       probe_brier_delta = as.double(probe_brier_delta),
       log_alpha_spoke_sd_alt = as.double(alt_fit$log_alpha_sd %||% NA_real_),
-      alt_eval_active_edges = as.integer(nrow(cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE])),
+      alt_eval_active_edges = as.integer(nrow(cross_active_epoch)),
       alt_eval_converged = as.logical(alt_fit$converged %||% FALSE),
       alternative_fit_method = "map_laplace",
       probe_brier_delta_min_used = as.double(controller$probe_brier_delta_min %||% 0.005),
@@ -3206,6 +3287,7 @@
   controller$link_escalation_consecutive_pass_count_by_spoke <- escalation_counter_map
   controller$link_epoch_id_by_spoke <- epoch_id_map
   controller$link_epoch_signature_by_spoke <- epoch_signature_map
+  controller$link_epoch_start_step_by_spoke <- epoch_start_step_map
   controller$link_lag_domain_key_by_spoke <- lag_domain_key_map
   controller$link_lag_domain_reset_refit_id_by_spoke <- lag_domain_reset_refit_map
   controller$linking_identified <- any(unlist(link_identified_map), na.rm = TRUE)

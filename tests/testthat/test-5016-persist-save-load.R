@@ -278,6 +278,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
   state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 3L)
   state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  state$controller$link_epoch_start_step_by_spoke <- list(`2` = 8L)
   state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
@@ -300,6 +301,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   expect_true(isTRUE(restored$controller$link_transform_frozen_by_spoke[["2"]]))
   expect_identical(restored$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 3L)
   expect_identical(restored$controller$link_epoch_id_by_spoke[["2"]], 4L)
+  expect_identical(restored$controller$link_epoch_start_step_by_spoke[["2"]], 8L)
   expect_identical(restored$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 1L)
 })
 

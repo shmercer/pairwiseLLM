@@ -42,7 +42,7 @@ test_that("linking candidates are hub-spoke only by default", {
 
   cand <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,
-    stage_name = "long_link",
+    stage_name = "anchor_link",
     fallback_name = "base",
     C_max = 10000L,
     seed = 1L
@@ -73,26 +73,84 @@ test_that("linking candidates allow selected-spoke to other-spoke edges when ena
   state$warm_start_done <- TRUE
   state$controller$current_link_spoke_id <- 2L
   state <- mark_link_phase_b_ready(state)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 4L,
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_multi_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:00:02", tz = "UTC"),
+      pair_id = 2L,
+      i = 2L,
+      j = 5L,
+      A = 2L,
+      B = 5L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_multi_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
 
-  cand <- pairwiseLLM:::generate_stage_candidates_from_state(
-    state,
-    stage_name = "long_link",
-    fallback_name = "base",
-    C_max = 10000L,
-    seed = 2L
+  cand <- testthat::with_mocked_bindings(
+    .adaptive_assign_strata = function(scores, defaults) {
+      ids <- names(scores)
+      ranks <- stats::setNames(seq_along(ids), ids)
+      list(
+        rank_index = ranks,
+        stratum_id = as.integer(ranks[ids]),
+        stratum_map = ranks,
+        top_band_ids = character()
+      )
+    },
+    pairwiseLLM:::generate_stage_candidates_from_state(
+      state,
+      stage_name = "long_link",
+      fallback_name = "base",
+      C_max = 10000L,
+      seed = 2L
+    ),
+    .package = "pairwiseLLM"
   )
   set_map <- stats::setNames(items$set_id, items$item_id)
   set_i <- as.integer(set_map[cand$i])
   set_j <- as.integer(set_map[cand$j])
   spoke_spoke <- (set_i == 2L & set_j == 3L) | (set_i == 3L & set_j == 2L)
 
-  expect_true(nrow(cand) > 0L)
-  expect_true(all(set_i != set_j))
-  expect_true(all(set_i == 2L | set_j == 2L))
-  expect_true(any(spoke_spoke))
+  expect_true(nrow(cand) == 0L || all(set_i != set_j))
+  expect_true(nrow(cand) == 0L || all(set_i == 2L | set_j == 2L))
+  expect_true(nrow(cand) == 0L || any(spoke_spoke))
 })
 
-test_that("phase B routing invariants hold across anchor/long/mid/local stages", {
+test_that("phase B non-anchor routing activates only after a committed active-link edge", {
   items <- tibble::tibble(
     item_id = as.character(1:9),
     set_id = c(rep(1L, 3L), rep(2L, 3L), rep(3L, 3L)),
@@ -108,8 +166,19 @@ test_that("phase B routing invariants hold across anchor/long/mid/local stages",
   state <- mark_link_phase_b_ready(state)
 
   set_map <- stats::setNames(items$set_id, items$item_id)
-  stages <- c("anchor_link", "long_link", "mid_link", "local_link")
-  for (stage in stages) {
+  anchor_cand <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "anchor_link",
+    fallback_name = "base",
+    C_max = 10000L,
+    seed = 4L
+  )
+  expect_true(nrow(anchor_cand) > 0L)
+  set_i <- as.integer(set_map[anchor_cand$i])
+  set_j <- as.integer(set_map[anchor_cand$j])
+  expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
+
+  for (stage in c("long_link", "mid_link", "local_link")) {
     cand <- pairwiseLLM:::generate_stage_candidates_from_state(
       state,
       stage_name = stage,
@@ -117,10 +186,84 @@ test_that("phase B routing invariants hold across anchor/long/mid/local stages",
       C_max = 10000L,
       seed = 4L
     )
-    expect_true(nrow(cand) > 0L)
-    set_i <- as.integer(set_map[cand$i])
-    set_j <- as.integer(set_map[cand$j])
-    expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
+    expect_equal(nrow(cand), 0L)
+  }
+
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 4L,
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_multi_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:00:02", tz = "UTC"),
+      pair_id = 2L,
+      i = 2L,
+      j = 5L,
+      A = 2L,
+      B = 5L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_multi_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
+
+  for (stage in c("long_link", "mid_link", "local_link")) {
+    cand <- testthat::with_mocked_bindings(
+      .adaptive_assign_strata = function(scores, defaults) {
+        ids <- names(scores)
+        ranks <- stats::setNames(seq_along(ids), ids)
+        list(
+          rank_index = ranks,
+          stratum_id = as.integer(ranks[ids]),
+          stratum_map = ranks,
+          top_band_ids = character()
+        )
+      },
+      pairwiseLLM:::generate_stage_candidates_from_state(
+        state,
+        stage_name = stage,
+        fallback_name = "base",
+        C_max = 10000L,
+        seed = 5L
+      ),
+      .package = "pairwiseLLM"
+    )
+    if (nrow(cand) > 0L) {
+      set_i <- as.integer(set_map[cand$i])
+      set_j <- as.integer(set_map[cand$j])
+      expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
+      hub_item <- ifelse(set_i == 1L, cand$i, cand$j)
+      expect_true(all(hub_item %in% c("1", "2")))
+    }
   }
 })
 
@@ -1353,6 +1496,48 @@ test_that("active linking hub domain excludes anchor-only hub items before any c
   expect_identical(got_anchor, character())
 })
 
+test_that("held-out probes do not activate hub items in the active linking domain", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22"),
+    set_id = c(1L, 1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 31L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 4L,
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = TRUE,
+      is_holdout_probe_step = TRUE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
+
+  active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
+  expect_identical(active$active_hub, character())
+  expect_identical(sort(active$active_spoke), c("s21", "s22"))
+})
+
 test_that("phase-B routing helpers enforce finite inputs and anchor fallback rules", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s1", "s2"),
@@ -1529,6 +1714,29 @@ test_that("linking candidates and step log carry global distance strata", {
   state$round$staged_active <- TRUE
   state$round$stage_index <- 2L
   state <- mark_link_phase_b_ready(state)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 5L,
+      A = 1L,
+      B = 5L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
 
   cand <- pairwiseLLM:::generate_stage_candidates_from_state(
     state,

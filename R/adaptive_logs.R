@@ -58,6 +58,8 @@ schema_step_log <- c(
   set_j = "integer",
   is_cross_set = "logical",
   is_probe_step = "logical",
+  is_holdout_probe_step = "logical",
+  is_drift_probe_step = "logical",
   link_spoke_id = "integer",
   run_mode = "character",
   link_stage = "character",

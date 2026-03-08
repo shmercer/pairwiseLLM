@@ -872,6 +872,8 @@ generate_stage_candidates_from_state <- function(state,
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
     spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
     active_spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) %in% eligible_spokes])
+    active_items <- .adaptive_link_active_item_ids(state, spoke_id = spoke_id, hub_id = hub_id)
+    active_hub_ids <- as.character(active_items$active_hub)
     if (length(hub_ids) < 1L) {
       rlang::abort(
         paste0(
@@ -891,10 +893,11 @@ generate_stage_candidates_from_state <- function(state,
         )
       )
     }
+    routing_hub_ids <- if (identical(stage_name, "anchor_link")) hub_ids else active_hub_ids
     active_ids <- if (isTRUE(allow_spoke_spoke)) {
-      unique(c(hub_ids, active_spoke_ids))
+      unique(c(routing_hub_ids, active_spoke_ids))
     } else {
-      unique(c(hub_ids, spoke_ids))
+      unique(c(routing_hub_ids, spoke_ids))
     }
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
@@ -987,6 +990,13 @@ generate_stage_candidates_from_state <- function(state,
         if (identical(stage_name, "anchor_link")) {
           keep <- xor(i_anchor, j_anchor)
         } else {
+          if (!i_hub && !j_hub) {
+            next
+          }
+          hub_item_id <- if (isTRUE(i_hub)) i_id else j_id
+          if (!hub_item_id %in% active_hub_ids) {
+            next
+          }
           keep <- dist >= bounds$min && dist <= bounds$max
         }
       } else {

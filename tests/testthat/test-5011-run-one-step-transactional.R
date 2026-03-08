@@ -113,6 +113,9 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_equal(row$utility_mode[[1L]], "linking_d_optimal")
   expect_equal(row$hub_lock_mode[[1L]], "soft_lock")
   expect_equal(row$hub_lock_kappa[[1L]], 0.75)
+  expect_false(isTRUE(row$is_probe_step[[1L]]))
+  expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
+  expect_false(isTRUE(row$is_drift_probe_step[[1L]]))
   expect_false(is.na(row$posterior_win_prob_pre[[1L]]))
   expect_false(is.na(row$cross_set_utility_pre[[1L]]))
 })
@@ -239,8 +242,11 @@ test_that("run_one_step logs probe rows without linking d-opt utility fields", {
 
   expect_identical(as.character(row$run_mode[[1L]]), "link_probe")
   expect_true(isTRUE(row$is_probe_step[[1L]]))
+  expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
+  expect_true(isTRUE(row$is_drift_probe_step[[1L]]))
   expect_true(is.na(row$utility_mode[[1L]]))
   expect_true(is.na(row$cross_set_utility_pre[[1L]]))
+  expect_equal(nrow(out$history_pairs), 0L)
 })
 
 test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs", {
@@ -292,10 +298,11 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
   expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")
   expect_true(isTRUE(row$is_probe_step[[1L]]))
+  expect_true(isTRUE(row$is_holdout_probe_step[[1L]]))
+  expect_false(isTRUE(row$is_drift_probe_step[[1L]]))
   expect_true(is.na(row$utility_mode[[1L]]))
   expect_true(is.na(row$cross_set_utility_pre[[1L]]))
-  expect_equal(nrow(out$history_pairs), 1L)
-  expect_true(isTRUE(out$history_pairs$is_probe_step[[1L]]))
+  expect_equal(nrow(out$history_pairs), 0L)
   expect_true(is.list(out$linking$probe$panels_by_spoke))
   expect_true(nrow(out$linking$probe$realized_edges) >= 1L)
 })

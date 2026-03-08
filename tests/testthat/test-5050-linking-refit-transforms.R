@@ -121,10 +121,13 @@ test_that("linking refit contract fields follow transform mode", {
   c_shift <- state_shift$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_identical(c_shift$parameters, c("delta_s"))
   expect_identical(c_shift$link_transform_state, "shift_only")
+  expect_false("link_transform_mode" %in% names(c_shift))
+  expect_false("link_transform_mode" %in% names(state_shift$controller$link_refit_stats_by_spoke[["2"]]))
 
   c_scale <- state_scale$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_identical(c_scale$parameters, c("delta_s", "log_alpha_s"))
   expect_identical(c_scale$link_transform_state, "shift_scale")
+  expect_false("link_transform_mode" %in% names(c_scale))
 })
 
 test_that("soft lock with kappa=0 is rejected in joint refit", {
@@ -700,34 +703,34 @@ test_that("phase-B candidate routing responds to linking-global transform parame
   state <- make_linking_refit_state()
   state$warm_start_done <- TRUE
   state$controller$current_link_spoke_id <- 2L
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  active_ids <- c("h1", "h2", "s21", "s22")
 
-  base <- pairwiseLLM:::generate_stage_candidates_from_state(
-    state,
-    stage_name = "mid_link",
-    fallback_name = "base",
-    C_max = 5000L,
-    seed = 99L
+  base <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = state$controller,
+    active_ids = active_ids,
+    hub_id = 1L
   )
 
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(delta_spoke_mean = 4))
-  shifted_up <- pairwiseLLM:::generate_stage_candidates_from_state(
-    state,
-    stage_name = "mid_link",
-    fallback_name = "base",
-    C_max = 5000L,
-    seed = 99L
+  shifted_up <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = state$controller,
+    active_ids = active_ids,
+    hub_id = 1L
   )
 
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(delta_spoke_mean = -4, log_alpha_spoke_mean = log(1.4), link_transform_state = "shift_scale")
   )
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_scale")
-  shifted_down_scale <- pairwiseLLM:::generate_stage_candidates_from_state(
-    state,
-    stage_name = "mid_link",
-    fallback_name = "base",
-    C_max = 5000L,
-    seed = 99L
+  shifted_down_scale <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = state$controller,
+    active_ids = active_ids,
+    hub_id = 1L
   )
 
   expect_false(identical(base, shifted_up))
@@ -939,6 +942,148 @@ test_that("active linking transformed reliability uses the active hub-spoke doma
 
   expect_equal(rel_active, rel_manual, tolerance = 1e-12)
   expect_false(isTRUE(all.equal(rel_active, rel_all, tolerance = 1e-12)))
+})
+
+test_that("scale_ready uses current-epoch active edges only", {
+  make_state <- function(epoch_start_step) {
+    state <- make_linking_refit_state(
+      list(
+        spoke_quantile_coverage_bins = 1L,
+        shift_scale_min_cross_set_edges = 2L,
+        shift_scale_min_distinct_spoke_items_per_bin = 1L
+      )
+    )
+    state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+    state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+    state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
+    state$controller$link_epoch_start_step_by_spoke <- list(`2` = as.integer(epoch_start_step))
+    state$controller$link_epoch_signature_by_spoke <- list(`2` = "shift_only|shift_only|soft_lock|NA|NA|NA|NA|NA")
+    state$controller$link_stage_coverage_bins_used <- list(`2` = 1L)
+    state
+  }
+
+  run_case <- function(state) {
+    testthat::with_mocked_bindings(
+      .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+        list(
+          delta_mean = 0,
+          delta_sd = 0.1,
+          log_alpha_mean = NA_real_,
+          log_alpha_sd = NA_real_,
+          theta_hub_post = hub_theta,
+          theta_spoke_post = spoke_theta,
+          posterior_draws = list(),
+          diagnostics = list(
+            divergences = 0L,
+            max_rhat = 1,
+            min_ess_bulk = 1000,
+            diagnostics_divergences_pass = TRUE,
+            diagnostics_rhat_pass = TRUE,
+            diagnostics_ess_pass = TRUE
+          ),
+          fit_contract = list()
+        )
+      },
+      .adaptive_link_reliability_transformed_active = function(...) 0.95,
+      .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+      .adaptive_link_rank_stability_lagged = function(...) {
+        list(lag_eligible = FALSE, rho_rank_lagged = NA_real_, rho_rank_lagged_pass = FALSE)
+      },
+      .adaptive_link_probe_edges_realized = function(...) tibble::tibble(),
+      .adaptive_link_probe_brier_for_fit = function(...) NA_real_,
+      .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) NA_real_,
+      .adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
+      .package = "pairwiseLLM"
+    )
+  }
+
+  stats_all_edges <- run_case(make_state(epoch_start_step = 1L))$controller$link_refit_stats_by_spoke[["2"]]
+  stats_epoch_edges <- run_case(make_state(epoch_start_step = 3L))$controller$link_refit_stats_by_spoke[["2"]]
+
+  expect_true(isTRUE(stats_all_edges$scale_ready))
+  expect_false(isTRUE(stats_epoch_edges$scale_ready))
+})
+
+test_that("epoch reset paths advance epoch start step and clear counters", {
+  make_reset_state <- function() {
+    state <- make_linking_refit_state()
+    state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+    state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+    state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+    state$controller$link_epoch_start_step_by_spoke <- list(`2` = 1L)
+    state$controller$link_epoch_signature_by_spoke <- list(`2` = "old_signature")
+    state$controller$link_stop_consecutive_pass_count_by_spoke <- list(`2` = 2L)
+    state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
+    state
+  }
+
+  run_reset <- function(state) {
+    testthat::with_mocked_bindings(
+      .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+        list(
+          delta_mean = 0,
+          delta_sd = 0.1,
+          log_alpha_mean = NA_real_,
+          log_alpha_sd = NA_real_,
+          theta_hub_post = hub_theta,
+          theta_spoke_post = spoke_theta,
+          posterior_draws = list(),
+          diagnostics = list(
+            divergences = 0L,
+            max_rhat = 1,
+            min_ess_bulk = 1000,
+            diagnostics_divergences_pass = TRUE,
+            diagnostics_rhat_pass = TRUE,
+            diagnostics_ess_pass = TRUE
+          ),
+          fit_contract = list()
+        )
+      },
+      .adaptive_link_reliability_transformed_active = function(...) 0.95,
+      .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+      .adaptive_link_rank_stability_lagged = function(...) {
+        list(lag_eligible = FALSE, rho_rank_lagged = NA_real_, rho_rank_lagged_pass = FALSE)
+      },
+      .adaptive_link_probe_edges_realized = function(...) tibble::tibble(),
+      .adaptive_link_probe_brier_for_fit = function(...) NA_real_,
+      .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) NA_real_,
+      .adaptive_linking_refit_update_state(state, list(last_refit_step = 2L)),
+      .package = "pairwiseLLM"
+    )
+  }
+
+  artifact_state <- make_reset_state()
+  artifact_state$linking$phase_a$artifacts[["2"]]$refit_id <- 9L
+  artifact_reset <- run_reset(artifact_state)
+
+  probe_state <- make_reset_state()
+  panel <- tibble::tibble(
+    probe_panel_id = "new_panel",
+    link_epoch_id = 4L,
+    spoke_id = 2L,
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    spoke_bin = 1L,
+    hub_bin = 1L,
+    planned_rank = 1L,
+    pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+    realized = FALSE,
+    realized_step_id = NA_integer_,
+    realized_pair_id = NA_integer_,
+    realized_run_mode = NA_character_
+  )
+  probe_state$linking$probe$panels_by_spoke <- list(`2` = panel)
+  probe_reset <- run_reset(probe_state)
+
+  for (out in list(artifact_reset, probe_reset)) {
+    expect_identical(out$controller$link_epoch_id_by_spoke[["2"]], 5L)
+    expect_identical(out$controller$link_epoch_start_step_by_spoke[["2"]], 3L)
+    expect_identical(out$controller$link_stop_consecutive_pass_count_by_spoke[["2"]], 0L)
+    expect_identical(out$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 0L)
+    stats_row <- out$controller$link_refit_stats_by_spoke[["2"]]
+    expect_true(isTRUE(stats_row$lag_domain_reset))
+    expect_false(isTRUE(stats_row$lag_eligible))
+  }
 })
 
 test_that("link stop gating enforces diagnostics and lag eligibility", {
