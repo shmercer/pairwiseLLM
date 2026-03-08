@@ -288,6 +288,7 @@ test_that("adaptive_rank_run_live covers progress event, persistence writes, and
     maybe_refit_btl = function(state, config, fit_fn) {
       list(state = state, refit_performed = TRUE, config = config, refit_context = list())
     },
+    .adaptive_linking_refit_update_state = function(state, refit_context) state,
     compute_stop_metrics = function(state, config) pairwiseLLM:::.adaptive_stop_metrics_defaults(),
     .adaptive_maybe_enter_phase3 = function(state, metrics, config) state,
     should_stop = function(metrics, config) FALSE,
@@ -586,7 +587,12 @@ test_that("global stop allowance respects within-set and linking phase boundarie
   link_phase_b$linking$phase_a$set_stop_pass_by_set <- list(`1` = TRUE, `2` = TRUE, `3` = TRUE)
   link_phase_b$linking$phase_a$phase <- "phase_b"
   link_phase_b$linking$phase_a$ready_spokes <- c(2L, 3L)
+  link_phase_b$linking$phase_a$active_spokes <- c(2L, 3L)
   link_phase_b$linking$phase_a$active_phase_a_set <- NA_integer_
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(link_phase_b)))
+
+  link_phase_b$controller$link_stopped_by_spoke <- list(`2` = TRUE, `3` = TRUE)
+  link_phase_b$controller$probe_pairs_per_refit_per_spoke <- 0L
   expect_true(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(link_phase_b)))
 })
 
@@ -820,6 +826,75 @@ test_that("phase B stage exhaustion persists across round rollover within refit 
 
   expect_identical(progress$stage_committed[["anchor_link"]], progress$stage_quotas[["anchor_link"]])
   expect_identical(progress$active_stage, "long_link")
+})
+
+test_that("phase B global stop remains blocked until linking stop is terminally legal", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 61L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ready", "ready"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_spokes = 2L
+  )
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(state)))
+
+  state$controller$link_stopped_by_spoke <- list(`2` = TRUE)
+  state$controller$probe_pairs_per_refit_per_spoke <- 0L
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(state)))
+})
+
+test_that("phase B all-spokes-exhausted stop uses explicit linking reason", {
+  state <- pairwiseLLM::adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+      set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+      global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+    ),
+    seed = 62L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("ready", "ready", "ready"),
+      validation_message = c("ready", "ready", "ready"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    phase = "phase_b",
+    ready_spokes = c(2L, 3L),
+    active_spokes = c(2L, 3L)
+  )
+  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
+    `1::2` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE),
+    `1::3` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE)
+  )
+
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_all_spokes_exhausted(state, refit_id = 1L)))
 })
 
 test_that("adaptive run helper branches for linking stop/routing utilities are covered", {

@@ -1998,3 +1998,75 @@ test_that("phase B starvation marks the attempted spoke exhausted and advances s
   )
   expect_identical(next_stage, "mid_link")
 })
+
+test_that("pooled backfill enforces duplicate caps and preserves candidate counts", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 81L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 1L
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ready", "ready"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_spokes = 2L
+  )
+  state$controller$current_link_spoke_id <- 2L
+  state$history_pairs <- tibble::tibble(
+    A_id = c("h1", "h1", "h1"),
+    B_id = c("s21", "s21", "s21")
+  )
+  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
+    `1::2` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE)
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      stats::setNames(c(1L, 1L, 1L, 1L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    .adaptive_link_candidate_pool = function(
+      state, controller, spoke_id, include_utility = TRUE, C_max = NULL, seed = 1L
+    ) {
+      tibble::tibble(
+        i = c("h1", "h2"),
+        j = c("s21", "s22"),
+        p = c(0.5, 0.5),
+        u0 = c(0.25, 0.25),
+        link_d_opt_gain = c(10, 5),
+        link_u = c(10, 5),
+        link_stage = c("long_link", "long_link"),
+        link_spoke_id = c(2L, 2L),
+        coverage_bins_used = c(3L, 3L),
+        coverage_source = c("linking_global_score", "linking_global_score")
+      )
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::select_next_pair(state, step_id = 1L)
+    }
+  )
+
+  expect_false(isTRUE(out$candidate_starved))
+  expect_identical(as.integer(out$i), 2L)
+  expect_identical(as.integer(out$j), 4L)
+  expect_gt(as.integer(out$n_candidates_generated), 0L)
+  expect_gt(as.integer(out$n_candidates_after_duplicates), 0L)
+  expect_gt(as.integer(out$n_candidates_scored), 0L)
+})

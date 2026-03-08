@@ -627,7 +627,36 @@
     return(FALSE)
   }
 
-  TRUE
+  isTRUE(.adaptive_link_all_spokes_stopped(state))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_all_spokes_exhausted <- function(state, refit_id) {
+  controller <- .adaptive_controller_resolve(state)
+  if (!.adaptive_link_mode_active(controller)) {
+    return(FALSE)
+  }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(FALSE)
+  }
+  active_spokes <- unique(as.integer(phase_ctx$active_spokes %||% integer()))
+  active_spokes <- active_spokes[!is.na(active_spokes)]
+  if (length(active_spokes) < 1L) {
+    return(FALSE)
+  }
+  exhausted_map <- .adaptive_link_refit_exhausted_map(state)
+  stage_order <- .adaptive_stage_order()
+  refit_id <- as.integer(refit_id %||% NA_integer_)
+  if (is.na(refit_id)) {
+    return(FALSE)
+  }
+  all(vapply(active_spokes, function(spoke_id) {
+    key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
+    exhausted <- exhausted_map[[key]] %||% list()
+    all(vapply(stage_order, function(stage_name) isTRUE(exhausted[[stage_name]]), logical(1L)))
+  }, logical(1L)))
 }
 
 #' @keywords internal
@@ -1789,6 +1818,17 @@ adaptive_rank_run_live <- function(state,
           }
           return(state)
         }
+      }
+      if (isTRUE(.adaptive_link_all_spokes_exhausted(
+        state,
+        refit_id = as.integer(round_row$refit_id %||% NA_integer_)
+      ))) {
+        state$meta$stop_decision <- TRUE
+        state$meta$stop_reason <- "all_spokes_exhausted"
+        if (!is.null(state$config$session_dir)) {
+          save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+        }
+        return(state)
       }
       if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
         state$meta$stop_decision <- TRUE

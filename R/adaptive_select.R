@@ -1121,6 +1121,80 @@ adaptive_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_filter_link_backfill_candidates <- function(
+  candidates,
+  counts,
+  round,
+  recent_deg,
+  defaults
+) {
+  cand <- tibble::as_tibble(candidates)
+  n_generated <- nrow(cand)
+  if (n_generated < 1L) {
+    return(list(
+      candidates = cand,
+      counts = list(
+        n_candidates_generated = 0L,
+        n_candidates_after_hard_filters = 0L,
+        n_candidates_after_duplicates = 0L,
+        n_candidates_after_star_caps = 0L,
+        n_candidates_scored = 0L
+      ),
+      star_caps = list(rejects = 0L, reject_items = character(), reject_items_count = 0L)
+    ))
+  }
+
+  cap_count <- ceiling(defaults$cap_frac * defaults$W_cap)
+  cand_hard <- .adaptive_round_exposure_filter(
+    cand,
+    round = round,
+    recent_deg = recent_deg,
+    defaults = defaults,
+    allow_repeat_pressure = FALSE
+  )
+  n_after_hard <- nrow(cand_hard)
+  p_vals <- if ("p" %in% names(cand_hard)) as.double(cand_hard$p) else rep_len(NA_real_, n_after_hard)
+  u0_vals <- if ("u0" %in% names(cand_hard)) as.double(cand_hard$u0) else rep_len(NA_real_, n_after_hard)
+  u0_quantile <- if ("u0" %in% names(cand_hard) && n_after_hard > 0L) {
+    stats::quantile(cand_hard$u0, probs = defaults$q, names = FALSE, type = 7)
+  } else {
+    NULL
+  }
+  cand_dup <- .adaptive_duplicate_filter(
+    candidates = cand_hard,
+    pair_count = counts$pair_count,
+    dup_max_obs = defaults$dup_max_obs,
+    allow_repeats = FALSE,
+    dup_max_obs_default = defaults$dup_max_obs,
+    dup_p_margin = defaults$dup_p_margin,
+    p_vals = p_vals,
+    u0_vals = u0_vals,
+    u0_quantile = u0_quantile
+  )
+  n_after_dup <- nrow(cand_dup)
+  star_filtered <- .adaptive_star_cap_filter(cand_dup, recent_deg, cap_count)
+  cand_final <- star_filtered$candidates
+  n_after_star <- nrow(cand_final)
+
+  list(
+    candidates = cand_final,
+    counts = list(
+      n_candidates_generated = as.integer(n_generated),
+      n_candidates_after_hard_filters = as.integer(n_after_hard),
+      n_candidates_after_duplicates = as.integer(n_after_dup),
+      n_candidates_after_star_caps = as.integer(n_after_star),
+      n_candidates_scored = as.integer(n_after_star)
+    ),
+    star_caps = list(
+      rejects = as.integer(star_filtered$rejects),
+      reject_items = as.character(star_filtered$reject_items),
+      reject_items_count = as.integer(star_filtered$reject_items_count)
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
 select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
@@ -1397,6 +1471,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       }
 
       if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {
+        backfill_filtered <- .adaptive_filter_link_backfill_candidates(
+          candidates = stage_candidates,
+          counts = counts,
+          round = round,
+          recent_deg = recent_deg,
+          defaults = defaults
+        )
+        last_counts <- backfill_filtered$counts
+        last_star_caps <- backfill_filtered$star_caps
+        stage_candidates <- backfill_filtered$candidates
         if (nrow(stage_candidates) == 0L) {
           next
         }
@@ -1691,6 +1775,29 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   }
 
   selected_pair <- tibble::as_tibble(selected_pair)
+  if (!identical(selected_round_stage, "warm_start")) {
+    count_fields <- c(
+      "n_candidates_generated",
+      "n_candidates_after_hard_filters",
+      "n_candidates_after_duplicates",
+      "n_candidates_after_star_caps",
+      "n_candidates_scored"
+    )
+    count_vals <- vapply(
+      count_fields,
+      function(field) as.integer(last_counts[[field]] %||% 0L),
+      integer(1L)
+    )
+    if (all(count_vals <= 0L)) {
+      rlang::abort(
+        paste0(
+          "Selector invariant failed: committed selection for stage `",
+          selected_round_stage,
+          "` cannot have zero candidate accounting."
+        )
+      )
+    }
+  }
   order_vals <- .adaptive_assign_order(
     selected_pair,
     counts$posA,

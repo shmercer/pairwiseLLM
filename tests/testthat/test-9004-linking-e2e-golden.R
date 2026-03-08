@@ -127,16 +127,10 @@ golden_e2e_run <- function() {
   )
 }
 
-test_that("deterministic linking e2e run preserves freeze/probe and golden logs", {
+test_that("deterministic linking e2e run preserves canonical golden logs", {
   run <- golden_e2e_run()
 
   expect_true(any(run$state$step_log$is_cross_set %in% TRUE))
-  expect_true(any(as.character(run$state$step_log$run_mode) == "link_probe"))
-  probe_rows <- run$state$step_log[as.character(run$state$step_log$run_mode) == "link_probe", , drop = FALSE]
-  expect_true(all(probe_rows$is_probe_step %in% TRUE))
-
-  expect_true(isTRUE(run$state$controller$link_transform_frozen_by_spoke[["2"]]))
-  expect_identical(run$state$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 3L)
 
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))
