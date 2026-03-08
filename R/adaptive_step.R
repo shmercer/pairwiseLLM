@@ -708,11 +708,16 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_integer_
   }
+  selected_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
   if (isTRUE(is_cross_set) && is.na(link_spoke_id)) {
-    selected_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
     if (!is.na(selected_spoke_id) && selected_spoke_id %in% c(set_i, set_j)) {
       link_spoke_id <- selected_spoke_id
     }
+  }
+  if (is.na(link_spoke_id) &&
+    isTRUE(selection$candidate_starved %||% FALSE) &&
+    !is.na(selected_spoke_id)) {
+    link_spoke_id <- selected_spoke_id
   }
   frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
   if (isTRUE(is_cross_set) && !is.na(link_spoke_id) && isTRUE(frozen_map[[as.character(link_spoke_id)]])) {
@@ -908,14 +913,14 @@ run_one_step <- function(state, judge, ...) {
     )
   }
 
-  if (isTRUE(is_valid) && !is.na(as.integer(selection$link_spoke_id_selected %||% NA_integer_))) {
+  if (!is.na(selected_spoke_id)) {
     out$controller <- .adaptive_controller_resolve(out)
-    spoke_key <- as.character(as.integer(selection$link_spoke_id_selected))
+    spoke_key <- as.character(as.integer(selected_spoke_id))
     bins_map <- out$controller$link_stage_coverage_bins_used %||% list()
     source_map <- out$controller$link_stage_coverage_source %||% list()
     bins_map[[spoke_key]] <- as.integer(selection$coverage_bins_used %||% NA_integer_)
     source_map[[spoke_key]] <- as.character(selection$coverage_source %||% NA_character_)
-    out$controller$current_link_spoke_id <- as.integer(selection$link_spoke_id_selected)
+    out$controller$current_link_spoke_id <- as.integer(selected_spoke_id)
     out$controller$link_stage_coverage_bins_used <- bins_map
     out$controller$link_stage_coverage_source <- source_map
   }

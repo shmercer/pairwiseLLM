@@ -1626,6 +1626,11 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   }
 
   if (is.null(selected_pair) || nrow(selected_pair) == 0L) {
+    starved_spoke_id <- if (!is.na(selected_link_spoke_attempt)) {
+      as.integer(selected_link_spoke_attempt)
+    } else {
+      as.integer(active_link_spoke %||% NA_integer_)
+    }
     starvation_reason <- if (isTRUE(link_phase_b_concurrent) && length(ranked_link_spokes) > 0L) {
       "all_eligible_spokes_infeasible"
     } else {
@@ -1662,7 +1667,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       dist_stratum_global = NA_integer_,
       coverage_bins_used = NA_integer_,
       coverage_source = NA_character_,
-      link_spoke_id_selected = NA_integer_,
+      link_spoke_id_selected = as.integer(starved_spoke_id),
       stage_committed_so_far = as.integer(selected_stage_committed_so_far),
       stage_quota = as.integer(selected_stage_quota),
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,

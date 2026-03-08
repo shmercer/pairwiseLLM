@@ -1090,7 +1090,7 @@ test_that("concurrent selector starves only after all eligible spokes are infeas
 
   expect_true(isTRUE(out$candidate_starved))
   expect_identical(out$starvation_reason, "all_eligible_spokes_infeasible")
-  expect_true(is.na(out$link_spoke_id_selected))
+  expect_true(as.integer(out$link_spoke_id_selected) %in% c(2L, 3L))
 })
 
 test_that("concurrent fallback ordering is deterministic under fixed state and seed", {
@@ -1913,4 +1913,88 @@ test_that("cross-set candidate generation aborts when requested spoke is not pha
     ),
     "requested spoke_id=3 is not eligible"
   )
+})
+
+test_that("phase B starved selection preserves the attempted spoke id", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 77L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$controller$current_link_spoke_id <- 3L
+  state <- mark_link_phase_b_ready(state)
+
+  out <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(...) tibble::tibble(),
+    .adaptive_link_candidate_pool = function(...) tibble::tibble(),
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::select_next_pair(state, step_id = 1L)
+    }
+  )
+
+  expect_true(isTRUE(out$candidate_starved))
+  expect_identical(as.integer(out$link_spoke_id_selected), 3L)
+  expect_identical(as.character(out$round_stage), "anchor_link")
+})
+
+test_that("phase B starvation marks the attempted spoke exhausted and advances stage", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 78L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 10L
+  state$controller$current_link_spoke_id <- 3L
+  state <- mark_link_phase_b_ready(state)
+  state$refit_meta$last_refit_step <- 0L
+  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
+    `1::2` = list(long_link = TRUE)
+  )
+  state$refit_meta$link_stage_shortfalls_by_refit_spoke <- list(
+    `1::2` = list(long_link = 1L)
+  )
+
+  step_row <- tibble::tibble(
+    round_stage = "long_link",
+    link_spoke_id = 3L,
+    starvation_reason = "few_candidates_generated"
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      stats::setNames(c(0L, 1L, 1L, 0L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_round_starvation(state, step_row)$state
+    }
+  )
+
+  exhausted_map <- out$refit_meta$link_stage_exhausted_by_refit_spoke
+  expect_true(isTRUE(exhausted_map[["1::3"]]$long_link))
+  expect_identical(out$controller$current_link_spoke_id, 3L)
+  next_stage <- testthat::with_mocked_bindings(
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      stats::setNames(c(0L, 1L, 1L, 0L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_round_active_stage(out)
+    }
+  )
+  expect_identical(next_stage, "mid_link")
 })

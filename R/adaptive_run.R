@@ -1019,6 +1019,7 @@
       }
     }
     if (length(spokes_to_mark) > 0L) {
+      out$controller <- controller
       refit_id <- .adaptive_link_refit_window_id(out)
       shortfalls <- .adaptive_link_refit_shortfalls_map(out)
       exhausted_map <- .adaptive_link_refit_exhausted_map(out)
@@ -1064,6 +1065,9 @@
       }
       out$refit_meta$link_stage_shortfalls_by_refit_spoke <- shortfalls
       out$refit_meta$link_stage_exhausted_by_refit_spoke <- exhausted_map
+      if (length(unique(as.integer(spokes_to_mark))) == 1L) {
+        out$controller$current_link_spoke_id <- as.integer(unique(as.integer(spokes_to_mark))[[1L]])
+      }
       out$round <- round
       return(list(state = out, exhausted = FALSE))
     }
