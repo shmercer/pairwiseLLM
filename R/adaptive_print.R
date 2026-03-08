@@ -774,6 +774,61 @@ summarize_adaptive <- function(state) {
   )
 }
 
+.adaptive_print_compact_values <- function(x) {
+  vals <- unique(as.character(x))
+  vals <- vals[!is.na(vals) & nzchar(vals)]
+  if (length(vals) < 1L) {
+    return(NA_character_)
+  }
+  paste(sort(vals), collapse = ",")
+}
+
+.adaptive_print_link_phase_line <- function(state) {
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(character())
+  }
+
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  policy <- as.character(controller$link_transform_policy %||% NA_character_)
+  state_map <- controller$link_transform_state_by_spoke %||% list()
+  state_vals <- .adaptive_print_compact_values(state_map)
+  epoch_map <- controller$link_epoch_id_by_spoke %||% list()
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_spokes <- as.integer(names(frozen_map)[vapply(frozen_map, isTRUE, logical(1L))])
+  frozen_spokes <- frozen_spokes[is.finite(frozen_spokes)]
+
+  phase_line <- paste0("linking: ", phase_ctx$phase, " (run_mode=", run_mode, ")")
+  details <- c(
+    if (is.finite(phase_ctx$active_phase_a_set)) {
+      paste0("phase_a_set=", phase_ctx$active_phase_a_set)
+    },
+    if (length(phase_ctx$ready_spokes) > 0L) {
+      paste0("ready_spokes=", paste(phase_ctx$ready_spokes, collapse = ","))
+    },
+    if (length(phase_ctx$stopped_spokes) > 0L) {
+      paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+    },
+    if (!is.na(policy) && nzchar(policy)) {
+      paste0("transform_policy=", policy)
+    },
+    if (!is.na(state_vals) && nzchar(state_vals)) {
+      paste0("transform_state=", state_vals)
+    },
+    if (length(epoch_map) > 0L) {
+      paste0("link_epoch=", .adaptive_print_compact_values(epoch_map))
+    },
+    if (length(frozen_spokes) > 0L) {
+      paste0("frozen_spokes=", paste(sort(unique(frozen_spokes)), collapse = ","))
+    }
+  )
+  if (length(details) > 0L) {
+    phase_line <- paste0(phase_line, " [", paste(details, collapse = "; "), "]")
+  }
+  phase_line
+}
+
 #' Print an adaptive state summary.
 #'
 #' @description
@@ -800,6 +855,7 @@ print.adaptive_state <- function(x, ...) {
     paste0("steps: ", summary$steps_attempted, " (committed=", summary$committed_pairs, ")"),
     paste0("refits: ", summary$n_refits)
   )
+  lines <- c(lines, .adaptive_print_link_phase_line(x))
 
   if (!is.na(summary$last_stop_decision)) {
     decision <- if (isTRUE(summary$last_stop_decision)) "stop" else "continue"
@@ -959,6 +1015,16 @@ adaptive_progress_step_event <- function(step_row, cfg) {
   step_id <- step_row$step_id[[1L]]
   stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
   stage_txt <- if (!is.na(stage) && stage != "") paste0(" stage=", stage) else ""
+  run_mode <- if ("run_mode" %in% names(step_row)) {
+    as.character(step_row$run_mode[[1L]] %||% NA_character_)
+  } else {
+    NA_character_
+  }
+  is_probe_step <- if ("is_probe_step" %in% names(step_row)) {
+    isTRUE(step_row$is_probe_step[[1L]] %||% FALSE)
+  } else {
+    FALSE
+  }
   link_txt <- character()
   if ("is_cross_set" %in% names(step_row) && isTRUE(step_row$is_cross_set[[1L]] %||% FALSE)) {
     spoke <- as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
@@ -971,6 +1037,20 @@ adaptive_progress_step_event <- function(step_row, cfg) {
         link_txt <- c(link_txt, paste0("transform=", mode))
       }
     }
+  }
+  if (isTRUE(is_probe_step) || run_mode %in% c("link_probe_holdout", "link_probe")) {
+    probe_label <- if (identical(run_mode, "link_probe_holdout") ||
+      ("is_holdout_probe_step" %in% names(step_row) &&
+        isTRUE(step_row$is_holdout_probe_step[[1L]] %||% FALSE))) {
+      "holdout"
+    } else if (identical(run_mode, "link_probe") ||
+      ("is_drift_probe_step" %in% names(step_row) &&
+        isTRUE(step_row$is_drift_probe_step[[1L]] %||% FALSE))) {
+      "drift"
+    } else {
+      "probe"
+    }
+    link_txt <- c(link_txt, paste0("probe=", probe_label))
   }
   link_txt <- if (length(link_txt) > 0L) {
     paste0(" ", paste(link_txt, collapse = " "))
@@ -1272,26 +1352,41 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   link_block <- character()
   if (nrow(link_stage_rows) > 0L) {
     active_spokes <- sort(unique(as.integer(link_stage_rows$spoke_id %||% integer())))
+    transform_policies <- sort(unique(as.character(link_stage_rows$link_transform_policy %||% character())))
     transform_modes <- sort(unique(as.character(link_stage_rows$link_transform_state %||% character())))
     refit_modes <- sort(unique(as.character(link_stage_rows$link_refit_mode %||% character())))
     lock_modes <- sort(unique(as.character(link_stage_rows$hub_lock_mode %||% character())))
+    epoch_ids <- sort(unique(as.integer(link_stage_rows$link_epoch_id %||% integer())))
     transform_modes <- transform_modes[!is.na(transform_modes) & nzchar(transform_modes)]
+    transform_policies <- transform_policies[!is.na(transform_policies) & nzchar(transform_policies)]
     refit_modes <- refit_modes[!is.na(refit_modes) & nzchar(refit_modes)]
     lock_modes <- lock_modes[!is.na(lock_modes) & nzchar(lock_modes)]
+    epoch_ids <- epoch_ids[is.finite(epoch_ids)]
 
     link_block <- c(
       "Linking summary:",
       paste0("  active_spokes=", paste(active_spokes, collapse = ",")),
+      paste0("  transform_policy=", paste(transform_policies, collapse = ",")),
       paste0("  transform_state=", paste(transform_modes, collapse = ",")),
       paste0("  link_refit_mode=", paste(refit_modes, collapse = ",")),
       paste0("  hub_lock_mode=", paste(lock_modes, collapse = ","))
     )
+    if (length(epoch_ids) > 0L) {
+      link_block <- c(link_block, paste0("  link_epoch_id=", paste(epoch_ids, collapse = ",")))
+    }
 
-    rel_values <- as.double(link_stage_rows$reliability_EAP_link %||% rep(NA_real_, nrow(link_stage_rows)))
+    rel_values <- as.double(link_stage_rows$reliability_link_global %||% rep(NA_real_, nrow(link_stage_rows)))
     rel_values <- rel_values[is.finite(rel_values)]
     if (length(rel_values) > 0L) {
-      link_block <- c(link_block, paste0("  reliability_EAP_link[min,max]=", sprintf("%.3f", min(rel_values)), ",",
-        sprintf("%.3f", max(rel_values))))
+      link_block <- c(
+        link_block,
+        paste0(
+          "  reliability_link_global[min,max]=",
+          sprintf("%.3f", min(rel_values)),
+          ",",
+          sprintf("%.3f", max(rel_values))
+        )
+      )
     }
 
     stop_pass <- sum(link_stage_rows$link_stop_pass %in% TRUE, na.rm = TRUE)
@@ -1302,6 +1397,9 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
       paste0("  link_stop_pass=", stop_pass, "/", nrow(link_stage_rows))
     )
 
+    frozen <- sum(link_stage_rows$transform_frozen %in% TRUE, na.rm = TRUE)
+    link_block <- c(link_block, paste0("  transform_frozen=", frozen, "/", nrow(link_stage_rows)))
+
     cross_done <- sum(as.integer(link_stage_rows$n_pairs_cross_set_done %||% 0L), na.rm = TRUE)
     cross_new <- sum(as.integer(link_stage_rows$n_cross_edges_total_since_last_refit %||% 0L), na.rm = TRUE)
     cross_unique <- sum(as.integer(link_stage_rows$n_unique_cross_pairs_seen %||% 0L), na.rm = TRUE)
@@ -1311,6 +1409,16 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
       paste0("  cross_edges_since_last_refit=", cross_new),
       paste0("  cross_unique_pairs_seen=", cross_unique)
     )
+
+    probe_planned <- sum(as.integer(link_stage_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
+    probe_realized <- sum(as.integer(link_stage_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
+    if (probe_planned > 0L || probe_realized > 0L) {
+      link_block <- c(
+        link_block,
+        paste0("  probe_edges_planned=", probe_planned),
+        paste0("  probe_edges_realized=", probe_realized)
+      )
+    }
 
     if ("escalated_this_refit" %in% names(link_stage_rows)) {
       n_escalated <- sum(link_stage_rows$escalated_this_refit %in% TRUE, na.rm = TRUE)

@@ -467,12 +467,12 @@ make_adaptive_judge_llm <- function(
 #'   \item{`hub_lock_kappa`}{Only used when `hub_lock_mode = "soft_lock"`.
 #'     Regularization strength in `[0,1]`. Default is `0.75`.}
 #'
-#'   \item{`link_identified_reliability_min`}{Minimum transformed EAP reliability
-#'     on the linking-active item domain used to mark a spoke as identified.
-#'     Default is `0.80`.}
-#'   \item{`link_stop_reliability_min`}{Minimum transformed EAP reliability on
-#'     the linking-active item domain used to permit linking stop. Default is
-#'     `0.90`.}
+#'   \item{`link_identified_reliability_min`}{Minimum
+#'     `reliability_link_global` value on the linking-active item domain used
+#'     to mark a spoke as identified. Default is `0.80`.}
+#'   \item{`link_stop_reliability_min`}{Minimum `reliability_link_global` value
+#'     on the linking-active item domain used to permit linking stop. Default
+#'     is `0.90`.}
 #'   \item{`link_rank_corr_min`}{Minimum Spearman rank correlation between
 #'     TrueSkill and transformed BTL posterior mean ranks on the linking-active
 #'     item domain. Default is `0.90`.}
@@ -653,7 +653,9 @@ make_adaptive_judge_llm <- function(
 #'   \item{state}{Final \code{adaptive_state}.}
 #'   \item{summary}{Run-level summary from [summarize_adaptive()].}
 #'   \item{refits}{Per-refit summary from [summarize_refits()].}
-#'   \item{items}{Item summary from [summarize_items()].}
+#'   \item{items}{Item summary from [summarize_items()], sorted by a usable
+#'     canonical rank column (`rank_link` for linking runs when available,
+#'     otherwise `rank_raw`).}
 #'   \item{logs}{Canonical logs from [adaptive_get_logs()].}
 #'   \item{output_file}{Saved output path when `save_outputs = TRUE`, otherwise
 #'     `NULL`.}
@@ -898,8 +900,12 @@ adaptive_rank <- function(
   logs <- adaptive_get_logs(state)
   item_sort_by <- "rank_raw"
   if (length(logs$item_log) > 0L && is.data.frame(logs$item_log[[1L]])) {
-    item_cols <- names(logs$item_log[[1L]])
-    if ("rank_link" %in% item_cols) {
+    item_view <- tibble::as_tibble(logs$item_log[[1L]])
+    item_cols <- names(item_view)
+    rank_link_ok <- "rank_link" %in% item_cols &&
+      any(is.finite(as.double(item_view$rank_link)), na.rm = TRUE) &&
+      !all(is.na(item_view$theta_link_eap %||% rep(NA_real_, nrow(item_view))))
+    if (isTRUE(rank_link_ok)) {
       item_sort_by <- "rank_link"
     } else if ("rank_raw" %in% item_cols) {
       item_sort_by <- "rank_raw"

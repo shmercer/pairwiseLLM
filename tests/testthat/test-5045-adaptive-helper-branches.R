@@ -410,21 +410,24 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
 
   starved <- tibble::tibble(
     step_id = 1L, round_stage = "anchor_link", candidate_starved = TRUE,
-    status = "starved", starvation_reason = NA_character_, fallback_used = NA_character_
+    status = "starved", starvation_reason = NA_character_, fallback_used = NA_character_,
+    run_mode = "within_set", is_probe_step = FALSE
   )
   msg_starved <- pairwiseLLM:::adaptive_progress_step_event(starved, cfg)
   expect_match(msg_starved, "candidate_starved=TRUE")
 
   invalid <- tibble::tibble(
     step_id = 2L, round_stage = "mid_link", candidate_starved = FALSE,
-    status = "invalid", starvation_reason = "", fallback_used = NA_character_
+    status = "invalid", starvation_reason = "", fallback_used = NA_character_,
+    run_mode = "within_set", is_probe_step = FALSE
   )
   msg_invalid <- pairwiseLLM:::adaptive_progress_step_event(invalid, cfg)
   expect_match(msg_invalid, "invalid judge")
 
   fallback <- tibble::tibble(
     step_id = 3L, round_stage = "local_link", candidate_starved = FALSE,
-    status = "ok", starvation_reason = NA_character_, fallback_used = "global_safe"
+    status = "ok", starvation_reason = NA_character_, fallback_used = "global_safe",
+    run_mode = "within_set", is_probe_step = FALSE
   )
   msg_fb <- pairwiseLLM:::adaptive_progress_step_event(fallback, cfg)
   expect_match(msg_fb, "fallback_used=global_safe")

@@ -1028,7 +1028,10 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   legacy_mode <- bad_realized |> dplyr::select(-link_transform_policy, -link_transform_state)
   legacy_mode$link_transform_mode <- "shift_only"
   legacy_mode$stage_budget_unfilled <- 1L
-  expect_no_error(pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(legacy_mode))
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(legacy_mode),
+    "missing required columns: link_transform_policy, link_transform_state"
+  )
 
   empty_fit <- pairwiseLLM:::.adaptive_link_fit_transform_alt_shift_scale(
     cross_edges = tibble::tibble(),

@@ -575,6 +575,9 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
   expect_true(nrow(cross) > 0L)
   expect_true(all(cross$link_spoke_id == 2L))
   expect_true(nrow(out$logs$link_stage_log) >= 1L)
+  expect_true(all(c("link_transform_policy", "link_transform_state", "reliability_link_global") %in%
+    names(out$logs$link_stage_log)))
+  expect_true("rank_link" %in% names(out$items))
 })
 
 test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
@@ -617,6 +620,39 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(all(sort(unique(cross$link_spoke_id)) == c(2L, 3L)))
   expect_true(all(xor(cross$set_i == 1L, cross$set_j == 1L)))
   expect_true(nrow(out$logs$link_stage_log) >= 2L)
+  expect_true(all(c("link_transform_policy", "link_transform_state", "link_epoch_id") %in%
+    names(out$logs$link_stage_log)))
+})
+
+test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are unavailable", {
+  samples <- make_linking_samples_df()
+  fit_override <- make_deterministic_fit_fn(ids = as.character(samples$ID[samples$set_id %in% c(1L, 2L)]))
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = samples[samples$set_id %in% c(1L, 2L), , drop = FALSE],
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 1L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run"
+    ),
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none",
+    seed = 31L
+  )
+
+  expect_true("rank_raw" %in% names(out$items))
+  expect_true("rank_link" %in% names(out$items))
+  expect_true(all(is.na(out$items$theta_link_eap)))
+  expect_identical(out$items$item_id, out$items$item_id[order(out$items$rank_raw)])
 })
 
 test_that("adaptive_rank wrapper emits clear linking preflight errors", {

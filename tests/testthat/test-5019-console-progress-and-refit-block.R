@@ -98,8 +98,46 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   combined <- c(output, messages)
   expect_true(any(grepl("Linking summary:", combined)))
   expect_true(any(grepl("active_spokes=", combined)))
+  expect_true(any(grepl("transform_policy=", combined)))
   expect_true(any(grepl("transform_state=", combined)))
+  expect_true(any(grepl("link_epoch_id=", combined)))
   expect_true(any(grepl("link_refit_mode=", combined)))
   expect_true(any(grepl("cross_pairs_done=", combined)))
   expect_true(any(grepl("link_stop_pass=", combined)))
+  expect_true(any(grepl("reliability_link_global\\[min,max\\]=", combined)))
+  expect_false(any(grepl("reliability_EAP_link\\[min,max\\]=", combined)))
+})
+
+test_that("adaptive progress step events label holdout and drift probes distinctly", {
+  cfg <- pairwiseLLM:::.adaptive_progress_config(
+    progress = "all",
+    progress_redraw_every = 1L,
+    progress_show_events = TRUE,
+    progress_errors = TRUE
+  )
+  holdout <- tibble::tibble(
+    step_id = 1L,
+    round_stage = "local_link",
+    run_mode = "link_probe_holdout",
+    is_probe_step = TRUE,
+    is_holdout_probe_step = TRUE,
+    is_drift_probe_step = FALSE,
+    is_cross_set = TRUE,
+    link_spoke_id = 2L,
+    link_transform_state = "shift_only",
+    candidate_starved = FALSE,
+    status = "ok",
+    fallback_used = "refresh"
+  )
+  drift <- holdout
+  drift$step_id <- 2L
+  drift$run_mode <- "link_probe"
+  drift$is_holdout_probe_step <- FALSE
+  drift$is_drift_probe_step <- TRUE
+
+  holdout_msg <- pairwiseLLM:::adaptive_progress_step_event(holdout, cfg)
+  drift_msg <- pairwiseLLM:::adaptive_progress_step_event(drift, cfg)
+
+  expect_match(holdout_msg, "probe=holdout")
+  expect_match(drift_msg, "probe=drift")
 })

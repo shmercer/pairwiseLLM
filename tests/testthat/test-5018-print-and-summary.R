@@ -22,3 +22,36 @@ test_that("print and summarize_adaptive use adaptive logs", {
     "last_stop_reason"
   ) %in% names(summary)))
 })
+
+test_that("print.adaptive_state exposes linking phase and controller state concisely", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 9L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_spokes <- 2L
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("ready", "ready"),
+    validation_message = c("ok", "ok"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 3L)
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  output <- capture.output(print(state))
+
+  expect_true(any(grepl("^linking: phase_b", output)))
+  expect_true(any(grepl("transform_policy=auto", output)))
+  expect_true(any(grepl("transform_state=shift_only", output)))
+  expect_true(any(grepl("link_epoch=3", output)))
+  expect_true(any(grepl("frozen_spokes=2", output)))
+})

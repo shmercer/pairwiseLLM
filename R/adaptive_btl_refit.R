@@ -352,12 +352,12 @@
 
 .adaptive_link_transform_state_for_spoke <- function(controller, spoke_id) {
   policy <- .adaptive_normalize_link_transform_policy(
-    controller$link_transform_policy %||% controller$link_transform_mode %||% "auto"
+    controller$link_transform_policy %||% "auto"
   )
   if (!identical(policy, "auto")) {
     return(.adaptive_default_link_transform_state(policy))
   }
-  state_map <- controller$link_transform_state_by_spoke %||% controller$link_transform_mode_by_spoke %||% list()
+  state_map <- controller$link_transform_state_by_spoke %||% list()
   state <- as.character(state_map[[as.character(spoke_id)]] %||% "shift_only")
   if (!state %in% .adaptive_link_transform_state_levels()) {
     return("shift_only")
@@ -808,7 +808,7 @@
     if ("link_transform_state" %in% names(lag_row)) {
       as.character(lag_row$link_transform_state[[1L]] %||% "shift_only")
     } else {
-      as.character(lag_row$link_transform_mode[[1L]] %||% "shift_only")
+      "shift_only"
     }
   } else {
     as.character(transform_mode %||% "shift_only")
@@ -1793,9 +1793,16 @@
           prior_pen <- prior_pen + sum(
             0.5 * ((hub_val[fit_hub_idx] - hub_prior_center[fit_hub_idx]) / pmax(sd_soft, 1e-8))^2
           )
-        } else if (identical(lock_mode, "free")) {
-          prior_pen <- prior_pen + sum(0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / 3)^2)
         } else {
+          if (!identical(lock_mode, "hard_lock")) {
+            rlang::abort(
+              paste0(
+                "Unsupported `hub_lock_mode` in linking joint refit: ",
+                lock_mode,
+                ". Expected `hard_lock` or `soft_lock`."
+              )
+            )
+          }
           prior_pen <- prior_pen + sum(
             0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / pmax(hub_ref_sd[fit_hub_idx], 1e-8))^2
           )
@@ -2926,9 +2933,16 @@
     fit_diag <- fit$diagnostics %||% list()
     hub_anchored <- if (identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
       TRUE
-    } else if (identical(lock_mode, "free")) {
-      FALSE
     } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
+      if (!identical(lock_mode, "soft_lock")) {
+        rlang::abort(
+          paste0(
+            "Unsupported `hub_lock_mode` in linking stop-gate logic: ",
+            lock_mode,
+            ". Expected `hard_lock` or `soft_lock`."
+          )
+        )
+      }
       history <- out$refit_meta$theta_mean_history %||% list()
       current_raw <- history[[length(history)]] %||% numeric()
       lag_raw <- history[[max(1L, length(history) - lag)]] %||% numeric()
@@ -3747,21 +3761,6 @@
 #' @noRd
 .adaptive_assert_link_stage_rows_completeness <- function(link_rows) {
   rows <- tibble::as_tibble(link_rows)
-  if ("link_transform_mode" %in% names(rows) && !"link_transform_state" %in% names(rows)) {
-    rows$link_transform_state <- rows$link_transform_mode
-  }
-  if ("link_transform_mode" %in% names(rows) && !"link_transform_policy" %in% names(rows)) {
-    rows$link_transform_policy <- vapply(
-      as.character(rows$link_transform_mode),
-      function(value) {
-        if (is.na(value) || value == "") {
-          return(NA_character_)
-        }
-        .adaptive_normalize_link_transform_policy(value)
-      },
-      character(1)
-    )
-  }
   if (nrow(rows) < 1L) {
     return(invisible(TRUE))
   }

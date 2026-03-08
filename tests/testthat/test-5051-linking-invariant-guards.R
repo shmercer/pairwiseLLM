@@ -127,6 +127,20 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
   )
 })
 
+test_that("link-stage completeness guard requires canonical policy/state fields", {
+  legacy_rows <- tibble::tibble(
+    refit_id = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    link_transform_mode = "shift_only"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(legacy_rows),
+    "missing required columns: link_transform_policy, link_transform_state"
+  )
+})
+
 test_that("link-stage budget invariant guard rejects target sum mismatches", {
   bad_rows <- tibble::tibble(
     B_spoke_refit_budget = 5L,

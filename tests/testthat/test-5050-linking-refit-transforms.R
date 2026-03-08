@@ -522,7 +522,7 @@ test_that("startup-gap helper and edge extractors cover fallback edge paths", {
   expect_false(isTRUE(pairwiseLLM:::.adaptive_link_phase_b_startup_gap_for_spoke(state, 2L)))
 })
 
-test_that("joint shift_scale fit consumes within-set edges and records lock/joint fields", {
+test_that("joint shift_scale fit rejects unsupported hub lock modes", {
   edges <- tibble::tibble(
     spoke_item = c("s1", "s2"),
     hub_item = c("h1", "h2"),
@@ -554,18 +554,15 @@ test_that("joint shift_scale fit consumes within-set edges and records lock/join
   attr(hub_theta, "theta_sd") <- c(h1 = 0.1, h2 = 0.1)
   attr(spoke_theta, "theta_sd") <- c(s1 = 0.2, s2 = 0.2)
 
-  fit <- pairwiseLLM:::.adaptive_link_fit_transform(
-    edges,
-    hub_theta = hub_theta,
-    spoke_theta = spoke_theta,
-    transform_mode = "shift_scale"
+  expect_error(
+    pairwiseLLM:::.adaptive_link_fit_transform(
+      edges,
+      hub_theta = hub_theta,
+      spoke_theta = spoke_theta,
+      transform_mode = "shift_scale"
+    ),
+    "Unsupported `hub_lock_mode`"
   )
-  expect_true(is.finite(fit$delta_mean))
-  expect_true(is.finite(fit$log_alpha_mean))
-  expect_equal(length(fit$theta_hub_post), 2L)
-  expect_equal(length(fit$theta_spoke_post), 2L)
-  expect_identical(fit$fit_contract$link_refit_mode, "joint_refit")
-  expect_true(isTRUE(fit$fit_contract$joint_refit$used))
 })
 
 test_that("link likelihood applies signed beta by original presentation side", {
@@ -669,6 +666,17 @@ test_that("invalid linking mode combinations fail validation", {
       set_ids = c(1L, 2L, 3L)
     ),
     "must be one of"
+  )
+})
+
+test_that("linking runtime aborts loudly if an unsupported hub lock mode leaks into refit state", {
+  state <- make_linking_refit_state(list(link_refit_mode = "joint_refit", hub_lock_mode = "soft_lock"))
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state$controller$hub_lock_mode <- "free"
+
+  expect_error(
+    pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
+    "Unsupported `hub_lock_mode`"
   )
 })
 
@@ -1687,7 +1695,7 @@ test_that("linking active-domain helper guard branches return typed NA outputs",
   state <- make_linking_refit_state()
 
   mode <- pairwiseLLM:::.adaptive_link_transform_state_for_spoke(
-    controller = list(link_transform_mode = "auto", link_transform_state_by_spoke = list(`2` = "bad")),
+    controller = list(link_transform_policy = "auto", link_transform_state_by_spoke = list(`2` = "bad")),
     spoke_id = 2L
   )
   expect_identical(mode, "shift_only")

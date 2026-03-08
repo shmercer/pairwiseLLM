@@ -156,12 +156,12 @@ Choices are \code{"hard_lock"} (hub anchored to Phase A), \code{"soft_lock"}
 \item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
 Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}
 
-\item{\code{link_identified_reliability_min}}{Minimum transformed EAP reliability
-on the linking-active item domain used to mark a spoke as identified.
-Default is \code{0.80}.}
-\item{\code{link_stop_reliability_min}}{Minimum transformed EAP reliability on
-the linking-active item domain used to permit linking stop. Default is
-\code{0.90}.}
+\item{\code{link_identified_reliability_min}}{Minimum
+\code{reliability_link_global} value on the linking-active item domain used
+to mark a spoke as identified. Default is \code{0.80}.}
+\item{\code{link_stop_reliability_min}}{Minimum \code{reliability_link_global} value
+on the linking-active item domain used to permit linking stop. Default
+is \code{0.90}.}
 \item{\code{link_rank_corr_min}}{Minimum Spearman rank correlation between
 TrueSkill and transformed BTL posterior mean ranks on the linking-active
 item domain. Default is \code{0.90}.}
@@ -355,7 +355,9 @@ A list with:
 \item{state}{Final \code{adaptive_state}.}
 \item{summary}{Run-level summary from \code{\link[=summarize_adaptive]{summarize_adaptive()}}.}
 \item{refits}{Per-refit summary from \code{\link[=summarize_refits]{summarize_refits()}}.}
-\item{items}{Item summary from \code{\link[=summarize_items]{summarize_items()}}.}
+\item{items}{Item summary from \code{\link[=summarize_items]{summarize_items()}}, sorted by a usable
+canonical rank column (\code{rank_link} for linking runs when available,
+otherwise \code{rank_raw}).}
 \item{logs}{Canonical logs from \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}.}
 \item{output_file}{Saved output path when \code{save_outputs = TRUE}, otherwise
 \code{NULL}.}
