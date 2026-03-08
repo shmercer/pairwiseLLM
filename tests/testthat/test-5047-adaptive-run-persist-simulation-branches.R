@@ -542,6 +542,193 @@ test_that("adaptive rank start and warm-start starvation save branch validations
   expect_gte(tracker$save_called, 1L)
 })
 
+test_that("global stop allowance respects within-set and linking phase boundaries", {
+  within_state <- pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 1L)
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(within_state)))
+
+  link_phase_a <- pairwiseLLM::adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+      set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+      global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+    ),
+    seed = 2L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  link_phase_a$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("ready", "pending_finalization", "pending_finalization"),
+      validation_message = c("ready", "pending", "pending"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    strict_ready_for_phase_b = FALSE,
+    required_sets = c(1L, 2L, 3L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = FALSE, `3` = FALSE),
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 2L
+  )
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(link_phase_a)))
+
+  link_phase_b <- link_phase_a
+  link_phase_b$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L, 3L),
+    source = c("run", "run", "run"),
+    status = c("ready", "ready", "ready"),
+    validation_message = c("ready", "ready", "ready"),
+    artifact_path = c(NA_character_, NA_character_, NA_character_)
+  )
+  link_phase_b$linking$phase_a$strict_ready_for_phase_b <- TRUE
+  link_phase_b$linking$phase_a$set_stop_pass_by_set <- list(`1` = TRUE, `2` = TRUE, `3` = TRUE)
+  link_phase_b$linking$phase_a$phase <- "phase_b"
+  link_phase_b$linking$phase_a$ready_spokes <- c(2L, 3L)
+  link_phase_b$linking$phase_a$active_phase_a_set <- NA_integer_
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(link_phase_b)))
+})
+
+test_that("linking phase A convergence does not terminate the whole run before phase B", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+
+  base_state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 3L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  base_state$warm_start_done <- TRUE
+  base_state$round$staged_active <- TRUE
+  base_state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("pending_finalization", "pending_finalization", "pending_finalization"),
+      validation_message = c("pending", "pending", "pending"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    strict_ready_for_phase_b = FALSE,
+    required_sets = c(1L, 2L, 3L),
+    set_stop_pass_by_set = list(`1` = FALSE, `2` = FALSE, `3` = FALSE),
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 1L
+  )
+
+  run_with_phase <- function(state) {
+    testthat::with_mocked_bindings(
+      run_one_step = function(st, judge, ...) {
+        row <- list(
+          step_id = as.integer(nrow(st$step_log) + 1L),
+          timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+          status = "ok",
+          candidate_starved = FALSE,
+          round_stage = "anchor_link",
+          A = 1L,
+          B = 2L,
+          Y = 1L
+        )
+        st$step_log <- pairwiseLLM:::append_step_log(st$step_log, row)
+        st
+      },
+      maybe_refit_btl = function(state, config, fit_fn) {
+        list(state = state, refit_performed = TRUE, config = config, refit_context = list())
+      },
+      compute_stop_metrics = function(state, config) pairwiseLLM:::.adaptive_stop_metrics_defaults(),
+      .adaptive_maybe_enter_phase3 = function(state, metrics, config) state,
+      should_stop = function(metrics, config) TRUE,
+      .adaptive_round_log_row = function(state, metrics, stop_decision, stop_reason, refit_context, config) {
+        rr <- pairwiseLLM:::round_log_schema()[1, , drop = FALSE]
+        rr$refit_id <- 1L
+        rr$phase_scope <- "phase_a_set"
+        rr$phase_scope_set_id <- as.integer(state$linking$phase_a$active_phase_a_set %||% 1L)
+        rr$stop_decision <- isTRUE(stop_decision)
+        rr$stop_reason <- as.character(stop_reason %||% NA_character_)
+        rr
+      },
+      append_round_log = function(round_log, row) tibble::as_tibble(row),
+      .adaptive_build_item_log_refit = function(state, refit_id) pairwiseLLM:::.adaptive_item_log_defaults(n_rows = 0L),
+      .adaptive_append_item_log = function(state, item_log_tbl) state,
+      .adaptive_phase_a_prepare = function(state) {
+        set_ids <- sort(unique(as.integer(state$items$set_id)))
+        pending_ids <- setdiff(set_ids, 1L)
+        state$linking$phase_a$set_status <- tibble::tibble(
+          set_id = set_ids,
+          source = rep("run", length(set_ids)),
+          status = c("ready", rep("pending_finalization", length(pending_ids))),
+          validation_message = c("built_in_run_refit_1", rep("pending", length(pending_ids))),
+          artifact_path = rep(NA_character_, length(set_ids))
+        )
+        state$linking$phase_a$artifacts <- list(`1` = list(
+          diagnostics = list(diagnostics_pass = TRUE),
+          reliability_EAP_scope = 0.95,
+          n_pairs_committed = 1L
+        ))
+        stop_map <- as.list(stats::setNames(rep(FALSE, length(set_ids)), as.character(set_ids)))
+        stop_map[["1"]] <- TRUE
+        state$linking$phase_a$set_stop_pass_by_set <- stop_map
+        state
+      },
+      .adaptive_phase_a_finalize_if_ready = function(state) {
+        state$linking$phase_a$ready_for_phase_b <- FALSE
+        state$linking$phase_a$strict_ready_for_phase_b <- FALSE
+        state$linking$phase_a$phase <- "phase_a"
+        state$linking$phase_a$ready_spokes <- integer()
+        state$linking$phase_a$active_phase_a_set <- 2L
+        state
+      },
+      .package = "pairwiseLLM",
+      {
+        pairwiseLLM::adaptive_rank_run_live(
+          state = state,
+          judge = make_deterministic_judge("i_wins"),
+          n_steps = 1L,
+          progress = "none"
+        )
+      }
+    )
+  }
+
+  out_multi <- run_with_phase(base_state)
+  expect_false(isTRUE(out_multi$meta$stop_decision))
+  expect_identical(out_multi$linking$phase_a$active_phase_a_set, 2L)
+
+  one_spoke <- pairwiseLLM::adaptive_rank_start(
+    items[items$set_id %in% c(1L, 2L), , drop = FALSE],
+    seed = 4L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  one_spoke$warm_start_done <- TRUE
+  one_spoke$round$staged_active <- TRUE
+  one_spoke$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("pending_finalization", "pending_finalization"),
+      validation_message = c("pending", "pending"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    strict_ready_for_phase_b = FALSE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = FALSE, `2` = FALSE),
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 1L
+  )
+  out_one <- run_with_phase(one_spoke)
+  expect_false(isTRUE(out_one$meta$stop_decision))
+  expect_identical(out_one$linking$phase_a$active_phase_a_set, 2L)
+})
+
 test_that("phase B stage exhaustion persists across round rollover within refit window", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),

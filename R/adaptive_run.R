@@ -613,6 +613,25 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_global_stop_allowed <- function(state) {
+  controller <- .adaptive_controller_resolve(state)
+  if (!.adaptive_link_mode_active(controller)) {
+    return(TRUE)
+  }
+
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(FALSE)
+  }
+  if (length(as.integer(phase_ctx$pending_run_sets %||% integer())) > 0L) {
+    return(FALSE)
+  }
+
+  TRUE
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_stop_boundary_bootstrap <- function(state) {
   out <- state
   out$meta <- out$meta %||% list()
@@ -1707,7 +1726,8 @@ adaptive_rank_run_live <- function(state,
           cat(paste(block, collapse = "\n"), "\n")
         }
       }
-      if (isTRUE(stop_decision)) {
+      global_stop_allowed <- isTRUE(.adaptive_global_stop_allowed(state))
+      if (isTRUE(stop_decision) && isTRUE(global_stop_allowed)) {
         round_row_tbl <- tibble::as_tibble(round_row)
         boundary_refit_id <- if ("refit_id" %in% names(round_row_tbl)) {
           as.integer(round_row_tbl$refit_id[[1L]] %||% NA_integer_)
