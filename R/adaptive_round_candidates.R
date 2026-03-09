@@ -230,6 +230,11 @@
   as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")
 }
 
+.adaptive_set_candidate_filter_counts <- function(candidates, counts) {
+  attr(candidates, "candidate_filter_counts") <- counts
+  candidates
+}
+
 .adaptive_link_ranked_spokes <- function(state, controller, eligible_spoke_ids = NULL) {
   set_ids <- unique(as.integer(state$items$set_id))
   hub_id <- as.integer(controller$hub_id %||% 1L)
@@ -974,7 +979,16 @@ generate_stage_candidates_from_state <- function(state,
   link_spoke_id <- integer()
   coverage_bins_used <- integer()
   coverage_source <- character()
+  n_after_route_filters <- NA_integer_
+  n_after_active_domain <- NA_integer_
+  n_after_stage_filters <- NA_integer_
   set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+
+  if (isTRUE(link_phase_b_active)) {
+    n_after_route_filters <- 0L
+    n_after_active_domain <- 0L
+    n_after_stage_filters <- 0L
+  }
 
   for (a in seq_len(length(ids) - 1L)) {
     i_id <- ids[[a]]
@@ -997,9 +1011,11 @@ generate_stage_candidates_from_state <- function(state,
         if (isTRUE(allow_spoke_spoke) && !isTRUE(i_set == spoke_id || j_set == spoke_id)) {
           next
         }
+        n_after_route_filters <- as.integer(n_after_route_filters + 1L)
         i_anchor <- i_id %in% hub_anchor_ids
         j_anchor <- j_id %in% hub_anchor_ids
         if (identical(stage_name, "anchor_link")) {
+          n_after_active_domain <- as.integer(n_after_active_domain + 1L)
           keep <- xor(i_anchor, j_anchor)
         } else {
           if (!i_hub && !j_hub) {
@@ -1009,6 +1025,7 @@ generate_stage_candidates_from_state <- function(state,
           if (!hub_item_id %in% active_hub_ids) {
             next
           }
+          n_after_active_domain <- as.integer(n_after_active_domain + 1L)
           keep <- dist >= bounds$min && dist <= bounds$max
         }
       } else {
@@ -1027,6 +1044,9 @@ generate_stage_candidates_from_state <- function(state,
       }
 
       if (isTRUE(keep)) {
+        if (isTRUE(link_phase_b_active)) {
+          n_after_stage_filters <- as.integer(n_after_stage_filters + 1L)
+        }
         i_vals <- c(i_vals, i_id)
         j_vals <- c(j_vals, j_id)
         dist_vals <- c(dist_vals, as.integer(dist))
@@ -1051,7 +1071,14 @@ generate_stage_candidates_from_state <- function(state,
   }
 
   if (length(i_vals) == 0L) {
-    return(tibble::tibble(i = character(), j = character()))
+    return(.adaptive_set_candidate_filter_counts(
+      tibble::tibble(i = character(), j = character()),
+      list(
+        n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
+        n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
+        n_candidates_after_stage_filters = as.integer(n_after_stage_filters %||% NA_integer_)
+      )
+    ))
   }
 
   cand <- tibble::tibble(i = as.character(i_vals), j = as.character(j_vals))
@@ -1078,10 +1105,24 @@ generate_stage_candidates_from_state <- function(state,
     }
   }
   if (nrow(cand) < 1L) {
-    return(tibble::tibble(i = character(), j = character()))
+    return(.adaptive_set_candidate_filter_counts(
+      tibble::tibble(i = character(), j = character()),
+      list(
+        n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
+        n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
+        n_candidates_after_stage_filters = 0L
+      )
+    ))
   }
   cand <- .adaptive_uniform_subsample_pairs(cand, C_max = as.integer(C_max), seed = as.integer(seed))
-  cand
+  .adaptive_set_candidate_filter_counts(
+    cand,
+    list(
+      n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
+      n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
+      n_candidates_after_stage_filters = as.integer(nrow(cand))
+    )
+  )
 }
 
 #' @keywords internal
@@ -1288,8 +1329,19 @@ generate_stage_candidates_from_state <- function(state,
                                             defaults,
                                             allow_repeat_pressure = FALSE) {
   cand <- tibble::as_tibble(candidates)
+  .with_exposure_counts <- function(out) {
+    .adaptive_set_candidate_filter_counts(
+      out,
+      utils::modifyList(
+        attr(out, "candidate_filter_counts") %||% list(),
+        list(
+          n_candidates_after_exposure_filters = as.integer(nrow(out))
+        )
+      )
+    )
+  }
   if (nrow(cand) == 0L) {
-    return(cand)
+    return(.with_exposure_counts(cand))
   }
 
   uses <- round$per_round_item_uses %||% integer()
@@ -1308,17 +1360,17 @@ generate_stage_candidates_from_state <- function(state,
   base_keep <- (i_used == 0L) & (j_used == 0L)
 
   if (!isTRUE(allow_repeat_pressure)) {
-    return(cand[base_keep, , drop = FALSE])
+    return(.with_exposure_counts(cand[base_keep, , drop = FALSE]))
   }
 
   if (repeat_remaining <= 0L) {
-    return(cand[base_keep, , drop = FALSE])
+    return(.with_exposure_counts(cand[base_keep, , drop = FALSE]))
   }
 
   recent <- as.double(recent_deg)
   names(recent) <- names(recent_deg)
   if (length(recent) == 0L || all(is.na(recent))) {
-    return(cand[base_keep, , drop = FALSE])
+    return(.with_exposure_counts(cand[base_keep, , drop = FALSE]))
   }
 
   underrep_q <- as.double(defaults$exposure_underrep_q %||% 0.25)
@@ -1345,5 +1397,5 @@ generate_stage_candidates_from_state <- function(state,
     repeated_endpoint_ok
 
   keep <- base_keep | allow_repeat
-  cand[keep, , drop = FALSE]
+  .with_exposure_counts(cand[keep, , drop = FALSE])
 }

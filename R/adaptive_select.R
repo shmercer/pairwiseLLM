@@ -899,7 +899,9 @@ adaptive_defaults <- function(N) {
 ) {
   generation_stage <- as.character(generation_stage %||% .adaptive_round_active_stage(state) %||% "warm_start")
   ids <- as.character(state$trueskill_state$items$item_id)
-  candidates <- tibble::as_tibble(candidates %||% tibble::tibble(i = character(), j = character()))
+  candidates <- candidates %||% tibble::tibble(i = character(), j = character())
+  filter_counts <- attr(candidates, "candidate_filter_counts", exact = TRUE) %||% list()
+  candidates <- tibble::as_tibble(candidates)
 
   n_generated <- nrow(candidates)
   long_gate_pass <- NA
@@ -911,6 +913,10 @@ adaptive_defaults <- function(N) {
       selected = NULL,
       counts = list(
         n_candidates_generated = 0L,
+        n_candidates_after_route_filters = as.integer(filter_counts$n_candidates_after_route_filters %||% NA_integer_),
+        n_candidates_after_active_domain = as.integer(filter_counts$n_candidates_after_active_domain %||% NA_integer_),
+        n_candidates_after_stage_filters = as.integer(filter_counts$n_candidates_after_stage_filters %||% NA_integer_),
+        n_candidates_after_exposure_filters = as.integer(filter_counts$n_candidates_after_exposure_filters %||% 0L),
         n_candidates_after_hard_filters = 0L,
         n_candidates_after_duplicates = 0L,
         n_candidates_after_star_caps = 0L,
@@ -1101,6 +1107,10 @@ adaptive_defaults <- function(N) {
     selected = candidates,
     counts = list(
       n_candidates_generated = n_generated,
+      n_candidates_after_route_filters = as.integer(filter_counts$n_candidates_after_route_filters %||% NA_integer_),
+      n_candidates_after_active_domain = as.integer(filter_counts$n_candidates_after_active_domain %||% NA_integer_),
+      n_candidates_after_stage_filters = as.integer(filter_counts$n_candidates_after_stage_filters %||% NA_integer_),
+      n_candidates_after_exposure_filters = as.integer(n_after_hard),
       n_candidates_after_hard_filters = n_after_hard,
       n_candidates_after_duplicates = n_after_dup,
       n_candidates_after_star_caps = n_after_star,
@@ -1135,6 +1145,10 @@ adaptive_defaults <- function(N) {
       candidates = cand,
       counts = list(
         n_candidates_generated = 0L,
+        n_candidates_after_route_filters = NA_integer_,
+        n_candidates_after_active_domain = NA_integer_,
+        n_candidates_after_stage_filters = NA_integer_,
+        n_candidates_after_exposure_filters = 0L,
         n_candidates_after_hard_filters = 0L,
         n_candidates_after_duplicates = 0L,
         n_candidates_after_star_caps = 0L,
@@ -1180,6 +1194,10 @@ adaptive_defaults <- function(N) {
     candidates = cand_final,
     counts = list(
       n_candidates_generated = as.integer(n_generated),
+      n_candidates_after_route_filters = NA_integer_,
+      n_candidates_after_active_domain = NA_integer_,
+      n_candidates_after_stage_filters = NA_integer_,
+      n_candidates_after_exposure_filters = as.integer(n_after_hard),
       n_candidates_after_hard_filters = as.integer(n_after_hard),
       n_candidates_after_duplicates = as.integer(n_after_dup),
       n_candidates_after_star_caps = as.integer(n_after_star),
@@ -1408,12 +1426,28 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
   .starvation_reason_from_counts <- function(counts) {
     generated <- as.integer(counts$n_candidates_generated %||% 0L)
+    after_route <- as.integer(counts$n_candidates_after_route_filters %||% NA_integer_)
+    after_active_domain <- as.integer(counts$n_candidates_after_active_domain %||% NA_integer_)
+    after_stage <- as.integer(counts$n_candidates_after_stage_filters %||% NA_integer_)
+    after_exposure <- as.integer(counts$n_candidates_after_exposure_filters %||% NA_integer_)
     after_hard <- as.integer(counts$n_candidates_after_hard_filters %||% 0L)
     after_dup <- as.integer(counts$n_candidates_after_duplicates %||% 0L)
     after_star <- as.integer(counts$n_candidates_after_star_caps %||% 0L)
     scored <- as.integer(counts$n_candidates_scored %||% 0L)
     if (generated <= 0L) {
       return("few_candidates_generated")
+    }
+    if (!is.na(after_route) && after_route <= 0L) {
+      return("filtered_by_route_filters")
+    }
+    if (!is.na(after_active_domain) && after_active_domain <= 0L) {
+      return("filtered_by_active_domain")
+    }
+    if (!is.na(after_stage) && after_stage <= 0L) {
+      return("filtered_by_stage_filters")
+    }
+    if (!is.na(after_exposure) && after_exposure <= 0L) {
+      return("filtered_by_exposure_filters")
     }
     if (after_hard <= 0L) {
       return("filtered_by_hard_filters")
@@ -1779,10 +1813,15 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       stage_committed_so_far = as.integer(selected_stage_committed_so_far),
       stage_quota = as.integer(selected_stage_quota),
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
+      n_candidates_after_route_filters = last_counts$n_candidates_after_route_filters %||% NA_integer_,
+      n_candidates_after_active_domain = last_counts$n_candidates_after_active_domain %||% NA_integer_,
+      n_candidates_after_stage_filters = last_counts$n_candidates_after_stage_filters %||% NA_integer_,
+      n_candidates_after_exposure_filters = last_counts$n_candidates_after_exposure_filters %||% 0L,
       n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
       n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
       n_candidates_after_star_caps = last_counts$n_candidates_after_star_caps %||% 0L,
       n_candidates_scored = last_counts$n_candidates_scored %||% 0L,
+      hard_filter_collapse_stage = as.character(starvation_reason %||% NA_character_),
       deg_i = NA_integer_,
       deg_j = NA_integer_,
       recent_deg_i = NA_integer_,
@@ -1905,6 +1944,12 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   } else {
     NA_real_
   }
+  hard_filter_collapse_stage <- if ((last_counts$n_candidates_generated %||% 0L) > 0L &&
+    (last_counts$n_candidates_after_hard_filters %||% 0L) <= 0L) {
+    as.character(.starvation_reason_from_counts(last_counts))
+  } else {
+    NA_character_
+  }
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -1941,10 +1986,15 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     stage_committed_so_far = as.integer(selected_stage_committed_so_far),
     stage_quota = as.integer(selected_stage_quota),
     n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
+    n_candidates_after_route_filters = last_counts$n_candidates_after_route_filters %||% NA_integer_,
+    n_candidates_after_active_domain = last_counts$n_candidates_after_active_domain %||% NA_integer_,
+    n_candidates_after_stage_filters = last_counts$n_candidates_after_stage_filters %||% NA_integer_,
+    n_candidates_after_exposure_filters = last_counts$n_candidates_after_exposure_filters %||% 0L,
     n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
     n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
     n_candidates_after_star_caps = last_counts$n_candidates_after_star_caps %||% 0L,
     n_candidates_scored = last_counts$n_candidates_scored %||% 0L,
+    hard_filter_collapse_stage = as.character(hard_filter_collapse_stage),
     deg_i = as.integer(counts$deg[[i_id]]),
     deg_j = as.integer(counts$deg[[j_id]]),
     recent_deg_i = as.integer(recent_deg[[i_id]]),

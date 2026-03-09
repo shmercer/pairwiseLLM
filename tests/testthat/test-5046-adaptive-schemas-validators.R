@@ -54,6 +54,10 @@ make_legacy_schema_state <- function() {
 test_that("pairs/results/failed schemas validate and reject key malformed rows", {
   expect_true("base" %in% pairwiseLLM:::.adaptive_fallback_used_levels())
   expect_true("unknown" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_route_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_active_domain" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_stage_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_exposure_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
   expect_true("filtered_by_hard_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
   expect_true("filtered_by_star_caps" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
   expect_true("filtered_by_scoring" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())

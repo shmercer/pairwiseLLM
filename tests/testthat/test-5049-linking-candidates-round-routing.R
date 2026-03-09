@@ -1144,6 +1144,64 @@ test_that("selector reports hard-filter starvation when raw Phase B candidates c
   expect_identical(as.integer(out$n_candidates_after_hard_filters), 0L)
 })
 
+test_that("selector reports exposure-filter starvation when exposure is the final hard gate", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 85L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "independent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+  state$controller$global_identified <- TRUE
+  state$refit_meta$last_refit_step <- 0L
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_select_stage = function(...) {
+      list(
+        selected = tibble::tibble(),
+        counts = list(
+          n_candidates_generated = 11L,
+          n_candidates_after_route_filters = 11L,
+          n_candidates_after_active_domain = 11L,
+          n_candidates_after_stage_filters = 11L,
+          n_candidates_after_exposure_filters = 0L,
+          n_candidates_after_hard_filters = 0L,
+          n_candidates_after_duplicates = 0L,
+          n_candidates_after_star_caps = 0L,
+          n_candidates_scored = 0L
+        ),
+        star_caps = list(rejects = 0L, reject_items = character(), reject_items_count = 0L),
+        long_gate_pass = NA,
+        long_gate_reason = NA_character_,
+        star_override_used = FALSE,
+        star_override_reason = NA_character_,
+        recent_deg = NULL
+      )
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(isTRUE(out$candidate_starved))
+  expect_identical(out$starvation_reason, "filtered_by_exposure_filters")
+  expect_identical(as.integer(out$n_candidates_after_route_filters), 11L)
+  expect_identical(as.integer(out$n_candidates_after_active_domain), 11L)
+  expect_identical(as.integer(out$n_candidates_after_stage_filters), 11L)
+  expect_identical(as.integer(out$n_candidates_after_exposure_filters), 0L)
+  expect_identical(out$hard_filter_collapse_stage, "filtered_by_exposure_filters")
+})
+
 test_that("concurrent fallback ordering is deterministic under fixed state and seed", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),

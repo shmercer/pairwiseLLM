@@ -58,6 +58,10 @@ as_pairs_tbl <- function(...) {
 
 .adaptive_starvation_reason_levels <- function() {
   c(
+    "filtered_by_route_filters",
+    "filtered_by_active_domain",
+    "filtered_by_stage_filters",
+    "filtered_by_exposure_filters",
     "filtered_by_hard_filters",
     "few_candidates_generated",
     "filtered_by_duplicates",
