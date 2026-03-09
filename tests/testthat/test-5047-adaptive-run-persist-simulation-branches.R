@@ -189,6 +189,29 @@ test_that("persist validator checks metadata and btl-fit load branch", {
   expect_no_error(pairwiseLLM::validate_session_dir(session_dir2))
 })
 
+test_that("load_adaptive_session backfills newly added step_log fields for resume", {
+  state <- pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 2L)
+  session_dir <- withr::local_tempdir()
+  pairwiseLLM::save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  step_path <- file.path(session_dir, "step_log.rds")
+  step <- readRDS(step_path)
+  drop_cols <- c(
+    "n_candidates_after_route_filters",
+    "n_candidates_after_active_domain",
+    "n_candidates_after_stage_filters",
+    "n_candidates_after_exposure_filters",
+    "hard_filter_collapse_stage"
+  )
+  step <- step[, setdiff(names(step), drop_cols), drop = FALSE]
+  saveRDS(step, step_path)
+
+  expect_no_error(pairwiseLLM::validate_session_dir(session_dir))
+  loaded <- pairwiseLLM::load_adaptive_session(session_dir)
+  expect_true(all(drop_cols %in% names(loaded$step_log)))
+  expect_true(all(vapply(drop_cols, function(col) all(is.na(loaded$step_log[[col]])), logical(1L))))
+})
+
 test_that("session persistence round-trips D-opt information matrix state", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),

@@ -432,7 +432,7 @@ validate_session_dir <- function(session_dir) {
     read_log(paths$step_log),
     schema_step_log,
     "step_log",
-    fill_missing = FALSE
+    fill_missing = TRUE
   )
   round_log <- read_log(paths$round_log)
   round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
@@ -589,7 +589,7 @@ load_adaptive_session <- function(session_dir) {
     read_log(paths$step_log),
     schema_step_log,
     "step_log",
-    fill_missing = FALSE
+    fill_missing = TRUE
   )
   round_log <- read_log(paths$round_log)
   round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
