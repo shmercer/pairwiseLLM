@@ -206,7 +206,7 @@ test_that("load_adaptive_session backfills newly added step_log fields for resum
   step <- step[, setdiff(names(step), drop_cols), drop = FALSE]
   saveRDS(step, step_path)
 
-  expect_no_error(pairwiseLLM::validate_session_dir(session_dir))
+  expect_error(pairwiseLLM::validate_session_dir(session_dir), "missing required columns")
   loaded <- pairwiseLLM::load_adaptive_session(session_dir)
   expect_true(all(drop_cols %in% names(loaded$step_log)))
   expect_true(all(vapply(drop_cols, function(col) all(is.na(loaded$step_log[[col]])), logical(1L))))

@@ -338,6 +338,25 @@ read_log <- function(path) {
   state
 }
 
+.adaptive_read_session_metadata <- function(paths) {
+  metadata <- readRDS(paths$metadata)
+  if (!is.list(metadata)) {
+    rlang::abort("Session metadata must be a named list.")
+  }
+  schema_version <- metadata$schema_version %||% NA_character_
+  if (!is.character(schema_version) ||
+    length(schema_version) != 1L ||
+    is.na(schema_version) ||
+    schema_version == "") {
+    rlang::abort("Session metadata `schema_version` must be a non-empty string.")
+  }
+  n_items <- metadata$n_items %||% NA_integer_
+  if (!.adaptive_is_integerish(n_items) || length(n_items) != 1L || is.na(n_items) || n_items < 1L) {
+    rlang::abort("Session metadata `n_items` must be a positive integer.")
+  }
+  metadata
+}
+
 .adaptive_item_log_paths <- function(item_log_dir, refit_ids) {
   vapply(
     refit_ids,
@@ -412,27 +431,13 @@ validate_session_dir <- function(session_dir) {
     rlang::abort("Session directory is missing required artifacts.")
   }
 
-  metadata <- readRDS(paths$metadata)
-  if (!is.list(metadata)) {
-    rlang::abort("Session metadata must be a named list.")
-  }
-  schema_version <- metadata$schema_version %||% NA_character_
-  if (!is.character(schema_version) ||
-    length(schema_version) != 1L ||
-    is.na(schema_version) ||
-    schema_version == "") {
-    rlang::abort("Session metadata `schema_version` must be a non-empty string.")
-  }
-  n_items <- metadata$n_items %||% NA_integer_
-  if (!.adaptive_is_integerish(n_items) || length(n_items) != 1L || is.na(n_items) || n_items < 1L) {
-    rlang::abort("Session metadata `n_items` must be a positive integer.")
-  }
+  metadata <- .adaptive_read_session_metadata(paths)
 
   step_log <- .adaptive_align_log_schema_for_resume(
     read_log(paths$step_log),
     schema_step_log,
     "step_log",
-    fill_missing = TRUE
+    fill_missing = FALSE
   )
   round_log <- read_log(paths$round_log)
   round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
@@ -572,8 +577,13 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 #' @family adaptive persistence
 #' @export
 load_adaptive_session <- function(session_dir) {
-  metadata <- validate_session_dir(session_dir)
   paths <- .adaptive_session_paths(session_dir)
+  required <- c(paths$state, paths$step_log, paths$round_log, paths$metadata)
+  missing <- required[!file.exists(required)]
+  if (length(missing) > 0L) {
+    rlang::abort("Session directory is missing required artifacts.")
+  }
+  metadata <- .adaptive_read_session_metadata(paths)
 
   state <- readRDS(paths$state)
   if (!inherits(state, "adaptive_state")) {
