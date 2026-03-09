@@ -754,15 +754,8 @@ summarize_adaptive <- function(state) {
   round_log <- adaptive_round_log(state)
   committed <- sum(!is.na(step_log$pair_id))
 
-  last_stop_decision <- NA
-  last_stop_reason <- NA_character_
-  if (nrow(round_log) > 0L) {
-    last_stop_decision <- round_log$stop_decision[[nrow(round_log)]]
-    last_stop_reason <- round_log$stop_reason[[nrow(round_log)]]
-  } else if (is.list(state$meta)) {
-    last_stop_decision <- as.logical(state$meta$stop_decision %||% NA)
-    last_stop_reason <- as.character(state$meta$stop_reason %||% NA_character_)
-  }
+  last_stop_decision <- as.logical(state$meta$stop_decision %||% NA)
+  last_stop_reason <- as.character(state$meta$stop_reason %||% NA_character_)
 
   tibble::tibble(
     n_items = as.integer(state$n_items),

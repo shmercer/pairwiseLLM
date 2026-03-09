@@ -327,6 +327,43 @@ test_that("adaptive_rank wrapper exposes top-band defaults and ceiling top-band 
   expect_equal(length(strata$top_band_ids), as.integer(ceiling(0.10 * out$state$n_items)))
 })
 
+test_that("adaptive_rank summary uses persisted meta stop state, not stale round-log stop flags", {
+  samples <- make_linking_samples_df()
+  judge <- function(A, B, state, ...) {
+    list(is_valid = TRUE, Y = 1L, invalid_reason = NA_character_)
+  }
+
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_run_live = function(state, judge, n_steps, ...) {
+      state$meta$stop_decision <- FALSE
+      state$meta$stop_reason <- NA_character_
+      state$round_log <- tibble::tibble(
+        refit_id = 1L,
+        phase_scope = "global",
+        stop_decision = TRUE,
+        stop_reason = "btl_converged"
+      )
+      state
+    },
+    pairwiseLLM::adaptive_rank(
+      data = samples,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      progress = "none",
+      seed = 17L,
+      adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_false(isTRUE(out$summary$last_stop_decision[[1L]]))
+  expect_true(is.na(out$summary$last_stop_reason[[1L]]))
+  expect_true(isTRUE(out$logs$round_log$stop_decision[[1L]]))
+  expect_identical(as.character(out$logs$round_log$stop_reason[[1L]]), "btl_converged")
+})
+
 test_that("adaptive_rank builds internal llm judge and forwards judge_call_args", {
   samples <- make_test_samples_df(4L)[, c("ID", "text")]
   calls <- list()
