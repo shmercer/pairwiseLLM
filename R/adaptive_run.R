@@ -1024,6 +1024,9 @@
 
   if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
     out$round <- round
+    if ((round$round_committed %||% 0L) >= (round$round_pairs_target %||% 0L)) {
+      out <- .adaptive_round_start_next(out)
+    }
     return(out)
   }
 

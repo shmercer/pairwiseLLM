@@ -1221,6 +1221,44 @@ test_that("linking Phase A stage exhaustion advances to next round when progress
   expect_true(isTRUE(out$meta$round_restarted))
 })
 
+test_that("linking Phase B committed steps restart the round when the exposure window fills", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 713L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ready", "ready"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b"
+  )
+  state$controller$link_phase <- "phase_b"
+  state$round$staged_active <- TRUE
+  state$round$round_pairs_target <- 1L
+  state$round$round_committed <- 0L
+  state$round$round_id <- 1L
+  state$round$per_round_item_uses[] <- 0L
+  step_row <- tibble::tibble(round_stage = "anchor_link", A = 1L, B = 3L)
+
+  out <- pairwiseLLM:::.adaptive_round_commit(state, step_row)
+
+  expect_true(as.integer(out$round$round_id) >= 2L)
+  expect_identical(as.integer(out$round$round_committed), 0L)
+  expect_true(all(as.integer(out$round$per_round_item_uses) == 0L))
+})
+
 test_that("linking Phase A unresolved exhaustion fails loudly with set-specific reason", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
