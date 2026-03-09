@@ -1078,11 +1078,34 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     return(character())
   }
   row <- round_row[1L, , drop = FALSE]
+  link_stage_rows <- tibble::as_tibble(link_stage_rows %||% tibble::tibble())
+  has_linking_rows <- nrow(link_stage_rows) > 0L
   thresholds <- cfg$stop_thresholds %||% list()
   phase_scope <- as.character(row$phase_scope %||% "global")
   use_scope_metrics <- identical(phase_scope, "phase_a_set")
   scope_set_id <- as.integer(row$phase_scope_set_id %||% NA_integer_)
   scope_n_items <- as.integer(row$phase_scope_n_items %||% row$n_items)
+  link_stop_reliability_min <- as.double(thresholds$link_stop_reliability_min %||% 0.90)
+  probe_brier_max <- as.double(thresholds$probe_brier_max %||% 0.19)
+  probe_pred_rmse_max <- as.double(thresholds$probe_pred_rmse_max %||% 0.015)
+  theta_global_rmse_max <- as.double(thresholds$theta_global_rmse_max %||% 0.04)
+  stability_consecutive_k <- as.integer(thresholds$stability_consecutive_k %||% 2L)
+  min_refits_in_phase_b <- as.integer(thresholds$min_refits_in_phase_b %||% 3L)
+  fmt_num <- function(x, digits = 3L) {
+    if (!is.finite(x)) {
+      return("NA")
+    }
+    formatC(x, digits = digits, format = "f")
+  }
+  fmt_mark <- function(x) {
+    if (isTRUE(x)) {
+      "[x]"
+    } else if (identical(x, FALSE)) {
+      "[ ]"
+    } else {
+      "[-]"
+    }
+  }
 
   header <- paste0(
     "REFIT #",
@@ -1201,7 +1224,11 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     paste0("  min_ess_bulk=", row$min_ess_bulk, " (need >= ", row$ess_bulk_required, ")")
   )
 
-  stop_table <- c("Stop criteria (rule: ALL applicable must pass):")
+  stop_header <- "Stop criteria (rule: ALL applicable must pass):"
+  if (has_linking_rows) {
+    stop_header <- "Global BTL stop criteria (round_log; not sufficient for Phase B stop):"
+  }
+  stop_table <- c(stop_header)
   stop_table <- c(
     stop_table,
     paste0(
@@ -1330,18 +1357,14 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   )
 
   decision <- if (isTRUE(row$stop_decision)) "Decision: STOP" else "Decision: continue"
-  if (!is.na(row$stop_reason) && row$stop_reason != "") {
-    decision <- paste0(decision, "  stop_reason=\"", row$stop_reason, "\"")
-  }
-
   stop_summary <- paste0(
-    "stop_decision=",
+    if (has_linking_rows) "global_stop_decision=" else "stop_decision=",
     row$stop_decision,
-    "  stop_reason=",
+    "  ",
+    if (has_linking_rows) "global_stop_reason=" else "stop_reason=",
     row$stop_reason
   )
 
-  link_stage_rows <- tibble::as_tibble(link_stage_rows %||% tibble::tibble())
   link_block <- character()
   if (nrow(link_stage_rows) > 0L) {
     active_spokes <- sort(unique(as.integer(link_stage_rows$spoke_id %||% integer())))
@@ -1422,6 +1445,106 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
       tapered <- sum(as.integer(link_stage_rows$quota_long_link_removed %||% 0L), na.rm = TRUE)
       link_block <- c(link_block, paste0("  long_link_taper_removed_total=", tapered))
     }
+
+    link_stop_block <- c("Linking stop criteria by spoke:")
+    for (idx in seq_len(nrow(link_stage_rows))) {
+      link_row <- link_stage_rows[idx, , drop = FALSE]
+      spoke_id <- as.integer(link_row$spoke_id[[1L]] %||% NA_integer_)
+      probe_realized <- as.integer(link_row$probe_edges_realized[[1L]] %||% 0L)
+      probe_min <- as.integer(link_row$probe_edges_min_for_stop_used[[1L]] %||% NA_integer_)
+      stop_counter <- as.integer(link_row$stop_consecutive_pass_count[[1L]] %||% 0L)
+      link_stop_block <- c(
+        link_stop_block,
+        paste0(
+          "  spoke=",
+          spoke_id,
+          "  eligible=",
+          link_row$link_stop_eligible[[1L]],
+          "  pass=",
+          link_row$link_stop_pass[[1L]],
+          "  transform_frozen=",
+          link_row$transform_frozen[[1L]],
+          "  stop_consecutive_pass_count=",
+          stop_counter,
+          "/",
+          stability_consecutive_k
+        ),
+        paste0(
+          "    link_lag_eligible=",
+          fmt_mark(link_row$link_lag_eligible[[1L]]),
+          "  link_min_refit_eligible=",
+          fmt_mark(link_row$link_min_refit_eligible[[1L]]),
+          " (need refit >= ",
+          min_refits_in_phase_b,
+          ")  link_stop_gate_open=",
+          fmt_mark(link_row$link_stop_gate_open[[1L]]),
+          "  diagnostics_pass=",
+          fmt_mark(
+            isTRUE(link_row$link_diagnostics_divergences_pass[[1L]]) &&
+              isTRUE(link_row$link_diagnostics_rhat_pass[[1L]]) &&
+              isTRUE(link_row$link_diagnostics_ess_pass[[1L]])
+          ),
+          "  probe_edges_realized=",
+          probe_realized,
+          " (need >= ",
+          if (is.na(probe_min)) "NA" else probe_min,
+          ")  scale_ready=",
+          fmt_mark(link_row$scale_ready[[1L]])
+        ),
+        paste0(
+          "    hub_anchored=",
+          fmt_mark(link_row$hub_anchored[[1L]]),
+          "  reliability_link_global=",
+          fmt_num(as.double(link_row$reliability_link_global[[1L]]), digits = 3L),
+          " (need >= ",
+          fmt_num(link_stop_reliability_min, digits = 3L),
+          "; pass=",
+          fmt_mark(link_row$reliability_stop_pass[[1L]]),
+          ")  rank_stability_lagged=",
+          fmt_num(as.double(link_row$rank_stability_lagged[[1L]]), digits = 3L),
+          " (pass=",
+          fmt_mark(link_row$rank_stability_pass[[1L]]),
+          ")  delta_spoke_sd=",
+          fmt_num(as.double(link_row$delta_spoke_sd[[1L]]), digits = 3L),
+          " (need <= ",
+          fmt_num(as.double(link_row$delta_sd_max_used[[1L]]), digits = 3L),
+          "; pass=",
+          fmt_mark(link_row$delta_sd_pass[[1L]]),
+          ")  probe_brier=",
+          fmt_num(as.double(link_row$probe_brier[[1L]]), digits = 3L),
+          " (need <= ",
+          fmt_num(probe_brier_max, digits = 3L),
+          ")  probe_pred_rmse_lagged=",
+          fmt_num(as.double(link_row$probe_pred_rmse_lagged[[1L]]), digits = 3L),
+          " (need <= ",
+          fmt_num(probe_pred_rmse_max, digits = 3L),
+          ")  theta_global_rmse_lagged=",
+          fmt_num(as.double(link_row$theta_global_rmse_lagged[[1L]]), digits = 3L),
+          " (need <= ",
+          fmt_num(theta_global_rmse_max, digits = 3L),
+          ")"
+        )
+      )
+    }
+    link_block <- c(link_block, link_stop_block)
+
+    all_link_stop <- all(link_stage_rows$link_stop_pass %in% TRUE)
+    if (isTRUE(all_link_stop)) {
+      decision <- "Decision: STOP (all active spokes passed linking stop)"
+    } else if (isTRUE(row$stop_decision)) {
+      any_eligible <- any(link_stage_rows$link_stop_eligible %in% TRUE, na.rm = TRUE)
+      detail <- if (isTRUE(any_eligible)) {
+        "linking stop has not passed for all active spokes"
+      } else {
+        "linking stop is not yet eligible for the active spokes"
+      }
+      decision <- paste0(
+        "Decision: continue  global_stop_decision=TRUE but ",
+        detail
+      )
+    }
+  } else if (!is.na(row$stop_reason) && row$stop_reason != "") {
+    decision <- paste0(decision, "  stop_reason=\"", row$stop_reason, "\"")
   }
 
   c(
