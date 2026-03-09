@@ -1,4 +1,4 @@
-mark_link_phase_b_ready <- function(state, source = "import") {
+mark_link_phase_b_ready <- function(state, source = "import", probe_edges_min_for_stop = 0L) {
   set_ids <- sort(unique(as.integer(state$items$set_id)))
   if (is.null(state$linking$phase_a)) {
     state$linking$phase_a <- list()
@@ -22,6 +22,7 @@ mark_link_phase_b_ready <- function(state, source = "import") {
   state$linking$phase_a$artifacts <- artifacts
   state$linking$phase_a$ready_for_phase_b <- TRUE
   state$linking$phase_a$phase <- "phase_b"
+  state$controller$probe_edges_min_for_stop <- as.integer(probe_edges_min_for_stop)
   state
 }
 
@@ -447,13 +448,75 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
-  judge <- make_deterministic_judge("i_wins")
-  state <- pairwiseLLM:::run_one_step(state, judge)
-  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
-  state <- pairwiseLLM:::run_one_step(state, judge)
-  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
-  state <- pairwiseLLM:::run_one_step(state, judge)
-  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 4L,
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_multi_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:00:02", tz = "UTC"),
+      pair_id = 2L,
+      i = 2L,
+      j = 7L,
+      A = 2L,
+      B = 7L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 3L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 3L,
+      run_mode = "link_multi_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 3L,
+      timestamp = as.POSIXct("2026-01-01 00:00:03", tz = "UTC"),
+      pair_id = 3L,
+      i = 3L,
+      j = 5L,
+      A = 3L,
+      B = 5L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_multi_spoke",
+      link_stage = "long_link",
+      round_stage = "long_link"
+    )
+  )
   state$round_log <- pairwiseLLM:::append_round_log(state$round_log, list(refit_id = 1L, diagnostics_pass = TRUE))
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(), `3` = list())
   rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
@@ -641,8 +704,31 @@ test_that("coverage source propagates through selection and linking stage rows",
   sel <- pairwiseLLM:::select_next_pair(state, step_id = 1L)
   expect_identical(sel$coverage_source, "phase_a_rank_mu_raw")
 
-  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
-  state <- pairwiseLLM:::.adaptive_round_commit(state, state$step_log[nrow(state$step_log), , drop = FALSE])
+  state$controller$link_stage_coverage_source <- list(`2` = sel$coverage_source)
+  state$controller$link_stage_coverage_bins_used <- list(`2` = as.integer(sel$coverage_bins_used))
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 5L,
+      A = 1L,
+      B = 5L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
   state$round_log <- pairwiseLLM:::append_round_log(state$round_log, list(refit_id = 1L, diagnostics_pass = TRUE))
   state <- pairwiseLLM:::.adaptive_linking_refit_update_state(
     state = state,
@@ -1467,7 +1553,6 @@ test_that("planned holdout probe edges are excluded from active linking candidat
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
-  state$linking$probe$collect_holdout_now_by_spoke <- list(`2` = TRUE)
   state <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(state, controller = state$controller, spoke_ids = 2L)
   panel <- state$linking$probe$panels_by_spoke[["2"]]
   expect_true(nrow(panel) >= 1L)

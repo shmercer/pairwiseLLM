@@ -292,8 +292,6 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
-  state$linking$probe$collect_holdout_now_by_spoke <- list(`2` = TRUE)
-
   out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
   expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")
@@ -305,6 +303,7 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
   expect_equal(nrow(out$history_pairs), 0L)
   expect_true(is.list(out$linking$probe$panels_by_spoke))
   expect_true(nrow(out$linking$probe$realized_edges) >= 1L)
+  expect_true(nrow(out$linking$probe$panels_by_spoke[["2"]]) >= 1L)
 })
 
 test_that("invalid linking step does not mutate controller link routing state", {
@@ -378,6 +377,27 @@ test_that("run_one_step uses selected spoke fallback for non-hub cross-set rows"
     validation_message = c("ok", "ok", "ok"),
     artifact_path = c(NA_character_, NA_character_, NA_character_)
   )
+  state$linking$phase_a$artifacts <- list(
+    `1` = list(items = tibble::tibble(
+      global_item_id = "gh1",
+      theta_raw_mean = 0,
+      theta_raw_sd = 0.1,
+      rank_mu_raw = 1
+    )),
+    `2` = list(items = tibble::tibble(
+      global_item_id = "gs21",
+      theta_raw_mean = 0,
+      theta_raw_sd = 0.1,
+      rank_mu_raw = 1
+    )),
+    `3` = list(items = tibble::tibble(
+      global_item_id = "gs31",
+      theta_raw_mean = 0,
+      theta_raw_sd = 0.1,
+      rank_mu_raw = 1
+    ))
+  )
+  state$controller$probe_edges_min_for_stop <- 0L
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(), `3` = list())
 
   judge <- make_deterministic_judge("i_wins")

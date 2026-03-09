@@ -282,6 +282,95 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_holdout_since_last_refit <- function(state, spoke_id) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (
+    nrow(step_log) < 1L ||
+      !all(c("pair_id", "step_id", "link_spoke_id", "run_mode") %in% names(step_log))
+  ) {
+    return(0L)
+  }
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+  as.integer(sum(
+    !is.na(step_log$pair_id) &
+      as.integer(step_log$step_id) > last_refit_step &
+      as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
+      as.character(step_log$run_mode) == "link_probe_holdout",
+    na.rm = TRUE
+  ))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_next_holdout_spoke <- function(state,
+                                                    controller,
+                                                    eligible_spoke_ids = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  spoke_ids <- as.integer(eligible_spoke_ids %||% phase_ctx$active_spokes %||% integer())
+  spoke_ids <- sort(unique(spoke_ids[!is.na(spoke_ids)]))
+  if (length(spoke_ids) < 1L) {
+    return(NA_integer_)
+  }
+
+  realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 30L)
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  ranked_spokes <- .adaptive_link_ranked_spokes(
+    state = state,
+    controller = controller,
+    eligible_spoke_ids = spoke_ids
+  )
+  if (length(ranked_spokes) < 1L) {
+    ranked_spokes <- spoke_ids
+  }
+  rank_map <- stats::setNames(seq_along(ranked_spokes), as.character(ranked_spokes))
+
+  pending <- lapply(spoke_ids, function(spoke_id) {
+    key <- as.character(spoke_id)
+    if (isTRUE(frozen_map[[key]])) {
+      return(NULL)
+    }
+    epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
+    panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
+    if (nrow(panel) < 1L) {
+      return(list(
+        spoke_id = as.integer(spoke_id),
+        realized_total = 0L,
+        realized_refit = 0L,
+        rank = as.integer(rank_map[[key]] %||% (length(spoke_ids) + as.integer(spoke_id)))
+      ))
+    }
+    realized_total <- .adaptive_link_probe_realized_count(state, spoke_id = spoke_id, epoch_id = epoch_id)
+    if (realized_total >= realized_min) {
+      return(NULL)
+    }
+    list(
+      spoke_id = as.integer(spoke_id),
+      realized_total = as.integer(realized_total),
+      realized_refit = .adaptive_link_probe_holdout_since_last_refit(state, spoke_id = spoke_id),
+      rank = as.integer(rank_map[[key]] %||% (length(spoke_ids) + as.integer(spoke_id)))
+    )
+  })
+  pending <- Filter(Negate(is.null), pending)
+  if (length(pending) < 1L) {
+    return(NA_integer_)
+  }
+  pending_tbl <- tibble::as_tibble(do.call(rbind, lapply(pending, as.data.frame)))
+  pending_tbl <- pending_tbl[
+    order(
+      as.integer(pending_tbl$realized_refit),
+      as.integer(pending_tbl$realized_total),
+      as.integer(pending_tbl$rank),
+      as.integer(pending_tbl$spoke_id)
+    ),
+    ,
+    drop = FALSE
+  ]
+  as.integer(pending_tbl$spoke_id[[1L]] %||% NA_integer_)
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_next_pair <- function(state, spoke_id, epoch_id = NULL) {
   panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
   pending <- panel[!panel$realized %in% TRUE, , drop = FALSE]

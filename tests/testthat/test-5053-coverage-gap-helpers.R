@@ -493,10 +493,27 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
     panels_by_spoke = list(),
     prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
     realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
-    collect_holdout_now_by_spoke = list(`2` = TRUE)
+    collect_holdout_now_by_spoke = list()
   )
   ensured <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(state, controller = state$controller, spoke_ids = 2L)
   expect_true(is.data.frame(ensured$linking$probe$panels_by_spoke[["2"]]))
+  expect_true(nrow(ensured$linking$probe$panels_by_spoke[["2"]]) >= 1L)
+
+  next_spoke <- pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+    ensured,
+    controller = ensured$controller,
+    eligible_spoke_ids = 2L
+  )
+  expect_identical(next_spoke, 2L)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+      state,
+      controller = utils::modifyList(state$controller, list(hub_id = 99L)),
+      spoke_ids = 2L
+    ),
+    "no held-out panel could be constructed"
+  )
 
   meta_empty <- pairwiseLLM:::.adaptive_selected_coverage_meta(tibble::tibble())
   expect_true(is.na(meta_empty$coverage_bins_used))

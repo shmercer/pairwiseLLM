@@ -799,21 +799,29 @@
   }
   out$linking <- out$linking %||% list()
   probe <- .adaptive_link_probe_state(out)
-  collect_flags <- probe$collect_holdout_now_by_spoke %||% list()
   for (spoke_id in unique(spoke_ids)) {
     epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
     panel <- probe$panels_by_spoke[[as.character(spoke_id)]] %||% .adaptive_link_probe_empty_panel()
     panel <- tibble::as_tibble(panel)
-    should_build <- nrow(panel) > 0L || isTRUE(collect_flags[[as.character(spoke_id)]])
-    if (isTRUE(should_build) && (nrow(panel) < 1L || !all(as.integer(panel$link_epoch_id) == epoch_id))) {
-      probe$panels_by_spoke[[as.character(spoke_id)]] <- tryCatch(
-        .adaptive_link_probe_construct_panel(
-          state = out,
-          controller = controller,
-          spoke_id = spoke_id
-        ),
-        error = function(e) .adaptive_link_probe_empty_panel()
+    if (nrow(panel) < 1L || !all(as.integer(panel$link_epoch_id) == epoch_id)) {
+      built_panel <- .adaptive_link_probe_construct_panel(
+        state = out,
+        controller = controller,
+        spoke_id = spoke_id
       )
+      built_panel <- tibble::as_tibble(built_panel)
+      if (nrow(built_panel) < 1L) {
+        rlang::abort(
+          paste0(
+            "Phase B probe-panel invariant failed: no held-out panel could be constructed for spoke_id=",
+            as.integer(spoke_id),
+            " in link_epoch_id=",
+            as.integer(epoch_id),
+            "."
+          )
+        )
+      }
+      probe$panels_by_spoke[[as.character(spoke_id)]] <- built_panel
     }
   }
   out$linking$probe <- probe
