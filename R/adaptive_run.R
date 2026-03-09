@@ -1018,9 +1018,6 @@
     return(list(state = out, exhausted = TRUE))
   }
   stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
-  if (is.na(stage) || !stage %in% round$stage_order) {
-    return(list(state = out, exhausted = TRUE))
-  }
   is_adaptive <- inherits(out, "adaptive_state")
   controller <- if (isTRUE(is_adaptive)) .adaptive_controller_resolve(out) else list(run_mode = "within_set")
   phase_ctx <- if (isTRUE(is_adaptive)) {
@@ -1028,7 +1025,8 @@
   } else {
     list(phase = "phase_a")
   }
-  if (isTRUE(is_adaptive) && .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+  stage_order <- as.character(round$stage_order %||% .adaptive_stage_order())
+  mark_phase_b_spoke_exhaustion <- function(state, controller, phase_ctx, stage_name, mark_all_stages = FALSE) {
     starvation_reason <- if ("starvation_reason" %in% names(step_row)) {
       as.character(step_row$starvation_reason[[1L]] %||% NA_character_)
     } else {
@@ -1047,59 +1045,89 @@
         spokes_to_mark <- as.integer(spoke_id)
       }
     }
-    if (length(spokes_to_mark) > 0L) {
-      out$controller <- controller
-      refit_id <- .adaptive_link_refit_window_id(out)
-      shortfalls <- .adaptive_link_refit_shortfalls_map(out)
-      exhausted_map <- .adaptive_link_refit_exhausted_map(out)
-      budget_map <- .adaptive_link_budget_map_for_refit(
-        state = out,
-        controller = controller,
-        eligible_spoke_ids = unique(as.integer(spokes_to_mark))
+    if (length(spokes_to_mark) < 1L) {
+      return(list(state = state, exhausted = TRUE))
+    }
+
+    out <- state
+    out$controller <- controller
+    refit_id <- .adaptive_link_refit_window_id(out)
+    shortfalls <- .adaptive_link_refit_shortfalls_map(out)
+    exhausted_map <- .adaptive_link_refit_exhausted_map(out)
+    budget_map <- .adaptive_link_budget_map_for_refit(
+      state = out,
+      controller = controller,
+      eligible_spoke_ids = unique(as.integer(spokes_to_mark))
+    )
+    for (spoke_id in unique(as.integer(spokes_to_mark))) {
+      quota_controller <- controller
+      quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+      quota_controller$B_spoke_refit_budget <- as.integer(
+        budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget %||% NA_integer_
       )
-      for (spoke_id in unique(as.integer(spokes_to_mark))) {
-        quota_controller <- controller
-        quota_controller$current_link_spoke_id <- as.integer(spoke_id)
-        quota_controller$B_spoke_refit_budget <- as.integer(
-          budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget %||% NA_integer_
-        )
-        quota_controller$B_spoke_refit_budget_source <- as.character(
-          budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget_source %||% "single_spoke_default"
-        )
-        stage_quotas <- .adaptive_round_compute_quotas(
-          round_id = as.integer(round$round_id %||% 1L),
-          n_items = as.integer(out$n_items),
-          controller = quota_controller
-        )
-        progress <- .adaptive_link_stage_progress(
-          state = out,
-          spoke_id = as.integer(spoke_id),
-          stage_quotas = stage_quotas,
-          stage_order = round$stage_order %||% .adaptive_stage_order(),
-          refit_id = refit_id
-        )
+      quota_controller$B_spoke_refit_budget_source <- as.character(
+        budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget_source %||% "single_spoke_default"
+      )
+      stage_quotas <- .adaptive_round_compute_quotas(
+        round_id = as.integer(round$round_id %||% 1L),
+        n_items = as.integer(out$n_items),
+        controller = quota_controller
+      )
+      progress <- .adaptive_link_stage_progress(
+        state = out,
+        spoke_id = as.integer(spoke_id),
+        stage_quotas = stage_quotas,
+        stage_order = stage_order,
+        refit_id = refit_id
+      )
+      key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
+      existing_shortfall <- shortfalls[[key]] %||% list()
+      existing_exhausted <- exhausted_map[[key]] %||% list()
+      stages_to_mark <- if (isTRUE(mark_all_stages)) stage_order else as.character(stage_name)
+      for (stage_name_i in stages_to_mark) {
         shortfall <- max(
           0L,
-          as.integer(progress$stage_quotas[[stage]] %||% 0L) -
-            as.integer(progress$stage_committed[[stage]] %||% 0L)
+          as.integer(progress$stage_quotas[[stage_name_i]] %||% 0L) -
+            as.integer(progress$stage_committed[[stage_name_i]] %||% 0L)
         )
-        key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
-        existing_shortfall <- shortfalls[[key]] %||% list()
-        existing_shortfall[[stage]] <- as.integer((existing_shortfall[[stage]] %||% 0L) + shortfall)
-        shortfalls[[key]] <- existing_shortfall
-
-        existing_exhausted <- exhausted_map[[key]] %||% list()
-        existing_exhausted[[stage]] <- TRUE
-        exhausted_map[[key]] <- existing_exhausted
+        existing_shortfall[[stage_name_i]] <- as.integer(
+          (existing_shortfall[[stage_name_i]] %||% 0L) + shortfall
+        )
+        existing_exhausted[[stage_name_i]] <- TRUE
       }
-      out$refit_meta$link_stage_shortfalls_by_refit_spoke <- shortfalls
-      out$refit_meta$link_stage_exhausted_by_refit_spoke <- exhausted_map
-      if (length(unique(as.integer(spokes_to_mark))) == 1L) {
-        out$controller$current_link_spoke_id <- as.integer(unique(as.integer(spokes_to_mark))[[1L]])
-      }
-      out$round <- round
-      return(list(state = out, exhausted = FALSE))
+      shortfalls[[key]] <- existing_shortfall
+      exhausted_map[[key]] <- existing_exhausted
     }
+    out$refit_meta$link_stage_shortfalls_by_refit_spoke <- shortfalls
+    out$refit_meta$link_stage_exhausted_by_refit_spoke <- exhausted_map
+    if (length(unique(as.integer(spokes_to_mark))) == 1L) {
+      out$controller$current_link_spoke_id <- as.integer(unique(as.integer(spokes_to_mark))[[1L]])
+    }
+    out$round <- round
+    list(state = out, exhausted = FALSE)
+  }
+  if (isTRUE(is_adaptive) && .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    if (identical(stage, "pooled_backfill")) {
+      return(mark_phase_b_spoke_exhaustion(
+        state = out,
+        controller = controller,
+        phase_ctx = phase_ctx,
+        stage_name = stage,
+        mark_all_stages = TRUE
+      ))
+    }
+  }
+  if (is.na(stage) || !stage %in% stage_order) {
+    return(list(state = out, exhausted = TRUE))
+  }
+  if (isTRUE(is_adaptive) && .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    return(mark_phase_b_spoke_exhaustion(
+      state = out,
+      controller = controller,
+      phase_ctx = phase_ctx,
+      stage_name = stage,
+      mark_all_stages = FALSE
+    ))
   }
 
   shortfall <- max(0L, as.integer(round$stage_quotas[[stage]] %||% 0L) -
@@ -1710,12 +1738,28 @@ adaptive_rank_run_live <- function(state,
             return(state)
           }
         } else {
-          state$meta$stop_decision <- TRUE
-          state$meta$stop_reason <- "candidate_starvation"
-          if (!is.null(state$config$session_dir)) {
-            save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+          controller <- .adaptive_controller_resolve(state)
+          phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+          is_link_phase_b <- .adaptive_link_mode_active(controller) &&
+            identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
+          if (isTRUE(is_link_phase_b)) {
+            refit_id <- .adaptive_link_refit_window_id(state)
+            if (isTRUE(.adaptive_link_all_spokes_exhausted(state, refit_id = refit_id))) {
+              state$meta$stop_decision <- TRUE
+              state$meta$stop_reason <- "all_spokes_exhausted"
+              if (!is.null(state$config$session_dir)) {
+                save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+              }
+              return(state)
+            }
+          } else {
+            state$meta$stop_decision <- TRUE
+            state$meta$stop_reason <- "candidate_starvation"
+            if (!is.null(state$config$session_dir)) {
+              save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+            }
+            return(state)
           }
-          return(state)
         }
       }
     } else if (isTRUE(step_row$candidate_starved[[1L]])) {

@@ -62,6 +62,11 @@ test_that("adaptive_rank_start and adaptive_rank_run_live cover additional input
   state$warm_start_done <- FALSE
 
   out <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_prepare = function(state) state,
+    .adaptive_phase_a_finalize_if_ready = function(state) state,
+    .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_link_sync_warm_start = function(state) state,
+    .adaptive_clear_stale_global_stop_state = function(state) state,
     run_one_step = function(st, judge, ...) {
       row <- list(
         step_id = as.integer(nrow(st$step_log) + 1L),
@@ -270,6 +275,11 @@ test_that("adaptive_rank_run_live covers progress event, persistence writes, and
   tracker$write_called <- 0L
 
   out <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_prepare = function(state) state,
+    .adaptive_phase_a_finalize_if_ready = function(state) state,
+    .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_link_sync_warm_start = function(state) state,
+    .adaptive_clear_stale_global_stop_state = function(state) state,
     run_one_step = function(st, judge, ...) {
       row <- list(
         step_id = as.integer(nrow(st$step_log) + 1L),
@@ -513,6 +523,11 @@ test_that("adaptive rank start and warm-start starvation save branch validations
   tracker$save_called <- 0L
 
   out <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_prepare = function(state) state,
+    .adaptive_phase_a_finalize_if_ready = function(state) state,
+    .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_link_sync_warm_start = function(state) state,
+    .adaptive_clear_stale_global_stop_state = function(state) state,
     run_one_step = function(st, judge, ...) {
       row <- list(
         step_id = as.integer(nrow(st$step_log) + 1L),
@@ -862,6 +877,88 @@ test_that("phase B global stop remains blocked until linking stop is terminally 
   state$controller$link_stopped_by_spoke <- list(`2` = TRUE)
   state$controller$probe_pairs_per_refit_per_spoke <- 0L
   expect_true(isTRUE(pairwiseLLM:::.adaptive_global_stop_allowed(state)))
+})
+
+test_that("link_multi_spoke Phase B starvation is non-terminal until all spokes exhaust", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 63L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 1L
+  state$config$session_dir <- tempfile("session-link-phaseb-starve-")
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("ready", "ready", "ready"),
+      validation_message = c("ready", "ready", "ready"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(items = tibble::tibble(item_id = c("h1", "h2"), theta_raw_mean = c(2, 1))),
+      `2` = list(items = tibble::tibble(item_id = c("s21", "s22"), theta_raw_mean = c(2, 1))),
+      `3` = list(items = tibble::tibble(item_id = c("s31", "s32"), theta_raw_mean = c(2, 1)))
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    phase = "phase_b",
+    ready_spokes = c(2L, 3L),
+    active_spokes = c(2L, 3L)
+  )
+  state$controller$current_link_spoke_id <- 3L
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_prepare = function(state) state,
+    .adaptive_phase_a_finalize_if_ready = function(state) state,
+    .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_link_sync_warm_start = function(state) state,
+    .adaptive_clear_stale_global_stop_state = function(state) state,
+    run_one_step = function(st, judge, ...) {
+      row <- list(
+        step_id = as.integer(nrow(st$step_log) + 1L),
+        timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        status = "starved",
+        candidate_starved = TRUE,
+        round_stage = "pooled_backfill",
+        link_spoke_id = 3L,
+        starvation_reason = "few_candidates_generated"
+      )
+      st$step_log <- pairwiseLLM:::append_step_log(st$step_log, row)
+      st
+    },
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      stats::setNames(c(1L, 1L, 1L, 1L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    maybe_refit_btl = function(state, config, fit_fn = NULL) {
+      list(state = state, refit_performed = FALSE, config = config)
+    },
+    save_adaptive_session = function(state, session_dir, overwrite = TRUE) state,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM::adaptive_rank_run_live(
+        state = state,
+        judge = make_deterministic_judge("invalid"),
+        n_steps = 1L,
+        progress = "none"
+      )
+    }
+  )
+
+  expect_false(isTRUE(out$meta$stop_decision))
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_all_spokes_exhausted(out, refit_id = 1L)))
+  expect_true(all(vapply(
+    pairwiseLLM:::.adaptive_stage_order(),
+    function(stage_name) isTRUE(out$refit_meta$link_stage_exhausted_by_refit_spoke[["1::3"]][[stage_name]]),
+    logical(1L)
+  )))
 })
 
 test_that("phase B all-spokes-exhausted stop uses explicit linking reason", {
