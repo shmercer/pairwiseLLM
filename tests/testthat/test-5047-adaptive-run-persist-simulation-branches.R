@@ -1259,6 +1259,29 @@ test_that("linking Phase B committed steps restart the round when the exposure w
   expect_true(all(as.integer(out$round$per_round_item_uses) == 0L))
 })
 
+test_that("linking Phase B rounds use the AD-sized exposure window, not the full refit budget", {
+  item_ids <- c(paste0("h", seq_len(50)), paste0("s", seq_len(100)))
+  round <- pairwiseLLM:::.adaptive_new_round_state(
+    item_ids = item_ids,
+    round_id = 1L,
+    staged_active = TRUE,
+    controller = list(
+      run_mode = "link_multi_spoke",
+      link_phase = "phase_b",
+      current_link_spoke_id = 2L,
+      B_spoke_refit_budget = 75L,
+      B_spoke_refit_budget_source = "fixed_override"
+    )
+  )
+
+  expect_identical(as.integer(sum(unlist(round$stage_quotas))), 75L)
+  expect_identical(
+    as.integer(round$round_pairs_target),
+    as.integer(pairwiseLLM:::adaptive_defaults(length(item_ids))$round_pairs_target)
+  )
+  expect_true(as.integer(round$round_pairs_target) < as.integer(sum(unlist(round$stage_quotas))))
+})
+
 test_that("linking Phase A unresolved exhaustion fails loudly with set-specific reason", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),

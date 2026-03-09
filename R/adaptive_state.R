@@ -1148,7 +1148,7 @@
   stage_committed <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
   round_pairs_target <- if (isTRUE(as.character(controller$run_mode %||% "within_set") %in%
     c("link_one_spoke", "link_multi_spoke"))) {
-    as.integer(sum(stage_quotas))
+    as.integer(min(defaults$round_pairs_target, sum(stage_quotas)))
   } else {
     as.integer(defaults$round_pairs_target)
   }
