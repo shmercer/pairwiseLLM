@@ -519,7 +519,7 @@
     return(anchors)
   }
 
-  n_anchor <- length(anchors)
+  n_anchor <- max(length(anchors), min(2L, length(ranked)))
   primary <- ranked_unused[seq_len(min(length(ranked_unused), n_anchor))]
   if (length(primary) < n_anchor) {
     fill <- ranked[!ranked %in% primary]
@@ -660,11 +660,7 @@
     hub_scores = routing_scores,
     defaults = adaptive_defaults(max(2L, length(unique(c(hub_ids, spoke_ids)))))
   )
-  hub_pool <- if (isTRUE(controller$hub_anchor_required_phase_b %||% TRUE)) {
-    as.character(hub_anchors)
-  } else {
-    hub_ids
-  }
+  hub_pool <- unique(c(as.character(hub_anchors), hub_ids))
   if (length(hub_pool) < 1L) {
     hub_pool <- hub_ids
   }
@@ -689,7 +685,11 @@
   h_bins <- 3L
   spoke_bin_map <- .adaptive_link_probe_quantile_bins(spoke_ids, spoke_theta, q_bins)
   hub_bin_map <- .adaptive_link_probe_quantile_bins(hub_pool, hub_theta, h_bins)
-  target_edges <- .adaptive_link_probe_panel_size(n_spoke_start)
+  target_edges <- .adaptive_link_probe_panel_size(
+    n_spoke_items = n_spoke_start,
+    n_available_pairs = as.integer(length(hub_pool) * length(spoke_ids)),
+    probe_edges_min_for_stop = as.integer(controller$probe_edges_min_for_stop %||% 30L)
+  )
 
   observed_keys <- character()
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
@@ -759,6 +759,46 @@
           spoke_item_id = as.character(picked$spoke_item_id[[idx]]),
           spoke_bin = as.integer(q),
           hub_bin = as.integer(h),
+          pair_key = as.character(picked$pair_key[[idx]])
+        )
+      }))
+    }
+  }
+
+  if (length(planned) < target_edges) {
+    existing_keys <- unique(c(seen_keys, vapply(planned, function(x) x$pair_key, character(1L))))
+    fallback_pairs <- expand.grid(
+      hub_item_id = sort(hub_pool),
+      spoke_item_id = sort(spoke_ids),
+      stringsAsFactors = FALSE
+    )
+    fallback_pairs$pair_key <- vapply(seq_len(nrow(fallback_pairs)), function(idx) {
+      make_unordered_key(fallback_pairs$hub_item_id[[idx]], fallback_pairs$spoke_item_id[[idx]])
+    }, character(1L))
+    fallback_pairs <- fallback_pairs[!fallback_pairs$pair_key %in% existing_keys, , drop = FALSE]
+    if (nrow(fallback_pairs) > 0L) {
+      fallback_pairs$spoke_bin <- as.integer(spoke_bin_map[fallback_pairs$spoke_item_id])
+      fallback_pairs$hub_bin <- as.integer(hub_bin_map[fallback_pairs$hub_item_id])
+      fallback_pairs <- fallback_pairs[
+        order(
+          as.integer(fallback_pairs$spoke_bin),
+          as.integer(fallback_pairs$hub_bin),
+          as.character(fallback_pairs$hub_item_id),
+          as.character(fallback_pairs$spoke_item_id)
+        ),
+        ,
+        drop = FALSE
+      ]
+      take <- min(target_edges - length(planned), nrow(fallback_pairs))
+      picked <- fallback_pairs[seq_len(take), , drop = FALSE]
+      planned <- c(planned, lapply(seq_len(nrow(picked)), function(idx) {
+        list(
+          link_epoch_id = as.integer(epoch_id),
+          spoke_id = as.integer(spoke_id),
+          hub_item_id = as.character(picked$hub_item_id[[idx]]),
+          spoke_item_id = as.character(picked$spoke_item_id[[idx]]),
+          spoke_bin = as.integer(picked$spoke_bin[[idx]] %||% NA_integer_),
+          hub_bin = as.integer(picked$hub_bin[[idx]] %||% NA_integer_),
           pair_key = as.character(picked$pair_key[[idx]])
         )
       }))

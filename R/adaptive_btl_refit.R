@@ -4274,6 +4274,22 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
     refit_pairs_target = refit_pairs_target
   )
   if (!isTRUE(eligibility$eligible)) {
+    controller <- .adaptive_controller_resolve(state)
+    phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+    step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+    latest_starved <- if (nrow(step_log) > 0L && "candidate_starved" %in% names(step_log)) {
+      isTRUE(step_log$candidate_starved[[nrow(step_log)]])
+    } else {
+      FALSE
+    }
+    if (.adaptive_link_mode_active(controller) &&
+      identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b") &&
+      isTRUE(latest_starved) &&
+      isTRUE(M_done > last_refit_M_done)) {
+      eligibility$eligible <- TRUE
+    }
+  }
+  if (!isTRUE(eligibility$eligible)) {
     return(list(
       state = state,
       refit_performed = FALSE,

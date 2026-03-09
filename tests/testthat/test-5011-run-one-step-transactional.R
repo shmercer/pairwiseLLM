@@ -292,6 +292,20 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state$refit_meta$refit_pairs_target_current <- 3L
+  state$controller$refit_pairs_target <- 3L
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
   out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
   expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")

@@ -86,7 +86,7 @@
 .adaptive_log_factor_specs_step <- function() {
   list(
     run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe"),
-    link_stage = c("anchor_link", "long_link", "mid_link", "local_link"),
+    link_stage = c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
     utility_mode = c("pairing_trueskill_u0", "linking_d_optimal"),

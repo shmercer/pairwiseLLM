@@ -888,7 +888,7 @@ adaptive_defaults <- function(N) {
   stage,
   state,
   config,
-  controller,
+  controller = NULL,
   generation_stage = NULL,
   round,
   history,
@@ -897,6 +897,7 @@ adaptive_defaults <- function(N) {
   seed_base,
   candidates = NULL
 ) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
   generation_stage <- as.character(generation_stage %||% .adaptive_round_active_stage(state) %||% "warm_start")
   ids <- as.character(state$trueskill_state$items$item_id)
   candidates <- candidates %||% tibble::tibble(i = character(), j = character())
@@ -990,6 +991,10 @@ adaptive_defaults <- function(N) {
   cap_count <- ceiling(config$cap_frac * config$W_cap)
   recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
   allow_repeats <- identical(stage$dup_policy, "relaxed")
+  link_phase_b <- .adaptive_link_mode_active(controller) &&
+    identical(as.character(.adaptive_link_phase_context(state, controller = controller)$phase %||% "phase_a"), "phase_b")
+  dup_max_obs_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs
+  dup_max_obs_relaxed_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs_relaxed
 
   .apply_downstream_filters <- function(candidates_in) {
     star_override_used_local <- FALSE
@@ -1007,9 +1012,9 @@ adaptive_defaults <- function(N) {
     after_dup <- .adaptive_duplicate_filter(
       candidates = candidates_in,
       pair_count = counts$pair_count,
-      dup_max_obs = if (allow_repeats) config$dup_max_obs_relaxed else config$dup_max_obs,
+      dup_max_obs = if (allow_repeats) dup_max_obs_relaxed_active else dup_max_obs_active,
       allow_repeats = allow_repeats,
-      dup_max_obs_default = config$dup_max_obs,
+      dup_max_obs_default = dup_max_obs_active,
       dup_p_margin = config$dup_p_margin,
       p_vals = candidates_in$p,
       u0_vals = candidates_in$u0,

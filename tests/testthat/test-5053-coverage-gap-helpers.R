@@ -504,6 +504,28 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
     controller = ensured$controller,
     eligible_spoke_ids = 2L
   )
+  expect_true(is.na(next_spoke))
+
+  ensured$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+  ensured$refit_meta$refit_pairs_target_current <- 3L
+  ensured$controller$refit_pairs_target <- 3L
+  ensured$controller$probe_pairs_per_refit_per_spoke <- 1L
+  next_spoke <- pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+    ensured,
+    controller = ensured$controller,
+    eligible_spoke_ids = 2L
+  )
   expect_identical(next_spoke, 2L)
 
   expect_error(

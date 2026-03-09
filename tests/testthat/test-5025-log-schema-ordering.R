@@ -154,7 +154,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
     levels(step_log$run_mode),
     c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe")
   )
-  expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link"))
+  expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"))
   expect_identical(levels(step_log$link_transform_policy), c("auto", "fixed_shift_only", "fixed_shift_scale"))
   expect_identical(levels(step_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(

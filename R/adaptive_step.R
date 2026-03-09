@@ -736,7 +736,7 @@ run_one_step <- function(state, judge, ...) {
       .adaptive_link_transform_state_for_spoke(controller, link_spoke_id))
   }
   link_stage <- if (isTRUE(is_cross_set) &&
-    selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link")) {
+    selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel")) {
     selection$round_stage
   } else {
     NA_character_
@@ -754,16 +754,21 @@ run_one_step <- function(state, judge, ...) {
     utility_mode <- NA_character_
   }
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
-    isTRUE(is_link_run_mode) &&
-    !isTRUE(is_probe_step) &&
-    identical(utility_mode, "linking_d_optimal")) {
-    as.double(
-      if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {
-        selection$link_d_opt_gain
-      } else {
-        selection$link_u %||% selection$U0_ij %||% NA_real_
-      }
-    )
+    isTRUE(is_link_run_mode)) {
+    explicit_utility <- as.double(selection$cross_set_utility_pre %||% NA_real_)
+    if (is.finite(explicit_utility)) {
+      explicit_utility
+    } else if (identical(utility_mode, "linking_d_optimal")) {
+      as.double(
+        if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {
+          selection$link_d_opt_gain
+        } else {
+          selection$link_u %||% selection$U0_ij %||% NA_real_
+        }
+      )
+    } else {
+      NA_real_
+    }
   } else {
     NA_real_
   }

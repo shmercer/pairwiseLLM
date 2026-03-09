@@ -223,8 +223,18 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_link_probe_panel_size <- function(n_spoke_items) {
-  .btl_mcmc_clamp(40L, 160L, as.integer(ceiling(0.25 * as.integer(n_spoke_items))))
+.adaptive_link_probe_panel_size <- function(n_spoke_items,
+                                            n_available_pairs = NA_integer_,
+                                            probe_edges_min_for_stop = 30L) {
+  n_spoke_items <- as.integer(n_spoke_items)
+  n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
+  probe_edges_min_for_stop <- max(1L, as.integer(probe_edges_min_for_stop %||% 30L))
+  base_target <- max(1L, as.integer(ceiling(0.25 * n_spoke_items)))
+  target <- max(base_target, probe_edges_min_for_stop)
+  if (!is.na(n_available_pairs)) {
+    target <- min(target, max(1L, as.integer(floor(0.5 * n_available_pairs))))
+  }
+  max(1L, as.integer(target))
 }
 
 #' @keywords internal
@@ -302,6 +312,25 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_holdout_total_since_last_refit <- function(state) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (
+    nrow(step_log) < 1L ||
+      !all(c("pair_id", "step_id", "run_mode") %in% names(step_log))
+  ) {
+    return(0L)
+  }
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+  as.integer(sum(
+    !is.na(step_log$pair_id) &
+      as.integer(step_log$step_id) > last_refit_step &
+      as.character(step_log$run_mode) == "link_probe_holdout",
+    na.rm = TRUE
+  ))
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_next_holdout_spoke <- function(state,
                                                     controller,
                                                     eligible_spoke_ids = NULL) {
@@ -312,8 +341,26 @@
   if (length(spoke_ids) < 1L) {
     return(NA_integer_)
   }
+  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
+  if (nrow(link_stage_log) < 1L) {
+    return(NA_integer_)
+  }
 
   realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 30L)
+  probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+  refit_target <- max(0L, as.integer(
+    state$refit_meta$refit_pairs_target_current %||%
+      controller$refit_pairs_target %||%
+      0L
+  ))
+  global_probe_cap <- max(0L, refit_target - 1L)
+  if (global_probe_cap <= 0L) {
+    return(NA_integer_)
+  }
+  holdout_total_since_refit <- .adaptive_link_probe_holdout_total_since_last_refit(state)
+  if (holdout_total_since_refit >= global_probe_cap) {
+    return(NA_integer_)
+  }
   frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
   ranked_spokes <- .adaptive_link_ranked_spokes(
     state = state,
@@ -337,18 +384,22 @@
         spoke_id = as.integer(spoke_id),
         realized_total = 0L,
         realized_refit = 0L,
-        rank = as.integer(rank_map[[key]] %||% (length(spoke_ids) + as.integer(spoke_id)))
+        rank = as.integer(rank_map[key] %||% (length(spoke_ids) + as.integer(spoke_id)))
       ))
     }
     realized_total <- .adaptive_link_probe_realized_count(state, spoke_id = spoke_id, epoch_id = epoch_id)
     if (realized_total >= realized_min) {
       return(NULL)
     }
+    realized_refit <- .adaptive_link_probe_holdout_since_last_refit(state, spoke_id = spoke_id)
+    if (realized_refit >= probe_cap) {
+      return(NULL)
+    }
     list(
       spoke_id = as.integer(spoke_id),
       realized_total = as.integer(realized_total),
-      realized_refit = .adaptive_link_probe_holdout_since_last_refit(state, spoke_id = spoke_id),
-      rank = as.integer(rank_map[[key]] %||% (length(spoke_ids) + as.integer(spoke_id)))
+      realized_refit = as.integer(realized_refit),
+      rank = as.integer(rank_map[key] %||% (length(spoke_ids) + as.integer(spoke_id)))
     )
   })
   pending <- Filter(Negate(is.null), pending)
