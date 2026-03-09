@@ -58,10 +58,14 @@ as_pairs_tbl <- function(...) {
 
 .adaptive_starvation_reason_levels <- function() {
   c(
+    "filtered_by_hard_filters",
     "few_candidates_generated",
     "filtered_by_duplicates",
+    "filtered_by_star_caps",
+    "filtered_by_scoring",
     "filtered_by_paircount",
     "filtered_by_other_filters",
+    "all_eligible_spokes_infeasible",
     "unknown"
   )
 }

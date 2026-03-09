@@ -1406,6 +1406,29 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   selected_stage_quota <- as.integer(stage_quota)
   selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
   recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
+  .starvation_reason_from_counts <- function(counts) {
+    generated <- as.integer(counts$n_candidates_generated %||% 0L)
+    after_hard <- as.integer(counts$n_candidates_after_hard_filters %||% 0L)
+    after_dup <- as.integer(counts$n_candidates_after_duplicates %||% 0L)
+    after_star <- as.integer(counts$n_candidates_after_star_caps %||% 0L)
+    scored <- as.integer(counts$n_candidates_scored %||% 0L)
+    if (generated <= 0L) {
+      return("few_candidates_generated")
+    }
+    if (after_hard <= 0L) {
+      return("filtered_by_hard_filters")
+    }
+    if (after_dup <= 0L) {
+      return("filtered_by_duplicates")
+    }
+    if (after_star <= 0L) {
+      return("filtered_by_star_caps")
+    }
+    if (scored <= 0L) {
+      return("filtered_by_scoring")
+    }
+    "filtered_by_other_filters"
+  }
 
   for (idx in seq_along(stage_defs)) {
     stage <- stage_defs[[idx]]
@@ -1720,11 +1743,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     } else {
       as.integer(active_link_spoke %||% NA_integer_)
     }
-    starvation_reason <- if (isTRUE(link_phase_b_concurrent) && length(ranked_link_spokes) > 0L) {
-      "all_eligible_spokes_infeasible"
-    } else {
-      "few_candidates_generated"
-    }
+    starvation_reason <- .starvation_reason_from_counts(last_counts %||% list())
     return(list(
       i = NA_integer_,
       j = NA_integer_,
