@@ -237,6 +237,18 @@
   if (!is.null(eligible_spoke_ids)) {
     spoke_ids <- intersect(spoke_ids, as.integer(eligible_spoke_ids))
   }
+  if (.adaptive_link_mode_active(controller)) {
+    refit_id <- .adaptive_link_refit_window_id(state)
+    effective_spokes <- .adaptive_link_effective_active_spokes(
+      state,
+      controller = controller,
+      refit_id = refit_id,
+      exclude_exhausted = TRUE
+    )
+    if (length(effective_spokes) > 0L) {
+      spoke_ids <- intersect(spoke_ids, as.integer(effective_spokes))
+    }
+  }
   if (length(spoke_ids) < 1L) {
     return(integer())
   }

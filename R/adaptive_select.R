@@ -1243,7 +1243,12 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   link_budget_map <- list()
   round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
   if (isTRUE(link_phase_b)) {
-    eligible_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
+    eligible_spokes <- .adaptive_link_effective_active_spokes(
+      state,
+      controller = controller,
+      refit_id = .adaptive_link_refit_window_id(state),
+      exclude_exhausted = TRUE
+    )
     link_budget_map <- .adaptive_link_budget_map_for_refit(
       state = state,
       controller = controller,

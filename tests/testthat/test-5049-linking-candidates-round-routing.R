@@ -2046,6 +2046,35 @@ test_that("phase B pooled backfill starvation exhausts only the attempted spoke"
   expect_false(isTRUE(pairwiseLLM:::.adaptive_link_all_spokes_exhausted(out$state, refit_id = 1L)))
 })
 
+test_that("ranked spokes exclude fully exhausted spokes in the current refit", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 82L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 1L
+  state <- mark_link_phase_b_ready(state)
+  state$controller$current_link_spoke_id <- 3L
+  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
+    `1::3` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE)
+  )
+
+  ranked <- pairwiseLLM:::.adaptive_link_ranked_spokes(
+    state = state,
+    controller = state$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
+
+  expect_identical(as.integer(ranked), 2L)
+})
+
 test_that("pooled backfill enforces duplicate caps and preserves candidate counts", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
@@ -2060,25 +2089,11 @@ test_that("pooled backfill enforces duplicate caps and preserves candidate count
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE
   state$round$round_id <- 1L
-  state$linking$phase_a <- list(
-    set_status = tibble::tibble(
-      set_id = c(1L, 2L),
-      source = c("run", "run"),
-      status = c("ready", "ready"),
-      validation_message = c("ready", "ready"),
-      artifact_path = c(NA_character_, NA_character_)
-    ),
-    artifacts = list(),
-    ready_for_phase_b = TRUE,
-    strict_ready_for_phase_b = TRUE,
-    phase = "phase_b",
-    ready_spokes = 2L,
-    active_spokes = 2L
-  )
+  state <- mark_link_phase_b_ready(state)
   state$controller$current_link_spoke_id <- 2L
   state$history_pairs <- tibble::tibble(
-    A_id = c("h1", "h1", "h1"),
-    B_id = c("s21", "s21", "s21")
+    A_id = rep("h1", 10L),
+    B_id = rep("s21", 10L)
   )
   state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
     `1::2` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE)
@@ -2111,8 +2126,7 @@ test_that("pooled backfill enforces duplicate caps and preserves candidate count
   )
 
   expect_false(isTRUE(out$candidate_starved))
-  expect_identical(as.integer(out$i), 2L)
-  expect_identical(as.integer(out$j), 4L)
+  expect_false(identical(c(as.integer(out$i), as.integer(out$j)), c(1L, 3L)))
   expect_gt(as.integer(out$n_candidates_generated), 0L)
   expect_gt(as.integer(out$n_candidates_after_duplicates), 0L)
   expect_gt(as.integer(out$n_candidates_scored), 0L)

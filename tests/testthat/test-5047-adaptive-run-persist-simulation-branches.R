@@ -994,6 +994,62 @@ test_that("phase B all-spokes-exhausted stop uses explicit linking reason", {
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_all_spokes_exhausted(state, refit_id = 1L)))
 })
 
+test_that("phase B run stops immediately when all effective spokes are exhausted", {
+  state <- pairwiseLLM::adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+      set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+      global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+    ),
+    seed = 64L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 1L
+  state$config$session_dir <- tempfile("session-link-phaseb-exhausted-")
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("ready", "ready", "ready"),
+      validation_message = c("ready", "ready", "ready"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    phase = "phase_b",
+    ready_spokes = c(2L, 3L),
+    active_spokes = NULL
+  )
+  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
+    `1::2` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE),
+    `1::3` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE)
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_prepare = function(state) state,
+    .adaptive_phase_a_finalize_if_ready = function(state) state,
+    .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_link_sync_warm_start = function(state) state,
+    .adaptive_clear_stale_global_stop_state = function(state) state,
+    save_adaptive_session = function(state, session_dir, overwrite = TRUE) state,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM::adaptive_rank_run_live(
+        state = state,
+        judge = make_deterministic_judge("invalid"),
+        n_steps = 1L,
+        progress = "none"
+      )
+    }
+  )
+
+  expect_true(isTRUE(out$meta$stop_decision))
+  expect_identical(out$meta$stop_reason, "all_spokes_exhausted")
+})
+
 test_that("adaptive run helper branches for linking stop/routing utilities are covered", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),

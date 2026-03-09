@@ -613,6 +613,48 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_effective_active_spokes <- function(state,
+                                                   controller = NULL,
+                                                   refit_id = NULL,
+                                                   exclude_exhausted = FALSE) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (!.adaptive_link_mode_active(controller)) {
+    return(integer())
+  }
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(integer())
+  }
+
+  spoke_ids <- as.integer(phase_ctx$active_spokes %||% phase_ctx$ready_spokes %||% integer())
+  spoke_ids <- sort(unique(spoke_ids[!is.na(spoke_ids)]))
+  if (length(spoke_ids) < 1L) {
+    return(integer())
+  }
+
+  stopped_map <- controller$link_stopped_by_spoke %||% list()
+  keep <- vapply(as.character(spoke_ids), function(key) !isTRUE(stopped_map[[key]]), logical(1L))
+  spoke_ids <- as.integer(spoke_ids[keep])
+  if (length(spoke_ids) < 1L || !isTRUE(exclude_exhausted)) {
+    return(as.integer(spoke_ids))
+  }
+
+  refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
+  if (is.na(refit_id)) {
+    return(as.integer(spoke_ids))
+  }
+  exhausted_map <- .adaptive_link_refit_exhausted_map(state)
+  stage_order <- .adaptive_stage_order()
+  keep <- vapply(spoke_ids, function(spoke_id) {
+    key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
+    exhausted <- exhausted_map[[key]] %||% list()
+    !all(vapply(stage_order, function(stage_name) isTRUE(exhausted[[stage_name]]), logical(1L)))
+  }, logical(1L))
+  as.integer(spoke_ids[keep])
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_global_stop_allowed <- function(state) {
   controller <- .adaptive_controller_resolve(state)
   if (!.adaptive_link_mode_active(controller)) {
@@ -641,8 +683,12 @@
   if (!identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
     return(FALSE)
   }
-  active_spokes <- unique(as.integer(phase_ctx$active_spokes %||% integer()))
-  active_spokes <- active_spokes[!is.na(active_spokes)]
+  active_spokes <- .adaptive_link_effective_active_spokes(
+    state,
+    controller = controller,
+    refit_id = refit_id,
+    exclude_exhausted = FALSE
+  )
   if (length(active_spokes) < 1L) {
     return(FALSE)
   }
@@ -817,7 +863,12 @@
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
-    eligible_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
+    eligible_spokes <- .adaptive_link_effective_active_spokes(
+      state,
+      controller = controller,
+      refit_id = .adaptive_link_refit_window_id(state),
+      exclude_exhausted = TRUE
+    )
     budget_map <- .adaptive_link_budget_map_for_refit(
       state = state,
       controller = controller,
@@ -1661,6 +1712,17 @@ adaptive_rank_run_live <- function(state,
     state <- .adaptive_phase_a_finalize_if_ready(state)
     state <- .adaptive_clear_stale_global_stop_state(state)
     .adaptive_phase_a_gate_or_abort(state)
+    if (isTRUE(.adaptive_link_all_spokes_exhausted(
+      state,
+      refit_id = .adaptive_link_refit_window_id(state)
+    ))) {
+      state$meta$stop_decision <- TRUE
+      state$meta$stop_reason <- "all_spokes_exhausted"
+      if (!is.null(state$config$session_dir)) {
+        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
+      }
+      return(state)
+    }
     if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
       state$meta$stop_decision <- TRUE
       state$meta$stop_reason <- "all_spokes_stopped"

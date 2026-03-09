@@ -413,7 +413,7 @@ test_that("linking starvation paths in tiny domains are logged with fallback met
   expect_true(nrow(starved) >= 1L)
   expect_true(any(!is.na(starved$fallback_path)))
   if (!is.na(out$meta$stop_reason)) {
-    expect_true(out$meta$stop_reason %in% c("candidate_starvation", "btl_converged"))
+    expect_true(out$meta$stop_reason %in% c("candidate_starvation", "all_spokes_exhausted", "btl_converged"))
   }
 })
 
