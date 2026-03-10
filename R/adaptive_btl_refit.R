@@ -3587,6 +3587,8 @@
     probe_edges_planned <- as.integer(nrow(probe_panel))
     probe_edges_realized <- as.integer(sum(probe_panel$realized %in% TRUE, na.rm = TRUE))
     probe_panel_shortfall <- as.integer(max(0L, probe_edges_planned - probe_edges_realized))
+    probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+    probe_panel_reallocation_used <- as.logical(n_pairs_since_probe > probe_effort_base_cap)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
     probe_pred_cache_used <- nrow(probe_cache[
       as.integer(probe_cache$refit_id) == as.integer(refit_id) &
@@ -3773,7 +3775,7 @@
       probe_edges_planned = as.integer(probe_edges_planned),
       probe_edges_realized = as.integer(probe_edges_realized),
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
-      probe_panel_reallocation_used = as.logical(FALSE),
+      probe_panel_reallocation_used = as.logical(probe_panel_reallocation_used),
       probe_pred_cache_used = as.logical(probe_pred_cache_used),
       probe_brier = as.double(stats_row$probe_brier %||% NA_real_),
       probe_pred_rmse_lagged = as.double(stats_row$probe_pred_rmse_lagged %||% NA_real_),

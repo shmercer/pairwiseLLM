@@ -331,6 +331,77 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_last_stage_row <- function(state, spoke_id) {
+  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
+  if (
+    nrow(link_stage_log) < 1L ||
+      !all(c("spoke_id", "refit_id") %in% names(link_stage_log))
+  ) {
+    return(tibble::as_tibble(new_link_stage_log()))
+  }
+  rows <- link_stage_log[as.integer(link_stage_log$spoke_id) == as.integer(spoke_id), , drop = FALSE]
+  if (nrow(rows) < 1L) {
+    return(tibble::as_tibble(new_link_stage_log()))
+  }
+  rows <- rows[order(as.integer(rows$refit_id), seq_len(nrow(rows))), , drop = FALSE]
+  rows[nrow(rows), , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_effort_plan <- function(state, controller, spoke_id) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  spoke_id <- as.integer(spoke_id %||% NA_integer_)
+  base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+  realized_min <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 30L))
+  epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
+  panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
+  panel_n <- as.integer(nrow(panel))
+  realized_total <- max(0L, .adaptive_link_probe_realized_count(state, spoke_id = spoke_id, epoch_id = epoch_id))
+  realized_refit <- max(0L, .adaptive_link_probe_holdout_since_last_refit(state, spoke_id = spoke_id))
+  realized_before_refit <- max(0L, as.integer(realized_total - realized_refit))
+  remaining_to_min_start <- max(0L, as.integer(realized_min - realized_before_refit))
+  panel_shortfall_start <- max(0L, as.integer(panel_n - realized_before_refit))
+
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
+  last_stage_row <- .adaptive_link_probe_last_stage_row(state, spoke_id = spoke_id)
+  linking_identified <- isTRUE(
+    stats_row$link_identified %||%
+      if (nrow(last_stage_row) > 0L) last_stage_row$linking_identified[[1L]] else FALSE
+  )
+  link_stop_eligible <- isTRUE(
+    stats_row$link_stop_eligible %||%
+      if (nrow(last_stage_row) > 0L) last_stage_row$link_stop_eligible[[1L]] else FALSE
+  )
+
+  acceleration_used <- isTRUE(linking_identified) &&
+    !isTRUE(link_stop_eligible) &&
+    remaining_to_min_start > base_cap &&
+    panel_shortfall_start > base_cap
+  effective_cap <- if (isTRUE(acceleration_used)) {
+    min(panel_shortfall_start, remaining_to_min_start)
+  } else {
+    base_cap
+  }
+
+  list(
+    spoke_id = as.integer(spoke_id),
+    base_cap = as.integer(base_cap),
+    effective_cap = as.integer(max(base_cap, effective_cap)),
+    realized_min = as.integer(realized_min),
+    realized_total = as.integer(realized_total),
+    realized_refit = as.integer(realized_refit),
+    realized_before_refit = as.integer(realized_before_refit),
+    remaining_to_min_start = as.integer(remaining_to_min_start),
+    panel_shortfall_start = as.integer(panel_shortfall_start),
+    linking_identified = as.logical(linking_identified),
+    link_stop_eligible = as.logical(link_stop_eligible),
+    acceleration_used = as.logical(acceleration_used)
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_next_holdout_spoke <- function(state,
                                                     controller,
                                                     eligible_spoke_ids = NULL) {
@@ -377,6 +448,11 @@
     if (isTRUE(frozen_map[[key]])) {
       return(NULL)
     }
+    plan <- .adaptive_link_probe_effort_plan(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id)
+    )
     epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
     panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
     if (nrow(panel) < 1L) {
@@ -384,21 +460,28 @@
         spoke_id = as.integer(spoke_id),
         realized_total = 0L,
         realized_refit = 0L,
+        effective_cap = as.integer(plan$effective_cap %||% probe_cap),
+        remaining_to_min_start = as.integer(plan$remaining_to_min_start %||% realized_min),
+        acceleration_used = as.logical(plan$acceleration_used %||% FALSE),
         rank = as.integer(rank_map[key] %||% (length(spoke_ids) + as.integer(spoke_id)))
       ))
     }
-    realized_total <- .adaptive_link_probe_realized_count(state, spoke_id = spoke_id, epoch_id = epoch_id)
+    realized_total <- as.integer(plan$realized_total %||% 0L)
     if (realized_total >= realized_min) {
       return(NULL)
     }
-    realized_refit <- .adaptive_link_probe_holdout_since_last_refit(state, spoke_id = spoke_id)
-    if (realized_refit >= probe_cap) {
+    realized_refit <- as.integer(plan$realized_refit %||% 0L)
+    effective_cap <- as.integer(plan$effective_cap %||% probe_cap)
+    if (realized_refit >= effective_cap) {
       return(NULL)
     }
     list(
       spoke_id = as.integer(spoke_id),
       realized_total = as.integer(realized_total),
       realized_refit = as.integer(realized_refit),
+      effective_cap = as.integer(effective_cap),
+      remaining_to_min_start = as.integer(plan$remaining_to_min_start %||% realized_min),
+      acceleration_used = as.logical(plan$acceleration_used %||% FALSE),
       rank = as.integer(rank_map[key] %||% (length(spoke_ids) + as.integer(spoke_id)))
     )
   })
@@ -409,6 +492,8 @@
   pending_tbl <- tibble::as_tibble(do.call(rbind, lapply(pending, as.data.frame)))
   pending_tbl <- pending_tbl[
     order(
+      -as.integer(pending_tbl$acceleration_used %in% TRUE),
+      as.integer(pending_tbl$remaining_to_min_start),
       as.integer(pending_tbl$realized_refit),
       as.integer(pending_tbl$realized_total),
       as.integer(pending_tbl$rank),

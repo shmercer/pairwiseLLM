@@ -320,6 +320,88 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
   expect_true(nrow(out$linking$probe$panels_by_spoke[["2"]]) >= 1L)
 })
 
+test_that("run_one_step can realize multiple holdout probes in one refit when probe evidence is the blocker", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22"),
+    set_id = c(1L, 1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 52L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(items = tibble::tibble(
+        global_item_id = c("gh1", "gh2", "gh3"),
+        theta_raw_mean = c(0.3, 0.0, -0.2),
+        theta_raw_sd = c(0.1, 0.1, 0.1),
+        rank_mu_raw = c(1, 2, 3)
+      )),
+      `2` = list(items = tibble::tibble(
+        global_item_id = c("gs21", "gs22"),
+        theta_raw_mean = c(0.2, -0.1),
+        theta_raw_sd = c(0.1, 0.1),
+        rank_mu_raw = c(1, 2)
+      ))
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$refit_meta$refit_pairs_target_current <- 5L
+  state$controller$refit_pairs_target <- 5L
+  state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  state$controller$probe_edges_min_for_stop <- 3L
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(
+    link_identified = TRUE,
+    link_stop_eligible = FALSE,
+    link_epoch_id = 1L
+  ))
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+
+  step1 <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  step2 <- pairwiseLLM:::run_one_step(step1, make_deterministic_judge("i_wins"))
+  step3 <- pairwiseLLM:::run_one_step(step2, make_deterministic_judge("i_wins"))
+  rows <- tail(step3$step_log, 3L)
+
+  expect_true(all(as.character(rows$run_mode) == "link_probe_holdout"))
+  expect_true(all(rows$is_probe_step %in% TRUE))
+  expect_true(all(rows$is_holdout_probe_step %in% TRUE))
+  expect_identical(nrow(step3$history_pairs), 0L)
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(step3, 2L, epoch_id = 1L),
+    3L
+  )
+})
+
 test_that("invalid linking step does not mutate controller link routing state", {
   items <- tibble::tibble(
     item_id = c("a", "b"),
