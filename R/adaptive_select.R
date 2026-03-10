@@ -1545,6 +1545,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       }
 
       if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {
+        blocker_spoke_id <- ifelse(is.na(spoke_attempt), active_link_spoke, as.integer(spoke_attempt))
+        blocker_stats_map <- link_controller$link_refit_stats_by_spoke %||% list()
+        blocker_stats <- blocker_stats_map[[as.character(blocker_spoke_id)]] %||% list()
+        blocker_stage_weights <- .adaptive_link_blocker_stage_weights(
+          blocker_weights = .adaptive_link_blocker_weights_for_spoke(
+            controller = link_controller,
+            spoke_id = blocker_spoke_id
+          ),
+          linking_identified = isTRUE(blocker_stats$link_identified %||% FALSE)
+        )
         backfill_filtered <- .adaptive_filter_link_backfill_candidates(
           candidates = stage_candidates,
           counts = counts,
@@ -1562,7 +1572,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         order_idx <- .adaptive_link_backfill_order(
           stage_candidates,
           hub_id = as.integer(link_controller$hub_id %||% 1L),
-          set_map = set_map
+          set_map = set_map,
+          blocker_stage_weights = blocker_stage_weights
         )
         if (length(order_idx) < 1L) {
           next

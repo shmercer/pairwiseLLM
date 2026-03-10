@@ -886,6 +886,114 @@ test_that("linking stage targets are deterministic from budget, floors, and tape
   expect_identical(meta_taper$stage_target_long_link_post_taper, 2L)
 })
 
+test_that("canonical blocker weights are deterministic and conservative on missing metrics", {
+  controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
+
+  weights_missing <- pairwiseLLM:::.adaptive_link_blocker_weights(
+    stats_row = list(),
+    controller = controller
+  )
+  expect_identical(
+    unname(weights_missing),
+    c(0, 0, 0, 0, 0)
+  )
+
+  weights <- pairwiseLLM:::.adaptive_link_blocker_weights(
+    stats_row = list(
+      probe_panel_shortfall = 15L,
+      probe_edges_min_for_stop_used = 30L,
+      probe_brier = 0.38,
+      probe_pred_rmse_lagged = 0.03,
+      theta_global_rmse_lagged = 0.08,
+      delta_spoke_sd = 0.20,
+      delta_sd_max_used = 0.10
+    ),
+    controller = controller
+  )
+  expect_equal(weights[["probe_panel_shortfall"]], 0.5, tolerance = 1e-12)
+  expect_equal(weights[["probe_brier"]], 1, tolerance = 1e-12)
+  expect_equal(weights[["probe_pred_rmse_lagged"]], 1, tolerance = 1e-12)
+  expect_equal(weights[["theta_global_rmse_lagged"]], 1, tolerance = 1e-12)
+  expect_equal(weights[["delta_spoke_sd"]], 1, tolerance = 1e-12)
+})
+
+test_that("late-phase taper redistribution leans toward anchor when probe and delta blockers dominate", {
+  controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
+  controller$current_link_spoke_id <- 2L
+  controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      probe_panel_shortfall = 30L,
+      probe_edges_min_for_stop_used = 30L,
+      delta_spoke_sd = 0.30,
+      delta_sd_max_used = 0.10
+    )
+  )
+
+  q_taper <- pairwiseLLM:::.adaptive_link_compute_stage_targets(
+    budget = 10L,
+    controller = controller,
+    linking_identified = TRUE
+  )
+
+  expect_identical(unname(q_taper[c("anchor_link", "long_link", "mid_link", "local_link")]), c(5L, 2L, 2L, 1L))
+})
+
+test_that("identified Phase B feasibility adjustment prefers local backfill when theta RMSE dominates", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 3L, long_link = 2L, mid_link = 1L, local_link = 0L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = TRUE)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      theta_global_rmse_lagged = 0.20,
+      theta_global_rmse_max_used = 0.04
+    )
+  )
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 3L,
+        long_link = 0L,
+        mid_link = 4L,
+        local_link = 4L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(
+        i = rep("h1", n),
+        j = paste0(stage_name, "_", seq_len(n))
+      )
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- 1
+      cand$link_u <- 1
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = utils::modifyList(state$controller, list(current_link_spoke_id = 2L)),
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(adjusted[["long_link"]], 0L)
+  expect_identical(adjusted[["anchor_link"]], 3L)
+  expect_true(adjusted[["local_link"]] >= 1L)
+  expect_true((adjusted[["mid_link"]] + adjusted[["local_link"]]) >= 3L)
+})
+
 test_that("phase B feasibility adjustment reduces impossible stage targets before starvation", {
   state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
   state$round$round_id <- 1L
@@ -930,12 +1038,15 @@ test_that("phase B feasibility adjustment reduces impossible stage targets befor
     .package = "pairwiseLLM"
   )
 
-  expect_identical(unname(adjusted[c("anchor_link", "long_link", "mid_link", "local_link")]), c(2L, 0L, 1L, 1L))
+  expect_identical(adjusted[["anchor_link"]], 2L)
+  expect_identical(adjusted[["long_link"]], 0L)
   meta <- attr(adjusted, "quota_meta")
   expect_true(isTRUE(meta$feasibility_reallocation_used))
   expect_identical(as.character(meta$feasibility_reallocation_rule), "pooled_utility_backfill")
   expect_identical(meta$feasible_stage_capacity_long_link, 0L)
-  expect_lte(sum(adjusted, na.rm = TRUE), sum(base_quotas))
+  expect_true(adjusted[["mid_link"]] >= 1L)
+  expect_true(adjusted[["local_link"]] >= 1L)
+  expect_identical(sum(adjusted, na.rm = TRUE), sum(base_quotas))
 })
 
 test_that("identified Phase B feasibility adjustment remains within feasible stage capacities", {

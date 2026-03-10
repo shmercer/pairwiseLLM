@@ -323,6 +323,14 @@
   }
 
   if (isTRUE(concurrent_mode)) {
+    blocker_totals <- vapply(
+      spoke_ids,
+      function(spoke_id) {
+        sum(.adaptive_link_blocker_weights_for_spoke(controller, spoke_id = as.integer(spoke_id)))
+      },
+      numeric(1L)
+    )
+    names(blocker_totals) <- as.character(spoke_ids)
     if (nrow(step_subset) > 0L) {
       last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
       step_subset <- step_subset[as.integer(step_subset$step_id) > last_refit_step, , drop = FALSE]
@@ -359,18 +367,30 @@
     )
     floor_deficit <- pmax(0L, floor_pairs - counts)
     if (any(floor_deficit > 0L)) {
-      ord_floor <- order(-floor_deficit, -utility_mass, counts, as.integer(names(counts)))
+      ord_floor <- order(
+        -floor_deficit,
+        -blocker_totals[names(counts)],
+        -utility_mass,
+        counts,
+        as.integer(names(counts))
+      )
       return(as.integer(names(counts)[ord_floor]))
     }
 
     target_deficit <- as.integer(target_pairs[names(counts)] - counts)
     target_deficit[!is.finite(target_deficit)] <- 0L
     if (any(target_deficit > 0L)) {
-      ord_deficit <- order(-target_deficit, -utility_mass, counts, as.integer(names(counts)))
+      ord_deficit <- order(
+        -target_deficit,
+        -blocker_totals[names(counts)],
+        -utility_mass,
+        counts,
+        as.integer(names(counts))
+      )
       return(as.integer(names(counts)[ord_deficit]))
     }
 
-    ord_counts <- order(-utility_mass, counts, as.integer(names(counts)))
+    ord_counts <- order(-blocker_totals[names(counts)], -utility_mass, counts, as.integer(names(counts)))
     return(as.integer(names(counts)[ord_counts]))
   }
 
@@ -1462,7 +1482,10 @@ generate_stage_candidates_from_state <- function(state,
 
 #' @keywords internal
 #' @noRd
-.adaptive_link_backfill_order <- function(candidates, hub_id, set_map) {
+.adaptive_link_backfill_order <- function(candidates,
+                                         hub_id,
+                                         set_map,
+                                         blocker_stage_weights = NULL) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L) {
     return(integer())
@@ -1478,6 +1501,12 @@ generate_stage_candidates_from_state <- function(state,
   cand_stage <- if ("link_stage" %in% names(cand)) as.character(cand$link_stage) else rep(NA_character_, nrow(cand))
   priority <- as.integer(stage_priority[cand_stage])
   priority[is.na(priority)] <- as.integer(length(stage_priority) + 1L)
+  if (is.null(blocker_stage_weights) || length(blocker_stage_weights) < 1L) {
+    blocker_stage_weights <- stats::setNames(rep(1, length(stage_priority)), names(stage_priority))
+  }
+  stage_weights <- as.double(blocker_stage_weights[cand_stage])
+  stage_weights[!is.finite(stage_weights) | stage_weights <= 0] <- 1
+  utility <- utility * stage_weights
   i_set <- as.integer(set_map[as.character(cand$i)])
   j_set <- as.integer(set_map[as.character(cand$j)])
   hub_item <- ifelse(i_set == as.integer(hub_id), as.character(cand$i), as.character(cand$j))

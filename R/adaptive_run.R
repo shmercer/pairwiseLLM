@@ -1186,16 +1186,27 @@
   adjusted[!is.finite(adjusted)] <- 0L
   released <- as.integer(sum(pmax(0L, quotas - adjusted), na.rm = TRUE))
   slack <- pmax(0L, feasible_counts - adjusted)
+  names(slack) <- stage_order
   slack[!is.finite(slack)] <- 0L
   weights <- utility_mass
   weights[!is.finite(weights) | weights < 0] <- 0
-  if (isTRUE(meta$linking_identified %||% FALSE)) {
-    weights[["anchor_link"]] <- weights[["anchor_link"]] * 0.70
-    weights[["long_link"]] <- weights[["long_link"]] * 0.75
-    weights[["mid_link"]] <- weights[["mid_link"]] * 1.20
-    weights[["local_link"]] <- weights[["local_link"]] * 1.35
-  }
+  blocker_weights <- .adaptive_link_blocker_weights_for_spoke(
+    controller = controller,
+    spoke_id = as.integer(spoke_id)
+  )
+  stage_weights <- .adaptive_link_blocker_stage_weights(
+    blocker_weights = blocker_weights,
+    linking_identified = isTRUE(meta$linking_identified %||% FALSE)
+  )
   weights <- pmax(weights, as.double(slack))
+  if (isTRUE(meta$linking_identified %||% FALSE)) {
+    stage_weights[["anchor_link"]] <- stage_weights[["anchor_link"]] * 0.70
+    stage_weights[["long_link"]] <- stage_weights[["long_link"]] * 0.75
+    stage_weights[["mid_link"]] <- stage_weights[["mid_link"]] * 1.20
+    stage_weights[["local_link"]] <- stage_weights[["local_link"]] * 1.35
+  }
+  names(weights) <- stage_order
+  weights <- weights * stage_weights[names(weights)]
 
   remaining <- as.integer(released %||% 0L)
   if (length(remaining) != 1L || !is.finite(remaining) || is.na(remaining) || remaining < 1L) {
@@ -1206,7 +1217,9 @@
     if (length(eligible) < 1L) {
       break
     }
-    eligible <- eligible[order(-weights[eligible], match(eligible, stage_order))]
+    score <- as.double(weights[eligible])
+    score[!is.finite(score)] <- 0
+    eligible <- eligible[order(-score, match(eligible, stage_order))]
     allocated <- FALSE
     for (stage_name in eligible) {
       if (!isTRUE(remaining > 0L) || !isTRUE(slack[stage_name] > 0L)) {

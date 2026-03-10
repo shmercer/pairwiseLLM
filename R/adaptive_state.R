@@ -967,9 +967,17 @@
     freed <- as.integer(long_pre_taper - long_post_taper)
     targets[["long_link"]] <- as.integer(long_post_taper)
     if (freed > 0L) {
+      blocker_weights <- .adaptive_link_blocker_weights_for_spoke(
+        controller = controller,
+        spoke_id = as.integer(controller$current_link_spoke_id %||% NA_integer_)
+      )
+      stage_weights <- .adaptive_link_blocker_stage_weights(
+        blocker_weights = blocker_weights,
+        linking_identified = TRUE
+      )
       redist <- .adaptive_weighted_largest_remainder(
         total_units = freed,
-        weights = fractions[taper_redist_order],
+        weights = fractions[taper_redist_order] * stage_weights[taper_redist_order],
         tie_order = taper_redist_order
       )
       targets[taper_redist_order] <- targets[taper_redist_order] + redist$add[taper_redist_order]
@@ -992,6 +1000,139 @@
   )
   attr(targets, "quota_meta") <- meta
   targets
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_blocker_weights <- function(stats_row, controller = NULL) {
+  row <- stats_row %||% list()
+  if (is.data.frame(row)) {
+    row <- if (nrow(row) > 0L) as.list(row[1L, , drop = FALSE]) else list()
+  }
+  controller <- controller %||% list()
+
+  read_metric <- function(name, default = NA_real_) {
+    val <- row[[name]] %||% default
+    val <- suppressWarnings(as.double(val))
+    if (length(val) != 1L || !is.finite(val)) {
+      return(NA_real_)
+    }
+    as.double(val)
+  }
+
+  read_threshold <- function(row_name, controller_name, fallback) {
+    val <- row[[row_name]] %||% controller[[controller_name]] %||% fallback
+    val <- suppressWarnings(as.double(val))
+    if (length(val) != 1L || !is.finite(val) || val <= 0) {
+      return(as.double(fallback))
+    }
+    as.double(val)
+  }
+
+  probe_shortfall <- read_metric("probe_panel_shortfall", default = 0)
+  if (!is.finite(probe_shortfall) || probe_shortfall < 0) {
+    probe_shortfall <- 0
+  }
+  probe_min <- read_threshold(
+    row_name = "probe_edges_min_for_stop_used",
+    controller_name = "probe_edges_min_for_stop",
+    fallback = 30
+  )
+  probe_brier <- read_metric("probe_brier")
+  probe_brier_max <- read_threshold(
+    row_name = "probe_brier_max_used",
+    controller_name = "probe_brier_max",
+    fallback = 0.19
+  )
+  probe_pred_rmse <- read_metric("probe_pred_rmse_lagged")
+  probe_pred_rmse_max <- read_threshold(
+    row_name = "probe_pred_rmse_max_used",
+    controller_name = "probe_pred_rmse_max",
+    fallback = 0.015
+  )
+  theta_rmse <- read_metric("theta_global_rmse_lagged")
+  theta_rmse_max <- read_threshold(
+    row_name = "theta_global_rmse_max_used",
+    controller_name = "theta_global_rmse_max",
+    fallback = 0.04
+  )
+  delta_sd <- read_metric("delta_spoke_sd")
+  delta_sd_max <- read_threshold(
+    row_name = "delta_sd_max_used",
+    controller_name = "delta_sd_max",
+    fallback = 0.10
+  )
+
+  excess_ratio <- function(value, threshold) {
+    if (!is.finite(value) || !is.finite(threshold) || threshold <= 0) {
+      return(0)
+    }
+    max(0, (value - threshold) / threshold)
+  }
+
+  weights <- c(
+    probe_panel_shortfall = as.double(probe_shortfall / max(1, probe_min)),
+    probe_brier = as.double(excess_ratio(probe_brier, probe_brier_max)),
+    probe_pred_rmse_lagged = as.double(excess_ratio(probe_pred_rmse, probe_pred_rmse_max)),
+    theta_global_rmse_lagged = as.double(excess_ratio(theta_rmse, theta_rmse_max)),
+    delta_spoke_sd = as.double(excess_ratio(delta_sd, delta_sd_max))
+  )
+  weights[!is.finite(weights) | weights < 0] <- 0
+  weights
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_blocker_weights_for_spoke <- function(controller, spoke_id = NA_integer_) {
+  controller <- controller %||% list()
+  spoke_id <- as.integer(spoke_id %||% controller$current_link_spoke_id %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    return(.adaptive_link_blocker_weights(list(), controller = controller))
+  }
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
+  .adaptive_link_blocker_weights(stats_row = stats_row, controller = controller)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_blocker_stage_weights <- function(blocker_weights, linking_identified = FALSE) {
+  weights <- as.double(blocker_weights %||% numeric())
+  names(weights) <- names(blocker_weights %||% numeric())
+  read_weight <- function(name) {
+    val <- as.double(weights[[name]] %||% 0)
+    if (!is.finite(val) || val < 0) {
+      return(0)
+    }
+    val
+  }
+
+  probe_shortfall <- read_weight("probe_panel_shortfall")
+  probe_brier <- read_weight("probe_brier")
+  probe_rmse <- read_weight("probe_pred_rmse_lagged")
+  theta_rmse <- read_weight("theta_global_rmse_lagged")
+  delta_sd <- read_weight("delta_spoke_sd")
+
+  stage_weights <- c(anchor_link = 1, long_link = 1, mid_link = 1, local_link = 1)
+
+  stage_weights[["anchor_link"]] <- stage_weights[["anchor_link"]] +
+    (3.00 * probe_shortfall) +
+    (0.45 * probe_brier) +
+    (2.50 * delta_sd)
+  stage_weights[["long_link"]] <- stage_weights[["long_link"]] +
+    (0.35 * probe_shortfall) +
+    (0.20 * probe_brier) +
+    (0.95 * delta_sd) +
+    (0.15 * theta_rmse)
+  stage_weights[["mid_link"]] <- stage_weights[["mid_link"]] +
+    (0.60 * theta_rmse) +
+    (0.40 * probe_rmse) +
+    (0.15 * probe_brier)
+  stage_weights[["local_link"]] <- stage_weights[["local_link"]] +
+    (0.95 * theta_rmse) +
+    (0.55 * probe_rmse)
+
+  stage_weights[!is.finite(stage_weights) | stage_weights <= 0] <- 1
+  stage_weights
 }
 
 #' @keywords internal

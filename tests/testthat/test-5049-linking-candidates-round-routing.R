@@ -1419,6 +1419,83 @@ test_that("linking deterministic ordering falls back when linking utility is ful
   expect_identical(ord, c(2L, 3L, 1L))
 })
 
+test_that("pooled backfill ordering shifts toward blocker-weighted stages but stays deterministic when neutral", {
+  cand <- tibble::tibble(
+    i = c("h1", "h1", "h1"),
+    j = c("s21", "s22", "s23"),
+    link_stage = c("anchor_link", "mid_link", "local_link"),
+    link_d_opt_gain = c(0.5, 0.5, 0.5)
+  )
+  set_map <- c(h1 = 1L, s21 = 2L, s22 = 2L, s23 = 2L)
+
+  ord_neutral <- pairwiseLLM:::.adaptive_link_backfill_order(
+    cand,
+    hub_id = 1L,
+    set_map = set_map,
+    blocker_stage_weights = c(anchor_link = 1, long_link = 1, mid_link = 1, local_link = 1)
+  )
+  expect_identical(ord_neutral, c(1L, 2L, 3L))
+
+  ord_theta <- pairwiseLLM:::.adaptive_link_backfill_order(
+    cand,
+    hub_id = 1L,
+    set_map = set_map,
+    blocker_stage_weights = c(anchor_link = 1, long_link = 1, mid_link = 2, local_link = 3)
+  )
+  expect_identical(ord_theta, c(3L, 2L, 1L))
+})
+
+test_that("concurrent spoke ranking breaks matched deficits toward stronger canonical blockers", {
+  state <- adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "h3", "s21", "s22", "s31", "s32"),
+      set_id = c(1L, 1L, 1L, 2L, 2L, 3L, 3L),
+      global_item_id = paste0("g", seq_len(7L))
+    ),
+    seed = 404L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$strict_ready_for_phase_b <- TRUE
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(probe_panel_shortfall = 0L),
+    `3` = list(probe_panel_shortfall = 30L, probe_edges_min_for_stop_used = 30L)
+  )
+
+  ranked <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(...) {
+      list(
+        `2` = list(
+          B_spoke_refit_budget = 2L,
+          concurrent_utility_mass = 1,
+          concurrent_floor_pairs = 1L
+        ),
+        `3` = list(
+          B_spoke_refit_budget = 2L,
+          concurrent_utility_mass = 1,
+          concurrent_floor_pairs = 1L
+        )
+      )
+    },
+    pairwiseLLM:::.adaptive_link_ranked_spokes(
+      state = state,
+      controller = state$controller,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(ranked, c(3L, 2L))
+})
+
 test_that("frozen spokes respect per-refit probe cap in routing", {
   items <- tibble::tibble(
     item_id = as.character(1:9),
@@ -2284,7 +2361,7 @@ test_that("phase B starvation marks the attempted spoke exhausted and advances s
       pairwiseLLM:::.adaptive_round_active_stage(out)
     }
   )
-  expect_identical(next_stage, "local_link")
+  expect_identical(next_stage, "anchor_link")
 })
 
 test_that("phase B pooled backfill starvation exhausts only the attempted spoke", {
