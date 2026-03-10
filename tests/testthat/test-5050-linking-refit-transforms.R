@@ -836,6 +836,54 @@ test_that("independent mode authorizes exactly one spoke per refit window", {
   )
 })
 
+test_that("run_one_step does not rewrite independent Phase B budget map within a refit window", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  budget_map <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = state$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- budget_map
+
+  active_spoke <- as.integer(names(which(vapply(
+    budget_map,
+    function(entry) as.integer(entry$B_spoke_refit_budget %||% 0L) > 0L,
+    logical(1L)
+  )))[[1L]])
+  inactive_spoke <- setdiff(c(2L, 3L), active_spoke)
+  state$controller$current_link_spoke_id <- inactive_spoke
+
+  judged <- FALSE
+  judge <- function(...) {
+    judged <<- TRUE
+    list(winner = "A")
+  }
+
+  out <- testthat::with_mocked_bindings(
+    select_next_pair = function(state, step_id = NULL, candidates = NULL) {
+      list(
+        i = 1L,
+        j = 3L,
+        A = 1L,
+        B = 3L,
+        round_id = 1L,
+        round_stage = "anchor_link",
+        pair_type = "anchor_link",
+        run_mode = "link_multi_spoke",
+        link_spoke_id_selected = active_spoke,
+        is_probe_step = FALSE
+      )
+    },
+    pairwiseLLM:::run_one_step(state, judge = judge),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(judged)
+  expect_identical(out$controller$link_budget_refit_id, state$controller$link_budget_refit_id)
+  expect_identical(out$controller$link_budget_map, budget_map)
+})
+
 test_that("link stage rows abort when realized active work exceeds emitted budget", {
   state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)

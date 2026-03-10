@@ -600,12 +600,17 @@ run_one_step <- function(state, judge, ...) {
   .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
   if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
     state$controller <- controller
-    state$controller$link_budget_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
-    state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
-      state = state,
-      controller = state$controller,
-      eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
-    )
+    current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+    cached_refit_id <- as.integer(state$controller$link_budget_refit_id %||% NA_integer_)
+    cached_budget_map <- state$controller$link_budget_map %||% list()
+    if (!identical(cached_refit_id, current_refit_id) || length(cached_budget_map) < 1L) {
+      state$controller$link_budget_refit_id <- current_refit_id
+      state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
+        state = state,
+        controller = state$controller,
+        eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+      )
+    }
     controller <- state$controller
     state <- .adaptive_link_probe_ensure_panels(
       state,
