@@ -85,6 +85,13 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
   expect_true(nrow(rows) >= 1L)
   expect_true(is.finite(rows$delta_spoke_mean[[nrow(rows)]]))
   expect_true(rows$delta_spoke_mean[[nrow(rows)]] > -2)
+  expect_true(all(c(
+    "feasible_stage_capacity_anchor_link",
+    "feasible_stage_capacity_long_link",
+    "feasibility_budget_released",
+    "blocker_probe_panel_shortfall_weight",
+    "blocker_reweighting_rule"
+  ) %in% names(rows)))
   expect_true(all(rows$link_fit_method == "bayesian_mcmc"))
   expect_true(all(rows$link_uncertainty_approximation == "posterior_draws"))
 })

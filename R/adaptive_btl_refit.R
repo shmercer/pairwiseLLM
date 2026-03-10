@@ -2336,8 +2336,44 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_assert_link_stage_budget_invariants <- function(link_rows) {
+.adaptive_link_stage_backfill_audit_columns <- function(link_rows) {
   rows <- tibble::as_tibble(link_rows)
+  if (nrow(rows) < 1L) {
+    return(rows)
+  }
+  stage_target_or_na <- function(col) {
+    if (col %in% names(rows)) {
+      return(rows[[col]])
+    }
+    rep(NA_integer_, nrow(rows))
+  }
+  defaults <- list(
+    feasible_stage_capacity_anchor_link = stage_target_or_na("stage_target_anchor_link"),
+    feasible_stage_capacity_long_link = stage_target_or_na("stage_target_long_link"),
+    feasible_stage_capacity_mid_link = stage_target_or_na("stage_target_mid_link"),
+    feasible_stage_capacity_local_link = stage_target_or_na("stage_target_local_link"),
+    feasibility_budget_released = rep(0L, nrow(rows)),
+    feasibility_reallocation_used = rep(FALSE, nrow(rows)),
+    feasibility_reallocation_rule = rep("none", nrow(rows)),
+    blocker_probe_panel_shortfall_weight = rep(NA_real_, nrow(rows)),
+    blocker_probe_brier_weight = rep(NA_real_, nrow(rows)),
+    blocker_probe_pred_rmse_weight = rep(NA_real_, nrow(rows)),
+    blocker_theta_global_rmse_weight = rep(NA_real_, nrow(rows)),
+    blocker_delta_spoke_sd_weight = rep(NA_real_, nrow(rows)),
+    blocker_reweighting_rule = rep(NA_character_, nrow(rows))
+  )
+  for (col in names(defaults)) {
+    if (!col %in% names(rows)) {
+      rows[[col]] <- defaults[[col]]
+    }
+  }
+  rows
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_assert_link_stage_budget_invariants <- function(link_rows) {
+  rows <- .adaptive_link_stage_backfill_audit_columns(link_rows)
   if (nrow(rows) < 1L) {
     return(invisible(TRUE))
   }
@@ -2347,6 +2383,13 @@
     "stage_target_long_link",
     "stage_target_mid_link",
     "stage_target_local_link",
+    "feasible_stage_capacity_anchor_link",
+    "feasible_stage_capacity_long_link",
+    "feasible_stage_capacity_mid_link",
+    "feasible_stage_capacity_local_link",
+    "feasibility_budget_released",
+    "feasibility_reallocation_used",
+    "feasibility_reallocation_rule",
     "stage_realized_anchor_link",
     "stage_realized_long_link",
     "stage_realized_mid_link",
@@ -2403,6 +2446,11 @@
     "stage_target_long_link",
     "stage_target_mid_link",
     "stage_target_local_link",
+    "feasible_stage_capacity_anchor_link",
+    "feasible_stage_capacity_long_link",
+    "feasible_stage_capacity_mid_link",
+    "feasible_stage_capacity_local_link",
+    "feasibility_budget_released",
     "stage_realized_anchor_link",
     "stage_realized_long_link",
     "stage_realized_mid_link",
@@ -2419,6 +2467,27 @@
         paste0("link_stage_log budget invariant failure: `", col, "` must be non-negative.")
       )
     }
+  }
+
+  inactive_feasibility <- rows$feasibility_reallocation_used %in% FALSE
+  if (any(inactive_feasibility, na.rm = TRUE) &&
+    any(
+      as.character(rows$feasibility_reallocation_rule[inactive_feasibility]) != "none",
+      na.rm = TRUE
+    )) {
+    rlang::abort(
+      "link_stage_log budget invariant failure: non-reallocated feasibility rows must use rule `none`."
+    )
+  }
+  active_feasibility <- rows$feasibility_reallocation_used %in% TRUE
+  if (any(active_feasibility, na.rm = TRUE) &&
+    any(
+      as.character(rows$feasibility_reallocation_rule[active_feasibility]) != "pooled_utility_backfill",
+      na.rm = TRUE
+    )) {
+    rlang::abort(
+      "link_stage_log budget invariant failure: reallocated feasibility rows must use rule `pooled_utility_backfill`."
+    )
   }
 
   no_backfill <- rows$stage_reallocation_used %in% FALSE
@@ -3597,6 +3666,11 @@
       drop = FALSE
     ]) > 0L
 
+    blocker_weights <- .adaptive_link_blocker_weights(
+      stats_row = stats_row,
+      controller = controller
+    )
+    blocker_rule <- "canonical_metric_excess_ratio_v1"
     reallocation_used <- isTRUE(quota_meta$feasibility_reallocation_used %||% FALSE) ||
       any(committed_stage > stage_quotas, na.rm = TRUE)
     reallocation_rule <- if (isTRUE(reallocation_used)) "pooled_utility_backfill" else "none"
@@ -3694,6 +3768,23 @@
       stage_target_long_link = as.integer(stage_quotas[["long_link"]] %||% NA_integer_),
       stage_target_mid_link = as.integer(stage_quotas[["mid_link"]] %||% NA_integer_),
       stage_target_local_link = as.integer(stage_quotas[["local_link"]] %||% NA_integer_),
+      feasible_stage_capacity_anchor_link = as.integer(
+        quota_meta$feasible_stage_capacity_anchor_link %||% stage_quotas[["anchor_link"]] %||% NA_integer_
+      ),
+      feasible_stage_capacity_long_link = as.integer(
+        quota_meta$feasible_stage_capacity_long_link %||% stage_quotas[["long_link"]] %||% NA_integer_
+      ),
+      feasible_stage_capacity_mid_link = as.integer(
+        quota_meta$feasible_stage_capacity_mid_link %||% stage_quotas[["mid_link"]] %||% NA_integer_
+      ),
+      feasible_stage_capacity_local_link = as.integer(
+        quota_meta$feasible_stage_capacity_local_link %||% stage_quotas[["local_link"]] %||% NA_integer_
+      ),
+      feasibility_budget_released = as.integer(quota_meta$feasibility_budget_released %||% 0L),
+      feasibility_reallocation_used = as.logical(quota_meta$feasibility_reallocation_used %||% FALSE),
+      feasibility_reallocation_rule = as.character(
+        quota_meta$feasibility_reallocation_rule %||% "none"
+      ),
       stage_realized_anchor_link = as.integer(committed_stage[["anchor_link"]] %||% 0L),
       stage_realized_long_link = as.integer(committed_stage[["long_link"]] %||% 0L),
       stage_realized_mid_link = as.integer(committed_stage[["mid_link"]] %||% 0L),
@@ -3777,6 +3868,22 @@
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
       probe_panel_reallocation_used = as.logical(probe_panel_reallocation_used),
       probe_pred_cache_used = as.logical(probe_pred_cache_used),
+      blocker_probe_panel_shortfall_weight = as.double(
+        blocker_weights[["probe_panel_shortfall"]] %||% NA_real_
+      ),
+      blocker_probe_brier_weight = as.double(
+        blocker_weights[["probe_brier"]] %||% NA_real_
+      ),
+      blocker_probe_pred_rmse_weight = as.double(
+        blocker_weights[["probe_pred_rmse_lagged"]] %||% NA_real_
+      ),
+      blocker_theta_global_rmse_weight = as.double(
+        blocker_weights[["theta_global_rmse_lagged"]] %||% NA_real_
+      ),
+      blocker_delta_spoke_sd_weight = as.double(
+        blocker_weights[["delta_spoke_sd"]] %||% NA_real_
+      ),
+      blocker_reweighting_rule = as.character(blocker_rule),
       probe_brier = as.double(stats_row$probe_brier %||% NA_real_),
       probe_pred_rmse_lagged = as.double(stats_row$probe_pred_rmse_lagged %||% NA_real_),
       theta_global_rmse_scope = as.character(
@@ -3819,7 +3926,7 @@
 #' @keywords internal
 #' @noRd
 .adaptive_assert_link_stage_rows_completeness <- function(link_rows) {
-  rows <- tibble::as_tibble(link_rows)
+  rows <- .adaptive_link_stage_backfill_audit_columns(link_rows)
   if (nrow(rows) < 1L) {
     return(invisible(TRUE))
   }
@@ -3831,10 +3938,16 @@
     "n_cross_edges_probe_since_last_refit", "n_cross_edges_total_since_last_refit", "coverage_bins_used",
     "B_spoke_refit_budget", "B_spoke_refit_budget_source",
     "stage_target_anchor_link", "stage_target_long_link", "stage_target_mid_link", "stage_target_local_link",
+    "feasible_stage_capacity_anchor_link", "feasible_stage_capacity_long_link",
+    "feasible_stage_capacity_mid_link", "feasible_stage_capacity_local_link",
+    "feasibility_budget_released", "feasibility_reallocation_used", "feasibility_reallocation_rule",
     "stage_realized_anchor_link", "stage_realized_long_link", "stage_realized_mid_link", "stage_realized_local_link",
     "stage_shortfall_anchor_link", "stage_shortfall_long_link", "stage_shortfall_mid_link",
     "stage_shortfall_local_link", "stage_reallocation_used", "stage_reallocation_rule_used",
-    "stage_budget_unfilled"
+    "stage_budget_unfilled",
+    "blocker_probe_panel_shortfall_weight", "blocker_probe_brier_weight",
+    "blocker_probe_pred_rmse_weight", "blocker_theta_global_rmse_weight",
+    "blocker_delta_spoke_sd_weight", "blocker_reweighting_rule"
   )
   missing <- setdiff(required, names(rows))
   if (length(missing) > 0L) {

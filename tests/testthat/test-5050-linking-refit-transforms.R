@@ -864,6 +864,81 @@ test_that("link stage rows abort when realized active work exceeds emitted budge
   )
 })
 
+test_that("link_stage_log rows expose feasibility and blocker explanations canonically", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  state$controller$link_budget_refit_id <- 1L
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 6L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "independent_inactive_spoke"
+    )
+  )
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      probe_panel_shortfall = 15L,
+      probe_edges_min_for_stop_used = 30L,
+      probe_brier = 0.38,
+      probe_pred_rmse_lagged = 0.03,
+      theta_global_rmse_lagged = 0.08,
+      delta_spoke_sd = 0.20,
+      delta_sd_max_used = 0.10
+    )
+  )
+
+  rows <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 4L,
+        long_link = 0L,
+        mid_link = 4L,
+        local_link = 4L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(i = rep("h1", n), j = paste0(stage_name, "_", seq_len(n)))
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- 1
+      cand$link_u <- 1
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state,
+      refit_id = 1L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_identical(row$feasible_stage_capacity_anchor_link[[1L]], 4L)
+  expect_identical(row$feasible_stage_capacity_long_link[[1L]], 0L)
+  expect_identical(row$feasibility_budget_released[[1L]], 3L)
+  expect_true(isTRUE(row$feasibility_reallocation_used[[1L]]))
+  expect_identical(
+    as.character(row$feasibility_reallocation_rule[[1L]]),
+    "pooled_utility_backfill"
+  )
+  expect_equal(row$blocker_probe_panel_shortfall_weight[[1L]], 0.5, tolerance = 1e-12)
+  expect_equal(row$blocker_probe_brier_weight[[1L]], 1, tolerance = 1e-12)
+  expect_equal(row$blocker_probe_pred_rmse_weight[[1L]], 1, tolerance = 1e-12)
+  expect_equal(row$blocker_theta_global_rmse_weight[[1L]], 1, tolerance = 1e-12)
+  expect_equal(row$blocker_delta_spoke_sd_weight[[1L]], 1, tolerance = 1e-12)
+  expect_identical(
+    as.character(row$blocker_reweighting_rule[[1L]]),
+    "canonical_metric_excess_ratio_v1"
+  )
+})
+
 test_that("linking stage targets are deterministic from budget, floors, and taper", {
   controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
   q_base <- pairwiseLLM:::.adaptive_link_compute_stage_targets(

@@ -1452,6 +1452,52 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
       link_block <- c(link_block, paste0("  long_link_taper_removed_total=", tapered))
     }
 
+    if ("feasibility_budget_released" %in% names(link_stage_rows)) {
+      feasibility_released <- sum(
+        as.integer(link_stage_rows$feasibility_budget_released %||% 0L),
+        na.rm = TRUE
+      )
+      feasibility_rows <- sum(
+        link_stage_rows$feasibility_reallocation_used %in% TRUE,
+        na.rm = TRUE
+      )
+      link_block <- c(
+        link_block,
+        paste0("  feasibility_budget_released=", feasibility_released),
+        paste0("  feasibility_reallocated_rows=", feasibility_rows, "/", nrow(link_stage_rows))
+      )
+    }
+
+    if ("blocker_probe_panel_shortfall_weight" %in% names(link_stage_rows)) {
+      blocker_totals <- c(
+        probe_panel_shortfall = sum(
+          as.double(link_stage_rows$blocker_probe_panel_shortfall_weight %||% 0),
+          na.rm = TRUE
+        ),
+        probe_brier = sum(
+          as.double(link_stage_rows$blocker_probe_brier_weight %||% 0),
+          na.rm = TRUE
+        ),
+        probe_pred_rmse = sum(
+          as.double(link_stage_rows$blocker_probe_pred_rmse_weight %||% 0),
+          na.rm = TRUE
+        ),
+        theta_global_rmse = sum(
+          as.double(link_stage_rows$blocker_theta_global_rmse_weight %||% 0),
+          na.rm = TRUE
+        ),
+        delta_spoke_sd = sum(
+          as.double(link_stage_rows$blocker_delta_spoke_sd_weight %||% 0),
+          na.rm = TRUE
+        )
+      )
+      dominant_blocker <- names(blocker_totals)[[which.max(blocker_totals)]]
+      link_block <- c(
+        link_block,
+        paste0("  dominant_blocker=", dominant_blocker)
+      )
+    }
+
     link_stop_block <- c("Linking stop criteria by spoke:")
     for (idx in seq_len(nrow(link_stage_rows))) {
       link_row <- link_stage_rows[idx, , drop = FALSE]
@@ -1506,6 +1552,52 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           link_col_value(link_row, "alternative_fit_method", default = NA_character_),
           "  alt_uncertainty=",
           link_col_value(link_row, "alternative_uncertainty_approximation", default = NA_character_)
+        ),
+        paste0(
+          "    feasibility_capacity[a,l,m,loc]=",
+          paste(
+            c(
+              link_col_value(link_row, "feasible_stage_capacity_anchor_link", default = NA_integer_),
+              link_col_value(link_row, "feasible_stage_capacity_long_link", default = NA_integer_),
+              link_col_value(link_row, "feasible_stage_capacity_mid_link", default = NA_integer_),
+              link_col_value(link_row, "feasible_stage_capacity_local_link", default = NA_integer_)
+            ),
+            collapse = ","
+          ),
+          "  released=",
+          link_col_value(link_row, "feasibility_budget_released", default = NA_integer_),
+          "  feasibility_rule=",
+          link_col_value(link_row, "feasibility_reallocation_rule", default = NA_character_)
+        ),
+        paste0(
+          "    blocker_weights[probe_shortfall,probe_brier,probe_rmse,theta_rmse,delta_sd]=",
+          paste(
+            c(
+              fmt_num(
+                as.double(link_col_value(link_row, "blocker_probe_panel_shortfall_weight", default = NA_real_)),
+                digits = 2L
+              ),
+              fmt_num(
+                as.double(link_col_value(link_row, "blocker_probe_brier_weight", default = NA_real_)),
+                digits = 2L
+              ),
+              fmt_num(
+                as.double(link_col_value(link_row, "blocker_probe_pred_rmse_weight", default = NA_real_)),
+                digits = 2L
+              ),
+              fmt_num(
+                as.double(link_col_value(link_row, "blocker_theta_global_rmse_weight", default = NA_real_)),
+                digits = 2L
+              ),
+              fmt_num(
+                as.double(link_col_value(link_row, "blocker_delta_spoke_sd_weight", default = NA_real_)),
+                digits = 2L
+              )
+            ),
+            collapse = ","
+          ),
+          "  blocker_rule=",
+          link_col_value(link_row, "blocker_reweighting_rule", default = NA_character_)
         ),
         paste0(
           "    hub_anchored=",

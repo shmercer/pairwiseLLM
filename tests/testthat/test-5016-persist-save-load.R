@@ -369,6 +369,91 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
 
+test_that("save/load preserves feasibility and blocker explanation fields in link_stage_log", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 41L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      reliability_EAP_link = 0.9,
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      n_pairs_cross_set_done = 2L,
+      n_unique_cross_pairs_seen = 2L,
+      n_probe_pairs_since_last_refit = 0L,
+      n_cross_edges_active_since_last_refit = 2L,
+      n_cross_edges_probe_since_last_refit = 0L,
+      n_cross_edges_total_since_last_refit = 2L,
+      coverage_bins_used = 3L,
+      B_spoke_refit_budget = 4L,
+      B_spoke_refit_budget_source = "single_spoke_controller",
+      stage_target_anchor_link = 1L,
+      stage_target_long_link = 1L,
+      stage_target_mid_link = 1L,
+      stage_target_local_link = 1L,
+      feasible_stage_capacity_anchor_link = 2L,
+      feasible_stage_capacity_long_link = 0L,
+      feasible_stage_capacity_mid_link = 2L,
+      feasible_stage_capacity_local_link = 2L,
+      feasibility_budget_released = 1L,
+      feasibility_reallocation_used = TRUE,
+      feasibility_reallocation_rule = "pooled_utility_backfill",
+      stage_realized_anchor_link = 1L,
+      stage_realized_long_link = 0L,
+      stage_realized_mid_link = 1L,
+      stage_realized_local_link = 1L,
+      stage_shortfall_anchor_link = 0L,
+      stage_shortfall_long_link = 1L,
+      stage_shortfall_mid_link = 0L,
+      stage_shortfall_local_link = 0L,
+      stage_reallocation_used = TRUE,
+      stage_reallocation_rule_used = "pooled_utility_backfill",
+      stage_budget_unfilled = 1L,
+      blocker_probe_panel_shortfall_weight = 0.5,
+      blocker_probe_brier_weight = 1,
+      blocker_probe_pred_rmse_weight = 1,
+      blocker_theta_global_rmse_weight = 0.5,
+      blocker_delta_spoke_sd_weight = 0.25,
+      blocker_reweighting_rule = "canonical_metric_excess_ratio_v1"
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+  row <- restored$link_stage_log[1L, , drop = FALSE]
+
+  expect_identical(row$feasible_stage_capacity_long_link[[1L]], 0L)
+  expect_identical(row$feasibility_budget_released[[1L]], 1L)
+  expect_true(isTRUE(row$feasibility_reallocation_used[[1L]]))
+  expect_identical(
+    as.character(row$feasibility_reallocation_rule[[1L]]),
+    "pooled_utility_backfill"
+  )
+  expect_equal(row$blocker_probe_panel_shortfall_weight[[1L]], 0.5, tolerance = 1e-12)
+  expect_identical(
+    as.character(row$blocker_reweighting_rule[[1L]]),
+    "canonical_metric_excess_ratio_v1"
+  )
+})
+
 test_that("save/load preserves planned probe panels and realized probe bookkeeping", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
