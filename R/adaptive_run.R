@@ -928,11 +928,252 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_abort_feasibility_failure <- function(refit_id,
+                                                     spoke_id,
+                                                     stage_name,
+                                                     helper_name,
+                                                     error) {
+  rlang::abort(
+    message = paste0(
+      "Phase B feasibility computation failed before quota reduction at refit_id=",
+      as.integer(refit_id %||% NA_integer_),
+      ", spoke_id=",
+      as.integer(spoke_id %||% NA_integer_),
+      ", stage_name=`",
+      as.character(stage_name %||% NA_character_),
+      "`, helper=`",
+      as.character(helper_name %||% NA_character_),
+      "`. No feasibility-based quota reduction was authorized. Underlying error: ",
+      conditionMessage(error)
+    ),
+    parent = error
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_feasibility_snapshot <- function(state, controller, spoke_id, stage_order) {
+  round <- state$round %||% list()
+  defaults <- adaptive_defaults(as.integer(state$n_items))
+  history <- .adaptive_history_tbl(state)
+  counts <- .adaptive_pair_counts(history, as.character(state$item_ids))
+  recent_deg <- .adaptive_recent_deg(history, as.character(state$item_ids), defaults$W_cap)
+  link_controller <- controller
+  link_controller$current_link_spoke_id <- as.integer(spoke_id)
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  feasible_counts <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+  feasible_utility_mass <- stats::setNames(rep.int(0, length(stage_order)), stage_order)
+
+  for (idx in seq_along(stage_order)) {
+    stage_name <- as.character(stage_order[[idx]])
+    stage_seed <- 1000L + (37L * idx) + (1009L * as.integer(spoke_id))
+    generated <- tryCatch(
+      generate_stage_candidates_from_state(
+        state = state,
+        stage_name = stage_name,
+        fallback_name = "base",
+        C_max = defaults$C_max,
+        seed = stage_seed,
+        link_spoke_id = as.integer(spoke_id)
+      ),
+      error = function(e) {
+        .adaptive_link_abort_feasibility_failure(
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          stage_name = stage_name,
+          helper_name = "generate_stage_candidates_from_state",
+          error = e
+        )
+      }
+    )
+    filtered <- tryCatch(
+      .adaptive_filter_link_backfill_candidates(
+        candidates = generated,
+        counts = counts,
+        round = round,
+        recent_deg = recent_deg,
+        defaults = defaults
+      ),
+      error = function(e) {
+        .adaptive_link_abort_feasibility_failure(
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          stage_name = stage_name,
+          helper_name = ".adaptive_filter_link_backfill_candidates",
+          error = e
+        )
+      }
+    )
+    cand <- tibble::as_tibble(filtered$candidates)
+    feasible_counts[[stage_name]] <- as.integer(nrow(cand))
+    if (nrow(cand) < 1L) {
+      next
+    }
+    if (!"p" %in% names(cand)) {
+      cand$p <- rep(0.5, nrow(cand))
+    }
+    if (!"u0" %in% names(cand)) {
+      cand$u0 <- rep(0, nrow(cand))
+    }
+    cand <- tryCatch(
+      .adaptive_link_attach_predictive_utility(
+        candidates = cand,
+        state = state,
+        controller = link_controller,
+        spoke_id = as.integer(spoke_id)
+      ),
+      error = function(e) {
+        .adaptive_link_abort_feasibility_failure(
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          stage_name = stage_name,
+          helper_name = ".adaptive_link_attach_predictive_utility",
+          error = e
+        )
+      }
+    )
+    utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+    utility_vals <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
+      as.double(cand[[utility_col]])
+    } else {
+      rep_len(0, nrow(cand))
+    }
+    utility_vals[!is.finite(utility_vals) | utility_vals < 0] <- 0
+    feasible_utility_mass[[stage_name]] <- as.double(sum(utility_vals))
+  }
+
+  list(
+    feasible_counts = feasible_counts,
+    feasible_utility_mass = feasible_utility_mass
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_adjust_stage_quotas_for_feasibility <- function(state,
+                                                               controller,
+                                                               spoke_id,
+                                                               stage_quotas,
+                                                               stage_order,
+                                                               refit_id = NULL) {
+  quotas <- as.integer(stage_quotas[stage_order])
+  names(quotas) <- as.character(stage_order)
+  quotas[!is.finite(quotas)] <- 0L
+  meta <- attr(stage_quotas, "quota_meta") %||% list()
+  refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
+  if (is.na(as.integer(spoke_id)) || sum(quotas, na.rm = TRUE) < 1L) {
+    meta$feasibility_reallocation_used <- FALSE
+    meta$feasibility_reallocation_rule <- "none"
+    meta$feasible_stage_capacity_anchor_link <- as.integer(quotas[["anchor_link"]] %||% 0L)
+    meta$feasible_stage_capacity_long_link <- as.integer(quotas[["long_link"]] %||% 0L)
+    meta$feasible_stage_capacity_mid_link <- as.integer(quotas[["mid_link"]] %||% 0L)
+    meta$feasible_stage_capacity_local_link <- as.integer(quotas[["local_link"]] %||% 0L)
+    attr(quotas, "quota_meta") <- meta
+    return(quotas)
+  }
+
+  snapshot <- .adaptive_link_stage_feasibility_snapshot(
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id),
+    stage_order = stage_order
+  )
+  feasible_counts <- as.integer(snapshot$feasible_counts[stage_order])
+  names(feasible_counts) <- stage_order
+  feasible_counts[!is.finite(feasible_counts)] <- 0L
+  utility_mass <- as.double(snapshot$feasible_utility_mass[stage_order])
+  names(utility_mass) <- stage_order
+  utility_mass[!is.finite(utility_mass)] <- 0
+  if (sum(feasible_counts, na.rm = TRUE) < 1L) {
+    meta$refit_id <- as.integer(refit_id)
+    meta$feasibility_reallocation_used <- FALSE
+    meta$feasibility_reallocation_rule <- "none"
+    meta$feasible_stage_capacity_anchor_link <- as.integer(feasible_counts[["anchor_link"]] %||% 0L)
+    meta$feasible_stage_capacity_long_link <- as.integer(feasible_counts[["long_link"]] %||% 0L)
+    meta$feasible_stage_capacity_mid_link <- as.integer(feasible_counts[["mid_link"]] %||% 0L)
+    meta$feasible_stage_capacity_local_link <- as.integer(feasible_counts[["local_link"]] %||% 0L)
+    meta$feasibility_budget_released <- 0L
+    attr(quotas, "quota_meta") <- meta
+    return(quotas)
+  }
+
+  adjusted <- pmin(quotas, feasible_counts)
+  adjusted[!is.finite(adjusted)] <- 0L
+  released <- as.integer(sum(pmax(0L, quotas - adjusted), na.rm = TRUE))
+  slack <- pmax(0L, feasible_counts - adjusted)
+  slack[!is.finite(slack)] <- 0L
+  weights <- utility_mass
+  weights[!is.finite(weights) | weights < 0] <- 0
+  if (isTRUE(meta$linking_identified %||% FALSE)) {
+    weights[["anchor_link"]] <- weights[["anchor_link"]] * 0.70
+    weights[["long_link"]] <- weights[["long_link"]] * 0.75
+    weights[["mid_link"]] <- weights[["mid_link"]] * 1.20
+    weights[["local_link"]] <- weights[["local_link"]] * 1.35
+  }
+  weights <- pmax(weights, as.double(slack))
+
+  remaining <- as.integer(released %||% 0L)
+  if (length(remaining) != 1L || !is.finite(remaining) || is.na(remaining) || remaining < 1L) {
+    remaining <- 0L
+  }
+  while (isTRUE(remaining > 0L) && isTRUE(any(slack > 0L, na.rm = TRUE))) {
+    eligible <- stage_order[slack[stage_order] > 0L]
+    if (length(eligible) < 1L) {
+      break
+    }
+    eligible <- eligible[order(-weights[eligible], match(eligible, stage_order))]
+    allocated <- FALSE
+    for (stage_name in eligible) {
+      if (!isTRUE(remaining > 0L) || !isTRUE(slack[stage_name] > 0L)) {
+        next
+      }
+      adjusted[stage_name] <- as.integer(adjusted[stage_name] + 1L)
+      slack[stage_name] <- as.integer(slack[stage_name] - 1L)
+      remaining <- as.integer(remaining - 1L)
+      allocated <- TRUE
+      if (!isTRUE(remaining > 0L)) {
+        break
+      }
+    }
+    if (!isTRUE(allocated)) {
+      break
+    }
+  }
+
+  meta$refit_id <- as.integer(refit_id)
+  meta$feasibility_reallocation_used <- isTRUE(released > 0L)
+  meta$feasibility_reallocation_rule <- if (released > 0L) {
+    "pooled_utility_backfill"
+  } else {
+    "none"
+  }
+  meta$feasible_stage_capacity_anchor_link <- as.integer(feasible_counts[["anchor_link"]] %||% 0L)
+  meta$feasible_stage_capacity_long_link <- as.integer(feasible_counts[["long_link"]] %||% 0L)
+  meta$feasible_stage_capacity_mid_link <- as.integer(feasible_counts[["mid_link"]] %||% 0L)
+  meta$feasible_stage_capacity_local_link <- as.integer(feasible_counts[["local_link"]] %||% 0L)
+  meta$feasibility_budget_released <- as.integer(released)
+  attr(adjusted, "quota_meta") <- meta
+  adjusted
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_stage_progress <- function(state, spoke_id, stage_quotas, stage_order, refit_id = NULL) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  controller <- .adaptive_controller_resolve(state)
   stage_order <- as.character(stage_order %||% .adaptive_stage_order())
+  quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
   stage_quotas <- as.integer(stage_quotas[stage_order])
   names(stage_quotas) <- stage_order
+  attr(stage_quotas, "quota_meta") <- quota_meta
+  stage_quotas <- .adaptive_link_adjust_stage_quotas_for_feasibility(
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id),
+    stage_quotas = stage_quotas,
+    stage_order = stage_order,
+    refit_id = refit_id
+  )
   committed_actual <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
   refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
   last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
@@ -965,10 +1206,15 @@
   }
 
   deficits <- pmax(0L, stage_quotas - committed)
-  backfill_active <- sum(committed_actual) < sum(stage_quotas) && !any(deficits > 0L)
+  deficits[!is.finite(deficits)] <- 0L
+  committed[!is.finite(committed)] <- 0L
+  committed_actual[!is.finite(committed_actual)] <- 0L
+  stage_quotas[!is.finite(stage_quotas)] <- 0L
+  backfill_active <- sum(committed_actual, na.rm = TRUE) < sum(stage_quotas, na.rm = TRUE) &&
+    !any(deficits > 0L, na.rm = TRUE)
   active_stage <- if (isTRUE(backfill_active)) {
     "pooled_backfill"
-  } else if (any(deficits > 0L)) {
+  } else if (any(deficits > 0L, na.rm = TRUE)) {
     stage_order[[which(deficits > 0L)[[1L]]]]
   } else {
     stage_order[[length(stage_order)]]
@@ -980,7 +1226,8 @@
     stage_realized = committed_actual,
     stage_committed = committed,
     stage_quotas = stage_quotas,
-    budget_remaining_actual = as.integer(max(0L, sum(stage_quotas) - sum(committed_actual)))
+    budget_remaining_actual = as.integer(max(0L, sum(stage_quotas, na.rm = TRUE) -
+      sum(committed_actual, na.rm = TRUE)))
   )
 }
 

@@ -544,6 +544,21 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
       )
     )
   )
+  expected2 <- pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+    state = state,
+    controller = utils::modifyList(
+      state$controller,
+      list(
+        current_link_spoke_id = 2L,
+        B_spoke_refit_budget = budget_map[["2"]]$B_spoke_refit_budget,
+        B_spoke_refit_budget_source = budget_map[["2"]]$B_spoke_refit_budget_source
+      )
+    ),
+    spoke_id = 2L,
+    stage_quotas = expected2,
+    stage_order = pairwiseLLM:::.adaptive_stage_order(),
+    refit_id = 1L
+  )
   meta2 <- attr(expected2, "quota_meta")
   if (is.null(meta2)) meta2 <- list()
   expect_true(nrow(row2) == 1L)
@@ -1138,8 +1153,8 @@ test_that("concurrent fallback recomputes per-spoke stage context helpers", {
     stage_order = state$round$stage_order,
     refit_id = refit_id
   )
-  expect_true(progress2$active_stage %in% names(stage_quotas2))
-  expect_true(progress3$active_stage %in% names(stage_quotas3))
+  expect_true(progress2$active_stage %in% c(names(stage_quotas2), "pooled_backfill"))
+  expect_true(progress3$active_stage %in% c(names(stage_quotas3), "pooled_backfill"))
   expect_gte(
     as.integer(progress2$stage_committed[["anchor_link"]]),
     as.integer(progress3$stage_committed[["anchor_link"]])
@@ -1476,8 +1491,15 @@ test_that("independent spoke stage progress is computed per spoke without shared
     tibble::tibble(
       pair_id = 999L,
       step_id = as.integer(max(as.integer(state2$step_log$step_id), na.rm = TRUE) + 1L),
+      i = match("h1", state2$item_ids),
+      j = match("s21", state2$item_ids),
+      A = match("h1", state2$item_ids),
+      B = match("s21", state2$item_ids),
       is_cross_set = TRUE,
+      set_i = 1L,
+      set_j = 2L,
       link_spoke_id = 2L,
+      link_stage = "anchor_link",
       round_stage = "anchor_link"
     )
   )
@@ -2262,7 +2284,7 @@ test_that("phase B starvation marks the attempted spoke exhausted and advances s
       pairwiseLLM:::.adaptive_round_active_stage(out)
     }
   )
-  expect_identical(next_stage, "mid_link")
+  expect_identical(next_stage, "local_link")
 })
 
 test_that("phase B pooled backfill starvation exhausts only the attempted spoke", {

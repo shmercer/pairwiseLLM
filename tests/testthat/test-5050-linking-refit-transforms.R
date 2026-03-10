@@ -886,6 +886,258 @@ test_that("linking stage targets are deterministic from budget, floors, and tape
   expect_identical(meta_taper$stage_target_long_link_post_taper, 2L)
 })
 
+test_that("phase B feasibility adjustment reduces impossible stage targets before starvation", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 2L,
+        long_link = 0L,
+        mid_link = 3L,
+        local_link = 2L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(
+        i = rep("h1", n),
+        j = paste0("s", seq_len(n))
+      )
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- seq(from = nrow(cand), to = 1, by = -1)
+      cand$link_u <- cand$link_d_opt_gain
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(unname(adjusted[c("anchor_link", "long_link", "mid_link", "local_link")]), c(2L, 0L, 1L, 1L))
+  meta <- attr(adjusted, "quota_meta")
+  expect_true(isTRUE(meta$feasibility_reallocation_used))
+  expect_identical(as.character(meta$feasibility_reallocation_rule), "pooled_utility_backfill")
+  expect_identical(meta$feasible_stage_capacity_long_link, 0L)
+  expect_lte(sum(adjusted, na.rm = TRUE), sum(base_quotas))
+})
+
+test_that("identified Phase B feasibility adjustment remains within feasible stage capacities", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 3L, long_link = 2L, mid_link = 1L, local_link = 0L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = TRUE)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      hub_anchored = TRUE,
+      probe_brier = 0.25,
+      probe_pred_rmse_lagged = 0.03,
+      theta_global_rmse_lagged = 0.06
+    )
+  )
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 3L,
+        long_link = 0L,
+        mid_link = 4L,
+        local_link = 4L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(
+        i = rep("h1", n),
+        j = paste0(stage_name, "_", seq_len(n))
+      )
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      stage_name <- ifelse(grepl("^local_link_", cand$j[[1L]]), "local_link", "mid_link")
+      cand$link_d_opt_gain <- if (identical(stage_name, "local_link")) 10 else 4
+      cand$link_u <- cand$link_d_opt_gain
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = utils::modifyList(state$controller, list(current_link_spoke_id = 2L)),
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  meta <- attr(adjusted, "quota_meta")
+  expect_identical(adjusted[["long_link"]], 0L)
+  expect_true(isTRUE(meta$feasibility_reallocation_used))
+  expect_lte(adjusted[["mid_link"]], meta$feasible_stage_capacity_mid_link)
+  expect_lte(adjusted[["local_link"]], meta$feasible_stage_capacity_local_link)
+  expect_lte(sum(adjusted, na.rm = TRUE), sum(base_quotas))
+})
+
+test_that("phase B feasibility adjustment aborts on candidate-generation errors", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  err <- tryCatch(
+    testthat::with_mocked_bindings(
+      generate_stage_candidates_from_state = function(state, stage_name, ...) {
+        if (identical(stage_name, "long_link")) {
+          rlang::abort("synthetic generation failure")
+        }
+        tibble::tibble(i = "h1", j = "s1")
+      },
+      .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+        list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+      },
+      .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+        cand <- tibble::as_tibble(candidates)
+        cand$link_d_opt_gain <- 1
+        cand$link_u <- 1
+        cand
+      },
+      pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L,
+        stage_quotas = base_quotas,
+        stage_order = pairwiseLLM:::.adaptive_stage_order(),
+        refit_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    error = identity
+  )
+  expect_s3_class(err, "rlang_error")
+  expect_true(grepl(
+    "Phase B feasibility computation failed before quota reduction",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("refit_id=1, spoke_id=2, stage_name=`long_link`", conditionMessage(err), fixed = TRUE))
+  expect_true(grepl(
+    "helper=`generate_stage_candidates_from_state`",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("synthetic generation failure", conditionMessage(err), fixed = TRUE))
+})
+
+test_that("phase B feasibility adjustment aborts on utility-attachment errors", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  err <- tryCatch(
+    testthat::with_mocked_bindings(
+      generate_stage_candidates_from_state = function(state, stage_name, ...) {
+        tibble::tibble(i = "h1", j = paste0(stage_name, "_candidate"))
+      },
+      .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+        list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+      },
+      .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+        rlang::abort("synthetic utility failure")
+      },
+      pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L,
+        stage_quotas = base_quotas,
+        stage_order = pairwiseLLM:::.adaptive_stage_order(),
+        refit_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    error = identity
+  )
+  expect_s3_class(err, "rlang_error")
+  expect_true(grepl(
+    "Phase B feasibility computation failed before quota reduction",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("refit_id=1, spoke_id=2, stage_name=`anchor_link`", conditionMessage(err), fixed = TRUE))
+  expect_true(grepl(
+    "helper=`.adaptive_link_attach_predictive_utility`",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("synthetic utility failure", conditionMessage(err), fixed = TRUE))
+})
+
+test_that("phase B feasibility adjustment keeps genuine empty stages non-fatal", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      if (identical(stage_name, "long_link")) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(i = "h1", j = paste0(stage_name, "_candidate"))
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- 1
+      cand$link_u <- 1
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(adjusted[["long_link"]], 0L)
+  meta <- attr(adjusted, "quota_meta")
+  expect_identical(meta$feasible_stage_capacity_long_link, 0L)
+  expect_true(isTRUE(meta$feasibility_reallocation_used))
+})
+
 test_that("concurrent spoke routing enforces floor before budget targets", {
   state <- make_linking_refit_state(
     list(
@@ -1525,6 +1777,10 @@ test_that("auto escalation requires diagnostics to pass before any decision open
   expect_false(isTRUE(stats$link_stop_eligible))
   expect_false(isTRUE(stats$escalated_this_refit))
   expect_identical(out$controller$link_transform_state_by_spoke[["2"]], "shift_only")
+  expect_identical(stats$link_fit_method, "bayesian_mcmc")
+  expect_identical(stats$link_uncertainty_approximation, "posterior_draws")
+  expect_identical(stats$alternative_fit_method, "map_laplace_hessian")
+  expect_identical(stats$alternative_uncertainty_approximation, "laplace_hessian")
 })
 
 test_that("linking identified state is reconstructable from canonical link-stage fields", {

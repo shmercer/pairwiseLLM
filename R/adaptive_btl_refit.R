@@ -2226,7 +2226,9 @@
     converged = is.finite(log_alpha_sd),
     delta_mean = as.double(opt$par[[1L]]),
     log_alpha_mean = as.double(opt$par[[2L]]),
-    log_alpha_sd = as.double(log_alpha_sd)
+    log_alpha_sd = as.double(log_alpha_sd),
+    fit_method = "map_laplace_hessian",
+    uncertainty_approximation = "laplace_hessian"
   )
 }
 
@@ -2969,6 +2971,7 @@
       lag_row = lag_row
     )
     fit_diag <- fit$diagnostics %||% list()
+    fit_contract <- fit$fit_contract %||% list()
     hub_anchored <- if (identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
       TRUE
     } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
@@ -3260,7 +3263,11 @@
       ppc_brier_cross_active = as.double(ppc_brier_cross_active),
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
-      fit_contract = fit$fit_contract %||% list(),
+      fit_contract = fit_contract,
+      link_fit_method = as.character(fit_contract$estimation_method %||% NA_character_),
+      link_uncertainty_approximation = as.character(
+        fit_contract$uncertainty_approximation %||% NA_character_
+      ),
       link_diagnostics_divergences = as.integer(fit_diag$divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(fit_diag$max_rhat %||% NA_real_),
       link_diagnostics_min_ess_bulk = as.double(fit_diag$min_ess_bulk %||% NA_real_),
@@ -3281,7 +3288,10 @@
       log_alpha_spoke_sd_alt = as.double(alt_fit$log_alpha_sd %||% NA_real_),
       alt_eval_active_edges = as.integer(nrow(cross_active_epoch)),
       alt_eval_converged = as.logical(alt_fit$converged %||% FALSE),
-      alternative_fit_method = "map_laplace",
+      alternative_fit_method = as.character(alt_fit$fit_method %||% "map_laplace_hessian"),
+      alternative_uncertainty_approximation = as.character(
+        alt_fit$uncertainty_approximation %||% "laplace_hessian"
+      ),
       probe_brier_delta_min_used = as.double(controller$probe_brier_delta_min %||% 0.005),
       logalpha_sd_guardrail_used = as.double(controller$logalpha_sd_guardrail %||% 0.10),
       probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 30L),
@@ -3446,6 +3456,14 @@
       n_items = as.integer(state$n_items),
       controller = quota_controller
     )
+    stage_quotas <- .adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = .adaptive_stage_order(),
+      refit_id = as.integer(refit_id)
+    )
     quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
     quota_long_link_raw <- as.integer(quota_meta$long_quota_raw %||% NA_integer_)
     quota_long_link_effective <- as.integer(quota_meta$long_quota_effective %||%
@@ -3483,14 +3501,17 @@
         committed_stage[names(tab_stage)] <- as.integer(tab_stage)
       }
     }
-    realized_active_budget_floor <- as.integer(sum(committed_stage))
-    if (sum(stage_quotas) < realized_active_budget_floor) {
+    stage_quotas[!is.finite(stage_quotas)] <- 0L
+    committed_stage[!is.finite(committed_stage)] <- 0L
+    realized_active_budget_floor <- as.integer(sum(committed_stage, na.rm = TRUE))
+    stage_budget_total <- as.integer(sum(stage_quotas, na.rm = TRUE))
+    if (stage_budget_total < realized_active_budget_floor) {
       rlang::abort(
         paste0(
           "link_stage_log budget invariant failure: realized active counts exceed emitted budget ",
           "for spoke_id=", as.integer(spoke_id),
           " at refit_id=", as.integer(refit_id),
-          ". budget=", as.integer(sum(stage_quotas)),
+          ". budget=", as.integer(stage_budget_total),
           ", realized=", as.integer(realized_active_budget_floor),
           "."
         )
@@ -3574,7 +3595,8 @@
       drop = FALSE
     ]) > 0L
 
-    reallocation_used <- any(committed_stage > stage_quotas, na.rm = TRUE)
+    reallocation_used <- isTRUE(quota_meta$feasibility_reallocation_used %||% FALSE) ||
+      any(committed_stage > stage_quotas, na.rm = TRUE)
     reallocation_rule <- if (isTRUE(reallocation_used)) "pooled_utility_backfill" else "none"
     rows[[idx]] <- list(
       refit_id = as.integer(refit_id),
@@ -3634,6 +3656,10 @@
       ppc_brier_cross = as.double(stats_row$ppc_brier_cross %||% NA_real_),
       hub_anchored = as.logical(stats_row$hub_anchored %||% NA),
       scale_ready = as.logical(stats_row$scale_ready %||% NA),
+      link_fit_method = as.character(stats_row$link_fit_method %||% NA_character_),
+      link_uncertainty_approximation = as.character(
+        stats_row$link_uncertainty_approximation %||% NA_character_
+      ),
       link_diagnostics_divergences = as.integer(stats_row$link_diagnostics_divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(stats_row$link_diagnostics_max_rhat %||% NA_real_),
       link_diagnostics_min_ess_bulk = as.double(stats_row$link_diagnostics_min_ess_bulk %||% NA_real_),
@@ -3759,6 +3785,9 @@
         stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 30L
       ),
       alternative_fit_method = as.character(stats_row$alternative_fit_method %||% NA_character_),
+      alternative_uncertainty_approximation = as.character(
+        stats_row$alternative_uncertainty_approximation %||% NA_character_
+      ),
       alt_eval_active_edges = as.integer(stats_row$alt_eval_active_edges %||% NA_integer_),
       alt_eval_converged = as.logical(stats_row$alt_eval_converged %||% NA),
       probe_brier_delta_min_used = as.double(

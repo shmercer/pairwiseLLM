@@ -1079,6 +1079,12 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   }
   row <- round_row[1L, , drop = FALSE]
   link_stage_rows <- tibble::as_tibble(link_stage_rows %||% tibble::tibble())
+  link_col_value <- function(tbl, col, idx = 1L, default = NA) {
+    if (!col %in% names(tbl)) {
+      return(default)
+    }
+    tbl[[col]][[idx]] %||% default
+  }
   has_linking_rows <- nrow(link_stage_rows) > 0L
   thresholds <- cfg$stop_thresholds %||% list()
   phase_scope <- as.character(row$phase_scope %||% "global")
@@ -1490,6 +1496,16 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           if (is.na(probe_min)) "NA" else probe_min,
           ")  scale_ready=",
           fmt_mark(link_row$scale_ready[[1L]])
+        ),
+        paste0(
+          "    link_fit_method=",
+          link_col_value(link_row, "link_fit_method", default = NA_character_),
+          "  link_uncertainty=",
+          link_col_value(link_row, "link_uncertainty_approximation", default = NA_character_),
+          "  alt_fit_method=",
+          link_col_value(link_row, "alternative_fit_method", default = NA_character_),
+          "  alt_uncertainty=",
+          link_col_value(link_row, "alternative_uncertainty_approximation", default = NA_character_)
         ),
         paste0(
           "    hub_anchored=",
