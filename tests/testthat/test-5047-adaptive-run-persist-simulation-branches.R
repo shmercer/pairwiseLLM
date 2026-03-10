@@ -859,7 +859,8 @@ test_that("phase B stage exhaustion persists across round rollover within refit 
     spoke_id = 2L,
     stage_quotas = stage_quotas,
     stage_order = pairwiseLLM:::.adaptive_stage_order(),
-    refit_id = refit_id
+    refit_id = refit_id,
+    adjust_for_feasibility = FALSE
   )
 
   expect_identical(progress$stage_committed[["anchor_link"]], progress$stage_quotas[["anchor_link"]])

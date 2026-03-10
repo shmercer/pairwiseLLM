@@ -1158,7 +1158,12 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_link_stage_progress <- function(state, spoke_id, stage_quotas, stage_order, refit_id = NULL) {
+.adaptive_link_stage_progress <- function(state,
+                                         spoke_id,
+                                         stage_quotas,
+                                         stage_order,
+                                         refit_id = NULL,
+                                         adjust_for_feasibility = TRUE) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   controller <- .adaptive_controller_resolve(state)
   stage_order <- as.character(stage_order %||% .adaptive_stage_order())
@@ -1166,14 +1171,16 @@
   stage_quotas <- as.integer(stage_quotas[stage_order])
   names(stage_quotas) <- stage_order
   attr(stage_quotas, "quota_meta") <- quota_meta
-  stage_quotas <- .adaptive_link_adjust_stage_quotas_for_feasibility(
-    state = state,
-    controller = controller,
-    spoke_id = as.integer(spoke_id),
-    stage_quotas = stage_quotas,
-    stage_order = stage_order,
-    refit_id = refit_id
-  )
+  if (isTRUE(adjust_for_feasibility)) {
+    stage_quotas <- .adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = stage_order,
+      refit_id = refit_id
+    )
+  }
   committed_actual <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
   refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
   last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
@@ -1519,7 +1526,8 @@
         spoke_id = as.integer(spoke_id),
         stage_quotas = stage_quotas,
         stage_order = stage_order,
-        refit_id = refit_id
+        refit_id = refit_id,
+        adjust_for_feasibility = FALSE
       )
       key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
       existing_shortfall <- shortfalls[[key]] %||% list()
