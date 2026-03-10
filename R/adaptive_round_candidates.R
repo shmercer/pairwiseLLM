@@ -293,6 +293,25 @@
 
   # In multi-spoke mode, route deterministically across spokes.
   spoke_ids <- as.integer(sort(spoke_ids))
+  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+  if (!isTRUE(concurrent_mode)) {
+    cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+    current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+    cached_map <- controller$link_budget_map %||% list()
+    if (!is.na(cached_refit_id) && identical(cached_refit_id, current_refit_id) && length(cached_map) > 0L) {
+      cached_active <- names(cached_map)[vapply(
+        cached_map,
+        function(entry) as.integer(entry$B_spoke_refit_budget %||% 0L) > 0L,
+        logical(1L)
+      )]
+      cached_active <- as.integer(cached_active)
+      cached_active <- cached_active[cached_active %in% spoke_ids]
+      if (length(cached_active) > 0L) {
+        tail_ids <- as.integer(sort(setdiff(spoke_ids, cached_active[[1L]])))
+        return(as.integer(c(cached_active[[1L]], tail_ids)))
+      }
+    }
+  }
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
   step_subset <- tibble::tibble()
@@ -303,7 +322,7 @@
     step_subset <- step_log[eligible, , drop = FALSE]
   }
 
-  if (identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
+  if (isTRUE(concurrent_mode)) {
     if (nrow(step_subset) > 0L) {
       last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
       step_subset <- step_subset[as.integer(step_subset$step_id) > last_refit_step, , drop = FALSE]

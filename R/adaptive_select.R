@@ -325,6 +325,12 @@ adaptive_defaults <- function(N) {
       controller$min_cross_set_pairs_per_spoke_per_refit %||% 5L
     ),
     current_link_spoke_id = as.integer(controller$current_link_spoke_id %||% NA_integer_),
+    link_budget_refit_id = as.integer(controller$link_budget_refit_id %||% NA_integer_),
+    link_budget_map = controller$link_budget_map %||% list(),
+    B_spoke_refit_budget = as.integer(controller$B_spoke_refit_budget %||% NA_integer_),
+    B_spoke_refit_budget_source = as.character(
+      controller$B_spoke_refit_budget_source %||% NA_character_
+    ),
     link_refit_stats_by_spoke = controller$link_refit_stats_by_spoke %||% list(),
     global_identified = isTRUE(controller$global_identified %||% FALSE),
     global_identified_reliability_min = as.double(
@@ -991,8 +997,9 @@ adaptive_defaults <- function(N) {
   cap_count <- ceiling(config$cap_frac * config$W_cap)
   recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
   allow_repeats <- identical(stage$dup_policy, "relaxed")
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   link_phase_b <- .adaptive_link_mode_active(controller) &&
-    identical(as.character(.adaptive_link_phase_context(state, controller = controller)$phase %||% "phase_a"), "phase_b")
+    identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
   dup_max_obs_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs
   dup_max_obs_relaxed_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs_relaxed
 

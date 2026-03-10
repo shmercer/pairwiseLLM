@@ -1121,11 +1121,10 @@ test_that("remaining candidate-generation and budget helpers cover edge branches
     eligible_spoke_ids = 2L,
     seed = 1L
   )
-  expect_identical(budget_map[["2"]]$B_spoke_refit_budget, 1L)
-  expect_identical(
-    budget_map[["2"]]$B_spoke_refit_budget_source,
-    "concurrent_allocator_reconciled_to_realized"
-  )
+  expect_identical(budget_map[["2"]]$B_spoke_refit_budget, 0L)
+  expect_identical(budget_map[["2"]]$B_spoke_refit_budget_source, "concurrent_allocator")
+  expect_true(isTRUE(budget_map[["2"]]$concurrent_floor_met))
+  expect_true(isTRUE(budget_map[["2"]]$concurrent_target_met))
 
   expect_identical(
     pairwiseLLM:::.adaptive_select_rolling_anchors(c(a = 1), adaptive_defaults(2L)),

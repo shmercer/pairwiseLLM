@@ -134,7 +134,7 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
   expect_true(all(c("theta_hub", "theta_spoke", "delta_s") %in% contract$parameters))
 })
 
-test_that("three-set linking remains hub-spoke only and rotates across spokes", {
+test_that("three-set linking stays hub-spoke only and authorizes one independent spoke per refit", {
   withr::local_seed(20260213)
 
   items <- make_linking_items_three_set()
@@ -168,17 +168,24 @@ test_that("three-set linking remains hub-spoke only and rotates across spokes", 
 
   committed <- out$step_log[!is.na(out$step_log$pair_id) & out$step_log$is_cross_set %in% TRUE, , drop = FALSE]
   expect_true(nrow(committed) > 0L)
-  expect_true(all(sort(unique(committed$link_spoke_id)) == c(2L, 3L)))
 
   is_hub_i <- committed$set_i == 1L
   is_hub_j <- committed$set_j == 1L
   expect_true(all(xor(is_hub_i, is_hub_j)))
-  expect_true(any(committed$set_i == 2L | committed$set_j == 2L))
-  expect_true(any(committed$set_i == 3L | committed$set_j == 3L))
 
   link_rows <- out$link_stage_log
   expect_true(any(link_rows$spoke_id == 2L))
   expect_true(any(link_rows$spoke_id == 3L))
+  positive_budget_counts <- tapply(
+    link_rows$B_spoke_refit_budget > 0L,
+    link_rows$refit_id,
+    sum
+  )
+  expect_true(all(as.integer(positive_budget_counts) == 1L))
+  zero_budget_sources <- unique(as.character(
+    link_rows$B_spoke_refit_budget_source[link_rows$B_spoke_refit_budget == 0L]
+  ))
+  expect_true("independent_inactive_spoke" %in% zero_budget_sources)
 })
 
 test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking", {

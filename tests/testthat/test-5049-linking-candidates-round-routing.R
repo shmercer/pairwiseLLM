@@ -448,6 +448,7 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
+  state$controller$current_link_spoke_id <- 2L
   state$step_log <- pairwiseLLM:::append_step_log(
     state$step_log,
     list(
@@ -478,17 +479,17 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
       timestamp = as.POSIXct("2026-01-01 00:00:02", tz = "UTC"),
       pair_id = 2L,
       i = 2L,
-      j = 7L,
+      j = 6L,
       A = 2L,
-      B = 7L,
+      B = 6L,
       Y = 1L,
       set_i = 1L,
-      set_j = 3L,
+      set_j = 2L,
       is_cross_set = TRUE,
       is_probe_step = FALSE,
       is_holdout_probe_step = FALSE,
       is_drift_probe_step = FALSE,
-      link_spoke_id = 3L,
+      link_spoke_id = 2L,
       run_mode = "link_multi_spoke",
       link_stage = "anchor_link",
       round_stage = "anchor_link"
@@ -526,38 +527,44 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
   )
   row2 <- rows[rows$spoke_id == 2L, , drop = FALSE]
   row3 <- rows[rows$spoke_id == 3L, , drop = FALSE]
+  budget_map <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = state$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
   expected2 <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = as.integer(state$round$round_id),
     n_items = as.integer(state$n_items),
-    controller = utils::modifyList(state$controller, list(current_link_spoke_id = 2L))
-  )
-  expected3 <- pairwiseLLM:::.adaptive_round_compute_quotas(
-    round_id = as.integer(state$round$round_id),
-    n_items = as.integer(state$n_items),
-    controller = utils::modifyList(state$controller, list(current_link_spoke_id = 3L))
+    controller = utils::modifyList(
+      state$controller,
+      list(
+        current_link_spoke_id = 2L,
+        B_spoke_refit_budget = budget_map[["2"]]$B_spoke_refit_budget,
+        B_spoke_refit_budget_source = budget_map[["2"]]$B_spoke_refit_budget_source
+      )
+    )
   )
   meta2 <- attr(expected2, "quota_meta")
   if (is.null(meta2)) meta2 <- list()
-  meta3 <- attr(expected3, "quota_meta")
-  if (is.null(meta3)) meta3 <- list()
   expect_true(nrow(row2) == 1L)
   expect_true(nrow(row3) == 1L)
   expect_identical(row2$quota_anchor_link[[1L]], expected2[["anchor_link"]])
   expect_identical(row2$quota_long_link[[1L]], expected2[["long_link"]])
   expect_true(row2$committed_anchor_link[[1L]] + row2$committed_long_link[[1L]] +
     row2$committed_mid_link[[1L]] + row2$committed_local_link[[1L]] >= 1L)
-  expect_true(row3$committed_anchor_link[[1L]] + row3$committed_long_link[[1L]] +
-    row3$committed_mid_link[[1L]] + row3$committed_local_link[[1L]] >= 1L)
+  expect_identical(row3$B_spoke_refit_budget[[1L]], 0L)
+  expect_identical(as.character(row3$B_spoke_refit_budget_source[[1L]]), "independent_inactive_spoke")
+  expect_identical(row3$committed_anchor_link[[1L]] + row3$committed_long_link[[1L]] +
+    row3$committed_mid_link[[1L]] + row3$committed_local_link[[1L]], 0L)
   expect_identical(row2$quota_long_link_raw[[1L]], meta2$long_quota_raw)
   expect_identical(row2$quota_long_link_effective[[1L]], meta2$long_quota_effective)
   expect_identical(row2$quota_long_link_removed[[1L]], meta2$long_quota_removed)
   expect_false(isTRUE(row2$quota_taper_applied[[1L]]))
   expect_identical(row2$quota_taper_spoke_id[[1L]], 2L)
-  expect_identical(row3$quota_long_link_raw[[1L]], meta3$long_quota_raw)
-  expect_identical(row3$quota_long_link_effective[[1L]], meta3$long_quota_effective)
-  expect_identical(row3$quota_long_link_removed[[1L]], meta3$long_quota_removed)
-  expect_false(isTRUE(row3$quota_taper_applied[[1L]]))
-  expect_identical(row3$quota_taper_spoke_id[[1L]], 3L)
+  expect_identical(row3$quota_anchor_link[[1L]], 0L)
+  expect_identical(row3$quota_long_link[[1L]], 0L)
+  expect_identical(row3$quota_mid_link[[1L]], 0L)
+  expect_identical(row3$quota_local_link[[1L]], 0L)
 })
 
 test_that("linking spoke quantile bins dynamically fall back for small spokes", {

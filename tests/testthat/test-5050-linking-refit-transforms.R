@@ -781,6 +781,89 @@ test_that("concurrent allocation uses utility mass and enforces floor", {
   expect_true(is.finite(stats3$concurrent_utility_mass))
 })
 
+test_that("independent mode authorizes exactly one spoke per refit window", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+
+  budget_map <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = state$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
+  budgets <- vapply(
+    budget_map,
+    function(entry) as.integer(entry$B_spoke_refit_budget %||% NA_integer_),
+    integer(1L)
+  )
+  active_spoke <- as.integer(names(budgets)[budgets > 0L][[1L]])
+  inactive_spoke <- setdiff(c(2L, 3L), active_spoke)
+
+  expect_identical(sum(budgets > 0L), 1L)
+  expect_identical(budget_map[[as.character(active_spoke)]]$B_spoke_refit_budget_source, "single_spoke_controller")
+  expect_identical(budget_map[[as.character(inactive_spoke)]]$B_spoke_refit_budget, 0L)
+  expect_identical(
+    budget_map[[as.character(inactive_spoke)]]$B_spoke_refit_budget_source,
+    "independent_inactive_spoke"
+  )
+
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- budget_map
+  if (identical(active_spoke, 2L)) {
+    state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  } else {
+    state <- append_cross_step(state, 1L, "s31", "h1", 1L, spoke_id = 3L)
+  }
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller, eligible_spoke_ids = c(2L, 3L)),
+    active_spoke
+  )
+
+  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_active <- rows[rows$spoke_id == active_spoke, , drop = FALSE]
+  row_inactive <- rows[rows$spoke_id == inactive_spoke, , drop = FALSE]
+  expect_identical(nrow(row_active), 1L)
+  expect_identical(nrow(row_inactive), 1L)
+  expect_true(row_active$B_spoke_refit_budget[[1L]] > 0L)
+  expect_identical(row_inactive$B_spoke_refit_budget[[1L]], 0L)
+  expect_identical(
+    as.character(row_inactive$B_spoke_refit_budget_source[[1L]]),
+    "independent_inactive_spoke"
+  )
+})
+
+test_that("link stage rows abort when realized active work exceeds emitted budget", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s22", "h2", 1L, spoke_id = 2L)
+  state$step_log$link_stage <- c("anchor_link", "anchor_link")
+  state$step_log$round_stage <- c("anchor_link", "anchor_link")
+  state$controller$link_budget_refit_id <- 1L
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 1L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "independent_inactive_spoke"
+    )
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state,
+      refit_id = 1L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    "realized active counts exceed emitted budget"
+  )
+})
+
 test_that("linking stage targets are deterministic from budget, floors, and taper", {
   controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
   q_base <- pairwiseLLM:::.adaptive_link_compute_stage_targets(
