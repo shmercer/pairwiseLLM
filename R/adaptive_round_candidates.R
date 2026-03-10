@@ -889,6 +889,119 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_max_non_anchor_pairs <- function(active_hub_ids, spoke_ids) {
+  as.integer(length(unique(as.character(active_hub_ids))) * length(unique(as.character(spoke_ids))))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_assert_active_domain_count <- function(stage_name,
+                                                      n_candidates_after_active_domain,
+                                                      active_hub_ids,
+                                                      spoke_ids,
+                                                      spoke_id) {
+  if (!stage_name %in% c("long_link", "mid_link", "local_link")) {
+    return(invisible(NULL))
+  }
+  observed <- as.integer(n_candidates_after_active_domain %||% NA_integer_)
+  if (!is.finite(observed) || is.na(observed)) {
+    return(invisible(NULL))
+  }
+  max_pairs <- .adaptive_link_max_non_anchor_pairs(
+    active_hub_ids = active_hub_ids,
+    spoke_ids = spoke_ids
+  )
+  if (observed > max_pairs) {
+    rlang::abort(
+      paste0(
+        "Phase B active-domain invariant failed for stage `",
+        stage_name,
+        "` and spoke_id=",
+        as.integer(spoke_id),
+        ": n_candidates_after_active_domain=",
+        observed,
+        " exceeds the maximum possible active-domain cross-set pairs=",
+        max_pairs,
+        "."
+      )
+    )
+  }
+  invisible(NULL)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_assert_non_anchor_candidate_domain <- function(candidates,
+                                                              stage_name,
+                                                              spoke_id,
+                                                              hub_id,
+                                                              active_hub_ids,
+                                                              reserved_keys = character(),
+                                                              set_map) {
+  if (!stage_name %in% c("long_link", "mid_link", "local_link")) {
+    return(invisible(NULL))
+  }
+  cand <- tibble::as_tibble(candidates)
+  if (nrow(cand) < 1L) {
+    return(invisible(NULL))
+  }
+  hub_id <- as.integer(hub_id)
+  spoke_id <- as.integer(spoke_id)
+  active_hub_ids <- unique(as.character(active_hub_ids))
+  set_map <- stats::setNames(as.integer(set_map), names(set_map))
+  pair_keys <- make_unordered_key(cand$i, cand$j)
+
+  invalid_idx <- vapply(seq_len(nrow(cand)), function(idx) {
+    i_id <- as.character(cand$i[[idx]])
+    j_id <- as.character(cand$j[[idx]])
+    i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
+    j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
+    i_hub <- identical(i_set, hub_id)
+    j_hub <- identical(j_set, hub_id)
+    if (!isTRUE(xor(i_hub, j_hub))) {
+      return(TRUE)
+    }
+    hub_item_id <- if (isTRUE(i_hub)) i_id else j_id
+    spoke_item_set <- if (isTRUE(i_hub)) j_set else i_set
+    !hub_item_id %in% active_hub_ids || !identical(spoke_item_set, spoke_id)
+  }, logical(1L))
+
+  if (any(invalid_idx)) {
+    bad_keys <- unique(pair_keys[invalid_idx])
+    rlang::abort(
+      paste0(
+        "Phase B non-anchor routing invariant failed for stage `",
+        stage_name,
+        "` and spoke_id=",
+        spoke_id,
+        ": generated candidates fell outside active_link_items(s). Bad pair keys: ",
+        paste(bad_keys, collapse = ", "),
+        "."
+      )
+    )
+  }
+
+  reserved_keys <- unique(as.character(reserved_keys))
+  if (length(reserved_keys) > 0L && any(pair_keys %in% reserved_keys)) {
+    bad_keys <- unique(pair_keys[pair_keys %in% reserved_keys])
+    rlang::abort(
+      paste0(
+        "Phase B probe isolation invariant failed for stage `",
+        stage_name,
+        "` and spoke_id=",
+        spoke_id,
+        ": reserved held-out probe pairs entered linking-active candidates. Bad pair keys: ",
+        paste(bad_keys, collapse = ", "),
+        "."
+      )
+    )
+  }
+
+  invisible(NULL)
+}
+
+#' @keywords internal
+#' @noRd
 generate_stage_candidates_from_state <- function(state,
                                                  stage_name,
                                                  fallback_name,
@@ -1138,6 +1251,15 @@ generate_stage_candidates_from_state <- function(state,
   }
 
   if (length(i_vals) == 0L) {
+    if (isTRUE(link_phase_b_active)) {
+      .adaptive_link_assert_active_domain_count(
+        stage_name = stage_name,
+        n_candidates_after_active_domain = n_after_active_domain,
+        active_hub_ids = active_hub_ids,
+        spoke_ids = spoke_ids,
+        spoke_id = spoke_id
+      )
+    }
     return(.adaptive_set_candidate_filter_counts(
       tibble::tibble(i = character(), j = character()),
       list(
@@ -1156,7 +1278,15 @@ generate_stage_candidates_from_state <- function(state,
     cand$link_spoke_id <- as.integer(link_spoke_id)
     cand$coverage_bins_used <- as.integer(coverage_bins_used)
     cand$coverage_source <- as.character(coverage_source)
+    .adaptive_link_assert_active_domain_count(
+      stage_name = stage_name,
+      n_candidates_after_active_domain = n_after_active_domain,
+      active_hub_ids = active_hub_ids,
+      spoke_ids = spoke_ids,
+      spoke_id = spoke_id
+    )
     frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+    reserved_keys <- character()
     if (!isTRUE(frozen_map[[as.character(spoke_id)]])) {
       reserved_keys <- .adaptive_link_probe_reserved_keys(
         state,
@@ -1170,6 +1300,15 @@ generate_stage_candidates_from_state <- function(state,
         cand <- cand[!cand_pair_keys %in% reserved_keys, , drop = FALSE]
       }
     }
+    .adaptive_link_assert_non_anchor_candidate_domain(
+      candidates = cand,
+      stage_name = stage_name,
+      spoke_id = spoke_id,
+      hub_id = hub_id,
+      active_hub_ids = active_hub_ids,
+      reserved_keys = reserved_keys,
+      set_map = set_map
+    )
   }
   if (nrow(cand) < 1L) {
     return(.adaptive_set_candidate_filter_counts(

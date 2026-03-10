@@ -1739,6 +1739,71 @@ test_that("held-out probes do not activate hub items in the active linking domai
   expect_identical(sort(active$active_spoke), c("s21", "s22"))
 })
 
+test_that("non-anchor active-domain count guard aborts on impossible candidate counts", {
+  expect_error(
+    pairwiseLLM:::.adaptive_link_assert_active_domain_count(
+      stage_name = "long_link",
+      n_candidates_after_active_domain = 5L,
+      active_hub_ids = c("h1", "h2"),
+      spoke_ids = c("s21", "s22"),
+      spoke_id = 2L
+    ),
+    "n_candidates_after_active_domain=5 exceeds the maximum possible active-domain cross-set pairs=4"
+  )
+
+  expect_invisible(
+    pairwiseLLM:::.adaptive_link_assert_active_domain_count(
+      stage_name = "anchor_link",
+      n_candidates_after_active_domain = 99L,
+      active_hub_ids = character(),
+      spoke_ids = c("s21", "s22"),
+      spoke_id = 2L
+    )
+  )
+})
+
+test_that("non-anchor routing guard rejects inactive hub endpoints and reserved probe pairs", {
+  set_map <- c(h1 = 1L, h2 = 1L, s21 = 2L, s22 = 2L)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_assert_non_anchor_candidate_domain(
+      candidates = tibble::tibble(i = "h2", j = "s21"),
+      stage_name = "mid_link",
+      spoke_id = 2L,
+      hub_id = 1L,
+      active_hub_ids = "h1",
+      reserved_keys = character(),
+      set_map = set_map
+    ),
+    "generated candidates fell outside active_link_items\\(s\\)"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_assert_non_anchor_candidate_domain(
+      candidates = tibble::tibble(i = "h1", j = "s21"),
+      stage_name = "local_link",
+      spoke_id = 2L,
+      hub_id = 1L,
+      active_hub_ids = "h1",
+      reserved_keys = pairwiseLLM:::make_unordered_key("h1", "s21"),
+      set_map = set_map
+    ),
+    "reserved held-out probe pairs entered linking-active candidates"
+  )
+
+  expect_invisible(
+    pairwiseLLM:::.adaptive_link_assert_non_anchor_candidate_domain(
+      candidates = tibble::tibble(i = "h1", j = "s21"),
+      stage_name = "long_link",
+      spoke_id = 2L,
+      hub_id = 1L,
+      active_hub_ids = "h1",
+      reserved_keys = character(),
+      set_map = set_map
+    )
+  )
+})
+
 test_that("phase-B routing helpers enforce finite inputs and anchor fallback rules", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s1", "s2"),
