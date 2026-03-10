@@ -3151,7 +3151,14 @@
         ,
         drop = FALSE
       ]
-      bins_used <- as.integer(coverage_bins_map[[key]] %||% 3L)
+      bins_used <- suppressWarnings(as.integer(
+        coverage_bins_map[[key]] %||%
+          controller$spoke_quantile_coverage_bins %||%
+          3L
+      ))
+      if (length(bins_used) != 1L || is.na(bins_used) || !is.finite(bins_used) || bins_used < 1L) {
+        bins_used <- max(1L, as.integer(controller$spoke_quantile_coverage_bins %||% 3L))
+      }
       score_map <- .adaptive_link_phase_b_routing_scores(
         state = out,
         controller = controller,

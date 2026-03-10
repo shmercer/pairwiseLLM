@@ -1533,6 +1533,58 @@ test_that("scale_ready uses current-epoch active edges only", {
   expect_false(isTRUE(stats_epoch_edges$scale_ready))
 })
 
+test_that("scale_ready tolerates missing legacy coverage bin state on resume", {
+  state <- make_linking_refit_state(
+    list(
+      spoke_quantile_coverage_bins = 1L,
+      shift_scale_min_cross_set_edges = 2L,
+      shift_scale_min_distinct_spoke_items_per_bin = 1L
+    )
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
+  state$controller$link_epoch_start_step_by_spoke <- list(`2` = 1L)
+  state$controller$link_epoch_signature_by_spoke <- list(`2` = "shift_only|shift_only|soft_lock|NA|NA|NA|NA|NA")
+  state$controller$link_stage_coverage_bins_used <- list(`2` = NA_integer_)
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+      list(
+        delta_mean = 0,
+        delta_sd = 0.1,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        posterior_draws = list(),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = TRUE,
+          diagnostics_ess_pass = TRUE
+        ),
+        fit_contract = list()
+      )
+    },
+    .adaptive_link_reliability_transformed_active = function(...) 0.95,
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(lag_eligible = FALSE, rho_rank_lagged = NA_real_, rho_rank_lagged_pass = FALSE)
+    },
+    .adaptive_link_probe_edges_realized = function(...) tibble::tibble(),
+    .adaptive_link_probe_brier_for_fit = function(...) NA_real_,
+    .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) NA_real_,
+    .adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
+    .package = "pairwiseLLM"
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(stats$scale_ready))
+})
+
 test_that("epoch reset paths advance epoch start step and clear counters", {
   make_reset_state <- function() {
     state <- make_linking_refit_state()
