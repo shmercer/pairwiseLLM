@@ -695,7 +695,10 @@
 #' @noRd
 .adaptive_link_probe_register_commit <- function(state, step_row) {
   row <- tibble::as_tibble(step_row)
-  if (nrow(row) != 1L || !isTRUE(row$is_probe_step[[1L]] %||% FALSE)) {
+  run_mode <- as.character(row$run_mode[[1L]] %||% NA_character_)
+  if (nrow(row) != 1L ||
+    !isTRUE(row$is_probe_step[[1L]] %||% FALSE) ||
+    !identical(run_mode, "link_probe_holdout")) {
     return(state)
   }
   out <- state
