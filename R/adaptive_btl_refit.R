@@ -1447,6 +1447,19 @@
       diagnostics_ess_pass = NA
     ))
   }
+  if (dim(arr)[3L] < 1L) {
+    return(list(
+      param_names = as.character(param_names),
+      rhat = numeric(),
+      ess_bulk = numeric(),
+      divergences = NA_integer_,
+      max_rhat = NA_real_,
+      min_ess_bulk = NA_real_,
+      diagnostics_divergences_pass = NA,
+      diagnostics_rhat_pass = NA,
+      diagnostics_ess_pass = NA
+    ))
+  }
   n_par <- dim(arr)[3L]
   rhat <- rep(NA_real_, n_par)
   ess <- rep(NA_real_, n_par)
@@ -1467,12 +1480,32 @@
     param_names = as.character(param_names),
     rhat = as.double(rhat),
     ess_bulk = as.double(ess),
-    divergences = NA_integer_,
+    divergences = 0L,
     max_rhat = as.double(max_rhat),
     min_ess_bulk = as.double(min_ess),
-    diagnostics_divergences_pass = NA,
+    diagnostics_divergences_pass = TRUE,
     diagnostics_rhat_pass = if (is.finite(max_rhat)) max_rhat <= 1.05 else NA,
     diagnostics_ess_pass = if (is.finite(min_ess)) min_ess >= 100 else NA
+  )
+}
+
+.adaptive_link_mcmc_schedule <- function(attempt, n_param, joint_used = FALSE) {
+  attempt <- max(1L, as.integer(attempt %||% 1L))
+  n_param <- max(1L, as.integer(n_param %||% 1L))
+  joint_used <- isTRUE(joint_used)
+
+  base_warmup <- if (joint_used) 160L else 120L
+  base_samples <- if (joint_used) 240L else 180L
+  warmup_mult <- c(1, 2, 3, 4)
+  sample_mult <- c(1, 2, 3, 4)
+  idx <- min(attempt, length(warmup_mult))
+  warmup <- as.integer(base_warmup * warmup_mult[[idx]] + max(0L, n_param - 2L) * 4L)
+  samples <- as.integer(base_samples * sample_mult[[idx]] + max(0L, n_param - 2L) * 6L)
+
+  list(
+    n_chains = 4L,
+    n_warmup = max(120L, warmup),
+    n_samples = max(180L, samples)
   )
 }
 
@@ -1841,14 +1874,35 @@
     transform_mode = transform_mode,
     link_refit_mode = link_refit_mode
   )
-  mcmc <- .adaptive_link_mcmc_sample(
-    log_post_fn = log_post,
-    init = start,
-    seed = seed
-  )
-  draws <- as.matrix(mcmc$draws)
-  colnames(draws) <- param_names
-  diagnostics <- .adaptive_link_mcmc_diagnostics(mcmc$chain_draws, param_names = param_names)
+  mcmc <- NULL
+  draws <- NULL
+  diagnostics <- NULL
+  mcmc_schedule_used <- NULL
+  repair_attempts <- 0L
+  max_attempts <- 3L
+  for (attempt in seq_len(max_attempts)) {
+    repair_attempts <- as.integer(attempt)
+    mcmc_schedule_used <- .adaptive_link_mcmc_schedule(
+      attempt = attempt,
+      n_param = length(param_names),
+      joint_used = joint_used
+    )
+    mcmc <- .adaptive_link_mcmc_sample(
+      log_post_fn = log_post,
+      init = start,
+      seed = as.integer((seed + attempt * 1009L) %% .Machine$integer.max),
+      n_chains = mcmc_schedule_used$n_chains,
+      n_warmup = mcmc_schedule_used$n_warmup,
+      n_samples = mcmc_schedule_used$n_samples
+    )
+    draws <- as.matrix(mcmc$draws)
+    colnames(draws) <- param_names
+    diagnostics <- .adaptive_link_mcmc_diagnostics(mcmc$chain_draws, param_names = param_names)
+    if (isTRUE(diagnostics$diagnostics_rhat_pass) &&
+      isTRUE(diagnostics$diagnostics_ess_pass)) {
+      break
+    }
+  }
 
   delta_draws <- as.double(draws[, idx_delta])
   delta_mean <- as.double(mean(delta_draws))
@@ -1950,9 +2004,10 @@
     ),
     mcmc = list(
       chains = as.integer(dim(mcmc$chain_draws)[2L] %||% NA_integer_),
-      warmup = 120L,
+      warmup = as.integer(mcmc_schedule_used$n_warmup %||% NA_integer_),
       samples = as.integer(dim(mcmc$chain_draws)[1L] %||% NA_integer_),
-      mean_accept_rate = as.double(mcmc$accept_rate %||% NA_real_)
+      mean_accept_rate = as.double(mcmc$accept_rate %||% NA_real_),
+      repair_attempts = as.integer(repair_attempts)
     )
   )
 

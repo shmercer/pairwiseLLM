@@ -2747,6 +2747,7 @@ test_that("linking MCMC helper edge branches are deterministic and guarded", {
   ))
   expect_true(is.na(diag_flat$max_rhat))
   expect_true(is.na(diag_flat$min_ess_bulk))
+  expect_true(is.na(diag_flat$diagnostics_divergences_pass))
 
   expect_error(
     pairwiseLLM:::.adaptive_link_mcmc_sample(
@@ -2797,6 +2798,89 @@ test_that("linking MCMC sampling and refit seed are stable under fixed inputs", 
   expect_false(is.na(seed_large_a))
   expect_true(seed_large_a >= 1L)
   expect_identical(seed_large_a, seed_large_b)
+})
+
+test_that("linking MCMC diagnostics mark divergence gate as passed for valid local sampler draws", {
+  chain_draws <- array(
+    stats::rnorm(4L * 20L, sd = 0.1),
+    dim = c(20L, 4L, 1L),
+    dimnames = list(NULL, paste0("chain_", seq_len(4L)), "delta")
+  )
+  diag_ok <- pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
+    chain_draws = chain_draws,
+    param_names = "delta"
+  )
+
+  expect_identical(diag_ok$divergences, 0L)
+  expect_true(isTRUE(diag_ok$diagnostics_divergences_pass))
+})
+
+test_that("linking refit retries MCMC effort until diagnostics pass", {
+  state <- make_linking_refit_state(list(link_refit_mode = "shift_only"))
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  sampled <- list()
+  diag_calls <- 0L
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_mcmc_sample = function(log_post_fn,
+                                          init,
+                                          seed,
+                                          n_chains = 4L,
+                                          n_warmup = 120L,
+                                          n_samples = 180L) {
+      sampled[[length(sampled) + 1L]] <<- list(
+        n_chains = as.integer(n_chains),
+        n_warmup = as.integer(n_warmup),
+        n_samples = as.integer(n_samples)
+      )
+      chain_draws <- array(
+        0,
+        dim = c(as.integer(n_samples), as.integer(n_chains), length(init)),
+        dimnames = list(NULL, paste0("chain_", seq_len(as.integer(n_chains))), c("delta"))
+      )
+      list(
+        chain_draws = chain_draws,
+        draws = matrix(0, nrow = as.integer(n_samples) * as.integer(n_chains), ncol = length(init)),
+        accept_rate = 0.25
+      )
+    },
+    .adaptive_link_mcmc_diagnostics = function(chain_draws, param_names) {
+      diag_calls <<- diag_calls + 1L
+      if (diag_calls < 3L) {
+        return(list(
+          divergences = 0L,
+          max_rhat = 1.02,
+          min_ess_bulk = 80,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = FALSE,
+          diagnostics_ess_pass = FALSE
+        ))
+      }
+      list(
+        divergences = 0L,
+        max_rhat = 1.004,
+        min_ess_bulk = 180,
+        diagnostics_divergences_pass = TRUE,
+        diagnostics_rhat_pass = TRUE,
+        diagnostics_ess_pass = TRUE
+      )
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_length(sampled, 3L)
+  expect_true(sampled[[2L]]$n_samples > sampled[[1L]]$n_samples)
+  expect_true(sampled[[3L]]$n_samples > sampled[[2L]]$n_samples)
+  expect_identical(stats$link_diagnostics_divergences, 0L)
+  expect_true(isTRUE(stats$link_diagnostics_divergences_pass))
+  expect_true(isTRUE(stats$link_diagnostics_rhat_pass))
+  expect_true(isTRUE(stats$link_diagnostics_ess_pass))
+  expect_identical(stats$fit_contract$mcmc$repair_attempts, 3L)
 })
 
 test_that("committed result orientation remains Y=1 => A wins in refit inputs", {
