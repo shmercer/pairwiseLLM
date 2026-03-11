@@ -3038,10 +3038,9 @@
     }
     ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
     ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
-    probe_holdout_flag <- if ("is_holdout_probe_step" %in% names(cross_since)) {
-      cross_since$is_holdout_probe_step %in% TRUE
-    } else {
-      as.character(cross_since$run_mode) == "link_probe_holdout"
+    probe_holdout_flag <- as.character(cross_since$run_mode) == "link_probe_holdout"
+    if ("is_holdout_probe_step" %in% names(cross_since)) {
+      probe_holdout_flag <- probe_holdout_flag | cross_since$is_holdout_probe_step %in% TRUE
     }
     cross_since_probe <- cross_since[
       probe_holdout_flag,
@@ -3866,10 +3865,9 @@
     }
 
     n_pairs_done <- as.integer(nrow(cumulative))
-    since_last_probe_flag <- if ("is_holdout_probe_step" %in% names(since_last)) {
-      since_last$is_holdout_probe_step %in% TRUE
-    } else {
-      as.character(since_last$run_mode) == "link_probe_holdout"
+    since_last_probe_flag <- as.character(since_last$run_mode) == "link_probe_holdout"
+    if ("is_holdout_probe_step" %in% names(since_last)) {
+      since_last_probe_flag <- since_last_probe_flag | since_last$is_holdout_probe_step %in% TRUE
     }
     since_last_probe <- since_last[
       since_last_probe_flag,
