@@ -26,7 +26,9 @@ test_that("canonical log schemas follow the expected column order", {
   )
   expected_round <- c(
     "refit_id", "round_id_at_refit", "step_id_at_refit", "timestamp", "model_variant", "n_items",
-    "total_pairs_done", "new_pairs_since_last_refit", "n_unique_pairs_seen",
+    "total_pairs_done", "new_pairs_since_last_refit",
+    "new_active_pairs_since_last_refit", "new_probe_pairs_since_last_refit",
+    "new_total_cross_pairs_since_last_refit", "n_unique_pairs_seen",
     "proposed_pairs_mode", "starve_rate_since_last_refit", "fallback_rate_since_last_refit",
     "fallback_used_mode", "starvation_reason_mode",
     "global_identified", "global_identified_reliability_min", "global_identified_rank_corr_min",
@@ -125,8 +127,10 @@ test_that("canonical log schemas follow the expected column order", {
     "it_logdet_start", "it_logdet_end", "it_trace_end", "it_n_pairs_accumulated",
     "coverage_bins_used",
     "coverage_source",
-    "probe_panel_id", "N_spoke_phase_b_start", "probe_edges_planned", "probe_edges_realized",
-    "probe_panel_shortfall",
+    "probe_panel_id", "N_spoke_phase_b_start", "probe_edges_planned",
+    "probe_edges_realized_before_refit", "probe_edges_realized",
+    "probe_edges_realized_delta_since_last_refit", "probe_panel_shortfall",
+    "probe_shortfall_reason",
     "probe_acceleration_used", "probe_effort_base_cap", "probe_effort_effective_cap",
     "probe_remaining_to_min_start", "probe_panel_reallocation_used", "probe_pred_cache_used",
     "blocker_probe_panel_shortfall_weight", "blocker_probe_brier_weight",
@@ -139,7 +143,8 @@ test_that("canonical log schemas follow the expected column order", {
     "probe_brier_delta_min_used", "logalpha_sd_guardrail_used",
     "link_transform_escalation_refits_required_used",
     "probe_edges_count_toward_active_constraints_used",
-    "lag_domain_key", "lag_domain_reset", "lag_domain_reset_reason"
+    "lag_domain_key", "lag_domain_reset", "lag_domain_reset_reason",
+    "resumed_from_session"
   )
 
   expect_equal(names(pairwiseLLM:::schema_step_log), expected_step)
@@ -223,6 +228,10 @@ test_that("public log accessors fail fast on invalid linking categorical values"
       n_cross_edges_active_since_last_refit = 0L,
       n_cross_edges_probe_since_last_refit = 1L,
       n_cross_edges_total_since_last_refit = 1L,
+      probe_edges_realized_before_refit = 0L,
+      probe_edges_realized_delta_since_last_refit = 1L,
+      probe_shortfall_reason = "insufficient_realization",
+      resumed_from_session = FALSE,
       coverage_bins_used = 3L
     )
   )

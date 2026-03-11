@@ -235,6 +235,22 @@ read_log <- function(path) {
   out
 }
 
+.adaptive_align_round_log_probe_audit_columns <- function(round_log) {
+  out <- tibble::as_tibble(round_log)
+  n <- nrow(out)
+  defaults <- list(
+    new_active_pairs_since_last_refit = rep(NA_integer_, n),
+    new_probe_pairs_since_last_refit = rep(NA_integer_, n),
+    new_total_cross_pairs_since_last_refit = rep(NA_integer_, n)
+  )
+  for (col in names(defaults)) {
+    if (!col %in% names(out)) {
+      out[[col]] <- defaults[[col]]
+    }
+  }
+  out[, names(schema_round_log), drop = FALSE]
+}
+
 .adaptive_item_log_current_schema <- function() {
   cols <- .adaptive_item_log_columns()
   int_cols <- c(
@@ -347,7 +363,8 @@ read_log <- function(path) {
 }
 
 .adaptive_is_resumed_session <- function(state) {
-  isTRUE((state$meta %||% list())$resumed_from_session)
+  isTRUE((state$meta %||% list())$resumed_from_session) ||
+    isTRUE((state$config %||% list())$resumed_from_session)
 }
 
 .adaptive_link_probe_resume_spoke_ids <- function(state) {
@@ -625,6 +642,7 @@ validate_session_dir <- function(session_dir) {
   )
   round_log <- read_log(paths$round_log)
   round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
+  round_log <- .adaptive_align_round_log_probe_audit_columns(round_log)
   link_stage_log <- if (file.exists(paths$link_stage_log)) {
     read_log(paths$link_stage_log)
   } else {
@@ -787,6 +805,7 @@ load_adaptive_session <- function(session_dir) {
   )
   round_log <- read_log(paths$round_log)
   round_log <- .adaptive_align_round_log_post_stop_columns(round_log)
+  round_log <- .adaptive_align_round_log_probe_audit_columns(round_log)
   link_stage_log <- if (file.exists(paths$link_stage_log)) {
     read_log(paths$link_stage_log)
   } else {
@@ -854,6 +873,7 @@ load_adaptive_session <- function(session_dir) {
   }
 
   state$config$session_dir <- session_dir
+  state$config$resumed_from_session <- TRUE
   state$meta$resumed_from_session <- TRUE
   state <- .adaptive_phase_a_prepare(state)
   state <- .adaptive_validate_probe_state_for_resume(state)

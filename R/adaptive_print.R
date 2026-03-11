@@ -1213,6 +1213,30 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     row$total_pairs_done,
     "  new_pairs_since_last_refit=",
     row$new_pairs_since_last_refit,
+    if ("new_active_pairs_since_last_refit" %in% names(row)) {
+      paste0(
+        "  new_active_pairs_since_last_refit=",
+        row$new_active_pairs_since_last_refit
+      )
+    } else {
+      ""
+    },
+    if ("new_probe_pairs_since_last_refit" %in% names(row)) {
+      paste0(
+        "  new_probe_pairs_since_last_refit=",
+        row$new_probe_pairs_since_last_refit
+      )
+    } else {
+      ""
+    },
+    if ("new_total_cross_pairs_since_last_refit" %in% names(row)) {
+      paste0(
+        "  new_total_cross_pairs_since_last_refit=",
+        row$new_total_cross_pairs_since_last_refit
+      )
+    } else {
+      ""
+    },
     "  n_unique_pairs_seen=",
     row$n_unique_pairs_seen
   )
@@ -1656,8 +1680,18 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           link_col_value(link_row, "probe_effort_base_cap", default = NA_integer_),
           "->",
           link_col_value(link_row, "probe_effort_effective_cap", default = NA_integer_),
+          "  probe_edges_realized_before_refit=",
+          link_col_value(link_row, "probe_edges_realized_before_refit", default = NA_integer_),
+          "  probe_edges_realized_delta_since_last_refit=",
+          link_col_value(link_row, "probe_edges_realized_delta_since_last_refit", default = NA_integer_),
           "  probe_remaining_to_min_start=",
           link_col_value(link_row, "probe_remaining_to_min_start", default = NA_integer_)
+        ),
+        paste0(
+          "    probe_shortfall_reason=",
+          link_col_value(link_row, "probe_shortfall_reason", default = NA_character_),
+          "  resumed_from_session=",
+          fmt_mark(link_col_value(link_row, "resumed_from_session", default = NA))
         ),
         paste0(
           "    feasibility_capacity[a,l,m,loc]=",

@@ -115,6 +115,7 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     save_adaptive_session(first, session_dir = session_dir, overwrite = TRUE)
     resumed <- adaptive_rank_resume(session_dir = session_dir)
     prev <- resumed$step_log
+    prev_link_rows <- nrow(resumed$link_stage_log %||% tibble::tibble())
 
     second <- adaptive_rank_run_live(
       state = resumed,
@@ -132,6 +133,27 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     if (isTRUE(sc$linking)) {
       expect_true(any(second$step_log$is_cross_set %in% TRUE))
       expect_true(nrow(second$link_stage_log) >= 1L)
+      appended_link_rows <- second$link_stage_log[
+        seq.int(from = prev_link_rows + 1L, to = nrow(second$link_stage_log)),
+        ,
+        drop = FALSE
+      ]
+      appended_link_rows <- appended_link_rows[!is.na(appended_link_rows$refit_id), , drop = FALSE]
+      expect_true(nrow(appended_link_rows) >= 1L)
+      complete_probe_rows <- appended_link_rows[
+        !is.na(appended_link_rows$probe_edges_realized_before_refit) &
+          !is.na(appended_link_rows$probe_edges_realized_delta_since_last_refit) &
+          !is.na(appended_link_rows$probe_edges_realized),
+        ,
+        drop = FALSE
+      ]
+      if (nrow(complete_probe_rows) >= 1L) {
+        expect_true(all(
+          as.integer(complete_probe_rows$probe_edges_realized_before_refit) +
+            as.integer(complete_probe_rows$probe_edges_realized_delta_since_last_refit) ==
+            as.integer(complete_probe_rows$probe_edges_realized)
+        ))
+      }
     }
   }
 })

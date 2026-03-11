@@ -212,6 +212,39 @@ test_that("load_adaptive_session backfills newly added step_log fields for resum
   expect_true(all(vapply(drop_cols, function(col) all(is.na(loaded$step_log[[col]])), logical(1L))))
 })
 
+test_that("load_adaptive_session backfills newly added round_log fields for resume", {
+  state <- pairwiseLLM::adaptive_rank_start(make_test_items(4), seed = 3L)
+  judge <- make_deterministic_judge("i_wins")
+  fit_stub <- make_deterministic_fit_fn(state$item_ids)
+
+  out <- pairwiseLLM::adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 4L,
+    fit_fn = fit_stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+    progress = "none"
+  )
+
+  session_dir <- withr::local_tempdir()
+  pairwiseLLM::save_adaptive_session(out, session_dir, overwrite = TRUE)
+
+  round_path <- file.path(session_dir, "round_log.rds")
+  round_log <- readRDS(round_path)
+  drop_cols <- c(
+    "new_active_pairs_since_last_refit",
+    "new_probe_pairs_since_last_refit",
+    "new_total_cross_pairs_since_last_refit"
+  )
+  round_log <- round_log[, setdiff(names(round_log), drop_cols), drop = FALSE]
+  saveRDS(round_log, round_path)
+
+  expect_no_error(pairwiseLLM::validate_session_dir(session_dir))
+  loaded <- pairwiseLLM::load_adaptive_session(session_dir)
+  expect_true(all(drop_cols %in% names(loaded$round_log)))
+  expect_true(all(vapply(drop_cols, function(col) all(is.na(loaded$round_log[[col]])), logical(1L))))
+})
+
 test_that("session persistence round-trips D-opt information matrix state", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),

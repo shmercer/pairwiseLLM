@@ -2413,6 +2413,9 @@ adaptive_rank_run_live <- function(state,
   if (!is.null(persist_item_log)) {
     state$config$persist_item_log <- isTRUE(persist_item_log)
   }
+  resumed_from_session <- .adaptive_is_resumed_session(state)
+  state$config$resumed_from_session <- isTRUE(resumed_from_session)
+  state$meta$resumed_from_session <- isTRUE(resumed_from_session)
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state <- .adaptive_stop_boundary_bootstrap(state)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))

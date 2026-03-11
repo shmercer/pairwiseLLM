@@ -92,6 +92,9 @@ schema_round_log <- c(
   n_items = "integer",
   total_pairs_done = "integer",
   new_pairs_since_last_refit = "integer",
+  new_active_pairs_since_last_refit = "integer",
+  new_probe_pairs_since_last_refit = "integer",
+  new_total_cross_pairs_since_last_refit = "integer",
   n_unique_pairs_seen = "integer",
   proposed_pairs_mode = "double",
   starve_rate_since_last_refit = "double",
@@ -336,8 +339,11 @@ schema_link_stage_log <- c(
   probe_panel_id = "character",
   N_spoke_phase_b_start = "integer",
   probe_edges_planned = "integer",
+  probe_edges_realized_before_refit = "integer",
   probe_edges_realized = "integer",
+  probe_edges_realized_delta_since_last_refit = "integer",
   probe_panel_shortfall = "integer",
+  probe_shortfall_reason = "character",
   probe_acceleration_used = "logical",
   probe_effort_base_cap = "integer",
   probe_effort_effective_cap = "integer",
@@ -365,7 +371,8 @@ schema_link_stage_log <- c(
   probe_edges_count_toward_active_constraints_used = "logical",
   lag_domain_key = "character",
   lag_domain_reset = "logical",
-  lag_domain_reset_reason = "character"
+  lag_domain_reset_reason = "character",
+  resumed_from_session = "logical"
 )
 
 schema_item_step_log <- c(

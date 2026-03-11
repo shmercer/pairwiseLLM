@@ -446,6 +446,88 @@ test_that("linking starvation paths in tiny domains are logged with fallback met
   }
 })
 
+test_that("round_log and link_stage_log canonically reconcile probe and active work", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_three_set()
+  state <- adaptive_rank_start(items, seed = 5L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.0, h3 = 0.7,
+    s21 = -0.2, s22 = 0.3, s23 = 1.1,
+    s31 = -0.4, s32 = 0.2, s33 = 0.9
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 24L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts
+    ),
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none"
+  )
+
+  round_log <- out$round_log
+  link_stage_log <- out$link_stage_log
+  expect_true(all(c(
+    "new_active_pairs_since_last_refit",
+    "new_probe_pairs_since_last_refit",
+    "new_total_cross_pairs_since_last_refit"
+  ) %in% names(round_log)))
+  expect_true(all(c(
+    "probe_edges_realized_before_refit",
+    "probe_edges_realized_delta_since_last_refit",
+    "probe_shortfall_reason"
+  ) %in% names(link_stage_log)))
+
+  phase_b_rounds <- round_log[!is.na(round_log$new_total_cross_pairs_since_last_refit), , drop = FALSE]
+  expect_true(nrow(phase_b_rounds) >= 1L)
+
+  for (idx in seq_len(nrow(phase_b_rounds))) {
+    refit_id <- as.integer(phase_b_rounds$refit_id[[idx]])
+    link_rows <- link_stage_log[as.integer(link_stage_log$refit_id) == refit_id, , drop = FALSE]
+    expect_true(nrow(link_rows) >= 1L)
+    expect_identical(
+      as.integer(phase_b_rounds$new_active_pairs_since_last_refit[[idx]]),
+      as.integer(sum(link_rows$n_cross_edges_active_since_last_refit, na.rm = TRUE))
+    )
+    expect_identical(
+      as.integer(phase_b_rounds$new_probe_pairs_since_last_refit[[idx]]),
+      as.integer(sum(link_rows$n_cross_edges_probe_since_last_refit, na.rm = TRUE))
+    )
+    expect_identical(
+      as.integer(phase_b_rounds$new_total_cross_pairs_since_last_refit[[idx]]),
+      as.integer(sum(link_rows$n_cross_edges_total_since_last_refit, na.rm = TRUE))
+    )
+  }
+
+  expect_true(all(
+    as.integer(link_stage_log$probe_edges_realized_before_refit) +
+      as.integer(link_stage_log$probe_edges_realized_delta_since_last_refit) ==
+      as.integer(link_stage_log$probe_edges_realized)
+  ))
+  expect_true(all(
+    ifelse(
+      as.integer(link_stage_log$probe_panel_shortfall) > 0L &
+        !is.na(as.character(link_stage_log$lag_domain_reset_reason)) &
+        as.character(link_stage_log$lag_domain_reset_reason) == "probe_panel_rebuild",
+      as.character(link_stage_log$probe_shortfall_reason) == "probe_panel_rebuild",
+      TRUE
+    )
+  ))
+})
+
 test_that("judge parameter mode mismatch rejects incompatible imported Phase A artifacts", {
   withr::local_seed(20260213)
 

@@ -2544,7 +2544,11 @@
     blocker_theta_global_rmse_weight = rep(NA_real_, nrow(rows)),
     blocker_delta_spoke_sd_weight = rep(NA_real_, nrow(rows)),
     blocker_reweighting_rule = rep(NA_character_, nrow(rows)),
-    lag_domain_reset_reason = rep(NA_character_, nrow(rows))
+    probe_edges_realized_before_refit = rep(NA_integer_, nrow(rows)),
+    probe_edges_realized_delta_since_last_refit = rep(NA_integer_, nrow(rows)),
+    probe_shortfall_reason = rep(NA_character_, nrow(rows)),
+    lag_domain_reset_reason = rep(NA_character_, nrow(rows)),
+    resumed_from_session = rep(NA, nrow(rows))
   )
   for (col in names(defaults)) {
     if (!col %in% names(rows)) {
@@ -4119,6 +4123,9 @@
       drop = FALSE
     ]
     canonical_probe_edges_realized <- as.integer(nrow(realized_probe_log))
+    probe_edges_realized_before_refit <- as.integer(
+      max(0L, canonical_probe_edges_realized - nrow(realized_probe_log_current_window))
+    )
     prior_probe_edges_realized_max <- .adaptive_link_probe_prior_realized_max(
       link_stage_log = state$link_stage_log,
       spoke_id = as.integer(spoke_id),
@@ -4153,9 +4160,19 @@
     }
     n_pairs_since_probe <- as.integer(nrow(realized_probe_log_current_window))
     probe_edges_realized <- canonical_probe_edges_realized
+    probe_edges_realized_delta_since_last_refit <- as.integer(n_pairs_since_probe)
     probe_panel_shortfall <- as.integer(
       max(0L, probe_edges_planned - probe_edges_realized)
     )
+    probe_shortfall_reason <- if (probe_panel_shortfall < 1L) {
+      "none"
+    } else if (identical(as.character(stats_row$lag_domain_reset_reason %||% NA_character_), "probe_panel_rebuild")) {
+      "probe_panel_rebuild"
+    } else if (!is.na(as.character(stats_row$lag_domain_reset_reason %||% NA_character_))) {
+      "epoch_reset"
+    } else {
+      "insufficient_realization"
+    }
     probe_effort_plan <- .adaptive_link_probe_effort_plan(
       state = state,
       controller = controller,
@@ -4397,8 +4414,11 @@
       probe_panel_id = as.character(probe_panel_id),
       N_spoke_phase_b_start = as.integer(sum(as.integer(state$items$set_id) == as.integer(spoke_id), na.rm = TRUE)),
       probe_edges_planned = as.integer(probe_edges_planned),
+      probe_edges_realized_before_refit = as.integer(probe_edges_realized_before_refit),
       probe_edges_realized = as.integer(probe_edges_realized),
+      probe_edges_realized_delta_since_last_refit = as.integer(probe_edges_realized_delta_since_last_refit),
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
+      probe_shortfall_reason = as.character(probe_shortfall_reason),
       probe_acceleration_used = as.logical(probe_effort_plan$acceleration_used %||% FALSE),
       probe_effort_base_cap = as.integer(probe_effort_plan$base_cap %||% probe_effort_base_cap),
       probe_effort_effective_cap = as.integer(
@@ -4456,7 +4476,8 @@
       ),
       lag_domain_key = as.character(stats_row$lag_domain_key %||% NA_character_),
       lag_domain_reset = as.logical(stats_row$lag_domain_reset %||% NA),
-      lag_domain_reset_reason = as.character(stats_row$lag_domain_reset_reason %||% NA_character_)
+      lag_domain_reset_reason = as.character(stats_row$lag_domain_reset_reason %||% NA_character_),
+      resumed_from_session = as.logical(.adaptive_is_resumed_session(state))
     )
   }
 
@@ -4487,9 +4508,12 @@
     "stage_shortfall_anchor_link", "stage_shortfall_long_link", "stage_shortfall_mid_link",
     "stage_shortfall_local_link", "stage_reallocation_used", "stage_reallocation_rule_used",
     "stage_budget_unfilled",
+    "probe_edges_realized_before_refit", "probe_edges_realized_delta_since_last_refit",
+    "probe_shortfall_reason",
     "blocker_probe_panel_shortfall_weight", "blocker_probe_brier_weight",
     "blocker_probe_pred_rmse_weight", "blocker_theta_global_rmse_weight",
-    "blocker_delta_spoke_sd_weight", "blocker_reweighting_rule"
+    "blocker_delta_spoke_sd_weight", "blocker_reweighting_rule",
+    "resumed_from_session"
   )
   missing <- setdiff(required, names(rows))
   if (length(missing) > 0L) {
@@ -4589,6 +4613,50 @@
   step_log <- tibble::as_tibble(state$step_log)
   step_subset <- step_log[step_log$step_id > last_step &
     step_log$step_id <= step_id_at_refit, , drop = FALSE]
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  phase_b_linking <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
+  if (!"pair_id" %in% names(step_subset)) {
+    step_subset$pair_id <- NA_integer_
+  }
+  if (!"is_cross_set" %in% names(step_subset)) {
+    step_subset$is_cross_set <- FALSE
+  }
+  if (!"run_mode" %in% names(step_subset)) {
+    step_subset$run_mode <- NA_character_
+  }
+  if (!"is_probe_step" %in% names(step_subset)) {
+    step_subset$is_probe_step <- FALSE
+  }
+  committed_subset <- step_subset[!is.na(step_subset$pair_id), , drop = FALSE]
+  cross_subset <- committed_subset[committed_subset$is_cross_set %in% TRUE, , drop = FALSE]
+  probe_subset <- cross_subset[
+    as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
+      cross_subset$is_probe_step %in% TRUE,
+    ,
+    drop = FALSE
+  ]
+  active_subset <- cross_subset[
+    !(as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
+      cross_subset$is_probe_step %in% TRUE),
+    ,
+    drop = FALSE
+  ]
+  new_active_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
+    as.integer(nrow(active_subset))
+  } else {
+    NA_integer_
+  }
+  new_probe_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
+    as.integer(nrow(probe_subset))
+  } else {
+    NA_integer_
+  }
+  new_total_cross_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
+    as.integer(nrow(cross_subset))
+  } else {
+    NA_integer_
+  }
 
   proposed_pairs <- step_subset$n_candidates_scored
   proposed_pairs_mode <- if (length(proposed_pairs) > 0L && any(!is.na(proposed_pairs))) {
@@ -4804,7 +4872,6 @@
   } else {
     as.integer(round_id_current)
   }
-  controller <- .adaptive_controller_resolve(state)
   max_pairs_after_stop <- as.integer(controller$max_pairs_after_stop %||% 0L)
   if (!is.finite(max_pairs_after_stop) || is.na(max_pairs_after_stop) || max_pairs_after_stop < 0L) {
     max_pairs_after_stop <- 0L
@@ -4830,6 +4897,9 @@
     n_items = as.integer(state$n_items),
     total_pairs_done = as.integer(total_pairs_done),
     new_pairs_since_last_refit = as.integer(new_pairs_since_last_refit),
+    new_active_pairs_since_last_refit = as.integer(new_active_pairs_since_last_refit),
+    new_probe_pairs_since_last_refit = as.integer(new_probe_pairs_since_last_refit),
+    new_total_cross_pairs_since_last_refit = as.integer(new_total_cross_pairs_since_last_refit),
     n_unique_pairs_seen = as.integer(n_unique_pairs_seen),
     proposed_pairs_mode = as.double(proposed_pairs_mode),
     starve_rate_since_last_refit = as.double(starve_rate),
