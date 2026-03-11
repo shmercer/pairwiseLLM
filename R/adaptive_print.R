@@ -1470,8 +1470,20 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
       link_block <- c(link_block, paste0("  link_epoch_id=", paste(epoch_ids, collapse = ",")))
     }
 
-    fit_methods <- .adaptive_print_compact_values(link_stage_rows$link_fit_method)
-    uncertainty <- .adaptive_print_compact_values(link_stage_rows$link_uncertainty_approximation)
+    fit_methods <- .adaptive_print_compact_values(
+      if ("link_fit_method" %in% names(link_stage_rows)) {
+        link_stage_rows$link_fit_method
+      } else {
+        character()
+      }
+    )
+    uncertainty <- .adaptive_print_compact_values(
+      if ("link_uncertainty_approximation" %in% names(link_stage_rows)) {
+        link_stage_rows$link_uncertainty_approximation
+      } else {
+        character()
+      }
+    )
     if (!is.na(fit_methods) && nzchar(fit_methods)) {
       link_block <- c(link_block, paste0("  authoritative_link_fit_method=", fit_methods))
     }
@@ -1685,7 +1697,7 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
         ),
         paste0(
           "    lag_domain_reset=",
-          fmt_mark(link_row$lag_domain_reset[[1L]]),
+          fmt_mark(link_col_value(link_row, "lag_domain_reset", default = NA)),
           "  lag_domain_reset_reason=",
           link_col_value(link_row, "lag_domain_reset_reason", default = NA_character_)
         ),
