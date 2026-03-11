@@ -383,6 +383,19 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   stats_con <- out_con$controller$link_refit_stats_by_spoke
   expect_true(length(stats_con) >= 2L)
   expect_true(all(vapply(stats_con, function(x) !is.null(x$concurrent_target_pairs), logical(1L))))
+  expect_true(all(c(
+    "probe_acceleration_used",
+    "probe_effort_base_cap",
+    "probe_effort_effective_cap",
+    "probe_remaining_to_min_start"
+  ) %in% names(out_con$link_stage_log)))
+  active_budget_rows <- out_con$link_stage_log[
+    out_con$link_stage_log$B_spoke_refit_budget > 0L,
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(active_budget_rows) >= 1L)
+  expect_true(all(as.integer(active_budget_rows$n_cross_edges_active_since_last_refit) >= 1L))
 
   committed_con <- out_con$step_log[
     !is.na(out_con$step_log$pair_id) & out_con$step_log$is_cross_set %in% TRUE,

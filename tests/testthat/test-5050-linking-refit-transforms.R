@@ -1081,6 +1081,8 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
       link_epoch_id = 4L,
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
       probe_panel_shortfall = 15L,
       probe_panel_id = "panel_eval",
       probe_edges_planned = 30L,
@@ -1170,6 +1172,10 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   expect_identical(as.character(row$probe_panel_id[[1L]]), "panel_eval")
   expect_identical(as.integer(row$probe_edges_planned[[1L]]), 30L)
   expect_identical(as.integer(row$probe_edges_realized[[1L]]), 15L)
+  expect_false(isTRUE(row$probe_acceleration_used[[1L]]))
+  expect_identical(as.integer(row$probe_effort_base_cap[[1L]]), 2L)
+  expect_identical(as.integer(row$probe_effort_effective_cap[[1L]]), 2L)
+  expect_identical(as.integer(row$probe_remaining_to_min_start[[1L]]), 15L)
   expect_identical(as.character(row$stop_blocker_codes[[1L]]), paste(
     c(
       "diagnostics_failed",

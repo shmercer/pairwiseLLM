@@ -479,6 +479,88 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_active_progress_guard <- function(state,
+                                                       controller,
+                                                       eligible_spoke_ids = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+  if (!isTRUE(concurrent_mode)) {
+    return(list(
+      block_probes = FALSE,
+      pending_spokes = integer(),
+      budgeted_spokes = integer()
+    ))
+  }
+
+  refit_id <- .adaptive_link_refit_window_id(state)
+  effective_spokes <- .adaptive_link_effective_active_spokes(
+    state = state,
+    controller = controller,
+    refit_id = refit_id,
+    exclude_exhausted = TRUE
+  )
+  if (!is.null(eligible_spoke_ids)) {
+    effective_spokes <- intersect(as.integer(effective_spokes), as.integer(eligible_spoke_ids))
+  }
+  effective_spokes <- sort(unique(as.integer(effective_spokes[!is.na(effective_spokes)])))
+  if (length(effective_spokes) < 1L) {
+    return(list(
+      block_probes = FALSE,
+      pending_spokes = integer(),
+      budgeted_spokes = integer()
+    ))
+  }
+
+  cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+  cached_budget_map <- controller$link_budget_map %||% list()
+  budget_map <- if (identical(cached_refit_id, refit_id) && length(cached_budget_map) > 0L) {
+    cached_budget_map
+  } else {
+    .adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = effective_spokes
+    )
+  }
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+
+  budgeted_spokes <- integer()
+  pending_spokes <- integer()
+  for (spoke_id in effective_spokes) {
+    key <- as.character(spoke_id)
+    if (isTRUE(frozen_map[[key]])) {
+      next
+    }
+    budget <- as.integer(budget_map[[key]]$B_spoke_refit_budget %||% 0L)
+    if (!is.finite(budget) || budget < 1L) {
+      next
+    }
+    budgeted_spokes <- c(budgeted_spokes, as.integer(spoke_id))
+    cross_since <- .adaptive_link_cross_edges(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      last_refit_step = last_refit_step
+    )
+    active_edges_since_refit <- if (nrow(cross_since) > 0L) {
+      as.integer(sum(!as.logical(cross_since$is_probe_step %||% FALSE), na.rm = TRUE))
+    } else {
+      0L
+    }
+    if (active_edges_since_refit < 1L) {
+      pending_spokes <- c(pending_spokes, as.integer(spoke_id))
+    }
+  }
+
+  list(
+    block_probes = length(pending_spokes) > 0L,
+    pending_spokes = as.integer(sort(unique(pending_spokes))),
+    budgeted_spokes = as.integer(sort(unique(budgeted_spokes)))
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_next_holdout_spoke <- function(state,
                                                     controller,
                                                     eligible_spoke_ids = NULL) {
@@ -507,6 +589,14 @@
   }
   holdout_total_since_refit <- .adaptive_link_probe_holdout_total_since_last_refit(state)
   if (holdout_total_since_refit >= global_probe_cap) {
+    return(NA_integer_)
+  }
+  fairness_guard <- .adaptive_link_probe_active_progress_guard(
+    state = state,
+    controller = controller,
+    eligible_spoke_ids = spoke_ids
+  )
+  if (isTRUE(fairness_guard$block_probes)) {
     return(NA_integer_)
   }
   frozen_map <- controller$link_transform_frozen_by_spoke %||% list()

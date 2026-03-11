@@ -4156,6 +4156,11 @@
     probe_panel_shortfall <- as.integer(
       max(0L, probe_edges_planned - probe_edges_realized)
     )
+    probe_effort_plan <- .adaptive_link_probe_effort_plan(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id)
+    )
     probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
     probe_panel_reallocation_used <- as.logical(n_pairs_since_probe > probe_effort_base_cap)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
@@ -4394,6 +4399,14 @@
       probe_edges_planned = as.integer(probe_edges_planned),
       probe_edges_realized = as.integer(probe_edges_realized),
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
+      probe_acceleration_used = as.logical(probe_effort_plan$acceleration_used %||% FALSE),
+      probe_effort_base_cap = as.integer(probe_effort_plan$base_cap %||% probe_effort_base_cap),
+      probe_effort_effective_cap = as.integer(
+        probe_effort_plan$effective_cap %||% probe_effort_base_cap
+      ),
+      probe_remaining_to_min_start = as.integer(
+        probe_effort_plan$remaining_to_min_start %||% NA_integer_
+      ),
       probe_panel_reallocation_used = as.logical(probe_panel_reallocation_used),
       probe_pred_cache_used = as.logical(probe_pred_cache_used),
       blocker_probe_panel_shortfall_weight = as.double(

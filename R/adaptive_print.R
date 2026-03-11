@@ -1650,6 +1650,16 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           link_col_value(link_row, "alternative_uncertainty_approximation", default = NA_character_)
         ),
         paste0(
+          "    probe_acceleration_used=",
+          fmt_mark(link_col_value(link_row, "probe_acceleration_used", default = NA)),
+          "  probe_cap=",
+          link_col_value(link_row, "probe_effort_base_cap", default = NA_integer_),
+          "->",
+          link_col_value(link_row, "probe_effort_effective_cap", default = NA_integer_),
+          "  probe_remaining_to_min_start=",
+          link_col_value(link_row, "probe_remaining_to_min_start", default = NA_integer_)
+        ),
+        paste0(
           "    feasibility_capacity[a,l,m,loc]=",
           paste(
             c(
