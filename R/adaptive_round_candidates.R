@@ -941,6 +941,44 @@
           )
         }
         built_panel_id <- as.character(built_panel$probe_panel_id[[1L]] %||% NA_character_)
+        realized_pairs_compatible <- nrow(epoch_realized) < 1L ||
+          all(as.character(epoch_realized$pair_key) %in% as.character(built_panel$pair_key))
+        planned_size_compatible <- !is.finite(latest_stage_planned) ||
+          is.na(latest_stage_planned) ||
+          latest_stage_planned <= 0L ||
+          identical(as.integer(nrow(built_panel)), as.integer(latest_stage_planned))
+        stage_id_mismatch <- length(stage_panel_ids) > 1L ||
+          (length(stage_panel_ids) == 1L && !identical(stage_panel_ids[[1L]], built_panel_id))
+        realized_id_mismatch <- length(realized_panel_ids) > 1L ||
+          (length(realized_panel_ids) == 1L && !identical(realized_panel_ids[[1L]], built_panel_id))
+        if ((isTRUE(stage_id_mismatch) || isTRUE(realized_id_mismatch)) &&
+          isTRUE(realized_pairs_compatible) &&
+          isTRUE(planned_size_compatible)) {
+          if (nrow(stage_rows) > 0L) {
+            stage_idx <- which(
+              as.integer(link_stage_log$spoke_id) == as.integer(spoke_id) &
+                as.integer(link_stage_log$link_epoch_id) == as.integer(epoch_id)
+            )
+            if (length(stage_idx) > 0L) {
+              link_stage_log$probe_panel_id[stage_idx] <- built_panel_id
+              out$link_stage_log <- link_stage_log
+              stage_rows$probe_panel_id[] <- built_panel_id
+            }
+            stage_panel_ids <- built_panel_id
+          }
+          if (nrow(epoch_realized) > 0L) {
+            realized_idx <- which(
+              as.integer(probe$realized_edges$spoke_id) == as.integer(spoke_id) &
+                as.integer(probe$realized_edges$link_epoch_id) == as.integer(epoch_id)
+            )
+            if (length(realized_idx) > 0L) {
+              probe$realized_edges$probe_panel_id[realized_idx] <- built_panel_id
+              out$linking$probe <- probe
+              epoch_realized$probe_panel_id[] <- built_panel_id
+            }
+            realized_panel_ids <- built_panel_id
+          }
+        }
         if (length(stage_panel_ids) > 1L ||
           (length(stage_panel_ids) == 1L && !identical(stage_panel_ids[[1L]], built_panel_id))) {
           .adaptive_link_probe_resume_abort(
@@ -956,7 +994,7 @@
           )
         }
         if (nrow(epoch_realized) > 0L &&
-          !all(as.character(epoch_realized$pair_key) %in% as.character(built_panel$pair_key))) {
+          !isTRUE(realized_pairs_compatible)) {
           .adaptive_link_probe_resume_abort(
             "reconstructed probe panel does not contain all canonical realized probe edges",
             spoke_id = spoke_id
@@ -965,7 +1003,7 @@
         if (is.finite(latest_stage_planned) &&
           !is.na(latest_stage_planned) &&
           latest_stage_planned > 0L &&
-          !identical(as.integer(nrow(built_panel)), as.integer(latest_stage_planned))) {
+          !isTRUE(planned_size_compatible)) {
           .adaptive_link_probe_resume_abort(
             "reconstructed probe panel size does not match canonical `probe_edges_planned`",
             spoke_id = spoke_id

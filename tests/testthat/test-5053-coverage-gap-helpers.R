@@ -937,6 +937,24 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
   expect_true(isTRUE(row_stage$probe_panel_reallocation_used[[1L]]))
   expect_identical(row_stage$n_probe_pairs_since_last_refit[[1L]], 2L)
 
+  state_drift <- state
+  state_drift <- append_cross_probe_step(
+    state_drift,
+    step_id = 11L,
+    A_id = "h2",
+    B_id = "s22",
+    Y = 1L,
+    spoke_id = 2L,
+    run_mode = "link_probe"
+  )
+  stage_rows_drift <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state_drift,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_stage_drift <- stage_rows_drift[stage_rows_drift$spoke_id == 2L, , drop = FALSE]
+  expect_identical(row_stage_drift$n_probe_pairs_since_last_refit[[1L]], 2L)
+
   ids_k <- pairwiseLLM:::.adaptive_link_theta_global_scope_ids(
     state,
     spoke_id = 2L,

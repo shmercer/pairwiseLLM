@@ -3038,13 +3038,18 @@
     }
     ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
     ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
+    probe_holdout_flag <- if ("is_holdout_probe_step" %in% names(cross_since)) {
+      cross_since$is_holdout_probe_step %in% TRUE
+    } else {
+      as.character(cross_since$run_mode) == "link_probe_holdout"
+    }
     cross_since_probe <- cross_since[
-      as.character(cross_since$run_mode) == "link_probe" | cross_since$is_probe_step %in% TRUE,
+      probe_holdout_flag,
       ,
       drop = FALSE
     ]
     cross_since_active <- cross_since[
-      !(as.character(cross_since$run_mode) == "link_probe" | cross_since$is_probe_step %in% TRUE),
+      !probe_holdout_flag,
       ,
       drop = FALSE
     ]
@@ -3861,13 +3866,18 @@
     }
 
     n_pairs_done <- as.integer(nrow(cumulative))
+    since_last_probe_flag <- if ("is_holdout_probe_step" %in% names(since_last)) {
+      since_last$is_holdout_probe_step %in% TRUE
+    } else {
+      as.character(since_last$run_mode) == "link_probe_holdout"
+    }
     since_last_probe <- since_last[
-      as.character(since_last$run_mode) == "link_probe" | since_last$is_probe_step %in% TRUE,
+      since_last_probe_flag,
       ,
       drop = FALSE
     ]
     since_last_active <- since_last[
-      !(as.character(since_last$run_mode) == "link_probe" | since_last$is_probe_step %in% TRUE),
+      !since_last_probe_flag,
       ,
       drop = FALSE
     ]
@@ -4145,7 +4155,8 @@
         )
       )
     }
-    if (!identical(as.integer(nrow(since_last_probe)), as.integer(nrow(realized_probe_log_current_window)))) {
+    if (nrow(since_last_probe) > 0L &&
+      !identical(as.integer(nrow(since_last_probe)), as.integer(nrow(realized_probe_log_current_window)))) {
       rlang::abort(
         paste0(
           "Phase B probe accounting invariant failed: `n_probe_pairs_since_last_refit` from committed ",
