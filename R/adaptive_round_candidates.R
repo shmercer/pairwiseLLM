@@ -896,6 +896,26 @@
         ,
         drop = FALSE
       ]
+      stage_panel_ids <- unique(as.character(stage_rows$probe_panel_id))
+      stage_panel_ids <- stage_panel_ids[!is.na(stage_panel_ids) & nzchar(stage_panel_ids)]
+      latest_stage_planned <- if (nrow(stage_rows) > 0L) {
+        planned_vals <- as.integer(stage_rows$probe_edges_planned)
+        if (any(is.finite(planned_vals), na.rm = TRUE)) {
+          suppressWarnings(max(planned_vals, na.rm = TRUE))
+        } else {
+          NA_integer_
+        }
+      } else {
+        NA_integer_
+      }
+      epoch_realized <- realized_edges[
+        as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
+          as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id),
+        ,
+        drop = FALSE
+      ]
+      realized_panel_ids <- unique(as.character(epoch_realized$probe_panel_id))
+      realized_panel_ids <- realized_panel_ids[!is.na(realized_panel_ids) & nzchar(realized_panel_ids)]
       has_stage_probe_evidence <- nrow(stage_rows) > 0L && any(
         (!is.na(stage_rows$probe_panel_id) & nzchar(as.character(stage_rows$probe_panel_id))) |
           (as.integer(stage_rows$probe_edges_planned) > 0L) |
@@ -904,14 +924,55 @@
       )
       if (.adaptive_is_resumed_session(out) &&
         (isTRUE(has_realized_epoch_evidence) || isTRUE(has_stage_probe_evidence))) {
-        .adaptive_link_probe_resume_abort(
-          paste0(
-            "no persisted held-out probe panel is available for current link_epoch_id=",
-            as.integer(epoch_id),
-            " but canonical probe evidence already exists; refusing to rebuild the panel"
-          ),
+        built_panel <- .adaptive_link_probe_construct_panel(
+          state = out,
+          controller = controller,
           spoke_id = spoke_id
         )
+        built_panel <- tibble::as_tibble(built_panel)
+        if (nrow(built_panel) < 1L) {
+          .adaptive_link_probe_resume_abort(
+            paste0(
+              "no persisted held-out probe panel is available for current link_epoch_id=",
+              as.integer(epoch_id),
+              " and deterministic reconstruction also failed"
+            ),
+            spoke_id = spoke_id
+          )
+        }
+        built_panel_id <- as.character(built_panel$probe_panel_id[[1L]] %||% NA_character_)
+        if (length(stage_panel_ids) > 1L ||
+          (length(stage_panel_ids) == 1L && !identical(stage_panel_ids[[1L]], built_panel_id))) {
+          .adaptive_link_probe_resume_abort(
+            "reconstructed probe panel id does not match canonical `link_stage_log$probe_panel_id`",
+            spoke_id = spoke_id
+          )
+        }
+        if (length(realized_panel_ids) > 1L ||
+          (length(realized_panel_ids) == 1L && !identical(realized_panel_ids[[1L]], built_panel_id))) {
+          .adaptive_link_probe_resume_abort(
+            "reconstructed probe panel id does not match canonical `realized_edges$probe_panel_id`",
+            spoke_id = spoke_id
+          )
+        }
+        if (nrow(epoch_realized) > 0L &&
+          !all(as.character(epoch_realized$pair_key) %in% as.character(built_panel$pair_key))) {
+          .adaptive_link_probe_resume_abort(
+            "reconstructed probe panel does not contain all canonical realized probe edges",
+            spoke_id = spoke_id
+          )
+        }
+        if (is.finite(latest_stage_planned) &&
+          !is.na(latest_stage_planned) &&
+          latest_stage_planned > 0L &&
+          !identical(as.integer(nrow(built_panel)), as.integer(latest_stage_planned))) {
+          .adaptive_link_probe_resume_abort(
+            "reconstructed probe panel size does not match canonical `probe_edges_planned`",
+            spoke_id = spoke_id
+          )
+        }
+        probe$panels_by_spoke[[as.character(spoke_id)]] <- built_panel
+        next
       }
       built_panel <- .adaptive_link_probe_construct_panel(
         state = out,
