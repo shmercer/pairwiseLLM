@@ -654,6 +654,50 @@ test_that("resume preserves probe panel identity, epoch, and realized counts acr
   expect_gte(as.integer(realized_resumed), as.integer(realized_after))
 })
 
+test_that("resume accepts current-window realized probes beyond the latest link-stage row", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  realized <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
+  expect_gte(realized, 1L)
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- state$link_stage_log[0, , drop = FALSE]
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_realized = 0L,
+      probe_panel_shortfall = as.integer(nrow(panel))
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L),
+    as.integer(realized)
+  )
+  last_row <- tibble::as_tibble(restored$link_stage_log) |>
+    dplyr::filter(.data$spoke_id == 2L) |>
+    dplyr::slice_tail(n = 1L)
+  expect_identical(as.integer(last_row$probe_edges_realized[[1L]]), 0L)
+})
+
 test_that("resume aborts when persisted probe state disagrees with canonical logs or controller epoch", {
   state <- make_probe_resume_state()
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))

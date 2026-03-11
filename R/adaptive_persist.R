@@ -509,13 +509,33 @@ read_log <- function(path) {
   if (nrow(spoke_rows) > 0L) {
     last_row <- spoke_rows[nrow(spoke_rows), , drop = FALSE]
     row_realized <- as.integer(last_row$probe_edges_realized[[1L]] %||% NA_integer_)
-    if (is.finite(row_realized) && !identical(as.integer(row_realized), as.integer(realized_count))) {
+    last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+    realized_since_last_refit <- .adaptive_link_probe_realized_log_for_panel(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(panel_epoch),
+      panel = panel
+    )
+    if (nrow(realized_since_last_refit) > 0L) {
+      realized_since_last_refit <- realized_since_last_refit[
+        as.integer(realized_since_last_refit$step_id) > last_refit_step,
+        ,
+        drop = FALSE
+      ]
+    }
+    current_window_realized <- as.integer(nrow(realized_since_last_refit))
+    delta_from_row <- as.integer(as.integer(realized_count) - row_realized)
+    if (is.finite(row_realized) &&
+      (delta_from_row < 0L || delta_from_row > current_window_realized)) {
       .adaptive_link_probe_resume_abort(
         paste0(
           "latest `link_stage_log$probe_edges_realized`=",
           row_realized,
-          " does not match canonical realized count ",
-          realized_count
+          " is inconsistent with canonical realized count ",
+          realized_count,
+          " given current-window realized probes ",
+          current_window_realized,
+          " after the last refit"
         ),
         spoke_id = spoke_id
       )
