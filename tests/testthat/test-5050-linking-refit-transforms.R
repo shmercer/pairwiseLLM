@@ -1037,6 +1037,36 @@ test_that("link stage rows use cached concurrent budget for the completed refit 
 
 test_that("link_stage_log rows expose feasibility and blocker explanations canonically", {
   state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  panel_keys <- paste0("pair_", seq_len(30L))
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_eval",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = rep("h1", 30L),
+      spoke_item_id = paste0("s21_probe_", seq_len(30L)),
+      spoke_bin = rep(1L, 30L),
+      hub_bin = rep(1L, 30L),
+      planned_rank = seq_len(30L),
+      pair_key = panel_keys,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = seq_len(15L),
+    pair_id = seq_len(15L),
+    run_mode = rep("link_probe_holdout", 15L),
+    spoke_id = rep(2L, 15L),
+    link_epoch_id = rep(4L, 15L),
+    probe_panel_id = rep("panel_eval", 15L),
+    hub_item_id = rep("h1", 15L),
+    spoke_item_id = paste0("s21_probe_", seq_len(15L)),
+    pair_key = panel_keys[seq_len(15L)],
+    Y = rep(1L, 15L)
+  )
   state$controller$link_budget_refit_id <- 1L
   state$controller$link_budget_map <- list(
     `2` = list(
@@ -2015,6 +2045,183 @@ test_that("probe realized bookkeeping is derived from canonical realized-edge lo
   realized_edges <- pairwiseLLM:::.adaptive_link_probe_edges_realized(state, spoke_id = 2L, epoch_id = 4L)
   expect_identical(nrow(realized_edges), 1L)
   expect_identical(as.integer(realized_edges$step_id[[1L]]), 10L)
+})
+
+test_that("stale panel realized flags do not become canonical realized probe evidence", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  panel <- tibble::tibble(
+    probe_panel_id = "panel_a",
+    link_epoch_id = 4L,
+    spoke_id = 2L,
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    spoke_bin = 1L,
+    hub_bin = 1L,
+    planned_rank = 1L,
+    pair_key = pair_key,
+    realized = TRUE,
+    realized_step_id = 10L,
+    realized_pair_id = 10L,
+    realized_run_mode = "link_probe_holdout"
+  )
+  state$linking$probe$panels_by_spoke <- list(`2` = panel)
+  state$linking$probe$realized_edges <- pairwiseLLM:::.adaptive_link_probe_empty_realized_log()
+
+  realized_log <- pairwiseLLM:::.adaptive_link_probe_realized_log_for_panel(
+    state = state,
+    spoke_id = 2L,
+    epoch_id = 4L,
+    panel = panel
+  )
+  expect_identical(nrow(realized_log), 0L)
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 4L), 0L)
+})
+
+test_that("same-epoch realized-edge panel mismatch fails before refit rows are emitted", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_b",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pair_key,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 10L,
+    pair_id = 10L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 4L,
+    probe_panel_id = "panel_a",
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    pair_key = pair_key,
+    Y = 1L
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 4L),
+    "realized_edges\\$probe_panel_id"
+  )
+})
+
+test_that("link stage refit rows use canonical realized probe counts and enforce monotonicity", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  state$controller$current_link_spoke_id <- 2L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_epoch_id = 4L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only"
+    )
+  )
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_a",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pair_key,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  ids <- as.character(state$item_ids)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 10L,
+      timestamp = as.POSIXct("2026-01-01 00:00:10", tz = "UTC"),
+      pair_id = 10L,
+      i = match("h1", ids),
+      j = match("s21", ids),
+      A = match("h1", ids),
+      B = match("s21", ids),
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE,
+      link_stage = "probe_panel",
+      round_stage = "probe_panel"
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 10L,
+    pair_id = 10L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 4L,
+    probe_panel_id = "panel_a",
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    pair_key = pair_key,
+    Y = 1L
+  )
+
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_identical(as.integer(row$probe_edges_realized[[1L]]), 1L)
+  expect_identical(as.integer(row$probe_panel_shortfall[[1L]]), 0L)
+  expect_identical(as.integer(row$n_probe_pairs_since_last_refit[[1L]]), 1L)
+  expect_identical(as.integer(row$n_cross_edges_probe_since_last_refit[[1L]]), 1L)
+
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_epoch_id = 4L,
+      probe_panel_id = "panel_a",
+      probe_edges_planned = 1L,
+      probe_edges_realized = 2L,
+      probe_panel_shortfall = 0L,
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state = state,
+      refit_id = 2L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    "probe monotonicity invariant failed"
+  )
 })
 
 test_that("link stop gating enforces diagnostics and lag eligibility", {

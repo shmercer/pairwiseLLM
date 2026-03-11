@@ -421,7 +421,18 @@ test_that("probe helpers cover selection, commit registration, caching, and stop
   state$linking$probe <- list(
     panels_by_spoke = list(`2` = panel),
     prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
-    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    realized_edges = tibble::tibble(
+      step_id = 10L,
+      pair_id = 10L,
+      run_mode = "link_probe_holdout",
+      spoke_id = 2L,
+      link_epoch_id = 3L,
+      probe_panel_id = "panel",
+      hub_item_id = "h2",
+      spoke_item_id = "s22",
+      pair_key = "h2:s22",
+      Y = 0L
+    ),
     collect_holdout_now_by_spoke = list(`2` = TRUE)
   )
   state <- append_cross_probe_step(
@@ -729,7 +740,18 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
       pair_key = c("h1:s21", "h1:s21"),
       pred_prob = c(0.8, 0.6)
     ),
-    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    realized_edges = tibble::tibble(
+      step_id = c(1L, 2L),
+      pair_id = c(1L, 2L),
+      run_mode = c("link_probe_holdout", "link_probe_holdout"),
+      spoke_id = c(2L, 2L),
+      link_epoch_id = c(3L, 3L),
+      probe_panel_id = c("p", "p"),
+      hub_item_id = c("h1", "h2"),
+      spoke_item_id = c("s21", "s22"),
+      pair_key = c("h1:s21", "h2:s22"),
+      Y = c(1L, 0L)
+    ),
     collect_holdout_now_by_spoke = list()
   )
   state <- append_cross_probe_step(state, 1L, "h1", "s21", 1L, 2L)

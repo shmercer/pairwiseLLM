@@ -286,6 +286,44 @@
     ,
     drop = FALSE
   ]
+  panel_ids <- unique(as.character(panel$probe_panel_id))
+  panel_ids <- panel_ids[!is.na(panel_ids) & nzchar(panel_ids)]
+  if (length(panel_ids) > 1L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-panel invariant failed: current panel has multiple `probe_panel_id` values ",
+        "for spoke_id=", as.integer(spoke_id),
+        " in link_epoch_id=", as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
+        "."
+      )
+    )
+  }
+  panel_id <- if (length(panel_ids) == 1L) panel_ids[[1L]] else NA_character_
+  if (nrow(realized_edges) > 0L) {
+    realized_panel_ids <- unique(as.character(realized_edges$probe_panel_id))
+    realized_panel_ids <- realized_panel_ids[!is.na(realized_panel_ids) & nzchar(realized_panel_ids)]
+    if (length(realized_panel_ids) > 1L ||
+      (length(realized_panel_ids) == 1L && !identical(realized_panel_ids[[1L]], panel_id))) {
+      rlang::abort(
+        paste0(
+          "Phase B probe-panel invariant failed: canonical `realized_edges$probe_panel_id` does not ",
+          "match the current panel for spoke_id=", as.integer(spoke_id),
+          " in link_epoch_id=", as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
+          "."
+        )
+      )
+    }
+    if (!all(as.character(realized_edges$pair_key) %in% as.character(panel$pair_key))) {
+      rlang::abort(
+        paste0(
+          "Phase B probe-panel invariant failed: canonical realized probe edges are not contained in ",
+          "the current panel for spoke_id=", as.integer(spoke_id),
+          " in link_epoch_id=", as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
+          "."
+        )
+      )
+    }
+  }
   if (nrow(realized_edges) < 1L) {
     return(panel)
   }
@@ -317,7 +355,16 @@
 #' @noRd
 .adaptive_link_probe_realized_count <- function(state, spoke_id, epoch_id = NULL) {
   panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
-  as.integer(sum(panel$realized %in% TRUE, na.rm = TRUE))
+  if (nrow(panel) < 1L) {
+    return(0L)
+  }
+  realized_edges <- .adaptive_link_probe_realized_log_for_panel(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_),
+    panel = panel
+  )
+  as.integer(nrow(realized_edges))
 }
 
 #' @keywords internal
@@ -672,16 +719,30 @@
   panel_key <- as.character(spoke_id)
   panel <- probe$panels_by_spoke[[panel_key]] %||% .adaptive_link_probe_empty_panel()
   panel <- tibble::as_tibble(panel)
-  if (nrow(panel) > 0L) {
-    hit <- which(as.character(panel$pair_key) == pair_key)
-    if (length(hit) > 0L) {
-      idx <- hit[[1L]]
-      panel$realized[[idx]] <- TRUE
-      panel$realized_step_id[[idx]] <- as.integer(row$step_id[[1L]] %||% NA_integer_)
-      panel$realized_pair_id[[idx]] <- as.integer(row$pair_id[[1L]] %||% NA_integer_)
-      panel$realized_run_mode[[idx]] <- as.character(row$run_mode[[1L]] %||% NA_character_)
-    }
+  if (nrow(panel) < 1L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-panel invariant failed: committed probe step has no current panel for ",
+        "spoke_id=", as.integer(spoke_id),
+        "."
+      )
+    )
   }
+  hit <- which(as.character(panel$pair_key) == pair_key)
+  if (length(hit) < 1L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-panel invariant failed: committed probe pair is not present in the current ",
+        "panel for spoke_id=", as.integer(spoke_id),
+        "."
+      )
+    )
+  }
+  idx <- hit[[1L]]
+  panel$realized[[idx]] <- TRUE
+  panel$realized_step_id[[idx]] <- as.integer(row$step_id[[1L]] %||% NA_integer_)
+  panel$realized_pair_id[[idx]] <- as.integer(row$pair_id[[1L]] %||% NA_integer_)
+  panel$realized_run_mode[[idx]] <- as.character(row$run_mode[[1L]] %||% NA_character_)
   probe$panels_by_spoke[[panel_key]] <- panel
   probe$realized_edges <- append_canonical_row(
     probe$realized_edges,
@@ -797,22 +858,7 @@
   }
   realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
   if (nrow(realized_edges) < 1L) {
-    panel_realized <- panel[panel$realized %in% TRUE, , drop = FALSE]
-    if (nrow(panel_realized) < 1L) {
-      return(.adaptive_link_probe_empty_realized_log())
-    }
-    return(tibble::tibble(
-      step_id = as.integer(panel_realized$realized_step_id %||% NA_integer_),
-      pair_id = as.integer(panel_realized$realized_pair_id %||% NA_integer_),
-      run_mode = as.character(panel_realized$realized_run_mode %||% NA_character_),
-      spoke_id = as.integer(panel_realized$spoke_id %||% spoke_id),
-      link_epoch_id = as.integer(panel_realized$link_epoch_id %||% epoch_id),
-      probe_panel_id = as.character(panel_realized$probe_panel_id %||% NA_character_),
-      hub_item_id = as.character(panel_realized$hub_item_id %||% NA_character_),
-      spoke_item_id = as.character(panel_realized$spoke_item_id %||% NA_character_),
-      pair_key = as.character(panel_realized$pair_key %||% NA_character_),
-      Y = rep.int(NA_integer_, nrow(panel_realized))
-    ))
+    return(.adaptive_link_probe_empty_realized_log())
   }
   realized_edges <- realized_edges[
     as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
@@ -822,22 +868,7 @@
     drop = FALSE
   ]
   if (nrow(realized_edges) < 1L) {
-    panel_realized <- panel[panel$realized %in% TRUE, , drop = FALSE]
-    if (nrow(panel_realized) < 1L) {
-      return(.adaptive_link_probe_empty_realized_log())
-    }
-    return(tibble::tibble(
-      step_id = as.integer(panel_realized$realized_step_id %||% NA_integer_),
-      pair_id = as.integer(panel_realized$realized_pair_id %||% NA_integer_),
-      run_mode = as.character(panel_realized$realized_run_mode %||% NA_character_),
-      spoke_id = as.integer(panel_realized$spoke_id %||% spoke_id),
-      link_epoch_id = as.integer(panel_realized$link_epoch_id %||% epoch_id),
-      probe_panel_id = as.character(panel_realized$probe_panel_id %||% NA_character_),
-      hub_item_id = as.character(panel_realized$hub_item_id %||% NA_character_),
-      spoke_item_id = as.character(panel_realized$spoke_item_id %||% NA_character_),
-      pair_key = as.character(panel_realized$pair_key %||% NA_character_),
-      Y = rep.int(NA_integer_, nrow(panel_realized))
-    ))
+    return(.adaptive_link_probe_empty_realized_log())
   }
   realized_edges[
     !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),

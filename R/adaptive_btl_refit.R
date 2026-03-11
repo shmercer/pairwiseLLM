@@ -2222,6 +2222,29 @@
   cross[cross$pair_key %in% panel_keys & cross$is_probe_step %in% TRUE, , drop = FALSE]
 }
 
+.adaptive_link_probe_prior_realized_max <- function(link_stage_log, spoke_id, epoch_id, refit_id) {
+  link_stage_log <- tibble::as_tibble(link_stage_log %||% new_link_stage_log())
+  if (nrow(link_stage_log) < 1L) {
+    return(NA_integer_)
+  }
+  rows <- link_stage_log[
+    as.integer(link_stage_log$spoke_id) == as.integer(spoke_id) &
+      as.integer(link_stage_log$link_epoch_id) == as.integer(epoch_id) &
+      as.integer(link_stage_log$refit_id) < as.integer(refit_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(rows) < 1L || !"probe_edges_realized" %in% names(rows)) {
+    return(NA_integer_)
+  }
+  vals <- as.integer(rows$probe_edges_realized)
+  vals <- vals[is.finite(vals) & !is.na(vals)]
+  if (length(vals) < 1L) {
+    return(NA_integer_)
+  }
+  as.integer(max(vals))
+}
+
 .adaptive_link_probe_brier_for_fit <- function(edges,
                                                hub_theta,
                                                spoke_theta,
@@ -4089,11 +4112,49 @@
       epoch_id = as.integer(stats_epoch_id),
       panel = probe_panel
     )
-    probe_edges_realized <- as.integer(
-      stats_row$probe_edges_realized %||% nrow(realized_probe_log)
+    realized_probe_log_current_window <- realized_probe_log[
+      as.integer(realized_probe_log$step_id) > refit_step_start &
+        as.integer(realized_probe_log$step_id) <= refit_step_end,
+      ,
+      drop = FALSE
+    ]
+    canonical_probe_edges_realized <- as.integer(nrow(realized_probe_log))
+    prior_probe_edges_realized_max <- .adaptive_link_probe_prior_realized_max(
+      link_stage_log = state$link_stage_log,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(stats_epoch_id),
+      refit_id = as.integer(refit_id)
     )
+    if (is.finite(prior_probe_edges_realized_max) &&
+      canonical_probe_edges_realized < prior_probe_edges_realized_max) {
+      rlang::abort(
+        paste0(
+          "Phase B probe monotonicity invariant failed: canonical `probe_edges_realized` decreased ",
+          "within link_epoch_id=", as.integer(stats_epoch_id),
+          " for spoke_id=", as.integer(spoke_id),
+          ". prior_max=", as.integer(prior_probe_edges_realized_max),
+          ", current=", as.integer(canonical_probe_edges_realized),
+          "."
+        )
+      )
+    }
+    if (!identical(as.integer(nrow(since_last_probe)), as.integer(nrow(realized_probe_log_current_window)))) {
+      rlang::abort(
+        paste0(
+          "Phase B probe accounting invariant failed: `n_probe_pairs_since_last_refit` from committed ",
+          "probe steps does not match canonical realized probe rows for spoke_id=",
+          as.integer(spoke_id),
+          " at refit_id=", as.integer(refit_id),
+          ". steps=", as.integer(nrow(since_last_probe)),
+          ", canonical=", as.integer(nrow(realized_probe_log_current_window)),
+          "."
+        )
+      )
+    }
+    n_pairs_since_probe <- as.integer(nrow(realized_probe_log_current_window))
+    probe_edges_realized <- canonical_probe_edges_realized
     probe_panel_shortfall <- as.integer(
-      stats_row$probe_panel_shortfall %||% max(0L, probe_edges_planned - probe_edges_realized)
+      max(0L, probe_edges_planned - probe_edges_realized)
     )
     probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
     probe_panel_reallocation_used <- as.logical(n_pairs_since_probe > probe_effort_base_cap)
