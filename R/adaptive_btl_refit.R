@@ -3851,15 +3851,20 @@
         )
       )
     }
-    if (is.finite(authoritative_budget_total) && authoritative_budget_total >= 0L) {
-      tracked_targets <- stats::setNames(rep.int(NA_integer_, length(stage_order)), stage_order)
-      for (stage_name in stage_order) {
-        shortfall_val <- as.integer(tracked_shortfalls[[stage_name]] %||% NA_integer_)
-        if (is.finite(shortfall_val)) {
-          tracked_targets[[stage_name]] <- as.integer((committed_stage[[stage_name]] %||% 0L) + shortfall_val)
-        }
+    tracked_targets <- stats::setNames(rep.int(NA_integer_, length(stage_order)), stage_order)
+    for (stage_name in stage_order) {
+      shortfall_val <- as.integer(tracked_shortfalls[[stage_name]] %||% NA_integer_)
+      if (is.finite(shortfall_val)) {
+        tracked_targets[[stage_name]] <- as.integer((committed_stage[[stage_name]] %||% 0L) + shortfall_val)
       }
-      has_tracked_targets <- any(is.finite(tracked_targets))
+    }
+    has_tracked_targets <- any(is.finite(tracked_targets))
+    stage_total <- as.integer(sum(stage_quotas, na.rm = TRUE))
+    needs_completed_window_reconcile <- isTRUE(has_tracked_targets) ||
+      stage_total < realized_active_budget_floor
+    if (isTRUE(needs_completed_window_reconcile) &&
+      is.finite(authoritative_budget_total) &&
+      authoritative_budget_total >= 0L) {
       if (isTRUE(has_tracked_targets)) {
         for (stage_name in stage_order) {
           if (is.finite(tracked_targets[[stage_name]])) {
