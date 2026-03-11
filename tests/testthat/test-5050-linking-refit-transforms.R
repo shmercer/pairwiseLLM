@@ -1598,6 +1598,31 @@ test_that("concurrent routing uses budget deficit, not least-used balancing", {
   expect_identical(pick, 3L)
 })
 
+test_that("concurrent routing stops active spoke selection once refit budgets are met", {
+  state <- make_linking_refit_state(
+    list(
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$refit_meta$last_refit_step <- 0L
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
+
+  pick <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(state, controller = NULL, eligible_spoke_ids = NULL, seed = 1L) {
+      list(
+        `2` = list(B_spoke_refit_budget = 1L, concurrent_floor_pairs = 1L, concurrent_utility_mass = 5),
+        `3` = list(B_spoke_refit_budget = 1L, concurrent_floor_pairs = 1L, concurrent_utility_mass = 5)
+      )
+    },
+    pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(is.na(pick))
+})
+
 test_that("concurrent floor is enforced as a routing floor when feasible", {
   state <- make_linking_refit_state(
     list(

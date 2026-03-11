@@ -390,8 +390,7 @@
       return(as.integer(names(counts)[ord_deficit]))
     }
 
-    ord_counts <- order(-blocker_totals[names(counts)], -utility_mass, counts, as.integer(names(counts)))
-    return(as.integer(names(counts)[ord_counts]))
+    return(integer())
   }
 
   if (nrow(step_subset) > 0L) {
