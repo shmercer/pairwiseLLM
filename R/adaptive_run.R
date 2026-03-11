@@ -273,6 +273,36 @@
   if (!is.null(epoch_id)) {
     panel <- panel[as.integer(panel$link_epoch_id) == as.integer(epoch_id), , drop = FALSE]
   }
+  if (nrow(panel) < 1L) {
+    return(panel)
+  }
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (nrow(realized_edges) < 1L) {
+    return(panel)
+  }
+  realized_edges <- realized_edges[
+    as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
+      as.integer(realized_edges$link_epoch_id) == as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(realized_edges) < 1L) {
+    return(panel)
+  }
+  realized_edges <- realized_edges[
+    !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),
+    ,
+    drop = FALSE
+  ]
+  realized_idx <- match(as.character(panel$pair_key), as.character(realized_edges$pair_key))
+  hit <- !is.na(realized_idx)
+  if (!any(hit)) {
+    return(panel)
+  }
+  panel$realized[hit] <- TRUE
+  panel$realized_step_id[hit] <- as.integer(realized_edges$step_id[realized_idx[hit]])
+  panel$realized_pair_id[hit] <- as.integer(realized_edges$pair_id[realized_idx[hit]])
+  panel$realized_run_mode[hit] <- as.character(realized_edges$run_mode[realized_idx[hit]])
   panel
 }
 
@@ -695,12 +725,33 @@
 .adaptive_link_probe_cache_predictions <- function(state, refit_id, spoke_id) {
   out <- state
   probe <- .adaptive_link_probe_state(out)
+  epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
   panel <- .adaptive_link_probe_panel_for_spoke(
     out,
     spoke_id = as.integer(spoke_id),
-    epoch_id = .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
+    epoch_id = epoch_id
   )
-  panel <- panel[panel$realized %in% TRUE, , drop = FALSE]
+  realized_log <- .adaptive_link_probe_realized_log_for_panel(
+    out,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(epoch_id),
+    panel = panel
+  )
+  if (nrow(realized_log) > 0L) {
+    panel <- dplyr::inner_join(
+      panel,
+      realized_log[, c("pair_key", "probe_panel_id"), drop = FALSE],
+      by = "pair_key",
+      suffix = c("", "_realized")
+    )
+    if ("probe_panel_id_realized" %in% names(panel)) {
+      use_realized_id <- !is.na(panel$probe_panel_id_realized) & nzchar(panel$probe_panel_id_realized)
+      panel$probe_panel_id[use_realized_id] <- panel$probe_panel_id_realized[use_realized_id]
+      panel$probe_panel_id_realized <- NULL
+    }
+  } else {
+    panel <- panel[0, , drop = FALSE]
+  }
   if (nrow(panel) < 1L) {
     out$linking$probe <- probe
     return(out)
@@ -729,6 +780,39 @@
   )
   out$linking$probe <- probe
   out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_log_for_panel <- function(state, spoke_id, epoch_id, panel = NULL) {
+  probe <- .adaptive_link_probe_state(state)
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (nrow(realized_edges) < 1L) {
+    return(realized_edges)
+  }
+  panel <- tibble::as_tibble(panel %||% .adaptive_link_probe_panel_for_spoke(
+    state,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  ))
+  if (nrow(panel) < 1L) {
+    return(realized_edges[0, , drop = FALSE])
+  }
+  realized_edges <- realized_edges[
+    as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
+      as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id) &
+      as.character(realized_edges$pair_key) %in% as.character(panel$pair_key),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(realized_edges) < 1L) {
+    return(realized_edges)
+  }
+  realized_edges[
+    !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),
+    ,
+    drop = FALSE
+  ]
 }
 
 #' @keywords internal

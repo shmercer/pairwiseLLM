@@ -498,6 +498,25 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
     phase_b_started_at_step = 1L
   )
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  panel_before <- state$linking$probe$panels_by_spoke[["2"]]
+  pair_key <- as.character(panel_before$pair_key[[1L]])
+  panel_before$realized[[1L]] <- FALSE
+  panel_before$realized_step_id[[1L]] <- NA_integer_
+  panel_before$realized_pair_id[[1L]] <- NA_integer_
+  panel_before$realized_run_mode[[1L]] <- NA_character_
+  state$linking$probe$panels_by_spoke[["2"]] <- panel_before
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 99L,
+    pair_id = 99L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 1L,
+    probe_panel_id = as.character(panel_before$probe_panel_id[[1L]]),
+    hub_item_id = as.character(panel_before$hub_item_id[[1L]]),
+    spoke_item_id = as.character(panel_before$spoke_item_id[[1L]]),
+    pair_key = pair_key,
+    Y = 1L
+  )
 
   session_dir <- withr::local_tempdir()
   save_adaptive_session(state, session_dir)
@@ -510,5 +529,16 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   expect_equal(
     restored$linking$probe$realized_edges$pair_key,
     state$linking$probe$realized_edges$pair_key
+  )
+  restored_panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(
+    restored,
+    spoke_id = 2L,
+    epoch_id = 1L
+  )
+  expect_true(isTRUE(restored_panel$realized[[1L]]))
+  expect_identical(as.integer(restored_panel$realized_step_id[[1L]]), 99L)
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L),
+    1L
   )
 })

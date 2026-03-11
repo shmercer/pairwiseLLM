@@ -1835,7 +1835,7 @@ test_that("scale_ready tolerates missing legacy coverage bin state on resume", {
 })
 
 test_that("epoch resets require regime changes, not ordinary probe-panel churn", {
-  make_reset_state <- function() {
+  make_reset_state <- function(with_prior_panel_row = FALSE) {
     state <- make_linking_refit_state()
     state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
     state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
@@ -1846,6 +1846,21 @@ test_that("epoch resets require regime changes, not ordinary probe-panel churn",
     )
     state$controller$link_stop_consecutive_pass_count_by_spoke <- list(`2` = 2L)
     state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
+    if (isTRUE(with_prior_panel_row)) {
+      state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+        state$link_stage_log,
+        list(
+          refit_id = 1L,
+          spoke_id = 2L,
+          hub_id = 1L,
+          link_epoch_id = 4L,
+          probe_panel_id = "prior_panel",
+          probe_edges_planned = 1L,
+          probe_edges_realized = 0L,
+          probe_panel_shortfall = 1L
+        )
+      )
+    }
     state
   }
 
@@ -1925,6 +1940,81 @@ test_that("epoch resets require regime changes, not ordinary probe-panel churn",
   probe_stats <- probe_reset$controller$link_refit_stats_by_spoke[["2"]]
   expect_false(isTRUE(probe_stats$lag_domain_reset))
   expect_true(is.na(probe_stats$lag_domain_reset_reason))
+
+  probe_state_changed <- make_reset_state(with_prior_panel_row = TRUE)
+  probe_state_changed$linking$probe$panels_by_spoke <- list(`2` = panel)
+  probe_reset_changed <- run_reset(probe_state_changed)
+
+  expect_identical(probe_reset_changed$controller$link_epoch_id_by_spoke[["2"]], 5L)
+  expect_identical(probe_reset_changed$controller$link_epoch_start_step_by_spoke[["2"]], 3L)
+  expect_identical(probe_reset_changed$controller$link_stop_consecutive_pass_count_by_spoke[["2"]], 0L)
+  expect_identical(probe_reset_changed$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 0L)
+  probe_stats_changed <- probe_reset_changed$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(probe_stats_changed$lag_domain_reset))
+  expect_identical(as.character(probe_stats_changed$lag_domain_reset_reason), "probe_panel_rebuild")
+})
+
+test_that("probe realized bookkeeping is derived from canonical realized-edge log", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_a",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pair_key,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 10L,
+    pair_id = 10L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 4L,
+    probe_panel_id = "panel_a",
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    pair_key = pair_key,
+    Y = 1L
+  )
+  ids <- as.character(state$item_ids)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 10L,
+      timestamp = as.POSIXct("2026-01-01 00:00:10", tz = "UTC"),
+      pair_id = 10L,
+      i = match("h1", ids),
+      j = match("s21", ids),
+      A = match("h1", ids),
+      B = match("s21", ids),
+      Y = 0L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE
+    )
+  )
+
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 4L)
+  expect_true(isTRUE(panel$realized[[1L]]))
+  expect_identical(as.integer(panel$realized_step_id[[1L]]), 10L)
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 4L), 1L)
+  realized_edges <- pairwiseLLM:::.adaptive_link_probe_edges_realized(state, spoke_id = 2L, epoch_id = 4L)
+  expect_identical(nrow(realized_edges), 1L)
+  expect_identical(as.integer(realized_edges$step_id[[1L]]), 10L)
 })
 
 test_that("link stop gating enforces diagnostics and lag eligibility", {

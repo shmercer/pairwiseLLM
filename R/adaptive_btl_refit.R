@@ -2203,10 +2203,16 @@
   if (nrow(panel) < 1L) {
     return(tibble::tibble())
   }
-  panel_keys <- as.character(panel$pair_key[panel$realized %in% TRUE])
-  if (length(panel_keys) < 1L) {
+  realized_log <- .adaptive_link_probe_realized_log_for_panel(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(epoch_id),
+    panel = panel
+  )
+  if (nrow(realized_log) < 1L) {
     return(tibble::tibble())
   }
+  panel_keys <- as.character(realized_log$pair_key)
   cross <- .adaptive_link_cross_edges(state, spoke_id = spoke_id, last_refit_step = NULL)
   if (nrow(cross) < 1L) {
     return(tibble::tibble())
@@ -3103,9 +3109,79 @@
       probe_state$panels_by_spoke[[key]] <- panel_eval
       out$linking$probe <- probe_state
     }
+    prior_panel_row <- link_stage_hist[
+      as.integer(link_stage_hist$spoke_id) == as.integer(spoke_id),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(prior_panel_row) > 0L) {
+      prior_panel_row <- prior_panel_row[
+        order(as.integer(prior_panel_row$refit_id), seq_len(nrow(prior_panel_row))),
+        ,
+        drop = FALSE
+      ]
+      prior_panel_row <- prior_panel_row[nrow(prior_panel_row), , drop = FALSE]
+    }
+    prior_panel_epoch <- if (nrow(prior_panel_row) > 0L) {
+      as.integer(prior_panel_row$link_epoch_id[[1L]] %||% NA_integer_)
+    } else {
+      NA_integer_
+    }
+    prior_panel_id <- if (nrow(prior_panel_row) > 0L) {
+      as.character(prior_panel_row$probe_panel_id[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
+    }
+    current_panel_id <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
+    same_epoch_panel_changed <- nrow(prior_panel_row) > 0L &&
+      is.finite(prior_panel_epoch) &&
+      identical(prior_panel_epoch, as.integer(link_epoch_id)) &&
+      is.character(prior_panel_id) &&
+      nzchar(prior_panel_id) &&
+      is.character(current_panel_id) &&
+      nzchar(current_panel_id) &&
+      !identical(prior_panel_id, current_panel_id)
+    if (isTRUE(same_epoch_panel_changed)) {
+      link_epoch_id <- as.integer(link_epoch_id + 1L)
+      epoch_id_map[[key]] <- as.integer(link_epoch_id)
+      stop_counter_map[[key]] <- 0L
+      escalation_counter_map[[key]] <- 0L
+      lag_domain_reset <- TRUE
+      lag_domain_reset_reason <- "probe_panel_rebuild"
+      lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
+      epoch_start_step_map[[key]] <- as.integer(last_step + 1L)
+      out$controller$link_epoch_id_by_spoke <- epoch_id_map
+      out$linking <- out$linking %||% list()
+      probe_state <- .adaptive_link_probe_state(out)
+      rebuilt_panel <- .adaptive_link_probe_construct_panel(
+        state = out,
+        controller = out$controller,
+        spoke_id = as.integer(spoke_id)
+      )
+      rebuilt_panel <- tibble::as_tibble(rebuilt_panel)
+      if (nrow(rebuilt_panel) < 1L) {
+        rlang::abort(
+          paste0(
+            "Phase B probe-panel invariant failed: no held-out panel could be constructed for spoke_id=",
+            as.integer(spoke_id),
+            " after probe-panel rebuild reset in link_epoch_id=",
+            as.integer(link_epoch_id),
+            "."
+          )
+        )
+      }
+      probe_state$panels_by_spoke[[key]] <- rebuilt_panel
+      out$linking$probe <- probe_state
+      panel_eval <- rebuilt_panel
+      current_panel_id <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
+    }
     probe_panel_id_eval <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
     probe_edges_planned_eval <- as.integer(nrow(panel_eval))
-    probe_edges_realized_eval <- as.integer(sum(panel_eval$realized %in% TRUE, na.rm = TRUE))
+    probe_edges_realized_eval <- .adaptive_link_probe_realized_count(
+      out,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(link_epoch_id)
+    )
     probe_panel_shortfall_eval <- as.integer(
       max(0L, probe_edges_planned_eval - probe_edges_realized_eval)
     )
@@ -3993,8 +4069,14 @@
         if (nrow(probe_panel) > 0L) probe_panel$probe_panel_id[[1L]] else NA_character_
     )
     probe_edges_planned <- as.integer(stats_row$probe_edges_planned %||% nrow(probe_panel))
+    realized_probe_log <- .adaptive_link_probe_realized_log_for_panel(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(stats_epoch_id),
+      panel = probe_panel
+    )
     probe_edges_realized <- as.integer(
-      stats_row$probe_edges_realized %||% sum(probe_panel$realized %in% TRUE, na.rm = TRUE)
+      stats_row$probe_edges_realized %||% nrow(realized_probe_log)
     )
     probe_panel_shortfall <- as.integer(
       stats_row$probe_panel_shortfall %||% max(0L, probe_edges_planned - probe_edges_realized)
