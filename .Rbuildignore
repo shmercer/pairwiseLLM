@@ -20,5 +20,6 @@
 ^\.lintr$
 ^inst/stan/btl_e_b\.exe$
 ^inst/stan/btl_e_b$
+^inst/stan/link_transform_refit$
 ^codex$
 ^scripts$
