@@ -786,17 +786,33 @@
 #' @noRd
 .adaptive_link_probe_realized_log_for_panel <- function(state, spoke_id, epoch_id, panel = NULL) {
   probe <- .adaptive_link_probe_state(state)
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
-  if (nrow(realized_edges) < 1L) {
-    return(realized_edges)
-  }
   panel <- tibble::as_tibble(panel %||% .adaptive_link_probe_panel_for_spoke(
     state,
     spoke_id = spoke_id,
     epoch_id = epoch_id
   ))
   if (nrow(panel) < 1L) {
+    realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
     return(realized_edges[0, , drop = FALSE])
+  }
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (nrow(realized_edges) < 1L) {
+    panel_realized <- panel[panel$realized %in% TRUE, , drop = FALSE]
+    if (nrow(panel_realized) < 1L) {
+      return(.adaptive_link_probe_empty_realized_log())
+    }
+    return(tibble::tibble(
+      step_id = as.integer(panel_realized$realized_step_id %||% NA_integer_),
+      pair_id = as.integer(panel_realized$realized_pair_id %||% NA_integer_),
+      run_mode = as.character(panel_realized$realized_run_mode %||% NA_character_),
+      spoke_id = as.integer(panel_realized$spoke_id %||% spoke_id),
+      link_epoch_id = as.integer(panel_realized$link_epoch_id %||% epoch_id),
+      probe_panel_id = as.character(panel_realized$probe_panel_id %||% NA_character_),
+      hub_item_id = as.character(panel_realized$hub_item_id %||% NA_character_),
+      spoke_item_id = as.character(panel_realized$spoke_item_id %||% NA_character_),
+      pair_key = as.character(panel_realized$pair_key %||% NA_character_),
+      Y = rep.int(NA_integer_, nrow(panel_realized))
+    ))
   }
   realized_edges <- realized_edges[
     as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
@@ -806,7 +822,22 @@
     drop = FALSE
   ]
   if (nrow(realized_edges) < 1L) {
-    return(realized_edges)
+    panel_realized <- panel[panel$realized %in% TRUE, , drop = FALSE]
+    if (nrow(panel_realized) < 1L) {
+      return(.adaptive_link_probe_empty_realized_log())
+    }
+    return(tibble::tibble(
+      step_id = as.integer(panel_realized$realized_step_id %||% NA_integer_),
+      pair_id = as.integer(panel_realized$realized_pair_id %||% NA_integer_),
+      run_mode = as.character(panel_realized$realized_run_mode %||% NA_character_),
+      spoke_id = as.integer(panel_realized$spoke_id %||% spoke_id),
+      link_epoch_id = as.integer(panel_realized$link_epoch_id %||% epoch_id),
+      probe_panel_id = as.character(panel_realized$probe_panel_id %||% NA_character_),
+      hub_item_id = as.character(panel_realized$hub_item_id %||% NA_character_),
+      spoke_item_id = as.character(panel_realized$spoke_item_id %||% NA_character_),
+      pair_key = as.character(panel_realized$pair_key %||% NA_character_),
+      Y = rep.int(NA_integer_, nrow(panel_realized))
+    ))
   }
   realized_edges[
     !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),
