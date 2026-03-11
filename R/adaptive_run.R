@@ -254,7 +254,8 @@
 .adaptive_link_probe_panel_id <- function(panel_tbl) {
   panel_tbl <- tibble::as_tibble(panel_tbl)
   keys <- if (nrow(panel_tbl) > 0L) {
-    paste(panel_tbl$hub_item_id, panel_tbl$spoke_item_id, sep = "::")
+    sort(unique(as.character(panel_tbl$pair_key %||%
+      make_unordered_key(panel_tbl$hub_item_id, panel_tbl$spoke_item_id))))
   } else {
     character()
   }

@@ -448,6 +448,10 @@ test_that("probe helpers cover selection, commit registration, caching, and stop
     pairwiseLLM:::.adaptive_link_probe_panel_id(panel),
     pairwiseLLM:::.adaptive_link_probe_panel_id(panel)
   )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_id(panel),
+    pairwiseLLM:::.adaptive_link_probe_panel_id(panel[c(2L, 1L), , drop = FALSE])
+  )
   expect_identical(pairwiseLLM:::.adaptive_link_probe_realized_count(state, 2L, epoch_id = 3L), 1L)
   next_pair <- pairwiseLLM:::.adaptive_link_probe_next_pair(state, 2L, epoch_id = 3L)
   expect_identical(next_pair$hub_item_id[[1L]], "h1")
