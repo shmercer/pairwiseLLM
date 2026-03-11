@@ -1,3 +1,65 @@
+make_probe_resume_state <- function() {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22"),
+    set_id = c(1L, 1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 61L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(items = tibble::tibble(
+        global_item_id = c("gh1", "gh2", "gh3"),
+        theta_raw_mean = c(0.5, 0, -0.5),
+        theta_raw_sd = c(0.1, 0.1, 0.1),
+        rank_mu_raw = c(1, 2, 3)
+      )),
+      `2` = list(items = tibble::tibble(
+        global_item_id = c("gs21", "gs22"),
+        theta_raw_mean = c(0.2, -0.2),
+        theta_raw_sd = c(0.1, 0.1),
+        rank_mu_raw = c(1, 2)
+      ))
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$refit_meta$refit_pairs_target_current <- 3L
+  state$controller$refit_pairs_target <- 3L
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+  state
+}
+
 test_that("save_adaptive_session and load_adaptive_session round-trip adaptive artifacts", {
   items <- make_test_items(4)
   state <- adaptive_rank_start(items)
@@ -540,5 +602,94 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L),
     1L
+  )
+})
+
+test_that("resume preserves probe panel identity, epoch, and realized counts across a chunk boundary", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  panel_before <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  realized_before <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
+  expect_gte(nrow(panel_before), 1L)
+  expect_gte(realized_before, 1L)
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 2L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel_before$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel_before)),
+      probe_edges_realized = as.integer(realized_before),
+      probe_panel_shortfall = as.integer(nrow(panel_before) - realized_before)
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  panel_after <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(restored, spoke_id = 2L, epoch_id = 1L)
+  realized_after <- pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L)
+  expect_identical(as.character(panel_after$probe_panel_id[[1L]]), as.character(panel_before$probe_panel_id[[1L]]))
+  expect_identical(as.integer(panel_after$link_epoch_id[[1L]]), 1L)
+  expect_identical(as.integer(restored$controller$link_epoch_id_by_spoke[["2"]]), 1L)
+  expect_identical(as.integer(realized_after), as.integer(realized_before))
+
+  resumed <- pairwiseLLM:::run_one_step(restored, make_deterministic_judge("i_wins"))
+  panel_resumed <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(resumed, spoke_id = 2L, epoch_id = 1L)
+  realized_resumed <- pairwiseLLM:::.adaptive_link_probe_realized_count(resumed, spoke_id = 2L, epoch_id = 1L)
+  expect_identical(as.character(panel_resumed$probe_panel_id[[1L]]), as.character(panel_before$probe_panel_id[[1L]]))
+  expect_identical(as.integer(panel_resumed$link_epoch_id[[1L]]), 1L)
+  expect_gte(as.integer(realized_resumed), as.integer(realized_after))
+})
+
+test_that("resume aborts when persisted probe state disagrees with canonical logs or controller epoch", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  realized <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 2L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_realized = as.integer(realized),
+      probe_panel_shortfall = as.integer(nrow(panel) - realized)
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  persisted_state <- readRDS(file.path(session_dir, "state.rds"))
+  persisted_state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
+  saveRDS(persisted_state, file.path(session_dir, "state.rds"))
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "probe-state invariant failed.*link_epoch_id_by_spoke"
   )
 })

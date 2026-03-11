@@ -338,6 +338,190 @@ read_log <- function(path) {
   state
 }
 
+.adaptive_link_probe_resume_abort <- function(message, spoke_id = NA_integer_) {
+  prefix <- "Adaptive resume probe-state invariant failed"
+  if (is.finite(as.integer(spoke_id))) {
+    prefix <- paste0(prefix, " for spoke_id=", as.integer(spoke_id))
+  }
+  rlang::abort(paste0(prefix, ": ", message, "."))
+}
+
+.adaptive_is_resumed_session <- function(state) {
+  isTRUE((state$meta %||% list())$resumed_from_session)
+}
+
+.adaptive_link_probe_resume_spoke_ids <- function(state) {
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  ids <- c(
+    as.integer(phase_ctx$active_spokes %||% integer()),
+    as.integer(phase_ctx$ready_spokes %||% integer()),
+    suppressWarnings(as.integer(names(state$linking$probe$panels_by_spoke %||% list()))),
+    as.integer((state$linking$probe$realized_edges %||% tibble::tibble())$spoke_id %||% integer()),
+    as.integer((state$linking$probe$prediction_cache %||% tibble::tibble())$spoke_id %||% integer()),
+    as.integer((state$link_stage_log %||% tibble::tibble())$spoke_id %||% integer()),
+    suppressWarnings(as.integer(names(controller$link_epoch_id_by_spoke %||% list())))
+  )
+  sort(unique(ids[is.finite(ids) & !is.na(ids)]))
+}
+
+.adaptive_link_probe_resume_validate_spoke <- function(state, spoke_id) {
+  probe <- .adaptive_link_probe_state(state)
+  panel <- tibble::as_tibble(
+    probe$panels_by_spoke[[as.character(as.integer(spoke_id))]] %||% .adaptive_link_probe_empty_panel()
+  )
+  if (nrow(panel) < 1L) {
+    return(invisible(NULL))
+  }
+
+  if (!all(as.integer(panel$spoke_id) == as.integer(spoke_id))) {
+    .adaptive_link_probe_resume_abort(
+      "persisted probe panel rows carry a different `spoke_id` than their `panels_by_spoke` key",
+      spoke_id = spoke_id
+    )
+  }
+
+  panel_epoch <- unique(as.integer(panel$link_epoch_id))
+  if (length(panel_epoch) != 1L || !is.finite(panel_epoch)) {
+    .adaptive_link_probe_resume_abort(
+      "persisted probe panel must have exactly one non-missing `link_epoch_id`",
+      spoke_id = spoke_id
+    )
+  }
+  panel_epoch <- as.integer(panel_epoch[[1L]])
+
+  panel_id <- unique(as.character(panel$probe_panel_id))
+  panel_id <- panel_id[!is.na(panel_id) & nzchar(panel_id)]
+  if (length(panel_id) != 1L) {
+    .adaptive_link_probe_resume_abort(
+      "persisted probe panel must have exactly one non-empty `probe_panel_id`",
+      spoke_id = spoke_id
+    )
+  }
+  panel_id <- as.character(panel_id[[1L]])
+
+  if (anyDuplicated(as.character(panel$pair_key))) {
+    .adaptive_link_probe_resume_abort(
+      "persisted probe panel contains duplicate `pair_key` values",
+      spoke_id = spoke_id
+    )
+  }
+
+  controller <- .adaptive_controller_resolve(state)
+  controller_epoch <- as.integer(
+    (controller$link_epoch_id_by_spoke %||% list())[[as.character(spoke_id)]] %||% NA_integer_
+  )
+  if (is.finite(controller_epoch) && !identical(controller_epoch, panel_epoch)) {
+    .adaptive_link_probe_resume_abort(
+      paste0(
+        "`controller$link_epoch_id_by_spoke`=",
+        controller_epoch,
+        " does not match persisted panel epoch ",
+        panel_epoch
+      ),
+      spoke_id = spoke_id
+    )
+  }
+
+  spoke_rows <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
+  spoke_rows <- spoke_rows[as.integer(spoke_rows$spoke_id) == as.integer(spoke_id), , drop = FALSE]
+  if (nrow(spoke_rows) > 0L) {
+    spoke_rows <- spoke_rows[order(as.integer(spoke_rows$refit_id), seq_len(nrow(spoke_rows))), , drop = FALSE]
+    last_row <- spoke_rows[nrow(spoke_rows), , drop = FALSE]
+    row_epoch <- as.integer(last_row$link_epoch_id[[1L]] %||% NA_integer_)
+    row_panel_id <- as.character(last_row$probe_panel_id[[1L]] %||% NA_character_)
+    if (is.finite(row_epoch) && !identical(row_epoch, panel_epoch)) {
+      .adaptive_link_probe_resume_abort(
+        paste0(
+          "latest `link_stage_log$link_epoch_id`=",
+          row_epoch,
+          " does not match persisted panel epoch ",
+          panel_epoch
+        ),
+        spoke_id = spoke_id
+      )
+    }
+    if (!is.na(row_panel_id) && nzchar(row_panel_id) && !identical(row_panel_id, panel_id)) {
+      .adaptive_link_probe_resume_abort(
+        paste0(
+          "latest `link_stage_log$probe_panel_id`=",
+          row_panel_id,
+          " does not match persisted panel id ",
+          panel_id
+        ),
+        spoke_id = spoke_id
+      )
+    }
+  }
+
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (nrow(realized_edges) > 0L) {
+    realized_edges <- realized_edges[
+      as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
+        as.integer(realized_edges$link_epoch_id) == as.integer(panel_epoch),
+      ,
+      drop = FALSE
+    ]
+  }
+  if (nrow(realized_edges) > 0L) {
+    bad_key <- !as.character(realized_edges$pair_key) %in% as.character(panel$pair_key)
+    if (any(bad_key)) {
+      .adaptive_link_probe_resume_abort(
+        "persisted `realized_edges` include pair keys not present in the current panel",
+        spoke_id = spoke_id
+      )
+    }
+    bad_panel_id <- !is.na(realized_edges$probe_panel_id) &
+      nzchar(realized_edges$probe_panel_id) &
+      as.character(realized_edges$probe_panel_id) != panel_id
+    if (any(bad_panel_id)) {
+      .adaptive_link_probe_resume_abort(
+        "persisted `realized_edges$probe_panel_id` does not match the current panel id",
+        spoke_id = spoke_id
+      )
+    }
+  }
+
+  realized_count <- .adaptive_link_probe_realized_count(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel_epoch)
+  )
+  if (nrow(spoke_rows) > 0L) {
+    last_row <- spoke_rows[nrow(spoke_rows), , drop = FALSE]
+    row_realized <- as.integer(last_row$probe_edges_realized[[1L]] %||% NA_integer_)
+    if (is.finite(row_realized) && !identical(as.integer(row_realized), as.integer(realized_count))) {
+      .adaptive_link_probe_resume_abort(
+        paste0(
+          "latest `link_stage_log$probe_edges_realized`=",
+          row_realized,
+          " does not match canonical realized count ",
+          realized_count
+        ),
+        spoke_id = spoke_id
+      )
+    }
+  }
+
+  invisible(NULL)
+}
+
+.adaptive_validate_probe_state_for_resume <- function(state) {
+  probe <- .adaptive_link_probe_state(state)
+  state$linking <- state$linking %||% list()
+  state$linking$probe <- probe
+
+  spoke_ids <- .adaptive_link_probe_resume_spoke_ids(state)
+  if (length(spoke_ids) < 1L) {
+    return(state)
+  }
+
+  for (spoke_id in spoke_ids) {
+    .adaptive_link_probe_resume_validate_spoke(state, spoke_id = spoke_id)
+  }
+  state
+}
+
 .adaptive_read_session_metadata <- function(paths) {
   metadata <- readRDS(paths$metadata)
   if (!is.list(metadata)) {
@@ -670,6 +854,8 @@ load_adaptive_session <- function(session_dir) {
   }
 
   state$config$session_dir <- session_dir
+  state$meta$resumed_from_session <- TRUE
   state <- .adaptive_phase_a_prepare(state)
+  state <- .adaptive_validate_probe_state_for_resume(state)
   state
 }

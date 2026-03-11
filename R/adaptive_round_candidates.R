@@ -877,11 +877,42 @@
   }
   out$linking <- out$linking %||% list()
   probe <- .adaptive_link_probe_state(out)
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  link_stage_log <- tibble::as_tibble(out$link_stage_log %||% new_link_stage_log())
   for (spoke_id in unique(spoke_ids)) {
     epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
     panel <- probe$panels_by_spoke[[as.character(spoke_id)]] %||% .adaptive_link_probe_empty_panel()
     panel <- tibble::as_tibble(panel)
     if (nrow(panel) < 1L || !all(as.integer(panel$link_epoch_id) == epoch_id)) {
+      has_realized_epoch_evidence <- nrow(realized_edges) > 0L &&
+        any(
+          as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
+            as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id),
+          na.rm = TRUE
+        )
+      stage_rows <- link_stage_log[
+        as.integer(link_stage_log$spoke_id) == as.integer(spoke_id) &
+          as.integer(link_stage_log$link_epoch_id) == as.integer(epoch_id),
+        ,
+        drop = FALSE
+      ]
+      has_stage_probe_evidence <- nrow(stage_rows) > 0L && any(
+        (!is.na(stage_rows$probe_panel_id) & nzchar(as.character(stage_rows$probe_panel_id))) |
+          (as.integer(stage_rows$probe_edges_planned) > 0L) |
+          (as.integer(stage_rows$probe_edges_realized) > 0L),
+        na.rm = TRUE
+      )
+      if (.adaptive_is_resumed_session(out) &&
+        (isTRUE(has_realized_epoch_evidence) || isTRUE(has_stage_probe_evidence))) {
+        .adaptive_link_probe_resume_abort(
+          paste0(
+            "no persisted held-out probe panel is available for current link_epoch_id=",
+            as.integer(epoch_id),
+            " but canonical probe evidence already exists; refusing to rebuild the panel"
+          ),
+          spoke_id = spoke_id
+        )
+      }
       built_panel <- .adaptive_link_probe_construct_panel(
         state = out,
         controller = controller,

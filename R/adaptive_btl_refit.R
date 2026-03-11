@@ -3142,6 +3142,20 @@
       nzchar(current_panel_id) &&
       !identical(prior_panel_id, current_panel_id)
     if (isTRUE(same_epoch_panel_changed)) {
+      if (.adaptive_is_resumed_session(out)) {
+        .adaptive_link_probe_resume_abort(
+          paste0(
+            "persisted/current probe panel id ",
+            current_panel_id,
+            " disagrees with canonical `link_stage_log$probe_panel_id` ",
+            prior_panel_id,
+            " in the same link_epoch_id=",
+            as.integer(link_epoch_id),
+            "; refusing to rebuild the panel mid-epoch"
+          ),
+          spoke_id = spoke_id
+        )
+      }
       link_epoch_id <- as.integer(link_epoch_id + 1L)
       epoch_id_map[[key]] <- as.integer(link_epoch_id)
       stop_counter_map[[key]] <- 0L
