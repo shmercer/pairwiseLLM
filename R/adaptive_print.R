@@ -1541,7 +1541,9 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           " (need >= ",
           if (is.na(probe_min)) "NA" else probe_min,
           ")  scale_ready=",
-          fmt_mark(link_row$scale_ready[[1L]])
+          fmt_mark(link_row$scale_ready[[1L]]),
+          "  blockers=",
+          link_col_value(link_row, "stop_blocker_codes", default = NA_character_)
         ),
         paste0(
           "    link_fit_method=",
@@ -1598,6 +1600,12 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           ),
           "  blocker_rule=",
           link_col_value(link_row, "blocker_reweighting_rule", default = NA_character_)
+        ),
+        paste0(
+          "    lag_domain_reset=",
+          fmt_mark(link_row$lag_domain_reset[[1L]]),
+          "  lag_domain_reset_reason=",
+          link_col_value(link_row, "lag_domain_reset_reason", default = NA_character_)
         ),
         paste0(
           "    hub_anchored=",

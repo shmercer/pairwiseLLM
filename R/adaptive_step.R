@@ -934,8 +934,18 @@ run_one_step <- function(state, judge, ...) {
     spoke_key <- as.character(as.integer(selected_spoke_id))
     bins_map <- out$controller$link_stage_coverage_bins_used %||% list()
     source_map <- out$controller$link_stage_coverage_source %||% list()
-    bins_map[[spoke_key]] <- as.integer(selection$coverage_bins_used %||% NA_integer_)
-    source_map[[spoke_key]] <- as.character(selection$coverage_source %||% NA_character_)
+    is_probe_selection <- isTRUE(step_row$is_probe_step %||% FALSE)
+    next_bins <- as.integer(selection$coverage_bins_used %||% NA_integer_)
+    next_source <- as.character(selection$coverage_source %||% NA_character_)
+    if (!isTRUE(is_probe_selection) && !is.na(next_bins)) {
+      bins_map[[spoke_key]] <- as.integer(next_bins)
+    }
+    if (!isTRUE(is_probe_selection) &&
+      length(next_source) == 1L &&
+      !is.na(next_source) &&
+      nzchar(next_source)) {
+      source_map[[spoke_key]] <- as.character(next_source)
+    }
     out$controller$current_link_spoke_id <- as.integer(selected_spoke_id)
     out$controller$link_stage_coverage_bins_used <- bins_map
     out$controller$link_stage_coverage_source <- source_map

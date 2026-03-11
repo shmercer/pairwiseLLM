@@ -84,6 +84,11 @@ test_that("canonical log schemas follow the expected column order", {
     "transform_frozen_refit_id", "link_epoch_id", "ts_btl_rank_spearman",
     "ppc_brier_cross_active", "ppc_brier_cross_probe", "ppc_brier_cross",
     "hub_anchored", "scale_ready",
+    "stop_blocker_codes", "stop_blocker_diagnostics_failed",
+    "stop_blocker_lag_not_eligible", "stop_blocker_min_refits_not_met",
+    "stop_blocker_realized_probes_below_min", "stop_blocker_reliability_undefined",
+    "stop_blocker_probe_brier_unavailable", "stop_blocker_probe_pred_rmse_unavailable",
+    "stop_blocker_theta_global_rmse_unavailable", "stop_blocker_hub_not_anchored",
     "link_fit_method", "link_uncertainty_approximation",
     "link_diagnostics_divergences", "link_diagnostics_max_rhat",
     "link_diagnostics_min_ess_bulk", "link_diagnostics_divergences_pass",
@@ -132,7 +137,7 @@ test_that("canonical log schemas follow the expected column order", {
     "probe_brier_delta_min_used", "logalpha_sd_guardrail_used",
     "link_transform_escalation_refits_required_used",
     "probe_edges_count_toward_active_constraints_used",
-    "lag_domain_key", "lag_domain_reset"
+    "lag_domain_key", "lag_domain_reset", "lag_domain_reset_reason"
   )
 
   expect_equal(names(pairwiseLLM:::schema_step_log), expected_step)

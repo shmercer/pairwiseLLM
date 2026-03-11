@@ -231,6 +231,8 @@ test_that("run_one_step logs probe rows without linking d-opt utility fields", {
   state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
   state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_stage_coverage_bins_used <- list(`2` = 3L)
+  state$controller$link_stage_coverage_source <- list(`2` = "linking_global_score")
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(
     link_transform_state = "shift_only",
     delta_spoke_mean = 0,
@@ -247,6 +249,8 @@ test_that("run_one_step logs probe rows without linking d-opt utility fields", {
   expect_true(is.na(row$utility_mode[[1L]]))
   expect_true(is.na(row$cross_set_utility_pre[[1L]]))
   expect_equal(nrow(out$history_pairs), 0L)
+  expect_identical(out$controller$link_stage_coverage_bins_used[["2"]], 3L)
+  expect_identical(out$controller$link_stage_coverage_source[["2"]], "linking_global_score")
 })
 
 test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs", {

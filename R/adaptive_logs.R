@@ -243,6 +243,16 @@ schema_link_stage_log <- c(
   ppc_brier_cross = "double",
   hub_anchored = "logical",
   scale_ready = "logical",
+  stop_blocker_codes = "character",
+  stop_blocker_diagnostics_failed = "logical",
+  stop_blocker_lag_not_eligible = "logical",
+  stop_blocker_min_refits_not_met = "logical",
+  stop_blocker_realized_probes_below_min = "logical",
+  stop_blocker_reliability_undefined = "logical",
+  stop_blocker_probe_brier_unavailable = "logical",
+  stop_blocker_probe_pred_rmse_unavailable = "logical",
+  stop_blocker_theta_global_rmse_unavailable = "logical",
+  stop_blocker_hub_not_anchored = "logical",
   link_fit_method = "character",
   link_uncertainty_approximation = "character",
   link_diagnostics_divergences = "integer",
@@ -350,7 +360,8 @@ schema_link_stage_log <- c(
   link_transform_escalation_refits_required_used = "integer",
   probe_edges_count_toward_active_constraints_used = "logical",
   lag_domain_key = "character",
-  lag_domain_reset = "logical"
+  lag_domain_reset = "logical",
+  lag_domain_reset_reason = "character"
 )
 
 schema_item_step_log <- c(

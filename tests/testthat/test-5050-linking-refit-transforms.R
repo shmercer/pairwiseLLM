@@ -80,6 +80,23 @@ append_cross_step <- function(state, step_id, A_id, B_id, Y, spoke_id) {
   state
 }
 
+current_link_epoch_signature <- function(state,
+                                         spoke_id,
+                                         transform_state = "shift_only",
+                                         refit_mode = "shift_only",
+                                         lock_mode = "soft_lock") {
+  hub_id <- 1L
+  pairwiseLLM:::.adaptive_link_epoch_signature_string(
+    pairwiseLLM:::.adaptive_link_epoch_signature_components(
+      transform_state = transform_state,
+      refit_mode = refit_mode,
+      lock_mode = lock_mode,
+      hub_art = state$linking$phase_a$artifacts[[as.character(hub_id)]],
+      spoke_art = state$linking$phase_a$artifacts[[as.character(spoke_id)]]
+    )
+  )
+}
+
 test_that("linking refit contract fields follow transform mode", {
   state_shift <- make_linking_refit_state(
     list(link_transform_mode = "shift_only", link_refit_mode = "shift_only")
@@ -975,13 +992,41 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   )
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
+      link_epoch_id = 4L,
       probe_panel_shortfall = 15L,
+      probe_panel_id = "panel_eval",
+      probe_edges_planned = 30L,
+      probe_edges_realized = 15L,
       probe_edges_min_for_stop_used = 30L,
       probe_brier = 0.38,
       probe_pred_rmse_lagged = 0.03,
       theta_global_rmse_lagged = 0.08,
       delta_spoke_sd = 0.20,
-      delta_sd_max_used = 0.10
+      delta_sd_max_used = 0.10,
+      stop_blocker_codes = paste(
+        c(
+          "diagnostics_failed",
+          "lag_not_eligible",
+          "min_refits_not_met",
+          "realized_probes_below_min",
+          "reliability_undefined",
+          "probe_brier_unavailable",
+          "probe_pred_rmse_unavailable",
+          "theta_global_rmse_unavailable",
+          "hub_not_anchored"
+        ),
+        collapse = ","
+      ),
+      stop_blocker_diagnostics_failed = TRUE,
+      stop_blocker_lag_not_eligible = TRUE,
+      stop_blocker_min_refits_not_met = TRUE,
+      stop_blocker_realized_probes_below_min = TRUE,
+      stop_blocker_reliability_undefined = TRUE,
+      stop_blocker_probe_brier_unavailable = TRUE,
+      stop_blocker_probe_pred_rmse_unavailable = TRUE,
+      stop_blocker_theta_global_rmse_unavailable = TRUE,
+      stop_blocker_hub_not_anchored = TRUE,
+      lag_domain_reset_reason = "spoke_artifact_replaced"
     )
   )
 
@@ -1033,6 +1078,27 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
     as.character(row$blocker_reweighting_rule[[1L]]),
     "canonical_metric_excess_ratio_v1"
   )
+  expect_identical(as.integer(row$link_epoch_id[[1L]]), 4L)
+  expect_identical(as.character(row$probe_panel_id[[1L]]), "panel_eval")
+  expect_identical(as.integer(row$probe_edges_planned[[1L]]), 30L)
+  expect_identical(as.integer(row$probe_edges_realized[[1L]]), 15L)
+  expect_identical(as.character(row$stop_blocker_codes[[1L]]), paste(
+    c(
+      "diagnostics_failed",
+      "lag_not_eligible",
+      "min_refits_not_met",
+      "realized_probes_below_min",
+      "reliability_undefined",
+      "probe_brier_unavailable",
+      "probe_pred_rmse_unavailable",
+      "theta_global_rmse_unavailable",
+      "hub_not_anchored"
+    ),
+    collapse = ","
+  ))
+  expect_true(isTRUE(row$stop_blocker_diagnostics_failed[[1L]]))
+  expect_true(isTRUE(row$stop_blocker_hub_not_anchored[[1L]]))
+  expect_identical(as.character(row$lag_domain_reset_reason[[1L]]), "spoke_artifact_replaced")
 })
 
 test_that("linking stage targets are deterministic from budget, floors, and taper", {
@@ -1582,7 +1648,9 @@ test_that("scale_ready uses current-epoch active edges only", {
     state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
     state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
     state$controller$link_epoch_start_step_by_spoke <- list(`2` = as.integer(epoch_start_step))
-    state$controller$link_epoch_signature_by_spoke <- list(`2` = "shift_only|shift_only|soft_lock|NA|NA|NA|NA|NA")
+    state$controller$link_epoch_signature_by_spoke <- list(
+      `2` = current_link_epoch_signature(state, spoke_id = 2L)
+    )
     state$controller$link_stage_coverage_bins_used <- list(`2` = 1L)
     state
   }
@@ -1641,7 +1709,9 @@ test_that("scale_ready tolerates missing legacy coverage bin state on resume", {
   state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
   state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
   state$controller$link_epoch_start_step_by_spoke <- list(`2` = 1L)
-  state$controller$link_epoch_signature_by_spoke <- list(`2` = "shift_only|shift_only|soft_lock|NA|NA|NA|NA|NA")
+  state$controller$link_epoch_signature_by_spoke <- list(
+    `2` = current_link_epoch_signature(state, spoke_id = 2L)
+  )
   state$controller$link_stage_coverage_bins_used <- list(`2` = NA_integer_)
 
   out <- testthat::with_mocked_bindings(
@@ -1681,14 +1751,16 @@ test_that("scale_ready tolerates missing legacy coverage bin state on resume", {
   expect_true(isTRUE(stats$scale_ready))
 })
 
-test_that("epoch reset paths advance epoch start step and clear counters", {
+test_that("epoch resets require regime changes, not ordinary probe-panel churn", {
   make_reset_state <- function() {
     state <- make_linking_refit_state()
     state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
     state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
     state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
     state$controller$link_epoch_start_step_by_spoke <- list(`2` = 1L)
-    state$controller$link_epoch_signature_by_spoke <- list(`2` = "old_signature")
+    state$controller$link_epoch_signature_by_spoke <- list(
+      `2` = current_link_epoch_signature(state, spoke_id = 2L)
+    )
     state$controller$link_stop_consecutive_pass_count_by_spoke <- list(`2` = 2L)
     state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
     state
@@ -1733,6 +1805,19 @@ test_that("epoch reset paths advance epoch start step and clear counters", {
   artifact_state$linking$phase_a$artifacts[["2"]]$refit_id <- 9L
   artifact_reset <- run_reset(artifact_state)
 
+  artifact_state <- make_reset_state()
+  artifact_state$linking$phase_a$artifacts[["2"]]$refit_id <- 9L
+  artifact_reset <- run_reset(artifact_state)
+
+  expect_identical(artifact_reset$controller$link_epoch_id_by_spoke[["2"]], 5L)
+  expect_identical(artifact_reset$controller$link_epoch_start_step_by_spoke[["2"]], 3L)
+  expect_identical(artifact_reset$controller$link_stop_consecutive_pass_count_by_spoke[["2"]], 0L)
+  expect_identical(artifact_reset$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 0L)
+  artifact_stats <- artifact_reset$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(artifact_stats$lag_domain_reset))
+  expect_identical(as.character(artifact_stats$lag_domain_reset_reason), "spoke_artifact_replaced")
+  expect_false(isTRUE(artifact_stats$lag_eligible))
+
   probe_state <- make_reset_state()
   panel <- tibble::tibble(
     probe_panel_id = "new_panel",
@@ -1752,15 +1837,11 @@ test_that("epoch reset paths advance epoch start step and clear counters", {
   probe_state$linking$probe$panels_by_spoke <- list(`2` = panel)
   probe_reset <- run_reset(probe_state)
 
-  for (out in list(artifact_reset, probe_reset)) {
-    expect_identical(out$controller$link_epoch_id_by_spoke[["2"]], 5L)
-    expect_identical(out$controller$link_epoch_start_step_by_spoke[["2"]], 3L)
-    expect_identical(out$controller$link_stop_consecutive_pass_count_by_spoke[["2"]], 0L)
-    expect_identical(out$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 0L)
-    stats_row <- out$controller$link_refit_stats_by_spoke[["2"]]
-    expect_true(isTRUE(stats_row$lag_domain_reset))
-    expect_false(isTRUE(stats_row$lag_eligible))
-  }
+  expect_identical(probe_reset$controller$link_epoch_id_by_spoke[["2"]], 4L)
+  expect_identical(probe_reset$controller$link_epoch_start_step_by_spoke[["2"]], 1L)
+  probe_stats <- probe_reset$controller$link_refit_stats_by_spoke[["2"]]
+  expect_false(isTRUE(probe_stats$lag_domain_reset))
+  expect_true(is.na(probe_stats$lag_domain_reset_reason))
 })
 
 test_that("link stop gating enforces diagnostics and lag eligibility", {
