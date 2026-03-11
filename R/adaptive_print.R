@@ -776,6 +776,70 @@ summarize_adaptive <- function(state) {
   paste(sort(vals), collapse = ",")
 }
 
+.adaptive_latest_link_stage_rows <- function(state) {
+  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% tibble::tibble())
+  if (nrow(link_stage_log) < 1L) {
+    return(link_stage_log)
+  }
+  if (!all(c("spoke_id", "refit_id") %in% names(link_stage_log))) {
+    return(link_stage_log[0, , drop = FALSE])
+  }
+  ord <- order(
+    as.integer(link_stage_log$spoke_id),
+    as.integer(link_stage_log$refit_id),
+    seq_len(nrow(link_stage_log))
+  )
+  link_stage_log <- link_stage_log[ord, , drop = FALSE]
+  keep <- !duplicated(as.integer(link_stage_log$spoke_id), fromLast = TRUE)
+  tibble::as_tibble(link_stage_log[keep, , drop = FALSE])
+}
+
+.adaptive_print_link_state_line <- function(state, phase_ctx) {
+  latest_rows <- .adaptive_latest_link_stage_rows(state)
+  if (nrow(latest_rows) < 1L) {
+    return(character())
+  }
+
+  fit_methods <- .adaptive_print_compact_values(latest_rows$link_fit_method)
+  uncertainty <- .adaptive_print_compact_values(latest_rows$link_uncertainty_approximation)
+  probe_planned <- sum(as.integer(latest_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
+  probe_realized <- sum(as.integer(latest_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
+  gate_open <- sum(latest_rows$link_stop_gate_open %in% TRUE, na.rm = TRUE)
+  lag_open <- sum(latest_rows$link_lag_eligible %in% TRUE, na.rm = TRUE)
+  frozen <- sum(latest_rows$transform_frozen %in% TRUE, na.rm = TRUE)
+
+  blocker_codes <- unique(as.character(latest_rows$stop_blocker_codes %||% character()))
+  blocker_codes <- blocker_codes[!is.na(blocker_codes) & nzchar(blocker_codes)]
+  blockers <- unique(unlist(strsplit(blocker_codes, "\\|", fixed = FALSE), use.names = FALSE))
+  blockers <- blockers[!is.na(blockers) & nzchar(blockers)]
+
+  details <- c(
+    if (!is.na(fit_methods) && nzchar(fit_methods)) {
+      paste0("fit_method=", fit_methods)
+    },
+    if (!is.na(uncertainty) && nzchar(uncertainty)) {
+      paste0("uncertainty=", uncertainty)
+    },
+    paste0("probe_edges=", probe_realized, "/", probe_planned),
+    paste0("lag_open=", lag_open, "/", nrow(latest_rows)),
+    paste0("stop_gate_open=", gate_open, "/", nrow(latest_rows)),
+    if (length(phase_ctx$stopped_spokes) > 0L) {
+      paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+    },
+    if (frozen > 0L) {
+      paste0("transform_frozen=", frozen, "/", nrow(latest_rows))
+    },
+    if (length(blockers) > 0L) {
+      paste0("stop_blockers=", paste(sort(blockers), collapse = ","))
+    }
+  )
+
+  if (length(details) < 1L) {
+    return(character())
+  }
+  paste0("link review: ", paste(details, collapse = "; "))
+}
+
 .adaptive_print_link_phase_line <- function(state) {
   controller <- .adaptive_controller_resolve(state)
   run_mode <- as.character(controller$run_mode %||% "within_set")
@@ -819,7 +883,13 @@ summarize_adaptive <- function(state) {
   if (length(details) > 0L) {
     phase_line <- paste0(phase_line, " [", paste(details, collapse = "; "), "]")
   }
-  phase_line
+  c(
+    phase_line,
+    .adaptive_print_link_state_line(
+      state = state,
+      phase_ctx = phase_ctx
+    )
+  )
 }
 
 #' Print an adaptive state summary.
@@ -1024,6 +1094,9 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     if (is.finite(spoke)) {
       link_txt <- c(link_txt, paste0("spoke=", spoke))
     }
+    if (!(isTRUE(is_probe_step) || run_mode %in% c("link_probe_holdout", "link_probe"))) {
+      link_txt <- c(link_txt, "link=active")
+    }
     if ("link_transform_state" %in% names(step_row)) {
       mode <- as.character(step_row$link_transform_state[[1L]] %||% NA_character_)
       if (!is.na(mode) && nzchar(mode)) {
@@ -1039,7 +1112,7 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     } else if (identical(run_mode, "link_probe") ||
       ("is_drift_probe_step" %in% names(step_row) &&
         isTRUE(step_row$is_drift_probe_step[[1L]] %||% FALSE))) {
-      "drift"
+      "drift_followup"
     } else {
       "probe"
     }
@@ -1395,6 +1468,15 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     )
     if (length(epoch_ids) > 0L) {
       link_block <- c(link_block, paste0("  link_epoch_id=", paste(epoch_ids, collapse = ",")))
+    }
+
+    fit_methods <- .adaptive_print_compact_values(link_stage_rows$link_fit_method)
+    uncertainty <- .adaptive_print_compact_values(link_stage_rows$link_uncertainty_approximation)
+    if (!is.na(fit_methods) && nzchar(fit_methods)) {
+      link_block <- c(link_block, paste0("  authoritative_link_fit_method=", fit_methods))
+    }
+    if (!is.na(uncertainty) && nzchar(uncertainty)) {
+      link_block <- c(link_block, paste0("  authoritative_link_uncertainty=", uncertainty))
     }
 
     rel_values <- as.double(link_stage_rows$reliability_link_global %||% rep(NA_real_, nrow(link_stage_rows)))

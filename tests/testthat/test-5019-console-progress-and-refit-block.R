@@ -101,6 +101,8 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   expect_true(any(grepl("transform_policy=", combined)))
   expect_true(any(grepl("transform_state=", combined)))
   expect_true(any(grepl("link_epoch_id=", combined)))
+  expect_true(any(grepl("authoritative_link_fit_method=", combined)))
+  expect_true(any(grepl("authoritative_link_uncertainty=", combined)))
   expect_true(any(grepl("link_refit_mode=", combined)))
   expect_true(any(grepl("cross_pairs_done=", combined)))
   expect_true(any(grepl("link_stop_pass=", combined)))
@@ -143,5 +145,33 @@ test_that("adaptive progress step events label holdout and drift probes distinct
   drift_msg <- pairwiseLLM:::adaptive_progress_step_event(drift, cfg)
 
   expect_match(holdout_msg, "probe=holdout")
-  expect_match(drift_msg, "probe=drift")
+  expect_match(drift_msg, "probe=drift_followup")
+})
+
+test_that("adaptive progress step events distinguish active linking from probe follow-up", {
+  cfg <- pairwiseLLM:::.adaptive_progress_config(
+    progress = "all",
+    progress_redraw_every = 1L,
+    progress_show_events = TRUE,
+    progress_errors = TRUE
+  )
+  active <- tibble::tibble(
+    step_id = 3L,
+    round_stage = "mid_link",
+    run_mode = "link_one_spoke",
+    is_probe_step = FALSE,
+    is_holdout_probe_step = FALSE,
+    is_drift_probe_step = FALSE,
+    is_cross_set = TRUE,
+    link_spoke_id = 2L,
+    link_transform_state = "shift_only",
+    candidate_starved = FALSE,
+    status = "ok",
+    fallback_used = "refresh"
+  )
+
+  active_msg <- pairwiseLLM:::adaptive_progress_step_event(active, cfg)
+
+  expect_match(active_msg, "link=active")
+  expect_false(grepl("probe=", active_msg))
 })
