@@ -111,6 +111,7 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   expect_true(any(grepl("feasibility_capacity\\[a,l,m,loc\\]=", combined)))
   expect_true(any(grepl("blocker_weights\\[probe_shortfall,probe_brier,probe_rmse,theta_rmse,delta_sd\\]=", combined)))
   expect_true(any(grepl("reliability_link_global\\[min,max\\]=", combined)))
+  expect_true(any(grepl("probe_panel_id=", combined)))
   expect_false(any(grepl("reliability_EAP_link\\[min,max\\]=", combined)))
 })
 

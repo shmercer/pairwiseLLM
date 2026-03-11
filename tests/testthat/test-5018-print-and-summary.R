@@ -58,6 +58,7 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
       link_epoch_id = 3L,
+      probe_panel_id = "panel-epoch-3",
       link_fit_method = "cmdstan_hmc",
       link_uncertainty_approximation = "cmdstan_posterior_draws",
       probe_edges_planned = 30L,
@@ -77,6 +78,7 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   expect_true(any(grepl("frozen_spokes=2", output)))
   expect_true(any(grepl("^link review: ", output)))
   expect_true(any(grepl("fit_method=cmdstan_hmc", output)))
+  expect_true(any(grepl("probe_panel_id=panel-epoch-3", output)))
   expect_true(any(grepl("probe_edges=18/30", output)))
   expect_true(any(grepl("stop_blockers=probe_pred_rmse_unavailable,theta_global_rmse_unavailable", output)))
 })

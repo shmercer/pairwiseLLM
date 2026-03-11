@@ -802,6 +802,7 @@ summarize_adaptive <- function(state) {
 
   fit_methods <- .adaptive_print_compact_values(latest_rows$link_fit_method)
   uncertainty <- .adaptive_print_compact_values(latest_rows$link_uncertainty_approximation)
+  probe_panel_id <- .adaptive_print_compact_values(latest_rows$probe_panel_id)
   probe_planned <- sum(as.integer(latest_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
   probe_realized <- sum(as.integer(latest_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
   gate_open <- sum(latest_rows$link_stop_gate_open %in% TRUE, na.rm = TRUE)
@@ -819,6 +820,9 @@ summarize_adaptive <- function(state) {
     },
     if (!is.na(uncertainty) && nzchar(uncertainty)) {
       paste0("uncertainty=", uncertainty)
+    },
+    if (!is.na(probe_panel_id) && nzchar(probe_panel_id)) {
+      paste0("probe_panel_id=", probe_panel_id)
     },
     paste0("probe_edges=", probe_realized, "/", probe_planned),
     paste0("lag_open=", lag_open, "/", nrow(latest_rows)),
@@ -1658,7 +1662,9 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           probe_realized,
           " (need >= ",
           if (is.na(probe_min)) "NA" else probe_min,
-          ")  scale_ready=",
+          ")  probe_panel_id=",
+          link_col_value(link_row, "probe_panel_id", default = NA_character_),
+          "  scale_ready=",
           fmt_mark(link_row$scale_ready[[1L]]),
           "  blockers=",
           link_col_value(link_row, "stop_blocker_codes", default = NA_character_)
