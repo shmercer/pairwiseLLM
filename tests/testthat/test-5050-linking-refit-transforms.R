@@ -581,17 +581,65 @@ test_that("link likelihood applies signed beta by original presentation side", {
   hub_theta <- c(h1 = 0)
   spoke_theta <- c(s1 = 0)
 
-  fit_mixed <- pairwiseLLM:::.adaptive_link_fit_transform(
-    edges_mixed,
-    hub_theta,
-    spoke_theta,
-    transform_mode = "shift_only"
+  fit_mixed <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform_cmdstan = function(stan_data,
+                                                    variable_names,
+                                                    cmdstan,
+                                                    seed,
+                                                    model_fn = NULL) {
+      delta_draws <- if (sum(stan_data$beta_signed) == 0) {
+        c(-0.1, 0, 0.1, 0)
+      } else {
+        c(-0.6, -0.5, -0.4, -0.5)
+      }
+      list(
+        draws_matrix = cbind(delta = delta_draws),
+        diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 1000),
+        mcmc_config_used = list(
+          chains = 4L,
+          parallel_chains = 4L,
+          threads_per_chain = 1L,
+          cmdstanr_version = "test"
+        )
+      )
+    },
+    .package = "pairwiseLLM",
+    pairwiseLLM:::.adaptive_link_fit_transform(
+      edges_mixed,
+      hub_theta,
+      spoke_theta,
+      transform_mode = "shift_only"
+    )
   )
-  fit_all_a <- pairwiseLLM:::.adaptive_link_fit_transform(
-    edges_all_a,
-    hub_theta,
-    spoke_theta,
-    transform_mode = "shift_only"
+  fit_all_a <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform_cmdstan = function(stan_data,
+                                                    variable_names,
+                                                    cmdstan,
+                                                    seed,
+                                                    model_fn = NULL) {
+      delta_draws <- if (sum(stan_data$beta_signed) == 0) {
+        c(-0.1, 0, 0.1, 0)
+      } else {
+        c(-0.6, -0.5, -0.4, -0.5)
+      }
+      list(
+        draws_matrix = cbind(delta = delta_draws),
+        diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 1000),
+        mcmc_config_used = list(
+          chains = 4L,
+          parallel_chains = 4L,
+          threads_per_chain = 1L,
+          cmdstanr_version = "test"
+        )
+      )
+    },
+    .package = "pairwiseLLM",
+    pairwiseLLM:::.adaptive_link_fit_transform(
+      edges_all_a,
+      hub_theta,
+      spoke_theta,
+      transform_mode = "shift_only"
+    )
   )
 
   expect_true(abs(fit_mixed$delta_mean) < 0.5)
@@ -2037,14 +2085,27 @@ test_that("auto escalation requires diagnostics to pass before any decision open
     .adaptive_link_fit_transform_alt_shift_scale = function(...) {
       list(converged = TRUE, delta_mean = 0.2, log_alpha_mean = 0.3, log_alpha_sd = 0.02)
     },
-    .adaptive_link_mcmc_diagnostics = function(...) {
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
       list(
-        divergences = 0L,
-        max_rhat = 1.20,
-        min_ess_bulk = 50,
-        diagnostics_divergences_pass = TRUE,
-        diagnostics_rhat_pass = FALSE,
-        diagnostics_ess_pass = FALSE
+        delta_mean = 0.1,
+        delta_sd = 0.1,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        posterior_draws = list(delta = c(0.1, 0.1)),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1.20,
+          min_ess_bulk = 50,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = FALSE,
+          diagnostics_ess_pass = FALSE
+        ),
+        fit_contract = list(
+          estimation_method = "cmdstan_hmc",
+          uncertainty_approximation = "cmdstan_posterior_draws"
+        )
       )
     },
     .adaptive_link_probe_brier_for_fit = function(..., log_alpha_mean = NA_real_) {
@@ -2063,8 +2124,8 @@ test_that("auto escalation requires diagnostics to pass before any decision open
   expect_false(isTRUE(stats$link_stop_eligible))
   expect_false(isTRUE(stats$escalated_this_refit))
   expect_identical(out$controller$link_transform_state_by_spoke[["2"]], "shift_only")
-  expect_identical(stats$link_fit_method, "bayesian_mcmc")
-  expect_identical(stats$link_uncertainty_approximation, "posterior_draws")
+  expect_identical(stats$link_fit_method, "cmdstan_hmc")
+  expect_identical(stats$link_uncertainty_approximation, "cmdstan_posterior_draws")
   expect_identical(stats$alternative_fit_method, "map_laplace_hessian")
   expect_identical(stats$alternative_uncertainty_approximation, "laplace_hessian")
 })
@@ -2727,61 +2788,30 @@ test_that("adaptive_state validation branches for linking controls are covered",
   expect_true(q[["long_link"]] <= 8L)
 })
 
-test_that("linking MCMC helper edge branches are deterministic and guarded", {
-  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_rhat(matrix(1, nrow = 1L, ncol = 1L))))
-  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_rhat(matrix(1, nrow = 8L, ncol = 2L))))
-  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_ess_bulk(matrix(1, nrow = 2L, ncol = 1L))))
-
-  diag_bad_shape <- pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
-    chain_draws = array(1, dim = c(8L, 2L)),
-    param_names = "delta"
+test_that("linking CmdStan diagnostics validator enforces canonical HMC fields", {
+  diag_ok <- pairwiseLLM:::.adaptive_link_cmdstan_validate_diagnostics(
+    diagnostics = list(divergences = 0L, max_rhat = 1.005, min_ess_bulk = 900),
+    thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
   )
-  expect_true(is.na(diag_bad_shape$max_rhat))
-  expect_true(is.na(diag_bad_shape$min_ess_bulk))
-  expect_true(is.na(diag_bad_shape$diagnostics_rhat_pass))
-  expect_true(is.na(diag_bad_shape$diagnostics_ess_pass))
-
-  diag_flat <- suppressWarnings(pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
-    chain_draws = array(numeric(), dim = c(10L, 2L, 0L)),
-    param_names = character()
-  ))
-  expect_true(is.na(diag_flat$max_rhat))
-  expect_true(is.na(diag_flat$min_ess_bulk))
-  expect_true(is.na(diag_flat$diagnostics_divergences_pass))
+  expect_identical(diag_ok$divergences, 0L)
+  expect_true(isTRUE(diag_ok$diagnostics_divergences_pass))
+  expect_true(isTRUE(diag_ok$diagnostics_rhat_pass))
+  expect_true(isTRUE(diag_ok$diagnostics_ess_pass))
 
   expect_error(
-    pairwiseLLM:::.adaptive_link_mcmc_sample(
-      log_post_fn = function(x) -sum(x^2),
-      init = numeric(),
-      seed = 1L
+    pairwiseLLM:::.adaptive_link_cmdstan_validate_diagnostics(
+      diagnostics = list(divergences = NA_integer_, max_rhat = 1.01, min_ess_bulk = 500),
+      thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
     ),
-    "at least one parameter"
-  )
-  expect_error(
-    pairwiseLLM:::.adaptive_link_mcmc_sample(
-      log_post_fn = function(x) NA_real_,
-      init = c(0),
-      seed = 1L,
-      n_warmup = 0L,
-      n_samples = 20L
-    ),
-    "failed to initialize a finite posterior state"
+    "missing or malformed"
   )
 })
 
-test_that("linking MCMC sampling and refit seed are stable under fixed inputs", {
-  draws <- pairwiseLLM:::.adaptive_link_mcmc_sample(
-    log_post_fn = function(x) -sum(x^2),
-    init = c(0),
-    seed = 17L,
-    n_chains = 1L,
-    n_warmup = 2L,
-    n_samples = 5L
-  )
-  expect_equal(dim(draws$chain_draws), c(20L, 2L, 1L))
-  expect_equal(ncol(draws$draws), 1L)
-  expect_true(is.finite(draws$accept_rate))
-
+test_that("linking CmdStan schedule and refit seed are stable under fixed inputs", {
+  sched1 <- pairwiseLLM:::.adaptive_link_cmdstan_schedule(1L, n_param = 1L, joint_used = FALSE)
+  sched2 <- pairwiseLLM:::.adaptive_link_cmdstan_schedule(2L, n_param = 3L, joint_used = TRUE)
+  expect_true(sched2$iter_sampling > sched1$iter_sampling)
+  expect_true(sched2$iter_warmup > sched1$iter_warmup)
   edges <- tibble::tibble(step_id = c(NA_integer_, 2L), y_spoke = c(2L, 1L))
   seed1 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
   seed2 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
@@ -2800,70 +2830,39 @@ test_that("linking MCMC sampling and refit seed are stable under fixed inputs", 
   expect_identical(seed_large_a, seed_large_b)
 })
 
-test_that("linking MCMC diagnostics mark divergence gate as passed for valid local sampler draws", {
-  chain_draws <- array(
-    stats::rnorm(4L * 20L, sd = 0.1),
-    dim = c(20L, 4L, 1L),
-    dimnames = list(NULL, paste0("chain_", seq_len(4L)), "delta")
-  )
-  diag_ok <- pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
-    chain_draws = chain_draws,
-    param_names = "delta"
-  )
-
-  expect_identical(diag_ok$divergences, 0L)
-  expect_true(isTRUE(diag_ok$diagnostics_divergences_pass))
-})
-
-test_that("linking refit retries MCMC effort until diagnostics pass", {
+test_that("linking refit retries CmdStan effort until diagnostics pass", {
   state <- make_linking_refit_state(list(link_refit_mode = "shift_only"))
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
 
   sampled <- list()
-  diag_calls <- 0L
+  fit_calls <- 0L
   out <- testthat::with_mocked_bindings(
-    .adaptive_link_mcmc_sample = function(log_post_fn,
-                                          init,
-                                          seed,
-                                          n_chains = 4L,
-                                          n_warmup = 120L,
-                                          n_samples = 180L) {
+    .adaptive_link_fit_transform_cmdstan = function(stan_data,
+                                                    variable_names,
+                                                    cmdstan,
+                                                    seed,
+                                                    model_fn = NULL) {
+      fit_calls <<- fit_calls + 1L
       sampled[[length(sampled) + 1L]] <<- list(
-        n_chains = as.integer(n_chains),
-        n_warmup = as.integer(n_warmup),
-        n_samples = as.integer(n_samples)
+        chains = as.integer(cmdstan$chains),
+        iter_warmup = as.integer(cmdstan$iter_warmup),
+        iter_sampling = as.integer(cmdstan$iter_sampling)
       )
-      chain_draws <- array(
-        0,
-        dim = c(as.integer(n_samples), as.integer(n_chains), length(init)),
-        dimnames = list(NULL, paste0("chain_", seq_len(as.integer(n_chains))), c("delta"))
-      )
-      list(
-        chain_draws = chain_draws,
-        draws = matrix(0, nrow = as.integer(n_samples) * as.integer(n_chains), ncol = length(init)),
-        accept_rate = 0.25
-      )
-    },
-    .adaptive_link_mcmc_diagnostics = function(chain_draws, param_names) {
-      diag_calls <<- diag_calls + 1L
-      if (diag_calls < 3L) {
-        return(list(
-          divergences = 0L,
-          max_rhat = 1.02,
-          min_ess_bulk = 80,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = FALSE,
-          diagnostics_ess_pass = FALSE
-        ))
+      diagnostics <- if (fit_calls < 3L) {
+        list(divergences = 0L, max_rhat = 1.02, min_ess_bulk = 80)
+      } else {
+        list(divergences = 0L, max_rhat = 1.004, min_ess_bulk = 480)
       }
       list(
-        divergences = 0L,
-        max_rhat = 1.004,
-        min_ess_bulk = 180,
-        diagnostics_divergences_pass = TRUE,
-        diagnostics_rhat_pass = TRUE,
-        diagnostics_ess_pass = TRUE
+        draws_matrix = cbind(delta = c(0, 0, 0, 0)),
+        diagnostics = diagnostics,
+        mcmc_config_used = list(
+          chains = as.integer(cmdstan$chains),
+          parallel_chains = as.integer(cmdstan$chains),
+          threads_per_chain = 1L,
+          cmdstanr_version = "test"
+        )
       )
     },
     .package = "pairwiseLLM",
@@ -2874,13 +2873,15 @@ test_that("linking refit retries MCMC effort until diagnostics pass", {
 
   stats <- out$controller$link_refit_stats_by_spoke[["2"]]
   expect_length(sampled, 3L)
-  expect_true(sampled[[2L]]$n_samples > sampled[[1L]]$n_samples)
-  expect_true(sampled[[3L]]$n_samples > sampled[[2L]]$n_samples)
+  expect_true(sampled[[2L]]$iter_sampling > sampled[[1L]]$iter_sampling)
+  expect_true(sampled[[3L]]$iter_sampling > sampled[[2L]]$iter_sampling)
   expect_identical(stats$link_diagnostics_divergences, 0L)
   expect_true(isTRUE(stats$link_diagnostics_divergences_pass))
   expect_true(isTRUE(stats$link_diagnostics_rhat_pass))
   expect_true(isTRUE(stats$link_diagnostics_ess_pass))
   expect_identical(stats$fit_contract$mcmc$repair_attempts, 3L)
+  expect_identical(stats$link_fit_method, "cmdstan_hmc")
+  expect_identical(stats$link_uncertainty_approximation, "cmdstan_posterior_draws")
 })
 
 test_that("committed result orientation remains Y=1 => A wins in refit inputs", {

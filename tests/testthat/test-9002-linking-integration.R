@@ -92,8 +92,8 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
     "blocker_probe_panel_shortfall_weight",
     "blocker_reweighting_rule"
   ) %in% names(rows)))
-  expect_true(all(rows$link_fit_method == "bayesian_mcmc"))
-  expect_true(all(rows$link_uncertainty_approximation == "posterior_draws"))
+  expect_true(all(rows$link_fit_method == "cmdstan_hmc"))
+  expect_true(all(rows$link_uncertainty_approximation == "cmdstan_posterior_draws"))
 })
 
 test_that("joint_refit integration records joint mode and soft-lock runtime fields", {

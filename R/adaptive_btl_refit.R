@@ -1377,215 +1377,193 @@
   )
 }
 
-.adaptive_mcmc_rhat <- function(chains) {
-  mat <- as.matrix(chains)
-  n <- nrow(mat)
-  m <- ncol(mat)
-  if (n < 2L || m < 2L) {
-    return(NA_real_)
+.adaptive_link_cmdstan_file <- function() {
+  path <- system.file("stan", "link_transform_refit.stan", package = "pairwiseLLM")
+  if (nzchar(path)) {
+    return(path)
   }
-  chain_means <- colMeans(mat)
-  w <- mean(apply(mat, 2L, stats::var))
-  if (!is.finite(w) || w <= 0) {
-    return(NA_real_)
+  fallback <- file.path("inst", "stan", "link_transform_refit.stan")
+  if (!file.exists(fallback)) {
+    rlang::abort("Stan model file for authoritative linking refit not found.")
   }
-  b <- n * stats::var(chain_means)
-  var_hat <- ((n - 1) / n) * w + (b / n)
-  as.double(sqrt(var_hat / w))
+  fallback
 }
 
-.adaptive_mcmc_ess_bulk <- function(chains) {
-  mat <- as.matrix(chains)
-  n <- nrow(mat)
-  m <- ncol(mat)
-  if (n < 3L || m < 1L) {
-    return(NA_real_)
+.adaptive_link_cmdstan_summary_vars <- function(joint_used, estimate_hub, use_scale) {
+  vars <- "delta"
+  if (isTRUE(use_scale)) {
+    vars <- c(vars, "log_alpha")
   }
-  ess_sum <- 0
-  for (j in seq_len(m)) {
-    x <- as.double(mat[, j])
-    if (!all(is.finite(x)) || stats::sd(x) == 0) {
-      next
+  if (isTRUE(estimate_hub)) {
+    vars <- c(vars, "theta_hub")
+  }
+  if (isTRUE(joint_used)) {
+    vars <- c(vars, "theta_spoke")
+  }
+  vars
+}
+
+.adaptive_link_cmdstan_collect_diagnostics <- function(fit, variables) {
+  diagnostics <- list(
+    divergences = NA_integer_,
+    max_rhat = NA_real_,
+    min_ess_bulk = NA_real_
+  )
+  notes <- character()
+
+  diag_tbl <- tryCatch(fit$diagnostic_summary(), error = function(e) NULL)
+  if (!is.null(diag_tbl) && "num_divergent" %in% names(diag_tbl)) {
+    divergences <- sum(diag_tbl$num_divergent, na.rm = TRUE)
+    diagnostics$divergences <- if (is.finite(divergences)) as.integer(divergences) else NA_integer_
+    if (!is.finite(divergences)) {
+      notes <- c(notes, "Divergence count not finite.")
     }
-    max_lag <- min(100L, n - 1L)
-    acf_vals <- stats::acf(x, lag.max = max_lag, plot = FALSE)$acf[-1L]
-    acf_vals[!is.finite(acf_vals)] <- 0
-    if (length(acf_vals) >= 2L) {
-      odd <- acf_vals[seq.int(1L, length(acf_vals), by = 2L)]
-      even <- acf_vals[seq.int(2L, length(acf_vals), by = 2L)]
-      n_pair <- min(length(odd), length(even))
-      pair_sums <- if (n_pair > 0L) {
-        odd[seq_len(n_pair)] + even[seq_len(n_pair)]
+  } else {
+    notes <- c(notes, "CmdStan diagnostics missing num_divergent.")
+  }
+
+  summary_tbl <- tryCatch(
+    withCallingHandlers(
+      fit$summary(variables = variables),
+      warning = function(w) invokeRestart("muffleWarning")
+    ),
+    error = function(e) NULL
+  )
+  if (!is.null(summary_tbl) && nrow(summary_tbl) > 0L) {
+    if ("rhat" %in% names(summary_tbl)) {
+      rhat_vals <- summary_tbl$rhat[is.finite(summary_tbl$rhat)]
+      if (length(rhat_vals) > 0L) {
+        diagnostics$max_rhat <- max(rhat_vals)
       } else {
-        numeric()
+        notes <- c(notes, "Rhat values missing or non-finite.")
       }
-      if (length(pair_sums) > 0L && any(is.finite(pair_sums))) {
-        first_bad <- which(pair_sums < 0)[1L]
-        if (!is.na(first_bad)) {
-          pair_sums <- pair_sums[seq_len(max(0L, first_bad - 1L))]
-        }
-      }
-      tau <- 1 + 2 * sum(pair_sums[pair_sums > 0], na.rm = TRUE)
     } else {
-      tau <- 1
+      notes <- c(notes, "CmdStan summary missing rhat.")
     }
-    tau <- max(1, tau)
-    ess_sum <- ess_sum + (n / tau)
+    if ("ess_bulk" %in% names(summary_tbl)) {
+      ess_vals <- summary_tbl$ess_bulk[is.finite(summary_tbl$ess_bulk)]
+      if (length(ess_vals) > 0L) {
+        diagnostics$min_ess_bulk <- min(ess_vals)
+      } else {
+        notes <- c(notes, "ESS bulk values missing or non-finite.")
+      }
+    } else {
+      notes <- c(notes, "CmdStan summary missing ess_bulk.")
+    }
+  } else {
+    notes <- c(notes, "CmdStan summary not available.")
   }
-  as.double(ess_sum)
+
+  if (length(notes) > 0L) {
+    diagnostics$notes <- notes
+  }
+  diagnostics
 }
 
-.adaptive_link_mcmc_diagnostics <- function(chain_draws, param_names) {
-  arr <- array(chain_draws, dim = dim(chain_draws), dimnames = dimnames(chain_draws))
-  if (length(dim(arr)) != 3L) {
-    return(list(
-      divergences = NA_integer_,
-      max_rhat = NA_real_,
-      min_ess_bulk = NA_real_,
-      diagnostics_divergences_pass = NA,
-      diagnostics_rhat_pass = NA,
-      diagnostics_ess_pass = NA
-    ))
-  }
-  if (dim(arr)[3L] < 1L) {
-    return(list(
-      param_names = as.character(param_names),
-      rhat = numeric(),
-      ess_bulk = numeric(),
-      divergences = NA_integer_,
-      max_rhat = NA_real_,
-      min_ess_bulk = NA_real_,
-      diagnostics_divergences_pass = NA,
-      diagnostics_rhat_pass = NA,
-      diagnostics_ess_pass = NA
-    ))
-  }
-  n_par <- dim(arr)[3L]
-  rhat <- rep(NA_real_, n_par)
-  ess <- rep(NA_real_, n_par)
-  for (k in seq_len(n_par)) {
-    mat <- arr[, , k, drop = TRUE]
-    rhat[[k]] <- .adaptive_mcmc_rhat(mat)
-    ess[[k]] <- .adaptive_mcmc_ess_bulk(mat)
-  }
-  max_rhat <- max(rhat, na.rm = TRUE)
-  min_ess <- min(ess, na.rm = TRUE)
-  if (!is.finite(max_rhat)) {
-    max_rhat <- NA_real_
-  }
-  if (!is.finite(min_ess)) {
-    min_ess <- NA_real_
+.adaptive_link_cmdstan_validate_diagnostics <- function(diagnostics, thresholds) {
+  diagnostics <- diagnostics %||% list()
+  divergences <- as.integer(diagnostics$divergences %||% NA_integer_)
+  max_rhat <- as.double(diagnostics$max_rhat %||% NA_real_)
+  min_ess_bulk <- as.double(diagnostics$min_ess_bulk %||% NA_real_)
+  if (is.na(divergences) || !is.finite(max_rhat) || !is.finite(min_ess_bulk)) {
+    details <- paste(
+      c(
+        paste0("divergences=", diagnostics$divergences %||% "NULL"),
+        paste0("max_rhat=", diagnostics$max_rhat %||% "NULL"),
+        paste0("min_ess_bulk=", diagnostics$min_ess_bulk %||% "NULL")
+      ),
+      collapse = ", "
+    )
+    rlang::abort(
+      paste0(
+        "Authoritative linking CmdStan diagnostics are missing or malformed. ",
+        details,
+        "."
+      )
+    )
   }
   list(
-    param_names = as.character(param_names),
-    rhat = as.double(rhat),
-    ess_bulk = as.double(ess),
-    divergences = 0L,
+    divergences = as.integer(divergences),
     max_rhat = as.double(max_rhat),
-    min_ess_bulk = as.double(min_ess),
-    diagnostics_divergences_pass = TRUE,
-    diagnostics_rhat_pass = if (is.finite(max_rhat)) max_rhat <= 1.05 else NA,
-    diagnostics_ess_pass = if (is.finite(min_ess)) min_ess >= 100 else NA
+    min_ess_bulk = as.double(min_ess_bulk),
+    diagnostics_divergences_pass = as.logical(divergences <= as.integer(thresholds$divergences_max)),
+    diagnostics_rhat_pass = as.logical(max_rhat <= as.double(thresholds$max_rhat)),
+    diagnostics_ess_pass = as.logical(min_ess_bulk >= as.double(thresholds$min_ess_bulk))
   )
 }
 
-.adaptive_link_mcmc_schedule <- function(attempt, n_param, joint_used = FALSE) {
+.adaptive_link_cmdstan_schedule <- function(attempt, n_param, joint_used = FALSE) {
   attempt <- max(1L, as.integer(attempt %||% 1L))
   n_param <- max(1L, as.integer(n_param %||% 1L))
   joint_used <- isTRUE(joint_used)
 
-  base_warmup <- if (joint_used) 160L else 120L
-  base_samples <- if (joint_used) 240L else 180L
-  warmup_mult <- c(1, 2, 3, 4)
-  sample_mult <- c(1, 2, 3, 4)
+  base_warmup <- if (joint_used) 400L else 300L
+  base_sampling <- if (joint_used) 500L else 400L
+  warmup_mult <- c(1L, 2L, 3L)
+  sampling_mult <- c(1L, 2L, 3L)
   idx <- min(attempt, length(warmup_mult))
-  warmup <- as.integer(base_warmup * warmup_mult[[idx]] + max(0L, n_param - 2L) * 4L)
-  samples <- as.integer(base_samples * sample_mult[[idx]] + max(0L, n_param - 2L) * 6L)
 
   list(
-    n_chains = 4L,
-    n_warmup = max(120L, warmup),
-    n_samples = max(180L, samples)
+    chains = 4L,
+    iter_warmup = as.integer(base_warmup * warmup_mult[[idx]] + max(0L, n_param - 2L) * 10L),
+    iter_sampling = as.integer(base_sampling * sampling_mult[[idx]] + max(0L, n_param - 2L) * 15L)
   )
 }
 
-.adaptive_link_mcmc_sample <- function(log_post_fn,
-                                       init,
-                                       seed,
-                                       n_chains = 4L,
-                                       n_warmup = 120L,
-                                       n_samples = 180L) {
-  init <- as.double(init)
-  n_param <- length(init)
-  if (n_param < 1L) {
-    rlang::abort("Linking Bayesian refit requires at least one parameter.")
-  }
-  n_chains <- max(2L, as.integer(n_chains))
-  n_warmup <- max(0L, as.integer(n_warmup))
-  n_samples <- max(20L, as.integer(n_samples))
-  total_iter <- as.integer(n_warmup + n_samples)
-  chain_draws <- array(
-    NA_real_,
-    dim = c(n_samples, n_chains, n_param),
-    dimnames = list(NULL, paste0("chain_", seq_len(n_chains)), NULL)
+.adaptive_link_cmdstan_draws_matrix <- function(fit, variables) {
+  tryCatch(
+    fit$draws(variables = variables, format = "matrix"),
+    error = function(e) {
+      rlang::abort(
+        paste0("Authoritative linking CmdStan fit did not return draws: ", conditionMessage(e))
+      )
+    }
   )
-  accept_rates <- rep(NA_real_, n_chains)
+}
 
-  for (chain in seq_len(n_chains)) {
-    chain_seed <- as.integer((seed + chain * 101L) %% .Machine$integer.max)
-    res <- withr::with_seed(chain_seed, {
-      cur <- init + stats::rnorm(n_param, sd = 0.05)
-      cur_lp <- as.double(log_post_fn(cur))
-      tries <- 0L
-      while ((!is.finite(cur_lp)) && tries < 200L) {
-        tries <- tries + 1L
-        cur <- init + stats::rnorm(n_param, sd = 0.25)
-        cur_lp <- as.double(log_post_fn(cur))
-      }
-      if (!is.finite(cur_lp)) {
-        rlang::abort("Linking Bayesian refit failed to initialize a finite posterior state.")
-      }
-
-      step_sd <- rep(0.08, n_param)
-      accepted <- 0L
-      accept_window <- 0L
-      draws <- matrix(NA_real_, nrow = n_samples, ncol = n_param)
-      keep_idx <- 0L
-      for (iter in seq_len(total_iter)) {
-        prop <- cur + stats::rnorm(n_param, sd = step_sd)
-        prop_lp <- as.double(log_post_fn(prop))
-        accept <- is.finite(prop_lp) &&
-          log(stats::runif(1L)) < (prop_lp - cur_lp)
-        if (isTRUE(accept)) {
-          cur <- prop
-          cur_lp <- prop_lp
-          accepted <- accepted + 1L
-          accept_window <- accept_window + 1L
-        }
-        if (iter <= n_warmup && (iter %% 20L) == 0L) {
-          rate <- accept_window / 20
-          if (rate > 0.35) {
-            step_sd <- step_sd * 1.15
-          } else if (rate < 0.20) {
-            step_sd <- step_sd * 0.85
-          }
-          accept_window <- 0L
-        }
-        if (iter > n_warmup) {
-          keep_idx <- keep_idx + 1L
-          draws[keep_idx, ] <- cur
-        }
-      }
-      list(draws = draws, accept_rate = accepted / total_iter)
-    })
-    chain_draws[, chain, ] <- res$draws
-    accept_rates[[chain]] <- res$accept_rate
+.adaptive_link_fit_transform_cmdstan <- function(stan_data,
+                                                 variable_names,
+                                                 cmdstan,
+                                                 seed,
+                                                 model_fn = NULL) {
+  .btl_mcmc_require_cmdstanr()
+  resolved_cmdstan <- .btl_mcmc_resolve_cmdstan_config(cmdstan %||% list())
+  if (is.null(model_fn)) {
+    model_fn <- cmdstanr::cmdstan_model
+  }
+  if (!is.function(model_fn)) {
+    rlang::abort("`model_fn` must be a function when provided.")
   }
 
+  model <- model_fn(
+    .adaptive_link_cmdstan_file(),
+    cpp_options = list(stan_threads = TRUE)
+  )
+
+  sample_args <- list(
+    data = stan_data,
+    chains = as.integer(resolved_cmdstan$chains),
+    iter_warmup = as.integer(cmdstan$iter_warmup),
+    iter_sampling = as.integer(cmdstan$iter_sampling),
+    parallel_chains = as.integer(resolved_cmdstan$parallel_chains),
+    threads_per_chain = as.integer(resolved_cmdstan$threads_per_chain),
+    refresh = 0,
+    seed = as.integer(seed)
+  )
+  output_dir <- cmdstan$output_dir %||% NULL
+  if (!is.null(output_dir)) {
+    if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+      rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
+    }
+    sample_args$output_dir <- output_dir
+  }
+
+  fit <- do.call(model$sample, sample_args)
   list(
-    chain_draws = chain_draws,
-    draws = matrix(chain_draws, ncol = n_param),
-    accept_rate = as.double(mean(accept_rates))
+    fit = fit,
+    draws_matrix = .adaptive_link_cmdstan_draws_matrix(fit, variable_names),
+    diagnostics = .adaptive_link_cmdstan_collect_diagnostics(fit, variable_names),
+    mcmc_config_used = resolved_cmdstan
   )
 }
 
@@ -1637,6 +1615,18 @@
   link_refit_mode <- as.character(refit_contract_ctx$link_refit_mode %||% "shift_only")
   lock_mode <- as.character(refit_contract_ctx$hub_lock_mode %||% NA_character_)
   lock_kappa <- as.double(refit_contract_ctx$hub_lock_kappa %||% NA_real_)
+  diagnostics_thresholds <- refit_contract_ctx$link_diagnostics_thresholds %||% list(
+    divergences_max = 0L,
+    max_rhat = 1.01,
+    min_ess_bulk = 400
+  )
+  diagnostics_thresholds$divergences_max <- as.integer(
+    diagnostics_thresholds$divergences_max %||% 0L
+  )
+  diagnostics_thresholds$max_rhat <- as.double(diagnostics_thresholds$max_rhat %||% 1.01)
+  diagnostics_thresholds$min_ess_bulk <- as.double(
+    diagnostics_thresholds$min_ess_bulk %||% 400
+  )
   hub_sd_map <- attr(hub_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   spoke_sd_map <- attr(spoke_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   edges <- tibble::as_tibble(cross_edges)
@@ -1650,8 +1640,8 @@
     )
     empty$fit_contract <- list(
       contract_type = "link_refit",
-      estimation_method = "bayesian_mcmc",
-      uncertainty_approximation = "posterior_draws",
+      estimation_method = "cmdstan_hmc",
+      uncertainty_approximation = "cmdstan_posterior_draws",
       link_refit_mode = as.character(link_refit_mode),
       link_transform_policy = as.character(
         .adaptive_normalize_link_transform_policy(refit_contract_ctx$link_transform_policy %||% "auto")
@@ -1730,14 +1720,10 @@
   theta_hub_post <- hub_ref
   theta_spoke_post <- spoke_ref
   joint_used <- identical(link_refit_mode, "joint_refit")
+  estimate_hub <- isTRUE(joint_used) && !identical(lock_mode, "hard_lock")
   n_hub_items_estimated <- 0L
   n_spoke_items_estimated <- 0L
 
-  param_names <- character()
-  start <- numeric()
-  log_post <- NULL
-  idx_delta <- NA_integer_
-  idx_log_alpha <- NA_integer_
   fit_hub_idx <- integer()
   fit_spoke_idx <- integer()
   within_hub <- tibble::as_tibble(edge_attrs$within_hub_edges %||% tibble::tibble())
@@ -1751,167 +1737,150 @@
     fit_spoke_idx <- seq_along(spoke_ref)
     n_hub_items_estimated <- as.integer(length(fit_hub_idx))
     n_spoke_items_estimated <- as.integer(length(fit_spoke_idx))
-    n_h <- length(fit_hub_idx)
-    n_s <- length(fit_spoke_idx)
-    idx_delta <- n_h + n_s + 1L
-    idx_log_alpha <- if (isTRUE(use_scale)) idx_delta + 1L else NA_integer_
-    n_par <- n_h + n_s + 1L + ifelse(isTRUE(use_scale), 1L, 0L)
-    start <- rep(0, n_par)
-    if (n_h > 0L) {
-      start[seq_len(n_h)] <- hub_init[fit_hub_idx]
-    }
-    if (n_s > 0L) {
-      start[n_h + seq_len(n_s)] <- spoke_init[fit_spoke_idx]
-    }
-    param_names <- c(
-      if (n_h > 0L) paste0("theta_hub_", seq_len(n_h)) else character(),
-      if (n_s > 0L) paste0("theta_spoke_", seq_len(n_s)) else character(),
-      "delta",
-      if (isTRUE(use_scale)) "log_alpha" else character()
-    )
-    hub_lut <- stats::setNames(seq_along(hub_ref), names(hub_ref))
-    spoke_lut <- stats::setNames(seq_along(spoke_ref), names(spoke_ref))
-    log_post <- function(par) {
-      hub_val <- hub_ref
-      if (n_h > 0L) {
-        hub_val[fit_hub_idx] <- par[seq_len(n_h)]
-      }
-      spoke_val <- spoke_ref
-      if (n_s > 0L) {
-        spoke_val[fit_spoke_idx] <- par[n_h + seq_len(n_s)]
-      }
-      delta <- par[[idx_delta]]
-      log_alpha <- if (isTRUE(use_scale)) par[[idx_log_alpha]] else 0
-      alpha <- exp(log_alpha)
-      eta_cross <- delta +
-        alpha * spoke_val[as.character(edges_obs$spoke_item)] -
-        hub_val[as.character(edges_obs$hub_item)] +
-        beta_signed
-      p_cross <- (1 - epsilon) * stats::plogis(eta_cross) + epsilon * 0.5
-      p_cross <- pmax(1e-10, pmin(1 - 1e-10, p_cross))
-      ll <- sum(stats::dbinom(y, size = 1L, prob = p_cross, log = TRUE))
-
-      if (nrow(within_hub) > 0L) {
-        idx_a <- hub_lut[as.character(within_hub$A_item)]
-        idx_b <- hub_lut[as.character(within_hub$B_item)]
-        y_a <- as.integer(within_hub$y_A)
-        keep_h <- !is.na(idx_a) & !is.na(idx_b) & y_a %in% c(0L, 1L)
-        if (any(keep_h)) {
-          eta_h <- hub_val[idx_a[keep_h]] - hub_val[idx_b[keep_h]] + beta
-          p_h <- (1 - epsilon) * stats::plogis(eta_h) + epsilon * 0.5
-          p_h <- pmax(1e-10, pmin(1 - 1e-10, p_h))
-          ll <- ll + sum(stats::dbinom(y_a[keep_h], size = 1L, prob = p_h, log = TRUE))
-        }
-      }
-      if (nrow(within_spoke) > 0L) {
-        idx_a <- spoke_lut[as.character(within_spoke$A_item)]
-        idx_b <- spoke_lut[as.character(within_spoke$B_item)]
-        y_a <- as.integer(within_spoke$y_A)
-        keep_s <- !is.na(idx_a) & !is.na(idx_b) & y_a %in% c(0L, 1L)
-        if (any(keep_s)) {
-          eta_s <- alpha * (spoke_val[idx_a[keep_s]] - spoke_val[idx_b[keep_s]]) + beta
-          p_s <- (1 - epsilon) * stats::plogis(eta_s) + epsilon * 0.5
-          p_s <- pmax(1e-10, pmin(1 - 1e-10, p_s))
-          ll <- ll + sum(stats::dbinom(y_a[keep_s], size = 1L, prob = p_s, log = TRUE))
-        }
-      }
-
-      prior_pen <- 0.5 * (delta / 1)^2
-      if (isTRUE(use_scale)) {
-        prior_pen <- prior_pen + 0.5 * (log_alpha / 0.2)^2
-      }
-      if (n_h > 0L) {
-        if (identical(lock_mode, "soft_lock")) {
-          sd_soft <- hub_ref_sd[fit_hub_idx] / max(lock_kappa, 1e-8)
-          prior_pen <- prior_pen + sum(
-            0.5 * ((hub_val[fit_hub_idx] - hub_prior_center[fit_hub_idx]) / pmax(sd_soft, 1e-8))^2
-          )
-        } else {
-          if (!identical(lock_mode, "hard_lock")) {
-            rlang::abort(
-              paste0(
-                "Unsupported `hub_lock_mode` in linking joint refit: ",
-                lock_mode,
-                ". Expected `hard_lock` or `soft_lock`."
-              )
-            )
-          }
-          prior_pen <- prior_pen + sum(
-            0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / pmax(hub_ref_sd[fit_hub_idx], 1e-8))^2
-          )
-        }
-      }
-      if (n_s > 0L) {
-        prior_pen <- prior_pen + sum(
-          0.5 * ((spoke_val[fit_spoke_idx] - spoke_ref[fit_spoke_idx]) / pmax(spoke_ref_sd[fit_spoke_idx], 1e-8))^2
-        )
-      }
-      as.double(ll - prior_pen)
-    }
-  } else {
-    idx_delta <- 1L
-    idx_log_alpha <- if (isTRUE(use_scale)) 2L else NA_integer_
-    start <- if (isTRUE(use_scale)) c(0, 0) else c(0)
-    param_names <- c("delta", if (isTRUE(use_scale)) "log_alpha" else character())
-    log_post <- function(par) {
-      delta <- par[[idx_delta]]
-      log_alpha <- if (isTRUE(use_scale)) par[[idx_log_alpha]] else 0
-      alpha <- exp(log_alpha)
-      eta <- delta + alpha * s - h + beta_signed
-      p <- (1 - epsilon) * stats::plogis(eta) + epsilon * 0.5
-      p <- pmax(1e-10, pmin(1 - 1e-10, p))
-      ll <- sum(stats::dbinom(y, size = 1L, prob = p, log = TRUE))
-      prior_pen <- 0.5 * (delta / 1)^2
-      if (isTRUE(use_scale)) {
-        prior_pen <- prior_pen + 0.5 * (log_alpha / 0.2)^2
-      }
-      as.double(ll - prior_pen)
-    }
   }
 
+  hub_lut <- stats::setNames(seq_along(hub_ref), names(hub_ref))
+  spoke_lut <- stats::setNames(seq_along(spoke_ref), names(spoke_ref))
+  hub_cross_idx <- as.integer(hub_lut[as.character(edges_obs$hub_item)])
+  spoke_cross_idx <- as.integer(spoke_lut[as.character(edges_obs$spoke_item)])
+  if (any(is.na(hub_cross_idx)) || any(is.na(spoke_cross_idx))) {
+    rlang::abort("Linking authoritative CmdStan refit could not resolve cross-edge item indices.")
+  }
+
+  within_hub_a <- if ("A_item" %in% names(within_hub)) as.character(within_hub$A_item) else character()
+  within_hub_b <- if ("B_item" %in% names(within_hub)) as.character(within_hub$B_item) else character()
+  within_hub_y <- if ("y_A" %in% names(within_hub)) as.integer(within_hub$y_A) else integer()
+  within_hub_idx_a <- as.integer(hub_lut[within_hub_a])
+  within_hub_idx_b <- as.integer(hub_lut[within_hub_b])
+  keep_within_hub <- !is.na(within_hub_idx_a) & !is.na(within_hub_idx_b) & within_hub_y %in% c(0L, 1L)
+  within_hub_idx_a <- within_hub_idx_a[keep_within_hub]
+  within_hub_idx_b <- within_hub_idx_b[keep_within_hub]
+  within_hub_y <- within_hub_y[keep_within_hub]
+
+  within_spoke_a <- if ("A_item" %in% names(within_spoke)) as.character(within_spoke$A_item) else character()
+  within_spoke_b <- if ("B_item" %in% names(within_spoke)) as.character(within_spoke$B_item) else character()
+  within_spoke_y <- if ("y_A" %in% names(within_spoke)) as.integer(within_spoke$y_A) else integer()
+  within_spoke_idx_a <- as.integer(spoke_lut[within_spoke_a])
+  within_spoke_idx_b <- as.integer(spoke_lut[within_spoke_b])
+  keep_within_spoke <- !is.na(within_spoke_idx_a) & !is.na(within_spoke_idx_b) & within_spoke_y %in% c(0L, 1L)
+  within_spoke_idx_a <- within_spoke_idx_a[keep_within_spoke]
+  within_spoke_idx_b <- within_spoke_idx_b[keep_within_spoke]
+  within_spoke_y <- within_spoke_y[keep_within_spoke]
+
+  if (isTRUE(joint_used) && !lock_mode %in% c("hard_lock", "soft_lock")) {
+    rlang::abort(
+      paste0(
+        "Unsupported `hub_lock_mode` in linking joint refit: ",
+        lock_mode,
+        ". Expected `hard_lock` or `soft_lock`."
+      )
+    )
+  }
+  hub_prior_sd <- if (isTRUE(estimate_hub) && identical(lock_mode, "soft_lock")) {
+    pmax(hub_ref_sd / max(lock_kappa, 1e-8), 1e-8)
+  } else {
+    pmax(hub_ref_sd, 1e-8)
+  }
+  spoke_prior_sd <- pmax(spoke_ref_sd, 1e-8)
+
+  stan_data_base <- list(
+    N_cross = as.integer(length(y)),
+    y_spoke = as.integer(y),
+    hub_ref_cross = as.double(h),
+    spoke_ref_cross = as.double(s),
+    cross_hub_idx = as.integer(hub_cross_idx),
+    cross_spoke_idx = as.integer(spoke_cross_idx),
+    beta_signed = as.double(beta_signed),
+    epsilon = as.double(epsilon),
+    beta_within = as.double(beta),
+    joint_used = as.integer(joint_used),
+    estimate_hub = as.integer(estimate_hub),
+    use_scale = as.integer(use_scale),
+    N_hub = as.integer(length(hub_ref)),
+    N_spoke = as.integer(length(spoke_ref)),
+    hub_ref = as.double(hub_ref),
+    spoke_ref = as.double(spoke_ref),
+    hub_prior_center = as.double(hub_prior_center),
+    hub_prior_sd = as.double(hub_prior_sd),
+    spoke_prior_sd = as.double(spoke_prior_sd),
+    N_within_hub = as.integer(length(within_hub_y)),
+    hub_within_A_idx = as.integer(within_hub_idx_a),
+    hub_within_B_idx = as.integer(within_hub_idx_b),
+    hub_within_y_A = as.integer(within_hub_y),
+    N_within_spoke = as.integer(length(within_spoke_y)),
+    spoke_within_A_idx = as.integer(within_spoke_idx_a),
+    spoke_within_B_idx = as.integer(within_spoke_idx_b),
+    spoke_within_y_A = as.integer(within_spoke_y)
+  )
+  variable_names <- .adaptive_link_cmdstan_summary_vars(
+    joint_used = joint_used,
+    estimate_hub = estimate_hub,
+    use_scale = use_scale
+  )
   seed <- .adaptive_link_refit_seed(
     cross_edges = edges_obs,
     transform_mode = transform_mode,
     link_refit_mode = link_refit_mode
   )
-  mcmc <- NULL
-  draws <- NULL
+  cmdstan_fit <- NULL
+  draws_matrix <- NULL
   diagnostics <- NULL
-  mcmc_schedule_used <- NULL
+  mcmc_config_used <- NULL
+  cmdstan_schedule_used <- NULL
   repair_attempts <- 0L
   max_attempts <- 3L
   for (attempt in seq_len(max_attempts)) {
     repair_attempts <- as.integer(attempt)
-    mcmc_schedule_used <- .adaptive_link_mcmc_schedule(
+    cmdstan_schedule_used <- .adaptive_link_cmdstan_schedule(
       attempt = attempt,
-      n_param = length(param_names),
+      n_param = as.integer(
+        1L +
+          if (isTRUE(use_scale)) 1L else 0L +
+          if (isTRUE(estimate_hub)) length(hub_ref) else 0L +
+          if (isTRUE(joint_used)) length(spoke_ref) else 0L
+      ),
       joint_used = joint_used
     )
-    mcmc <- .adaptive_link_mcmc_sample(
-      log_post_fn = log_post,
-      init = start,
+    cmdstan_fit <- .adaptive_link_fit_transform_cmdstan(
+      stan_data = stan_data_base,
+      variable_names = variable_names,
+      cmdstan = utils::modifyList(
+        refit_contract_ctx$cmdstan %||% list(),
+        list(
+          chains = as.integer(cmdstan_schedule_used$chains),
+          iter_warmup = as.integer(cmdstan_schedule_used$iter_warmup),
+          iter_sampling = as.integer(cmdstan_schedule_used$iter_sampling)
+        )
+      ),
       seed = as.integer((seed + attempt * 1009L) %% .Machine$integer.max),
-      n_chains = mcmc_schedule_used$n_chains,
-      n_warmup = mcmc_schedule_used$n_warmup,
-      n_samples = mcmc_schedule_used$n_samples
+      model_fn = refit_contract_ctx$cmdstan_model_fn %||% NULL
     )
-    draws <- as.matrix(mcmc$draws)
-    colnames(draws) <- param_names
-    diagnostics <- .adaptive_link_mcmc_diagnostics(mcmc$chain_draws, param_names = param_names)
+    draws_matrix <- as.matrix(cmdstan_fit$draws_matrix)
+    diagnostics <- .adaptive_link_cmdstan_validate_diagnostics(
+      diagnostics = cmdstan_fit$diagnostics,
+      thresholds = diagnostics_thresholds
+    )
+    mcmc_config_used <- cmdstan_fit$mcmc_config_used
     if (isTRUE(diagnostics$diagnostics_rhat_pass) &&
       isTRUE(diagnostics$diagnostics_ess_pass)) {
       break
     }
   }
 
-  delta_draws <- as.double(draws[, idx_delta])
+  if (!"delta" %in% colnames(draws_matrix)) {
+    rlang::abort("Authoritative linking CmdStan output missing delta draws.")
+  }
+  delta_draws <- as.double(draws_matrix[, "delta", drop = TRUE])
   delta_mean <- as.double(mean(delta_draws))
   delta_sd <- as.double(stats::sd(delta_draws))
   if (!is.finite(delta_sd)) {
     delta_sd <- 0
   }
   if (isTRUE(use_scale)) {
-    log_alpha_draws <- as.double(draws[, idx_log_alpha])
+    if (!"log_alpha" %in% colnames(draws_matrix)) {
+      rlang::abort("Authoritative linking CmdStan output missing log_alpha draws.")
+    }
+    log_alpha_draws <- as.double(draws_matrix[, "log_alpha", drop = TRUE])
     log_alpha_mean <- as.double(mean(log_alpha_draws))
     log_alpha_sd <- as.double(stats::sd(log_alpha_draws))
     if (!is.finite(log_alpha_sd)) {
@@ -1923,34 +1892,40 @@
     log_alpha_sd <- NA_real_
   }
 
-  if (isTRUE(joint_used) && length(fit_hub_idx) > 0L) {
-    hub_cols <- seq_along(fit_hub_idx)
-    theta_hub_post[fit_hub_idx] <- colMeans(draws[, hub_cols, drop = FALSE])
+  if (isTRUE(estimate_hub) && length(fit_hub_idx) > 0L) {
+    hub_cols <- paste0("theta_hub[", seq_along(fit_hub_idx), "]")
+    if (!all(hub_cols %in% colnames(draws_matrix))) {
+      rlang::abort("Authoritative linking CmdStan output missing theta_hub draws.")
+    }
+    theta_hub_post[fit_hub_idx] <- colMeans(draws_matrix[, hub_cols, drop = FALSE])
   }
   if (isTRUE(joint_used) && length(fit_spoke_idx) > 0L) {
-    spoke_cols <- length(fit_hub_idx) + seq_along(fit_spoke_idx)
-    theta_spoke_post[fit_spoke_idx] <- colMeans(draws[, spoke_cols, drop = FALSE])
+    spoke_cols <- paste0("theta_spoke[", seq_along(fit_spoke_idx), "]")
+    if (!all(spoke_cols %in% colnames(draws_matrix))) {
+      rlang::abort("Authoritative linking CmdStan output missing theta_spoke draws.")
+    }
+    theta_spoke_post[fit_spoke_idx] <- colMeans(draws_matrix[, spoke_cols, drop = FALSE])
   }
 
   theta_hub_draws <- matrix(
-    rep(theta_hub_post, each = nrow(draws)),
-    nrow = nrow(draws),
+    rep(theta_hub_post, each = nrow(draws_matrix)),
+    nrow = nrow(draws_matrix),
     byrow = FALSE,
     dimnames = list(NULL, names(theta_hub_post))
   )
   theta_spoke_draws <- matrix(
-    rep(theta_spoke_post, each = nrow(draws)),
-    nrow = nrow(draws),
+    rep(theta_spoke_post, each = nrow(draws_matrix)),
+    nrow = nrow(draws_matrix),
     byrow = FALSE,
     dimnames = list(NULL, names(theta_spoke_post))
   )
-  if (isTRUE(joint_used) && length(fit_hub_idx) > 0L) {
-    hub_cols <- seq_along(fit_hub_idx)
-    theta_hub_draws[, fit_hub_idx] <- draws[, hub_cols, drop = FALSE]
+  if (isTRUE(estimate_hub) && length(fit_hub_idx) > 0L) {
+    hub_cols <- paste0("theta_hub[", seq_along(fit_hub_idx), "]")
+    theta_hub_draws[, fit_hub_idx] <- draws_matrix[, hub_cols, drop = FALSE]
   }
   if (isTRUE(joint_used) && length(fit_spoke_idx) > 0L) {
-    spoke_cols <- length(fit_hub_idx) + seq_along(fit_spoke_idx)
-    theta_spoke_draws[, fit_spoke_idx] <- draws[, spoke_cols, drop = FALSE]
+    spoke_cols <- paste0("theta_spoke[", seq_along(fit_spoke_idx), "]")
+    theta_spoke_draws[, fit_spoke_idx] <- draws_matrix[, spoke_cols, drop = FALSE]
   }
 
   prop_var <- mean(hub_sd^2 + spoke_sd^2, na.rm = TRUE)
@@ -1963,8 +1938,8 @@
 
   fit_contract <- list(
     contract_type = "link_refit",
-    estimation_method = "bayesian_mcmc",
-    uncertainty_approximation = "posterior_draws",
+    estimation_method = "cmdstan_hmc",
+    uncertainty_approximation = "cmdstan_posterior_draws",
     link_refit_mode = as.character(link_refit_mode),
     link_transform_policy = as.character(
       .adaptive_normalize_link_transform_policy(refit_contract_ctx$link_transform_policy %||% "auto")
@@ -2003,10 +1978,12 @@
       divergences = as.integer(diagnostics$divergences %||% NA_integer_)
     ),
     mcmc = list(
-      chains = as.integer(dim(mcmc$chain_draws)[2L] %||% NA_integer_),
-      warmup = as.integer(mcmc_schedule_used$n_warmup %||% NA_integer_),
-      samples = as.integer(dim(mcmc$chain_draws)[1L] %||% NA_integer_),
-      mean_accept_rate = as.double(mcmc$accept_rate %||% NA_real_),
+      chains = as.integer(mcmc_config_used$chains %||% NA_integer_),
+      parallel_chains = as.integer(mcmc_config_used$parallel_chains %||% NA_integer_),
+      warmup = as.integer(cmdstan_schedule_used$iter_warmup %||% NA_integer_),
+      samples = as.integer(cmdstan_schedule_used$iter_sampling %||% NA_integer_),
+      threads_per_chain = as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_),
+      cmdstanr_version = as.character(mcmc_config_used$cmdstanr_version %||% NA_character_),
       repair_attempts = as.integer(repair_attempts)
     )
   )
@@ -2858,7 +2835,13 @@
       link_transform_policy = transform_policy,
       hub_lock_mode = lock_mode,
       hub_lock_kappa = kappa,
-      shift_only_theta_treatment = theta_treatment
+      shift_only_theta_treatment = theta_treatment,
+      cmdstan = out$config$btl_config$cmdstan %||% list(),
+      link_diagnostics_thresholds = list(
+        divergences_max = as.integer(out$config$btl_config$divergences_max %||% 0L),
+        max_rhat = as.double(out$config$btl_config$max_rhat %||% 1.01),
+        min_ess_bulk = as.double(out$config$btl_config$ess_bulk_min %||% 400)
+      )
     )
     hub_theta_init <- if (identical(refit_mode, "joint_refit") && length(hub_current) > 0L) {
       hub_current
