@@ -248,7 +248,9 @@ read_log <- function(path) {
       out[[col]] <- defaults[[col]]
     }
   }
-  out[, names(schema_round_log), drop = FALSE]
+  ordered_existing <- intersect(names(schema_round_log), names(out))
+  trailing_extra <- setdiff(names(out), ordered_existing)
+  out[, c(ordered_existing, trailing_extra), drop = FALSE]
 }
 
 .adaptive_item_log_current_schema <- function() {
