@@ -977,6 +977,64 @@ test_that("link stage rows abort when realized active work exceeds emitted budge
   )
 })
 
+test_that("link stage rows use cached concurrent budget for the completed refit window", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "concurrent"))
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 15L,
+      model_variant = "btl_e_b",
+      n_items = nrow(state$items)
+    )
+  )
+  state$step_log <- tibble::tibble(
+    step_id = seq_len(15L),
+    pair_id = seq_len(15L),
+    is_cross_set = rep(TRUE, 15L),
+    link_spoke_id = rep(3L, 15L),
+    link_stage = rep("anchor_link", 15L),
+    round_stage = rep("anchor_link", 15L),
+    run_mode = rep("link_multi_spoke", 15L)
+  )
+  state$controller$link_budget_refit_id <- 1L
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "concurrent_allocator",
+      concurrent_target_pairs = 0L,
+      concurrent_floor_pairs = 5L
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 15L,
+      B_spoke_refit_budget_source = "concurrent_allocator",
+      concurrent_target_pairs = 15L,
+      concurrent_floor_pairs = 5L
+    )
+  )
+
+  rows <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(...) {
+      list(
+        `2` = list(B_spoke_refit_budget = 1L, B_spoke_refit_budget_source = "concurrent_allocator"),
+        `3` = list(B_spoke_refit_budget = 14L, B_spoke_refit_budget_source = "concurrent_allocator")
+      )
+    },
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state,
+      refit_id = 1L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  row_spoke_3 <- rows[rows$spoke_id == 3L, , drop = FALSE]
+  expect_identical(as.integer(row_spoke_3$B_spoke_refit_budget[[1L]]), 15L)
+  expect_identical(as.integer(row_spoke_3$stage_realized_anchor_link[[1L]]), 15L)
+  expect_identical(as.integer(row_spoke_3$stage_budget_unfilled[[1L]]), 0L)
+})
+
 test_that("link_stage_log rows expose feasibility and blocker explanations canonically", {
   state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
   state$controller$link_budget_refit_id <- 1L

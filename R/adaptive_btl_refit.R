@@ -3696,11 +3696,20 @@
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
-  budget_map <- .adaptive_link_budget_map_for_refit(
-    state = state,
-    controller = controller,
-    eligible_spoke_ids = spoke_ids
-  )
+  cached_budget_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+  cached_budget_map <- controller$link_budget_map %||% list()
+  if (!is.na(cached_budget_refit_id) &&
+    identical(cached_budget_refit_id, as.integer(refit_id)) &&
+    length(cached_budget_map) > 0L) {
+    budget_map <- cached_budget_map[as.character(spoke_ids)]
+    budget_map <- budget_map[!vapply(budget_map, is.null, logical(1L))]
+  } else {
+    budget_map <- .adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = spoke_ids
+    )
+  }
 
   for (idx in seq_along(spoke_ids)) {
     spoke_id <- as.integer(spoke_ids[[idx]])
@@ -3784,6 +3793,11 @@
     quota_taper_spoke_id <- as.integer(quota_meta$link_spoke_id %||% spoke_id)
     stage_order <- .adaptive_stage_order()
     committed_stage <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+    refit_spoke_key <- .adaptive_link_refit_spoke_key(
+      refit_id = as.integer(refit_id),
+      spoke_id = as.integer(spoke_id)
+    )
+    tracked_shortfalls <- .adaptive_link_refit_shortfalls_map(state)[[refit_spoke_key]] %||% list()
     refit_step_end <- if ("step_id" %in% names(step_log) && nrow(step_log) > 0L) {
       as.integer(max(as.integer(step_log$step_id), na.rm = TRUE))
     } else {
@@ -3808,9 +3822,91 @@
         committed_stage[names(tab_stage)] <- as.integer(tab_stage)
       }
     }
+    stage_quotas <- stats::setNames(
+      vapply(
+        stage_order,
+        function(stage_name) {
+          as.integer(stage_quotas[[stage_name]] %||% 0L)
+        },
+        integer(1L)
+      ),
+      stage_order
+    )
     stage_quotas[!is.finite(stage_quotas)] <- 0L
     committed_stage[!is.finite(committed_stage)] <- 0L
+    authoritative_budget_total <- as.integer(
+      budget_info$B_spoke_refit_budget %||% sum(stage_quotas, na.rm = TRUE)
+    )
     realized_active_budget_floor <- as.integer(sum(committed_stage, na.rm = TRUE))
+    if (is.finite(authoritative_budget_total) &&
+      authoritative_budget_total < realized_active_budget_floor) {
+      rlang::abort(
+        paste0(
+          "link_stage_log budget invariant failure: realized active counts exceed emitted budget ",
+          "for spoke_id=", as.integer(spoke_id),
+          " at refit_id=", as.integer(refit_id),
+          ". budget=", as.integer(authoritative_budget_total),
+          ", realized=", as.integer(realized_active_budget_floor),
+          "."
+        )
+      )
+    }
+    if (is.finite(authoritative_budget_total) && authoritative_budget_total >= 0L) {
+      tracked_targets <- stats::setNames(rep.int(NA_integer_, length(stage_order)), stage_order)
+      for (stage_name in stage_order) {
+        shortfall_val <- as.integer(tracked_shortfalls[[stage_name]] %||% NA_integer_)
+        if (is.finite(shortfall_val)) {
+          tracked_targets[[stage_name]] <- as.integer((committed_stage[[stage_name]] %||% 0L) + shortfall_val)
+        }
+      }
+      has_tracked_targets <- any(is.finite(tracked_targets))
+      if (isTRUE(has_tracked_targets)) {
+        for (stage_name in stage_order) {
+          if (is.finite(tracked_targets[[stage_name]])) {
+            stage_quotas[[stage_name]] <- as.integer(tracked_targets[[stage_name]])
+          }
+        }
+      }
+      stage_quotas <- stats::setNames(
+        pmax(as.integer(stage_quotas), as.integer(committed_stage)),
+        stage_order
+      )
+      stage_total <- as.integer(sum(stage_quotas, na.rm = TRUE))
+      if (stage_total != authoritative_budget_total) {
+        slack <- pmax(as.integer(stage_quotas) - as.integer(committed_stage), 0L)
+        names(slack) <- stage_order
+        if (stage_total > authoritative_budget_total) {
+          excess <- as.integer(stage_total - authoritative_budget_total)
+          reduce_order <- names(sort(slack, decreasing = TRUE))
+          for (stage_name in reduce_order) {
+            if (excess <= 0L) {
+              break
+            }
+            reducible <- min(excess, slack[[stage_name]])
+            if (reducible > 0L) {
+              stage_quotas[[stage_name]] <- as.integer(stage_quotas[[stage_name]] - reducible)
+              excess <- as.integer(excess - reducible)
+            }
+          }
+        } else {
+          remainder <- as.integer(authoritative_budget_total - stage_total)
+          add_order <- names(sort(as.integer(stage_quotas), decreasing = TRUE))
+          if (length(add_order) < 1L) {
+            add_order <- stage_order
+          }
+          if (all(replace(as.integer(stage_quotas[add_order]), is.na(as.integer(stage_quotas[add_order])), 0L) == 0L)) {
+            add_order <- stage_order
+          }
+          pos <- 1L
+          while (remainder > 0L && length(add_order) > 0L) {
+            stage_name <- add_order[[pos]]
+            stage_quotas[[stage_name]] <- as.integer(stage_quotas[[stage_name]] + 1L)
+            remainder <- as.integer(remainder - 1L)
+            pos <- if (pos >= length(add_order)) 1L else pos + 1L
+          }
+        }
+      }
+    }
     stage_budget_total <- as.integer(sum(stage_quotas, na.rm = TRUE))
     if (stage_budget_total < realized_active_budget_floor) {
       rlang::abort(
