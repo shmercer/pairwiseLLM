@@ -692,7 +692,7 @@ test_that("linking run stops via all-spokes-stopped gate when every spoke is sto
     progress = "none"
   )
   out_init$controller$link_stopped_by_spoke <- list(`2` = TRUE)
-  out_init$controller$probe_pairs_per_refit_per_spoke <- 0L
+  out_init$controller$probe_pairs_per_refit_per_spoke <- 2L
   out_init$linking$phase_a$phase <- "phase_b"
   out_init$linking$phase_a$ready_for_phase_b <- TRUE
   out_init$linking$phase_a$strict_ready_for_phase_b <- TRUE

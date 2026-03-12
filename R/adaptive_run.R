@@ -1086,17 +1086,12 @@
     return(FALSE)
   }
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  all_stopped <- all(vapply(as.character(spoke_ids), function(key) isTRUE(stopped_map[[key]]), logical(1L)))
-  if (!isTRUE(all_stopped)) {
-    return(FALSE)
-  }
-
-  probe_cap <- as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L)
-  probe_cap <- max(0L, probe_cap)
-  if (probe_cap > 0L) {
-    return(FALSE)
-  }
-  TRUE
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  all(vapply(
+    as.character(spoke_ids),
+    function(key) isTRUE(stopped_map[[key]]) || isTRUE(frozen_map[[key]]),
+    logical(1L)
+  ))
 }
 
 #' @keywords internal
@@ -1121,7 +1116,12 @@
   }
 
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  keep <- vapply(as.character(spoke_ids), function(key) !isTRUE(stopped_map[[key]]), logical(1L))
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  keep <- vapply(
+    as.character(spoke_ids),
+    function(key) !isTRUE(stopped_map[[key]]) && !isTRUE(frozen_map[[key]]),
+    logical(1L)
+  )
   spoke_ids <- as.integer(spoke_ids[keep])
   if (length(spoke_ids) < 1L || !isTRUE(exclude_exhausted)) {
     return(as.integer(spoke_ids))
@@ -2625,8 +2625,17 @@ adaptive_rank_run_live <- function(state,
         config = refit_out$config
       )
       state$round_log <- append_round_log(state$round_log, round_row)
-      phase_ctx_post_refit <- .adaptive_link_phase_context(state, controller = .adaptive_controller_resolve(state))
-      for (spoke_id in as.integer(phase_ctx_post_refit$active_spokes %||% integer())) {
+      controller_post_refit <- .adaptive_controller_resolve(state)
+      cache_spokes <- .adaptive_link_effective_active_spokes(
+        state = state,
+        controller = controller_post_refit,
+        refit_id = as.integer(round_row$refit_id),
+        exclude_exhausted = FALSE
+      )
+      if (length(cache_spokes) < 1L) {
+        cache_spokes <- integer()
+      }
+      for (spoke_id in as.integer(cache_spokes)) {
         state <- .adaptive_link_probe_cache_predictions(
           state,
           refit_id = as.integer(round_row$refit_id),

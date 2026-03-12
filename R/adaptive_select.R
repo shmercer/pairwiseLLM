@@ -1266,7 +1266,6 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   link_phase_b <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
   link_phase_b_concurrent <- isTRUE(link_phase_b) &&
     identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
-  frozen_map <- link_controller$link_transform_frozen_by_spoke %||% list()
   active_link_spoke <- as.integer(NA_integer_)
   ranked_link_spokes <- integer()
   link_progress <- NULL
@@ -1431,7 +1430,6 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   local_priority_mode <- NA_character_
   is_explore_step <- FALSE
   selected_link_spoke_attempt <- as.integer(NA_integer_)
-  selected_is_probe_ordering <- FALSE
   selected_round_stage <- as.character(round_stage)
   selected_stage_quota <- as.integer(stage_quota)
   selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
@@ -1580,7 +1578,6 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         }
         selected_pair <- tibble::as_tibble(stage_candidates[order_idx[[1L]], , drop = FALSE])
         selected_link_spoke_attempt <- as.integer(spoke_attempt %||% active_link_spoke)
-        selected_is_probe_ordering <- FALSE
         selected_round_stage <- as.character(selected_pair$link_stage[[1L]] %||% attempt_round_stage)
         selected_stage_quota <- as.integer(
           stage_ctx$stage_quota %||%
@@ -1623,23 +1620,28 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         next
       }
       spoke_for_utility <- as.integer(NA_integer_)
-      stage_is_probe_ordering <- FALSE
       if (isTRUE(is_link_mode) && isTRUE(link_phase_b)) {
         spoke_for_utility <- if ("link_spoke_id" %in% names(cand)) {
           as.integer(unique(stats::na.omit(as.integer(cand$link_spoke_id)))[1L] %||% NA_integer_)
         } else {
           as.integer(spoke_attempt %||% NA_integer_)
         }
-        stage_is_probe_ordering <- !is.na(spoke_for_utility) &&
-          isTRUE(frozen_map[[as.character(spoke_for_utility)]])
-        if (!isTRUE(stage_is_probe_ordering)) {
-          cand <- .adaptive_link_attach_predictive_utility(
-            candidates = cand,
-            state = state,
-            controller = link_controller,
-            spoke_id = as.integer(spoke_for_utility)
+        if (!is.na(spoke_for_utility) &&
+          isTRUE((link_controller$link_transform_frozen_by_spoke %||% list())[[as.character(spoke_for_utility)]])) {
+          rlang::abort(
+            paste0(
+              "Selector invariant failed: frozen spoke_id=",
+              as.integer(spoke_for_utility),
+              " remained eligible for live Phase B candidate ordering."
+            )
           )
         }
+        cand <- .adaptive_link_attach_predictive_utility(
+          candidates = cand,
+          state = state,
+          controller = link_controller,
+          spoke_id = as.integer(spoke_for_utility)
+        )
       }
 
       explore_rate <- defaults$explore_rate
@@ -1741,8 +1743,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
           stage_local_priority_mode <- NA_character_
         }
         selected_utility_mode <- .adaptive_selection_utility_mode(
-          run_mode = if (isTRUE(stage_is_probe_ordering)) "within_set" else controller$run_mode,
-          is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b) && !isTRUE(stage_is_probe_ordering)
+          run_mode = controller$run_mode,
+          is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b)
         )
         if (isTRUE(is_link_mode) && isTRUE(link_phase_b)) {
           # Linking mode keeps canonical candidate generation/filtering via
@@ -1781,7 +1783,6 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       local_priority_mode <- stage_local_priority_mode
       selected_stage <- stage
       selected_link_spoke_attempt <- as.integer(spoke_attempt %||% NA_integer_)
-      selected_is_probe_ordering <- isTRUE(stage_is_probe_ordering)
       selected_round_stage <- as.character(attempt_round_stage)
       selected_stage_quota <- as.integer(attempt_stage_quota)
       selected_stage_committed_so_far <- as.integer(attempt_stage_committed_so_far)
@@ -1936,14 +1937,10 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   B_id <- as.character(order_vals[["B_id"]] %||% NA_character_)
   p_ij_ts <- trueskill_win_probability(A_id, B_id, state$trueskill_state)
   p_ij <- as.double(p_ij_ts)
-  if (isTRUE(selected_is_cross_set) && isTRUE(selected_is_probe_ordering)) {
-    utility_mode <- NA_character_
-  } else {
-    utility_mode <- .adaptive_selection_utility_mode(
-      run_mode = controller$run_mode,
-      is_cross_set = isTRUE(selected_is_cross_set)
-    )
-  }
+  utility_mode <- .adaptive_selection_utility_mode(
+    run_mode = controller$run_mode,
+    is_cross_set = isTRUE(selected_is_cross_set)
+  )
   if (isTRUE(is_link_mode) && !is.na(selected_spoke_id)) {
     p_link_oriented <- .adaptive_link_predictive_prob_oriented(
       state = state,

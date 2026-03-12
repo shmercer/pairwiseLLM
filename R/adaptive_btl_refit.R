@@ -3173,6 +3173,14 @@
   frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
+  spoke_ids <- spoke_ids[!vapply(
+    as.character(spoke_ids),
+    function(key) isTRUE(frozen_map[[key]]) && !is.null(link_stats[[key]]),
+    logical(1L)
+  )]
+  if (length(spoke_ids) < 1L) {
+    return(out)
+  }
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   stop_counter_map <- controller$link_stop_consecutive_pass_count_by_spoke %||% list()
   escalation_counter_map <- controller$link_escalation_consecutive_pass_count_by_spoke %||% list()
@@ -4083,6 +4091,8 @@
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
+  stopped_map <- controller$link_stopped_by_spoke %||% list()
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
   cached_budget_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
   cached_budget_map <- controller$link_budget_map %||% list()
   if (!is.na(cached_budget_refit_id) &&
@@ -4145,10 +4155,18 @@
     n_pairs_since_probe <- as.integer(nrow(since_last_probe))
     n_pairs_since_active <- as.integer(nrow(since_last_active))
     n_pairs_since_total <- as.integer(nrow(since_last))
-    budget_info <- budget_map[[key]] %||% list(
-      B_spoke_refit_budget = .adaptive_link_refit_budget_default(as.integer(state$n_items), controller),
-      B_spoke_refit_budget_source = "single_spoke_default"
-    )
+    retired_spoke <- isTRUE(stopped_map[[key]]) || isTRUE(frozen_map[[key]])
+    budget_info <- budget_map[[key]] %||% if (isTRUE(retired_spoke)) {
+      list(
+        B_spoke_refit_budget = 0L,
+        B_spoke_refit_budget_source = "frozen_spoke_retired"
+      )
+    } else {
+      list(
+        B_spoke_refit_budget = .adaptive_link_refit_budget_default(as.integer(state$n_items), controller),
+        B_spoke_refit_budget_source = "single_spoke_default"
+      )
+    }
     quota_controller <- controller
     quota_controller$current_link_spoke_id <- as.integer(spoke_id)
     quota_controller$B_spoke_refit_budget <- as.integer(budget_info$B_spoke_refit_budget %||% NA_integer_)

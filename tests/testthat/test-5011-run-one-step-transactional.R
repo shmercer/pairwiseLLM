@@ -181,7 +181,7 @@ test_that("run_one_step logs linking pre-step transform estimates when available
   expect_equal(row$log_alpha_spoke_sd_pre[[1L]], 0.02, tolerance = 1e-12)
 })
 
-test_that("run_one_step logs probe rows without linking d-opt utility fields", {
+test_that("run_one_step retires frozen spoke work without emitting a new step", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
     set_id = c(1L, 1L, 2L, 2L),
@@ -239,15 +239,10 @@ test_that("run_one_step logs probe rows without linking d-opt utility fields", {
     delta_spoke_sd = 0.1
   ))
 
+  n_before <- nrow(state$step_log)
   out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
-  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
 
-  expect_identical(as.character(row$run_mode[[1L]]), "link_probe")
-  expect_true(isTRUE(row$is_probe_step[[1L]]))
-  expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
-  expect_true(isTRUE(row$is_drift_probe_step[[1L]]))
-  expect_true(is.na(row$utility_mode[[1L]]))
-  expect_true(is.na(row$cross_set_utility_pre[[1L]]))
+  expect_identical(nrow(out$step_log), n_before)
   expect_equal(nrow(out$history_pairs), 0L)
   expect_identical(out$controller$link_stage_coverage_bins_used[["2"]], 3L)
   expect_identical(out$controller$link_stage_coverage_source[["2"]], "linking_global_score")

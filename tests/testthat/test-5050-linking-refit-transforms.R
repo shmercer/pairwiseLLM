@@ -544,6 +544,68 @@ test_that("freeze transition is one-way and refit reuses frozen transform parame
   expect_equal(stats$delta_spoke_mean, 0.17, tolerance = 1e-12)
 })
 
+test_that("link stage rows retire frozen spokes with zero budget and zero new work", {
+  state <- make_linking_refit_state(
+    list(
+      link_transform_mode = "shift_only",
+      link_refit_mode = "shift_only"
+    )
+  )
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s31", "h2", 1L, spoke_id = 3L)
+  state <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    state,
+    tibble::tibble(
+      refit_id = 1L,
+      spoke_id = 2L,
+      link_stop_pass = TRUE,
+      link_transform_state = "shift_only",
+      delta_spoke_mean = 0.17,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only", `3` = "shift_only")
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_state = "shift_only",
+      link_stop_pass = TRUE,
+      stop_consecutive_pass_count = 2L,
+      transform_frozen = TRUE,
+      link_epoch_id = 1L
+    ),
+    `3` = list(
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      stop_consecutive_pass_count = 0L,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L
+    )
+  )
+  state$controller$link_budget_refit_id <- 2L
+  state$controller$link_budget_map <- list(
+    `3` = list(
+      B_spoke_refit_budget = 4L,
+      B_spoke_refit_budget_source = "concurrent_allocator"
+    )
+  )
+
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 1L)
+  )
+  frozen_row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+
+  expect_identical(nrow(frozen_row), 1L)
+  expect_true(isTRUE(frozen_row$transform_frozen[[1L]]))
+  expect_true(isTRUE(frozen_row$link_stop_pass[[1L]]))
+  expect_identical(frozen_row$B_spoke_refit_budget[[1L]], 0L)
+  expect_identical(frozen_row$n_cross_edges_active_since_last_refit[[1L]], 0L)
+  expect_identical(frozen_row$n_probe_pairs_since_last_refit[[1L]], 0L)
+  expect_identical(frozen_row$n_cross_edges_total_since_last_refit[[1L]], 0L)
+})
+
 test_that("escalation path does not evaluate without realized held-out probes", {
   state <- make_linking_refit_state(
     list(

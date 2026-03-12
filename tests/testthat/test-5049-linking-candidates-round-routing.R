@@ -1496,7 +1496,7 @@ test_that("concurrent spoke ranking breaks matched deficits toward stronger cano
   expect_identical(ranked, c(3L, 2L))
 })
 
-test_that("frozen spokes respect per-refit probe cap in routing", {
+test_that("frozen spokes are retired from ranked routing immediately", {
   items <- tibble::tibble(
     item_id = as.character(1:9),
     set_id = c(rep(1L, 3L), rep(2L, 3L), rep(3L, 3L)),
@@ -1511,17 +1511,6 @@ test_that("frozen spokes respect per-refit probe cap in routing", {
   state <- mark_link_phase_b_ready(state)
   state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
   state$controller$probe_pairs_per_refit_per_spoke <- 2L
-  state$step_log <- dplyr::bind_rows(
-    state$step_log,
-    tibble::tibble(
-      pair_id = c(1L, 2L),
-      step_id = c(1L, 2L),
-      is_cross_set = c(TRUE, TRUE),
-      link_spoke_id = c(2L, 2L),
-      run_mode = c("link_probe", "link_probe"),
-      is_probe_step = c(TRUE, TRUE)
-    )
-  )
   ranked <- pairwiseLLM:::.adaptive_link_ranked_spokes(
     state,
     controller = state$controller,
@@ -1615,7 +1604,7 @@ test_that("link stop rows update per-spoke stop state in controller metadata", {
   expect_true(all(sort(phase_ctx$active_spokes) == c(2L, 3L)))
 })
 
-test_that("frozen spoke cross-set commits are tagged as probe steps", {
+test_that("frozen spokes do not emit post-freeze probe or active steps", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
@@ -1637,13 +1626,9 @@ test_that("frozen spoke cross-set commits are tagged as probe steps", {
     delta_spoke_sd = 0.1
   ))
 
+  n_before <- nrow(state$step_log)
   out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
-  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
-  expect_true(isTRUE(row$is_cross_set[[1L]]))
-  expect_identical(as.character(row$run_mode[[1L]]), "link_probe")
-  expect_true(isTRUE(row$is_probe_step[[1L]]))
-  expect_true(is.na(row$cross_set_utility_pre[[1L]]))
-  expect_true(is.na(row$utility_mode[[1L]]))
+  expect_identical(nrow(out$step_log), n_before)
 })
 
 test_that("planned holdout probe edges are excluded from active linking candidates", {

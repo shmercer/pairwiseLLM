@@ -269,13 +269,20 @@ validate_judge_result <- function(result, A_id, B_id) {
     )
   }
   run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
+  if (identical(run_mode, "link_probe")) {
+    rlang::abort(
+      paste0(
+        "step_log append completeness failure: `run_mode = link_probe` is legacy-only and ",
+        "must not be emitted by the current Phase B runtime."
+      )
+    )
+  }
   is_link_run_mode <- run_mode %in% c(
     "link_one_spoke",
     "link_multi_spoke",
-    "link_probe_holdout",
-    "link_probe"
+    "link_probe_holdout"
   )
-  is_probe_run_mode <- run_mode %in% c("link_probe_holdout", "link_probe")
+  is_probe_run_mode <- identical(run_mode, "link_probe_holdout")
   holdout_flag <- if ("is_holdout_probe_step" %in% names(row)) {
     as.logical(row$is_holdout_probe_step[[1L]] %||% FALSE)
   } else {
@@ -284,7 +291,7 @@ validate_judge_result <- function(result, A_id, B_id) {
   drift_flag <- if ("is_drift_probe_step" %in% names(row)) {
     as.logical(row$is_drift_probe_step[[1L]] %||% FALSE)
   } else {
-    identical(run_mode, "link_probe")
+    FALSE
   }
   probe_flag <- if ("is_probe_step" %in% names(row)) {
     as.logical(row$is_probe_step[[1L]] %||% FALSE)
@@ -598,7 +605,21 @@ run_one_step <- function(state, judge, ...) {
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
+  if (.adaptive_link_mode_active(controller) &&
+    identical(phase_ctx$phase, "phase_b") &&
+    isTRUE(.adaptive_link_all_spokes_stopped(state))) {
+    return(state)
+  }
   if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    active_phase_b_spokes <- .adaptive_link_effective_active_spokes(
+      state = state,
+      controller = controller,
+      refit_id = .adaptive_link_refit_window_id(state),
+      exclude_exhausted = TRUE
+    )
+    if (length(active_phase_b_spokes) < 1L) {
+      return(state)
+    }
     state$controller <- controller
     current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
     cached_refit_id <- as.integer(state$controller$link_budget_refit_id %||% NA_integer_)
@@ -608,14 +629,14 @@ run_one_step <- function(state, judge, ...) {
       state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
         state = state,
         controller = state$controller,
-        eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+        eligible_spoke_ids = as.integer(active_phase_b_spokes)
       )
     }
     controller <- state$controller
     state <- .adaptive_link_probe_ensure_panels(
       state,
       controller = controller,
-      spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+      spoke_ids = as.integer(active_phase_b_spokes)
     )
   }
 
@@ -628,7 +649,12 @@ run_one_step <- function(state, judge, ...) {
       probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
         state,
         controller,
-        eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+        eligible_spoke_ids = .adaptive_link_effective_active_spokes(
+          state = state,
+          controller = controller,
+          refit_id = .adaptive_link_refit_window_id(state),
+          exclude_exhausted = TRUE
+        )
       )
       if (!is.na(probe_spoke_id)) {
         probe_selection <- .adaptive_link_probe_select_holdout(
@@ -727,7 +753,13 @@ run_one_step <- function(state, judge, ...) {
   }
   frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
   if (isTRUE(is_cross_set) && !is.na(link_spoke_id) && isTRUE(frozen_map[[as.character(link_spoke_id)]])) {
-    run_mode <- "link_probe"
+    rlang::abort(
+      paste0(
+        "Phase B retirement invariant failed: runtime attempted to emit a cross-set step for frozen ",
+        "spoke_id=", as.integer(link_spoke_id),
+        "."
+      )
+    )
   }
   if (is.character(selection$run_mode) && length(selection$run_mode) == 1L &&
     !is.na(selection$run_mode) && selection$run_mode != "") {
@@ -749,12 +781,11 @@ run_one_step <- function(state, judge, ...) {
   is_link_run_mode <- run_mode %in% c(
     "link_one_spoke",
     "link_multi_spoke",
-    "link_probe_holdout",
-    "link_probe"
+    "link_probe_holdout"
   )
-  is_probe_step <- if (isTRUE(is_cross_set) && run_mode %in% c("link_probe_holdout", "link_probe")) TRUE else FALSE
+  is_probe_step <- isTRUE(is_cross_set) && identical(run_mode, "link_probe_holdout")
   is_holdout_probe_step <- isTRUE(is_probe_step) && identical(run_mode, "link_probe_holdout")
-  is_drift_probe_step <- isTRUE(is_probe_step) && identical(run_mode, "link_probe")
+  is_drift_probe_step <- FALSE
   if (isTRUE(is_probe_step)) {
     utility_mode <- NA_character_
   }
