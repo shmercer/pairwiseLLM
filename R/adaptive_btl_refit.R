@@ -143,6 +143,271 @@
   )
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_link_phase_b_active <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  .adaptive_link_mode_active(controller) &&
+    identical(
+      as.character((.adaptive_link_phase_context(state, controller = controller)$phase %||% "phase_a")),
+      "phase_b"
+    )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_artifact_item_ids <- function(state, artifact, set_id) {
+  expected_ids <- as.character(
+    state$items$item_id[as.integer(state$items$set_id) == as.integer(set_id)]
+  )
+  if (length(expected_ids) < 1L) {
+    rlang::abort(paste0("No state items found for Phase A artifact set_id=", as.integer(set_id), "."))
+  }
+
+  items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())
+  artifact_ids <- character()
+  if ("item_id" %in% names(items_tbl)) {
+    artifact_ids <- as.character(items_tbl$item_id)
+  } else if ("global_item_id" %in% names(items_tbl)) {
+    item_map <- stats::setNames(
+      as.character(state$items$item_id),
+      as.character(state$items$global_item_id)
+    )
+    artifact_ids <- as.character(item_map[as.character(items_tbl$global_item_id)])
+  }
+
+  if (length(artifact_ids) > 0L) {
+    missing_ids <- setdiff(expected_ids, artifact_ids)
+    extra_ids <- setdiff(artifact_ids, expected_ids)
+    if (length(missing_ids) > 0L || length(extra_ids) > 0L) {
+      rlang::abort(paste0(
+        "Phase A artifact item domain mismatch for set_id=",
+        as.integer(set_id),
+        "."
+      ))
+    }
+  }
+
+  expected_ids
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_artifact_draws_for_phase_b_global <- function(state, set_id) {
+  phase_a <- state$linking$phase_a %||% list()
+  artifact <- (phase_a$artifacts %||% list())[[as.character(set_id)]] %||% NULL
+  if (!is.list(artifact)) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires a Phase A artifact for set_id=",
+      as.integer(set_id),
+      "."
+    ))
+  }
+
+  draws <- artifact$posterior_draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires numeric `posterior_draws` with at least two ",
+      "draws for set_id=",
+      as.integer(set_id),
+      "."
+    ))
+  }
+
+  item_ids <- .adaptive_phase_a_artifact_item_ids(state, artifact, set_id = set_id)
+  if (is.null(colnames(draws))) {
+    if (ncol(draws) != length(item_ids)) {
+      rlang::abort(paste0(
+        "Phase A artifact draw columns do not match the item count for set_id=",
+        as.integer(set_id),
+        "."
+      ))
+    }
+    colnames(draws) <- item_ids
+  }
+  if (!all(item_ids %in% colnames(draws))) {
+    rlang::abort(paste0(
+      "Phase A artifact draw columns are missing required item ids for set_id=",
+      as.integer(set_id),
+      "."
+    ))
+  }
+
+  .pairwiseLLM_sanitize_draws_matrix(
+    draws[, item_ids, drop = FALSE],
+    name = paste0("phase_a_artifact_posterior_draws_set_", as.integer(set_id))
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_transform_stats <- function(state, spoke_id, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  key <- as.character(as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+  last_row <- tibble::tibble()
+  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
+  if (nrow(link_stage_log) > 0L && all(c("spoke_id", "refit_id") %in% names(link_stage_log))) {
+    link_stage_log <- link_stage_log[
+      as.integer(link_stage_log$spoke_id) == as.integer(spoke_id),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(link_stage_log) > 0L) {
+      link_stage_log <- link_stage_log[
+        order(as.integer(link_stage_log$refit_id), seq_len(nrow(link_stage_log))),
+        ,
+        drop = FALSE
+      ]
+      last_row <- link_stage_log[nrow(link_stage_log), , drop = FALSE]
+    }
+  }
+
+  transform_state <- as.character(
+    stats_row$link_transform_state %||%
+      if (nrow(last_row) > 0L) last_row$link_transform_state[[1L]] else NA_character_ %||%
+      .adaptive_link_transform_state_for_spoke(controller, spoke_id)
+  )
+  if (!transform_state %in% .adaptive_link_transform_state_levels()) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction could not resolve a valid transform state for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  delta_mean <- as.double(
+    stats_row$delta_spoke_mean %||%
+      if (nrow(last_row) > 0L) last_row$delta_spoke_mean[[1L]] else NA_real_ %||%
+      (controller$link_transform_frozen_delta_by_spoke %||% list())[[key]] %||%
+      (controller$link_transform_last_delta_by_spoke %||% list())[[key]] %||%
+      NA_real_
+  )
+  if (!is.finite(delta_mean)) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires a finite delta for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  log_alpha_mean <- as.double(
+    stats_row$log_alpha_spoke_mean %||%
+      if (nrow(last_row) > 0L) last_row$log_alpha_spoke_mean[[1L]] else NA_real_ %||%
+      (controller$link_transform_frozen_log_alpha_by_spoke %||% list())[[key]] %||%
+      (controller$link_transform_last_log_alpha_by_spoke %||% list())[[key]] %||%
+      NA_real_
+  )
+  if (identical(transform_state, "shift_scale") && !is.finite(log_alpha_mean)) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires a finite log-alpha for shift-scale spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  list(
+    link_transform_state = transform_state,
+    delta_spoke_mean = as.double(delta_mean),
+    log_alpha_spoke_mean = as.double(log_alpha_mean)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_draws <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (!isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
+    return(NULL)
+  }
+
+  phase_a <- state$linking$phase_a %||% list()
+  required_sets <- as.integer(
+    phase_a$required_sets %||% .adaptive_phase_a_required_sets(state, controller = controller)
+  )
+  required_sets <- sort(unique(required_sets[!is.na(required_sets)]))
+  if (length(required_sets) < 1L) {
+    rlang::abort("Phase B global metric reconstruction requires non-empty `required_sets`.")
+  }
+
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  per_set_draws <- vector("list", length(required_sets))
+  names(per_set_draws) <- as.character(required_sets)
+  common_n_draws <- Inf
+
+  for (set_id in required_sets) {
+    set_draws <- .adaptive_phase_a_artifact_draws_for_phase_b_global(state, set_id = set_id)
+    per_set_draws[[as.character(set_id)]] <- set_draws
+    common_n_draws <- min(common_n_draws, nrow(set_draws))
+  }
+
+  common_n_draws <- as.integer(common_n_draws %||% NA_integer_)
+  if (!is.finite(common_n_draws) || common_n_draws < 2L) {
+    rlang::abort(
+      "Phase B global metric reconstruction requires at least two aligned Phase A posterior draws."
+    )
+  }
+
+  combined <- vector("list", length(required_sets))
+  names(combined) <- names(per_set_draws)
+  for (set_id in required_sets) {
+    key <- as.character(set_id)
+    set_draws <- per_set_draws[[key]][seq_len(common_n_draws), , drop = FALSE]
+    if (!identical(as.integer(set_id), hub_id)) {
+      transform <- .adaptive_phase_b_global_metric_transform_stats(
+        state = state,
+        spoke_id = as.integer(set_id),
+        controller = controller
+      )
+      alpha <- if (identical(transform$link_transform_state, "shift_scale")) {
+        exp(as.double(transform$log_alpha_spoke_mean))
+      } else {
+        1
+      }
+      set_draws <- as.double(transform$delta_spoke_mean) + alpha * set_draws
+      dim(set_draws) <- c(common_n_draws, ncol(per_set_draws[[key]]))
+      colnames(set_draws) <- colnames(per_set_draws[[key]])
+    }
+    combined[[key]] <- set_draws
+  }
+
+  combined_draws <- do.call(cbind, combined)
+  ids <- as.character(state$item_ids)
+  if (!all(ids %in% colnames(combined_draws))) {
+    rlang::abort(
+      "Phase B global metric reconstruction failed to cover the full runtime item domain."
+    )
+  }
+
+  .pairwiseLLM_sanitize_draws_matrix(
+    combined_draws[, ids, drop = FALSE],
+    name = "phase_b_global_metric_draws"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_history_update <- function(state, refit_id = NULL) {
+  controller <- .adaptive_controller_resolve(state)
+  if (!isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
+    return(state)
+  }
+
+  draws <- .adaptive_phase_b_global_metric_draws(state, controller = controller)
+  theta_mean <- stats::setNames(as.double(colMeans(draws)), as.character(colnames(draws)))
+  history <- state$refit_meta$phase_b_global_theta_mean_history %||% list()
+  refit_id <- as.integer(refit_id %||% (nrow(state$round_log %||% tibble::tibble()) + 1L))
+  if (!is.finite(refit_id) || refit_id < 1L) {
+    rlang::abort("Phase B global metric history update requires a positive `refit_id`.")
+  }
+  if (length(history) < refit_id) {
+    history <- c(history, rep_len(list(NULL), refit_id - length(history)))
+  }
+  history[[refit_id]] <- theta_mean
+  state$refit_meta$phase_b_global_theta_mean_history <- history
+  state
+}
+
 .adaptive_refit_eligibility <- function(total_committed, last_refit_committed, refit_pairs_target) {
   total_committed <- as.integer(total_committed %||% 0L)
   last_refit_committed <- as.integer(last_refit_committed %||% 0L)
@@ -5165,6 +5430,24 @@ compute_stop_metrics <- function(state, config) {
 
   ids <- as.character(state$item_ids)
   theta_mean_named <- .adaptive_btl_fit_theta_mean(fit)
+  theta_history <- state$refit_meta$theta_mean_history %||% list()
+  controller <- .adaptive_controller_resolve(state)
+  if (isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
+    combined_draws <- .adaptive_phase_b_global_metric_draws(state, controller = controller)
+    if (is.matrix(combined_draws) && is.numeric(combined_draws)) {
+      draws <- combined_draws
+      theta_mean_named <- stats::setNames(as.double(colMeans(draws)), as.character(colnames(draws)))
+      theta_history <- state$refit_meta$phase_b_global_theta_mean_history %||% list()
+      expected_refit_id <- as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
+      if (length(theta_history) < expected_refit_id) {
+        theta_history <- c(
+          theta_history,
+          rep_len(list(NULL), expected_refit_id - length(theta_history))
+        )
+        theta_history[[expected_refit_id]] <- theta_mean_named
+      }
+    }
+  }
   theta_mean <- as.double(theta_mean_named)
   names(theta_mean) <- as.character(names(theta_mean_named))
   theta_sd_eap <- stats::sd(theta_mean)
@@ -5211,7 +5494,7 @@ compute_stop_metrics <- function(state, config) {
     is.finite(reliability_EAP) &&
     reliability_EAP >= eap_min
 
-  history <- state$refit_meta$theta_mean_history %||% list()
+  history <- theta_history
   current_refit <- length(history)
   use_scope_history <- identical(as.character(scope$phase_scope %||% "global"), "phase_a_set") &&
     is.finite(as.integer(scope$phase_scope_set_id %||% NA_integer_))

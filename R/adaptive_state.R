@@ -1377,6 +1377,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         last_refit_step_by_phase_a_set = list(),
         last_refit_round_id = 0L,
         theta_mean_history = list(),
+        phase_b_global_theta_mean_history = list(),
         theta_mean_history_by_phase_a_set = list(),
         phase_a_lag_domain_last_set_id = NA_integer_,
         phase_a_lag_domain_reset_refit_id_by_set = list(),

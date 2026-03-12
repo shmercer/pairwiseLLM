@@ -194,3 +194,125 @@ test_that("linking Phase A stop metrics use active set scope", {
   metrics_global$phase_scope <- "global"
   expect_false(isTRUE(pairwiseLLM:::should_stop(metrics_global, config = cfg)))
 })
+
+test_that("Phase B global stop metrics reconstruct the canonical Phase A plus linking domain", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 99L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import"
+    )
+  )
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+
+  hub_draws <- cbind(
+    h1 = c(1.20, 1.10, 1.15, 1.18),
+    h2 = c(-1.10, -1.05, -1.02, -1.08)
+  )
+  spoke_draws <- cbind(
+    s1 = c(0.20, 0.24, 0.18, 0.22),
+    s2 = c(-0.25, -0.20, -0.22, -0.18)
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("import", "import"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(
+        set_id = 1L,
+        items = tibble::tibble(
+          item_id = c("h1", "h2"),
+          global_item_id = c("gh1", "gh2"),
+          theta_raw_mean = colMeans(hub_draws),
+          theta_raw_sd = apply(hub_draws, 2, stats::sd),
+          rank_mu_raw = c(1, 2)
+        ),
+        posterior_draws = hub_draws
+      ),
+      `2` = list(
+        set_id = 2L,
+        items = tibble::tibble(
+          item_id = c("s1", "s2"),
+          global_item_id = c("gs1", "gs2"),
+          theta_raw_mean = colMeans(spoke_draws),
+          theta_raw_sd = apply(spoke_draws, 2, stats::sd),
+          rank_mu_raw = c(1, 2)
+        ),
+        posterior_draws = spoke_draws
+      )
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$controller$link_transform_policy <- "auto"
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_state = "shift_only",
+      delta_spoke_mean = 0.80,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+  poor_draws <- cbind(
+    h1 = c(0.10, -0.15, 0.20, -0.05),
+    h2 = c(-0.10, 0.05, -0.20, 0.15),
+    s1 = c(0.00, 0.10, -0.05, 0.05),
+    s2 = c(0.05, -0.10, 0.10, -0.05)
+  )
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = poor_draws,
+    diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
+  )
+  state$refit_meta$phase_b_global_theta_mean_history <- list(
+    c(h1 = 1.05, h2 = -1.02, s1 = 0.96, s2 = 0.54),
+    c(h1 = 1.16, h2 = -1.06, s1 = 1.01, s2 = 0.59)
+  )
+
+  metrics <- pairwiseLLM:::compute_stop_metrics(
+    state,
+    config = list(
+      ess_bulk_min = 100,
+      ess_bulk_min_near_stop = 100,
+      max_rhat = 1.01,
+      divergences_max = 0L,
+      eap_reliability_min = 0.10,
+      stability_lag = 1L,
+      theta_corr_min = 0.90,
+      theta_sd_rel_change_max = 0.50,
+      rank_spearman_min = 0.90
+    )
+  )
+
+  combined_draws <- pairwiseLLM:::.adaptive_phase_b_global_metric_draws(state)
+  expect_equal(
+    metrics$reliability_EAP,
+    pairwiseLLM:::compute_reliability_EAP(combined_draws)
+  )
+  expect_gt(
+    metrics$reliability_EAP,
+    pairwiseLLM:::compute_reliability_EAP(state$btl_fit$btl_posterior_draws)
+  )
+  expect_true(isTRUE(metrics$lag_eligible))
+  expect_true(is.finite(metrics$rho_theta))
+  expect_true(is.finite(metrics$rho_rank))
+  expect_true(is.finite(metrics$delta_sd_theta))
+})

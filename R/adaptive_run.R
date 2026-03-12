@@ -2605,6 +2605,10 @@ adaptive_rank_run_live <- function(state,
         state = state,
         refit_context = refit_out$refit_context
       )
+      state <- .adaptive_phase_b_global_metric_history_update(
+        state = state,
+        refit_id = as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
+      )
       cfg$stop_thresholds <- refit_out$config
       metrics <- compute_stop_metrics(state, config = refit_out$config)
       state$stop_metrics <- metrics
@@ -2663,7 +2667,8 @@ adaptive_rank_run_live <- function(state,
         }
       }
       global_stop_allowed <- isTRUE(.adaptive_global_stop_allowed(state))
-      if (isTRUE(stop_decision) && isTRUE(global_stop_allowed)) {
+      is_link_phase_b <- isTRUE(.adaptive_link_phase_b_active(state))
+      if (!isTRUE(is_link_phase_b) && isTRUE(stop_decision) && isTRUE(global_stop_allowed)) {
         round_row_tbl <- tibble::as_tibble(round_row)
         boundary_refit_id <- if ("refit_id" %in% names(round_row_tbl)) {
           as.integer(round_row_tbl$refit_id[[1L]] %||% NA_integer_)

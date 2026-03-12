@@ -1465,10 +1465,10 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
 
   decision <- if (isTRUE(row$stop_decision)) "Decision: STOP" else "Decision: continue"
   stop_summary <- paste0(
-    if (has_linking_rows) "global_stop_decision=" else "stop_decision=",
+    if (has_linking_rows) "global_btl_stop_signal=" else "stop_decision=",
     row$stop_decision,
     "  ",
-    if (has_linking_rows) "global_stop_reason=" else "stop_reason=",
+    if (has_linking_rows) "global_btl_stop_reason=" else "stop_reason=",
     row$stop_reason
   )
 
@@ -1799,7 +1799,7 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
         "linking stop is not yet eligible for the active spokes"
       }
       decision <- paste0(
-        "Decision: continue  global_stop_decision=TRUE but ",
+        "Decision: continue  global_btl_stop_signal=TRUE but ",
         detail
       )
     }

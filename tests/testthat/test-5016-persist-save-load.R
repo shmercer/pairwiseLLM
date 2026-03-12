@@ -791,3 +791,73 @@ test_that("resume aborts when persisted probe state disagrees with canonical log
     "probe-state invariant failed.*link_epoch_id_by_spoke"
   )
 })
+
+test_that("save/load preserves Phase B global audit metrics built from Phase A artifacts", {
+  state <- make_probe_resume_state()
+  state$controller$phase_a_mode <- "import"
+  state$linking$phase_a$set_status$source <- c("import", "import")
+  phase_a_draws <- cbind(
+    h1 = c(0.60, 0.55, 0.50, 0.58),
+    h2 = c(0.10, 0.05, 0.00, 0.08),
+    h3 = c(-0.40, -0.35, -0.30, -0.38),
+    s21 = c(0.25, 0.20, 0.15, 0.22),
+    s22 = c(-0.15, -0.10, -0.05, -0.12)
+  )
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = phase_a_draws,
+    diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
+  )
+  artifact_1 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
+  artifact_2 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 2L)
+  artifact_1$quality_gate_accepted <- TRUE
+  artifact_2$quality_gate_accepted <- TRUE
+  state$linking$phase_a$artifacts <- list(`1` = artifact_1, `2` = artifact_2)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_state = "shift_only",
+      delta_spoke_mean = 0.65,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = cbind(
+      h1 = c(0.05, -0.05, 0.10, -0.10),
+      h2 = c(-0.05, 0.05, -0.10, 0.10),
+      h3 = c(0.00, 0.10, -0.05, -0.05),
+      s21 = c(0.02, -0.08, 0.04, 0.01),
+      s22 = c(-0.03, 0.07, -0.02, -0.01)
+    ),
+    diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
+  )
+  state <- pairwiseLLM:::.adaptive_phase_b_global_metric_history_update(state, refit_id = 1L)
+
+  cfg <- list(
+    ess_bulk_min = 100,
+    ess_bulk_min_near_stop = 100,
+    max_rhat = 1.01,
+    divergences_max = 0L,
+    eap_reliability_min = 0.10,
+    stability_lag = 1L,
+    theta_corr_min = 0.90,
+    theta_sd_rel_change_max = 0.50,
+    rank_spearman_min = 0.90
+  )
+  metrics_before <- pairwiseLLM:::compute_stop_metrics(state, config = cfg)
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+  restored <- load_adaptive_session(session_dir)
+  metrics_after <- pairwiseLLM:::compute_stop_metrics(restored, config = cfg)
+
+  expect_equal(metrics_after$reliability_EAP, metrics_before$reliability_EAP)
+  expect_equal(metrics_after$rho_theta, metrics_before$rho_theta)
+  expect_equal(metrics_after$delta_sd_theta, metrics_before$delta_sd_theta)
+  expect_equal(metrics_after$rho_rank, metrics_before$rho_rank)
+  expect_equal(
+    restored$refit_meta$phase_b_global_theta_mean_history,
+    state$refit_meta$phase_b_global_theta_mean_history
+  )
+})

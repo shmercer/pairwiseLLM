@@ -624,13 +624,13 @@ test_that("adaptive progress refit block prints linking stop gates without misle
 
   expect_true(any(grepl("Global BTL stop criteria", block, fixed = TRUE)))
   expect_true(any(grepl("Linking stop criteria by spoke:", block, fixed = TRUE)))
-  expect_true(any(grepl("global_stop_decision=TRUE", block, fixed = TRUE)))
+  expect_true(any(grepl("global_btl_stop_signal=TRUE", block, fixed = TRUE)))
   expect_true(any(grepl("probe_edges_realized=0 \\(need >= 30\\)", block)))
   expect_true(any(grepl("reliability_link_global=0.972 \\(need >= 0.900; pass=\\[x\\]\\)", block)))
   expect_true(any(grepl("delta_spoke_sd=0.632 \\(need <= 0.169; pass=\\[ \\]\\)", block)))
   expect_true(any(grepl("probe_pred_rmse_lagged=NA \\(need <= 0.015\\)", block)))
   expect_true(any(grepl(
-    "Decision: continue  global_stop_decision=TRUE but linking stop is not yet eligible",
+    "Decision: continue  global_btl_stop_signal=TRUE but linking stop is not yet eligible",
     block,
     fixed = TRUE
   )))
