@@ -76,7 +76,7 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 3L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 3L)),
     progress = "none"
   )
 
@@ -127,7 +127,7 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
         as.character(x$fit_config_hash)
       }, character(1L))
     ),
-    btl_config = list(refit_pairs_target = 2L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none"
   )
 
@@ -171,7 +171,7 @@ test_that("three-set linking stays hub-spoke only and authorizes one independent
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -218,7 +218,7 @@ test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking"
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -253,7 +253,7 @@ test_that("linking run keeps warm-start during Phase A and bypasses warm-start i
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -309,7 +309,7 @@ test_that("mixed run/import mode combines imported and in-run artifacts by set",
       phase_a_artifacts = list(`1` = import_artifacts[["1"]]),
       phase_a_compatible_config_hashes = import_artifacts[["1"]]$fit_config_hash
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -348,7 +348,7 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_ind
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -376,7 +376,7 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_con
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -434,7 +434,7 @@ test_that("linking starvation paths in tiny domains are logged with fallback met
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -474,7 +474,7 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -575,7 +575,7 @@ test_that("single-set runs remain behaviorally equivalent when linking controls 
     judge = judge,
     n_steps = 10L,
     fit_fn = fit_a$fit_fn,
-    btl_config = list(refit_pairs_target = 5L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none"
   )
 
@@ -592,7 +592,7 @@ test_that("single-set runs remain behaviorally equivalent when linking controls 
       link_refit_mode = "shift_only",
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 5L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none"
   )
 
@@ -629,7 +629,7 @@ test_that("independent mode ignores concurrent allocation controls under seeded 
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_base
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -653,7 +653,7 @@ test_that("independent mode ignores concurrent allocation controls under seeded 
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_tuned
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -736,7 +736,7 @@ test_that("phase_b aborts when required sets are ready but strict phase_a stop-p
         phase_a_mode = "import",
         phase_a_artifacts = artifacts
       ),
-      btl_config = list(refit_pairs_target = 1L),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
       progress = "none"
     ),
     "Phase B linking cannot start"

@@ -714,6 +714,7 @@ test_that("coverage source propagates through selection and linking stage rows",
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
   state$round$staged_active <- TRUE
+  state$config$btl_config <- test_link_btl_config(state$config$btl_config %||% list())
   draws <- matrix(
     seq_along(state$item_ids),
     nrow = 4L,

@@ -81,7 +81,7 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
             phase_a_mode = "import",
             phase_a_artifacts = artifacts
           ),
-          btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+          btl_config = test_link_btl_config(list(refit_pairs_target = 2L, stability_lag = 1L)),
           progress = "all",
           progress_redraw_every = 1L
         )

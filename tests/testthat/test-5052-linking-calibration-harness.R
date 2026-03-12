@@ -10,6 +10,7 @@ test_that("offline linking calibration is deterministic and writes required arti
     judge_b = 0.05,
     judge_eps = 0.03,
     n_steps = 30L,
+    btl_config = test_link_btl_config(),
     output_dir = out_dir,
     progress = "none"
   )
@@ -22,6 +23,7 @@ test_that("offline linking calibration is deterministic and writes required arti
     judge_b = 0.05,
     judge_eps = 0.03,
     n_steps = 30L,
+    btl_config = test_link_btl_config(),
     output_dir = withr::local_tempdir(),
     progress = "none"
   )
@@ -81,6 +83,7 @@ test_that("offline calibration reuses canonical production selection utilities",
     seed = 17L,
     set_sizes = c(3L, 3L),
     n_steps = 50L,
+    btl_config = test_link_btl_config(),
     progress = "none"
   )
 

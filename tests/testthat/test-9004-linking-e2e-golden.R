@@ -62,13 +62,13 @@ golden_e2e_run <- function() {
         delta_change_max = 100,
         probe_pairs_per_refit_per_spoke = 2L
       ),
-      btl_config = list(
+      btl_config = test_link_btl_config(list(
         refit_pairs_target = 1L,
         stability_lag = 1L,
         eap_reliability_min = 0.0,
         theta_corr_min = 0.0,
         rank_spearman_min = 0.0
-      ),
+      )),
       progress = "none"
     )
 
@@ -100,13 +100,13 @@ golden_e2e_run <- function() {
         delta_change_max = 100,
         probe_pairs_per_refit_per_spoke = 2L
       ),
-      btl_config = list(
+      btl_config = test_link_btl_config(list(
         refit_pairs_target = 1L,
         stability_lag = 1L,
         eap_reliability_min = 0.0,
         theta_corr_min = 0.0,
         rank_spearman_min = 0.0
-      ),
+      )),
       progress = "none"
     )
   })

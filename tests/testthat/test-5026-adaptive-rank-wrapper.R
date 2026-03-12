@@ -599,7 +599,7 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")]
     ),
-    btl_config = list(refit_pairs_target = 2L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 13L
   )
@@ -643,7 +643,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 2L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 17L
   )
@@ -681,7 +681,7 @@ test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are un
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none",
     seed = 31L
   )

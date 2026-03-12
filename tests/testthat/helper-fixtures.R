@@ -135,3 +135,94 @@ make_deterministic_fit_fn <- function(ids, fit = NULL) {
     get_calls = function() env$calls
   )
 }
+
+make_test_link_cmdstan_fit_fn <- function() {
+  function(stan_data, variable_names, cmdstan, seed, model_fn = NULL) {
+    n_draws <- 4L
+    draw_offsets <- c(-0.03, -0.01, 0.01, 0.03)
+    delta_center <- if (is.numeric(stan_data$hub_ref_cross) && is.numeric(stan_data$spoke_ref_cross)) {
+      mean(as.double(stan_data$hub_ref_cross) - as.double(stan_data$spoke_ref_cross), na.rm = TRUE)
+    } else {
+      0
+    }
+    if (!is.finite(delta_center)) {
+      delta_center <- 0
+    }
+    hub_prior_signal <- mean(as.double(stan_data$hub_prior_sd %||% numeric()), na.rm = TRUE)
+    if (is.finite(hub_prior_signal)) {
+      delta_center <- delta_center + (hub_prior_signal * 0.01)
+    }
+
+    build_theta_draws <- function(base_vals, prefix) {
+      base_vals <- as.double(base_vals %||% numeric())
+      if (length(base_vals) < 1L) {
+        return(NULL)
+      }
+      out <- vapply(
+        seq_along(base_vals),
+        function(idx) base_vals[[idx]] + draw_offsets + ((idx - 1L) * 0.005),
+        numeric(n_draws)
+      )
+      colnames(out) <- paste0(prefix, "[", seq_along(base_vals), "]")
+      out
+    }
+
+    draws <- matrix(nrow = n_draws, ncol = 0L)
+    if ("delta" %in% variable_names) {
+      draws <- cbind(draws, delta = delta_center + draw_offsets)
+    }
+    if ("log_alpha" %in% variable_names) {
+      draws <- cbind(draws, log_alpha = c(-0.04, -0.01, 0.01, 0.04))
+    }
+
+    theta_hub_draws <- build_theta_draws(stan_data$hub_ref, "theta_hub")
+    if (!is.null(theta_hub_draws) &&
+      ("theta_hub" %in% variable_names || any(grepl("^theta_hub\\[", variable_names)))) {
+      keep <- if ("theta_hub" %in% variable_names) {
+        rep(TRUE, ncol(theta_hub_draws))
+      } else {
+        colnames(theta_hub_draws) %in% variable_names
+      }
+      draws <- cbind(draws, theta_hub_draws[, keep, drop = FALSE])
+    }
+
+    theta_spoke_draws <- build_theta_draws(stan_data$spoke_ref, "theta_spoke")
+    if (!is.null(theta_spoke_draws) &&
+      ("theta_spoke" %in% variable_names || any(grepl("^theta_spoke\\[", variable_names)))) {
+      keep <- if ("theta_spoke" %in% variable_names) {
+        rep(TRUE, ncol(theta_spoke_draws))
+      } else {
+        colnames(theta_spoke_draws) %in% variable_names
+      }
+      draws <- cbind(draws, theta_spoke_draws[, keep, drop = FALSE])
+    }
+
+    if (ncol(draws) < 1L) {
+      draws <- matrix(delta_center + draw_offsets, ncol = 1L)
+      colnames(draws) <- "delta"
+    }
+
+    list(
+      fit = NULL,
+      draws_matrix = draws,
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1.0,
+        min_ess_bulk = 1000
+      ),
+      mcmc_config_used = list(
+        chains = as.integer(cmdstan$chains %||% 4L),
+        parallel_chains = as.integer(cmdstan$parallel_chains %||% cmdstan$chains %||% 4L),
+        threads_per_chain = as.integer(cmdstan$threads_per_chain %||% 1L),
+        cmdstanr_version = "test"
+      )
+    )
+  }
+}
+
+test_link_btl_config <- function(x = list()) {
+  utils::modifyList(
+    list(cmdstan_fit_fn = make_test_link_cmdstan_fit_fn()),
+    x %||% list()
+  )
+}

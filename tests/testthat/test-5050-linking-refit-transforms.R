@@ -10,6 +10,7 @@ make_linking_refit_state <- function(adaptive_config = list()) {
     seed = 123L,
     adaptive_config = utils::modifyList(base_cfg, adaptive_config)
   )
+  state$config$btl_config <- test_link_btl_config(state$config$btl_config %||% list())
 
   draws <- matrix(
     c(
@@ -3786,6 +3787,7 @@ test_that("linking CmdStan schedule and refit seed are stable under fixed inputs
 
 test_that("linking refit retries CmdStan effort until diagnostics pass", {
   state <- make_linking_refit_state(list(link_refit_mode = "shift_only"))
+  state$config$btl_config$cmdstan_fit_fn <- NULL
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
 

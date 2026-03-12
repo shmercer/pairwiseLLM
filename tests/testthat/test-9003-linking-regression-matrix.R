@@ -108,7 +108,7 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
       n_steps = 8L,
       fit_fn = fit_stub$fit_fn,
       adaptive_config = cfg,
-      btl_config = list(refit_pairs_target = 1L),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
       session_dir = session_dir,
       progress = "none"
     )
@@ -123,7 +123,7 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
       n_steps = 4L,
       fit_fn = fit_stub$fit_fn,
       adaptive_config = cfg,
-      btl_config = list(refit_pairs_target = 1L),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
       session_dir = session_dir,
       progress = "none"
     )
@@ -180,7 +180,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
   status_import <- tibble::as_tibble(out_import$linking$phase_a$set_status)
@@ -197,7 +197,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
   status_run <- tibble::as_tibble(out_run$linking$phase_a$set_status)
@@ -217,7 +217,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
       phase_a_artifacts = list(`1` = artifacts[["1"]]),
       phase_a_compatible_config_hashes = artifacts[["1"]]$fit_config_hash
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
   status_mixed <- tibble::as_tibble(out_mixed$linking$phase_a$set_status)

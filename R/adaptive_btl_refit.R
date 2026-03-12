@@ -1944,9 +1944,9 @@
                                                  cmdstan,
                                                  seed,
                                                  model_fn = NULL) {
-  .btl_mcmc_require_cmdstanr()
   resolved_cmdstan <- .btl_mcmc_resolve_cmdstan_config(cmdstan %||% list())
   if (is.null(model_fn)) {
+    .btl_mcmc_require_cmdstanr()
     model_fn <- cmdstanr::cmdstan_model
   }
   if (!is.function(model_fn)) {
@@ -2245,6 +2245,10 @@
   diagnostics <- NULL
   mcmc_config_used <- NULL
   cmdstan_schedule_used <- NULL
+  cmdstan_fit_fn <- refit_contract_ctx[["cmdstan_fit_fn"]] %||% .adaptive_link_fit_transform_cmdstan
+  if (!is.function(cmdstan_fit_fn)) {
+    rlang::abort("`refit_contract$cmdstan_fit_fn` must be a function when provided.")
+  }
   repair_attempts <- 0L
   max_attempts <- 3L
   for (attempt in seq_len(max_attempts)) {
@@ -2259,11 +2263,11 @@
       ),
       joint_used = joint_used
     )
-    cmdstan_fit <- .adaptive_link_fit_transform_cmdstan(
+    cmdstan_fit <- cmdstan_fit_fn(
       stan_data = stan_data_base,
       variable_names = variable_names,
       cmdstan = utils::modifyList(
-        refit_contract_ctx$cmdstan %||% list(),
+        refit_contract_ctx[["cmdstan"]] %||% list(),
         list(
           chains = as.integer(cmdstan_schedule_used$chains),
           iter_warmup = as.integer(cmdstan_schedule_used$iter_warmup),
@@ -2271,7 +2275,7 @@
         )
       ),
       seed = as.integer((seed + attempt * 1009L) %% .Machine$integer.max),
-      model_fn = refit_contract_ctx$cmdstan_model_fn %||% NULL
+      model_fn = refit_contract_ctx[["cmdstan_model_fn"]] %||% NULL
     )
     draws_matrix <- as.matrix(cmdstan_fit$draws_matrix)
     diagnostics <- .adaptive_link_cmdstan_validate_diagnostics(
@@ -3286,6 +3290,7 @@
       }
     }
 
+    btl_config <- out$config$btl_config %||% list()
     cross_all <- .adaptive_link_cross_edges(out, spoke_id = spoke_id, last_refit_step = NULL)
     cross_since <- .adaptive_link_cross_edges(out, spoke_id = spoke_id, last_refit_step = last_step)
     startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(out, spoke_id = spoke_id)
@@ -3306,11 +3311,13 @@
       hub_lock_mode = lock_mode,
       hub_lock_kappa = kappa,
       shift_only_theta_treatment = theta_treatment,
-      cmdstan = out$config$btl_config$cmdstan %||% list(),
+      cmdstan = btl_config[["cmdstan"]] %||% list(),
+      cmdstan_fit_fn = btl_config[["cmdstan_fit_fn"]] %||% NULL,
+      cmdstan_model_fn = btl_config[["cmdstan_model_fn"]] %||% NULL,
       link_diagnostics_thresholds = list(
-        divergences_max = as.integer(out$config$btl_config$divergences_max %||% 0L),
-        max_rhat = as.double(out$config$btl_config$max_rhat %||% 1.01),
-        min_ess_bulk = as.double(out$config$btl_config$ess_bulk_min %||% 400)
+        divergences_max = as.integer(btl_config$divergences_max %||% 0L),
+        max_rhat = as.double(btl_config$max_rhat %||% 1.01),
+        min_ess_bulk = as.double(btl_config$ess_bulk_min %||% 400)
       )
     )
     hub_theta_init <- if (identical(refit_mode, "joint_refit") && length(hub_current) > 0L) {
@@ -5345,7 +5352,7 @@ default_btl_fit_fn <- function(state, config) {
     results = results,
     ids = ids_fit,
     model_variant = config$model_variant %||% "btl_e_b",
-    cmdstan = config$cmdstan %||% list()
+    cmdstan = config[["cmdstan"]] %||% list()
   )
 
   fit_contract <- .adaptive_btl_extract_fit_contract(fit_out)
