@@ -2461,6 +2461,7 @@ adaptive_rank_run_live <- function(state,
   )
   btl_cfg <- .adaptive_btl_resolve_config(state, btl_config)
   btl_cfg$refit_pairs_target <- .adaptive_refit_pairs_target(state, btl_cfg)
+  state$config$btl_config <- btl_cfg
   cfg$refit_pairs_target <- btl_cfg$refit_pairs_target
   cfg$stop_thresholds <- btl_cfg
   state$refit_meta$refit_pairs_target_current <- as.integer(btl_cfg$refit_pairs_target)
@@ -2600,6 +2601,7 @@ adaptive_rank_run_live <- function(state,
 
     refit_out <- maybe_refit_btl(state, config = btl_cfg, fit_fn = fit_fn)
     state <- refit_out$state
+    state$config$btl_config <- refit_out$config
     if (isTRUE(refit_out$refit_performed)) {
       state <- .adaptive_linking_refit_update_state(
         state = state,

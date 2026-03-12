@@ -614,6 +614,7 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
   expect_true(nrow(out$logs$link_stage_log) >= 1L)
   expect_true(all(c("link_transform_policy", "link_transform_state", "reliability_link_global") %in%
     names(out$logs$link_stage_log)))
+  expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
   expect_true("rank_link" %in% names(out$items))
 })
 
@@ -659,6 +660,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(nrow(out$logs$link_stage_log) >= 2L)
   expect_true(all(c("link_transform_policy", "link_transform_state", "link_epoch_id") %in%
     names(out$logs$link_stage_log)))
+  expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
 })
 
 test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are unavailable", {
