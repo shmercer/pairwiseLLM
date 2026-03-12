@@ -1,3 +1,65 @@
+make_probe_resume_state <- function() {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22"),
+    set_id = c(1L, 1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 61L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(items = tibble::tibble(
+        global_item_id = c("gh1", "gh2", "gh3"),
+        theta_raw_mean = c(0.5, 0, -0.5),
+        theta_raw_sd = c(0.1, 0.1, 0.1),
+        rank_mu_raw = c(1, 2, 3)
+      )),
+      `2` = list(items = tibble::tibble(
+        global_item_id = c("gs21", "gs22"),
+        theta_raw_mean = c(0.2, -0.2),
+        theta_raw_sd = c(0.1, 0.1),
+        rank_mu_raw = c(1, 2)
+      ))
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$refit_meta$refit_pairs_target_current <- 3L
+  state$controller$refit_pairs_target <- 3L
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+  state
+}
+
 test_that("save_adaptive_session and load_adaptive_session round-trip adaptive artifacts", {
   items <- make_test_items(4)
   state <- adaptive_rank_start(items)
@@ -279,7 +341,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 3L)
   state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
   state$controller$link_epoch_start_step_by_spoke <- list(`2` = 8L)
-  state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
+  state$controller$link_escalation_recent_pass_window_by_spoke <- list(`2` = c(TRUE))
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
       link_transform_policy = "auto",
@@ -302,7 +364,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   expect_identical(restored$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 3L)
   expect_identical(restored$controller$link_epoch_id_by_spoke[["2"]], 4L)
   expect_identical(restored$controller$link_epoch_start_step_by_spoke[["2"]], 8L)
-  expect_identical(restored$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 1L)
+  expect_identical(restored$controller$link_escalation_recent_pass_window_by_spoke[["2"]], c(TRUE))
 })
 
 test_that("load_adaptive_session normalizes legacy link_stage_log transform columns on resume", {
@@ -332,7 +394,7 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
     link_transform_mode = "shift_only",
     link_refit_mode = "shift_only",
     hub_lock_mode = "soft_lock",
-    reliability_EAP_link = 0.9,
+    reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = FALSE,
     link_stop_pass = FALSE,
@@ -367,6 +429,95 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
   expect_false("link_transform_mode" %in% names(restored$link_stage_log))
   expect_identical(as.character(restored$link_stage_log$link_transform_policy[[1L]]), "fixed_shift_only")
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
+})
+
+test_that("save/load preserves feasibility and canonical stop-threshold fields in link_stage_log", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 41L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      reliability_link_global = 0.9,
+      link_stop_reliability_min_used = 0.9,
+      reliability_stop_pass = TRUE,
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      n_pairs_cross_set_done = 2L,
+      n_unique_cross_pairs_seen = 2L,
+      n_probe_pairs_since_last_refit = 0L,
+      n_cross_edges_active_since_last_refit = 2L,
+      n_cross_edges_probe_since_last_refit = 0L,
+      n_cross_edges_total_since_last_refit = 2L,
+      coverage_bins_used = 3L,
+      B_spoke_refit_budget = 4L,
+      B_spoke_refit_budget_source = "single_spoke_controller",
+      stage_target_anchor_link = 1L,
+      stage_target_long_link = 1L,
+      stage_target_mid_link = 1L,
+      stage_target_local_link = 1L,
+      feasible_stage_capacity_anchor_link = 2L,
+      feasible_stage_capacity_long_link = 0L,
+      feasible_stage_capacity_mid_link = 2L,
+      feasible_stage_capacity_local_link = 2L,
+      feasibility_budget_released = 1L,
+      feasibility_reallocation_used = TRUE,
+      feasibility_reallocation_rule = "pooled_utility_backfill",
+      stage_realized_anchor_link = 1L,
+      stage_realized_long_link = 0L,
+      stage_realized_mid_link = 1L,
+      stage_realized_local_link = 1L,
+      stage_shortfall_anchor_link = 0L,
+      stage_shortfall_long_link = 1L,
+      stage_shortfall_mid_link = 0L,
+      stage_shortfall_local_link = 0L,
+      stage_reallocation_used = TRUE,
+      stage_reallocation_rule_used = "pooled_utility_backfill",
+      stage_budget_unfilled = 1L,
+      probe_brier = 0.12,
+      probe_brier_max_used = 0.19,
+      probe_brier_pass = TRUE,
+      probe_pred_rmse_lagged = 0.01,
+      probe_pred_rmse_max_used = 0.015,
+      probe_pred_rmse_pass = TRUE,
+      theta_global_rmse_lagged = 0.03,
+      theta_global_rmse_max_used = 0.05,
+      theta_global_rmse_pass = TRUE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+  row <- restored$link_stage_log[1L, , drop = FALSE]
+
+  expect_identical(row$feasible_stage_capacity_long_link[[1L]], 0L)
+  expect_identical(row$feasibility_budget_released[[1L]], 1L)
+  expect_true(isTRUE(row$feasibility_reallocation_used[[1L]]))
+  expect_identical(
+    as.character(row$feasibility_reallocation_rule[[1L]]),
+    "pooled_utility_backfill"
+  )
+  expect_equal(row$probe_brier_max_used[[1L]], 0.19, tolerance = 1e-12)
+  expect_true(isTRUE(row$probe_brier_pass[[1L]]))
+  expect_equal(row$theta_global_rmse_max_used[[1L]], 0.05, tolerance = 1e-12)
+  expect_true(isTRUE(row$theta_global_rmse_pass[[1L]]))
 })
 
 test_that("save/load preserves planned probe panels and realized probe bookkeeping", {
@@ -413,6 +564,25 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
     phase_b_started_at_step = 1L
   )
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  panel_before <- state$linking$probe$panels_by_spoke[["2"]]
+  pair_key <- as.character(panel_before$pair_key[[1L]])
+  panel_before$realized[[1L]] <- FALSE
+  panel_before$realized_step_id[[1L]] <- NA_integer_
+  panel_before$realized_pair_id[[1L]] <- NA_integer_
+  panel_before$realized_run_mode[[1L]] <- NA_character_
+  state$linking$probe$panels_by_spoke[["2"]] <- panel_before
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 99L,
+    pair_id = 99L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 1L,
+    probe_panel_id = as.character(panel_before$probe_panel_id[[1L]]),
+    hub_item_id = as.character(panel_before$hub_item_id[[1L]]),
+    spoke_item_id = as.character(panel_before$spoke_item_id[[1L]]),
+    pair_key = pair_key,
+    Y = 1L
+  )
 
   session_dir <- withr::local_tempdir()
   save_adaptive_session(state, session_dir)
@@ -425,5 +595,273 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   expect_equal(
     restored$linking$probe$realized_edges$pair_key,
     state$linking$probe$realized_edges$pair_key
+  )
+  restored_panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(
+    restored,
+    spoke_id = 2L,
+    epoch_id = 1L
+  )
+  expect_true(isTRUE(restored_panel$realized[[1L]]))
+  expect_identical(as.integer(restored_panel$realized_step_id[[1L]]), 99L)
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L),
+    1L
+  )
+})
+
+test_that("resume preserves probe panel identity, epoch, and realized counts across a chunk boundary", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  panel_before <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  realized_before <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
+  expect_gte(nrow(panel_before), 1L)
+  expect_gte(realized_before, 1L)
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 2L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel_before$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel_before)),
+      probe_edges_realized = as.integer(realized_before),
+      probe_panel_shortfall = as.integer(nrow(panel_before) - realized_before)
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  panel_after <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(restored, spoke_id = 2L, epoch_id = 1L)
+  realized_after <- pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L)
+  expect_identical(as.character(panel_after$probe_panel_id[[1L]]), as.character(panel_before$probe_panel_id[[1L]]))
+  expect_identical(as.integer(panel_after$link_epoch_id[[1L]]), 1L)
+  expect_identical(as.integer(restored$controller$link_epoch_id_by_spoke[["2"]]), 1L)
+  expect_identical(as.integer(realized_after), as.integer(realized_before))
+
+  synced <- pairwiseLLM:::.adaptive_apply_controller_config(restored, adaptive_config = NULL)
+  expect_true("probe" %in% names(synced$linking))
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(synced, spoke_id = 2L, epoch_id = 1L),
+    as.integer(realized_after)
+  )
+
+  resumed <- adaptive_rank_run_live(
+    restored,
+    make_deterministic_judge("i_wins"),
+    n_steps = 1L,
+    progress = "none"
+  )
+  panel_resumed <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(resumed, spoke_id = 2L, epoch_id = 1L)
+  realized_resumed <- pairwiseLLM:::.adaptive_link_probe_realized_count(resumed, spoke_id = 2L, epoch_id = 1L)
+  expect_identical(as.character(panel_resumed$probe_panel_id[[1L]]), as.character(panel_before$probe_panel_id[[1L]]))
+  expect_identical(as.integer(panel_resumed$link_epoch_id[[1L]]), 1L)
+  expect_gte(as.integer(realized_resumed), as.integer(realized_after))
+})
+
+test_that("resume accepts current-window realized probes beyond the latest link-stage row", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  realized <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
+  expect_gte(realized, 1L)
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- state$link_stage_log[0, , drop = FALSE]
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_realized = 0L,
+      probe_panel_shortfall = as.integer(nrow(panel))
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L),
+    as.integer(realized)
+  )
+  last_row <- tibble::as_tibble(restored$link_stage_log) |>
+    dplyr::filter(.data$spoke_id == 2L) |>
+    dplyr::slice_tail(n = 1L)
+  expect_identical(as.integer(last_row$probe_edges_realized[[1L]]), 0L)
+})
+
+test_that("resume aborts when current-window holdout steps do not reconcile to canonical realized_edges", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  expect_gte(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L),
+    1L
+  )
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- state$link_stage_log[0, , drop = FALSE]
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_realized = 0L,
+      probe_panel_shortfall = as.integer(nrow(panel))
+    )
+  )
+  state$linking$probe$realized_edges <- pairwiseLLM:::.adaptive_link_probe_empty_realized_log()
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "committed holdout probe steps after the last refit do not reconcile"
+  )
+})
+
+test_that("resume aborts when persisted probe state disagrees with canonical logs or controller epoch", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  realized <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 2L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_realized = as.integer(realized),
+      probe_panel_shortfall = as.integer(nrow(panel) - realized)
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  persisted_state <- readRDS(file.path(session_dir, "state.rds"))
+  persisted_state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
+  saveRDS(persisted_state, file.path(session_dir, "state.rds"))
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "probe-state invariant failed.*link_epoch_id_by_spoke"
+  )
+})
+
+test_that("save/load preserves Phase B global audit metrics built from Phase A artifacts", {
+  state <- make_probe_resume_state()
+  state$controller$phase_a_mode <- "import"
+  state$linking$phase_a$set_status$source <- c("import", "import")
+  phase_a_draws <- cbind(
+    h1 = c(0.60, 0.55, 0.50, 0.58),
+    h2 = c(0.10, 0.05, 0.00, 0.08),
+    h3 = c(-0.40, -0.35, -0.30, -0.38),
+    s21 = c(0.25, 0.20, 0.15, 0.22),
+    s22 = c(-0.15, -0.10, -0.05, -0.12)
+  )
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = phase_a_draws,
+    diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
+  )
+  artifact_1 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
+  artifact_2 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 2L)
+  artifact_1$quality_gate_accepted <- TRUE
+  artifact_2$quality_gate_accepted <- TRUE
+  state$linking$phase_a$artifacts <- list(`1` = artifact_1, `2` = artifact_2)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_state = "shift_only",
+      delta_spoke_mean = 0.65,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
+  state$btl_fit <- make_test_btl_fit(
+    state$item_ids,
+    draws = cbind(
+      h1 = c(0.05, -0.05, 0.10, -0.10),
+      h2 = c(-0.05, 0.05, -0.10, 0.10),
+      h3 = c(0.00, 0.10, -0.05, -0.05),
+      s21 = c(0.02, -0.08, 0.04, 0.01),
+      s22 = c(-0.03, 0.07, -0.02, -0.01)
+    ),
+    diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500)
+  )
+  state <- pairwiseLLM:::.adaptive_phase_b_global_metric_history_update(state, refit_id = 1L)
+
+  cfg <- list(
+    ess_bulk_min = 100,
+    ess_bulk_min_near_stop = 100,
+    max_rhat = 1.01,
+    divergences_max = 0L,
+    eap_reliability_min = 0.10,
+    stability_lag = 1L,
+    theta_corr_min = 0.90,
+    theta_sd_rel_change_max = 0.50,
+    rank_spearman_min = 0.90
+  )
+  metrics_before <- pairwiseLLM:::compute_stop_metrics(state, config = cfg)
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+  restored <- load_adaptive_session(session_dir)
+  metrics_after <- pairwiseLLM:::compute_stop_metrics(restored, config = cfg)
+
+  expect_equal(metrics_after$reliability_EAP, metrics_before$reliability_EAP)
+  expect_equal(metrics_after$rho_theta, metrics_before$rho_theta)
+  expect_equal(metrics_after$delta_sd_theta, metrics_before$delta_sd_theta)
+  expect_equal(metrics_after$rho_rank, metrics_before$rho_rank)
+  expect_equal(
+    restored$refit_meta$phase_b_global_theta_mean_history,
+    state$refit_meta$phase_b_global_theta_mean_history
   )
 })

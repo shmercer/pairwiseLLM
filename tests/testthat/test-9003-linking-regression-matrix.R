@@ -108,13 +108,14 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
       n_steps = 8L,
       fit_fn = fit_stub$fit_fn,
       adaptive_config = cfg,
-      btl_config = list(refit_pairs_target = 1L),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
       session_dir = session_dir,
       progress = "none"
     )
     save_adaptive_session(first, session_dir = session_dir, overwrite = TRUE)
     resumed <- adaptive_rank_resume(session_dir = session_dir)
     prev <- resumed$step_log
+    prev_link_rows <- nrow(resumed$link_stage_log %||% tibble::tibble())
 
     second <- adaptive_rank_run_live(
       state = resumed,
@@ -122,7 +123,7 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
       n_steps = 4L,
       fit_fn = fit_stub$fit_fn,
       adaptive_config = cfg,
-      btl_config = list(refit_pairs_target = 1L),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
       session_dir = session_dir,
       progress = "none"
     )
@@ -132,6 +133,27 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     if (isTRUE(sc$linking)) {
       expect_true(any(second$step_log$is_cross_set %in% TRUE))
       expect_true(nrow(second$link_stage_log) >= 1L)
+      appended_link_rows <- second$link_stage_log[
+        seq.int(from = prev_link_rows + 1L, to = nrow(second$link_stage_log)),
+        ,
+        drop = FALSE
+      ]
+      appended_link_rows <- appended_link_rows[!is.na(appended_link_rows$refit_id), , drop = FALSE]
+      expect_true(nrow(appended_link_rows) >= 1L)
+      complete_probe_rows <- appended_link_rows[
+        !is.na(appended_link_rows$probe_edges_realized_before_refit) &
+          !is.na(appended_link_rows$probe_edges_realized_delta_since_last_refit) &
+          !is.na(appended_link_rows$probe_edges_realized),
+        ,
+        drop = FALSE
+      ]
+      if (nrow(complete_probe_rows) >= 1L) {
+        expect_true(all(
+          as.integer(complete_probe_rows$probe_edges_realized_before_refit) +
+            as.integer(complete_probe_rows$probe_edges_realized_delta_since_last_refit) ==
+            as.integer(complete_probe_rows$probe_edges_realized)
+        ))
+      }
     }
   }
 })
@@ -158,7 +180,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
   status_import <- tibble::as_tibble(out_import$linking$phase_a$set_status)
@@ -175,7 +197,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
   status_run <- tibble::as_tibble(out_run$linking$phase_a$set_status)
@@ -195,7 +217,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
       phase_a_artifacts = list(`1` = artifacts[["1"]]),
       phase_a_compatible_config_hashes = artifacts[["1"]]$fit_config_hash
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
   status_mixed <- tibble::as_tibble(out_mixed$linking$phase_a$set_status)

@@ -259,10 +259,11 @@ validate_btl_mcmc_config <- function(config) {
     "`keep_draws` must be logical.")
   .btl_mcmc_check(.btl_mcmc_intish(config$thin_draws) && config$thin_draws >= 1L,
     "`thin_draws` must be >= 1.")
-  if (!is.list(config$cmdstan)) {
+  cmdstan <- config[["cmdstan"]]
+  if (!is.list(cmdstan)) {
     rlang::abort("`config$cmdstan` must be a list when provided.")
   }
-  cmdstan_output_dir <- config$cmdstan$output_dir %||% NULL
+  cmdstan_output_dir <- cmdstan[["output_dir"]] %||% NULL
   if (!is.null(cmdstan_output_dir)) {
     .btl_mcmc_check(is.character(cmdstan_output_dir) && length(cmdstan_output_dir) == 1L,
       "`config$cmdstan$output_dir` must be a length-1 character path.")
@@ -804,7 +805,7 @@ build_round_log_row <- function(state,
   row$mcmc_cores_detected_physical <- as.integer(mcmc_config_used$cores_detected_physical %||% NA_integer_)
   row$mcmc_cores_detected_logical <- as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_)
   threads_per_chain <- mcmc_config_used$threads_per_chain %||%
-    config$cmdstan$threads_per_chain %||% 1L
+    config[["cmdstan"]][["threads_per_chain"]] %||% 1L
   row$mcmc_threads_per_chain <- as.integer(threads_per_chain %||% NA_integer_)
   row$mcmc_cmdstanr_version <- as.character(mcmc_config_used$cmdstanr_version %||% NA_character_)
   row

@@ -535,7 +535,7 @@ as_btl_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     Y = as.integer(bt_data$Y)
   )
 
-  cmdstan <- config$cmdstan %||% list()
+  cmdstan <- config[["cmdstan"]] %||% list()
   if (!is.list(cmdstan)) {
     rlang::abort("`config$cmdstan` must be a list when provided.")
   }

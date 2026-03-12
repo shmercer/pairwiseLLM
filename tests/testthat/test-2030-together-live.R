@@ -3,8 +3,6 @@
 #   Tests for together_compare_pair_live() and submit_together_pairs_live()
 # =====================================================================
 
-skip_if_no_psock()
-
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 together_compare_pair_live <- pairwiseLLM::together_compare_pair_live
@@ -835,6 +833,7 @@ testthat::test_that("submit_together_pairs_live: Sequential Save Error Handling"
 })
 
 testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -846,7 +845,6 @@ testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error
   )
   tmp_file <- tempfile(fileext = ".csv")
 
-  # Mock write_csv to throw an error (triggering the save warning)
   testthat::with_mocked_bindings(
     write_csv = function(...) stop("Parallel Disk full"),
     .package = "readr",
@@ -855,7 +853,7 @@ testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error
         testthat::expect_warning(
           res <- submit_together_pairs_live(
             pairs,
-            model = 123, # FIX 2: Pass invalid model type to force stop() inside worker
+            model = 123,
             trait_name = td$name,
             trait_description = td$description,
             parallel = TRUE, workers = 2,
@@ -865,7 +863,6 @@ testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error
         )
       })
 
-      # Now we expect failures with "Error: " because together_compare_pair_live threw an error
       testthat::expect_equal(nrow(res$failed_pairs), 2L)
       testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
       testthat::expect_true(all(grepl("must be a single character", res$failed_pairs$error_message)))
@@ -895,6 +892,7 @@ testthat::test_that("submit_together_pairs_live: Sequential Internal Error Handl
 })
 
 testthat::test_that("submit_together_pairs_live: Parallel Save Strips raw_response", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -904,12 +902,6 @@ testthat::test_that("submit_together_pairs_live: Parallel Save Strips raw_respon
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
 
-  # We run with parallel = TRUE and include_raw = TRUE.
-  # We provide a fake API key, so the worker will fail (caught by internal tryCatch).
-  # The worker returns an error tibble which includes a 'raw_response' column (Line 655).
-  # The main process aggregates this and should strip 'raw_response' before saving (Line 667).
-
-  # No warning expected (save should succeed)
   testthat::expect_warning(
     submit_together_pairs_live(
       pairs, "model", td$name, td$description,

@@ -29,17 +29,15 @@ test_that("adaptive_rank_run_live prints refit blocks and stop criteria", {
   })
 
   combined <- c(output, messages)
-  expect_true(any(grepl("REFIT #", combined)))
-  expect_true(any(grepl("round_id", combined)))
-  expect_true(any(grepl("step_id_at_refit", combined)))
-  expect_true(any(grepl("total_pairs_done", combined)))
-  expect_true(any(grepl("diagnostics_pass", combined)))
-  expect_true(any(grepl("min_ess_bulk", combined)))
-  expect_true(any(grepl("chains=", combined)))
-  expect_true(any(grepl("parallel_chains=", combined)))
-  expect_true(any(grepl("cov_trace_theta=", combined)))
-  expect_true(any(grepl("Decision:", combined)))
-  expect_true(any(grepl("\\[x\\]|\\[ \\]", combined)))
+  expect_true(any(grepl("^Refit [0-9]{4}  step=", combined)))
+  expect_true(any(grepl("^Global stop:", combined)))
+  expect_true(any(grepl("reliability_EAP=", combined)))
+  expect_false(any(grepl("Model params", combined, fixed = TRUE)))
+  expect_false(any(grepl("chains=", combined, fixed = TRUE)))
+  expect_false(any(grepl("parallel_chains=", combined, fixed = TRUE)))
+  expect_false(any(grepl("cov_trace_theta=", combined, fixed = TRUE)))
+  expect_false(any(grepl("Decision:", combined, fixed = TRUE)))
+  expect_false(any(grepl("\\[x\\]|\\[ \\]", combined)))
   expect_true(any(grepl("^step [0-9]+: new_pairs_since_last_refit=", combined)))
 })
 
@@ -83,7 +81,7 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
             phase_a_mode = "import",
             phase_a_artifacts = artifacts
           ),
-          btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+          btl_config = test_link_btl_config(list(refit_pairs_target = 2L, stability_lag = 1L)),
           progress = "all",
           progress_redraw_every = 1L
         )
@@ -96,16 +94,19 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   })
 
   combined <- c(output, messages)
-  expect_true(any(grepl("Linking summary:", combined)))
-  expect_true(any(grepl("active_spokes=", combined)))
-  expect_true(any(grepl("transform_policy=", combined)))
-  expect_true(any(grepl("transform_state=", combined)))
-  expect_true(any(grepl("link_epoch_id=", combined)))
-  expect_true(any(grepl("link_refit_mode=", combined)))
-  expect_true(any(grepl("cross_pairs_done=", combined)))
-  expect_true(any(grepl("link_stop_pass=", combined)))
-  expect_true(any(grepl("reliability_link_global\\[min,max\\]=", combined)))
-  expect_false(any(grepl("reliability_EAP_link\\[min,max\\]=", combined)))
+  expect_true(any(grepl("^Refit [0-9]{4}  round=", combined)))
+  expect_true(any(grepl("^Pairs: new=[0-9]+  active=[0-9]+  probe=[0-9]+  total_cross=[0-9]+$", combined)))
+  expect_true(any(grepl("^Global: audit_only", combined)))
+  expect_true(any(grepl("^Spokes:$", combined)))
+  expect_true(any(grepl("spoke=[0-9]+ active", combined)))
+  expect_true(any(grepl("reliability_link_global=", combined, fixed = TRUE)))
+  expect_true(any(grepl("probe_pred_rmse_lagged=", combined, fixed = TRUE)))
+  expect_true(any(grepl("theta_global_rmse_lagged=", combined, fixed = TRUE)))
+  expect_false(any(grepl("authoritative_link_fit_method=", combined, fixed = TRUE)))
+  expect_false(any(grepl("authoritative_link_uncertainty=", combined, fixed = TRUE)))
+  expect_false(any(grepl("link_stop_pass=", combined, fixed = TRUE)))
+  expect_false(any(grepl("probe_brier=", combined, fixed = TRUE)))
+  expect_false(any(grepl("delta_spoke_sd=", combined, fixed = TRUE)))
 })
 
 test_that("adaptive progress step events label holdout and drift probes distinctly", {
@@ -139,5 +140,33 @@ test_that("adaptive progress step events label holdout and drift probes distinct
   drift_msg <- pairwiseLLM:::adaptive_progress_step_event(drift, cfg)
 
   expect_match(holdout_msg, "probe=holdout")
-  expect_match(drift_msg, "probe=drift")
+  expect_match(drift_msg, "probe=drift_followup")
+})
+
+test_that("adaptive progress step events distinguish active linking from probe follow-up", {
+  cfg <- pairwiseLLM:::.adaptive_progress_config(
+    progress = "all",
+    progress_redraw_every = 1L,
+    progress_show_events = TRUE,
+    progress_errors = TRUE
+  )
+  active <- tibble::tibble(
+    step_id = 3L,
+    round_stage = "mid_link",
+    run_mode = "link_one_spoke",
+    is_probe_step = FALSE,
+    is_holdout_probe_step = FALSE,
+    is_drift_probe_step = FALSE,
+    is_cross_set = TRUE,
+    link_spoke_id = 2L,
+    link_transform_state = "shift_only",
+    candidate_starved = FALSE,
+    status = "ok",
+    fallback_used = "refresh"
+  )
+
+  active_msg <- pairwiseLLM:::adaptive_progress_step_event(active, cfg)
+
+  expect_match(active_msg, "link=active")
+  expect_false(grepl("probe=", active_msg))
 })

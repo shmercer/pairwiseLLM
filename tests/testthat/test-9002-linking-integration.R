@@ -76,7 +76,7 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 3L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 3L)),
     progress = "none"
   )
 
@@ -85,6 +85,15 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
   expect_true(nrow(rows) >= 1L)
   expect_true(is.finite(rows$delta_spoke_mean[[nrow(rows)]]))
   expect_true(rows$delta_spoke_mean[[nrow(rows)]] > -2)
+  expect_true(all(c(
+    "feasible_stage_capacity_anchor_link",
+    "feasible_stage_capacity_long_link",
+    "feasibility_budget_released",
+    "probe_brier_max_used",
+    "theta_global_rmse_pass"
+  ) %in% names(rows)))
+  expect_true(all(rows$link_fit_method == "cmdstan_hmc"))
+  expect_true(all(rows$link_uncertainty_approximation == "cmdstan_posterior_draws"))
 })
 
 test_that("joint_refit integration records joint mode and soft-lock runtime fields", {
@@ -118,7 +127,7 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
         as.character(x$fit_config_hash)
       }, character(1L))
     ),
-    btl_config = list(refit_pairs_target = 2L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none"
   )
 
@@ -134,7 +143,7 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
   expect_true(all(c("theta_hub", "theta_spoke", "delta_s") %in% contract$parameters))
 })
 
-test_that("three-set linking remains hub-spoke only and rotates across spokes", {
+test_that("three-set linking stays hub-spoke only and authorizes one independent spoke per refit", {
   withr::local_seed(20260213)
 
   items <- make_linking_items_three_set()
@@ -162,23 +171,30 @@ test_that("three-set linking remains hub-spoke only and rotates across spokes", 
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
   committed <- out$step_log[!is.na(out$step_log$pair_id) & out$step_log$is_cross_set %in% TRUE, , drop = FALSE]
   expect_true(nrow(committed) > 0L)
-  expect_true(all(sort(unique(committed$link_spoke_id)) == c(2L, 3L)))
 
   is_hub_i <- committed$set_i == 1L
   is_hub_j <- committed$set_j == 1L
   expect_true(all(xor(is_hub_i, is_hub_j)))
-  expect_true(any(committed$set_i == 2L | committed$set_j == 2L))
-  expect_true(any(committed$set_i == 3L | committed$set_j == 3L))
 
   link_rows <- out$link_stage_log
   expect_true(any(link_rows$spoke_id == 2L))
   expect_true(any(link_rows$spoke_id == 3L))
+  positive_budget_counts <- tapply(
+    link_rows$B_spoke_refit_budget > 0L,
+    link_rows$refit_id,
+    sum
+  )
+  expect_true(all(as.integer(positive_budget_counts) == 1L))
+  zero_budget_sources <- unique(as.character(
+    link_rows$B_spoke_refit_budget_source[link_rows$B_spoke_refit_budget == 0L]
+  ))
+  expect_true("independent_inactive_spoke" %in% zero_budget_sources)
 })
 
 test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking", {
@@ -202,7 +218,7 @@ test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking"
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -237,7 +253,7 @@ test_that("linking run keeps warm-start during Phase A and bypasses warm-start i
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -293,7 +309,7 @@ test_that("mixed run/import mode combines imported and in-run artifacts by set",
       phase_a_artifacts = list(`1` = import_artifacts[["1"]]),
       phase_a_compatible_config_hashes = import_artifacts[["1"]]$fit_config_hash
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -332,7 +348,7 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_ind
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -360,13 +376,26 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_con
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
   stats_con <- out_con$controller$link_refit_stats_by_spoke
   expect_true(length(stats_con) >= 2L)
   expect_true(all(vapply(stats_con, function(x) !is.null(x$concurrent_target_pairs), logical(1L))))
+  expect_true(all(c(
+    "probe_acceleration_used",
+    "probe_effort_base_cap",
+    "probe_effort_effective_cap",
+    "probe_remaining_to_min_start"
+  ) %in% names(out_con$link_stage_log)))
+  active_budget_rows <- out_con$link_stage_log[
+    out_con$link_stage_log$B_spoke_refit_budget > 0L,
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(active_budget_rows) >= 1L)
+  expect_true(all(as.integer(active_budget_rows$n_cross_edges_active_since_last_refit) >= 1L))
 
   committed_con <- out_con$step_log[
     !is.na(out_con$step_log$pair_id) & out_con$step_log$is_cross_set %in% TRUE,
@@ -405,7 +434,7 @@ test_that("linking starvation paths in tiny domains are logged with fallback met
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -413,8 +442,90 @@ test_that("linking starvation paths in tiny domains are logged with fallback met
   expect_true(nrow(starved) >= 1L)
   expect_true(any(!is.na(starved$fallback_path)))
   if (!is.na(out$meta$stop_reason)) {
-    expect_true(out$meta$stop_reason %in% c("candidate_starvation", "btl_converged"))
+    expect_true(out$meta$stop_reason %in% c("candidate_starvation", "all_spokes_exhausted", "btl_converged"))
   }
+})
+
+test_that("round_log and link_stage_log canonically reconcile probe and active work", {
+  withr::local_seed(20260213)
+
+  items <- make_linking_items_three_set()
+  state <- adaptive_rank_start(items, seed = 5L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.0, h3 = 0.7,
+    s21 = -0.2, s22 = 0.3, s23 = 1.1,
+    s31 = -0.4, s32 = 0.2, s33 = 0.9
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 24L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+    progress = "none"
+  )
+
+  round_log <- out$round_log
+  link_stage_log <- out$link_stage_log
+  expect_true(all(c(
+    "new_active_pairs_since_last_refit",
+    "new_probe_pairs_since_last_refit",
+    "new_total_cross_pairs_since_last_refit"
+  ) %in% names(round_log)))
+  expect_true(all(c(
+    "probe_edges_realized_before_refit",
+    "probe_edges_realized_delta_since_last_refit",
+    "probe_shortfall_reason"
+  ) %in% names(link_stage_log)))
+
+  phase_b_rounds <- round_log[!is.na(round_log$new_total_cross_pairs_since_last_refit), , drop = FALSE]
+  expect_true(nrow(phase_b_rounds) >= 1L)
+
+  for (idx in seq_len(nrow(phase_b_rounds))) {
+    refit_id <- as.integer(phase_b_rounds$refit_id[[idx]])
+    link_rows <- link_stage_log[as.integer(link_stage_log$refit_id) == refit_id, , drop = FALSE]
+    expect_true(nrow(link_rows) >= 1L)
+    expect_identical(
+      as.integer(phase_b_rounds$new_active_pairs_since_last_refit[[idx]]),
+      as.integer(sum(link_rows$n_cross_edges_active_since_last_refit, na.rm = TRUE))
+    )
+    expect_identical(
+      as.integer(phase_b_rounds$new_probe_pairs_since_last_refit[[idx]]),
+      as.integer(sum(link_rows$n_cross_edges_probe_since_last_refit, na.rm = TRUE))
+    )
+    expect_identical(
+      as.integer(phase_b_rounds$new_total_cross_pairs_since_last_refit[[idx]]),
+      as.integer(sum(link_rows$n_cross_edges_total_since_last_refit, na.rm = TRUE))
+    )
+  }
+
+  expect_true(all(
+    as.integer(link_stage_log$probe_edges_realized_before_refit) +
+      as.integer(link_stage_log$probe_edges_realized_delta_since_last_refit) ==
+      as.integer(link_stage_log$probe_edges_realized)
+  ))
+  expect_true(all(
+    ifelse(
+      as.integer(link_stage_log$probe_panel_shortfall) > 0L &
+        !is.na(as.character(link_stage_log$lag_domain_reset_reason)) &
+        as.character(link_stage_log$lag_domain_reset_reason) == "probe_panel_rebuild",
+      as.character(link_stage_log$probe_shortfall_reason) == "probe_panel_rebuild",
+      TRUE
+    )
+  ))
 })
 
 test_that("judge parameter mode mismatch rejects incompatible imported Phase A artifacts", {
@@ -464,7 +575,7 @@ test_that("single-set runs remain behaviorally equivalent when linking controls 
     judge = judge,
     n_steps = 10L,
     fit_fn = fit_a$fit_fn,
-    btl_config = list(refit_pairs_target = 5L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none"
   )
 
@@ -481,7 +592,7 @@ test_that("single-set runs remain behaviorally equivalent when linking controls 
       link_refit_mode = "shift_only",
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 5L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none"
   )
 
@@ -518,7 +629,7 @@ test_that("independent mode ignores concurrent allocation controls under seeded 
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_base
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -542,7 +653,7 @@ test_that("independent mode ignores concurrent allocation controls under seeded 
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_tuned
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
 
@@ -581,7 +692,7 @@ test_that("linking run stops via all-spokes-stopped gate when every spoke is sto
     progress = "none"
   )
   out_init$controller$link_stopped_by_spoke <- list(`2` = TRUE)
-  out_init$controller$probe_pairs_per_refit_per_spoke <- 0L
+  out_init$controller$probe_pairs_per_refit_per_spoke <- 2L
   out_init$linking$phase_a$phase <- "phase_b"
   out_init$linking$phase_a$ready_for_phase_b <- TRUE
   out_init$linking$phase_a$strict_ready_for_phase_b <- TRUE
@@ -625,7 +736,7 @@ test_that("phase_b aborts when required sets are ready but strict phase_a stop-p
         phase_a_mode = "import",
         phase_a_artifacts = artifacts
       ),
-      btl_config = list(refit_pairs_target = 1L),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
       progress = "none"
     ),
     "Phase B linking cannot start"

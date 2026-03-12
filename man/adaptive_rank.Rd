@@ -175,9 +175,15 @@ allowed posterior SD of \code{log(alpha_s)}. Default is \code{0.10}.}
 \item{\code{log_alpha_change_max}}{Only used for \code{"shift_scale"} spokes. Maximum
 allowed absolute change in \code{log(alpha_s)} over the lag window used for
 linking stability. Default is \code{0.05}.}
-\item{\code{link_transform_escalation_refits_required}}{Only used when
-\code{link_transform_policy = "auto"}. Number of consecutive eligible refits
-required for escalation. Default is \code{2L}.}
+\item{\code{link_transform_escalation_window_refits}}{Only used when
+\code{link_transform_policy = "auto"}. Number of eligible refits retained in
+the rolling escalation window. Default is \code{3L}.}
+\item{\code{link_transform_escalation_passes_required}}{Only used when
+\code{link_transform_policy = "auto"}. Minimum number of passing eligible
+refits required within the rolling escalation window. Default is \code{2L}.}
+\item{\code{link_transform_escalation_refits_required}}{Backward-compatible
+alias for older persisted/configured states. When supplied without the
+new rolling-window fields, it seeds both escalation window parameters.}
 \item{\code{link_transform_escalation_is_one_way}}{Only used when
 \code{link_transform_policy = "auto"}. When \code{TRUE}, escalation is one-way
 (shift-only can become shift+scale but not revert). Default is \code{TRUE}.}
@@ -203,7 +209,7 @@ Phase B stop gate. Default is \code{0.19}.}
 allowed by the Phase B stop gate. Default is \code{0.015}.}
 \item{\code{theta_global_rmse_max}}{Maximum lagged transformed-score RMSE on the
 configured spoke scope allowed by the Phase B stop gate. Default is
-\code{0.04}.}
+\code{0.05}.}
 \item{\code{theta_global_rmse_scope}}{Scope used for transformed-score lagged
 RMSE. Choices are \code{"direct_evidence_spoke"} (default),
 \code{"all_spoke_items"}, and \code{"min_cross_set_edges_k"}.}
@@ -211,9 +217,13 @@ RMSE. Choices are \code{"direct_evidence_spoke"} (default),
 \code{theta_global_rmse_scope = "min_cross_set_edges_k"}. Minimum number of
 committed cross-set edges per spoke item required to enter the RMSE
 scope. Default is \code{1L}.}
-\item{\code{stability_consecutive_k}}{Number of consecutive eligible Phase B
-refits required before linking stop or auto escalation triggers. Default
-is \code{2L}.}
+\item{\code{stability_window_refits}}{Number of eligible refits retained in the
+rolling stop window. Default is \code{3L}.}
+\item{\code{stability_passes_required}}{Minimum number of passing eligible
+refits required within the rolling stop window. Default is \code{2L}.}
+\item{\code{stability_consecutive_k}}{Backward-compatible alias for older
+persisted/configured states. When supplied without the new rolling-window
+fields, it seeds both stop-window parameters.}
 \item{\code{min_refits_in_phase_b}}{Minimum refit index within Phase B before
 linking stop can be evaluated. Default is \code{3L}.}
 \item{\code{hub_theta_rmse_max}}{Maximum lagged hub-theta RMSE allowed for

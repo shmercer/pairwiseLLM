@@ -108,7 +108,7 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     link_transform_state = NA_character_,
     link_refit_mode = "shift_only",
     hub_lock_mode = "soft_lock",
-    reliability_EAP_link = 0.9,
+    reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = TRUE,
@@ -274,7 +274,7 @@ test_that("step row completeness guard validates structure and non-cross-set spo
   )
 })
 
-test_that("step row completeness accepts link_probe and enforces posterior orientation bounds", {
+test_that("step row completeness rejects legacy link_probe runtime rows", {
   ok_probe <- list(
     run_mode = "link_probe",
     is_cross_set = TRUE,
@@ -287,27 +287,9 @@ test_that("step row completeness accepts link_probe and enforces posterior orien
     cross_set_utility_pre = NA_real_,
     utility_mode = NA_character_
   )
-  expect_silent(pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(ok_probe))
-
-  bad_probe_utility <- ok_probe
-  bad_probe_utility$utility_mode <- "linking_d_optimal"
   expect_error(
-    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_probe_utility),
-    "must not be linking_d_optimal"
-  )
-
-  bad_probe_cross_utility <- ok_probe
-  bad_probe_cross_utility$cross_set_utility_pre <- 0.24
-  expect_error(
-    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_probe_cross_utility),
-    "cross_set_utility_pre` must be NA"
-  )
-
-  bad_prob <- ok_probe
-  bad_prob$posterior_win_prob_pre <- 1.2
-  expect_error(
-    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_prob),
-    "must be finite in \\[0,1\\]"
+    pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(ok_probe),
+    "legacy-only"
   )
 })
 

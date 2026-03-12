@@ -3,8 +3,6 @@
 # Tests for openai_compare_pair_live() and submit_openai_pairs_live()
 # =====================================================================
 
-skip_if_no_psock()
-
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 openai_compare_pair_live <- pairwiseLLM::openai_compare_pair_live
@@ -1240,6 +1238,7 @@ testthat::test_that("submit_openai_pairs_live: Sequential Save Error Handling", 
 })
 
 testthat::test_that("submit_openai_pairs_live: Parallel Execution & Save Error", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -1277,15 +1276,14 @@ testthat::test_that("submit_openai_pairs_live: Parallel Execution & Save Error",
         )
       })
 
-      # Verify we got failures from the workers
       testthat::expect_equal(nrow(res$failed_pairs), 2L)
-      # The error message comes from the worker tryCatch
       testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
     }
   )
 })
 
 testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -1293,10 +1291,6 @@ testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
-
-  # Parallel execution with include_raw = TRUE.
-  # The workers will fail (fake key), returning a tibble WITH `raw_response`.
-  # The main process must strip this column before saving (Line 566).
 
   testthat::expect_warning(
     submit_openai_pairs_live(
@@ -1306,7 +1300,7 @@ testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response
       include_raw = TRUE,
       api_key = "FAKE_KEY"
     ),
-    regexp = NA # Should NOT warn about save failure
+    regexp = NA
   )
 
   testthat::expect_true(file.exists(tmp_file))

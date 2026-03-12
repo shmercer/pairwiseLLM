@@ -421,7 +421,18 @@ test_that("probe helpers cover selection, commit registration, caching, and stop
   state$linking$probe <- list(
     panels_by_spoke = list(`2` = panel),
     prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
-    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    realized_edges = tibble::tibble(
+      step_id = 10L,
+      pair_id = 10L,
+      run_mode = "link_probe_holdout",
+      spoke_id = 2L,
+      link_epoch_id = 3L,
+      probe_panel_id = "panel",
+      hub_item_id = "h2",
+      spoke_item_id = "s22",
+      pair_key = "h2:s22",
+      Y = 0L
+    ),
     collect_holdout_now_by_spoke = list(`2` = TRUE)
   )
   state <- append_cross_probe_step(
@@ -436,6 +447,10 @@ test_that("probe helpers cover selection, commit registration, caching, and stop
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_panel_id(panel),
     pairwiseLLM:::.adaptive_link_probe_panel_id(panel)
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_id(panel),
+    pairwiseLLM:::.adaptive_link_probe_panel_id(panel[c(2L, 1L), , drop = FALSE])
   )
   expect_identical(pairwiseLLM:::.adaptive_link_probe_realized_count(state, 2L, epoch_id = 3L), 1L)
   next_pair <- pairwiseLLM:::.adaptive_link_probe_next_pair(state, 2L, epoch_id = 3L)
@@ -493,10 +508,49 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
     panels_by_spoke = list(),
     prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
     realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
-    collect_holdout_now_by_spoke = list(`2` = TRUE)
+    collect_holdout_now_by_spoke = list()
   )
   ensured <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(state, controller = state$controller, spoke_ids = 2L)
   expect_true(is.data.frame(ensured$linking$probe$panels_by_spoke[["2"]]))
+  expect_true(nrow(ensured$linking$probe$panels_by_spoke[["2"]]) >= 1L)
+
+  next_spoke <- pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+    ensured,
+    controller = ensured$controller,
+    eligible_spoke_ids = 2L
+  )
+  expect_true(is.na(next_spoke))
+
+  ensured$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+  ensured$refit_meta$refit_pairs_target_current <- 3L
+  ensured$controller$refit_pairs_target <- 3L
+  ensured$controller$probe_pairs_per_refit_per_spoke <- 1L
+  next_spoke <- pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+    ensured,
+    controller = ensured$controller,
+    eligible_spoke_ids = 2L
+  )
+  expect_identical(next_spoke, 2L)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+      state,
+      controller = utils::modifyList(state$controller, list(hub_id = 99L)),
+      spoke_ids = 2L
+    ),
+    "no held-out panel could be constructed"
+  )
 
   meta_empty <- pairwiseLLM:::.adaptive_selected_coverage_meta(tibble::tibble())
   expect_true(is.na(meta_empty$coverage_bins_used))
@@ -524,6 +578,270 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
     spoke_id = NA_integer_
   )
   expect_identical(nrow(empty_pool), 0L)
+})
+
+test_that("probe effort plan accelerates deterministically for identified probe-blocked spokes", {
+  state <- make_link_probe_state()
+  state$refit_meta$last_refit_step <- 10L
+  state$refit_meta$refit_pairs_target_current <- 6L
+  state$controller$refit_pairs_target <- 6L
+  state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  state$controller$probe_edges_min_for_stop <- 3L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_identified = TRUE,
+      link_stop_eligible = FALSE,
+      link_epoch_id = 3L
+    )
+  )
+  state$linking$probe <- list(
+    panels_by_spoke = list(
+      `2` = tibble::tibble(
+        probe_panel_id = "panel-2",
+        link_epoch_id = 3L,
+        spoke_id = 2L,
+        hub_item_id = c("h1", "h2", "h3"),
+        spoke_item_id = c("s21", "s21", "s22"),
+        spoke_bin = c(1L, 1L, 2L),
+        hub_bin = c(1L, 2L, 3L),
+        planned_rank = c(1L, 2L, 3L),
+        pair_key = make_unordered_key(c("h1", "h2", "h3"), c("s21", "s21", "s22")),
+        realized = c(FALSE, FALSE, FALSE),
+        realized_step_id = c(NA_integer_, NA_integer_, NA_integer_),
+        realized_pair_id = c(NA_integer_, NA_integer_, NA_integer_),
+        realized_run_mode = c(NA_character_, NA_character_, NA_character_)
+      )
+    ),
+    prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
+    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    collect_holdout_now_by_spoke = list()
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+
+  plan0 <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L
+  )
+  expect_identical(plan0$base_cap, 1L)
+  expect_identical(plan0$effective_cap, 3L)
+  expect_true(isTRUE(plan0$acceleration_used))
+
+  step1 <- append_cross_probe_step(state, 11L, "h1", "s21", 1L, 2L)
+  step1 <- pairwiseLLM:::.adaptive_link_probe_register_commit(
+    step1,
+    tibble::tibble(
+      step_id = 11L,
+      pair_id = 11L,
+      A = match("h1", step1$item_ids),
+      B = match("s21", step1$item_ids),
+      Y = 1L,
+      run_mode = "link_probe_holdout",
+      link_spoke_id = 2L,
+      is_probe_step = TRUE
+    )
+  )
+  plan1 <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = step1,
+    controller = step1$controller,
+    spoke_id = 2L
+  )
+  expect_identical(plan1$effective_cap, 3L)
+  expect_identical(plan1$realized_refit, 1L)
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+      step1,
+      controller = step1$controller,
+      eligible_spoke_ids = 2L
+    ),
+    2L
+  )
+
+  step2 <- append_cross_probe_step(step1, 12L, "h2", "s21", 0L, 2L)
+  step2 <- pairwiseLLM:::.adaptive_link_probe_register_commit(
+    step2,
+    tibble::tibble(
+      step_id = 12L,
+      pair_id = 12L,
+      A = match("h2", step2$item_ids),
+      B = match("s21", step2$item_ids),
+      Y = 0L,
+      run_mode = "link_probe_holdout",
+      link_spoke_id = 2L,
+      is_probe_step = TRUE
+    )
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+      step2,
+      controller = step2$controller,
+      eligible_spoke_ids = 2L
+    ),
+    2L
+  )
+
+  step3 <- append_cross_probe_step(step2, 13L, "h3", "s22", 1L, 2L)
+  step3 <- pairwiseLLM:::.adaptive_link_probe_register_commit(
+    step3,
+    tibble::tibble(
+      step_id = 13L,
+      pair_id = 13L,
+      A = match("h3", step3$item_ids),
+      B = match("s22", step3$item_ids),
+      Y = 1L,
+      run_mode = "link_probe_holdout",
+      link_spoke_id = 2L,
+      is_probe_step = TRUE
+    )
+  )
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+    step3,
+    controller = step3$controller,
+    eligible_spoke_ids = 2L
+  )))
+})
+
+test_that("concurrent probe fairness guard waits for minimum active progress before holdout catch-up", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
+    global_item_id = paste0("g", seq_len(9L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 808L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$strict_ready_for_phase_b <- TRUE
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state$refit_meta$last_refit_step <- 10L
+  state$refit_meta$refit_pairs_target_current <- 6L
+  state$controller$refit_pairs_target <- 6L
+  state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  state$controller$probe_edges_min_for_stop <- 3L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(link_identified = TRUE, link_stop_eligible = FALSE, link_epoch_id = 3L),
+    `3` = list(link_identified = TRUE, link_stop_eligible = FALSE, link_epoch_id = 3L)
+  )
+  panel_tbl <- function(spoke_id) {
+    tibble::tibble(
+      probe_panel_id = paste0("panel-", spoke_id),
+      link_epoch_id = 3L,
+      spoke_id = as.integer(spoke_id),
+      hub_item_id = c("h1", "h2", "h3"),
+      spoke_item_id = paste0("s", spoke_id, c("1", "2", "3")),
+      spoke_bin = c(1L, 2L, 3L),
+      hub_bin = c(1L, 2L, 3L),
+      planned_rank = c(1L, 2L, 3L),
+      pair_key = make_unordered_key(c("h1", "h2", "h3"), paste0("s", spoke_id, c("1", "2", "3"))),
+      realized = c(FALSE, FALSE, FALSE),
+      realized_step_id = c(NA_integer_, NA_integer_, NA_integer_),
+      realized_pair_id = c(NA_integer_, NA_integer_, NA_integer_),
+      realized_run_mode = c(NA_character_, NA_character_, NA_character_)
+    )
+  }
+  state$linking$probe <- list(
+    panels_by_spoke = list(`2` = panel_tbl(2L), `3` = panel_tbl(3L)),
+    prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
+    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    collect_holdout_now_by_spoke = list()
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::append_link_stage_log(
+      pairwiseLLM:::new_link_stage_log(),
+      list(
+        refit_id = 1L,
+        spoke_id = 2L,
+        hub_id = 1L,
+        link_transform_policy = "auto",
+        link_transform_state = "shift_only",
+        linking_identified = TRUE,
+        link_stop_eligible = FALSE,
+        link_stop_pass = FALSE,
+        transform_frozen = FALSE
+      )
+    ),
+    list(
+      refit_id = 1L,
+      spoke_id = 3L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+
+  state$controller$link_budget_refit_id <- 1L
+  state$controller$link_budget_map <- list(
+    `2` = list(B_spoke_refit_budget = 2L, B_spoke_refit_budget_source = "concurrent_allocator"),
+    `3` = list(B_spoke_refit_budget = 2L, B_spoke_refit_budget_source = "concurrent_allocator")
+  )
+
+  guard0 <- testthat::with_mocked_bindings(
+    .adaptive_link_effective_active_spokes = function(...) c(2L, 3L),
+    pairwiseLLM:::.adaptive_link_probe_active_progress_guard(
+      state,
+      controller = state$controller,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_true(isTRUE(guard0$block_probes))
+  expect_identical(guard0$pending_spokes, c(2L, 3L))
+
+  state <- append_cross_probe_step(state, 11L, "h1", "s21", 1L, 2L, run_mode = "link_multi_spoke")
+  state$step_log$is_probe_step[nrow(state$step_log)] <- FALSE
+
+  guard1 <- testthat::with_mocked_bindings(
+    .adaptive_link_effective_active_spokes = function(...) c(2L, 3L),
+    pairwiseLLM:::.adaptive_link_probe_active_progress_guard(
+      state,
+      controller = state$controller,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_true(isTRUE(guard1$block_probes))
+  expect_identical(guard1$pending_spokes, 3L)
+
+  state <- append_cross_probe_step(state, 12L, "h1", "s31", 1L, 3L, run_mode = "link_multi_spoke")
+  state$step_log$is_probe_step[nrow(state$step_log)] <- FALSE
+
+  guard2 <- testthat::with_mocked_bindings(
+    .adaptive_link_effective_active_spokes = function(...) c(2L, 3L),
+    pairwiseLLM:::.adaptive_link_probe_active_progress_guard(
+      state,
+      controller = state$controller,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_false(isTRUE(guard2$block_probes))
+  expect_identical(guard2$pending_spokes, integer())
 })
 
 test_that("refit helpers cover probe metrics, stop reconstruction, and concurrent allocation edges", {
@@ -556,7 +874,18 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
       pair_key = c("h1:s21", "h1:s21"),
       pred_prob = c(0.8, 0.6)
     ),
-    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    realized_edges = tibble::tibble(
+      step_id = c(1L, 2L),
+      pair_id = c(1L, 2L),
+      run_mode = c("link_probe_holdout", "link_probe_holdout"),
+      spoke_id = c(2L, 2L),
+      link_epoch_id = c(3L, 3L),
+      probe_panel_id = c("p", "p"),
+      hub_item_id = c("h1", "h2"),
+      spoke_item_id = c("s21", "s22"),
+      pair_key = c("h1:s21", "h2:s22"),
+      Y = c(1L, 0L)
+    ),
     collect_holdout_now_by_spoke = list()
   )
   state <- append_cross_probe_step(state, 1L, "h1", "s21", 1L, 2L)
@@ -598,6 +927,80 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
     tolerance = 1e-12
   )
 
+  state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  stage_rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_stage <- stage_rows[stage_rows$spoke_id == 2L, , drop = FALSE]
+  expect_true(isTRUE(row_stage$probe_panel_reallocation_used[[1L]]))
+  expect_identical(row_stage$n_probe_pairs_since_last_refit[[1L]], 2L)
+
+  state_drift <- state
+  state_drift <- append_cross_probe_step(
+    state_drift,
+    step_id = 11L,
+    A_id = "h2",
+    B_id = "s22",
+    Y = 1L,
+    spoke_id = 2L,
+    run_mode = "link_probe"
+  )
+  stage_rows_drift <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state_drift,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_stage_drift <- stage_rows_drift[stage_rows_drift$spoke_id == 2L, , drop = FALSE]
+  expect_identical(row_stage_drift$n_probe_pairs_since_last_refit[[1L]], 2L)
+
+  state_legacy_holdout <- state
+  state_legacy_holdout$step_log$is_holdout_probe_step <- FALSE
+  stage_rows_legacy_holdout <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state_legacy_holdout,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_stage_legacy_holdout <- stage_rows_legacy_holdout[
+    stage_rows_legacy_holdout$spoke_id == 2L,
+    ,
+    drop = FALSE
+  ]
+  expect_identical(row_stage_legacy_holdout$n_probe_pairs_since_last_refit[[1L]], 2L)
+
+  state_legacy_drift <- state_drift
+  state_legacy_drift$step_log$is_holdout_probe_step <- TRUE
+  state_legacy_drift$step_log$is_drift_probe_step <- FALSE
+  state_legacy_drift$step_log$is_probe_step <- FALSE
+  stage_rows_legacy_drift <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state_legacy_drift,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_stage_legacy_drift <- stage_rows_legacy_drift[
+    stage_rows_legacy_drift$spoke_id == 2L,
+    ,
+    drop = FALSE
+  ]
+  expect_identical(row_stage_legacy_drift$n_probe_pairs_since_last_refit[[1L]], 2L)
+
+  normalized_step_log <- pairwiseLLM:::.adaptive_align_log_schema_for_resume(
+    state_legacy_drift$step_log,
+    pairwiseLLM:::schema_step_log,
+    name = "step_log",
+    fill_missing = TRUE
+  )
+  expect_false(any(
+    as.character(normalized_step_log$run_mode) == "link_probe" &
+      normalized_step_log$is_holdout_probe_step %in% TRUE
+  ))
+  expect_true(all(
+    normalized_step_log$is_probe_step[
+      as.character(normalized_step_log$run_mode) == "link_probe"
+    ] %in% TRUE
+  ))
+
   ids_k <- pairwiseLLM:::.adaptive_link_theta_global_scope_ids(
     state,
     spoke_id = 2L,
@@ -624,12 +1027,7 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
 
   old_row <- tibble::tibble(
     link_stop_eligible = TRUE,
-    reliability_stop_pass = TRUE,
-    delta_sd_pass = TRUE,
-    log_alpha_sd_pass = NA,
-    delta_change_pass = TRUE,
-    log_alpha_change_pass = NA,
-    rank_stability_pass = TRUE
+    reliability_stop_pass = TRUE
   )
   expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     old_row,
@@ -926,7 +1324,7 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     link_transform_state = "shift_only",
     link_refit_mode = "shift_only",
     hub_lock_mode = "hard_lock",
-    reliability_EAP_link = 0.9,
+    reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = FALSE,
@@ -953,7 +1351,16 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     stage_shortfall_local_link = 0L,
     stage_reallocation_used = FALSE,
     stage_reallocation_rule_used = "none",
-    stage_budget_unfilled = 0L
+    stage_budget_unfilled = 0L,
+    probe_brier = 0.10,
+    probe_brier_max_used = 0.19,
+    probe_brier_pass = TRUE,
+    probe_pred_rmse_lagged = 0.01,
+    probe_pred_rmse_max_used = 0.015,
+    probe_pred_rmse_pass = TRUE,
+    theta_global_rmse_lagged = 0.02,
+    theta_global_rmse_max_used = 0.05,
+    theta_global_rmse_pass = TRUE
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_budget_invariants(bad_realized),
@@ -1082,11 +1489,10 @@ test_that("remaining candidate-generation and budget helpers cover edge branches
     eligible_spoke_ids = 2L,
     seed = 1L
   )
-  expect_identical(budget_map[["2"]]$B_spoke_refit_budget, 1L)
-  expect_identical(
-    budget_map[["2"]]$B_spoke_refit_budget_source,
-    "concurrent_allocator_reconciled_to_realized"
-  )
+  expect_identical(budget_map[["2"]]$B_spoke_refit_budget, 0L)
+  expect_identical(budget_map[["2"]]$B_spoke_refit_budget_source, "concurrent_allocator")
+  expect_true(isTRUE(budget_map[["2"]]$concurrent_floor_met))
+  expect_true(isTRUE(budget_map[["2"]]$concurrent_target_met))
 
   expect_identical(
     pairwiseLLM:::.adaptive_select_rolling_anchors(c(a = 1), adaptive_defaults(2L)),

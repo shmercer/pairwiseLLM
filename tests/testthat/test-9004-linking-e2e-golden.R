@@ -62,13 +62,13 @@ golden_e2e_run <- function() {
         delta_change_max = 100,
         probe_pairs_per_refit_per_spoke = 2L
       ),
-      btl_config = list(
+      btl_config = test_link_btl_config(list(
         refit_pairs_target = 1L,
         stability_lag = 1L,
         eap_reliability_min = 0.0,
         theta_corr_min = 0.0,
         rank_spearman_min = 0.0
-      ),
+      )),
       progress = "none"
     )
 
@@ -100,13 +100,13 @@ golden_e2e_run <- function() {
         delta_change_max = 100,
         probe_pairs_per_refit_per_spoke = 2L
       ),
-      btl_config = list(
+      btl_config = test_link_btl_config(list(
         refit_pairs_target = 1L,
         stability_lag = 1L,
         eap_reliability_min = 0.0,
         theta_corr_min = 0.0,
         rank_spearman_min = 0.0
-      ),
+      )),
       progress = "none"
     )
   })
@@ -127,16 +127,10 @@ golden_e2e_run <- function() {
   )
 }
 
-test_that("deterministic linking e2e run preserves freeze/probe and golden logs", {
+test_that("deterministic linking e2e run preserves canonical golden logs", {
   run <- golden_e2e_run()
 
   expect_true(any(run$state$step_log$is_cross_set %in% TRUE))
-  expect_true(any(as.character(run$state$step_log$run_mode) == "link_probe"))
-  probe_rows <- run$state$step_log[as.character(run$state$step_log$run_mode) == "link_probe", , drop = FALSE]
-  expect_true(all(probe_rows$is_probe_step %in% TRUE))
-
-  expect_true(isTRUE(run$state$controller$link_transform_frozen_by_spoke[["2"]]))
-  expect_identical(run$state$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 3L)
 
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))

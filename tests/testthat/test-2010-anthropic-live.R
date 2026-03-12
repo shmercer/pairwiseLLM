@@ -3,8 +3,6 @@
 #   Tests for anthropic_compare_pair_live() and submit_anthropic_pairs_live()
 # =====================================================================
 
-skip_if_no_psock()
-
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 anthropic_compare_pair_live <- pairwiseLLM::anthropic_compare_pair_live
@@ -1028,6 +1026,7 @@ testthat::test_that("submit_anthropic_pairs_live: Directory creation & Raw respo
 })
 
 testthat::test_that("submit_anthropic_pairs_live: Parallel execution & Parallel error handling", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr") # We will use save_path here too
@@ -1043,18 +1042,12 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel execution & Parallel 
 
   tmp_par <- tempfile(fileext = ".csv")
 
-  # We run with parallel = TRUE and workers = 2.
-  # We do NOT mock anthropic_compare_pair_live here. This means the workers
-  # will execute the real function, fail (due to fake API key / no network),
-  # and trigger the tryCatch inside 'work_fn' (Lines 868-881).
-  # This covers the parallel block, the chunk loop, and the parallel error handling.
-
   out_par <- capture.output(
     {
       res_par <- submit_anthropic_pairs_live(
         pairs_par, "model", td$name, td$description,
         parallel = TRUE, workers = 2, verbose = TRUE,
-        api_key = "fake_key", # Ensure failure
+        api_key = "fake_key",
         save_path = tmp_par
       )
     },
@@ -1078,6 +1071,7 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel execution & Parallel 
 })
 
 testthat::test_that("submit_anthropic_pairs_live: Parallel Save Failure", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("readr")
 
@@ -1091,18 +1085,9 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel Save Failure", {
   # but fail the write_csv in the main process.
 
   testthat::with_mocked_bindings(
-    # We must ensure we don't block the parallel workers from starting
-    # so we don't mock requireNamespace here.
-
-    # Mock write_csv to fail
     write_csv = function(...) stop("Parallel Disk full"),
     .package = "readr",
     {
-      # We force parallel execution.
-      # Since we aren't mocking the internal worker function here, it might fail or succeed
-      # depending on the environment (likely fail due to missing API key),
-      # but it WILL attempt to save the result (even an error result) to CSV.
-
       testthat::expect_warning(
         submit_anthropic_pairs_live(
           pairs, "model", td$name, td$description,
@@ -1188,6 +1173,7 @@ testthat::test_that("submit_anthropic_pairs_live: Sequential Save Error Handling
 })
 
 testthat::test_that("submit_anthropic_pairs_live: Parallel Save Error Handling", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("readr")
 
@@ -1195,15 +1181,10 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel Save Error Handling",
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
 
-  # Mock write_csv to throw an error (triggering Line 896 warning)
   testthat::with_mocked_bindings(
     write_csv = function(...) stop("Parallel Disk full"),
     .package = "readr",
     {
-      # We force parallel execution. The worker function is NOT mocked, so it will
-      # execute the real code, likely fail (missing API key), and return an error tibble.
-      # The main process then attempts to save this error tibble and hits our mock error.
-
       testthat::expect_warning(
         submit_anthropic_pairs_live(
           pairs, "model", td$name, td$description,

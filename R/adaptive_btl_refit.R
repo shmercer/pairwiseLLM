@@ -143,6 +143,271 @@
   )
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_link_phase_b_active <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  .adaptive_link_mode_active(controller) &&
+    identical(
+      as.character((.adaptive_link_phase_context(state, controller = controller)$phase %||% "phase_a")),
+      "phase_b"
+    )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_artifact_item_ids <- function(state, artifact, set_id) {
+  expected_ids <- as.character(
+    state$items$item_id[as.integer(state$items$set_id) == as.integer(set_id)]
+  )
+  if (length(expected_ids) < 1L) {
+    rlang::abort(paste0("No state items found for Phase A artifact set_id=", as.integer(set_id), "."))
+  }
+
+  items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())
+  artifact_ids <- character()
+  if ("item_id" %in% names(items_tbl)) {
+    artifact_ids <- as.character(items_tbl$item_id)
+  } else if ("global_item_id" %in% names(items_tbl)) {
+    item_map <- stats::setNames(
+      as.character(state$items$item_id),
+      as.character(state$items$global_item_id)
+    )
+    artifact_ids <- as.character(item_map[as.character(items_tbl$global_item_id)])
+  }
+
+  if (length(artifact_ids) > 0L) {
+    missing_ids <- setdiff(expected_ids, artifact_ids)
+    extra_ids <- setdiff(artifact_ids, expected_ids)
+    if (length(missing_ids) > 0L || length(extra_ids) > 0L) {
+      rlang::abort(paste0(
+        "Phase A artifact item domain mismatch for set_id=",
+        as.integer(set_id),
+        "."
+      ))
+    }
+  }
+
+  expected_ids
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_artifact_draws_for_phase_b_global <- function(state, set_id) {
+  phase_a <- state$linking$phase_a %||% list()
+  artifact <- (phase_a$artifacts %||% list())[[as.character(set_id)]] %||% NULL
+  if (!is.list(artifact)) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires a Phase A artifact for set_id=",
+      as.integer(set_id),
+      "."
+    ))
+  }
+
+  draws <- artifact$posterior_draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires numeric `posterior_draws` with at least two ",
+      "draws for set_id=",
+      as.integer(set_id),
+      "."
+    ))
+  }
+
+  item_ids <- .adaptive_phase_a_artifact_item_ids(state, artifact, set_id = set_id)
+  if (is.null(colnames(draws))) {
+    if (ncol(draws) != length(item_ids)) {
+      rlang::abort(paste0(
+        "Phase A artifact draw columns do not match the item count for set_id=",
+        as.integer(set_id),
+        "."
+      ))
+    }
+    colnames(draws) <- item_ids
+  }
+  if (!all(item_ids %in% colnames(draws))) {
+    rlang::abort(paste0(
+      "Phase A artifact draw columns are missing required item ids for set_id=",
+      as.integer(set_id),
+      "."
+    ))
+  }
+
+  .pairwiseLLM_sanitize_draws_matrix(
+    draws[, item_ids, drop = FALSE],
+    name = paste0("phase_a_artifact_posterior_draws_set_", as.integer(set_id))
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_transform_stats <- function(state, spoke_id, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  key <- as.character(as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+  last_row <- tibble::tibble()
+  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
+  if (nrow(link_stage_log) > 0L && all(c("spoke_id", "refit_id") %in% names(link_stage_log))) {
+    link_stage_log <- link_stage_log[
+      as.integer(link_stage_log$spoke_id) == as.integer(spoke_id),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(link_stage_log) > 0L) {
+      link_stage_log <- link_stage_log[
+        order(as.integer(link_stage_log$refit_id), seq_len(nrow(link_stage_log))),
+        ,
+        drop = FALSE
+      ]
+      last_row <- link_stage_log[nrow(link_stage_log), , drop = FALSE]
+    }
+  }
+
+  transform_state <- as.character(
+    stats_row$link_transform_state %||%
+      if (nrow(last_row) > 0L) last_row$link_transform_state[[1L]] else NA_character_ %||%
+      .adaptive_link_transform_state_for_spoke(controller, spoke_id)
+  )
+  if (!transform_state %in% .adaptive_link_transform_state_levels()) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction could not resolve a valid transform state for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  delta_mean <- as.double(
+    stats_row$delta_spoke_mean %||%
+      if (nrow(last_row) > 0L) last_row$delta_spoke_mean[[1L]] else NA_real_ %||%
+      (controller$link_transform_frozen_delta_by_spoke %||% list())[[key]] %||%
+      (controller$link_transform_last_delta_by_spoke %||% list())[[key]] %||%
+      NA_real_
+  )
+  if (!is.finite(delta_mean)) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires a finite delta for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  log_alpha_mean <- as.double(
+    stats_row$log_alpha_spoke_mean %||%
+      if (nrow(last_row) > 0L) last_row$log_alpha_spoke_mean[[1L]] else NA_real_ %||%
+      (controller$link_transform_frozen_log_alpha_by_spoke %||% list())[[key]] %||%
+      (controller$link_transform_last_log_alpha_by_spoke %||% list())[[key]] %||%
+      NA_real_
+  )
+  if (identical(transform_state, "shift_scale") && !is.finite(log_alpha_mean)) {
+    rlang::abort(paste0(
+      "Phase B global metric reconstruction requires a finite log-alpha for shift-scale spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  list(
+    link_transform_state = transform_state,
+    delta_spoke_mean = as.double(delta_mean),
+    log_alpha_spoke_mean = as.double(log_alpha_mean)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_draws <- function(state, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (!isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
+    return(NULL)
+  }
+
+  phase_a <- state$linking$phase_a %||% list()
+  required_sets <- as.integer(
+    phase_a$required_sets %||% .adaptive_phase_a_required_sets(state, controller = controller)
+  )
+  required_sets <- sort(unique(required_sets[!is.na(required_sets)]))
+  if (length(required_sets) < 1L) {
+    rlang::abort("Phase B global metric reconstruction requires non-empty `required_sets`.")
+  }
+
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  per_set_draws <- vector("list", length(required_sets))
+  names(per_set_draws) <- as.character(required_sets)
+  common_n_draws <- Inf
+
+  for (set_id in required_sets) {
+    set_draws <- .adaptive_phase_a_artifact_draws_for_phase_b_global(state, set_id = set_id)
+    per_set_draws[[as.character(set_id)]] <- set_draws
+    common_n_draws <- min(common_n_draws, nrow(set_draws))
+  }
+
+  common_n_draws <- as.integer(common_n_draws %||% NA_integer_)
+  if (!is.finite(common_n_draws) || common_n_draws < 2L) {
+    rlang::abort(
+      "Phase B global metric reconstruction requires at least two aligned Phase A posterior draws."
+    )
+  }
+
+  combined <- vector("list", length(required_sets))
+  names(combined) <- names(per_set_draws)
+  for (set_id in required_sets) {
+    key <- as.character(set_id)
+    set_draws <- per_set_draws[[key]][seq_len(common_n_draws), , drop = FALSE]
+    if (!identical(as.integer(set_id), hub_id)) {
+      transform <- .adaptive_phase_b_global_metric_transform_stats(
+        state = state,
+        spoke_id = as.integer(set_id),
+        controller = controller
+      )
+      alpha <- if (identical(transform$link_transform_state, "shift_scale")) {
+        exp(as.double(transform$log_alpha_spoke_mean))
+      } else {
+        1
+      }
+      set_draws <- as.double(transform$delta_spoke_mean) + alpha * set_draws
+      dim(set_draws) <- c(common_n_draws, ncol(per_set_draws[[key]]))
+      colnames(set_draws) <- colnames(per_set_draws[[key]])
+    }
+    combined[[key]] <- set_draws
+  }
+
+  combined_draws <- do.call(cbind, combined)
+  ids <- as.character(state$item_ids)
+  if (!all(ids %in% colnames(combined_draws))) {
+    rlang::abort(
+      "Phase B global metric reconstruction failed to cover the full runtime item domain."
+    )
+  }
+
+  .pairwiseLLM_sanitize_draws_matrix(
+    combined_draws[, ids, drop = FALSE],
+    name = "phase_b_global_metric_draws"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_history_update <- function(state, refit_id = NULL) {
+  controller <- .adaptive_controller_resolve(state)
+  if (!isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
+    return(state)
+  }
+
+  draws <- .adaptive_phase_b_global_metric_draws(state, controller = controller)
+  theta_mean <- stats::setNames(as.double(colMeans(draws)), as.character(colnames(draws)))
+  history <- state$refit_meta$phase_b_global_theta_mean_history %||% list()
+  refit_id <- as.integer(refit_id %||% (nrow(state$round_log %||% tibble::tibble()) + 1L))
+  if (!is.finite(refit_id) || refit_id < 1L) {
+    rlang::abort("Phase B global metric history update requires a positive `refit_id`.")
+  }
+  if (length(history) < refit_id) {
+    history <- c(history, rep_len(list(NULL), refit_id - length(history)))
+  }
+  history[[refit_id]] <- theta_mean
+  state$refit_meta$phase_b_global_theta_mean_history <- history
+  state
+}
+
 .adaptive_refit_eligibility <- function(total_committed, last_refit_committed, refit_pairs_target) {
   total_committed <- as.integer(total_committed %||% 0L)
   last_refit_committed <- as.integer(last_refit_committed %||% 0L)
@@ -1042,6 +1307,126 @@
   sqrt(mean(diff^2))
 }
 
+.adaptive_link_epoch_signature_components <- function(transform_state,
+                                                     refit_mode,
+                                                     lock_mode,
+                                                     hub_art,
+                                                     spoke_art) {
+  c(
+    link_transform_state = as.character(transform_state),
+    link_refit_mode = as.character(refit_mode),
+    hub_lock_mode = as.character(lock_mode),
+    hub_artifact_refit_id = as.character(as.integer(hub_art$refit_id %||% NA_integer_)),
+    spoke_artifact_refit_id = as.character(as.integer(spoke_art$refit_id %||% NA_integer_)),
+    hub_artifact_config_hash = as.character(hub_art$fit_config_hash %||% NA_character_),
+    spoke_artifact_config_hash = as.character(spoke_art$fit_config_hash %||% NA_character_)
+  )
+}
+
+.adaptive_link_epoch_signature_string <- function(components) {
+  paste(as.character(components), collapse = "|")
+}
+
+.adaptive_link_epoch_reset_reason <- function(previous_signature, current_components) {
+  if (!is.character(previous_signature) || length(previous_signature) != 1L ||
+    is.na(previous_signature) || !nzchar(previous_signature)) {
+    return(NA_character_)
+  }
+  previous_parts <- strsplit(previous_signature, "|", fixed = TRUE)[[1L]]
+  previous_parts[previous_parts %in% c("NA", "")] <- NA_character_
+  expected_names <- names(current_components)
+  if (length(previous_parts) < length(expected_names)) {
+    return("legacy_epoch_signature_schema")
+  }
+  names(previous_parts) <- c(
+    expected_names,
+    if (length(previous_parts) > length(expected_names)) {
+      paste0("legacy_extra_", seq_len(length(previous_parts) - length(expected_names)))
+    } else {
+      character()
+    }
+  )
+  previous_components <- previous_parts[expected_names]
+  current_values <- as.character(current_components)
+  same_component <- mapply(
+    function(previous_value, current_value) {
+      if (is.na(previous_value) && is.na(current_value)) {
+        return(TRUE)
+      }
+      identical(as.character(previous_value), as.character(current_value))
+    },
+    previous_value = previous_components,
+    current_value = current_values,
+    USE.NAMES = FALSE
+  )
+  changed <- expected_names[!same_component]
+  if (length(changed) < 1L) {
+    return(NA_character_)
+  }
+  reason_map <- c(
+    link_transform_state = "transform_state_change",
+    link_refit_mode = "link_refit_mode_change",
+    hub_lock_mode = "hub_lock_mode_change",
+    hub_artifact_refit_id = "hub_artifact_replaced",
+    spoke_artifact_refit_id = "spoke_artifact_replaced",
+    hub_artifact_config_hash = "hub_artifact_reloaded",
+    spoke_artifact_config_hash = "spoke_artifact_reloaded"
+  )
+  as.character(reason_map[[changed[[1L]]]] %||% "epoch_signature_change")
+}
+
+.adaptive_link_stop_blockers <- function(link_diagnostics_pass,
+                                         link_lag_eligible,
+                                         link_min_refit_eligible,
+                                         probe_edges_realized,
+                                         probe_edges_min_for_stop,
+                                         link_stop_reliability_min,
+                                         reliability_active,
+                                         probe_brier,
+                                         probe_brier_max,
+                                         probe_pred_rmse_lagged,
+                                         probe_pred_rmse_max,
+                                         theta_global_rmse_lagged,
+                                         theta_global_rmse_max,
+                                         hub_anchored) {
+  blocker_names <- c(
+    "diagnostics_failed",
+    "lag_not_eligible",
+    "min_refits_not_met",
+    "probe_edges_min_for_stop",
+    "reliability_link_global",
+    "probe_brier",
+    "probe_pred_rmse_lagged",
+    "theta_global_rmse_lagged",
+    "hub_not_anchored"
+  )
+  blockers <- c(
+    diagnostics_failed = !isTRUE(link_diagnostics_pass),
+    lag_not_eligible = !isTRUE(link_lag_eligible),
+    min_refits_not_met = !isTRUE(link_min_refit_eligible),
+    probe_edges_min_for_stop = as.integer(probe_edges_realized %||% 0L) <
+      as.integer(probe_edges_min_for_stop %||% 0L),
+    reliability_link_global = !is.finite(as.double(reliability_active %||% NA_real_)) ||
+      as.double(reliability_active) < as.double(link_stop_reliability_min %||% 0.90),
+    probe_brier = !is.finite(as.double(probe_brier %||% NA_real_)) ||
+      as.double(probe_brier) > as.double(probe_brier_max %||% 0.19),
+    probe_pred_rmse_lagged = !is.finite(as.double(probe_pred_rmse_lagged %||% NA_real_)) ||
+      as.double(probe_pred_rmse_lagged) > as.double(probe_pred_rmse_max %||% 0.015),
+    theta_global_rmse_lagged = !is.finite(as.double(theta_global_rmse_lagged %||% NA_real_)) ||
+      as.double(theta_global_rmse_lagged) > as.double(theta_global_rmse_max %||% 0.05),
+    hub_not_anchored = !isTRUE(hub_anchored)
+  )
+  blockers <- stats::setNames(as.logical(unname(blockers)), blocker_names)
+  list(
+    blockers = blockers,
+    codes = if (any(blockers)) {
+      paste(names(blockers)[blockers], collapse = ",")
+    } else {
+      "none"
+    }
+  )
+}
+
 .adaptive_link_reconstruct_stop_from_logs <- function(link_row, diagnostics_pass, hub_theta_sd, controller) {
   row <- tibble::as_tibble(link_row)
   if (nrow(row) != 1L) {
@@ -1055,11 +1440,35 @@
   if (!isTRUE(diagnostics_pass)) {
     return(FALSE)
   }
+  row_col <- function(name) row[[name]] %||% NULL
+  reliability_min <- as.double(
+    row_col("link_stop_reliability_min_used")[[1L]] %||%
+      controller$link_stop_reliability_min %||%
+      0.90
+  )
+  probe_brier_max <- as.double(
+    row_col("probe_brier_max_used")[[1L]] %||%
+      controller$probe_brier_max %||%
+      0.19
+  )
+  probe_pred_rmse_max <- as.double(
+    row_col("probe_pred_rmse_max_used")[[1L]] %||%
+      controller$probe_pred_rmse_max %||%
+      0.015
+  )
+  theta_global_rmse_max <- as.double(
+    row_col("theta_global_rmse_max_used")[[1L]] %||%
+      controller$theta_global_rmse_max %||%
+      0.05
+  )
   rel_gate <- if ("reliability_stop_pass" %in% names(row)) {
     isTRUE(row$reliability_stop_pass[[1L]] %||% FALSE)
+  } else if ("reliability_link_global" %in% names(row)) {
+    is.finite(row$reliability_link_global[[1L]]) &&
+      row$reliability_link_global[[1L]] >= reliability_min
   } else if ("reliability_EAP_link" %in% names(row)) {
     is.finite(row$reliability_EAP_link[[1L]]) &&
-      row$reliability_EAP_link[[1L]] >= as.double(controller$link_stop_reliability_min %||% 0.90)
+      row$reliability_EAP_link[[1L]] >= reliability_min
   } else {
     FALSE
   }
@@ -1070,19 +1479,19 @@
   }
   probe_gate <- if ("probe_brier" %in% names(row)) {
     is.finite(as.double(row$probe_brier[[1L]] %||% NA_real_)) &&
-      as.double(row$probe_brier[[1L]]) <= as.double(controller$probe_brier_max %||% 0.19)
+      as.double(row$probe_brier[[1L]]) <= probe_brier_max
   } else {
     FALSE
   }
   probe_rmse_gate <- if ("probe_pred_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$probe_pred_rmse_lagged[[1L]] %||% NA_real_)) &&
-      as.double(row$probe_pred_rmse_lagged[[1L]]) <= as.double(controller$probe_pred_rmse_max %||% 0.015)
+      as.double(row$probe_pred_rmse_lagged[[1L]]) <= probe_pred_rmse_max
     } else {
       FALSE
     }
   theta_rmse_gate <- if ("theta_global_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$theta_global_rmse_lagged[[1L]] %||% NA_real_)) &&
-      as.double(row$theta_global_rmse_lagged[[1L]]) <= as.double(controller$theta_global_rmse_max %||% 0.04)
+      as.double(row$theta_global_rmse_lagged[[1L]]) <= theta_global_rmse_max
     } else {
       FALSE
     }
@@ -1099,8 +1508,13 @@
     rlang::abort("`link_row` must have exactly one row.")
   }
   controller <- utils::modifyList(.adaptive_controller_defaults(2L), controller %||% list())
-  rel_gate <- is.finite(row$reliability_EAP_link[[1L]]) &&
-    row$reliability_EAP_link[[1L]] >= as.double(controller$link_identified_reliability_min %||% 0.80)
+  reliability_val <- as.double(
+    row$reliability_link_global[[1L]] %||%
+      row$reliability_EAP_link[[1L]] %||%
+      NA_real_
+  )
+  rel_gate <- is.finite(reliability_val) &&
+    reliability_val >= as.double(controller$link_identified_reliability_min %||% 0.80)
   rank_gate <- is.finite(row$ts_btl_rank_spearman[[1L]]) &&
     row$ts_btl_rank_spearman[[1L]] >= as.double(controller$link_rank_corr_min %||% 0.90)
   isTRUE(rel_gate) && isTRUE(rank_gate)
@@ -1377,182 +1791,197 @@
   )
 }
 
-.adaptive_mcmc_rhat <- function(chains) {
-  mat <- as.matrix(chains)
-  n <- nrow(mat)
-  m <- ncol(mat)
-  if (n < 2L || m < 2L) {
-    return(NA_real_)
+.adaptive_link_cmdstan_file <- function() {
+  path <- system.file("stan", "link_transform_refit.stan", package = "pairwiseLLM")
+  if (nzchar(path)) {
+    return(path)
   }
-  chain_means <- colMeans(mat)
-  w <- mean(apply(mat, 2L, stats::var))
-  if (!is.finite(w) || w <= 0) {
-    return(NA_real_)
+  fallback <- file.path("inst", "stan", "link_transform_refit.stan")
+  if (!file.exists(fallback)) {
+    rlang::abort("Stan model file for authoritative linking refit not found.")
   }
-  b <- n * stats::var(chain_means)
-  var_hat <- ((n - 1) / n) * w + (b / n)
-  as.double(sqrt(var_hat / w))
+  fallback
 }
 
-.adaptive_mcmc_ess_bulk <- function(chains) {
-  mat <- as.matrix(chains)
-  n <- nrow(mat)
-  m <- ncol(mat)
-  if (n < 3L || m < 1L) {
-    return(NA_real_)
+.adaptive_link_cmdstan_summary_vars <- function(joint_used, estimate_hub, use_scale) {
+  vars <- "delta"
+  if (isTRUE(use_scale)) {
+    vars <- c(vars, "log_alpha")
   }
-  ess_sum <- 0
-  for (j in seq_len(m)) {
-    x <- as.double(mat[, j])
-    if (!all(is.finite(x)) || stats::sd(x) == 0) {
-      next
-    }
-    max_lag <- min(100L, n - 1L)
-    acf_vals <- stats::acf(x, lag.max = max_lag, plot = FALSE)$acf[-1L]
-    acf_vals[!is.finite(acf_vals)] <- 0
-    if (length(acf_vals) >= 2L) {
-      odd <- acf_vals[seq.int(1L, length(acf_vals), by = 2L)]
-      even <- acf_vals[seq.int(2L, length(acf_vals), by = 2L)]
-      n_pair <- min(length(odd), length(even))
-      pair_sums <- if (n_pair > 0L) {
-        odd[seq_len(n_pair)] + even[seq_len(n_pair)]
-      } else {
-        numeric()
-      }
-      if (length(pair_sums) > 0L && any(is.finite(pair_sums))) {
-        first_bad <- which(pair_sums < 0)[1L]
-        if (!is.na(first_bad)) {
-          pair_sums <- pair_sums[seq_len(max(0L, first_bad - 1L))]
-        }
-      }
-      tau <- 1 + 2 * sum(pair_sums[pair_sums > 0], na.rm = TRUE)
-    } else {
-      tau <- 1
-    }
-    tau <- max(1, tau)
-    ess_sum <- ess_sum + (n / tau)
+  if (isTRUE(estimate_hub)) {
+    vars <- c(vars, "theta_hub")
   }
-  as.double(ess_sum)
+  if (isTRUE(joint_used)) {
+    vars <- c(vars, "theta_spoke")
+  }
+  vars
 }
 
-.adaptive_link_mcmc_diagnostics <- function(chain_draws, param_names) {
-  arr <- array(chain_draws, dim = dim(chain_draws), dimnames = dimnames(chain_draws))
-  if (length(dim(arr)) != 3L) {
-    return(list(
-      divergences = NA_integer_,
-      max_rhat = NA_real_,
-      min_ess_bulk = NA_real_,
-      diagnostics_divergences_pass = NA,
-      diagnostics_rhat_pass = NA,
-      diagnostics_ess_pass = NA
-    ))
-  }
-  n_par <- dim(arr)[3L]
-  rhat <- rep(NA_real_, n_par)
-  ess <- rep(NA_real_, n_par)
-  for (k in seq_len(n_par)) {
-    mat <- arr[, , k, drop = TRUE]
-    rhat[[k]] <- .adaptive_mcmc_rhat(mat)
-    ess[[k]] <- .adaptive_mcmc_ess_bulk(mat)
-  }
-  max_rhat <- max(rhat, na.rm = TRUE)
-  min_ess <- min(ess, na.rm = TRUE)
-  if (!is.finite(max_rhat)) {
-    max_rhat <- NA_real_
-  }
-  if (!is.finite(min_ess)) {
-    min_ess <- NA_real_
-  }
-  list(
-    param_names = as.character(param_names),
-    rhat = as.double(rhat),
-    ess_bulk = as.double(ess),
+.adaptive_link_cmdstan_collect_diagnostics <- function(fit, variables) {
+  diagnostics <- list(
     divergences = NA_integer_,
+    max_rhat = NA_real_,
+    min_ess_bulk = NA_real_
+  )
+  notes <- character()
+
+  diag_tbl <- tryCatch(fit$diagnostic_summary(), error = function(e) NULL)
+  if (!is.null(diag_tbl) && "num_divergent" %in% names(diag_tbl)) {
+    divergences <- sum(diag_tbl$num_divergent, na.rm = TRUE)
+    diagnostics$divergences <- if (is.finite(divergences)) as.integer(divergences) else NA_integer_
+    if (!is.finite(divergences)) {
+      notes <- c(notes, "Divergence count not finite.")
+    }
+  } else {
+    notes <- c(notes, "CmdStan diagnostics missing num_divergent.")
+  }
+
+  summary_tbl <- tryCatch(
+    withCallingHandlers(
+      fit$summary(variables = variables),
+      warning = function(w) invokeRestart("muffleWarning")
+    ),
+    error = function(e) NULL
+  )
+  if (!is.null(summary_tbl) && nrow(summary_tbl) > 0L) {
+    if ("rhat" %in% names(summary_tbl)) {
+      rhat_vals <- summary_tbl$rhat[is.finite(summary_tbl$rhat)]
+      if (length(rhat_vals) > 0L) {
+        diagnostics$max_rhat <- max(rhat_vals)
+      } else {
+        notes <- c(notes, "Rhat values missing or non-finite.")
+      }
+    } else {
+      notes <- c(notes, "CmdStan summary missing rhat.")
+    }
+    if ("ess_bulk" %in% names(summary_tbl)) {
+      ess_vals <- summary_tbl$ess_bulk[is.finite(summary_tbl$ess_bulk)]
+      if (length(ess_vals) > 0L) {
+        diagnostics$min_ess_bulk <- min(ess_vals)
+      } else {
+        notes <- c(notes, "ESS bulk values missing or non-finite.")
+      }
+    } else {
+      notes <- c(notes, "CmdStan summary missing ess_bulk.")
+    }
+  } else {
+    notes <- c(notes, "CmdStan summary not available.")
+  }
+
+  if (length(notes) > 0L) {
+    diagnostics$notes <- notes
+  }
+  diagnostics
+}
+
+.adaptive_link_cmdstan_validate_diagnostics <- function(diagnostics, thresholds) {
+  diagnostics <- diagnostics %||% list()
+  divergences <- as.integer(diagnostics$divergences %||% NA_integer_)
+  max_rhat <- as.double(diagnostics$max_rhat %||% NA_real_)
+  min_ess_bulk <- as.double(diagnostics$min_ess_bulk %||% NA_real_)
+  if (is.na(divergences) || !is.finite(max_rhat) || !is.finite(min_ess_bulk)) {
+    details <- paste(
+      c(
+        paste0("divergences=", diagnostics$divergences %||% "NULL"),
+        paste0("max_rhat=", diagnostics$max_rhat %||% "NULL"),
+        paste0("min_ess_bulk=", diagnostics$min_ess_bulk %||% "NULL")
+      ),
+      collapse = ", "
+    )
+    rlang::abort(
+      paste0(
+        "Authoritative linking CmdStan diagnostics are missing or malformed. ",
+        details,
+        "."
+      )
+    )
+  }
+  list(
+    divergences = as.integer(divergences),
     max_rhat = as.double(max_rhat),
-    min_ess_bulk = as.double(min_ess),
-    diagnostics_divergences_pass = NA,
-    diagnostics_rhat_pass = if (is.finite(max_rhat)) max_rhat <= 1.05 else NA,
-    diagnostics_ess_pass = if (is.finite(min_ess)) min_ess >= 100 else NA
+    min_ess_bulk = as.double(min_ess_bulk),
+    diagnostics_divergences_pass = as.logical(divergences <= as.integer(thresholds$divergences_max)),
+    diagnostics_rhat_pass = as.logical(max_rhat <= as.double(thresholds$max_rhat)),
+    diagnostics_ess_pass = as.logical(min_ess_bulk >= as.double(thresholds$min_ess_bulk))
   )
 }
 
-.adaptive_link_mcmc_sample <- function(log_post_fn,
-                                       init,
-                                       seed,
-                                       n_chains = 4L,
-                                       n_warmup = 120L,
-                                       n_samples = 180L) {
-  init <- as.double(init)
-  n_param <- length(init)
-  if (n_param < 1L) {
-    rlang::abort("Linking Bayesian refit requires at least one parameter.")
-  }
-  n_chains <- max(2L, as.integer(n_chains))
-  n_warmup <- max(0L, as.integer(n_warmup))
-  n_samples <- max(20L, as.integer(n_samples))
-  total_iter <- as.integer(n_warmup + n_samples)
-  chain_draws <- array(
-    NA_real_,
-    dim = c(n_samples, n_chains, n_param),
-    dimnames = list(NULL, paste0("chain_", seq_len(n_chains)), NULL)
-  )
-  accept_rates <- rep(NA_real_, n_chains)
+.adaptive_link_cmdstan_schedule <- function(attempt, n_param, joint_used = FALSE) {
+  attempt <- max(1L, as.integer(attempt %||% 1L))
+  n_param <- max(1L, as.integer(n_param %||% 1L))
+  joint_used <- isTRUE(joint_used)
 
-  for (chain in seq_len(n_chains)) {
-    chain_seed <- as.integer((seed + chain * 101L) %% .Machine$integer.max)
-    res <- withr::with_seed(chain_seed, {
-      cur <- init + stats::rnorm(n_param, sd = 0.05)
-      cur_lp <- as.double(log_post_fn(cur))
-      tries <- 0L
-      while ((!is.finite(cur_lp)) && tries < 200L) {
-        tries <- tries + 1L
-        cur <- init + stats::rnorm(n_param, sd = 0.25)
-        cur_lp <- as.double(log_post_fn(cur))
-      }
-      if (!is.finite(cur_lp)) {
-        rlang::abort("Linking Bayesian refit failed to initialize a finite posterior state.")
-      }
-
-      step_sd <- rep(0.08, n_param)
-      accepted <- 0L
-      accept_window <- 0L
-      draws <- matrix(NA_real_, nrow = n_samples, ncol = n_param)
-      keep_idx <- 0L
-      for (iter in seq_len(total_iter)) {
-        prop <- cur + stats::rnorm(n_param, sd = step_sd)
-        prop_lp <- as.double(log_post_fn(prop))
-        accept <- is.finite(prop_lp) &&
-          log(stats::runif(1L)) < (prop_lp - cur_lp)
-        if (isTRUE(accept)) {
-          cur <- prop
-          cur_lp <- prop_lp
-          accepted <- accepted + 1L
-          accept_window <- accept_window + 1L
-        }
-        if (iter <= n_warmup && (iter %% 20L) == 0L) {
-          rate <- accept_window / 20
-          if (rate > 0.35) {
-            step_sd <- step_sd * 1.15
-          } else if (rate < 0.20) {
-            step_sd <- step_sd * 0.85
-          }
-          accept_window <- 0L
-        }
-        if (iter > n_warmup) {
-          keep_idx <- keep_idx + 1L
-          draws[keep_idx, ] <- cur
-        }
-      }
-      list(draws = draws, accept_rate = accepted / total_iter)
-    })
-    chain_draws[, chain, ] <- res$draws
-    accept_rates[[chain]] <- res$accept_rate
-  }
+  base_warmup <- if (joint_used) 400L else 300L
+  base_sampling <- if (joint_used) 500L else 400L
+  warmup_mult <- c(1L, 2L, 3L)
+  sampling_mult <- c(1L, 2L, 3L)
+  idx <- min(attempt, length(warmup_mult))
 
   list(
-    chain_draws = chain_draws,
-    draws = matrix(chain_draws, ncol = n_param),
-    accept_rate = as.double(mean(accept_rates))
+    chains = 4L,
+    iter_warmup = as.integer(base_warmup * warmup_mult[[idx]] + max(0L, n_param - 2L) * 10L),
+    iter_sampling = as.integer(base_sampling * sampling_mult[[idx]] + max(0L, n_param - 2L) * 15L)
+  )
+}
+
+.adaptive_link_cmdstan_draws_matrix <- function(fit, variables) {
+  tryCatch(
+    fit$draws(variables = variables, format = "matrix"),
+    error = function(e) {
+      rlang::abort(
+        paste0("Authoritative linking CmdStan fit did not return draws: ", conditionMessage(e))
+      )
+    }
+  )
+}
+
+.adaptive_link_cmdstan_output_basename <- function(output_dir) {
+  basename(tempfile(pattern = "link_transform_refit-", tmpdir = output_dir))
+}
+
+.adaptive_link_fit_transform_cmdstan <- function(stan_data,
+                                                 variable_names,
+                                                 cmdstan,
+                                                 seed,
+                                                 model_fn = NULL) {
+  resolved_cmdstan <- .btl_mcmc_resolve_cmdstan_config(cmdstan %||% list())
+  if (is.null(model_fn)) {
+    .btl_mcmc_require_cmdstanr()
+    model_fn <- cmdstanr::cmdstan_model
+  }
+  if (!is.function(model_fn)) {
+    rlang::abort("`model_fn` must be a function when provided.")
+  }
+
+  model <- model_fn(
+    .adaptive_link_cmdstan_file(),
+    cpp_options = list(stan_threads = TRUE)
+  )
+
+  sample_args <- list(
+    data = stan_data,
+    chains = as.integer(resolved_cmdstan$chains),
+    iter_warmup = as.integer(cmdstan$iter_warmup),
+    iter_sampling = as.integer(cmdstan$iter_sampling),
+    parallel_chains = as.integer(resolved_cmdstan$parallel_chains),
+    threads_per_chain = as.integer(resolved_cmdstan$threads_per_chain),
+    refresh = 0,
+    seed = as.integer(seed)
+  )
+  output_dir <- cmdstan$output_dir %||% file.path(tempdir(), "pairwiseLLM-cmdstan-link")
+  if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+    rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
+  }
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  sample_args$output_dir <- output_dir
+  sample_args$output_basename <- .adaptive_link_cmdstan_output_basename(output_dir)
+
+  fit <- do.call(model$sample, sample_args)
+  list(
+    fit = fit,
+    draws_matrix = .adaptive_link_cmdstan_draws_matrix(fit, variable_names),
+    diagnostics = .adaptive_link_cmdstan_collect_diagnostics(fit, variable_names),
+    mcmc_config_used = resolved_cmdstan
   )
 }
 
@@ -1604,6 +2033,18 @@
   link_refit_mode <- as.character(refit_contract_ctx$link_refit_mode %||% "shift_only")
   lock_mode <- as.character(refit_contract_ctx$hub_lock_mode %||% NA_character_)
   lock_kappa <- as.double(refit_contract_ctx$hub_lock_kappa %||% NA_real_)
+  diagnostics_thresholds <- refit_contract_ctx$link_diagnostics_thresholds %||% list(
+    divergences_max = 0L,
+    max_rhat = 1.01,
+    min_ess_bulk = 400
+  )
+  diagnostics_thresholds$divergences_max <- as.integer(
+    diagnostics_thresholds$divergences_max %||% 0L
+  )
+  diagnostics_thresholds$max_rhat <- as.double(diagnostics_thresholds$max_rhat %||% 1.01)
+  diagnostics_thresholds$min_ess_bulk <- as.double(
+    diagnostics_thresholds$min_ess_bulk %||% 400
+  )
   hub_sd_map <- attr(hub_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   spoke_sd_map <- attr(spoke_theta, "theta_sd", exact = TRUE) %||% stats::setNames(numeric(), character())
   edges <- tibble::as_tibble(cross_edges)
@@ -1617,8 +2058,8 @@
     )
     empty$fit_contract <- list(
       contract_type = "link_refit",
-      estimation_method = "bayesian_mcmc",
-      uncertainty_approximation = "posterior_draws",
+      estimation_method = "cmdstan_hmc",
+      uncertainty_approximation = "cmdstan_posterior_draws",
       link_refit_mode = as.character(link_refit_mode),
       link_transform_policy = as.character(
         .adaptive_normalize_link_transform_policy(refit_contract_ctx$link_transform_policy %||% "auto")
@@ -1697,14 +2138,10 @@
   theta_hub_post <- hub_ref
   theta_spoke_post <- spoke_ref
   joint_used <- identical(link_refit_mode, "joint_refit")
+  estimate_hub <- isTRUE(joint_used) && !identical(lock_mode, "hard_lock")
   n_hub_items_estimated <- 0L
   n_spoke_items_estimated <- 0L
 
-  param_names <- character()
-  start <- numeric()
-  log_post <- NULL
-  idx_delta <- NA_integer_
-  idx_log_alpha <- NA_integer_
   fit_hub_idx <- integer()
   fit_spoke_idx <- integer()
   within_hub <- tibble::as_tibble(edge_attrs$within_hub_edges %||% tibble::tibble())
@@ -1718,146 +2155,154 @@
     fit_spoke_idx <- seq_along(spoke_ref)
     n_hub_items_estimated <- as.integer(length(fit_hub_idx))
     n_spoke_items_estimated <- as.integer(length(fit_spoke_idx))
-    n_h <- length(fit_hub_idx)
-    n_s <- length(fit_spoke_idx)
-    idx_delta <- n_h + n_s + 1L
-    idx_log_alpha <- if (isTRUE(use_scale)) idx_delta + 1L else NA_integer_
-    n_par <- n_h + n_s + 1L + ifelse(isTRUE(use_scale), 1L, 0L)
-    start <- rep(0, n_par)
-    if (n_h > 0L) {
-      start[seq_len(n_h)] <- hub_init[fit_hub_idx]
-    }
-    if (n_s > 0L) {
-      start[n_h + seq_len(n_s)] <- spoke_init[fit_spoke_idx]
-    }
-    param_names <- c(
-      if (n_h > 0L) paste0("theta_hub_", seq_len(n_h)) else character(),
-      if (n_s > 0L) paste0("theta_spoke_", seq_len(n_s)) else character(),
-      "delta",
-      if (isTRUE(use_scale)) "log_alpha" else character()
-    )
-    hub_lut <- stats::setNames(seq_along(hub_ref), names(hub_ref))
-    spoke_lut <- stats::setNames(seq_along(spoke_ref), names(spoke_ref))
-    log_post <- function(par) {
-      hub_val <- hub_ref
-      if (n_h > 0L) {
-        hub_val[fit_hub_idx] <- par[seq_len(n_h)]
-      }
-      spoke_val <- spoke_ref
-      if (n_s > 0L) {
-        spoke_val[fit_spoke_idx] <- par[n_h + seq_len(n_s)]
-      }
-      delta <- par[[idx_delta]]
-      log_alpha <- if (isTRUE(use_scale)) par[[idx_log_alpha]] else 0
-      alpha <- exp(log_alpha)
-      eta_cross <- delta +
-        alpha * spoke_val[as.character(edges_obs$spoke_item)] -
-        hub_val[as.character(edges_obs$hub_item)] +
-        beta_signed
-      p_cross <- (1 - epsilon) * stats::plogis(eta_cross) + epsilon * 0.5
-      p_cross <- pmax(1e-10, pmin(1 - 1e-10, p_cross))
-      ll <- sum(stats::dbinom(y, size = 1L, prob = p_cross, log = TRUE))
-
-      if (nrow(within_hub) > 0L) {
-        idx_a <- hub_lut[as.character(within_hub$A_item)]
-        idx_b <- hub_lut[as.character(within_hub$B_item)]
-        y_a <- as.integer(within_hub$y_A)
-        keep_h <- !is.na(idx_a) & !is.na(idx_b) & y_a %in% c(0L, 1L)
-        if (any(keep_h)) {
-          eta_h <- hub_val[idx_a[keep_h]] - hub_val[idx_b[keep_h]] + beta
-          p_h <- (1 - epsilon) * stats::plogis(eta_h) + epsilon * 0.5
-          p_h <- pmax(1e-10, pmin(1 - 1e-10, p_h))
-          ll <- ll + sum(stats::dbinom(y_a[keep_h], size = 1L, prob = p_h, log = TRUE))
-        }
-      }
-      if (nrow(within_spoke) > 0L) {
-        idx_a <- spoke_lut[as.character(within_spoke$A_item)]
-        idx_b <- spoke_lut[as.character(within_spoke$B_item)]
-        y_a <- as.integer(within_spoke$y_A)
-        keep_s <- !is.na(idx_a) & !is.na(idx_b) & y_a %in% c(0L, 1L)
-        if (any(keep_s)) {
-          eta_s <- alpha * (spoke_val[idx_a[keep_s]] - spoke_val[idx_b[keep_s]]) + beta
-          p_s <- (1 - epsilon) * stats::plogis(eta_s) + epsilon * 0.5
-          p_s <- pmax(1e-10, pmin(1 - 1e-10, p_s))
-          ll <- ll + sum(stats::dbinom(y_a[keep_s], size = 1L, prob = p_s, log = TRUE))
-        }
-      }
-
-      prior_pen <- 0.5 * (delta / 1)^2
-      if (isTRUE(use_scale)) {
-        prior_pen <- prior_pen + 0.5 * (log_alpha / 0.2)^2
-      }
-      if (n_h > 0L) {
-        if (identical(lock_mode, "soft_lock")) {
-          sd_soft <- hub_ref_sd[fit_hub_idx] / max(lock_kappa, 1e-8)
-          prior_pen <- prior_pen + sum(
-            0.5 * ((hub_val[fit_hub_idx] - hub_prior_center[fit_hub_idx]) / pmax(sd_soft, 1e-8))^2
-          )
-        } else {
-          if (!identical(lock_mode, "hard_lock")) {
-            rlang::abort(
-              paste0(
-                "Unsupported `hub_lock_mode` in linking joint refit: ",
-                lock_mode,
-                ". Expected `hard_lock` or `soft_lock`."
-              )
-            )
-          }
-          prior_pen <- prior_pen + sum(
-            0.5 * ((hub_val[fit_hub_idx] - hub_ref[fit_hub_idx]) / pmax(hub_ref_sd[fit_hub_idx], 1e-8))^2
-          )
-        }
-      }
-      if (n_s > 0L) {
-        prior_pen <- prior_pen + sum(
-          0.5 * ((spoke_val[fit_spoke_idx] - spoke_ref[fit_spoke_idx]) / pmax(spoke_ref_sd[fit_spoke_idx], 1e-8))^2
-        )
-      }
-      as.double(ll - prior_pen)
-    }
-  } else {
-    idx_delta <- 1L
-    idx_log_alpha <- if (isTRUE(use_scale)) 2L else NA_integer_
-    start <- if (isTRUE(use_scale)) c(0, 0) else c(0)
-    param_names <- c("delta", if (isTRUE(use_scale)) "log_alpha" else character())
-    log_post <- function(par) {
-      delta <- par[[idx_delta]]
-      log_alpha <- if (isTRUE(use_scale)) par[[idx_log_alpha]] else 0
-      alpha <- exp(log_alpha)
-      eta <- delta + alpha * s - h + beta_signed
-      p <- (1 - epsilon) * stats::plogis(eta) + epsilon * 0.5
-      p <- pmax(1e-10, pmin(1 - 1e-10, p))
-      ll <- sum(stats::dbinom(y, size = 1L, prob = p, log = TRUE))
-      prior_pen <- 0.5 * (delta / 1)^2
-      if (isTRUE(use_scale)) {
-        prior_pen <- prior_pen + 0.5 * (log_alpha / 0.2)^2
-      }
-      as.double(ll - prior_pen)
-    }
   }
 
+  hub_lut <- stats::setNames(seq_along(hub_ref), names(hub_ref))
+  spoke_lut <- stats::setNames(seq_along(spoke_ref), names(spoke_ref))
+  hub_cross_idx <- as.integer(hub_lut[as.character(edges_obs$hub_item)])
+  spoke_cross_idx <- as.integer(spoke_lut[as.character(edges_obs$spoke_item)])
+  if (any(is.na(hub_cross_idx)) || any(is.na(spoke_cross_idx))) {
+    rlang::abort("Linking authoritative CmdStan refit could not resolve cross-edge item indices.")
+  }
+
+  within_hub_a <- if ("A_item" %in% names(within_hub)) as.character(within_hub$A_item) else character()
+  within_hub_b <- if ("B_item" %in% names(within_hub)) as.character(within_hub$B_item) else character()
+  within_hub_y <- if ("y_A" %in% names(within_hub)) as.integer(within_hub$y_A) else integer()
+  within_hub_idx_a <- as.integer(hub_lut[within_hub_a])
+  within_hub_idx_b <- as.integer(hub_lut[within_hub_b])
+  keep_within_hub <- !is.na(within_hub_idx_a) & !is.na(within_hub_idx_b) & within_hub_y %in% c(0L, 1L)
+  within_hub_idx_a <- within_hub_idx_a[keep_within_hub]
+  within_hub_idx_b <- within_hub_idx_b[keep_within_hub]
+  within_hub_y <- within_hub_y[keep_within_hub]
+
+  within_spoke_a <- if ("A_item" %in% names(within_spoke)) as.character(within_spoke$A_item) else character()
+  within_spoke_b <- if ("B_item" %in% names(within_spoke)) as.character(within_spoke$B_item) else character()
+  within_spoke_y <- if ("y_A" %in% names(within_spoke)) as.integer(within_spoke$y_A) else integer()
+  within_spoke_idx_a <- as.integer(spoke_lut[within_spoke_a])
+  within_spoke_idx_b <- as.integer(spoke_lut[within_spoke_b])
+  keep_within_spoke <- !is.na(within_spoke_idx_a) & !is.na(within_spoke_idx_b) & within_spoke_y %in% c(0L, 1L)
+  within_spoke_idx_a <- within_spoke_idx_a[keep_within_spoke]
+  within_spoke_idx_b <- within_spoke_idx_b[keep_within_spoke]
+  within_spoke_y <- within_spoke_y[keep_within_spoke]
+
+  if (isTRUE(joint_used) && !lock_mode %in% c("hard_lock", "soft_lock")) {
+    rlang::abort(
+      paste0(
+        "Unsupported `hub_lock_mode` in linking joint refit: ",
+        lock_mode,
+        ". Expected `hard_lock` or `soft_lock`."
+      )
+    )
+  }
+  hub_prior_sd <- if (isTRUE(estimate_hub) && identical(lock_mode, "soft_lock")) {
+    pmax(hub_ref_sd / max(lock_kappa, 1e-8), 1e-8)
+  } else {
+    pmax(hub_ref_sd, 1e-8)
+  }
+  spoke_prior_sd <- pmax(spoke_ref_sd, 1e-8)
+
+  stan_data_base <- list(
+    N_cross = as.integer(length(y)),
+    y_spoke = as.integer(y),
+    hub_ref_cross = as.double(h),
+    spoke_ref_cross = as.double(s),
+    cross_hub_idx = as.integer(hub_cross_idx),
+    cross_spoke_idx = as.integer(spoke_cross_idx),
+    beta_signed = as.double(beta_signed),
+    epsilon = as.double(epsilon),
+    beta_within = as.double(beta),
+    joint_used = as.integer(joint_used),
+    estimate_hub = as.integer(estimate_hub),
+    use_scale = as.integer(use_scale),
+    N_hub = as.integer(length(hub_ref)),
+    N_spoke = as.integer(length(spoke_ref)),
+    hub_ref = as.double(hub_ref),
+    spoke_ref = as.double(spoke_ref),
+    hub_prior_center = as.double(hub_prior_center),
+    hub_prior_sd = as.double(hub_prior_sd),
+    spoke_prior_sd = as.double(spoke_prior_sd),
+    N_within_hub = as.integer(length(within_hub_y)),
+    hub_within_A_idx = as.integer(within_hub_idx_a),
+    hub_within_B_idx = as.integer(within_hub_idx_b),
+    hub_within_y_A = as.integer(within_hub_y),
+    N_within_spoke = as.integer(length(within_spoke_y)),
+    spoke_within_A_idx = as.integer(within_spoke_idx_a),
+    spoke_within_B_idx = as.integer(within_spoke_idx_b),
+    spoke_within_y_A = as.integer(within_spoke_y)
+  )
+  variable_names <- .adaptive_link_cmdstan_summary_vars(
+    joint_used = joint_used,
+    estimate_hub = estimate_hub,
+    use_scale = use_scale
+  )
   seed <- .adaptive_link_refit_seed(
     cross_edges = edges_obs,
     transform_mode = transform_mode,
     link_refit_mode = link_refit_mode
   )
-  mcmc <- .adaptive_link_mcmc_sample(
-    log_post_fn = log_post,
-    init = start,
-    seed = seed
-  )
-  draws <- as.matrix(mcmc$draws)
-  colnames(draws) <- param_names
-  diagnostics <- .adaptive_link_mcmc_diagnostics(mcmc$chain_draws, param_names = param_names)
+  cmdstan_fit <- NULL
+  draws_matrix <- NULL
+  diagnostics <- NULL
+  mcmc_config_used <- NULL
+  cmdstan_schedule_used <- NULL
+  cmdstan_fit_fn <- refit_contract_ctx[["cmdstan_fit_fn"]] %||% .adaptive_link_fit_transform_cmdstan
+  if (!is.function(cmdstan_fit_fn)) {
+    rlang::abort("`refit_contract$cmdstan_fit_fn` must be a function when provided.")
+  }
+  repair_attempts <- 0L
+  max_attempts <- 3L
+  for (attempt in seq_len(max_attempts)) {
+    repair_attempts <- as.integer(attempt)
+    cmdstan_schedule_used <- .adaptive_link_cmdstan_schedule(
+      attempt = attempt,
+      n_param = as.integer(
+        1L +
+          if (isTRUE(use_scale)) 1L else 0L +
+          if (isTRUE(estimate_hub)) length(hub_ref) else 0L +
+          if (isTRUE(joint_used)) length(spoke_ref) else 0L
+      ),
+      joint_used = joint_used
+    )
+    cmdstan_fit <- cmdstan_fit_fn(
+      stan_data = stan_data_base,
+      variable_names = variable_names,
+      cmdstan = utils::modifyList(
+        refit_contract_ctx[["cmdstan"]] %||% list(),
+        list(
+          chains = as.integer(cmdstan_schedule_used$chains),
+          iter_warmup = as.integer(cmdstan_schedule_used$iter_warmup),
+          iter_sampling = as.integer(cmdstan_schedule_used$iter_sampling)
+        )
+      ),
+      seed = as.integer((seed + attempt * 1009L) %% .Machine$integer.max),
+      model_fn = refit_contract_ctx[["cmdstan_model_fn"]] %||% NULL
+    )
+    draws_matrix <- as.matrix(cmdstan_fit$draws_matrix)
+    diagnostics <- .adaptive_link_cmdstan_validate_diagnostics(
+      diagnostics = cmdstan_fit$diagnostics,
+      thresholds = diagnostics_thresholds
+    )
+    mcmc_config_used <- cmdstan_fit$mcmc_config_used
+    if (isTRUE(diagnostics$diagnostics_rhat_pass) &&
+      isTRUE(diagnostics$diagnostics_ess_pass)) {
+      break
+    }
+  }
 
-  delta_draws <- as.double(draws[, idx_delta])
+  if (!"delta" %in% colnames(draws_matrix)) {
+    rlang::abort("Authoritative linking CmdStan output missing delta draws.")
+  }
+  delta_draws <- as.double(draws_matrix[, "delta", drop = TRUE])
   delta_mean <- as.double(mean(delta_draws))
   delta_sd <- as.double(stats::sd(delta_draws))
   if (!is.finite(delta_sd)) {
     delta_sd <- 0
   }
   if (isTRUE(use_scale)) {
-    log_alpha_draws <- as.double(draws[, idx_log_alpha])
+    if (!"log_alpha" %in% colnames(draws_matrix)) {
+      rlang::abort("Authoritative linking CmdStan output missing log_alpha draws.")
+    }
+    log_alpha_draws <- as.double(draws_matrix[, "log_alpha", drop = TRUE])
     log_alpha_mean <- as.double(mean(log_alpha_draws))
     log_alpha_sd <- as.double(stats::sd(log_alpha_draws))
     if (!is.finite(log_alpha_sd)) {
@@ -1869,34 +2314,40 @@
     log_alpha_sd <- NA_real_
   }
 
-  if (isTRUE(joint_used) && length(fit_hub_idx) > 0L) {
-    hub_cols <- seq_along(fit_hub_idx)
-    theta_hub_post[fit_hub_idx] <- colMeans(draws[, hub_cols, drop = FALSE])
+  if (isTRUE(estimate_hub) && length(fit_hub_idx) > 0L) {
+    hub_cols <- paste0("theta_hub[", seq_along(fit_hub_idx), "]")
+    if (!all(hub_cols %in% colnames(draws_matrix))) {
+      rlang::abort("Authoritative linking CmdStan output missing theta_hub draws.")
+    }
+    theta_hub_post[fit_hub_idx] <- colMeans(draws_matrix[, hub_cols, drop = FALSE])
   }
   if (isTRUE(joint_used) && length(fit_spoke_idx) > 0L) {
-    spoke_cols <- length(fit_hub_idx) + seq_along(fit_spoke_idx)
-    theta_spoke_post[fit_spoke_idx] <- colMeans(draws[, spoke_cols, drop = FALSE])
+    spoke_cols <- paste0("theta_spoke[", seq_along(fit_spoke_idx), "]")
+    if (!all(spoke_cols %in% colnames(draws_matrix))) {
+      rlang::abort("Authoritative linking CmdStan output missing theta_spoke draws.")
+    }
+    theta_spoke_post[fit_spoke_idx] <- colMeans(draws_matrix[, spoke_cols, drop = FALSE])
   }
 
   theta_hub_draws <- matrix(
-    rep(theta_hub_post, each = nrow(draws)),
-    nrow = nrow(draws),
+    rep(theta_hub_post, each = nrow(draws_matrix)),
+    nrow = nrow(draws_matrix),
     byrow = FALSE,
     dimnames = list(NULL, names(theta_hub_post))
   )
   theta_spoke_draws <- matrix(
-    rep(theta_spoke_post, each = nrow(draws)),
-    nrow = nrow(draws),
+    rep(theta_spoke_post, each = nrow(draws_matrix)),
+    nrow = nrow(draws_matrix),
     byrow = FALSE,
     dimnames = list(NULL, names(theta_spoke_post))
   )
-  if (isTRUE(joint_used) && length(fit_hub_idx) > 0L) {
-    hub_cols <- seq_along(fit_hub_idx)
-    theta_hub_draws[, fit_hub_idx] <- draws[, hub_cols, drop = FALSE]
+  if (isTRUE(estimate_hub) && length(fit_hub_idx) > 0L) {
+    hub_cols <- paste0("theta_hub[", seq_along(fit_hub_idx), "]")
+    theta_hub_draws[, fit_hub_idx] <- draws_matrix[, hub_cols, drop = FALSE]
   }
   if (isTRUE(joint_used) && length(fit_spoke_idx) > 0L) {
-    spoke_cols <- length(fit_hub_idx) + seq_along(fit_spoke_idx)
-    theta_spoke_draws[, fit_spoke_idx] <- draws[, spoke_cols, drop = FALSE]
+    spoke_cols <- paste0("theta_spoke[", seq_along(fit_spoke_idx), "]")
+    theta_spoke_draws[, fit_spoke_idx] <- draws_matrix[, spoke_cols, drop = FALSE]
   }
 
   prop_var <- mean(hub_sd^2 + spoke_sd^2, na.rm = TRUE)
@@ -1909,8 +2360,8 @@
 
   fit_contract <- list(
     contract_type = "link_refit",
-    estimation_method = "bayesian_mcmc",
-    uncertainty_approximation = "posterior_draws",
+    estimation_method = "cmdstan_hmc",
+    uncertainty_approximation = "cmdstan_posterior_draws",
     link_refit_mode = as.character(link_refit_mode),
     link_transform_policy = as.character(
       .adaptive_normalize_link_transform_policy(refit_contract_ctx$link_transform_policy %||% "auto")
@@ -1949,10 +2400,13 @@
       divergences = as.integer(diagnostics$divergences %||% NA_integer_)
     ),
     mcmc = list(
-      chains = as.integer(dim(mcmc$chain_draws)[2L] %||% NA_integer_),
-      warmup = 120L,
-      samples = as.integer(dim(mcmc$chain_draws)[1L] %||% NA_integer_),
-      mean_accept_rate = as.double(mcmc$accept_rate %||% NA_real_)
+      chains = as.integer(mcmc_config_used$chains %||% NA_integer_),
+      parallel_chains = as.integer(mcmc_config_used$parallel_chains %||% NA_integer_),
+      warmup = as.integer(cmdstan_schedule_used$iter_warmup %||% NA_integer_),
+      samples = as.integer(cmdstan_schedule_used$iter_sampling %||% NA_integer_),
+      threads_per_chain = as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_),
+      cmdstanr_version = as.character(mcmc_config_used$cmdstanr_version %||% NA_character_),
+      repair_attempts = as.integer(repair_attempts)
     )
   )
 
@@ -2059,10 +2513,16 @@
   if (nrow(panel) < 1L) {
     return(tibble::tibble())
   }
-  panel_keys <- as.character(panel$pair_key[panel$realized %in% TRUE])
-  if (length(panel_keys) < 1L) {
+  realized_log <- .adaptive_link_probe_realized_log_for_panel(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(epoch_id),
+    panel = panel
+  )
+  if (nrow(realized_log) < 1L) {
     return(tibble::tibble())
   }
+  panel_keys <- as.character(realized_log$pair_key)
   cross <- .adaptive_link_cross_edges(state, spoke_id = spoke_id, last_refit_step = NULL)
   if (nrow(cross) < 1L) {
     return(tibble::tibble())
@@ -2070,6 +2530,29 @@
   cross <- tibble::as_tibble(cross)
   cross$pair_key <- make_unordered_key(cross$hub_item, cross$spoke_item)
   cross[cross$pair_key %in% panel_keys & cross$is_probe_step %in% TRUE, , drop = FALSE]
+}
+
+.adaptive_link_probe_prior_realized_max <- function(link_stage_log, spoke_id, epoch_id, refit_id) {
+  link_stage_log <- tibble::as_tibble(link_stage_log %||% new_link_stage_log())
+  if (nrow(link_stage_log) < 1L) {
+    return(NA_integer_)
+  }
+  rows <- link_stage_log[
+    as.integer(link_stage_log$spoke_id) == as.integer(spoke_id) &
+      as.integer(link_stage_log$link_epoch_id) == as.integer(epoch_id) &
+      as.integer(link_stage_log$refit_id) < as.integer(refit_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(rows) < 1L || !"probe_edges_realized" %in% names(rows)) {
+    return(NA_integer_)
+  }
+  vals <- as.integer(rows$probe_edges_realized)
+  vals <- vals[is.finite(vals) & !is.na(vals)]
+  if (length(vals) < 1L) {
+    return(NA_integer_)
+  }
+  as.integer(max(vals))
 }
 
 .adaptive_link_probe_brier_for_fit <- function(edges,
@@ -2226,7 +2709,9 @@
     converged = is.finite(log_alpha_sd),
     delta_mean = as.double(opt$par[[1L]]),
     log_alpha_mean = as.double(opt$par[[2L]]),
-    log_alpha_sd = as.double(log_alpha_sd)
+    log_alpha_sd = as.double(log_alpha_sd),
+    fit_method = "map_laplace_hessian",
+    uncertainty_approximation = "laplace_hessian"
   )
 }
 
@@ -2334,8 +2819,59 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_assert_link_stage_budget_invariants <- function(link_rows) {
+.adaptive_link_stage_backfill_audit_columns <- function(link_rows) {
   rows <- tibble::as_tibble(link_rows)
+  if (nrow(rows) < 1L) {
+    return(rows)
+  }
+  stage_target_or_na <- function(col) {
+    if (col %in% names(rows)) {
+      return(rows[[col]])
+    }
+    rep(NA_integer_, nrow(rows))
+  }
+  defaults <- list(
+    feasible_stage_capacity_anchor_link = stage_target_or_na("stage_target_anchor_link"),
+    feasible_stage_capacity_long_link = stage_target_or_na("stage_target_long_link"),
+    feasible_stage_capacity_mid_link = stage_target_or_na("stage_target_mid_link"),
+    feasible_stage_capacity_local_link = stage_target_or_na("stage_target_local_link"),
+    feasibility_budget_released = rep(0L, nrow(rows)),
+    feasibility_reallocation_used = rep(FALSE, nrow(rows)),
+    feasibility_reallocation_rule = rep("none", nrow(rows)),
+    stop_blocker_codes = rep(NA_character_, nrow(rows)),
+    probe_edges_realized_before_refit = rep(NA_integer_, nrow(rows)),
+    probe_edges_realized_delta_since_last_refit = rep(NA_integer_, nrow(rows)),
+    probe_shortfall_reason = rep(NA_character_, nrow(rows)),
+    stop_recent_pass_count = rep(NA_integer_, nrow(rows)),
+    stop_recent_window_size = rep(NA_integer_, nrow(rows)),
+    stability_window_refits_used = rep(NA_integer_, nrow(rows)),
+    stability_passes_required_used = rep(NA_integer_, nrow(rows)),
+    escalation_recent_pass_count = rep(NA_integer_, nrow(rows)),
+    escalation_recent_window_size = rep(NA_integer_, nrow(rows)),
+    link_transform_escalation_window_refits_used = rep(NA_integer_, nrow(rows)),
+    link_transform_escalation_passes_required_used = rep(NA_integer_, nrow(rows)),
+    link_stop_reliability_min_used = rep(NA_real_, nrow(rows)),
+    probe_brier_max_used = rep(NA_real_, nrow(rows)),
+    probe_brier_pass = rep(NA, nrow(rows)),
+    probe_pred_rmse_max_used = rep(NA_real_, nrow(rows)),
+    probe_pred_rmse_pass = rep(NA, nrow(rows)),
+    theta_global_rmse_max_used = rep(NA_real_, nrow(rows)),
+    theta_global_rmse_pass = rep(NA, nrow(rows)),
+    lag_domain_reset_reason = rep(NA_character_, nrow(rows)),
+    resumed_from_session = rep(NA, nrow(rows))
+  )
+  for (col in names(defaults)) {
+    if (!col %in% names(rows)) {
+      rows[[col]] <- defaults[[col]]
+    }
+  }
+  rows
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_assert_link_stage_budget_invariants <- function(link_rows) {
+  rows <- .adaptive_link_stage_backfill_audit_columns(link_rows)
   if (nrow(rows) < 1L) {
     return(invisible(TRUE))
   }
@@ -2345,6 +2881,13 @@
     "stage_target_long_link",
     "stage_target_mid_link",
     "stage_target_local_link",
+    "feasible_stage_capacity_anchor_link",
+    "feasible_stage_capacity_long_link",
+    "feasible_stage_capacity_mid_link",
+    "feasible_stage_capacity_local_link",
+    "feasibility_budget_released",
+    "feasibility_reallocation_used",
+    "feasibility_reallocation_rule",
     "stage_realized_anchor_link",
     "stage_realized_long_link",
     "stage_realized_mid_link",
@@ -2401,6 +2944,11 @@
     "stage_target_long_link",
     "stage_target_mid_link",
     "stage_target_local_link",
+    "feasible_stage_capacity_anchor_link",
+    "feasible_stage_capacity_long_link",
+    "feasible_stage_capacity_mid_link",
+    "feasible_stage_capacity_local_link",
+    "feasibility_budget_released",
     "stage_realized_anchor_link",
     "stage_realized_long_link",
     "stage_realized_mid_link",
@@ -2417,6 +2965,27 @@
         paste0("link_stage_log budget invariant failure: `", col, "` must be non-negative.")
       )
     }
+  }
+
+  inactive_feasibility <- rows$feasibility_reallocation_used %in% FALSE
+  if (any(inactive_feasibility, na.rm = TRUE) &&
+    any(
+      as.character(rows$feasibility_reallocation_rule[inactive_feasibility]) != "none",
+      na.rm = TRUE
+    )) {
+    rlang::abort(
+      "link_stage_log budget invariant failure: non-reallocated feasibility rows must use rule `none`."
+    )
+  }
+  active_feasibility <- rows$feasibility_reallocation_used %in% TRUE
+  if (any(active_feasibility, na.rm = TRUE) &&
+    any(
+      as.character(rows$feasibility_reallocation_rule[active_feasibility]) != "pooled_utility_backfill",
+      na.rm = TRUE
+    )) {
+    rlang::abort(
+      "link_stage_log budget invariant failure: reallocated feasibility rows must use rule `pooled_utility_backfill`."
+    )
   }
 
   no_backfill <- rows$stage_reallocation_used %in% FALSE
@@ -2454,6 +3023,19 @@
                                                 controller = NULL,
                                                 eligible_spoke_ids = NULL,
                                                 seed = 1L) {
+  zero_budget_entry <- function(source = "independent_inactive_spoke") {
+    list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = as.character(source),
+      concurrent_target_pairs = NA_integer_,
+      concurrent_floor_pairs = NA_integer_,
+      concurrent_floor_met = NA,
+      concurrent_target_met = NA,
+      concurrent_utility_mass = NA_real_,
+      concurrent_top_k_used = NA_integer_,
+      concurrent_candidate_count = NA_integer_
+    )
+  }
   controller <- controller %||% .adaptive_controller_resolve(state)
   refit_id <- as.integer(.adaptive_link_refit_window_id(state))
   cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
@@ -2464,13 +3046,32 @@
   if (length(spoke_ids) < 1L) {
     return(list())
   }
+  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
   if (!is.na(cached_refit_id) &&
     identical(cached_refit_id, refit_id) &&
-    length(cached_map) > 0L &&
-    all(as.character(spoke_ids) %in% names(cached_map))) {
-    if (identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
+    length(cached_map) > 0L) {
+    if (!isTRUE(concurrent_mode)) {
+      cached_active <- names(cached_map)[vapply(
+        cached_map,
+        function(entry) as.integer(entry$B_spoke_refit_budget %||% 0L) > 0L,
+        logical(1L)
+      )]
+      out <- lapply(as.character(spoke_ids), function(key) {
+        if (key %in% names(cached_map)) {
+          cached_map[[key]]
+        } else if (length(cached_active) > 0L) {
+          zero_budget_entry()
+        } else {
+          NULL
+        }
+      })
+      names(out) <- as.character(spoke_ids)
+      out <- out[!vapply(out, is.null, logical(1L))]
+      return(out)
+    }
+    if (all(as.character(spoke_ids) %in% names(cached_map))) {
       cached_map <- lapply(as.character(spoke_ids), function(key) {
         entry <- cached_map[[key]] %||% list()
         obs <- 0L
@@ -2484,28 +3085,41 @@
             na.rm = TRUE
           ))
         }
-        budget <- as.integer(entry$B_spoke_refit_budget %||% 0L)
-        if (budget < obs) {
-          entry$B_spoke_refit_budget <- as.integer(obs)
-          entry$B_spoke_refit_budget_source <- "concurrent_allocator_reconciled_to_realized"
-        }
-        target_pairs <- as.integer(entry$concurrent_target_pairs %||% 0L)
-        entry$concurrent_target_met <- as.logical(obs >= target_pairs)
+        target_pairs <- as.integer(entry$concurrent_target_pairs %||% entry$B_spoke_refit_budget %||% 0L)
         floor_pairs <- as.integer(entry$concurrent_floor_pairs %||% 0L)
+        entry$concurrent_target_met <- as.logical(obs >= target_pairs)
         entry$concurrent_floor_met <- as.logical(obs >= floor_pairs)
         entry
       })
       names(cached_map) <- as.character(spoke_ids)
+      return(cached_map[as.character(spoke_ids)])
     }
-    return(cached_map[as.character(spoke_ids)])
   }
 
   single_budget <- .adaptive_link_refit_budget_default(as.integer(state$n_items), controller = controller)
-  if (!identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")) {
-    out <- lapply(spoke_ids, function(spoke_id) {
+  if (!isTRUE(concurrent_mode)) {
+    current_spoke_id <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
+    active_spoke_id <- if (!is.na(current_spoke_id) && current_spoke_id %in% spoke_ids) {
+      current_spoke_id
+    } else if (identical(as.character(controller$run_mode %||% "within_set"), "link_multi_spoke")) {
+      .adaptive_link_active_spoke(
+        state = state,
+        controller = controller,
+        eligible_spoke_ids = spoke_ids
+      )
+    } else {
+      as.integer(spoke_ids[[1L]])
+    }
+    if (is.na(active_spoke_id) || !active_spoke_id %in% spoke_ids) {
+      return(list())
+    }
+    out <- lapply(as.character(spoke_ids), function(key) {
+      if (!identical(as.integer(key), as.integer(active_spoke_id))) {
+        return(zero_budget_entry())
+      }
       list(
         B_spoke_refit_budget = as.integer(single_budget),
-        B_spoke_refit_budget_source = "single_spoke_default",
+        B_spoke_refit_budget_source = "single_spoke_controller",
         concurrent_target_pairs = NA_integer_,
         concurrent_floor_pairs = NA_integer_,
         concurrent_floor_met = NA,
@@ -2542,6 +3156,8 @@
     floor_pairs = as.integer(floor_pairs)
   )
   out <- lapply(as.character(spoke_ids), function(key) {
+    stat <- spoke_stats[[key]] %||% list()
+    target_pairs <- as.integer(targets[[key]] %||% 0L)
     obs <- 0L
     if (nrow(step_log) > 0L &&
       all(c("pair_id", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
@@ -2553,18 +3169,9 @@
         na.rm = TRUE
       ))
     }
-    stat <- spoke_stats[[key]] %||% list()
-    target_pairs <- as.integer(targets[[key]] %||% 0L)
-    realized_floor <- as.integer(max(0L, obs))
-    budget_assigned <- as.integer(max(target_pairs, realized_floor))
-    budget_source <- if (budget_assigned > target_pairs) {
-      "concurrent_allocator_reconciled_to_realized"
-    } else {
-      "concurrent_allocator"
-    }
     list(
-      B_spoke_refit_budget = as.integer(budget_assigned),
-      B_spoke_refit_budget_source = as.character(budget_source),
+      B_spoke_refit_budget = as.integer(target_pairs),
+      B_spoke_refit_budget_source = "concurrent_allocator",
       concurrent_target_pairs = as.integer(target_pairs),
       concurrent_floor_pairs = as.integer(floor_pairs),
       concurrent_floor_met = as.logical(obs >= floor_pairs),
@@ -2607,9 +3214,17 @@
   frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
+  spoke_ids <- spoke_ids[!vapply(
+    as.character(spoke_ids),
+    function(key) isTRUE(frozen_map[[key]]) && !is.null(link_stats[[key]]),
+    logical(1L)
+  )]
+  if (length(spoke_ids) < 1L) {
+    return(out)
+  }
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
-  stop_counter_map <- controller$link_stop_consecutive_pass_count_by_spoke %||% list()
-  escalation_counter_map <- controller$link_escalation_consecutive_pass_count_by_spoke %||% list()
+  stop_window_map <- controller$link_stop_recent_pass_window_by_spoke %||% list()
+  escalation_window_map <- controller$link_escalation_recent_pass_window_by_spoke %||% list()
   epoch_id_map <- controller$link_epoch_id_by_spoke %||% list()
   epoch_signature_map <- controller$link_epoch_signature_by_spoke %||% list()
   epoch_start_step_map <- controller$link_epoch_start_step_by_spoke %||% list()
@@ -2675,6 +3290,7 @@
       }
     }
 
+    btl_config <- out$config$btl_config %||% list()
     cross_all <- .adaptive_link_cross_edges(out, spoke_id = spoke_id, last_refit_step = NULL)
     cross_since <- .adaptive_link_cross_edges(out, spoke_id = spoke_id, last_refit_step = last_step)
     startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(out, spoke_id = spoke_id)
@@ -2694,7 +3310,15 @@
       link_transform_policy = transform_policy,
       hub_lock_mode = lock_mode,
       hub_lock_kappa = kappa,
-      shift_only_theta_treatment = theta_treatment
+      shift_only_theta_treatment = theta_treatment,
+      cmdstan = btl_config[["cmdstan"]] %||% list(),
+      cmdstan_fit_fn = btl_config[["cmdstan_fit_fn"]] %||% NULL,
+      cmdstan_model_fn = btl_config[["cmdstan_model_fn"]] %||% NULL,
+      link_diagnostics_thresholds = list(
+        divergences_max = as.integer(btl_config$divergences_max %||% 0L),
+        max_rhat = as.double(btl_config$max_rhat %||% 1.01),
+        min_ess_bulk = as.double(btl_config$ess_bulk_min %||% 400)
+      )
     )
     hub_theta_init <- if (identical(refit_mode, "joint_refit") && length(hub_current) > 0L) {
       hub_current
@@ -2735,13 +3359,14 @@
     }
     ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
     ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
+    probe_holdout_flag <- .adaptive_link_is_holdout_probe_rows(cross_since)
     cross_since_probe <- cross_since[
-      as.character(cross_since$run_mode) == "link_probe" | cross_since$is_probe_step %in% TRUE,
+      probe_holdout_flag,
       ,
       drop = FALSE
     ]
     cross_since_active <- cross_since[
-      !(as.character(cross_since$run_mode) == "link_probe" | cross_since$is_probe_step %in% TRUE),
+      !probe_holdout_flag,
       ,
       drop = FALSE
     ]
@@ -2770,32 +3395,27 @@
       posterior_draws = fit$posterior_draws
     )
 
-    panel_current <- .adaptive_link_probe_panel_for_spoke(out, spoke_id = spoke_id)
-    probe_panel_id_current <- if (nrow(panel_current) > 0L) {
-      as.character(panel_current$probe_panel_id[[1L]] %||% NA_character_)
-    } else {
-      NA_character_
-    }
     hub_art <- out$linking$phase_a$artifacts[[as.character(hub_id)]] %||% list()
     spoke_art <- out$linking$phase_a$artifacts[[as.character(spoke_id)]] %||% list()
-    epoch_signature <- paste(
-      as.character(transform_state),
-      as.character(refit_mode),
-      as.character(lock_mode),
-      as.integer(hub_art$refit_id %||% NA_integer_),
-      as.integer(spoke_art$refit_id %||% NA_integer_),
-      as.character(hub_art$fit_config_hash %||% NA_character_),
-      as.character(spoke_art$fit_config_hash %||% NA_character_),
-      as.character(probe_panel_id_current),
-      sep = "|"
+    epoch_signature_components <- .adaptive_link_epoch_signature_components(
+      transform_state = transform_state,
+      refit_mode = refit_mode,
+      lock_mode = lock_mode,
+      hub_art = hub_art,
+      spoke_art = spoke_art
     )
+    epoch_signature <- .adaptive_link_epoch_signature_string(epoch_signature_components)
     previous_signature <- as.character(epoch_signature_map[[key]] %||% NA_character_)
     link_epoch_id <- as.integer(epoch_id_map[[key]] %||% 1L)
-    lag_domain_reset <- !is.na(previous_signature) && !identical(previous_signature, epoch_signature)
+    lag_domain_reset_reason <- .adaptive_link_epoch_reset_reason(
+      previous_signature = previous_signature,
+      current_components = epoch_signature_components
+    )
+    lag_domain_reset <- !is.na(lag_domain_reset_reason)
     if (isTRUE(lag_domain_reset)) {
       link_epoch_id <- as.integer(link_epoch_id + 1L)
-      stop_counter_map[[key]] <- 0L
-      escalation_counter_map[[key]] <- 0L
+      stop_window_map[[key]] <- logical()
+      escalation_window_map[[key]] <- logical()
       lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
       epoch_start_step_map[[key]] <- as.integer(last_step + 1L)
     }
@@ -2806,6 +3426,129 @@
     epoch_start_step <- as.integer(
       epoch_start_step_map[[key]] %||% .adaptive_link_epoch_start_step_default(out, spoke_id)
     )
+    out$controller <- controller
+    out$controller$link_epoch_id_by_spoke <- epoch_id_map
+    panel_eval <- .adaptive_link_probe_panel_for_spoke(
+      out,
+      spoke_id = spoke_id,
+      epoch_id = link_epoch_id
+    )
+    if (nrow(panel_eval) < 1L) {
+      tmp_state <- out
+      tmp_controller <- out$controller
+      panel_eval <- .adaptive_link_probe_construct_panel(
+        state = tmp_state,
+        controller = tmp_controller,
+        spoke_id = as.integer(spoke_id)
+      )
+      panel_eval <- tibble::as_tibble(panel_eval)
+      if (nrow(panel_eval) < 1L) {
+        rlang::abort(
+          paste0(
+            "Phase B probe-panel invariant failed: no held-out panel could be constructed for spoke_id=",
+            as.integer(spoke_id),
+            " in link_epoch_id=",
+            as.integer(link_epoch_id),
+            "."
+          )
+        )
+      }
+      out$linking <- out$linking %||% list()
+      probe_state <- .adaptive_link_probe_state(out)
+      probe_state$panels_by_spoke[[key]] <- panel_eval
+      out$linking$probe <- probe_state
+    }
+    prior_panel_row <- link_stage_hist[
+      as.integer(link_stage_hist$spoke_id) == as.integer(spoke_id),
+      ,
+      drop = FALSE
+    ]
+    if (nrow(prior_panel_row) > 0L) {
+      prior_panel_row <- prior_panel_row[
+        order(as.integer(prior_panel_row$refit_id), seq_len(nrow(prior_panel_row))),
+        ,
+        drop = FALSE
+      ]
+      prior_panel_row <- prior_panel_row[nrow(prior_panel_row), , drop = FALSE]
+    }
+    prior_panel_epoch <- if (nrow(prior_panel_row) > 0L) {
+      as.integer(prior_panel_row$link_epoch_id[[1L]] %||% NA_integer_)
+    } else {
+      NA_integer_
+    }
+    prior_panel_id <- if (nrow(prior_panel_row) > 0L) {
+      as.character(prior_panel_row$probe_panel_id[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
+    }
+    current_panel_id <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
+    same_epoch_panel_changed <- nrow(prior_panel_row) > 0L &&
+      is.finite(prior_panel_epoch) &&
+      identical(prior_panel_epoch, as.integer(link_epoch_id)) &&
+      is.character(prior_panel_id) &&
+      nzchar(prior_panel_id) &&
+      is.character(current_panel_id) &&
+      nzchar(current_panel_id) &&
+      !identical(prior_panel_id, current_panel_id)
+    if (isTRUE(same_epoch_panel_changed)) {
+      if (.adaptive_is_resumed_session(out)) {
+        .adaptive_link_probe_resume_abort(
+          paste0(
+            "persisted/current probe panel id ",
+            current_panel_id,
+            " disagrees with canonical `link_stage_log$probe_panel_id` ",
+            prior_panel_id,
+            " in the same link_epoch_id=",
+            as.integer(link_epoch_id),
+            "; refusing to rebuild the panel mid-epoch"
+          ),
+          spoke_id = spoke_id
+        )
+      }
+      link_epoch_id <- as.integer(link_epoch_id + 1L)
+      epoch_id_map[[key]] <- as.integer(link_epoch_id)
+      stop_window_map[[key]] <- logical()
+      escalation_window_map[[key]] <- logical()
+      lag_domain_reset <- TRUE
+      lag_domain_reset_reason <- "probe_panel_rebuild"
+      lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
+      epoch_start_step_map[[key]] <- as.integer(last_step + 1L)
+      out$controller$link_epoch_id_by_spoke <- epoch_id_map
+      out$linking <- out$linking %||% list()
+      probe_state <- .adaptive_link_probe_state(out)
+      rebuilt_panel <- .adaptive_link_probe_construct_panel(
+        state = out,
+        controller = out$controller,
+        spoke_id = as.integer(spoke_id)
+      )
+      rebuilt_panel <- tibble::as_tibble(rebuilt_panel)
+      if (nrow(rebuilt_panel) < 1L) {
+        rlang::abort(
+          paste0(
+            "Phase B probe-panel invariant failed: no held-out panel could be constructed for spoke_id=",
+            as.integer(spoke_id),
+            " after probe-panel rebuild reset in link_epoch_id=",
+            as.integer(link_epoch_id),
+            "."
+          )
+        )
+      }
+      probe_state$panels_by_spoke[[key]] <- rebuilt_panel
+      out$linking$probe <- probe_state
+      panel_eval <- rebuilt_panel
+      current_panel_id <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
+    }
+    probe_panel_id_eval <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
+    probe_edges_planned_eval <- as.integer(nrow(panel_eval))
+    probe_edges_realized_eval <- .adaptive_link_probe_realized_count(
+      out,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(link_epoch_id)
+    )
+    probe_panel_shortfall_eval <- as.integer(
+      max(0L, probe_edges_planned_eval - probe_edges_realized_eval)
+    )
+    eval_link_epoch_id <- as.integer(link_epoch_id)
 
     lag <- as.integer(out$config$btl_config$stability_lag %||% 2L)
     lag_eligible <- !isTRUE(lag_domain_reset) && !is.na(lag) && lag >= 1L && current_refit_id > lag
@@ -2829,35 +3572,6 @@
     } else {
       NA_real_
     }
-    delta_change_pass <- if (isTRUE(lag_eligible) && is.finite(delta_change)) {
-      delta_change <= as.double(controller$delta_change_max %||% 0.05)
-    } else {
-      NA
-    }
-    log_alpha_change_pass <- if (isTRUE(lag_eligible) &&
-      identical(transform_state, "shift_scale") &&
-      is.finite(log_alpha_change)) {
-      log_alpha_change <= as.double(controller$log_alpha_change_max %||% 0.05)
-    } else if (identical(transform_state, "shift_only")) {
-      NA
-    } else {
-      NA
-    }
-
-    delta_sd_max_used <- .adaptive_link_delta_sd_max_derived(
-      state = out,
-      hub_id = hub_id,
-      delta_sd_mult = as.double(controller$delta_sd_max %||% 0.10)
-    )
-    delta_sd_pass <- is.finite(fit$delta_sd) &&
-      is.finite(delta_sd_max_used) &&
-      fit$delta_sd <= delta_sd_max_used
-    log_alpha_sd_pass <- if (identical(transform_state, "shift_scale")) {
-      is.finite(fit$log_alpha_sd) && fit$log_alpha_sd <= as.double(controller$log_alpha_sd_max %||% 0.10)
-    } else {
-      TRUE
-    }
-
     if (identical(transform_state, "shift_scale") && !is.finite(fit$log_alpha_mean)) {
       fit$log_alpha_mean <- 0
     }
@@ -2868,7 +3582,6 @@
       fit$log_alpha_mean <- NA_real_
       fit$log_alpha_sd <- NA_real_
       log_alpha_change <- NA_real_
-      log_alpha_change_pass <- NA
     }
 
     active <- .adaptive_link_active_item_ids(out, spoke_id = spoke_id, hub_id = hub_id)
@@ -2931,6 +3644,7 @@
       lag_row = lag_row
     )
     fit_diag <- fit$diagnostics %||% list()
+    fit_contract <- fit$fit_contract %||% list()
     hub_anchored <- if (identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
       TRUE
     } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
@@ -2980,7 +3694,7 @@
     probe_edges_realized_tbl <- .adaptive_link_probe_edges_realized(
       state = out,
       spoke_id = spoke_id,
-      epoch_id = link_epoch_id
+      epoch_id = eval_link_epoch_id
     )
     link_diagnostics_pass <- isTRUE(fit_diag$diagnostics_divergences_pass %||% NA) &&
       isTRUE(fit_diag$diagnostics_rhat_pass %||% NA) &&
@@ -3015,22 +3729,42 @@
     link_stop_eligible <- isTRUE(link_lag_eligible) &&
       isTRUE(link_min_refit_eligible) &&
       isTRUE(link_stop_gate_open)
+    reliability_min_used <- as.double(controller$link_stop_reliability_min %||% 0.90)
+    probe_brier_max_used <- as.double(controller$probe_brier_max %||% 0.19)
+    probe_pred_rmse_max_used <- as.double(controller$probe_pred_rmse_max %||% 0.015)
+    theta_global_rmse_max_used <- as.double(controller$theta_global_rmse_max %||% 0.05)
+    reliability_stop_pass <- is.finite(reliability_active) &&
+      reliability_active >= reliability_min_used
+    probe_brier_pass <- is.finite(probe_brier) &&
+      probe_brier <= probe_brier_max_used
+    probe_pred_rmse_pass <- is.finite(probe_pred_rmse_lagged) &&
+      probe_pred_rmse_lagged <= probe_pred_rmse_max_used
+    theta_global_rmse_pass <- is.finite(theta_global_rmse_lagged) &&
+      theta_global_rmse_lagged <= theta_global_rmse_max_used
+    stop_window_refits_used <- as.integer(controller$stability_window_refits %||% 3L)
+    stop_passes_required_used <- as.integer(controller$stability_passes_required %||% 2L)
     link_stop_pass_now <- isTRUE(link_stop_eligible) &&
       isTRUE(hub_anchored) &&
-      is.finite(reliability_active) &&
-      reliability_active >= as.double(controller$link_stop_reliability_min %||% 0.90) &&
-      is.finite(probe_brier) &&
-      probe_brier <= as.double(controller$probe_brier_max %||% 0.19) &&
-      is.finite(probe_pred_rmse_lagged) &&
-      probe_pred_rmse_lagged <= as.double(controller$probe_pred_rmse_max %||% 0.015) &&
-      is.finite(theta_global_rmse_lagged) &&
-      theta_global_rmse_lagged <= as.double(controller$theta_global_rmse_max %||% 0.04)
-    stop_counter <- if (isTRUE(link_stop_pass_now)) {
-      as.integer(stop_counter_map[[key]] %||% 0L) + 1L
-    } else {
-      0L
+      isTRUE(reliability_stop_pass) &&
+      isTRUE(probe_brier_pass) &&
+      isTRUE(probe_pred_rmse_pass) &&
+      isTRUE(theta_global_rmse_pass)
+    stop_window <- .adaptive_link_result_window_normalize(
+      stop_window_map[[key]] %||% logical(),
+      max_size = stop_window_refits_used
+    )
+    if (isTRUE(link_stop_eligible)) {
+      stop_window <- .adaptive_link_result_window_append(
+        stop_window,
+        result = link_stop_pass_now,
+        max_size = stop_window_refits_used
+      )
     }
-    stop_counter_map[[key]] <- as.integer(stop_counter)
+    stop_window_map[[key]] <- stop_window
+    stop_recent_pass_count <- .adaptive_link_result_window_pass_count(stop_window)
+    stop_recent_window_size <- length(stop_window)
+    link_stop_pass <- isTRUE(stop_recent_window_size >= stop_window_refits_used) &&
+      isTRUE(stop_recent_pass_count >= stop_passes_required_used)
 
     cross_active_epoch <- cross_active_all[0, , drop = FALSE]
     scale_ready <- FALSE
@@ -3041,7 +3775,14 @@
         ,
         drop = FALSE
       ]
-      bins_used <- as.integer(coverage_bins_map[[key]] %||% 3L)
+      bins_used <- suppressWarnings(as.integer(
+        coverage_bins_map[[key]] %||%
+          controller$spoke_quantile_coverage_bins %||%
+          3L
+      ))
+      if (length(bins_used) != 1L || is.na(bins_used) || !is.finite(bins_used) || bins_used < 1L) {
+        bins_used <- max(1L, as.integer(controller$spoke_quantile_coverage_bins %||% 3L))
+      }
       score_map <- .adaptive_link_phase_b_routing_scores(
         state = out,
         controller = controller,
@@ -3081,7 +3822,16 @@
     probe_brier_shift_scale <- NA_real_
     probe_brier_delta <- NA_real_
     escalated_this_refit <- FALSE
-    escalation_counter <- as.integer(escalation_counter_map[[key]] %||% 0L)
+    escalation_window_refits_used <- as.integer(
+      controller$link_transform_escalation_window_refits %||% 3L
+    )
+    escalation_passes_required_used <- as.integer(
+      controller$link_transform_escalation_passes_required %||% 2L
+    )
+    escalation_window <- .adaptive_link_result_window_normalize(
+      escalation_window_map[[key]] %||% logical(),
+      max_size = escalation_window_refits_used
+    )
     if (!isTRUE(transform_frozen) &&
       identical(transform_policy, "auto") &&
       identical(refit_mode, "shift_only") &&
@@ -3106,18 +3856,21 @@
         )
         probe_brier_delta <- as.double(probe_brier_shift_only - probe_brier_shift_scale)
       }
-      if (isTRUE(alt_fit$converged) &&
+      escalation_pass_now <- isTRUE(alt_fit$converged) &&
         is.finite(probe_brier_delta) &&
         probe_brier_delta >= as.double(controller$probe_brier_delta_min %||% 0.005) &&
         is.finite(alt_fit$log_alpha_sd) &&
-        alt_fit$log_alpha_sd <= as.double(controller$logalpha_sd_guardrail %||% 0.10)) {
-        escalation_counter <- escalation_counter + 1L
-      } else {
-        escalation_counter <- 0L
-      }
-      if (escalation_counter >= as.integer(controller$link_transform_escalation_refits_required %||% 2L)) {
+        alt_fit$log_alpha_sd <= as.double(controller$logalpha_sd_guardrail %||% 0.10)
+      escalation_window <- .adaptive_link_result_window_append(
+        escalation_window,
+        result = escalation_pass_now,
+        max_size = escalation_window_refits_used
+      )
+      if (length(escalation_window) >= escalation_window_refits_used &&
+        .adaptive_link_result_window_pass_count(escalation_window) >=
+          escalation_passes_required_used) {
         escalated_this_refit <- TRUE
-        escalation_counter <- 0L
+        escalation_window <- logical()
         transform_state <- "shift_scale"
         state_map[[key]] <- "shift_scale"
         fit$delta_mean <- as.double(alt_fit$delta_mean %||% fit$delta_mean)
@@ -3128,21 +3881,20 @@
         epoch_start_step_map[[key]] <- as.integer(
           max(c(as.integer(tibble::as_tibble(out$step_log %||% tibble::tibble())$step_id), 0L), na.rm = TRUE) + 1L
         )
-        epoch_signature <- paste(
-          "shift_scale",
-          as.character(refit_mode),
-          as.character(lock_mode),
-          as.integer(hub_art$refit_id %||% NA_integer_),
-          as.integer(spoke_art$refit_id %||% NA_integer_),
-          as.character(hub_art$fit_config_hash %||% NA_character_),
-          as.character(spoke_art$fit_config_hash %||% NA_character_),
-          as.character(probe_panel_id_current),
-          sep = "|"
+        epoch_signature <- .adaptive_link_epoch_signature_string(
+          .adaptive_link_epoch_signature_components(
+            transform_state = "shift_scale",
+            refit_mode = refit_mode,
+            lock_mode = lock_mode,
+            hub_art = hub_art,
+            spoke_art = spoke_art
+          )
         )
         epoch_signature_map[[key]] <- as.character(epoch_signature)
         lag_domain_key <- as.character(epoch_signature)
         lag_domain_key_map[[key]] <- as.character(lag_domain_key)
         lag_domain_reset <- TRUE
+        lag_domain_reset_reason <- "transform_state_change"
         lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
         scale_ready <- FALSE
         lag_eligible <- FALSE
@@ -3155,13 +3907,32 @@
           rho_rank_lagged = NA_real_,
           rho_rank_lagged_pass = FALSE
         )
-        stop_counter <- 0L
-        stop_counter_map[[key]] <- 0L
+        stop_window <- logical()
+        stop_window_map[[key]] <- logical()
+        stop_recent_pass_count <- 0L
+        stop_recent_window_size <- 0L
+        link_stop_pass <- FALSE
       }
-    } else {
-      escalation_counter <- 0L
     }
-    escalation_counter_map[[key]] <- as.integer(escalation_counter)
+    escalation_window_map[[key]] <- escalation_window
+    escalation_recent_pass_count <- .adaptive_link_result_window_pass_count(escalation_window)
+    escalation_recent_window_size <- length(escalation_window)
+    stop_blockers <- .adaptive_link_stop_blockers(
+      link_diagnostics_pass = link_diagnostics_pass,
+      link_lag_eligible = link_lag_eligible,
+      link_min_refit_eligible = link_min_refit_eligible,
+      probe_edges_realized = probe_edges_realized_eval,
+      probe_edges_min_for_stop = as.integer(controller$probe_edges_min_for_stop %||% 30L),
+      link_stop_reliability_min = reliability_min_used,
+      reliability_active = reliability_active,
+      probe_brier = probe_brier,
+      probe_brier_max = probe_brier_max_used,
+      probe_pred_rmse_lagged = probe_pred_rmse_lagged,
+      probe_pred_rmse_max = probe_pred_rmse_max_used,
+      theta_global_rmse_lagged = theta_global_rmse_lagged,
+      theta_global_rmse_max = theta_global_rmse_max_used,
+      hub_anchored = hub_anchored
+    )
 
     link_identified <- is.finite(reliability_active) &&
       reliability_active >= as.double(controller$link_identified_reliability_min %||% 0.80) &&
@@ -3184,21 +3955,13 @@
       log_alpha_spoke_sd = as.double(fit$log_alpha_sd),
       delta_change_lagged = as.double(delta_change),
       log_alpha_change_lagged = as.double(log_alpha_change),
-      delta_change_pass = as.logical(delta_change_pass),
-      log_alpha_change_pass = as.logical(log_alpha_change_pass),
-      delta_sd_pass = as.logical(delta_sd_pass),
-      log_alpha_sd_pass = as.logical(log_alpha_sd_pass),
-      delta_sd_max_used = as.double(delta_sd_max_used),
-      link_reliability = as.double(reliability_active),
       reliability_link_global = as.double(reliability_active),
+      link_stop_reliability_min_used = as.double(reliability_min_used),
       link_reliability_identified_pass = as.logical(
         is.finite(reliability_active) &&
           reliability_active >= as.double(controller$link_identified_reliability_min %||% 0.80)
       ),
-      link_reliability_stop_pass = as.logical(
-        is.finite(reliability_active) &&
-          reliability_active >= as.double(controller$link_stop_reliability_min %||% 0.90)
-      ),
+      link_reliability_stop_pass = as.logical(reliability_stop_pass),
       ts_btl_rank_spearman_active = as.double(ts_btl_rank_active),
       link_rank_corr_pass = as.logical(
         is.finite(ts_btl_rank_active) &&
@@ -3206,23 +3969,28 @@
       ),
       lag_domain_key = as.character(lag_domain_key),
       lag_domain_reset = as.logical(lag_domain_reset),
-      link_epoch_id = as.integer(link_epoch_id),
+      lag_domain_reset_reason = as.character(lag_domain_reset_reason %||% NA_character_),
+      link_epoch_id = as.integer(eval_link_epoch_id),
       lag_eligible = as.logical(lag_eligible),
       link_lag_eligible = as.logical(link_lag_eligible),
       link_min_refit_eligible = as.logical(link_min_refit_eligible),
       link_stop_gate_open = as.logical(link_stop_gate_open),
       rank_stability_lagged = as.double(rank_stability$rho_rank_lagged %||% NA_real_),
-      rank_stability_pass = as.logical(rank_stability$rho_rank_lagged_pass %||% FALSE),
       link_identified = as.logical(link_identified),
       link_stop_eligible = as.logical(link_stop_eligible),
-      stop_consecutive_pass_count = as.integer(stop_counter),
-      link_stop_pass = as.logical(
-        stop_counter >= as.integer(controller$stability_consecutive_k %||% 2L)
-      ),
+      stop_recent_pass_count = as.integer(stop_recent_pass_count),
+      stop_recent_window_size = as.integer(stop_recent_window_size),
+      link_stop_pass = as.logical(link_stop_pass),
+      stability_window_refits_used = as.integer(stop_window_refits_used),
+      stability_passes_required_used = as.integer(stop_passes_required_used),
       ppc_brier_cross_active = as.double(ppc_brier_cross_active),
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
-      fit_contract = fit$fit_contract %||% list(),
+      fit_contract = fit_contract,
+      link_fit_method = as.character(fit_contract$estimation_method %||% NA_character_),
+      link_uncertainty_approximation = as.character(
+        fit_contract$uncertainty_approximation %||% NA_character_
+      ),
       link_diagnostics_divergences = as.integer(fit_diag$divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(fit_diag$max_rhat %||% NA_real_),
       link_diagnostics_min_ess_bulk = as.double(fit_diag$min_ess_bulk %||% NA_real_),
@@ -3231,31 +3999,45 @@
       link_diagnostics_ess_pass = as.logical(fit_diag$diagnostics_ess_pass %||% NA),
       hub_anchored = as.logical(hub_anchored),
       scale_ready = as.logical(scale_ready),
+      stop_blocker_codes = as.character(stop_blockers$codes),
       probe_brier = as.double(probe_brier),
+      probe_brier_max_used = as.double(probe_brier_max_used),
+      probe_brier_pass = as.logical(probe_brier_pass),
       probe_pred_rmse_lagged = as.double(probe_pred_rmse_lagged),
+      probe_pred_rmse_max_used = as.double(probe_pred_rmse_max_used),
+      probe_pred_rmse_pass = as.logical(probe_pred_rmse_pass),
       theta_global_rmse_scope = as.character(controller$theta_global_rmse_scope %||% "direct_evidence_spoke"),
       theta_global_rmse_lagged = as.double(theta_global_rmse_lagged),
+      theta_global_rmse_max_used = as.double(theta_global_rmse_max_used),
+      theta_global_rmse_pass = as.logical(theta_global_rmse_pass),
       escalated_this_refit = as.logical(escalated_this_refit),
-      escalation_consecutive_pass_count = as.integer(escalation_counter),
+      escalation_recent_pass_count = as.integer(escalation_recent_pass_count),
+      escalation_recent_window_size = as.integer(escalation_recent_window_size),
       probe_brier_shift_only = as.double(probe_brier_shift_only),
       probe_brier_shift_scale = as.double(probe_brier_shift_scale),
       probe_brier_delta = as.double(probe_brier_delta),
       log_alpha_spoke_sd_alt = as.double(alt_fit$log_alpha_sd %||% NA_real_),
       alt_eval_active_edges = as.integer(nrow(cross_active_epoch)),
       alt_eval_converged = as.logical(alt_fit$converged %||% FALSE),
-      alternative_fit_method = "map_laplace",
+      alternative_fit_method = as.character(alt_fit$fit_method %||% "map_laplace_hessian"),
+      alternative_uncertainty_approximation = as.character(
+        alt_fit$uncertainty_approximation %||% "laplace_hessian"
+      ),
       probe_brier_delta_min_used = as.double(controller$probe_brier_delta_min %||% 0.005),
       logalpha_sd_guardrail_used = as.double(controller$logalpha_sd_guardrail %||% 0.10),
       probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 30L),
-      link_transform_escalation_refits_required_used = as.integer(
-        controller$link_transform_escalation_refits_required %||% 2L
-      ),
+      link_transform_escalation_window_refits_used = as.integer(escalation_window_refits_used),
+      link_transform_escalation_passes_required_used = as.integer(escalation_passes_required_used),
       n_probe_pairs_since_last_refit = as.integer(nrow(cross_since_probe)),
       n_cross_edges_active_since_last_refit = as.integer(nrow(cross_since_active)),
       n_cross_edges_probe_since_last_refit = as.integer(nrow(cross_since_probe)),
       n_cross_edges_total_since_last_refit = as.integer(nrow(cross_since)),
       coverage_bins_used = as.integer(coverage_bins_map[[key]] %||% NA_integer_),
       coverage_source = as.character(coverage_source_map[[key]] %||% NA_character_),
+      probe_panel_id = as.character(probe_panel_id_eval),
+      probe_edges_planned = as.integer(probe_edges_planned_eval),
+      probe_edges_realized = as.integer(probe_edges_realized_eval),
+      probe_panel_shortfall = as.integer(probe_panel_shortfall_eval),
       active_item_count_hub = as.integer(length(active$active_hub)),
       active_item_count_spoke = as.integer(length(scope_ids)),
       active_item_count_total = as.integer(length(active$active_all)),
@@ -3297,8 +4079,8 @@
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
   controller$linking_identified_by_spoke <- link_identified_map
-  controller$link_stop_consecutive_pass_count_by_spoke <- stop_counter_map
-  controller$link_escalation_consecutive_pass_count_by_spoke <- escalation_counter_map
+  controller$link_stop_recent_pass_window_by_spoke <- stop_window_map
+  controller$link_escalation_recent_pass_window_by_spoke <- escalation_window_map
   controller$link_epoch_id_by_spoke <- epoch_id_map
   controller$link_epoch_signature_by_spoke <- epoch_signature_map
   controller$link_epoch_start_step_by_spoke <- epoch_start_step_map
@@ -3341,11 +4123,22 @@
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
-  budget_map <- .adaptive_link_budget_map_for_refit(
-    state = state,
-    controller = controller,
-    eligible_spoke_ids = spoke_ids
-  )
+  stopped_map <- controller$link_stopped_by_spoke %||% list()
+  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  cached_budget_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+  cached_budget_map <- controller$link_budget_map %||% list()
+  if (!is.na(cached_budget_refit_id) &&
+    identical(cached_budget_refit_id, as.integer(refit_id)) &&
+    length(cached_budget_map) > 0L) {
+    budget_map <- cached_budget_map[as.character(spoke_ids)]
+    budget_map <- budget_map[!vapply(budget_map, is.null, logical(1L))]
+  } else {
+    budget_map <- .adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = spoke_ids
+    )
+  }
 
   for (idx in seq_along(spoke_ids)) {
     spoke_id <- as.integer(spoke_ids[[idx]])
@@ -3380,23 +4173,32 @@
     }
 
     n_pairs_done <- as.integer(nrow(cumulative))
+    since_last_probe_flag <- .adaptive_link_is_holdout_probe_rows(since_last)
     since_last_probe <- since_last[
-      as.character(since_last$run_mode) == "link_probe" | since_last$is_probe_step %in% TRUE,
+      since_last_probe_flag,
       ,
       drop = FALSE
     ]
     since_last_active <- since_last[
-      !(as.character(since_last$run_mode) == "link_probe" | since_last$is_probe_step %in% TRUE),
+      !since_last_probe_flag,
       ,
       drop = FALSE
     ]
     n_pairs_since_probe <- as.integer(nrow(since_last_probe))
     n_pairs_since_active <- as.integer(nrow(since_last_active))
     n_pairs_since_total <- as.integer(nrow(since_last))
-    budget_info <- budget_map[[key]] %||% list(
-      B_spoke_refit_budget = .adaptive_link_refit_budget_default(as.integer(state$n_items), controller),
-      B_spoke_refit_budget_source = "single_spoke_default"
-    )
+    retired_spoke <- isTRUE(stopped_map[[key]]) || isTRUE(frozen_map[[key]])
+    budget_info <- budget_map[[key]] %||% if (isTRUE(retired_spoke)) {
+      list(
+        B_spoke_refit_budget = 0L,
+        B_spoke_refit_budget_source = "frozen_spoke_retired"
+      )
+    } else {
+      list(
+        B_spoke_refit_budget = .adaptive_link_refit_budget_default(as.integer(state$n_items), controller),
+        B_spoke_refit_budget_source = "single_spoke_default"
+      )
+    }
     quota_controller <- controller
     quota_controller$current_link_spoke_id <- as.integer(spoke_id)
     quota_controller$B_spoke_refit_budget <- as.integer(budget_info$B_spoke_refit_budget %||% NA_integer_)
@@ -3407,6 +4209,14 @@
       round_id = as.integer(state$round$round_id %||% 1L),
       n_items = as.integer(state$n_items),
       controller = quota_controller
+    )
+    stage_quotas <- .adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = .adaptive_stage_order(),
+      refit_id = as.integer(refit_id)
     )
     quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
     quota_long_link_raw <- as.integer(quota_meta$long_quota_raw %||% NA_integer_)
@@ -3421,6 +4231,11 @@
     quota_taper_spoke_id <- as.integer(quota_meta$link_spoke_id %||% spoke_id)
     stage_order <- .adaptive_stage_order()
     committed_stage <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+    refit_spoke_key <- .adaptive_link_refit_spoke_key(
+      refit_id = as.integer(refit_id),
+      spoke_id = as.integer(spoke_id)
+    )
+    tracked_shortfalls <- .adaptive_link_refit_shortfalls_map(state)[[refit_spoke_key]] %||% list()
     refit_step_end <- if ("step_id" %in% names(step_log) && nrow(step_log) > 0L) {
       as.integer(max(as.integer(step_log$step_id), na.rm = TRUE))
     } else {
@@ -3445,28 +4260,108 @@
         committed_stage[names(tab_stage)] <- as.integer(tab_stage)
       }
     }
-    realized_active_budget_floor <- as.integer(sum(committed_stage))
-    if (sum(stage_quotas) < realized_active_budget_floor) {
-      quota_controller$B_spoke_refit_budget <- as.integer(realized_active_budget_floor)
-      quota_controller$B_spoke_refit_budget_source <- "refit_rows_reconciled_to_realized"
-      stage_quotas <- .adaptive_round_compute_quotas(
-        round_id = as.integer(state$round$round_id %||% 1L),
-        n_items = as.integer(state$n_items),
-        controller = quota_controller
+    stage_quotas <- stats::setNames(
+      vapply(
+        stage_order,
+        function(stage_name) {
+          as.integer(stage_quotas[[stage_name]] %||% 0L)
+        },
+        integer(1L)
+      ),
+      stage_order
+    )
+    stage_quotas[!is.finite(stage_quotas)] <- 0L
+    committed_stage[!is.finite(committed_stage)] <- 0L
+    authoritative_budget_total <- as.integer(
+      budget_info$B_spoke_refit_budget %||% sum(stage_quotas, na.rm = TRUE)
+    )
+    realized_active_budget_floor <- as.integer(sum(committed_stage, na.rm = TRUE))
+    if (is.finite(authoritative_budget_total) &&
+      authoritative_budget_total < realized_active_budget_floor) {
+      rlang::abort(
+        paste0(
+          "link_stage_log budget invariant failure: realized active counts exceed emitted budget ",
+          "for spoke_id=", as.integer(spoke_id),
+          " at refit_id=", as.integer(refit_id),
+          ". budget=", as.integer(authoritative_budget_total),
+          ", realized=", as.integer(realized_active_budget_floor),
+          "."
+        )
       )
-      quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
-      quota_long_link_raw <- as.integer(quota_meta$long_quota_raw %||% NA_integer_)
-      quota_long_link_effective <- as.integer(quota_meta$long_quota_effective %||%
-        stage_quotas[["long_link"]] %||% NA_integer_)
-      quota_long_link_removed <- as.integer(quota_meta$long_quota_removed %||% NA_integer_)
-      quota_taper_applied <- if (!is.na(quota_long_link_raw) && !is.na(quota_long_link_effective)) {
-        as.logical(quota_long_link_effective < quota_long_link_raw)
-      } else {
-        as.logical(quota_meta$taper_applied %||% FALSE)
+    }
+    tracked_targets <- stats::setNames(rep.int(NA_integer_, length(stage_order)), stage_order)
+    for (stage_name in stage_order) {
+      shortfall_val <- as.integer(tracked_shortfalls[[stage_name]] %||% NA_integer_)
+      if (is.finite(shortfall_val)) {
+        tracked_targets[[stage_name]] <- as.integer((committed_stage[[stage_name]] %||% 0L) + shortfall_val)
       }
-      quota_taper_spoke_id <- as.integer(quota_meta$link_spoke_id %||% spoke_id)
-      budget_info$B_spoke_refit_budget <- as.integer(realized_active_budget_floor)
-      budget_info$B_spoke_refit_budget_source <- "refit_rows_reconciled_to_realized"
+    }
+    has_tracked_targets <- any(is.finite(tracked_targets))
+    stage_total <- as.integer(sum(stage_quotas, na.rm = TRUE))
+    needs_completed_window_reconcile <- isTRUE(has_tracked_targets) ||
+      stage_total < realized_active_budget_floor
+    if (isTRUE(needs_completed_window_reconcile) &&
+      is.finite(authoritative_budget_total) &&
+      authoritative_budget_total >= 0L) {
+      if (isTRUE(has_tracked_targets)) {
+        for (stage_name in stage_order) {
+          if (is.finite(tracked_targets[[stage_name]])) {
+            stage_quotas[[stage_name]] <- as.integer(tracked_targets[[stage_name]])
+          }
+        }
+      }
+      stage_quotas <- stats::setNames(
+        pmax(as.integer(stage_quotas), as.integer(committed_stage)),
+        stage_order
+      )
+      stage_total <- as.integer(sum(stage_quotas, na.rm = TRUE))
+      if (stage_total != authoritative_budget_total) {
+        slack <- pmax(as.integer(stage_quotas) - as.integer(committed_stage), 0L)
+        names(slack) <- stage_order
+        if (stage_total > authoritative_budget_total) {
+          excess <- as.integer(stage_total - authoritative_budget_total)
+          reduce_order <- names(sort(slack, decreasing = TRUE))
+          for (stage_name in reduce_order) {
+            if (excess <= 0L) {
+              break
+            }
+            reducible <- min(excess, slack[[stage_name]])
+            if (reducible > 0L) {
+              stage_quotas[[stage_name]] <- as.integer(stage_quotas[[stage_name]] - reducible)
+              excess <- as.integer(excess - reducible)
+            }
+          }
+        } else {
+          remainder <- as.integer(authoritative_budget_total - stage_total)
+          add_order <- names(sort(as.integer(stage_quotas), decreasing = TRUE))
+          if (length(add_order) < 1L) {
+            add_order <- stage_order
+          }
+          if (all(replace(as.integer(stage_quotas[add_order]), is.na(as.integer(stage_quotas[add_order])), 0L) == 0L)) {
+            add_order <- stage_order
+          }
+          pos <- 1L
+          while (remainder > 0L && length(add_order) > 0L) {
+            stage_name <- add_order[[pos]]
+            stage_quotas[[stage_name]] <- as.integer(stage_quotas[[stage_name]] + 1L)
+            remainder <- as.integer(remainder - 1L)
+            pos <- if (pos >= length(add_order)) 1L else pos + 1L
+          }
+        }
+      }
+    }
+    stage_budget_total <- as.integer(sum(stage_quotas, na.rm = TRUE))
+    if (stage_budget_total < realized_active_budget_floor) {
+      rlang::abort(
+        paste0(
+          "link_stage_log budget invariant failure: realized active counts exceed emitted budget ",
+          "for spoke_id=", as.integer(spoke_id),
+          " at refit_id=", as.integer(refit_id),
+          ". budget=", as.integer(stage_budget_total),
+          ", realized=", as.integer(realized_active_budget_floor),
+          "."
+        )
+      )
     }
     n_unique <- 0L
     if (nrow(cumulative) > 0L && all(c("A", "B") %in% names(cumulative))) {
@@ -3525,19 +4420,88 @@
       (isTRUE(lag_eligible) && isTRUE(link_min_refit_eligible) && isTRUE(link_stop_gate_open)))
     link_stop_pass <- as.logical(stats_row$link_stop_pass %||% FALSE)
     transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE) || isTRUE(link_stop_pass)
+    stats_epoch_id <- as.integer(stats_row$link_epoch_id %||% .adaptive_link_probe_epoch_for_spoke(state, spoke_id))
     probe_panel <- .adaptive_link_probe_panel_for_spoke(
       state,
       spoke_id = as.integer(spoke_id),
-      epoch_id = .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
+      epoch_id = stats_epoch_id
     )
-    probe_panel_id <- if (nrow(probe_panel) > 0L) {
-      as.character(probe_panel$probe_panel_id[[1L]] %||% NA_character_)
-    } else {
-      NA_character_
+    probe_panel_id <- as.character(
+      stats_row$probe_panel_id %||%
+        if (nrow(probe_panel) > 0L) probe_panel$probe_panel_id[[1L]] else NA_character_
+    )
+    probe_edges_planned <- as.integer(stats_row$probe_edges_planned %||% nrow(probe_panel))
+    realized_probe_log <- .adaptive_link_probe_realized_log_for_panel(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(stats_epoch_id),
+      panel = probe_panel
+    )
+    realized_probe_log_current_window <- realized_probe_log[
+      as.integer(realized_probe_log$step_id) > refit_step_start &
+        as.integer(realized_probe_log$step_id) <= refit_step_end,
+      ,
+      drop = FALSE
+    ]
+    canonical_probe_edges_realized <- as.integer(nrow(realized_probe_log))
+    probe_edges_realized_before_refit <- as.integer(
+      max(0L, canonical_probe_edges_realized - nrow(realized_probe_log_current_window))
+    )
+    prior_probe_edges_realized_max <- .adaptive_link_probe_prior_realized_max(
+      link_stage_log = state$link_stage_log,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(stats_epoch_id),
+      refit_id = as.integer(refit_id)
+    )
+    if (is.finite(prior_probe_edges_realized_max) &&
+      canonical_probe_edges_realized < prior_probe_edges_realized_max) {
+      rlang::abort(
+        paste0(
+          "Phase B probe monotonicity invariant failed: canonical `probe_edges_realized` decreased ",
+          "within link_epoch_id=", as.integer(stats_epoch_id),
+          " for spoke_id=", as.integer(spoke_id),
+          ". prior_max=", as.integer(prior_probe_edges_realized_max),
+          ", current=", as.integer(canonical_probe_edges_realized),
+          "."
+        )
+      )
     }
-    probe_edges_planned <- as.integer(nrow(probe_panel))
-    probe_edges_realized <- as.integer(sum(probe_panel$realized %in% TRUE, na.rm = TRUE))
-    probe_panel_shortfall <- as.integer(max(0L, probe_edges_planned - probe_edges_realized))
+    if (nrow(since_last_probe) > 0L &&
+      !identical(as.integer(nrow(since_last_probe)), as.integer(nrow(realized_probe_log_current_window)))) {
+      rlang::abort(
+        paste0(
+          "Phase B probe accounting invariant failed: `n_probe_pairs_since_last_refit` from committed ",
+          "probe steps does not match canonical realized probe rows for spoke_id=",
+          as.integer(spoke_id),
+          " at refit_id=", as.integer(refit_id),
+          ". steps=", as.integer(nrow(since_last_probe)),
+          ", canonical=", as.integer(nrow(realized_probe_log_current_window)),
+          "."
+        )
+      )
+    }
+    n_pairs_since_probe <- as.integer(nrow(realized_probe_log_current_window))
+    probe_edges_realized <- canonical_probe_edges_realized
+    probe_edges_realized_delta_since_last_refit <- as.integer(n_pairs_since_probe)
+    probe_panel_shortfall <- as.integer(
+      max(0L, probe_edges_planned - probe_edges_realized)
+    )
+    probe_shortfall_reason <- if (probe_panel_shortfall < 1L) {
+      "none"
+    } else if (identical(as.character(stats_row$lag_domain_reset_reason %||% NA_character_), "probe_panel_rebuild")) {
+      "probe_panel_rebuild"
+    } else if (!is.na(as.character(stats_row$lag_domain_reset_reason %||% NA_character_))) {
+      "epoch_reset"
+    } else {
+      "insufficient_realization"
+    }
+    probe_effort_plan <- .adaptive_link_probe_effort_plan(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id)
+    )
+    probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+    probe_panel_reallocation_used <- as.logical(n_pairs_since_probe > probe_effort_base_cap)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
     probe_pred_cache_used <- nrow(probe_cache[
       as.integer(probe_cache$refit_id) == as.integer(refit_id) &
@@ -3546,7 +4510,8 @@
       drop = FALSE
     ]) > 0L
 
-    reallocation_used <- any(committed_stage > stage_quotas, na.rm = TRUE)
+    reallocation_used <- isTRUE(quota_meta$feasibility_reallocation_used %||% FALSE) ||
+      any(committed_stage > stage_quotas, na.rm = TRUE)
     reallocation_rule <- if (isTRUE(reallocation_used)) "pooled_utility_backfill" else "none"
     rows[[idx]] <- list(
       refit_id = as.integer(refit_id),
@@ -3576,14 +4541,13 @@
       log_alpha_spoke_sd = as.double(stats_row$log_alpha_spoke_sd %||% NA_real_),
       delta_change_lagged = as.double(stats_row$delta_change_lagged %||% NA_real_),
       log_alpha_change_lagged = as.double(stats_row$log_alpha_change_lagged %||% NA_real_),
-      delta_change_pass = as.logical(stats_row$delta_change_pass %||% NA),
-      log_alpha_change_pass = as.logical(stats_row$log_alpha_change_pass %||% NA),
-      delta_sd_max_used = as.double(stats_row$delta_sd_max_used %||% NA_real_),
-      delta_sd_pass = as.logical(stats_row$delta_sd_pass %||% NA),
-      log_alpha_sd_pass = as.logical(stats_row$log_alpha_sd_pass %||% NA),
-      reliability_EAP_link = as.double(stats_row$link_reliability %||% NA_real_),
       reliability_link_global = as.double(
         stats_row$reliability_link_global %||% stats_row$link_reliability %||% NA_real_
+      ),
+      link_stop_reliability_min_used = as.double(
+        stats_row$link_stop_reliability_min_used %||%
+          controller$link_stop_reliability_min %||%
+          0.90
       ),
       reliability_stop_pass = as.logical(stats_row$link_reliability_stop_pass %||% NA),
       linking_identified = as.logical(linking_identified),
@@ -3592,27 +4556,57 @@
       link_min_refit_eligible = as.logical(stats_row$link_min_refit_eligible %||% FALSE),
       link_stop_gate_open = as.logical(stats_row$link_stop_gate_open %||% FALSE),
       rank_stability_lagged = as.double(stats_row$rank_stability_lagged %||% NA_real_),
-      rank_stability_pass = as.logical(stats_row$rank_stability_pass %||% FALSE),
       link_stop_eligible = as.logical(link_stop_eligible),
-      stop_consecutive_pass_count = as.integer(stats_row$stop_consecutive_pass_count %||% 0L),
+      stop_recent_pass_count = as.integer(
+        stats_row$stop_recent_pass_count %||% stats_row$stop_consecutive_pass_count %||% 0L
+      ),
+      stop_recent_window_size = as.integer(
+        stats_row$stop_recent_window_size %||% stats_row$stop_consecutive_pass_count %||% 0L
+      ),
       link_stop_pass = as.logical(link_stop_pass),
+      stability_window_refits_used = as.integer(
+        stats_row$stability_window_refits_used %||%
+          controller$stability_window_refits %||%
+          3L
+      ),
+      stability_passes_required_used = as.integer(
+        stats_row$stability_passes_required_used %||%
+          stats_row$stability_consecutive_k %||%
+          controller$stability_passes_required %||%
+          controller$stability_consecutive_k %||%
+          2L
+      ),
       transform_frozen = as.logical(transform_frozen),
       transform_frozen_refit_id = as.integer(controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
         if (isTRUE(transform_frozen)) refit_id else NA_integer_),
-      link_epoch_id = as.integer(.adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)),
+      link_epoch_id = as.integer(stats_epoch_id),
       ts_btl_rank_spearman = as.double(stats_row$ts_btl_rank_spearman_active %||% NA_real_),
       ppc_brier_cross_active = as.double(stats_row$ppc_brier_cross_active %||% NA_real_),
       ppc_brier_cross_probe = as.double(stats_row$ppc_brier_cross_probe %||% NA_real_),
       ppc_brier_cross = as.double(stats_row$ppc_brier_cross %||% NA_real_),
       hub_anchored = as.logical(stats_row$hub_anchored %||% NA),
       scale_ready = as.logical(stats_row$scale_ready %||% NA),
+      stop_blocker_codes = as.character(stats_row$stop_blocker_codes %||% NA_character_),
+      link_fit_method = as.character(stats_row$link_fit_method %||% NA_character_),
+      link_uncertainty_approximation = as.character(
+        stats_row$link_uncertainty_approximation %||% NA_character_
+      ),
       link_diagnostics_divergences = as.integer(stats_row$link_diagnostics_divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(stats_row$link_diagnostics_max_rhat %||% NA_real_),
       link_diagnostics_min_ess_bulk = as.double(stats_row$link_diagnostics_min_ess_bulk %||% NA_real_),
       link_diagnostics_divergences_pass = as.logical(stats_row$link_diagnostics_divergences_pass %||% NA),
       link_diagnostics_rhat_pass = as.logical(stats_row$link_diagnostics_rhat_pass %||% NA),
       link_diagnostics_ess_pass = as.logical(stats_row$link_diagnostics_ess_pass %||% NA),
-      escalation_consecutive_pass_count = as.integer(stats_row$escalation_consecutive_pass_count %||% 0L),
+      escalation_recent_pass_count = as.integer(
+        stats_row$escalation_recent_pass_count %||%
+          stats_row$escalation_consecutive_pass_count %||%
+          0L
+      ),
+      escalation_recent_window_size = as.integer(
+        stats_row$escalation_recent_window_size %||%
+          stats_row$escalation_consecutive_pass_count %||%
+          0L
+      ),
       escalated_this_refit = as.logical(stats_row$escalated_this_refit %||% FALSE),
       probe_brier_shift_only = as.double(stats_row$probe_brier_shift_only %||% NA_real_),
       probe_brier_shift_scale = as.double(stats_row$probe_brier_shift_scale %||% NA_real_),
@@ -3638,6 +4632,23 @@
       stage_target_long_link = as.integer(stage_quotas[["long_link"]] %||% NA_integer_),
       stage_target_mid_link = as.integer(stage_quotas[["mid_link"]] %||% NA_integer_),
       stage_target_local_link = as.integer(stage_quotas[["local_link"]] %||% NA_integer_),
+      feasible_stage_capacity_anchor_link = as.integer(
+        quota_meta$feasible_stage_capacity_anchor_link %||% stage_quotas[["anchor_link"]] %||% NA_integer_
+      ),
+      feasible_stage_capacity_long_link = as.integer(
+        quota_meta$feasible_stage_capacity_long_link %||% stage_quotas[["long_link"]] %||% NA_integer_
+      ),
+      feasible_stage_capacity_mid_link = as.integer(
+        quota_meta$feasible_stage_capacity_mid_link %||% stage_quotas[["mid_link"]] %||% NA_integer_
+      ),
+      feasible_stage_capacity_local_link = as.integer(
+        quota_meta$feasible_stage_capacity_local_link %||% stage_quotas[["local_link"]] %||% NA_integer_
+      ),
+      feasibility_budget_released = as.integer(quota_meta$feasibility_budget_released %||% 0L),
+      feasibility_reallocation_used = as.logical(quota_meta$feasibility_reallocation_used %||% FALSE),
+      feasibility_reallocation_rule = as.character(
+        quota_meta$feasibility_reallocation_rule %||% "none"
+      ),
       stage_realized_anchor_link = as.integer(committed_stage[["anchor_link"]] %||% 0L),
       stage_realized_long_link = as.integer(committed_stage[["long_link"]] %||% 0L),
       stage_realized_mid_link = as.integer(committed_stage[["mid_link"]] %||% 0L),
@@ -3717,20 +4728,46 @@
       probe_panel_id = as.character(probe_panel_id),
       N_spoke_phase_b_start = as.integer(sum(as.integer(state$items$set_id) == as.integer(spoke_id), na.rm = TRUE)),
       probe_edges_planned = as.integer(probe_edges_planned),
+      probe_edges_realized_before_refit = as.integer(probe_edges_realized_before_refit),
       probe_edges_realized = as.integer(probe_edges_realized),
+      probe_edges_realized_delta_since_last_refit = as.integer(probe_edges_realized_delta_since_last_refit),
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
-      probe_panel_reallocation_used = as.logical(FALSE),
+      probe_shortfall_reason = as.character(probe_shortfall_reason),
+      probe_acceleration_used = as.logical(probe_effort_plan$acceleration_used %||% FALSE),
+      probe_effort_base_cap = as.integer(probe_effort_plan$base_cap %||% probe_effort_base_cap),
+      probe_effort_effective_cap = as.integer(
+        probe_effort_plan$effective_cap %||% probe_effort_base_cap
+      ),
+      probe_remaining_to_min_start = as.integer(
+        probe_effort_plan$remaining_to_min_start %||% NA_integer_
+      ),
+      probe_panel_reallocation_used = as.logical(probe_panel_reallocation_used),
       probe_pred_cache_used = as.logical(probe_pred_cache_used),
       probe_brier = as.double(stats_row$probe_brier %||% NA_real_),
+      probe_brier_max_used = as.double(
+        stats_row$probe_brier_max_used %||% controller$probe_brier_max %||% 0.19
+      ),
+      probe_brier_pass = as.logical(stats_row$probe_brier_pass %||% NA),
       probe_pred_rmse_lagged = as.double(stats_row$probe_pred_rmse_lagged %||% NA_real_),
+      probe_pred_rmse_max_used = as.double(
+        stats_row$probe_pred_rmse_max_used %||% controller$probe_pred_rmse_max %||% 0.015
+      ),
+      probe_pred_rmse_pass = as.logical(stats_row$probe_pred_rmse_pass %||% NA),
       theta_global_rmse_scope = as.character(
         stats_row$theta_global_rmse_scope %||% controller$theta_global_rmse_scope %||% "direct_evidence_spoke"
       ),
       theta_global_rmse_lagged = as.double(stats_row$theta_global_rmse_lagged %||% NA_real_),
+      theta_global_rmse_max_used = as.double(
+        stats_row$theta_global_rmse_max_used %||% controller$theta_global_rmse_max %||% 0.05
+      ),
+      theta_global_rmse_pass = as.logical(stats_row$theta_global_rmse_pass %||% NA),
       probe_edges_min_for_stop_used = as.integer(
         stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 30L
       ),
       alternative_fit_method = as.character(stats_row$alternative_fit_method %||% NA_character_),
+      alternative_uncertainty_approximation = as.character(
+        stats_row$alternative_uncertainty_approximation %||% NA_character_
+      ),
       alt_eval_active_edges = as.integer(stats_row$alt_eval_active_edges %||% NA_integer_),
       alt_eval_converged = as.logical(stats_row$alt_eval_converged %||% NA),
       probe_brier_delta_min_used = as.double(
@@ -3739,8 +4776,17 @@
       logalpha_sd_guardrail_used = as.double(
         stats_row$logalpha_sd_guardrail_used %||% controller$logalpha_sd_guardrail %||% 0.10
       ),
-      link_transform_escalation_refits_required_used = as.integer(
-        stats_row$link_transform_escalation_refits_required_used %||%
+      link_transform_escalation_window_refits_used = as.integer(
+        stats_row$link_transform_escalation_window_refits_used %||%
+          stats_row$link_transform_escalation_refits_required_used %||%
+          controller$link_transform_escalation_window_refits %||%
+          controller$link_transform_escalation_refits_required %||%
+          3L
+      ),
+      link_transform_escalation_passes_required_used = as.integer(
+        stats_row$link_transform_escalation_passes_required_used %||%
+          stats_row$link_transform_escalation_refits_required_used %||%
+          controller$link_transform_escalation_passes_required %||%
           controller$link_transform_escalation_refits_required %||%
           2L
       ),
@@ -3748,7 +4794,9 @@
         controller$probe_edges_count_toward_active_constraints %||% FALSE
       ),
       lag_domain_key = as.character(stats_row$lag_domain_key %||% NA_character_),
-      lag_domain_reset = as.logical(stats_row$lag_domain_reset %||% NA)
+      lag_domain_reset = as.logical(stats_row$lag_domain_reset %||% NA),
+      lag_domain_reset_reason = as.character(stats_row$lag_domain_reset_reason %||% NA_character_),
+      resumed_from_session = as.logical(.adaptive_is_resumed_session(state))
     )
   }
 
@@ -3760,22 +4808,36 @@
 #' @keywords internal
 #' @noRd
 .adaptive_assert_link_stage_rows_completeness <- function(link_rows) {
-  rows <- tibble::as_tibble(link_rows)
+  rows <- .adaptive_link_stage_backfill_audit_columns(link_rows)
   if (nrow(rows) < 1L) {
     return(invisible(TRUE))
   }
   required <- c(
     "refit_id", "spoke_id", "hub_id", "link_transform_policy", "link_transform_state", "link_refit_mode",
-    "hub_lock_mode", "reliability_EAP_link", "linking_identified", "link_stop_eligible", "link_stop_pass",
+    "hub_lock_mode", "reliability_link_global", "linking_identified", "link_stop_eligible", "link_stop_pass",
     "transform_frozen",
+    "stop_recent_pass_count", "stop_recent_window_size",
+    "stability_window_refits_used", "stability_passes_required_used",
+    "escalation_recent_pass_count", "escalation_recent_window_size",
+    "link_transform_escalation_window_refits_used",
+    "link_transform_escalation_passes_required_used",
     "n_pairs_cross_set_done", "n_unique_cross_pairs_seen", "n_cross_edges_active_since_last_refit",
     "n_cross_edges_probe_since_last_refit", "n_cross_edges_total_since_last_refit", "coverage_bins_used",
     "B_spoke_refit_budget", "B_spoke_refit_budget_source",
     "stage_target_anchor_link", "stage_target_long_link", "stage_target_mid_link", "stage_target_local_link",
+    "feasible_stage_capacity_anchor_link", "feasible_stage_capacity_long_link",
+    "feasible_stage_capacity_mid_link", "feasible_stage_capacity_local_link",
+    "feasibility_budget_released", "feasibility_reallocation_used", "feasibility_reallocation_rule",
     "stage_realized_anchor_link", "stage_realized_long_link", "stage_realized_mid_link", "stage_realized_local_link",
     "stage_shortfall_anchor_link", "stage_shortfall_long_link", "stage_shortfall_mid_link",
     "stage_shortfall_local_link", "stage_reallocation_used", "stage_reallocation_rule_used",
-    "stage_budget_unfilled"
+    "stage_budget_unfilled",
+    "probe_edges_realized_before_refit", "probe_edges_realized_delta_since_last_refit",
+    "probe_shortfall_reason",
+    "probe_brier", "probe_brier_max_used", "probe_brier_pass",
+    "probe_pred_rmse_lagged", "probe_pred_rmse_max_used", "probe_pred_rmse_pass",
+    "theta_global_rmse_lagged", "theta_global_rmse_max_used", "theta_global_rmse_pass",
+    "resumed_from_session"
   )
   missing <- setdiff(required, names(rows))
   if (length(missing) > 0L) {
@@ -3875,6 +4937,50 @@
   step_log <- tibble::as_tibble(state$step_log)
   step_subset <- step_log[step_log$step_id > last_step &
     step_log$step_id <= step_id_at_refit, , drop = FALSE]
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  phase_b_linking <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
+  if (!"pair_id" %in% names(step_subset)) {
+    step_subset$pair_id <- NA_integer_
+  }
+  if (!"is_cross_set" %in% names(step_subset)) {
+    step_subset$is_cross_set <- FALSE
+  }
+  if (!"run_mode" %in% names(step_subset)) {
+    step_subset$run_mode <- NA_character_
+  }
+  if (!"is_probe_step" %in% names(step_subset)) {
+    step_subset$is_probe_step <- FALSE
+  }
+  committed_subset <- step_subset[!is.na(step_subset$pair_id), , drop = FALSE]
+  cross_subset <- committed_subset[committed_subset$is_cross_set %in% TRUE, , drop = FALSE]
+  probe_subset <- cross_subset[
+    as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
+      cross_subset$is_probe_step %in% TRUE,
+    ,
+    drop = FALSE
+  ]
+  active_subset <- cross_subset[
+    !(as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
+      cross_subset$is_probe_step %in% TRUE),
+    ,
+    drop = FALSE
+  ]
+  new_active_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
+    as.integer(nrow(active_subset))
+  } else {
+    NA_integer_
+  }
+  new_probe_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
+    as.integer(nrow(probe_subset))
+  } else {
+    NA_integer_
+  }
+  new_total_cross_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
+    as.integer(nrow(cross_subset))
+  } else {
+    NA_integer_
+  }
 
   proposed_pairs <- step_subset$n_candidates_scored
   proposed_pairs_mode <- if (length(proposed_pairs) > 0L && any(!is.na(proposed_pairs))) {
@@ -4090,7 +5196,6 @@
   } else {
     as.integer(round_id_current)
   }
-  controller <- .adaptive_controller_resolve(state)
   max_pairs_after_stop <- as.integer(controller$max_pairs_after_stop %||% 0L)
   if (!is.finite(max_pairs_after_stop) || is.na(max_pairs_after_stop) || max_pairs_after_stop < 0L) {
     max_pairs_after_stop <- 0L
@@ -4116,6 +5221,9 @@
     n_items = as.integer(state$n_items),
     total_pairs_done = as.integer(total_pairs_done),
     new_pairs_since_last_refit = as.integer(new_pairs_since_last_refit),
+    new_active_pairs_since_last_refit = as.integer(new_active_pairs_since_last_refit),
+    new_probe_pairs_since_last_refit = as.integer(new_probe_pairs_since_last_refit),
+    new_total_cross_pairs_since_last_refit = as.integer(new_total_cross_pairs_since_last_refit),
     n_unique_pairs_seen = as.integer(n_unique_pairs_seen),
     proposed_pairs_mode = as.double(proposed_pairs_mode),
     starve_rate_since_last_refit = as.double(starve_rate),
@@ -4244,7 +5352,7 @@ default_btl_fit_fn <- function(state, config) {
     results = results,
     ids = ids_fit,
     model_variant = config$model_variant %||% "btl_e_b",
-    cmdstan = config$cmdstan %||% list()
+    cmdstan = config[["cmdstan"]] %||% list()
   )
 
   fit_contract <- .adaptive_btl_extract_fit_contract(fit_out)
@@ -4273,6 +5381,22 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
     last_refit_committed = last_refit_M_done,
     refit_pairs_target = refit_pairs_target
   )
+  if (!isTRUE(eligibility$eligible)) {
+    controller <- .adaptive_controller_resolve(state)
+    phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+    step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+    latest_starved <- if (nrow(step_log) > 0L && "candidate_starved" %in% names(step_log)) {
+      isTRUE(step_log$candidate_starved[[nrow(step_log)]])
+    } else {
+      FALSE
+    }
+    if (.adaptive_link_mode_active(controller) &&
+      identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b") &&
+      isTRUE(latest_starved) &&
+      isTRUE(M_done > last_refit_M_done)) {
+      eligibility$eligible <- TRUE
+    }
+  }
   if (!isTRUE(eligibility$eligible)) {
     return(list(
       state = state,
@@ -4358,6 +5482,24 @@ compute_stop_metrics <- function(state, config) {
 
   ids <- as.character(state$item_ids)
   theta_mean_named <- .adaptive_btl_fit_theta_mean(fit)
+  theta_history <- state$refit_meta$theta_mean_history %||% list()
+  controller <- .adaptive_controller_resolve(state)
+  if (isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
+    combined_draws <- .adaptive_phase_b_global_metric_draws(state, controller = controller)
+    if (is.matrix(combined_draws) && is.numeric(combined_draws)) {
+      draws <- combined_draws
+      theta_mean_named <- stats::setNames(as.double(colMeans(draws)), as.character(colnames(draws)))
+      theta_history <- state$refit_meta$phase_b_global_theta_mean_history %||% list()
+      expected_refit_id <- as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
+      if (length(theta_history) < expected_refit_id) {
+        theta_history <- c(
+          theta_history,
+          rep_len(list(NULL), expected_refit_id - length(theta_history))
+        )
+        theta_history[[expected_refit_id]] <- theta_mean_named
+      }
+    }
+  }
   theta_mean <- as.double(theta_mean_named)
   names(theta_mean) <- as.character(names(theta_mean_named))
   theta_sd_eap <- stats::sd(theta_mean)
@@ -4404,7 +5546,7 @@ compute_stop_metrics <- function(state, config) {
     is.finite(reliability_EAP) &&
     reliability_EAP >= eap_min
 
-  history <- state$refit_meta$theta_mean_history %||% list()
+  history <- theta_history
   current_refit <- length(history)
   use_scope_history <- identical(as.character(scope$phase_scope %||% "global"), "phase_a_set") &&
     is.finite(as.integer(scope$phase_scope_set_id %||% NA_integer_))

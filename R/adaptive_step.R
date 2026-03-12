@@ -146,10 +146,15 @@ validate_judge_result <- function(result, A_id, B_id) {
     stage_committed_so_far = NA_integer_,
     stage_quota = NA_integer_,
     n_candidates_generated = NA_integer_,
+    n_candidates_after_route_filters = NA_integer_,
+    n_candidates_after_active_domain = NA_integer_,
+    n_candidates_after_stage_filters = NA_integer_,
+    n_candidates_after_exposure_filters = NA_integer_,
     n_candidates_after_hard_filters = NA_integer_,
     n_candidates_after_duplicates = NA_integer_,
     n_candidates_after_star_caps = NA_integer_,
     n_candidates_scored = NA_integer_,
+    hard_filter_collapse_stage = NA_character_,
     deg_i = as.integer(counts$deg[[i_id]]),
     deg_j = as.integer(counts$deg[[j_id]]),
     recent_deg_i = as.integer(recent_deg[[i_id]]),
@@ -264,13 +269,20 @@ validate_judge_result <- function(result, A_id, B_id) {
     )
   }
   run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
+  if (identical(run_mode, "link_probe")) {
+    rlang::abort(
+      paste0(
+        "step_log append completeness failure: `run_mode = link_probe` is legacy-only and ",
+        "must not be emitted by the current Phase B runtime."
+      )
+    )
+  }
   is_link_run_mode <- run_mode %in% c(
     "link_one_spoke",
     "link_multi_spoke",
-    "link_probe_holdout",
-    "link_probe"
+    "link_probe_holdout"
   )
-  is_probe_run_mode <- run_mode %in% c("link_probe_holdout", "link_probe")
+  is_probe_run_mode <- identical(run_mode, "link_probe_holdout")
   holdout_flag <- if ("is_holdout_probe_step" %in% names(row)) {
     as.logical(row$is_holdout_probe_step[[1L]] %||% FALSE)
   } else {
@@ -279,7 +291,7 @@ validate_judge_result <- function(result, A_id, B_id) {
   drift_flag <- if ("is_drift_probe_step" %in% names(row)) {
     as.logical(row$is_drift_probe_step[[1L]] %||% FALSE)
   } else {
-    identical(run_mode, "link_probe")
+    FALSE
   }
   probe_flag <- if ("is_probe_step" %in% names(row)) {
     as.logical(row$is_probe_step[[1L]] %||% FALSE)
@@ -593,19 +605,38 @@ run_one_step <- function(state, judge, ...) {
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
+  if (.adaptive_link_mode_active(controller) &&
+    identical(phase_ctx$phase, "phase_b") &&
+    isTRUE(.adaptive_link_all_spokes_stopped(state))) {
+    return(state)
+  }
   if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
-    state$controller <- controller
-    state$controller$link_budget_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
-    state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
+    active_phase_b_spokes <- .adaptive_link_effective_active_spokes(
       state = state,
-      controller = state$controller,
-      eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+      controller = controller,
+      refit_id = .adaptive_link_refit_window_id(state),
+      exclude_exhausted = TRUE
     )
+    if (length(active_phase_b_spokes) < 1L) {
+      return(state)
+    }
+    state$controller <- controller
+    current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+    cached_refit_id <- as.integer(state$controller$link_budget_refit_id %||% NA_integer_)
+    cached_budget_map <- state$controller$link_budget_map %||% list()
+    if (!identical(cached_refit_id, current_refit_id) || length(cached_budget_map) < 1L) {
+      state$controller$link_budget_refit_id <- current_refit_id
+      state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
+        state = state,
+        controller = state$controller,
+        eligible_spoke_ids = as.integer(active_phase_b_spokes)
+      )
+    }
     controller <- state$controller
     state <- .adaptive_link_probe_ensure_panels(
       state,
       controller = controller,
-      spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+      spoke_ids = as.integer(active_phase_b_spokes)
     )
   }
 
@@ -615,16 +646,17 @@ run_one_step <- function(state, judge, ...) {
     state <- .adaptive_refresh_round_anchors(state)
     probe_selection <- NULL
     if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
-      probe_spoke_id <- .adaptive_link_active_spoke(
+      probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
         state,
         controller,
-        eligible_spoke_ids = as.integer(phase_ctx$active_spokes %||% integer())
+        eligible_spoke_ids = .adaptive_link_effective_active_spokes(
+          state = state,
+          controller = controller,
+          refit_id = .adaptive_link_refit_window_id(state),
+          exclude_exhausted = TRUE
+        )
       )
-      frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
-      probe_flags <- .adaptive_link_probe_state(state)$collect_holdout_now_by_spoke %||% list()
-      if (!is.na(probe_spoke_id) &&
-        isTRUE(probe_flags[[as.character(probe_spoke_id)]]) &&
-        !isTRUE(frozen_map[[as.character(probe_spoke_id)]])) {
+      if (!is.na(probe_spoke_id)) {
         probe_selection <- .adaptive_link_probe_select_holdout(
           state,
           step_id = step_id,
@@ -708,15 +740,26 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_integer_
   }
+  selected_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
   if (isTRUE(is_cross_set) && is.na(link_spoke_id)) {
-    selected_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
     if (!is.na(selected_spoke_id) && selected_spoke_id %in% c(set_i, set_j)) {
       link_spoke_id <- selected_spoke_id
     }
   }
+  if (is.na(link_spoke_id) &&
+    isTRUE(selection$candidate_starved %||% FALSE) &&
+    !is.na(selected_spoke_id)) {
+    link_spoke_id <- selected_spoke_id
+  }
   frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
   if (isTRUE(is_cross_set) && !is.na(link_spoke_id) && isTRUE(frozen_map[[as.character(link_spoke_id)]])) {
-    run_mode <- "link_probe"
+    rlang::abort(
+      paste0(
+        "Phase B retirement invariant failed: runtime attempted to emit a cross-set step for frozen ",
+        "spoke_id=", as.integer(link_spoke_id),
+        "."
+      )
+    )
   }
   if (is.character(selection$run_mode) && length(selection$run_mode) == 1L &&
     !is.na(selection$run_mode) && selection$run_mode != "") {
@@ -730,7 +773,7 @@ run_one_step <- function(state, judge, ...) {
       .adaptive_link_transform_state_for_spoke(controller, link_spoke_id))
   }
   link_stage <- if (isTRUE(is_cross_set) &&
-    selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link")) {
+    selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel")) {
     selection$round_stage
   } else {
     NA_character_
@@ -738,26 +781,30 @@ run_one_step <- function(state, judge, ...) {
   is_link_run_mode <- run_mode %in% c(
     "link_one_spoke",
     "link_multi_spoke",
-    "link_probe_holdout",
-    "link_probe"
+    "link_probe_holdout"
   )
-  is_probe_step <- if (isTRUE(is_cross_set) && run_mode %in% c("link_probe_holdout", "link_probe")) TRUE else FALSE
+  is_probe_step <- isTRUE(is_cross_set) && identical(run_mode, "link_probe_holdout")
   is_holdout_probe_step <- isTRUE(is_probe_step) && identical(run_mode, "link_probe_holdout")
-  is_drift_probe_step <- isTRUE(is_probe_step) && identical(run_mode, "link_probe")
+  is_drift_probe_step <- FALSE
   if (isTRUE(is_probe_step)) {
     utility_mode <- NA_character_
   }
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
-    isTRUE(is_link_run_mode) &&
-    !isTRUE(is_probe_step) &&
-    identical(utility_mode, "linking_d_optimal")) {
-    as.double(
-      if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {
-        selection$link_d_opt_gain
-      } else {
-        selection$link_u %||% selection$U0_ij %||% NA_real_
-      }
-    )
+    isTRUE(is_link_run_mode)) {
+    explicit_utility <- as.double(selection$cross_set_utility_pre %||% NA_real_)
+    if (is.finite(explicit_utility)) {
+      explicit_utility
+    } else if (identical(utility_mode, "linking_d_optimal")) {
+      as.double(
+        if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {
+          selection$link_d_opt_gain
+        } else {
+          selection$link_u %||% selection$U0_ij %||% NA_real_
+        }
+      )
+    } else {
+      NA_real_
+    }
   } else {
     NA_real_
   }
@@ -850,11 +897,16 @@ run_one_step <- function(state, judge, ...) {
     fallback_used = selection$fallback_used,
     fallback_path = selection$fallback_path,
     starvation_reason = selection$starvation_reason,
-    n_candidates_generated = selection$n_candidates_generated,
-    n_candidates_after_hard_filters = selection$n_candidates_after_hard_filters,
-    n_candidates_after_duplicates = selection$n_candidates_after_duplicates,
-    n_candidates_after_star_caps = selection$n_candidates_after_star_caps,
-    n_candidates_scored = selection$n_candidates_scored,
+    n_candidates_generated = selection$n_candidates_generated %||% NA_integer_,
+    n_candidates_after_route_filters = selection$n_candidates_after_route_filters %||% NA_integer_,
+    n_candidates_after_active_domain = selection$n_candidates_after_active_domain %||% NA_integer_,
+    n_candidates_after_stage_filters = selection$n_candidates_after_stage_filters %||% NA_integer_,
+    n_candidates_after_exposure_filters = selection$n_candidates_after_exposure_filters %||% NA_integer_,
+    n_candidates_after_hard_filters = selection$n_candidates_after_hard_filters %||% NA_integer_,
+    n_candidates_after_duplicates = selection$n_candidates_after_duplicates %||% NA_integer_,
+    n_candidates_after_star_caps = selection$n_candidates_after_star_caps %||% NA_integer_,
+    n_candidates_scored = selection$n_candidates_scored %||% NA_integer_,
+    hard_filter_collapse_stage = selection$hard_filter_collapse_stage %||% NA_character_,
     deg_i = selection$deg_i,
     deg_j = selection$deg_j,
     recent_deg_i = selection$recent_deg_i,
@@ -908,14 +960,24 @@ run_one_step <- function(state, judge, ...) {
     )
   }
 
-  if (isTRUE(is_valid) && !is.na(as.integer(selection$link_spoke_id_selected %||% NA_integer_))) {
+  if (!is.na(selected_spoke_id)) {
     out$controller <- .adaptive_controller_resolve(out)
-    spoke_key <- as.character(as.integer(selection$link_spoke_id_selected))
+    spoke_key <- as.character(as.integer(selected_spoke_id))
     bins_map <- out$controller$link_stage_coverage_bins_used %||% list()
     source_map <- out$controller$link_stage_coverage_source %||% list()
-    bins_map[[spoke_key]] <- as.integer(selection$coverage_bins_used %||% NA_integer_)
-    source_map[[spoke_key]] <- as.character(selection$coverage_source %||% NA_character_)
-    out$controller$current_link_spoke_id <- as.integer(selection$link_spoke_id_selected)
+    is_probe_selection <- isTRUE(step_row$is_probe_step %||% FALSE)
+    next_bins <- as.integer(selection$coverage_bins_used %||% NA_integer_)
+    next_source <- as.character(selection$coverage_source %||% NA_character_)
+    if (!isTRUE(is_probe_selection) && !is.na(next_bins)) {
+      bins_map[[spoke_key]] <- as.integer(next_bins)
+    }
+    if (!isTRUE(is_probe_selection) &&
+      length(next_source) == 1L &&
+      !is.na(next_source) &&
+      nzchar(next_source)) {
+      source_map[[spoke_key]] <- as.character(next_source)
+    }
+    out$controller$current_link_spoke_id <- as.integer(selected_spoke_id)
     out$controller$link_stage_coverage_bins_used <- bins_map
     out$controller$link_stage_coverage_source <- source_map
   }

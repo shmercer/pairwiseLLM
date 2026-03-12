@@ -400,8 +400,15 @@
     d_opt_knobs = list(lambda = 1e-6, ordering_mode = "linking_d_optimal"),
     probe_pairs_per_refit_per_spoke = as.integer(adaptive_cfg$probe_pairs_per_refit_per_spoke %||% 2L),
     stopping_and_quota = list(
-      link_transform_escalation_refits_required = as.integer(
-        adaptive_cfg$link_transform_escalation_refits_required %||% 2L
+      link_transform_escalation_window_refits = as.integer(
+        adaptive_cfg$link_transform_escalation_window_refits %||%
+          adaptive_cfg$link_transform_escalation_refits_required %||%
+          3L
+      ),
+      link_transform_escalation_passes_required = as.integer(
+        adaptive_cfg$link_transform_escalation_passes_required %||%
+          adaptive_cfg$link_transform_escalation_refits_required %||%
+          2L
       ),
       min_cross_set_pairs_per_spoke_per_refit = as.integer(
         adaptive_cfg$min_cross_set_pairs_per_spoke_per_refit %||% 5L
@@ -414,55 +421,57 @@
       cross_set_utility = "linking_d_optimal"
     )
   )
+  withr::with_seed(seed, {
+    replicate_rows <- vector("list", replicates)
+    for (idx in seq_len(replicates)) {
+      rep_out <- .adaptive_calibration_run_replicate(
+        replicate_id = idx,
+        seed = seed,
+        set_sizes = set_sizes,
+        true_delta = true_delta,
+        true_alpha = true_alpha,
+        judge_b = judge_b,
+        judge_eps = judge_eps,
+        n_steps = n_steps,
+        btl_config = btl_config,
+        adaptive_config = adaptive_cfg,
+        progress = progress
+      )
+      replicate_rows[[idx]] <- rep_out$metrics
+    }
+    replicate_tbl <- dplyr::bind_rows(replicate_rows) |>
+      dplyr::arrange(.data$replicate_id, .data$refit_id, .data$spoke_id)
 
-  replicate_rows <- vector("list", replicates)
-  for (idx in seq_len(replicates)) {
-    rep_out <- .adaptive_calibration_run_replicate(
-      replicate_id = idx,
+    agg <- .adaptive_calibration_summarize(
+      metrics = replicate_tbl,
+      replicate_count = replicates,
       seed = seed,
-      set_sizes = set_sizes,
-      true_delta = true_delta,
-      true_alpha = true_alpha,
-      judge_b = judge_b,
-      judge_eps = judge_eps,
-      n_steps = n_steps,
-      btl_config = btl_config,
-      adaptive_config = adaptive_cfg,
-      progress = progress
+      config_payload = cfg_payload
     )
-    replicate_rows[[idx]] <- rep_out$metrics
-  }
-  replicate_tbl <- dplyr::bind_rows(replicate_rows)
-
-  agg <- .adaptive_calibration_summarize(
-    metrics = replicate_tbl,
-    replicate_count = replicates,
-    seed = seed,
-    config_payload = cfg_payload
-  )
-  sidecar <- agg$sidecar
-  summary_tbl <- dplyr::bind_cols(
-    tibble::tibble(
-      ppc_calibration_id = as.character(sidecar$ppc_calibration_id),
-      cross_set_ppc_brier_max = as.double(sidecar$cross_set_ppc_brier_max)
-    ),
-    agg$summary
-  )
-
-  files <- NULL
-  if (is.character(output_dir) && length(output_dir) == 1L && !is.na(output_dir) && nzchar(output_dir)) {
-    files <- .adaptive_calibration_write_artifacts(
-      summary_tbl = summary_tbl,
-      metrics_tbl = replicate_tbl,
-      sidecar_payload = sidecar,
-      output_dir = output_dir
+    sidecar <- agg$sidecar
+    summary_tbl <- dplyr::bind_cols(
+      tibble::tibble(
+        ppc_calibration_id = as.character(sidecar$ppc_calibration_id),
+        cross_set_ppc_brier_max = as.double(sidecar$cross_set_ppc_brier_max)
+      ),
+      agg$summary
     )
-  }
 
-  list(
-    summary = summary_tbl,
-    replicate_metrics = replicate_tbl,
-    sidecar = sidecar,
-    files = files
-  )
+    files <- NULL
+    if (is.character(output_dir) && length(output_dir) == 1L && !is.na(output_dir) && nzchar(output_dir)) {
+      files <- .adaptive_calibration_write_artifacts(
+        summary_tbl = summary_tbl,
+        metrics_tbl = replicate_tbl,
+        sidecar_payload = sidecar,
+        output_dir = output_dir
+      )
+    }
+
+    list(
+      summary = summary_tbl,
+      replicate_metrics = replicate_tbl,
+      sidecar = sidecar,
+      files = files
+    )
+  })
 }

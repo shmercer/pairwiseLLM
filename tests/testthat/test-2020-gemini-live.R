@@ -1,7 +1,5 @@
 # tests/testthat/test-gemini_live.R
 
-skip_if_no_psock()
-
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 gemini_compare_pair_live <- pairwiseLLM::gemini_compare_pair_live
@@ -965,6 +963,7 @@ test_that("submit_gemini_pairs_live outputs verbose messages", {
 })
 
 test_that("gemini live wrappers call future backends", {
+  skip_if_no_psock()
   skip_if_not_installed("future")
   skip_if_not_installed("future.apply")
 

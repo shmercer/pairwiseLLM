@@ -10,6 +10,7 @@ make_linking_refit_state <- function(adaptive_config = list()) {
     seed = 123L,
     adaptive_config = utils::modifyList(base_cfg, adaptive_config)
   )
+  state$config$btl_config <- test_link_btl_config(state$config$btl_config %||% list())
 
   draws <- matrix(
     c(
@@ -79,6 +80,223 @@ append_cross_step <- function(state, step_id, A_id, B_id, Y, spoke_id) {
   )
   state
 }
+
+current_link_epoch_signature <- function(state,
+                                         spoke_id,
+                                         transform_state = "shift_only",
+                                         refit_mode = "shift_only",
+                                         lock_mode = "soft_lock") {
+  hub_id <- 1L
+  pairwiseLLM:::.adaptive_link_epoch_signature_string(
+    pairwiseLLM:::.adaptive_link_epoch_signature_components(
+      transform_state = transform_state,
+      refit_mode = refit_mode,
+      lock_mode = lock_mode,
+      hub_art = state$linking$phase_a$artifacts[[as.character(hub_id)]],
+      spoke_art = state$linking$phase_a$artifacts[[as.character(spoke_id)]]
+    )
+  )
+}
+
+make_stable_epoch_stop_state <- function(probe_edges_min_for_stop = 2L,
+                                         min_refits_in_phase_b = 3L,
+                                         stability_lag = 2L) {
+  state <- make_linking_refit_state(
+    list(
+      probe_edges_min_for_stop = probe_edges_min_for_stop,
+      min_refits_in_phase_b = min_refits_in_phase_b
+    )
+  )
+  state$config$btl_config$stability_lag <- as.integer(stability_lag)
+  state$controller$probe_edges_min_for_stop <- as.integer(probe_edges_min_for_stop)
+  state$controller$min_refits_in_phase_b <- as.integer(min_refits_in_phase_b)
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  state$controller$link_epoch_signature_by_spoke <- list(
+    `2` = current_link_epoch_signature(state, spoke_id = 2L)
+  )
+  state$controller$link_epoch_start_step_by_spoke <- list(`2` = 1L)
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(link_epoch_id = 4L))
+
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  state <- append_cross_step(state, 3L, "s21", "h3", 1L, spoke_id = 2L)
+
+  panel <- tibble::tibble(
+    probe_panel_id = c("panel_a", "panel_a"),
+    link_epoch_id = c(4L, 4L),
+    spoke_id = c(2L, 2L),
+    hub_item_id = c("h1", "h2"),
+    spoke_item_id = c("s21", "s22"),
+    spoke_bin = c(1L, 2L),
+    hub_bin = c(1L, 2L),
+    planned_rank = c(1L, 2L),
+    pair_key = c(
+      pairwiseLLM:::make_unordered_key("h1", "s21"),
+      pairwiseLLM:::make_unordered_key("h2", "s22")
+    ),
+    realized = c(TRUE, TRUE),
+    realized_step_id = c(11L, 12L),
+    realized_pair_id = c(11L, 12L),
+    realized_run_mode = c("link_probe_holdout", "link_probe_holdout")
+  )
+
+  state$linking$probe <- pairwiseLLM:::.adaptive_link_probe_empty_state()
+  state$linking$probe$panels_by_spoke[["2"]] <- panel
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = c(11L, 12L),
+    pair_id = c(11L, 12L),
+    run_mode = c("link_probe_holdout", "link_probe_holdout"),
+    spoke_id = c(2L, 2L),
+    link_epoch_id = c(4L, 4L),
+    probe_panel_id = c("panel_a", "panel_a"),
+    hub_item_id = c("h1", "h2"),
+    spoke_item_id = c("s21", "s22"),
+    pair_key = panel$pair_key,
+    Y = c(1L, 0L)
+  )
+
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(refit_id = 1L, diagnostics_pass = TRUE)
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(refit_id = 2L, diagnostics_pass = TRUE)
+  )
+
+  stage_row <- list(
+    spoke_id = 2L,
+    hub_id = 1L,
+    link_transform_policy = "auto",
+    link_transform_state = "shift_only",
+    link_refit_mode = "shift_only",
+    hub_lock_mode = "soft_lock",
+    link_epoch_id = 4L,
+    probe_panel_id = "panel_a",
+    delta_spoke_mean = 0.10,
+    delta_spoke_sd = 0.01,
+    reliability_link_global = 0.95,
+    reliability_stop_pass = TRUE,
+    linking_identified = TRUE,
+    transform_frozen = FALSE,
+    probe_edges_planned = as.integer(probe_edges_min_for_stop),
+    probe_edges_min_for_stop_used = as.integer(probe_edges_min_for_stop),
+    probe_edges_realized_before_refit = 0L,
+    probe_edges_realized_delta_since_last_refit = 0L,
+    stop_blocker_codes = "lag_not_eligible,probe_pred_rmse_lagged,theta_global_rmse_lagged"
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    utils::modifyList(stage_row, list(
+      refit_id = 1L,
+      probe_edges_realized = 0L,
+      stop_recent_pass_count = 0L,
+      stop_recent_window_size = 0L,
+      stability_window_refits_used = 3L,
+      stability_passes_required_used = 2L,
+      link_stop_pass = FALSE
+    ))
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    utils::modifyList(stage_row, list(
+      refit_id = 2L,
+      probe_edges_realized_before_refit = 0L,
+      probe_edges_realized_delta_since_last_refit = 1L,
+      probe_edges_realized = 1L,
+      stop_recent_pass_count = 0L,
+      stop_recent_window_size = 0L,
+      stability_window_refits_used = 3L,
+      stability_passes_required_used = 2L,
+      link_stop_pass = FALSE
+    ))
+  )
+
+  state
+}
+
+run_mocked_stop_window_refit <- function(state, theta_rmse = 0.02) {
+  testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+      list(
+        delta_mean = 0.1,
+        delta_sd = 0.01,
+        log_alpha_mean = if (identical(transform_mode, "shift_scale")) 0.02 else NA_real_,
+        log_alpha_sd = if (identical(transform_mode, "shift_scale")) 0.02 else NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        posterior_draws = list(),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = TRUE,
+          diagnostics_ess_pass = TRUE
+        ),
+        fit_contract = list(
+          estimation_method = "map_laplace",
+          uncertainty_approximation = "laplace_hessian"
+        )
+      )
+    },
+    .adaptive_link_global_score_stats_active = function(...) {
+      list(reliability = 0.95, V_mu = 1.2, V_post = 0.06)
+    },
+    .adaptive_link_reliability_transformed_active = function(...) 0.95,
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(lag_eligible = TRUE, rho_rank_lagged = 0.99, rho_rank_lagged_pass = TRUE)
+    },
+    .adaptive_link_probe_brier_for_fit = function(...) 0.10,
+    .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) 0.01,
+    .adaptive_link_theta_global_rmse_lagged = function(...) theta_rmse,
+    .adaptive_linking_refit_update_state(state, list(last_refit_step = 3L)),
+    .package = "pairwiseLLM"
+  )
+}
+
+test_that("rolling pass windows retain the last 3 eligible outcomes without shortcutting", {
+  window <- c(TRUE, FALSE)
+  window <- pairwiseLLM:::.adaptive_link_result_window_append(window, TRUE, max_size = 3L)
+  expect_identical(window, c(TRUE, FALSE, TRUE))
+  expect_identical(pairwiseLLM:::.adaptive_link_result_window_pass_count(window), 2L)
+  expect_true(length(window) == 3L)
+
+  stale_window <- c(TRUE, FALSE, FALSE)
+  stale_window <- pairwiseLLM:::.adaptive_link_result_window_append(
+    stale_window,
+    TRUE,
+    max_size = 3L
+  )
+  expect_identical(stale_window, c(FALSE, FALSE, TRUE))
+  expect_identical(pairwiseLLM:::.adaptive_link_result_window_pass_count(stale_window), 1L)
+  expect_false(
+    length(stale_window) == 3L &&
+      pairwiseLLM:::.adaptive_link_result_window_pass_count(stale_window) >= 2L
+  )
+})
+
+test_that("ineligible refits do not pollute stop or escalation rolling windows", {
+  state <- make_stable_epoch_stop_state()
+  state$controller$link_stop_recent_pass_window_by_spoke <- list(`2` = c(TRUE, TRUE))
+  state$controller$link_escalation_recent_pass_window_by_spoke <- list(`2` = c(TRUE, FALSE))
+  state$linking$probe$realized_edges <- state$linking$probe$realized_edges[0, , drop = FALSE]
+
+  out <- run_mocked_stop_window_refit(state, theta_rmse = 0.045)
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+
+  expect_false(isTRUE(stats$link_stop_eligible))
+  expect_false(isTRUE(stats$link_stop_pass))
+  expect_identical(stats$stop_recent_pass_count, 2L)
+  expect_identical(stats$stop_recent_window_size, 2L)
+  expect_identical(out$controller$link_stop_recent_pass_window_by_spoke[["2"]], c(TRUE, TRUE))
+  expect_identical(
+    out$controller$link_escalation_recent_pass_window_by_spoke[["2"]],
+    c(TRUE, FALSE)
+  )
+})
 
 test_that("linking refit contract fields follow transform mode", {
   state_shift <- make_linking_refit_state(
@@ -289,7 +507,8 @@ test_that("auto escalation stays in shift_only before lag and stop eligibility a
     list(
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
-      link_transform_escalation_refits_required = 2L
+      link_transform_escalation_window_refits = 3L,
+      link_transform_escalation_passes_required = 2L
     )
   )
 
@@ -328,7 +547,7 @@ test_that("auto escalation stays in shift_only before lag and stop eligibility a
     .package = "pairwiseLLM"
   )
   expect_identical(state1$controller$link_transform_state_by_spoke[["2"]], "shift_only")
-  expect_identical(state1$controller$link_refit_stats_by_spoke[["2"]]$escalation_consecutive_pass_count, 0L)
+  expect_identical(state1$controller$link_refit_stats_by_spoke[["2"]]$escalation_recent_pass_count, 0L)
   expect_false(isTRUE(state1$controller$link_refit_stats_by_spoke[["2"]]$link_stop_eligible))
 })
 
@@ -362,7 +581,8 @@ test_that("auto escalation streak resets when eligibility fails", {
     list(
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
-      link_transform_escalation_refits_required = 2L
+      link_transform_escalation_window_refits = 3L,
+      link_transform_escalation_passes_required = 2L
     )
   )
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
@@ -377,7 +597,7 @@ test_that("auto escalation streak resets when eligibility fails", {
   )
 
   expect_identical(out$controller$link_transform_state_by_spoke[["2"]], "shift_only")
-  expect_identical(out$controller$link_refit_stats_by_spoke[["2"]]$escalation_consecutive_pass_count, 0L)
+  expect_identical(out$controller$link_refit_stats_by_spoke[["2"]]$escalation_recent_pass_count, 0L)
 })
 
 test_that("freeze transition is one-way and refit reuses frozen transform parameters", {
@@ -419,12 +639,81 @@ test_that("freeze transition is one-way and refit reuses frozen transform parame
   expect_equal(stats$delta_spoke_mean, 0.17, tolerance = 1e-12)
 })
 
+test_that("link stage rows retire frozen spokes with zero budget and zero new work", {
+  state <- make_linking_refit_state(
+    list(
+      link_transform_mode = "shift_only",
+      link_refit_mode = "shift_only"
+    )
+  )
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s31", "h2", 1L, spoke_id = 3L)
+  state <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    state,
+    tibble::tibble(
+      refit_id = 1L,
+      spoke_id = 2L,
+      link_stop_pass = TRUE,
+      link_transform_state = "shift_only",
+      delta_spoke_mean = 0.17,
+      log_alpha_spoke_mean = NA_real_
+    )
+  )
+  state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only", `3` = "shift_only")
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_transform_state = "shift_only",
+      link_stop_pass = TRUE,
+      stop_recent_pass_count = 2L,
+      stop_recent_window_size = 3L,
+      stability_window_refits_used = 3L,
+      stability_passes_required_used = 2L,
+      transform_frozen = TRUE,
+      link_epoch_id = 1L
+    ),
+    `3` = list(
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      stop_recent_pass_count = 0L,
+      stop_recent_window_size = 0L,
+      stability_window_refits_used = 3L,
+      stability_passes_required_used = 2L,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L
+    )
+  )
+  state$controller$link_budget_refit_id <- 2L
+  state$controller$link_budget_map <- list(
+    `3` = list(
+      B_spoke_refit_budget = 4L,
+      B_spoke_refit_budget_source = "concurrent_allocator"
+    )
+  )
+
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 1L)
+  )
+  frozen_row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+
+  expect_identical(nrow(frozen_row), 1L)
+  expect_true(isTRUE(frozen_row$transform_frozen[[1L]]))
+  expect_true(isTRUE(frozen_row$link_stop_pass[[1L]]))
+  expect_identical(frozen_row$B_spoke_refit_budget[[1L]], 0L)
+  expect_identical(frozen_row$n_cross_edges_active_since_last_refit[[1L]], 0L)
+  expect_identical(frozen_row$n_probe_pairs_since_last_refit[[1L]], 0L)
+  expect_identical(frozen_row$n_cross_edges_total_since_last_refit[[1L]], 0L)
+})
+
 test_that("escalation path does not evaluate without realized held-out probes", {
   state <- make_linking_refit_state(
     list(
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
-      link_transform_escalation_refits_required = 1L
+      link_transform_escalation_window_refits = 1L,
+      link_transform_escalation_passes_required = 1L
     )
   )
   ids <- as.character(state$item_ids)
@@ -511,6 +800,58 @@ test_that("phase-specific judge mode allows startup fallback but aborts after st
   )
 })
 
+test_that("linking CmdStan transform refit always sets stable output targets", {
+  sample_args_seen <- NULL
+  fake_fit <- new.env(parent = emptyenv())
+  fake_fit$draws <- function(variables, format) {
+    expect_identical(format, "matrix")
+    out <- matrix(0.1, nrow = 2, ncol = length(variables))
+    colnames(out) <- variables
+    out
+  }
+  fake_fit$diagnostic_summary <- function() {
+    tibble::tibble(num_divergent = c(0, 0))
+  }
+  fake_fit$summary <- function(variables) {
+    tibble::tibble(
+      variable = variables,
+      rhat = rep(1, length(variables)),
+      ess_bulk = rep(500, length(variables))
+    )
+  }
+  model_stub <- function(path, cpp_options) {
+    expect_true(file.exists(path))
+    expect_identical(cpp_options, list(stan_threads = TRUE))
+    list(sample = function(...) {
+      sample_args_seen <<- list(...)
+      fake_fit
+    })
+  }
+
+  out_dir <- withr::local_tempdir()
+  fit <- pairwiseLLM:::.adaptive_link_fit_transform_cmdstan(
+    stan_data = list(N = 1L),
+    variable_names = c("delta"),
+    cmdstan = list(
+      chains = 1L,
+      parallel_chains = 1L,
+      threads_per_chain = 1L,
+      iter_warmup = 10L,
+      iter_sampling = 10L,
+      output_dir = out_dir
+    ),
+    seed = 123L,
+    model_fn = model_stub
+  )
+
+  expect_true(is.matrix(fit$draws_matrix))
+  expect_identical(sample_args_seen$output_dir, out_dir)
+  expect_true(dir.exists(sample_args_seen$output_dir))
+  expect_true(is.character(sample_args_seen$output_basename))
+  expect_length(sample_args_seen$output_basename, 1L)
+  expect_match(sample_args_seen$output_basename, "^link_transform_refit-")
+})
+
 test_that("startup-gap helper and edge extractors cover fallback edge paths", {
   state <- make_linking_refit_state()
 
@@ -581,17 +922,65 @@ test_that("link likelihood applies signed beta by original presentation side", {
   hub_theta <- c(h1 = 0)
   spoke_theta <- c(s1 = 0)
 
-  fit_mixed <- pairwiseLLM:::.adaptive_link_fit_transform(
-    edges_mixed,
-    hub_theta,
-    spoke_theta,
-    transform_mode = "shift_only"
+  fit_mixed <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform_cmdstan = function(stan_data,
+                                                    variable_names,
+                                                    cmdstan,
+                                                    seed,
+                                                    model_fn = NULL) {
+      delta_draws <- if (sum(stan_data$beta_signed) == 0) {
+        c(-0.1, 0, 0.1, 0)
+      } else {
+        c(-0.6, -0.5, -0.4, -0.5)
+      }
+      list(
+        draws_matrix = cbind(delta = delta_draws),
+        diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 1000),
+        mcmc_config_used = list(
+          chains = 4L,
+          parallel_chains = 4L,
+          threads_per_chain = 1L,
+          cmdstanr_version = "test"
+        )
+      )
+    },
+    .package = "pairwiseLLM",
+    pairwiseLLM:::.adaptive_link_fit_transform(
+      edges_mixed,
+      hub_theta,
+      spoke_theta,
+      transform_mode = "shift_only"
+    )
   )
-  fit_all_a <- pairwiseLLM:::.adaptive_link_fit_transform(
-    edges_all_a,
-    hub_theta,
-    spoke_theta,
-    transform_mode = "shift_only"
+  fit_all_a <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform_cmdstan = function(stan_data,
+                                                    variable_names,
+                                                    cmdstan,
+                                                    seed,
+                                                    model_fn = NULL) {
+      delta_draws <- if (sum(stan_data$beta_signed) == 0) {
+        c(-0.1, 0, 0.1, 0)
+      } else {
+        c(-0.6, -0.5, -0.4, -0.5)
+      }
+      list(
+        draws_matrix = cbind(delta = delta_draws),
+        diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 1000),
+        mcmc_config_used = list(
+          chains = 4L,
+          parallel_chains = 4L,
+          threads_per_chain = 1L,
+          cmdstanr_version = "test"
+        )
+      )
+    },
+    .package = "pairwiseLLM",
+    pairwiseLLM:::.adaptive_link_fit_transform(
+      edges_all_a,
+      hub_theta,
+      spoke_theta,
+      transform_mode = "shift_only"
+    )
   )
 
   expect_true(abs(fit_mixed$delta_mean) < 0.5)
@@ -781,6 +1170,346 @@ test_that("concurrent allocation uses utility mass and enforces floor", {
   expect_true(is.finite(stats3$concurrent_utility_mass))
 })
 
+test_that("independent mode authorizes exactly one spoke per refit window", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+
+  budget_map <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = state$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
+  budgets <- vapply(
+    budget_map,
+    function(entry) as.integer(entry$B_spoke_refit_budget %||% NA_integer_),
+    integer(1L)
+  )
+  active_spoke <- as.integer(names(budgets)[budgets > 0L][[1L]])
+  inactive_spoke <- setdiff(c(2L, 3L), active_spoke)
+
+  expect_identical(sum(budgets > 0L), 1L)
+  expect_identical(budget_map[[as.character(active_spoke)]]$B_spoke_refit_budget_source, "single_spoke_controller")
+  expect_identical(budget_map[[as.character(inactive_spoke)]]$B_spoke_refit_budget, 0L)
+  expect_identical(
+    budget_map[[as.character(inactive_spoke)]]$B_spoke_refit_budget_source,
+    "independent_inactive_spoke"
+  )
+
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- budget_map
+  if (identical(active_spoke, 2L)) {
+    state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  } else {
+    state <- append_cross_step(state, 1L, "s31", "h1", 1L, spoke_id = 3L)
+  }
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller, eligible_spoke_ids = c(2L, 3L)),
+    active_spoke
+  )
+
+  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state,
+    refit_id = 1L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_active <- rows[rows$spoke_id == active_spoke, , drop = FALSE]
+  row_inactive <- rows[rows$spoke_id == inactive_spoke, , drop = FALSE]
+  expect_identical(nrow(row_active), 1L)
+  expect_identical(nrow(row_inactive), 1L)
+  expect_true(row_active$B_spoke_refit_budget[[1L]] > 0L)
+  expect_identical(row_inactive$B_spoke_refit_budget[[1L]], 0L)
+  expect_identical(
+    as.character(row_inactive$B_spoke_refit_budget_source[[1L]]),
+    "independent_inactive_spoke"
+  )
+})
+
+test_that("run_one_step does not rewrite independent Phase B budget map within a refit window", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  budget_map <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = state$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- budget_map
+
+  active_spoke <- as.integer(names(which(vapply(
+    budget_map,
+    function(entry) as.integer(entry$B_spoke_refit_budget %||% 0L) > 0L,
+    logical(1L)
+  )))[[1L]])
+  inactive_spoke <- setdiff(c(2L, 3L), active_spoke)
+  state$controller$current_link_spoke_id <- inactive_spoke
+
+  judged <- FALSE
+  judge <- function(...) {
+    judged <<- TRUE
+    list(winner = "A")
+  }
+
+  out <- testthat::with_mocked_bindings(
+    select_next_pair = function(state, step_id = NULL, candidates = NULL) {
+      list(
+        i = 1L,
+        j = 3L,
+        A = 1L,
+        B = 3L,
+        round_id = 1L,
+        round_stage = "anchor_link",
+        pair_type = "anchor_link",
+        run_mode = "link_multi_spoke",
+        link_spoke_id_selected = active_spoke,
+        is_probe_step = FALSE
+      )
+    },
+    pairwiseLLM:::run_one_step(state, judge = judge),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(judged)
+  expect_identical(out$controller$link_budget_refit_id, state$controller$link_budget_refit_id)
+  expect_identical(out$controller$link_budget_map, budget_map)
+})
+
+test_that("link stage rows abort when realized active work exceeds emitted budget", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s22", "h2", 1L, spoke_id = 2L)
+  state$step_log$link_stage <- c("anchor_link", "anchor_link")
+  state$step_log$round_stage <- c("anchor_link", "anchor_link")
+  state$controller$link_budget_refit_id <- 1L
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 1L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "independent_inactive_spoke"
+    )
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state,
+      refit_id = 1L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    "realized active counts exceed emitted budget"
+  )
+})
+
+test_that("link stage rows use cached concurrent budget for the completed refit window", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "concurrent"))
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 15L,
+      model_variant = "btl_e_b",
+      n_items = nrow(state$items)
+    )
+  )
+  state$step_log <- tibble::tibble(
+    step_id = seq_len(15L),
+    pair_id = seq_len(15L),
+    is_cross_set = rep(TRUE, 15L),
+    link_spoke_id = rep(3L, 15L),
+    link_stage = rep("anchor_link", 15L),
+    round_stage = rep("anchor_link", 15L),
+    run_mode = rep("link_multi_spoke", 15L)
+  )
+  state$controller$link_budget_refit_id <- 1L
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "concurrent_allocator",
+      concurrent_target_pairs = 0L,
+      concurrent_floor_pairs = 5L
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 15L,
+      B_spoke_refit_budget_source = "concurrent_allocator",
+      concurrent_target_pairs = 15L,
+      concurrent_floor_pairs = 5L
+    )
+  )
+
+  rows <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(...) {
+      list(
+        `2` = list(B_spoke_refit_budget = 1L, B_spoke_refit_budget_source = "concurrent_allocator"),
+        `3` = list(B_spoke_refit_budget = 14L, B_spoke_refit_budget_source = "concurrent_allocator")
+      )
+    },
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state,
+      refit_id = 1L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  row_spoke_3 <- rows[rows$spoke_id == 3L, , drop = FALSE]
+  expect_identical(as.integer(row_spoke_3$B_spoke_refit_budget[[1L]]), 15L)
+  expect_identical(as.integer(row_spoke_3$stage_realized_anchor_link[[1L]]), 15L)
+  expect_identical(as.integer(row_spoke_3$stage_budget_unfilled[[1L]]), 0L)
+})
+
+test_that("link_stage_log rows expose feasibility and blocker explanations canonically", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  panel_keys <- paste0("pair_", seq_len(30L))
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_eval",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = rep("h1", 30L),
+      spoke_item_id = paste0("s21_probe_", seq_len(30L)),
+      spoke_bin = rep(1L, 30L),
+      hub_bin = rep(1L, 30L),
+      planned_rank = seq_len(30L),
+      pair_key = panel_keys,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = seq_len(15L),
+    pair_id = seq_len(15L),
+    run_mode = rep("link_probe_holdout", 15L),
+    spoke_id = rep(2L, 15L),
+    link_epoch_id = rep(4L, 15L),
+    probe_panel_id = rep("panel_eval", 15L),
+    hub_item_id = rep("h1", 15L),
+    spoke_item_id = paste0("s21_probe_", seq_len(15L)),
+    pair_key = panel_keys[seq_len(15L)],
+    Y = rep(1L, 15L)
+  )
+  state$controller$link_budget_refit_id <- 1L
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 6L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "independent_inactive_spoke"
+    )
+  )
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_epoch_id = 4L,
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
+      probe_panel_shortfall = 15L,
+      probe_panel_id = "panel_eval",
+      probe_edges_planned = 30L,
+      probe_edges_realized = 15L,
+      probe_edges_min_for_stop_used = 30L,
+      probe_brier = 0.38,
+      probe_brier_max_used = 0.19,
+      probe_brier_pass = FALSE,
+      probe_pred_rmse_lagged = 0.03,
+      probe_pred_rmse_max_used = 0.015,
+      probe_pred_rmse_pass = FALSE,
+      theta_global_rmse_lagged = 0.08,
+      theta_global_rmse_max_used = 0.05,
+      theta_global_rmse_pass = FALSE,
+      delta_spoke_sd = 0.20,
+      link_stop_reliability_min_used = 0.90,
+      reliability_link_global = NA_real_,
+      reliability_stop_pass = FALSE,
+      stop_blocker_codes = paste(
+        c(
+          "diagnostics_failed",
+          "lag_not_eligible",
+          "min_refits_not_met",
+          "probe_edges_min_for_stop",
+          "reliability_link_global",
+          "probe_brier",
+          "probe_pred_rmse_lagged",
+          "theta_global_rmse_lagged",
+          "hub_not_anchored"
+        ),
+        collapse = ","
+      ),
+      lag_domain_reset_reason = "spoke_artifact_replaced"
+    )
+  )
+
+  rows <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 4L,
+        long_link = 0L,
+        mid_link = 4L,
+        local_link = 4L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(i = rep("h1", n), j = paste0(stage_name, "_", seq_len(n)))
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- 1
+      cand$link_u <- 1
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state,
+      refit_id = 1L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_identical(row$feasible_stage_capacity_anchor_link[[1L]], 4L)
+  expect_identical(row$feasible_stage_capacity_long_link[[1L]], 0L)
+  expect_identical(row$feasibility_budget_released[[1L]], 3L)
+  expect_true(isTRUE(row$feasibility_reallocation_used[[1L]]))
+  expect_identical(
+    as.character(row$feasibility_reallocation_rule[[1L]]),
+    "pooled_utility_backfill"
+  )
+  expect_identical(as.integer(row$link_epoch_id[[1L]]), 4L)
+  expect_identical(as.character(row$probe_panel_id[[1L]]), "panel_eval")
+  expect_identical(as.integer(row$probe_edges_planned[[1L]]), 30L)
+  expect_identical(as.integer(row$probe_edges_realized[[1L]]), 15L)
+  expect_false(isTRUE(row$probe_acceleration_used[[1L]]))
+  expect_identical(as.integer(row$probe_effort_base_cap[[1L]]), 2L)
+  expect_identical(as.integer(row$probe_effort_effective_cap[[1L]]), 2L)
+  expect_identical(as.integer(row$probe_remaining_to_min_start[[1L]]), 15L)
+  expect_identical(as.character(row$stop_blocker_codes[[1L]]), paste(
+    c(
+      "diagnostics_failed",
+      "lag_not_eligible",
+      "min_refits_not_met",
+      "probe_edges_min_for_stop",
+      "reliability_link_global",
+      "probe_brier",
+      "probe_pred_rmse_lagged",
+      "theta_global_rmse_lagged",
+      "hub_not_anchored"
+    ),
+    collapse = ","
+  ))
+  expect_false(isTRUE(row$probe_brier_pass[[1L]]))
+  expect_false(isTRUE(row$probe_pred_rmse_pass[[1L]]))
+  expect_false(isTRUE(row$theta_global_rmse_pass[[1L]]))
+  expect_identical(as.character(row$lag_domain_reset_reason[[1L]]), "spoke_artifact_replaced")
+})
+
 test_that("linking stage targets are deterministic from budget, floors, and taper", {
   controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
   q_base <- pairwiseLLM:::.adaptive_link_compute_stage_targets(
@@ -801,6 +1530,369 @@ test_that("linking stage targets are deterministic from budget, floors, and tape
   expect_true(isTRUE(meta_taper$long_link_taper_applied))
   expect_identical(meta_taper$stage_target_long_link_pre_taper, 4L)
   expect_identical(meta_taper$stage_target_long_link_post_taper, 2L)
+})
+
+test_that("canonical blocker weights are deterministic and conservative on missing metrics", {
+  controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
+
+  weights_missing <- pairwiseLLM:::.adaptive_link_blocker_weights(
+    stats_row = list(),
+    controller = controller
+  )
+  expect_identical(
+    unname(weights_missing),
+    c(0, 0, 0, 0, 0)
+  )
+
+  weights <- pairwiseLLM:::.adaptive_link_blocker_weights(
+    stats_row = list(
+      probe_panel_shortfall = 15L,
+      probe_edges_min_for_stop_used = 30L,
+      probe_brier = 0.38,
+      probe_pred_rmse_lagged = 0.03,
+      theta_global_rmse_lagged = 0.08,
+      delta_spoke_sd = 0.20,
+      delta_sd_max_used = 0.10
+    ),
+    controller = controller
+  )
+  expect_equal(weights[["probe_panel_shortfall"]], 0.5, tolerance = 1e-12)
+  expect_equal(weights[["probe_brier"]], 1, tolerance = 1e-12)
+  expect_equal(weights[["probe_pred_rmse_lagged"]], 1, tolerance = 1e-12)
+  expect_equal(weights[["theta_global_rmse_lagged"]], 0.6, tolerance = 1e-12)
+  expect_equal(weights[["delta_spoke_sd"]], 1, tolerance = 1e-12)
+})
+
+test_that("late-phase taper redistribution leans toward anchor when probe and delta blockers dominate", {
+  controller <- pairwiseLLM:::.adaptive_controller_defaults(10L)
+  controller$current_link_spoke_id <- 2L
+  controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      probe_panel_shortfall = 30L,
+      probe_edges_min_for_stop_used = 30L,
+      delta_spoke_sd = 0.30,
+      delta_sd_max_used = 0.10
+    )
+  )
+
+  q_taper <- pairwiseLLM:::.adaptive_link_compute_stage_targets(
+    budget = 10L,
+    controller = controller,
+    linking_identified = TRUE
+  )
+
+  expect_identical(unname(q_taper[c("anchor_link", "long_link", "mid_link", "local_link")]), c(5L, 2L, 2L, 1L))
+})
+
+test_that("identified Phase B feasibility adjustment prefers local backfill when theta RMSE dominates", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 3L, long_link = 2L, mid_link = 1L, local_link = 0L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = TRUE)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      theta_global_rmse_lagged = 0.20,
+      theta_global_rmse_max_used = 0.05
+    )
+  )
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 3L,
+        long_link = 0L,
+        mid_link = 4L,
+        local_link = 4L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(
+        i = rep("h1", n),
+        j = paste0(stage_name, "_", seq_len(n))
+      )
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- 1
+      cand$link_u <- 1
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = utils::modifyList(state$controller, list(current_link_spoke_id = 2L)),
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(adjusted[["long_link"]], 0L)
+  expect_identical(adjusted[["anchor_link"]], 3L)
+  expect_true(adjusted[["local_link"]] >= 1L)
+  expect_true((adjusted[["mid_link"]] + adjusted[["local_link"]]) >= 3L)
+})
+
+test_that("phase B feasibility adjustment reduces impossible stage targets before starvation", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 2L,
+        long_link = 0L,
+        mid_link = 3L,
+        local_link = 2L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(
+        i = rep("h1", n),
+        j = paste0("s", seq_len(n))
+      )
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- seq(from = nrow(cand), to = 1, by = -1)
+      cand$link_u <- cand$link_d_opt_gain
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(adjusted[["anchor_link"]], 2L)
+  expect_identical(adjusted[["long_link"]], 0L)
+  meta <- attr(adjusted, "quota_meta")
+  expect_true(isTRUE(meta$feasibility_reallocation_used))
+  expect_identical(as.character(meta$feasibility_reallocation_rule), "pooled_utility_backfill")
+  expect_identical(meta$feasible_stage_capacity_long_link, 0L)
+  expect_true(adjusted[["mid_link"]] >= 1L)
+  expect_true(adjusted[["local_link"]] >= 1L)
+  expect_identical(sum(adjusted, na.rm = TRUE), sum(base_quotas))
+})
+
+test_that("identified Phase B feasibility adjustment remains within feasible stage capacities", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 3L, long_link = 2L, mid_link = 1L, local_link = 0L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = TRUE)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      hub_anchored = TRUE,
+      probe_brier = 0.25,
+      probe_pred_rmse_lagged = 0.03,
+      theta_global_rmse_lagged = 0.06
+    )
+  )
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      n <- switch(stage_name,
+        anchor_link = 3L,
+        long_link = 0L,
+        mid_link = 4L,
+        local_link = 4L
+      )
+      if (n < 1L) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(
+        i = rep("h1", n),
+        j = paste0(stage_name, "_", seq_len(n))
+      )
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      stage_name <- ifelse(grepl("^local_link_", cand$j[[1L]]), "local_link", "mid_link")
+      cand$link_d_opt_gain <- if (identical(stage_name, "local_link")) 10 else 4
+      cand$link_u <- cand$link_d_opt_gain
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = utils::modifyList(state$controller, list(current_link_spoke_id = 2L)),
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  meta <- attr(adjusted, "quota_meta")
+  expect_identical(adjusted[["long_link"]], 0L)
+  expect_true(isTRUE(meta$feasibility_reallocation_used))
+  expect_lte(adjusted[["mid_link"]], meta$feasible_stage_capacity_mid_link)
+  expect_lte(adjusted[["local_link"]], meta$feasible_stage_capacity_local_link)
+  expect_lte(sum(adjusted, na.rm = TRUE), sum(base_quotas))
+})
+
+test_that("phase B feasibility adjustment aborts on candidate-generation errors", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  err <- tryCatch(
+    testthat::with_mocked_bindings(
+      generate_stage_candidates_from_state = function(state, stage_name, ...) {
+        if (identical(stage_name, "long_link")) {
+          rlang::abort("synthetic generation failure")
+        }
+        tibble::tibble(i = "h1", j = "s1")
+      },
+      .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+        list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+      },
+      .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+        cand <- tibble::as_tibble(candidates)
+        cand$link_d_opt_gain <- 1
+        cand$link_u <- 1
+        cand
+      },
+      pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L,
+        stage_quotas = base_quotas,
+        stage_order = pairwiseLLM:::.adaptive_stage_order(),
+        refit_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    error = identity
+  )
+  expect_s3_class(err, "rlang_error")
+  expect_true(grepl(
+    "Phase B feasibility computation failed before quota reduction",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("refit_id=1, spoke_id=2, stage_name=`long_link`", conditionMessage(err), fixed = TRUE))
+  expect_true(grepl(
+    "helper=`generate_stage_candidates_from_state`",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("synthetic generation failure", conditionMessage(err), fixed = TRUE))
+})
+
+test_that("phase B feasibility adjustment aborts on utility-attachment errors", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  err <- tryCatch(
+    testthat::with_mocked_bindings(
+      generate_stage_candidates_from_state = function(state, stage_name, ...) {
+        tibble::tibble(i = "h1", j = paste0(stage_name, "_candidate"))
+      },
+      .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+        list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+      },
+      .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+        rlang::abort("synthetic utility failure")
+      },
+      pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L,
+        stage_quotas = base_quotas,
+        stage_order = pairwiseLLM:::.adaptive_stage_order(),
+        refit_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    error = identity
+  )
+  expect_s3_class(err, "rlang_error")
+  expect_true(grepl(
+    "Phase B feasibility computation failed before quota reduction",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("refit_id=1, spoke_id=2, stage_name=`anchor_link`", conditionMessage(err), fixed = TRUE))
+  expect_true(grepl(
+    "helper=`.adaptive_link_attach_predictive_utility`",
+    conditionMessage(err),
+    fixed = TRUE
+  ))
+  expect_true(grepl("synthetic utility failure", conditionMessage(err), fixed = TRUE))
+})
+
+test_that("phase B feasibility adjustment keeps genuine empty stages non-fatal", {
+  state <- make_linking_refit_state(list(link_transform_mode = "shift_only"))
+  state$round$round_id <- 1L
+  state$refit_meta$last_refit_step <- 0L
+
+  base_quotas <- c(anchor_link = 2L, long_link = 2L, mid_link = 1L, local_link = 1L)
+  attr(base_quotas, "quota_meta") <- list(linking_identified = FALSE)
+
+  adjusted <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, ...) {
+      if (identical(stage_name, "long_link")) {
+        return(tibble::tibble())
+      }
+      tibble::tibble(i = "h1", j = paste0(stage_name, "_candidate"))
+    },
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- 1
+      cand$link_u <- 1
+      cand
+    },
+    pairwiseLLM:::.adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L,
+      stage_quotas = base_quotas,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      refit_id = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(adjusted[["long_link"]], 0L)
+  meta <- attr(adjusted, "quota_meta")
+  expect_identical(meta$feasible_stage_capacity_long_link, 0L)
+  expect_true(isTRUE(meta$feasibility_reallocation_used))
 })
 
 test_that("concurrent spoke routing enforces floor before budget targets", {
@@ -855,6 +1947,31 @@ test_that("concurrent routing uses budget deficit, not least-used balancing", {
     .package = "pairwiseLLM"
   )
   expect_identical(pick, 3L)
+})
+
+test_that("concurrent routing stops active spoke selection once refit budgets are met", {
+  state <- make_linking_refit_state(
+    list(
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    )
+  )
+  state$refit_meta$last_refit_step <- 0L
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
+
+  pick <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(state, controller = NULL, eligible_spoke_ids = NULL, seed = 1L) {
+      list(
+        `2` = list(B_spoke_refit_budget = 1L, concurrent_floor_pairs = 1L, concurrent_utility_mass = 5),
+        `3` = list(B_spoke_refit_budget = 1L, concurrent_floor_pairs = 1L, concurrent_utility_mass = 5)
+      )
+    },
+    pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(is.na(pick))
 })
 
 test_that("concurrent floor is enforced as a routing floor when feasible", {
@@ -965,7 +2082,9 @@ test_that("scale_ready uses current-epoch active edges only", {
     state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
     state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
     state$controller$link_epoch_start_step_by_spoke <- list(`2` = as.integer(epoch_start_step))
-    state$controller$link_epoch_signature_by_spoke <- list(`2` = "shift_only|shift_only|soft_lock|NA|NA|NA|NA|NA")
+    state$controller$link_epoch_signature_by_spoke <- list(
+      `2` = current_link_epoch_signature(state, spoke_id = 2L)
+    )
     state$controller$link_stage_coverage_bins_used <- list(`2` = 1L)
     state
   }
@@ -1012,16 +2131,87 @@ test_that("scale_ready uses current-epoch active edges only", {
   expect_false(isTRUE(stats_epoch_edges$scale_ready))
 })
 
-test_that("epoch reset paths advance epoch start step and clear counters", {
-  make_reset_state <- function() {
+test_that("scale_ready tolerates missing legacy coverage bin state on resume", {
+  state <- make_linking_refit_state(
+    list(
+      spoke_quantile_coverage_bins = 1L,
+      shift_scale_min_cross_set_edges = 2L,
+      shift_scale_min_distinct_spoke_items_per_bin = 1L
+    )
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
+  state$controller$link_epoch_start_step_by_spoke <- list(`2` = 1L)
+  state$controller$link_epoch_signature_by_spoke <- list(
+    `2` = current_link_epoch_signature(state, spoke_id = 2L)
+  )
+  state$controller$link_stage_coverage_bins_used <- list(`2` = NA_integer_)
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+      list(
+        delta_mean = 0,
+        delta_sd = 0.1,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        posterior_draws = list(),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = TRUE,
+          diagnostics_ess_pass = TRUE
+        ),
+        fit_contract = list()
+      )
+    },
+    .adaptive_link_reliability_transformed_active = function(...) 0.95,
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(lag_eligible = FALSE, rho_rank_lagged = NA_real_, rho_rank_lagged_pass = FALSE)
+    },
+    .adaptive_link_probe_edges_realized = function(...) tibble::tibble(),
+    .adaptive_link_probe_brier_for_fit = function(...) NA_real_,
+    .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) NA_real_,
+    .adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
+    .package = "pairwiseLLM"
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(stats$scale_ready))
+})
+
+test_that("epoch resets require regime changes, not ordinary probe-panel churn", {
+  make_reset_state <- function(with_prior_panel_row = FALSE) {
     state <- make_linking_refit_state()
     state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
     state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
     state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
     state$controller$link_epoch_start_step_by_spoke <- list(`2` = 1L)
-    state$controller$link_epoch_signature_by_spoke <- list(`2` = "old_signature")
-    state$controller$link_stop_consecutive_pass_count_by_spoke <- list(`2` = 2L)
-    state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
+    state$controller$link_epoch_signature_by_spoke <- list(
+      `2` = current_link_epoch_signature(state, spoke_id = 2L)
+    )
+    state$controller$link_stop_recent_pass_window_by_spoke <- list(`2` = c(TRUE, TRUE))
+    state$controller$link_escalation_recent_pass_window_by_spoke <- list(`2` = c(TRUE))
+    if (isTRUE(with_prior_panel_row)) {
+      state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+        state$link_stage_log,
+        list(
+          refit_id = 1L,
+          spoke_id = 2L,
+          hub_id = 1L,
+          link_epoch_id = 4L,
+          probe_panel_id = "prior_panel",
+          probe_edges_planned = 1L,
+          probe_edges_realized = 0L,
+          probe_panel_shortfall = 1L
+        )
+      )
+    }
     state
   }
 
@@ -1064,6 +2254,19 @@ test_that("epoch reset paths advance epoch start step and clear counters", {
   artifact_state$linking$phase_a$artifacts[["2"]]$refit_id <- 9L
   artifact_reset <- run_reset(artifact_state)
 
+  artifact_state <- make_reset_state()
+  artifact_state$linking$phase_a$artifacts[["2"]]$refit_id <- 9L
+  artifact_reset <- run_reset(artifact_state)
+
+  expect_identical(artifact_reset$controller$link_epoch_id_by_spoke[["2"]], 5L)
+  expect_identical(artifact_reset$controller$link_epoch_start_step_by_spoke[["2"]], 3L)
+  expect_identical(artifact_reset$controller$link_stop_recent_pass_window_by_spoke[["2"]], logical())
+  expect_identical(artifact_reset$controller$link_escalation_recent_pass_window_by_spoke[["2"]], logical())
+  artifact_stats <- artifact_reset$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(artifact_stats$lag_domain_reset))
+  expect_identical(as.character(artifact_stats$lag_domain_reset_reason), "spoke_artifact_replaced")
+  expect_false(isTRUE(artifact_stats$lag_eligible))
+
   probe_state <- make_reset_state()
   panel <- tibble::tibble(
     probe_panel_id = "new_panel",
@@ -1083,15 +2286,263 @@ test_that("epoch reset paths advance epoch start step and clear counters", {
   probe_state$linking$probe$panels_by_spoke <- list(`2` = panel)
   probe_reset <- run_reset(probe_state)
 
-  for (out in list(artifact_reset, probe_reset)) {
-    expect_identical(out$controller$link_epoch_id_by_spoke[["2"]], 5L)
-    expect_identical(out$controller$link_epoch_start_step_by_spoke[["2"]], 3L)
-    expect_identical(out$controller$link_stop_consecutive_pass_count_by_spoke[["2"]], 0L)
-    expect_identical(out$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 0L)
-    stats_row <- out$controller$link_refit_stats_by_spoke[["2"]]
-    expect_true(isTRUE(stats_row$lag_domain_reset))
-    expect_false(isTRUE(stats_row$lag_eligible))
-  }
+  expect_identical(probe_reset$controller$link_epoch_id_by_spoke[["2"]], 4L)
+  expect_identical(probe_reset$controller$link_epoch_start_step_by_spoke[["2"]], 1L)
+  probe_stats <- probe_reset$controller$link_refit_stats_by_spoke[["2"]]
+  expect_false(isTRUE(probe_stats$lag_domain_reset))
+  expect_true(is.na(probe_stats$lag_domain_reset_reason))
+
+  probe_state_changed <- make_reset_state(with_prior_panel_row = TRUE)
+  probe_state_changed$linking$probe$panels_by_spoke <- list(`2` = panel)
+  probe_reset_changed <- run_reset(probe_state_changed)
+
+  expect_identical(probe_reset_changed$controller$link_epoch_id_by_spoke[["2"]], 5L)
+  expect_identical(probe_reset_changed$controller$link_epoch_start_step_by_spoke[["2"]], 3L)
+  expect_identical(probe_reset_changed$controller$link_stop_recent_pass_window_by_spoke[["2"]], logical())
+  expect_identical(probe_reset_changed$controller$link_escalation_recent_pass_window_by_spoke[["2"]], logical())
+  probe_stats_changed <- probe_reset_changed$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(probe_stats_changed$lag_domain_reset))
+  expect_identical(as.character(probe_stats_changed$lag_domain_reset_reason), "probe_panel_rebuild")
+})
+
+test_that("probe realized bookkeeping is derived from canonical realized-edge log", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_a",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pair_key,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 10L,
+    pair_id = 10L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 4L,
+    probe_panel_id = "panel_a",
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    pair_key = pair_key,
+    Y = 1L
+  )
+  ids <- as.character(state$item_ids)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 10L,
+      timestamp = as.POSIXct("2026-01-01 00:00:10", tz = "UTC"),
+      pair_id = 10L,
+      i = match("h1", ids),
+      j = match("s21", ids),
+      A = match("h1", ids),
+      B = match("s21", ids),
+      Y = 0L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE
+    )
+  )
+
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 4L)
+  expect_true(isTRUE(panel$realized[[1L]]))
+  expect_identical(as.integer(panel$realized_step_id[[1L]]), 10L)
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 4L), 1L)
+  realized_edges <- pairwiseLLM:::.adaptive_link_probe_edges_realized(state, spoke_id = 2L, epoch_id = 4L)
+  expect_identical(nrow(realized_edges), 1L)
+  expect_identical(as.integer(realized_edges$step_id[[1L]]), 10L)
+})
+
+test_that("stale panel realized flags do not become canonical realized probe evidence", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  panel <- tibble::tibble(
+    probe_panel_id = "panel_a",
+    link_epoch_id = 4L,
+    spoke_id = 2L,
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    spoke_bin = 1L,
+    hub_bin = 1L,
+    planned_rank = 1L,
+    pair_key = pair_key,
+    realized = TRUE,
+    realized_step_id = 10L,
+    realized_pair_id = 10L,
+    realized_run_mode = "link_probe_holdout"
+  )
+  state$linking$probe$panels_by_spoke <- list(`2` = panel)
+  state$linking$probe$realized_edges <- pairwiseLLM:::.adaptive_link_probe_empty_realized_log()
+
+  realized_log <- pairwiseLLM:::.adaptive_link_probe_realized_log_for_panel(
+    state = state,
+    spoke_id = 2L,
+    epoch_id = 4L,
+    panel = panel
+  )
+  expect_identical(nrow(realized_log), 0L)
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 4L), 0L)
+})
+
+test_that("same-epoch realized-edge panel mismatch fails before refit rows are emitted", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_b",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pair_key,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 10L,
+    pair_id = 10L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 4L,
+    probe_panel_id = "panel_a",
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    pair_key = pair_key,
+    Y = 1L
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 4L),
+    "realized_edges\\$probe_panel_id"
+  )
+})
+
+test_that("link stage refit rows use canonical realized probe counts and enforce monotonicity", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  state$controller$current_link_spoke_id <- 2L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_epoch_id = 4L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only"
+    )
+  )
+  pair_key <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_a",
+      link_epoch_id = 4L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pair_key,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+  ids <- as.character(state$item_ids)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 10L,
+      timestamp = as.POSIXct("2026-01-01 00:00:10", tz = "UTC"),
+      pair_id = 10L,
+      i = match("h1", ids),
+      j = match("s21", ids),
+      A = match("h1", ids),
+      B = match("s21", ids),
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE,
+      link_stage = "probe_panel",
+      round_stage = "probe_panel"
+    )
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 10L,
+    pair_id = 10L,
+    run_mode = "link_probe_holdout",
+    spoke_id = 2L,
+    link_epoch_id = 4L,
+    probe_panel_id = "panel_a",
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    pair_key = pair_key,
+    Y = 1L
+  )
+
+  rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state = state,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- rows[rows$spoke_id == 2L, , drop = FALSE]
+  expect_identical(as.integer(row$probe_edges_realized[[1L]]), 1L)
+  expect_identical(as.integer(row$probe_panel_shortfall[[1L]]), 0L)
+  expect_identical(as.integer(row$n_probe_pairs_since_last_refit[[1L]]), 1L)
+  expect_identical(as.integer(row$n_cross_edges_probe_since_last_refit[[1L]]), 1L)
+
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_epoch_id = 4L,
+      probe_panel_id = "panel_a",
+      probe_edges_planned = 1L,
+      probe_edges_realized = 2L,
+      probe_panel_shortfall = 0L,
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state = state,
+      refit_id = 2L,
+      refit_context = list(last_refit_step = 0L)
+    ),
+    "probe monotonicity invariant failed"
+  )
 })
 
 test_that("link stop gating enforces diagnostics and lag eligibility", {
@@ -1103,16 +2554,12 @@ test_that("link stop gating enforces diagnostics and lag eligibility", {
       delta_spoke_mean = 0.1,
       delta_spoke_sd = 0.02,
       delta_change_lagged = 0.01,
-      delta_change_pass = TRUE,
-      log_alpha_change_pass = NA,
-      delta_sd_pass = TRUE,
-      log_alpha_sd_pass = NA,
-      link_reliability = 0.95,
+      reliability_link_global = 0.95,
+      link_stop_reliability_min_used = 0.90,
       link_reliability_stop_pass = TRUE,
       ts_btl_rank_spearman_active = 0.94,
       lag_eligible = FALSE,
       rank_stability_lagged = NA_real_,
-      rank_stability_pass = FALSE,
       link_identified = TRUE,
       active_item_count_hub = 1L,
       active_item_count_spoke = 2L
@@ -1135,7 +2582,6 @@ test_that("link stop gating enforces diagnostics and lag eligibility", {
 
   state$controller$link_refit_stats_by_spoke[["2"]]$lag_eligible <- TRUE
   state$controller$link_refit_stats_by_spoke[["2"]]$rank_stability_lagged <- 0.99
-  state$controller$link_refit_stats_by_spoke[["2"]]$rank_stability_pass <- TRUE
   state$round_log$diagnostics_pass[[nrow(state$round_log)]] <- FALSE
   rows_diag <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
     state = state,
@@ -1146,7 +2592,7 @@ test_that("link stop gating enforces diagnostics and lag eligibility", {
   expect_false(isTRUE(row_diag$link_stop_eligible[[1L]]))
   expect_false(isTRUE(row_diag$link_stop_pass[[1L]]))
 
-  state$controller$link_refit_stats_by_spoke[["2"]]$delta_change_pass <- NA
+  state$controller$link_refit_stats_by_spoke[["2"]]$link_stop_gate_open <- FALSE
   state$round_log$diagnostics_pass[[nrow(state$round_log)]] <- TRUE
   rows_missing <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
     state = state,
@@ -1209,11 +2655,8 @@ test_that("link stop decision is reproducible from supplement-defined link_stage
       log_alpha_spoke_sd = 0.03,
       delta_change_lagged = 0.01,
       log_alpha_change_lagged = 0.01,
-      delta_change_pass = TRUE,
-      log_alpha_change_pass = TRUE,
-      delta_sd_pass = TRUE,
-      log_alpha_sd_pass = TRUE,
-      link_reliability = 0.95,
+      reliability_link_global = 0.95,
+      link_stop_reliability_min_used = 0.90,
       link_reliability_stop_pass = TRUE,
       ts_btl_rank_spearman_active = 0.95,
       lag_eligible = TRUE,
@@ -1221,18 +2664,25 @@ test_that("link stop decision is reproducible from supplement-defined link_stage
       link_min_refit_eligible = TRUE,
       link_stop_gate_open = TRUE,
       link_stop_eligible = TRUE,
-      stop_consecutive_pass_count = 2L,
+      stop_recent_pass_count = 2L,
+      stop_recent_window_size = 3L,
+      stability_window_refits_used = 3L,
+      stability_passes_required_used = 2L,
       link_stop_pass = TRUE,
       rank_stability_lagged = 0.99,
-      rank_stability_pass = TRUE,
       link_identified = TRUE,
       hub_anchored = TRUE,
       probe_brier = 0.10,
+      probe_brier_max_used = 0.19,
+      probe_brier_pass = TRUE,
       probe_pred_rmse_lagged = 0.01,
+      probe_pred_rmse_max_used = 0.015,
+      probe_pred_rmse_pass = TRUE,
       theta_global_rmse_lagged = 0.02,
+      theta_global_rmse_max_used = 0.05,
+      theta_global_rmse_pass = TRUE,
       active_item_count_hub = 1L,
-      active_item_count_spoke = 2L,
-      delta_sd_max_used = 0.05
+      active_item_count_spoke = 2L
     )
   )
   state$controller$linking_identified_by_spoke <- list(`2` = TRUE)
@@ -1267,17 +2717,12 @@ test_that("link stage log stores active TS-BTL correlation separately from lagge
       delta_spoke_mean = 0.1,
       delta_spoke_sd = 0.02,
       delta_change_lagged = 0.01,
-      delta_change_pass = TRUE,
-      delta_sd_max_used = 0.05,
-      delta_sd_pass = TRUE,
-      log_alpha_sd_pass = NA,
-      log_alpha_change_pass = NA,
-      link_reliability = 0.91,
+      reliability_link_global = 0.91,
+      link_stop_reliability_min_used = 0.90,
       link_reliability_stop_pass = TRUE,
       ts_btl_rank_spearman_active = 0.93,
       lag_eligible = TRUE,
-      rank_stability_lagged = 0.99,
-      rank_stability_pass = TRUE
+      rank_stability_lagged = 0.99
     )
   )
   state$round_log <- pairwiseLLM:::append_round_log(
@@ -1297,12 +2742,7 @@ test_that("link stage log stores active TS-BTL correlation separately from lagge
 test_that("link stop reconstruction rejects legacy pass-only rows without normative probe fields", {
   row <- tibble::tibble(
     link_stop_eligible = TRUE,
-    reliability_stop_pass = TRUE,
-    delta_sd_pass = TRUE,
-    log_alpha_sd_pass = NA,
-    delta_change_pass = TRUE,
-    log_alpha_change_pass = NA,
-    rank_stability_pass = TRUE
+    reliability_stop_pass = TRUE
   )
   out <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     link_row = row,
@@ -1312,7 +2752,7 @@ test_that("link stop reconstruction rejects legacy pass-only rows without normat
   )
   expect_false(isTRUE(out))
 
-  row$rank_stability_pass <- FALSE
+  row$reliability_stop_pass <- FALSE
   out2 <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     link_row = row,
     diagnostics_pass = TRUE,
@@ -1327,7 +2767,7 @@ test_that("link stop reconstruction fallback path honors numeric gates", {
     link_stop_reliability_min = 0.90,
     probe_brier_max = 0.19,
     probe_pred_rmse_max = 0.015,
-    theta_global_rmse_max = 0.04
+    theta_global_rmse_max = 0.05
   )
   row_shift <- tibble::tibble(
     link_stop_eligible = TRUE,
@@ -1361,7 +2801,15 @@ test_that("link stop reconstruction fallback path honors numeric gates", {
   )
   expect_true(isTRUE(pass_scale))
 
-  row_scale$theta_global_rmse_lagged <- 0.25
+  row_scale$theta_global_rmse_lagged <- 0.045
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
+    link_row = row_scale,
+    diagnostics_pass = TRUE,
+    hub_theta_sd = 0.5,
+    controller = controller
+  )))
+
+  row_scale$theta_global_rmse_lagged <- 0.055
   fail_scale <- pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     link_row = row_scale,
     diagnostics_pass = TRUE,
@@ -1386,7 +2834,8 @@ test_that("auto escalation requires diagnostics to pass before any decision open
     list(
       link_transform_policy = "auto",
       link_refit_mode = "shift_only",
-      link_transform_escalation_refits_required = 1L
+      link_transform_escalation_window_refits = 1L,
+      link_transform_escalation_passes_required = 1L
     )
   )
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
@@ -1416,14 +2865,27 @@ test_that("auto escalation requires diagnostics to pass before any decision open
     .adaptive_link_fit_transform_alt_shift_scale = function(...) {
       list(converged = TRUE, delta_mean = 0.2, log_alpha_mean = 0.3, log_alpha_sd = 0.02)
     },
-    .adaptive_link_mcmc_diagnostics = function(...) {
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
       list(
-        divergences = 0L,
-        max_rhat = 1.20,
-        min_ess_bulk = 50,
-        diagnostics_divergences_pass = TRUE,
-        diagnostics_rhat_pass = FALSE,
-        diagnostics_ess_pass = FALSE
+        delta_mean = 0.1,
+        delta_sd = 0.1,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        posterior_draws = list(delta = c(0.1, 0.1)),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1.20,
+          min_ess_bulk = 50,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = FALSE,
+          diagnostics_ess_pass = FALSE
+        ),
+        fit_contract = list(
+          estimation_method = "cmdstan_hmc",
+          uncertainty_approximation = "cmdstan_posterior_draws"
+        )
       )
     },
     .adaptive_link_probe_brier_for_fit = function(..., log_alpha_mean = NA_real_) {
@@ -1442,15 +2904,196 @@ test_that("auto escalation requires diagnostics to pass before any decision open
   expect_false(isTRUE(stats$link_stop_eligible))
   expect_false(isTRUE(stats$escalated_this_refit))
   expect_identical(out$controller$link_transform_state_by_spoke[["2"]], "shift_only")
+  expect_identical(stats$link_fit_method, "cmdstan_hmc")
+  expect_identical(stats$link_uncertainty_approximation, "cmdstan_posterior_draws")
+  expect_identical(stats$alternative_fit_method, "map_laplace_hessian")
+  expect_identical(stats$alternative_uncertainty_approximation, "laplace_hessian")
+})
+
+test_that("stable Phase B epochs expose finite lagged stop metrics and clear unavailable blockers", {
+  state <- make_stable_epoch_stop_state()
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_cross_edges = function(...) {
+      tibble::tibble(
+        spoke_item = c("s21", "s22", "s21"),
+        hub_item = c("h1", "h2", "h3"),
+        y_spoke = c(1L, 0L, 1L),
+        step_id = c(1L, 2L, 3L),
+        spoke_in_A = c(TRUE, TRUE, TRUE),
+        run_mode = c("link_multi_spoke", "link_multi_spoke", "link_multi_spoke"),
+        is_probe_step = c(FALSE, FALSE, FALSE)
+      )
+    },
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+      list(
+        delta_mean = 0.14,
+        delta_sd = 0.01,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        posterior_draws = list(delta = c(0.14, 0.14)),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1.0,
+          min_ess_bulk = 500,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = TRUE,
+          diagnostics_ess_pass = TRUE
+        ),
+        fit_contract = list(
+          estimation_method = "cmdstan_hmc",
+          uncertainty_approximation = "cmdstan_posterior_draws"
+        )
+      )
+    },
+    .adaptive_link_global_score_stats_active = function(...) list(reliability = 0.96),
+    .adaptive_link_reliability_transformed_active = function(...) 0.96,
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(rho_rank_lagged = 0.98, rho_rank_lagged_pass = TRUE)
+    },
+    .adaptive_link_probe_edges_realized = function(...) {
+      tibble::tibble(
+        hub_item = c("h1", "h2"),
+        spoke_item = c("s21", "s22"),
+        y_spoke = c(1L, 0L),
+        step_id = c(11L, 12L),
+        spoke_in_A = c(TRUE, TRUE),
+        run_mode = c("link_probe_holdout", "link_probe_holdout"),
+        is_probe_step = c(TRUE, TRUE),
+        pair_key = c(
+          pairwiseLLM:::make_unordered_key("h1", "s21"),
+          pairwiseLLM:::make_unordered_key("h2", "s22")
+        )
+      )
+    },
+    .adaptive_link_probe_brier_for_fit = function(...) 0.10,
+    .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) 0.01,
+    .adaptive_link_theta_global_rmse_lagged = function(...) 0.02,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(
+        state,
+        refit_context = list(last_refit_step = 0L)
+      )
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  row <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    out,
+    refit_id = 3L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- row[row$spoke_id == 2L, , drop = FALSE]
+
+  expect_true(isTRUE(stats$link_lag_eligible))
+  expect_true(is.finite(stats$probe_pred_rmse_lagged))
+  expect_true(is.finite(stats$theta_global_rmse_lagged))
+  expect_true(isTRUE(stats$probe_pred_rmse_pass))
+  expect_true(isTRUE(stats$theta_global_rmse_pass))
+  expect_false(grepl("probe_pred_rmse_lagged", as.character(stats$stop_blocker_codes), fixed = TRUE))
+  expect_false(grepl("theta_global_rmse_lagged", as.character(stats$stop_blocker_codes), fixed = TRUE))
+  expect_true(isTRUE(row$link_lag_eligible[[1L]]))
+  expect_true(is.finite(row$probe_pred_rmse_lagged[[1L]]))
+  expect_true(is.finite(row$theta_global_rmse_lagged[[1L]]))
+})
+
+test_that("stable Phase B epochs can open the stop gate and become stop-eligible", {
+  state <- make_stable_epoch_stop_state()
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_cross_edges = function(...) {
+      tibble::tibble(
+        spoke_item = c("s21", "s22", "s21"),
+        hub_item = c("h1", "h2", "h3"),
+        y_spoke = c(1L, 0L, 1L),
+        step_id = c(1L, 2L, 3L),
+        spoke_in_A = c(TRUE, TRUE, TRUE),
+        run_mode = c("link_multi_spoke", "link_multi_spoke", "link_multi_spoke"),
+        is_probe_step = c(FALSE, FALSE, FALSE)
+      )
+    },
+    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
+      list(
+        delta_mean = 0.14,
+        delta_sd = 0.01,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        posterior_draws = list(delta = c(0.14, 0.14)),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1.0,
+          min_ess_bulk = 500,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = TRUE,
+          diagnostics_ess_pass = TRUE
+        ),
+        fit_contract = list(
+          estimation_method = "cmdstan_hmc",
+          uncertainty_approximation = "cmdstan_posterior_draws"
+        )
+      )
+    },
+    .adaptive_link_global_score_stats_active = function(...) list(reliability = 0.96),
+    .adaptive_link_reliability_transformed_active = function(...) 0.96,
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(rho_rank_lagged = 0.98, rho_rank_lagged_pass = TRUE)
+    },
+    .adaptive_link_probe_edges_realized = function(...) {
+      tibble::tibble(
+        hub_item = c("h1", "h2"),
+        spoke_item = c("s21", "s22"),
+        y_spoke = c(1L, 0L),
+        step_id = c(11L, 12L),
+        spoke_in_A = c(TRUE, TRUE),
+        run_mode = c("link_probe_holdout", "link_probe_holdout"),
+        is_probe_step = c(TRUE, TRUE),
+        pair_key = c(
+          pairwiseLLM:::make_unordered_key("h1", "s21"),
+          pairwiseLLM:::make_unordered_key("h2", "s22")
+        )
+      )
+    },
+    .adaptive_link_probe_brier_for_fit = function(...) 0.10,
+    .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) 0.01,
+    .adaptive_link_theta_global_rmse_lagged = function(...) 0.02,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(
+        state,
+        refit_context = list(last_refit_step = 0L)
+      )
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  row <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    out,
+    refit_id = 3L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row <- row[row$spoke_id == 2L, , drop = FALSE]
+
+  expect_true(isTRUE(stats$link_stop_gate_open))
+  expect_true(isTRUE(stats$link_stop_eligible))
+  expect_true(isTRUE(row$link_stop_gate_open[[1L]]))
+  expect_true(isTRUE(row$link_stop_eligible[[1L]]))
+  expect_identical(as.integer(row$link_epoch_id[[1L]]), 4L)
+  expect_identical(as.character(row$probe_panel_id[[1L]]), "panel_a")
+  expect_identical(as.integer(row$probe_edges_realized[[1L]]), 2L)
 })
 
 test_that("linking identified state is reconstructable from canonical link-stage fields", {
   row <- tibble::tibble(
     link_transform_mode = "shift_scale",
-    reliability_EAP_link = 0.92,
-    ts_btl_rank_spearman = 0.93,
-    delta_sd_pass = TRUE,
-    log_alpha_sd_pass = TRUE
+    reliability_link_global = 0.92,
+    ts_btl_rank_spearman = 0.93
   )
   identified <- pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = row,
@@ -1945,7 +3588,7 @@ test_that("transformed-domain helper and reconstruction guard branches are cover
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
       link_transform_state = "shift_scale",
-      reliability_EAP_link = 0.95,
+      reliability_link_global = 0.95,
       ts_btl_rank_spearman = 0.95
     ),
     controller = list(link_identified_reliability_min = 0.80, link_rank_corr_min = 0.90)
@@ -1953,18 +3596,16 @@ test_that("transformed-domain helper and reconstruction guard branches are cover
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
       link_transform_state = "shift_scale",
-      reliability_EAP_link = 0.95,
-      ts_btl_rank_spearman = 0.95,
-      delta_sd_pass = TRUE
+      reliability_link_global = 0.95,
+      ts_btl_rank_spearman = 0.95
     ),
     controller = list(link_identified_reliability_min = 0.80, link_rank_corr_min = 0.90)
   )))
   expect_true(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_identified_from_logs(
     link_row = tibble::tibble(
       link_transform_state = "shift_only",
-      reliability_EAP_link = 0.95,
-      ts_btl_rank_spearman = 0.95,
-      delta_sd_pass = TRUE
+      reliability_link_global = 0.95,
+      ts_btl_rank_spearman = 0.95
     ),
     controller = list(link_identified_reliability_min = 0.80, link_rank_corr_min = 0.90)
   )))
@@ -2102,60 +3743,30 @@ test_that("adaptive_state validation branches for linking controls are covered",
   expect_true(q[["long_link"]] <= 8L)
 })
 
-test_that("linking MCMC helper edge branches are deterministic and guarded", {
-  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_rhat(matrix(1, nrow = 1L, ncol = 1L))))
-  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_rhat(matrix(1, nrow = 8L, ncol = 2L))))
-  expect_true(is.na(pairwiseLLM:::.adaptive_mcmc_ess_bulk(matrix(1, nrow = 2L, ncol = 1L))))
-
-  diag_bad_shape <- pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
-    chain_draws = array(1, dim = c(8L, 2L)),
-    param_names = "delta"
+test_that("linking CmdStan diagnostics validator enforces canonical HMC fields", {
+  diag_ok <- pairwiseLLM:::.adaptive_link_cmdstan_validate_diagnostics(
+    diagnostics = list(divergences = 0L, max_rhat = 1.005, min_ess_bulk = 900),
+    thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
   )
-  expect_true(is.na(diag_bad_shape$max_rhat))
-  expect_true(is.na(diag_bad_shape$min_ess_bulk))
-  expect_true(is.na(diag_bad_shape$diagnostics_rhat_pass))
-  expect_true(is.na(diag_bad_shape$diagnostics_ess_pass))
-
-  diag_flat <- suppressWarnings(pairwiseLLM:::.adaptive_link_mcmc_diagnostics(
-    chain_draws = array(numeric(), dim = c(10L, 2L, 0L)),
-    param_names = character()
-  ))
-  expect_true(is.na(diag_flat$max_rhat))
-  expect_true(is.na(diag_flat$min_ess_bulk))
+  expect_identical(diag_ok$divergences, 0L)
+  expect_true(isTRUE(diag_ok$diagnostics_divergences_pass))
+  expect_true(isTRUE(diag_ok$diagnostics_rhat_pass))
+  expect_true(isTRUE(diag_ok$diagnostics_ess_pass))
 
   expect_error(
-    pairwiseLLM:::.adaptive_link_mcmc_sample(
-      log_post_fn = function(x) -sum(x^2),
-      init = numeric(),
-      seed = 1L
+    pairwiseLLM:::.adaptive_link_cmdstan_validate_diagnostics(
+      diagnostics = list(divergences = NA_integer_, max_rhat = 1.01, min_ess_bulk = 500),
+      thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
     ),
-    "at least one parameter"
-  )
-  expect_error(
-    pairwiseLLM:::.adaptive_link_mcmc_sample(
-      log_post_fn = function(x) NA_real_,
-      init = c(0),
-      seed = 1L,
-      n_warmup = 0L,
-      n_samples = 20L
-    ),
-    "failed to initialize a finite posterior state"
+    "missing or malformed"
   )
 })
 
-test_that("linking MCMC sampling and refit seed are stable under fixed inputs", {
-  draws <- pairwiseLLM:::.adaptive_link_mcmc_sample(
-    log_post_fn = function(x) -sum(x^2),
-    init = c(0),
-    seed = 17L,
-    n_chains = 1L,
-    n_warmup = 2L,
-    n_samples = 5L
-  )
-  expect_equal(dim(draws$chain_draws), c(20L, 2L, 1L))
-  expect_equal(ncol(draws$draws), 1L)
-  expect_true(is.finite(draws$accept_rate))
-
+test_that("linking CmdStan schedule and refit seed are stable under fixed inputs", {
+  sched1 <- pairwiseLLM:::.adaptive_link_cmdstan_schedule(1L, n_param = 1L, joint_used = FALSE)
+  sched2 <- pairwiseLLM:::.adaptive_link_cmdstan_schedule(2L, n_param = 3L, joint_used = TRUE)
+  expect_true(sched2$iter_sampling > sched1$iter_sampling)
+  expect_true(sched2$iter_warmup > sched1$iter_warmup)
   edges <- tibble::tibble(step_id = c(NA_integer_, 2L), y_spoke = c(2L, 1L))
   seed1 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
   seed2 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
@@ -2172,6 +3783,61 @@ test_that("linking MCMC sampling and refit seed are stable under fixed inputs", 
   expect_false(is.na(seed_large_a))
   expect_true(seed_large_a >= 1L)
   expect_identical(seed_large_a, seed_large_b)
+})
+
+test_that("linking refit retries CmdStan effort until diagnostics pass", {
+  state <- make_linking_refit_state(list(link_refit_mode = "shift_only"))
+  state$config$btl_config$cmdstan_fit_fn <- NULL
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  sampled <- list()
+  fit_calls <- 0L
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_transform_cmdstan = function(stan_data,
+                                                    variable_names,
+                                                    cmdstan,
+                                                    seed,
+                                                    model_fn = NULL) {
+      fit_calls <<- fit_calls + 1L
+      sampled[[length(sampled) + 1L]] <<- list(
+        chains = as.integer(cmdstan$chains),
+        iter_warmup = as.integer(cmdstan$iter_warmup),
+        iter_sampling = as.integer(cmdstan$iter_sampling)
+      )
+      diagnostics <- if (fit_calls < 3L) {
+        list(divergences = 0L, max_rhat = 1.02, min_ess_bulk = 80)
+      } else {
+        list(divergences = 0L, max_rhat = 1.004, min_ess_bulk = 480)
+      }
+      list(
+        draws_matrix = cbind(delta = c(0, 0, 0, 0)),
+        diagnostics = diagnostics,
+        mcmc_config_used = list(
+          chains = as.integer(cmdstan$chains),
+          parallel_chains = as.integer(cmdstan$chains),
+          threads_per_chain = 1L,
+          cmdstanr_version = "test"
+        )
+      )
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_length(sampled, 3L)
+  expect_true(sampled[[2L]]$iter_sampling > sampled[[1L]]$iter_sampling)
+  expect_true(sampled[[3L]]$iter_sampling > sampled[[2L]]$iter_sampling)
+  expect_identical(stats$link_diagnostics_divergences, 0L)
+  expect_true(isTRUE(stats$link_diagnostics_divergences_pass))
+  expect_true(isTRUE(stats$link_diagnostics_rhat_pass))
+  expect_true(isTRUE(stats$link_diagnostics_ess_pass))
+  expect_identical(stats$fit_contract$mcmc$repair_attempts, 3L)
+  expect_identical(stats$link_fit_method, "cmdstan_hmc")
+  expect_identical(stats$link_uncertainty_approximation, "cmdstan_posterior_draws")
 })
 
 test_that("committed result orientation remains Y=1 => A wins in refit inputs", {

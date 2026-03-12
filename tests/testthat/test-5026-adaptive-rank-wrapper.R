@@ -327,6 +327,43 @@ test_that("adaptive_rank wrapper exposes top-band defaults and ceiling top-band 
   expect_equal(length(strata$top_band_ids), as.integer(ceiling(0.10 * out$state$n_items)))
 })
 
+test_that("adaptive_rank summary uses persisted meta stop state, not stale round-log stop flags", {
+  samples <- make_linking_samples_df()
+  judge <- function(A, B, state, ...) {
+    list(is_valid = TRUE, Y = 1L, invalid_reason = NA_character_)
+  }
+
+  out <- testthat::with_mocked_bindings(
+    adaptive_rank_run_live = function(state, judge, n_steps, ...) {
+      state$meta$stop_decision <- FALSE
+      state$meta$stop_reason <- NA_character_
+      state$round_log <- tibble::tibble(
+        refit_id = 1L,
+        phase_scope = "global",
+        stop_decision = TRUE,
+        stop_reason = "btl_converged"
+      )
+      state
+    },
+    pairwiseLLM::adaptive_rank(
+      data = samples,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      progress = "none",
+      seed = 17L,
+      adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_false(isTRUE(out$summary$last_stop_decision[[1L]]))
+  expect_true(is.na(out$summary$last_stop_reason[[1L]]))
+  expect_true(isTRUE(out$logs$round_log$stop_decision[[1L]]))
+  expect_identical(as.character(out$logs$round_log$stop_reason[[1L]]), "btl_converged")
+})
+
 test_that("adaptive_rank builds internal llm judge and forwards judge_call_args", {
   samples <- make_test_samples_df(4L)[, c("ID", "text")]
   calls <- list()
@@ -562,7 +599,7 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")]
     ),
-    btl_config = list(refit_pairs_target = 2L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 13L
   )
@@ -577,6 +614,7 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
   expect_true(nrow(out$logs$link_stage_log) >= 1L)
   expect_true(all(c("link_transform_policy", "link_transform_state", "reliability_link_global") %in%
     names(out$logs$link_stage_log)))
+  expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
   expect_true("rank_link" %in% names(out$items))
 })
 
@@ -606,7 +644,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
-    btl_config = list(refit_pairs_target = 2L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 17L
   )
@@ -622,6 +660,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(nrow(out$logs$link_stage_log) >= 2L)
   expect_true(all(c("link_transform_policy", "link_transform_state", "link_epoch_id") %in%
     names(out$logs$link_stage_log)))
+  expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
 })
 
 test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are unavailable", {
@@ -644,7 +683,7 @@ test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are un
       hub_id = 1L,
       phase_a_mode = "run"
     ),
-    btl_config = list(refit_pairs_target = 1L),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none",
     seed = 31L
   )

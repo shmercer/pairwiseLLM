@@ -508,12 +508,263 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
     stop_reason = "btl_converged"
   )
   block <- pairwiseLLM:::adaptive_progress_refit_block(row, cfg = list(stop_thresholds = list()))
-  expect_true(any(grepl("Decision: STOP", block)))
-  expect_true(any(grepl("Model params", block)))
-  expect_true(any(grepl("phase_scope=phase_a_set", block, fixed = TRUE)))
-  expect_true(any(grepl("reliability_EAP_scope >= eap_reliability_min", block, fixed = TRUE)))
-  expect_true(any(grepl("lag_eligible_scope", block, fixed = TRUE)))
+  expect_true(any(grepl("^Refit 0001  step=3  new_pairs=3", block)))
+  expect_true(any(grepl("phase_scope=phase_a_set\\(set_id=2\\)", block)))
+  expect_true(any(grepl("^Global stop:", block)))
+  expect_true(any(grepl("reliability_EAP_scope=0.990/0.950 pass", block, fixed = TRUE)))
+  expect_true(any(grepl("rho_theta_scope=0.990/0.950 pass", block, fixed = TRUE)))
+  expect_false(any(grepl("Model params", block, fixed = TRUE)))
+  expect_false(any(grepl("chains=", block, fixed = TRUE)))
   expect_equal(length(pairwiseLLM:::adaptive_progress_refit_block(tibble::tibble(), cfg = list())), 0L)
+})
+
+test_that("adaptive progress refit block prints linking stop gates without misleading STOP", {
+  row <- tibble::tibble(
+    refit_id = 8L,
+    round_id_at_refit = 20L,
+    step_id_at_refit = 200L,
+    model_variant = "btl_e_b",
+    n_items = 100L,
+    phase_scope = "global",
+    phase_scope_set_id = NA_integer_,
+    phase_scope_n_items = 100L,
+    total_pairs_done = 200L,
+    new_pairs_since_last_refit = 25L,
+    n_unique_pairs_seen = 180L,
+    proposed_pairs_mode = "base",
+    starve_rate_since_last_refit = 0,
+    fallback_rate_since_last_refit = 0,
+    fallback_used_mode = "none",
+    starvation_reason_mode = NA_character_,
+    mean_degree = 4,
+    min_degree = 1,
+    mean_degree_scope = 4,
+    min_degree_scope = 1,
+    pos_balance_sd = 0.1,
+    epsilon_mean = 0.05,
+    epsilon_p2.5 = 0.01,
+    epsilon_p50 = 0.05,
+    epsilon_p97.5 = 0.09,
+    b_mean = 0.02,
+    b_p2.5 = -0.1,
+    b_p50 = 0.02,
+    b_p97.5 = 0.12,
+    diagnostics_pass = TRUE,
+    divergences = 0L,
+    divergences_max_allowed = 0L,
+    diagnostics_divergences_pass = TRUE,
+    max_rhat = 1.001,
+    max_rhat_allowed = 1.01,
+    diagnostics_rhat_pass = TRUE,
+    min_ess_bulk = 500,
+    ess_bulk_required = 400,
+    reliability_EAP = 0.95,
+    eap_reliability_min = 0.9,
+    rho_rank = 0.99,
+    rank_spearman_min = 0.95,
+    rho_theta = 0.99,
+    theta_corr_min = 0.95,
+    delta_sd_theta = 0.01,
+    theta_sd_rel_change_max = 0.2,
+    lag_eligible = TRUE,
+    ci95_theta_width_mean = 0.2,
+    near_tie_adj_frac = 0.1,
+    cov_trace_theta = 1.2,
+    top20_boundary_entropy_mean = 0.3,
+    nn_diff_sd_mean = 0.4,
+    mcmc_chains = 2L,
+    mcmc_parallel_chains = 2L,
+    mcmc_core_fraction = 0.8,
+    mcmc_threads_per_chain = 1L,
+    stop_decision = TRUE,
+    stop_reason = "btl_converged"
+  )
+  link_rows <- tibble::tibble(
+    spoke_id = c(2L, 3L),
+    link_transform_policy = "auto",
+    link_transform_state = "shift_only",
+    link_refit_mode = "shift_only",
+    hub_lock_mode = "soft_lock",
+    link_epoch_id = 1L,
+    reliability_link_global = c(0.972, 0.971),
+    link_stop_pass = c(FALSE, FALSE),
+    link_stop_eligible = c(FALSE, FALSE),
+    transform_frozen = c(FALSE, FALSE),
+    n_pairs_cross_set_done = c(680L, 679L),
+    n_cross_edges_total_since_last_refit = c(38L, 37L),
+    n_unique_cross_pairs_seen = c(448L, 467L),
+    probe_edges_planned = c(0L, 0L),
+    probe_edges_realized = c(0L, 0L),
+    escalated_this_refit = c(FALSE, FALSE),
+    quota_long_link_removed = c(13L, 0L),
+    link_lag_eligible = c(TRUE, TRUE),
+    link_min_refit_eligible = c(TRUE, TRUE),
+    link_stop_gate_open = c(FALSE, FALSE),
+    stop_recent_pass_count = c(0L, 0L),
+    stop_recent_window_size = c(0L, 0L),
+    stability_window_refits_used = c(3L, 3L),
+    stability_passes_required_used = c(2L, 2L),
+    link_diagnostics_divergences_pass = c(TRUE, TRUE),
+    link_diagnostics_rhat_pass = c(TRUE, TRUE),
+    link_diagnostics_ess_pass = c(TRUE, TRUE),
+    probe_edges_min_for_stop_used = c(30L, 30L),
+    scale_ready = c(TRUE, TRUE),
+    reliability_stop_pass = c(TRUE, TRUE),
+    hub_anchored = c(TRUE, TRUE),
+    rank_stability_lagged = c(0.999, 0.998),
+    delta_spoke_sd = c(0.632, 0.626),
+    probe_brier_max_used = c(0.19, 0.19),
+    probe_brier_pass = c(NA, NA),
+    theta_global_rmse_lagged = c(0.075, 0.023),
+    theta_global_rmse_max_used = c(0.05, 0.05),
+    theta_global_rmse_pass = c(FALSE, TRUE),
+    probe_pred_rmse_lagged = c(NA_real_, NA_real_),
+    probe_pred_rmse_max_used = c(0.015, 0.015),
+    probe_pred_rmse_pass = c(NA, NA),
+    probe_brier = c(NA_real_, NA_real_)
+  )
+
+  block <- pairwiseLLM:::adaptive_progress_refit_block(
+    row,
+    cfg = list(stop_thresholds = list()),
+    link_stage_rows = link_rows
+  )
+
+  expect_true(any(grepl("^Global: audit_only", block)))
+  expect_true(any(grepl("^Spokes:$", block)))
+  expect_true(any(grepl("spoke=2 active  eligible=no  gate_open=no", block, fixed = TRUE)))
+  expect_true(any(grepl("probes=0/30", block, fixed = TRUE)))
+  expect_true(any(grepl("reliability_link_global=0.972/0.900 pass", block, fixed = TRUE)))
+  expect_true(any(grepl("probe_pred_rmse_lagged=inactive/0.015 inactive", block, fixed = TRUE)))
+  expect_true(any(grepl("theta_global_rmse_lagged=0.075/0.050 fail", block, fixed = TRUE)))
+  expect_false(any(grepl("Decision: STOP", block, fixed = TRUE)))
+  expect_false(any(grepl("delta_spoke_sd=", block, fixed = TRUE)))
+  expect_false(any(grepl("probe_brier=", block, fixed = TRUE)))
+})
+
+test_that("adaptive progress refit block keeps frozen spokes compact and emits health notes only when needed", {
+  row <- tibble::tibble(
+    refit_id = 9L,
+    round_id_at_refit = 21L,
+    step_id_at_refit = 210L,
+    model_variant = "btl_e_b",
+    n_items = 100L,
+    phase_scope = "global",
+    total_pairs_done = 220L,
+    new_pairs_since_last_refit = 6L,
+    new_active_pairs_since_last_refit = 4L,
+    new_probe_pairs_since_last_refit = 2L,
+    new_total_cross_pairs_since_last_refit = 6L,
+    fallback_rate_since_last_refit = 0.25,
+    fallback_used_mode = "dup_relax",
+    starve_rate_since_last_refit = 0,
+    starvation_reason_mode = NA_character_,
+    diagnostics_pass = TRUE,
+    eap_pass = TRUE,
+    reliability_EAP = 0.95,
+    eap_reliability_min = 0.90,
+    lag_eligible = TRUE,
+    theta_corr_pass = TRUE,
+    rho_theta = 0.99,
+    theta_corr_min = 0.95,
+    delta_sd_theta_pass = TRUE,
+    delta_sd_theta = 0.01,
+    theta_sd_rel_change_max = 0.20,
+    rho_rank_pass = TRUE,
+    rho_rank = 0.99,
+    rank_spearman_min = 0.95,
+    stop_decision = FALSE
+  )
+  link_rows <- tibble::tibble(
+    spoke_id = c(2L, 3L),
+    transform_frozen = c(FALSE, TRUE),
+    transform_frozen_refit_id = c(NA_integer_, 8L),
+    link_transform_state = c("shift_only", "shift_only"),
+    link_stop_eligible = c(TRUE, TRUE),
+    link_stop_gate_open = c(TRUE, TRUE),
+    link_lag_eligible = c(TRUE, TRUE),
+    link_min_refit_eligible = c(TRUE, TRUE),
+    stop_recent_pass_count = c(1L, 2L),
+    stop_recent_window_size = c(2L, 3L),
+    stability_window_refits_used = c(3L, 3L),
+    stability_passes_required_used = c(2L, 2L),
+    probe_edges_realized = c(30L, 30L),
+    probe_edges_min_for_stop_used = c(30L, 30L),
+    link_diagnostics_divergences_pass = c(TRUE, TRUE),
+    link_diagnostics_rhat_pass = c(TRUE, TRUE),
+    link_diagnostics_ess_pass = c(TRUE, TRUE),
+    hub_anchored = c(TRUE, TRUE),
+    reliability_link_global = c(0.96, 0.97),
+    reliability_stop_pass = c(TRUE, TRUE),
+    probe_pred_rmse_lagged = c(0.01, 0.01),
+    probe_pred_rmse_max_used = c(0.015, 0.015),
+    probe_pred_rmse_pass = c(TRUE, TRUE),
+    theta_global_rmse_lagged = c(0.03, 0.02),
+    theta_global_rmse_max_used = c(0.05, 0.05),
+    theta_global_rmse_pass = c(TRUE, TRUE),
+    stage_budget_unfilled = c(2L, 0L),
+    probe_panel_shortfall = c(3L, 0L),
+    probe_shortfall_reason = c("probe_panel_rebuild", "none")
+  )
+
+  block <- pairwiseLLM:::adaptive_progress_refit_block(
+    row,
+    cfg = list(stop_thresholds = list()),
+    link_stage_rows = link_rows
+  )
+
+  expect_true(any(grepl("spoke=3 frozen  state=shift_only  frozen_refit=8", block, fixed = TRUE)))
+  expect_true(any(grepl(
+    "Selection: fallback=dup_relax (rate=0.25); budget_shortfall=2; probe_shortfall=3 (probe_panel_rebuild)",
+    block,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl("^Diagnostics:", block)))
+})
+
+test_that("adaptive progress refit block suppresses diagnostics unless problematic", {
+  row_pass <- tibble::tibble(
+    refit_id = 2L,
+    step_id_at_refit = 4L,
+    new_pairs_since_last_refit = 2L,
+    diagnostics_pass = TRUE,
+    eap_pass = TRUE,
+    reliability_EAP = 0.96,
+    eap_reliability_min = 0.90,
+    lag_eligible = FALSE,
+    stop_decision = FALSE
+  )
+  block_pass <- pairwiseLLM:::adaptive_progress_refit_block(
+    row_pass,
+    cfg = list(stop_thresholds = list())
+  )
+  expect_false(any(grepl("^Diagnostics:", block_pass)))
+
+  row_fail <- tibble::tibble(
+    refit_id = 2L,
+    step_id_at_refit = 4L,
+    new_pairs_since_last_refit = 2L,
+    diagnostics_pass = FALSE,
+    diagnostics_divergences_pass = FALSE,
+    divergences = 2L,
+    divergences_max_allowed = 0L,
+    diagnostics_rhat_pass = TRUE,
+    max_rhat = 1.001,
+    max_rhat_allowed = 1.01,
+    diagnostics_ess_pass = FALSE,
+    min_ess_bulk = 100,
+    ess_bulk_required = 400,
+    eap_pass = TRUE,
+    reliability_EAP = 0.96,
+    eap_reliability_min = 0.90,
+    lag_eligible = FALSE,
+    stop_decision = FALSE
+  )
+  block_fail <- pairwiseLLM:::adaptive_progress_refit_block(
+    row_fail,
+    cfg = list(stop_thresholds = list())
+  )
+  expect_true(any(grepl("^Diagnostics: global divergences=2/0 fail", block_fail)))
 })
 
 test_that("legacy stopping scaffold helpers abort loudly", {

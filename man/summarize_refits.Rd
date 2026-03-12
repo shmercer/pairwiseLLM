@@ -30,7 +30,9 @@ Key fields include:
 \item identity: \code{refit_id}, \code{round_id_at_refit},
 \code{step_id_at_refit}
 \item run scale: \code{total_pairs_done}, \code{new_pairs_since_last_refit},
-\code{n_unique_pairs_seen}
+\code{new_active_pairs_since_last_refit},
+\code{new_probe_pairs_since_last_refit},
+\code{new_total_cross_pairs_since_last_refit}, \code{n_unique_pairs_seen}
 \item candidate health: \code{proposed_pairs_mode},
 \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
 \code{fallback_used_mode}, \code{starvation_reason_mode}

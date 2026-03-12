@@ -86,7 +86,7 @@
 .adaptive_log_factor_specs_step <- function() {
   list(
     run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe"),
-    link_stage = c("anchor_link", "long_link", "mid_link", "local_link"),
+    link_stage = c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
     utility_mode = c("pairing_trueskill_u0", "linking_d_optimal"),
@@ -754,15 +754,8 @@ summarize_adaptive <- function(state) {
   round_log <- adaptive_round_log(state)
   committed <- sum(!is.na(step_log$pair_id))
 
-  last_stop_decision <- NA
-  last_stop_reason <- NA_character_
-  if (nrow(round_log) > 0L) {
-    last_stop_decision <- round_log$stop_decision[[nrow(round_log)]]
-    last_stop_reason <- round_log$stop_reason[[nrow(round_log)]]
-  } else if (is.list(state$meta)) {
-    last_stop_decision <- as.logical(state$meta$stop_decision %||% NA)
-    last_stop_reason <- as.character(state$meta$stop_reason %||% NA_character_)
-  }
+  last_stop_decision <- as.logical(state$meta$stop_decision %||% NA)
+  last_stop_reason <- as.character(state$meta$stop_reason %||% NA_character_)
 
   tibble::tibble(
     n_items = as.integer(state$n_items),
@@ -781,6 +774,74 @@ summarize_adaptive <- function(state) {
     return(NA_character_)
   }
   paste(sort(vals), collapse = ",")
+}
+
+.adaptive_latest_link_stage_rows <- function(state) {
+  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% tibble::tibble())
+  if (nrow(link_stage_log) < 1L) {
+    return(link_stage_log)
+  }
+  if (!all(c("spoke_id", "refit_id") %in% names(link_stage_log))) {
+    return(link_stage_log[0, , drop = FALSE])
+  }
+  ord <- order(
+    as.integer(link_stage_log$spoke_id),
+    as.integer(link_stage_log$refit_id),
+    seq_len(nrow(link_stage_log))
+  )
+  link_stage_log <- link_stage_log[ord, , drop = FALSE]
+  keep <- !duplicated(as.integer(link_stage_log$spoke_id), fromLast = TRUE)
+  tibble::as_tibble(link_stage_log[keep, , drop = FALSE])
+}
+
+.adaptive_print_link_state_line <- function(state, phase_ctx) {
+  latest_rows <- .adaptive_latest_link_stage_rows(state)
+  if (nrow(latest_rows) < 1L) {
+    return(character())
+  }
+
+  fit_methods <- .adaptive_print_compact_values(latest_rows$link_fit_method)
+  uncertainty <- .adaptive_print_compact_values(latest_rows$link_uncertainty_approximation)
+  probe_panel_id <- .adaptive_print_compact_values(latest_rows$probe_panel_id)
+  probe_planned <- sum(as.integer(latest_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
+  probe_realized <- sum(as.integer(latest_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
+  gate_open <- sum(latest_rows$link_stop_gate_open %in% TRUE, na.rm = TRUE)
+  lag_open <- sum(latest_rows$link_lag_eligible %in% TRUE, na.rm = TRUE)
+  frozen <- sum(latest_rows$transform_frozen %in% TRUE, na.rm = TRUE)
+
+  blocker_codes <- unique(as.character(latest_rows$stop_blocker_codes %||% character()))
+  blocker_codes <- blocker_codes[!is.na(blocker_codes) & nzchar(blocker_codes)]
+  blockers <- unique(unlist(strsplit(blocker_codes, "[,|]", fixed = FALSE), use.names = FALSE))
+  blockers <- blockers[!is.na(blockers) & nzchar(blockers)]
+
+  details <- c(
+    if (!is.na(fit_methods) && nzchar(fit_methods)) {
+      paste0("fit_method=", fit_methods)
+    },
+    if (!is.na(uncertainty) && nzchar(uncertainty)) {
+      paste0("uncertainty=", uncertainty)
+    },
+    if (!is.na(probe_panel_id) && nzchar(probe_panel_id)) {
+      paste0("probe_panel_id=", probe_panel_id)
+    },
+    paste0("probe_edges=", probe_realized, "/", probe_planned),
+    paste0("lag_open=", lag_open, "/", nrow(latest_rows)),
+    paste0("stop_gate_open=", gate_open, "/", nrow(latest_rows)),
+    if (length(phase_ctx$stopped_spokes) > 0L) {
+      paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+    },
+    if (frozen > 0L) {
+      paste0("transform_frozen=", frozen, "/", nrow(latest_rows))
+    },
+    if (length(blockers) > 0L) {
+      paste0("stop_blockers=", paste(sort(blockers), collapse = ","))
+    }
+  )
+
+  if (length(details) < 1L) {
+    return(character())
+  }
+  paste0("link review: ", paste(details, collapse = "; "))
 }
 
 .adaptive_print_link_phase_line <- function(state) {
@@ -826,7 +887,13 @@ summarize_adaptive <- function(state) {
   if (length(details) > 0L) {
     phase_line <- paste0(phase_line, " [", paste(details, collapse = "; "), "]")
   }
-  phase_line
+  c(
+    phase_line,
+    .adaptive_print_link_state_line(
+      state = state,
+      phase_ctx = phase_ctx
+    )
+  )
 }
 
 #' Print an adaptive state summary.
@@ -922,6 +989,700 @@ print.adaptive_state <- function(x, ...) {
     return(value >= threshold)
   }
   value <= threshold
+}
+
+.adaptive_progress_col_value <- function(tbl, col, idx = 1L, default = NA) {
+  if (!col %in% names(tbl)) {
+    return(default)
+  }
+  tbl[[col]][[idx]] %||% default
+}
+
+.adaptive_progress_fmt_num <- function(x, digits = 3L, inactive = "inactive") {
+  if (!is.finite(x)) {
+    return(inactive)
+  }
+  formatC(as.double(x), digits = digits, format = "f")
+}
+
+.adaptive_progress_fmt_state <- function(x, true = "pass", false = "fail", inactive = "inactive") {
+  if (isTRUE(x)) {
+    return(true)
+  }
+  if (identical(x, FALSE)) {
+    return(false)
+  }
+  inactive
+}
+
+.adaptive_progress_gate_detail <- function(label,
+                                           value,
+                                           threshold,
+                                           pass,
+                                           direction = c("ge", "le"),
+                                           digits = 3L) {
+  direction <- match.arg(direction)
+  value_txt <- .adaptive_progress_fmt_num(value, digits = digits, inactive = "inactive")
+  threshold_txt <- .adaptive_progress_fmt_num(threshold, digits = digits, inactive = "NA")
+  relation <- if (identical(direction, "ge")) ">=" else "<="
+  paste0(
+    label,
+    "=",
+    value_txt,
+    "/",
+    threshold_txt,
+    " ",
+    .adaptive_progress_fmt_state(pass),
+    " (",
+    relation,
+    ")"
+  )
+}
+
+.adaptive_progress_link_diag_pass <- function(link_row) {
+  isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)) &&
+    isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)) &&
+    isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA))
+}
+
+.adaptive_progress_selection_notes <- function(row, link_stage_rows) {
+  notes <- character()
+
+  fallback_rate <- as.double(.adaptive_progress_col_value(
+    row,
+    "fallback_rate_since_last_refit",
+    default = NA_real_
+  ))
+  fallback_mode <- as.character(.adaptive_progress_col_value(
+    row,
+    "fallback_used_mode",
+    default = NA_character_
+  ))
+  if (is.finite(fallback_rate) && fallback_rate > 0) {
+    if (!is.na(fallback_mode) && nzchar(fallback_mode) && !fallback_mode %in% c("base", "warm_start")) {
+      notes <- c(
+        notes,
+        paste0(
+          "fallback=",
+          fallback_mode,
+          " (rate=",
+          .adaptive_progress_fmt_num(fallback_rate, digits = 2L, inactive = "0.00"),
+          ")"
+        )
+      )
+    } else {
+      notes <- c(
+        notes,
+        paste0(
+          "fallback_rate=",
+          .adaptive_progress_fmt_num(fallback_rate, digits = 2L, inactive = "0.00")
+        )
+      )
+    }
+  }
+
+  starve_rate <- as.double(.adaptive_progress_col_value(
+    row,
+    "starve_rate_since_last_refit",
+    default = NA_real_
+  ))
+  starvation_reason <- as.character(.adaptive_progress_col_value(
+    row,
+    "starvation_reason_mode",
+    default = NA_character_
+  ))
+  if (is.finite(starve_rate) && starve_rate > 0) {
+    note <- paste0(
+      "candidate_starved=",
+      .adaptive_progress_fmt_num(starve_rate, digits = 2L, inactive = "0.00")
+    )
+    if (!is.na(starvation_reason) && nzchar(starvation_reason)) {
+      note <- paste0(note, " (", starvation_reason, ")")
+    }
+    notes <- c(notes, note)
+  }
+
+  if (nrow(link_stage_rows) > 0L) {
+    budget_shortfall <- sum(as.integer(
+      if ("stage_budget_unfilled" %in% names(link_stage_rows)) {
+        link_stage_rows$stage_budget_unfilled
+      } else {
+        0L
+      }
+    ), na.rm = TRUE)
+    if (budget_shortfall > 0L) {
+      notes <- c(notes, paste0("budget_shortfall=", as.integer(budget_shortfall)))
+    }
+
+    probe_shortfall <- sum(as.integer(
+      if ("probe_panel_shortfall" %in% names(link_stage_rows)) {
+        link_stage_rows$probe_panel_shortfall
+      } else {
+        0L
+      }
+    ), na.rm = TRUE)
+    if (probe_shortfall > 0L) {
+      probe_reasons <- if ("probe_shortfall_reason" %in% names(link_stage_rows)) {
+        reasons <- as.character(link_stage_rows$probe_shortfall_reason)
+        reasons <- reasons[!is.na(reasons) & nzchar(reasons) & reasons != "none"]
+        .adaptive_print_compact_values(reasons)
+      } else {
+        NA_character_
+      }
+      note <- paste0("probe_shortfall=", as.integer(probe_shortfall))
+      if (!is.na(probe_reasons) && nzchar(probe_reasons)) {
+        note <- paste0(note, " (", probe_reasons, ")")
+      }
+      notes <- c(notes, note)
+    }
+  }
+
+  notes
+}
+
+.adaptive_progress_diagnostics_lines <- function(row, link_stage_rows) {
+  diagnostics <- character()
+
+  global_pass <- isTRUE(.adaptive_progress_col_value(row, "diagnostics_pass", default = NA))
+  if (!global_pass) {
+    diagnostics <- c(
+      diagnostics,
+      paste0(
+        "Diagnostics: global divergences=",
+        .adaptive_progress_col_value(row, "divergences", default = NA_integer_),
+        "/",
+        .adaptive_progress_col_value(row, "divergences_max_allowed", default = NA_integer_),
+        " ",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(row, "diagnostics_divergences_pass", default = NA)
+        ),
+        "  max_rhat=",
+        .adaptive_progress_fmt_num(
+          .adaptive_progress_col_value(row, "max_rhat", default = NA_real_),
+          digits = 3L
+        ),
+        "/",
+        .adaptive_progress_fmt_num(
+          .adaptive_progress_col_value(row, "max_rhat_allowed", default = NA_real_),
+          digits = 3L,
+          inactive = "NA"
+        ),
+        " ",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(row, "diagnostics_rhat_pass", default = NA)
+        ),
+        "  min_ess_bulk=",
+        .adaptive_progress_fmt_num(
+          .adaptive_progress_col_value(row, "min_ess_bulk", default = NA_real_),
+          digits = 0L
+        ),
+        "/",
+        .adaptive_progress_fmt_num(
+          .adaptive_progress_col_value(row, "ess_bulk_required", default = NA_real_),
+          digits = 0L,
+          inactive = "NA"
+        ),
+        " ",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(row, "diagnostics_ess_pass", default = NA)
+        )
+      )
+    )
+  }
+
+  if (nrow(link_stage_rows) > 0L) {
+    bad_idx <- which(!vapply(
+      seq_len(nrow(link_stage_rows)),
+      function(idx) .adaptive_progress_link_diag_pass(link_stage_rows[idx, , drop = FALSE]),
+      logical(1L)
+    ))
+    if (length(bad_idx) > 0L) {
+      for (idx in bad_idx) {
+        link_row <- link_stage_rows[idx, , drop = FALSE]
+        diagnostics <- c(
+          diagnostics,
+          paste0(
+            "Diagnostics: spoke=",
+            as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_)),
+            " link divergences=",
+            .adaptive_progress_col_value(link_row, "link_diagnostics_divergences", default = NA_integer_),
+            " ",
+            .adaptive_progress_fmt_state(
+              .adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)
+            ),
+            "  max_rhat=",
+            .adaptive_progress_fmt_num(
+              .adaptive_progress_col_value(link_row, "link_diagnostics_max_rhat", default = NA_real_),
+              digits = 3L
+            ),
+            " ",
+            .adaptive_progress_fmt_state(
+              .adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)
+            ),
+            "  min_ess_bulk=",
+            .adaptive_progress_fmt_num(
+              .adaptive_progress_col_value(link_row, "link_diagnostics_min_ess_bulk", default = NA_real_),
+              digits = 0L
+            ),
+            " ",
+            .adaptive_progress_fmt_state(
+              .adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA)
+            )
+          )
+        )
+      }
+    }
+  }
+
+  diagnostics
+}
+
+.adaptive_progress_phase_a_blocker <- function(row, use_scope_metrics, values) {
+  if (!isTRUE(values$diagnostics_pass)) {
+    return("diagnostics_pass")
+  }
+  if (!isTRUE(values$eap_pass)) {
+    return(values$reliability_label)
+  }
+  if (!isTRUE(values$lag_eligible)) {
+    return(if (isTRUE(use_scope_metrics)) "lag_eligible_scope" else "lag_eligible")
+  }
+  if (!isTRUE(values$theta_pass)) {
+    return(values$theta_label)
+  }
+  if (!isTRUE(values$delta_pass)) {
+    return(values$delta_label)
+  }
+  if (!isTRUE(values$rank_pass)) {
+    return(values$rank_label)
+  }
+  if (!isTRUE(.adaptive_progress_col_value(row, "stop_decision", default = NA))) {
+    return("stop_pending")
+  }
+  NA_character_
+}
+
+.adaptive_progress_phase_a_lines <- function(row, thresholds) {
+  phase_scope <- as.character(.adaptive_progress_col_value(row, "phase_scope", default = "global"))
+  use_scope_metrics <- identical(phase_scope, "phase_a_set")
+  scope_set_id <- as.integer(.adaptive_progress_col_value(row, "phase_scope_set_id", default = NA_integer_))
+
+  reliability_label <- if (isTRUE(use_scope_metrics)) "reliability_EAP_scope" else "reliability_EAP"
+  theta_label <- if (isTRUE(use_scope_metrics)) "rho_theta_scope" else "rho_theta"
+  delta_label <- if (isTRUE(use_scope_metrics)) "delta_sd_theta_scope" else "delta_sd_theta"
+  rank_label <- if (isTRUE(use_scope_metrics)) "rho_rank_scope" else "rho_rank"
+
+  reliability_value <- as.double(.adaptive_progress_col_value(row, reliability_label, default = NA_real_))
+  theta_value <- as.double(.adaptive_progress_col_value(row, theta_label, default = NA_real_))
+  delta_value <- as.double(.adaptive_progress_col_value(row, delta_label, default = NA_real_))
+  rank_value <- as.double(.adaptive_progress_col_value(row, rank_label, default = NA_real_))
+
+  reliability_min <- as.double(.adaptive_progress_col_value(
+    row,
+    "eap_reliability_min",
+    default = thresholds$eap_reliability_min %||% NA_real_
+  ))
+  theta_min <- as.double(.adaptive_progress_col_value(
+    row,
+    "theta_corr_min",
+    default = thresholds$theta_corr_min %||% NA_real_
+  ))
+  delta_max <- as.double(.adaptive_progress_col_value(
+    row,
+    "theta_sd_rel_change_max",
+    default = thresholds$theta_sd_rel_change_max %||% NA_real_
+  ))
+  rank_min <- as.double(.adaptive_progress_col_value(
+    row,
+    "rank_spearman_min",
+    default = thresholds$rank_spearman_min %||% NA_real_
+  ))
+
+  diagnostics_pass <- isTRUE(.adaptive_progress_col_value(row, "diagnostics_pass", default = NA))
+  eap_pass_col <- if (isTRUE(use_scope_metrics)) "eap_pass_scope" else "eap_pass"
+  theta_pass_col <- if (isTRUE(use_scope_metrics)) "theta_corr_pass_scope" else "theta_corr_pass"
+  delta_pass_col <- if (isTRUE(use_scope_metrics)) "delta_sd_theta_pass_scope" else "delta_sd_theta_pass"
+  rank_pass_col <- if (isTRUE(use_scope_metrics)) "rho_rank_pass_scope" else "rho_rank_pass"
+  lag_col <- if (isTRUE(use_scope_metrics)) "lag_eligible_scope" else "lag_eligible"
+
+  lag_eligible <- isTRUE(.adaptive_progress_col_value(row, lag_col, default = NA))
+  eap_pass <- .adaptive_progress_col_value(row, eap_pass_col, default = NA)
+  theta_pass <- .adaptive_progress_col_value(row, theta_pass_col, default = NA)
+  delta_pass <- .adaptive_progress_col_value(row, delta_pass_col, default = NA)
+  rank_pass <- .adaptive_progress_col_value(row, rank_pass_col, default = NA)
+
+  if (!is.logical(eap_pass) || is.na(eap_pass)) {
+    eap_pass <- .adaptive_meets_threshold(reliability_value, reliability_min, "ge")
+  }
+  if (!is.logical(theta_pass) || is.na(theta_pass)) {
+    theta_pass <- .adaptive_meets_threshold(theta_value, theta_min, "ge")
+  }
+  if (!is.logical(delta_pass) || is.na(delta_pass)) {
+    delta_pass <- .adaptive_meets_threshold(delta_value, delta_max, "le")
+  }
+  if (!is.logical(rank_pass) || is.na(rank_pass)) {
+    rank_pass <- .adaptive_meets_threshold(rank_value, rank_min, "ge")
+  }
+
+  refit_line <- paste0(
+    "Refit ",
+    sprintf("%04d", as.integer(.adaptive_progress_col_value(row, "refit_id", default = NA_integer_))),
+    "  step=",
+    .adaptive_progress_col_value(row, "step_id_at_refit", default = NA_integer_),
+    "  new_pairs=",
+    .adaptive_progress_col_value(row, "new_pairs_since_last_refit", default = NA_integer_),
+    if (isTRUE(use_scope_metrics) && is.finite(scope_set_id)) {
+      paste0("  phase_scope=phase_a_set(set_id=", scope_set_id, ")")
+    } else {
+      ""
+    }
+  )
+
+  global_parts <- c(
+    paste0("diagnostics=", .adaptive_progress_fmt_state(diagnostics_pass)),
+    .adaptive_progress_gate_detail(
+      reliability_label,
+      reliability_value,
+      reliability_min,
+      eap_pass,
+      direction = "ge"
+    )
+  )
+  if (isTRUE(lag_eligible)) {
+    global_parts <- c(
+      global_parts,
+      .adaptive_progress_gate_detail(theta_label, theta_value, theta_min, theta_pass, "ge"),
+      .adaptive_progress_gate_detail(delta_label, delta_value, delta_max, delta_pass, "le"),
+      .adaptive_progress_gate_detail(rank_label, rank_value, rank_min, rank_pass, "ge")
+    )
+  } else {
+    global_parts <- c(global_parts, "lagged=inactive")
+  }
+  global_parts <- c(
+    global_parts,
+    paste0(
+      "stop=",
+      .adaptive_progress_fmt_state(
+        .adaptive_progress_col_value(row, "stop_decision", default = NA),
+        true = "pass",
+        false = "continue"
+      )
+    )
+  )
+
+  blocker <- .adaptive_progress_phase_a_blocker(
+    row = row,
+    use_scope_metrics = use_scope_metrics,
+    values = list(
+      diagnostics_pass = diagnostics_pass,
+      eap_pass = eap_pass,
+      lag_eligible = lag_eligible,
+      theta_pass = theta_pass,
+      delta_pass = delta_pass,
+      rank_pass = rank_pass,
+      reliability_label = reliability_label,
+      theta_label = theta_label,
+      delta_label = delta_label,
+      rank_label = rank_label
+    )
+  )
+
+  lines <- c(refit_line, paste0("Global stop: ", paste(global_parts, collapse = "  ")))
+  if (!is.na(blocker) && blocker != "stop_pending") {
+    lines <- c(lines, paste0("Blocker: ", blocker))
+  }
+  lines
+}
+
+.adaptive_progress_phase_b_spoke_lines <- function(link_stage_rows,
+                                                   thresholds,
+                                                   stability_window_refits,
+                                                   stability_passes_required) {
+  lines <- "Spokes:"
+  if (nrow(link_stage_rows) < 1L) {
+    return(c(lines, "  none"))
+  }
+
+  rows <- link_stage_rows[order(as.integer(link_stage_rows$spoke_id)), , drop = FALSE]
+  for (idx in seq_len(nrow(rows))) {
+    link_row <- rows[idx, , drop = FALSE]
+    spoke_id <- as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_))
+    transform_state <- as.character(.adaptive_progress_col_value(
+      link_row,
+      "link_transform_state",
+      default = NA_character_
+    ))
+
+    if (isTRUE(.adaptive_progress_col_value(link_row, "transform_frozen", default = NA))) {
+      frozen_refit <- .adaptive_progress_col_value(
+        link_row,
+        "transform_frozen_refit_id",
+        default = NA_integer_
+      )
+      lines <- c(
+        lines,
+        paste0(
+          "  spoke=",
+          spoke_id,
+          " frozen",
+          if (!is.na(transform_state) && nzchar(transform_state)) {
+            paste0("  state=", transform_state)
+          } else {
+            ""
+          },
+          if (is.finite(frozen_refit)) {
+            paste0("  frozen_refit=", frozen_refit)
+          } else {
+            ""
+          }
+        )
+      )
+      next
+    }
+
+    stop_count <- as.integer(.adaptive_progress_col_value(
+      link_row,
+      "stop_recent_pass_count",
+      default = 0L
+    ))
+    stop_window_size <- as.integer(.adaptive_progress_col_value(
+      link_row,
+      "stop_recent_window_size",
+      default = 0L
+    ))
+    stop_window_used <- as.integer(.adaptive_progress_col_value(
+      link_row,
+      "stability_window_refits_used",
+      default = stability_window_refits
+    ))
+    stop_passes_used <- as.integer(.adaptive_progress_col_value(
+      link_row,
+      "stability_passes_required_used",
+      default = stability_passes_required
+    ))
+    probes_realized <- as.integer(.adaptive_progress_col_value(
+      link_row,
+      "probe_edges_realized",
+      default = 0L
+    ))
+    probes_min <- as.integer(.adaptive_progress_col_value(
+      link_row,
+      "probe_edges_min_for_stop_used",
+      default = NA_integer_
+    ))
+
+    reliability_min <- as.double(.adaptive_progress_col_value(
+      link_row,
+      "link_stop_reliability_min_used",
+      default = thresholds$link_stop_reliability_min %||% 0.90
+    ))
+    probe_pred_max <- as.double(.adaptive_progress_col_value(
+      link_row,
+      "probe_pred_rmse_max_used",
+      default = thresholds$probe_pred_rmse_max %||% 0.015
+    ))
+    theta_rmse_max <- as.double(.adaptive_progress_col_value(
+      link_row,
+      "theta_global_rmse_max_used",
+      default = thresholds$theta_global_rmse_max %||% 0.05
+    ))
+
+    lines <- c(
+      lines,
+      paste0(
+        "  spoke=",
+        spoke_id,
+        " active",
+        "  eligible=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "link_stop_eligible", default = NA),
+          true = "yes",
+          false = "no"
+        ),
+        "  gate_open=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "link_stop_gate_open", default = NA),
+          true = "yes",
+          false = "no"
+        ),
+        "  lag=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "link_lag_eligible", default = NA)
+        ),
+        "  min_refit=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "link_min_refit_eligible", default = NA)
+        ),
+        "  probes=",
+        probes_realized,
+        "/",
+        if (is.na(probes_min)) "NA" else probes_min,
+        "  window=",
+        stop_count,
+        "/",
+        stop_window_size,
+        " need ",
+        stop_passes_used,
+        "/",
+        stop_window_used
+      ),
+      paste0(
+        "    diagnostics=",
+        .adaptive_progress_fmt_state(.adaptive_progress_link_diag_pass(link_row)),
+        "  hub_anchored=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "hub_anchored", default = NA)
+        ),
+        "  ",
+        .adaptive_progress_gate_detail(
+          "reliability_link_global",
+          as.double(.adaptive_progress_col_value(link_row, "reliability_link_global", default = NA_real_)),
+          reliability_min,
+          .adaptive_progress_col_value(link_row, "reliability_stop_pass", default = NA),
+          direction = "ge"
+        ),
+        "  ",
+        .adaptive_progress_gate_detail(
+          "probe_pred_rmse_lagged",
+          as.double(.adaptive_progress_col_value(link_row, "probe_pred_rmse_lagged", default = NA_real_)),
+          probe_pred_max,
+          .adaptive_progress_col_value(link_row, "probe_pred_rmse_pass", default = NA),
+          direction = "le"
+        ),
+        "  ",
+        .adaptive_progress_gate_detail(
+          "theta_global_rmse_lagged",
+          as.double(.adaptive_progress_col_value(link_row, "theta_global_rmse_lagged", default = NA_real_)),
+          theta_rmse_max,
+          .adaptive_progress_col_value(link_row, "theta_global_rmse_pass", default = NA),
+          direction = "le"
+        )
+      )
+    )
+  }
+
+  lines
+}
+
+.adaptive_progress_phase_b_lines <- function(row, link_stage_rows, thresholds) {
+  stability_window_refits <- as.integer(thresholds$stability_window_refits %||% 3L)
+  stability_passes_required <- as.integer(
+    thresholds$stability_passes_required %||%
+      thresholds$stability_consecutive_k %||%
+      2L
+  )
+
+  refit_line <- paste0(
+    "Refit ",
+    sprintf("%04d", as.integer(.adaptive_progress_col_value(row, "refit_id", default = NA_integer_))),
+    "  round=",
+    .adaptive_progress_col_value(row, "round_id_at_refit", default = NA_integer_),
+    "  step=",
+    .adaptive_progress_col_value(row, "step_id_at_refit", default = NA_integer_)
+  )
+
+  pairs_line <- paste0(
+    "Pairs: new=",
+    .adaptive_progress_col_value(row, "new_pairs_since_last_refit", default = NA_integer_),
+    "  active=",
+    .adaptive_progress_col_value(row, "new_active_pairs_since_last_refit", default = 0L),
+    "  probe=",
+    .adaptive_progress_col_value(row, "new_probe_pairs_since_last_refit", default = 0L),
+    "  total_cross=",
+    .adaptive_progress_col_value(row, "new_total_cross_pairs_since_last_refit", default = 0L)
+  )
+
+  reliability_value <- as.double(.adaptive_progress_col_value(row, "reliability_EAP", default = NA_real_))
+  reliability_min <- as.double(.adaptive_progress_col_value(
+    row,
+    "eap_reliability_min",
+    default = thresholds$eap_reliability_min %||% NA_real_
+  ))
+  theta_value <- as.double(.adaptive_progress_col_value(row, "rho_theta", default = NA_real_))
+  theta_min <- as.double(.adaptive_progress_col_value(
+    row,
+    "theta_corr_min",
+    default = thresholds$theta_corr_min %||% NA_real_
+  ))
+  delta_value <- as.double(.adaptive_progress_col_value(row, "delta_sd_theta", default = NA_real_))
+  delta_max <- as.double(.adaptive_progress_col_value(
+    row,
+    "theta_sd_rel_change_max",
+    default = thresholds$theta_sd_rel_change_max %||% NA_real_
+  ))
+  rank_value <- as.double(.adaptive_progress_col_value(row, "rho_rank", default = NA_real_))
+  rank_min <- as.double(.adaptive_progress_col_value(
+    row,
+    "rank_spearman_min",
+    default = thresholds$rank_spearman_min %||% NA_real_
+  ))
+  lag_eligible <- isTRUE(.adaptive_progress_col_value(row, "lag_eligible", default = NA))
+
+  global_parts <- c(
+    "audit_only",
+    paste0(
+      "diagnostics=",
+      .adaptive_progress_fmt_state(.adaptive_progress_col_value(row, "diagnostics_pass", default = NA))
+    ),
+    .adaptive_progress_gate_detail(
+      "reliability_EAP",
+      reliability_value,
+      reliability_min,
+      .adaptive_progress_col_value(row, "eap_pass", default = NA),
+      direction = "ge"
+    )
+  )
+  if (isTRUE(lag_eligible)) {
+    global_parts <- c(
+      global_parts,
+      .adaptive_progress_gate_detail(
+        "rho_theta",
+        theta_value,
+        theta_min,
+        .adaptive_progress_col_value(row, "theta_corr_pass", default = NA),
+        direction = "ge"
+      ),
+      .adaptive_progress_gate_detail(
+        "delta_sd_theta",
+        delta_value,
+        delta_max,
+        .adaptive_progress_col_value(row, "delta_sd_theta_pass", default = NA),
+        direction = "le"
+      ),
+      .adaptive_progress_gate_detail(
+        "rho_rank",
+        rank_value,
+        rank_min,
+        .adaptive_progress_col_value(row, "rho_rank_pass", default = NA),
+        direction = "ge"
+      )
+    )
+  } else {
+    global_parts <- c(global_parts, "lagged=inactive")
+  }
+  global_parts <- c(
+    global_parts,
+    paste0(
+      "global_btl_stop=",
+      .adaptive_progress_fmt_state(
+        .adaptive_progress_col_value(row, "stop_decision", default = NA),
+        true = "pass",
+        false = "continue"
+      )
+    )
+  )
+
+  c(
+    refit_line,
+    pairs_line,
+    paste0("Global: ", paste(global_parts, collapse = "  ")),
+    .adaptive_progress_phase_b_spoke_lines(
+      link_stage_rows = link_stage_rows,
+      thresholds = thresholds,
+      stability_window_refits = stability_window_refits,
+      stability_passes_required = stability_passes_required
+    )
+  )
 }
 
 adaptive_progress_init <- function(state, cfg) {
@@ -1031,6 +1792,9 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     if (is.finite(spoke)) {
       link_txt <- c(link_txt, paste0("spoke=", spoke))
     }
+    if (!(isTRUE(is_probe_step) || run_mode %in% c("link_probe_holdout", "link_probe"))) {
+      link_txt <- c(link_txt, "link=active")
+    }
     if ("link_transform_state" %in% names(step_row)) {
       mode <- as.character(step_row$link_transform_state[[1L]] %||% NA_character_)
       if (!is.na(mode) && nzchar(mode)) {
@@ -1046,7 +1810,7 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     } else if (identical(run_mode, "link_probe") ||
       ("is_drift_probe_step" %in% names(step_row) &&
         isTRUE(step_row$is_drift_probe_step[[1L]] %||% FALSE))) {
-      "drift"
+      "drift_followup"
     } else {
       "probe"
     }
@@ -1085,366 +1849,28 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
     return(character())
   }
   row <- round_row[1L, , drop = FALSE]
-  thresholds <- cfg$stop_thresholds %||% list()
-  phase_scope <- as.character(row$phase_scope %||% "global")
-  use_scope_metrics <- identical(phase_scope, "phase_a_set")
-  scope_set_id <- as.integer(row$phase_scope_set_id %||% NA_integer_)
-  scope_n_items <- as.integer(row$phase_scope_n_items %||% row$n_items)
-
-  header <- paste0(
-    "REFIT #",
-    sprintf("%04d", as.integer(row$refit_id)),
-    "  round_id_at_refit=",
-    row$round_id_at_refit,
-    "  step_id_at_refit=",
-    row$step_id_at_refit,
-    "  model_variant=",
-    row$model_variant,
-    "  n_items=",
-    row$n_items
-  )
-  if (isTRUE(use_scope_metrics)) {
-    header <- paste0(
-      header,
-      "  phase_scope=phase_a_set",
-      if (is.finite(scope_set_id)) paste0("(set_id=", scope_set_id, ")") else "",
-      "  scope_n_items=",
-      scope_n_items
-    )
-  }
-
-  pairs <- paste0(
-    "Pairs: total_pairs_done=",
-    row$total_pairs_done,
-    "  new_pairs_since_last_refit=",
-    row$new_pairs_since_last_refit,
-    "  n_unique_pairs_seen=",
-    row$n_unique_pairs_seen
-  )
-
-  selection <- c(
-    "Selection health (since last refit):",
-    paste0("  proposed_pairs_mode=", row$proposed_pairs_mode),
-    paste0("  starve_rate_since_last_refit=", row$starve_rate_since_last_refit),
-    paste0("  fallback_rate_since_last_refit=", row$fallback_rate_since_last_refit),
-    paste0("  fallback_used_mode=", row$fallback_used_mode),
-    paste0("  starvation_reason_mode=", row$starvation_reason_mode)
-  )
-
-  mean_degree_show <- if (isTRUE(use_scope_metrics)) {
-    row$mean_degree_scope %||% row$mean_degree
-  } else {
-    row$mean_degree
-  }
-  min_degree_show <- if (isTRUE(use_scope_metrics)) {
-    row$min_degree_scope %||% row$min_degree
-  } else {
-    row$min_degree
-  }
-  coverage <- c(
-    "Coverage / balance:",
-    paste0("  mean_degree=", mean_degree_show, "  min_degree=", min_degree_show),
-    paste0("  pos_balance_sd=", row$pos_balance_sd)
-  )
-
-  model_params <- character()
-  if (!is.na(row$epsilon_mean)) {
-    model_params <- c(
-      model_params,
-      paste0(
-        "  epsilon_mean=",
-        row$epsilon_mean,
-        " [p2.5=",
-        row$epsilon_p2.5,
-        " p50=",
-        row$epsilon_p50,
-        " p97.5=",
-        row$epsilon_p97.5,
-        "]"
-      )
-    )
-  }
-  if (!is.na(row$b_mean)) {
-    model_params <- c(
-      model_params,
-      paste0(
-        "  b_mean=",
-        row$b_mean,
-        " [p2.5=",
-        row$b_p2.5,
-        " p50=",
-        row$b_p50,
-        " p97.5=",
-        row$b_p97.5,
-        "]"
-      )
-    )
-  }
-  if (length(model_params) > 0L) {
-    model_params <- c("Model params (posterior; compact):", model_params)
-  }
-
-  diagnostics <- c(
-    "Diagnostics gate:",
-    paste0("  diagnostics_pass=", row$diagnostics_pass),
-    paste0(
-      "  divergences=",
-      row$divergences,
-      " (need <= ",
-      row$divergences_max_allowed,
-      "; pass=",
-      row$diagnostics_divergences_pass,
-      ")"
-    ),
-    paste0(
-      "  max_rhat=",
-      row$max_rhat,
-      " (need <= ",
-      row$max_rhat_allowed,
-      "; pass=",
-      row$diagnostics_rhat_pass,
-      ")"
-    ),
-    paste0("  min_ess_bulk=", row$min_ess_bulk, " (need >= ", row$ess_bulk_required, ")")
-  )
-
-  stop_table <- c("Stop criteria (rule: ALL applicable must pass):")
-  stop_table <- c(
-    stop_table,
-    paste0(
-      "  ",
-      if (isTRUE(row$diagnostics_pass)) "[x] " else "[ ] ",
-      "diagnostics_pass"
-    )
-  )
-
-  eap_min <- row$eap_reliability_min %||% thresholds$eap_reliability_min %||% NA_real_
-  reliability_val <- if (isTRUE(use_scope_metrics)) {
-    row$reliability_EAP_scope %||% row$reliability_EAP
-  } else {
-    row$reliability_EAP
-  }
-  eap_pass <- .adaptive_meets_threshold(reliability_val, eap_min, "ge")
-  reliability_label <- if (isTRUE(use_scope_metrics)) "reliability_EAP_scope" else "reliability_EAP"
-  stop_table <- c(
-    stop_table,
-    paste0(
-      "  ",
-      if (isTRUE(eap_pass)) "[x] " else "[ ] ",
-      reliability_label,
-      " >= eap_reliability_min  value=",
-      reliability_val,
-      " (need >= ",
-      eap_min,
-      ")"
-    )
-  )
-
-  rho_rank_min <- row$rank_spearman_min %||% thresholds$rank_spearman_min %||% NA_real_
-  rho_rank_val <- if (isTRUE(use_scope_metrics)) {
-    row$rho_rank_scope %||% row$rho_rank
-  } else {
-    row$rho_rank
-  }
-  rho_rank_pass <- .adaptive_meets_threshold(rho_rank_val, rho_rank_min, "ge")
-  rho_rank_label <- if (isTRUE(use_scope_metrics)) "rho_rank_scope" else "rho_rank"
-  stop_table <- c(
-    stop_table,
-    paste0(
-      "  ",
-      if (isTRUE(rho_rank_pass)) "[x] " else "[ ] ",
-      rho_rank_label,
-      " >= rank_spearman_min  value=",
-      rho_rank_val,
-      " (need >= ",
-      rho_rank_min,
-      ")"
-    )
-  )
-
-  theta_min <- row$theta_corr_min %||% thresholds$theta_corr_min %||% NA_real_
-  rho_theta_val <- if (isTRUE(use_scope_metrics)) {
-    row$rho_theta_scope %||% row$rho_theta
-  } else {
-    row$rho_theta
-  }
-  theta_pass <- .adaptive_meets_threshold(rho_theta_val, theta_min, "ge")
-  rho_theta_label <- if (isTRUE(use_scope_metrics)) "rho_theta_scope" else "rho_theta"
-  stop_table <- c(
-    stop_table,
-    paste0(
-      "  ",
-      if (isTRUE(theta_pass)) "[x] " else "[ ] ",
-      rho_theta_label,
-      " >= theta_corr_min  value=",
-      rho_theta_val,
-      " (need >= ",
-      theta_min,
-      ")"
-    )
-  )
-
-  sd_max <- row$theta_sd_rel_change_max %||% thresholds$theta_sd_rel_change_max %||% NA_real_
-  delta_sd_val <- if (isTRUE(use_scope_metrics)) {
-    row$delta_sd_theta_scope %||% row$delta_sd_theta
-  } else {
-    row$delta_sd_theta
-  }
-  sd_pass <- .adaptive_meets_threshold(delta_sd_val, sd_max, "le")
-  delta_sd_label <- if (isTRUE(use_scope_metrics)) "delta_sd_theta_scope" else "delta_sd_theta"
-  stop_table <- c(
-    stop_table,
-    paste0(
-      "  ",
-      if (isTRUE(sd_pass)) "[x] " else "[ ] ",
-      delta_sd_label,
-      " <= theta_sd_rel_change_max  value=",
-      delta_sd_val,
-      " (need <= ",
-      sd_max,
-      ")"
-    )
-  )
-  lag_eligible_val <- if (isTRUE(use_scope_metrics)) {
-    row$lag_eligible_scope %||% row$lag_eligible
-  } else {
-    row$lag_eligible
-  }
-  stop_table <- c(
-    stop_table,
-    paste0(
-      "  ",
-      if (isTRUE(lag_eligible_val)) "[x] " else "[ ] ",
-      if (isTRUE(use_scope_metrics)) "lag_eligible_scope" else "lag_eligible"
-    )
-  )
-
-  report_only <- c(
-    "Report-only metrics (not used for stopping):",
-    paste0("  ci95_theta_width_mean=", row$ci95_theta_width_mean),
-    paste0("  near_tie_adj_frac=", row$near_tie_adj_frac),
-    paste0("  cov_trace_theta=", row$cov_trace_theta),
-    paste0("  top20_boundary_entropy_mean=", row$top20_boundary_entropy_mean),
-    paste0("  nn_diff_sd_mean=", row$nn_diff_sd_mean)
-  )
-
-  mcmc <- c(
-    "Refit MCMC settings:",
-    paste0("  chains=", row$mcmc_chains),
-    paste0("  parallel_chains=", row$mcmc_parallel_chains),
-    paste0("  core_fraction=", row$mcmc_core_fraction),
-    paste0("  threads_per_chain=", row$mcmc_threads_per_chain)
-  )
-
-  decision <- if (isTRUE(row$stop_decision)) "Decision: STOP" else "Decision: continue"
-  if (!is.na(row$stop_reason) && row$stop_reason != "") {
-    decision <- paste0(decision, "  stop_reason=\"", row$stop_reason, "\"")
-  }
-
-  stop_summary <- paste0(
-    "stop_decision=",
-    row$stop_decision,
-    "  stop_reason=",
-    row$stop_reason
-  )
-
   link_stage_rows <- tibble::as_tibble(link_stage_rows %||% tibble::tibble())
-  link_block <- character()
-  if (nrow(link_stage_rows) > 0L) {
-    active_spokes <- sort(unique(as.integer(link_stage_rows$spoke_id %||% integer())))
-    transform_policies <- sort(unique(as.character(link_stage_rows$link_transform_policy %||% character())))
-    transform_modes <- sort(unique(as.character(link_stage_rows$link_transform_state %||% character())))
-    refit_modes <- sort(unique(as.character(link_stage_rows$link_refit_mode %||% character())))
-    lock_modes <- sort(unique(as.character(link_stage_rows$hub_lock_mode %||% character())))
-    epoch_ids <- sort(unique(as.integer(link_stage_rows$link_epoch_id %||% integer())))
-    transform_modes <- transform_modes[!is.na(transform_modes) & nzchar(transform_modes)]
-    transform_policies <- transform_policies[!is.na(transform_policies) & nzchar(transform_policies)]
-    refit_modes <- refit_modes[!is.na(refit_modes) & nzchar(refit_modes)]
-    lock_modes <- lock_modes[!is.na(lock_modes) & nzchar(lock_modes)]
-    epoch_ids <- epoch_ids[is.finite(epoch_ids)]
-
-    link_block <- c(
-      "Linking summary:",
-      paste0("  active_spokes=", paste(active_spokes, collapse = ",")),
-      paste0("  transform_policy=", paste(transform_policies, collapse = ",")),
-      paste0("  transform_state=", paste(transform_modes, collapse = ",")),
-      paste0("  link_refit_mode=", paste(refit_modes, collapse = ",")),
-      paste0("  hub_lock_mode=", paste(lock_modes, collapse = ","))
+  has_linking_rows <- nrow(link_stage_rows) > 0L
+  thresholds <- cfg$stop_thresholds %||% list()
+  lines <- if (isTRUE(has_linking_rows)) {
+    .adaptive_progress_phase_b_lines(
+      row = row,
+      link_stage_rows = link_stage_rows,
+      thresholds = thresholds
     )
-    if (length(epoch_ids) > 0L) {
-      link_block <- c(link_block, paste0("  link_epoch_id=", paste(epoch_ids, collapse = ",")))
-    }
-
-    rel_values <- as.double(link_stage_rows$reliability_link_global %||% rep(NA_real_, nrow(link_stage_rows)))
-    rel_values <- rel_values[is.finite(rel_values)]
-    if (length(rel_values) > 0L) {
-      link_block <- c(
-        link_block,
-        paste0(
-          "  reliability_link_global[min,max]=",
-          sprintf("%.3f", min(rel_values)),
-          ",",
-          sprintf("%.3f", max(rel_values))
-        )
-      )
-    }
-
-    stop_pass <- sum(link_stage_rows$link_stop_pass %in% TRUE, na.rm = TRUE)
-    stop_eligible <- sum(link_stage_rows$link_stop_eligible %in% TRUE, na.rm = TRUE)
-    link_block <- c(
-      link_block,
-      paste0("  link_stop_eligible=", stop_eligible, "/", nrow(link_stage_rows)),
-      paste0("  link_stop_pass=", stop_pass, "/", nrow(link_stage_rows))
-    )
-
-    frozen <- sum(link_stage_rows$transform_frozen %in% TRUE, na.rm = TRUE)
-    link_block <- c(link_block, paste0("  transform_frozen=", frozen, "/", nrow(link_stage_rows)))
-
-    cross_done <- sum(as.integer(link_stage_rows$n_pairs_cross_set_done %||% 0L), na.rm = TRUE)
-    cross_new <- sum(as.integer(link_stage_rows$n_cross_edges_total_since_last_refit %||% 0L), na.rm = TRUE)
-    cross_unique <- sum(as.integer(link_stage_rows$n_unique_cross_pairs_seen %||% 0L), na.rm = TRUE)
-    link_block <- c(
-      link_block,
-      paste0("  cross_pairs_done=", cross_done),
-      paste0("  cross_edges_since_last_refit=", cross_new),
-      paste0("  cross_unique_pairs_seen=", cross_unique)
-    )
-
-    probe_planned <- sum(as.integer(link_stage_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
-    probe_realized <- sum(as.integer(link_stage_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
-    if (probe_planned > 0L || probe_realized > 0L) {
-      link_block <- c(
-        link_block,
-        paste0("  probe_edges_planned=", probe_planned),
-        paste0("  probe_edges_realized=", probe_realized)
-      )
-    }
-
-    if ("escalated_this_refit" %in% names(link_stage_rows)) {
-      n_escalated <- sum(link_stage_rows$escalated_this_refit %in% TRUE, na.rm = TRUE)
-      link_block <- c(link_block, paste0("  escalated_this_refit=", n_escalated, "/", nrow(link_stage_rows)))
-    }
-
-    if ("quota_long_link_removed" %in% names(link_stage_rows)) {
-      tapered <- sum(as.integer(link_stage_rows$quota_long_link_removed %||% 0L), na.rm = TRUE)
-      link_block <- c(link_block, paste0("  long_link_taper_removed_total=", tapered))
-    }
+  } else {
+    .adaptive_progress_phase_a_lines(row = row, thresholds = thresholds)
   }
 
-  c(
-    strrep("-", 64),
-    header,
-    pairs,
-    selection,
-    coverage,
-    model_params,
-    mcmc,
-    diagnostics,
-    report_only,
-    stop_table,
-    link_block,
-    stop_summary,
-    decision,
-    strrep("-", 64)
-  )
+  selection_notes <- .adaptive_progress_selection_notes(row = row, link_stage_rows = link_stage_rows)
+  if (length(selection_notes) > 0L) {
+    lines <- c(lines, paste0("Selection: ", paste(selection_notes, collapse = "; ")))
+  }
+
+  diagnostics <- .adaptive_progress_diagnostics_lines(row = row, link_stage_rows = link_stage_rows)
+  if (length(diagnostics) > 0L) {
+    lines <- c(lines, diagnostics)
+  }
+
+  lines
 }

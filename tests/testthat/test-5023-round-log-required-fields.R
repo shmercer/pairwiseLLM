@@ -51,6 +51,9 @@ test_that("round_log includes required stopping and star-cap audit fields", {
     "rho_rank_pass_scope",
     "refit_id",
     "round_id_at_refit",
+    "new_active_pairs_since_last_refit",
+    "new_probe_pairs_since_last_refit",
+    "new_total_cross_pairs_since_last_refit",
     "mcmc_chains",
     "mcmc_parallel_chains",
     "max_pairs_after_stop",
@@ -96,6 +99,9 @@ test_that("round_log includes required stopping and star-cap audit fields", {
   expect_true(is.logical(round_log$rho_rank_pass_scope))
   expect_true(is.integer(round_log$refit_id))
   expect_true(is.integer(round_log$round_id_at_refit))
+  expect_true(is.integer(round_log$new_active_pairs_since_last_refit))
+  expect_true(is.integer(round_log$new_probe_pairs_since_last_refit))
+  expect_true(is.integer(round_log$new_total_cross_pairs_since_last_refit))
   expect_true(is.integer(round_log$mcmc_chains))
   expect_true(is.integer(round_log$mcmc_parallel_chains))
   expect_true(is.integer(round_log$max_pairs_after_stop))
@@ -106,6 +112,9 @@ test_that("round_log includes required stopping and star-cap audit fields", {
   reject_rate <- reject_rate[!is.na(reject_rate)]
   expect_true(all(reject_rate >= 0))
   expect_true(all(reject_rate <= 1))
+  expect_true(all(is.na(round_log$new_active_pairs_since_last_refit)))
+  expect_true(all(is.na(round_log$new_probe_pairs_since_last_refit)))
+  expect_true(all(is.na(round_log$new_total_cross_pairs_since_last_refit)))
 })
 
 test_that("round_log stop decisions and committed counts are reconstructable from logs", {

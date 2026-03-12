@@ -13,6 +13,7 @@ dev-checklists
 agents.md
 inst/stan/btl_e_b.exe
 inst/stan/btl_e_b
+inst/stan/link_transform_refit
 /dev/
 /codex/
 /scripts/
