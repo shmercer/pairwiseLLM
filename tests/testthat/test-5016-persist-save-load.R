@@ -646,7 +646,19 @@ test_that("resume preserves probe panel identity, epoch, and realized counts acr
   expect_identical(as.integer(restored$controller$link_epoch_id_by_spoke[["2"]]), 1L)
   expect_identical(as.integer(realized_after), as.integer(realized_before))
 
-  resumed <- pairwiseLLM:::run_one_step(restored, make_deterministic_judge("i_wins"))
+  synced <- pairwiseLLM:::.adaptive_apply_controller_config(restored, adaptive_config = NULL)
+  expect_true("probe" %in% names(synced$linking))
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(synced, spoke_id = 2L, epoch_id = 1L),
+    as.integer(realized_after)
+  )
+
+  resumed <- adaptive_rank_run_live(
+    restored,
+    make_deterministic_judge("i_wins"),
+    n_steps = 1L,
+    progress = "none"
+  )
   panel_resumed <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(resumed, spoke_id = 2L, epoch_id = 1L)
   realized_resumed <- pairwiseLLM:::.adaptive_link_probe_realized_count(resumed, spoke_id = 2L, epoch_id = 1L)
   expect_identical(as.character(panel_resumed$probe_panel_id[[1L]]), as.character(panel_before$probe_panel_id[[1L]]))
@@ -696,6 +708,48 @@ test_that("resume accepts current-window realized probes beyond the latest link-
     dplyr::filter(.data$spoke_id == 2L) |>
     dplyr::slice_tail(n = 1L)
   expect_identical(as.integer(last_row$probe_edges_realized[[1L]]), 0L)
+})
+
+test_that("resume aborts when current-window holdout steps do not reconcile to canonical realized_edges", {
+  state <- make_probe_resume_state()
+  state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  expect_gte(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L),
+    1L
+  )
+
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$link_stage_log <- state$link_stage_log[0, , drop = FALSE]
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE,
+      link_epoch_id = 1L,
+      probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
+      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_realized = 0L,
+      probe_panel_shortfall = as.integer(nrow(panel))
+    )
+  )
+  state$linking$probe$realized_edges <- pairwiseLLM:::.adaptive_link_probe_empty_realized_log()
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "committed holdout probe steps after the last refit do not reconcile"
+  )
 })
 
 test_that("resume aborts when persisted probe state disagrees with canonical logs or controller epoch", {

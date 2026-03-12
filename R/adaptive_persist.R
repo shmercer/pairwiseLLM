@@ -396,6 +396,75 @@ read_log <- function(path) {
   sort(unique(ids[is.finite(ids) & !is.na(ids)]))
 }
 
+.adaptive_link_probe_resume_validate_current_window <- function(state, spoke_id, panel_epoch, panel) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  required <- c("pair_id", "step_id", "link_spoke_id", "A", "B")
+  if (nrow(step_log) < 1L || !all(required %in% names(step_log))) {
+    return(invisible(NULL))
+  }
+
+  holdout_flag <- .adaptive_link_is_holdout_probe_rows(step_log)
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+  current_window_steps <- step_log[
+    !is.na(step_log$pair_id) &
+      as.integer(step_log$step_id) > last_refit_step &
+      as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
+      holdout_flag %in% TRUE,
+    ,
+    drop = FALSE
+  ]
+  if (nrow(current_window_steps) < 1L) {
+    return(invisible(NULL))
+  }
+
+  ids <- as.character(state$item_ids %||% character())
+  current_window_steps$pair_key <- make_unordered_key(
+    ids[as.integer(current_window_steps$A)],
+    ids[as.integer(current_window_steps$B)]
+  )
+  if (!all(as.character(current_window_steps$pair_key) %in% as.character(panel$pair_key))) {
+    .adaptive_link_probe_resume_abort(
+      paste0(
+        "committed holdout probe steps after the last refit are not contained in the current panel ",
+        "for link_epoch_id=",
+        as.integer(panel_epoch)
+      ),
+      spoke_id = spoke_id
+    )
+  }
+
+  realized_since_last_refit <- .adaptive_link_probe_realized_log_for_panel(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel_epoch),
+    panel = panel
+  )
+  if (nrow(realized_since_last_refit) > 0L) {
+    realized_since_last_refit <- realized_since_last_refit[
+      as.integer(realized_since_last_refit$step_id) > last_refit_step,
+      ,
+      drop = FALSE
+    ]
+  }
+  if (!identical(nrow(current_window_steps), nrow(realized_since_last_refit))) {
+    .adaptive_link_probe_resume_abort(
+      paste0(
+        "committed holdout probe steps after the last refit do not reconcile to canonical ",
+        "`realized_edges` for link_epoch_id=",
+        as.integer(panel_epoch),
+        " (steps=",
+        as.integer(nrow(current_window_steps)),
+        ", canonical=",
+        as.integer(nrow(realized_since_last_refit)),
+        ")"
+      ),
+      spoke_id = spoke_id
+    )
+  }
+
+  invisible(NULL)
+}
+
 .adaptive_link_probe_resume_validate_spoke <- function(state, spoke_id) {
   probe <- .adaptive_link_probe_state(state)
   panel <- tibble::as_tibble(
@@ -553,6 +622,12 @@ read_log <- function(path) {
       )
     }
   }
+  .adaptive_link_probe_resume_validate_current_window(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    panel_epoch = as.integer(panel_epoch),
+    panel = panel
+  )
 
   invisible(NULL)
 }

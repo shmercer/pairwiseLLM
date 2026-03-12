@@ -772,15 +772,16 @@
 .adaptive_sync_linking_meta <- function(state) {
   out <- state
   controller <- .adaptive_controller_resolve(out)
+  linking <- out$linking %||% list()
   set_ids <- sort(unique(as.integer(out$items$set_id)))
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- setdiff(set_ids, hub_id)
-  out$linking <- list(
+  out$linking <- utils::modifyList(linking, list(
     run_mode = as.character(controller$run_mode),
     hub_id = hub_id,
     spoke_ids = as.integer(spoke_ids),
     is_multi_set = length(set_ids) > 1L,
-    phase_a = out$linking$phase_a %||% list(
+    phase_a = linking$phase_a %||% list(
       set_status = .adaptive_phase_a_empty_state(set_ids),
       artifacts = list(),
       ready_for_phase_b = FALSE,
@@ -790,7 +791,7 @@
       phase = "phase_a",
       phase_b_started_at_step = NA_integer_
     )
-  )
+  ))
   out
 }
 
