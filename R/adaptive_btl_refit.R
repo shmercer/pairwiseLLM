@@ -1633,6 +1633,10 @@
   )
 }
 
+.adaptive_link_cmdstan_output_basename <- function(output_dir) {
+  basename(tempfile(pattern = "link_transform_refit-", tmpdir = output_dir))
+}
+
 .adaptive_link_fit_transform_cmdstan <- function(stan_data,
                                                  variable_names,
                                                  cmdstan,
@@ -1662,13 +1666,13 @@
     refresh = 0,
     seed = as.integer(seed)
   )
-  output_dir <- cmdstan$output_dir %||% NULL
-  if (!is.null(output_dir)) {
-    if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
-      rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
-    }
-    sample_args$output_dir <- output_dir
+  output_dir <- cmdstan$output_dir %||% file.path(tempdir(), "pairwiseLLM-cmdstan-link")
+  if (!is.character(output_dir) || length(output_dir) != 1L || is.na(output_dir)) {
+    rlang::abort("`cmdstan$output_dir` must be a length-1 character path.")
   }
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  sample_args$output_dir <- output_dir
+  sample_args$output_basename <- .adaptive_link_cmdstan_output_basename(output_dir)
 
   fit <- do.call(model$sample, sample_args)
   list(
@@ -3038,10 +3042,7 @@
     }
     ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
     ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
-    probe_holdout_flag <- as.character(cross_since$run_mode) == "link_probe_holdout"
-    if ("is_holdout_probe_step" %in% names(cross_since)) {
-      probe_holdout_flag <- probe_holdout_flag | cross_since$is_holdout_probe_step %in% TRUE
-    }
+    probe_holdout_flag <- .adaptive_link_is_holdout_probe_rows(cross_since)
     cross_since_probe <- cross_since[
       probe_holdout_flag,
       ,
@@ -3865,10 +3866,7 @@
     }
 
     n_pairs_done <- as.integer(nrow(cumulative))
-    since_last_probe_flag <- as.character(since_last$run_mode) == "link_probe_holdout"
-    if ("is_holdout_probe_step" %in% names(since_last)) {
-      since_last_probe_flag <- since_last_probe_flag | since_last$is_holdout_probe_step %in% TRUE
-    }
+    since_last_probe_flag <- .adaptive_link_is_holdout_probe_rows(since_last)
     since_last_probe <- since_last[
       since_last_probe_flag,
       ,

@@ -636,6 +636,58 @@ test_that("phase-specific judge mode allows startup fallback but aborts after st
   )
 })
 
+test_that("linking CmdStan transform refit always sets stable output targets", {
+  sample_args_seen <- NULL
+  fake_fit <- new.env(parent = emptyenv())
+  fake_fit$draws <- function(variables, format) {
+    expect_identical(format, "matrix")
+    out <- matrix(0.1, nrow = 2, ncol = length(variables))
+    colnames(out) <- variables
+    out
+  }
+  fake_fit$diagnostic_summary <- function() {
+    tibble::tibble(num_divergent = c(0, 0))
+  }
+  fake_fit$summary <- function(variables) {
+    tibble::tibble(
+      variable = variables,
+      rhat = rep(1, length(variables)),
+      ess_bulk = rep(500, length(variables))
+    )
+  }
+  model_stub <- function(path, cpp_options) {
+    expect_true(file.exists(path))
+    expect_identical(cpp_options, list(stan_threads = TRUE))
+    list(sample = function(...) {
+      sample_args_seen <<- list(...)
+      fake_fit
+    })
+  }
+
+  out_dir <- withr::local_tempdir()
+  fit <- pairwiseLLM:::.adaptive_link_fit_transform_cmdstan(
+    stan_data = list(N = 1L),
+    variable_names = c("delta"),
+    cmdstan = list(
+      chains = 1L,
+      parallel_chains = 1L,
+      threads_per_chain = 1L,
+      iter_warmup = 10L,
+      iter_sampling = 10L,
+      output_dir = out_dir
+    ),
+    seed = 123L,
+    model_fn = model_stub
+  )
+
+  expect_true(is.matrix(fit$draws_matrix))
+  expect_identical(sample_args_seen$output_dir, out_dir)
+  expect_true(dir.exists(sample_args_seen$output_dir))
+  expect_true(is.character(sample_args_seen$output_basename))
+  expect_length(sample_args_seen$output_basename, 1L)
+  expect_match(sample_args_seen$output_basename, "^link_transform_refit-")
+})
+
 test_that("startup-gap helper and edge extractors cover fallback edge paths", {
   state <- make_linking_refit_state()
 

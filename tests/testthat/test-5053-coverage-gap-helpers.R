@@ -969,6 +969,38 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
   ]
   expect_identical(row_stage_legacy_holdout$n_probe_pairs_since_last_refit[[1L]], 2L)
 
+  state_legacy_drift <- state_drift
+  state_legacy_drift$step_log$is_holdout_probe_step <- TRUE
+  state_legacy_drift$step_log$is_drift_probe_step <- FALSE
+  state_legacy_drift$step_log$is_probe_step <- FALSE
+  stage_rows_legacy_drift <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    state_legacy_drift,
+    refit_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  row_stage_legacy_drift <- stage_rows_legacy_drift[
+    stage_rows_legacy_drift$spoke_id == 2L,
+    ,
+    drop = FALSE
+  ]
+  expect_identical(row_stage_legacy_drift$n_probe_pairs_since_last_refit[[1L]], 2L)
+
+  normalized_step_log <- pairwiseLLM:::.adaptive_align_log_schema_for_resume(
+    state_legacy_drift$step_log,
+    pairwiseLLM:::schema_step_log,
+    name = "step_log",
+    fill_missing = TRUE
+  )
+  expect_false(any(
+    as.character(normalized_step_log$run_mode) == "link_probe" &
+      normalized_step_log$is_holdout_probe_step %in% TRUE
+  ))
+  expect_true(all(
+    normalized_step_log$is_probe_step[
+      as.character(normalized_step_log$run_mode) == "link_probe"
+    ] %in% TRUE
+  ))
+
   ids_k <- pairwiseLLM:::.adaptive_link_theta_global_scope_ids(
     state,
     spoke_id = 2L,

@@ -158,11 +158,23 @@ read_log <- function(path) {
     } else {
       rep(NA_character_, nrow(out))
     }
+    run_mode_known <- !is.na(run_mode_chr) & nzchar(run_mode_chr)
     if (!"is_holdout_probe_step" %in% names(out)) {
       out$is_holdout_probe_step <- as.logical(run_mode_chr == "link_probe_holdout")
+    } else {
+      out$is_holdout_probe_step <- as.logical(out$is_holdout_probe_step %||% FALSE)
+      out$is_holdout_probe_step[run_mode_known] <- run_mode_chr[run_mode_known] == "link_probe_holdout"
     }
     if (!"is_drift_probe_step" %in% names(out)) {
       out$is_drift_probe_step <- as.logical(run_mode_chr == "link_probe")
+    } else {
+      out$is_drift_probe_step <- as.logical(out$is_drift_probe_step %||% FALSE)
+      out$is_drift_probe_step[run_mode_known] <- run_mode_chr[run_mode_known] == "link_probe"
+    }
+    if ("is_probe_step" %in% names(out)) {
+      out$is_probe_step <- as.logical(out$is_probe_step %||% FALSE)
+      out$is_probe_step[run_mode_known] <- run_mode_chr[run_mode_known] %in%
+        c("link_probe_holdout", "link_probe")
     }
     if ("link_transform_mode" %in% names(out)) {
       if (!"link_transform_policy" %in% names(out)) {

@@ -267,6 +267,29 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_is_holdout_probe_rows <- function(step_tbl) {
+  step_tbl <- tibble::as_tibble(step_tbl)
+  if (nrow(step_tbl) < 1L) {
+    return(logical())
+  }
+  run_mode <- if ("run_mode" %in% names(step_tbl)) {
+    as.character(step_tbl$run_mode)
+  } else {
+    rep(NA_character_, nrow(step_tbl))
+  }
+  holdout_flag <- if ("is_holdout_probe_step" %in% names(step_tbl)) {
+    as.logical(step_tbl$is_holdout_probe_step %||% FALSE)
+  } else {
+    rep(FALSE, nrow(step_tbl))
+  }
+  run_mode_known <- !is.na(run_mode) & nzchar(run_mode)
+  out <- holdout_flag %in% TRUE
+  out[run_mode_known] <- run_mode[run_mode_known] == "link_probe_holdout"
+  out
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_panel_for_spoke <- function(state, spoke_id, epoch_id = NULL) {
   probe <- .adaptive_link_probe_state(state)
   panel <- probe$panels_by_spoke[[as.character(as.integer(spoke_id))]] %||% .adaptive_link_probe_empty_panel()
