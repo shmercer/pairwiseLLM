@@ -66,7 +66,7 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
       link_lag_eligible = TRUE,
       link_stop_gate_open = FALSE,
       transform_frozen = TRUE,
-      stop_blocker_codes = "probe_pred_rmse_unavailable|theta_global_rmse_unavailable"
+      stop_blocker_codes = "probe_pred_rmse_lagged,theta_global_rmse_lagged"
     )
   )
   output <- capture.output(print(state))
@@ -80,5 +80,5 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   expect_true(any(grepl("fit_method=cmdstan_hmc", output)))
   expect_true(any(grepl("probe_panel_id=panel-epoch-3", output)))
   expect_true(any(grepl("probe_edges=18/30", output)))
-  expect_true(any(grepl("stop_blockers=probe_pred_rmse_unavailable,theta_global_rmse_unavailable", output)))
+  expect_true(any(grepl("stop_blockers=probe_pred_rmse_lagged,theta_global_rmse_lagged", output)))
 })

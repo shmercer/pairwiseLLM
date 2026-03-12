@@ -202,6 +202,41 @@ read_log <- function(path) {
     if ("cross_set_ppc_brier_max_used" %in% names(out)) {
       out$cross_set_ppc_brier_max_used <- NULL
     }
+    if ("reliability_EAP_link" %in% names(out) && !"reliability_link_global" %in% names(out)) {
+      out$reliability_link_global <- suppressWarnings(as.double(out$reliability_EAP_link))
+    }
+    if ("stop_consecutive_pass_count" %in% names(out)) {
+      if (!"stop_recent_pass_count" %in% names(out)) {
+        out$stop_recent_pass_count <- as.integer(out$stop_consecutive_pass_count)
+      }
+      if (!"stop_recent_window_size" %in% names(out)) {
+        out$stop_recent_window_size <- as.integer(out$stop_consecutive_pass_count)
+      }
+      out$stop_consecutive_pass_count <- NULL
+    }
+    if ("escalation_consecutive_pass_count" %in% names(out)) {
+      if (!"escalation_recent_pass_count" %in% names(out)) {
+        out$escalation_recent_pass_count <- as.integer(out$escalation_consecutive_pass_count)
+      }
+      if (!"escalation_recent_window_size" %in% names(out)) {
+        out$escalation_recent_window_size <- as.integer(out$escalation_consecutive_pass_count)
+      }
+      out$escalation_consecutive_pass_count <- NULL
+    }
+    if ("link_transform_escalation_refits_required_used" %in% names(out)) {
+      if (!"link_transform_escalation_window_refits_used" %in% names(out)) {
+        out$link_transform_escalation_window_refits_used <-
+          as.integer(out$link_transform_escalation_refits_required_used)
+      }
+      if (!"link_transform_escalation_passes_required_used" %in% names(out)) {
+        out$link_transform_escalation_passes_required_used <-
+          as.integer(out$link_transform_escalation_refits_required_used)
+      }
+      out$link_transform_escalation_refits_required_used <- NULL
+    }
+    if ("reliability_EAP_link" %in% names(out)) {
+      out$reliability_EAP_link <- NULL
+    }
   }
   if (!isTRUE(fill_missing)) {
     return(out)
@@ -902,6 +937,7 @@ load_adaptive_session <- function(session_dir) {
   }
 
   state <- .adaptive_validate_state_for_resume(state)
+  state$controller <- .adaptive_controller_resolve(state)
   state$meta$schema_version <- metadata$schema_version
   state$linking <- state$linking %||% list()
   state$linking$probe <- .adaptive_link_probe_state(state)

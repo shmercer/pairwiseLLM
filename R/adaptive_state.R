@@ -243,7 +243,101 @@
   out$cross_set_ppc_brier_max <- NULL
   out$ppc_calibration_id <- NULL
 
+  if (is.null(out$stability_passes_required) && !is.null(out$stability_consecutive_k)) {
+    out$stability_passes_required <- as.integer(out$stability_consecutive_k)
+  }
+  if (is.null(out$stability_window_refits) && !is.null(out$stability_consecutive_k)) {
+    out$stability_window_refits <- as.integer(out$stability_consecutive_k)
+  }
+  out$stability_consecutive_k <- NULL
+
+  if (is.null(out$link_transform_escalation_passes_required) &&
+    !is.null(out$link_transform_escalation_refits_required)) {
+    out$link_transform_escalation_passes_required <-
+      as.integer(out$link_transform_escalation_refits_required)
+  }
+  if (is.null(out$link_transform_escalation_window_refits) &&
+    !is.null(out$link_transform_escalation_refits_required)) {
+    out$link_transform_escalation_window_refits <-
+      as.integer(out$link_transform_escalation_refits_required)
+  }
+  out$link_transform_escalation_refits_required <- NULL
+
+  stop_window_size <- as.integer(
+    out$stability_window_refits %||% defaults$stability_window_refits
+  )
+  escalation_window_size <- as.integer(
+    out$link_transform_escalation_window_refits %||%
+      defaults$link_transform_escalation_window_refits
+  )
+  normalize_window_map <- function(window_map, count_map, max_size) {
+    base_map <- window_map %||% list()
+    if (!is.list(base_map)) {
+      base_map <- list()
+    }
+    if (length(base_map) < 1L && is.list(count_map) && length(count_map) > 0L) {
+      base_map <- lapply(
+        count_map,
+        function(value) {
+          rep_len(
+            TRUE,
+            max(0L, as.integer(value %||% 0L))
+          )
+        }
+      )
+    }
+    lapply(
+      base_map,
+      .adaptive_link_result_window_normalize,
+      max_size = max_size
+    )
+  }
+  out$link_stop_recent_pass_window_by_spoke <- normalize_window_map(
+    out$link_stop_recent_pass_window_by_spoke %||% NULL,
+    out$link_stop_consecutive_pass_count_by_spoke %||% NULL,
+    max_size = stop_window_size
+  )
+  out$link_stop_consecutive_pass_count_by_spoke <- NULL
+  out$link_escalation_recent_pass_window_by_spoke <- normalize_window_map(
+    out$link_escalation_recent_pass_window_by_spoke %||% NULL,
+    out$link_escalation_consecutive_pass_count_by_spoke %||% NULL,
+    max_size = escalation_window_size
+  )
+  out$link_escalation_consecutive_pass_count_by_spoke <- NULL
+
   out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_result_window_normalize <- function(window, max_size) {
+  if (is.null(window)) {
+    return(logical())
+  }
+  values <- suppressWarnings(as.logical(unlist(window, use.names = FALSE)))
+  values <- values[!is.na(values)]
+  max_size <- suppressWarnings(as.integer(max_size %||% NA_integer_))
+  if (!is.finite(max_size) || is.na(max_size) || max_size < 1L) {
+    return(values)
+  }
+  utils::tail(values, max_size)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_result_window_append <- function(window, result, max_size) {
+  values <- .adaptive_link_result_window_normalize(window, max_size = max_size)
+  result <- suppressWarnings(as.logical(result))
+  if (length(result) != 1L || is.na(result)) {
+    rlang::abort("Rolling link-result windows require a single non-missing logical result.")
+  }
+  .adaptive_link_result_window_normalize(c(values, result), max_size = max_size)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_result_window_pass_count <- function(window) {
+  sum(.adaptive_link_result_window_normalize(window, max_size = Inf) %in% TRUE)
 }
 
 #' @keywords internal
@@ -280,7 +374,8 @@
     delta_change_max = 0.05,
     log_alpha_sd_max = 0.10,
     log_alpha_change_max = 0.05,
-    link_transform_escalation_refits_required = 2L,
+    link_transform_escalation_window_refits = 3L,
+    link_transform_escalation_passes_required = 2L,
     link_transform_escalation_is_one_way = TRUE,
     max_pairs_after_stop = 0L,
     probe_pairs_per_refit_per_spoke = 2L,
@@ -288,10 +383,11 @@
     probe_brier_delta_min = 0.005,
     probe_brier_max = 0.19,
     probe_pred_rmse_max = 0.015,
-    theta_global_rmse_max = 0.04,
+    theta_global_rmse_max = 0.05,
     theta_global_rmse_scope = "direct_evidence_spoke",
     min_cross_set_edges_k = 1L,
-    stability_consecutive_k = 2L,
+    stability_window_refits = 3L,
+    stability_passes_required = 2L,
     min_refits_in_phase_b = 3L,
     hub_theta_rmse_max = 0.02,
     logalpha_sd_guardrail = 0.10,
@@ -346,8 +442,8 @@
     link_epoch_id_by_spoke = list(),
     link_epoch_signature_by_spoke = list(),
     link_epoch_start_step_by_spoke = list(),
-    link_stop_consecutive_pass_count_by_spoke = list(),
-    link_escalation_consecutive_pass_count_by_spoke = list(),
+    link_stop_recent_pass_window_by_spoke = list(),
+    link_escalation_recent_pass_window_by_spoke = list(),
     link_lag_domain_key_by_spoke = list(),
     link_lag_domain_reset_refit_id_by_spoke = list(),
     link_stage_coverage_bins_used = list(),
@@ -388,6 +484,8 @@
     "delta_change_max",
     "log_alpha_sd_max",
     "log_alpha_change_max",
+    "link_transform_escalation_window_refits",
+    "link_transform_escalation_passes_required",
     "link_transform_escalation_refits_required",
     "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
@@ -399,6 +497,8 @@
     "theta_global_rmse_max",
     "theta_global_rmse_scope",
     "min_cross_set_edges_k",
+    "stability_window_refits",
+    "stability_passes_required",
     "stability_consecutive_k",
     "min_refits_in_phase_b",
     "hub_theta_rmse_max",
@@ -578,6 +678,16 @@
   out$delta_change_max <- read_double("delta_change_max", 0, Inf)
   out$log_alpha_sd_max <- read_double("log_alpha_sd_max", 0, Inf)
   out$log_alpha_change_max <- read_double("log_alpha_change_max", 0, Inf)
+  out$link_transform_escalation_window_refits <- read_integer(
+    "link_transform_escalation_window_refits",
+    1L,
+    Inf
+  )
+  out$link_transform_escalation_passes_required <- read_integer(
+    "link_transform_escalation_passes_required",
+    1L,
+    Inf
+  )
   out$link_transform_escalation_refits_required <- read_integer(
     "link_transform_escalation_refits_required",
     1L,
@@ -596,6 +706,8 @@
     c("direct_evidence_spoke", "all_spoke_items", "min_cross_set_edges_k")
   )
   out$min_cross_set_edges_k <- read_integer("min_cross_set_edges_k", 1L, Inf)
+  out$stability_window_refits <- read_integer("stability_window_refits", 1L, Inf)
+  out$stability_passes_required <- read_integer("stability_passes_required", 1L, Inf)
   out$stability_consecutive_k <- read_integer("stability_consecutive_k", 1L, Inf)
   out$min_refits_in_phase_b <- read_integer("min_refits_in_phase_b", 1L, Inf)
   out$hub_theta_rmse_max <- read_double("hub_theta_rmse_max", 0, Inf)
@@ -716,6 +828,20 @@
     (!is.finite(resolved$hub_lock_kappa) || resolved$hub_lock_kappa <= 0 || resolved$hub_lock_kappa > 1)) {
     rlang::abort(
       "`adaptive_config$hub_lock_kappa` must be strictly in (0, 1] when `hub_lock_mode = \"soft_lock\"`."
+    )
+  }
+  if (resolved$stability_passes_required > resolved$stability_window_refits) {
+    rlang::abort(
+      "`adaptive_config$stability_passes_required` must be <= `adaptive_config$stability_window_refits`."
+    )
+  }
+  if (resolved$link_transform_escalation_passes_required >
+    resolved$link_transform_escalation_window_refits) {
+    rlang::abort(
+      paste0(
+        "`adaptive_config$link_transform_escalation_passes_required` must be <= ",
+        "`adaptive_config$link_transform_escalation_window_refits`."
+      )
     )
   }
   if (isTRUE(is_link_mode) &&
@@ -1055,7 +1181,7 @@
   theta_rmse_max <- read_threshold(
     row_name = "theta_global_rmse_max_used",
     controller_name = "theta_global_rmse_max",
-    fallback = 0.04
+    fallback = 0.05
   )
   delta_sd <- read_metric("delta_spoke_sd")
   delta_sd_max <- read_threshold(

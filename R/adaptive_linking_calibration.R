@@ -400,8 +400,15 @@
     d_opt_knobs = list(lambda = 1e-6, ordering_mode = "linking_d_optimal"),
     probe_pairs_per_refit_per_spoke = as.integer(adaptive_cfg$probe_pairs_per_refit_per_spoke %||% 2L),
     stopping_and_quota = list(
-      link_transform_escalation_refits_required = as.integer(
-        adaptive_cfg$link_transform_escalation_refits_required %||% 2L
+      link_transform_escalation_window_refits = as.integer(
+        adaptive_cfg$link_transform_escalation_window_refits %||%
+          adaptive_cfg$link_transform_escalation_refits_required %||%
+          3L
+      ),
+      link_transform_escalation_passes_required = as.integer(
+        adaptive_cfg$link_transform_escalation_passes_required %||%
+          adaptive_cfg$link_transform_escalation_refits_required %||%
+          2L
       ),
       min_cross_set_pairs_per_spoke_per_refit = as.integer(
         adaptive_cfg$min_cross_set_pairs_per_spoke_per_refit %||% 5L

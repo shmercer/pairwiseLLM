@@ -811,7 +811,7 @@ summarize_adaptive <- function(state) {
 
   blocker_codes <- unique(as.character(latest_rows$stop_blocker_codes %||% character()))
   blocker_codes <- blocker_codes[!is.na(blocker_codes) & nzchar(blocker_codes)]
-  blockers <- unique(unlist(strsplit(blocker_codes, "\\|", fixed = FALSE), use.names = FALSE))
+  blockers <- unique(unlist(strsplit(blocker_codes, "[,|]", fixed = FALSE), use.names = FALSE))
   blockers <- blockers[!is.na(blockers) & nzchar(blockers)]
 
   details <- c(
@@ -1171,8 +1171,13 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
   link_stop_reliability_min <- as.double(thresholds$link_stop_reliability_min %||% 0.90)
   probe_brier_max <- as.double(thresholds$probe_brier_max %||% 0.19)
   probe_pred_rmse_max <- as.double(thresholds$probe_pred_rmse_max %||% 0.015)
-  theta_global_rmse_max <- as.double(thresholds$theta_global_rmse_max %||% 0.04)
-  stability_consecutive_k <- as.integer(thresholds$stability_consecutive_k %||% 2L)
+  theta_global_rmse_max <- as.double(thresholds$theta_global_rmse_max %||% 0.05)
+  stability_window_refits <- as.integer(thresholds$stability_window_refits %||% 3L)
+  stability_passes_required <- as.integer(
+    thresholds$stability_passes_required %||%
+      thresholds$stability_consecutive_k %||%
+      2L
+  )
   min_refits_in_phase_b <- as.integer(thresholds$min_refits_in_phase_b %||% 3L)
   fmt_num <- function(x, digits = 3L) {
     if (!is.finite(x)) {
@@ -1590,43 +1595,58 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
       )
     }
 
-    if ("blocker_probe_panel_shortfall_weight" %in% names(link_stage_rows)) {
-      blocker_totals <- c(
-        probe_panel_shortfall = sum(
-          as.double(link_stage_rows$blocker_probe_panel_shortfall_weight %||% 0),
-          na.rm = TRUE
-        ),
-        probe_brier = sum(
-          as.double(link_stage_rows$blocker_probe_brier_weight %||% 0),
-          na.rm = TRUE
-        ),
-        probe_pred_rmse = sum(
-          as.double(link_stage_rows$blocker_probe_pred_rmse_weight %||% 0),
-          na.rm = TRUE
-        ),
-        theta_global_rmse = sum(
-          as.double(link_stage_rows$blocker_theta_global_rmse_weight %||% 0),
-          na.rm = TRUE
-        ),
-        delta_spoke_sd = sum(
-          as.double(link_stage_rows$blocker_delta_spoke_sd_weight %||% 0),
-          na.rm = TRUE
-        )
-      )
-      dominant_blocker <- names(blocker_totals)[[which.max(blocker_totals)]]
-      link_block <- c(
-        link_block,
-        paste0("  dominant_blocker=", dominant_blocker)
-      )
-    }
-
     link_stop_block <- c("Linking stop criteria by spoke:")
     for (idx in seq_len(nrow(link_stage_rows))) {
       link_row <- link_stage_rows[idx, , drop = FALSE]
       spoke_id <- as.integer(link_row$spoke_id[[1L]] %||% NA_integer_)
       probe_realized <- as.integer(link_row$probe_edges_realized[[1L]] %||% 0L)
       probe_min <- as.integer(link_row$probe_edges_min_for_stop_used[[1L]] %||% NA_integer_)
-      stop_counter <- as.integer(link_row$stop_consecutive_pass_count[[1L]] %||% 0L)
+      stop_count <- as.integer(
+        link_row$stop_recent_pass_count[[1L]] %||%
+          link_row$stop_consecutive_pass_count[[1L]] %||%
+          0L
+      )
+      stop_window_size <- as.integer(
+        link_row$stop_recent_window_size[[1L]] %||%
+          link_row$stop_consecutive_pass_count[[1L]] %||%
+          0L
+      )
+      stop_window_used <- as.integer(
+        link_row$stability_window_refits_used[[1L]] %||%
+          stability_window_refits
+      )
+      stop_passes_used <- as.integer(
+        link_row$stability_passes_required_used[[1L]] %||%
+          stability_passes_required
+      )
+      reliability_min_used <- as.double(
+        link_col_value(link_row, "link_stop_reliability_min_used", default = NA_real_) %||%
+          link_stop_reliability_min
+      )
+      if (!is.finite(reliability_min_used)) {
+        reliability_min_used <- link_stop_reliability_min
+      }
+      probe_brier_max_used <- as.double(
+        link_col_value(link_row, "probe_brier_max_used", default = NA_real_) %||%
+          probe_brier_max
+      )
+      if (!is.finite(probe_brier_max_used)) {
+        probe_brier_max_used <- probe_brier_max
+      }
+      probe_pred_rmse_max_used <- as.double(
+        link_col_value(link_row, "probe_pred_rmse_max_used", default = NA_real_) %||%
+          probe_pred_rmse_max
+      )
+      if (!is.finite(probe_pred_rmse_max_used)) {
+        probe_pred_rmse_max_used <- probe_pred_rmse_max
+      }
+      theta_global_rmse_max_used <- as.double(
+        link_col_value(link_row, "theta_global_rmse_max_used", default = NA_real_) %||%
+          theta_global_rmse_max
+      )
+      if (!is.finite(theta_global_rmse_max_used)) {
+        theta_global_rmse_max_used <- theta_global_rmse_max
+      }
       link_stop_block <- c(
         link_stop_block,
         paste0(
@@ -1638,10 +1658,15 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           link_row$link_stop_pass[[1L]],
           "  transform_frozen=",
           link_row$transform_frozen[[1L]],
-          "  stop_consecutive_pass_count=",
-          stop_counter,
+          "  stop_recent_pass_count=",
+          stop_count,
           "/",
-          stability_consecutive_k
+          stop_window_size,
+          " (need ",
+          stop_passes_used,
+          "/",
+          stop_window_used,
+          ")"
         ),
         paste0(
           "    link_lag_eligible=",
@@ -1716,36 +1741,6 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           link_col_value(link_row, "feasibility_reallocation_rule", default = NA_character_)
         ),
         paste0(
-          "    blocker_weights[probe_shortfall,probe_brier,probe_rmse,theta_rmse,delta_sd]=",
-          paste(
-            c(
-              fmt_num(
-                as.double(link_col_value(link_row, "blocker_probe_panel_shortfall_weight", default = NA_real_)),
-                digits = 2L
-              ),
-              fmt_num(
-                as.double(link_col_value(link_row, "blocker_probe_brier_weight", default = NA_real_)),
-                digits = 2L
-              ),
-              fmt_num(
-                as.double(link_col_value(link_row, "blocker_probe_pred_rmse_weight", default = NA_real_)),
-                digits = 2L
-              ),
-              fmt_num(
-                as.double(link_col_value(link_row, "blocker_theta_global_rmse_weight", default = NA_real_)),
-                digits = 2L
-              ),
-              fmt_num(
-                as.double(link_col_value(link_row, "blocker_delta_spoke_sd_weight", default = NA_real_)),
-                digits = 2L
-              )
-            ),
-            collapse = ","
-          ),
-          "  blocker_rule=",
-          link_col_value(link_row, "blocker_reweighting_rule", default = NA_character_)
-        ),
-        paste0(
           "    lag_domain_reset=",
           fmt_mark(link_col_value(link_row, "lag_domain_reset", default = NA)),
           "  lag_domain_reset_reason=",
@@ -1757,31 +1752,31 @@ adaptive_progress_refit_block <- function(round_row, cfg, link_stage_rows = NULL
           "  reliability_link_global=",
           fmt_num(as.double(link_row$reliability_link_global[[1L]]), digits = 3L),
           " (need >= ",
-          fmt_num(link_stop_reliability_min, digits = 3L),
+          fmt_num(reliability_min_used, digits = 3L),
           "; pass=",
           fmt_mark(link_row$reliability_stop_pass[[1L]]),
           ")  rank_stability_lagged=",
           fmt_num(as.double(link_row$rank_stability_lagged[[1L]]), digits = 3L),
-          " (pass=",
-          fmt_mark(link_row$rank_stability_pass[[1L]]),
-          ")  delta_spoke_sd=",
+          "  delta_spoke_sd=",
           fmt_num(as.double(link_row$delta_spoke_sd[[1L]]), digits = 3L),
-          " (need <= ",
-          fmt_num(as.double(link_row$delta_sd_max_used[[1L]]), digits = 3L),
-          "; pass=",
-          fmt_mark(link_row$delta_sd_pass[[1L]]),
-          ")  probe_brier=",
+          "  probe_brier=",
           fmt_num(as.double(link_row$probe_brier[[1L]]), digits = 3L),
           " (need <= ",
-          fmt_num(probe_brier_max, digits = 3L),
+          fmt_num(probe_brier_max_used, digits = 3L),
+          "; pass=",
+          fmt_mark(link_row$probe_brier_pass[[1L]]),
           ")  probe_pred_rmse_lagged=",
           fmt_num(as.double(link_row$probe_pred_rmse_lagged[[1L]]), digits = 3L),
           " (need <= ",
-          fmt_num(probe_pred_rmse_max, digits = 3L),
+          fmt_num(probe_pred_rmse_max_used, digits = 3L),
+          "; pass=",
+          fmt_mark(link_row$probe_pred_rmse_pass[[1L]]),
           ")  theta_global_rmse_lagged=",
           fmt_num(as.double(link_row$theta_global_rmse_lagged[[1L]]), digits = 3L),
           " (need <= ",
-          fmt_num(theta_global_rmse_max, digits = 3L),
+          fmt_num(theta_global_rmse_max_used, digits = 3L),
+          "; pass=",
+          fmt_mark(link_row$theta_global_rmse_pass[[1L]]),
           ")"
         )
       )

@@ -341,7 +341,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 3L)
   state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
   state$controller$link_epoch_start_step_by_spoke <- list(`2` = 8L)
-  state$controller$link_escalation_consecutive_pass_count_by_spoke <- list(`2` = 1L)
+  state$controller$link_escalation_recent_pass_window_by_spoke <- list(`2` = c(TRUE))
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
       link_transform_policy = "auto",
@@ -364,7 +364,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   expect_identical(restored$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 3L)
   expect_identical(restored$controller$link_epoch_id_by_spoke[["2"]], 4L)
   expect_identical(restored$controller$link_epoch_start_step_by_spoke[["2"]], 8L)
-  expect_identical(restored$controller$link_escalation_consecutive_pass_count_by_spoke[["2"]], 1L)
+  expect_identical(restored$controller$link_escalation_recent_pass_window_by_spoke[["2"]], c(TRUE))
 })
 
 test_that("load_adaptive_session normalizes legacy link_stage_log transform columns on resume", {
@@ -394,7 +394,7 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
     link_transform_mode = "shift_only",
     link_refit_mode = "shift_only",
     hub_lock_mode = "soft_lock",
-    reliability_EAP_link = 0.9,
+    reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = FALSE,
     link_stop_pass = FALSE,
@@ -431,7 +431,7 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
 
-test_that("save/load preserves feasibility and blocker explanation fields in link_stage_log", {
+test_that("save/load preserves feasibility and canonical stop-threshold fields in link_stage_log", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
     set_id = c(1L, 1L, 2L, 2L),
@@ -452,7 +452,9 @@ test_that("save/load preserves feasibility and blocker explanation fields in lin
       link_transform_state = "shift_only",
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
-      reliability_EAP_link = 0.9,
+      reliability_link_global = 0.9,
+      link_stop_reliability_min_used = 0.9,
+      reliability_stop_pass = TRUE,
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
       link_stop_pass = FALSE,
@@ -488,12 +490,15 @@ test_that("save/load preserves feasibility and blocker explanation fields in lin
       stage_reallocation_used = TRUE,
       stage_reallocation_rule_used = "pooled_utility_backfill",
       stage_budget_unfilled = 1L,
-      blocker_probe_panel_shortfall_weight = 0.5,
-      blocker_probe_brier_weight = 1,
-      blocker_probe_pred_rmse_weight = 1,
-      blocker_theta_global_rmse_weight = 0.5,
-      blocker_delta_spoke_sd_weight = 0.25,
-      blocker_reweighting_rule = "canonical_metric_excess_ratio_v1"
+      probe_brier = 0.12,
+      probe_brier_max_used = 0.19,
+      probe_brier_pass = TRUE,
+      probe_pred_rmse_lagged = 0.01,
+      probe_pred_rmse_max_used = 0.015,
+      probe_pred_rmse_pass = TRUE,
+      theta_global_rmse_lagged = 0.03,
+      theta_global_rmse_max_used = 0.05,
+      theta_global_rmse_pass = TRUE
     )
   )
 
@@ -509,11 +514,10 @@ test_that("save/load preserves feasibility and blocker explanation fields in lin
     as.character(row$feasibility_reallocation_rule[[1L]]),
     "pooled_utility_backfill"
   )
-  expect_equal(row$blocker_probe_panel_shortfall_weight[[1L]], 0.5, tolerance = 1e-12)
-  expect_identical(
-    as.character(row$blocker_reweighting_rule[[1L]]),
-    "canonical_metric_excess_ratio_v1"
-  )
+  expect_equal(row$probe_brier_max_used[[1L]], 0.19, tolerance = 1e-12)
+  expect_true(isTRUE(row$probe_brier_pass[[1L]]))
+  expect_equal(row$theta_global_rmse_max_used[[1L]], 0.05, tolerance = 1e-12)
+  expect_true(isTRUE(row$theta_global_rmse_pass[[1L]]))
 })
 
 test_that("save/load preserves planned probe panels and realized probe bookkeeping", {

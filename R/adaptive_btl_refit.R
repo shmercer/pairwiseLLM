@@ -1380,32 +1380,40 @@
                                          link_min_refit_eligible,
                                          probe_edges_realized,
                                          probe_edges_min_for_stop,
+                                         link_stop_reliability_min,
                                          reliability_active,
                                          probe_brier,
+                                         probe_brier_max,
                                          probe_pred_rmse_lagged,
+                                         probe_pred_rmse_max,
                                          theta_global_rmse_lagged,
+                                         theta_global_rmse_max,
                                          hub_anchored) {
   blocker_names <- c(
     "diagnostics_failed",
     "lag_not_eligible",
     "min_refits_not_met",
-    "realized_probes_below_min",
-    "reliability_undefined",
-    "probe_brier_unavailable",
-    "probe_pred_rmse_unavailable",
-    "theta_global_rmse_unavailable",
+    "probe_edges_min_for_stop",
+    "reliability_link_global",
+    "probe_brier",
+    "probe_pred_rmse_lagged",
+    "theta_global_rmse_lagged",
     "hub_not_anchored"
   )
   blockers <- c(
     diagnostics_failed = !isTRUE(link_diagnostics_pass),
     lag_not_eligible = !isTRUE(link_lag_eligible),
     min_refits_not_met = !isTRUE(link_min_refit_eligible),
-    realized_probes_below_min = as.integer(probe_edges_realized %||% 0L) <
+    probe_edges_min_for_stop = as.integer(probe_edges_realized %||% 0L) <
       as.integer(probe_edges_min_for_stop %||% 0L),
-    reliability_undefined = !is.finite(as.double(reliability_active %||% NA_real_)),
-    probe_brier_unavailable = !is.finite(as.double(probe_brier %||% NA_real_)),
-    probe_pred_rmse_unavailable = !is.finite(as.double(probe_pred_rmse_lagged %||% NA_real_)),
-    theta_global_rmse_unavailable = !is.finite(as.double(theta_global_rmse_lagged %||% NA_real_)),
+    reliability_link_global = !is.finite(as.double(reliability_active %||% NA_real_)) ||
+      as.double(reliability_active) < as.double(link_stop_reliability_min %||% 0.90),
+    probe_brier = !is.finite(as.double(probe_brier %||% NA_real_)) ||
+      as.double(probe_brier) > as.double(probe_brier_max %||% 0.19),
+    probe_pred_rmse_lagged = !is.finite(as.double(probe_pred_rmse_lagged %||% NA_real_)) ||
+      as.double(probe_pred_rmse_lagged) > as.double(probe_pred_rmse_max %||% 0.015),
+    theta_global_rmse_lagged = !is.finite(as.double(theta_global_rmse_lagged %||% NA_real_)) ||
+      as.double(theta_global_rmse_lagged) > as.double(theta_global_rmse_max %||% 0.05),
     hub_not_anchored = !isTRUE(hub_anchored)
   )
   blockers <- stats::setNames(as.logical(unname(blockers)), blocker_names)
@@ -1432,11 +1440,35 @@
   if (!isTRUE(diagnostics_pass)) {
     return(FALSE)
   }
+  row_col <- function(name) row[[name]] %||% NULL
+  reliability_min <- as.double(
+    row_col("link_stop_reliability_min_used")[[1L]] %||%
+      controller$link_stop_reliability_min %||%
+      0.90
+  )
+  probe_brier_max <- as.double(
+    row_col("probe_brier_max_used")[[1L]] %||%
+      controller$probe_brier_max %||%
+      0.19
+  )
+  probe_pred_rmse_max <- as.double(
+    row_col("probe_pred_rmse_max_used")[[1L]] %||%
+      controller$probe_pred_rmse_max %||%
+      0.015
+  )
+  theta_global_rmse_max <- as.double(
+    row_col("theta_global_rmse_max_used")[[1L]] %||%
+      controller$theta_global_rmse_max %||%
+      0.05
+  )
   rel_gate <- if ("reliability_stop_pass" %in% names(row)) {
     isTRUE(row$reliability_stop_pass[[1L]] %||% FALSE)
+  } else if ("reliability_link_global" %in% names(row)) {
+    is.finite(row$reliability_link_global[[1L]]) &&
+      row$reliability_link_global[[1L]] >= reliability_min
   } else if ("reliability_EAP_link" %in% names(row)) {
     is.finite(row$reliability_EAP_link[[1L]]) &&
-      row$reliability_EAP_link[[1L]] >= as.double(controller$link_stop_reliability_min %||% 0.90)
+      row$reliability_EAP_link[[1L]] >= reliability_min
   } else {
     FALSE
   }
@@ -1447,19 +1479,19 @@
   }
   probe_gate <- if ("probe_brier" %in% names(row)) {
     is.finite(as.double(row$probe_brier[[1L]] %||% NA_real_)) &&
-      as.double(row$probe_brier[[1L]]) <= as.double(controller$probe_brier_max %||% 0.19)
+      as.double(row$probe_brier[[1L]]) <= probe_brier_max
   } else {
     FALSE
   }
   probe_rmse_gate <- if ("probe_pred_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$probe_pred_rmse_lagged[[1L]] %||% NA_real_)) &&
-      as.double(row$probe_pred_rmse_lagged[[1L]]) <= as.double(controller$probe_pred_rmse_max %||% 0.015)
+      as.double(row$probe_pred_rmse_lagged[[1L]]) <= probe_pred_rmse_max
     } else {
       FALSE
     }
   theta_rmse_gate <- if ("theta_global_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$theta_global_rmse_lagged[[1L]] %||% NA_real_)) &&
-      as.double(row$theta_global_rmse_lagged[[1L]]) <= as.double(controller$theta_global_rmse_max %||% 0.04)
+      as.double(row$theta_global_rmse_lagged[[1L]]) <= theta_global_rmse_max
     } else {
       FALSE
     }
@@ -1476,8 +1508,13 @@
     rlang::abort("`link_row` must have exactly one row.")
   }
   controller <- utils::modifyList(.adaptive_controller_defaults(2L), controller %||% list())
-  rel_gate <- is.finite(row$reliability_EAP_link[[1L]]) &&
-    row$reliability_EAP_link[[1L]] >= as.double(controller$link_identified_reliability_min %||% 0.80)
+  reliability_val <- as.double(
+    row$reliability_link_global[[1L]] %||%
+      row$reliability_EAP_link[[1L]] %||%
+      NA_real_
+  )
+  rel_gate <- is.finite(reliability_val) &&
+    reliability_val >= as.double(controller$link_identified_reliability_min %||% 0.80)
   rank_gate <- is.finite(row$ts_btl_rank_spearman[[1L]]) &&
     row$ts_btl_rank_spearman[[1L]] >= as.double(controller$link_rank_corr_min %||% 0.90)
   isTRUE(rel_gate) && isTRUE(rank_gate)
@@ -2798,24 +2835,24 @@
     feasibility_reallocation_used = rep(FALSE, nrow(rows)),
     feasibility_reallocation_rule = rep("none", nrow(rows)),
     stop_blocker_codes = rep(NA_character_, nrow(rows)),
-    stop_blocker_diagnostics_failed = rep(NA, nrow(rows)),
-    stop_blocker_lag_not_eligible = rep(NA, nrow(rows)),
-    stop_blocker_min_refits_not_met = rep(NA, nrow(rows)),
-    stop_blocker_realized_probes_below_min = rep(NA, nrow(rows)),
-    stop_blocker_reliability_undefined = rep(NA, nrow(rows)),
-    stop_blocker_probe_brier_unavailable = rep(NA, nrow(rows)),
-    stop_blocker_probe_pred_rmse_unavailable = rep(NA, nrow(rows)),
-    stop_blocker_theta_global_rmse_unavailable = rep(NA, nrow(rows)),
-    stop_blocker_hub_not_anchored = rep(NA, nrow(rows)),
-    blocker_probe_panel_shortfall_weight = rep(NA_real_, nrow(rows)),
-    blocker_probe_brier_weight = rep(NA_real_, nrow(rows)),
-    blocker_probe_pred_rmse_weight = rep(NA_real_, nrow(rows)),
-    blocker_theta_global_rmse_weight = rep(NA_real_, nrow(rows)),
-    blocker_delta_spoke_sd_weight = rep(NA_real_, nrow(rows)),
-    blocker_reweighting_rule = rep(NA_character_, nrow(rows)),
     probe_edges_realized_before_refit = rep(NA_integer_, nrow(rows)),
     probe_edges_realized_delta_since_last_refit = rep(NA_integer_, nrow(rows)),
     probe_shortfall_reason = rep(NA_character_, nrow(rows)),
+    stop_recent_pass_count = rep(NA_integer_, nrow(rows)),
+    stop_recent_window_size = rep(NA_integer_, nrow(rows)),
+    stability_window_refits_used = rep(NA_integer_, nrow(rows)),
+    stability_passes_required_used = rep(NA_integer_, nrow(rows)),
+    escalation_recent_pass_count = rep(NA_integer_, nrow(rows)),
+    escalation_recent_window_size = rep(NA_integer_, nrow(rows)),
+    link_transform_escalation_window_refits_used = rep(NA_integer_, nrow(rows)),
+    link_transform_escalation_passes_required_used = rep(NA_integer_, nrow(rows)),
+    link_stop_reliability_min_used = rep(NA_real_, nrow(rows)),
+    probe_brier_max_used = rep(NA_real_, nrow(rows)),
+    probe_brier_pass = rep(NA, nrow(rows)),
+    probe_pred_rmse_max_used = rep(NA_real_, nrow(rows)),
+    probe_pred_rmse_pass = rep(NA, nrow(rows)),
+    theta_global_rmse_max_used = rep(NA_real_, nrow(rows)),
+    theta_global_rmse_pass = rep(NA, nrow(rows)),
     lag_domain_reset_reason = rep(NA_character_, nrow(rows)),
     resumed_from_session = rep(NA, nrow(rows))
   )
@@ -3182,8 +3219,8 @@
     return(out)
   }
   link_identified_map <- controller$linking_identified_by_spoke %||% list()
-  stop_counter_map <- controller$link_stop_consecutive_pass_count_by_spoke %||% list()
-  escalation_counter_map <- controller$link_escalation_consecutive_pass_count_by_spoke %||% list()
+  stop_window_map <- controller$link_stop_recent_pass_window_by_spoke %||% list()
+  escalation_window_map <- controller$link_escalation_recent_pass_window_by_spoke %||% list()
   epoch_id_map <- controller$link_epoch_id_by_spoke %||% list()
   epoch_signature_map <- controller$link_epoch_signature_by_spoke %||% list()
   epoch_start_step_map <- controller$link_epoch_start_step_by_spoke %||% list()
@@ -3370,8 +3407,8 @@
     lag_domain_reset <- !is.na(lag_domain_reset_reason)
     if (isTRUE(lag_domain_reset)) {
       link_epoch_id <- as.integer(link_epoch_id + 1L)
-      stop_counter_map[[key]] <- 0L
-      escalation_counter_map[[key]] <- 0L
+      stop_window_map[[key]] <- logical()
+      escalation_window_map[[key]] <- logical()
       lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
       epoch_start_step_map[[key]] <- as.integer(last_step + 1L)
     }
@@ -3463,8 +3500,8 @@
       }
       link_epoch_id <- as.integer(link_epoch_id + 1L)
       epoch_id_map[[key]] <- as.integer(link_epoch_id)
-      stop_counter_map[[key]] <- 0L
-      escalation_counter_map[[key]] <- 0L
+      stop_window_map[[key]] <- logical()
+      escalation_window_map[[key]] <- logical()
       lag_domain_reset <- TRUE
       lag_domain_reset_reason <- "probe_panel_rebuild"
       lag_domain_reset_refit_map[[key]] <- as.integer(current_refit_id)
@@ -3528,35 +3565,6 @@
     } else {
       NA_real_
     }
-    delta_change_pass <- if (isTRUE(lag_eligible) && is.finite(delta_change)) {
-      delta_change <= as.double(controller$delta_change_max %||% 0.05)
-    } else {
-      NA
-    }
-    log_alpha_change_pass <- if (isTRUE(lag_eligible) &&
-      identical(transform_state, "shift_scale") &&
-      is.finite(log_alpha_change)) {
-      log_alpha_change <= as.double(controller$log_alpha_change_max %||% 0.05)
-    } else if (identical(transform_state, "shift_only")) {
-      NA
-    } else {
-      NA
-    }
-
-    delta_sd_max_used <- .adaptive_link_delta_sd_max_derived(
-      state = out,
-      hub_id = hub_id,
-      delta_sd_mult = as.double(controller$delta_sd_max %||% 0.10)
-    )
-    delta_sd_pass <- is.finite(fit$delta_sd) &&
-      is.finite(delta_sd_max_used) &&
-      fit$delta_sd <= delta_sd_max_used
-    log_alpha_sd_pass <- if (identical(transform_state, "shift_scale")) {
-      is.finite(fit$log_alpha_sd) && fit$log_alpha_sd <= as.double(controller$log_alpha_sd_max %||% 0.10)
-    } else {
-      TRUE
-    }
-
     if (identical(transform_state, "shift_scale") && !is.finite(fit$log_alpha_mean)) {
       fit$log_alpha_mean <- 0
     }
@@ -3567,7 +3575,6 @@
       fit$log_alpha_mean <- NA_real_
       fit$log_alpha_sd <- NA_real_
       log_alpha_change <- NA_real_
-      log_alpha_change_pass <- NA
     }
 
     active <- .adaptive_link_active_item_ids(out, spoke_id = spoke_id, hub_id = hub_id)
@@ -3715,22 +3722,42 @@
     link_stop_eligible <- isTRUE(link_lag_eligible) &&
       isTRUE(link_min_refit_eligible) &&
       isTRUE(link_stop_gate_open)
+    reliability_min_used <- as.double(controller$link_stop_reliability_min %||% 0.90)
+    probe_brier_max_used <- as.double(controller$probe_brier_max %||% 0.19)
+    probe_pred_rmse_max_used <- as.double(controller$probe_pred_rmse_max %||% 0.015)
+    theta_global_rmse_max_used <- as.double(controller$theta_global_rmse_max %||% 0.05)
+    reliability_stop_pass <- is.finite(reliability_active) &&
+      reliability_active >= reliability_min_used
+    probe_brier_pass <- is.finite(probe_brier) &&
+      probe_brier <= probe_brier_max_used
+    probe_pred_rmse_pass <- is.finite(probe_pred_rmse_lagged) &&
+      probe_pred_rmse_lagged <= probe_pred_rmse_max_used
+    theta_global_rmse_pass <- is.finite(theta_global_rmse_lagged) &&
+      theta_global_rmse_lagged <= theta_global_rmse_max_used
+    stop_window_refits_used <- as.integer(controller$stability_window_refits %||% 3L)
+    stop_passes_required_used <- as.integer(controller$stability_passes_required %||% 2L)
     link_stop_pass_now <- isTRUE(link_stop_eligible) &&
       isTRUE(hub_anchored) &&
-      is.finite(reliability_active) &&
-      reliability_active >= as.double(controller$link_stop_reliability_min %||% 0.90) &&
-      is.finite(probe_brier) &&
-      probe_brier <= as.double(controller$probe_brier_max %||% 0.19) &&
-      is.finite(probe_pred_rmse_lagged) &&
-      probe_pred_rmse_lagged <= as.double(controller$probe_pred_rmse_max %||% 0.015) &&
-      is.finite(theta_global_rmse_lagged) &&
-      theta_global_rmse_lagged <= as.double(controller$theta_global_rmse_max %||% 0.04)
-    stop_counter <- if (isTRUE(link_stop_pass_now)) {
-      as.integer(stop_counter_map[[key]] %||% 0L) + 1L
-    } else {
-      0L
+      isTRUE(reliability_stop_pass) &&
+      isTRUE(probe_brier_pass) &&
+      isTRUE(probe_pred_rmse_pass) &&
+      isTRUE(theta_global_rmse_pass)
+    stop_window <- .adaptive_link_result_window_normalize(
+      stop_window_map[[key]] %||% logical(),
+      max_size = stop_window_refits_used
+    )
+    if (isTRUE(link_stop_eligible)) {
+      stop_window <- .adaptive_link_result_window_append(
+        stop_window,
+        result = link_stop_pass_now,
+        max_size = stop_window_refits_used
+      )
     }
-    stop_counter_map[[key]] <- as.integer(stop_counter)
+    stop_window_map[[key]] <- stop_window
+    stop_recent_pass_count <- .adaptive_link_result_window_pass_count(stop_window)
+    stop_recent_window_size <- length(stop_window)
+    link_stop_pass <- isTRUE(stop_recent_window_size >= stop_window_refits_used) &&
+      isTRUE(stop_recent_pass_count >= stop_passes_required_used)
 
     cross_active_epoch <- cross_active_all[0, , drop = FALSE]
     scale_ready <- FALSE
@@ -3788,7 +3815,16 @@
     probe_brier_shift_scale <- NA_real_
     probe_brier_delta <- NA_real_
     escalated_this_refit <- FALSE
-    escalation_counter <- as.integer(escalation_counter_map[[key]] %||% 0L)
+    escalation_window_refits_used <- as.integer(
+      controller$link_transform_escalation_window_refits %||% 3L
+    )
+    escalation_passes_required_used <- as.integer(
+      controller$link_transform_escalation_passes_required %||% 2L
+    )
+    escalation_window <- .adaptive_link_result_window_normalize(
+      escalation_window_map[[key]] %||% logical(),
+      max_size = escalation_window_refits_used
+    )
     if (!isTRUE(transform_frozen) &&
       identical(transform_policy, "auto") &&
       identical(refit_mode, "shift_only") &&
@@ -3813,18 +3849,21 @@
         )
         probe_brier_delta <- as.double(probe_brier_shift_only - probe_brier_shift_scale)
       }
-      if (isTRUE(alt_fit$converged) &&
+      escalation_pass_now <- isTRUE(alt_fit$converged) &&
         is.finite(probe_brier_delta) &&
         probe_brier_delta >= as.double(controller$probe_brier_delta_min %||% 0.005) &&
         is.finite(alt_fit$log_alpha_sd) &&
-        alt_fit$log_alpha_sd <= as.double(controller$logalpha_sd_guardrail %||% 0.10)) {
-        escalation_counter <- escalation_counter + 1L
-      } else {
-        escalation_counter <- 0L
-      }
-      if (escalation_counter >= as.integer(controller$link_transform_escalation_refits_required %||% 2L)) {
+        alt_fit$log_alpha_sd <= as.double(controller$logalpha_sd_guardrail %||% 0.10)
+      escalation_window <- .adaptive_link_result_window_append(
+        escalation_window,
+        result = escalation_pass_now,
+        max_size = escalation_window_refits_used
+      )
+      if (length(escalation_window) >= escalation_window_refits_used &&
+        .adaptive_link_result_window_pass_count(escalation_window) >=
+          escalation_passes_required_used) {
         escalated_this_refit <- TRUE
-        escalation_counter <- 0L
+        escalation_window <- logical()
         transform_state <- "shift_scale"
         state_map[[key]] <- "shift_scale"
         fit$delta_mean <- as.double(alt_fit$delta_mean %||% fit$delta_mean)
@@ -3861,23 +3900,30 @@
           rho_rank_lagged = NA_real_,
           rho_rank_lagged_pass = FALSE
         )
-        stop_counter <- 0L
-        stop_counter_map[[key]] <- 0L
+        stop_window <- logical()
+        stop_window_map[[key]] <- logical()
+        stop_recent_pass_count <- 0L
+        stop_recent_window_size <- 0L
+        link_stop_pass <- FALSE
       }
-    } else {
-      escalation_counter <- 0L
     }
-    escalation_counter_map[[key]] <- as.integer(escalation_counter)
+    escalation_window_map[[key]] <- escalation_window
+    escalation_recent_pass_count <- .adaptive_link_result_window_pass_count(escalation_window)
+    escalation_recent_window_size <- length(escalation_window)
     stop_blockers <- .adaptive_link_stop_blockers(
       link_diagnostics_pass = link_diagnostics_pass,
       link_lag_eligible = link_lag_eligible,
       link_min_refit_eligible = link_min_refit_eligible,
       probe_edges_realized = probe_edges_realized_eval,
       probe_edges_min_for_stop = as.integer(controller$probe_edges_min_for_stop %||% 30L),
+      link_stop_reliability_min = reliability_min_used,
       reliability_active = reliability_active,
       probe_brier = probe_brier,
+      probe_brier_max = probe_brier_max_used,
       probe_pred_rmse_lagged = probe_pred_rmse_lagged,
+      probe_pred_rmse_max = probe_pred_rmse_max_used,
       theta_global_rmse_lagged = theta_global_rmse_lagged,
+      theta_global_rmse_max = theta_global_rmse_max_used,
       hub_anchored = hub_anchored
     )
 
@@ -3902,21 +3948,13 @@
       log_alpha_spoke_sd = as.double(fit$log_alpha_sd),
       delta_change_lagged = as.double(delta_change),
       log_alpha_change_lagged = as.double(log_alpha_change),
-      delta_change_pass = as.logical(delta_change_pass),
-      log_alpha_change_pass = as.logical(log_alpha_change_pass),
-      delta_sd_pass = as.logical(delta_sd_pass),
-      log_alpha_sd_pass = as.logical(log_alpha_sd_pass),
-      delta_sd_max_used = as.double(delta_sd_max_used),
-      link_reliability = as.double(reliability_active),
       reliability_link_global = as.double(reliability_active),
+      link_stop_reliability_min_used = as.double(reliability_min_used),
       link_reliability_identified_pass = as.logical(
         is.finite(reliability_active) &&
           reliability_active >= as.double(controller$link_identified_reliability_min %||% 0.80)
       ),
-      link_reliability_stop_pass = as.logical(
-        is.finite(reliability_active) &&
-          reliability_active >= as.double(controller$link_stop_reliability_min %||% 0.90)
-      ),
+      link_reliability_stop_pass = as.logical(reliability_stop_pass),
       ts_btl_rank_spearman_active = as.double(ts_btl_rank_active),
       link_rank_corr_pass = as.logical(
         is.finite(ts_btl_rank_active) &&
@@ -3931,13 +3969,13 @@
       link_min_refit_eligible = as.logical(link_min_refit_eligible),
       link_stop_gate_open = as.logical(link_stop_gate_open),
       rank_stability_lagged = as.double(rank_stability$rho_rank_lagged %||% NA_real_),
-      rank_stability_pass = as.logical(rank_stability$rho_rank_lagged_pass %||% FALSE),
       link_identified = as.logical(link_identified),
       link_stop_eligible = as.logical(link_stop_eligible),
-      stop_consecutive_pass_count = as.integer(stop_counter),
-      link_stop_pass = as.logical(
-        stop_counter >= as.integer(controller$stability_consecutive_k %||% 2L)
-      ),
+      stop_recent_pass_count = as.integer(stop_recent_pass_count),
+      stop_recent_window_size = as.integer(stop_recent_window_size),
+      link_stop_pass = as.logical(link_stop_pass),
+      stability_window_refits_used = as.integer(stop_window_refits_used),
+      stability_passes_required_used = as.integer(stop_passes_required_used),
       ppc_brier_cross_active = as.double(ppc_brier_cross_active),
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
@@ -3955,31 +3993,19 @@
       hub_anchored = as.logical(hub_anchored),
       scale_ready = as.logical(scale_ready),
       stop_blocker_codes = as.character(stop_blockers$codes),
-      stop_blocker_diagnostics_failed = as.logical(stop_blockers$blockers[["diagnostics_failed"]]),
-      stop_blocker_lag_not_eligible = as.logical(stop_blockers$blockers[["lag_not_eligible"]]),
-      stop_blocker_min_refits_not_met = as.logical(stop_blockers$blockers[["min_refits_not_met"]]),
-      stop_blocker_realized_probes_below_min = as.logical(
-        stop_blockers$blockers[["realized_probes_below_min"]]
-      ),
-      stop_blocker_reliability_undefined = as.logical(
-        stop_blockers$blockers[["reliability_undefined"]]
-      ),
-      stop_blocker_probe_brier_unavailable = as.logical(
-        stop_blockers$blockers[["probe_brier_unavailable"]]
-      ),
-      stop_blocker_probe_pred_rmse_unavailable = as.logical(
-        stop_blockers$blockers[["probe_pred_rmse_unavailable"]]
-      ),
-      stop_blocker_theta_global_rmse_unavailable = as.logical(
-        stop_blockers$blockers[["theta_global_rmse_unavailable"]]
-      ),
-      stop_blocker_hub_not_anchored = as.logical(stop_blockers$blockers[["hub_not_anchored"]]),
       probe_brier = as.double(probe_brier),
+      probe_brier_max_used = as.double(probe_brier_max_used),
+      probe_brier_pass = as.logical(probe_brier_pass),
       probe_pred_rmse_lagged = as.double(probe_pred_rmse_lagged),
+      probe_pred_rmse_max_used = as.double(probe_pred_rmse_max_used),
+      probe_pred_rmse_pass = as.logical(probe_pred_rmse_pass),
       theta_global_rmse_scope = as.character(controller$theta_global_rmse_scope %||% "direct_evidence_spoke"),
       theta_global_rmse_lagged = as.double(theta_global_rmse_lagged),
+      theta_global_rmse_max_used = as.double(theta_global_rmse_max_used),
+      theta_global_rmse_pass = as.logical(theta_global_rmse_pass),
       escalated_this_refit = as.logical(escalated_this_refit),
-      escalation_consecutive_pass_count = as.integer(escalation_counter),
+      escalation_recent_pass_count = as.integer(escalation_recent_pass_count),
+      escalation_recent_window_size = as.integer(escalation_recent_window_size),
       probe_brier_shift_only = as.double(probe_brier_shift_only),
       probe_brier_shift_scale = as.double(probe_brier_shift_scale),
       probe_brier_delta = as.double(probe_brier_delta),
@@ -3993,9 +4019,8 @@
       probe_brier_delta_min_used = as.double(controller$probe_brier_delta_min %||% 0.005),
       logalpha_sd_guardrail_used = as.double(controller$logalpha_sd_guardrail %||% 0.10),
       probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 30L),
-      link_transform_escalation_refits_required_used = as.integer(
-        controller$link_transform_escalation_refits_required %||% 2L
-      ),
+      link_transform_escalation_window_refits_used = as.integer(escalation_window_refits_used),
+      link_transform_escalation_passes_required_used = as.integer(escalation_passes_required_used),
       n_probe_pairs_since_last_refit = as.integer(nrow(cross_since_probe)),
       n_cross_edges_active_since_last_refit = as.integer(nrow(cross_since_active)),
       n_cross_edges_probe_since_last_refit = as.integer(nrow(cross_since_probe)),
@@ -4047,8 +4072,8 @@
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
   controller$linking_identified_by_spoke <- link_identified_map
-  controller$link_stop_consecutive_pass_count_by_spoke <- stop_counter_map
-  controller$link_escalation_consecutive_pass_count_by_spoke <- escalation_counter_map
+  controller$link_stop_recent_pass_window_by_spoke <- stop_window_map
+  controller$link_escalation_recent_pass_window_by_spoke <- escalation_window_map
   controller$link_epoch_id_by_spoke <- epoch_id_map
   controller$link_epoch_signature_by_spoke <- epoch_signature_map
   controller$link_epoch_start_step_by_spoke <- epoch_start_step_map
@@ -4478,11 +4503,6 @@
       drop = FALSE
     ]) > 0L
 
-    blocker_weights <- .adaptive_link_blocker_weights(
-      stats_row = stats_row,
-      controller = controller
-    )
-    blocker_rule <- "canonical_metric_excess_ratio_v1"
     reallocation_used <- isTRUE(quota_meta$feasibility_reallocation_used %||% FALSE) ||
       any(committed_stage > stage_quotas, na.rm = TRUE)
     reallocation_rule <- if (isTRUE(reallocation_used)) "pooled_utility_backfill" else "none"
@@ -4514,14 +4534,13 @@
       log_alpha_spoke_sd = as.double(stats_row$log_alpha_spoke_sd %||% NA_real_),
       delta_change_lagged = as.double(stats_row$delta_change_lagged %||% NA_real_),
       log_alpha_change_lagged = as.double(stats_row$log_alpha_change_lagged %||% NA_real_),
-      delta_change_pass = as.logical(stats_row$delta_change_pass %||% NA),
-      log_alpha_change_pass = as.logical(stats_row$log_alpha_change_pass %||% NA),
-      delta_sd_max_used = as.double(stats_row$delta_sd_max_used %||% NA_real_),
-      delta_sd_pass = as.logical(stats_row$delta_sd_pass %||% NA),
-      log_alpha_sd_pass = as.logical(stats_row$log_alpha_sd_pass %||% NA),
-      reliability_EAP_link = as.double(stats_row$link_reliability %||% NA_real_),
       reliability_link_global = as.double(
         stats_row$reliability_link_global %||% stats_row$link_reliability %||% NA_real_
+      ),
+      link_stop_reliability_min_used = as.double(
+        stats_row$link_stop_reliability_min_used %||%
+          controller$link_stop_reliability_min %||%
+          0.90
       ),
       reliability_stop_pass = as.logical(stats_row$link_reliability_stop_pass %||% NA),
       linking_identified = as.logical(linking_identified),
@@ -4530,10 +4549,26 @@
       link_min_refit_eligible = as.logical(stats_row$link_min_refit_eligible %||% FALSE),
       link_stop_gate_open = as.logical(stats_row$link_stop_gate_open %||% FALSE),
       rank_stability_lagged = as.double(stats_row$rank_stability_lagged %||% NA_real_),
-      rank_stability_pass = as.logical(stats_row$rank_stability_pass %||% FALSE),
       link_stop_eligible = as.logical(link_stop_eligible),
-      stop_consecutive_pass_count = as.integer(stats_row$stop_consecutive_pass_count %||% 0L),
+      stop_recent_pass_count = as.integer(
+        stats_row$stop_recent_pass_count %||% stats_row$stop_consecutive_pass_count %||% 0L
+      ),
+      stop_recent_window_size = as.integer(
+        stats_row$stop_recent_window_size %||% stats_row$stop_consecutive_pass_count %||% 0L
+      ),
       link_stop_pass = as.logical(link_stop_pass),
+      stability_window_refits_used = as.integer(
+        stats_row$stability_window_refits_used %||%
+          controller$stability_window_refits %||%
+          3L
+      ),
+      stability_passes_required_used = as.integer(
+        stats_row$stability_passes_required_used %||%
+          stats_row$stability_consecutive_k %||%
+          controller$stability_passes_required %||%
+          controller$stability_consecutive_k %||%
+          2L
+      ),
       transform_frozen = as.logical(transform_frozen),
       transform_frozen_refit_id = as.integer(controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
         if (isTRUE(transform_frozen)) refit_id else NA_integer_),
@@ -4545,33 +4580,6 @@
       hub_anchored = as.logical(stats_row$hub_anchored %||% NA),
       scale_ready = as.logical(stats_row$scale_ready %||% NA),
       stop_blocker_codes = as.character(stats_row$stop_blocker_codes %||% NA_character_),
-      stop_blocker_diagnostics_failed = as.logical(
-        stats_row$stop_blocker_diagnostics_failed %||% NA
-      ),
-      stop_blocker_lag_not_eligible = as.logical(
-        stats_row$stop_blocker_lag_not_eligible %||% NA
-      ),
-      stop_blocker_min_refits_not_met = as.logical(
-        stats_row$stop_blocker_min_refits_not_met %||% NA
-      ),
-      stop_blocker_realized_probes_below_min = as.logical(
-        stats_row$stop_blocker_realized_probes_below_min %||% NA
-      ),
-      stop_blocker_reliability_undefined = as.logical(
-        stats_row$stop_blocker_reliability_undefined %||% NA
-      ),
-      stop_blocker_probe_brier_unavailable = as.logical(
-        stats_row$stop_blocker_probe_brier_unavailable %||% NA
-      ),
-      stop_blocker_probe_pred_rmse_unavailable = as.logical(
-        stats_row$stop_blocker_probe_pred_rmse_unavailable %||% NA
-      ),
-      stop_blocker_theta_global_rmse_unavailable = as.logical(
-        stats_row$stop_blocker_theta_global_rmse_unavailable %||% NA
-      ),
-      stop_blocker_hub_not_anchored = as.logical(
-        stats_row$stop_blocker_hub_not_anchored %||% NA
-      ),
       link_fit_method = as.character(stats_row$link_fit_method %||% NA_character_),
       link_uncertainty_approximation = as.character(
         stats_row$link_uncertainty_approximation %||% NA_character_
@@ -4582,7 +4590,16 @@
       link_diagnostics_divergences_pass = as.logical(stats_row$link_diagnostics_divergences_pass %||% NA),
       link_diagnostics_rhat_pass = as.logical(stats_row$link_diagnostics_rhat_pass %||% NA),
       link_diagnostics_ess_pass = as.logical(stats_row$link_diagnostics_ess_pass %||% NA),
-      escalation_consecutive_pass_count = as.integer(stats_row$escalation_consecutive_pass_count %||% 0L),
+      escalation_recent_pass_count = as.integer(
+        stats_row$escalation_recent_pass_count %||%
+          stats_row$escalation_consecutive_pass_count %||%
+          0L
+      ),
+      escalation_recent_window_size = as.integer(
+        stats_row$escalation_recent_window_size %||%
+          stats_row$escalation_consecutive_pass_count %||%
+          0L
+      ),
       escalated_this_refit = as.logical(stats_row$escalated_this_refit %||% FALSE),
       probe_brier_shift_only = as.double(stats_row$probe_brier_shift_only %||% NA_real_),
       probe_brier_shift_scale = as.double(stats_row$probe_brier_shift_scale %||% NA_real_),
@@ -4719,28 +4736,24 @@
       ),
       probe_panel_reallocation_used = as.logical(probe_panel_reallocation_used),
       probe_pred_cache_used = as.logical(probe_pred_cache_used),
-      blocker_probe_panel_shortfall_weight = as.double(
-        blocker_weights[["probe_panel_shortfall"]] %||% NA_real_
-      ),
-      blocker_probe_brier_weight = as.double(
-        blocker_weights[["probe_brier"]] %||% NA_real_
-      ),
-      blocker_probe_pred_rmse_weight = as.double(
-        blocker_weights[["probe_pred_rmse_lagged"]] %||% NA_real_
-      ),
-      blocker_theta_global_rmse_weight = as.double(
-        blocker_weights[["theta_global_rmse_lagged"]] %||% NA_real_
-      ),
-      blocker_delta_spoke_sd_weight = as.double(
-        blocker_weights[["delta_spoke_sd"]] %||% NA_real_
-      ),
-      blocker_reweighting_rule = as.character(blocker_rule),
       probe_brier = as.double(stats_row$probe_brier %||% NA_real_),
+      probe_brier_max_used = as.double(
+        stats_row$probe_brier_max_used %||% controller$probe_brier_max %||% 0.19
+      ),
+      probe_brier_pass = as.logical(stats_row$probe_brier_pass %||% NA),
       probe_pred_rmse_lagged = as.double(stats_row$probe_pred_rmse_lagged %||% NA_real_),
+      probe_pred_rmse_max_used = as.double(
+        stats_row$probe_pred_rmse_max_used %||% controller$probe_pred_rmse_max %||% 0.015
+      ),
+      probe_pred_rmse_pass = as.logical(stats_row$probe_pred_rmse_pass %||% NA),
       theta_global_rmse_scope = as.character(
         stats_row$theta_global_rmse_scope %||% controller$theta_global_rmse_scope %||% "direct_evidence_spoke"
       ),
       theta_global_rmse_lagged = as.double(stats_row$theta_global_rmse_lagged %||% NA_real_),
+      theta_global_rmse_max_used = as.double(
+        stats_row$theta_global_rmse_max_used %||% controller$theta_global_rmse_max %||% 0.05
+      ),
+      theta_global_rmse_pass = as.logical(stats_row$theta_global_rmse_pass %||% NA),
       probe_edges_min_for_stop_used = as.integer(
         stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 30L
       ),
@@ -4756,8 +4769,17 @@
       logalpha_sd_guardrail_used = as.double(
         stats_row$logalpha_sd_guardrail_used %||% controller$logalpha_sd_guardrail %||% 0.10
       ),
-      link_transform_escalation_refits_required_used = as.integer(
-        stats_row$link_transform_escalation_refits_required_used %||%
+      link_transform_escalation_window_refits_used = as.integer(
+        stats_row$link_transform_escalation_window_refits_used %||%
+          stats_row$link_transform_escalation_refits_required_used %||%
+          controller$link_transform_escalation_window_refits %||%
+          controller$link_transform_escalation_refits_required %||%
+          3L
+      ),
+      link_transform_escalation_passes_required_used = as.integer(
+        stats_row$link_transform_escalation_passes_required_used %||%
+          stats_row$link_transform_escalation_refits_required_used %||%
+          controller$link_transform_escalation_passes_required %||%
           controller$link_transform_escalation_refits_required %||%
           2L
       ),
@@ -4785,8 +4807,13 @@
   }
   required <- c(
     "refit_id", "spoke_id", "hub_id", "link_transform_policy", "link_transform_state", "link_refit_mode",
-    "hub_lock_mode", "reliability_EAP_link", "linking_identified", "link_stop_eligible", "link_stop_pass",
+    "hub_lock_mode", "reliability_link_global", "linking_identified", "link_stop_eligible", "link_stop_pass",
     "transform_frozen",
+    "stop_recent_pass_count", "stop_recent_window_size",
+    "stability_window_refits_used", "stability_passes_required_used",
+    "escalation_recent_pass_count", "escalation_recent_window_size",
+    "link_transform_escalation_window_refits_used",
+    "link_transform_escalation_passes_required_used",
     "n_pairs_cross_set_done", "n_unique_cross_pairs_seen", "n_cross_edges_active_since_last_refit",
     "n_cross_edges_probe_since_last_refit", "n_cross_edges_total_since_last_refit", "coverage_bins_used",
     "B_spoke_refit_budget", "B_spoke_refit_budget_source",
@@ -4800,9 +4827,9 @@
     "stage_budget_unfilled",
     "probe_edges_realized_before_refit", "probe_edges_realized_delta_since_last_refit",
     "probe_shortfall_reason",
-    "blocker_probe_panel_shortfall_weight", "blocker_probe_brier_weight",
-    "blocker_probe_pred_rmse_weight", "blocker_theta_global_rmse_weight",
-    "blocker_delta_spoke_sd_weight", "blocker_reweighting_rule",
+    "probe_brier", "probe_brier_max_used", "probe_brier_pass",
+    "probe_pred_rmse_lagged", "probe_pred_rmse_max_used", "probe_pred_rmse_pass",
+    "theta_global_rmse_lagged", "theta_global_rmse_max_used", "theta_global_rmse_pass",
     "resumed_from_session"
   )
   missing <- setdiff(required, names(rows))

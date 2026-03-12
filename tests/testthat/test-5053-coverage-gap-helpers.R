@@ -1027,12 +1027,7 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
 
   old_row <- tibble::tibble(
     link_stop_eligible = TRUE,
-    reliability_stop_pass = TRUE,
-    delta_sd_pass = TRUE,
-    log_alpha_sd_pass = NA,
-    delta_change_pass = TRUE,
-    log_alpha_change_pass = NA,
-    rank_stability_pass = TRUE
+    reliability_stop_pass = TRUE
   )
   expect_false(isTRUE(pairwiseLLM:::.adaptive_link_reconstruct_stop_from_logs(
     old_row,
@@ -1329,7 +1324,7 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     link_transform_state = "shift_only",
     link_refit_mode = "shift_only",
     hub_lock_mode = "hard_lock",
-    reliability_EAP_link = 0.9,
+    reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = FALSE,
@@ -1356,7 +1351,16 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     stage_shortfall_local_link = 0L,
     stage_reallocation_used = FALSE,
     stage_reallocation_rule_used = "none",
-    stage_budget_unfilled = 0L
+    stage_budget_unfilled = 0L,
+    probe_brier = 0.10,
+    probe_brier_max_used = 0.19,
+    probe_brier_pass = TRUE,
+    probe_pred_rmse_lagged = 0.01,
+    probe_pred_rmse_max_used = 0.015,
+    probe_pred_rmse_pass = TRUE,
+    theta_global_rmse_lagged = 0.02,
+    theta_global_rmse_max_used = 0.05,
+    theta_global_rmse_pass = TRUE
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_budget_invariants(bad_realized),

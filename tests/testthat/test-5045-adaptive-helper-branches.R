@@ -598,7 +598,10 @@ test_that("adaptive progress refit block prints linking stop gates without misle
     link_lag_eligible = c(TRUE, TRUE),
     link_min_refit_eligible = c(TRUE, TRUE),
     link_stop_gate_open = c(FALSE, FALSE),
-    stop_consecutive_pass_count = c(0L, 0L),
+    stop_recent_pass_count = c(0L, 0L),
+    stop_recent_window_size = c(0L, 0L),
+    stability_window_refits_used = c(3L, 3L),
+    stability_passes_required_used = c(2L, 2L),
     link_diagnostics_divergences_pass = c(TRUE, TRUE),
     link_diagnostics_rhat_pass = c(TRUE, TRUE),
     link_diagnostics_ess_pass = c(TRUE, TRUE),
@@ -606,13 +609,16 @@ test_that("adaptive progress refit block prints linking stop gates without misle
     scale_ready = c(TRUE, TRUE),
     reliability_stop_pass = c(TRUE, TRUE),
     hub_anchored = c(TRUE, TRUE),
-    rank_stability_pass = c(TRUE, TRUE),
     rank_stability_lagged = c(0.999, 0.998),
-    delta_sd_pass = c(FALSE, FALSE),
     delta_spoke_sd = c(0.632, 0.626),
-    delta_sd_max_used = c(0.169, 0.169),
+    probe_brier_max_used = c(0.19, 0.19),
+    probe_brier_pass = c(NA, NA),
     theta_global_rmse_lagged = c(0.075, 0.023),
+    theta_global_rmse_max_used = c(0.05, 0.05),
+    theta_global_rmse_pass = c(FALSE, TRUE),
     probe_pred_rmse_lagged = c(NA_real_, NA_real_),
+    probe_pred_rmse_max_used = c(0.015, 0.015),
+    probe_pred_rmse_pass = c(NA, NA),
     probe_brier = c(NA_real_, NA_real_)
   )
 
@@ -627,8 +633,8 @@ test_that("adaptive progress refit block prints linking stop gates without misle
   expect_true(any(grepl("global_btl_stop_signal=TRUE", block, fixed = TRUE)))
   expect_true(any(grepl("probe_edges_realized=0 \\(need >= 30\\)", block)))
   expect_true(any(grepl("reliability_link_global=0.972 \\(need >= 0.900; pass=\\[x\\]\\)", block)))
-  expect_true(any(grepl("delta_spoke_sd=0.632 \\(need <= 0.169; pass=\\[ \\]\\)", block)))
-  expect_true(any(grepl("probe_pred_rmse_lagged=NA \\(need <= 0.015\\)", block)))
+  expect_true(any(grepl("delta_spoke_sd=0.632", block)))
+  expect_true(any(grepl("probe_pred_rmse_lagged=NA \\(need <= 0.015; pass=\\[-\\]\\)", block)))
   expect_true(any(grepl(
     "Decision: continue  global_btl_stop_signal=TRUE but linking stop is not yet eligible",
     block,

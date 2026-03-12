@@ -108,7 +108,7 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     link_transform_state = NA_character_,
     link_refit_mode = "shift_only",
     hub_lock_mode = "soft_lock",
-    reliability_EAP_link = 0.9,
+    reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = TRUE,

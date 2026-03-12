@@ -89,8 +89,8 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
     "feasible_stage_capacity_anchor_link",
     "feasible_stage_capacity_long_link",
     "feasibility_budget_released",
-    "blocker_probe_panel_shortfall_weight",
-    "blocker_reweighting_rule"
+    "probe_brier_max_used",
+    "theta_global_rmse_pass"
   ) %in% names(rows)))
   expect_true(all(rows$link_fit_method == "cmdstan_hmc"))
   expect_true(all(rows$link_uncertainty_approximation == "cmdstan_posterior_draws"))
