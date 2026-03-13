@@ -595,6 +595,40 @@
   if (length(spoke_ids) < 1L) {
     return(NA_integer_)
   }
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+  if (identical(run_mode, "link_multi_spoke") && !isTRUE(concurrent_mode)) {
+    refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+    cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+    cached_budget_map <- controller$link_budget_map %||% list()
+    budget_map <- if (identical(cached_refit_id, refit_id) && length(cached_budget_map) > 0L) {
+      cached_budget_map
+    } else {
+      .adaptive_link_budget_map_for_refit(
+        state = state,
+        controller = controller,
+        eligible_spoke_ids = spoke_ids
+      )
+    }
+    budgeted_spokes <- as.integer(spoke_ids[vapply(as.character(spoke_ids), function(key) {
+      as.integer(budget_map[[key]]$B_spoke_refit_budget %||% 0L) > 0L
+    }, logical(1L))])
+    budgeted_spokes <- sort(unique(budgeted_spokes[!is.na(budgeted_spokes)]))
+    if (length(budgeted_spokes) > 1L) {
+      rlang::abort(
+        paste0(
+          "Independent multi-spoke probe routing invariant failed: expected at most one budgeted ",
+          "spoke in the current refit window, found spoke_id: ",
+          paste(budgeted_spokes, collapse = ", "),
+          "."
+        )
+      )
+    }
+    if (length(budgeted_spokes) < 1L) {
+      return(NA_integer_)
+    }
+    spoke_ids <- as.integer(budgeted_spokes)
+  }
   link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
   if (nrow(link_stage_log) < 1L) {
     return(NA_integer_)

@@ -401,6 +401,195 @@ test_that("run_one_step can realize multiple holdout probes in one refit when pr
   )
 })
 
+test_that("run_one_step keeps independent multi-spoke holdout probes on the active spoke", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 410L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L
+    )
+  )
+  draws <- matrix(
+    c(
+      1.00, 0.80, 0.60, -0.70, -0.90, -0.20, -0.40,
+      1.05, 0.85, 0.65, -0.60, -0.85, -0.15, -0.35,
+      0.95, 0.75, 0.55, -0.75, -0.95, -0.30, -0.45,
+      1.10, 0.90, 0.70, -0.65, -0.80, -0.10, -0.30
+    ),
+    nrow = 4,
+    byrow = TRUE
+  )
+  colnames(draws) <- state$item_ids
+  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = c("run", "run", "run"),
+      status = c("ready", "ready", "ready"),
+      validation_message = c("ok", "ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(
+        items = tibble::tibble(
+          global_item_id = c("gh1", "gh2", "gh3"),
+          theta_raw_mean = c(0.80, 0.40, 0.10),
+          theta_raw_sd = c(0.15, 0.15, 0.15),
+          rank_mu_raw = c(1L, 2L, 3L)
+        )
+      ),
+      `2` = list(
+        items = tibble::tibble(
+          global_item_id = c("gs21", "gs22"),
+          theta_raw_mean = c(-0.30, -0.60),
+          theta_raw_sd = c(0.15, 0.15),
+          rank_mu_raw = c(1L, 2L)
+        )
+      ),
+      `3` = list(
+        items = tibble::tibble(
+          global_item_id = c("gs31", "gs32"),
+          theta_raw_mean = c(0.20, -0.10),
+          theta_raw_sd = c(0.15, 0.15),
+          rank_mu_raw = c(1L, 2L)
+        )
+      )
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L, 3L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE, `3` = TRUE),
+    phase = "phase_b",
+    ready_spokes = c(2L, 3L),
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  state$controller$multi_spoke_mode <- "independent"
+  state$controller$current_link_spoke_id <- 2L
+  state$refit_meta$refit_pairs_target_current <- 6L
+  state$controller$refit_pairs_target <- 6L
+  state$controller$probe_pairs_per_refit_per_spoke <- 2L
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      delta_spoke_mean = 0.25,
+      log_alpha_spoke_mean = NA_real_,
+      link_epoch_id = 3L
+    ),
+    `3` = list(
+      delta_spoke_mean = 0.05,
+      log_alpha_spoke_mean = NA_real_,
+      link_epoch_id = 1L
+    )
+  )
+  state$linking$probe <- list(
+    panels_by_spoke = list(
+      `2` = tibble::tibble(
+        probe_panel_id = "panel-2",
+        link_epoch_id = 3L,
+        spoke_id = 2L,
+        hub_item_id = "h1",
+        spoke_item_id = "s21",
+        planned_rank = 1L,
+        pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+        realized = FALSE,
+        realized_step_id = NA_integer_,
+        realized_pair_id = NA_integer_,
+        realized_run_mode = NA_character_
+      ),
+      `3` = tibble::tibble(
+        probe_panel_id = "panel-3",
+        link_epoch_id = 1L,
+        spoke_id = 3L,
+        hub_item_id = "h1",
+        spoke_item_id = "s31",
+        planned_rank = 1L,
+        pair_key = pairwiseLLM:::make_unordered_key("h1", "s31"),
+        realized = FALSE,
+        realized_step_id = NA_integer_,
+        realized_pair_id = NA_integer_,
+        realized_run_mode = NA_character_
+      )
+    ),
+    prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
+    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    collect_holdout_now_by_spoke = list()
+  )
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 4L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "independent_inactive_spoke"
+    )
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 3L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_probe_effort_plan = function(state, controller, spoke_id) {
+      if (identical(as.integer(spoke_id), 2L)) {
+        list(
+          realized_total = 0L,
+          realized_refit = 0L,
+          effective_cap = 2L,
+          remaining_to_min_start = 30L,
+          acceleration_used = FALSE
+        )
+      } else {
+        list(
+          realized_total = 29L,
+          realized_refit = 0L,
+          effective_cap = 2L,
+          remaining_to_min_start = 1L,
+          acceleration_used = FALSE
+        )
+      }
+    },
+    pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
+    .package = "pairwiseLLM"
+  )
+
+  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
+  expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")
+  expect_identical(as.integer(row$link_spoke_id[[1L]]), 2L)
+  expect_true(isTRUE(row$is_probe_step[[1L]]))
+  expect_identical(as.integer(out$controller$current_link_spoke_id), 2L)
+  expect_identical(as.integer(out$linking$probe$realized_edges$spoke_id[[1L]]), 2L)
+})
+
 test_that("invalid linking step does not mutate controller link routing state", {
   items <- tibble::tibble(
     item_id = c("a", "b"),

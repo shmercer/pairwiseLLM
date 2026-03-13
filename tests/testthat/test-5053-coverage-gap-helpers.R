@@ -714,6 +714,86 @@ test_that("probe effort plan accelerates deterministically for identified probe-
   )))
 })
 
+test_that("independent multi-spoke holdout routing ignores inactive spokes", {
+  state <- make_link_probe_state()
+  state$controller$multi_spoke_mode <- "independent"
+  state$controller$current_link_spoke_id <- 2L
+  state$refit_meta$refit_pairs_target_current <- 6L
+  state$controller$refit_pairs_target <- 6L
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 4L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    ),
+    `3` = list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "independent_inactive_spoke"
+    )
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 3L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      transform_frozen = FALSE
+    )
+  )
+
+  next_spoke <- testthat::with_mocked_bindings(
+    .adaptive_link_probe_effort_plan = function(state, controller, spoke_id) {
+      if (identical(as.integer(spoke_id), 2L)) {
+        list(
+          realized_total = 0L,
+          realized_refit = 0L,
+          effective_cap = 2L,
+          remaining_to_min_start = 30L,
+          acceleration_used = FALSE
+        )
+      } else {
+        list(
+          realized_total = 29L,
+          realized_refit = 0L,
+          effective_cap = 2L,
+          remaining_to_min_start = 1L,
+          acceleration_used = FALSE
+        )
+      }
+    },
+    .adaptive_link_probe_panel_for_spoke = function(state, spoke_id, epoch_id = NULL) {
+      tibble::tibble(
+        probe_panel_id = paste0("panel-", as.integer(spoke_id)),
+        link_epoch_id = 1L,
+        pair_key = paste0("pair-", as.integer(spoke_id))
+      )
+    },
+    pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+      state,
+      controller = state$controller,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(next_spoke, 2L)
+})
+
 test_that("concurrent probe fairness guard waits for minimum active progress before holdout catch-up", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
