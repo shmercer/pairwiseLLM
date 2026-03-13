@@ -132,6 +132,10 @@ test_that("deterministic linking e2e run preserves canonical golden logs", {
 
   expect_true(any(run$state$step_log$is_cross_set %in% TRUE))
 
+  # The golden excludes the pre-patch extra pooled_backfill starvation step.
+  # Late-phase feasibility compaction now triggers the refit immediately once
+  # the active Phase B window is exhausted, so the canonical deterministic run
+  # ends this fixture with three logged steps instead of four.
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))
   fixture <- readRDS(fixture_path)
