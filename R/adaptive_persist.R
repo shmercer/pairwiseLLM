@@ -442,6 +442,22 @@ read_log <- function(path) {
   ]
   last_row <- round_log[nrow(round_log), , drop = FALSE]
   last_refit_step <- as.integer(last_row$step_id_at_refit[[1L]] %||% NA_integer_)
+  committed_step_count <- if (nrow(step_log) > 0L && "pair_id" %in% names(step_log)) {
+    as.integer(sum(!is.na(step_log$pair_id), na.rm = TRUE))
+  } else {
+    0L
+  }
+  if (committed_step_count < 1L) {
+    refit_meta$last_refit_M_done <- as.integer(
+      last_row$total_pairs_done[[1L]] %||%
+        refit_meta$last_refit_M_done %||%
+        0L
+    )
+    refit_meta$last_refit_step <- as.integer(last_refit_step %||% 0L)
+    refit_meta$last_refit_round_id <- as.integer(last_row$refit_id[[1L]] %||% nrow(round_log))
+    state$refit_meta <- refit_meta
+    return(state)
+  }
   max_step_id <- if (nrow(step_log) > 0L && "step_id" %in% names(step_log)) {
     as.integer(max(as.integer(step_log$step_id), na.rm = TRUE))
   } else {

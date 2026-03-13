@@ -318,6 +318,29 @@ test_that("load_adaptive_session aborts when canonical round totals do not recon
   )
 })
 
+test_that("load_adaptive_session preserves canonical round boundaries for artifact-only sessions", {
+  state <- adaptive_rank_start(make_test_items(4), seed = 33L)
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 20L,
+      total_pairs_done = 0L,
+      diagnostics_pass = TRUE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  restored <- load_adaptive_session(session_dir)
+  expect_identical(restored$refit_meta$last_refit_step, 20L)
+  expect_identical(restored$refit_meta$last_refit_M_done, 0L)
+  expect_identical(restored$refit_meta$last_refit_round_id, 1L)
+  expect_identical(nrow(restored$history_pairs), 0L)
+})
+
 test_that("load_adaptive_session accepts persisted item logs with current schema", {
   items <- make_test_items(6)
   state <- adaptive_rank_start(items, persist_item_log = TRUE)
