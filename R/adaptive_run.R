@@ -507,8 +507,9 @@
                                                        controller,
                                                        eligible_spoke_ids = NULL) {
   controller <- controller %||% .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
   concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
-  if (!isTRUE(concurrent_mode)) {
+  if (!(identical(run_mode, "link_multi_spoke") && isTRUE(concurrent_mode))) {
     return(list(
       block_probes = FALSE,
       pending_spokes = integer(),
@@ -528,6 +529,13 @@
   }
   effective_spokes <- sort(unique(as.integer(effective_spokes[!is.na(effective_spokes)])))
   if (length(effective_spokes) < 1L) {
+    return(list(
+      block_probes = FALSE,
+      pending_spokes = integer(),
+      budgeted_spokes = integer()
+    ))
+  }
+  if (length(effective_spokes) <= 1L) {
     return(list(
       block_probes = FALSE,
       pending_spokes = integer(),

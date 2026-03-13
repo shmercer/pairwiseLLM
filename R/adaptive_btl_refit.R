@@ -3103,7 +3103,9 @@
   if (length(spoke_ids) < 1L) {
     return(list())
   }
-  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  concurrent_mode <- identical(run_mode, "link_multi_spoke") &&
+    identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
   if (!is.na(cached_refit_id) &&

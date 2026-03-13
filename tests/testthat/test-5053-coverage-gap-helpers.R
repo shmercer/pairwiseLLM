@@ -922,6 +922,15 @@ test_that("concurrent probe fairness guard waits for minimum active progress bef
   )
   expect_false(isTRUE(guard2$block_probes))
   expect_identical(guard2$pending_spokes, integer())
+
+  single_spoke_guard <- pairwiseLLM:::.adaptive_link_probe_active_progress_guard(
+    state,
+    controller = utils::modifyList(state$controller, list(run_mode = "link_one_spoke")),
+    eligible_spoke_ids = 2L
+  )
+  expect_false(isTRUE(single_spoke_guard$block_probes))
+  expect_identical(single_spoke_guard$pending_spokes, integer())
+  expect_identical(single_spoke_guard$budgeted_spokes, integer())
 })
 
 test_that("refit helpers cover probe metrics, stop reconstruction, and concurrent allocation edges", {
@@ -1579,6 +1588,22 @@ test_that("remaining candidate-generation and budget helpers cover edge branches
   expect_identical(budget_map[["2"]]$B_spoke_refit_budget_source, "concurrent_allocator")
   expect_true(isTRUE(budget_map[["2"]]$concurrent_floor_met))
   expect_true(isTRUE(budget_map[["2"]]$concurrent_target_met))
+
+  one_spoke_state <- cached_state
+  one_spoke_state$controller$run_mode <- "link_one_spoke"
+  one_spoke_state$controller$link_budget_refit_id <- NA_integer_
+  one_spoke_state$controller$link_budget_map <- list()
+  one_spoke_budget <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = one_spoke_state,
+    controller = one_spoke_state$controller,
+    eligible_spoke_ids = 2L,
+    seed = 1L
+  )
+  expect_true(one_spoke_budget[["2"]]$B_spoke_refit_budget > 0L)
+  expect_identical(
+    one_spoke_budget[["2"]]$B_spoke_refit_budget_source,
+    "single_spoke_controller_feasible_capacity"
+  )
 
   expect_identical(
     pairwiseLLM:::.adaptive_select_rolling_anchors(c(a = 1), adaptive_defaults(2L)),
