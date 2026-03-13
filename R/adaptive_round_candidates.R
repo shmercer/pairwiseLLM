@@ -320,6 +320,13 @@
     if (nrow(step_subset) > 0L) {
       last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
       step_subset <- step_subset[as.integer(step_subset$step_id) > last_refit_step, , drop = FALSE]
+      if (nrow(step_subset) > 0L) {
+        step_subset <- step_subset[
+          !.adaptive_link_is_holdout_probe_rows(step_subset),
+          ,
+          drop = FALSE
+        ]
+      }
     }
     counts <- rep.int(0L, length(spoke_ids))
     names(counts) <- as.character(spoke_ids)
@@ -353,27 +360,29 @@
     )
     floor_deficit <- pmax(0L, floor_pairs - counts)
     if (any(floor_deficit > 0L)) {
+      eligible_counts <- counts[floor_deficit > 0L]
       ord_floor <- order(
-        -floor_deficit,
-        -blocker_totals[names(counts)],
-        -utility_mass,
-        counts,
-        as.integer(names(counts))
+        -floor_deficit[names(eligible_counts)],
+        -blocker_totals[names(eligible_counts)],
+        -utility_mass[names(eligible_counts)],
+        eligible_counts,
+        as.integer(names(eligible_counts))
       )
-      return(as.integer(names(counts)[ord_floor]))
+      return(as.integer(names(eligible_counts)[ord_floor]))
     }
 
     target_deficit <- as.integer(target_pairs[names(counts)] - counts)
     target_deficit[!is.finite(target_deficit)] <- 0L
     if (any(target_deficit > 0L)) {
+      eligible_counts <- counts[target_deficit > 0L]
       ord_deficit <- order(
-        -target_deficit,
-        -blocker_totals[names(counts)],
-        -utility_mass,
-        counts,
-        as.integer(names(counts))
+        -target_deficit[names(eligible_counts)],
+        -blocker_totals[names(eligible_counts)],
+        -utility_mass[names(eligible_counts)],
+        eligible_counts,
+        as.integer(names(eligible_counts))
       )
-      return(as.integer(names(counts)[ord_deficit]))
+      return(as.integer(names(eligible_counts)[ord_deficit]))
     }
 
     return(integer())
