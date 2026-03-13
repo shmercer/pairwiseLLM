@@ -1015,6 +1015,13 @@ print.adaptive_state <- function(x, ...) {
   inactive
 }
 
+.adaptive_progress_indent <- function(lines, spaces = 2L) {
+  if (length(lines) < 1L) {
+    return(character())
+  }
+  paste0(strrep(" ", as.integer(spaces %||% 0L)), lines)
+}
+
 .adaptive_progress_gate_detail <- function(label,
                                            value,
                                            threshold,
@@ -1387,7 +1394,11 @@ print.adaptive_state <- function(x, ...) {
     )
   )
 
-  lines <- c(refit_line, paste0("Global stop: ", paste(global_parts, collapse = "  ")))
+  lines <- c(
+    refit_line,
+    "Global stop:",
+    .adaptive_progress_indent(global_parts, spaces = 2L)
+  )
   if (!is.na(blocker) && blocker != "stop_pending") {
     lines <- c(lines, paste0("Blocker: ", blocker))
   }
@@ -1421,21 +1432,17 @@ print.adaptive_state <- function(x, ...) {
       )
       lines <- c(
         lines,
-        paste0(
-          "  spoke=",
-          spoke_id,
-          " frozen",
-          if (!is.na(transform_state) && nzchar(transform_state)) {
-            paste0("  state=", transform_state)
-          } else {
-            ""
-          },
-          if (is.finite(frozen_refit)) {
-            paste0("  frozen_refit=", frozen_refit)
-          } else {
-            ""
-          }
-        )
+        paste0("  spoke=", spoke_id, " frozen"),
+        if (!is.na(transform_state) && nzchar(transform_state)) {
+          paste0("    state=", transform_state)
+        } else {
+          character()
+        },
+        if (is.finite(frozen_refit)) {
+          paste0("    frozen_refit=", frozen_refit)
+        } else {
+          character()
+        }
       )
       next
     }
@@ -1489,35 +1496,48 @@ print.adaptive_state <- function(x, ...) {
 
     lines <- c(
       lines,
+      paste0("  spoke=", spoke_id, " active"),
+      if (!is.na(transform_state) && nzchar(transform_state)) {
+        paste0("    state=", transform_state)
+      } else {
+        character()
+      },
       paste0(
-        "  spoke=",
-        spoke_id,
-        " active",
-        "  eligible=",
+        "    stop_eligible=",
         .adaptive_progress_fmt_state(
           .adaptive_progress_col_value(link_row, "link_stop_eligible", default = NA),
           true = "yes",
           false = "no"
-        ),
-        "  gate_open=",
+        )
+      ),
+      paste0(
+        "    stop_gate_open=",
         .adaptive_progress_fmt_state(
           .adaptive_progress_col_value(link_row, "link_stop_gate_open", default = NA),
           true = "yes",
           false = "no"
-        ),
-        "  lag=",
+        )
+      ),
+      paste0(
+        "    lag=",
         .adaptive_progress_fmt_state(
           .adaptive_progress_col_value(link_row, "link_lag_eligible", default = NA)
-        ),
-        "  min_refit=",
+        )
+      ),
+      paste0(
+        "    min_refit=",
         .adaptive_progress_fmt_state(
           .adaptive_progress_col_value(link_row, "link_min_refit_eligible", default = NA)
-        ),
-        "  probes=",
+        )
+      ),
+      paste0(
+        "    probes=",
         probes_realized,
         "/",
-        if (is.na(probes_min)) "NA" else probes_min,
-        "  window=",
+        if (is.na(probes_min)) "NA" else probes_min
+      ),
+      paste0(
+        "    stop_window=",
         stop_count,
         "/",
         stop_window_size,
@@ -1528,28 +1548,36 @@ print.adaptive_state <- function(x, ...) {
       ),
       paste0(
         "    diagnostics=",
-        .adaptive_progress_fmt_state(.adaptive_progress_link_diag_pass(link_row)),
-        "  hub_anchored=",
+        .adaptive_progress_fmt_state(.adaptive_progress_link_diag_pass(link_row))
+      ),
+      paste0(
+        "    hub_anchored=",
         .adaptive_progress_fmt_state(
           .adaptive_progress_col_value(link_row, "hub_anchored", default = NA)
-        ),
-        "  ",
+        )
+      ),
+      paste0(
+        "    ",
         .adaptive_progress_gate_detail(
           "reliability_link_global",
           as.double(.adaptive_progress_col_value(link_row, "reliability_link_global", default = NA_real_)),
           reliability_min,
           .adaptive_progress_col_value(link_row, "reliability_stop_pass", default = NA),
           direction = "ge"
-        ),
-        "  ",
+        )
+      ),
+      paste0(
+        "    ",
         .adaptive_progress_gate_detail(
           "probe_pred_rmse_lagged",
           as.double(.adaptive_progress_col_value(link_row, "probe_pred_rmse_lagged", default = NA_real_)),
           probe_pred_max,
           .adaptive_progress_col_value(link_row, "probe_pred_rmse_pass", default = NA),
           direction = "le"
-        ),
-        "  ",
+        )
+      ),
+      paste0(
+        "    ",
         .adaptive_progress_gate_detail(
           "theta_global_rmse_lagged",
           as.double(.adaptive_progress_col_value(link_row, "theta_global_rmse_lagged", default = NA_real_)),
@@ -1675,7 +1703,8 @@ print.adaptive_state <- function(x, ...) {
   c(
     refit_line,
     pairs_line,
-    paste0("Global: ", paste(global_parts, collapse = "  ")),
+    "Global:",
+    .adaptive_progress_indent(global_parts, spaces = 2L),
     .adaptive_progress_phase_b_spoke_lines(
       link_stage_rows = link_stage_rows,
       thresholds = thresholds,

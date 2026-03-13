@@ -68,3 +68,21 @@ test_that("adaptive_rank_start stores linking run metadata", {
   expect_equal(state$linking$spoke_ids, 2L)
   expect_true(state$linking$is_multi_set)
 })
+
+test_that("adaptive_rank_start defaults multi-spoke linking to concurrent mode", {
+  items <- tibble::tibble(
+    item_id = c("a", "b", "c", "d", "e", "f"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("g_a", "g_b", "g_c", "g_d", "g_e", "g_f")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 2L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L
+    )
+  )
+
+  expect_identical(state$controller$multi_spoke_mode, "concurrent")
+})

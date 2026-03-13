@@ -565,7 +565,7 @@ make_adaptive_judge_llm <- function(
 #'   \item{`multi_spoke_mode`}{Only used when `run_mode = "link_multi_spoke"`.
 #'     Choices are `"independent"` (fit each spoke separately) and
 #'     `"concurrent"` (enforce per-refit spoke budgets and stronger hub locking
-#'     requirements). Default is `"independent"`.}
+#'     requirements). Default is `"concurrent"`.}
 #'   \item{`min_cross_set_pairs_per_spoke_per_refit`}{Only used in concurrent
 #'     multi-spoke linking. Minimum cross-set committed comparisons per spoke
 #'     per refit window. Default is `5L`.}

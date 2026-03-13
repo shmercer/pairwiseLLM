@@ -254,7 +254,7 @@ cross-set comparisons. Default is \code{FALSE} (hub↔spoke only).}
 \item{\code{multi_spoke_mode}}{Only used when \code{run_mode = "link_multi_spoke"}.
 Choices are \code{"independent"} (fit each spoke separately) and
 \code{"concurrent"} (enforce per-refit spoke budgets and stronger hub locking
-requirements). Default is \code{"independent"}.}
+requirements). Default is \code{"concurrent"}.}
 \item{\code{min_cross_set_pairs_per_spoke_per_refit}}{Only used in concurrent
 multi-spoke linking. Minimum cross-set committed comparisons per spoke
 per refit window. Default is \code{5L}.}

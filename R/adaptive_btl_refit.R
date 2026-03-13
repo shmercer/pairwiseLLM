@@ -1260,18 +1260,20 @@
                                                     transform_mode,
                                                     delta_mean,
                                                     log_alpha_mean,
-                                                    lag_row) {
+                                                    lag_row,
+                                                    lag = 1L) {
   ids <- as.character(scope_ids)
   if (length(ids) < 2L) {
     return(NA_real_)
   }
   history <- state$refit_meta$theta_mean_history %||% list()
   current_refit <- length(history)
-  if (current_refit < 1L) {
+  lag <- as.integer(lag %||% 1L)
+  if (current_refit < 1L || is.na(lag) || lag < 1L || current_refit <= lag) {
     return(NA_real_)
   }
   current_raw <- history[[current_refit]]
-  lag_raw <- history[[max(1L, current_refit - 1L)]]
+  lag_raw <- history[[current_refit - lag]]
   if (!is.numeric(current_raw) || !is.numeric(lag_raw) || is.null(names(current_raw)) || is.null(names(lag_raw))) {
     return(NA_real_)
   }
@@ -3754,7 +3756,8 @@
         transform_mode = transform_state,
         delta_mean = fit$delta_mean,
         log_alpha_mean = fit$log_alpha_mean,
-        lag_row = lag_row
+        lag_row = lag_row,
+        lag = lag
       )
     } else {
       NA_real_

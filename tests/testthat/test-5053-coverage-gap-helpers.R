@@ -1093,6 +1093,11 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
     delta_spoke_mean = 0.1,
     log_alpha_spoke_mean = NA_real_
   )
+  state$refit_meta$theta_mean_history <- list(
+    c(h1 = 1, s21 = 0),
+    c(h1 = 1, s21 = 1),
+    c(h1 = 1, s21 = 2)
+  )
   rmse <- pairwiseLLM:::.adaptive_link_theta_global_rmse_lagged(
     state,
     spoke_id = 2L,
@@ -1101,9 +1106,10 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
     transform_mode = "shift_only",
     delta_mean = 0.2,
     log_alpha_mean = NA_real_,
-    lag_row = lag_row
+    lag_row = lag_row,
+    lag = 2L
   )
-  expect_true(is.finite(rmse))
+  expect_equal(rmse, sqrt((2.1^2) / 2), tolerance = 1e-12)
 
   old_row <- tibble::tibble(
     link_stop_eligible = TRUE,

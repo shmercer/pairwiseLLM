@@ -399,7 +399,7 @@
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
     allow_spoke_spoke_cross_set = FALSE,
-    multi_spoke_mode = "independent",
+    multi_spoke_mode = "concurrent",
     multi_spoke_budget_rule = "utility_mass_topk",
     multi_spoke_budget_top_k = 10L,
     min_cross_set_pairs_per_spoke_per_refit = 5L,

@@ -68,6 +68,7 @@ test_that("linking candidates allow selected-spoke to other-spoke edges when ena
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
+      multi_spoke_mode = "independent",
       allow_spoke_spoke_cross_set = TRUE
     )
   )
@@ -2583,7 +2584,11 @@ test_that("phase B starved selection preserves the attempted spoke id", {
   state <- adaptive_rank_start(
     items,
     seed = 77L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "independent"
+    )
   )
   state$warm_start_done <- TRUE
   state$controller$current_link_spoke_id <- 3L
