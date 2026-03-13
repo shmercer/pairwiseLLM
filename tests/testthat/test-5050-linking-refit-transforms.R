@@ -1905,7 +1905,16 @@ test_that("concurrent spoke routing enforces floor before budget targets", {
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
   state$refit_meta$last_refit_step <- 0L
   # Spoke 3 is below floor while spoke 2 already has one edge.
-  pick <- pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)
+  pick <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(state, controller = NULL, eligible_spoke_ids = NULL, seed = 1L) {
+      list(
+        `2` = list(B_spoke_refit_budget = 2L, concurrent_floor_pairs = 2L, concurrent_utility_mass = 1),
+        `3` = list(B_spoke_refit_budget = 2L, concurrent_floor_pairs = 2L, concurrent_utility_mass = 1)
+      )
+    },
+    pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller),
+    .package = "pairwiseLLM"
+  )
   expect_identical(pick, 3L)
 
   state <- append_cross_step(state, 2L, "s31", "h1", 1L, spoke_id = 3L)
