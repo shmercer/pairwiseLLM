@@ -4614,16 +4614,10 @@
       log_alpha_spoke_sd_alt = as.double(stats_row$log_alpha_spoke_sd_alt %||% NA_real_),
       n_pairs_cross_set_done = as.integer(n_pairs_done),
       n_unique_cross_pairs_seen = as.integer(n_unique),
-      n_probe_pairs_since_last_refit = as.integer(stats_row$n_probe_pairs_since_last_refit %||% n_pairs_since_probe),
-      n_cross_edges_active_since_last_refit = as.integer(
-        stats_row$n_cross_edges_active_since_last_refit %||% n_pairs_since_active
-      ),
-      n_cross_edges_probe_since_last_refit = as.integer(
-        stats_row$n_cross_edges_probe_since_last_refit %||% n_pairs_since_probe
-      ),
-      n_cross_edges_total_since_last_refit = as.integer(
-        stats_row$n_cross_edges_total_since_last_refit %||% n_pairs_since_total
-      ),
+      n_probe_pairs_since_last_refit = as.integer(n_pairs_since_probe),
+      n_cross_edges_active_since_last_refit = as.integer(n_pairs_since_active),
+      n_cross_edges_probe_since_last_refit = as.integer(n_pairs_since_probe),
+      n_cross_edges_total_since_last_refit = as.integer(n_pairs_since_total),
       B_spoke_refit_budget = as.integer(sum(stage_quotas)),
       B_spoke_refit_budget_source = as.character(
         budget_info$B_spoke_refit_budget_source %||% "single_spoke_default"

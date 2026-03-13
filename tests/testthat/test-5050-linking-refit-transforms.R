@@ -670,7 +670,11 @@ test_that("link stage rows retire frozen spokes with zero budget and zero new wo
       stability_window_refits_used = 3L,
       stability_passes_required_used = 2L,
       transform_frozen = TRUE,
-      link_epoch_id = 1L
+      link_epoch_id = 1L,
+      n_probe_pairs_since_last_refit = 7L,
+      n_cross_edges_active_since_last_refit = 11L,
+      n_cross_edges_probe_since_last_refit = 7L,
+      n_cross_edges_total_since_last_refit = 18L
     ),
     `3` = list(
       link_transform_state = "shift_only",
