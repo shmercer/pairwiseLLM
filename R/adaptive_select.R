@@ -1358,6 +1358,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         stage_quota = as.integer(ctx_stage_quota),
         stage_committed_so_far = as.integer(ctx_stage_committed),
         stage_realized = ctx_stage_realized,
+        budget_remaining_actual = as.integer(NA_integer_),
         backfill_active = isTRUE(ctx_backfill_active)
       ))
     }
@@ -1405,6 +1406,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       stage_quota = as.integer(ctx_stage_quota),
       stage_committed_so_far = as.integer(ctx_stage_committed),
       stage_realized = ctx_stage_realized,
+      budget_remaining_actual = as.integer(progress$budget_remaining_actual %||% 0L),
       backfill_active = isTRUE(ctx_backfill_active)
     )
   }
@@ -1438,6 +1440,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   selected_round_stage <- as.character(round_stage)
   selected_stage_quota <- as.integer(stage_quota)
   selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
+  phase_b_budget_depleted <- FALSE
   recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
   .starvation_reason_from_counts <- function(counts) {
     generated <- as.integer(counts$n_candidates_generated %||% 0L)
@@ -1478,6 +1481,68 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     }
     "filtered_by_other_filters"
   }
+  .starved_selection <- function(starved_spoke_id, starvation_reason_override = NULL) {
+    starvation_reason <- as.character(
+      starvation_reason_override %||% .starvation_reason_from_counts(last_counts %||% list())
+    )
+    list(
+      i = NA_integer_,
+      j = NA_integer_,
+      A = NA_integer_,
+      B = NA_integer_,
+      is_explore_step = FALSE,
+      explore_mode = NA_character_,
+      explore_reason = NA_character_,
+      candidate_starved = TRUE,
+      fallback_used = "global_safe",
+      fallback_path = paste(fallback_path, collapse = ">"),
+      starvation_reason = starvation_reason,
+      round_id = as.integer(round$round_id %||% NA_integer_),
+      round_stage = as.character(selected_round_stage),
+      pair_type = as.character(selected_round_stage),
+      explore_rate_used = as.double(explore_rate_used),
+      local_priority_mode = as.character(local_priority_mode),
+      long_gate_pass = last_long_gate_pass,
+      long_gate_reason = as.character(last_long_gate_reason),
+      star_override_used = NA,
+      star_override_reason = as.character(last_star_override_reason),
+      used_in_round_i = NA_integer_,
+      used_in_round_j = NA_integer_,
+      is_anchor_i = NA,
+      is_anchor_j = NA,
+      stratum_i = NA_integer_,
+      stratum_j = NA_integer_,
+      dist_stratum = NA_integer_,
+      dist_stratum_global = NA_integer_,
+      coverage_bins_used = NA_integer_,
+      coverage_source = NA_character_,
+      link_spoke_id_selected = as.integer(starved_spoke_id),
+      stage_committed_so_far = as.integer(selected_stage_committed_so_far),
+      stage_quota = as.integer(selected_stage_quota),
+      n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
+      n_candidates_after_route_filters = last_counts$n_candidates_after_route_filters %||% NA_integer_,
+      n_candidates_after_active_domain = last_counts$n_candidates_after_active_domain %||% NA_integer_,
+      n_candidates_after_stage_filters = last_counts$n_candidates_after_stage_filters %||% NA_integer_,
+      n_candidates_after_exposure_filters = last_counts$n_candidates_after_exposure_filters %||% 0L,
+      n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
+      n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
+      n_candidates_after_star_caps = last_counts$n_candidates_after_star_caps %||% 0L,
+      n_candidates_scored = last_counts$n_candidates_scored %||% 0L,
+      hard_filter_collapse_stage = as.character(starvation_reason %||% NA_character_),
+      deg_i = NA_integer_,
+      deg_j = NA_integer_,
+      recent_deg_i = NA_integer_,
+      recent_deg_j = NA_integer_,
+      mu_i = NA_real_,
+      mu_j = NA_real_,
+      sigma_i = NA_real_,
+      sigma_j = NA_real_,
+      p_ij = NA_real_,
+      U0_ij = NA_real_,
+      star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
+      star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)
+    )
+  }
 
   for (idx in seq_along(stage_defs)) {
     stage <- stage_defs[[idx]]
@@ -1510,7 +1575,19 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       attempt_generation_stage <- as.character(stage_ctx$generation_stage)
       attempt_stage_quota <- as.integer(stage_ctx$stage_quota)
       attempt_stage_committed_so_far <- as.integer(stage_ctx$stage_committed_so_far)
+      attempt_budget_remaining_actual <- as.integer(stage_ctx$budget_remaining_actual %||% NA_integer_)
       attempt_backfill_active <- isTRUE(stage_ctx$backfill_active)
+      if (isTRUE(link_phase_b) &&
+        !isTRUE(attempt_backfill_active) &&
+        is.finite(attempt_budget_remaining_actual) &&
+        attempt_budget_remaining_actual <= 0L) {
+        phase_b_budget_depleted <- TRUE
+        selected_link_spoke_attempt <- as.integer(ctx_spoke_id)
+        selected_round_stage <- as.character(attempt_round_stage)
+        selected_stage_quota <- as.integer(attempt_stage_quota)
+        selected_stage_committed_so_far <- as.integer(attempt_stage_committed_so_far)
+        next
+      }
       stage_seed <- .adaptive_stage_seed(
         seed_base,
         step_id,
@@ -1806,63 +1883,14 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     } else {
       as.integer(active_link_spoke %||% NA_integer_)
     }
-    starvation_reason <- .starvation_reason_from_counts(last_counts %||% list())
-    return(list(
-      i = NA_integer_,
-      j = NA_integer_,
-      A = NA_integer_,
-      B = NA_integer_,
-      is_explore_step = FALSE,
-      explore_mode = NA_character_,
-      explore_reason = NA_character_,
-      candidate_starved = TRUE,
-      fallback_used = "global_safe",
-      fallback_path = paste(fallback_path, collapse = ">"),
-      starvation_reason = starvation_reason,
-      round_id = as.integer(round$round_id %||% NA_integer_),
-      round_stage = as.character(selected_round_stage),
-      pair_type = as.character(selected_round_stage),
-      explore_rate_used = as.double(explore_rate_used),
-      local_priority_mode = as.character(local_priority_mode),
-      long_gate_pass = last_long_gate_pass,
-      long_gate_reason = as.character(last_long_gate_reason),
-      star_override_used = NA,
-      star_override_reason = as.character(last_star_override_reason),
-      used_in_round_i = NA_integer_,
-      used_in_round_j = NA_integer_,
-      is_anchor_i = NA,
-      is_anchor_j = NA,
-      stratum_i = NA_integer_,
-      stratum_j = NA_integer_,
-      dist_stratum = NA_integer_,
-      dist_stratum_global = NA_integer_,
-      coverage_bins_used = NA_integer_,
-      coverage_source = NA_character_,
-      link_spoke_id_selected = as.integer(starved_spoke_id),
-      stage_committed_so_far = as.integer(selected_stage_committed_so_far),
-      stage_quota = as.integer(selected_stage_quota),
-      n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
-      n_candidates_after_route_filters = last_counts$n_candidates_after_route_filters %||% NA_integer_,
-      n_candidates_after_active_domain = last_counts$n_candidates_after_active_domain %||% NA_integer_,
-      n_candidates_after_stage_filters = last_counts$n_candidates_after_stage_filters %||% NA_integer_,
-      n_candidates_after_exposure_filters = last_counts$n_candidates_after_exposure_filters %||% 0L,
-      n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
-      n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
-      n_candidates_after_star_caps = last_counts$n_candidates_after_star_caps %||% 0L,
-      n_candidates_scored = last_counts$n_candidates_scored %||% 0L,
-      hard_filter_collapse_stage = as.character(starvation_reason %||% NA_character_),
-      deg_i = NA_integer_,
-      deg_j = NA_integer_,
-      recent_deg_i = NA_integer_,
-      recent_deg_j = NA_integer_,
-      mu_i = NA_real_,
-      mu_j = NA_real_,
-      sigma_i = NA_real_,
-      sigma_j = NA_real_,
-      p_ij = NA_real_,
-      U0_ij = NA_real_,
-      star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
-      star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)
+    starvation_reason <- if (isTRUE(link_phase_b) && isTRUE(phase_b_budget_depleted)) {
+      "all_eligible_spokes_infeasible"
+    } else {
+      NULL
+    }
+    return(.starved_selection(
+      starved_spoke_id = as.integer(starved_spoke_id),
+      starvation_reason_override = starvation_reason
     ))
   }
 

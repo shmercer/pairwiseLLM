@@ -1198,7 +1198,7 @@ test_that("concurrent selector starves only after all eligible spokes are infeas
   )
 
   expect_true(isTRUE(out$candidate_starved))
-  expect_identical(out$starvation_reason, "few_candidates_generated")
+  expect_identical(out$starvation_reason, "all_eligible_spokes_infeasible")
   expect_true(as.integer(out$link_spoke_id_selected) %in% c(2L, 3L))
 })
 
@@ -2656,6 +2656,99 @@ test_that("phase B starvation marks the attempted spoke exhausted and advances s
     }
   )
   expect_identical(next_stage, "anchor_link")
+})
+
+test_that("phase B global-safe starvation retires the last active spoke for the refit", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 780L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 10L
+  state$controller$current_link_spoke_id <- 3L
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state <- mark_link_phase_b_ready(state)
+  state$refit_meta$last_refit_step <- 0L
+
+  step_row <- tibble::tibble(
+    round_stage = "local_link",
+    link_spoke_id = 3L,
+    fallback_used = "global_safe",
+    starvation_reason = "few_candidates_generated"
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      stats::setNames(c(1L, 1L, 1L, 1L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_round_starvation(state, step_row)$state
+    }
+  )
+
+  exhausted_map <- out$refit_meta$link_stage_exhausted_by_refit_spoke
+  expect_true(all(vapply(
+    pairwiseLLM:::.adaptive_stage_order(),
+    function(stage_name) isTRUE(exhausted_map[["1::3"]][[stage_name]]),
+    logical(1L)
+  )))
+})
+
+test_that("phase B selector short-circuits when no eligible spoke budget remains", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", 1:6)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 781L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 1L
+  state <- mark_link_phase_b_ready(state)
+  state$controller$current_link_spoke_id <- 2L
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(...) {
+      list(`2` = list(
+        B_spoke_refit_budget = 1L,
+        B_spoke_refit_budget_source = "single_spoke_controller"
+      ))
+    },
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      stats::setNames(c(1L, 0L, 0L, 0L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    .adaptive_link_stage_progress = function(...) {
+      list(
+        active_stage = "anchor_link",
+        backfill_active = FALSE,
+        stage_realized = stats::setNames(c(1L, 0L, 0L, 0L), pairwiseLLM:::.adaptive_stage_order()),
+        stage_committed = stats::setNames(c(1L, 0L, 0L, 0L), pairwiseLLM:::.adaptive_stage_order()),
+        stage_quotas = stats::setNames(c(1L, 0L, 0L, 0L), pairwiseLLM:::.adaptive_stage_order()),
+        budget_remaining_actual = 0L
+      )
+    },
+    generate_stage_candidates_from_state = function(...) {
+      rlang::abort("candidate generation should be skipped when budget is depleted")
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(isTRUE(out$candidate_starved))
+  expect_identical(as.character(out$starvation_reason), "all_eligible_spokes_infeasible")
+  expect_identical(as.character(out$fallback_used), "global_safe")
 })
 
 test_that("phase B pooled backfill starvation exhausts only the attempted spoke", {

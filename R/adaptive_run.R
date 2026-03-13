@@ -1195,6 +1195,63 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_phase_b_window_exhausted <- function(state,
+                                                    controller = NULL,
+                                                    refit_id = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!.adaptive_link_mode_active(controller) ||
+    !identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(FALSE)
+  }
+
+  refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
+  active_spokes <- .adaptive_link_effective_active_spokes(
+    state = state,
+    controller = controller,
+    refit_id = refit_id,
+    exclude_exhausted = TRUE
+  )
+  if (length(active_spokes) < 1L) {
+    return(FALSE)
+  }
+
+  budget_map <- .adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = controller,
+    eligible_spoke_ids = active_spokes
+  )
+  stage_order <- .adaptive_stage_order()
+  all(vapply(active_spokes, function(spoke_id) {
+    budget_entry <- budget_map[[as.character(spoke_id)]] %||% list()
+    budget_total <- as.integer(budget_entry$B_spoke_refit_budget %||% 0L)
+    if (!is.finite(budget_total) || budget_total < 1L) {
+      return(TRUE)
+    }
+    quota_controller <- controller
+    quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+    quota_controller$B_spoke_refit_budget <- as.integer(budget_total)
+    quota_controller$B_spoke_refit_budget_source <- as.character(
+      budget_entry$B_spoke_refit_budget_source %||% "single_spoke_default"
+    )
+    stage_quotas <- .adaptive_round_compute_quotas(
+      round_id = as.integer((state$round %||% list())$round_id %||% 1L),
+      n_items = as.integer(state$n_items),
+      controller = quota_controller
+    )
+    progress <- .adaptive_link_stage_progress(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = stage_order,
+      refit_id = refit_id
+    )
+    as.integer(progress$budget_remaining_actual %||% 0L) <= 0L
+  }, logical(1L)))
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_clear_stale_global_stop_state <- function(state) {
   out <- state
   controller <- .adaptive_controller_resolve(out)
@@ -1841,10 +1898,21 @@
     } else {
       NA_character_
     }
-    concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+    fallback_used <- if ("fallback_used" %in% names(step_row)) {
+      as.character(step_row$fallback_used[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
+    }
+    refit_id <- .adaptive_link_refit_window_id(state)
+    effective_spokes <- .adaptive_link_effective_active_spokes(
+      state = state,
+      controller = controller,
+      refit_id = refit_id,
+      exclude_exhausted = TRUE
+    )
     spokes_to_mark <- as.integer()
-    if (isTRUE(concurrent_mode) && identical(starvation_reason, "all_eligible_spokes_infeasible")) {
-      spokes_to_mark <- as.integer(phase_ctx$active_spokes %||% integer())
+    if (identical(starvation_reason, "all_eligible_spokes_infeasible")) {
+      spokes_to_mark <- as.integer(effective_spokes %||% phase_ctx$active_spokes %||% integer())
     } else {
       spoke_id <- as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
       if (is.na(spoke_id)) {
@@ -1860,13 +1928,13 @@
 
     out <- state
     out$controller <- controller
-    refit_id <- .adaptive_link_refit_window_id(out)
     shortfalls <- .adaptive_link_refit_shortfalls_map(out)
     exhausted_map <- .adaptive_link_refit_exhausted_map(out)
     budget_map <- .adaptive_link_budget_map_for_refit(
       state = out,
       controller = controller,
-      eligible_spoke_ids = unique(as.integer(spokes_to_mark))
+      eligible_spoke_ids = unique(as.integer(spokes_to_mark)),
+      compact_for_feasibility = FALSE
     )
     for (spoke_id in unique(as.integer(spokes_to_mark))) {
       quota_controller <- controller
@@ -1893,7 +1961,14 @@
       key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
       existing_shortfall <- shortfalls[[key]] %||% list()
       existing_exhausted <- exhausted_map[[key]] %||% list()
-      stages_to_mark <- if (isTRUE(mark_all_stages)) stage_order else as.character(stage_name)
+      retire_single_spoke <- identical(fallback_used, "global_safe") &&
+        length(unique(as.integer(effective_spokes))) == 1L &&
+        identical(as.integer(unique(as.integer(effective_spokes))[[1L]]), as.integer(spoke_id))
+      stages_to_mark <- if (isTRUE(mark_all_stages) || isTRUE(retire_single_spoke)) {
+        stage_order
+      } else {
+        as.character(stage_name)
+      }
       for (stage_name_i in stages_to_mark) {
         shortfall <- max(
           0L,

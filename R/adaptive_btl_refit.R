@@ -3022,7 +3022,62 @@
 .adaptive_link_budget_map_for_refit <- function(state,
                                                 controller = NULL,
                                                 eligible_spoke_ids = NULL,
+                                                compact_for_feasibility = TRUE,
                                                 seed = 1L) {
+  compact_budget_source <- function(source) {
+    source <- as.character(source %||% "single_spoke_default")
+    if (endsWith(source, "_feasible_capacity")) {
+      return(source)
+    }
+    paste0(source, "_feasible_capacity")
+  }
+  compact_budget_entry <- function(entry, spoke_id) {
+    entry <- entry %||% list()
+    base_budget <- as.integer(entry$B_spoke_refit_budget %||% 0L)
+    if (!is.finite(base_budget) || base_budget < 1L) {
+      return(entry)
+    }
+    quota_controller <- controller
+    quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+    quota_controller$B_spoke_refit_budget <- as.integer(base_budget)
+    quota_controller$B_spoke_refit_budget_source <- as.character(
+      entry$B_spoke_refit_budget_source %||% "single_spoke_default"
+    )
+    stage_quotas <- .adaptive_round_compute_quotas(
+      round_id = as.integer((state$round %||% list())$round_id %||% 1L),
+      n_items = as.integer(state$n_items),
+      controller = quota_controller
+    )
+    stage_quotas <- .adaptive_link_adjust_stage_quotas_for_feasibility(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = .adaptive_stage_order(),
+      refit_id = refit_id
+    )
+    compacted_budget <- as.integer(sum(as.integer(stage_quotas), na.rm = TRUE))
+    if (!is.finite(compacted_budget) || compacted_budget < 0L) {
+      compacted_budget <- 0L
+    }
+    if (compacted_budget < base_budget) {
+      entry$B_spoke_refit_budget <- as.integer(compacted_budget)
+      entry$B_spoke_refit_budget_source <- compact_budget_source(
+        entry$B_spoke_refit_budget_source %||% "single_spoke_default"
+      )
+      if (!is.null(entry$concurrent_target_pairs)) {
+        entry$concurrent_target_pairs <- as.integer(
+          min(as.integer(entry$concurrent_target_pairs %||% compacted_budget), compacted_budget)
+        )
+      }
+      if (!is.null(entry$concurrent_floor_pairs)) {
+        entry$concurrent_floor_pairs <- as.integer(
+          min(as.integer(entry$concurrent_floor_pairs %||% compacted_budget), compacted_budget)
+        )
+      }
+    }
+    entry
+  }
   zero_budget_entry <- function(source = "independent_inactive_spoke") {
     list(
       B_spoke_refit_budget = 0L,
@@ -3117,7 +3172,7 @@
       if (!identical(as.integer(key), as.integer(active_spoke_id))) {
         return(zero_budget_entry())
       }
-      list(
+      entry <- list(
         B_spoke_refit_budget = as.integer(single_budget),
         B_spoke_refit_budget_source = "single_spoke_controller",
         concurrent_target_pairs = NA_integer_,
@@ -3128,6 +3183,11 @@
         concurrent_top_k_used = NA_integer_,
         concurrent_candidate_count = NA_integer_
       )
+      if (isTRUE(compact_for_feasibility)) {
+        compact_budget_entry(entry, spoke_id = as.integer(key))
+      } else {
+        entry
+      }
     })
     names(out) <- as.character(spoke_ids)
     return(out)
@@ -3169,7 +3229,7 @@
         na.rm = TRUE
       ))
     }
-    list(
+    entry <- list(
       B_spoke_refit_budget = as.integer(target_pairs),
       B_spoke_refit_budget_source = "concurrent_allocator",
       concurrent_target_pairs = as.integer(target_pairs),
@@ -3180,6 +3240,14 @@
       concurrent_top_k_used = as.integer(stat$concurrent_top_k_used %||% 0L),
       concurrent_candidate_count = as.integer(stat$concurrent_candidate_count %||% 0L)
     )
+    if (isTRUE(compact_for_feasibility)) {
+      entry <- compact_budget_entry(entry, spoke_id = as.integer(key))
+    }
+    compacted_target <- as.integer(entry$concurrent_target_pairs %||% entry$B_spoke_refit_budget %||% 0L)
+    compacted_floor <- as.integer(entry$concurrent_floor_pairs %||% 0L)
+    entry$concurrent_target_met <- as.logical(obs >= compacted_target)
+    entry$concurrent_floor_met <- as.logical(obs >= compacted_floor)
+    entry
   })
   names(out) <- as.character(spoke_ids)
   out
@@ -5384,9 +5452,16 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
     } else {
       FALSE
     }
+    phase_b_window_exhausted <- if (.adaptive_link_mode_active(controller) &&
+      identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b") &&
+      isTRUE(M_done > last_refit_M_done)) {
+      isTRUE(.adaptive_link_phase_b_window_exhausted(state, controller = controller))
+    } else {
+      FALSE
+    }
     if (.adaptive_link_mode_active(controller) &&
       identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b") &&
-      isTRUE(latest_starved) &&
+      isTRUE(latest_starved || phase_b_window_exhausted) &&
       isTRUE(M_done > last_refit_M_done)) {
       eligibility$eligible <- TRUE
     }
