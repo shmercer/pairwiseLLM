@@ -403,6 +403,111 @@ read_log <- function(path) {
   state
 }
 
+.adaptive_resume_history_pairs_from_step_log <- function(state, step_log) {
+  step_log <- tibble::as_tibble(step_log %||% tibble::tibble())
+  if (nrow(step_log) < 1L || !all(c("pair_id", "A", "B") %in% names(step_log))) {
+    return(tibble::tibble(A_id = character(), B_id = character()))
+  }
+
+  committed <- step_log[!is.na(step_log$pair_id), , drop = FALSE]
+  if (nrow(committed) < 1L) {
+    return(tibble::tibble(A_id = character(), B_id = character()))
+  }
+
+  ids <- as.character(state$item_ids %||% character())
+  tibble::tibble(
+    A_id = as.character(ids[as.integer(committed$A)]),
+    B_id = as.character(ids[as.integer(committed$B)])
+  )
+}
+
+.adaptive_resume_reconcile_refit_meta <- function(state, step_log, round_log) {
+  step_log <- tibble::as_tibble(step_log %||% tibble::tibble())
+  round_log <- tibble::as_tibble(round_log %||% tibble::tibble())
+  state$history_pairs <- .adaptive_resume_history_pairs_from_step_log(state, step_log)
+
+  refit_meta <- state$refit_meta %||% list()
+  if (nrow(round_log) < 1L) {
+    refit_meta$last_refit_M_done <- 0L
+    refit_meta$last_refit_step <- 0L
+    refit_meta$last_refit_round_id <- 0L
+    state$refit_meta <- refit_meta
+    return(state)
+  }
+
+  round_log <- round_log[
+    order(as.integer(round_log$refit_id), seq_len(nrow(round_log))),
+    ,
+    drop = FALSE
+  ]
+  last_row <- round_log[nrow(round_log), , drop = FALSE]
+  last_refit_step <- as.integer(last_row$step_id_at_refit[[1L]] %||% NA_integer_)
+  committed_step_count <- if (nrow(step_log) > 0L && "pair_id" %in% names(step_log)) {
+    as.integer(sum(!is.na(step_log$pair_id), na.rm = TRUE))
+  } else {
+    0L
+  }
+  if (committed_step_count < 1L) {
+    refit_meta$last_refit_M_done <- as.integer(
+      last_row$total_pairs_done[[1L]] %||%
+        refit_meta$last_refit_M_done %||%
+        0L
+    )
+    refit_meta$last_refit_step <- as.integer(last_refit_step %||% 0L)
+    refit_meta$last_refit_round_id <- as.integer(last_row$refit_id[[1L]] %||% nrow(round_log))
+    state$refit_meta <- refit_meta
+    return(state)
+  }
+  max_step_id <- if (nrow(step_log) > 0L && "step_id" %in% names(step_log)) {
+    as.integer(max(as.integer(step_log$step_id), na.rm = TRUE))
+  } else {
+    0L
+  }
+  if (!is.finite(last_refit_step) || last_refit_step < 0L || last_refit_step > max_step_id) {
+    rlang::abort(
+      paste0(
+        "Adaptive resume invariant failed: canonical `round_log$step_id_at_refit` is out of range. ",
+        "last_refit_step=",
+        as.integer(last_refit_step),
+        ", max_step_id=",
+        as.integer(max_step_id),
+        "."
+      )
+    )
+  }
+
+  committed_at_refit <- if (nrow(step_log) > 0L && all(c("pair_id", "step_id") %in% names(step_log))) {
+    as.integer(sum(
+      !is.na(step_log$pair_id) &
+        as.integer(step_log$step_id) <= as.integer(last_refit_step),
+      na.rm = TRUE
+    ))
+  } else {
+    0L
+  }
+  logged_total_pairs <- as.integer(last_row$total_pairs_done[[1L]] %||% committed_at_refit)
+  if (is.finite(logged_total_pairs) && logged_total_pairs != committed_at_refit) {
+    rlang::abort(
+      paste0(
+        "Adaptive resume invariant failed: canonical `round_log$total_pairs_done` does not reconcile ",
+        "to committed `step_log` rows at the last refit boundary. logged_total_pairs=",
+        as.integer(logged_total_pairs),
+        ", committed_at_refit=",
+        as.integer(committed_at_refit),
+        ", last_refit_step=",
+        as.integer(last_refit_step),
+        "."
+      )
+    )
+  }
+
+  refit_meta$last_refit_M_done <- as.integer(committed_at_refit)
+  refit_meta$last_refit_step <- as.integer(last_refit_step)
+  refit_meta$last_refit_round_id <- as.integer(last_row$refit_id[[1L]] %||% nrow(round_log))
+  state$refit_meta <- refit_meta
+  state
+}
+
 .adaptive_link_probe_resume_abort <- function(message, spoke_id = NA_integer_) {
   prefix <- "Adaptive resume probe-state invariant failed"
   if (is.finite(as.integer(spoke_id))) {
@@ -1016,6 +1121,13 @@ load_adaptive_session <- function(session_dir) {
       rlang::abort("`step_log` contains invalid item indices.")
     }
   }
+
+  state <- .adaptive_resume_reconcile_refit_meta(
+    state = state,
+    step_log = state$step_log,
+    round_log = state$round_log
+  )
+  state$controller <- .adaptive_controller_resolve(state)
 
   state$config$session_dir <- session_dir
   state$config$resumed_from_session <- TRUE

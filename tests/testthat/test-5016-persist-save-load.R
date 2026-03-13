@@ -235,6 +235,112 @@ test_that("load_adaptive_session backfills legacy round_log post-stop columns", 
   expect_true(all(restored$round_log$pairs_committed_after_stop == 0L))
 })
 
+test_that("load_adaptive_session reconciles refit boundaries and committed history from canonical logs", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items, seed = 31L)
+  judge <- make_deterministic_judge("i_wins")
+  fit_stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 4L,
+    fit_fn = fit_stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+    progress = "none"
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  state_path <- file.path(session_dir, "state.rds")
+  round_path <- file.path(session_dir, "round_log.rds")
+  step_path <- file.path(session_dir, "step_log.rds")
+
+  stale_state <- readRDS(state_path)
+  stale_state$history_pairs <- tibble::tibble(A_id = character(), B_id = character())
+  stale_state$refit_meta$last_refit_M_done <- 1L
+  stale_state$refit_meta$last_refit_step <- 1L
+  stale_state$refit_meta$last_refit_round_id <- 1L
+  saveRDS(stale_state, state_path)
+
+  round_log <- readRDS(round_path)
+  step_log <- readRDS(step_path)
+  committed_at_last_refit <- sum(
+    !is.na(step_log$pair_id) &
+      step_log$step_id <= round_log$step_id_at_refit[[nrow(round_log)]]
+  )
+
+  restored <- load_adaptive_session(session_dir)
+  expect_identical(
+    restored$refit_meta$last_refit_step,
+    as.integer(round_log$step_id_at_refit[[nrow(round_log)]])
+  )
+  expect_identical(
+    restored$refit_meta$last_refit_round_id,
+    as.integer(round_log$refit_id[[nrow(round_log)]])
+  )
+  expect_identical(restored$refit_meta$last_refit_M_done, as.integer(committed_at_last_refit))
+  expect_identical(
+    nrow(restored$history_pairs),
+    as.integer(sum(!is.na(step_log$pair_id)))
+  )
+})
+
+test_that("load_adaptive_session aborts when canonical round totals do not reconcile to committed steps", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items, seed = 32L)
+  judge <- make_deterministic_judge("i_wins")
+  fit_stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 4L,
+    fit_fn = fit_stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+    progress = "none"
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  round_path <- file.path(session_dir, "round_log.rds")
+  round_log <- readRDS(round_path)
+  round_log$total_pairs_done[[nrow(round_log)]] <- 999L
+  saveRDS(round_log, round_path)
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "does not reconcile to committed `step_log` rows"
+  )
+})
+
+test_that("load_adaptive_session preserves canonical round boundaries for artifact-only sessions", {
+  state <- adaptive_rank_start(make_test_items(4), seed = 33L)
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 20L,
+      total_pairs_done = 0L,
+      diagnostics_pass = TRUE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  restored <- load_adaptive_session(session_dir)
+  expect_identical(restored$refit_meta$last_refit_step, 20L)
+  expect_identical(restored$refit_meta$last_refit_M_done, 0L)
+  expect_identical(restored$refit_meta$last_refit_round_id, 1L)
+  expect_identical(nrow(restored$history_pairs), 0L)
+})
+
 test_that("load_adaptive_session accepts persisted item logs with current schema", {
   items <- make_test_items(6)
   state <- adaptive_rank_start(items, persist_item_log = TRUE)
