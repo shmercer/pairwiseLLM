@@ -409,7 +409,13 @@ read_log <- function(path) {
     return(tibble::tibble(A_id = character(), B_id = character()))
   }
 
-  committed <- step_log[!is.na(step_log$pair_id), , drop = FALSE]
+  holdout_flag <- .adaptive_link_is_holdout_probe_rows(step_log)
+  committed <- step_log[
+    !is.na(step_log$pair_id) &
+      !(holdout_flag %in% TRUE),
+    ,
+    drop = FALSE
+  ]
   if (nrow(committed) < 1L) {
     return(tibble::tibble(A_id = character(), B_id = character()))
   }
@@ -443,7 +449,12 @@ read_log <- function(path) {
   last_row <- round_log[nrow(round_log), , drop = FALSE]
   last_refit_step <- as.integer(last_row$step_id_at_refit[[1L]] %||% NA_integer_)
   committed_step_count <- if (nrow(step_log) > 0L && "pair_id" %in% names(step_log)) {
-    as.integer(sum(!is.na(step_log$pair_id), na.rm = TRUE))
+    holdout_flag <- .adaptive_link_is_holdout_probe_rows(step_log)
+    as.integer(sum(
+      !is.na(step_log$pair_id) &
+        !(holdout_flag %in% TRUE),
+      na.rm = TRUE
+    ))
   } else {
     0L
   }
@@ -477,8 +488,10 @@ read_log <- function(path) {
   }
 
   committed_at_refit <- if (nrow(step_log) > 0L && all(c("pair_id", "step_id") %in% names(step_log))) {
+    holdout_flag <- .adaptive_link_is_holdout_probe_rows(step_log)
     as.integer(sum(
       !is.na(step_log$pair_id) &
+        !(holdout_flag %in% TRUE) &
         as.integer(step_log$step_id) <= as.integer(last_refit_step),
       na.rm = TRUE
     ))
