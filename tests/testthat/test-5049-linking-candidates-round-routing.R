@@ -1725,6 +1725,110 @@ test_that("frozen spokes are retired from ranked routing immediately", {
   expect_identical(ranked, 3L)
 })
 
+test_that("selector keeps frozen concurrent spokes retired after controller reduction", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
+    global_item_id = paste0("g", seq_len(9L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 214L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent"
+    )
+  )
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$round$round_id <- 1L
+  state <- mark_link_phase_b_ready(state)
+  state$controller$link_transform_frozen_by_spoke <- list(`3` = TRUE)
+  state$controller$link_stopped_by_spoke <- list(`2` = FALSE, `3` = TRUE)
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(delta_spoke_mean = 0, log_alpha_spoke_mean = 0, link_identified = FALSE),
+    `3` = list(delta_spoke_mean = 0, log_alpha_spoke_mean = 0, link_identified = TRUE)
+  )
+
+  reduced <- pairwiseLLM:::.adaptive_resolve_controller(state, adaptive_defaults(nrow(items)))
+  expect_true(isTRUE(reduced$link_transform_frozen_by_spoke[["3"]]))
+  expect_true(isTRUE(reduced$link_stopped_by_spoke[["3"]]))
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_ranked_spokes(
+      state,
+      controller = reduced,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    2L
+  )
+
+  out <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(
+      state, stage_name, fallback_name, C_max, seed, link_spoke_id = NA_integer_
+    ) {
+      tibble::tibble(
+        i = "h1",
+        j = if (identical(as.integer(link_spoke_id), 2L)) "s21" else "s31",
+        p = 0.5,
+        u0 = 0.5,
+        link_spoke_id = as.integer(link_spoke_id)
+      )
+    },
+    .adaptive_select_stage = function(
+      stage,
+      state,
+      config,
+      controller,
+      generation_stage,
+      round,
+      history,
+      counts,
+      step_id,
+      seed_base,
+      candidates
+    ) {
+      cand <- tibble::as_tibble(candidates)
+      spoke_id <- unique(as.integer(cand$link_spoke_id))
+      if (identical(spoke_id, 2L)) {
+        cand <- cand[0, , drop = FALSE]
+      }
+      n_cand <- as.integer(nrow(cand))
+      list(
+        selected = cand,
+        counts = list(
+          n_candidates_generated = n_cand,
+          n_candidates_after_route_filters = n_cand,
+          n_candidates_after_active_domain = n_cand,
+          n_candidates_after_stage_filters = n_cand,
+          n_candidates_after_exposure_filters = n_cand,
+          n_candidates_after_hard_filters = n_cand,
+          n_candidates_after_duplicates = n_cand,
+          n_candidates_after_star_caps = n_cand,
+          n_candidates_scored = n_cand
+        ),
+        star_caps = list(rejects = 0L, reject_items = character(), reject_items_count = 0L),
+        recent_deg = integer(),
+        long_gate_pass = NA,
+        long_gate_reason = NA_character_,
+        star_override_used = FALSE,
+        star_override_reason = NA_character_
+      )
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, state, controller, spoke_id) {
+      cand <- tibble::as_tibble(candidates)
+      cand$link_d_opt_gain <- 1
+      cand$link_u <- 1
+      cand
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(isTRUE(out$candidate_starved))
+  expect_identical(as.integer(out$link_spoke_id_selected), 2L)
+})
+
 test_that("independent spoke stage progress is computed per spoke without shared coupling", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),

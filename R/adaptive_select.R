@@ -327,6 +327,11 @@ adaptive_defaults <- function(N) {
     current_link_spoke_id = as.integer(controller$current_link_spoke_id %||% NA_integer_),
     link_budget_refit_id = as.integer(controller$link_budget_refit_id %||% NA_integer_),
     link_budget_map = controller$link_budget_map %||% list(),
+    link_stopped_by_spoke = controller$link_stopped_by_spoke %||% list(),
+    link_stop_refit_id_by_spoke = controller$link_stop_refit_id_by_spoke %||% list(),
+    link_transform_frozen_by_spoke = controller$link_transform_frozen_by_spoke %||% list(),
+    link_transform_frozen_refit_id_by_spoke =
+      controller$link_transform_frozen_refit_id_by_spoke %||% list(),
     B_spoke_refit_budget = as.integer(controller$B_spoke_refit_budget %||% NA_integer_),
     B_spoke_refit_budget_source = as.character(
       controller$B_spoke_refit_budget_source %||% NA_character_
