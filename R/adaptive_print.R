@@ -1432,6 +1432,21 @@ print.adaptive_state <- function(x, ...) {
       )
       lines <- c(
         lines,
+        paste0(
+          "  spoke=",
+          spoke_id,
+          " frozen",
+          if (!is.na(transform_state) && nzchar(transform_state)) {
+            paste0("  state=", transform_state)
+          } else {
+            ""
+          },
+          if (is.finite(frozen_refit)) {
+            paste0("  frozen_refit=", frozen_refit)
+          } else {
+            ""
+          }
+        ),
         paste0("  spoke=", spoke_id, " frozen"),
         if (!is.na(transform_state) && nzchar(transform_state)) {
           paste0("    state=", transform_state)
@@ -1496,6 +1511,27 @@ print.adaptive_state <- function(x, ...) {
 
     lines <- c(
       lines,
+      paste0(
+        "  spoke=",
+        spoke_id,
+        " active",
+        "  eligible=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "link_stop_eligible", default = NA),
+          true = "yes",
+          false = "no"
+        ),
+        "  gate_open=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "link_stop_gate_open", default = NA),
+          true = "yes",
+          false = "no"
+        ),
+        "  probes=",
+        probes_realized,
+        "/",
+        if (is.na(probes_min)) "NA" else probes_min
+      ),
       paste0("  spoke=", spoke_id, " active"),
       if (!is.na(transform_state) && nzchar(transform_state)) {
         paste0("    state=", transform_state)
@@ -1703,6 +1739,7 @@ print.adaptive_state <- function(x, ...) {
   c(
     refit_line,
     pairs_line,
+    paste0("Global: ", paste(global_parts, collapse = "  ")),
     "Global:",
     .adaptive_progress_indent(global_parts, spaces = 2L),
     .adaptive_progress_phase_b_spoke_lines(
