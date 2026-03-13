@@ -670,7 +670,11 @@ test_that("link stage rows retire frozen spokes with zero budget and zero new wo
       stability_window_refits_used = 3L,
       stability_passes_required_used = 2L,
       transform_frozen = TRUE,
-      link_epoch_id = 1L
+      link_epoch_id = 1L,
+      n_probe_pairs_since_last_refit = 7L,
+      n_cross_edges_active_since_last_refit = 11L,
+      n_cross_edges_probe_since_last_refit = 7L,
+      n_cross_edges_total_since_last_refit = 18L
     ),
     `3` = list(
       link_transform_state = "shift_only",
@@ -1187,7 +1191,10 @@ test_that("independent mode authorizes exactly one spoke per refit window", {
   inactive_spoke <- setdiff(c(2L, 3L), active_spoke)
 
   expect_identical(sum(budgets > 0L), 1L)
-  expect_identical(budget_map[[as.character(active_spoke)]]$B_spoke_refit_budget_source, "single_spoke_controller")
+  expect_identical(
+    budget_map[[as.character(active_spoke)]]$B_spoke_refit_budget_source,
+    "single_spoke_controller_feasible_capacity"
+  )
   expect_identical(budget_map[[as.character(inactive_spoke)]]$B_spoke_refit_budget, 0L)
   expect_identical(
     budget_map[[as.character(inactive_spoke)]]$B_spoke_refit_budget_source,
@@ -1223,6 +1230,81 @@ test_that("independent mode authorizes exactly one spoke per refit window", {
     as.character(row_inactive$B_spoke_refit_budget_source[[1L]]),
     "independent_inactive_spoke"
   )
+})
+
+test_that("independent mode compacts the active spoke budget to feasible late-phase capacity", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  state$controller$current_link_spoke_id <- 2L
+
+  budget_map <- testthat::with_mocked_bindings(
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      stats::setNames(c(4L, 4L, 4L, 3L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    .adaptive_link_adjust_stage_quotas_for_feasibility = function(...) {
+      adjusted <- stats::setNames(c(4L, 3L, 2L, 0L), c("anchor_link", "long_link", "mid_link", "local_link"))
+      attr(adjusted, "quota_meta") <- list()
+      adjusted
+    },
+    pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = state$controller,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(budget_map[["2"]]$B_spoke_refit_budget, 9L)
+  expect_identical(
+    budget_map[["2"]]$B_spoke_refit_budget_source,
+    "single_spoke_controller_feasible_capacity"
+  )
+  expect_identical(budget_map[["3"]]$B_spoke_refit_budget, 0L)
+})
+
+test_that("phase B window exhaustion can trigger an early refit without a starved step", {
+  state <- make_linking_refit_state(list(multi_spoke_mode = "independent"))
+  state <- append_cross_step(state, 1L, "h1", "s21", 1L, spoke_id = 2L)
+  state$step_log$link_stage <- "anchor_link"
+  state$step_log$round_stage <- "anchor_link"
+
+  fit_fn <- function(state, config) {
+    draws <- matrix(
+      c(
+        0.2, 0.1, 0.0, -0.1, -0.2, -0.3, -0.4,
+        0.1, 0.0, -0.1, -0.2, -0.3, -0.4, -0.5
+      ),
+      nrow = 2,
+      byrow = TRUE
+    )
+    colnames(draws) <- as.character(state$item_ids)
+    make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
+  }
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_refit_scope_counts = function(state) {
+      list(
+        M_done = 1L,
+        last_refit_M_done = 0L,
+        last_refit_step = 0L,
+        scope_set_id = NA_integer_
+      )
+    },
+    .adaptive_refit_pairs_target = function(state, config) 30L,
+    .adaptive_refit_eligibility = function(total_committed, last_refit_committed, refit_pairs_target) {
+      list(eligible = FALSE)
+    },
+    .adaptive_link_phase_b_window_exhausted = function(...) TRUE,
+    pairwiseLLM:::maybe_refit_btl(
+      state = state,
+      config = state$config$btl_config,
+      fit_fn = fit_fn
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(isTRUE(out$refit_performed))
+  expect_identical(out$state$refit_meta$last_refit_M_done, 1L)
+  expect_identical(out$state$refit_meta$last_refit_step, 1L)
 })
 
 test_that("run_one_step does not rewrite independent Phase B budget map within a refit window", {
