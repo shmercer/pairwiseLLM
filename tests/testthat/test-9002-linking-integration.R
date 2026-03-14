@@ -479,6 +479,7 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
   )
 
   round_log <- out$round_log
+  step_log <- out$step_log
   link_stage_log <- out$link_stage_log
   expect_true(all(c(
     "new_active_pairs_since_last_refit",
@@ -496,8 +497,25 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
 
   for (idx in seq_len(nrow(phase_b_rounds))) {
     refit_id <- as.integer(phase_b_rounds$refit_id[[idx]])
+    step_hi <- as.integer(phase_b_rounds$step_id_at_refit[[idx]])
+    step_lo <- if (idx == 1L) {
+      0L
+    } else {
+      as.integer(phase_b_rounds$step_id_at_refit[[idx - 1L]])
+    }
+    committed_window <- step_log[
+      as.integer(step_log$step_id) > step_lo &
+        as.integer(step_log$step_id) <= step_hi &
+        !is.na(step_log$pair_id),
+      ,
+      drop = FALSE
+    ]
     link_rows <- link_stage_log[as.integer(link_stage_log$refit_id) == refit_id, , drop = FALSE]
     expect_true(nrow(link_rows) >= 1L)
+    expect_identical(
+      as.integer(phase_b_rounds$new_pairs_since_last_refit[[idx]]),
+      as.integer(nrow(committed_window))
+    )
     expect_identical(
       as.integer(phase_b_rounds$new_active_pairs_since_last_refit[[idx]]),
       as.integer(sum(link_rows$n_cross_edges_active_since_last_refit, na.rm = TRUE))
@@ -509,6 +527,10 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
     expect_identical(
       as.integer(phase_b_rounds$new_total_cross_pairs_since_last_refit[[idx]]),
       as.integer(sum(link_rows$n_cross_edges_total_since_last_refit, na.rm = TRUE))
+    )
+    expect_identical(
+      as.integer(phase_b_rounds$total_pairs_done[[idx]]),
+      as.integer(sum(!is.na(step_log$pair_id[seq_len(step_hi)])))
     )
   }
 

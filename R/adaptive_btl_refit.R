@@ -4995,13 +4995,13 @@
   pos_balance <- as.double(counts$posA[ids] - counts$posB[ids])
   pos_balance_sd <- if (length(pos_balance) > 1L) stats::sd(pos_balance) else 0
 
+  step_log <- tibble::as_tibble(state$step_log)
+  committed_all <- step_log[!is.na(step_log$pair_id), , drop = FALSE]
   n_unique_pairs_seen <- sum(counts$pair_count >= 1L)
-  total_pairs_done <- nrow(history)
-  new_pairs_since_last_refit <- total_pairs_done - refit_context$last_refit_M_done
+  total_pairs_done <- nrow(committed_all)
 
   last_step <- refit_context$last_refit_step
   step_id_at_refit <- refit_context$step_id_at_refit
-  step_log <- tibble::as_tibble(state$step_log)
   step_subset <- step_log[step_log$step_id > last_step &
     step_log$step_id <= step_id_at_refit, , drop = FALSE]
   controller <- .adaptive_controller_resolve(state)
@@ -5020,6 +5020,7 @@
     step_subset$is_probe_step <- FALSE
   }
   committed_subset <- step_subset[!is.na(step_subset$pair_id), , drop = FALSE]
+  new_pairs_since_last_refit <- nrow(committed_subset)
   cross_subset <- committed_subset[committed_subset$is_cross_set %in% TRUE, , drop = FALSE]
   probe_subset <- cross_subset[
     as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |

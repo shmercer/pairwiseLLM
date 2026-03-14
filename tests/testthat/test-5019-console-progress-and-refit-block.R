@@ -30,6 +30,7 @@ test_that("adaptive_rank_run_live prints refit blocks and stop criteria", {
 
   combined <- c(output, messages)
   expect_true(any(grepl("^Refit [0-9]{4}  step=", combined)))
+  expect_true(any(grepl("^Pairs: new=[0-9]+  committed_pairs=[0-9]+$", combined)))
   expect_true(any(grepl("^Global stop:$", combined)))
   expect_true(any(grepl("^  diagnostics=", combined)))
   expect_true(any(grepl("reliability_EAP=", combined)))
@@ -96,7 +97,10 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
 
   combined <- c(output, messages)
   expect_true(any(grepl("^Refit [0-9]{4}  round=", combined)))
-  expect_true(any(grepl("^Pairs: new=[0-9]+  active=[0-9]+  probe=[0-9]+  total_cross=[0-9]+$", combined)))
+  expect_true(any(grepl(
+    "^Pairs: new=[0-9]+  committed_pairs=[0-9]+  active=[0-9]+  probe=[0-9]+  total_cross=[0-9]+$",
+    combined
+  )))
   expect_true(any(grepl("^Global:$", combined)))
   expect_true(any(grepl("^  audit_only$", combined)))
   expect_true(any(grepl("^Spokes:$", combined)))

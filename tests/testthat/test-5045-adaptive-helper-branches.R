@@ -508,7 +508,8 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
     stop_reason = "btl_converged"
   )
   block <- pairwiseLLM:::adaptive_progress_refit_block(row, cfg = list(stop_thresholds = list()))
-  expect_true(any(grepl("^Refit 0001  step=3  new_pairs=3", block)))
+  expect_true(any(grepl("^Refit 0001  step=3", block)))
+  expect_true(any(grepl("^Pairs: new=3  committed_pairs=3$", block)))
   expect_true(any(grepl("phase_scope=phase_a_set\\(set_id=2\\)", block)))
   expect_true(any(grepl("^Global stop:", block)))
   expect_true(any(grepl("reliability_EAP_scope=0.990/0.950 pass", block, fixed = TRUE)))
@@ -530,6 +531,9 @@ test_that("adaptive progress refit block prints linking stop gates without misle
     phase_scope_n_items = 100L,
     total_pairs_done = 200L,
     new_pairs_since_last_refit = 25L,
+    new_active_pairs_since_last_refit = 20L,
+    new_probe_pairs_since_last_refit = 5L,
+    new_total_cross_pairs_since_last_refit = 25L,
     n_unique_pairs_seen = 180L,
     proposed_pairs_mode = "base",
     starve_rate_since_last_refit = 0,
@@ -630,7 +634,9 @@ test_that("adaptive progress refit block prints linking stop gates without misle
     link_stage_rows = link_rows
   )
 
-  expect_true(any(grepl("^Global: audit_only", block)))
+  expect_true(any(grepl("^Pairs: new=25  committed_pairs=200  active=20  probe=5  total_cross=25$", block)))
+  expect_true(any(grepl("^Global:$", block)))
+  expect_true(any(grepl("^  audit_only$", block)))
   expect_true(any(grepl("^Spokes:$", block)))
   expect_true(any(grepl("spoke=2 active  eligible=no  gate_open=no", block, fixed = TRUE)))
   expect_true(any(grepl("probes=0/30", block, fixed = TRUE)))

@@ -956,11 +956,10 @@ print.adaptive_state <- function(x, ...) {
 .adaptive_progress_metrics <- function(state, refit_pairs_target) {
   step_log <- adaptive_step_log(state)
   last_step <- state$refit_meta$last_refit_step %||% 0L
-  last_M_done <- state$refit_meta$last_refit_M_done %||% 0L
 
   subset <- step_log[step_log$step_id > last_step, , drop = FALSE]
   committed <- sum(!is.na(step_log$pair_id))
-  new_pairs <- committed - as.integer(last_M_done)
+  new_pairs <- sum(!is.na(subset$pair_id))
   starved <- sum(subset$candidate_starved %in% TRUE, na.rm = TRUE)
   invalid <- sum(subset$status == "invalid", na.rm = TRUE)
   fallback_rate <- if (nrow(subset) > 0L) {
@@ -1336,13 +1335,17 @@ print.adaptive_state <- function(x, ...) {
     sprintf("%04d", as.integer(.adaptive_progress_col_value(row, "refit_id", default = NA_integer_))),
     "  step=",
     .adaptive_progress_col_value(row, "step_id_at_refit", default = NA_integer_),
-    "  new_pairs=",
-    .adaptive_progress_col_value(row, "new_pairs_since_last_refit", default = NA_integer_),
     if (isTRUE(use_scope_metrics) && is.finite(scope_set_id)) {
       paste0("  phase_scope=phase_a_set(set_id=", scope_set_id, ")")
     } else {
       ""
     }
+  )
+  pairs_line <- paste0(
+    "Pairs: new=",
+    .adaptive_progress_col_value(row, "new_pairs_since_last_refit", default = NA_integer_),
+    "  committed_pairs=",
+    .adaptive_progress_col_value(row, "total_pairs_done", default = NA_integer_)
   )
 
   global_parts <- c(
@@ -1396,6 +1399,7 @@ print.adaptive_state <- function(x, ...) {
 
   lines <- c(
     refit_line,
+    pairs_line,
     "Global stop:",
     .adaptive_progress_indent(global_parts, spaces = 2L)
   )
@@ -1648,6 +1652,8 @@ print.adaptive_state <- function(x, ...) {
   pairs_line <- paste0(
     "Pairs: new=",
     .adaptive_progress_col_value(row, "new_pairs_since_last_refit", default = NA_integer_),
+    "  committed_pairs=",
+    .adaptive_progress_col_value(row, "total_pairs_done", default = NA_integer_),
     "  active=",
     .adaptive_progress_col_value(row, "new_active_pairs_since_last_refit", default = 0L),
     "  probe=",
@@ -1739,7 +1745,6 @@ print.adaptive_state <- function(x, ...) {
   c(
     refit_line,
     pairs_line,
-    paste0("Global: ", paste(global_parts, collapse = "  ")),
     "Global:",
     .adaptive_progress_indent(global_parts, spaces = 2L),
     .adaptive_progress_phase_b_spoke_lines(
