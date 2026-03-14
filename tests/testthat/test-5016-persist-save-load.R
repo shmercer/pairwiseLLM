@@ -341,7 +341,65 @@ test_that("load_adaptive_session preserves canonical round boundaries for artifa
   expect_identical(nrow(restored$history_pairs), 0L)
 })
 
-test_that("load_adaptive_session excludes held-out probes from reconciled committed history", {
+test_that("load_adaptive_session accepts canonical round totals with held-out probes", {
+  state <- make_probe_resume_state()
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      status = "ok",
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:01:00", tz = "UTC"),
+      pair_id = 2L,
+      status = "ok",
+      A = 2L,
+      B = 5L,
+      Y = 0L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE,
+      is_holdout_probe_step = TRUE
+    )
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 2L,
+      total_pairs_done = 2L,
+      new_pairs_since_last_refit = 2L,
+      diagnostics_pass = TRUE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  restored <- load_adaptive_session(session_dir)
+  expect_identical(restored$refit_meta$last_refit_M_done, 1L)
+  expect_identical(nrow(restored$history_pairs), 1L)
+  expect_identical(as.character(restored$history_pairs$A_id[[1L]]), "h1")
+  expect_identical(as.character(restored$history_pairs$B_id[[1L]]), "s21")
+})
+
+test_that("load_adaptive_session accepts legacy round totals that exclude held-out probes", {
   state <- make_probe_resume_state()
   state$step_log <- pairwiseLLM:::append_step_log(
     state$step_log,

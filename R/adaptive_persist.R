@@ -448,7 +448,7 @@ read_log <- function(path) {
   ]
   last_row <- round_log[nrow(round_log), , drop = FALSE]
   last_refit_step <- as.integer(last_row$step_id_at_refit[[1L]] %||% NA_integer_)
-  committed_step_count <- if (nrow(step_log) > 0L && "pair_id" %in% names(step_log)) {
+  committed_step_count_non_holdout <- if (nrow(step_log) > 0L && "pair_id" %in% names(step_log)) {
     holdout_flag <- .adaptive_link_is_holdout_probe_rows(step_log)
     as.integer(sum(
       !is.na(step_log$pair_id) &
@@ -458,12 +458,15 @@ read_log <- function(path) {
   } else {
     0L
   }
-  if (committed_step_count < 1L) {
-    refit_meta$last_refit_M_done <- as.integer(
-      last_row$total_pairs_done[[1L]] %||%
-        refit_meta$last_refit_M_done %||%
-        0L
-    )
+  if (nrow(step_log) < 1L || !"pair_id" %in% names(step_log)) {
+    refit_meta$last_refit_M_done <- as.integer(refit_meta$last_refit_M_done %||% 0L)
+    refit_meta$last_refit_step <- as.integer(last_refit_step %||% 0L)
+    refit_meta$last_refit_round_id <- as.integer(last_row$refit_id[[1L]] %||% nrow(round_log))
+    state$refit_meta <- refit_meta
+    return(state)
+  }
+  if (committed_step_count_non_holdout < 1L) {
+    refit_meta$last_refit_M_done <- 0L
     refit_meta$last_refit_step <- as.integer(last_refit_step %||% 0L)
     refit_meta$last_refit_round_id <- as.integer(last_row$refit_id[[1L]] %||% nrow(round_log))
     state$refit_meta <- refit_meta
@@ -498,14 +501,27 @@ read_log <- function(path) {
   } else {
     0L
   }
+  committed_all_at_refit <- if (nrow(step_log) > 0L && all(c("pair_id", "step_id") %in% names(step_log))) {
+    as.integer(sum(
+      !is.na(step_log$pair_id) &
+        as.integer(step_log$step_id) <= as.integer(last_refit_step),
+      na.rm = TRUE
+    ))
+  } else {
+    0L
+  }
   logged_total_pairs <- as.integer(last_row$total_pairs_done[[1L]] %||% committed_at_refit)
-  if (is.finite(logged_total_pairs) && logged_total_pairs != committed_at_refit) {
+  total_pairs_matches <- isTRUE(logged_total_pairs == committed_all_at_refit) ||
+    isTRUE(logged_total_pairs == committed_at_refit)
+  if (is.finite(logged_total_pairs) && !isTRUE(total_pairs_matches)) {
     rlang::abort(
       paste0(
         "Adaptive resume invariant failed: canonical `round_log$total_pairs_done` does not reconcile ",
         "to committed `step_log` rows at the last refit boundary. logged_total_pairs=",
         as.integer(logged_total_pairs),
-        ", committed_at_refit=",
+        ", committed_all_at_refit=",
+        as.integer(committed_all_at_refit),
+        ", committed_non_holdout_at_refit=",
         as.integer(committed_at_refit),
         ", last_refit_step=",
         as.integer(last_refit_step),
