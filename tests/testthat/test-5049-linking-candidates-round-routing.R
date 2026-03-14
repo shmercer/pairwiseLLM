@@ -2663,7 +2663,7 @@ test_that("phase B starvation marks the attempted spoke exhausted and advances s
   expect_identical(next_stage, "anchor_link")
 })
 
-test_that("phase B global-safe starvation retires the last active spoke for the refit", {
+test_that("phase B global-safe starvation exhausts only the attempted stage for the last active spoke", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
     set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
@@ -2700,11 +2700,11 @@ test_that("phase B global-safe starvation retires the last active spoke for the 
   )
 
   exhausted_map <- out$refit_meta$link_stage_exhausted_by_refit_spoke
-  expect_true(all(vapply(
-    pairwiseLLM:::.adaptive_stage_order(),
-    function(stage_name) isTRUE(exhausted_map[["1::3"]][[stage_name]]),
-    logical(1L)
-  )))
+  expect_identical(exhausted_map[["1::3"]]$local_link, TRUE)
+  expect_false(isTRUE(exhausted_map[["1::3"]]$anchor_link))
+  expect_false(isTRUE(exhausted_map[["1::3"]]$long_link))
+  expect_false(isTRUE(exhausted_map[["1::3"]]$mid_link))
+  expect_false(isTRUE(pairwiseLLM:::.adaptive_link_all_spokes_exhausted(out, refit_id = 1L)))
 })
 
 test_that("phase B selector short-circuits when no eligible spoke budget remains", {

@@ -2003,10 +2003,7 @@
       key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = as.integer(spoke_id))
       existing_shortfall <- shortfalls[[key]] %||% list()
       existing_exhausted <- exhausted_map[[key]] %||% list()
-      retire_single_spoke <- identical(fallback_used, "global_safe") &&
-        length(unique(as.integer(effective_spokes))) == 1L &&
-        identical(as.integer(unique(as.integer(effective_spokes))[[1L]]), as.integer(spoke_id))
-      stages_to_mark <- if (isTRUE(mark_all_stages) || isTRUE(retire_single_spoke)) {
+      stages_to_mark <- if (isTRUE(mark_all_stages)) {
         stage_order
       } else {
         as.character(stage_name)
