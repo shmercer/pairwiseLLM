@@ -44,6 +44,31 @@ test_that("append_step_log validates column names and fills missing columns", {
   expect_true(is.na(out$status))
   expect_true(is.logical(out$is_explore_step))
   expect_true(is.na(out$is_explore_step))
+  expect_true(is.character(out$link_estimation_mode))
+  expect_true(is.na(out$link_estimation_mode))
+})
+
+test_that("append_link_stage_log normalizes legacy freeze names and anchored transform fields", {
+  rows <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_epoch_id = 1L,
+      link_estimation_mode = "anchored_joint",
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "hard_lock",
+      transform_frozen = TRUE
+    )
+  )
+
+  expect_true(rows$link_state_frozen[[1L]])
+  expect_true(is.na(rows$link_transform_policy[[1L]]))
+  expect_true(is.na(rows$link_transform_state[[1L]]))
+  expect_true(is.na(rows$link_refit_mode[[1L]]))
 })
 
 test_that("append_step_log rejects bad coercions and multirow input", {

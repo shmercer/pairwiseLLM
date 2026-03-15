@@ -49,12 +49,13 @@ make_probe_resume_state <- function() {
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
   state
@@ -559,8 +560,8 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
     )
   )
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_scale")
-  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
-  state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 3L)
+  state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_state_frozen_refit_id_by_spoke <- list(`2` = 3L)
   state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
   state$controller$link_epoch_start_step_by_spoke <- list(`2` = 8L)
   state$controller$link_escalation_recent_pass_window_by_spoke <- list(`2` = c(TRUE))
@@ -569,7 +570,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
       link_transform_policy = "auto",
       link_transform_state = "shift_scale",
       link_epoch_id = 4L,
-      transform_frozen = TRUE,
+      link_state_frozen = TRUE,
       link_stop_gate_open = FALSE,
       link_stop_eligible = FALSE,
       link_stop_pass = TRUE,
@@ -582,8 +583,8 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   restored <- load_adaptive_session(session_dir)
 
   expect_identical(restored$controller$link_transform_state_by_spoke[["2"]], "shift_scale")
-  expect_true(isTRUE(restored$controller$link_transform_frozen_by_spoke[["2"]]))
-  expect_identical(restored$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 3L)
+  expect_true(isTRUE(restored$controller$link_state_frozen_by_spoke[["2"]]))
+  expect_identical(restored$controller$link_state_frozen_refit_id_by_spoke[["2"]], 3L)
   expect_identical(restored$controller$link_epoch_id_by_spoke[["2"]], 4L)
   expect_identical(restored$controller$link_epoch_start_step_by_spoke[["2"]], 8L)
   expect_identical(restored$controller$link_escalation_recent_pass_window_by_spoke[["2"]], c(TRUE))
@@ -620,7 +621,7 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
     linking_identified = TRUE,
     link_stop_eligible = FALSE,
     link_stop_pass = FALSE,
-    transform_frozen = FALSE,
+    link_state_frozen = FALSE,
     n_pairs_cross_set_done = 1L,
     n_unique_cross_pairs_seen = 1L,
     n_cross_edges_active_since_last_refit = 1L,
@@ -649,6 +650,7 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
 
   restored <- load_adaptive_session(session_dir)
   expect_false("link_transform_mode" %in% names(restored$link_stage_log))
+  expect_identical(as.character(restored$link_stage_log$link_estimation_mode[[1L]]), "transform")
   expect_identical(as.character(restored$link_stage_log$link_transform_policy[[1L]]), "fixed_shift_only")
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
@@ -670,6 +672,7 @@ test_that("save/load preserves feasibility and canonical stop-threshold fields i
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_refit_mode = "shift_only",
@@ -680,7 +683,7 @@ test_that("save/load preserves feasibility and canonical stop-threshold fields i
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
       link_stop_pass = FALSE,
-      transform_frozen = FALSE,
+      link_state_frozen = FALSE,
       n_pairs_cross_set_done = 2L,
       n_unique_cross_pairs_seen = 2L,
       n_probe_pairs_since_last_refit = 0L,
@@ -852,7 +855,7 @@ test_that("resume preserves probe panel identity, epoch, and realized counts acr
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE,
+      link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel_before$probe_panel_id[[1L]]),
       probe_edges_planned = as.integer(nrow(panel_before)),
@@ -913,7 +916,7 @@ test_that("resume accepts current-window realized probes beyond the latest link-
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE,
+      link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
       probe_edges_planned = as.integer(nrow(panel)),
@@ -959,7 +962,7 @@ test_that("resume aborts when current-window holdout steps do not reconcile to c
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE,
+      link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
       probe_edges_planned = as.integer(nrow(panel)),
@@ -996,7 +999,7 @@ test_that("resume aborts when persisted probe state disagrees with canonical log
       link_refit_mode = "shift_only",
       hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE,
+      link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
       probe_edges_planned = as.integer(nrow(panel)),

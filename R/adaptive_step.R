@@ -709,6 +709,7 @@ run_one_step <- function(state, judge, ...) {
 
   run_mode <- as.character(selection$run_mode %||% controller$run_mode %||% "within_set")
   hub_id <- as.integer(controller$hub_id %||% 1L)
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
   link_transform_policy <- as.character(controller$link_transform_policy %||% NA_character_)
   link_transform_state <- .adaptive_default_link_transform_state(link_transform_policy)
   utility_mode <- as.character(selection$utility_mode %||% NA_character_)
@@ -927,6 +928,7 @@ run_one_step <- function(state, judge, ...) {
     is_drift_probe_step = is_drift_probe_step,
     link_spoke_id = link_spoke_id,
     run_mode = run_mode,
+    link_estimation_mode = if (isTRUE(is_cross_set)) link_estimation_mode else NA_character_,
     link_stage = link_stage,
     delta_spoke_estimate_pre = delta_spoke_estimate_pre,
     delta_spoke_sd_pre = delta_spoke_sd_pre,

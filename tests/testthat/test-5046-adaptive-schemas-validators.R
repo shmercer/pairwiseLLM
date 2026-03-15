@@ -451,3 +451,51 @@ test_that("validate_state enforces linking identifiers and mode guards", {
   bad_concurrent$controller$hub_lock_mode <- "free"
   expect_error(pairwiseLLM:::validate_state(bad_concurrent), "must be hard_lock or soft_lock")
 })
+
+test_that("controller config validates anchored-joint mode requirements", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+
+  expect_no_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_estimation_mode = "anchored_joint"
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    )
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_estimation_mode = "anchored_joint",
+        hub_lock_mode = "soft_lock"
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    ),
+    "requires `adaptive_config\\$hub_lock_mode = \"hard_lock\"`"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_estimation_mode = "anchored_joint",
+        link_refit_mode = "shift_only"
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    ),
+    "does not support transform-only configuration fields"
+  )
+})

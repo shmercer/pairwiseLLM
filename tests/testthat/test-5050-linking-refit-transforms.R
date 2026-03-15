@@ -179,7 +179,7 @@ make_stable_epoch_stop_state <- function(probe_edges_min_for_stop = 2L,
     reliability_link_global = 0.95,
     reliability_stop_pass = TRUE,
     linking_identified = TRUE,
-    transform_frozen = FALSE,
+    link_state_frozen = FALSE,
     probe_edges_planned = as.integer(probe_edges_min_for_stop),
     probe_edges_min_for_stop_used = as.integer(probe_edges_min_for_stop),
     probe_edges_realized_before_refit = 0L,
@@ -635,7 +635,7 @@ test_that("freeze transition is one-way and refit reuses frozen transform parame
   stats <- out$controller$link_refit_stats_by_spoke[["2"]]
   expect_true(isTRUE(out$controller$link_transform_frozen_by_spoke[["2"]]))
   expect_identical(out$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 1L)
-  expect_true(isTRUE(stats$transform_frozen))
+  expect_true(isTRUE(stats$link_state_frozen))
   expect_equal(stats$delta_spoke_mean, 0.17, tolerance = 1e-12)
 })
 
@@ -669,7 +669,7 @@ test_that("link stage rows retire frozen spokes with zero budget and zero new wo
       stop_recent_window_size = 3L,
       stability_window_refits_used = 3L,
       stability_passes_required_used = 2L,
-      transform_frozen = TRUE,
+      link_state_frozen = TRUE,
       link_epoch_id = 1L,
       n_probe_pairs_since_last_refit = 7L,
       n_cross_edges_active_since_last_refit = 11L,
@@ -683,7 +683,7 @@ test_that("link stage rows retire frozen spokes with zero budget and zero new wo
       stop_recent_window_size = 0L,
       stability_window_refits_used = 3L,
       stability_passes_required_used = 2L,
-      transform_frozen = FALSE,
+      link_state_frozen = FALSE,
       link_epoch_id = 1L
     )
   )
@@ -703,7 +703,7 @@ test_that("link stage rows retire frozen spokes with zero budget and zero new wo
   frozen_row <- rows[rows$spoke_id == 2L, , drop = FALSE]
 
   expect_identical(nrow(frozen_row), 1L)
-  expect_true(isTRUE(frozen_row$transform_frozen[[1L]]))
+  expect_true(isTRUE(frozen_row$link_state_frozen[[1L]]))
   expect_true(isTRUE(frozen_row$link_stop_pass[[1L]]))
   expect_identical(frozen_row$B_spoke_refit_budget[[1L]], 0L)
   expect_identical(frozen_row$n_cross_edges_active_since_last_refit[[1L]], 0L)
@@ -2622,7 +2622,7 @@ test_that("link stage refit rows use canonical realized probe counts and enforce
       probe_edges_realized = 2L,
       probe_panel_shortfall = 0L,
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
 

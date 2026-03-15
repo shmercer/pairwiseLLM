@@ -185,8 +185,29 @@ read_log <- function(path) {
       }
       out$link_transform_mode <- NULL
     }
+    if (!"link_estimation_mode" %in% names(out)) {
+      is_linking_row <- rep_len(FALSE, nrow(out))
+      if ("is_cross_set" %in% names(out)) {
+        is_linking_row <- as.logical(out$is_cross_set %||% FALSE)
+      }
+      if ("run_mode" %in% names(out)) {
+        run_mode_chr <- as.character(out$run_mode)
+        is_linking_row <- is_linking_row |
+          run_mode_chr %in% c("link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe")
+      }
+      out$link_estimation_mode <- ifelse(is_linking_row, "transform", NA_character_)
+    }
   }
   if (identical(name, "link_stage_log")) {
+    if ("transform_frozen" %in% names(out) && !"link_state_frozen" %in% names(out)) {
+      out$link_state_frozen <- as.logical(out$transform_frozen)
+    }
+    if ("transform_frozen_refit_id" %in% names(out) &&
+      !"link_state_frozen_refit_id" %in% names(out)) {
+      out$link_state_frozen_refit_id <- as.integer(out$transform_frozen_refit_id)
+    }
+    out$transform_frozen <- NULL
+    out$transform_frozen_refit_id <- NULL
     if ("link_transform_mode" %in% names(out)) {
       if (!"link_transform_policy" %in% names(out)) {
         out$link_transform_policy <- normalize_policy_col(out$link_transform_mode)
@@ -237,6 +258,16 @@ read_log <- function(path) {
     if ("reliability_EAP_link" %in% names(out)) {
       out$reliability_EAP_link <- NULL
     }
+    if (!"link_estimation_mode" %in% names(out)) {
+      out$link_estimation_mode <- rep("transform", nrow(out))
+    }
+  }
+  if (identical(name, "step_log") || identical(name, "link_stage_log")) {
+    out <- .adaptive_log_normalize_mode_fields(
+      out,
+      if (identical(name, "step_log")) schema_step_log else schema_link_stage_log,
+      name
+    )
   }
   if (!isTRUE(fill_missing)) {
     return(out)

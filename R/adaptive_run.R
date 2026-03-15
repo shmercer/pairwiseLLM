@@ -1102,9 +1102,11 @@
   controller$link_stopped_by_spoke <- stopped_map
   controller$link_stop_refit_id_by_spoke <- stop_refit_map
   controller$link_stop_reason_by_spoke <- stop_reason_map
+  controller$link_state_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
+  controller$link_state_frozen_refit_id_by_spoke <- frozen_refit_map
   controller$link_transform_frozen_refit_id_by_spoke <- frozen_refit_map
   controller$link_transform_state_by_spoke <- state_map
   out$controller <- controller

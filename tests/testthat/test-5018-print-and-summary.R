@@ -46,13 +46,14 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   )
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
   state$controller$link_epoch_id_by_spoke <- list(`2` = 3L)
-  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
     state$link_stage_log,
     list(
       refit_id = 2L,
       spoke_id = 2L,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_refit_mode = "shift_only",
@@ -65,7 +66,7 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
       probe_edges_realized = 18L,
       link_lag_eligible = TRUE,
       link_stop_gate_open = FALSE,
-      transform_frozen = TRUE,
+      link_state_frozen = TRUE,
       stop_blocker_codes = "probe_pred_rmse_lagged,theta_global_rmse_lagged"
     )
   )
@@ -80,5 +81,6 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   expect_true(any(grepl("fit_method=cmdstan_hmc", output)))
   expect_true(any(grepl("probe_panel_id=panel-epoch-3", output)))
   expect_true(any(grepl("probe_edges=18/30", output)))
+  expect_true(any(grepl("mode=transform", output)))
   expect_true(any(grepl("stop_blockers=probe_pred_rmse_lagged,theta_global_rmse_lagged", output)))
 })

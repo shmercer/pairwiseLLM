@@ -228,7 +228,7 @@ test_that("run_one_step retires frozen spoke work without emitting a new step", 
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
-  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
   state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
   state$controller$link_stage_coverage_bins_used <- list(`2` = 3L)
@@ -299,10 +299,11 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
   out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
@@ -377,12 +378,13 @@ test_that("run_one_step can realize multiple holdout probes in one refit when pr
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
 
@@ -539,10 +541,11 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
@@ -551,10 +554,11 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
       refit_id = 1L,
       spoke_id = 3L,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
 

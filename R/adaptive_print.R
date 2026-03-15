@@ -86,6 +86,7 @@
 .adaptive_log_factor_specs_step <- function() {
   list(
     run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe"),
+    link_estimation_mode = .adaptive_link_estimation_mode_levels(),
     link_stage = c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
@@ -96,6 +97,7 @@
 
 .adaptive_log_factor_specs_link_stage <- function() {
   list(
+    link_estimation_mode = .adaptive_link_estimation_mode_levels(),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
     link_refit_mode = c("shift_only", "joint_refit"),
@@ -807,7 +809,8 @@ summarize_adaptive <- function(state) {
   probe_realized <- sum(as.integer(latest_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
   gate_open <- sum(latest_rows$link_stop_gate_open %in% TRUE, na.rm = TRUE)
   lag_open <- sum(latest_rows$link_lag_eligible %in% TRUE, na.rm = TRUE)
-  frozen <- sum(latest_rows$transform_frozen %in% TRUE, na.rm = TRUE)
+  frozen <- sum(latest_rows$link_state_frozen %in% TRUE, na.rm = TRUE)
+  estimation_mode <- .adaptive_print_compact_values(latest_rows$link_estimation_mode)
 
   blocker_codes <- unique(as.character(latest_rows$stop_blocker_codes %||% character()))
   blocker_codes <- blocker_codes[!is.na(blocker_codes) & nzchar(blocker_codes)]
@@ -821,6 +824,9 @@ summarize_adaptive <- function(state) {
     if (!is.na(uncertainty) && nzchar(uncertainty)) {
       paste0("uncertainty=", uncertainty)
     },
+    if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+      paste0("mode=", estimation_mode)
+    },
     if (!is.na(probe_panel_id) && nzchar(probe_panel_id)) {
       paste0("probe_panel_id=", probe_panel_id)
     },
@@ -831,7 +837,7 @@ summarize_adaptive <- function(state) {
       paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
     },
     if (frozen > 0L) {
-      paste0("transform_frozen=", frozen, "/", nrow(latest_rows))
+      paste0("link_state_frozen=", frozen, "/", nrow(latest_rows))
     },
     if (length(blockers) > 0L) {
       paste0("stop_blockers=", paste(sort(blockers), collapse = ","))
@@ -851,12 +857,13 @@ summarize_adaptive <- function(state) {
     return(character())
   }
 
+  estimation_mode <- as.character(controller$link_estimation_mode %||% NA_character_)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   policy <- as.character(controller$link_transform_policy %||% NA_character_)
   state_map <- controller$link_transform_state_by_spoke %||% list()
   state_vals <- .adaptive_print_compact_values(state_map)
   epoch_map <- controller$link_epoch_id_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- controller$link_state_frozen_by_spoke %||% list()
   frozen_spokes <- as.integer(names(frozen_map)[vapply(frozen_map, isTRUE, logical(1L))])
   frozen_spokes <- frozen_spokes[is.finite(frozen_spokes)]
 
@@ -870,6 +877,9 @@ summarize_adaptive <- function(state) {
     },
     if (length(phase_ctx$stopped_spokes) > 0L) {
       paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+    },
+    if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+      paste0("estimation_mode=", estimation_mode)
     },
     if (!is.na(policy) && nzchar(policy)) {
       paste0("transform_policy=", policy)
@@ -1428,10 +1438,10 @@ print.adaptive_state <- function(x, ...) {
       default = NA_character_
     ))
 
-    if (isTRUE(.adaptive_progress_col_value(link_row, "transform_frozen", default = NA))) {
+    if (isTRUE(.adaptive_progress_col_value(link_row, "link_state_frozen", default = NA))) {
       frozen_refit <- .adaptive_progress_col_value(
         link_row,
-        "transform_frozen_refit_id",
+        "link_state_frozen_refit_id",
         default = NA_integer_
       )
       lines <- c(

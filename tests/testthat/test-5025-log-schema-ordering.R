@@ -17,7 +17,7 @@ test_that("canonical log schemas follow the expected column order", {
     "mu_i", "mu_j", "sigma_i", "sigma_j", "p_ij", "U0_ij",
     "star_cap_rejects", "star_cap_reject_items",
     "set_i", "set_j", "is_cross_set", "is_probe_step", "is_holdout_probe_step", "is_drift_probe_step",
-    "link_spoke_id", "run_mode", "link_stage",
+    "link_spoke_id", "run_mode", "link_estimation_mode", "link_stage",
     "delta_spoke_estimate_pre", "delta_spoke_sd_pre", "dist_stratum_global",
     "posterior_win_prob_ij_pre", "posterior_win_prob_pre",
     "link_transform_policy", "link_transform_state", "cross_set_utility_pre",
@@ -72,7 +72,8 @@ test_that("canonical log schemas follow the expected column order", {
   )
   expected_item_step <- c("step_id", "timestamp", "item_id", "mu", "sigma", "degree")
   expected_link_stage <- c(
-    "refit_id", "spoke_id", "hub_id", "link_transform_policy", "link_transform_state",
+    "refit_id", "spoke_id", "hub_id", "link_epoch_id", "link_estimation_mode",
+    "link_transform_policy", "link_transform_state",
     "link_refit_mode", "hub_lock_mode", "hub_lock_kappa",
     "shift_only_theta_treatment", "shift_only_theta_treatment_resolved",
     "delta_spoke_mean", "delta_spoke_sd",
@@ -83,9 +84,9 @@ test_that("canonical log schemas follow the expected column order", {
     "lag_eligible", "link_lag_eligible", "link_min_refit_eligible", "link_stop_gate_open",
     "rank_stability_lagged",
     "link_stop_eligible", "stop_recent_pass_count", "stop_recent_window_size",
-    "link_stop_pass", "stability_window_refits_used", "stability_passes_required_used",
-    "transform_frozen",
-    "transform_frozen_refit_id", "link_epoch_id", "ts_btl_rank_spearman",
+    "link_stop_pass", "link_state_frozen", "link_state_frozen_refit_id",
+    "stability_window_refits_used", "stability_passes_required_used",
+    "ts_btl_rank_spearman",
     "ppc_brier_cross_active", "ppc_brier_cross_probe", "ppc_brier_cross",
     "hub_anchored", "scale_ready",
     "stop_blocker_codes",
@@ -166,6 +167,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   logs <- adaptive_get_logs(state)
 
   expect_true(is.factor(step_log$run_mode))
+  expect_true(is.factor(step_log$link_estimation_mode))
   expect_true(is.factor(step_log$link_stage))
   expect_true(is.factor(step_log$link_transform_policy))
   expect_true(is.factor(step_log$link_transform_state))
@@ -175,6 +177,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
     levels(step_log$run_mode),
     c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe")
   )
+  expect_identical(levels(step_log$link_estimation_mode), c("transform", "anchored_joint"))
   expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"))
   expect_identical(levels(step_log$link_transform_policy), c("auto", "fixed_shift_only", "fixed_shift_scale"))
   expect_identical(levels(step_log$link_transform_state), c("shift_only", "shift_scale"))
@@ -184,10 +187,12 @@ test_that("public log accessors cast linking categorical fields to constrained f
   )
   expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock"))
 
+  expect_true(is.factor(logs$link_stage_log$link_estimation_mode))
   expect_true(is.factor(logs$link_stage_log$link_transform_policy))
   expect_true(is.factor(logs$link_stage_log$link_transform_state))
   expect_true(is.factor(logs$link_stage_log$link_refit_mode))
   expect_true(is.factor(logs$link_stage_log$hub_lock_mode))
+  expect_identical(levels(logs$link_stage_log$link_estimation_mode), c("transform", "anchored_joint"))
   expect_identical(
     levels(logs$link_stage_log$link_transform_policy),
     c("auto", "fixed_shift_only", "fixed_shift_scale")
@@ -212,6 +217,8 @@ test_that("public log accessors fail fast on invalid linking categorical values"
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
+      link_epoch_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_policy = "bad_mode",
       link_transform_state = "shift_only",
       link_refit_mode = "shift_only",
@@ -220,7 +227,7 @@ test_that("public log accessors fail fast on invalid linking categorical values"
       linking_identified = TRUE,
       link_stop_eligible = TRUE,
       link_stop_pass = TRUE,
-      transform_frozen = TRUE,
+      link_state_frozen = TRUE,
       n_pairs_cross_set_done = 1L,
       n_unique_cross_pairs_seen = 1L,
       n_probe_pairs_since_last_refit = 1L,

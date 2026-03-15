@@ -4021,6 +4021,7 @@
       link_transform_state = as.character(transform_state),
       shift_only_theta_treatment = as.character(theta_treatment),
       shift_only_theta_treatment_resolved = as.character(theta_treatment_resolved),
+      link_state_frozen = as.logical(transform_frozen),
       transform_frozen = as.logical(transform_frozen),
       delta_spoke_mean = as.double(fit$delta_mean),
       delta_spoke_sd = as.double(fit$delta_sd),
@@ -4148,6 +4149,7 @@
   controller$link_transform_state_by_spoke <- state_map
   controller$link_transform_last_delta_by_spoke <- last_delta
   controller$link_transform_last_log_alpha_by_spoke <- last_log_alpha
+  controller$link_state_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
@@ -4492,7 +4494,9 @@
     link_stop_eligible <- as.logical(stats_row$link_stop_eligible %||%
       (isTRUE(lag_eligible) && isTRUE(link_min_refit_eligible) && isTRUE(link_stop_gate_open)))
     link_stop_pass <- as.logical(stats_row$link_stop_pass %||% FALSE)
-    transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE) || isTRUE(link_stop_pass)
+    transform_frozen <- isTRUE(
+      stats_row$link_state_frozen %||% stats_row$transform_frozen %||% FALSE
+    ) || isTRUE(link_stop_pass)
     stats_epoch_id <- as.integer(stats_row$link_epoch_id %||% .adaptive_link_probe_epoch_for_spoke(state, spoke_id))
     probe_panel <- .adaptive_link_probe_panel_for_spoke(
       state,
@@ -4590,6 +4594,8 @@
       refit_id = as.integer(refit_id),
       spoke_id = as.integer(spoke_id),
       hub_id = as.integer(hub_id),
+      link_epoch_id = as.integer(stats_epoch_id),
+      link_estimation_mode = as.character(controller$link_estimation_mode %||% "transform"),
       link_transform_policy = as.character(transform_policy),
       link_transform_state = as.character(transform_state),
       link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
@@ -4637,6 +4643,12 @@
         stats_row$stop_recent_window_size %||% stats_row$stop_consecutive_pass_count %||% 0L
       ),
       link_stop_pass = as.logical(link_stop_pass),
+      link_state_frozen = as.logical(transform_frozen),
+      link_state_frozen_refit_id = as.integer(
+        controller$link_state_frozen_refit_id_by_spoke[[key]] %||%
+          controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
+          if (isTRUE(transform_frozen)) refit_id else NA_integer_
+      ),
       stability_window_refits_used = as.integer(
         stats_row$stability_window_refits_used %||%
           controller$stability_window_refits %||%
@@ -4649,10 +4661,6 @@
           controller$stability_consecutive_k %||%
           2L
       ),
-      transform_frozen = as.logical(transform_frozen),
-      transform_frozen_refit_id = as.integer(controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
-        if (isTRUE(transform_frozen)) refit_id else NA_integer_),
-      link_epoch_id = as.integer(stats_epoch_id),
       ts_btl_rank_spearman = as.double(stats_row$ts_btl_rank_spearman_active %||% NA_real_),
       ppc_brier_cross_active = as.double(stats_row$ppc_brier_cross_active %||% NA_real_),
       ppc_brier_cross_probe = as.double(stats_row$ppc_brier_cross_probe %||% NA_real_),
@@ -4880,9 +4888,10 @@
     return(invisible(TRUE))
   }
   required <- c(
-    "refit_id", "spoke_id", "hub_id", "link_transform_policy", "link_transform_state", "link_refit_mode",
+    "refit_id", "spoke_id", "hub_id", "link_epoch_id", "link_estimation_mode",
+    "link_transform_policy", "link_transform_state", "link_refit_mode",
     "hub_lock_mode", "reliability_link_global", "linking_identified", "link_stop_eligible", "link_stop_pass",
-    "transform_frozen",
+    "link_state_frozen",
     "stop_recent_pass_count", "stop_recent_window_size",
     "stability_window_refits_used", "stability_passes_required_used",
     "escalation_recent_pass_count", "escalation_recent_window_size",
@@ -4938,8 +4947,8 @@
       )
     )
   }
-  if (any(is.na(rows$transform_frozen))) {
-    rlang::abort("link_stage_log append completeness failure: `transform_frozen` must be populated.")
+  if (any(is.na(rows$link_state_frozen))) {
+    rlang::abort("link_stage_log append completeness failure: `link_state_frozen` must be populated.")
   }
   .adaptive_assert_link_stage_budget_invariants(rows)
 

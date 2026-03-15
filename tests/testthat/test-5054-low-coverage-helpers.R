@@ -161,7 +161,7 @@ add_link_stage_row <- function(state,
                                probe_panel_id = NA_character_,
                                probe_edges_realized = 0L,
                                probe_edges_planned = 2L,
-                               transform_frozen = FALSE) {
+                               link_state_frozen = FALSE) {
   link_stage_log <- state$link_stage_log
   if (is.null(link_stage_log)) {
     link_stage_log <- pairwiseLLM:::new_link_stage_log()
@@ -184,7 +184,7 @@ add_link_stage_row <- function(state,
       linking_identified = FALSE,
       link_stop_eligible = FALSE,
       link_stop_pass = FALSE,
-      transform_frozen = transform_frozen,
+      link_state_frozen = link_state_frozen,
       stop_recent_pass_count = 0L,
       stop_recent_window_size = 3L,
       stability_window_refits_used = 3L,
@@ -815,7 +815,11 @@ test_that("low-coverage CmdStan, concurrent allocation, selector, and print help
       starve_rate_since_last_refit = 0.10,
       starvation_reason_mode = "filtered_by_duplicates"
     ),
-    link_stage_rows = tibble::tibble(stage_budget_unfilled = 1L, probe_panel_shortfall = 2L, probe_shortfall_reason = "panel_size")
+    link_stage_rows = tibble::tibble(
+      stage_budget_unfilled = 1L,
+      probe_panel_shortfall = 2L,
+      probe_shortfall_reason = "panel_size"
+    )
   )
   expect_true(any(grepl("fallback=refresh", selection_notes)))
   expect_true(any(grepl("candidate_starved=", selection_notes)))
@@ -878,8 +882,8 @@ test_that("low-coverage CmdStan, concurrent allocation, selector, and print help
   frozen_lines <- pairwiseLLM:::.adaptive_progress_phase_b_spoke_lines(
     link_stage_rows = tibble::tibble(
       spoke_id = 2L,
-      transform_frozen = TRUE,
-      transform_frozen_refit_id = 3L,
+      link_state_frozen = TRUE,
+      link_state_frozen_refit_id = 3L,
       link_transform_state = "shift_only"
     ),
     thresholds = list(),
@@ -959,7 +963,10 @@ test_that("low-coverage CmdStan, concurrent allocation, selector, and print help
     generation_stage = "long_link",
     round = selector_state$round,
     history = pairwiseLLM:::.adaptive_history_tbl(selector_state),
-    counts = pairwiseLLM:::.adaptive_pair_counts(pairwiseLLM:::.adaptive_history_tbl(selector_state), selector_state$item_ids),
+    counts = pairwiseLLM:::.adaptive_pair_counts(
+      pairwiseLLM:::.adaptive_history_tbl(selector_state),
+      selector_state$item_ids
+    ),
     step_id = 1L,
     seed_base = 1L,
     candidates = candidates
@@ -2243,38 +2250,44 @@ test_that("low-coverage linking refit update covers escalation path", {
     },
     .adaptive_link_phase_b_startup_gap_for_spoke = function(...) FALSE,
     .adaptive_link_judge_params = function(...) list(mode = "global_shared", scope = "link", beta = 0, epsilon = 0),
-    .adaptive_link_within_edges = function(...) tibble::tibble(
-      A_item = character(),
-      B_item = character(),
-      y_A = integer(),
-      step_id = integer()
-    ),
-    .adaptive_link_fit_transform = function(...) list(
-      delta_mean = 0.1,
-      delta_sd = 0.01,
-      log_alpha_mean = 0.05,
-      log_alpha_sd = NA_real_,
-      theta_hub_post = c(h1 = 0.8, h2 = 0.2, h3 = -0.2),
-      theta_spoke_post = c(s21 = 0.3, s22 = -0.1, s23 = -0.4),
-      posterior_draws = list(),
-      diagnostics = list(
-        divergences = 0L,
-        max_rhat = 1,
-        min_ess_bulk = 1000,
-        diagnostics_divergences_pass = TRUE,
-        diagnostics_rhat_pass = TRUE,
-        diagnostics_ess_pass = TRUE
-      ),
-      fit_contract = list(
-        estimation_method = "cmdstan_hmc",
-        uncertainty_approximation = "cmdstan_posterior_draws"
+    .adaptive_link_within_edges = function(...) {
+      tibble::tibble(
+        A_item = character(),
+        B_item = character(),
+        y_A = integer(),
+        step_id = integer()
       )
-    ),
-    .adaptive_link_active_item_ids = function(...) list(
-      active_all = c("h1", "h2", "s21", "s22"),
-      active_hub = c("h1", "h2"),
-      active_spoke = c("s21", "s22")
-    ),
+    },
+    .adaptive_link_fit_transform = function(...) {
+      list(
+        delta_mean = 0.1,
+        delta_sd = 0.01,
+        log_alpha_mean = 0.05,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = c(h1 = 0.8, h2 = 0.2, h3 = -0.2),
+        theta_spoke_post = c(s21 = 0.3, s22 = -0.1, s23 = -0.4),
+        posterior_draws = list(),
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1,
+          min_ess_bulk = 1000,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = TRUE,
+          diagnostics_ess_pass = TRUE
+        ),
+        fit_contract = list(
+          estimation_method = "cmdstan_hmc",
+          uncertainty_approximation = "cmdstan_posterior_draws"
+        )
+      )
+    },
+    .adaptive_link_active_item_ids = function(...) {
+      list(
+        active_all = c("h1", "h2", "s21", "s22"),
+        active_hub = c("h1", "h2"),
+        active_spoke = c("s21", "s22")
+      )
+    },
     .adaptive_link_global_score_stats_active = function(...) list(reliability = 0.95, V_mu = 0.2, V_post = 0.05),
     .adaptive_link_reliability_transformed_active = function(...) NA_real_,
     .adaptive_link_transform_theta_mean_for_spoke = function(...) {
@@ -2286,12 +2299,14 @@ test_that("low-coverage linking refit update covers escalation path", {
     },
     .adaptive_link_theta_global_scope_ids = function(...) c("s21", "s22"),
     .adaptive_link_theta_global_rmse_lagged = function(...) 0.001,
-    .adaptive_link_probe_edges_realized = function(...) tibble::tibble(
-      hub_item = "h1",
-      spoke_item = "s21",
-      spoke_in_A = TRUE,
-      y_spoke = 1L
-    ),
+    .adaptive_link_probe_edges_realized = function(...) {
+      tibble::tibble(
+        hub_item = "h1",
+        spoke_item = "s21",
+        spoke_in_A = TRUE,
+        y_spoke = 1L
+      )
+    },
     .adaptive_link_probe_brier_for_fit = function(edges,
                                                   hub_theta,
                                                   spoke_theta,
@@ -2305,15 +2320,19 @@ test_that("low-coverage linking refit update covers escalation path", {
     },
     .adaptive_link_probe_pred_rmse_lagged_for_fit = function(...) 0.001,
     .adaptive_link_phase_b_routing_scores = function(...) c(s21 = 0.2, s22 = 0.8),
-    .adaptive_link_probe_quantile_bins = function(items, scores, bins) stats::setNames(rep(1L, length(items)), items),
-    .adaptive_link_fit_transform_alt_shift_scale = function(...) list(
-      converged = TRUE,
-      delta_mean = 0.2,
-      log_alpha_mean = 0.1,
-      log_alpha_sd = 0.01,
-      fit_method = "map_laplace_hessian",
-      uncertainty_approximation = "laplace_hessian"
-    ),
+    .adaptive_link_probe_quantile_bins = function(items, scores, bins) {
+      stats::setNames(rep(1L, length(items)), items)
+    },
+    .adaptive_link_fit_transform_alt_shift_scale = function(...) {
+      list(
+        converged = TRUE,
+        delta_mean = 0.2,
+        log_alpha_mean = 0.1,
+        log_alpha_sd = 0.01,
+        fit_method = "map_laplace_hessian",
+        uncertainty_approximation = "laplace_hessian"
+      )
+    },
     .adaptive_link_epoch_signature_components = function(...) list(sig = "x"),
     .adaptive_link_epoch_signature_string = function(...) "sig",
     .adaptive_link_stop_blockers = function(...) list(codes = character()),
@@ -2341,7 +2360,9 @@ test_that("low-coverage linking refit update covers escalation path", {
   expect_false(updated$controller$link_refit_stats_by_spoke$`2`$link_stop_eligible)
 })
 
-test_that("low-coverage linking refit update covers probe panel mismatch failures", {
+test_that(
+  "low-coverage linking refit update covers probe panel mismatch failures",
+  {
   base_state <- make_lowcov_link_state()
   base_state <- add_link_stage_row(
     base_state,
@@ -2390,33 +2411,37 @@ test_that("low-coverage linking refit update covers probe panel mismatch failure
       .adaptive_link_judge_params = function(...) {
         list(mode = "global_shared", scope = "link", beta = 0, epsilon = 0)
       },
-      .adaptive_link_within_edges = function(...) tibble::tibble(
-        A_item = character(),
-        B_item = character(),
-        y_A = integer(),
-        step_id = integer()
-      ),
-      .adaptive_link_fit_transform = function(...) list(
-        delta_mean = 0.1,
-        delta_sd = 0.01,
-        log_alpha_mean = 0.05,
-        log_alpha_sd = NA_real_,
-        theta_hub_post = c(h1 = 0.8, h2 = 0.2, h3 = -0.2),
-        theta_spoke_post = c(s21 = 0.3, s22 = -0.1, s23 = -0.4),
-        posterior_draws = list(),
-        diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1,
-          min_ess_bulk = 1000,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = TRUE,
-          diagnostics_ess_pass = TRUE
-        ),
-        fit_contract = list(
-          estimation_method = "cmdstan_hmc",
-          uncertainty_approximation = "cmdstan_posterior_draws"
+      .adaptive_link_within_edges = function(...) {
+        tibble::tibble(
+          A_item = character(),
+          B_item = character(),
+          y_A = integer(),
+          step_id = integer()
         )
-      ),
+      },
+      .adaptive_link_fit_transform = function(...) {
+        list(
+          delta_mean = 0.1,
+          delta_sd = 0.01,
+          log_alpha_mean = 0.05,
+          log_alpha_sd = NA_real_,
+          theta_hub_post = c(h1 = 0.8, h2 = 0.2, h3 = -0.2),
+          theta_spoke_post = c(s21 = 0.3, s22 = -0.1, s23 = -0.4),
+          posterior_draws = list(),
+          diagnostics = list(
+            divergences = 0L,
+            max_rhat = 1,
+            min_ess_bulk = 1000,
+            diagnostics_divergences_pass = TRUE,
+            diagnostics_rhat_pass = TRUE,
+            diagnostics_ess_pass = TRUE
+          ),
+          fit_contract = list(
+            estimation_method = "cmdstan_hmc",
+            uncertainty_approximation = "cmdstan_posterior_draws"
+          )
+        )
+      },
       pairwiseLLM:::.adaptive_linking_refit_update_state(
         state = resumed_state,
         refit_context = list(last_refit_step = 0L)
@@ -2461,33 +2486,37 @@ test_that("low-coverage linking refit update covers probe panel mismatch failure
       .adaptive_link_judge_params = function(...) {
         list(mode = "global_shared", scope = "link", beta = 0, epsilon = 0)
       },
-      .adaptive_link_within_edges = function(...) tibble::tibble(
-        A_item = character(),
-        B_item = character(),
-        y_A = integer(),
-        step_id = integer()
-      ),
-      .adaptive_link_fit_transform = function(...) list(
-        delta_mean = 0.1,
-        delta_sd = 0.01,
-        log_alpha_mean = 0.05,
-        log_alpha_sd = NA_real_,
-        theta_hub_post = c(h1 = 0.8, h2 = 0.2, h3 = -0.2),
-        theta_spoke_post = c(s21 = 0.3, s22 = -0.1, s23 = -0.4),
-        posterior_draws = list(),
-        diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1,
-          min_ess_bulk = 1000,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = TRUE,
-          diagnostics_ess_pass = TRUE
-        ),
-        fit_contract = list(
-          estimation_method = "cmdstan_hmc",
-          uncertainty_approximation = "cmdstan_posterior_draws"
+      .adaptive_link_within_edges = function(...) {
+        tibble::tibble(
+          A_item = character(),
+          B_item = character(),
+          y_A = integer(),
+          step_id = integer()
         )
-      ),
+      },
+      .adaptive_link_fit_transform = function(...) {
+        list(
+          delta_mean = 0.1,
+          delta_sd = 0.01,
+          log_alpha_mean = 0.05,
+          log_alpha_sd = NA_real_,
+          theta_hub_post = c(h1 = 0.8, h2 = 0.2, h3 = -0.2),
+          theta_spoke_post = c(s21 = 0.3, s22 = -0.1, s23 = -0.4),
+          posterior_draws = list(),
+          diagnostics = list(
+            divergences = 0L,
+            max_rhat = 1,
+            min_ess_bulk = 1000,
+            diagnostics_divergences_pass = TRUE,
+            diagnostics_rhat_pass = TRUE,
+            diagnostics_ess_pass = TRUE
+          ),
+          fit_contract = list(
+            estimation_method = "cmdstan_hmc",
+            uncertainty_approximation = "cmdstan_posterior_draws"
+          )
+        )
+      },
       pairwiseLLM:::.adaptive_linking_refit_update_state(
         state = base_state,
         refit_context = list(last_refit_step = 0L)
@@ -2496,4 +2525,5 @@ test_that("low-coverage linking refit update covers probe panel mismatch failure
     ),
     "after probe-panel rebuild reset"
   )
-})
+  }
+)

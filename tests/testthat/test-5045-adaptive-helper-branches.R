@@ -593,7 +593,7 @@ test_that("adaptive progress refit block prints linking stop gates without misle
     reliability_link_global = c(0.972, 0.971),
     link_stop_pass = c(FALSE, FALSE),
     link_stop_eligible = c(FALSE, FALSE),
-    transform_frozen = c(FALSE, FALSE),
+    link_state_frozen = c(FALSE, FALSE),
     n_pairs_cross_set_done = c(680L, 679L),
     n_cross_edges_total_since_last_refit = c(38L, 37L),
     n_unique_cross_pairs_seen = c(448L, 467L),
@@ -683,8 +683,8 @@ test_that("adaptive progress refit block keeps frozen spokes compact and emits h
   )
   link_rows <- tibble::tibble(
     spoke_id = c(2L, 3L),
-    transform_frozen = c(FALSE, TRUE),
-    transform_frozen_refit_id = c(NA_integer_, 8L),
+    link_state_frozen = c(FALSE, TRUE),
+    link_state_frozen_refit_id = c(NA_integer_, 8L),
     link_transform_state = c("shift_only", "shift_only"),
     link_stop_eligible = c(TRUE, TRUE),
     link_stop_gate_open = c(TRUE, TRUE),

@@ -116,7 +116,7 @@ golden_e2e_run <- function() {
     "round_stage", "link_stage", "utility_mode"
   ), drop = FALSE]
   link_focus <- out$link_stage_log[, c(
-    "refit_id", "spoke_id", "transform_frozen", "link_stop_eligible", "link_stop_pass",
+    "refit_id", "spoke_id", "link_state_frozen", "link_stop_eligible", "link_stop_pass",
     "n_cross_edges_active_since_last_refit", "n_cross_edges_probe_since_last_refit"
   ), drop = FALSE]
 

@@ -530,7 +530,7 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
   ensured$refit_meta$refit_pairs_target_current <- 3L
@@ -627,7 +627,7 @@ test_that("probe effort plan accelerates deterministically for identified probe-
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
 
@@ -740,7 +740,7 @@ test_that("independent multi-spoke holdout routing ignores inactive spokes", {
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
@@ -752,7 +752,7 @@ test_that("independent multi-spoke holdout routing ignores inactive spokes", {
       link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
 
@@ -859,7 +859,7 @@ test_that("concurrent probe fairness guard waits for minimum active progress bef
         linking_identified = TRUE,
         link_stop_eligible = FALSE,
         link_stop_pass = FALSE,
-        transform_frozen = FALSE
+        link_state_frozen = FALSE
       )
     ),
     list(
@@ -871,7 +871,7 @@ test_that("concurrent probe fairness guard waits for minimum active progress bef
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
       link_stop_pass = FALSE,
-      transform_frozen = FALSE
+      link_state_frozen = FALSE
     )
   )
 
@@ -1415,6 +1415,8 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     refit_id = 1L,
     spoke_id = 2L,
     hub_id = 1L,
+    link_epoch_id = 1L,
+    link_estimation_mode = "transform",
     link_transform_policy = "auto",
     link_transform_state = "shift_only",
     link_refit_mode = "shift_only",
@@ -1423,7 +1425,7 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = FALSE,
-    transform_frozen = FALSE,
+    link_state_frozen = FALSE,
     n_pairs_cross_set_done = 1L,
     n_unique_cross_pairs_seen = 1L,
     n_cross_edges_active_since_last_refit = 1L,
@@ -1521,10 +1523,10 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   )
 
   frozen_na <- bad_realized
-  frozen_na$transform_frozen <- NA
+  frozen_na$link_state_frozen <- NA
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(frozen_na),
-    "`transform_frozen` must be populated"
+    "`link_state_frozen` must be populated"
   )
 
   legacy_mode <- bad_realized |> dplyr::select(-link_transform_policy, -link_transform_state)

@@ -144,6 +144,31 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_estimation_mode_levels <- function() {
+  c("transform", "anchored_joint")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_normalize_link_estimation_mode <- function(mode = NULL) {
+  value <- mode %||% "transform"
+  if (!is.character(value) || length(value) != 1L || is.na(value) || value == "") {
+    rlang::abort("Link estimation mode must be a single non-empty string.")
+  }
+  if (!value %in% .adaptive_link_estimation_mode_levels()) {
+    rlang::abort(
+      paste0(
+        "Link estimation mode must be one of: ",
+        paste(.adaptive_link_estimation_mode_levels(), collapse = ", "),
+        "."
+      )
+    )
+  }
+  value
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_shift_only_theta_treatment_levels <- function() {
   c("fixed_eap_plugin_var", "fixed_eap")
 }
@@ -175,6 +200,12 @@
 #' @keywords internal
 #' @noRd
 .adaptive_default_link_transform_state <- function(link_transform_policy) {
+  if (!is.character(link_transform_policy) ||
+    length(link_transform_policy) != 1L ||
+    is.na(link_transform_policy) ||
+    link_transform_policy == "") {
+    return(NA_character_)
+  }
   policy <- .adaptive_normalize_link_transform_policy(link_transform_policy)
   if (identical(policy, "fixed_shift_scale")) {
     return("shift_scale")
@@ -206,40 +237,74 @@
 .adaptive_controller_normalize_legacy_fields <- function(controller, n_items) {
   out <- controller %||% list()
   defaults <- .adaptive_controller_defaults(n_items)
-
-  out$link_transform_policy <- .adaptive_normalize_link_transform_policy(
-    policy = out$link_transform_policy %||% NULL,
-    legacy_mode = out$link_transform_mode %||% NULL
+  out$link_estimation_mode <- .adaptive_normalize_link_estimation_mode(
+    out$link_estimation_mode %||% defaults$link_estimation_mode
   )
-  out$link_transform_mode <- NULL
 
-  state_map <- out$link_transform_state_by_spoke %||% out$link_transform_mode_by_spoke %||% list()
-  if (!is.list(state_map)) {
-    state_map <- list()
-  }
-  if (length(state_map) > 0L) {
-    state_map <- lapply(
-      state_map,
-      function(value) .adaptive_normalize_link_transform_state(value, out$link_transform_policy)
+  if (identical(out$link_estimation_mode, "anchored_joint")) {
+    out$link_transform_policy <- NA_character_
+    out$link_transform_mode <- NULL
+    out$link_transform_state_by_spoke <- list()
+    out$link_transform_mode_by_spoke <- NULL
+  } else {
+    out$link_transform_policy <- .adaptive_normalize_link_transform_policy(
+      policy = out$link_transform_policy %||% NULL,
+      legacy_mode = out$link_transform_mode %||% NULL
     )
-  }
-  out$link_transform_state_by_spoke <- state_map
-  out$link_transform_mode_by_spoke <- NULL
+    out$link_transform_mode <- NULL
 
-  theta_treatment <- out$shift_only_theta_treatment %||% defaults$shift_only_theta_treatment
-  if (identical(theta_treatment, "normal_prior")) {
-    theta_treatment <- "fixed_eap_plugin_var"
-  }
-  if (!theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
-    rlang::abort(
-      paste0(
-        "`adaptive_config$shift_only_theta_treatment` must be one of: ",
-        paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
-        "."
+    state_map <- out$link_transform_state_by_spoke %||% out$link_transform_mode_by_spoke %||% list()
+    if (!is.list(state_map)) {
+      state_map <- list()
+    }
+    if (length(state_map) > 0L) {
+      state_map <- lapply(
+        state_map,
+        function(value) .adaptive_normalize_link_transform_state(value, out$link_transform_policy)
       )
-    )
+    }
+    out$link_transform_state_by_spoke <- state_map
+    out$link_transform_mode_by_spoke <- NULL
   }
-  out$shift_only_theta_treatment <- theta_treatment
+
+  frozen_map <- out$link_state_frozen_by_spoke %||% list()
+  if (!is.list(frozen_map) || length(frozen_map) < 1L) {
+    frozen_map <- out$link_transform_frozen_by_spoke %||% list()
+  }
+  if (!is.list(frozen_map)) {
+    frozen_map <- list()
+  }
+  out$link_state_frozen_by_spoke <- frozen_map
+  out$link_transform_frozen_by_spoke <- frozen_map
+
+  frozen_refit_map <- out$link_state_frozen_refit_id_by_spoke %||% list()
+  if (!is.list(frozen_refit_map) || length(frozen_refit_map) < 1L) {
+    frozen_refit_map <- out$link_transform_frozen_refit_id_by_spoke %||% list()
+  }
+  if (!is.list(frozen_refit_map)) {
+    frozen_refit_map <- list()
+  }
+  out$link_state_frozen_refit_id_by_spoke <- frozen_refit_map
+  out$link_transform_frozen_refit_id_by_spoke <- frozen_refit_map
+
+  if (identical(out$link_estimation_mode, "anchored_joint")) {
+    out$shift_only_theta_treatment <- NA_character_
+  } else {
+    theta_treatment <- out$shift_only_theta_treatment %||% defaults$shift_only_theta_treatment
+    if (identical(theta_treatment, "normal_prior")) {
+      theta_treatment <- "fixed_eap_plugin_var"
+    }
+    if (!theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
+      rlang::abort(
+        paste0(
+          "`adaptive_config$shift_only_theta_treatment` must be one of: ",
+          paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
+          "."
+        )
+      )
+    }
+    out$shift_only_theta_treatment <- theta_treatment
+  }
   out$cross_set_ppc_brier_max <- NULL
   out$ppc_calibration_id <- NULL
 
@@ -305,6 +370,13 @@
   )
   out$link_escalation_consecutive_pass_count_by_spoke <- NULL
 
+  if (identical(out$link_estimation_mode, "anchored_joint")) {
+    out$hub_lock_mode <- "hard_lock"
+    out$link_refit_mode <- NA_character_
+    out$shift_only_theta_treatment <- NA_character_
+    out$hub_lock_kappa <- NA_real_
+  }
+
   out
 }
 
@@ -361,12 +433,16 @@
     star_override_budget_per_round = as.integer(defaults$star_override_budget_per_round),
     run_mode = "within_set",
     hub_id = 1L,
+    link_estimation_mode = "transform",
     link_transform_policy = "auto",
     link_refit_mode = "shift_only",
     shift_only_theta_treatment = "fixed_eap_plugin_var",
     judge_param_mode = "global_shared",
     hub_lock_mode = "soft_lock",
     hub_lock_kappa = 0.75,
+    anchored_joint_spoke_prior_scale = 1.0,
+    anchored_joint_sd_floor = 0.02,
+    anchored_joint_spoke_prior_fallback_sd = 1.0,
     link_identified_reliability_min = 0.80,
     link_stop_reliability_min = 0.90,
     link_rank_corr_min = 0.90,
@@ -430,6 +506,8 @@
     link_transform_bad_refits_by_spoke = list(),
     link_transform_last_delta_by_spoke = list(),
     link_transform_last_log_alpha_by_spoke = list(),
+    link_state_frozen_by_spoke = list(),
+    link_state_frozen_refit_id_by_spoke = list(),
     link_transform_frozen_by_spoke = list(),
     link_transform_frozen_delta_by_spoke = list(),
     link_transform_frozen_log_alpha_by_spoke = list(),
@@ -470,6 +548,7 @@
     "star_override_budget_per_round",
     "run_mode",
     "hub_id",
+    "link_estimation_mode",
     "link_transform_policy",
     "link_transform_mode",
     "link_refit_mode",
@@ -477,6 +556,9 @@
     "judge_param_mode",
     "hub_lock_mode",
     "hub_lock_kappa",
+    "anchored_joint_spoke_prior_scale",
+    "anchored_joint_sd_floor",
+    "anchored_joint_spoke_prior_fallback_sd",
     "link_identified_reliability_min",
     "link_stop_reliability_min",
     "link_rank_corr_min",
@@ -644,6 +726,10 @@
   out$star_override_budget_per_round <- read_integer("star_override_budget_per_round", 0L, Inf)
   out$run_mode <- read_choice("run_mode", c("within_set", "link_one_spoke", "link_multi_spoke"))
   out$hub_id <- read_integer("hub_id", 1L, Inf)
+  out$link_estimation_mode <- read_choice(
+    "link_estimation_mode",
+    .adaptive_link_estimation_mode_levels()
+  )
   policy_value <- out$link_transform_policy %||% out$link_transform_mode %||% NULL
   if (!is.null(policy_value)) {
     out$link_transform_policy <- .adaptive_normalize_link_transform_policy(policy = policy_value)
@@ -671,6 +757,13 @@
   out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
   out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock"))
   out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
+  out$anchored_joint_spoke_prior_scale <- read_double("anchored_joint_spoke_prior_scale", 0, Inf)
+  out$anchored_joint_sd_floor <- read_double("anchored_joint_sd_floor", 0, Inf)
+  out$anchored_joint_spoke_prior_fallback_sd <- read_double(
+    "anchored_joint_spoke_prior_fallback_sd",
+    0,
+    Inf
+  )
   out$link_identified_reliability_min <- read_double("link_identified_reliability_min", 0, 1)
   out$link_stop_reliability_min <- read_double("link_stop_reliability_min", 0, 1)
   out$link_rank_corr_min <- read_double("link_rank_corr_min", 0, 1)
@@ -759,6 +852,17 @@
   )
   out$phase_a_required_reliability_min <- read_double("phase_a_required_reliability_min", 0, 1)
 
+  if (identical(out$link_estimation_mode %||% NULL, "anchored_joint") &&
+    "hub_lock_mode" %in% cfg_names &&
+    !identical(out$hub_lock_mode, "hard_lock")) {
+    rlang::abort(
+      paste0(
+        "`adaptive_config$link_estimation_mode = \"anchored_joint\"` requires ",
+        "`adaptive_config$hub_lock_mode = \"hard_lock\"`."
+      )
+    )
+  }
+
   if (!is.null(out$phase_a_compatible_model_ids)) {
     if (!is.character(out$phase_a_compatible_model_ids) ||
       any(is.na(out$phase_a_compatible_model_ids) | out$phase_a_compatible_model_ids == "")) {
@@ -822,6 +926,33 @@
     spoke_ids <- setdiff(unique(set_ids), resolved$hub_id)
     if (length(spoke_ids) != 1L) {
       rlang::abort("`run_mode = \"link_one_spoke\"` requires exactly one spoke set.")
+    }
+  }
+  if (identical(resolved$link_estimation_mode, "anchored_joint")) {
+    explicit_transform_fields <- c(
+      "link_transform_policy",
+      "link_transform_mode",
+      "link_refit_mode",
+      "shift_only_theta_treatment"
+    )
+    explicit_transform_fields <- explicit_transform_fields[explicit_transform_fields %in% cfg_names]
+    if (length(explicit_transform_fields) > 0L) {
+      rlang::abort(
+        paste0(
+          "`adaptive_config$link_estimation_mode = \"anchored_joint\"` does not support transform-only ",
+          "configuration fields: ",
+          paste(explicit_transform_fields, collapse = ", "),
+          "."
+        )
+      )
+    }
+    if (!identical(resolved$hub_lock_mode, "hard_lock")) {
+      rlang::abort(
+        paste0(
+          "`adaptive_config$link_estimation_mode = \"anchored_joint\"` requires ",
+          "`adaptive_config$hub_lock_mode = \"hard_lock\"`."
+        )
+      )
     }
   }
   if (identical(resolved$hub_lock_mode, "soft_lock") &&
@@ -933,7 +1064,10 @@
   if (length(overrides) == 0L) {
     return(.adaptive_sync_linking_meta(out))
   }
-  out$controller <- utils::modifyList(.adaptive_controller_resolve(out), overrides)
+  out$controller <- .adaptive_controller_normalize_legacy_fields(
+    utils::modifyList(.adaptive_controller_resolve(out), overrides),
+    n_items = out$n_items
+  )
   out <- .adaptive_sync_round_controller(out)
   .adaptive_sync_linking_meta(out)
 }

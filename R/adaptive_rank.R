@@ -442,6 +442,10 @@ make_adaptive_judge_llm <- function(
 #'     multiple spokes). Default is `"within_set"`. Linking modes require
 #'     multi-set inputs with `set_id` and `global_item_id` in `data`.}
 #'   \item{`hub_id`}{Hub `set_id` for linking modes. Default is `1L`.}
+#'   \item{`link_estimation_mode`}{Phase B estimation family. Choices are
+#'     `"transform"` (default) and `"anchored_joint"`. In v2,
+#'     `"anchored_joint"` requires `hub_lock_mode = "hard_lock"` and does not
+#'     accept transform-only config fields.}
 #'   \item{`link_transform_policy`}{Allowed spoke transform family. Choices are
 #'     `"auto"` (start shift-only then possibly escalate),
 #'     `"fixed_shift_only"` (offset only), and `"fixed_shift_scale"` (offset +
@@ -466,6 +470,13 @@ make_adaptive_judge_llm <- function(
 #'     (regularize toward Phase A). Default is `"soft_lock"`.}
 #'   \item{`hub_lock_kappa`}{Only used when `hub_lock_mode = "soft_lock"`.
 #'     Regularization strength in `[0,1]`. Default is `0.75`.}
+#'   \item{`anchored_joint_spoke_prior_scale`}{Scale multiplier for anchored-
+#'     joint spoke priors. Default is `1.0`.}
+#'   \item{`anchored_joint_sd_floor`}{Lower bound applied to anchored-joint
+#'     spoke prior SDs derived from Phase A artifacts. Default is `0.02`.}
+#'   \item{`anchored_joint_spoke_prior_fallback_sd`}{Fallback anchored-joint
+#'     spoke prior SD used when artifact-level SDs are unavailable. Default is
+#'     `1.0`.}
 #'
 #'   \item{`link_identified_reliability_min`}{Minimum
 #'     `reliability_link_global` value on the linking-active item domain used

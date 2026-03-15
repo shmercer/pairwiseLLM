@@ -105,6 +105,8 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     refit_id = 1L,
     spoke_id = NA_integer_,
     hub_id = 1L,
+    link_epoch_id = 1L,
+    link_estimation_mode = "transform",
     link_transform_state = NA_character_,
     link_refit_mode = "shift_only",
     hub_lock_mode = "soft_lock",
@@ -112,7 +114,7 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = TRUE,
-    transform_frozen = FALSE,
+    link_state_frozen = FALSE,
     n_pairs_cross_set_done = 1L,
     n_unique_cross_pairs_seen = 1L,
     n_cross_edges_active_since_last_refit = 1L,
@@ -137,7 +139,7 @@ test_that("link-stage completeness guard requires canonical policy/state fields"
 
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(legacy_rows),
-    "missing required columns: link_transform_policy, link_transform_state"
+    "missing required columns"
   )
 })
 

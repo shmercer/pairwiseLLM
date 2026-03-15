@@ -131,6 +131,10 @@ overrides allowed by the near-tie rule. Default is \code{1L}.}
 multiple spokes). Default is \code{"within_set"}. Linking modes require
 multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
 \item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
+\item{\code{link_estimation_mode}}{Phase B estimation family. Choices are
+\code{"transform"} (default) and \code{"anchored_joint"}. In v2,
+\code{"anchored_joint"} requires \code{hub_lock_mode = "hard_lock"} and does not
+accept transform-only config fields.}
 \item{\code{link_transform_policy}}{Allowed spoke transform family. Choices are
 \code{"auto"} (start shift-only then possibly escalate),
 \code{"fixed_shift_only"} (offset only), and \code{"fixed_shift_scale"} (offset +
@@ -155,6 +159,13 @@ Choices are \code{"hard_lock"} (hub anchored to Phase A), \code{"soft_lock"}
 (regularize toward Phase A). Default is \code{"soft_lock"}.}
 \item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
 Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}
+\item{\code{anchored_joint_spoke_prior_scale}}{Scale multiplier for anchored-
+joint spoke priors. Default is \code{1.0}.}
+\item{\code{anchored_joint_sd_floor}}{Lower bound applied to anchored-joint
+spoke prior SDs derived from Phase A artifacts. Default is \code{0.02}.}
+\item{\code{anchored_joint_spoke_prior_fallback_sd}}{Fallback anchored-joint
+spoke prior SD used when artifact-level SDs are unavailable. Default is
+\code{1.0}.}
 
 \item{\code{link_identified_reliability_min}}{Minimum
 \code{reliability_link_global} value on the linking-active item domain used
