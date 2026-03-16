@@ -103,7 +103,8 @@
     link_refit_mode = c("shift_only", "joint_refit"),
     shift_only_theta_treatment = .adaptive_shift_only_theta_treatment_levels(),
     shift_only_theta_treatment_resolved = .adaptive_shift_only_theta_treatment_levels(),
-    hub_lock_mode = c("hard_lock", "soft_lock")
+    hub_lock_mode = c("hard_lock", "soft_lock"),
+    anchored_joint_init_state_method = .adaptive_anchored_joint_init_state_method_levels()
   )
 }
 
@@ -133,6 +134,47 @@
     }
     out[[col]] <- factor(vals, levels = allowed)
   }
+  out
+}
+
+.adaptive_link_anchored_joint_quantiles <- function(theta_mean, theta_sd, probs) {
+  theta_mean <- as.double(theta_mean)
+  theta_sd <- as.double(theta_sd)
+  out <- matrix(
+    NA_real_,
+    nrow = length(probs),
+    ncol = length(theta_mean),
+    dimnames = list(NULL, names(theta_mean))
+  )
+  if (length(theta_mean) < 1L) {
+    return(out)
+  }
+
+  finite_mean <- is.finite(theta_mean)
+  if (any(finite_mean)) {
+    out[probs == 0.5, finite_mean] <- theta_mean[finite_mean]
+  }
+
+  point_mass <- finite_mean & is.finite(theta_sd) & theta_sd <= 0
+  if (any(point_mass)) {
+    out[, point_mass] <- matrix(
+      theta_mean[point_mass],
+      nrow = length(probs),
+      ncol = sum(point_mass),
+      byrow = TRUE
+    )
+  }
+
+  approx_idx <- finite_mean & is.finite(theta_sd) & theta_sd > 0
+  if (any(approx_idx)) {
+    z <- stats::qnorm(probs)
+    out[, approx_idx] <- vapply(
+      which(approx_idx),
+      function(idx) theta_mean[[idx]] + z * theta_sd[[idx]],
+      numeric(length(probs))
+    )
+  }
+
   out
 }
 
@@ -169,6 +211,78 @@
         ncol = ncol(theta_raw_quantiles),
         dimnames = dimnames(theta_raw_quantiles)
       )
+    ))
+  }
+
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
+    link_eap <- rep_len(NA_real_, length(ids))
+    link_sd <- rep_len(NA_real_, length(ids))
+    names(link_eap) <- ids
+    names(link_sd) <- ids
+    link_quantiles <- matrix(NA_real_, nrow = length(probs), ncol = length(ids))
+    rownames(link_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
+    colnames(link_quantiles) <- ids
+
+    hub_id <- as.integer(controller$hub_id %||% 1L)
+    spoke_ids <- sort(unique(as.integer(set_id[as.integer(set_id) != hub_id])))
+    if (length(spoke_ids) < 1L) {
+      return(list(
+        theta_link_eap = as.double(link_eap),
+        theta_link_sd = as.double(link_sd),
+        theta_link_quantiles = link_quantiles
+      ))
+    }
+
+    hub_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state,
+      spoke_id = as.integer(spoke_ids[[1L]]),
+      controller = controller
+    )
+    hub_mean <- as.double(hub_state$theta_hub_fixed)
+    names(hub_mean) <- names(hub_state$theta_hub_fixed)
+    hub_ids <- intersect(ids[as.integer(set_id) == hub_id], names(hub_mean))
+    if (length(hub_ids) > 0L) {
+      hub_quantiles <- .adaptive_link_anchored_joint_quantiles(
+        theta_mean = hub_mean,
+        theta_sd = rep(0, length(hub_mean)),
+        probs = probs
+      )
+      hub_match <- match(hub_ids, colnames(hub_quantiles))
+      link_eap[hub_ids] <- hub_mean[hub_ids]
+      link_sd[hub_ids] <- 0
+      link_quantiles[, hub_ids] <- hub_quantiles[, hub_match, drop = FALSE]
+    }
+
+    for (spoke_id in spoke_ids) {
+      accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+        state = state,
+        spoke_id = as.integer(spoke_id),
+        controller = controller
+      )
+      spoke_mean <- as.double(accepted_state$theta_spoke_global_mean)
+      names(spoke_mean) <- names(accepted_state$theta_spoke_global_mean)
+      spoke_sd <- as.double(accepted_state$theta_spoke_global_sd)
+      names(spoke_sd) <- names(accepted_state$theta_spoke_global_sd)
+      spoke_item_ids <- intersect(ids[as.integer(set_id) == as.integer(spoke_id)], names(spoke_mean))
+      if (length(spoke_item_ids) < 1L) {
+        next
+      }
+      spoke_quantiles <- .adaptive_link_anchored_joint_quantiles(
+        theta_mean = spoke_mean,
+        theta_sd = spoke_sd,
+        probs = probs
+      )
+      spoke_match <- match(spoke_item_ids, colnames(spoke_quantiles))
+      link_eap[spoke_item_ids] <- spoke_mean[spoke_item_ids]
+      link_sd[spoke_item_ids] <- spoke_sd[spoke_item_ids]
+      link_quantiles[, spoke_item_ids] <- spoke_quantiles[, spoke_match, drop = FALSE]
+    }
+
+    return(list(
+      theta_link_eap = as.double(link_eap),
+      theta_link_sd = as.double(link_sd),
+      theta_link_quantiles = link_quantiles
     ))
   }
 
@@ -811,6 +925,10 @@ summarize_adaptive <- function(state) {
   lag_open <- sum(latest_rows$link_lag_eligible %in% TRUE, na.rm = TRUE)
   frozen <- sum(latest_rows$link_state_frozen %in% TRUE, na.rm = TRUE)
   estimation_mode <- .adaptive_print_compact_values(latest_rows$link_estimation_mode)
+  init_method <- .adaptive_print_compact_values(latest_rows$anchored_joint_init_state_method)
+  phase_a_hub_edges <- sum(as.integer(latest_rows$phase_a_within_edges_hub_used %||% 0L), na.rm = TRUE)
+  phase_a_spoke_edges <- sum(as.integer(latest_rows$phase_a_within_edges_spoke_used %||% 0L), na.rm = TRUE)
+  phase_b_active_edges <- sum(as.integer(latest_rows$phase_b_active_edges_used %||% 0L), na.rm = TRUE)
 
   blocker_codes <- unique(as.character(latest_rows$stop_blocker_codes %||% character()))
   blocker_codes <- blocker_codes[!is.na(blocker_codes) & nzchar(blocker_codes)]
@@ -827,8 +945,21 @@ summarize_adaptive <- function(state) {
     if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
       paste0("mode=", estimation_mode)
     },
+    if (!is.na(init_method) && nzchar(init_method)) {
+      paste0("init_state=", init_method)
+    },
     if (!is.na(probe_panel_id) && nzchar(probe_panel_id)) {
       paste0("probe_panel_id=", probe_panel_id)
+    },
+    if (isTRUE(any(as.character(latest_rows$link_estimation_mode) == "anchored_joint", na.rm = TRUE))) {
+      paste0(
+        "evidence_edges=",
+        phase_a_hub_edges,
+        "+",
+        phase_a_spoke_edges,
+        "+",
+        phase_b_active_edges
+      )
     },
     paste0("probe_edges=", probe_realized, "/", probe_planned),
     paste0("lag_open=", lag_open, "/", nrow(latest_rows)),

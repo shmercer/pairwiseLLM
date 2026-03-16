@@ -1455,9 +1455,20 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     probe_pred_rmse_lagged = 0.01,
     probe_pred_rmse_max_used = 0.015,
     probe_pred_rmse_pass = TRUE,
+    phase_a_within_edges_hub_used = NA_integer_,
+    phase_a_within_edges_spoke_used = NA_integer_,
+    phase_b_active_edges_used = NA_integer_,
+    anchored_joint_hub_items_fixed_count = NA_integer_,
     theta_global_rmse_lagged = 0.02,
     theta_global_rmse_max_used = 0.05,
-    theta_global_rmse_pass = TRUE
+    theta_global_rmse_pass = TRUE,
+    anchored_joint_init_state_method = NA_character_,
+    anchored_joint_spoke_prior_scale_used = NA_real_,
+    anchored_joint_sd_floor_used = NA_real_,
+    anchored_joint_spoke_prior_fallback_used = NA,
+    anchored_joint_spoke_prior_fallback_sd_used = NA_real_,
+    judge_params_fixed_for_anchored_joint = NA,
+    anchored_joint_free_block_dim = NA_integer_
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_budget_invariants(bad_realized),

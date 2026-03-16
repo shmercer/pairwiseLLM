@@ -61,6 +61,103 @@ make_probe_resume_state <- function() {
   state
 }
 
+make_anchored_joint_resume_state <- function() {
+  items <- tibble::tibble(
+    item_id = c("a1", "a2", "b1", "b2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("g_a1", "g_a2", "g_b1", "g_b2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 71L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  draws <- matrix(
+    c(
+      1.0, 0.8, -0.5, -0.7,
+      1.1, 0.9, -0.4, -0.6,
+      1.2, 1.0, -0.3, -0.5,
+      0.9, 0.7, -0.6, -0.8
+    ),
+    nrow = 4,
+    byrow = TRUE
+  )
+  colnames(draws) <- as.character(state$item_ids)
+  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
+  t0 <- as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = t0,
+      pair_id = 1L,
+      A = 1L,
+      B = 2L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 1L,
+      is_cross_set = FALSE,
+      run_mode = "within_set"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = t0 + 1,
+      pair_id = 2L,
+      A = 3L,
+      B = 4L,
+      Y = 0L,
+      set_i = 2L,
+      set_j = 2L,
+      is_cross_set = FALSE,
+      run_mode = "within_set"
+    )
+  )
+  state$history_pairs <- tibble::tibble(
+    A_id = c("a1", "b1"),
+    B_id = c("a2", "b2")
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 1L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 1L
+    )
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 2L,
+      round_id_at_refit = 2L,
+      step_id_at_refit = 2L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 2L
+    )
+  )
+  art1 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+  state <- pairwiseLLM:::.adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(phase_a_artifacts = list(`1` = art1, `2` = art2))
+  )
+  pairwiseLLM:::.adaptive_phase_a_prepare(state)
+}
+
 test_that("save_adaptive_session and load_adaptive_session round-trip adaptive artifacts", {
   items <- make_test_items(4)
   state <- adaptive_rank_start(items)
@@ -1092,100 +1189,7 @@ test_that("save/load preserves Phase B global audit metrics built from Phase A a
 })
 
 test_that("load_adaptive_session reconstructs anchored-joint accepted-state scaffolding", {
-  items <- tibble::tibble(
-    item_id = c("a1", "a2", "b1", "b2"),
-    set_id = c(1L, 1L, 2L, 2L),
-    global_item_id = c("g_a1", "g_a2", "g_b1", "g_b2")
-  )
-  state <- adaptive_rank_start(
-    items,
-    seed = 71L,
-    adaptive_config = list(
-      run_mode = "link_one_spoke",
-      hub_id = 1L,
-      phase_a_mode = "import",
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
-    )
-  )
-  draws <- matrix(
-    c(
-      1.0, 0.8, -0.5, -0.7,
-      1.1, 0.9, -0.4, -0.6,
-      1.2, 1.0, -0.3, -0.5,
-      0.9, 0.7, -0.6, -0.8
-    ),
-    nrow = 4,
-    byrow = TRUE
-  )
-  colnames(draws) <- as.character(state$item_ids)
-  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
-  t0 <- as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
-  state$step_log <- pairwiseLLM:::append_step_log(
-    state$step_log,
-    list(
-      step_id = 1L,
-      timestamp = t0,
-      pair_id = 1L,
-      A = 1L,
-      B = 2L,
-      Y = 1L,
-      set_i = 1L,
-      set_j = 1L,
-      is_cross_set = FALSE,
-      run_mode = "within_set"
-    )
-  )
-  state$step_log <- pairwiseLLM:::append_step_log(
-    state$step_log,
-    list(
-      step_id = 2L,
-      timestamp = t0 + 1,
-      pair_id = 2L,
-      A = 3L,
-      B = 4L,
-      Y = 0L,
-      set_i = 2L,
-      set_j = 2L,
-      is_cross_set = FALSE,
-      run_mode = "within_set"
-    )
-  )
-  state$history_pairs <- tibble::tibble(
-    A_id = c("a1", "b1"),
-    B_id = c("a2", "b2")
-  )
-  state$round_log <- pairwiseLLM:::append_round_log(
-    state$round_log,
-    list(
-      refit_id = 1L,
-      round_id_at_refit = 1L,
-      step_id_at_refit = 1L,
-      diagnostics_pass = TRUE,
-      phase_scope = "phase_a_set",
-      phase_scope_set_id = 1L
-    )
-  )
-  state$round_log <- pairwiseLLM:::append_round_log(
-    state$round_log,
-    list(
-      refit_id = 2L,
-      round_id_at_refit = 2L,
-      step_id_at_refit = 2L,
-      diagnostics_pass = TRUE,
-      phase_scope = "phase_a_set",
-      phase_scope_set_id = 2L
-    )
-  )
-  art1 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
-  art2 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 2L)
-  art1$quality_gate_accepted <- TRUE
-  art2$quality_gate_accepted <- TRUE
-  state <- pairwiseLLM:::.adaptive_apply_controller_config(
-    state,
-    adaptive_config = list(phase_a_artifacts = list(`1` = art1, `2` = art2))
-  )
-  state <- pairwiseLLM:::.adaptive_phase_a_prepare(state)
+  state <- make_anchored_joint_resume_state()
   state$linking$anchored_joint$accepted_state_by_spoke <- list()
   state$linking$anchored_joint$fisher_t0_by_spoke <- list()
 
@@ -1201,5 +1205,130 @@ test_that("load_adaptive_session reconstructs anchored-joint accepted-state scaf
   expect_equal(
     restored$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence$A_item,
     "a1"
+  )
+})
+
+test_that("save/load preserves anchored-joint accepted-state provenance and audit fields", {
+  state <- make_anchored_joint_resume_state()
+  accepted <- state$linking$anchored_joint$accepted_state_by_spoke[["2"]]
+  state$linking$anchored_joint$fisher_t0_by_spoke[["2"]] <- list(
+    free_block_dim = 2L,
+    I_s_t0_zero = TRUE,
+    n_link_active_pairs = 3L,
+    anchored_joint_init_state_method = accepted$anchored_joint_init_state_method
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 3L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_epoch_id = 1L,
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock",
+      reliability_link_global = 0.91,
+      linking_identified = TRUE,
+      link_stop_eligible = FALSE,
+      link_stop_pass = FALSE,
+      link_state_frozen = FALSE,
+      n_pairs_cross_set_done = 3L,
+      n_unique_cross_pairs_seen = 3L,
+      n_probe_pairs_since_last_refit = 0L,
+      n_cross_edges_active_since_last_refit = 1L,
+      n_cross_edges_probe_since_last_refit = 0L,
+      n_cross_edges_total_since_last_refit = 1L,
+      coverage_bins_used = 2L,
+      B_spoke_refit_budget = 1L,
+      B_spoke_refit_budget_source = "single_spoke_controller",
+      stage_target_anchor_link = 1L,
+      stage_target_long_link = 0L,
+      stage_target_mid_link = 0L,
+      stage_target_local_link = 0L,
+      feasible_stage_capacity_anchor_link = 1L,
+      feasible_stage_capacity_long_link = 0L,
+      feasible_stage_capacity_mid_link = 0L,
+      feasible_stage_capacity_local_link = 0L,
+      feasibility_budget_released = 0L,
+      feasibility_reallocation_used = FALSE,
+      feasibility_reallocation_rule = "none",
+      stage_realized_anchor_link = 1L,
+      stage_realized_long_link = 0L,
+      stage_realized_mid_link = 0L,
+      stage_realized_local_link = 0L,
+      stage_shortfall_anchor_link = 0L,
+      stage_shortfall_long_link = 0L,
+      stage_shortfall_mid_link = 0L,
+      stage_shortfall_local_link = 0L,
+      stage_reallocation_used = FALSE,
+      stage_reallocation_rule_used = "none",
+      stage_budget_unfilled = 0L,
+      probe_edges_realized_before_refit = 0L,
+      probe_edges_realized_delta_since_last_refit = 0L,
+      probe_shortfall_reason = "none",
+      probe_brier = NA_real_,
+      probe_brier_max_used = NA_real_,
+      probe_brier_pass = NA,
+      probe_pred_rmse_lagged = NA_real_,
+      probe_pred_rmse_max_used = NA_real_,
+      probe_pred_rmse_pass = NA,
+      theta_global_rmse_scope = "direct_evidence_spoke",
+      phase_a_within_edges_hub_used = 1L,
+      phase_a_within_edges_spoke_used = 1L,
+      phase_b_active_edges_used = 1L,
+      anchored_joint_hub_items_fixed_count = 2L,
+      theta_global_rmse_lagged = NA_real_,
+      theta_global_rmse_max_used = NA_real_,
+      theta_global_rmse_pass = NA,
+      probe_edges_min_for_stop_used = 30L,
+      anchored_joint_init_state_method = accepted$anchored_joint_init_state_method,
+      anchored_joint_spoke_prior_scale_used = 1.0,
+      anchored_joint_sd_floor_used = 0.02,
+      anchored_joint_spoke_prior_fallback_used = FALSE,
+      anchored_joint_spoke_prior_fallback_sd_used = 1.0,
+      judge_params_fixed_for_anchored_joint = TRUE,
+      anchored_joint_free_block_dim = 2L,
+      resumed_from_session = FALSE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(restored$linking$anchored_joint$accepted_state_by_spoke[["2"]], accepted)
+  expect_identical(
+    restored$linking$anchored_joint$fisher_t0_by_spoke[["2"]]$n_link_active_pairs,
+    3L
+  )
+  row <- restored$link_stage_log[1L, , drop = FALSE]
+  expect_identical(as.character(row$anchored_joint_init_state_method[[1L]]), "artifact_copy_init")
+  expect_identical(row$phase_a_within_edges_hub_used[[1L]], 1L)
+  expect_identical(row$phase_a_within_edges_spoke_used[[1L]], 1L)
+  expect_identical(row$phase_b_active_edges_used[[1L]], 1L)
+  expect_true(isTRUE(row$judge_params_fixed_for_anchored_joint[[1L]]))
+  item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(restored, refit_id = 3L)
+  expect_equal(
+    item_log$theta_link_eap[item_log$item_id == "a1"],
+    accepted$theta_hub_fixed[["a1"]]
+  )
+  expect_equal(
+    item_log$theta_link_eap[item_log$item_id == "b1"],
+    accepted$theta_spoke_global_mean[["b1"]]
+  )
+  expect_equal(item_log$theta_link_sd[item_log$item_id == "a1"], 0)
+})
+
+test_that("load_adaptive_session aborts on anchored-joint accepted-state provenance drift", {
+  state <- make_anchored_joint_resume_state()
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  broken <- readRDS(file.path(session_dir, "state.rds"))
+  broken$linking$anchored_joint$accepted_state_by_spoke[["2"]]$phase_a_evidence_hash_hub <- "bad_hash"
+  saveRDS(broken, file.path(session_dir, "state.rds"))
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "persisted accepted-state scaffolding could not be preserved"
   )
 })

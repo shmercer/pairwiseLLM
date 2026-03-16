@@ -463,11 +463,22 @@ test_that("anchored-joint link-stage completeness allows transform-only typed NA
     probe_pred_rmse_lagged = NA_real_,
     probe_pred_rmse_max_used = NA_real_,
     probe_pred_rmse_pass = NA,
+    phase_a_within_edges_hub_used = 1L,
+    phase_a_within_edges_spoke_used = 1L,
+    phase_b_active_edges_used = 1L,
+    anchored_joint_hub_items_fixed_count = 2L,
     theta_global_rmse_lagged = NA_real_,
     theta_global_rmse_max_used = NA_real_,
     theta_global_rmse_pass = NA,
     resumed_from_session = FALSE
   )
+  row$anchored_joint_init_state_method <- "artifact_copy_init"
+  row$anchored_joint_spoke_prior_scale_used <- 1.0
+  row$anchored_joint_sd_floor_used <- 0.02
+  row$anchored_joint_spoke_prior_fallback_used <- FALSE
+  row$anchored_joint_spoke_prior_fallback_sd_used <- 1.0
+  row$judge_params_fixed_for_anchored_joint <- TRUE
+  row$anchored_joint_free_block_dim <- 2L
 
   expect_invisible(pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(row))
   expect_identical(controller$link_estimation_mode, "anchored_joint")

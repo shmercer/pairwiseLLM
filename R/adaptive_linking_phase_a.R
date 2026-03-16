@@ -629,6 +629,37 @@
     !identical(as.integer(state_obj$spoke_id %||% NA_integer_), as.integer(spoke_id))) {
     rlang::abort("Anchored-joint accepted state spoke/hub identifiers do not match current state.")
   }
+  hub_artifact <- (state$linking$phase_a$artifacts %||% list())[[as.character(hub_id)]] %||% NULL
+  spoke_artifact <- (state$linking$phase_a$artifacts %||% list())[[as.character(spoke_id)]] %||% NULL
+  if (!is.list(hub_artifact) || !is.list(spoke_artifact)) {
+    rlang::abort("Anchored-joint accepted state validation requires current hub and spoke Phase A artifacts.")
+  }
+  hub_evidence_hash_current <- .adaptive_phase_a_hash_object(
+    .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = hub_artifact,
+      state = state,
+      set_id = hub_id,
+      controller = controller
+    )
+  )
+  spoke_evidence_hash_current <- .adaptive_phase_a_hash_object(
+    .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = spoke_artifact,
+      state = state,
+      set_id = as.integer(spoke_id),
+      controller = controller
+    )
+  )
+  stored_hub_hash <- as.character(state_obj$phase_a_evidence_hash_hub %||% NA_character_)
+  stored_spoke_hash <- as.character(state_obj$phase_a_evidence_hash_spoke %||% NA_character_)
+  if (!is.na(stored_hub_hash) && nzchar(stored_hub_hash) &&
+    !identical(stored_hub_hash, hub_evidence_hash_current)) {
+    rlang::abort("Anchored-joint accepted state hub evidence hash does not match the current Phase A artifact.")
+  }
+  if (!is.na(stored_spoke_hash) && nzchar(stored_spoke_hash) &&
+    !identical(stored_spoke_hash, spoke_evidence_hash_current)) {
+    rlang::abort("Anchored-joint accepted state spoke evidence hash does not match the current Phase A artifact.")
+  }
   .adaptive_anchored_joint_new_accepted_state(
     state = state,
     hub_id = hub_id,
@@ -638,8 +669,8 @@
     theta_spoke_global_sd = state_obj$theta_spoke_global_sd,
     judge_params = state_obj$judge_params,
     anchored_joint_init_state_method = state_obj$anchored_joint_init_state_method,
-    phase_a_evidence_hash_hub = state_obj$phase_a_evidence_hash_hub,
-    phase_a_evidence_hash_spoke = state_obj$phase_a_evidence_hash_spoke
+    phase_a_evidence_hash_hub = hub_evidence_hash_current,
+    phase_a_evidence_hash_spoke = spoke_evidence_hash_current
   )
 }
 
@@ -709,27 +740,87 @@
     artifacts[[key]] <- spoke_artifact
 
     accepted_state <- accepted_map[[key]] %||% NULL
-    accepted_state <- tryCatch(
-      {
-        .adaptive_anchored_joint_validate_current_state(
-          state_obj = accepted_state,
-          state = out,
-          spoke_id = as.integer(spoke_id),
-          controller = controller
-        )
-      },
+    if (is.null(accepted_state)) {
+      accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
+        out,
+        spoke_id = as.integer(spoke_id),
+        controller = controller
+      )
+    } else {
+      accepted_state <- tryCatch(
+        {
+          .adaptive_anchored_joint_validate_current_state(
+            state_obj = accepted_state,
+            state = out,
+            spoke_id = as.integer(spoke_id),
+            controller = controller
+          )
+        },
+        error = function(e) {
+          if (isTRUE(.adaptive_is_resumed_session(out))) {
+            rlang::abort(paste0(
+              "Adaptive resume anchored-joint invariant failed for spoke_id=",
+              as.integer(spoke_id),
+              ": persisted accepted-state scaffolding could not be preserved: ",
+              conditionMessage(e),
+              "."
+            ))
+          }
+          .adaptive_anchored_joint_artifact_copy_init(
+            out,
+            spoke_id = as.integer(spoke_id),
+            controller = controller
+          )
+        }
+      )
+    }
+    accepted_map[[key]] <- accepted_state
+    prior_fisher <- fisher_map[[key]] %||% list()
+    expected_dim <- as.integer(length(accepted_state$theta_spoke_global_mean))
+    prior_dim <- as.integer(prior_fisher$free_block_dim %||% NA_integer_)
+    if (is.finite(prior_dim) && !identical(prior_dim, expected_dim)) {
+      if (isTRUE(.adaptive_is_resumed_session(out))) {
+        rlang::abort(paste0(
+          "Adaptive resume anchored-joint invariant failed for spoke_id=",
+          as.integer(spoke_id),
+          ": persisted fisher free-block dimension does not match the accepted-state domain."
+        ))
+      }
+      prior_fisher <- list()
+    }
+    prior_pairs <- as.integer(prior_fisher$n_link_active_pairs %||% 0L)
+    if (!is.finite(prior_pairs) || prior_pairs < 0L) {
+      if (isTRUE(.adaptive_is_resumed_session(out))) {
+        rlang::abort(paste0(
+          "Adaptive resume anchored-joint invariant failed for spoke_id=",
+          as.integer(spoke_id),
+          ": persisted fisher active-edge count must be a non-negative integer."
+        ))
+      }
+      prior_pairs <- 0L
+    }
+    prior_init_method <- prior_fisher$anchored_joint_init_state_method %||%
+      accepted_state$anchored_joint_init_state_method
+    prior_init_method <- tryCatch(
+      .adaptive_normalize_anchored_joint_init_state_method(prior_init_method),
       error = function(e) {
-        .adaptive_anchored_joint_artifact_copy_init(out, spoke_id = as.integer(spoke_id), controller = controller)
+        if (isTRUE(.adaptive_is_resumed_session(out))) {
+          rlang::abort(paste0(
+            "Adaptive resume anchored-joint invariant failed for spoke_id=",
+            as.integer(spoke_id),
+            ": persisted fisher init-state method is invalid."
+          ))
+        }
+        .adaptive_normalize_anchored_joint_init_state_method(
+          accepted_state$anchored_joint_init_state_method
+        )
       }
     )
-    accepted_map[[key]] <- accepted_state
     fisher_map[[key]] <- list(
-      free_block_dim = as.integer(length(accepted_state$theta_spoke_global_mean)),
-      I_s_t0_zero = TRUE,
-      n_link_active_pairs = 0L,
-      anchored_joint_init_state_method = as.character(
-        accepted_state$anchored_joint_init_state_method
-      )
+      free_block_dim = expected_dim,
+      I_s_t0_zero = as.logical(prior_fisher$I_s_t0_zero %||% TRUE),
+      n_link_active_pairs = as.integer(prior_pairs),
+      anchored_joint_init_state_method = as.character(prior_init_method)
     )
   }
 

@@ -134,9 +134,17 @@ test_that("canonical log schemas follow the expected column order", {
     "probe_remaining_to_min_start", "probe_panel_reallocation_used", "probe_pred_cache_used",
     "probe_brier", "probe_brier_max_used", "probe_brier_pass",
     "probe_pred_rmse_lagged", "probe_pred_rmse_max_used", "probe_pred_rmse_pass",
-    "theta_global_rmse_scope", "theta_global_rmse_lagged",
+    "theta_global_rmse_scope",
+    "phase_a_within_edges_hub_used", "phase_a_within_edges_spoke_used",
+    "phase_b_active_edges_used", "anchored_joint_hub_items_fixed_count",
+    "theta_global_rmse_lagged",
     "theta_global_rmse_max_used", "theta_global_rmse_pass",
     "probe_edges_min_for_stop_used",
+    "anchored_joint_init_state_method",
+    "anchored_joint_spoke_prior_scale_used", "anchored_joint_sd_floor_used",
+    "anchored_joint_spoke_prior_fallback_used",
+    "anchored_joint_spoke_prior_fallback_sd_used",
+    "judge_params_fixed_for_anchored_joint", "anchored_joint_free_block_dim",
     "alternative_fit_method", "alternative_uncertainty_approximation",
     "alt_eval_active_edges", "alt_eval_converged",
     "probe_brier_delta_min_used", "logalpha_sd_guardrail_used",
@@ -192,6 +200,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_true(is.factor(logs$link_stage_log$link_transform_state))
   expect_true(is.factor(logs$link_stage_log$link_refit_mode))
   expect_true(is.factor(logs$link_stage_log$hub_lock_mode))
+  expect_true(is.factor(logs$link_stage_log$anchored_joint_init_state_method))
   expect_identical(levels(logs$link_stage_log$link_estimation_mode), c("transform", "anchored_joint"))
   expect_identical(
     levels(logs$link_stage_log$link_transform_policy),
@@ -200,6 +209,10 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_identical(levels(logs$link_stage_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(levels(logs$link_stage_log$link_refit_mode), c("shift_only", "joint_refit"))
   expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock"))
+  expect_identical(
+    levels(logs$link_stage_log$anchored_joint_init_state_method),
+    c("artifact_copy_init", "phase_a_only_init_refit", "phase_b_refit")
+  )
 })
 
 test_that("public log accessors fail fast on invalid linking categorical values", {
