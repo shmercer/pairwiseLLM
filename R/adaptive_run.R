@@ -224,21 +224,26 @@
 #' @keywords internal
 #' @noRd
 .adaptive_link_probe_panel_size <- function(n_spoke_items,
-                                            n_available_pairs = NA_integer_,
-                                            probe_edges_min_for_stop = 30L) {
+                                            n_available_pairs = NA_integer_) {
   n_spoke_items <- as.integer(n_spoke_items)
-  n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
   base_target <- as.integer(ceiling(0.25 * n_spoke_items))
-  target <- min(160L, max(40L, base_target))
-  if (!is.na(n_available_pairs)) {
-    feasible_cap <- if (n_available_pairs > 0L) {
-      max(1L, as.integer(floor(0.5 * n_available_pairs)))
-    } else {
-      0L
-    }
-    target <- min(target, feasible_cap)
+  max(0L, as.integer(min(160L, max(40L, base_target))))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_panel_feasible_size <- function(target_edges, n_available_pairs = NA_integer_) {
+  target_edges <- max(0L, as.integer(target_edges %||% 0L))
+  n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
+  if (is.na(n_available_pairs)) {
+    return(as.integer(target_edges))
   }
-  max(0L, as.integer(target))
+  feasible_cap <- if (n_available_pairs > 0L) {
+    max(1L, as.integer(floor(0.5 * n_available_pairs)))
+  } else {
+    0L
+  }
+  as.integer(min(target_edges, feasible_cap))
 }
 
 #' @keywords internal
@@ -267,6 +272,23 @@
   on.exit(unlink(tmp), add = TRUE)
   saveRDS(keys, tmp)
   unname(tools::md5sum(tmp))[[1L]]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_planned_edges <- function(panel_tbl) {
+  panel_tbl <- tibble::as_tibble(panel_tbl)
+  if (nrow(panel_tbl) < 1L) {
+    return(0L)
+  }
+  if ("probe_edges_planned" %in% names(panel_tbl)) {
+    planned_vals <- unique(as.integer(panel_tbl$probe_edges_planned))
+    planned_vals <- planned_vals[!is.na(planned_vals)]
+    if (length(planned_vals) == 1L) {
+      return(as.integer(planned_vals))
+    }
+  }
+  as.integer(nrow(panel_tbl))
 }
 
 #' @keywords internal
@@ -461,7 +483,7 @@
   realized_min <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 30L))
   epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
   panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
-  panel_n <- as.integer(nrow(panel))
+  panel_n <- .adaptive_link_probe_planned_edges(panel)
   realized_total <- max(0L, .adaptive_link_probe_realized_count(state, spoke_id = spoke_id, epoch_id = epoch_id))
   realized_refit <- max(0L, .adaptive_link_probe_holdout_since_last_refit(state, spoke_id = spoke_id))
   realized_before_refit <- max(0L, as.integer(realized_total - realized_refit))

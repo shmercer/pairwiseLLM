@@ -777,10 +777,10 @@
   h_bins <- 3L
   spoke_bin_map <- .adaptive_link_probe_quantile_bins(spoke_ids, spoke_theta, q_bins)
   hub_bin_map <- .adaptive_link_probe_quantile_bins(hub_pool, hub_theta, h_bins)
-  target_edges <- .adaptive_link_probe_panel_size(
-    n_spoke_items = n_spoke_start,
-    n_available_pairs = as.integer(length(hub_pool) * length(spoke_ids)),
-    probe_edges_min_for_stop = as.integer(controller$probe_edges_min_for_stop %||% 30L)
+  target_edges <- .adaptive_link_probe_panel_size(n_spoke_items = n_spoke_start)
+  feasible_target_edges <- .adaptive_link_probe_panel_feasible_size(
+    target_edges = target_edges,
+    n_available_pairs = as.integer(length(hub_pool) * length(spoke_ids))
   )
 
   observed_keys <- character()
@@ -807,9 +807,10 @@
 
   planned <- vector("list", length = 0L)
   seen_keys <- observed_keys
-  spoke_q_targets <- rep.int(as.integer(target_edges %/% q_bins), q_bins)
-  if ((target_edges %% q_bins) > 0L) {
-    spoke_q_targets[seq_len(target_edges %% q_bins)] <- spoke_q_targets[seq_len(target_edges %% q_bins)] + 1L
+  spoke_q_targets <- rep.int(as.integer(feasible_target_edges %/% q_bins), q_bins)
+  if ((feasible_target_edges %% q_bins) > 0L) {
+    spoke_q_targets[seq_len(feasible_target_edges %% q_bins)] <-
+      spoke_q_targets[seq_len(feasible_target_edges %% q_bins)] + 1L
   }
 
   for (q in seq_len(q_bins)) {
@@ -857,7 +858,7 @@
     }
   }
 
-  if (length(planned) < target_edges) {
+  if (length(planned) < feasible_target_edges) {
     existing_keys <- unique(c(seen_keys, vapply(planned, function(x) x$pair_key, character(1L))))
     fallback_pairs <- expand.grid(
       hub_item_id = sort(hub_pool),
@@ -881,7 +882,7 @@
         ,
         drop = FALSE
       ]
-      take <- min(target_edges - length(planned), nrow(fallback_pairs))
+      take <- min(feasible_target_edges - length(planned), nrow(fallback_pairs))
       picked <- fallback_pairs[seq_len(take), , drop = FALSE]
       planned <- c(planned, lapply(seq_len(nrow(picked)), function(idx) {
         list(
@@ -902,6 +903,7 @@
   }
 
   panel <- tibble::as_tibble(do.call(rbind, lapply(planned, as.data.frame, stringsAsFactors = FALSE)))
+  panel$probe_edges_planned <- as.integer(target_edges)
   panel$planned_rank <- as.integer(seq_len(nrow(panel)))
   panel$realized <- FALSE
   panel$realized_step_id <- NA_integer_
@@ -909,6 +911,7 @@
   panel$realized_run_mode <- NA_character_
   panel <- panel[, c(
     "link_epoch_id", "spoke_id", "hub_item_id", "spoke_item_id", "spoke_bin", "hub_bin",
+    "probe_edges_planned",
     "planned_rank", "pair_key", "realized", "realized_step_id", "realized_pair_id", "realized_run_mode"
   )]
   panel$probe_panel_id <- .adaptive_link_probe_panel_id(panel)
@@ -997,10 +1000,14 @@
         built_panel_id <- as.character(built_panel$probe_panel_id[[1L]] %||% NA_character_)
         realized_pairs_compatible <- nrow(epoch_realized) < 1L ||
           all(as.character(epoch_realized$pair_key) %in% as.character(built_panel$pair_key))
+        panel_planned_edges <- .adaptive_link_probe_planned_edges(built_panel)
         planned_size_compatible <- !is.finite(latest_stage_planned) ||
           is.na(latest_stage_planned) ||
           latest_stage_planned <= 0L ||
-          identical(as.integer(nrow(built_panel)), as.integer(latest_stage_planned))
+          as.integer(latest_stage_planned) %in% c(
+            as.integer(panel_planned_edges),
+            as.integer(nrow(built_panel))
+          )
         stage_id_mismatch <- length(stage_panel_ids) > 1L ||
           (length(stage_panel_ids) == 1L && !identical(stage_panel_ids[[1L]], built_panel_id))
         realized_id_mismatch <- length(realized_panel_ids) > 1L ||

@@ -73,6 +73,7 @@
     spoke_item_id = character(),
     spoke_bin = integer(),
     hub_bin = integer(),
+    probe_edges_planned = integer(),
     planned_rank = integer(),
     pair_key = character(),
     realized = logical(),

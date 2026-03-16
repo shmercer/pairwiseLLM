@@ -1513,7 +1513,7 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   expect_identical(nrow(empty_cross), 0L)
 })
 
-test_that("probe panel size uses the normative clamp target before any feasibility cap", {
+test_that("probe panel size uses the normative clamp target", {
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_panel_size(n_spoke_items = 3L),
     40L
@@ -1528,28 +1528,19 @@ test_that("probe panel size uses the normative clamp target before any feasibili
   )
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_panel_size(
-      n_spoke_items = 3L,
-      n_available_pairs = 9L,
-      probe_edges_min_for_stop = 30L
+      n_spoke_items = 1000L
     ),
-    4L
+    160L
   )
-  expect_identical(
-    pairwiseLLM:::.adaptive_link_probe_panel_size(
-      n_spoke_items = 1000L,
-      n_available_pairs = 12L,
-      probe_edges_min_for_stop = 30L
-    ),
-    6L
-  )
-  expect_identical(
-    pairwiseLLM:::.adaptive_link_probe_panel_size(
-      n_spoke_items = 1L,
-      n_available_pairs = 1L,
-      probe_edges_min_for_stop = 30L
-    ),
-    1L
-  )
+})
+
+test_that("probe panel construction keeps the normative target auditable when feasibility caps apply", {
+  state <- make_link_probe_state()
+  panel <- pairwiseLLM:::.adaptive_link_probe_construct_panel(state, state$controller, spoke_id = 2L)
+
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_planned_edges(panel), 40L)
+  expect_identical(unique(as.integer(panel$probe_edges_planned)), 40L)
+  expect_identical(nrow(panel), 3L)
 })
 
 test_that("remaining candidate-generation and budget helpers cover edge branches", {

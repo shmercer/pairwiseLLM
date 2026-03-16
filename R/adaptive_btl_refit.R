@@ -4581,7 +4581,7 @@
       current_panel_id <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
     }
     probe_panel_id_eval <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
-    probe_edges_planned_eval <- as.integer(nrow(panel_eval))
+    probe_edges_planned_eval <- .adaptive_link_probe_planned_edges(panel_eval)
     probe_edges_realized_eval <- .adaptive_link_probe_realized_count(
       out,
       spoke_id = as.integer(spoke_id),
@@ -5619,7 +5619,9 @@
       stats_row$probe_panel_id %||%
         if (nrow(probe_panel) > 0L) probe_panel$probe_panel_id[[1L]] else NA_character_
     )
-    probe_edges_planned <- as.integer(stats_row$probe_edges_planned %||% nrow(probe_panel))
+    probe_edges_planned <- as.integer(
+      stats_row$probe_edges_planned %||% .adaptive_link_probe_planned_edges(probe_panel)
+    )
     realized_probe_log <- .adaptive_link_probe_realized_log_for_panel(
       state = state,
       spoke_id = as.integer(spoke_id),
