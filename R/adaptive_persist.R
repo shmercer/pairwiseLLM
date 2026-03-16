@@ -261,6 +261,30 @@ read_log <- function(path) {
     if (!"link_estimation_mode" %in% names(out)) {
       out$link_estimation_mode <- rep("transform", nrow(out))
     }
+    if (!"phase_b_global_metric_uncertainty_approximation" %in% names(out)) {
+      mode_vals <- as.character(out$link_estimation_mode %||% rep(NA_character_, nrow(out)))
+      uncertainty_vals <- if ("link_uncertainty_approximation" %in% names(out)) {
+        as.character(out$link_uncertainty_approximation)
+      } else {
+        rep(NA_character_, nrow(out))
+      }
+      fit_method_vals <- if ("link_fit_method" %in% names(out)) {
+        as.character(out$link_fit_method)
+      } else {
+        rep(NA_character_, nrow(out))
+      }
+      out$phase_b_global_metric_uncertainty_approximation <- vapply(
+        seq_len(nrow(out)),
+        function(idx) {
+          .adaptive_phase_b_global_metric_uncertainty_approximation(
+            link_estimation_mode = mode_vals[[idx]],
+            link_uncertainty_approximation = uncertainty_vals[[idx]],
+            link_fit_method = fit_method_vals[[idx]]
+          )
+        },
+        character(1)
+      )
+    }
   }
   if (identical(name, "step_log") || identical(name, "link_stage_log")) {
     out <- .adaptive_log_normalize_mode_fields(

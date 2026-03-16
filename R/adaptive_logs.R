@@ -248,6 +248,7 @@ schema_link_stage_log <- c(
   stop_blocker_codes = "character",
   link_fit_method = "character",
   link_uncertainty_approximation = "character",
+  phase_b_global_metric_uncertainty_approximation = "character",
   link_diagnostics_pass = "logical",
   link_diagnostics_converged_pass = "logical",
   link_diagnostics_finite_summary_pass = "logical",

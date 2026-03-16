@@ -1226,6 +1226,9 @@ test_that("save/load preserves anchored-joint accepted-state provenance and audi
       link_epoch_id = 1L,
       link_estimation_mode = "anchored_joint",
       hub_lock_mode = "hard_lock",
+      link_fit_method = "map_laplace",
+      link_uncertainty_approximation = "laplace_hessian",
+      phase_b_global_metric_uncertainty_approximation = "laplace_hessian_marginal_quantiles",
       reliability_link_global = 0.91,
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
@@ -1306,6 +1309,15 @@ test_that("save/load preserves anchored-joint accepted-state provenance and audi
   expect_identical(row$phase_a_within_edges_spoke_used[[1L]], 1L)
   expect_identical(row$phase_b_active_edges_used[[1L]], 1L)
   expect_true(isTRUE(row$judge_params_fixed_for_anchored_joint[[1L]]))
+  expect_identical(
+    as.character(row$phase_b_global_metric_uncertainty_approximation[[1L]]),
+    "laplace_hessian_marginal_quantiles"
+  )
+  print_line <- pairwiseLLM:::.adaptive_print_link_state_line(
+    restored,
+    list(stopped_spokes = integer())
+  )
+  expect_true(any(grepl("global_metric_uncertainty=laplace_hessian_marginal_quantiles", print_line)))
   item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(restored, refit_id = 3L)
   expect_equal(
     item_log$theta_link_eap[item_log$item_id == "a1"],

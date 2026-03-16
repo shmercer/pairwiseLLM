@@ -328,6 +328,179 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_phase_b_global_metric_uncertainty_approximation <- function(link_estimation_mode = "transform",
+                                                                      link_uncertainty_approximation = NULL,
+                                                                      link_fit_method = NULL) {
+  mode <- as.character(link_estimation_mode %||% "transform")
+  approx <- as.character(link_uncertainty_approximation %||% NA_character_)
+  fit_method <- as.character(link_fit_method %||% NA_character_)
+
+  if (!identical(mode, "anchored_joint")) {
+    if (length(approx) != 1L || is.na(approx) || !nzchar(approx)) {
+      return(NA_character_)
+    }
+    return(approx)
+  }
+
+  if (identical(approx, "cmdstan_posterior_draws")) {
+    return("cmdstan_posterior_draws")
+  }
+  if (identical(approx, "laplace_hessian") || identical(fit_method, "map_laplace")) {
+    return("laplace_hessian_marginal_quantiles")
+  }
+  if (identical(approx, "accepted_state") || identical(fit_method, "accepted_state_reuse")) {
+    return("accepted_state_marginal_quantiles")
+  }
+  if ((length(approx) != 1L || is.na(approx) || !nzchar(approx)) &&
+    (length(fit_method) != 1L || is.na(fit_method) || !nzchar(fit_method))) {
+    return("accepted_state_marginal_quantiles")
+  }
+
+  rlang::abort(paste0(
+    "Unsupported anchored-joint Phase B global metric uncertainty approximation: `",
+    approx %||% NA_character_,
+    "`."
+  ))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_marginal_quantile_draws <- function(theta_mean,
+                                                                    theta_sd,
+                                                                    n_draws,
+                                                                    name) {
+  mean_names <- as.character(names(theta_mean))
+  theta_mean <- as.double(theta_mean)
+  names(theta_mean) <- mean_names
+  sd_names <- as.character(names(theta_sd))
+  theta_sd <- as.double(theta_sd)
+  names(theta_sd) <- sd_names
+  n_draws <- as.integer(n_draws %||% NA_integer_)
+
+  if (!is.finite(n_draws) || is.na(n_draws) || n_draws < 2L) {
+    rlang::abort(paste0("`", name, "` requires at least two draws."))
+  }
+  if (length(theta_mean) < 1L || is.null(mean_names) || any(!nzchar(mean_names))) {
+    rlang::abort(paste0("`", name, "` requires named theta means."))
+  }
+  if (anyDuplicated(mean_names)) {
+    rlang::abort(paste0("`", name, "` requires unique theta ids."))
+  }
+  if (any(!mean_names %in% names(theta_sd))) {
+    rlang::abort(paste0("`", name, "` is missing required theta SD values."))
+  }
+
+  out <- matrix(
+    NA_real_,
+    nrow = n_draws,
+    ncol = length(theta_mean),
+    dimnames = list(NULL, mean_names)
+  )
+  base_probs <- (seq_len(n_draws) - 0.5) / n_draws
+  phi_shift <- 0.6180339887498949
+
+  for (idx in seq_along(theta_mean)) {
+    item_id <- mean_names[[idx]]
+    mu <- theta_mean[[idx]]
+    sd_i <- as.double(theta_sd[[item_id]])
+    if (!is.finite(mu)) {
+      rlang::abort(paste0("`", name, "` requires finite theta means for item `", item_id, "`."))
+    }
+    if (!is.finite(sd_i)) {
+      rlang::abort(paste0("`", name, "` requires finite theta SD values for item `", item_id, "`."))
+    }
+    if (sd_i < 0) {
+      rlang::abort(paste0("`", name, "` requires non-negative theta SD values for item `", item_id, "`."))
+    }
+    if (sd_i == 0) {
+      out[, idx] <- rep(mu, n_draws)
+      next
+    }
+
+    probs <- (base_probs + ((idx - 1L) * phi_shift)) %% 1
+    probs[probs <= 0] <- .Machine$double.eps
+    probs[probs >= 1] <- 1 - .Machine$double.eps
+    z <- stats::qnorm(probs)
+    z <- z - mean(z)
+    z_sd <- stats::sd(z)
+    if (!is.finite(z_sd) || z_sd <= 0) {
+      rlang::abort(paste0("`", name, "` could not construct deterministic draws for item `", item_id, "`."))
+    }
+    out[, idx] <- mu + sd_i * (z / z_sd)
+  }
+
+  .pairwiseLLM_sanitize_draws_matrix(out, name = name)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_draws_anchored_joint <- function(state,
+                                                                 spoke_id,
+                                                                 n_draws,
+                                                                 controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  key <- as.character(as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+  accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    controller = controller
+  )
+  approximation <- .adaptive_phase_b_global_metric_uncertainty_approximation(
+    link_estimation_mode = "anchored_joint",
+    link_uncertainty_approximation = stats_row$link_uncertainty_approximation %||% NA_character_,
+    link_fit_method = stats_row$link_fit_method %||% NA_character_
+  )
+  if (identical(approximation, "cmdstan_posterior_draws")) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires persisted authoritative posterior draws ",
+      "for spoke_id=",
+      as.integer(spoke_id),
+      ", but none are available."
+    ))
+  }
+
+  theta_mean <- as.double(accepted_state$theta_spoke_global_mean %||% numeric())
+  names(theta_mean) <- names(accepted_state$theta_spoke_global_mean)
+  theta_sd <- as.double(accepted_state$theta_spoke_global_sd %||% numeric())
+  names(theta_sd) <- names(accepted_state$theta_spoke_global_sd)
+
+  if (length(theta_mean) < 1L) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires spoke theta means for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+  if (length(theta_sd) != length(theta_mean) || !all(names(theta_mean) %in% names(theta_sd))) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires named spoke theta SD values for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+  if (any(!is.finite(theta_sd[names(theta_mean)]))) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires finite accepted-state uncertainty ",
+      "for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  list(
+    draws = .adaptive_phase_b_global_metric_marginal_quantile_draws(
+      theta_mean = theta_mean,
+      theta_sd = theta_sd[names(theta_mean)],
+      n_draws = n_draws,
+      name = paste0("phase_b_global_metric_draws_spoke_", as.integer(spoke_id))
+    ),
+    uncertainty_approximation = approximation
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_phase_b_global_metric_draws <- function(state, controller = NULL) {
   controller <- controller %||% .adaptive_controller_resolve(state)
   if (!isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
@@ -363,6 +536,8 @@
 
   combined <- vector("list", length(required_sets))
   names(combined) <- names(per_set_draws)
+  method_map <- vector("list", length(required_sets))
+  names(method_map) <- names(per_set_draws)
   for (set_id in required_sets) {
     key <- as.character(set_id)
     set_draws <- per_set_draws[[key]][seq_len(common_n_draws), , drop = FALSE]
@@ -373,13 +548,14 @@
         controller = controller
       )
       if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
-        theta_mean <- as.double(transform$theta_spoke_global_mean %||% numeric())
-        set_draws <- matrix(
-          rep(theta_mean, each = common_n_draws),
-          nrow = common_n_draws,
-          byrow = FALSE,
-          dimnames = list(NULL, names(transform$theta_spoke_global_mean))
+        anchored_draws <- .adaptive_phase_b_global_metric_draws_anchored_joint(
+          state = state,
+          spoke_id = as.integer(set_id),
+          n_draws = common_n_draws,
+          controller = controller
         )
+        set_draws <- anchored_draws$draws
+        method_map[[key]] <- as.character(anchored_draws$uncertainty_approximation)
       } else {
         alpha <- if (identical(transform$link_transform_state, "shift_scale")) {
           exp(as.double(transform$log_alpha_spoke_mean))
@@ -389,6 +565,15 @@
         set_draws <- as.double(transform$delta_spoke_mean) + alpha * set_draws
         dim(set_draws) <- c(common_n_draws, ncol(per_set_draws[[key]]))
         colnames(set_draws) <- colnames(per_set_draws[[key]])
+        method_map[[key]] <- .adaptive_phase_b_global_metric_uncertainty_approximation(
+          link_estimation_mode = "transform",
+          link_uncertainty_approximation = (
+            (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+          )$link_uncertainty_approximation %||% NA_character_,
+          link_fit_method = (
+            (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+          )$link_fit_method %||% NA_character_
+        )
       }
     }
     combined[[key]] <- set_draws
@@ -402,10 +587,12 @@
     )
   }
 
-  .pairwiseLLM_sanitize_draws_matrix(
+  combined_draws <- .pairwiseLLM_sanitize_draws_matrix(
     combined_draws[, ids, drop = FALSE],
     name = "phase_b_global_metric_draws"
   )
+  attr(combined_draws, "phase_b_global_metric_uncertainty_approximation_by_set") <- method_map
+  combined_draws
 }
 
 #' @keywords internal
@@ -4894,6 +5081,13 @@
       link_uncertainty_approximation = as.character(
         fit_diag$link_uncertainty_approximation %||% NA_character_
       ),
+      phase_b_global_metric_uncertainty_approximation = as.character(
+        .adaptive_phase_b_global_metric_uncertainty_approximation(
+          link_estimation_mode = link_estimation_mode,
+          link_uncertainty_approximation = fit_diag$link_uncertainty_approximation %||% NA_character_,
+          link_fit_method = fit_diag$link_fit_method %||% NA_character_
+        )
+      ),
       link_diagnostics_pass = as.logical(fit_diag$link_diagnostics_pass %||% NA),
       link_diagnostics_converged_pass = as.logical(
         fit_diag$link_diagnostics_converged_pass %||% NA
@@ -5667,6 +5861,9 @@
       link_fit_method = as.character(stats_row$link_fit_method %||% NA_character_),
       link_uncertainty_approximation = as.character(
         stats_row$link_uncertainty_approximation %||% NA_character_
+      ),
+      phase_b_global_metric_uncertainty_approximation = as.character(
+        stats_row$phase_b_global_metric_uncertainty_approximation %||% NA_character_
       ),
       link_diagnostics_pass = as.logical(stats_row$link_diagnostics_pass %||% NA),
       link_diagnostics_converged_pass = as.logical(

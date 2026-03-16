@@ -918,6 +918,9 @@ summarize_adaptive <- function(state) {
 
   fit_methods <- .adaptive_print_compact_values(latest_rows$link_fit_method)
   uncertainty <- .adaptive_print_compact_values(latest_rows$link_uncertainty_approximation)
+  global_metric_uncertainty <- .adaptive_print_compact_values(
+    latest_rows$phase_b_global_metric_uncertainty_approximation
+  )
   probe_panel_id <- .adaptive_print_compact_values(latest_rows$probe_panel_id)
   probe_planned <- sum(as.integer(latest_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
   probe_realized <- sum(as.integer(latest_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
@@ -941,6 +944,9 @@ summarize_adaptive <- function(state) {
     },
     if (!is.na(uncertainty) && nzchar(uncertainty)) {
       paste0("uncertainty=", uncertainty)
+    },
+    if (!is.na(global_metric_uncertainty) && nzchar(global_metric_uncertainty)) {
+      paste0("global_metric_uncertainty=", global_metric_uncertainty)
     },
     if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
       paste0("mode=", estimation_mode)

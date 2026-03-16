@@ -91,6 +91,7 @@ test_that("canonical log schemas follow the expected column order", {
     "hub_anchored", "scale_ready",
     "stop_blocker_codes",
     "link_fit_method", "link_uncertainty_approximation",
+    "phase_b_global_metric_uncertainty_approximation",
     "link_diagnostics_pass", "link_diagnostics_converged_pass",
     "link_diagnostics_finite_summary_pass", "link_diagnostics_uncertainty_pass",
     "link_diagnostics_divergences", "link_diagnostics_max_rhat",

@@ -1933,6 +1933,31 @@ test_that("low-coverage early adaptive_btl_refit helpers cover remaining guard b
     pairwiseLLM:::.adaptive_phase_b_global_metric_transform_stats(missing_delta, spoke_id = 2L),
     "requires a finite delta"
   )
+  expect_identical(
+    pairwiseLLM:::.adaptive_phase_b_global_metric_uncertainty_approximation(
+      link_estimation_mode = "anchored_joint",
+      link_uncertainty_approximation = "laplace_hessian",
+      link_fit_method = "map_laplace"
+    ),
+    "laplace_hessian_marginal_quantiles"
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_phase_b_global_metric_uncertainty_approximation(
+      link_estimation_mode = "anchored_joint",
+      link_uncertainty_approximation = "accepted_state",
+      link_fit_method = "accepted_state_reuse"
+    ),
+    "accepted_state_marginal_quantiles"
+  )
+  approx_draws <- pairwiseLLM:::.adaptive_phase_b_global_metric_marginal_quantile_draws(
+    theta_mean = c(s21 = 0.2, s22 = -0.1),
+    theta_sd = c(s21 = 0.3, s22 = 0),
+    n_draws = 4L,
+    name = "test_phase_b_global_metric_draws"
+  )
+  expect_equal(as.double(colMeans(approx_draws)), c(0.2, -0.1), tolerance = 1e-8)
+  expect_gt(stats::sd(approx_draws[, "s21"]), 0)
+  expect_true(all(approx_draws[, "s22"] == -0.1))
 
   non_phase_b <- adaptive_rank_start(make_test_items(4), seed = 1L)
   expect_null(pairwiseLLM:::.adaptive_phase_b_global_metric_draws(non_phase_b))
