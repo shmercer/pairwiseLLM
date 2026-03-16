@@ -224,7 +224,20 @@
 #' @keywords internal
 #' @noRd
 .adaptive_link_probe_panel_size <- function(n_spoke_items,
+                                            probe_panel_edges = NA_integer_,
                                             n_available_pairs = NA_integer_) {
+  if (!is.null(probe_panel_edges) && !all(is.na(probe_panel_edges))) {
+    if (!.adaptive_is_integerish(probe_panel_edges) ||
+      length(probe_panel_edges) != 1L ||
+      is.na(probe_panel_edges)) {
+      rlang::abort("`probe_panel_edges` must be a single integer when supplied.")
+    }
+    probe_panel_edges <- as.integer(probe_panel_edges)
+    if (probe_panel_edges < 1L) {
+      rlang::abort("`probe_panel_edges` must be >= 1 when supplied.")
+    }
+    return(as.integer(probe_panel_edges))
+  }
   n_spoke_items <- as.integer(n_spoke_items)
   base_target <- as.integer(ceiling(0.25 * n_spoke_items))
   max(0L, as.integer(min(160L, max(40L, base_target))))

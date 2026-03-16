@@ -449,6 +449,7 @@
     link_refit_mode = "shift_only",
     shift_only_theta_treatment = "fixed_eap_plugin_var",
     judge_param_mode = "global_shared",
+    within_phase_b_within_set_steps_allowed = FALSE,
     hub_lock_mode = "soft_lock",
     hub_lock_kappa = 0.75,
     anchored_joint_spoke_prior_scale = 1.0,
@@ -466,6 +467,7 @@
     link_transform_escalation_is_one_way = TRUE,
     max_pairs_after_stop = 0L,
     probe_pairs_per_refit_per_spoke = 2L,
+    probe_panel_edges = NA_integer_,
     probe_edges_min_for_stop = 30L,
     probe_brier_delta_min = 0.005,
     probe_brier_max = 0.19,
@@ -482,6 +484,7 @@
     shift_scale_min_distinct_spoke_items_per_bin = 2L,
     reliability_var_mu_epsilon = 1e-6,
     reliability_total_var_epsilon = 1e-6,
+    hub_anchor_required_phase_b = TRUE,
     probe_edges_count_toward_active_constraints = FALSE,
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
@@ -565,6 +568,7 @@
     "link_refit_mode",
     "shift_only_theta_treatment",
     "judge_param_mode",
+    "within_phase_b_within_set_steps_allowed",
     "hub_lock_mode",
     "hub_lock_kappa",
     "anchored_joint_spoke_prior_scale",
@@ -583,6 +587,7 @@
     "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
+    "probe_panel_edges",
     "probe_edges_min_for_stop",
     "probe_brier_delta_min",
     "probe_brier_max",
@@ -600,6 +605,7 @@
     "shift_scale_min_distinct_spoke_items_per_bin",
     "reliability_var_mu_epsilon",
     "reliability_total_var_epsilon",
+    "hub_anchor_required_phase_b",
     "probe_edges_count_toward_active_constraints",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
@@ -766,6 +772,9 @@
     }
   }
   out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
+  out$within_phase_b_within_set_steps_allowed <- read_logical(
+    "within_phase_b_within_set_steps_allowed"
+  )
   out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock"))
   out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
   out$anchored_joint_spoke_prior_scale <- read_double("anchored_joint_spoke_prior_scale", 0, Inf)
@@ -800,6 +809,7 @@
   out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
   out$max_pairs_after_stop <- read_integer("max_pairs_after_stop", 0L, Inf)
   out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
+  out$probe_panel_edges <- read_integer("probe_panel_edges", 1L, Inf)
   out$probe_edges_min_for_stop <- read_integer("probe_edges_min_for_stop", 1L, Inf)
   out$probe_brier_delta_min <- read_double("probe_brier_delta_min", 0, 1)
   out$probe_brier_max <- read_double("probe_brier_max", 0, 1)
@@ -824,6 +834,7 @@
   )
   out$reliability_var_mu_epsilon <- read_double("reliability_var_mu_epsilon", 0, Inf)
   out$reliability_total_var_epsilon <- read_double("reliability_total_var_epsilon", 0, Inf)
+  out$hub_anchor_required_phase_b <- read_logical("hub_anchor_required_phase_b")
   out$probe_edges_count_toward_active_constraints <- read_logical(
     "probe_edges_count_toward_active_constraints"
   )

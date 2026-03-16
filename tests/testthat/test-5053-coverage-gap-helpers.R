@@ -1557,6 +1557,13 @@ test_that("probe panel size uses the normative clamp target", {
     ),
     160L
   )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_size(
+      n_spoke_items = 1000L,
+      probe_panel_edges = 12L
+    ),
+    12L
+  )
 })
 
 test_that("probe panel construction respects anchor-only HubEligible and legal hub-spoke capacity", {

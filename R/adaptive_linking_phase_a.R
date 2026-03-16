@@ -1679,6 +1679,15 @@
     return(invisible(state))
   }
   if (identical(phase_ctx$phase, "phase_b")) {
+    if (isTRUE(controller$within_phase_b_within_set_steps_allowed %||% FALSE)) {
+      rlang::abort(
+        paste0(
+          "Phase B runtime does not support ",
+          "`adaptive_config$within_phase_b_within_set_steps_allowed = TRUE`; ",
+          "current Phase B execution remains cross-set only."
+        )
+      )
+    }
     if (length(phase_ctx$ready_spokes) < 1L) {
       rlang::abort(
         paste0(

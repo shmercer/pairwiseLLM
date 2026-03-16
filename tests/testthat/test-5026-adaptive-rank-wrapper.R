@@ -494,6 +494,41 @@ test_that("adaptive_rank forwards adaptive_config and rejects unknown keys", {
   )
 })
 
+test_that("adaptive_rank accepts reviewed public Phase B controls", {
+  samples <- make_linking_samples_df()
+  two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
+  items <- dplyr::rename(two_set, item_id = ID)
+  artifacts <- make_wrapper_import_artifacts(items)
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    n_steps = 1L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts[c("1", "2")],
+      hub_anchor_required_phase_b = FALSE,
+      probe_panel_edges = 12L,
+      within_phase_b_within_set_steps_allowed = FALSE
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
+    progress = "none",
+    seed = 27L
+  )
+
+  expect_false(isTRUE(out$state$controller$hub_anchor_required_phase_b))
+  expect_identical(out$state$controller$probe_panel_edges, 12L)
+  expect_false(isTRUE(out$state$controller$within_phase_b_within_set_steps_allowed))
+})
+
 test_that("adaptive_rank resume preserves adaptive controller config", {
   samples <- make_test_samples_df(5L)
   session_dir <- tempfile("adaptive-controller-session-")
@@ -777,5 +812,37 @@ test_that("adaptive_rank wrapper emits clear linking preflight errors", {
       progress = "none"
     ),
     "phase_a_mode.*only be import/mixed when linking run_mode is enabled"
+  )
+})
+
+test_that("adaptive_rank fails loudly for unsupported within-set maintenance in Phase B", {
+  samples <- make_linking_samples_df()
+  two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
+  items <- dplyr::rename(two_set, item_id = ID)
+  artifacts <- make_wrapper_import_artifacts(items)
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = two_set,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        phase_a_mode = "import",
+        phase_a_artifacts = artifacts[c("1", "2")],
+        within_phase_b_within_set_steps_allowed = TRUE
+      ),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
+      progress = "none",
+      seed = 29L
+    ),
+    "Phase B runtime does not support"
   )
 })

@@ -157,6 +157,11 @@ unavailable). Default is \code{"fixed_eap_plugin_var"}.}
 phases. Choices are \code{"global_shared"} (single shared judge parameter set)
 and \code{"phase_specific"} (separate within-set and link-phase judge
 parameters). Default is \code{"global_shared"}.}
+\item{\code{within_phase_b_within_set_steps_allowed}}{Linking-spec maintenance
+toggle for scheduling within-set comparisons after a set enters Phase B.
+The public field is accepted for config parity, but the current runtime
+does not implement that maintenance path and aborts explicitly if Phase B
+would begin with this set to \code{TRUE}. Default is \code{FALSE}.}
 \item{\code{hub_lock_mode}}{Controls hub behavior in Phase B fits. In
 \code{link_estimation_mode = "transform"}, this is only used when
 \code{link_refit_mode = "joint_refit"} and chooses between \code{"hard_lock"}
@@ -210,6 +215,11 @@ immediately after the first refit with \code{stop_decision = TRUE}. Values
 \verb{> 0L} allow that many additional committed comparisons after the first
 stop boundary before deterministic termination. Default is \code{0L}.}
 
+\item{\code{probe_panel_edges}}{Optional explicit planned held-out probe target
+per spoke. When omitted, the normative default formula is used:
+\code{clamp(40, 160, ceiling(0.25 * N_spoke_phase_b_start))}. When supplied,
+the value must be a positive integer and becomes the canonical planned
+target recorded in Phase B logs.}
 \item{\code{probe_pairs_per_refit_per_spoke}}{Base held-out probe collection cap
 per spoke per refit window while the spoke remains active in Phase B.
 The controller may exceed this only through documented probe
@@ -262,6 +272,10 @@ reliability. Default is \code{1e-6}.}
 \item{\code{reliability_total_var_epsilon}}{Degeneracy guard for the total
 active-domain transformed-score variance used in linking reliability.
 Default is \code{1e-6}.}
+\item{\code{hub_anchor_required_phase_b}}{Controls the normative \code{HubEligible}
+domain used for Phase B held-out probe construction. When \code{TRUE}
+(default), planned probes are drawn from the hub anchor pool; when
+\code{FALSE}, they are drawn from the full hub set.}
 \item{\code{spoke_quantile_coverage_bins}}{Cross-set coverage control: number of
 quantile bins used to ensure spoke items across the score distribution
 receive cross-set exposure within each refit window. Default is \code{3L}.}
@@ -527,6 +541,8 @@ link_out <- adaptive_rank(
     run_mode = "link_one_spoke",
     hub_id = 1L,
     phase_a_mode = "run",
+    probe_panel_edges = 48L,
+    hub_anchor_required_phase_b = TRUE,
     max_pairs_after_stop = 0L
   ),
   n_steps = 200,

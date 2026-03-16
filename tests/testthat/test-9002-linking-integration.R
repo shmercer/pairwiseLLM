@@ -270,6 +270,85 @@ test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking"
   expect_true(all(phase_a_rows$is_cross_set %in% FALSE))
 })
 
+test_that("public Phase B probe controls change HubEligible and preserve planned targets", {
+  withr::local_seed(20260316)
+
+  items <- make_linking_items_two_set()
+  state_anchor <- adaptive_rank_start(items, seed = 71L)
+  state_anchor$warm_start_done <- TRUE
+  state_anchor$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts_anchor <- make_phase_a_import_artifacts(state_anchor, spoke_shift = -1.3)
+  fit_anchor <- make_deterministic_fit_fn(as.character(state_anchor$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.1, h3 = 0.8,
+    s21 = -0.2, s22 = 0.4, s23 = 1.0
+  ))
+
+  out_anchor <- adaptive_rank_run_live(
+    state = state_anchor,
+    judge = judge,
+    n_steps = 1L,
+    fit_fn = fit_anchor$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts_anchor,
+      probe_panel_edges = 60L,
+      hub_anchor_required_phase_b = TRUE
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
+    progress = "none"
+  )
+
+  panel_anchor <- out_anchor$linking$probe$panels_by_spoke[["2"]]
+  routing_scores <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = out_anchor,
+    controller = out_anchor$controller,
+    active_ids = as.character(out_anchor$item_ids),
+    hub_id = 1L
+  )
+  hub_ids <- as.character(out_anchor$items$item_id[out_anchor$items$set_id == 1L])
+  hub_anchors <- pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+    state = out_anchor,
+    hub_ids = hub_ids,
+    hub_scores = routing_scores,
+    defaults = pairwiseLLM:::adaptive_defaults(out_anchor$n_items)
+  )
+
+  expect_identical(unique(as.integer(panel_anchor$probe_edges_planned)), 60L)
+  expect_true(nrow(panel_anchor) < 60L)
+  expect_setequal(unique(as.character(panel_anchor$hub_item_id)), as.character(hub_anchors))
+
+  state_full_hub <- adaptive_rank_start(items, seed = 71L)
+  state_full_hub$warm_start_done <- TRUE
+  state_full_hub$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts_full_hub <- make_phase_a_import_artifacts(state_full_hub, spoke_shift = -1.3)
+  fit_full_hub <- make_deterministic_fit_fn(as.character(state_full_hub$item_ids))
+
+  out_full_hub <- adaptive_rank_run_live(
+    state = state_full_hub,
+    judge = judge,
+    n_steps = 1L,
+    fit_fn = fit_full_hub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts_full_hub,
+      probe_panel_edges = 60L,
+      hub_anchor_required_phase_b = FALSE
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
+    progress = "none"
+  )
+
+  panel_full_hub <- out_full_hub$linking$probe$panels_by_spoke[["2"]]
+  expect_identical(unique(as.integer(panel_full_hub$probe_edges_planned)), 60L)
+  expect_identical(nrow(panel_full_hub), 60L)
+  expect_setequal(unique(as.character(panel_full_hub$hub_item_id)), hub_ids)
+})
+
 test_that("linking run keeps warm-start during Phase A and bypasses warm-start in Phase B", {
   withr::local_seed(20260213)
 

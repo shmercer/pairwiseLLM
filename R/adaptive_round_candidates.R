@@ -789,7 +789,10 @@
   h_bins <- 3L
   spoke_bin_map <- .adaptive_link_probe_quantile_bins(spoke_ids, spoke_theta, q_bins)
   hub_bin_map <- .adaptive_link_probe_quantile_bins(hub_pool, hub_theta, h_bins)
-  target_edges <- .adaptive_link_probe_panel_size(n_spoke_items = n_spoke_start)
+  target_edges <- .adaptive_link_probe_panel_size(
+    n_spoke_items = n_spoke_start,
+    probe_panel_edges = controller$probe_panel_edges %||% NA_integer_
+  )
 
   observed_keys <- character()
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
