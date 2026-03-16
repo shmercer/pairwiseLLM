@@ -135,8 +135,8 @@
       isTRUE(stopped_map[[key]])
     }, logical(1L))])
   }
-  # In linking Variant 2, spokes with link_stop_pass stay eligible for
-  # probe-only sampling until global stop.
+  # In linking Variant 2, freeze removes the spoke from further cross-set work
+  # in the current run, including held-out probe collection.
   active_spokes <- as.integer(ready_spokes)
   strict_ready <- isTRUE(phase_a$strict_ready_for_phase_b %||% phase_a$ready_for_phase_b %||% FALSE)
   has_stop_map <- length(stop_pass_map) > 0L

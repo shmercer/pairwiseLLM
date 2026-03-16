@@ -228,13 +228,17 @@
                                             probe_edges_min_for_stop = 30L) {
   n_spoke_items <- as.integer(n_spoke_items)
   n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
-  probe_edges_min_for_stop <- max(1L, as.integer(probe_edges_min_for_stop %||% 30L))
-  base_target <- max(1L, as.integer(ceiling(0.25 * n_spoke_items)))
-  target <- max(base_target, probe_edges_min_for_stop)
+  base_target <- as.integer(ceiling(0.25 * n_spoke_items))
+  target <- min(160L, max(40L, base_target))
   if (!is.na(n_available_pairs)) {
-    target <- min(target, max(1L, as.integer(floor(0.5 * n_available_pairs))))
+    feasible_cap <- if (n_available_pairs > 0L) {
+      max(1L, as.integer(floor(0.5 * n_available_pairs)))
+    } else {
+      0L
+    }
+    target <- min(target, feasible_cap)
   }
-  max(1L, as.integer(target))
+  max(0L, as.integer(target))
 }
 
 #' @keywords internal

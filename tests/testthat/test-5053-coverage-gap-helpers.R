@@ -1513,6 +1513,45 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   expect_identical(nrow(empty_cross), 0L)
 })
 
+test_that("probe panel size uses the normative clamp target before any feasibility cap", {
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_size(n_spoke_items = 3L),
+    40L
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_size(n_spoke_items = 200L),
+    50L
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_size(n_spoke_items = 1000L),
+    160L
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_size(
+      n_spoke_items = 3L,
+      n_available_pairs = 9L,
+      probe_edges_min_for_stop = 30L
+    ),
+    4L
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_size(
+      n_spoke_items = 1000L,
+      n_available_pairs = 12L,
+      probe_edges_min_for_stop = 30L
+    ),
+    6L
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_panel_size(
+      n_spoke_items = 1L,
+      n_available_pairs = 1L,
+      probe_edges_min_for_stop = 30L
+    ),
+    1L
+  )
+})
+
 test_that("remaining candidate-generation and budget helpers cover edge branches", {
   state <- make_link_probe_state()
 
