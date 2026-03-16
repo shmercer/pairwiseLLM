@@ -813,3 +813,66 @@ test_that("anchored-joint linking run records accepted-state refits and NA trans
   expect_true(accepted$anchored_joint_init_state_method %in% c("phase_b_refit", "phase_a_only_init_refit"))
   expect_true(all(is.finite(accepted$theta_spoke_global_mean)))
 })
+
+test_that("concurrent anchored-joint linking stays spoke-separable and keeps escalation disabled", {
+  withr::local_seed(20260315)
+
+  items <- make_linking_items_three_set()
+  state <- adaptive_rank_start(items, seed = 61L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1.2)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.6, h2 = 0.0, h3 = 0.9,
+    s21 = -0.2, s22 = 0.4, s23 = 1.0,
+    s31 = -0.3, s32 = 0.2, s33 = 0.8
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 24L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L)),
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+    progress = "none"
+  )
+
+  rows <- out$link_stage_log[out$link_stage_log$spoke_id %in% c(2L, 3L), , drop = FALSE]
+  expect_true(nrow(rows) >= 2L)
+  expect_true(all(as.character(rows$link_estimation_mode) == "anchored_joint"))
+  expect_true(all(is.na(rows$link_transform_policy)))
+  expect_true(all(is.na(rows$link_transform_state)))
+  expect_true(all(is.na(rows$link_refit_mode)))
+  expect_true(all(as.character(rows$hub_lock_mode) == "hard_lock"))
+  expect_true(all(is.na(rows$alternative_fit_method)))
+  expect_true(all(is.na(rows$escalation_recent_pass_count)))
+  expect_true(all(rows$alt_eval_converged %in% FALSE))
+  expect_true(all(rows$escalated_this_refit %in% FALSE))
+
+  committed <- out$step_log[!is.na(out$step_log$pair_id) & out$step_log$is_cross_set %in% TRUE, , drop = FALSE]
+  expect_true(nrow(committed) >= 1L)
+  expect_true(all(xor(committed$set_i == 1L, committed$set_j == 1L)))
+
+  accepted_2 <- out$linking$anchored_joint$accepted_state_by_spoke[["2"]]
+  accepted_3 <- out$linking$anchored_joint$accepted_state_by_spoke[["3"]]
+  expect_false(is.null(accepted_2))
+  expect_false(is.null(accepted_3))
+  expect_setequal(names(accepted_2$theta_spoke_global_mean), c("s21", "s22", "s23"))
+  expect_setequal(names(accepted_3$theta_spoke_global_mean), c("s31", "s32", "s33"))
+  expect_false(any(names(accepted_2$theta_spoke_global_mean) %in% c("s31", "s32", "s33")))
+  expect_false(any(names(accepted_3$theta_spoke_global_mean) %in% c("s21", "s22", "s23")))
+})

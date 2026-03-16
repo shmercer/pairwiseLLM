@@ -409,6 +409,18 @@ schema_item_step_log <- c(
   )
 }
 
+.adaptive_link_stage_anchored_joint_disabled_fields <- function() {
+  c(
+    "alternative_fit_method",
+    "alternative_uncertainty_approximation",
+    "alt_eval_active_edges",
+    "probe_brier_delta_min_used",
+    "logalpha_sd_guardrail_used",
+    "escalation_recent_pass_count",
+    "escalation_recent_window_size"
+  )
+}
+
 .adaptive_log_normalize_mode_fields <- function(row, schema, log_name) {
   out <- tibble::as_tibble(row)
 
@@ -474,6 +486,18 @@ schema_item_step_log <- c(
   if (identical(log_name, "link_stage_log")) {
     if ("hub_lock_kappa" %in% names(out)) {
       out$hub_lock_kappa[anchored_idx] <- NA_real_
+    }
+    for (col in intersect(.adaptive_link_stage_anchored_joint_disabled_fields(), names(schema))) {
+      if (!col %in% names(out)) {
+        out[[col]] <- rep_len(.adaptive_schema_typed_na(schema[[col]]), nrow(out))
+      }
+      out[[col]][anchored_idx] <- .adaptive_schema_typed_na(schema[[col]])
+    }
+    if ("scale_ready" %in% names(out)) {
+      out$scale_ready[anchored_idx] <- FALSE
+    }
+    if ("alt_eval_converged" %in% names(out)) {
+      out$alt_eval_converged[anchored_idx] <- FALSE
     }
     if ("escalated_this_refit" %in% names(out)) {
       out$escalated_this_refit[anchored_idx] <- FALSE

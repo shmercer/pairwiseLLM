@@ -1380,6 +1380,106 @@
   sqrt(mean(diff^2))
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_theta_history_at_refit <- function(state, refit_id) {
+  refit_id <- as.integer(refit_id %||% NA_integer_)
+  history <- state$refit_meta$phase_b_global_theta_mean_history %||% list()
+  if (!is.finite(refit_id) || is.na(refit_id) || refit_id < 1L || length(history) < refit_id) {
+    return(NULL)
+  }
+  theta <- history[[refit_id]]
+  if (!is.numeric(theta) || is.null(names(theta))) {
+    return(NULL)
+  }
+  theta <- as.double(theta)
+  names(theta) <- as.character(names(history[[refit_id]]))
+  theta
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_theta_global_rmse_from_maps <- function(current_theta, lag_theta, scope_ids) {
+  ids <- as.character(scope_ids)
+  if (length(ids) < 2L) {
+    return(NA_real_)
+  }
+  if (!is.numeric(current_theta) || !is.numeric(lag_theta) ||
+    is.null(names(current_theta)) || is.null(names(lag_theta))) {
+    return(NA_real_)
+  }
+  current_names <- as.character(names(current_theta))
+  current_theta <- as.double(current_theta)
+  names(current_theta) <- current_names
+  lag_names <- as.character(names(lag_theta))
+  lag_theta <- as.double(lag_theta)
+  names(lag_theta) <- lag_names
+  if (!all(ids %in% names(current_theta)) || !all(ids %in% names(lag_theta))) {
+    return(NA_real_)
+  }
+  diff <- as.double(current_theta[ids] - lag_theta[ids])
+  diff <- diff[is.finite(diff)]
+  if (length(diff) < 2L) {
+    return(NA_real_)
+  }
+  sqrt(mean(diff^2))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_pred_rmse_lagged_anchored_joint <- function(edges,
+                                                                 current_theta,
+                                                                 lag_theta,
+                                                                 judge_params = list(
+                                                                   beta = 0,
+                                                                   epsilon = 0
+                                                                 )) {
+  edges <- tibble::as_tibble(edges)
+  if (nrow(edges) < 1L) {
+    return(NA_real_)
+  }
+  if (!is.numeric(current_theta) || is.null(names(current_theta)) ||
+    !is.numeric(lag_theta) || is.null(names(lag_theta))) {
+    return(NA_real_)
+  }
+
+  current_names <- as.character(names(current_theta))
+  current_theta <- as.double(current_theta)
+  names(current_theta) <- current_names
+  lag_names <- as.character(names(lag_theta))
+  lag_theta <- as.double(lag_theta)
+  names(lag_theta) <- lag_names
+
+  hub_items <- unique(as.character(edges$hub_item))
+  spoke_items <- unique(as.character(edges$spoke_item))
+  if (!all(hub_items %in% names(current_theta)) || !all(hub_items %in% names(lag_theta)) ||
+    !all(spoke_items %in% names(current_theta)) || !all(spoke_items %in% names(lag_theta))) {
+    return(NA_real_)
+  }
+
+  p_now <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = current_theta[hub_items],
+    spoke_theta = current_theta[spoke_items],
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    judge_params = judge_params
+  )
+  p_lag <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = lag_theta[hub_items],
+    spoke_theta = lag_theta[spoke_items],
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    judge_params = judge_params
+  )
+  keep <- is.finite(p_now) & is.finite(p_lag)
+  if (!any(keep)) {
+    return(NA_real_)
+  }
+  sqrt(mean((p_now[keep] - p_lag[keep])^2))
+}
+
 .adaptive_link_epoch_signature_components <- function(transform_state,
                                                      refit_mode,
                                                      lock_mode,
@@ -1439,6 +1539,7 @@
     return(NA_character_)
   }
   reason_map <- c(
+    link_estimation_mode = "link_estimation_mode_change",
     link_transform_state = "transform_state_change",
     link_refit_mode = "link_refit_mode_change",
     hub_lock_mode = "hub_lock_mode_change",
@@ -4143,6 +4244,11 @@
     lag_eligible <- isTRUE(lag_eligible) && nrow(lag_row) == 1L
     lag_delta <- if (nrow(lag_row) > 0L) as.double(lag_row$delta_spoke_mean[[1L]]) else NA_real_
     lag_log_alpha <- if (nrow(lag_row) > 0L) as.double(lag_row$log_alpha_spoke_mean[[1L]]) else NA_real_
+    lag_global_theta <- if (identical(link_estimation_mode, "anchored_joint") && isTRUE(lag_eligible)) {
+      .adaptive_phase_b_global_theta_history_at_refit(out, refit_id = lag_refit_id)
+    } else {
+      NULL
+    }
     delta_change <- if (is.finite(lag_delta)) abs(fit$delta_mean - lag_delta) else NA_real_
     log_alpha_change <- if (is.finite(lag_log_alpha) && is.finite(fit$log_alpha_mean)) {
       abs(fit$log_alpha_mean - lag_log_alpha)
@@ -4277,7 +4383,11 @@
       scope = controller$theta_global_rmse_scope %||% "direct_evidence_spoke"
     )
     theta_global_rmse_lagged <- if (identical(link_estimation_mode, "anchored_joint")) {
-      NA_real_
+      .adaptive_link_theta_global_rmse_from_maps(
+        current_theta = theta_mean_transformed,
+        lag_theta = lag_global_theta,
+        scope_ids = scope_ids
+      )
     } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
       .adaptive_link_theta_global_rmse_lagged(
         state = out,
@@ -4309,7 +4419,14 @@
       log_alpha_mean = fit$log_alpha_mean,
       judge_params = judge_params
     )
-    probe_pred_rmse_lagged <- if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
+    probe_pred_rmse_lagged <- if (identical(link_estimation_mode, "anchored_joint")) {
+      .adaptive_link_probe_pred_rmse_lagged_anchored_joint(
+        edges = probe_edges_realized_tbl,
+        current_theta = theta_mean_transformed,
+        lag_theta = lag_global_theta,
+        judge_params = judge_params
+      )
+    } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
       .adaptive_link_probe_pred_rmse_lagged_for_fit(
         edges = probe_edges_realized_tbl,
         hub_theta = ppc_hub_theta,
@@ -4520,6 +4637,13 @@
     escalation_window_map[[key]] <- escalation_window
     escalation_recent_pass_count <- .adaptive_link_result_window_pass_count(escalation_window)
     escalation_recent_window_size <- length(escalation_window)
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      scale_ready <- FALSE
+      escalation_recent_pass_count <- NA_integer_
+      escalation_recent_window_size <- NA_integer_
+      escalation_window_refits_used <- NA_integer_
+      escalation_passes_required_used <- NA_integer_
+    }
     stop_blockers <- .adaptive_link_stop_blockers(
       link_diagnostics_pass = link_diagnostics_pass,
       link_lag_eligible = link_lag_eligible,
@@ -4621,17 +4745,47 @@
       probe_brier_shift_scale = as.double(probe_brier_shift_scale),
       probe_brier_delta = as.double(probe_brier_delta),
       log_alpha_spoke_sd_alt = as.double(alt_fit$log_alpha_sd %||% NA_real_),
-      alt_eval_active_edges = as.integer(nrow(cross_active_epoch)),
-      alt_eval_converged = as.logical(alt_fit$converged %||% FALSE),
-      alternative_fit_method = as.character(alt_fit$fit_method %||% "map_laplace_hessian"),
-      alternative_uncertainty_approximation = as.character(
-        alt_fit$uncertainty_approximation %||% "laplace_hessian"
-      ),
-      probe_brier_delta_min_used = as.double(controller$probe_brier_delta_min %||% 0.005),
-      logalpha_sd_guardrail_used = as.double(controller$logalpha_sd_guardrail %||% 0.10),
+      alt_eval_active_edges = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_integer_
+      } else {
+        as.integer(nrow(cross_active_epoch))
+      },
+      alt_eval_converged = if (identical(link_estimation_mode, "anchored_joint")) {
+        FALSE
+      } else {
+        as.logical(alt_fit$converged %||% FALSE)
+      },
+      alternative_fit_method = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_character_
+      } else {
+        as.character(alt_fit$fit_method %||% "map_laplace_hessian")
+      },
+      alternative_uncertainty_approximation = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_character_
+      } else {
+        as.character(alt_fit$uncertainty_approximation %||% "laplace_hessian")
+      },
+      probe_brier_delta_min_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_real_
+      } else {
+        as.double(controller$probe_brier_delta_min %||% 0.005)
+      },
+      logalpha_sd_guardrail_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_real_
+      } else {
+        as.double(controller$logalpha_sd_guardrail %||% 0.10)
+      },
       probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 30L),
-      link_transform_escalation_window_refits_used = as.integer(escalation_window_refits_used),
-      link_transform_escalation_passes_required_used = as.integer(escalation_passes_required_used),
+      link_transform_escalation_window_refits_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_integer_
+      } else {
+        as.integer(escalation_window_refits_used)
+      },
+      link_transform_escalation_passes_required_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_integer_
+      } else {
+        as.integer(escalation_passes_required_used)
+      },
       n_probe_pairs_since_last_refit = as.integer(nrow(cross_since_probe)),
       n_cross_edges_active_since_last_refit = as.integer(nrow(cross_since_active)),
       n_cross_edges_probe_since_last_refit = as.integer(nrow(cross_since_probe)),

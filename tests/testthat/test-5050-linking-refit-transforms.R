@@ -3092,6 +3092,76 @@ test_that("stable Phase B epochs expose finite lagged stop metrics and clear una
   expect_true(is.finite(row$theta_global_rmse_lagged[[1L]]))
 })
 
+test_that("anchored-joint lag helpers are finite and log normalization disables escalation fields", {
+  current_theta <- c(h1 = 0.80, h2 = 0.40, h3 = 0.10, s21 = -0.08, s22 = -0.38)
+  lag_theta <- c(h1 = 0.80, h2 = 0.40, h3 = 0.10, s21 = -0.10, s22 = -0.40)
+  edges <- tibble::tibble(
+    hub_item = c("h1", "h2"),
+    spoke_item = c("s21", "s22"),
+    spoke_in_A = c(TRUE, TRUE)
+  )
+
+  theta_rmse <- pairwiseLLM:::.adaptive_link_theta_global_rmse_from_maps(
+    current_theta = current_theta,
+    lag_theta = lag_theta,
+    scope_ids = c("s21", "s22")
+  )
+  probe_rmse <- pairwiseLLM:::.adaptive_link_probe_pred_rmse_lagged_anchored_joint(
+    edges = edges,
+    current_theta = current_theta,
+    lag_theta = lag_theta,
+    judge_params = list(beta = 0, epsilon = 0)
+  )
+
+  expect_true(is.finite(theta_rmse))
+  expect_true(theta_rmse > 0)
+  expect_true(is.finite(probe_rmse))
+  expect_true(probe_rmse > 0)
+
+  raw_row <- tibble::tibble(
+    refit_id = 3L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    link_epoch_id = 4L,
+    link_estimation_mode = "anchored_joint",
+    link_transform_policy = "auto",
+    link_transform_state = "shift_only",
+    link_refit_mode = "shift_only",
+    hub_lock_mode = "hard_lock",
+    hub_lock_kappa = 0.75,
+    scale_ready = TRUE,
+    alternative_fit_method = "map_laplace_hessian",
+    alternative_uncertainty_approximation = "laplace_hessian",
+    alt_eval_active_edges = 3L,
+    alt_eval_converged = TRUE,
+    probe_brier_delta_min_used = 0.005,
+    logalpha_sd_guardrail_used = 0.10,
+    escalation_recent_pass_count = 1L,
+    escalation_recent_window_size = 2L,
+    escalated_this_refit = TRUE
+  )
+  normalized <- pairwiseLLM:::.adaptive_log_normalize_mode_fields(
+    row = raw_row,
+    schema = pairwiseLLM:::schema_link_stage_log,
+    log_name = "link_stage_log"
+  )
+
+  expect_true(is.na(normalized$link_transform_policy[[1L]]))
+  expect_true(is.na(normalized$link_transform_state[[1L]]))
+  expect_true(is.na(normalized$link_refit_mode[[1L]]))
+  expect_true(is.na(normalized$hub_lock_kappa[[1L]]))
+  expect_false(normalized$scale_ready[[1L]])
+  expect_false(normalized$alt_eval_converged[[1L]])
+  expect_false(normalized$escalated_this_refit[[1L]])
+  expect_true(is.na(normalized$alternative_fit_method[[1L]]))
+  expect_true(is.na(normalized$alternative_uncertainty_approximation[[1L]]))
+  expect_true(is.na(normalized$alt_eval_active_edges[[1L]]))
+  expect_true(is.na(normalized$probe_brier_delta_min_used[[1L]]))
+  expect_true(is.na(normalized$logalpha_sd_guardrail_used[[1L]]))
+  expect_true(is.na(normalized$escalation_recent_pass_count[[1L]]))
+  expect_true(is.na(normalized$escalation_recent_window_size[[1L]]))
+})
+
 test_that("stable Phase B epochs can open the stop gate and become stop-eligible", {
   state <- make_stable_epoch_stop_state()
 
