@@ -238,11 +238,7 @@
   if (is.na(n_available_pairs)) {
     return(as.integer(target_edges))
   }
-  feasible_cap <- if (n_available_pairs > 0L) {
-    max(1L, as.integer(floor(0.5 * n_available_pairs)))
-  } else {
-    0L
-  }
+  feasible_cap <- max(0L, as.integer(n_available_pairs))
   as.integer(min(target_edges, feasible_cap))
 }
 
@@ -289,6 +285,26 @@
     }
   }
   as.integer(nrow(panel_tbl))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_panel_reallocation_used <- function(panel_tbl) {
+  panel_tbl <- tibble::as_tibble(panel_tbl)
+  if (nrow(panel_tbl) < 1L || !"probe_panel_reallocation_used" %in% names(panel_tbl)) {
+    return(FALSE)
+  }
+  values <- unique(as.logical(panel_tbl$probe_panel_reallocation_used))
+  values <- values[!is.na(values)]
+  if (length(values) < 1L) {
+    return(FALSE)
+  }
+  if (length(values) > 1L) {
+    rlang::abort(
+      "Phase B probe-panel invariant failed: current panel has multiple `probe_panel_reallocation_used` values."
+    )
+  }
+  isTRUE(values[[1L]])
 }
 
 #' @keywords internal

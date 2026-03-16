@@ -936,6 +936,7 @@ test_that("resume preserves probe panel identity, epoch, and realized counts acr
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
 
   panel_before <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  planned_before <- pairwiseLLM:::.adaptive_link_probe_planned_edges(panel_before)
   realized_before <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
   expect_gte(nrow(panel_before), 1L)
   expect_gte(realized_before, 1L)
@@ -955,9 +956,10 @@ test_that("resume preserves probe panel identity, epoch, and realized counts acr
       link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel_before$probe_panel_id[[1L]]),
-      probe_edges_planned = as.integer(nrow(panel_before)),
+      probe_edges_planned = as.integer(planned_before),
       probe_edges_realized = as.integer(realized_before),
-      probe_panel_shortfall = as.integer(nrow(panel_before) - realized_before)
+      probe_panel_shortfall = as.integer(planned_before - realized_before),
+      probe_panel_reallocation_used = pairwiseLLM:::.adaptive_link_probe_panel_reallocation_used(panel_before)
     )
   )
 
@@ -997,6 +999,7 @@ test_that("resume accepts current-window realized probes beyond the latest link-
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
 
   panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  planned_edges <- pairwiseLLM:::.adaptive_link_probe_planned_edges(panel)
   realized <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
   expect_gte(realized, 1L)
 
@@ -1016,9 +1019,10 @@ test_that("resume accepts current-window realized probes beyond the latest link-
       link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
-      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_planned = as.integer(planned_edges),
       probe_edges_realized = 0L,
-      probe_panel_shortfall = as.integer(nrow(panel))
+      probe_panel_shortfall = as.integer(planned_edges),
+      probe_panel_reallocation_used = pairwiseLLM:::.adaptive_link_probe_panel_reallocation_used(panel)
     )
   )
 
@@ -1041,6 +1045,7 @@ test_that("resume aborts when current-window holdout steps do not reconcile to c
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
 
   panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  planned_edges <- pairwiseLLM:::.adaptive_link_probe_planned_edges(panel)
   expect_gte(
     pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L),
     1L
@@ -1062,9 +1067,10 @@ test_that("resume aborts when current-window holdout steps do not reconcile to c
       link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
-      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_planned = as.integer(planned_edges),
       probe_edges_realized = 0L,
-      probe_panel_shortfall = as.integer(nrow(panel))
+      probe_panel_shortfall = as.integer(planned_edges),
+      probe_panel_reallocation_used = pairwiseLLM:::.adaptive_link_probe_panel_reallocation_used(panel)
     )
   )
   state$linking$probe$realized_edges <- pairwiseLLM:::.adaptive_link_probe_empty_realized_log()
@@ -1082,6 +1088,7 @@ test_that("resume aborts when persisted probe state disagrees with canonical log
   state <- make_probe_resume_state()
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
   panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(state, spoke_id = 2L, epoch_id = 1L)
+  planned_edges <- pairwiseLLM:::.adaptive_link_probe_planned_edges(panel)
   realized <- pairwiseLLM:::.adaptive_link_probe_realized_count(state, spoke_id = 2L, epoch_id = 1L)
 
   state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
@@ -1099,9 +1106,10 @@ test_that("resume aborts when persisted probe state disagrees with canonical log
       link_state_frozen = FALSE,
       link_epoch_id = 1L,
       probe_panel_id = as.character(panel$probe_panel_id[[1L]]),
-      probe_edges_planned = as.integer(nrow(panel)),
+      probe_edges_planned = as.integer(planned_edges),
       probe_edges_realized = as.integer(realized),
-      probe_panel_shortfall = as.integer(nrow(panel) - realized)
+      probe_panel_shortfall = as.integer(planned_edges - realized),
+      probe_panel_reallocation_used = pairwiseLLM:::.adaptive_link_probe_panel_reallocation_used(panel)
     )
   )
 

@@ -6,11 +6,35 @@ matrix_two_set_items <- function() {
   )
 }
 
+matrix_two_set_linking_items <- function() {
+  tibble::tibble(
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep.int(1L, 10L), rep.int(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
+  )
+}
+
 matrix_three_set_items <- function() {
   tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
     global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23", "gs31", "gs32", "gs33")
+  )
+}
+
+matrix_three_set_linking_items <- function() {
+  tibble::tibble(
+    item_id = c(
+      paste0("h", seq_len(10L)),
+      paste0("s2", seq_len(6L)),
+      paste0("s3", seq_len(6L))
+    ),
+    set_id = c(rep.int(1L, 10L), rep.int(2L, 6L), rep.int(3L, 6L)),
+    global_item_id = c(
+      paste0("gh", seq_len(10L)),
+      paste0("gs2", seq_len(6L)),
+      paste0("gs3", seq_len(6L))
+    )
   )
 }
 
@@ -56,13 +80,13 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     ),
     list(
       name = "link_one_spoke",
-      items = matrix_two_set_items(),
+      items = matrix_two_set_linking_items(),
       adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import"),
       linking = TRUE
     ),
     list(
       name = "link_multi_independent",
-      items = matrix_three_set_items(),
+      items = matrix_three_set_linking_items(),
       adaptive_config = list(
         run_mode = "link_multi_spoke",
         hub_id = 1L,
@@ -73,7 +97,7 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     ),
     list(
       name = "link_multi_concurrent",
-      items = matrix_three_set_items(),
+      items = matrix_three_set_linking_items(),
       adaptive_config = list(
         run_mode = "link_multi_spoke",
         hub_id = 1L,

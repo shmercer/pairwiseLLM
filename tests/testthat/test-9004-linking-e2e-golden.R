@@ -1,8 +1,10 @@
 golden_two_set_items <- function() {
+  hub_ids <- paste0("h", seq_len(10L))
+  spoke_ids <- paste0("s2", seq_len(6L))
   tibble::tibble(
-    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
-    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
-    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23")
+    item_id = c(hub_ids, spoke_ids),
+    set_id = c(rep(1L, length(hub_ids)), rep(2L, length(spoke_ids))),
+    global_item_id = c(paste0("g", hub_ids), paste0("g", spoke_ids))
   )
 }
 
@@ -10,10 +12,27 @@ golden_score_judge <- function(scores) {
   score_names <- names(scores)
   scores <- as.double(scores)
   names(scores) <- score_names
+  default_score <- function(item_id) {
+    item_id <- as.character(item_id)
+    if (grepl("^h\\d+$", item_id)) {
+      rank <- as.integer(sub("^h", "", item_id))
+      return(-1.0 + (0.16 * rank))
+    }
+    if (grepl("^s\\d\\d+$", item_id)) {
+      set_id <- as.integer(substr(item_id, 2L, 2L))
+      rank <- as.integer(sub("^s\\d", "", item_id))
+      return((0.1 * set_id) + (0.22 * rank))
+    }
+    0
+  }
   function(A, B, state, ...) {
     a <- as.character(A$item_id[[1L]])
     b <- as.character(B$item_id[[1L]])
-    y <- as.integer(scores[[a]] >= scores[[b]])
+    a_score <- scores[a]
+    b_score <- scores[b]
+    a_score <- if (!is.na(a_score)) as.double(a_score) else default_score(a)
+    b_score <- if (!is.na(b_score)) as.double(b_score) else default_score(b)
+    y <- as.integer(a_score >= b_score)
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
 }

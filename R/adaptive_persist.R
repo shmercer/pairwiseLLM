@@ -723,6 +723,8 @@ read_log <- function(path) {
     )
   }
   panel_id <- as.character(panel_id[[1L]])
+  panel_planned_edges <- .adaptive_link_probe_planned_edges(panel)
+  panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(panel)
 
   if (anyDuplicated(as.character(panel$pair_key))) {
     .adaptive_link_probe_resume_abort(
@@ -772,6 +774,33 @@ read_log <- function(path) {
           row_panel_id,
           " does not match persisted panel id ",
           panel_id
+        ),
+        spoke_id = spoke_id
+      )
+    }
+    row_planned <- as.integer(last_row$probe_edges_planned[[1L]] %||% NA_integer_)
+    if (is.finite(row_planned) &&
+      row_planned > 0L &&
+      !identical(as.integer(row_planned), as.integer(panel_planned_edges))) {
+      .adaptive_link_probe_resume_abort(
+        paste0(
+          "latest `link_stage_log$probe_edges_planned`=",
+          as.integer(row_planned),
+          " does not match the canonical planned probe count ",
+          as.integer(panel_planned_edges)
+        ),
+        spoke_id = spoke_id
+      )
+    }
+    row_reallocation <- as.logical(last_row$probe_panel_reallocation_used[[1L]] %||% NA)
+    if (!is.na(row_reallocation) &&
+      !identical(isTRUE(row_reallocation), isTRUE(panel_reallocation_used))) {
+      .adaptive_link_probe_resume_abort(
+        paste0(
+          "latest `link_stage_log$probe_panel_reallocation_used`=",
+          isTRUE(row_reallocation),
+          " does not match the canonical panel construction value ",
+          isTRUE(panel_reallocation_used)
         ),
         spoke_id = spoke_id
       )

@@ -582,7 +582,20 @@ test_that("phase_specific judge mode respects Phase A to Phase B boundary gating
 })
 
 test_that("phase_specific Phase B startup falls back deterministically without link judge estimates", {
-  state <- make_phase_a_ready_state()
+  items <- tibble::tibble(
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    text = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep(1L, 10L), rep(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
+  )
+  state <- adaptive_rank_start(items, seed = 1L)
+  draws <- matrix(
+    rep(seq_along(state$item_ids), each = 4L),
+    nrow = 4L,
+    byrow = TRUE
+  )
+  colnames(draws) <- as.character(state$item_ids)
+  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
   judge <- make_deterministic_judge("i_wins")
 
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)

@@ -74,6 +74,7 @@
     spoke_bin = integer(),
     hub_bin = integer(),
     probe_edges_planned = integer(),
+    probe_panel_reallocation_used = logical(),
     planned_rank = integer(),
     pair_key = character(),
     realized = logical(),

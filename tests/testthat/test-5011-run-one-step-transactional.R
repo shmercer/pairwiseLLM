@@ -322,9 +322,9 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
 
 test_that("run_one_step keeps holdout probe work within the ordinary per-refit cap", {
   items <- tibble::tibble(
-    item_id = c("h1", "h2", "h3", "s21", "s22"),
-    set_id = c(1L, 1L, 1L, 2L, 2L),
-    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22")
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep(1L, 10L), rep(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
   )
   state <- adaptive_rank_start(
     items,
@@ -342,16 +342,16 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
     ),
     artifacts = list(
       `1` = list(items = tibble::tibble(
-        global_item_id = c("gh1", "gh2", "gh3"),
-        theta_raw_mean = c(0.3, 0.0, -0.2),
-        theta_raw_sd = c(0.1, 0.1, 0.1),
-        rank_mu_raw = c(1, 2, 3)
+        global_item_id = paste0("gh", seq_len(10L)),
+        theta_raw_mean = seq(0.5, -0.4, length.out = 10L),
+        theta_raw_sd = rep(0.1, 10L),
+        rank_mu_raw = seq_len(10L)
       )),
       `2` = list(items = tibble::tibble(
-        global_item_id = c("gs21", "gs22"),
-        theta_raw_mean = c(0.2, -0.1),
-        theta_raw_sd = c(0.1, 0.1),
-        rank_mu_raw = c(1, 2)
+        global_item_id = paste0("gs2", seq_len(6L)),
+        theta_raw_mean = seq(0.4, -0.1, length.out = 6L),
+        theta_raw_sd = rep(0.1, 6L),
+        rank_mu_raw = seq_len(6L)
       ))
     ),
     ready_for_phase_b = TRUE,

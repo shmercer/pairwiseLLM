@@ -5692,7 +5692,7 @@
       spoke_id = as.integer(spoke_id)
     )
     probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
-    probe_panel_reallocation_used <- as.logical(n_pairs_since_probe > probe_effort_base_cap)
+    probe_panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(probe_panel)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
     probe_pred_cache_used <- nrow(probe_cache[
       as.integer(probe_cache$refit_id) == as.integer(refit_id) &

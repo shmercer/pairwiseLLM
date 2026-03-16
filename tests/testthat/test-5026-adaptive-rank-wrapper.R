@@ -7,12 +7,19 @@ make_test_samples_df <- function(n = 6L) {
 }
 
 make_linking_samples_df <- function() {
+  hub_ids <- paste0("h", seq_len(10L))
+  spoke2_ids <- paste0("s2", seq_len(6L))
+  spoke3_ids <- paste0("s3", seq_len(6L))
   tibble::tibble(
-    ID = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
-    text = paste("sample", seq_len(9L)),
-    quality_score = c(10, 20, 30, 9, 19, 29, 8, 18, 28),
-    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
-    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23", "gs31", "gs32", "gs33")
+    ID = c(hub_ids, spoke2_ids, spoke3_ids),
+    text = paste("sample", seq_len(22L)),
+    quality_score = c(
+      seq(10, 100, by = 10),
+      c(9, 19, 29, 39, 49, 59),
+      c(8, 18, 28, 38, 48, 58)
+    ),
+    set_id = c(rep(1L, 10L), rep(2L, 6L), rep(3L, 6L)),
+    global_item_id = c(paste0("g", hub_ids), paste0("g", spoke2_ids), paste0("g", spoke3_ids))
   )
 }
 

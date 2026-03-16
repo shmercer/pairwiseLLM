@@ -2414,11 +2414,11 @@ test_that("phase-B routing score source switches between Phase A and current the
 
 test_that("linking candidates and step log carry global distance strata", {
   items <- tibble::tibble(
-    item_id = as.character(1:8),
-    set_id = c(rep(1L, 4L), rep(2L, 4L)),
-    global_item_id = paste0("g", 1:8)
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep(1L, 10L), rep(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
   )
-  trueskill_state <- make_test_trueskill_state(items, mu = seq(8, 1))
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(nrow(items), 1))
   state <- make_test_state(items, trueskill_state)
   state <- pairwiseLLM:::.adaptive_apply_controller_config(
     state,
@@ -2434,9 +2434,9 @@ test_that("linking candidates and step log carry global distance strata", {
       timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
       pair_id = 1L,
       i = 1L,
-      j = 5L,
+      j = 11L,
       A = 1L,
-      B = 5L,
+      B = 11L,
       Y = 1L,
       set_i = 1L,
       set_j = 2L,

@@ -763,9 +763,20 @@
     hub_scores = routing_scores,
     defaults = adaptive_defaults(max(2L, length(unique(c(hub_ids, spoke_ids)))))
   )
-  hub_pool <- unique(c(as.character(hub_anchors), hub_ids))
-  if (length(hub_pool) < 1L) {
-    hub_pool <- hub_ids
+  anchor_required <- isTRUE(controller$hub_anchor_required_phase_b %||% TRUE)
+  if (anchor_required) {
+    hub_pool <- unique(as.character(hub_anchors))
+    if (length(hub_pool) < 1L) {
+      rlang::abort(
+        paste0(
+          "Phase B probe-panel invariant failed: `HubEligible` anchor pool is empty for spoke_id=",
+          as.integer(spoke_id),
+          " while `hub_anchor_required_phase_b=TRUE`."
+        )
+      )
+    }
+  } else {
+    hub_pool <- unique(as.character(hub_ids))
   }
 
   spoke_theta <- as.double(spoke_theta_all[spoke_ids])
@@ -778,10 +789,6 @@
   spoke_bin_map <- .adaptive_link_probe_quantile_bins(spoke_ids, spoke_theta, q_bins)
   hub_bin_map <- .adaptive_link_probe_quantile_bins(hub_pool, hub_theta, h_bins)
   target_edges <- .adaptive_link_probe_panel_size(n_spoke_items = n_spoke_start)
-  feasible_target_edges <- .adaptive_link_probe_panel_feasible_size(
-    target_edges = target_edges,
-    n_available_pairs = as.integer(length(hub_pool) * length(spoke_ids))
-  )
 
   observed_keys <- character()
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
@@ -796,6 +803,9 @@
       drop = FALSE
     ]
     if (nrow(cross_rows) > 0L) {
+      cross_rows <- cross_rows[!.adaptive_link_is_holdout_probe_rows(cross_rows), , drop = FALSE]
+    }
+    if (nrow(cross_rows) > 0L) {
       observed_keys <- vapply(seq_len(nrow(cross_rows)), function(idx) {
         make_unordered_key(
           ids_all[[as.integer(cross_rows$A[[idx]])]],
@@ -805,13 +815,28 @@
     }
   }
 
+  legal_pairs <- expand.grid(
+    hub_item_id = sort(hub_pool),
+    spoke_item_id = sort(spoke_ids),
+    stringsAsFactors = FALSE
+  )
+  legal_pairs$pair_key <- vapply(seq_len(nrow(legal_pairs)), function(idx) {
+    make_unordered_key(legal_pairs$hub_item_id[[idx]], legal_pairs$spoke_item_id[[idx]])
+  }, character(1L))
+  legal_pairs <- legal_pairs[!legal_pairs$pair_key %in% observed_keys, , drop = FALSE]
+  feasible_target_edges <- .adaptive_link_probe_panel_feasible_size(
+    target_edges = target_edges,
+    n_available_pairs = as.integer(nrow(legal_pairs))
+  )
+
   planned <- vector("list", length = 0L)
   seen_keys <- observed_keys
-  spoke_q_targets <- rep.int(as.integer(feasible_target_edges %/% q_bins), q_bins)
-  if ((feasible_target_edges %% q_bins) > 0L) {
-    spoke_q_targets[seq_len(feasible_target_edges %% q_bins)] <-
-      spoke_q_targets[seq_len(feasible_target_edges %% q_bins)] + 1L
+  spoke_q_targets <- rep.int(as.integer(target_edges %/% q_bins), q_bins)
+  if ((target_edges %% q_bins) > 0L) {
+    spoke_q_targets[seq_len(target_edges %% q_bins)] <-
+      spoke_q_targets[seq_len(target_edges %% q_bins)] + 1L
   }
+  cell_shortfall_detected <- FALSE
 
   for (q in seq_len(q_bins)) {
     q_target <- spoke_q_targets[[q]]
@@ -824,22 +849,27 @@
       cell_target <- as.integer(hub_targets[[h]])
       hub_bin_ids <- names(hub_bin_map)[as.integer(hub_bin_map) == h]
       if (cell_target < 1L || length(spoke_bin_ids) < 1L || length(hub_bin_ids) < 1L) {
+        if (cell_target > 0L) {
+          cell_shortfall_detected <- TRUE
+        }
         next
       }
-      cell_pairs <- expand.grid(
-        hub_item_id = sort(hub_bin_ids),
-        spoke_item_id = sort(spoke_bin_ids),
-        stringsAsFactors = FALSE
-      )
-      cell_pairs$pair_key <- vapply(seq_len(nrow(cell_pairs)), function(idx) {
-        make_unordered_key(cell_pairs$hub_item_id[[idx]], cell_pairs$spoke_item_id[[idx]])
-      }, character(1L))
-      cell_pairs <- cell_pairs[!cell_pairs$pair_key %in% seen_keys, , drop = FALSE]
+      cell_pairs <- legal_pairs[
+        as.character(legal_pairs$hub_item_id) %in% hub_bin_ids &
+          as.character(legal_pairs$spoke_item_id) %in% spoke_bin_ids &
+          !as.character(legal_pairs$pair_key) %in% seen_keys,
+        ,
+        drop = FALSE
+      ]
       if (nrow(cell_pairs) < 1L) {
+        cell_shortfall_detected <- TRUE
         next
       }
       seed <- as.integer((state$meta$seed %||% 1L) + (spoke_id * 1009L) + (q * 101L) + h)
       take <- min(cell_target, nrow(cell_pairs))
+      if (take < cell_target) {
+        cell_shortfall_detected <- TRUE
+      }
       picked_idx <- withr::with_seed(seed, sample.int(nrow(cell_pairs), size = take, replace = FALSE))
       picked <- cell_pairs[picked_idx, , drop = FALSE]
       picked <- picked[order(picked$hub_item_id, picked$spoke_item_id), , drop = FALSE]
@@ -858,17 +888,10 @@
     }
   }
 
+  fallback_reallocation_count <- 0L
   if (length(planned) < feasible_target_edges) {
     existing_keys <- unique(c(seen_keys, vapply(planned, function(x) x$pair_key, character(1L))))
-    fallback_pairs <- expand.grid(
-      hub_item_id = sort(hub_pool),
-      spoke_item_id = sort(spoke_ids),
-      stringsAsFactors = FALSE
-    )
-    fallback_pairs$pair_key <- vapply(seq_len(nrow(fallback_pairs)), function(idx) {
-      make_unordered_key(fallback_pairs$hub_item_id[[idx]], fallback_pairs$spoke_item_id[[idx]])
-    }, character(1L))
-    fallback_pairs <- fallback_pairs[!fallback_pairs$pair_key %in% existing_keys, , drop = FALSE]
+    fallback_pairs <- legal_pairs[!as.character(legal_pairs$pair_key) %in% existing_keys, , drop = FALSE]
     if (nrow(fallback_pairs) > 0L) {
       fallback_pairs$spoke_bin <- as.integer(spoke_bin_map[fallback_pairs$spoke_item_id])
       fallback_pairs$hub_bin <- as.integer(hub_bin_map[fallback_pairs$hub_item_id])
@@ -884,6 +907,7 @@
       ]
       take <- min(feasible_target_edges - length(planned), nrow(fallback_pairs))
       picked <- fallback_pairs[seq_len(take), , drop = FALSE]
+      fallback_reallocation_count <- as.integer(nrow(picked))
       planned <- c(planned, lapply(seq_len(nrow(picked)), function(idx) {
         list(
           link_epoch_id = as.integer(epoch_id),
@@ -899,11 +923,24 @@
   }
 
   if (length(planned) < 1L) {
+    if (nrow(legal_pairs) > 0L) {
+      rlang::abort(
+        paste0(
+          "Phase B probe-panel invariant failed: legal held-out probe candidates exist for spoke_id=",
+          as.integer(spoke_id),
+          " in link_epoch_id=",
+          as.integer(epoch_id),
+          " but construction produced an empty panel."
+        )
+      )
+    }
     return(.adaptive_link_probe_empty_panel())
   }
 
   panel <- tibble::as_tibble(do.call(rbind, lapply(planned, as.data.frame, stringsAsFactors = FALSE)))
   panel$probe_edges_planned <- as.integer(target_edges)
+  panel$probe_panel_reallocation_used <- isTRUE(cell_shortfall_detected) &&
+    as.integer(fallback_reallocation_count) > 0L
   panel$planned_rank <- as.integer(seq_len(nrow(panel)))
   panel$realized <- FALSE
   panel$realized_step_id <- NA_integer_
@@ -911,7 +948,7 @@
   panel$realized_run_mode <- NA_character_
   panel <- panel[, c(
     "link_epoch_id", "spoke_id", "hub_item_id", "spoke_item_id", "spoke_bin", "hub_bin",
-    "probe_edges_planned",
+    "probe_edges_planned", "probe_panel_reallocation_used",
     "planned_rank", "pair_key", "realized", "realized_step_id", "realized_pair_id", "realized_run_mode"
   )]
   panel$probe_panel_id <- .adaptive_link_probe_panel_id(panel)
@@ -1004,10 +1041,7 @@
         planned_size_compatible <- !is.finite(latest_stage_planned) ||
           is.na(latest_stage_planned) ||
           latest_stage_planned <= 0L ||
-          as.integer(latest_stage_planned) %in% c(
-            as.integer(panel_planned_edges),
-            as.integer(nrow(built_panel))
-          )
+          identical(as.integer(latest_stage_planned), as.integer(panel_planned_edges))
         stage_id_mismatch <- length(stage_panel_ids) > 1L ||
           (length(stage_panel_ids) == 1L && !identical(stage_panel_ids[[1L]], built_panel_id))
         realized_id_mismatch <- length(realized_panel_ids) > 1L ||

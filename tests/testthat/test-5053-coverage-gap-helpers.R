@@ -971,13 +971,29 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
   )
 
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  state$controller$hub_anchor_required_phase_b <- FALSE
+  state$controller$spoke_quantile_coverage_bins <- 1L
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = pairwiseLLM:::.adaptive_link_probe_construct_panel(state, state$controller, spoke_id = 2L)
+  )
+  panel <- state$linking$probe$panels_by_spoke$`2`
+  panel_id <- panel$probe_panel_id[[1L]]
+  state$linking$probe$realized_edges$probe_panel_id[] <- panel_id
+  state$linking$probe$realized_edges$hub_item_id <- as.character(panel$hub_item_id[1:2])
+  state$linking$probe$realized_edges$spoke_item_id <- as.character(panel$spoke_item_id[1:2])
+  state$linking$probe$realized_edges$pair_key <- as.character(panel$pair_key[1:2])
+  probe_idx <- which(as.character(state$step_log$run_mode) == "link_probe_holdout")
+  state$step_log$A[probe_idx] <- match(as.character(panel$hub_item_id[1:2]), state$item_ids)
+  state$step_log$B[probe_idx] <- match(as.character(panel$spoke_item_id[1:2]), state$item_ids)
+  state$step_log$i[probe_idx] <- state$step_log$A[probe_idx]
+  state$step_log$j[probe_idx] <- state$step_log$B[probe_idx]
   stage_rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
     state = state,
     refit_id = 2L,
     refit_context = list(last_refit_step = 0L)
   )
   row_stage <- stage_rows[stage_rows$spoke_id == 2L, , drop = FALSE]
-  expect_true(isTRUE(row_stage$probe_panel_reallocation_used[[1L]]))
+  expect_false(isTRUE(row_stage$probe_panel_reallocation_used[[1L]]))
   expect_identical(row_stage$n_probe_pairs_since_last_refit[[1L]], 2L)
 
   state_drift <- state
@@ -1102,16 +1118,24 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
   )
   expect_true(is.na(probs[[2L]]))
 
+  hub_theta_fit <- stats::setNames(
+    seq(0.8, by = -0.2, length.out = length(unique(edges$hub_item))),
+    unique(edges$hub_item)
+  )
+  spoke_theta_fit <- stats::setNames(
+    seq(-0.2, by = -0.2, length.out = length(unique(edges$spoke_item))),
+    unique(edges$spoke_item)
+  )
   expect_true(is.finite(pairwiseLLM:::.adaptive_link_probe_brier_for_fit(
     edges = edges,
-    hub_theta = c(h1 = 0.8, h2 = 0.4),
-    spoke_theta = c(s21 = -0.2, s22 = -0.4),
+    hub_theta = hub_theta_fit,
+    spoke_theta = spoke_theta_fit,
     delta_mean = 0.1
   )))
   expect_true(is.finite(pairwiseLLM:::.adaptive_link_probe_pred_rmse_lagged_for_fit(
     edges = edges,
-    hub_theta = c(h1 = 0.8, h2 = 0.4),
-    spoke_theta = c(s21 = -0.2, s22 = -0.4),
+    hub_theta = hub_theta_fit,
+    spoke_theta = spoke_theta_fit,
     delta_mean = 0.1,
     log_alpha_mean = NA_real_,
     lag_delta_mean = 0.3,
@@ -1534,13 +1558,47 @@ test_that("probe panel size uses the normative clamp target", {
   )
 })
 
+test_that("probe panel construction respects anchor-only HubEligible and legal hub-spoke capacity", {
+  state <- make_link_probe_state()
+  routing_scores <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = state$controller,
+    active_ids = c("h1", "h2", "h3", "s21", "s22"),
+    hub_id = 1L
+  )
+  hub_anchors <- pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+    state = state,
+    hub_ids = c("h1", "h2", "h3"),
+    hub_scores = routing_scores,
+    defaults = pairwiseLLM:::adaptive_defaults(5L)
+  )
+
+  panel_anchor_only <- pairwiseLLM:::.adaptive_link_probe_construct_panel(
+    state,
+    state$controller,
+    spoke_id = 2L
+  )
+  expect_setequal(unique(as.character(panel_anchor_only$hub_item_id)), as.character(hub_anchors))
+  expect_identical(nrow(panel_anchor_only), 4L)
+
+  state_full_hub <- make_link_probe_state()
+  state_full_hub$controller$hub_anchor_required_phase_b <- FALSE
+  panel_full_hub <- pairwiseLLM:::.adaptive_link_probe_construct_panel(
+    state_full_hub,
+    state_full_hub$controller,
+    spoke_id = 2L
+  )
+  expect_setequal(unique(as.character(panel_full_hub$hub_item_id)), c("h1", "h2", "h3"))
+  expect_identical(nrow(panel_full_hub), 6L)
+})
+
 test_that("probe panel construction keeps the normative target auditable when feasibility caps apply", {
   state <- make_link_probe_state()
   panel <- pairwiseLLM:::.adaptive_link_probe_construct_panel(state, state$controller, spoke_id = 2L)
 
   expect_identical(pairwiseLLM:::.adaptive_link_probe_planned_edges(panel), 40L)
   expect_identical(unique(as.integer(panel$probe_edges_planned)), 40L)
-  expect_identical(nrow(panel), 3L)
+  expect_identical(nrow(panel), 4L)
 })
 
 test_that("remaining candidate-generation and budget helpers cover edge branches", {

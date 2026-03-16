@@ -160,12 +160,18 @@ add_link_stage_row <- function(state,
                                link_epoch_id = 1L,
                                probe_panel_id = NA_character_,
                                probe_edges_realized = 0L,
-                               probe_edges_planned = 2L,
+                               probe_edges_planned = NULL,
                                link_state_frozen = FALSE) {
   link_stage_log <- state$link_stage_log
   if (is.null(link_stage_log)) {
     link_stage_log <- pairwiseLLM:::new_link_stage_log()
   }
+  probe_edges_planned <- as.integer(
+    probe_edges_planned %||%
+      pairwiseLLM:::.adaptive_link_probe_panel_size(
+        n_spoke_items = sum(as.integer(state$items$set_id) == as.integer(spoke_id), na.rm = TRUE)
+      )
+  )
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
     link_stage_log,
     list(
@@ -986,7 +992,7 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
     link_epoch_id = 1L,
     probe_panel_id = "legacy-panel",
     probe_edges_realized = 1L,
-    probe_edges_planned = nrow(panel)
+    probe_edges_planned = pairwiseLLM:::.adaptive_link_probe_planned_edges(panel)
   )
   resumed$meta$resumed_from_session <- TRUE
   resumed$linking$probe$panels_by_spoke <- list()

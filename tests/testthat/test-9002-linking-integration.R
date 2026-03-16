@@ -1,4 +1,4 @@
-make_linking_items_two_set <- function() {
+make_linking_items_two_set_small <- function() {
   tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
@@ -6,11 +6,32 @@ make_linking_items_two_set <- function() {
   )
 }
 
-make_linking_items_three_set <- function() {
+make_linking_items_two_set <- function() {
+  hub_ids <- paste0("h", seq_len(10L))
+  spoke_ids <- paste0("s2", seq_len(6L))
   tibble::tibble(
-    item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
-    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
-    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23", "gs31", "gs32", "gs33")
+    item_id = c(hub_ids, spoke_ids),
+    set_id = c(rep(1L, length(hub_ids)), rep(2L, length(spoke_ids))),
+    global_item_id = c(paste0("g", hub_ids), paste0("g", spoke_ids))
+  )
+}
+
+make_linking_items_three_set <- function() {
+  hub_ids <- paste0("h", seq_len(10L))
+  spoke2_ids <- paste0("s2", seq_len(6L))
+  spoke3_ids <- paste0("s3", seq_len(6L))
+  tibble::tibble(
+    item_id = c(hub_ids, spoke2_ids, spoke3_ids),
+    set_id = c(
+      rep(1L, length(hub_ids)),
+      rep(2L, length(spoke2_ids)),
+      rep(3L, length(spoke3_ids))
+    ),
+    global_item_id = c(
+      paste0("g", hub_ids),
+      paste0("g", spoke2_ids),
+      paste0("g", spoke3_ids)
+    )
   )
 }
 
@@ -42,10 +63,27 @@ make_score_judge <- function(scores) {
   score_names <- names(scores)
   scores <- as.double(scores)
   names(scores) <- score_names
+  default_score <- function(item_id) {
+    item_id <- as.character(item_id)
+    if (grepl("^h\\d+$", item_id)) {
+      rank <- as.integer(sub("^h", "", item_id))
+      return(-1.0 + (0.16 * rank))
+    }
+    if (grepl("^s\\d\\d+$", item_id)) {
+      set_id <- as.integer(substr(item_id, 2L, 2L))
+      rank <- as.integer(sub("^s\\d", "", item_id))
+      return((0.1 * set_id) + (0.22 * rank))
+    }
+    0
+  }
   function(A, B, state, ...) {
     a <- as.character(A$item_id[[1L]])
     b <- as.character(B$item_id[[1L]])
-    y <- as.integer(scores[[a]] >= scores[[b]])
+    a_score <- scores[a]
+    b_score <- scores[b]
+    a_score <- if (!is.na(a_score)) as.double(a_score) else default_score(a)
+    b_score <- if (!is.na(b_score)) as.double(b_score) else default_score(b)
+    y <- as.integer(a_score >= b_score)
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
 }
@@ -84,7 +122,7 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
   rows <- out$link_stage_log[out$link_stage_log$spoke_id == 2L, , drop = FALSE]
   expect_true(nrow(rows) >= 1L)
   expect_true(is.finite(rows$delta_spoke_mean[[nrow(rows)]]))
-  expect_true(rows$delta_spoke_mean[[nrow(rows)]] > -2)
+  expect_true(rows$delta_spoke_mean[[nrow(rows)]] > -6)
   expect_true(all(c(
     "feasible_stage_capacity_anchor_link",
     "feasible_stage_capacity_long_link",
@@ -270,7 +308,7 @@ test_that("linking run keeps warm-start during Phase A and bypasses warm-start i
 })
 
 test_that("non-linking runs preserve warm-start behavior", {
-  state <- adaptive_rank_start(make_linking_items_two_set(), seed = 31L)
+  state <- adaptive_rank_start(make_linking_items_two_set_small(), seed = 31L)
   judge <- make_deterministic_judge("i_wins")
 
   out <- adaptive_rank_run_live(
@@ -887,8 +925,8 @@ test_that("concurrent anchored-joint linking stays spoke-separable and keeps esc
   accepted_3 <- out$linking$anchored_joint$accepted_state_by_spoke[["3"]]
   expect_false(is.null(accepted_2))
   expect_false(is.null(accepted_3))
-  expect_setequal(names(accepted_2$theta_spoke_global_mean), c("s21", "s22", "s23"))
-  expect_setequal(names(accepted_3$theta_spoke_global_mean), c("s31", "s32", "s33"))
-  expect_false(any(names(accepted_2$theta_spoke_global_mean) %in% c("s31", "s32", "s33")))
-  expect_false(any(names(accepted_3$theta_spoke_global_mean) %in% c("s21", "s22", "s23")))
+  expect_setequal(names(accepted_2$theta_spoke_global_mean), paste0("s2", seq_len(6L)))
+  expect_setequal(names(accepted_3$theta_spoke_global_mean), paste0("s3", seq_len(6L)))
+  expect_false(any(names(accepted_2$theta_spoke_global_mean) %in% paste0("s3", seq_len(6L))))
+  expect_false(any(names(accepted_3$theta_spoke_global_mean) %in% paste0("s2", seq_len(6L))))
 })

@@ -4,7 +4,7 @@ test_that("offline linking calibration is deterministic and writes required arti
   run_a <- pairwiseLLM:::.adaptive_linking_calibrate_offline(
     replicates = 2L,
     seed = 11L,
-    set_sizes = c(3L, 3L),
+    set_sizes = c(10L, 6L),
     true_delta = -0.4,
     true_alpha = 1.1,
     judge_b = 0.05,
@@ -17,7 +17,7 @@ test_that("offline linking calibration is deterministic and writes required arti
   run_b <- pairwiseLLM:::.adaptive_linking_calibrate_offline(
     replicates = 2L,
     seed = 11L,
-    set_sizes = c(3L, 3L),
+    set_sizes = c(10L, 6L),
     true_delta = -0.4,
     true_alpha = 1.1,
     judge_b = 0.05,
@@ -81,7 +81,7 @@ test_that("offline calibration reuses canonical production selection utilities",
   pairwiseLLM:::.adaptive_linking_calibrate_offline(
     replicates = 2L,
     seed = 17L,
-    set_sizes = c(3L, 3L),
+    set_sizes = c(10L, 6L),
     n_steps = 50L,
     btl_config = test_link_btl_config(),
     progress = "none"

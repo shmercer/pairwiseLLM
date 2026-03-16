@@ -45,9 +45,9 @@ test_that("adaptive_rank_run_live prints refit blocks and stop criteria", {
 
 test_that("adaptive_rank_run_live prints linking-specific refit summary lines", {
   items <- tibble::tibble(
-    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
-    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
-    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23")
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep(1L, 10L), rep(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
   )
   state <- adaptive_rank_start(items = items, seed = 7L)
   ids <- as.character(state$item_ids)
@@ -62,7 +62,16 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   names(artifacts) <- as.character(sort(unique(items$set_id)))
 
   judge <- function(A, B, state, ...) {
-    y <- as.integer(A$item_id[[1L]] >= B$item_id[[1L]])
+    item_score <- function(item_id) {
+      item_id <- as.character(item_id)
+      if (grepl("^h\\d+$", item_id)) {
+        rank <- as.integer(sub("^h", "", item_id))
+        return(-1.0 + (0.16 * rank))
+      }
+      rank <- as.integer(sub("^s\\d", "", item_id))
+      0.2 + (0.22 * rank)
+    }
+    y <- as.integer(item_score(A$item_id[[1L]]) >= item_score(B$item_id[[1L]]))
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
   stub <- make_deterministic_fit_fn(state$item_ids)
