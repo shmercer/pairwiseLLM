@@ -1715,7 +1715,8 @@ test_that("frozen spokes are retired from ranked routing immediately", {
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
-  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = FALSE)
   state$controller$probe_pairs_per_refit_per_spoke <- 2L
   ranked <- pairwiseLLM:::.adaptive_link_ranked_spokes(
     state,
@@ -1745,7 +1746,8 @@ test_that("selector keeps frozen concurrent spokes retired after controller redu
   state$round$staged_active <- TRUE
   state$round$round_id <- 1L
   state <- mark_link_phase_b_ready(state)
-  state$controller$link_transform_frozen_by_spoke <- list(`3` = TRUE)
+  state$controller$link_state_frozen_by_spoke <- list(`3` = TRUE)
+  state$controller$link_transform_frozen_by_spoke <- list(`3` = FALSE)
   state$controller$link_stopped_by_spoke <- list(`2` = FALSE, `3` = TRUE)
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(delta_spoke_mean = 0, log_alpha_spoke_mean = 0, link_identified = FALSE),
@@ -1753,7 +1755,7 @@ test_that("selector keeps frozen concurrent spokes retired after controller redu
   )
 
   reduced <- pairwiseLLM:::.adaptive_resolve_controller(state, adaptive_defaults(nrow(items)))
-  expect_true(isTRUE(reduced$link_transform_frozen_by_spoke[["3"]]))
+  expect_true(isTRUE(reduced$link_state_frozen_by_spoke[["3"]]))
   expect_true(isTRUE(reduced$link_stopped_by_spoke[["3"]]))
   expect_identical(
     pairwiseLLM:::.adaptive_link_ranked_spokes(
@@ -1927,7 +1929,8 @@ test_that("frozen spokes do not emit post-freeze probe or active steps", {
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
-  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = FALSE)
   state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(

@@ -236,6 +236,7 @@
 }
 
 .adaptive_link_ranked_spokes <- function(state, controller, eligible_spoke_ids = NULL) {
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   set_ids <- unique(as.integer(state$items$set_id))
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- setdiff(set_ids, hub_id)
@@ -257,7 +258,7 @@
   if (length(spoke_ids) < 1L) {
     return(integer())
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   keep_spokes <- vapply(
     spoke_ids,
     function(spoke_id) !isTRUE(frozen_map[[as.character(spoke_id)]]),
@@ -1529,9 +1530,8 @@ generate_stage_candidates_from_state <- function(state,
       spoke_ids = spoke_ids,
       spoke_id = spoke_id
     )
-    frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
     reserved_keys <- character()
-    if (!isTRUE(frozen_map[[as.character(spoke_id)]])) {
+    if (!isTRUE(.adaptive_link_spoke_is_frozen(controller, spoke_id))) {
       reserved_keys <- .adaptive_link_probe_reserved_keys(
         state,
         spoke_id = spoke_id,

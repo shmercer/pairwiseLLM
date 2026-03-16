@@ -4155,7 +4155,7 @@
   state_map <- controller$link_transform_state_by_spoke %||% list()
   last_delta <- controller$link_transform_last_delta_by_spoke %||% list()
   last_log_alpha <- controller$link_transform_last_log_alpha_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
   spoke_ids <- spoke_ids[!vapply(
@@ -5280,7 +5280,7 @@
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   cached_budget_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
   cached_budget_map <- controller$link_budget_map %||% list()
   if (!is.na(cached_budget_refit_id) &&
@@ -5606,9 +5606,11 @@
     link_stop_eligible <- as.logical(stats_row$link_stop_eligible %||%
       (isTRUE(lag_eligible) && isTRUE(link_min_refit_eligible) && isTRUE(link_stop_gate_open)))
     link_stop_pass <- as.logical(stats_row$link_stop_pass %||% FALSE)
-    transform_frozen <- isTRUE(
-      stats_row$link_state_frozen %||% stats_row$transform_frozen %||% FALSE
-    ) || isTRUE(link_stop_pass)
+    transform_frozen <- isTRUE(stats_row$link_state_frozen %||% FALSE)
+    if (!isTRUE(transform_frozen) && "transform_frozen" %in% names(stats_row)) {
+      transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE)
+    }
+    transform_frozen <- isTRUE(transform_frozen) || isTRUE(link_stop_pass)
     stats_epoch_id <- as.integer(stats_row$link_epoch_id %||% .adaptive_link_probe_epoch_for_spoke(state, spoke_id))
     probe_panel <- .adaptive_link_probe_panel_for_spoke(
       state,
@@ -5837,8 +5839,7 @@
       link_stop_pass = as.logical(link_stop_pass),
       link_state_frozen = as.logical(transform_frozen),
       link_state_frozen_refit_id = as.integer(
-        controller$link_state_frozen_refit_id_by_spoke[[key]] %||%
-          controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
+        .adaptive_link_state_frozen_refit_id_by_spoke(controller)[[key]] %||%
           if (isTRUE(transform_frozen)) refit_id else NA_integer_
       ),
       stability_window_refits_used = as.integer(

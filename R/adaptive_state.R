@@ -1101,6 +1101,50 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_runtime_controller_resolve <- function(state, controller = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state object.")
+  }
+  if (is.null(controller)) {
+    return(.adaptive_controller_resolve(state))
+  }
+
+  n_items <- as.integer(state$n_items)
+  controller <- .adaptive_controller_normalize_legacy_fields(controller, n_items = n_items)
+  utils::modifyList(.adaptive_controller_defaults(n_items), controller)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_state_frozen_by_spoke <- function(controller) {
+  frozen_map <- controller$link_state_frozen_by_spoke %||% list()
+  if (!is.list(frozen_map)) {
+    frozen_map <- list()
+  }
+  frozen_map
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_state_frozen_refit_id_by_spoke <- function(controller) {
+  frozen_refit_map <- controller$link_state_frozen_refit_id_by_spoke %||% list()
+  if (!is.list(frozen_refit_map)) {
+    frozen_refit_map <- list()
+  }
+  frozen_refit_map
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_spoke_is_frozen <- function(controller, spoke_id) {
+  if (length(spoke_id) != 1L || is.na(spoke_id)) {
+    return(FALSE)
+  }
+  isTRUE(.adaptive_link_state_frozen_by_spoke(controller)[[as.character(spoke_id)]])
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_budget_fields <- function() {
   c(
     "B_spoke_refit_budget",

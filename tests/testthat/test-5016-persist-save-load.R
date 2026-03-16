@@ -687,6 +687,38 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   expect_identical(restored$controller$link_escalation_recent_pass_window_by_spoke[["2"]], c(TRUE))
 })
 
+test_that("load_adaptive_session normalizes legacy controller freeze fields into canonical state", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 23L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_transform_policy = "auto"
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  persisted_state <- readRDS(file.path(session_dir, "state.rds"))
+  persisted_state$controller$link_state_frozen_by_spoke <- NULL
+  persisted_state$controller$link_state_frozen_refit_id_by_spoke <- NULL
+  persisted_state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  persisted_state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 5L)
+  saveRDS(persisted_state, file.path(session_dir, "state.rds"))
+
+  restored <- load_adaptive_session(session_dir)
+
+  expect_true(isTRUE(restored$controller$link_state_frozen_by_spoke[["2"]]))
+  expect_identical(restored$controller$link_state_frozen_refit_id_by_spoke[["2"]], 5L)
+})
+
 test_that("load_adaptive_session normalizes legacy link_stage_log transform columns on resume", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),

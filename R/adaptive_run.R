@@ -541,7 +541,7 @@
 .adaptive_link_probe_active_progress_guard <- function(state,
                                                        controller,
                                                        eligible_spoke_ids = NULL) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   run_mode <- as.character(controller$run_mode %||% "within_set")
   concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   if (!(identical(run_mode, "link_multi_spoke") && isTRUE(concurrent_mode))) {
@@ -589,7 +589,7 @@
       eligible_spoke_ids = effective_spokes
     )
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
 
   budgeted_spokes <- integer()
@@ -631,7 +631,7 @@
 .adaptive_link_probe_next_holdout_spoke <- function(state,
                                                     controller,
                                                     eligible_spoke_ids = NULL) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   spoke_ids <- as.integer(eligible_spoke_ids %||% phase_ctx$active_spokes %||% integer())
   spoke_ids <- sort(unique(spoke_ids[!is.na(spoke_ids)]))
@@ -700,7 +700,7 @@
   if (isTRUE(fairness_guard$block_probes)) {
     return(NA_integer_)
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   ranked_spokes <- .adaptive_link_ranked_spokes(
     state = state,
     controller = controller,
@@ -1086,10 +1086,10 @@
   stopped_map <- controller$link_stopped_by_spoke %||% list()
   stop_refit_map <- controller$link_stop_refit_id_by_spoke %||% list()
   stop_reason_map <- controller$link_stop_reason_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
-  frozen_refit_map <- controller$link_transform_frozen_refit_id_by_spoke %||% list()
+  frozen_refit_map <- .adaptive_link_state_frozen_refit_id_by_spoke(controller)
   state_map <- controller$link_transform_state_by_spoke %||% list()
 
   for (idx in seq_len(nrow(rows))) {
@@ -1164,7 +1164,7 @@
     return(FALSE)
   }
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   all(vapply(
     as.character(spoke_ids),
     function(key) isTRUE(stopped_map[[key]]) || isTRUE(frozen_map[[key]]),
@@ -1178,7 +1178,7 @@
                                                    controller = NULL,
                                                    refit_id = NULL,
                                                    exclude_exhausted = FALSE) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   if (!.adaptive_link_mode_active(controller)) {
     return(integer())
   }
@@ -1194,7 +1194,7 @@
   }
 
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   keep <- vapply(
     as.character(spoke_ids),
     function(key) !isTRUE(stopped_map[[key]]) && !isTRUE(frozen_map[[key]]),

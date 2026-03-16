@@ -316,7 +316,9 @@ adaptive_defaults <- function(N) {
 }
 
 .adaptive_resolve_controller <- function(state, defaults) {
-  controller <- state$controller %||% list()
+  controller <- .adaptive_controller_resolve(state)
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
+  frozen_refit_map <- .adaptive_link_state_frozen_refit_id_by_spoke(controller)
   list(
     run_mode = as.character(controller$run_mode %||% "within_set"),
     hub_id = as.integer(controller$hub_id %||% 1L),
@@ -329,9 +331,10 @@ adaptive_defaults <- function(N) {
     link_budget_map = controller$link_budget_map %||% list(),
     link_stopped_by_spoke = controller$link_stopped_by_spoke %||% list(),
     link_stop_refit_id_by_spoke = controller$link_stop_refit_id_by_spoke %||% list(),
-    link_transform_frozen_by_spoke = controller$link_transform_frozen_by_spoke %||% list(),
-    link_transform_frozen_refit_id_by_spoke =
-      controller$link_transform_frozen_refit_id_by_spoke %||% list(),
+    link_state_frozen_by_spoke = frozen_map,
+    link_state_frozen_refit_id_by_spoke = frozen_refit_map,
+    link_transform_frozen_by_spoke = frozen_map,
+    link_transform_frozen_refit_id_by_spoke = frozen_refit_map,
     B_spoke_refit_budget = as.integer(controller$B_spoke_refit_budget %||% NA_integer_),
     B_spoke_refit_budget_source = as.character(
       controller$B_spoke_refit_budget_source %||% NA_character_
@@ -1828,7 +1831,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
           as.integer(spoke_attempt %||% NA_integer_)
         }
         if (!is.na(spoke_for_utility) &&
-          isTRUE((link_controller$link_transform_frozen_by_spoke %||% list())[[as.character(spoke_for_utility)]])) {
+          isTRUE((link_controller$link_state_frozen_by_spoke %||% list())[[as.character(spoke_for_utility)]])) {
           rlang::abort(
             paste0(
               "Selector invariant failed: frozen spoke_id=",

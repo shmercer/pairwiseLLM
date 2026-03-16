@@ -330,9 +330,7 @@ test_that("freeze state in regression matrix remains one-way across subsequent u
 
   expect_true(isTRUE(frozen_twice$controller$link_state_frozen_by_spoke[["2"]]))
   expect_identical(frozen_twice$controller$link_state_frozen_refit_id_by_spoke[["2"]], 1L)
-  expect_true(isTRUE(frozen_twice$controller$link_transform_frozen_by_spoke[["2"]]))
   expect_equal(frozen_twice$controller$link_transform_frozen_delta_by_spoke[["2"]], 0.22, tolerance = 1e-12)
-  expect_identical(frozen_twice$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 1L)
 })
 
 test_that("anchored-joint frozen spokes are removed from active and probe routing", {

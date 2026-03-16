@@ -630,6 +630,8 @@ test_that("freeze transition is one-way and refit reuses frozen transform parame
       log_alpha_spoke_mean = NA_real_
     )
   )
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = FALSE)
+  state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 9L)
 
   out <- testthat::with_mocked_bindings(
     .adaptive_link_fit_transform = function(...) {
@@ -643,8 +645,8 @@ test_that("freeze transition is one-way and refit reuses frozen transform parame
   )
 
   stats <- out$controller$link_refit_stats_by_spoke[["2"]]
-  expect_true(isTRUE(out$controller$link_transform_frozen_by_spoke[["2"]]))
-  expect_identical(out$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 1L)
+  expect_true(isTRUE(out$controller$link_state_frozen_by_spoke[["2"]]))
+  expect_identical(out$controller$link_state_frozen_refit_id_by_spoke[["2"]], 1L)
   expect_true(isTRUE(stats$link_state_frozen))
   expect_equal(stats$delta_spoke_mean, 0.17, tolerance = 1e-12)
 })
@@ -671,6 +673,7 @@ test_that("link stage rows retire frozen spokes with zero budget and zero new wo
     )
   )
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only", `3` = "shift_only")
+  state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 99L)
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
       link_transform_state = "shift_only",
@@ -714,6 +717,7 @@ test_that("link stage rows retire frozen spokes with zero budget and zero new wo
 
   expect_identical(nrow(frozen_row), 1L)
   expect_true(isTRUE(frozen_row$link_state_frozen[[1L]]))
+  expect_identical(frozen_row$link_state_frozen_refit_id[[1L]], 1L)
   expect_true(isTRUE(frozen_row$link_stop_pass[[1L]]))
   expect_identical(frozen_row$B_spoke_refit_budget[[1L]], 0L)
   expect_identical(frozen_row$n_cross_edges_active_since_last_refit[[1L]], 0L)

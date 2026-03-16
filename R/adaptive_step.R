@@ -812,8 +812,8 @@ run_one_step <- function(state, judge, ...) {
     !is.na(selected_spoke_id)) {
     link_spoke_id <- selected_spoke_id
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
-  if (isTRUE(is_cross_set) && !is.na(link_spoke_id) && isTRUE(frozen_map[[as.character(link_spoke_id)]])) {
+  if (isTRUE(is_cross_set) && !is.na(link_spoke_id) &&
+    isTRUE(.adaptive_link_spoke_is_frozen(controller, link_spoke_id))) {
     rlang::abort(
       paste0(
         "Phase B retirement invariant failed: runtime attempted to emit a cross-set step for frozen ",

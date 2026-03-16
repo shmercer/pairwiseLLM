@@ -229,6 +229,7 @@ test_that("run_one_step retires frozen spoke work without emitting a new step", 
     phase_b_started_at_step = 1L
   )
   state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = FALSE)
   state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
   state$controller$link_stage_coverage_bins_used <- list(`2` = 3L)

@@ -1184,7 +1184,8 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
 test_that("candidate ranking and refit-stop helpers cover remaining routing and stop branches", {
   state <- make_link_probe_state()
   state$controller$multi_spoke_mode <- "concurrent"
-  state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
+  state$controller$link_transform_frozen_by_spoke <- list(`2` = FALSE)
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
   state$refit_meta$last_refit_step <- 0L
   state <- append_cross_probe_step(state, 1L, "h1", "s21", 1L, 2L)
@@ -1724,7 +1725,8 @@ test_that("remaining candidate-generation and budget helpers cover edge branches
     realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
     collect_holdout_now_by_spoke = list(`2` = FALSE)
   )
-  probe_state$controller$link_transform_frozen_by_spoke <- list(`2` = FALSE)
+  probe_state$controller$link_state_frozen_by_spoke <- list(`2` = FALSE)
+  probe_state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
   pruned <- pairwiseLLM:::generate_stage_candidates_from_state(
     state = probe_state,
     stage_name = "anchor_link",
