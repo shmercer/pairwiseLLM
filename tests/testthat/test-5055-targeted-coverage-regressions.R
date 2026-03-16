@@ -871,5 +871,8 @@ test_that("adaptive run helper fallbacks cover remaining probe and phase-scope b
     2L
   )
   expect_false(.adaptive_link_all_spokes_exhausted(phase_b_empty, refit_id = NA_integer_))
-  expect_false(.adaptive_link_phase_b_window_exhausted(adaptive_rank_start(make_test_items(3), seed = 5L), refit_id = 1L))
+  expect_false(.adaptive_link_phase_b_window_exhausted(
+    adaptive_rank_start(make_test_items(3), seed = 5L),
+    refit_id = 1L
+  ))
 })

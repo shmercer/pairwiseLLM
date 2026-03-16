@@ -637,8 +637,8 @@ test_that("probe effort plan accelerates deterministically for identified probe-
     spoke_id = 2L
   )
   expect_identical(plan0$base_cap, 1L)
-  expect_identical(plan0$effective_cap, 3L)
-  expect_true(isTRUE(plan0$acceleration_used))
+  expect_identical(plan0$effective_cap, 1L)
+  expect_false(isTRUE(plan0$acceleration_used))
 
   step1 <- append_cross_probe_step(state, 11L, "h1", "s21", 1L, 2L)
   step1 <- pairwiseLLM:::.adaptive_link_probe_register_commit(
@@ -659,57 +659,11 @@ test_that("probe effort plan accelerates deterministically for identified probe-
     controller = step1$controller,
     spoke_id = 2L
   )
-  expect_identical(plan1$effective_cap, 3L)
+  expect_identical(plan1$effective_cap, 1L)
   expect_identical(plan1$realized_refit, 1L)
-  expect_identical(
-    pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
-      step1,
-      controller = step1$controller,
-      eligible_spoke_ids = 2L
-    ),
-    2L
-  )
-
-  step2 <- append_cross_probe_step(step1, 12L, "h2", "s21", 0L, 2L)
-  step2 <- pairwiseLLM:::.adaptive_link_probe_register_commit(
-    step2,
-    tibble::tibble(
-      step_id = 12L,
-      pair_id = 12L,
-      A = match("h2", step2$item_ids),
-      B = match("s21", step2$item_ids),
-      Y = 0L,
-      run_mode = "link_probe_holdout",
-      link_spoke_id = 2L,
-      is_probe_step = TRUE
-    )
-  )
-  expect_identical(
-    pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
-      step2,
-      controller = step2$controller,
-      eligible_spoke_ids = 2L
-    ),
-    2L
-  )
-
-  step3 <- append_cross_probe_step(step2, 13L, "h3", "s22", 1L, 2L)
-  step3 <- pairwiseLLM:::.adaptive_link_probe_register_commit(
-    step3,
-    tibble::tibble(
-      step_id = 13L,
-      pair_id = 13L,
-      A = match("h3", step3$item_ids),
-      B = match("s22", step3$item_ids),
-      Y = 1L,
-      run_mode = "link_probe_holdout",
-      link_spoke_id = 2L,
-      is_probe_step = TRUE
-    )
-  )
   expect_true(is.na(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
-    step3,
-    controller = step3$controller,
+    step1,
+    controller = step1$controller,
     eligible_spoke_ids = 2L
   )))
 })

@@ -475,20 +475,13 @@
       if (nrow(last_stage_row) > 0L) last_stage_row$link_stop_eligible[[1L]] else FALSE
   )
 
-  acceleration_used <- isTRUE(linking_identified) &&
-    !isTRUE(link_stop_eligible) &&
-    remaining_to_min_start > base_cap &&
-    panel_shortfall_start > base_cap
-  effective_cap <- if (isTRUE(acceleration_used)) {
-    min(panel_shortfall_start, remaining_to_min_start)
-  } else {
-    base_cap
-  }
+  acceleration_used <- FALSE
+  effective_cap <- base_cap
 
   list(
     spoke_id = as.integer(spoke_id),
     base_cap = as.integer(base_cap),
-    effective_cap = as.integer(max(base_cap, effective_cap)),
+    effective_cap = as.integer(max(0L, effective_cap)),
     realized_min = as.integer(realized_min),
     realized_total = as.integer(realized_total),
     realized_refit = as.integer(realized_refit),
@@ -725,7 +718,6 @@
   pending_tbl <- tibble::as_tibble(do.call(rbind, lapply(pending, as.data.frame)))
   pending_tbl <- pending_tbl[
     order(
-      -as.integer(pending_tbl$acceleration_used %in% TRUE),
       as.integer(pending_tbl$remaining_to_min_start),
       as.integer(pending_tbl$realized_refit),
       as.integer(pending_tbl$realized_total),

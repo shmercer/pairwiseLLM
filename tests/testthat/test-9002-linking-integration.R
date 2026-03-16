@@ -396,6 +396,22 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   ]
   expect_true(nrow(active_budget_rows) >= 1L)
   expect_true(all(as.integer(active_budget_rows$n_cross_edges_active_since_last_refit) >= 1L))
+  probe_audit_rows <- out_con$link_stage_log[
+    !is.na(out_con$link_stage_log$probe_effort_base_cap) &
+      !is.na(out_con$link_stage_log$probe_effort_effective_cap),
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(probe_audit_rows) >= 1L)
+  expect_false(any(probe_audit_rows$probe_acceleration_used %in% TRUE))
+  expect_true(all(
+    as.integer(probe_audit_rows$probe_effort_effective_cap) ==
+      as.integer(probe_audit_rows$probe_effort_base_cap)
+  ))
+  expect_true(all(
+    as.integer(probe_audit_rows$n_cross_edges_probe_since_last_refit) <=
+      as.integer(probe_audit_rows$probe_effort_effective_cap)
+  ))
 
   committed_con <- out_con$step_log[
     !is.na(out_con$step_log$pair_id) & out_con$step_log$is_cross_set %in% TRUE,

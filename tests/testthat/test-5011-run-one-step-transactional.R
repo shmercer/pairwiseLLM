@@ -320,7 +320,7 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
   expect_true(nrow(out$linking$probe$panels_by_spoke[["2"]]) >= 1L)
 })
 
-test_that("run_one_step can realize multiple holdout probes in one refit when probe evidence is the blocker", {
+test_that("run_one_step keeps holdout probe work within the ordinary per-refit cap", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22"),
     set_id = c(1L, 1L, 1L, 2L, 2L),
@@ -390,16 +390,26 @@ test_that("run_one_step can realize multiple holdout probes in one refit when pr
 
   step1 <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
   step2 <- pairwiseLLM:::run_one_step(step1, make_deterministic_judge("i_wins"))
-  step3 <- pairwiseLLM:::run_one_step(step2, make_deterministic_judge("i_wins"))
-  rows <- tail(step3$step_log, 3L)
+  rows <- tail(step2$step_log, 2L)
 
-  expect_true(all(as.character(rows$run_mode) == "link_probe_holdout"))
-  expect_true(all(rows$is_probe_step %in% TRUE))
-  expect_true(all(rows$is_holdout_probe_step %in% TRUE))
-  expect_identical(nrow(step3$history_pairs), 0L)
+  expect_identical(as.character(rows$run_mode[[1L]]), "link_probe_holdout")
+  expect_true(isTRUE(rows$is_probe_step[[1L]]))
+  expect_true(isTRUE(rows$is_holdout_probe_step[[1L]]))
+  expect_false(isTRUE(rows$is_probe_step[[2L]]))
+  expect_false(isTRUE(rows$is_holdout_probe_step[[2L]]))
+  expect_true(isTRUE(rows$is_cross_set[[2L]]))
   expect_identical(
-    pairwiseLLM:::.adaptive_link_probe_realized_count(step3, 2L, epoch_id = 1L),
-    3L
+    pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+      step1,
+      controller = step1$controller,
+      eligible_spoke_ids = 2L
+    ),
+    NA_integer_
+  )
+  expect_identical(nrow(step2$history_pairs), 1L)
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(step2, 2L, epoch_id = 1L),
+    1L
   )
 })
 

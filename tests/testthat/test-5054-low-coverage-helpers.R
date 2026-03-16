@@ -1082,7 +1082,7 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
           realized_refit = 0L,
           effective_cap = 2L,
           remaining_to_min_start = 1L,
-          acceleration_used = TRUE
+          acceleration_used = FALSE
         )
       } else {
         list(
