@@ -1090,3 +1090,116 @@ test_that("save/load preserves Phase B global audit metrics built from Phase A a
     state$refit_meta$phase_b_global_theta_mean_history
   )
 })
+
+test_that("load_adaptive_session reconstructs anchored-joint accepted-state scaffolding", {
+  items <- tibble::tibble(
+    item_id = c("a1", "a2", "b1", "b2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("g_a1", "g_a2", "g_b1", "g_b2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 71L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  draws <- matrix(
+    c(
+      1.0, 0.8, -0.5, -0.7,
+      1.1, 0.9, -0.4, -0.6,
+      1.2, 1.0, -0.3, -0.5,
+      0.9, 0.7, -0.6, -0.8
+    ),
+    nrow = 4,
+    byrow = TRUE
+  )
+  colnames(draws) <- as.character(state$item_ids)
+  state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
+  t0 <- as.POSIXct("2026-01-02 00:00:00", tz = "UTC")
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = t0,
+      pair_id = 1L,
+      A = 1L,
+      B = 2L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 1L,
+      is_cross_set = FALSE,
+      run_mode = "within_set"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = t0 + 1,
+      pair_id = 2L,
+      A = 3L,
+      B = 4L,
+      Y = 0L,
+      set_i = 2L,
+      set_j = 2L,
+      is_cross_set = FALSE,
+      run_mode = "within_set"
+    )
+  )
+  state$history_pairs <- tibble::tibble(
+    A_id = c("a1", "b1"),
+    B_id = c("a2", "b2")
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 1L,
+      round_id_at_refit = 1L,
+      step_id_at_refit = 1L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 1L
+    )
+  )
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 2L,
+      round_id_at_refit = 2L,
+      step_id_at_refit = 2L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 2L
+    )
+  )
+  art1 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+  state <- pairwiseLLM:::.adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(phase_a_artifacts = list(`1` = art1, `2` = art2))
+  )
+  state <- pairwiseLLM:::.adaptive_phase_a_prepare(state)
+  state$linking$anchored_joint$accepted_state_by_spoke <- list()
+  state$linking$anchored_joint$fisher_t0_by_spoke <- list()
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+  restored <- load_adaptive_session(session_dir)
+
+  accepted <- restored$linking$anchored_joint$accepted_state_by_spoke[["2"]]
+  fisher_t0 <- restored$linking$anchored_joint$fisher_t0_by_spoke[["2"]]
+  expect_identical(accepted$anchored_joint_init_state_method, "artifact_copy_init")
+  expect_true(isTRUE(fisher_t0$I_s_t0_zero))
+  expect_identical(fisher_t0$n_link_active_pairs, 0L)
+  expect_equal(
+    restored$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence$A_item,
+    "a1"
+  )
+})

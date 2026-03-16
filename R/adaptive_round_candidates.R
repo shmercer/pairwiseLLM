@@ -437,6 +437,7 @@
   proxy_scores <- .adaptive_rank_proxy(state)$scores
   link_refit_mode <- as.character(controller$link_refit_mode %||% "shift_only")
   use_current_theta <- identical(link_refit_mode, "joint_refit")
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
   active_sets <- sort(unique(as.integer(set_map[active_ids])))
   active_sets <- active_sets[!is.na(active_sets)]
   if (length(active_sets) < 1L) {
@@ -481,6 +482,11 @@
       phase_vals
     }
     names(raw_theta) <- as.character(set_items)
+    if (identical(link_estimation_mode, "anchored_joint") &&
+      as.integer(set_id) == as.integer(hub_id)) {
+      raw_theta <- as.double(phase_a_theta()[set_items])
+      names(raw_theta) <- as.character(set_items)
+    }
     if (as.integer(set_id) == as.integer(hub_id)) {
       missing_raw <- !is.finite(raw_theta)
       if (any(missing_raw)) {
@@ -500,6 +506,30 @@
 
     if (as.integer(set_id) == as.integer(hub_id)) {
       scores[set_items] <- as.double(raw_theta)
+      next
+    }
+
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      accepted_map <- (state$linking$anchored_joint %||% list())$accepted_state_by_spoke %||% list()
+      accepted_state <- accepted_map[[as.character(set_id)]] %||% NULL
+      if (is.null(accepted_state)) {
+        accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
+          state = state,
+          spoke_id = as.integer(set_id),
+          controller = controller
+        )
+      }
+      spoke_scores <- as.double(accepted_state$theta_spoke_global_mean[set_items])
+      names(spoke_scores) <- as.character(set_items)
+      if (any(!is.finite(spoke_scores))) {
+        rlang::abort(
+          sprintf(
+            "Anchored-joint routing invariant failed: accepted spoke scores missing/non-finite for set_id=%s.",
+            as.integer(set_id)
+          )
+        )
+      }
+      scores[set_items] <- spoke_scores
       next
     }
 

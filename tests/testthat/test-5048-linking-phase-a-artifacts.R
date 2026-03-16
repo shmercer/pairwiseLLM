@@ -25,14 +25,49 @@ make_phase_a_ready_state <- function() {
   state
 }
 
-test_that("phase A artifacts round-trip through persistence", {
+make_phase_a_ready_state_with_evidence <- function() {
   state <- make_phase_a_ready_state()
+  ts0 <- as.POSIXct("2026-01-01 00:00:00", tz = "UTC")
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = ts0,
+      pair_id = 1L,
+      A = 1L,
+      B = 2L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 1L,
+      is_cross_set = FALSE,
+      run_mode = "within_set"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = ts0 + 1,
+      pair_id = 2L,
+      A = 3L,
+      B = 4L,
+      Y = 0L,
+      set_i = 2L,
+      set_j = 2L,
+      is_cross_set = FALSE,
+      run_mode = "within_set"
+    )
+  )
+  state$history_pairs <- tibble::tibble(
+    A_id = c("a1", "b1"),
+    B_id = c("a2", "b2")
+  )
   state$round_log <- pairwiseLLM:::append_round_log(
     state$round_log,
     list(
       refit_id = 1L,
       round_id_at_refit = 1L,
-      step_id_at_refit = 10L,
+      step_id_at_refit = 1L,
       diagnostics_pass = TRUE,
       phase_scope = "phase_a_set",
       phase_scope_set_id = 1L
@@ -43,12 +78,49 @@ test_that("phase A artifacts round-trip through persistence", {
     list(
       refit_id = 2L,
       round_id_at_refit = 2L,
-      step_id_at_refit = 20L,
+      step_id_at_refit = 2L,
       diagnostics_pass = TRUE,
       phase_scope = "phase_a_set",
       phase_scope_set_id = 2L
     )
   )
+  state
+}
+
+test_that("phase A artifacts carry exact within-set evidence surfaces", {
+  state <- make_phase_a_ready_state_with_evidence()
+
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+
+  expect_equal(art1$n_pairs_committed, 1L)
+  expect_equal(art2$n_pairs_committed, 1L)
+  expect_equal(
+    art1$phase_a_within_set_evidence,
+    tibble::tibble(
+      pair_id = 1L,
+      step_id = 1L,
+      A_item = "a1",
+      B_item = "a2",
+      y_A = 1L
+    )
+  )
+  expect_equal(
+    art2$phase_a_within_set_evidence,
+    tibble::tibble(
+      pair_id = 2L,
+      step_id = 2L,
+      A_item = "b1",
+      B_item = "b2",
+      y_A = 0L
+    )
+  )
+  expect_true(is.character(art1$phase_a_within_set_evidence_hash))
+  expect_identical(art1$phase_a_within_set_evidence_source, "canonical_committed_step_log")
+})
+
+test_that("phase A artifacts round-trip through persistence", {
+  state <- make_phase_a_ready_state_with_evidence()
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
   art1$quality_gate_accepted <- TRUE
@@ -81,6 +153,80 @@ test_that("phase A artifacts round-trip through persistence", {
   expect_equal(as.integer(r1$set_id), 1L)
   expect_equal(as.integer(r1$refit_id), 1L)
   expect_true(all(c("global_item_id", "theta_raw_mean", "theta_raw_sd") %in% names(r1$items)))
+  expect_equal(nrow(r1$phase_a_within_set_evidence), 1L)
+})
+
+test_that("anchored-joint import validation rejects summary-only artifacts without exact evidence", {
+  state <- make_phase_a_ready_state()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  source_state <- .adaptive_apply_controller_config(
+    make_phase_a_ready_state_with_evidence(),
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  artifact <- .adaptive_phase_a_build_artifact(source_state, set_id = 1L)
+  artifact$quality_gate_accepted <- TRUE
+  artifact$phase_a_within_set_evidence <- NULL
+  artifact$phase_a_within_set_evidence_hash <- NULL
+  artifact$phase_a_within_set_evidence_source <- NULL
+  artifact$n_pairs_committed <- 1L
+  controller <- .adaptive_controller_resolve(state)
+
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      artifact,
+      state,
+      set_id = 1L,
+      controller = controller
+    ),
+    "exact within-set committed-edge history is unavailable"
+  )
+})
+
+test_that("phase_a_prepare scaffolds anchored-joint artifact-copy accepted states", {
+  state <- .adaptive_apply_controller_config(
+    make_phase_a_ready_state_with_evidence(),
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(phase_a_artifacts = list(`1` = art1, `2` = art2))
+  )
+
+  state <- .adaptive_phase_a_prepare(state)
+  accepted <- state$linking$anchored_joint$accepted_state_by_spoke[["2"]]
+  fisher_t0 <- state$linking$anchored_joint$fisher_t0_by_spoke[["2"]]
+
+  expect_identical(state$linking$phase_a$phase, "phase_b")
+  expect_identical(accepted$anchored_joint_init_state_method, "artifact_copy_init")
+  expect_equal(unname(accepted$theta_hub_fixed[c("a1", "a2")]), c(1.05, 0.85), tolerance = 1e-8)
+  expect_equal(unname(accepted$theta_spoke_global_mean[c("b1", "b2")]), c(-0.45, -0.65), tolerance = 1e-8)
+  expect_true(isTRUE(fisher_t0$I_s_t0_zero))
+  expect_identical(fisher_t0$n_link_active_pairs, 0L)
+  expect_identical(fisher_t0$anchored_joint_init_state_method, "artifact_copy_init")
 })
 
 test_that("phase A import validation rejects each required failure mode", {
@@ -595,8 +741,7 @@ test_that("phase A helper branch guards and edge paths are exercised", {
 })
 
 test_that("resume preserves persisted phase A artifacts for linking gate", {
-  state <- make_phase_a_ready_state()
-  judge <- make_deterministic_judge("i_wins")
+  state <- make_phase_a_ready_state_with_evidence()
 
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
@@ -621,24 +766,26 @@ test_that("resume preserves persisted phase A artifacts for linking gate", {
   restored <- load_adaptive_session(session_dir)
   restored$btl_fit <- NULL
 
-  expect_no_error(
-    adaptive_rank_run_live(
-      restored,
-      judge,
-      n_steps = 1L,
-      adaptive_config = list(
-        run_mode = "link_one_spoke",
-        hub_id = 1L,
-        phase_a_mode = "import",
-        phase_a_artifacts = list()
-      ),
-      progress = "none"
+  restored <- .adaptive_apply_controller_config(
+    restored,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_required_reliability_min = 0,
+      phase_a_artifacts = list()
     )
   )
+  expect_no_error(
+    restored <- .adaptive_phase_a_prepare(restored)
+  )
+  expect_no_error(.adaptive_phase_a_gate_or_abort(restored))
+  status <- tibble::as_tibble(restored$linking$phase_a$set_status)
+  expect_true(all(status$status == "ready"))
 })
 
 test_that("resume preserves Phase A pending/ready semantics and warm-start state", {
-  state <- make_phase_a_ready_state()
+  state <- make_phase_a_ready_state_with_evidence()
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
   art1$quality_gate_accepted <- TRUE

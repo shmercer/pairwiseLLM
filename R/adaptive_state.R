@@ -126,6 +126,15 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_anchored_joint_empty_state <- function() {
+  list(
+    accepted_state_by_spoke = list(),
+    fisher_t0_by_spoke = list()
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_stage_order <- function() {
   c("anchor_link", "long_link", "mid_link", "local_link")
 }
@@ -1038,6 +1047,7 @@
     hub_id = hub_id,
     spoke_ids = as.integer(spoke_ids),
     is_multi_set = length(set_ids) > 1L,
+    anchored_joint = linking$anchored_joint %||% .adaptive_anchored_joint_empty_state(),
     phase_a = linking$phase_a %||% list(
       set_status = .adaptive_phase_a_empty_state(set_ids),
       artifacts = list(),
@@ -1661,6 +1671,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         spoke_ids = integer(),
         is_multi_set = length(unique(set_ids)) > 1L,
         probe = .adaptive_link_probe_empty_state(),
+        anchored_joint = .adaptive_anchored_joint_empty_state(),
         phase_a = list(
           set_status = .adaptive_phase_a_empty_state(unique(set_ids)),
           artifacts = list(),

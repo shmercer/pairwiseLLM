@@ -566,6 +566,31 @@ adaptive_defaults <- function(N) {
   if (length(set_ids) < 1L) {
     return(stats::setNames(numeric(), character()))
   }
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    theta_global <- stats::setNames(numeric(), character())
+    hub_theta <- .adaptive_link_phase_a_theta_map(state, set_id = hub_id, field = "theta_raw_mean")
+    for (set_id in set_ids) {
+      set_items <- ids[as.integer(set_by_item[ids]) == as.integer(set_id)]
+      theta_map <- if (identical(as.integer(set_id), hub_id)) {
+        hub_theta
+      } else {
+        accepted_map <- (state$linking$anchored_joint %||% list())$accepted_state_by_spoke %||% list()
+        accepted_state <- accepted_map[[as.character(set_id)]] %||% NULL
+        if (is.null(accepted_state)) {
+          accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
+            state = state,
+            spoke_id = as.integer(set_id),
+            controller = controller
+          )
+        }
+        accepted_state$theta_spoke_global_mean %||% stats::setNames(numeric(), character())
+      }
+      theta_vals <- as.double(theta_map[set_items])
+      names(theta_vals) <- as.character(set_items)
+      theta_global <- c(theta_global, theta_vals)
+    }
+    return(theta_global[!duplicated(names(theta_global))])
+  }
 
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   theta_global <- stats::setNames(numeric(), character())
@@ -716,6 +741,14 @@ adaptive_defaults <- function(N) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L || is.na(spoke_id)) {
     return(cand)
+  }
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    rlang::abort(
+      paste0(
+        "Anchored-joint Phase B D-optimal candidate utility is not implemented in this PR. ",
+        "Accepted-state scaffolding is available, but mode-specific utility lands in PR 3."
+      )
+    )
   }
   theta_global <- .adaptive_link_theta_global_map_for_items(
     state = state,

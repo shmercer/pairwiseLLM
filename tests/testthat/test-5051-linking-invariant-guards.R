@@ -382,3 +382,32 @@ test_that("all-spokes-stopped helper is phase and mode aware", {
   state$controller$link_stopped_by_spoke <- list(`2` = TRUE, `3` = TRUE)
   expect_true(pairwiseLLM:::.adaptive_link_all_spokes_stopped(state))
 })
+
+test_that("anchored-joint utility path aborts until mode-specific D-optimal utility lands", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 19L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_attach_predictive_utility(
+      candidates = tibble::tibble(i = "h1", j = "s21"),
+      state = state,
+      controller = controller,
+      spoke_id = 2L
+    ),
+    "mode-specific utility lands in PR 3"
+  )
+})
