@@ -431,10 +431,49 @@
   stats::setNames(as.integer(idx), sorted)
 }
 
+.adaptive_link_require_phase_a_theta_map <- function(state,
+                                                     set_id,
+                                                     field,
+                                                     required_item_ids,
+                                                     helper_name) {
+  set_id <- as.integer(set_id)
+  required_item_ids <- unique(as.character(required_item_ids))
+  required_item_ids <- required_item_ids[!is.na(required_item_ids)]
+
+  theta_map <- tryCatch(
+    .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = field),
+    error = function(e) {
+      rlang::abort(
+        sprintf(
+          "%s invariant failed: Phase A %s unavailable for set_id=%s.",
+          helper_name,
+          field,
+          set_id
+        ),
+        parent = e
+      )
+    }
+  )
+
+  theta_vals <- as.double(theta_map[required_item_ids])
+  names(theta_vals) <- required_item_ids
+  if (any(!is.finite(theta_vals))) {
+    rlang::abort(
+      sprintf(
+        "%s invariant failed: Phase A %s missing/non-finite for set_id=%s.",
+        helper_name,
+        field,
+        set_id
+      )
+    )
+  }
+
+  theta_vals
+}
+
 .adaptive_link_phase_b_routing_scores <- function(state, controller, active_ids, hub_id) {
   active_ids <- as.character(active_ids)
   set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-  proxy_scores <- .adaptive_rank_proxy(state)$scores
   link_refit_mode <- as.character(controller$link_refit_mode %||% "shift_only")
   use_current_theta <- identical(link_refit_mode, "joint_refit")
   link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
@@ -449,20 +488,12 @@
   for (set_id in active_sets) {
     set_items <- active_ids[as.integer(set_map[active_ids]) == as.integer(set_id)]
     phase_a_theta <- function() {
-      tryCatch(
-        .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = "theta_raw_mean"),
-        error = function(e) {
-          if (as.integer(set_id) == as.integer(hub_id)) {
-            return(stats::setNames(numeric(), character()))
-          }
-          rlang::abort(
-            message = sprintf(
-              "Linking routing invariant failed: Phase A theta_raw_mean unavailable for set_id=%s.",
-              as.integer(set_id)
-            ),
-            parent = e
-          )
-        }
+      .adaptive_link_require_phase_a_theta_map(
+        state = state,
+        set_id = set_id,
+        field = "theta_raw_mean",
+        required_item_ids = set_items,
+        helper_name = "Linking routing"
       )
     }
     raw_theta <- if (isTRUE(use_current_theta)) {
@@ -486,12 +517,6 @@
       as.integer(set_id) == as.integer(hub_id)) {
       raw_theta <- as.double(phase_a_theta()[set_items])
       names(raw_theta) <- as.character(set_items)
-    }
-    if (as.integer(set_id) == as.integer(hub_id)) {
-      missing_raw <- !is.finite(raw_theta)
-      if (any(missing_raw)) {
-        raw_theta[missing_raw] <- as.double(proxy_scores[names(raw_theta)[missing_raw]])
-      }
     }
     if (any(!is.finite(raw_theta))) {
       source_label <- if (isTRUE(use_current_theta)) "current theta_mean" else "Phase A theta_raw_mean"
@@ -711,6 +736,21 @@
     return(.adaptive_link_probe_empty_panel())
   }
 
+  hub_theta_all <- .adaptive_link_require_phase_a_theta_map(
+    state = state,
+    set_id = hub_id,
+    field = "theta_raw_mean",
+    required_item_ids = hub_ids,
+    helper_name = "Probe panel construction"
+  )
+  spoke_theta_all <- .adaptive_link_require_phase_a_theta_map(
+    state = state,
+    set_id = spoke_id,
+    field = "theta_raw_mean",
+    required_item_ids = spoke_ids,
+    helper_name = "Probe panel construction"
+  )
+
   routing_scores <- .adaptive_link_phase_b_routing_scores(
     state = state,
     controller = controller,
@@ -728,21 +768,10 @@
     hub_pool <- hub_ids
   }
 
-  spoke_theta <- tryCatch(
-    .adaptive_link_phase_a_theta_map(state, set_id = spoke_id, field = "theta_raw_mean"),
-    error = function(e) routing_scores[spoke_ids]
-  )
-  hub_theta <- tryCatch(
-    .adaptive_link_phase_a_theta_map(state, set_id = hub_id, field = "theta_raw_mean"),
-    error = function(e) routing_scores[hub_pool]
-  )
-  spoke_theta <- as.double(spoke_theta[spoke_ids])
-  hub_theta <- as.double(hub_theta[hub_pool])
+  spoke_theta <- as.double(spoke_theta_all[spoke_ids])
+  hub_theta <- as.double(hub_theta_all[hub_pool])
   names(spoke_theta) <- spoke_ids
   names(hub_theta) <- hub_pool
-  if (any(!is.finite(spoke_theta)) || any(!is.finite(hub_theta))) {
-    rlang::abort("Probe panel construction invariant failed: Phase A theta maps must be finite.")
-  }
 
   q_bins <- max(1L, as.integer(controller$spoke_quantile_coverage_bins %||% 3L))
   h_bins <- 3L

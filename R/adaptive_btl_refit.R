@@ -1902,7 +1902,7 @@
   keep <- !is.na(item_id)
   vals <- as.double(items_tbl[[field]][keep])
   names(vals) <- as.character(item_id[keep])
-  vals[is.finite(vals)]
+  vals
 }
 
 .adaptive_link_theta_mean_map <- function(state, set_id) {

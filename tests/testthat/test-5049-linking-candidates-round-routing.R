@@ -2221,6 +2221,26 @@ test_that("phase-B routing helpers enforce finite inputs and anchor fallback rul
 
   expect_error(
     testthat::with_mocked_bindings(
+      .adaptive_link_phase_a_theta_map = function(state, set_id, field) {
+        if (as.integer(set_id) == 1L) {
+          c(h1 = NA_real_, h2 = 0.2)
+        } else {
+          c(s1 = -0.5, s2 = -0.7)
+        }
+      },
+      pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+        state = state,
+        controller = controller,
+        active_ids = c("h1", "s1"),
+        hub_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "set_id=1"
+  )
+
+  expect_error(
+    testthat::with_mocked_bindings(
       .adaptive_link_phase_a_theta_map = function(state, set_id, field) c(h1 = NA_real_),
       pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
         state = state,
@@ -2297,6 +2317,39 @@ test_that("phase-B routing helpers enforce finite inputs and anchor fallback rul
     .package = "pairwiseLLM"
   )
   expect_identical(anchor_rank_fallback, "h1")
+})
+
+test_that("probe panel construction hard-gates missing Phase A theta surfaces", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 903L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_phase_a_theta_map = function(state, set_id, field) {
+        if (as.integer(set_id) == 1L) {
+          c(h1 = 0.1, h2 = 0.2)
+        } else {
+          c(s1 = NA_real_, s2 = -0.4)
+        }
+      },
+      pairwiseLLM:::.adaptive_link_probe_construct_panel(
+        state = state,
+        controller = controller,
+        spoke_id = 2L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "Probe panel construction invariant failed: Phase A theta_raw_mean missing/non-finite for set_id=2"
+  )
 })
 
 test_that("phase-B routing score source switches between Phase A and current theta by refit mode", {
