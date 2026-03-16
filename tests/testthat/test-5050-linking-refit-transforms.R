@@ -228,12 +228,8 @@ run_mocked_stop_window_refit <- function(state, theta_rmse = 0.02) {
         theta_spoke_post = spoke_theta,
         posterior_draws = list(),
         diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1,
-          min_ess_bulk = 1000,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = TRUE,
-          diagnostics_ess_pass = TRUE
+          converged = TRUE,
+          hessian_posdef = TRUE
         ),
         fit_contract = list(
           estimation_method = "map_laplace",
@@ -481,7 +477,21 @@ test_that("soft-lock joint refit keeps Phase A prior center and uses current the
         delta_mean = 0,
         delta_sd = 1,
         log_alpha_mean = NA_real_,
-        log_alpha_sd = NA_real_
+        log_alpha_sd = NA_real_,
+        theta_hub_post = hub_theta,
+        theta_spoke_post = spoke_theta,
+        diagnostics = list(
+          divergences = 0L,
+          max_rhat = 1.0,
+          min_ess_bulk = 500,
+          diagnostics_divergences_pass = TRUE,
+          diagnostics_rhat_pass = TRUE,
+          diagnostics_ess_pass = TRUE
+        ),
+        fit_contract = list(
+          estimation_method = "cmdstan_hmc",
+          uncertainty_approximation = "cmdstan_posterior_draws"
+        )
       )
     },
     .adaptive_link_ppc_brier_cross = function(...) 0,
@@ -3245,9 +3255,172 @@ test_that("stable Phase B epochs can open the stop gate and become stop-eligible
   expect_true(isTRUE(stats$link_stop_eligible))
   expect_true(isTRUE(row$link_stop_gate_open[[1L]]))
   expect_true(isTRUE(row$link_stop_eligible[[1L]]))
+  expect_true(isTRUE(stats$link_diagnostics_pass))
+  expect_true(isTRUE(row$link_diagnostics_pass[[1L]]))
   expect_identical(as.integer(row$link_epoch_id[[1L]]), 4L)
   expect_identical(as.character(row$probe_panel_id[[1L]]), "panel_a")
   expect_identical(as.integer(row$probe_edges_realized[[1L]]), 2L)
+})
+
+test_that("anchored-joint deterministic diagnostics open stop gates and freeze the spoke", {
+  state <- make_stable_epoch_stop_state(
+    probe_edges_min_for_stop = 2L,
+    min_refits_in_phase_b = 3L,
+    stability_lag = 2L
+  )
+  state$controller$link_estimation_mode <- "anchored_joint"
+  state$controller$hub_lock_mode <- "hard_lock"
+  state$controller$run_mode <- "link_one_spoke"
+  state$controller$current_link_spoke_id <- 2L
+  state$controller$stability_window_refits <- 1L
+  state$controller$stability_passes_required <- 1L
+  state$config$btl_config$stability_lag <- 2L
+  state$linking$phase_a$ready_spokes <- 2L
+  state$linking$phase_a$active_spokes <- 2L
+  state$controller$link_epoch_signature_by_spoke <- list(
+    `2` = pairwiseLLM:::.adaptive_link_epoch_signature_string(
+      pairwiseLLM:::.adaptive_link_epoch_signature_components(
+        transform_state = NA_character_,
+        refit_mode = NA_character_,
+        lock_mode = "hard_lock",
+        hub_art = state$linking$phase_a$artifacts[["1"]],
+        spoke_art = state$linking$phase_a$artifacts[["2"]],
+        link_estimation_mode = "anchored_joint"
+      )
+    )
+  )
+  anchored_hist <- as.integer(state$link_stage_log$spoke_id) == 2L
+  state$link_stage_log$link_estimation_mode[anchored_hist] <- "anchored_joint"
+  state$link_stage_log$link_transform_policy[anchored_hist] <- NA_character_
+  state$link_stage_log$link_transform_state[anchored_hist] <- NA_character_
+  state$link_stage_log$link_refit_mode[anchored_hist] <- NA_character_
+  state$link_stage_log$hub_lock_mode[anchored_hist] <- "hard_lock"
+  state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 1L,
+    step_id = 1L,
+    A_item = "h1",
+    B_item = "h2",
+    y_A = 1L
+  )
+  state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 2L,
+    step_id = 2L,
+    A_item = "s21",
+    B_item = "s22",
+    y_A = 1L
+  )
+  state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence_hash <-
+    pairwiseLLM:::.adaptive_phase_a_hash_object(
+      state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence
+    )
+  state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence_hash <-
+    pairwiseLLM:::.adaptive_phase_a_hash_object(
+      state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence
+    )
+
+  accepted <- pairwiseLLM:::.adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = 2L,
+    controller = state$controller
+  )
+  state$linking$anchored_joint$accepted_state_by_spoke[["2"]] <- accepted
+  state$linking$anchored_joint$fisher_t0_by_spoke[["2"]] <- list(
+    fisher = diag(length(accepted$theta_spoke_global_mean)),
+    item_ids = names(accepted$theta_spoke_global_mean),
+    anchored_joint_init_state_method = accepted$anchored_joint_init_state_method
+  )
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_fit_anchored_joint = function(...) {
+      list(
+        delta_mean = 0,
+        delta_sd = NA_real_,
+        log_alpha_mean = NA_real_,
+        log_alpha_sd = NA_real_,
+        theta_hub_post = accepted$theta_hub_fixed,
+        theta_spoke_post = accepted$theta_spoke_global_mean,
+        theta_spoke_sd_post = stats::setNames(
+          c(0.08, 0.07),
+          names(accepted$theta_spoke_global_mean)
+        ),
+        posterior_draws = list(),
+        diagnostics = list(
+          converged = TRUE,
+          hessian_posdef = TRUE
+        ),
+        fit_contract = list(
+          contract_type = "link_refit",
+          estimation_method = "map_laplace",
+          uncertainty_approximation = "laplace_hessian",
+          anchored_joint = list(free_block_dim = 2L),
+          priors = list(
+            anchored_joint_spoke_prior_scale = 1.0,
+            anchored_joint_sd_floor = 0.02,
+            anchored_joint_spoke_prior_fallback_sd = 1.0,
+            prior_sd_fallback_used = FALSE,
+            prior_sd_fallback_items = character()
+          )
+        )
+      )
+    },
+    .adaptive_link_global_score_stats_active = function(...) {
+      list(reliability = 0.96, V_mu = 1.2, V_post = 0.04)
+    },
+    .adaptive_link_reliability_transformed_active = function(...) 0.96,
+    .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
+    .adaptive_link_rank_stability_lagged = function(...) {
+      list(lag_eligible = TRUE, rho_rank_lagged = 0.99, rho_rank_lagged_pass = TRUE)
+    },
+    .adaptive_link_probe_brier_for_fit = function(...) 0.10,
+    .adaptive_link_probe_edges_realized = function(...) {
+      tibble::tibble(
+        hub_item = c("h1", "h2"),
+        spoke_item = c("s21", "s22"),
+        y_spoke = c(1L, 0L),
+        step_id = c(11L, 12L),
+        spoke_in_A = c(TRUE, TRUE),
+        run_mode = c("link_probe_holdout", "link_probe_holdout"),
+        is_probe_step = c(TRUE, TRUE),
+        pair_key = c(
+          pairwiseLLM:::make_unordered_key("h1", "s21"),
+          pairwiseLLM:::make_unordered_key("h2", "s22")
+        )
+      )
+    },
+    .adaptive_link_probe_pred_rmse_lagged_anchored_joint = function(...) 0.01,
+    .adaptive_link_theta_global_rmse_from_maps = function(...) 0.02,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.adaptive_linking_refit_update_state(
+        state,
+        refit_context = list(last_refit_step = 3L)
+      )
+    }
+  )
+
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  expect_true(isTRUE(stats$link_diagnostics_pass))
+  expect_true(isTRUE(stats$link_stop_gate_open))
+  expect_true(isTRUE(stats$link_stop_eligible))
+  expect_true(isTRUE(stats$link_stop_pass))
+
+  out <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    out,
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      out,
+      refit_id = 3L,
+      refit_context = list(last_refit_step = 3L)
+    )
+  )
+
+  expect_true(isTRUE(out$controller$link_state_frozen_by_spoke[["2"]]))
+  expect_identical(out$controller$link_state_frozen_refit_id_by_spoke[["2"]], 3L)
+  expect_identical(pairwiseLLM:::.adaptive_link_effective_active_spokes(out), integer())
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_all_spokes_stopped(out)))
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+    out,
+    controller = out$controller
+  )))
 })
 
 test_that("linking identified state is reconstructable from canonical link-stage fields", {

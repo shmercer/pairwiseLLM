@@ -1187,6 +1187,14 @@ print.adaptive_state <- function(x, ...) {
 }
 
 .adaptive_progress_link_diag_pass <- function(link_row) {
+  contract_pass <- .adaptive_progress_col_value(
+    link_row,
+    "link_diagnostics_pass",
+    default = NA
+  )
+  if (!is.na(contract_pass)) {
+    return(isTRUE(contract_pass))
+  }
   isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)) &&
     isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)) &&
     isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA))
@@ -1346,37 +1354,78 @@ print.adaptive_state <- function(x, ...) {
     if (length(bad_idx) > 0L) {
       for (idx in bad_idx) {
         link_row <- link_stage_rows[idx, , drop = FALSE]
-        diagnostics <- c(
-          diagnostics,
-          paste0(
-            "Diagnostics: spoke=",
-            as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_)),
-            " link divergences=",
-            .adaptive_progress_col_value(link_row, "link_diagnostics_divergences", default = NA_integer_),
-            " ",
-            .adaptive_progress_fmt_state(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)
-            ),
-            "  max_rhat=",
-            .adaptive_progress_fmt_num(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_max_rhat", default = NA_real_),
-              digits = 3L
-            ),
-            " ",
-            .adaptive_progress_fmt_state(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)
-            ),
-            "  min_ess_bulk=",
-            .adaptive_progress_fmt_num(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_min_ess_bulk", default = NA_real_),
-              digits = 0L
-            ),
-            " ",
-            .adaptive_progress_fmt_state(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA)
+        fit_method <- as.character(.adaptive_progress_col_value(
+          link_row,
+          "link_fit_method",
+          default = NA_character_
+        ))
+        if (fit_method %in% c("map_laplace", "accepted_state_reuse")) {
+          diagnostics <- c(
+            diagnostics,
+            paste0(
+              "Diagnostics: spoke=",
+              as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_)),
+              " link method=",
+              fit_method,
+              " converged=",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(
+                  link_row,
+                  "link_diagnostics_converged_pass",
+                  default = NA
+                )
+              ),
+              "  finite_summary=",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(
+                  link_row,
+                  "link_diagnostics_finite_summary_pass",
+                  default = NA
+                )
+              ),
+              "  uncertainty=",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(
+                  link_row,
+                  "link_diagnostics_uncertainty_pass",
+                  default = NA
+                )
+              )
             )
           )
-        )
+        } else {
+          diagnostics <- c(
+            diagnostics,
+            paste0(
+              "Diagnostics: spoke=",
+              as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_)),
+              " link divergences=",
+              .adaptive_progress_col_value(link_row, "link_diagnostics_divergences", default = NA_integer_),
+              " ",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)
+              ),
+              "  max_rhat=",
+              .adaptive_progress_fmt_num(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_max_rhat", default = NA_real_),
+                digits = 3L
+              ),
+              " ",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)
+              ),
+              "  min_ess_bulk=",
+              .adaptive_progress_fmt_num(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_min_ess_bulk", default = NA_real_),
+                digits = 0L
+              ),
+              " ",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA)
+              )
+            )
+          )
+        }
       }
     }
   }

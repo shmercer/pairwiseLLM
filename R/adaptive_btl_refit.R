@@ -2416,6 +2416,179 @@
   )
 }
 
+.adaptive_link_fit_summaries_finite <- function(fit) {
+  fit <- fit %||% list()
+
+  theta_hub <- fit$theta_hub_post %||% numeric()
+  theta_spoke <- fit$theta_spoke_post %||% numeric()
+  if (length(theta_hub) > 0L && any(!is.finite(as.double(theta_hub)))) {
+    return(FALSE)
+  }
+  if (length(theta_spoke) > 0L && any(!is.finite(as.double(theta_spoke)))) {
+    return(FALSE)
+  }
+
+  delta_mean <- as.double(fit$delta_mean %||% NA_real_)
+  if (!is.na(delta_mean) && !is.finite(delta_mean)) {
+    return(FALSE)
+  }
+
+  log_alpha_mean <- as.double(fit$log_alpha_mean %||% NA_real_)
+  if (!is.na(log_alpha_mean) && !is.finite(log_alpha_mean)) {
+    return(FALSE)
+  }
+
+  TRUE
+}
+
+.adaptive_link_fit_uncertainty_available <- function(fit) {
+  fit <- fit %||% list()
+
+  theta_spoke_sd <- fit$theta_spoke_sd_post %||% NULL
+  if (!is.null(theta_spoke_sd)) {
+    theta_spoke_sd <- as.double(theta_spoke_sd)
+    if (length(theta_spoke_sd) > 0L &&
+      all(is.finite(theta_spoke_sd)) &&
+      all(theta_spoke_sd >= 0)) {
+      return(TRUE)
+    }
+  }
+
+  delta_sd <- as.double(fit$delta_sd %||% NA_real_)
+  log_alpha_sd <- as.double(fit$log_alpha_sd %||% NA_real_)
+  delta_ok <- is.na(delta_sd) || (is.finite(delta_sd) && delta_sd >= 0)
+  log_alpha_ok <- is.na(log_alpha_sd) || (is.finite(log_alpha_sd) && log_alpha_sd >= 0)
+
+  isTRUE(delta_ok) && isTRUE(log_alpha_ok)
+}
+
+.adaptive_link_diagnostics_contract <- function(fit) {
+  fit <- fit %||% list()
+  fit_contract <- fit$fit_contract %||% list()
+  contract_type <- as.character(fit_contract$contract_type %||% NA_character_)
+  fit_method <- as.character(fit_contract$estimation_method %||% NA_character_)
+  diagnostics <- fit$diagnostics %||% list()
+  if (is.na(fit_method) || !nzchar(fit_method)) {
+    has_hmc_diag <- any(c(
+      "divergences", "max_rhat", "min_ess_bulk",
+      "diagnostics_divergences_pass", "diagnostics_rhat_pass",
+      "diagnostics_ess_pass"
+    ) %in% names(diagnostics))
+    has_det_diag <- any(c("converged", "hessian_posdef") %in% names(diagnostics))
+    if (isTRUE(has_hmc_diag)) {
+      fit_method <- "cmdstan_hmc"
+    } else if (isTRUE(has_det_diag)) {
+      fit_method <- "map_laplace"
+    }
+  }
+  if ((is.na(fit_method) || !nzchar(fit_method)) &&
+    identical(contract_type, "link_refit_frozen_reuse")) {
+    fit_method <- "accepted_state_reuse"
+  }
+  uncertainty <- as.character(fit_contract$uncertainty_approximation %||% NA_character_)
+  if ((is.na(uncertainty) || !nzchar(uncertainty)) &&
+    identical(fit_method, "cmdstan_hmc")) {
+    uncertainty <- "cmdstan_posterior_draws"
+  }
+  if ((is.na(uncertainty) || !nzchar(uncertainty)) &&
+    identical(fit_method, "map_laplace")) {
+    uncertainty <- "laplace_hessian"
+  }
+  if ((is.na(uncertainty) || !nzchar(uncertainty)) &&
+    identical(fit_method, "accepted_state_reuse")) {
+    uncertainty <- "accepted_state"
+  }
+  if (identical(fit_method, "cmdstan_hmc")) {
+    diagnostics_pass <- isTRUE(diagnostics$diagnostics_divergences_pass %||% NA) &&
+      isTRUE(diagnostics$diagnostics_rhat_pass %||% NA) &&
+      isTRUE(diagnostics$diagnostics_ess_pass %||% NA)
+    return(list(
+      link_fit_method = fit_method,
+      link_uncertainty_approximation = uncertainty,
+      link_diagnostics_pass = diagnostics_pass,
+      link_diagnostics_converged_pass = NA,
+      link_diagnostics_finite_summary_pass = NA,
+      link_diagnostics_uncertainty_pass = NA,
+      link_diagnostics_divergences = as.integer(diagnostics$divergences %||% NA_integer_),
+      link_diagnostics_max_rhat = as.double(diagnostics$max_rhat %||% NA_real_),
+      link_diagnostics_min_ess_bulk = as.double(diagnostics$min_ess_bulk %||% NA_real_),
+      link_diagnostics_divergences_pass = as.logical(
+        diagnostics$diagnostics_divergences_pass %||% NA
+      ),
+      link_diagnostics_rhat_pass = as.logical(diagnostics$diagnostics_rhat_pass %||% NA),
+      link_diagnostics_ess_pass = as.logical(diagnostics$diagnostics_ess_pass %||% NA)
+    ))
+  }
+
+  if (identical(fit_method, "map_laplace")) {
+    converged_pass <- as.logical(diagnostics$converged %||% NA)
+    hessian_posdef <- as.logical(diagnostics$hessian_posdef %||% NA)
+    if (is.na(converged_pass) || is.na(hessian_posdef)) {
+      rlang::abort(
+        paste0(
+          "Deterministic linking diagnostics contract requires `converged` and ",
+          "`hessian_posdef` for `map_laplace` fits."
+        )
+      )
+    }
+    if (!identical(uncertainty, "laplace_hessian")) {
+      rlang::abort(
+        paste0(
+          "Deterministic linking diagnostics contract requires ",
+          "`uncertainty_approximation = \"laplace_hessian\"` for `map_laplace` fits."
+        )
+      )
+    }
+    finite_summary_pass <- .adaptive_link_fit_summaries_finite(fit)
+    uncertainty_pass <- isTRUE(hessian_posdef) &&
+      isTRUE(.adaptive_link_fit_uncertainty_available(fit))
+    return(list(
+      link_fit_method = fit_method,
+      link_uncertainty_approximation = uncertainty,
+      link_diagnostics_pass = isTRUE(converged_pass) &&
+        isTRUE(finite_summary_pass) &&
+        isTRUE(uncertainty_pass),
+      link_diagnostics_converged_pass = as.logical(converged_pass),
+      link_diagnostics_finite_summary_pass = as.logical(finite_summary_pass),
+      link_diagnostics_uncertainty_pass = as.logical(uncertainty_pass),
+      link_diagnostics_divergences = NA_integer_,
+      link_diagnostics_max_rhat = NA_real_,
+      link_diagnostics_min_ess_bulk = NA_real_,
+      link_diagnostics_divergences_pass = NA,
+      link_diagnostics_rhat_pass = NA,
+      link_diagnostics_ess_pass = NA
+    ))
+  }
+
+  if (identical(fit_method, "accepted_state_reuse")) {
+    finite_summary_pass <- .adaptive_link_fit_summaries_finite(fit)
+    uncertainty_pass <- .adaptive_link_fit_uncertainty_available(fit)
+    return(list(
+      link_fit_method = fit_method,
+      link_uncertainty_approximation = uncertainty,
+      link_diagnostics_pass = isTRUE(finite_summary_pass) &&
+        isTRUE(uncertainty_pass),
+      link_diagnostics_converged_pass = TRUE,
+      link_diagnostics_finite_summary_pass = as.logical(finite_summary_pass),
+      link_diagnostics_uncertainty_pass = as.logical(uncertainty_pass),
+      link_diagnostics_divergences = NA_integer_,
+      link_diagnostics_max_rhat = NA_real_,
+      link_diagnostics_min_ess_bulk = NA_real_,
+      link_diagnostics_divergences_pass = NA,
+      link_diagnostics_rhat_pass = NA,
+      link_diagnostics_ess_pass = NA
+    ))
+  }
+
+  rlang::abort(
+    paste0(
+      "Linking diagnostics contract is undefined for fit method `",
+      fit_method,
+      "`."
+    )
+  )
+}
+
 .adaptive_link_cmdstan_schedule <- function(attempt, n_param, joint_used = FALSE) {
   attempt <- max(1L, as.integer(attempt %||% 1L))
   n_param <- max(1L, as.integer(n_param %||% 1L))
@@ -3360,6 +3533,10 @@
     escalation_recent_window_size = rep(NA_integer_, nrow(rows)),
     link_transform_escalation_window_refits_used = rep(NA_integer_, nrow(rows)),
     link_transform_escalation_passes_required_used = rep(NA_integer_, nrow(rows)),
+    link_diagnostics_pass = rep(NA, nrow(rows)),
+    link_diagnostics_converged_pass = rep(NA, nrow(rows)),
+    link_diagnostics_finite_summary_pass = rep(NA, nrow(rows)),
+    link_diagnostics_uncertainty_pass = rep(NA, nrow(rows)),
     link_stop_reliability_min_used = rep(NA_real_, nrow(rows)),
     probe_brier_max_used = rep(NA_real_, nrow(rows)),
     probe_brier_pass = rep(NA, nrow(rows)),
@@ -4347,7 +4524,7 @@
         lag_row = lag_row
       )
     }
-    fit_diag <- fit$diagnostics %||% list()
+    fit_diag <- .adaptive_link_diagnostics_contract(fit)
     fit_contract <- fit$fit_contract %||% list()
     hub_anchored <- if (identical(link_estimation_mode, "anchored_joint") ||
       identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
@@ -4408,9 +4585,7 @@
       spoke_id = spoke_id,
       epoch_id = eval_link_epoch_id
     )
-    link_diagnostics_pass <- isTRUE(fit_diag$diagnostics_divergences_pass %||% NA) &&
-      isTRUE(fit_diag$diagnostics_rhat_pass %||% NA) &&
-      isTRUE(fit_diag$diagnostics_ess_pass %||% NA)
+    link_diagnostics_pass <- isTRUE(fit_diag$link_diagnostics_pass %||% NA)
     probe_brier <- .adaptive_link_probe_brier_for_fit(
       edges = probe_edges_realized_tbl,
       hub_theta = ppc_hub_theta,
@@ -4715,16 +4890,34 @@
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
       fit_contract = fit_contract,
-      link_fit_method = as.character(fit_contract$estimation_method %||% NA_character_),
+      link_fit_method = as.character(fit_diag$link_fit_method %||% NA_character_),
       link_uncertainty_approximation = as.character(
-        fit_contract$uncertainty_approximation %||% NA_character_
+        fit_diag$link_uncertainty_approximation %||% NA_character_
       ),
-      link_diagnostics_divergences = as.integer(fit_diag$divergences %||% NA_integer_),
-      link_diagnostics_max_rhat = as.double(fit_diag$max_rhat %||% NA_real_),
-      link_diagnostics_min_ess_bulk = as.double(fit_diag$min_ess_bulk %||% NA_real_),
-      link_diagnostics_divergences_pass = as.logical(fit_diag$diagnostics_divergences_pass %||% NA),
-      link_diagnostics_rhat_pass = as.logical(fit_diag$diagnostics_rhat_pass %||% NA),
-      link_diagnostics_ess_pass = as.logical(fit_diag$diagnostics_ess_pass %||% NA),
+      link_diagnostics_pass = as.logical(fit_diag$link_diagnostics_pass %||% NA),
+      link_diagnostics_converged_pass = as.logical(
+        fit_diag$link_diagnostics_converged_pass %||% NA
+      ),
+      link_diagnostics_finite_summary_pass = as.logical(
+        fit_diag$link_diagnostics_finite_summary_pass %||% NA
+      ),
+      link_diagnostics_uncertainty_pass = as.logical(
+        fit_diag$link_diagnostics_uncertainty_pass %||% NA
+      ),
+      link_diagnostics_divergences = as.integer(
+        fit_diag$link_diagnostics_divergences %||% NA_integer_
+      ),
+      link_diagnostics_max_rhat = as.double(
+        fit_diag$link_diagnostics_max_rhat %||% NA_real_
+      ),
+      link_diagnostics_min_ess_bulk = as.double(
+        fit_diag$link_diagnostics_min_ess_bulk %||% NA_real_
+      ),
+      link_diagnostics_divergences_pass = as.logical(
+        fit_diag$link_diagnostics_divergences_pass %||% NA
+      ),
+      link_diagnostics_rhat_pass = as.logical(fit_diag$link_diagnostics_rhat_pass %||% NA),
+      link_diagnostics_ess_pass = as.logical(fit_diag$link_diagnostics_ess_pass %||% NA),
       hub_anchored = as.logical(hub_anchored),
       scale_ready = as.logical(scale_ready),
       stop_blocker_codes = as.character(stop_blockers$codes),
@@ -5475,6 +5668,16 @@
       link_uncertainty_approximation = as.character(
         stats_row$link_uncertainty_approximation %||% NA_character_
       ),
+      link_diagnostics_pass = as.logical(stats_row$link_diagnostics_pass %||% NA),
+      link_diagnostics_converged_pass = as.logical(
+        stats_row$link_diagnostics_converged_pass %||% NA
+      ),
+      link_diagnostics_finite_summary_pass = as.logical(
+        stats_row$link_diagnostics_finite_summary_pass %||% NA
+      ),
+      link_diagnostics_uncertainty_pass = as.logical(
+        stats_row$link_diagnostics_uncertainty_pass %||% NA
+      ),
       link_diagnostics_divergences = as.integer(stats_row$link_diagnostics_divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(stats_row$link_diagnostics_max_rhat %||% NA_real_),
       link_diagnostics_min_ess_bulk = as.double(stats_row$link_diagnostics_min_ess_bulk %||% NA_real_),
@@ -5711,6 +5914,8 @@
     "escalation_recent_pass_count", "escalation_recent_window_size",
     "link_transform_escalation_window_refits_used",
     "link_transform_escalation_passes_required_used",
+    "link_diagnostics_pass", "link_diagnostics_converged_pass",
+    "link_diagnostics_finite_summary_pass", "link_diagnostics_uncertainty_pass",
     "n_pairs_cross_set_done", "n_unique_cross_pairs_seen", "n_cross_edges_active_since_last_refit",
     "n_cross_edges_probe_since_last_refit", "n_cross_edges_total_since_last_refit", "coverage_bins_used",
     "B_spoke_refit_budget", "B_spoke_refit_budget_source",

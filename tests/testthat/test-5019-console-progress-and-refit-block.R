@@ -197,3 +197,25 @@ test_that("adaptive progress Phase B spoke lines label anchored-joint mode witho
   expect_true(any(grepl("init_state=artifact_copy_init", lines)))
   expect_false(any(grepl("^\\s+state=", lines)))
 })
+
+test_that("adaptive progress diagnostics use deterministic link contract for anchored-joint fits", {
+  lines <- pairwiseLLM:::.adaptive_progress_diagnostics_lines(
+    row = tibble::tibble(diagnostics_pass = TRUE),
+    link_stage_rows = tibble::tibble(
+      spoke_id = 2L,
+      link_fit_method = "map_laplace",
+      link_diagnostics_pass = FALSE,
+      link_diagnostics_converged_pass = TRUE,
+      link_diagnostics_finite_summary_pass = FALSE,
+      link_diagnostics_uncertainty_pass = TRUE,
+      link_diagnostics_divergences_pass = NA,
+      link_diagnostics_rhat_pass = NA,
+      link_diagnostics_ess_pass = NA
+    )
+  )
+
+  expect_true(any(grepl("method=map_laplace", lines)))
+  expect_true(any(grepl("finite_summary=fail", lines)))
+  expect_false(any(grepl("max_rhat=", lines, fixed = TRUE)))
+  expect_false(any(grepl("min_ess_bulk=", lines, fixed = TRUE)))
+})
