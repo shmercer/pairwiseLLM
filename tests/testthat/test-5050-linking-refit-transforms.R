@@ -4058,3 +4058,145 @@ test_that("D-opt updater guard branches return state unchanged when prerequisite
     expect_identical(out$controller$link_d_opt_it_by_spoke, state$controller$link_d_opt_it_by_spoke)
   }
 })
+
+test_that("anchored-joint utility and Fisher updates use the accepted state", {
+  state <- make_linking_refit_state(
+    list(
+      run_mode = "link_multi_spoke",
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 1L,
+    step_id = 1L,
+    A_item = "h1",
+    B_item = "h2",
+    y_A = 1L
+  )
+  state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 2L,
+    step_id = 2L,
+    A_item = "s21",
+    B_item = "s22",
+    y_A = 1L
+  )
+  state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence_hash <-
+    pairwiseLLM:::.adaptive_phase_a_hash_object(state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence)
+  state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence_hash <-
+    pairwiseLLM:::.adaptive_phase_a_hash_object(state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence)
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
+  accepted <- pairwiseLLM:::.adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = 2L,
+    controller = controller
+  )
+  state$linking$anchored_joint$accepted_state_by_spoke[["2"]] <- accepted
+  state$linking$anchored_joint$fisher_t0_by_spoke[["2"]] <- list(
+    free_block_dim = length(accepted$theta_spoke_global_mean),
+    I_s_t0_zero = TRUE,
+    n_link_active_pairs = 0L,
+    anchored_joint_init_state_method = accepted$anchored_joint_init_state_method
+  )
+
+  state$btl_fit$beta_mean <- 1.4
+  state$btl_fit$epsilon_mean <- 0.35
+  cand <- pairwiseLLM:::.adaptive_link_attach_predictive_utility(
+    candidates = tibble::tibble(i = "h1", j = "s21"),
+    state = state,
+    controller = controller,
+    spoke_id = 2L
+  )
+
+  expected_p <- pairwiseLLM:::.adaptive_link_model_d_prob(
+    theta_a = accepted$theta_hub_fixed[["h1"]],
+    theta_b = accepted$theta_spoke_global_mean[["s21"]],
+    beta = accepted$judge_params$beta,
+    epsilon = accepted$judge_params$epsilon
+  )
+  expect_equal(cand$link_p[[1L]], expected_p, tolerance = 1e-8)
+  expect_true(is.finite(cand$link_d_opt_gain[[1L]]))
+
+  id_map <- stats::setNames(seq_along(state$item_ids), as.character(state$item_ids))
+  updated <- pairwiseLLM:::.adaptive_link_d_opt_update_after_commit(
+    state_before = state,
+    state_after = state,
+    step_row = list(
+      i = as.integer(id_map[["h1"]]),
+      j = as.integer(id_map[["s21"]]),
+      A = as.integer(id_map[["h1"]]),
+      B = as.integer(id_map[["s21"]]),
+      is_cross_set = TRUE,
+      run_mode = "link_one_spoke",
+      utility_mode = "linking_d_optimal",
+      link_spoke_id = 2L,
+      is_probe_step = FALSE
+    )
+  )
+  d_opt_entry <- updated$controller$link_d_opt_it_by_spoke[[paste0("1::2")]]
+  expect_identical(dim(d_opt_entry$it), c(2L, 2L))
+  expect_identical(d_opt_entry$it_n_pairs_accumulated, 1L)
+})
+
+test_that("anchored-joint fit keeps the hub fixed and records prior-SD fallback", {
+  state <- make_linking_refit_state(
+    list(
+      run_mode = "link_multi_spoke",
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 1L,
+    step_id = 1L,
+    A_item = "h1",
+    B_item = "h2",
+    y_A = 1L
+  )
+  state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 2L,
+    step_id = 2L,
+    A_item = "s21",
+    B_item = "s22",
+    y_A = 1L
+  )
+  state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence_hash <-
+    pairwiseLLM:::.adaptive_phase_a_hash_object(state$linking$phase_a$artifacts[["1"]]$phase_a_within_set_evidence)
+  state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence_hash <-
+    pairwiseLLM:::.adaptive_phase_a_hash_object(state$linking$phase_a$artifacts[["2"]]$phase_a_within_set_evidence)
+  state$linking$phase_a$artifacts[["2"]]$items$theta_raw_sd[[1L]] <- NA_real_
+
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
+  accepted <- pairwiseLLM:::.adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = 2L,
+    controller = controller
+  )
+  fit <- NULL
+  expect_warning(
+    fit <- pairwiseLLM:::.adaptive_link_fit_anchored_joint(
+      state = state,
+      spoke_id = 2L,
+      controller = controller,
+      cross_edges = tibble::tibble(
+        hub_item = "h1",
+        spoke_item = "s21",
+        y_spoke = 1L,
+        step_id = 3L,
+        spoke_in_A = TRUE,
+        run_mode = "link_one_spoke",
+        is_probe_step = FALSE
+      ),
+      judge_params = accepted$judge_params,
+      accepted_state = accepted
+    ),
+    "Anchored-joint spoke prior SD fallback applied"
+  )
+
+  expect_equal(fit$theta_hub_post, accepted$theta_hub_fixed, tolerance = 1e-8)
+  expect_true(all(is.finite(fit$theta_spoke_post)))
+  expect_identical(fit$fit_contract$estimation_method, "map_laplace")
+  expect_identical(fit$fit_contract$uncertainty_approximation, "laplace_hessian")
+  expect_true(isTRUE(fit$fit_contract$priors$prior_sd_fallback_used))
+  expect_true("s21" %in% fit$fit_contract$priors$prior_sd_fallback_items)
+})

@@ -383,7 +383,7 @@ test_that("all-spokes-stopped helper is phase and mode aware", {
   expect_true(pairwiseLLM:::.adaptive_link_all_spokes_stopped(state))
 })
 
-test_that("anchored-joint utility path aborts until mode-specific D-optimal utility lands", {
+test_that("anchored-joint link-stage completeness allows transform-only typed NA fields", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
     set_id = c(1L, 1L, 2L, 2L),
@@ -401,13 +401,74 @@ test_that("anchored-joint utility path aborts until mode-specific D-optimal util
   )
   controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
 
-  expect_error(
-    pairwiseLLM:::.adaptive_link_attach_predictive_utility(
-      candidates = tibble::tibble(i = "h1", j = "s21"),
-      state = state,
-      controller = controller,
-      spoke_id = 2L
-    ),
-    "mode-specific utility lands in PR 3"
+  row <- tibble::tibble(
+    refit_id = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    link_epoch_id = 1L,
+    link_estimation_mode = "anchored_joint",
+    link_transform_policy = NA_character_,
+    link_transform_state = NA_character_,
+    link_refit_mode = NA_character_,
+    hub_lock_mode = "hard_lock",
+    reliability_link_global = 0.9,
+    linking_identified = TRUE,
+    link_stop_eligible = FALSE,
+    link_stop_pass = FALSE,
+    link_state_frozen = FALSE,
+    stop_recent_pass_count = 0L,
+    stop_recent_window_size = 0L,
+    stability_window_refits_used = 3L,
+    stability_passes_required_used = 2L,
+    escalation_recent_pass_count = 0L,
+    escalation_recent_window_size = 0L,
+    link_transform_escalation_window_refits_used = NA_integer_,
+    link_transform_escalation_passes_required_used = NA_integer_,
+    n_pairs_cross_set_done = 1L,
+    n_unique_cross_pairs_seen = 1L,
+    n_cross_edges_active_since_last_refit = 1L,
+    n_cross_edges_probe_since_last_refit = 0L,
+    n_cross_edges_total_since_last_refit = 1L,
+    coverage_bins_used = 2L,
+    B_spoke_refit_budget = 1L,
+    B_spoke_refit_budget_source = "single_spoke_controller",
+    stage_target_anchor_link = 1L,
+    stage_target_long_link = 0L,
+    stage_target_mid_link = 0L,
+    stage_target_local_link = 0L,
+    feasible_stage_capacity_anchor_link = 1L,
+    feasible_stage_capacity_long_link = 0L,
+    feasible_stage_capacity_mid_link = 0L,
+    feasible_stage_capacity_local_link = 0L,
+    feasibility_budget_released = 0L,
+    feasibility_reallocation_used = FALSE,
+    feasibility_reallocation_rule = "none",
+    stage_realized_anchor_link = 1L,
+    stage_realized_long_link = 0L,
+    stage_realized_mid_link = 0L,
+    stage_realized_local_link = 0L,
+    stage_shortfall_anchor_link = 0L,
+    stage_shortfall_long_link = 0L,
+    stage_shortfall_mid_link = 0L,
+    stage_shortfall_local_link = 0L,
+    stage_reallocation_used = FALSE,
+    stage_reallocation_rule_used = "none",
+    stage_budget_unfilled = 0L,
+    probe_edges_realized_before_refit = 0L,
+    probe_edges_realized_delta_since_last_refit = 0L,
+    probe_shortfall_reason = "none",
+    probe_brier = NA_real_,
+    probe_brier_max_used = NA_real_,
+    probe_brier_pass = NA,
+    probe_pred_rmse_lagged = NA_real_,
+    probe_pred_rmse_max_used = NA_real_,
+    probe_pred_rmse_pass = NA,
+    theta_global_rmse_lagged = NA_real_,
+    theta_global_rmse_max_used = NA_real_,
+    theta_global_rmse_pass = NA,
+    resumed_from_session = FALSE
   )
+
+  expect_invisible(pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(row))
+  expect_identical(controller$link_estimation_mode, "anchored_joint")
 })

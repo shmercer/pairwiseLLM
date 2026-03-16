@@ -465,6 +465,66 @@ validate_judge_result <- function(result, A_id, B_id) {
   if (is.na(hub_item) || is.na(spoke_item)) {
     return(state_after)
   }
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state_before,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+    spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
+    spoke_idx <- as.integer(match(spoke_item, spoke_items))
+    theta_h <- as.double(accepted_state$theta_hub_fixed[[as.character(hub_item)]] %||% NA_real_)
+    theta_x <- as.double(accepted_state$theta_spoke_global_mean[[as.character(spoke_item)]] %||% NA_real_)
+    if (!is.finite(theta_h) || !is.finite(theta_x) || is.na(spoke_idx)) {
+      return(state_after)
+    }
+    judge_params <- .adaptive_link_anchored_joint_judge_params(
+      state = state_before,
+      spoke_id = as.integer(spoke_id),
+      controller = controller,
+      accepted_state = accepted_state
+    )
+    pbar <- .adaptive_link_model_d_pbar(
+      theta_h = theta_h,
+      theta_x = theta_x,
+      beta = as.double(judge_params$beta %||% 0),
+      epsilon = as.double(judge_params$epsilon %||% 0)
+    )
+    if (!is.finite(pbar)) {
+      return(state_after)
+    }
+    g <- matrix(0, nrow = length(spoke_items), ncol = 1L)
+    g[spoke_idx, 1L] <- 1
+    ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
+    refit_id <- .adaptive_link_refit_window_id(state_after)
+    d_opt_state <- .adaptive_link_d_opt_state_get(
+      controller = controller,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      transform_mode = NA_character_,
+      link_estimation_mode = "anchored_joint",
+      free_block_dim = length(spoke_items)
+    )
+    if (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != dim(ipair))) {
+      return(state_after)
+    }
+    d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
+    current_prefix <- paste0(as.integer(refit_id), "::")
+    map_names <- names(d_opt_map)
+    if (is.null(map_names)) {
+      d_opt_map <- list()
+    } else {
+      keep <- startsWith(as.character(map_names), current_prefix)
+      d_opt_map <- d_opt_map[keep]
+    }
+    d_opt_state$it <- as.matrix((d_opt_state$it + ipair + t(d_opt_state$it + ipair)) / 2)
+    d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
+    d_opt_map[[d_opt_state$key]] <- d_opt_state
+    controller$link_d_opt_it_by_spoke <- d_opt_map
+    state_after$controller <- controller
+    return(state_after)
+  }
   transform_state <- .adaptive_link_transform_state_for_spoke(controller, as.integer(spoke_id))
   stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
   delta <- as.double(row$delta_spoke_estimate_pre[[1L]] %||% stats_row$delta_spoke_mean %||% 0)

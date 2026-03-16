@@ -607,7 +607,11 @@
     spoke_id = as.integer(spoke_id),
     theta_hub_fixed = .adaptive_link_phase_a_theta_map(state, hub_id, "theta_raw_mean"),
     theta_spoke_global_mean = .adaptive_link_phase_a_theta_map(state, as.integer(spoke_id), "theta_raw_mean"),
-    theta_spoke_global_sd = .adaptive_link_phase_a_theta_map(state, as.integer(spoke_id), "theta_raw_sd"),
+    theta_spoke_global_sd = .adaptive_phase_a_artifact_item_field_map(
+      state = state,
+      set_id = as.integer(spoke_id),
+      field = "theta_raw_sd"
+    ),
     judge_params = judge_params,
     anchored_joint_init_state_method = "artifact_copy_init",
     phase_a_evidence_hash_hub = .adaptive_phase_a_hash_object(hub_evidence),

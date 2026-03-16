@@ -764,3 +764,52 @@ test_that("phase_b aborts when required sets are ready but strict phase_a stop-p
     "Phase B linking cannot start"
   )
 })
+
+test_that("anchored-joint linking run records accepted-state refits and NA transform fields", {
+  withr::local_seed(20260315)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 51L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1.4)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.1, h3 = 0.8,
+    s21 = -0.1, s22 = 0.4, s23 = 1.0
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 16L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L)),
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+    progress = "none"
+  )
+
+  rows <- out$link_stage_log[out$link_stage_log$spoke_id == 2L, , drop = FALSE]
+  expect_true(nrow(rows) >= 1L)
+  expect_true(all(as.character(rows$link_estimation_mode) == "anchored_joint"))
+  expect_true(all(is.na(rows$link_transform_policy)))
+  expect_true(all(is.na(rows$link_transform_state)))
+  expect_true(all(is.na(rows$link_refit_mode)))
+  expect_true(all(as.character(rows$hub_lock_mode) == "hard_lock"))
+  expect_true(all(as.character(rows$link_fit_method) == "map_laplace"))
+
+  accepted <- out$linking$anchored_joint$accepted_state_by_spoke[["2"]]
+  expect_false(is.null(accepted))
+  expect_true(accepted$anchored_joint_init_state_method %in% c("phase_b_refit", "phase_a_only_init_refit"))
+  expect_true(all(is.finite(accepted$theta_spoke_global_mean)))
+})
