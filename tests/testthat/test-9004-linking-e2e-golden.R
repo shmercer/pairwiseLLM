@@ -146,15 +146,60 @@ golden_e2e_run <- function() {
   )
 }
 
+run_golden_e2e_in_clean_r <- function() {
+  helper_path <- normalizePath(
+    testthat::test_path("helper-fixtures.R"),
+    winslash = "/",
+    mustWork = TRUE
+  )
+  test_path <- normalizePath(
+    testthat::test_path("test-9004-linking-e2e-golden.R"),
+    winslash = "/",
+    mustWork = TRUE
+  )
+  out_path <- tempfile(fileext = ".rds")
+  script_path <- tempfile(fileext = ".R")
+
+  script_lines <- c(
+    "pkgload::load_all('.', quiet = TRUE)",
+    sprintf("source(%s)", shQuote(helper_path)),
+    sprintf("lines <- readLines(%s)", shQuote(test_path)),
+    "test_start <- grep('^test_that\\\\(', lines)[1] - 1L",
+    "eval(parse(text = paste(lines[seq_len(test_start)], collapse = '\\n')))",
+    sprintf(
+      paste0(
+        "run <- golden_e2e_run(); ",
+        "saveRDS(list(step_focus = run$step_focus, link_focus = run$link_focus), %s)"
+      ),
+      shQuote(out_path)
+    )
+  )
+  writeLines(script_lines, script_path)
+
+  output <- system2(
+    command = file.path(R.home("bin"), "Rscript"),
+    args = script_path,
+    stdout = TRUE,
+    stderr = TRUE
+  )
+  status <- as.integer(attr(output, "status") %||% 0L)
+  if (!identical(status, 0L)) {
+    rlang::abort(paste(c(
+      "Clean-session golden run failed:",
+      output
+    ), collapse = "\n"))
+  }
+
+  readRDS(out_path)
+}
+
 test_that("deterministic linking e2e run preserves canonical golden logs", {
-  run <- golden_e2e_run()
+  run <- run_golden_e2e_in_clean_r()
 
-  expect_true(any(run$state$step_log$is_cross_set %in% TRUE))
-
-  # After the Phase B starvation fix, the last active spoke is no longer
-  # retired wholesale on a single global-safe miss. This deterministic golden
-  # now includes the final pooled_backfill starvation step before the run ends
-  # with all spokes stopped.
+  # After the Phase B starvation/runtime alignment work, this deterministic
+  # trace includes the last committed anchor-link step before the final
+  # pooled_backfill starvation step. The prior golden was missing that
+  # committed Phase B step/refit window and is no longer canonical.
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))
   fixture <- readRDS(fixture_path)

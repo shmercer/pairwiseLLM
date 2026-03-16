@@ -532,7 +532,22 @@ validate_state <- function(state) {
     }
   }
   controller <- .adaptive_controller_resolve(state)
-  if (isTRUE(is_link_mode) &&
+  if (identical(controller$hub_lock_mode, "free") &&
+    !.adaptive_hub_lock_mode_free_allowed(
+      run_mode = run_mode,
+      link_estimation_mode = controller$link_estimation_mode,
+      link_refit_mode = controller$link_refit_mode
+    )) {
+    rlang::abort(
+      paste0(
+        "`state$controller$hub_lock_mode = \"free\"` is only supported for ",
+        "`state$linking$run_mode = \"link_one_spoke\"` with ",
+        "`state$controller$link_estimation_mode = \"transform\"` and ",
+        "`state$controller$link_refit_mode = \"joint_refit\"`."
+      )
+    )
+  }
+  if (identical(run_mode, "link_multi_spoke") &&
     identical(controller$multi_spoke_mode, "concurrent") &&
     !controller$hub_lock_mode %in% c("hard_lock", "soft_lock")) {
     rlang::abort(

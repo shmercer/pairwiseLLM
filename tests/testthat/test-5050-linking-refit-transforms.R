@@ -412,6 +412,82 @@ test_that("soft lock uses artifact uncertainty and kappa strength", {
   )))
 })
 
+test_that("free hub lock skips soft-lock priors in transform joint refit", {
+  state <- make_linking_refit_state(
+    list(link_refit_mode = "joint_refit")
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  cross_edges <- pairwiseLLM:::.adaptive_link_cross_edges(
+    state,
+    spoke_id = 2L,
+    last_refit_step = NULL
+  )
+  attr(cross_edges, "judge_params") <- list(
+    mode = "global_shared",
+    scope = "link",
+    beta = 0,
+    epsilon = 0
+  )
+  attr(cross_edges, "within_hub_edges") <- pairwiseLLM:::.adaptive_link_within_edges(
+    state,
+    set_id = 1L
+  )
+  attr(cross_edges, "within_spoke_edges") <- pairwiseLLM:::.adaptive_link_within_edges(
+    state,
+    set_id = 2L
+  )
+
+  captured <- new.env(parent = emptyenv())
+  capture_fit_fn <- function(stan_data, variable_names, cmdstan, seed, model_fn = NULL) {
+    captured$stan_data <- stan_data
+    make_test_link_cmdstan_fit_fn()(stan_data, variable_names, cmdstan, seed, model_fn)
+  }
+  attr(cross_edges, "refit_contract") <- list(
+    link_refit_mode = "joint_refit",
+    hub_lock_mode = "free",
+    hub_lock_kappa = 0.75,
+    link_transform_policy = "auto",
+    shift_only_theta_treatment = "fixed_eap_plugin_var",
+    cmdstan = list(chains = 4L, parallel_chains = 4L, threads_per_chain = 1L),
+    cmdstan_fit_fn = capture_fit_fn
+  )
+
+  hub_theta <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(state, 1L, "theta_raw_mean")
+  attr(hub_theta, "theta_sd") <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(
+    state,
+    1L,
+    "theta_raw_sd"
+  )
+  attr(hub_theta, "theta_prior_center") <- hub_theta
+  attr(hub_theta, "theta_init") <- stats::setNames(c(10, 9, 8), names(hub_theta))
+
+  spoke_theta <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(state, 2L, "theta_raw_mean")
+  attr(spoke_theta, "theta_sd") <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(
+    state,
+    2L,
+    "theta_raw_sd"
+  )
+  attr(spoke_theta, "theta_init") <- spoke_theta
+
+  fit <- pairwiseLLM:::.adaptive_link_fit_transform(
+    cross_edges = cross_edges,
+    hub_theta = hub_theta,
+    spoke_theta = spoke_theta,
+    transform_mode = "shift_only"
+  )
+
+  expect_identical(captured$stan_data$estimate_hub, 1L)
+  expect_identical(captured$stan_data$hub_prior_active, 0L)
+  expect_identical(fit$fit_contract$lock$hub_lock_mode, "free")
+  expect_true(is.na(fit$fit_contract$lock$hub_lock_kappa))
+  expect_identical(
+    fit$fit_contract$joint_refit$n_hub_items_estimated,
+    length(hub_theta)
+  )
+})
+
 test_that("joint_refit fit contract records joint theta estimation", {
   state <- make_linking_refit_state(
     list(link_refit_mode = "joint_refit", link_transform_mode = "shift_only")
@@ -1068,23 +1144,56 @@ test_that("invalid linking mode combinations fail validation", {
 
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
-      list(run_mode = "link_multi_spoke", multi_spoke_mode = "concurrent", hub_lock_mode = "free"),
+      list(
+        run_mode = "link_multi_spoke",
+        multi_spoke_mode = "concurrent",
+        link_refit_mode = "joint_refit",
+        hub_lock_mode = "free"
+      ),
       n_items = 5L,
       set_ids = c(1L, 2L, 3L)
     ),
-    "must be one of"
+    "only supported"
   )
 })
 
 test_that("linking runtime aborts loudly if an unsupported hub lock mode leaks into refit state", {
   state <- make_linking_refit_state(list(link_refit_mode = "joint_refit", hub_lock_mode = "soft_lock"))
   state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
-  state$controller$hub_lock_mode <- "free"
+  state$controller$hub_lock_mode <- "bogus"
 
   expect_error(
     pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L)),
     "Unsupported `hub_lock_mode`"
   )
+})
+
+test_that("free hub lock leaves hub unanchored and blocks linking stop", {
+  state <- make_stable_epoch_stop_state()
+  state$linking$run_mode <- "link_one_spoke"
+  state$linking$spoke_ids <- 2L
+  state$controller$run_mode <- "link_one_spoke"
+  state$controller$multi_spoke_mode <- "independent"
+  state$controller$link_refit_mode <- "joint_refit"
+  state$controller$hub_lock_mode <- "free"
+  state$controller$link_epoch_signature_by_spoke <- list(
+    `2` = current_link_epoch_signature(state, spoke_id = 2L)
+  )
+
+  out <- run_mocked_stop_window_refit(state)
+  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
+  row <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+    out,
+    refit_id = 3L,
+    refit_context = list(last_refit_step = 3L)
+  )
+  row <- row[row$spoke_id == 2L, , drop = FALSE]
+
+  expect_false(isTRUE(stats$hub_anchored))
+  expect_false(isTRUE(stats$link_stop_pass))
+  expect_match(as.character(stats$stop_blocker_codes), "hub_not_anchored")
+  expect_false(isTRUE(row$hub_anchored[[1L]]))
+  expect_match(as.character(row$stop_blocker_codes[[1L]]), "hub_not_anchored")
 })
 
 test_that("within-set candidate routing remains independent of linking refit fields", {

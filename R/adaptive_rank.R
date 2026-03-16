@@ -479,8 +479,11 @@ make_adaptive_judge_llm <- function(
 #'   \item{`hub_lock_mode`}{Controls hub behavior in Phase B fits. In
 #'     `link_estimation_mode = "transform"`, this is only used when
 #'     `link_refit_mode = "joint_refit"` and chooses between `"hard_lock"`
-#'     (hub anchored to Phase A) and `"soft_lock"` (regularize toward Phase A).
-#'     In `link_estimation_mode = "anchored_joint"`, the only supported value is
+#'     (hub anchored to Phase A), `"soft_lock"` (regularize toward Phase A), and
+#'     `"free"` (no hub locking). `"free"` is only supported for
+#'     `run_mode = "link_one_spoke"` with `link_estimation_mode = "transform"`
+#'     and `link_refit_mode = "joint_refit"`. In
+#'     `link_estimation_mode = "anchored_joint"`, the only supported value is
 #'     `"hard_lock"`. Default is `"soft_lock"`.}
 #'   \item{`hub_lock_kappa`}{Only used when `hub_lock_mode = "soft_lock"`.
 #'     Regularization strength in `[0,1]`. Default is `0.75`.}

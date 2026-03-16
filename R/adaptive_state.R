@@ -161,6 +161,22 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_hub_lock_mode_levels <- function() {
+  c("hard_lock", "soft_lock", "free")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_hub_lock_mode_free_allowed <- function(run_mode,
+                                                 link_estimation_mode,
+                                                 link_refit_mode) {
+  identical(as.character(run_mode %||% "within_set"), "link_one_spoke") &&
+    identical(as.character(link_estimation_mode %||% "transform"), "transform") &&
+    identical(as.character(link_refit_mode %||% "shift_only"), "joint_refit")
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_normalize_link_estimation_mode <- function(mode = NULL) {
   value <- mode %||% "transform"
   if (!is.character(value) || length(value) != 1L || is.na(value) || value == "") {
@@ -775,7 +791,7 @@
   out$within_phase_b_within_set_steps_allowed <- read_logical(
     "within_phase_b_within_set_steps_allowed"
   )
-  out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock"))
+  out$hub_lock_mode <- read_choice("hub_lock_mode", .adaptive_hub_lock_mode_levels())
   out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
   out$anchored_joint_spoke_prior_scale <- read_double("anchored_joint_spoke_prior_scale", 0, Inf)
   out$anchored_joint_sd_floor <- read_double("anchored_joint_sd_floor", 0, Inf)
@@ -983,6 +999,19 @@
       "`adaptive_config$hub_lock_kappa` must be strictly in (0, 1] when `hub_lock_mode = \"soft_lock\"`."
     )
   }
+  if (identical(resolved$hub_lock_mode, "free") &&
+    !.adaptive_hub_lock_mode_free_allowed(
+      run_mode = resolved$run_mode,
+      link_estimation_mode = resolved$link_estimation_mode,
+      link_refit_mode = resolved$link_refit_mode
+    )) {
+    rlang::abort(paste0(
+      "`adaptive_config$hub_lock_mode = \"free\"` is only supported for ",
+      "`adaptive_config$run_mode = \"link_one_spoke\"` with ",
+      "`adaptive_config$link_estimation_mode = \"transform\"` and ",
+      "`adaptive_config$link_refit_mode = \"joint_refit\"`."
+    ))
+  }
   if (resolved$stability_passes_required > resolved$stability_window_refits) {
     rlang::abort(
       "`adaptive_config$stability_passes_required` must be <= `adaptive_config$stability_window_refits`."
@@ -997,7 +1026,7 @@
       )
     )
   }
-  if (isTRUE(is_link_mode) &&
+  if (identical(run_mode, "link_multi_spoke") &&
     identical(resolved$multi_spoke_mode, "concurrent") &&
     !resolved$hub_lock_mode %in% c("hard_lock", "soft_lock")) {
     rlang::abort(paste0(

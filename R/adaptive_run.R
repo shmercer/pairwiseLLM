@@ -2271,7 +2271,9 @@ adaptive_rank_start <- function(items,
 #' In linking \code{transform} mode with \code{link_refit_mode = "joint_refit"},
 #' hub+spoke item abilities and transform parameters are estimated together for
 #' the active hub+spoke graph, with hub behavior controlled by
-#' \code{hub_lock_mode} (\code{hard_lock} or \code{soft_lock});
+#' \code{hub_lock_mode} (\code{hard_lock}, \code{soft_lock}, or \code{free});
+#' \code{free} is only supported for single-spoke transform joint refits and
+#' disables hub locking entirely;
 #' \code{soft_lock} uses \code{hub_lock_kappa}-scaled regularization to Phase A
 #' hub summaries. In \code{link_estimation_mode = "anchored_joint"}, Phase B
 #' uses a hard-lock hub-fixed fit and a deterministic accepted state before the

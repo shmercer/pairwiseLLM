@@ -91,7 +91,7 @@
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
     utility_mode = c("pairing_trueskill_u0", "linking_d_optimal"),
-    hub_lock_mode = c("hard_lock", "soft_lock")
+    hub_lock_mode = .adaptive_hub_lock_mode_levels()
   )
 }
 
@@ -103,7 +103,7 @@
     link_refit_mode = c("shift_only", "joint_refit"),
     shift_only_theta_treatment = .adaptive_shift_only_theta_treatment_levels(),
     shift_only_theta_treatment_resolved = .adaptive_shift_only_theta_treatment_levels(),
-    hub_lock_mode = c("hard_lock", "soft_lock"),
+    hub_lock_mode = .adaptive_hub_lock_mode_levels(),
     anchored_joint_init_state_method = .adaptive_anchored_joint_init_state_method_levels()
   )
 }

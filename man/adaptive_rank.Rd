@@ -165,8 +165,11 @@ would begin with this set to \code{TRUE}. Default is \code{FALSE}.}
 \item{\code{hub_lock_mode}}{Controls hub behavior in Phase B fits. In
 \code{link_estimation_mode = "transform"}, this is only used when
 \code{link_refit_mode = "joint_refit"} and chooses between \code{"hard_lock"}
-(hub anchored to Phase A) and \code{"soft_lock"} (regularize toward Phase A).
-In \code{link_estimation_mode = "anchored_joint"}, the only supported value is
+(hub anchored to Phase A), \code{"soft_lock"} (regularize toward Phase A), and
+\code{"free"} (no hub locking). \code{"free"} is only supported for
+\code{run_mode = "link_one_spoke"} with \code{link_estimation_mode = "transform"}
+and \code{link_refit_mode = "joint_refit"}. In
+\code{link_estimation_mode = "anchored_joint"}, the only supported value is
 \code{"hard_lock"}. Default is \code{"soft_lock"}.}
 \item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
 Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}

@@ -196,7 +196,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
     levels(step_log$utility_mode),
     c("pairing_trueskill_u0", "linking_d_optimal")
   )
-  expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock"))
+  expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 
   expect_true(is.factor(logs$link_stage_log$link_estimation_mode))
   expect_true(is.factor(logs$link_stage_log$link_transform_policy))
@@ -211,7 +211,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   )
   expect_identical(levels(logs$link_stage_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(levels(logs$link_stage_log$link_refit_mode), c("shift_only", "joint_refit"))
-  expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock"))
+  expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
   expect_identical(
     levels(logs$link_stage_log$anchored_joint_init_state_method),
     c("artifact_copy_init", "phase_a_only_init_refit", "phase_b_refit")

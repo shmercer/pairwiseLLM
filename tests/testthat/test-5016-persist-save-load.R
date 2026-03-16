@@ -784,6 +784,23 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
 
+test_that("save/load preserves free hub lock across controller and link_stage_log", {
+  state <- make_probe_resume_state()
+  state$controller$link_refit_mode <- "joint_refit"
+  state$controller$hub_lock_mode <- "free"
+  state$link_stage_log$link_refit_mode[] <- "joint_refit"
+  state$link_stage_log$hub_lock_mode[] <- "free"
+
+  session_dir <- tempfile("adaptive-session-free-lock-")
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(restored$controller$link_refit_mode, "joint_refit")
+  expect_identical(restored$controller$hub_lock_mode, "free")
+  expect_identical(as.character(restored$link_stage_log$link_refit_mode[[1L]]), "joint_refit")
+  expect_identical(as.character(restored$link_stage_log$hub_lock_mode[[1L]]), "free")
+})
+
 test_that("save/load preserves feasibility and canonical stop-threshold fields in link_stage_log", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),

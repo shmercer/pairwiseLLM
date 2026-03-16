@@ -150,3 +150,53 @@ test_that("print.adaptive_state names anchored-joint mode without transform-only
   expect_false(any(grepl("transform_policy=", output)))
   expect_false(any(grepl("transform_state=", output)))
 })
+
+test_that("adaptive_get_logs and print preserve free hub-lock mode", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 18L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_refit_mode = "joint_refit",
+      hub_lock_mode = "free"
+    )
+  )
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_spokes <- 2L
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("ready", "ready"),
+    validation_message = c("ok", "ok"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    state$link_stage_log,
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "joint_refit",
+      hub_lock_mode = "free",
+      link_fit_method = "cmdstan_hmc",
+      link_uncertainty_approximation = "cmdstan_posterior_draws",
+      hub_anchored = FALSE,
+      link_stop_pass = FALSE,
+      link_state_frozen = FALSE
+    )
+  )
+
+  logs <- adaptive_get_logs(state)
+  expect_identical(as.character(logs$link_stage_log$hub_lock_mode[[1L]]), "free")
+  expect_no_error(capture.output(print(state)))
+})

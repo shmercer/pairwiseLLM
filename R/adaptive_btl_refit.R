@@ -2942,7 +2942,7 @@
     empty$joint_refit <- list(
       used = FALSE,
       lock_mode = lock_mode,
-      hub_lock_kappa = as.double(lock_kappa)
+      hub_lock_kappa = if (identical(lock_mode, "soft_lock")) as.double(lock_kappa) else NA_real_
     )
     empty$diagnostics <- list(
       divergences = NA_integer_,
@@ -3055,15 +3055,18 @@
   within_spoke_idx_b <- within_spoke_idx_b[keep_within_spoke]
   within_spoke_y <- within_spoke_y[keep_within_spoke]
 
-  if (isTRUE(joint_used) && !lock_mode %in% c("hard_lock", "soft_lock")) {
+  if (isTRUE(joint_used) && !lock_mode %in% .adaptive_hub_lock_mode_levels()) {
     rlang::abort(
       paste0(
         "Unsupported `hub_lock_mode` in linking joint refit: ",
         lock_mode,
-        ". Expected `hard_lock` or `soft_lock`."
+        ". Expected one of: ",
+        paste(.adaptive_hub_lock_mode_levels(), collapse = ", "),
+        "."
       )
     )
   }
+  hub_prior_active <- isTRUE(estimate_hub) && identical(lock_mode, "soft_lock")
   hub_prior_sd <- if (isTRUE(estimate_hub) && identical(lock_mode, "soft_lock")) {
     pmax(hub_ref_sd / max(lock_kappa, 1e-8), 1e-8)
   } else {
@@ -3083,6 +3086,7 @@
     beta_within = as.double(beta),
     joint_used = as.integer(joint_used),
     estimate_hub = as.integer(estimate_hub),
+    hub_prior_active = as.integer(hub_prior_active),
     use_scale = as.integer(use_scale),
     N_hub = as.integer(length(hub_ref)),
     N_spoke = as.integer(length(spoke_ref)),
@@ -3256,7 +3260,7 @@
     ),
     lock = list(
       hub_lock_mode = as.character(lock_mode),
-      hub_lock_kappa = as.double(lock_kappa)
+      hub_lock_kappa = if (identical(lock_mode, "soft_lock")) as.double(lock_kappa) else NA_real_
     ),
     theta_treatment = as.character(refit_contract_ctx$shift_only_theta_treatment %||% NA_character_),
     joint_refit = list(
@@ -4205,6 +4209,19 @@
       kappa <- as.double(controller$hub_lock_kappa %||% 0.75)
       theta_treatment <- as.character(controller$shift_only_theta_treatment %||% "fixed_eap_plugin_var")
       theta_treatment_resolved <- theta_treatment
+      if (identical(lock_mode, "free") &&
+        !.adaptive_hub_lock_mode_free_allowed(
+          run_mode = controller$run_mode %||% out$linking$run_mode %||% "within_set",
+          link_estimation_mode = link_estimation_mode,
+          link_refit_mode = refit_mode
+        )) {
+        rlang::abort(paste0(
+          "`state$controller$hub_lock_mode = \"free\"` is only supported for ",
+          "`state$linking$run_mode = \"link_one_spoke\"` with ",
+          "`state$controller$link_estimation_mode = \"transform\"` and ",
+          "`state$controller$link_refit_mode = \"joint_refit\"`."
+        ))
+      }
     }
 
     hub_phase <- .adaptive_link_phase_a_theta_map(out, hub_id, "theta_raw_mean")
@@ -4716,13 +4733,17 @@
     hub_anchored <- if (identical(link_estimation_mode, "anchored_joint") ||
       identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
       TRUE
+    } else if (identical(lock_mode, "free")) {
+      FALSE
     } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
       if (!identical(lock_mode, "soft_lock")) {
         rlang::abort(
           paste0(
             "Unsupported `hub_lock_mode` in linking stop-gate logic: ",
             lock_mode,
-            ". Expected `hard_lock` or `soft_lock`."
+            ". Expected one of: ",
+            paste(.adaptive_hub_lock_mode_levels(), collapse = ", "),
+            "."
           )
         )
       }

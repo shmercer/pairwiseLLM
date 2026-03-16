@@ -149,7 +149,8 @@ make_test_link_cmdstan_fit_fn <- function() {
       delta_center <- 0
     }
     hub_prior_signal <- mean(as.double(stan_data$hub_prior_sd %||% numeric()), na.rm = TRUE)
-    if (is.finite(hub_prior_signal)) {
+    if (isTRUE(as.integer(stan_data$hub_prior_active %||% 0L) == 1L) &&
+      is.finite(hub_prior_signal)) {
       delta_center <- delta_center + (hub_prior_signal * 0.01)
     }
 

@@ -916,11 +916,16 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
-      list(run_mode = "link_multi_spoke", multi_spoke_mode = "concurrent", hub_lock_mode = "free"),
+      list(
+        run_mode = "link_multi_spoke",
+        multi_spoke_mode = "concurrent",
+        link_refit_mode = "joint_refit",
+        hub_lock_mode = "free"
+      ),
       5L,
       set_ids = c(1L, 2L, 2L)
     ),
-    "must be one of"
+    "only supported"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(

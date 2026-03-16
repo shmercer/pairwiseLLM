@@ -10,6 +10,7 @@ data {
   real beta_within;
   int<lower=0, upper=1> joint_used;
   int<lower=0, upper=1> estimate_hub;
+  int<lower=0, upper=1> hub_prior_active;
   int<lower=0, upper=1> use_scale;
   int<lower=0> N_hub;
   int<lower=0> N_spoke;
@@ -58,7 +59,7 @@ model {
   if (use_scale == 1) {
     log_alpha_free[1] ~ normal(0, 0.2);
   }
-  if (estimate_hub == 1) {
+  if (estimate_hub == 1 && hub_prior_active == 1) {
     theta_hub ~ normal(hub_prior_center, hub_prior_sd);
   }
   if (joint_used == 1) {
