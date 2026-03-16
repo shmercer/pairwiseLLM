@@ -334,7 +334,10 @@ make_adaptive_judge_llm <- function(
 #' `run_mode = "link_one_spoke"` and `run_mode = "link_multi_spoke"` require
 #' multi-set input (`set_id`/`global_item_id`), enforce hub↔spoke routing
 #' defaults, and preserve Phase A artifact gating before Phase B cross-set
-#' comparisons begin.
+#' comparisons begin. `link_estimation_mode = "transform"` remains the default
+#' wrapper behavior; use `link_estimation_mode = "anchored_joint"` together
+#' with `hub_lock_mode = "hard_lock"` for the alternative anchored-joint
+#' Phase B fit.
 #'
 #' Selection semantics:
 #' pair selection is TrueSkill-driven in one-pair transactional steps.
@@ -443,18 +446,22 @@ make_adaptive_judge_llm <- function(
 #'     multi-set inputs with `set_id` and `global_item_id` in `data`.}
 #'   \item{`hub_id`}{Hub `set_id` for linking modes. Default is `1L`.}
 #'   \item{`link_estimation_mode`}{Phase B estimation family. Choices are
-#'     `"transform"` (default) and `"anchored_joint"`. In v2,
-#'     `"anchored_joint"` requires `hub_lock_mode = "hard_lock"` and does not
-#'     accept transform-only config fields.}
-#'   \item{`link_transform_policy`}{Allowed spoke transform family. Choices are
-#'     `"auto"` (start shift-only then possibly escalate),
+#'     `"transform"` (default) and `"anchored_joint"`. `"transform"` preserves
+#'     the existing shift/shift-scale linking workflow. `"anchored_joint"` uses
+#'     a hub-fixed, spoke-free full-evidence Phase B fit, requires
+#'     `hub_lock_mode = "hard_lock"`, and does not accept transform-only config
+#'     fields.}
+#'   \item{`link_transform_policy`}{Only used when
+#'     `link_estimation_mode = "transform"`. Allowed spoke transform family.
+#'     Choices are `"auto"` (start shift-only then possibly escalate),
 #'     `"fixed_shift_only"` (offset only), and `"fixed_shift_scale"` (offset +
 #'     scale). Default is `"auto"`. Earlier `link_transform_mode` values are
 #'     accepted for compatibility and normalized internally.}
-#'   \item{`link_refit_mode`}{Linking refit mode. Choices are `"shift_only"`
-#'     (fit transform with within-set abilities treated as fixed inputs) and
-#'     `"joint_refit"` (jointly estimate hub/spoke abilities and transform
-#'     parameters). Default is `"shift_only"`.}
+#'   \item{`link_refit_mode`}{Only used when
+#'     `link_estimation_mode = "transform"`. Linking refit mode. Choices are
+#'     `"shift_only"` (fit transform with within-set abilities treated as fixed
+#'     inputs) and `"joint_refit"` (jointly estimate hub/spoke abilities and
+#'     transform parameters). Default is `"shift_only"`.}
 #'   \item{`shift_only_theta_treatment`}{Only used when
 #'     `link_refit_mode = "shift_only"`. Choices are
 #'     `"fixed_eap_plugin_var"` (treat Phase A means with artifact SD plug-in
@@ -464,10 +471,12 @@ make_adaptive_judge_llm <- function(
 #'     phases. Choices are `"global_shared"` (single shared judge parameter set)
 #'     and `"phase_specific"` (separate within-set and link-phase judge
 #'     parameters). Default is `"global_shared"`.}
-#'   \item{`hub_lock_mode`}{Only used when `link_refit_mode = "joint_refit"`.
-#'     Controls whether the hub is allowed to drift during joint refits.
-#'     Choices are `"hard_lock"` (hub anchored to Phase A), `"soft_lock"`
-#'     (regularize toward Phase A). Default is `"soft_lock"`.}
+#'   \item{`hub_lock_mode`}{Controls hub behavior in Phase B fits. In
+#'     `link_estimation_mode = "transform"`, this is only used when
+#'     `link_refit_mode = "joint_refit"` and chooses between `"hard_lock"`
+#'     (hub anchored to Phase A) and `"soft_lock"` (regularize toward Phase A).
+#'     In `link_estimation_mode = "anchored_joint"`, the only supported value is
+#'     `"hard_lock"`. Default is `"soft_lock"`.}
 #'   \item{`hub_lock_kappa`}{Only used when `hub_lock_mode = "soft_lock"`.
 #'     Regularization strength in `[0,1]`. Default is `0.75`.}
 #'   \item{`anchored_joint_spoke_prior_scale`}{Scale multiplier for anchored-
@@ -515,10 +524,12 @@ make_adaptive_judge_llm <- function(
 #'     `> 0L` allow that many additional committed comparisons after the first
 #'     stop boundary before deterministic termination. Default is `0L`.}
 #'
-#'   \item{`probe_pairs_per_refit_per_spoke`}{When linking stop is reached for a
-#'     spoke, cross-set sampling becomes probe-only for that spoke until global
-#'     stop. This sets the per-refit probe budget per stopped spoke. Default is
-#'     `2L`.}
+#'   \item{`probe_pairs_per_refit_per_spoke`}{Base held-out probe collection cap
+#'     per spoke per refit window while the spoke remains active in Phase B.
+#'     The controller may exceed this only through documented probe
+#'     acceleration/reallocation rules used to satisfy the held-out minimum.
+#'     Under the current normative design, no additional cross-set work is
+#'     scheduled after a spoke freezes. Default is `2L`.}
 #'   \item{`probe_edges_min_for_stop`}{Minimum realized held-out probe edges
 #'     required before Phase B stop or escalation can be evaluated. Default is
 #'     `30L`.}
@@ -755,6 +766,15 @@ make_adaptive_judge_llm <- function(
 #'   resume = TRUE,
 #'   progress = "refits"
 #' )
+#'
+#' # Anchored-joint is an explicit alternative, not the default:
+#' # adaptive_config = list(
+#' #   run_mode = "link_one_spoke",
+#' #   hub_id = 1L,
+#' #   phase_a_mode = "run",
+#' #   link_estimation_mode = "anchored_joint",
+#' #   hub_lock_mode = "hard_lock"
+#' # )
 #'
 #' names(link_out$logs)
 #' }

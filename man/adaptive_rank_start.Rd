@@ -59,10 +59,12 @@ win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
 routing uses a linking-global score derived from Phase A raw summaries plus
 the current spoke transform (\eqn{\delta_s}, optional \eqn{\log \alpha_s}).
 In linking Phase B, eligible cross-set candidates are ranked by
-ridge-stabilized D-optimal log-det information gain on spoke transform
-parameters using order-averaged Model D probabilities. Linking inference
-parameters are used for
-inference/diagnostics/stopping, not as direct selection objectives.
+ridge-stabilized D-optimal log-det information gain on the active linking
+parameter block using order-averaged Model D probabilities. In
+\code{link_estimation_mode = "transform"}, this is the current spoke
+transform; in \code{link_estimation_mode = "anchored_joint"}, it is the
+spoke free block with the hub fixed. Linking inference parameters are used
+for inference/diagnostics/stopping, not as direct selection objectives.
 When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 step may use deterministic fallback from available within/shared judge
 estimates if link-specific estimates are not yet available; once link-specific
@@ -70,7 +72,7 @@ estimates are expected, missing/non-finite values abort.
 Bayesian BTL posterior draws are not used as general pair-selection
 objectives; within-set pairing remains TrueSkill-routed, with accepted
 posterior refits contributing only to the long-link probability gate.
-Linking transform refits use Bayesian posterior estimation and posterior
+Linking Phase B refits use Bayesian posterior estimation and posterior
 summaries/diagnostics are logged per spoke at each linking refit.
 
 The returned state contains canonical logs:

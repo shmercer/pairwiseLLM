@@ -965,7 +965,7 @@ summarize_adaptive <- function(state) {
     paste0("lag_open=", lag_open, "/", nrow(latest_rows)),
     paste0("stop_gate_open=", gate_open, "/", nrow(latest_rows)),
     if (length(phase_ctx$stopped_spokes) > 0L) {
-      paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+      paste0("stopped_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
     },
     if (frozen > 0L) {
       paste0("link_state_frozen=", frozen, "/", nrow(latest_rows))
@@ -1007,7 +1007,7 @@ summarize_adaptive <- function(state) {
       paste0("ready_spokes=", paste(phase_ctx$ready_spokes, collapse = ","))
     },
     if (length(phase_ctx$stopped_spokes) > 0L) {
-      paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+      paste0("stopped_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
     },
     if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
       paste0("estimation_mode=", estimation_mode)
@@ -1563,9 +1563,19 @@ print.adaptive_state <- function(x, ...) {
   for (idx in seq_len(nrow(rows))) {
     link_row <- rows[idx, , drop = FALSE]
     spoke_id <- as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_))
+    estimation_mode <- as.character(.adaptive_progress_col_value(
+      link_row,
+      "link_estimation_mode",
+      default = NA_character_
+    ))
     transform_state <- as.character(.adaptive_progress_col_value(
       link_row,
       "link_transform_state",
+      default = NA_character_
+    ))
+    init_method <- as.character(.adaptive_progress_col_value(
+      link_row,
+      "anchored_joint_init_state_method",
       default = NA_character_
     ))
 
@@ -1581,6 +1591,11 @@ print.adaptive_state <- function(x, ...) {
           "  spoke=",
           spoke_id,
           " frozen",
+          if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+            paste0("  mode=", estimation_mode)
+          } else {
+            ""
+          },
           if (!is.na(transform_state) && nzchar(transform_state)) {
             paste0("  state=", transform_state)
           } else {
@@ -1593,8 +1608,18 @@ print.adaptive_state <- function(x, ...) {
           }
         ),
         paste0("  spoke=", spoke_id, " frozen"),
+        if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+          paste0("    mode=", estimation_mode)
+        } else {
+          character()
+        },
         if (!is.na(transform_state) && nzchar(transform_state)) {
           paste0("    state=", transform_state)
+        } else {
+          character()
+        },
+        if (!is.na(init_method) && nzchar(init_method)) {
+          paste0("    init_state=", init_method)
         } else {
           character()
         },
@@ -1660,6 +1685,11 @@ print.adaptive_state <- function(x, ...) {
         "  spoke=",
         spoke_id,
         " active",
+        if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+          paste0("  mode=", estimation_mode)
+        } else {
+          ""
+        },
         "  eligible=",
         .adaptive_progress_fmt_state(
           .adaptive_progress_col_value(link_row, "link_stop_eligible", default = NA),
@@ -1678,8 +1708,18 @@ print.adaptive_state <- function(x, ...) {
         if (is.na(probes_min)) "NA" else probes_min
       ),
       paste0("  spoke=", spoke_id, " active"),
+      if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+        paste0("    mode=", estimation_mode)
+      } else {
+        character()
+      },
       if (!is.na(transform_state) && nzchar(transform_state)) {
         paste0("    state=", transform_state)
+      } else {
+        character()
+      },
+      if (!is.na(init_method) && nzchar(init_method)) {
+        paste0("    init_state=", init_method)
       } else {
         character()
       },

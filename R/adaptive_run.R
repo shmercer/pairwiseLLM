@@ -2082,10 +2082,12 @@
 #' routing uses a linking-global score derived from Phase A raw summaries plus
 #' the current spoke transform (\eqn{\delta_s}, optional \eqn{\log \alpha_s}).
 #' In linking Phase B, eligible cross-set candidates are ranked by
-#' ridge-stabilized D-optimal log-det information gain on spoke transform
-#' parameters using order-averaged Model D probabilities. Linking inference
-#' parameters are used for
-#' inference/diagnostics/stopping, not as direct selection objectives.
+#' ridge-stabilized D-optimal log-det information gain on the active linking
+#' parameter block using order-averaged Model D probabilities. In
+#' \code{link_estimation_mode = "transform"}, this is the current spoke
+#' transform; in \code{link_estimation_mode = "anchored_joint"}, it is the
+#' spoke free block with the hub fixed. Linking inference parameters are used
+#' for inference/diagnostics/stopping, not as direct selection objectives.
 #' When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 #' step may use deterministic fallback from available within/shared judge
 #' estimates if link-specific estimates are not yet available; once link-specific
@@ -2093,7 +2095,7 @@
 #' Bayesian BTL posterior draws are not used as general pair-selection
 #' objectives; within-set pairing remains TrueSkill-routed, with accepted
 #' posterior refits contributing only to the long-link probability gate.
-#' Linking transform refits use Bayesian posterior estimation and posterior
+#' Linking Phase B refits use Bayesian posterior estimation and posterior
 #' summaries/diagnostics are logged per spoke at each linking refit.
 #'
 #' The returned state contains canonical logs:
@@ -2208,20 +2210,25 @@ adaptive_rank_start <- function(items,
 #' BTL posterior win probability for candidate eligibility; before that it
 #' falls back deterministically to TrueSkill.
 #' In linking Phase B, anchor/strata routing uses linking-global scores built
-#' from Phase A raw summaries and the current spoke transform.
-#' Linking Phase B routing ranks eligible cross-set candidates by
-#' ridge-stabilized D-optimal log-det information gain on spoke transform
-#' parameters using order-averaged Model D probabilities. Linking inference
-#' parameters remain inference-only
+#' from Phase A summaries and the active linking state. In
+#' \code{link_estimation_mode = "transform"}, that state is the current spoke
+#' transform. In \code{link_estimation_mode = "anchored_joint"}, it is the
+#' accepted anchored-joint state. Linking Phase B routing ranks eligible
+#' cross-set candidates by ridge-stabilized D-optimal log-det information gain
+#' on the active linking parameter block using order-averaged Model D
+#' probabilities. Linking inference parameters remain inference-only
 #' (diagnostics and stopping) and are not direct pair-selection objectives.
 #' When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
 #' fallback from within/shared judge estimates only until link-specific estimates
 #' are expected, after which malformed link estimates abort.
-#' In linking \code{joint_refit} mode, hub+spoke item abilities and transform
-#' parameters are estimated together for the active hub+spoke graph, with hub
-#' behavior controlled by \code{hub_lock_mode} (\code{hard_lock}
-#' or \code{soft_lock}); \code{soft_lock} uses
-#' \code{hub_lock_kappa}-scaled regularization to Phase A hub summaries.
+#' In linking \code{transform} mode with \code{link_refit_mode = "joint_refit"},
+#' hub+spoke item abilities and transform parameters are estimated together for
+#' the active hub+spoke graph, with hub behavior controlled by
+#' \code{hub_lock_mode} (\code{hard_lock} or \code{soft_lock});
+#' \code{soft_lock} uses \code{hub_lock_kappa}-scaled regularization to Phase A
+#' hub summaries. In \code{link_estimation_mode = "anchored_joint"}, Phase B
+#' uses a hard-lock hub-fixed fit and a deterministic accepted state before the
+#' first linking refit.
 #' Exploration/exploitation routing and fallback handling are recorded in
 #' \code{step_log}.
 #'

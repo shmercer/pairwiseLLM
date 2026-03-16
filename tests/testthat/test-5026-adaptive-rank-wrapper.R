@@ -612,9 +612,54 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
   expect_true(nrow(cross) > 0L)
   expect_true(all(cross$link_spoke_id == 2L))
   expect_true(nrow(out$logs$link_stage_log) >= 1L)
+  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "transform"))
   expect_true(all(c("link_transform_policy", "link_transform_state", "reliability_link_global") %in%
     names(out$logs$link_stage_log)))
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
+  expect_true("rank_link" %in% names(out$items))
+})
+
+test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
+  samples <- make_linking_samples_df()
+  two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
+  items <- dplyr::rename(samples, item_id = ID)
+  artifacts <- make_wrapper_import_artifacts(items)
+  fit_override <- make_deterministic_fit_fn(ids = as.character(two_set$ID))
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 12L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts[c("1", "2")],
+      phase_a_compatible_config_hashes = vapply(artifacts[c("1", "2")], function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L)),
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+    progress = "none",
+    seed = 23L
+  )
+
+  expect_true(nrow(out$logs$link_stage_log) >= 1L)
+  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "anchored_joint"))
+  expect_true(all(is.na(out$logs$link_stage_log$link_transform_policy)))
+  expect_true(all(is.na(out$logs$link_stage_log$link_transform_state)))
+  expect_true(all(is.na(out$logs$link_stage_log$link_refit_mode)))
+  expect_true(all(as.character(out$logs$link_stage_log$hub_lock_mode) == "hard_lock"))
+  expect_false(is.null(out$state$linking$anchored_joint$accepted_state_by_spoke[["2"]]))
   expect_true("rank_link" %in% names(out$items))
 })
 

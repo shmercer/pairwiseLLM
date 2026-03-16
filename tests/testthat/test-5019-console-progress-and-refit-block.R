@@ -177,3 +177,23 @@ test_that("adaptive progress step events distinguish active linking from probe f
   expect_match(active_msg, "link=active")
   expect_false(grepl("probe=", active_msg))
 })
+
+test_that("adaptive progress Phase B spoke lines label anchored-joint mode without transform state", {
+  lines <- pairwiseLLM:::.adaptive_progress_phase_b_spoke_lines(
+    link_stage_rows = tibble::tibble(
+      spoke_id = 2L,
+      link_estimation_mode = "anchored_joint",
+      link_transform_state = NA_character_,
+      anchored_joint_init_state_method = "artifact_copy_init",
+      link_state_frozen = TRUE,
+      link_state_frozen_refit_id = 4L
+    ),
+    thresholds = list(),
+    stability_window_refits = 3L,
+    stability_passes_required = 2L
+  )
+
+  expect_true(any(grepl("mode=anchored_joint", lines)))
+  expect_true(any(grepl("init_state=artifact_copy_init", lines)))
+  expect_false(any(grepl("^\\s+state=", lines)))
+})
