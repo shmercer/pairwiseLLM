@@ -1771,12 +1771,13 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
           next
         }
         set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-        order_idx <- .adaptive_link_backfill_order(
-          stage_candidates,
-          hub_id = as.integer(link_controller$hub_id %||% 1L),
-          set_map = set_map,
-          blocker_stage_weights = blocker_stage_weights
-        )
+          order_idx <- .adaptive_link_backfill_order(
+            stage_candidates,
+            hub_id = as.integer(link_controller$hub_id %||% 1L),
+            set_map = set_map,
+            blocker_stage_weights = blocker_stage_weights,
+            spoke_id = blocker_spoke_id
+          )
         if (length(order_idx) < 1L) {
           next
         }
@@ -1956,7 +1957,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
           # linking-specific final ordering priority.
           order_idx <- .adaptive_linking_selection_order(
             cand,
-            utility_mode = selected_utility_mode
+            utility_mode = selected_utility_mode,
+            stage_name = attempt_generation_stage,
+            spoke_id = as.integer(spoke_attempt %||% active_link_spoke)
           )
         } else {
           utility_col <- .adaptive_resolve_selection_column(selected_utility_mode)

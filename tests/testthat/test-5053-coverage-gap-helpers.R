@@ -566,7 +566,7 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
     i = c("h2", "h1"),
     j = c("s22", "s21"),
     link_stage = c("mid_link", "anchor_link"),
-    link_u = c(0.1, 0.1)
+    link_d_opt_gain = c(0.1, 0.1)
   )
   set_map <- stats::setNames(state$items$set_id, state$items$item_id)
   ord <- pairwiseLLM:::.adaptive_link_backfill_order(cand, hub_id = 1L, set_map = set_map)
@@ -1210,7 +1210,11 @@ test_that("candidate ranking and refit-stop helpers cover remaining routing and 
   )
 
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(
-    tibble::tibble(i = c("b", "a"), j = c("z", "y"), u0 = c(NA_real_, NA_real_))
+    tibble::tibble(
+      i = c("b", "a"),
+      j = c("z", "y"),
+      link_d_opt_gain = c(1, 1)
+    )
   )
   expect_identical(ord, c(2L, 1L))
 

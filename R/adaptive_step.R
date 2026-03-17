@@ -850,15 +850,31 @@ run_one_step <- function(state, judge, ...) {
   if (isTRUE(is_probe_step)) {
     utility_mode <- NA_character_
   }
+  is_phase_b_link_ordering_step <- isTRUE(is_cross_set) &&
+    isTRUE(is_link_run_mode) &&
+    !isTRUE(is_probe_step) &&
+    identical(phase_ctx$phase, "phase_b") &&
+    !is.na(link_stage)
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode)) {
     explicit_utility <- as.double(selection$cross_set_utility_pre %||% NA_real_)
     if (is.finite(explicit_utility)) {
       explicit_utility
     } else if (identical(utility_mode, "linking_d_optimal")) {
+      d_opt_utility <- as.double(selection$link_d_opt_gain %||% NA_real_)
+      if (isTRUE(is_phase_b_link_ordering_step) && !is.finite(d_opt_utility)) {
+        rlang::abort(sprintf(
+          paste0(
+            "run_one_step invariant failed: canonical D-opt ordering utility is missing/non-finite ",
+            "for stage=%s, spoke_id=%s while preparing `cross_set_utility_pre`."
+          ),
+          as.character(link_stage),
+          as.integer(link_spoke_id)
+        ))
+      }
       as.double(
-        if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {
-          selection$link_d_opt_gain
+        if (isTRUE(is_phase_b_link_ordering_step) || is.finite(d_opt_utility)) {
+          d_opt_utility
         } else {
           selection$link_u %||% selection$U0_ij %||% NA_real_
         }

@@ -773,18 +773,18 @@ test_that("linking deterministic ordering prioritizes coverage before utility", 
     i = c("a", "b"),
     j = c("c", "d"),
     u0 = c(0.24, 0.25),
+    link_d_opt_gain = c(0.2, 0.9),
     coverage_priority = c(1L, 0L)
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
   expect_identical(ord[[1L]], 1L)
 })
 
-test_that("linking deterministic ordering ranks by linking utility with stable ties", {
+test_that("linking deterministic ordering ranks by D-opt gain with stable ties", {
   cand <- tibble::tibble(
     i = c("a", "b", "c"),
     j = c("d", "e", "f"),
-    u0 = c(0.49, 0.48, 0.47),
-    link_u = c(0.10, 0.30, 0.30)
+    link_d_opt_gain = c(0.10, 0.30, 0.30)
   )
   ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
   expect_identical(ord, c(2L, 3L, 1L))
@@ -965,6 +965,7 @@ test_that("predictive utility scoring receives full linking controller fields", 
       seen_judge_mode <<- as.character(controller$judge_param_mode %||% NA_character_)
       candidates$link_p <- as.double(candidates$p %||% rep(0.5, nrow(candidates)))
       candidates$link_u <- as.double(candidates$link_p * (1 - candidates$link_p))
+      candidates$link_d_opt_gain <- rep(1, nrow(candidates))
       candidates
     },
     pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
@@ -1380,15 +1381,24 @@ test_that("cross_set_utility_pre logs linking utility before commit in linking m
   expect_gte(row$cross_set_utility_pre[[1L]], 0)
 })
 
-test_that("cross-set ordering uses linking utility when predictive utility differs", {
+test_that("cross-set ordering aborts when canonical D-opt utility is missing", {
   cand <- tibble::tibble(
     i = c("h1", "h2"),
     j = c("s1", "s2"),
     u0 = c(0.26, 0.24),
     link_u = c(0.20, 0.28)
   )
-  ord <- pairwiseLLM:::.adaptive_linking_selection_order(cand)
-  expect_identical(ord[[1L]], 2L)
+  expect_error(
+    pairwiseLLM:::.adaptive_linking_selection_order(
+      cand,
+      stage_name = "mid_link",
+      spoke_id = 2L
+    ),
+    paste0(
+      "adaptive_linking_selection_order invariant failed: canonical D-opt ordering ",
+      "could not proceed for stage=mid_link, spoke_id=2 because `link_d_opt_gain` is unavailable"
+    )
+  )
 })
 
 test_that("pairing ordering ignores linking utility fields", {
@@ -1407,18 +1417,26 @@ test_that("pairing ordering ignores linking utility fields", {
   expect_identical(ord[[1L]], 2L)
 })
 
-test_that("linking deterministic ordering falls back when linking utility is fully non-finite", {
+test_that("linking deterministic ordering aborts when D-opt utility is fully non-finite", {
   cand <- tibble::tibble(
     i = c("a", "b", "c"),
     j = c("d", "e", "f"),
     u0 = c(0.20, 0.30, 0.30),
-    link_u = c(NA_real_, NaN, Inf)
+    link_u = c(0.10, 0.40, 0.30),
+    link_d_opt_gain = c(NA_real_, NaN, Inf)
   )
-  ord <- pairwiseLLM:::.adaptive_linking_selection_order(
-    cand,
-    utility_mode = "linking_d_optimal"
+  expect_error(
+    pairwiseLLM:::.adaptive_linking_selection_order(
+      cand,
+      utility_mode = "linking_d_optimal",
+      stage_name = "local_link",
+      spoke_id = 2L
+    ),
+    paste0(
+      "adaptive_linking_selection_order invariant failed: canonical D-opt ordering ",
+      "could not proceed for stage=local_link, spoke_id=2 because all `link_d_opt_gain` values were non-finite"
+    )
   )
-  expect_identical(ord, c(2L, 3L, 1L))
 })
 
 test_that("pooled backfill ordering shifts toward blocker-weighted stages but stays deterministic when neutral", {
@@ -1445,6 +1463,30 @@ test_that("pooled backfill ordering shifts toward blocker-weighted stages but st
     blocker_stage_weights = c(anchor_link = 1, long_link = 1, mid_link = 2, local_link = 3)
   )
   expect_identical(ord_theta, c(3L, 2L, 1L))
+})
+
+test_that("pooled backfill ordering aborts when D-opt utility is fully non-finite", {
+  cand <- tibble::tibble(
+    i = c("h1", "h1"),
+    j = c("s21", "s22"),
+    link_stage = c("anchor_link", "mid_link"),
+    link_d_opt_gain = c(NA_real_, NaN)
+  )
+  set_map <- c(h1 = 1L, s21 = 2L, s22 = 2L)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_backfill_order(
+      cand,
+      hub_id = 1L,
+      set_map = set_map,
+      spoke_id = 2L
+    ),
+    paste0(
+      "adaptive_link_backfill_order invariant failed: canonical D-opt ordering ",
+      "could not proceed for stage=pooled_backfill, spoke_id=2 because all `link_d_opt_gain` ",
+      "values were non-finite"
+    )
+  )
 })
 
 test_that("concurrent spoke ranking breaks matched deficits toward stronger canonical blockers", {
@@ -2046,6 +2088,7 @@ test_that("cross-set logged predictive probability uses final A/B orientation", 
     .adaptive_link_attach_predictive_utility = function(candidates, state, controller, spoke_id) {
       candidates$link_p <- 0.9
       candidates$link_u <- 0.09
+      candidates$link_d_opt_gain <- 0.4
       candidates
     },
     .adaptive_assign_order = function(pair, posA, posB, pair_last_order, seed_base = 1L) {

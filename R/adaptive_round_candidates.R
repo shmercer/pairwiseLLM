@@ -1581,7 +1581,9 @@ generate_stage_candidates_from_state <- function(state,
 #' @keywords internal
 #' @noRd
 .adaptive_linking_selection_order <- function(candidates,
-                                              utility_mode = "linking_d_optimal") {
+                                              utility_mode = "linking_d_optimal",
+                                              stage_name = NA_character_,
+                                              spoke_id = NA_integer_) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) == 0L) {
     return(integer())
@@ -1593,26 +1595,29 @@ generate_stage_candidates_from_state <- function(state,
       idx <- coverage_idx
     }
   }
-  # Linking ordering priority is resolver-selected utility. If all values are
-  # non-finite, fall back deterministically to link_u, then U0, then lexical.
   utility_col <- .adaptive_resolve_selection_column(utility_mode)
-  utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
-    as.double(cand[[utility_col]][idx])
-  } else {
-    rep_len(NA_real_, length(idx))
+  if (is.na(utility_col) || !utility_col %in% names(cand)) {
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_linking_selection_order invariant failed: canonical D-opt ordering ",
+        "could not proceed%s%s because `%s` is unavailable."
+      ),
+      if (!is.na(stage_name)) paste0(" for stage=", stage_name) else "",
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
   }
+  utility <- as.double(cand[[utility_col]][idx])
   if (!any(is.finite(utility))) {
-    fallback_link <- if ("link_u" %in% names(cand)) as.double(cand$link_u[idx]) else rep_len(NA_real_, length(idx))
-    if (any(is.finite(fallback_link))) {
-      fallback_link[!is.finite(fallback_link)] <- -Inf
-      return(idx[order(-fallback_link, cand$i[idx], cand$j[idx])])
-    }
-    fallback <- if ("u0" %in% names(cand)) as.double(cand$u0[idx]) else rep_len(NA_real_, length(idx))
-    if (!any(is.finite(fallback))) {
-      return(idx[order(cand$i[idx], cand$j[idx])])
-    }
-    fallback[!is.finite(fallback)] <- -Inf
-    return(idx[order(-fallback, cand$i[idx], cand$j[idx])])
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_linking_selection_order invariant failed: canonical D-opt ordering ",
+        "could not proceed%s%s because all `%s` values were non-finite."
+      ),
+      if (!is.na(stage_name)) paste0(" for stage=", stage_name) else "",
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
   }
   utility[!is.finite(utility)] <- -Inf
   idx[order(-utility, cand$i[idx], cand$j[idx])]
@@ -1712,16 +1717,33 @@ generate_stage_candidates_from_state <- function(state,
 .adaptive_link_backfill_order <- function(candidates,
                                          hub_id,
                                          set_map,
-                                         blocker_stage_weights = NULL) {
+                                         blocker_stage_weights = NULL,
+                                         spoke_id = NA_integer_) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L) {
     return(integer())
   }
   utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
-  utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
-    as.double(cand[[utility_col]])
-  } else {
-    rep_len(NA_real_, nrow(cand))
+  if (is.na(utility_col) || !utility_col %in% names(cand)) {
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_link_backfill_order invariant failed: canonical D-opt ordering ",
+        "could not proceed for stage=pooled_backfill%s because `%s` is unavailable."
+      ),
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
+  }
+  utility <- as.double(cand[[utility_col]])
+  if (!any(is.finite(utility))) {
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_link_backfill_order invariant failed: canonical D-opt ordering ",
+        "could not proceed for stage=pooled_backfill%s because all `%s` values were non-finite."
+      ),
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
   }
   utility[!is.finite(utility)] <- -Inf
   stage_priority <- .adaptive_link_stage_priority()
