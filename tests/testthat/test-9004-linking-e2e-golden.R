@@ -57,14 +57,14 @@ golden_import_artifacts <- function(state, spoke_shift = -0.8) {
 golden_e2e_run <- function() {
   out <- withr::with_seed(20260217, {
     items <- golden_two_set_items()
-    base <- adaptive_rank_start(items, seed = 313L)
+    base <- pairwiseLLM::adaptive_rank_start(items, seed = 313L)
     base$warm_start_done <- TRUE
     base$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
     artifacts <- golden_import_artifacts(base, spoke_shift = -0.8)
     fit_stub <- make_deterministic_fit_fn(as.character(base$item_ids))
     judge <- golden_score_judge(c(h1 = -0.6, h2 = 0.1, h3 = 0.8, s21 = -0.7, s22 = 0.0, s23 = 0.9))
 
-    out_a <- adaptive_rank_run_live(
+    out_a <- pairwiseLLM::adaptive_rank_run_live(
       state = base,
       judge = judge,
       n_steps = 12L,
@@ -102,7 +102,7 @@ golden_e2e_run <- function() {
         log_alpha_spoke_mean = NA_real_
       )
     )
-    adaptive_rank_run_live(
+    pairwiseLLM::adaptive_rank_run_live(
       state = out_b,
       judge = judge,
       n_steps = 18L,
@@ -147,6 +147,10 @@ golden_e2e_run <- function() {
 }
 
 run_golden_e2e_in_clean_r <- function() {
+  as_r_string <- function(path) {
+    encodeString(as.character(path), quote = "\"")
+  }
+
   pkg_root <- normalizePath(
     testthat::test_path("..", ".."),
     winslash = "/",
@@ -164,11 +168,22 @@ run_golden_e2e_in_clean_r <- function() {
   )
   out_path <- tempfile(fileext = ".rds")
   script_path <- tempfile(fileext = ".R")
+  out_path <- normalizePath(out_path, winslash = "/", mustWork = FALSE)
 
   script_lines <- c(
-    sprintf("pkgload::load_all(path = %s, quiet = TRUE)", shQuote(pkg_root)),
-    sprintf("source(%s)", shQuote(helper_path)),
-    sprintf("lines <- readLines(%s)", shQuote(test_path)),
+    sprintf("pkg_root <- %s", as_r_string(pkg_root)),
+    paste(
+      "use_load_all <-",
+      "requireNamespace(\"pkgload\", quietly = TRUE) &&",
+      "file.exists(file.path(pkg_root, \"R\", \"adaptive_step.R\"))"
+    ),
+    "if (isTRUE(use_load_all)) {",
+    "  pkgload::load_all(path = pkg_root, quiet = TRUE)",
+    "} else {",
+    "  library(pairwiseLLM)",
+    "}",
+    sprintf("source(%s)", as_r_string(helper_path)),
+    sprintf("lines <- readLines(%s)", as_r_string(test_path)),
     "test_start <- grep('^test_that\\\\(', lines)[1] - 1L",
     "eval(parse(text = paste(lines[seq_len(test_start)], collapse = '\\n')))",
     sprintf(
@@ -176,7 +191,7 @@ run_golden_e2e_in_clean_r <- function() {
         "run <- golden_e2e_run(); ",
         "saveRDS(list(step_focus = run$step_focus, link_focus = run$link_focus), %s)"
       ),
-      shQuote(out_path)
+      as_r_string(out_path)
     )
   )
   writeLines(script_lines, script_path)
