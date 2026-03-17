@@ -367,6 +367,9 @@ test_that("public Phase B probe controls change HubEligible and preserve planned
   expect_identical(unique(as.integer(panel_anchor$probe_edges_planned)), 60L)
   expect_true(nrow(panel_anchor) < 60L)
   expect_setequal(unique(as.character(panel_anchor$hub_item_id)), as.character(hub_anchors))
+  anchor_step <- out_anchor$step_log[nrow(out_anchor$step_log), , drop = FALSE]
+  expect_identical(as.character(anchor_step$run_mode[[1L]]), "link_one_spoke")
+  expect_false(isTRUE(anchor_step$is_probe_step[[1L]]))
 
   state_full_hub <- adaptive_rank_start(items, seed = 71L)
   state_full_hub$warm_start_done <- TRUE
@@ -395,6 +398,9 @@ test_that("public Phase B probe controls change HubEligible and preserve planned
   expect_identical(unique(as.integer(panel_full_hub$probe_edges_planned)), 60L)
   expect_identical(nrow(panel_full_hub), 60L)
   expect_setequal(unique(as.character(panel_full_hub$hub_item_id)), hub_ids)
+  full_hub_step <- out_full_hub$step_log[nrow(out_full_hub$step_log), , drop = FALSE]
+  expect_identical(as.character(full_hub_step$run_mode[[1L]]), "link_one_spoke")
+  expect_false(isTRUE(full_hub_step$is_probe_step[[1L]]))
 })
 
 test_that("linking run keeps warm-start during Phase A and bypasses warm-start in Phase B", {

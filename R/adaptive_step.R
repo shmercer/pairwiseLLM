@@ -704,8 +704,10 @@ run_one_step <- function(state, judge, ...) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
     state <- .adaptive_refresh_round_anchors(state)
-    probe_selection <- NULL
-    if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    selection <- select_next_pair(state, step_id = step_id)
+    if (isTRUE(selection$candidate_starved) &&
+      .adaptive_link_mode_active(controller) &&
+      identical(phase_ctx$phase, "phase_b")) {
       probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
         state,
         controller,
@@ -722,9 +724,18 @@ run_one_step <- function(state, judge, ...) {
           step_id = step_id,
           spoke_id = probe_spoke_id
         )
+        if (!is.null(probe_selection) && nrow(tibble::as_tibble(probe_selection)) != 0L) {
+          active_fallback_path <- as.character(selection$fallback_path %||% NA_character_)
+          active_fallback_path <- active_fallback_path[!is.na(active_fallback_path) & nzchar(active_fallback_path)]
+          probe_selection$fallback_used <- "probe_panel_after_active_unavailable"
+          probe_selection$fallback_path <- paste(
+            c(active_fallback_path, "probe_panel_after_active_unavailable"),
+            collapse = ">"
+          )
+          selection <- probe_selection
+        }
       }
     }
-    selection <- probe_selection %||% select_next_pair(state, step_id = step_id)
   }
 
   is_valid <- FALSE

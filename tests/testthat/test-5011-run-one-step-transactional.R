@@ -249,7 +249,95 @@ test_that("run_one_step retires frozen spoke work without emitting a new step", 
   expect_identical(out$controller$link_stage_coverage_source[["2"]], "linking_global_score")
 })
 
-test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs", {
+test_that("run_one_step gives active-link work precedence over held-out probes", {
+  items <- tibble::tibble(
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep(1L, 10L), rep(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 52L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = list(items = tibble::tibble(
+        global_item_id = paste0("gh", seq_len(10L)),
+        theta_raw_mean = seq(0.5, -0.4, length.out = 10L),
+        theta_raw_sd = rep(0.1, 10L),
+        rank_mu_raw = seq_len(10L)
+      )),
+      `2` = list(items = tibble::tibble(
+        global_item_id = paste0("gs2", seq_len(6L)),
+        theta_raw_mean = seq(0.4, -0.1, length.out = 6L),
+        theta_raw_sd = rep(0.1, 6L),
+        rank_mu_raw = seq_len(6L)
+      ))
+    ),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  state$refit_meta$refit_pairs_target_current <- 3L
+  state$controller$refit_pairs_target <- 3L
+  state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  state$controller$probe_edges_min_for_stop <- 3L
+  state$controller$link_refit_stats_by_spoke <- list(`2` = list(
+    link_identified = TRUE,
+    link_stop_eligible = FALSE,
+    link_epoch_id = 1L
+  ))
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      link_state_frozen = FALSE
+    )
+  )
+  active_selection <- pairwiseLLM:::select_next_pair(state, step_id = 1L)
+  expect_false(isTRUE(active_selection$candidate_starved))
+
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
+    .adaptive_link_probe_next_holdout_spoke = function(...) {
+      rlang::abort("probe routing should not be consulted when active-link work is legal")
+    },
+    .adaptive_link_probe_select_holdout = function(...) {
+      rlang::abort("probe selection should not run when active-link work is legal")
+    }
+  )
+  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
+  expect_identical(as.character(row$run_mode[[1L]]), "link_one_spoke")
+  expect_false(isTRUE(row$is_probe_step[[1L]]))
+  expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
+  expect_identical(as.character(row$utility_mode[[1L]]), "linking_d_optimal")
+  expect_equal(nrow(out$history_pairs), 1L)
+  expect_true(is.list(out$linking$probe$panels_by_spoke))
+  expect_identical(nrow(out$linking$probe$realized_edges), 0L)
+  expect_true(nrow(out$linking$probe$panels_by_spoke[["2"]]) >= 1L)
+})
+
+test_that("run_one_step uses link_probe_holdout after active-link starvation", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
     set_id = c(1L, 1L, 2L, 2L),
@@ -307,7 +395,72 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
       link_state_frozen = FALSE
     )
   )
-  out <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+
+  starved_selection <- list(
+    i = NA_integer_,
+    j = NA_integer_,
+    A = NA_integer_,
+    B = NA_integer_,
+    is_explore_step = FALSE,
+    explore_mode = NA_character_,
+    explore_reason = NA_character_,
+    candidate_starved = TRUE,
+    fallback_used = "global_safe",
+    fallback_path = "active_link",
+    starvation_reason = "filtered_by_active_domain",
+    round_id = as.integer(state$round$round_id %||% NA_integer_),
+    round_stage = "anchor_link",
+    pair_type = "anchor_link",
+    explore_rate_used = NA_real_,
+    local_priority_mode = NA_character_,
+    long_gate_pass = NA,
+    long_gate_reason = NA_character_,
+    star_override_used = NA,
+    star_override_reason = NA_character_,
+    used_in_round_i = NA_integer_,
+    used_in_round_j = NA_integer_,
+    is_anchor_i = NA,
+    is_anchor_j = NA,
+    stratum_i = NA_integer_,
+    stratum_j = NA_integer_,
+    dist_stratum = NA_integer_,
+    dist_stratum_global = NA_integer_,
+    coverage_bins_used = NA_integer_,
+    coverage_source = NA_character_,
+    link_spoke_id_selected = 2L,
+    stage_committed_so_far = 0L,
+    stage_quota = 0L,
+    n_candidates_generated = 0L,
+    n_candidates_after_route_filters = 0L,
+    n_candidates_after_active_domain = 0L,
+    n_candidates_after_stage_filters = 0L,
+    n_candidates_after_exposure_filters = 0L,
+    n_candidates_after_hard_filters = 0L,
+    n_candidates_after_duplicates = 0L,
+    n_candidates_after_star_caps = 0L,
+    n_candidates_scored = 0L,
+    hard_filter_collapse_stage = NA_character_,
+    deg_i = NA_integer_,
+    deg_j = NA_integer_,
+    recent_deg_i = NA_integer_,
+    recent_deg_j = NA_integer_,
+    mu_i = NA_real_,
+    mu_j = NA_real_,
+    sigma_i = NA_real_,
+    sigma_j = NA_real_,
+    p_ij = NA_real_,
+    U0_ij = NA_real_,
+    link_u = NA_real_,
+    link_d_opt_gain = NA_real_,
+    utility_mode = NA_character_,
+    star_cap_rejects = 0L,
+    star_cap_reject_items = 0L
+  )
+
+  out <- testthat::with_mocked_bindings(
+    pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
+    select_next_pair = function(...) starved_selection
+  )
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
   expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")
   expect_true(isTRUE(row$is_probe_step[[1L]]))
@@ -315,6 +468,8 @@ test_that("run_one_step uses link_probe_holdout for planned phase_b probe pairs"
   expect_false(isTRUE(row$is_drift_probe_step[[1L]]))
   expect_true(is.na(row$utility_mode[[1L]]))
   expect_true(is.na(row$cross_set_utility_pre[[1L]]))
+  expect_identical(as.character(row$fallback_used[[1L]]), "probe_panel_after_active_unavailable")
+  expect_identical(as.character(row$fallback_path[[1L]]), "active_link>probe_panel_after_active_unavailable")
   expect_equal(nrow(out$history_pairs), 0L)
   expect_true(is.list(out$linking$probe$panels_by_spoke))
   expect_true(nrow(out$linking$probe$realized_edges) >= 1L)
@@ -389,13 +544,81 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
     )
   )
 
-  step1 <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
+  starved_selection <- list(
+    i = NA_integer_,
+    j = NA_integer_,
+    A = NA_integer_,
+    B = NA_integer_,
+    is_explore_step = FALSE,
+    explore_mode = NA_character_,
+    explore_reason = NA_character_,
+    candidate_starved = TRUE,
+    fallback_used = "global_safe",
+    fallback_path = "active_link",
+    starvation_reason = "filtered_by_active_domain",
+    round_id = as.integer(state$round$round_id %||% NA_integer_),
+    round_stage = "anchor_link",
+    pair_type = "anchor_link",
+    explore_rate_used = NA_real_,
+    local_priority_mode = NA_character_,
+    long_gate_pass = NA,
+    long_gate_reason = NA_character_,
+    star_override_used = NA,
+    star_override_reason = NA_character_,
+    used_in_round_i = NA_integer_,
+    used_in_round_j = NA_integer_,
+    is_anchor_i = NA,
+    is_anchor_j = NA,
+    stratum_i = NA_integer_,
+    stratum_j = NA_integer_,
+    dist_stratum = NA_integer_,
+    dist_stratum_global = NA_integer_,
+    coverage_bins_used = NA_integer_,
+    coverage_source = NA_character_,
+    link_spoke_id_selected = 2L,
+    stage_committed_so_far = 0L,
+    stage_quota = 0L,
+    n_candidates_generated = 0L,
+    n_candidates_after_route_filters = 0L,
+    n_candidates_after_active_domain = 0L,
+    n_candidates_after_stage_filters = 0L,
+    n_candidates_after_exposure_filters = 0L,
+    n_candidates_after_hard_filters = 0L,
+    n_candidates_after_duplicates = 0L,
+    n_candidates_after_star_caps = 0L,
+    n_candidates_scored = 0L,
+    hard_filter_collapse_stage = NA_character_,
+    deg_i = NA_integer_,
+    deg_j = NA_integer_,
+    recent_deg_i = NA_integer_,
+    recent_deg_j = NA_integer_,
+    mu_i = NA_real_,
+    mu_j = NA_real_,
+    sigma_i = NA_real_,
+    sigma_j = NA_real_,
+    p_ij = NA_real_,
+    U0_ij = NA_real_,
+    link_u = NA_real_,
+    link_d_opt_gain = NA_real_,
+    utility_mode = NA_character_,
+    star_cap_rejects = 0L,
+    star_cap_reject_items = 0L
+  )
+
+  step1 <- testthat::with_mocked_bindings(
+    pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
+    select_next_pair = function(...) starved_selection
+  )
   step2 <- pairwiseLLM:::run_one_step(step1, make_deterministic_judge("i_wins"))
   rows <- tail(step2$step_log, 2L)
 
   expect_identical(as.character(rows$run_mode[[1L]]), "link_probe_holdout")
   expect_true(isTRUE(rows$is_probe_step[[1L]]))
   expect_true(isTRUE(rows$is_holdout_probe_step[[1L]]))
+  expect_identical(
+    as.character(rows$fallback_used[[1L]]),
+    "probe_panel_after_active_unavailable"
+  )
   expect_false(isTRUE(rows$is_probe_step[[2L]]))
   expect_false(isTRUE(rows$is_holdout_probe_step[[2L]]))
   expect_true(isTRUE(rows$is_cross_set[[2L]]))
@@ -573,6 +796,67 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
     )
   )
 
+  starved_selection <- list(
+    i = NA_integer_,
+    j = NA_integer_,
+    A = NA_integer_,
+    B = NA_integer_,
+    is_explore_step = FALSE,
+    explore_mode = NA_character_,
+    explore_reason = NA_character_,
+    candidate_starved = TRUE,
+    fallback_used = "global_safe",
+    fallback_path = "active_link",
+    starvation_reason = "filtered_by_active_domain",
+    round_id = as.integer(state$round$round_id %||% NA_integer_),
+    round_stage = "anchor_link",
+    pair_type = "anchor_link",
+    explore_rate_used = NA_real_,
+    local_priority_mode = NA_character_,
+    long_gate_pass = NA,
+    long_gate_reason = NA_character_,
+    star_override_used = NA,
+    star_override_reason = NA_character_,
+    used_in_round_i = NA_integer_,
+    used_in_round_j = NA_integer_,
+    is_anchor_i = NA,
+    is_anchor_j = NA,
+    stratum_i = NA_integer_,
+    stratum_j = NA_integer_,
+    dist_stratum = NA_integer_,
+    dist_stratum_global = NA_integer_,
+    coverage_bins_used = NA_integer_,
+    coverage_source = NA_character_,
+    link_spoke_id_selected = 2L,
+    stage_committed_so_far = 0L,
+    stage_quota = 0L,
+    n_candidates_generated = 0L,
+    n_candidates_after_route_filters = 0L,
+    n_candidates_after_active_domain = 0L,
+    n_candidates_after_stage_filters = 0L,
+    n_candidates_after_exposure_filters = 0L,
+    n_candidates_after_hard_filters = 0L,
+    n_candidates_after_duplicates = 0L,
+    n_candidates_after_star_caps = 0L,
+    n_candidates_scored = 0L,
+    hard_filter_collapse_stage = NA_character_,
+    deg_i = NA_integer_,
+    deg_j = NA_integer_,
+    recent_deg_i = NA_integer_,
+    recent_deg_j = NA_integer_,
+    mu_i = NA_real_,
+    mu_j = NA_real_,
+    sigma_i = NA_real_,
+    sigma_j = NA_real_,
+    p_ij = NA_real_,
+    U0_ij = NA_real_,
+    link_u = NA_real_,
+    link_d_opt_gain = NA_real_,
+    utility_mode = NA_character_,
+    star_cap_rejects = 0L,
+    star_cap_reject_items = 0L
+  )
+
   out <- testthat::with_mocked_bindings(
     .adaptive_link_probe_effort_plan = function(state, controller, spoke_id) {
       if (identical(as.integer(spoke_id), 2L)) {
@@ -593,6 +877,7 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
         )
       }
     },
+    select_next_pair = function(...) starved_selection,
     pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
     .package = "pairwiseLLM"
   )
