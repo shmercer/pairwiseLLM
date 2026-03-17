@@ -147,6 +147,11 @@ golden_e2e_run <- function() {
 }
 
 run_golden_e2e_in_clean_r <- function() {
+  pkg_root <- normalizePath(
+    testthat::test_path("..", ".."),
+    winslash = "/",
+    mustWork = TRUE
+  )
   helper_path <- normalizePath(
     testthat::test_path("helper-fixtures.R"),
     winslash = "/",
@@ -161,7 +166,7 @@ run_golden_e2e_in_clean_r <- function() {
   script_path <- tempfile(fileext = ".R")
 
   script_lines <- c(
-    "pkgload::load_all('.', quiet = TRUE)",
+    sprintf("pkgload::load_all(path = %s, quiet = TRUE)", shQuote(pkg_root)),
     sprintf("source(%s)", shQuote(helper_path)),
     sprintf("lines <- readLines(%s)", shQuote(test_path)),
     "test_start <- grep('^test_that\\\\(', lines)[1] - 1L",
