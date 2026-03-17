@@ -994,6 +994,7 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
   )
   row_stage <- stage_rows[stage_rows$spoke_id == 2L, , drop = FALSE]
   expect_false(isTRUE(row_stage$probe_panel_reallocation_used[[1L]]))
+  expect_false(isTRUE(row_stage$probe_edges_count_toward_active_constraints_used[[1L]]))
   expect_identical(row_stage$n_probe_pairs_since_last_refit[[1L]], 2L)
 
   state_drift <- state

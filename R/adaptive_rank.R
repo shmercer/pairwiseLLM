@@ -86,6 +86,21 @@
   if (identical(run_mode, "within_set") && !identical(phase_a_mode, "run")) {
     rlang::abort("`adaptive_config$phase_a_mode` can only be import/mixed when linking run_mode is enabled.")
   }
+  if (isTRUE(adaptive_config$probe_edges_count_toward_active_constraints %||% FALSE)) {
+    .adaptive_abort_unsupported_phase_b_public_control(
+      field = "`adaptive_config$probe_edges_count_toward_active_constraints = TRUE`",
+      detail = paste0(
+        "Held-out probes remain excluded from active-link duplicate suppression, degree counts, ",
+        "and star-cap exposure counters."
+      )
+    )
+  }
+  if (isTRUE(adaptive_config$allow_spoke_spoke_cross_set %||% FALSE)) {
+    .adaptive_abort_unsupported_phase_b_public_control(
+      field = "`adaptive_config$allow_spoke_spoke_cross_set = TRUE`",
+      detail = "The current reviewed hub-and-spoke runtime supports only hub↔spoke Phase B routing."
+    )
+  }
 
   set_ids <- if ("set_id" %in% names(items)) {
     suppressWarnings(as.integer(items$set_id))
@@ -593,14 +608,19 @@ make_adaptive_judge_llm <- function(
 #'     domain used for Phase B held-out probe construction. When `TRUE`
 #'     (default), planned probes are drawn from the hub anchor pool; when
 #'     `FALSE`, they are drawn from the full hub set.}
+#'   \item{`probe_edges_count_toward_active_constraints`}{Unsupported on the
+#'     current normative Phase B path. Held-out probes remain excluded from
+#'     active duplicate suppression, degree counts, and star-cap exposure
+#'     counters, so `TRUE` aborts canonically. Default is `FALSE`.}
 #'   \item{`spoke_quantile_coverage_bins`}{Cross-set coverage control: number of
 #'     quantile bins used to ensure spoke items across the score distribution
 #'     receive cross-set exposure within each refit window. Default is `3L`.}
 #'   \item{`spoke_quantile_coverage_min_per_bin_per_refit`}{Cross-set coverage
 #'     control: minimum cross-set comparisons per quantile bin per refit
 #'     window. Default is `1L`.}
-#'   \item{`allow_spoke_spoke_cross_set`}{When `TRUE`, allow spoke↔spoke
-#'     cross-set comparisons. Default is `FALSE` (hub↔spoke only).}
+#'   \item{`allow_spoke_spoke_cross_set`}{Unsupported on the current reviewed
+#'     hub-and-spoke Phase B path. The canonical runtime remains hub↔spoke
+#'     only, so `TRUE` aborts canonically. Default is `FALSE`.}
 #'   \item{`multi_spoke_mode`}{Only used when `run_mode = "link_multi_spoke"`.
 #'     Choices are `"independent"` (fit each spoke separately) and
 #'     `"concurrent"` (enforce per-refit spoke budgets and stronger hub locking

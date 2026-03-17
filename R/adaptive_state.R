@@ -653,6 +653,16 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_abort_unsupported_phase_b_public_control <- function(field, detail) {
+  rlang::abort(paste0(
+    field,
+    " is not supported on the current normative Phase B path. ",
+    detail
+  ))
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_validate_controller_config <- function(adaptive_config, n_items, set_ids = NULL) {
   if (is.null(adaptive_config)) {
     return(list())
@@ -1033,6 +1043,21 @@
       "`adaptive_config$hub_lock_mode` must be `hard_lock` or `soft_lock` ",
       "when `adaptive_config$multi_spoke_mode = \"concurrent\"`."
     ))
+  }
+  if (isTRUE(resolved$probe_edges_count_toward_active_constraints)) {
+    .adaptive_abort_unsupported_phase_b_public_control(
+      field = "`adaptive_config$probe_edges_count_toward_active_constraints = TRUE`",
+      detail = paste0(
+        "Held-out probes remain excluded from active-link duplicate suppression, degree counts, ",
+        "and star-cap exposure counters."
+      )
+    )
+  }
+  if (isTRUE(resolved$allow_spoke_spoke_cross_set)) {
+    .adaptive_abort_unsupported_phase_b_public_control(
+      field = "`adaptive_config$allow_spoke_spoke_cross_set = TRUE`",
+      detail = "The current reviewed hub-and-spoke runtime supports only hub↔spoke Phase B routing."
+    )
   }
   out
 }

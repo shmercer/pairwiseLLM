@@ -592,3 +592,23 @@ test_that("controller config exposes reviewed public Phase B fields", {
   expect_false(isTRUE(validated$hub_anchor_required_phase_b))
   expect_identical(validated$probe_panel_edges, 12L)
 })
+
+test_that("controller config hard-gates unsupported Phase B public controls", {
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(probe_edges_count_toward_active_constraints = TRUE),
+      n_items = 8L,
+      set_ids = c(1L, 2L)
+    ),
+    "probe_edges_count_toward_active_constraints = TRUE"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(allow_spoke_spoke_cross_set = TRUE),
+      n_items = 8L,
+      set_ids = c(1L, 2L, 3L)
+    ),
+    "allow_spoke_spoke_cross_set = TRUE"
+  )
+})

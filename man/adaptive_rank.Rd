@@ -279,14 +279,19 @@ Default is \code{1e-6}.}
 domain used for Phase B held-out probe construction. When \code{TRUE}
 (default), planned probes are drawn from the hub anchor pool; when
 \code{FALSE}, they are drawn from the full hub set.}
+\item{\code{probe_edges_count_toward_active_constraints}}{Unsupported on the
+current normative Phase B path. Held-out probes remain excluded from
+active duplicate suppression, degree counts, and star-cap exposure
+counters, so \code{TRUE} aborts canonically. Default is \code{FALSE}.}
 \item{\code{spoke_quantile_coverage_bins}}{Cross-set coverage control: number of
 quantile bins used to ensure spoke items across the score distribution
 receive cross-set exposure within each refit window. Default is \code{3L}.}
 \item{\code{spoke_quantile_coverage_min_per_bin_per_refit}}{Cross-set coverage
 control: minimum cross-set comparisons per quantile bin per refit
 window. Default is \code{1L}.}
-\item{\code{allow_spoke_spoke_cross_set}}{When \code{TRUE}, allow spoke↔spoke
-cross-set comparisons. Default is \code{FALSE} (hub↔spoke only).}
+\item{\code{allow_spoke_spoke_cross_set}}{Unsupported on the current reviewed
+hub-and-spoke Phase B path. The canonical runtime remains hub↔spoke
+only, so \code{TRUE} aborts canonically. Default is \code{FALSE}.}
 \item{\code{multi_spoke_mode}}{Only used when \code{run_mode = "link_multi_spoke"}.
 Choices are \code{"independent"} (fit each spoke separately) and
 \code{"concurrent"} (enforce per-refit spoke budgets and stronger hub locking

@@ -529,6 +529,48 @@ test_that("adaptive_rank accepts reviewed public Phase B controls", {
   expect_false(isTRUE(out$state$controller$within_phase_b_within_set_steps_allowed))
 })
 
+test_that("adaptive_rank hard-gates unsupported Phase B public controls", {
+  samples <- make_linking_samples_df()
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = samples,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      progress = "none",
+      adaptive_config = list(
+        run_mode = "link_multi_spoke",
+        hub_id = 1L,
+        probe_edges_count_toward_active_constraints = TRUE
+      )
+    ),
+    "probe_edges_count_toward_active_constraints = TRUE"
+  )
+
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = samples,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      n_steps = 1L,
+      progress = "none",
+      adaptive_config = list(
+        run_mode = "link_multi_spoke",
+        hub_id = 1L,
+        allow_spoke_spoke_cross_set = TRUE
+      )
+    ),
+    "allow_spoke_spoke_cross_set = TRUE"
+  )
+})
+
 test_that("adaptive_rank resume preserves adaptive controller config", {
   samples <- make_test_samples_df(5L)
   session_dir <- tempfile("adaptive-controller-session-")

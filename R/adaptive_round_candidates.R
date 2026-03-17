@@ -1313,10 +1313,14 @@ generate_stage_candidates_from_state <- function(state,
         )
       )
     }
-    allow_spoke_spoke <- isTRUE(controller$allow_spoke_spoke_cross_set %||% FALSE)
+    if (isTRUE(controller$allow_spoke_spoke_cross_set %||% FALSE)) {
+      .adaptive_abort_unsupported_phase_b_public_control(
+        field = "`allow_spoke_spoke_cross_set = TRUE`",
+        detail = "The current reviewed hub-and-spoke runtime supports only hub↔spoke Phase B routing."
+      )
+    }
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
     spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
-    active_spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) %in% eligible_spokes])
     active_items <- .adaptive_link_active_item_ids(state, spoke_id = spoke_id, hub_id = hub_id)
     active_hub_ids <- as.character(active_items$active_hub)
     if (length(hub_ids) < 1L) {
@@ -1339,11 +1343,7 @@ generate_stage_candidates_from_state <- function(state,
       )
     }
     routing_hub_ids <- if (identical(stage_name, "anchor_link")) hub_ids else active_hub_ids
-    active_ids <- if (isTRUE(allow_spoke_spoke)) {
-      unique(c(routing_hub_ids, active_spoke_ids))
-    } else {
-      unique(c(routing_hub_ids, spoke_ids))
-    }
+    active_ids <- unique(c(routing_hub_ids, spoke_ids))
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
     }
@@ -1433,10 +1433,7 @@ generate_stage_candidates_from_state <- function(state,
         }
         i_hub <- i_id %in% hub_ids
         j_hub <- j_id %in% hub_ids
-        if (!isTRUE(allow_spoke_spoke) && !isTRUE(xor(i_hub, j_hub))) {
-          next
-        }
-        if (isTRUE(allow_spoke_spoke) && !isTRUE(i_set == spoke_id || j_set == spoke_id)) {
+        if (!isTRUE(xor(i_hub, j_hub))) {
           next
         }
         n_after_route_filters <- as.integer(n_after_route_filters + 1L)

@@ -6103,9 +6103,7 @@
           controller$link_transform_escalation_refits_required %||%
           2L
       ),
-      probe_edges_count_toward_active_constraints_used = as.logical(
-        controller$probe_edges_count_toward_active_constraints %||% FALSE
-      ),
+      probe_edges_count_toward_active_constraints_used = FALSE,
       lag_domain_key = as.character(stats_row$lag_domain_key %||% NA_character_),
       lag_domain_reset = as.logical(stats_row$lag_domain_reset %||% NA),
       lag_domain_reset_reason = as.character(stats_row$lag_domain_reset_reason %||% NA_character_),
