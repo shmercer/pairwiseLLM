@@ -290,7 +290,7 @@ receive cross-set exposure within each refit window. Default is \code{3L}.}
 control: minimum cross-set comparisons per quantile bin per refit
 window. Default is \code{1L}.}
 \item{\code{allow_spoke_spoke_cross_set}}{Unsupported on the current reviewed
-hub-and-spoke Phase B path. The canonical runtime remains hub↔spoke
+hub-and-spoke Phase B path. The canonical runtime remains hub<->spoke
 only, so \code{TRUE} aborts canonically. Default is \code{FALSE}.}
 \item{\code{multi_spoke_mode}}{Only used when \code{run_mode = "link_multi_spoke"}.
 Choices are \code{"independent"} (fit each spoke separately) and
@@ -448,7 +448,7 @@ Use \code{adaptive_config} for identifiability-gated controller behavior and
 Linking run modes:
 \code{run_mode = "within_set"} is the single-set workflow.
 \code{run_mode = "link_one_spoke"} and \code{run_mode = "link_multi_spoke"} require
-multi-set input (\code{set_id}/\code{global_item_id}), enforce hub↔spoke routing
+multi-set input (\code{set_id}/\code{global_item_id}), enforce hub<->spoke routing
 defaults, and preserve Phase A artifact gating before Phase B cross-set
 comparisons begin. \code{link_estimation_mode = "transform"} remains the default
 wrapper behavior; use \code{link_estimation_mode = "anchored_joint"} together
