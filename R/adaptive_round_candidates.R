@@ -1316,7 +1316,7 @@ generate_stage_candidates_from_state <- function(state,
     if (isTRUE(controller$allow_spoke_spoke_cross_set %||% FALSE)) {
       .adaptive_abort_unsupported_phase_b_public_control(
         field = "`allow_spoke_spoke_cross_set = TRUE`",
-        detail = "The current reviewed hub-and-spoke runtime supports only hub↔spoke Phase B routing."
+        detail = "The current reviewed hub-and-spoke runtime supports only hub<->spoke Phase B routing."
       )
     }
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])

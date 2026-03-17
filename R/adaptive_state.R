@@ -1056,7 +1056,7 @@
   if (isTRUE(resolved$allow_spoke_spoke_cross_set)) {
     .adaptive_abort_unsupported_phase_b_public_control(
       field = "`adaptive_config$allow_spoke_spoke_cross_set = TRUE`",
-      detail = "The current reviewed hub-and-spoke runtime supports only hub↔spoke Phase B routing."
+      detail = "The current reviewed hub-and-spoke runtime supports only hub<->spoke Phase B routing."
     )
   }
   out

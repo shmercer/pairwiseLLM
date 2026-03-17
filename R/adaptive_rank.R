@@ -98,7 +98,7 @@
   if (isTRUE(adaptive_config$allow_spoke_spoke_cross_set %||% FALSE)) {
     .adaptive_abort_unsupported_phase_b_public_control(
       field = "`adaptive_config$allow_spoke_spoke_cross_set = TRUE`",
-      detail = "The current reviewed hub-and-spoke runtime supports only hub↔spoke Phase B routing."
+      detail = "The current reviewed hub-and-spoke runtime supports only hub<->spoke Phase B routing."
     )
   }
 
@@ -347,7 +347,7 @@ make_adaptive_judge_llm <- function(
 #' Linking run modes:
 #' `run_mode = "within_set"` is the single-set workflow.
 #' `run_mode = "link_one_spoke"` and `run_mode = "link_multi_spoke"` require
-#' multi-set input (`set_id`/`global_item_id`), enforce hub↔spoke routing
+#' multi-set input (`set_id`/`global_item_id`), enforce hub<->spoke routing
 #' defaults, and preserve Phase A artifact gating before Phase B cross-set
 #' comparisons begin. `link_estimation_mode = "transform"` remains the default
 #' wrapper behavior; use `link_estimation_mode = "anchored_joint"` together
@@ -619,7 +619,7 @@ make_adaptive_judge_llm <- function(
 #'     control: minimum cross-set comparisons per quantile bin per refit
 #'     window. Default is `1L`.}
 #'   \item{`allow_spoke_spoke_cross_set`}{Unsupported on the current reviewed
-#'     hub-and-spoke Phase B path. The canonical runtime remains hub↔spoke
+#'     hub-and-spoke Phase B path. The canonical runtime remains hub<->spoke
 #'     only, so `TRUE` aborts canonically. Default is `FALSE`.}
 #'   \item{`multi_spoke_mode`}{Only used when `run_mode = "link_multi_spoke"`.
 #'     Choices are `"independent"` (fit each spoke separately) and
