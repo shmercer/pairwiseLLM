@@ -110,7 +110,7 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_equal(row$run_mode[[1L]], "link_one_spoke")
   expect_equal(row$link_transform_policy[[1L]], "auto")
   expect_equal(row$link_transform_state[[1L]], "shift_only")
-  expect_equal(row$utility_mode[[1L]], "linking_d_optimal")
+  expect_equal(row$utility_mode[[1L]], "linking_d_optimal_transform")
   expect_equal(row$hub_lock_mode[[1L]], "soft_lock")
   expect_equal(row$hub_lock_kappa[[1L]], 0.75)
   expect_false(isTRUE(row$is_probe_step[[1L]]))
@@ -330,7 +330,7 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
   expect_identical(as.character(row$run_mode[[1L]]), "link_one_spoke")
   expect_false(isTRUE(row$is_probe_step[[1L]]))
   expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
-  expect_identical(as.character(row$utility_mode[[1L]]), "linking_d_optimal")
+  expect_identical(as.character(row$utility_mode[[1L]]), "linking_d_optimal_transform")
   expect_equal(nrow(out$history_pairs), 1L)
   expect_true(is.list(out$linking$probe$panels_by_spoke))
   expect_identical(nrow(out$linking$probe$realized_edges), 0L)
@@ -996,7 +996,7 @@ test_that("run_one_step uses selected spoke fallback for non-hub cross-set rows"
         U0_ij = 0.25,
         link_u = 0.25,
         link_d_opt_gain = 0.2,
-        utility_mode = "linking_d_optimal",
+        utility_mode = "linking_d_optimal_transform",
         run_mode = "link_multi_spoke",
         link_spoke_id_selected = 2L,
         long_gate_pass = NA,

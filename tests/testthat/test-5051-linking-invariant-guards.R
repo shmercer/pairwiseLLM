@@ -73,7 +73,7 @@ test_that("step row linking completeness guard rejects malformed linking metadat
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_cross_utility),
-    "must be linking_d_optimal"
+    "must be linking_d_optimal_transform"
   )
 
   bad_non_cross_cols <- list(

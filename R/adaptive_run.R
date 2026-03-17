@@ -1528,7 +1528,9 @@
         )
       }
     )
-    utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+    utility_col <- .adaptive_resolve_selection_column(
+      .adaptive_linking_utility_mode(link_controller$link_estimation_mode)
+    )
     utility_vals <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
       as.double(cand[[utility_col]])
     } else {

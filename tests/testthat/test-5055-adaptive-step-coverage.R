@@ -37,7 +37,7 @@ test_that("low-coverage adaptive step helpers cover warm-start, completeness, an
       posterior_win_prob_ij_pre = 0.5,
       is_drift_probe_step = TRUE,
       cross_set_utility_pre = 0.2,
-      utility_mode = "linking_d_optimal"
+      utility_mode = "linking_d_optimal_transform"
     )),
     "is_drift_probe_step"
   )
@@ -53,7 +53,7 @@ test_that("low-coverage adaptive step helpers cover warm-start, completeness, an
       posterior_win_prob_ij_pre = 0.5,
       is_probe_step = TRUE,
       cross_set_utility_pre = 0.2,
-      utility_mode = "linking_d_optimal"
+      utility_mode = "linking_d_optimal_transform"
     )),
     "is_probe_step"
   )
@@ -84,7 +84,7 @@ test_that("low-coverage adaptive step helpers cover warm-start, completeness, an
       cross_set_utility_pre = 0.2,
       utility_mode = "pairing_trueskill_u0"
     )),
-    "must be linking_d_optimal"
+    "must be linking_d_optimal_transform"
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(tibble::tibble(
@@ -97,9 +97,9 @@ test_that("low-coverage adaptive step helpers cover warm-start, completeness, an
       link_stage = "probe_panel",
       posterior_win_prob_ij_pre = 0.5,
       cross_set_utility_pre = NA_real_,
-      utility_mode = "linking_d_optimal"
+      utility_mode = "linking_d_optimal_transform"
     )),
-    "must not be linking_d_optimal"
+    "must not use a linking D-optimal audit label"
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(tibble::tibble(
@@ -126,7 +126,7 @@ test_that("low-coverage adaptive step helpers cover warm-start, completeness, an
       link_stage = "anchor_link",
       posterior_win_prob_ij_pre = 2,
       cross_set_utility_pre = 0.2,
-      utility_mode = "linking_d_optimal"
+      utility_mode = "linking_d_optimal_transform"
     )),
     "must be finite in \\[0,1\\]"
   )
@@ -142,7 +142,7 @@ test_that("low-coverage adaptive step helpers cover warm-start, completeness, an
   )
   state_after <- state_before
   step_row <- tibble::tibble(
-    utility_mode = "linking_d_optimal",
+    utility_mode = "linking_d_optimal_transform",
     is_probe_step = FALSE,
     is_cross_set = FALSE,
     link_spoke_id = NA_integer_

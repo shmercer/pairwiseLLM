@@ -1578,7 +1578,7 @@ generate_stage_candidates_from_state <- function(state,
 #' @keywords internal
 #' @noRd
 .adaptive_linking_selection_order <- function(candidates,
-                                              utility_mode = "linking_d_optimal",
+                                              utility_mode = "linking_d_optimal_transform",
                                               stage_name = NA_character_,
                                               spoke_id = NA_integer_) {
   cand <- tibble::as_tibble(candidates)
@@ -1692,7 +1692,9 @@ generate_stage_candidates_from_state <- function(state,
     ),
     error = function(e) tibble::tibble()
   )
-  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+  utility_col <- .adaptive_resolve_selection_column(
+    .adaptive_linking_utility_mode(controller$link_estimation_mode)
+  )
   utility <- if (!is.na(utility_col) && utility_col %in% names(pool)) {
     as.double(pool[[utility_col]])
   } else {
@@ -1720,7 +1722,7 @@ generate_stage_candidates_from_state <- function(state,
   if (nrow(cand) < 1L) {
     return(integer())
   }
-  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal_transform")
   if (is.na(utility_col) || !utility_col %in% names(cand)) {
     rlang::abort(sprintf(
       paste0(

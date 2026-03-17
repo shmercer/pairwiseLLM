@@ -4334,7 +4334,7 @@ test_that("D-opt information state accumulates by refit window and logs audit fi
     j = as.integer(id_map[["s21"]]),
     is_cross_set = TRUE,
     run_mode = "link_one_spoke",
-    utility_mode = "linking_d_optimal",
+    utility_mode = "linking_d_optimal_transform",
     link_spoke_id = 2L,
     is_probe_step = NA,
     delta_spoke_estimate_pre = 0,
@@ -4388,7 +4388,7 @@ test_that("D-opt updater guard branches return state unchanged when prerequisite
     j = as.integer(id_map[["s21"]]),
     is_cross_set = TRUE,
     run_mode = "link_one_spoke",
-    utility_mode = "linking_d_optimal",
+    utility_mode = "linking_d_optimal_transform",
     link_spoke_id = 2L,
     is_probe_step = NA,
     delta_spoke_estimate_pre = 0,
@@ -4484,7 +4484,7 @@ test_that("anchored-joint utility and Fisher updates use the accepted state", {
       B = as.integer(id_map[["s21"]]),
       is_cross_set = TRUE,
       run_mode = "link_one_spoke",
-      utility_mode = "linking_d_optimal",
+      utility_mode = "linking_d_optimal_anchored_joint",
       link_spoke_id = 2L,
       is_probe_step = FALSE
     )

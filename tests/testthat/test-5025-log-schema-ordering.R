@@ -186,7 +186,7 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_true(is.factor(step_log$hub_lock_mode))
   expect_identical(
     levels(step_log$run_mode),
-    c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe")
+    c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout")
   )
   expect_identical(levels(step_log$link_estimation_mode), c("transform", "anchored_joint"))
   expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"))
@@ -194,7 +194,12 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_identical(levels(step_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(
     levels(step_log$utility_mode),
-    c("pairing_trueskill_u0", "linking_d_optimal")
+    c(
+      "pairing_trueskill_u0",
+      "pairing_trueskill_u",
+      "linking_d_optimal_transform",
+      "linking_d_optimal_anchored_joint"
+    )
   )
   expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 
@@ -216,6 +221,43 @@ test_that("public log accessors cast linking categorical fields to constrained f
     levels(logs$link_stage_log$anchored_joint_init_state_method),
     c("artifact_copy_init", "phase_a_only_init_refit", "phase_b_refit")
   )
+})
+
+test_that("public step log accessors normalize legacy audit labels narrowly", {
+  state <- adaptive_rank_start(make_test_items(3))
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = Sys.time(),
+      run_mode = "link_probe",
+      is_probe_step = TRUE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = TRUE,
+      link_estimation_mode = "transform",
+      utility_mode = "linking_d_optimal"
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = Sys.time(),
+      run_mode = "link_one_spoke",
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_estimation_mode = "anchored_joint",
+      utility_mode = "linking_d_optimal"
+    )
+  )
+
+  step_log <- adaptive_step_log(state)
+
+  expect_identical(as.character(step_log$run_mode[[1L]]), "link_probe_holdout")
+  expect_true(isTRUE(step_log$is_drift_probe_step[[1L]]))
+  expect_true(is.na(step_log$utility_mode[[1L]]))
+  expect_identical(as.character(step_log$utility_mode[[2L]]), "linking_d_optimal_anchored_joint")
 })
 
 test_that("public log accessors fail fast on invalid linking categorical values", {

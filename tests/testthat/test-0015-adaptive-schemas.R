@@ -178,5 +178,14 @@ test_that("validate_failed_attempts_tbl rejects unsupported error_code", {
 test_that("adaptive step schema supports probe-mode run typing", {
   expect_true("is_probe_step" %in% names(pairwiseLLM:::schema_step_log))
   specs <- pairwiseLLM:::.adaptive_log_factor_specs_step()
-  expect_true("link_probe" %in% specs$run_mode)
+  expect_false("link_probe" %in% specs$run_mode)
+  expect_identical(
+    specs$utility_mode,
+    c(
+      "pairing_trueskill_u0",
+      "pairing_trueskill_u",
+      "linking_d_optimal_transform",
+      "linking_d_optimal_anchored_joint"
+    )
+  )
 })

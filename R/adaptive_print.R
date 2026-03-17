@@ -85,12 +85,12 @@
 
 .adaptive_log_factor_specs_step <- function() {
   list(
-    run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe"),
+    run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout"),
     link_estimation_mode = .adaptive_link_estimation_mode_levels(),
     link_stage = c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
-    utility_mode = c("pairing_trueskill_u0", "linking_d_optimal"),
+    utility_mode = .adaptive_utility_mode_levels(),
     hub_lock_mode = .adaptive_hub_lock_mode_levels()
   )
 }
@@ -134,6 +134,71 @@
     }
     out[[col]] <- factor(vals, levels = allowed)
   }
+  out
+}
+
+.adaptive_normalize_public_step_log <- function(step_log) {
+  out <- tibble::as_tibble(step_log)
+  if (nrow(out) < 1L) {
+    return(out)
+  }
+
+  run_mode_chr <- if ("run_mode" %in% names(out)) {
+    as.character(out$run_mode)
+  } else {
+    rep(NA_character_, nrow(out))
+  }
+  legacy_drift_idx <- which(run_mode_chr %in% "link_probe")
+
+  if ("run_mode" %in% names(out) && length(legacy_drift_idx) > 0L) {
+    out$run_mode <- run_mode_chr
+    out$run_mode[legacy_drift_idx] <- "link_probe_holdout"
+  }
+  if ("is_holdout_probe_step" %in% names(out)) {
+    out$is_holdout_probe_step <- as.logical(out$is_holdout_probe_step)
+    out$is_holdout_probe_step[legacy_drift_idx] <- FALSE
+  }
+  if ("is_drift_probe_step" %in% names(out)) {
+    out$is_drift_probe_step <- as.logical(out$is_drift_probe_step)
+    out$is_drift_probe_step[legacy_drift_idx] <- TRUE
+  }
+  if ("is_probe_step" %in% names(out)) {
+    out$is_probe_step <- as.logical(out$is_probe_step)
+    out$is_probe_step[legacy_drift_idx] <- TRUE
+  }
+  if ("utility_mode" %in% names(out)) {
+    utility_chr <- as.character(out$utility_mode)
+    link_estimation_mode <- if ("link_estimation_mode" %in% names(out)) {
+      as.character(out$link_estimation_mode)
+    } else {
+      rep("transform", nrow(out))
+    }
+    is_probe_step <- if ("is_probe_step" %in% names(out)) {
+      as.logical(out$is_probe_step)
+    } else {
+      rep(FALSE, nrow(out))
+    }
+    out$utility_mode <- vapply(
+      seq_along(utility_chr),
+      function(idx) {
+        mode <- utility_chr[[idx]]
+        if (is.na(mode) || mode == "") {
+          return(NA_character_)
+        }
+        if (isTRUE(is_probe_step[[idx]]) &&
+          .adaptive_is_linking_d_optimal_mode(mode, allow_legacy = TRUE)) {
+          return(NA_character_)
+        }
+        if (.adaptive_is_linking_d_optimal_mode(mode, allow_legacy = TRUE)) {
+          return(.adaptive_linking_utility_mode(link_estimation_mode[[idx]]))
+        }
+        mode
+      },
+      character(1L),
+      USE.NAMES = FALSE
+    )
+  }
+
   out
 }
 
@@ -574,7 +639,7 @@ adaptive_get_logs <- function(state) {
   }
   list(
     step_log = .adaptive_cast_log_factors(
-      state$step_log,
+      .adaptive_normalize_public_step_log(state$step_log),
       specs = .adaptive_log_factor_specs_step(),
       log_name = "step_log"
     ),
@@ -638,7 +703,7 @@ adaptive_step_log <- function(state) {
     rlang::abort("`state$step_log` is missing.")
   }
   .adaptive_cast_log_factors(
-    state$step_log,
+    .adaptive_normalize_public_step_log(state$step_log),
     specs = .adaptive_log_factor_specs_step(),
     log_name = "step_log"
   )
@@ -2110,14 +2175,14 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     }
   }
   if (isTRUE(is_probe_step) || run_mode %in% c("link_probe_holdout", "link_probe")) {
-    probe_label <- if (identical(run_mode, "link_probe_holdout") ||
-      ("is_holdout_probe_step" %in% names(step_row) &&
-        isTRUE(step_row$is_holdout_probe_step[[1L]] %||% FALSE))) {
-      "holdout"
-    } else if (identical(run_mode, "link_probe") ||
+    probe_label <- if (identical(run_mode, "link_probe") ||
       ("is_drift_probe_step" %in% names(step_row) &&
         isTRUE(step_row$is_drift_probe_step[[1L]] %||% FALSE))) {
       "drift_followup"
+    } else if (identical(run_mode, "link_probe_holdout") ||
+      ("is_holdout_probe_step" %in% names(step_row) &&
+        isTRUE(step_row$is_holdout_probe_step[[1L]] %||% FALSE))) {
+      "holdout"
     } else {
       "probe"
     }

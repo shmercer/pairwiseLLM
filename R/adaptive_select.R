@@ -371,9 +371,40 @@ adaptive_defaults <- function(N) {
     isTRUE(is_cross_set)
 }
 
-.adaptive_selection_utility_mode <- function(run_mode, is_cross_set = FALSE) {
+.adaptive_utility_mode_levels <- function() {
+  c(
+    "pairing_trueskill_u0",
+    "pairing_trueskill_u",
+    "linking_d_optimal_transform",
+    "linking_d_optimal_anchored_joint"
+  )
+}
+
+.adaptive_linking_d_optimal_utility_modes <- function() {
+  c("linking_d_optimal_transform", "linking_d_optimal_anchored_joint")
+}
+
+.adaptive_linking_utility_mode <- function(link_estimation_mode = "transform") {
+  if (identical(as.character(link_estimation_mode %||% "transform"), "anchored_joint")) {
+    return("linking_d_optimal_anchored_joint")
+  }
+  "linking_d_optimal_transform"
+}
+
+.adaptive_is_linking_d_optimal_mode <- function(utility_mode, allow_legacy = FALSE) {
+  mode <- as.character(utility_mode %||% NA_character_)
+  valid_modes <- .adaptive_linking_d_optimal_utility_modes()
+  if (isTRUE(allow_legacy)) {
+    valid_modes <- c(valid_modes, "linking_d_optimal")
+  }
+  !is.na(mode) && mode %in% valid_modes
+}
+
+.adaptive_selection_utility_mode <- function(run_mode,
+                                             is_cross_set = FALSE,
+                                             link_estimation_mode = "transform") {
   if (.adaptive_selection_mode_is_linking(run_mode = run_mode, is_cross_set = is_cross_set)) {
-    return("linking_d_optimal")
+    return(.adaptive_linking_utility_mode(link_estimation_mode = link_estimation_mode))
   }
   "pairing_trueskill_u0"
 }
@@ -383,7 +414,7 @@ adaptive_defaults <- function(N) {
   if (identical(mode, "pairing_trueskill_u0")) {
     return("u0")
   }
-  if (identical(mode, "linking_d_optimal")) {
+  if (.adaptive_is_linking_d_optimal_mode(mode, allow_legacy = TRUE)) {
     return("link_d_opt_gain")
   }
   NA_character_
@@ -1949,7 +1980,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         }
         selected_utility_mode <- .adaptive_selection_utility_mode(
           run_mode = controller$run_mode,
-          is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b)
+          is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b),
+          link_estimation_mode = link_controller$link_estimation_mode %||% controller$link_estimation_mode
         )
         if (isTRUE(is_link_mode) && isTRUE(link_phase_b)) {
           # Linking mode keeps canonical candidate generation/filtering via
@@ -2097,7 +2129,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   p_ij <- as.double(p_ij_ts)
   utility_mode <- .adaptive_selection_utility_mode(
     run_mode = controller$run_mode,
-    is_cross_set = isTRUE(selected_is_cross_set)
+    is_cross_set = isTRUE(selected_is_cross_set),
+    link_estimation_mode = link_controller$link_estimation_mode %||% controller$link_estimation_mode
   )
   if (isTRUE(is_link_mode) && !is.na(selected_spoke_id)) {
     p_link_oriented <- .adaptive_link_predictive_prob_oriented(

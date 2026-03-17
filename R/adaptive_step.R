@@ -112,7 +112,8 @@ validate_judge_result <- function(result, A_id, B_id) {
   is_cross_set <- !is.na(set_i) && !is.na(set_j) && set_i != set_j
   utility_mode <- .adaptive_selection_utility_mode(
     run_mode = run_mode,
-    is_cross_set = isTRUE(is_cross_set)
+    is_cross_set = isTRUE(is_cross_set),
+    link_estimation_mode = controller$link_estimation_mode
   )
 
   list(
@@ -250,15 +251,20 @@ validate_judge_result <- function(result, A_id, B_id) {
       "."
     ))
   }
-  valid_utility_modes <- c(
-    "pairing_trueskill_u0",
-    "linking_d_optimal"
-  )
+  valid_utility_modes <- .adaptive_utility_mode_levels()
   utility_mode <- if ("utility_mode" %in% names(row)) {
     as.character(row$utility_mode[[1L]] %||% NA_character_)
   } else {
     NA_character_
   }
+  link_estimation_mode <- if ("link_estimation_mode" %in% names(row)) {
+    as.character(row$link_estimation_mode[[1L]] %||% "transform")
+  } else {
+    "transform"
+  }
+  expected_linking_utility_mode <- .adaptive_linking_utility_mode(
+    link_estimation_mode = link_estimation_mode
+  )
   if (!is.na(utility_mode) && !utility_mode %in% valid_utility_modes) {
     rlang::abort(
       paste0(
@@ -342,20 +348,20 @@ validate_judge_result <- function(result, A_id, B_id) {
     }
     if (isTRUE(is_link_run_mode) &&
       !isTRUE(is_probe_run_mode) &&
-      !identical(utility_mode, "linking_d_optimal")) {
+      !identical(utility_mode, expected_linking_utility_mode)) {
       rlang::abort(
         paste0(
           "step_log append completeness failure for cross-set row: ",
-          "`utility_mode` must be linking_d_optimal."
+          "`utility_mode` must be ", expected_linking_utility_mode, "."
         )
       )
     }
     if (isTRUE(is_probe_run_mode) &&
-      identical(utility_mode, "linking_d_optimal")) {
+      .adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
       rlang::abort(
         paste0(
           "step_log append completeness failure for cross-set probe row: ",
-          "`utility_mode` must not be linking_d_optimal."
+          "`utility_mode` must not use a linking D-optimal audit label."
         )
       )
     }
@@ -413,7 +419,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     }
     if (isTRUE(is_link_run_mode) &&
       !is.na(utility_mode) &&
-      !utility_mode %in% c("pairing_trueskill_u0")) {
+      !utility_mode %in% c("pairing_trueskill_u0", "pairing_trueskill_u")) {
       rlang::abort(
         "step_log append completeness failure: non-cross-set rows in linking runs must use pairing utility mode or NA."
       )
@@ -437,7 +443,10 @@ validate_judge_result <- function(result, A_id, B_id) {
   if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
     return(state_after)
   }
-  if (identical(as.character(row$utility_mode[[1L]] %||% NA_character_), "linking_d_optimal") &&
+  if (.adaptive_is_linking_d_optimal_mode(
+    as.character(row$utility_mode[[1L]] %||% NA_character_),
+    allow_legacy = TRUE
+  ) &&
     isTRUE(row$is_probe_step[[1L]] %||% FALSE)) {
     return(state_after)
   }
@@ -871,7 +880,7 @@ run_one_step <- function(state, judge, ...) {
     explicit_utility <- as.double(selection$cross_set_utility_pre %||% NA_real_)
     if (is.finite(explicit_utility)) {
       explicit_utility
-    } else if (identical(utility_mode, "linking_d_optimal")) {
+    } else if (.adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
       d_opt_utility <- as.double(selection$link_d_opt_gain %||% NA_real_)
       if (isTRUE(is_phase_b_link_ordering_step) && !is.finite(d_opt_utility)) {
         rlang::abort(sprintf(

@@ -1327,7 +1327,7 @@ test_that("cross_set_utility_pre logs linking utility before commit in linking m
   out <- pairwiseLLM:::run_one_step(state, judge)
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
 
-  expect_equal(row$utility_mode[[1L]], "linking_d_optimal")
+  expect_equal(row$utility_mode[[1L]], "linking_d_optimal_transform")
   expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
   expect_gte(row$cross_set_utility_pre[[1L]], 0)
 })
@@ -1379,7 +1379,7 @@ test_that("linking deterministic ordering aborts when D-opt utility is fully non
   expect_error(
     pairwiseLLM:::.adaptive_linking_selection_order(
       cand,
-      utility_mode = "linking_d_optimal",
+      utility_mode = "linking_d_optimal_transform",
       stage_name = "local_link",
       spoke_id = 2L
     ),
