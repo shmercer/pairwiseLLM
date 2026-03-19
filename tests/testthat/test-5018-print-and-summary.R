@@ -200,3 +200,29 @@ test_that("adaptive_get_logs and print preserve free hub-lock mode", {
   expect_identical(as.character(logs$link_stage_log$hub_lock_mode[[1L]]), "free")
   expect_no_error(capture.output(print(state)))
 })
+
+test_that("print-compatible public logs preserve legacy drift probe labels", {
+  state <- adaptive_rank_start(make_test_items(3))
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = Sys.time(),
+      run_mode = "link_probe",
+      is_probe_step = TRUE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = TRUE,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      link_estimation_mode = "transform",
+      utility_mode = "linking_d_optimal"
+    )
+  )
+
+  logs <- adaptive_get_logs(state)
+
+  expect_identical(as.character(logs$step_log$run_mode[[1L]]), "link_probe")
+  expect_true(isTRUE(logs$step_log$is_probe_step[[1L]]))
+  expect_false(isTRUE(logs$step_log$is_holdout_probe_step[[1L]]))
+  expect_true(isTRUE(logs$step_log$is_drift_probe_step[[1L]]))
+})

@@ -83,9 +83,18 @@
   NA_real_
 }
 
-.adaptive_log_factor_specs_step <- function() {
+.adaptive_log_factor_specs_step <- function(allow_legacy_run_mode = FALSE) {
+  run_mode_levels <- c(
+    "within_set",
+    "link_one_spoke",
+    "link_multi_spoke",
+    "link_probe_holdout"
+  )
+  if (isTRUE(allow_legacy_run_mode)) {
+    run_mode_levels <- c(run_mode_levels, "link_probe")
+  }
   list(
-    run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout"),
+    run_mode = run_mode_levels,
     link_estimation_mode = .adaptive_link_estimation_mode_levels(),
     link_stage = c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
@@ -150,10 +159,6 @@
   }
   legacy_drift_idx <- which(run_mode_chr %in% "link_probe")
 
-  if ("run_mode" %in% names(out) && length(legacy_drift_idx) > 0L) {
-    out$run_mode <- run_mode_chr
-    out$run_mode[legacy_drift_idx] <- "link_probe_holdout"
-  }
   if ("is_holdout_probe_step" %in% names(out)) {
     out$is_holdout_probe_step <- as.logical(out$is_holdout_probe_step)
     out$is_holdout_probe_step[legacy_drift_idx] <- FALSE
@@ -200,6 +205,17 @@
   }
 
   out
+}
+
+.adaptive_public_step_log_factor_specs <- function(step_log) {
+  run_mode_chr <- if ("run_mode" %in% names(step_log)) {
+    as.character(step_log$run_mode)
+  } else {
+    character()
+  }
+  .adaptive_log_factor_specs_step(
+    allow_legacy_run_mode = any(run_mode_chr %in% "link_probe", na.rm = TRUE)
+  )
 }
 
 .adaptive_link_anchored_joint_quantiles <- function(theta_mean, theta_sd, probs) {
@@ -640,7 +656,7 @@ adaptive_get_logs <- function(state) {
   list(
     step_log = .adaptive_cast_log_factors(
       .adaptive_normalize_public_step_log(state$step_log),
-      specs = .adaptive_log_factor_specs_step(),
+      specs = .adaptive_public_step_log_factor_specs(state$step_log),
       log_name = "step_log"
     ),
     round_log = tibble::as_tibble(state$round_log),
@@ -704,7 +720,7 @@ adaptive_step_log <- function(state) {
   }
   .adaptive_cast_log_factors(
     .adaptive_normalize_public_step_log(state$step_log),
-    specs = .adaptive_log_factor_specs_step(),
+    specs = .adaptive_public_step_log_factor_specs(state$step_log),
     log_name = "step_log"
   )
 }

@@ -217,6 +217,26 @@ test_that("build_btl_results_data and fit-contract helpers cover empty and norma
   )
 })
 
+test_that("current runtime probe helpers continue to emit holdout rather than legacy link_probe", {
+  state <- make_link_probe_state()
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = pairwiseLLM:::.adaptive_link_probe_construct_panel(
+      state,
+      state$controller,
+      spoke_id = 2L
+    )
+  )
+
+  holdout <- pairwiseLLM:::.adaptive_link_probe_select_holdout(
+    state,
+    step_id = 11L,
+    spoke_id = 2L
+  )
+
+  expect_identical(holdout$run_mode, "link_probe_holdout")
+  expect_false(identical(holdout$run_mode, "link_probe"))
+})
+
 test_that("btl contract and config helpers cover current defaults and round-log fallbacks", {
   cfg <- pairwiseLLM:::btl_mcmc_config(
     4L,

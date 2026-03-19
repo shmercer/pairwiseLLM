@@ -254,8 +254,9 @@ test_that("public step log accessors normalize legacy audit labels narrowly", {
 
   step_log <- adaptive_step_log(state)
 
-  expect_identical(as.character(step_log$run_mode[[1L]]), "link_probe_holdout")
+  expect_identical(as.character(step_log$run_mode[[1L]]), "link_probe")
   expect_true(isTRUE(step_log$is_drift_probe_step[[1L]]))
+  expect_false(isTRUE(step_log$is_holdout_probe_step[[1L]]))
   expect_true(is.na(step_log$utility_mode[[1L]]))
   expect_identical(as.character(step_log$utility_mode[[2L]]), "linking_d_optimal_anchored_joint")
 })
